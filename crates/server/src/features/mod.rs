@@ -2,4 +2,5 @@
 
 pub mod accounts;
 pub mod documents;
+pub mod members;
 pub mod workspaces;

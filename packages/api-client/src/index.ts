@@ -15,6 +15,11 @@ export type CreateWorkspace = Schemas['CreateWorkspace'];
 export type DocumentSummary = Schemas['DocumentSummary'];
 export type CreateDocument = Schemas['CreateDocument'];
 export type ErrorBody = Schemas['ErrorBody'];
+export type Member = Schemas['Member'];
+export type MembersView = Schemas['MembersView'];
+export type Invitation = Schemas['Invitation'];
+export type ReceivedInvitation = Schemas['ReceivedInvitation'];
+export type Group = Schemas['Group'];
 /** 본문은 계약상 임의 객체(`type: "doc"`)라 생성 타입에서는 구체화하지 않는다. */
 export type DocumentWire = Schemas['Document'];
 export type SaveDocumentWire = Schemas['SaveDocument'];

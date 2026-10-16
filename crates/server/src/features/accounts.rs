@@ -254,6 +254,8 @@ pub struct VerifiedIdentity {
     pub issuer: String,
     pub subject: String,
     pub email: Option<String>,
+    /// 제공자가 이메일을 검증했는지(`email_verified`). 초대 대상 확인에만 쓰고 계정 병합에는 쓰지 않는다.
+    pub email_verified: bool,
     pub display_name: String,
     pub id_token: String,
 }
@@ -269,10 +271,11 @@ pub async fn start_session(
     let ttl_secs =
         i64::try_from(ttl.as_secs()).map_err(|_| AppError::Config("session ttl".into()))?;
     let mut tx = db.begin_anonymous().await?;
-    let user: UserId = sqlx::query_scalar("SELECT app_upsert_user($1, $2, $3, $4)")
+    let user: UserId = sqlx::query_scalar("SELECT app_upsert_user($1, $2, $3, $4, $5)")
         .bind(&identity.issuer)
         .bind(&identity.subject)
         .bind(&identity.email)
+        .bind(identity.email_verified)
         .bind(&identity.display_name)
         .fetch_one(tx.conn())
         .await?;
@@ -314,20 +317,18 @@ pub async fn callback(
         return Err(AppError::BadRequest("missing login state".into()));
     };
 
+    // 쿠키 비밀값과 돌아온 state가 모두 맞아야 상태를 꺼낸다(CSRF). 맞지 않으면 상태는 그대로 남아
+    // 진짜 콜백이 이어서 끝낼 수 있다.
     let mut tx = state.db.begin_anonymous().await?;
-    let row: Option<(String, String, String, String)> = sqlx::query_as(
-        "SELECT state, pkce_verifier, nonce, return_to FROM app_take_login_state($1)",
-    )
-    .bind(token_hash(&secret))
-    .fetch_optional(tx.conn())
-    .await?;
+    let row: Option<(String, String, String)> =
+        sqlx::query_as("SELECT pkce_verifier, nonce, return_to FROM app_take_login_state($1, $2)")
+            .bind(token_hash(&secret))
+            .bind(&returned_state)
+            .fetch_optional(tx.conn())
+            .await?;
     tx.commit().await?;
-    let (expected_state, pkce_verifier, nonce, return_to) =
-        row.ok_or_else(|| AppError::BadRequest("login state expired".into()))?;
-    // 브라우저가 시작한 로그인과 돌아온 콜백이 같은지 확인한다 (CSRF).
-    if returned_state != expected_state {
-        return Err(AppError::BadRequest("login state mismatch".into()));
-    }
+    let (pkce_verifier, nonce, return_to) =
+        row.ok_or_else(|| AppError::BadRequest("login state expired or mismatched".into()))?;
 
     let client = client_for(provider, provider.metadata().await?)();
     let token = client
@@ -357,6 +358,7 @@ pub async fn callback(
         issuer: claims.issuer().as_str().to_owned(),
         subject,
         email,
+        email_verified: claims.email_verified().unwrap_or(false),
         display_name,
         id_token: id_token.to_string(),
     };
@@ -398,8 +400,10 @@ pub async fn logout(
 ) -> Result<Response, AppError> {
     let home = state.config.public_url.as_str().to_owned();
     let mut redirect_to = home.clone();
+    // 같은 이름 쿠키가 둘 이상이면 어느 세션도 끝내지 않되, 제거 쿠키는 보내 사용자가 빠져나올 수 있게 한다.
     let token = single_cookie(&headers, session_cookie_name(&state.config))
-        .map_err(|()| AppError::Unauthorized)?;
+        .ok()
+        .flatten();
     if let Some(token) = token {
         let mut tx = state.db.begin_anonymous().await?;
         let id_token: Option<String> = sqlx::query_scalar("SELECT app_end_session($1)")

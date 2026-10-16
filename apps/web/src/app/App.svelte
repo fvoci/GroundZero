@@ -5,9 +5,10 @@
   import { api } from '$lib/api/client';
   import LoginScreen from '$lib/features/auth/LoginScreen.svelte';
   import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
+  import MembersScreen from '$lib/features/members/MembersScreen.svelte';
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
   import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
-  import { router, workspacePath } from '$lib/router.svelte';
+  import { membersPath, router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Sidebar from '$lib/ui/sidebar';
@@ -39,6 +40,12 @@
 
   void load();
 
+  /** 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스 목록을 다시 읽는다. */
+  async function reloadWorkspaces(): Promise<void> {
+    const workspaces = await api.workspaces();
+    if (session.state === 'signed-in') session.workspaces = workspaces;
+  }
+
   async function logout(): Promise<void> {
     const redirect = await api.logout();
     window.location.assign(redirect);
@@ -47,7 +54,9 @@
   const route = $derived(router.route);
   const currentWorkspace = $derived.by(() => {
     if (session.state !== 'signed-in') return undefined;
-    if (route.name !== 'workspace' && route.name !== 'document') return undefined;
+    if (route.name !== 'workspace' && route.name !== 'document' && route.name !== 'members') {
+      return undefined;
+    }
     const id = route.workspaceId;
     return session.workspaces.find((w) => w.id === id);
   });
@@ -139,11 +148,28 @@
                 session.workspaces = [...session.workspaces, ws];
               }
             }}
+            onjoined={reloadWorkspaces}
           />
-        {:else if route.name === 'workspace' || route.name === 'document'}
+        {:else if route.name === 'workspace' || route.name === 'document' || route.name === 'members'}
           {#if currentWorkspace === undefined}
             <p role="alert">워크스페이스가 없거나 볼 권한이 없습니다.</p>
+          {:else if route.name === 'members'}
+            <MembersScreen
+              workspace={currentWorkspace}
+              meId={signedIn.me.id}
+              onchanged={() => void reloadWorkspaces()}
+            />
           {:else if route.name === 'workspace'}
+            <nav aria-label="워크스페이스 메뉴" class="text-sm">
+              <a
+                class="underline"
+                href={membersPath(currentWorkspace.id)}
+                onclick={(e: MouseEvent) => {
+                  e.preventDefault();
+                  router.navigate(membersPath(currentWorkspace.id));
+                }}>멤버</a
+              >
+            </nav>
             <WorkspaceScreen workspace={currentWorkspace} />
           {:else}
             <nav aria-label="경로" class="text-sm">

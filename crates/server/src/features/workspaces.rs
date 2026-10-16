@@ -21,6 +21,8 @@ pub struct Workspace {
     pub name: String,
     /// 현재 사용자의 역할.
     pub role: Role,
+    /// 현재 사용자가 소유자인지 (D-51).
+    pub is_owner: bool,
 }
 
 /// 워크스페이스 생성 요청.
@@ -63,11 +65,16 @@ pub async fn member_role(tx: &mut UserTx, ws: WorkspaceId) -> Result<Role, AppEr
 }
 
 fn row_to_workspace(
-    (id, name, role): (WorkspaceId, String, String),
+    (id, name, role, is_owner): (WorkspaceId, String, String, bool),
 ) -> Result<Workspace, AppError> {
     let role = Role::parse(&role)
         .ok_or_else(|| AppError::Config(format!("unknown role in database: {role}")))?;
-    Ok(Workspace { id, name, role })
+    Ok(Workspace {
+        id,
+        name,
+        role,
+        is_owner,
+    })
 }
 
 /// 내가 속한 워크스페이스.
@@ -78,8 +85,8 @@ pub async fn list(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<Workspace>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let rows: Vec<(WorkspaceId, String, String)> = sqlx::query_as(
-        "SELECT w.id, w.name, m.role
+    let rows: Vec<(WorkspaceId, String, String, bool)> = sqlx::query_as(
+        "SELECT w.id, w.name, m.role, w.owner_id = m.user_id
          FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id
          WHERE m.user_id = app_user_id()
          ORDER BY w.created_at, w.id",
@@ -109,8 +116,8 @@ pub async fn create(
         .bind(&name)
         .fetch_one(tx.conn())
         .await?;
-    let row: (WorkspaceId, String, String) = sqlx::query_as(
-        "SELECT w.id, w.name, m.role FROM workspaces w
+    let row: (WorkspaceId, String, String, bool) = sqlx::query_as(
+        "SELECT w.id, w.name, m.role, w.owner_id = m.user_id FROM workspaces w
          JOIN workspace_members m ON m.workspace_id = w.id AND m.user_id = app_user_id()
          WHERE w.id = $1",
     )

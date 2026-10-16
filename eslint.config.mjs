@@ -58,6 +58,8 @@ export default tseslint.config(
       '@typescript-eslint/no-useless-default-assignment': 'off',
       '@typescript-eslint/consistent-type-definitions': 'off',
       '@typescript-eslint/no-empty-function': 'off',
+      '@typescript-eslint/prefer-nullish-coalescing': 'off',
+      '@typescript-eslint/consistent-type-assertions': 'off',
     },
   },
   {

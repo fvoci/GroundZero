@@ -410,6 +410,7 @@ async fn input_validation_and_origin_and_session_failures() {
         issuer: "https://test-issuer.invalid".into(),
         subject: format!("expiring-{}", uuid::Uuid::now_v7()),
         email: None,
+        email_verified: false,
         display_name: "expiring".into(),
         id_token: "t".into(),
     };

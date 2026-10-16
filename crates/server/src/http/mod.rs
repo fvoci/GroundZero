@@ -6,7 +6,7 @@ use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::http::{Method, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::Serialize;
 use tower_http::services::{ServeDir, ServeFile};
@@ -15,7 +15,7 @@ use utoipa::{OpenApi, ToSchema};
 use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
-use crate::features::{accounts, documents, workspaces};
+use crate::features::{accounts, documents, members, workspaces};
 
 /// 핸들러가 공유하는 상태.
 #[derive(Debug, Clone)]
@@ -118,8 +118,36 @@ async fn api_not_found() -> AppError {
         documents::create_wiki,
         documents::get,
         documents::save,
+        members::list_members,
+        members::set_role,
+        members::remove_member,
+        members::leave,
+        members::invite,
+        members::list_invitations,
+        members::revoke_invitation,
+        members::my_invitations,
+        members::accept_invitation,
+        members::decline_invitation,
+        members::offer_ownership,
+        members::cancel_ownership_offer,
+        members::accept_ownership,
+        members::list_groups,
+        members::create_group,
+        members::delete_group,
+        members::add_group_member,
+        members::remove_group_member,
     ),
     components(schemas(
+        members::Member,
+        members::MembersView,
+        members::SetRole,
+        members::CreateInvitation,
+        members::Invitation,
+        members::ReceivedInvitation,
+        members::Accepted,
+        members::OfferOwnership,
+        members::Group,
+        members::CreateGroup,
         Health,
         ErrorBody,
         accounts::Me,
@@ -139,6 +167,7 @@ async fn api_not_found() -> AppError {
         (name = "auth", description = "OIDC 로그인과 세션"),
         (name = "workspaces", description = "워크스페이스"),
         (name = "documents", description = "위키 문서"),
+        (name = "members", description = "멤버·초대·역할·그룹·소유권"),
     )
 )]
 pub struct ApiDoc;
@@ -167,6 +196,49 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/documents/{document_id}",
             get(documents::get).put(documents::save),
+        )
+        .route(
+            "/workspaces/{workspace_id}/members",
+            get(members::list_members),
+        )
+        .route(
+            "/workspaces/{workspace_id}/members/{user_id}",
+            put(members::set_role).delete(members::remove_member),
+        )
+        .route("/workspaces/{workspace_id}/leave", post(members::leave))
+        .route(
+            "/workspaces/{workspace_id}/invitations",
+            get(members::list_invitations).post(members::invite),
+        )
+        .route("/invitations", get(members::my_invitations))
+        .route(
+            "/invitations/{invitation_id}",
+            delete(members::revoke_invitation),
+        )
+        .route(
+            "/invitations/{invitation_id}/accept",
+            post(members::accept_invitation),
+        )
+        .route(
+            "/invitations/{invitation_id}/decline",
+            post(members::decline_invitation),
+        )
+        .route(
+            "/workspaces/{workspace_id}/ownership",
+            post(members::offer_ownership).delete(members::cancel_ownership_offer),
+        )
+        .route(
+            "/workspaces/{workspace_id}/ownership/accept",
+            post(members::accept_ownership),
+        )
+        .route(
+            "/workspaces/{workspace_id}/groups",
+            get(members::list_groups).post(members::create_group),
+        )
+        .route("/groups/{group_id}", delete(members::delete_group))
+        .route(
+            "/groups/{group_id}/members/{user_id}",
+            put(members::add_group_member).delete(members::remove_group_member),
         )
         .fallback(api_not_found);
 

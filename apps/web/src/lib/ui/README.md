@@ -13,7 +13,9 @@ pnpm dlx shadcn-svelte@1.7.0 add button input checkbox label dialog dropdown-men
 수정 기록
 
 - `dropdown-menu/`: `RadioGroup`·`RadioItem`을 제거(2026-10-17). 현재 미사용이고 `dropdown-menu-radio-group.svelte`가 `exactOptionalPropertyTypes`와 충돌한다(bits-ui `value?: string`에 `undefined` 전달). 필요해지면 `add dropdown-menu --overwrite` 후 타입을 맞춘다.
-- ESLint: 이 디렉터리와 `hooks/`, `utils.ts`에는 `eslint.config.mjs`의 외부 코드 예외가 적용된다(규칙 8개). 자체 코드에는 적용되지 않는다.
+- `select/select-item.svelte`: `label`을 값이 있을 때만 넘기도록 수정(2026-10-17). 같은 `exactOptionalPropertyTypes` 충돌.
+- 추가(2026-10-17): `pnpm dlx shadcn-svelte@1.7.0 add select badge --yes --no-deps-install`. 이미 있는 `separator`를 덮어쓰겠냐는 질문에 막히므로 잠시 옮겨 두고 추가한 뒤 원본과 같음(포맷 차이만)을 확인했다.
+- ESLint: 이 디렉터리와 `hooks/`, `utils.ts`에는 `eslint.config.mjs`의 외부 코드 예외가 적용된다(규칙 10개). 자체 코드에는 적용되지 않는다.
 
 규칙
 

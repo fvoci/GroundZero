@@ -5,14 +5,18 @@ export type Route =
   | { name: 'home' }
   | { name: 'workspace'; workspaceId: string }
   | { name: 'document'; workspaceId: string; documentId: string }
+  | { name: 'members'; workspaceId: string }
   | { name: 'not-found' };
 
 const UUID = '[0-9a-fA-F-]{36}';
 const WORKSPACE = new RegExp(`^/w/(${UUID})/?$`);
 const DOCUMENT = new RegExp(`^/w/(${UUID})/wiki/(${UUID})/?$`);
+const MEMBERS = new RegExp(`^/w/(${UUID})/members/?$`);
 
 export function parseRoute(pathname: string): Route {
   if (pathname === '/' || pathname === '') return { name: 'home' };
+  const members = MEMBERS.exec(pathname);
+  if (members?.[1] !== undefined) return { name: 'members', workspaceId: members[1] };
   const doc = DOCUMENT.exec(pathname);
   if (doc?.[1] !== undefined && doc[2] !== undefined) {
     return { name: 'document', workspaceId: doc[1], documentId: doc[2] };
@@ -24,6 +28,10 @@ export function parseRoute(pathname: string): Route {
 
 export function workspacePath(workspaceId: string): string {
   return `/w/${workspaceId}`;
+}
+
+export function membersPath(workspaceId: string): string {
+  return `/w/${workspaceId}/members`;
 }
 
 export function documentPath(workspaceId: string, documentId: string): string {

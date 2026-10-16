@@ -4,17 +4,21 @@
   import { api } from '$lib/api/client';
   import { router, workspacePath } from '$lib/router.svelte';
 
+  import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
+
   import CreateForm from './CreateForm.svelte';
 
   interface Props {
     workspaces: Workspace[];
     oncreated: (ws: Workspace) => void;
+    onjoined: () => Promise<void>;
   }
 
-  const { workspaces, oncreated }: Props = $props();
+  const { workspaces, oncreated, onjoined }: Props = $props();
 </script>
 
 <section class="flex flex-col gap-6" aria-labelledby="home-heading">
+  <ReceivedInvitations onaccepted={onjoined} />
   <h1 id="home-heading" class="text-xl font-semibold">워크스페이스</h1>
   {#if workspaces.length === 0}
     <p class="text-muted-foreground">아직 워크스페이스가 없습니다. 첫 워크스페이스를 만드세요.</p>

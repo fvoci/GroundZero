@@ -48,15 +48,35 @@ pub enum AppError {
     /// 입력 검증 실패.
     #[error("bad request: {0}")]
     BadRequest(String),
+    /// 현재 상태에서 할 수 없는 요청(예: 소유자 탈퇴, 이미 닫힌 초대).
+    #[error("invalid state: {0}")]
+    Conflict(String),
 }
 
 impl AppError {
+    /// 정의자 함수가 올린 오류 코드를 응답으로 바꾼다.
+    /// P0002 → 404, 42501 → 403, 22023 → 400, 55000 → 409. 그 밖은 내부 오류.
+    pub fn from_db_function(err: sqlx::Error) -> Self {
+        let Some(db) = err.as_database_error() else {
+            return Self::Database(err);
+        };
+        let message = db.message().to_owned();
+        match db.code().as_deref() {
+            Some("P0002") => Self::NotFound,
+            Some("42501") => Self::Forbidden,
+            Some("22023") => Self::BadRequest(message),
+            Some("55000") => Self::Conflict(message),
+            _ => Self::Database(err),
+        }
+    }
+
     fn status_and_code(&self) -> (StatusCode, &'static str) {
         match self {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
+            Self::Conflict(_) => (StatusCode::CONFLICT, "invalid_state"),
             Self::Oidc(_) => (StatusCode::BAD_GATEWAY, "oidc_error"),
             Self::Config(_) | Self::Database(_) | Self::Migrate(_) | Self::Io(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")
@@ -69,7 +89,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error) = self.status_and_code();
         let message = match &self {
-            Self::BadRequest(msg) => msg.clone(),
+            Self::BadRequest(msg) | Self::Conflict(msg) => msg.clone(),
             other => {
                 if status.is_server_error() {
                     // 내부 오류 세부는 로그에만 남긴다.

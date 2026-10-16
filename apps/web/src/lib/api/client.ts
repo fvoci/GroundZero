@@ -1,6 +1,18 @@
 // API 클라이언트. 타입은 계약에서 생성한 것(@fvoci/api-client)을 쓰고, 응답은 unknown으로 받아
 // 실제 형태를 확인한다(생성 타입은 런타임 검증을 대신하지 않는다 — docs/development.md 3절).
-import type { AuthInfo, DocumentSummary, Health, Me, Role, Workspace } from '@fvoci/api-client';
+import type {
+  AuthInfo,
+  DocumentSummary,
+  Group,
+  Health,
+  Invitation,
+  Me,
+  Member,
+  MembersView,
+  ReceivedInvitation,
+  Role,
+  Workspace,
+} from '@fvoci/api-client';
 
 /** Tiptap JSON 노드. 본문 최상위는 `type: "doc"`. */
 export interface DocNode {
@@ -99,7 +111,12 @@ export function parseMe(value: Json): Me {
 
 export function parseWorkspace(value: Json): Workspace {
   const o = rec(value, 'workspace');
-  return { id: str(o, 'id'), name: str(o, 'name'), role: role(str(o, 'role')) };
+  return {
+    id: str(o, 'id'),
+    name: str(o, 'name'),
+    role: role(str(o, 'role')),
+    is_owner: bool(o, 'is_owner'),
+  };
 }
 
 export function parseSummary(value: Json): DocumentSummary {
@@ -132,6 +149,69 @@ function parseList<T>(value: Json, item: (v: Json) => T): T[] {
   if (!Array.isArray(value)) throw new TypeError('expected array');
   return value.map(item);
 }
+
+function optStr(o: Record<string, unknown>, key: string): string | null {
+  const v = o[key];
+  if (v === null || v === undefined) return null;
+  if (typeof v !== 'string') throw new TypeError(`expected string or null at ${key}`);
+  return v;
+}
+
+export function parseMembersView(value: Json): MembersView {
+  const o = rec(value, 'members view');
+  const members = parseList(o.members, (m): Member => {
+    const r = rec(m, 'member');
+    return {
+      user_id: str(r, 'user_id'),
+      display_name: str(r, 'display_name'),
+      email: optStr(r, 'email'),
+      role: role(str(r, 'role')),
+      is_owner: bool(r, 'is_owner'),
+    };
+  });
+  return {
+    members,
+    my_role: role(str(o, 'my_role')),
+    i_am_owner: bool(o, 'i_am_owner'),
+    pending_owner: optStr(o, 'pending_owner'),
+  };
+}
+
+export function parseInvitation(value: Json): Invitation {
+  const o = rec(value, 'invitation');
+  return {
+    id: str(o, 'id'),
+    email: str(o, 'email'),
+    role: role(str(o, 'role')),
+    expires_at: str(o, 'expires_at'),
+  };
+}
+
+export function parseReceivedInvitation(value: Json): ReceivedInvitation {
+  const o = rec(value, 'received invitation');
+  return {
+    id: str(o, 'id'),
+    workspace_id: str(o, 'workspace_id'),
+    workspace_name: str(o, 'workspace_name'),
+    role: role(str(o, 'role')),
+    invited_by: str(o, 'invited_by'),
+    expires_at: str(o, 'expires_at'),
+  };
+}
+
+export function parseGroup(value: Json): Group {
+  const o = rec(value, 'group');
+  return {
+    id: str(o, 'id'),
+    name: str(o, 'name'),
+    members: parseList(o.members, (m) => {
+      if (typeof m !== 'string') throw new TypeError('expected member id');
+      return m;
+    }),
+  };
+}
+
+const none = (): undefined => undefined;
 
 async function request(
   method: string,
@@ -216,6 +296,62 @@ export const api = {
     ),
   document: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}`, parseDocument),
+  members: (ws: string) =>
+    expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/members`, parseMembersView),
+  setRole: (ws: string, userId: string, newRole: Role) =>
+    expectOk(
+      'PUT',
+      `/api/workspaces/${encodeURIComponent(ws)}/members/${encodeURIComponent(userId)}`,
+      none,
+      { role: newRole },
+    ),
+  removeMember: (ws: string, userId: string) =>
+    expectOk(
+      'DELETE',
+      `/api/workspaces/${encodeURIComponent(ws)}/members/${encodeURIComponent(userId)}`,
+      none,
+    ),
+  leave: (ws: string) => expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/leave`, none),
+  invitations: (ws: string) =>
+    expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/invitations`, (v) =>
+      parseList(v, parseInvitation),
+    ),
+  invite: (ws: string, email: string, newRole: Role) =>
+    expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/invitations`, parseInvitation, {
+      email,
+      role: newRole,
+    }),
+  revokeInvitation: (id: string) =>
+    expectOk('DELETE', `/api/invitations/${encodeURIComponent(id)}`, none),
+  myInvitations: () =>
+    expectOk('GET', '/api/invitations', (v) => parseList(v, parseReceivedInvitation)),
+  acceptInvitation: (id: string) =>
+    expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/accept`, (v) =>
+      str(rec(v, 'accepted'), 'workspace_id'),
+    ),
+  declineInvitation: (id: string) =>
+    expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/decline`, none),
+  offerOwnership: (ws: string, toUser: string) =>
+    expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/ownership`, none, {
+      to_user: toUser,
+    }),
+  cancelOwnershipOffer: (ws: string) =>
+    expectOk('DELETE', `/api/workspaces/${encodeURIComponent(ws)}/ownership`, none),
+  acceptOwnership: (ws: string) =>
+    expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/ownership/accept`, none),
+  groups: (ws: string) =>
+    expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/groups`, (v) =>
+      parseList(v, parseGroup),
+    ),
+  createGroup: (ws: string, name: string) =>
+    expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/groups`, parseGroup, { name }),
+  deleteGroup: (id: string) => expectOk('DELETE', `/api/groups/${encodeURIComponent(id)}`, none),
+  setGroupMember: (groupId: string, userId: string, present: boolean) =>
+    expectOk(
+      present ? 'PUT' : 'DELETE',
+      `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`,
+      none,
+    ),
   /** 저장. 충돌이면 `{ kind: 'conflict', current }`. */
   async saveDocument(
     id: string,

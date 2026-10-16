@@ -218,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn requires_oidc_client_settings() {
+    fn issuer_requires_client_settings() {
         let err = Config::from_lookup(with_db(&[("FVOCI_OIDC_ISSUER", "http://kc/realms/x")]))
             .unwrap_err();
         assert!(matches!(err, AppError::Config(m) if m.contains("FVOCI_OIDC_CLIENT_ID")));

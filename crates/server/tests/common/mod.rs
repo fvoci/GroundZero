@@ -53,12 +53,42 @@ pub struct TestUser {
     pub cookie: String,
 }
 
+/// 제공자가 검증한(또는 검증하지 않은) 이메일을 가진 사용자로 로그인한다.
+pub async fn login_with_email(
+    state: &AppState,
+    label: &str,
+    email: &str,
+    verified: bool,
+) -> TestUser {
+    let identity = VerifiedIdentity {
+        issuer: "https://test-issuer.invalid".to_owned(),
+        subject: format!("{label}-{}", uuid::Uuid::now_v7()),
+        email: Some(email.to_owned()),
+        email_verified: verified,
+        display_name: label.to_owned(),
+        id_token: "test-id-token".to_owned(),
+    };
+    let (id, token) = start_session(&state.db, state.config.session_ttl, &identity, None)
+        .await
+        .unwrap();
+    TestUser {
+        id,
+        cookie: format!("{SESSION_COOKIE}={token}"),
+    }
+}
+
+/// 테스트마다 겹치지 않는 이메일.
+pub fn unique_email(label: &str) -> String {
+    format!("{label}-{}@example.test", uuid::Uuid::now_v7().simple())
+}
+
 pub async fn login(state: &AppState, label: &str) -> TestUser {
     let subject = format!("{label}-{}", uuid::Uuid::now_v7());
     let identity = VerifiedIdentity {
         issuer: "https://test-issuer.invalid".to_owned(),
         subject,
         email: None,
+        email_verified: false,
         display_name: label.to_owned(),
         id_token: "test-id-token".to_owned(),
     };
