@@ -178,6 +178,15 @@ fvoci 자체 라이선스는 미정(O-27)이다. unlicensed 경고를 없애려�
 
 rhwp, Meilisearch 클라이언트 SDK, Tiptap 확장(오픈소스·유료 구분), OIDC 클라이언트 크레이트, Office 뷰어 후보, Playwright, 폰트·아이콘. 아직 의존성으로 추가하지 않았다.
 
+## 10. CI 구조 (D-64)
+
+- **베이스 이미지**: `deploy/docker/dev.Dockerfile`. `.github/workflows/base-image.yml`이 Dockerfile 변경·주 1회 스케줄·수동 실행 때만 빌드한다. 제품 커밋마다 만들지 않는다. push는 레지스트리·공개 범위 승인(O-32) 후 저장소 변수 `FVOCI_DEV_IMAGE_PUSH=true`로 켠다. 승인 전에는 로컬 로드만 한다.
+- **제품 검사**: `.github/workflows/ci.yml`. `check`와 `integration` 두 job이 같은 `FVOCI_DEV_IMAGE@FVOCI_DEV_IMAGE_DIGEST` 컨테이너에서 돈다. 호출하는 명령은 `pnpm install --frozen-lockfile`, `cargo xtask check`, `cargo xtask test --external-services`뿐이다.
+- **서비스 격리**: GitHub의 컨테이너 job 안에서는 Compose를 띄울 수 없어 PostgreSQL·Meilisearch를 job `services`로 둔다. 자격 증명은 `compose.test.yaml`과 같은 테스트 값이며, `cargo xtask test --external-services`가 `DATABASE_URL`이 없으면 실패한다. 로컬은 `cargo xtask test`(Compose)로 같은 테스트를 돌린다.
+- **캐시**: `Swatinem/rust-cache`와 buildx의 GHA 캐시는 속도용이다. 없어도 같은 명령이 성공해야 한다.
+- **산출물 공유**: 현재 통합 테스트는 in-process라 제품 바이너리를 소비하지 않는다. e2e가 생기면 `build` job이 서버 바이너리와 웹 번들을 한 번 만들고 소스 SHA·아키텍처를 키로 하는 artifact로 넘긴다. 병목 측정 전에는 job을 더 쪼개지 않는다.
+- **상태**: 두 워크플로 모두 작성만 했고 GitHub Actions에서 실행하지 않았다(NOT RUN). `ci.yml`은 O-32 결정과 digest 변수 설정 전에는 시작할 수 없다.
+
 ## 참고 자료
 
 - [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict.html)

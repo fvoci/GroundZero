@@ -13,7 +13,7 @@
 - `contracts/openapi.json`(생성)
 - `deploy/`: `compose.dev.yaml`, `compose.test.yaml`, `keycloak/realm-test.json`, `docker/{dev,app}.Dockerfile`. `compose.selfhost.yaml`은 O-25 결정 후.
 - `.agents/skills/{rust-api-db,svelte-ui,test-docker-ci}/SKILL.md`
-- `.github/workflows/ci.yml`
+- `.github/workflows/{base-image,ci}.yml`
 - `docs/`: `decisions.md`, `development.md`, `repo-structure.md`. 나머지 문서는 실제 내용이 생길 때 만든다.
 
 프론트엔드 `features/`에 `projects`·`hobbies`·`notifications`·`audit`·`modules`가 없는 것은 기능 제외가 아니다. 구현할 때 추가한다. 개인 노트는 `documents` 안에서 소유권·권한으로 구분하며 편집·저장 코드를 복제하지 않는다.

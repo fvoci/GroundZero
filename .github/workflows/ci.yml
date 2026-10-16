@@ -1,5 +1,7 @@
-# 로컬과 같은 진입점(`cargo xtask check`, `cargo xtask test`)만 실행한다. 검사 skip으로 통과시키지 않는다.
-# 이번 초기화에서는 작성만 했고 GitHub Actions에서 실행해 보지 않았다.
+# 제품 검사. 로컬과 같은 진입점(cargo xtask check / cargo xtask test)만 호출한다.
+# 모든 job은 base-image 워크플로가 만든 같은 이미지 digest 안에서 돈다 (latest 금지).
+# 저장소 변수: FVOCI_DEV_IMAGE (예: ghcr.io/<owner>/fvoci-dev), FVOCI_DEV_IMAGE_DIGEST (sha256:...).
+# 레지스트리·공개 범위 승인 전에는 변수가 없어 이 워크플로를 실행할 수 없다 (decisions.md O-32). 아직 실행해 보지 않았다.
 name: ci
 
 on:
@@ -7,39 +9,55 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    container:
+      image: ${{ vars.FVOCI_DEV_IMAGE }}@${{ vars.FVOCI_DEV_IMAGE_DIGEST }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.99.0
-          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.24.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: cargo install cargo-deny --version 0.20.2 --locked
       - run: pnpm install --frozen-lockfile
       - run: cargo xtask check
 
   integration:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    container:
+      image: ${{ vars.FVOCI_DEV_IMAGE }}@${{ vars.FVOCI_DEV_IMAGE_DIGEST }}
+    # 컨테이너 job 안에서는 Compose를 띄울 수 없으므로 job 서비스로 격리한다. 자격 증명은 compose.test.yaml과 같은 테스트 값.
+    services:
+      postgres:
+        image: postgres:18.3-alpine
+        env:
+          POSTGRES_USER: fvoci
+          POSTGRES_PASSWORD: fvoci-test-password
+          POSTGRES_DB: fvoci
+        options: >-
+          --health-cmd "pg_isready -U fvoci -d fvoci"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+      meilisearch:
+        image: getmeili/meilisearch:v1.37.0
+        env:
+          MEILI_ENV: development
+          MEILI_MASTER_KEY: fvoci-test-meili-master-key-16chars
+          MEILI_NO_ANALYTICS: 'true'
+    env:
+      DATABASE_URL: postgres://fvoci:fvoci-test-password@postgres:5432/fvoci
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.99.0
       - uses: Swatinem/rust-cache@v2
-      - run: cargo xtask test
+      - run: cargo xtask test --external-services

@@ -7,7 +7,10 @@ use xshell::cmd;
 
 use crate::compose::{self, Compose, Env};
 
-pub fn run(root: &Path, keep: bool, oidc: bool) -> Result<()> {
+pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Result<()> {
+    if external_services {
+        return run_external(root);
+    }
     let mut compose = Compose::new(root, Env::Test);
     if oidc {
         compose = compose.with_profile("oidc");
@@ -43,4 +46,19 @@ pub fn run(root: &Path, keep: bool, oidc: bool) -> Result<()> {
         compose.down(&sh)?;
     }
     result
+}
+
+/// 외부에서 준비된 서비스로 테스트한다. 필요한 환경 변수가 없으면 건너뛰지 않고 실패한다.
+fn run_external(root: &Path) -> Result<()> {
+    let sh = xshell::Shell::new()?;
+    sh.change_dir(root);
+    if std::env::var("DATABASE_URL")
+        .map(|v| v.trim().is_empty())
+        .unwrap_or(true)
+    {
+        anyhow::bail!("--external-services requires DATABASE_URL to be set");
+    }
+    println!("==> using external services from environment");
+    cmd!(sh, "cargo test --workspace --locked").run()?;
+    Ok(())
 }

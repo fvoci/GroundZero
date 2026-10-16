@@ -32,6 +32,9 @@ enum Command {
         /// OIDC 통합 테스트용 Keycloak도 함께 띄운다.
         #[arg(long)]
         oidc: bool,
+        /// Compose를 띄우지 않고 환경 변수(`DATABASE_URL` 등)로 주어진 외부 서비스를 쓴다. CI 컨테이너 job용.
+        #[arg(long)]
+        external_services: bool,
     },
     /// 개발용 Compose를 띄우고 서버를 실행한다. 종료는 Ctrl-C.
     Dev,
@@ -60,7 +63,11 @@ fn main() -> Result<()> {
     let root = repo_root()?;
     match cli.command {
         Command::Check => check::run(&root),
-        Command::Test { keep, oidc } => test::run(&root, keep, oidc),
+        Command::Test {
+            keep,
+            oidc,
+            external_services,
+        } => test::run(&root, keep, oidc, external_services),
         Command::Dev => dev::run(&root),
         Command::Down => compose::down_all(&root),
         Command::Openapi { check } => openapi::run(&root, check),
