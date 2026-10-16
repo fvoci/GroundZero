@@ -32,6 +32,8 @@ export interface DocumentView {
   placement: 'wiki' | 'module' | 'personal';
   /** 모듈 항목 아래 문서면 그 항목. */
   item_id: string | null;
+  /** 트리의 부모. 없거나 볼 수 없으면 null. */
+  parent_id: string | null;
   /** 사람이 보는 참조(WIKI-3). 개인 노트는 null. */
   reference: string | null;
   title: string;
@@ -141,6 +143,7 @@ export function parseSummary(value: Json): SummaryView {
     title: str(o, 'title'),
     revision: int(o, 'revision'),
     updated_at: str(o, 'updated_at'),
+    parent_id: optStr(o, 'parent_id'),
   };
 }
 
@@ -158,6 +161,7 @@ export function parseDocument(value: Json): DocumentView {
     id: str(o, 'id'),
     workspace_id: workspaceId,
     item_id: optStr(o, 'item_id'),
+    parent_id: optStr(o, 'parent_id'),
     placement,
     reference,
     title: str(o, 'title'),
@@ -179,6 +183,8 @@ export interface SummaryView {
   title: string;
   revision: number;
   updated_at: string;
+  /** 트리의 부모. 없거나 볼 수 없으면 null(최상위로 보인다). */
+  parent_id: string | null;
 }
 
 export interface SharedView {
@@ -204,6 +210,8 @@ export interface MovePreviewView {
   reference_changes: boolean;
   /** 이동해도 유지되는 활성 공개 링크 수. */
   active_public_links: number;
+  /** 원래 자리에 남는 하위 문서 수(볼 수 있는 것). */
+  children_left_behind: number;
 }
 
 export interface MoveOutcomeView {
@@ -249,6 +257,7 @@ export function parseMovePreview(value: Json): MovePreviewView {
     history_moves_with_document: bool(o, 'history_moves_with_document'),
     reference_changes: bool(o, 'reference_changes'),
     active_public_links: int(o, 'active_public_links'),
+    children_left_behind: int(o, 'children_left_behind'),
   };
 }
 
@@ -637,16 +646,24 @@ export const api = {
     expectOk('GET', `/api/workspaces/${encodeURIComponent(workspaceId)}/wiki/documents`, (v) =>
       parseList(v, parseSummary),
     ),
-  createWikiDocument: (workspaceId: string, requestId: string, title: string) =>
+  createWikiDocument: (
+    workspaceId: string,
+    requestId: string,
+    title: string,
+    parentId: string | null = null,
+  ) =>
     expectOk(
       'POST',
       `/api/workspaces/${encodeURIComponent(workspaceId)}/wiki/documents`,
       parseDocument,
-      {
-        request_id: requestId,
-        title,
-      },
+      { request_id: requestId, title, parent_id: parentId },
     ),
+  /** 트리에서 부모·순서를 바꾼다. parentId가 null이면 최상위, beforeId가 있으면 그 형제 바로 앞. */
+  setParent: (id: string, parentId: string | null, beforeId: string | null) =>
+    expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/parent`, parseDocument, {
+      parent_id: parentId,
+      before_id: beforeId,
+    }),
   document: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}`, parseDocument),
   members: (ws: string) =>
@@ -706,8 +723,12 @@ export const api = {
       none,
     ),
   myNotes: () => expectOk('GET', '/api/me/notes', (v) => parseList(v, parseSummary)),
-  createNote: (requestId: string, title: string) =>
-    expectOk('POST', '/api/me/notes', parseDocument, { request_id: requestId, title }),
+  createNote: (requestId: string, title: string, parentId: string | null = null) =>
+    expectOk('POST', '/api/me/notes', parseDocument, {
+      request_id: requestId,
+      title,
+      parent_id: parentId,
+    }),
   sharedWithMe: () => expectOk('GET', '/api/me/shared', (v) => parseList(v, parseSharedView)),
   setSettings: (id: string, visibility: 'workspace' | 'private', allowCopy: boolean) =>
     expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, {
@@ -828,10 +849,16 @@ export const api = {
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/documents`, (v) =>
       parseList(v, parseSummary),
     ),
-  createItemDocument: (itemId: string, requestId: string, title: string) =>
+  createItemDocument: (
+    itemId: string,
+    requestId: string,
+    title: string,
+    parentId: string | null = null,
+  ) =>
     expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/documents`, parseDocument, {
       request_id: requestId,
       title,
+      parent_id: parentId,
     }),
   publicLinks: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/public-links`, (v) =>

@@ -46,6 +46,8 @@ pub struct Limits {
     pub max_title_chars: usize,
     /// 문서 하나에 넣을 수 있는 참조(@ 링크·언급) 노드 수 상한. `FVOCI_MAX_REFERENCES_PER_DOCUMENT`.
     pub max_references_per_document: usize,
+    /// 문서 트리 최대 깊이(최상위 = 1). `FVOCI_MAX_DOCUMENT_DEPTH`.
+    pub max_document_depth: usize,
 }
 
 /// 서버 실행 구성.
@@ -138,7 +140,14 @@ impl Config {
                 "FVOCI_MAX_REFERENCES_PER_DOCUMENT",
                 500,
             )?,
+            max_document_depth: parse_or(&lookup, "FVOCI_MAX_DOCUMENT_DEPTH", 10)?,
         };
+        // 1 이하는 트리를 조용히 끄고, 너무 크면 DB의 깊이 계산 상한(1000)을 넘어 한도가 무의미해진다.
+        if !(2..=100).contains(&limits.max_document_depth) {
+            return Err(AppError::Config(
+                "FVOCI_MAX_DOCUMENT_DEPTH must be between 2 and 100".into(),
+            ));
+        }
 
         Ok(Self {
             bind,
@@ -245,5 +254,19 @@ mod tests {
     fn rejects_invalid_limit() {
         let err = Config::from_lookup(with_db(&[("FVOCI_MAX_TITLE_CHARS", "-1")])).unwrap_err();
         assert!(matches!(err, AppError::Config(m) if m.contains("FVOCI_MAX_TITLE_CHARS")));
+    }
+
+    #[test]
+    fn rejects_depth_outside_range() {
+        const BAD: [&[(&str, &str)]; 3] = [
+            &[("FVOCI_MAX_DOCUMENT_DEPTH", "0")],
+            &[("FVOCI_MAX_DOCUMENT_DEPTH", "1")],
+            &[("FVOCI_MAX_DOCUMENT_DEPTH", "101")],
+        ];
+        for bad in BAD {
+            let err = Config::from_lookup(with_db(bad)).unwrap_err();
+            assert!(matches!(err, AppError::Config(m) if m.contains("FVOCI_MAX_DOCUMENT_DEPTH")));
+        }
+        assert!(Config::from_lookup(with_db(&[("FVOCI_MAX_DOCUMENT_DEPTH", "3")])).is_ok());
     }
 }

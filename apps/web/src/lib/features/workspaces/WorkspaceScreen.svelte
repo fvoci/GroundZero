@@ -4,7 +4,9 @@
 
   import type { SummaryView } from '$lib/api/client';
 
-  import { api, ApiError } from '$lib/api/client';
+  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
+  import type { TreeMove } from '$lib/features/documents/tree';
   import { documentPath, router } from '$lib/router.svelte';
 
   import ModulesSection from '$lib/features/modules/ModulesSection.svelte';
@@ -50,23 +52,23 @@
   {:else if docs.length === 0}
     <p class="text-muted-foreground">위키 문서가 없습니다.</p>
   {:else}
-    <ul class="flex flex-col gap-1" data-testid="wiki-list">
-      {#each docs as doc (doc.id)}
-        <li>
-          <a
-            class="flex items-baseline gap-2 rounded px-2 py-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            href={documentPath(workspace.id, doc.id)}
-            onclick={(e) => {
-              e.preventDefault();
-              router.navigate(documentPath(workspace.id, doc.id));
-            }}
-          >
-            <span class="font-mono text-sm text-muted-foreground">{doc.reference}</span>
-            <span>{doc.title}</span>
-          </a>
-        </li>
-      {/each}
-    </ul>
+    <DocumentTree
+      {docs}
+      label={`${workspace.name} 위키 문서`}
+      hrefFor={(id: string) => documentPath(workspace.id, id)}
+      navigate={(path: string) => {
+        router.navigate(path);
+      }}
+      {canWrite}
+      onmove={async (id: string, move: TreeMove) => {
+        await api.setParent(id, move.parentId, move.beforeId);
+        docs = await api.wikiDocuments(workspace.id);
+      }}
+      oncreatechild={async (parentId: string) => {
+        const doc = await api.createWikiDocument(workspace.id, newRequestId(), '새 문서', parentId);
+        router.navigate(documentPath(workspace.id, doc.id));
+      }}
+    />
   {/if}
   {#if canWrite}
     <CreateForm

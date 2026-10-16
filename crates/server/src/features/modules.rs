@@ -21,7 +21,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
     Access, CreateDocument, Document, DocumentSummary, SCHEMA_VERSION, SUMMARY_COLUMNS, SummaryRow,
-    empty_body, load_with_access, to_document, to_summaries,
+    TREE_ORDER, empty_body, load_with_access, max_depth, to_document, to_summaries,
 };
 use crate::features::workspaces::{member_role, validate_title};
 use crate::http::AppState;
@@ -556,7 +556,7 @@ pub async fn list_item_documents(
     let mut tx = state.db.begin_as(user).await?;
     load_item(&mut tx, id).await?;
     let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
-        "SELECT {SUMMARY_COLUMNS} FROM documents WHERE item_id = $1 ORDER BY number"
+        "SELECT {SUMMARY_COLUMNS} FROM documents WHERE item_id = $1 ORDER BY {TREE_ORDER}"
     ))
     .bind(id)
     .fetch_all(tx.conn())
@@ -580,12 +580,14 @@ pub async fn create_item_document(
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
         let id: DocumentId =
-            sqlx::query_scalar("SELECT app_create_module_document($1, $2, $3, $4, $5)")
+            sqlx::query_scalar("SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7)")
                 .bind(item)
                 .bind(input.request_id)
                 .bind(&title)
                 .bind(SCHEMA_VERSION)
                 .bind(empty_body())
+                .bind(input.parent_id)
+                .bind(max_depth(&state.config.limits))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;

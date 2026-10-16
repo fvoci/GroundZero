@@ -130,6 +130,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/parent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 트리에서 부모·순서 바꾸기(쓰기 권한). 권한은 바뀌지 않는다. 부모는 같은 자리에 있어야 하고
+         *     자기 하위로는 옮길 수 없으며 깊이 한도(`FVOCI_MAX_DOCUMENT_DEPTH`)를 넘을 수 없다.
+         */
+        put: operations["set_parent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}/public-links": {
         parameters: {
             query?: never;
@@ -906,6 +926,7 @@ export interface components {
         };
         /** @description 문서 생성 요청. */
         CreateDocument: {
+            parent_id?: null | components["schemas"]["DocumentId"];
             /** Format: uuid */
             request_id: string;
             title: string;
@@ -982,6 +1003,7 @@ export interface components {
             can_manage: boolean;
             id: components["schemas"]["DocumentId"];
             item_id?: null | components["schemas"]["ItemId"];
+            parent_id?: null | components["schemas"]["DocumentId"];
             /** @description `wiki`, `module` 또는 `personal`. */
             placement: string;
             reference?: string | null;
@@ -1010,6 +1032,7 @@ export interface components {
         /** @description 문서 목록 항목. */
         DocumentSummary: {
             id: components["schemas"]["DocumentId"];
+            parent_id?: null | components["schemas"]["DocumentId"];
             /** @description 사람이 보는 참조. 예: `WIKI-3`. 개인 노트는 없다. */
             reference?: string | null;
             /** Format: int32 */
@@ -1146,6 +1169,11 @@ export interface components {
              * @description 이동해도 유지되는 활성 공개 링크 수. 로그인 없이 계속 볼 수 있다.
              */
             active_public_links: number;
+            /**
+             * Format: int64
+             * @description 원래 자리에 남는 하위 문서 수(내가 볼 수 있는 것). 이동하는 문서의 원래 부모에 붙는다.
+             */
+            children_left_behind: number;
             gains: string[];
             /** @description 이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다. */
             history_moves_with_document: boolean;
@@ -1304,6 +1332,11 @@ export interface components {
         /** @description 보관 상태 변경 요청. */
         SetArchived: {
             archived: boolean;
+        };
+        /** @description 부모·순서 바꾸기 요청. `parent_id`가 없으면 최상위, `before_id`가 있으면 그 형제 바로 앞, 없으면 맨 끝. */
+        SetParent: {
+            before_id?: null | components["schemas"]["DocumentId"];
+            parent_id?: null | components["schemas"]["DocumentId"];
         };
         /** @description 역할 변경 요청. */
         SetRole: {
@@ -1667,6 +1700,55 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_parent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetParent"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

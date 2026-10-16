@@ -543,6 +543,12 @@
             ? '대상에서 번호가 새로 붙습니다.'
             : '같은 모듈 안 이동이라 번호가 그대로입니다.'}
         </p>
+        {#if preview.children_left_behind > 0}
+          <p class="text-sm" role="note">
+            하위 문서 {preview.children_left_behind}개는 지금 자리에 남아 이 문서의 상위 문서 아래로
+            옮겨집니다.
+          </p>
+        {/if}
         {#if preview.active_public_links > 0}
           <p class="text-sm" role="note">
             활성 공개 링크 {preview.active_public_links}개가 그대로 유지되어 로그인 없이 계속 볼 수

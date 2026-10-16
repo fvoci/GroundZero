@@ -7,7 +7,6 @@
 //! 저장 경계 (D-62): 본문은 Tiptap JSON(`schema_version` 1)이며 저장할 때마다 리비전이 하나 늘어난다.
 //! 이것은 JSON 리비전 저장이고 공동 편집이 아니다. CRDT 도입 시 상태 열을 `body` 옆에 추가하며
 //! 문서 id·번호·리비전 번호는 그대로 이어진다.
-//!
 //! 충돌 (D-53): 저장 요청의 `base_revision`이 현재 리비전과 다르면 409와 함께 서버 최신본을 돌려준다.
 //! 클라이언트는 초안을 버리지 않는다. 같은 `request_id`의 재시도는 이미 만든 리비전을 돌려준다.
 
@@ -86,6 +85,8 @@ pub struct DocumentSummary {
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub updated_at: OffsetDateTime,
+    /// 트리의 부모. 없거나 볼 수 없으면 없다(최상위로 보인다).
+    pub parent_id: Option<DocumentId>,
 }
 
 /// 문서 전체.
@@ -96,6 +97,8 @@ pub struct Document {
     pub workspace_id: Option<WorkspaceId>,
     /// 모듈 항목 아래 문서면 그 항목 (D-59).
     pub item_id: Option<ItemId>,
+    /// 트리의 부모. 없거나 볼 수 없으면 없다.
+    pub parent_id: Option<DocumentId>,
     /// `wiki`, `module` 또는 `personal`.
     pub placement: String,
     pub reference: Option<String>,
@@ -126,6 +129,9 @@ pub struct CreateDocument {
     #[schema(value_type = String, format = Uuid)]
     pub request_id: Uuid,
     pub title: String,
+    /// 이 문서 아래에 만든다(같은 자리의 문서). 없으면 최상위 맨 끝.
+    #[serde(default)]
+    pub parent_id: Option<DocumentId>,
 }
 
 /// 문서 저장 요청.
@@ -243,6 +249,7 @@ pub(crate) struct DocRow {
     id: DocumentId,
     workspace_id: Option<WorkspaceId>,
     item_id: Option<ItemId>,
+    parent_id: Option<DocumentId>,
     placement: String,
     reference: Option<String>,
     title: String,
@@ -258,7 +265,8 @@ pub(crate) struct DocRow {
 /// 참조 문자열은 저장하지 않고 현재 키로 만든다(키가 바뀌어도 번호·id는 그대로, D-18).
 /// 항목 id는 그 항목을 볼 수 있는 사람에게만 준다(공유로만 문서를 보는 사람에게 비공개 항목을 드러내지 않는다).
 const DOC_COLUMNS: &str = "id, workspace_id, \
-    CASE WHEN app_item_access(item_id) IS NOT NULL THEN item_id END AS item_id, placement, \
+    CASE WHEN app_item_access(item_id) IS NOT NULL THEN item_id END AS item_id, \
+    CASE WHEN app_document_access(parent_id) IS NOT NULL THEN parent_id END AS parent_id, placement, \
     app_document_reference(id) AS reference, title, body, schema_version, revision, updated_at, \
     visibility, allow_copy, coalesce(app_document_base_access(id) = 'owner', false) AS can_manage";
 
@@ -267,6 +275,7 @@ pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
         id: row.id,
         workspace_id: row.workspace_id,
         item_id: row.item_id,
+        parent_id: row.parent_id,
         reference: row.reference,
         placement: row.placement,
         title: row.title,
@@ -314,20 +323,32 @@ pub(crate) async fn load_with_access(
 }
 
 /// 목록 조회 열. `SummaryRow`와 순서가 같다.
-pub(crate) const SUMMARY_COLUMNS: &str =
-    "id, app_document_reference(id) AS reference, title, revision, updated_at";
+/// 목록 조회 열. `SummaryRow`와 순서가 같다. 부모는 볼 수 있을 때만 준다(아니면 그 문서는 최상위로 보인다).
+pub(crate) const SUMMARY_COLUMNS: &str = "id, app_document_reference(id) AS reference, title, revision, \
+    updated_at, CASE WHEN app_document_access(parent_id) IS NOT NULL THEN parent_id END AS parent_id";
 
-pub(crate) type SummaryRow = (DocumentId, Option<String>, String, i32, OffsetDateTime);
+/// 트리 순서. 같은 부모 아래에서 위치, 같으면 번호·만든 순서.
+pub(crate) const TREE_ORDER: &str = "position, number NULLS LAST, created_at, id";
+
+pub(crate) type SummaryRow = (
+    DocumentId,
+    Option<String>,
+    String,
+    i32,
+    OffsetDateTime,
+    Option<DocumentId>,
+);
 
 pub(crate) fn to_summaries(rows: Vec<SummaryRow>) -> Vec<DocumentSummary> {
     rows.into_iter()
         .map(
-            |(id, reference, title, revision, updated_at)| DocumentSummary {
+            |(id, reference, title, revision, updated_at, parent_id)| DocumentSummary {
                 id,
                 reference,
                 title,
                 revision,
                 updated_at,
+                parent_id,
             },
         )
         .collect()
@@ -350,7 +371,7 @@ pub async fn list_wiki(
     member_role(&mut tx, ws).await?;
     let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
         "SELECT {SUMMARY_COLUMNS} FROM documents
-         WHERE workspace_id = $1 AND placement = 'wiki' ORDER BY number"
+         WHERE workspace_id = $1 AND placement = 'wiki' ORDER BY {TREE_ORDER}"
     ))
     .bind(ws)
     .fetch_all(tx.conn())
@@ -379,14 +400,17 @@ pub async fn create_wiki(
             return Err(AppError::Forbidden);
         }
         let id: DocumentId =
-            sqlx::query_scalar("SELECT app_create_wiki_document($1, $2, $3, $4, $5)")
+            sqlx::query_scalar("SELECT app_create_wiki_document($1, $2, $3, $4, $5, $6, $7)")
                 .bind(ws)
                 .bind(input.request_id)
                 .bind(&title)
                 .bind(SCHEMA_VERSION)
                 .bind(empty_body())
+                .bind(input.parent_id)
+                .bind(max_depth(&state.config.limits))
                 .fetch_one(tx.conn())
-                .await?;
+                .await
+                .map_err(AppError::from_db_function)?;
         let (row, access) = load_with_access(&mut tx, id).await?;
         tx.commit().await?;
         Ok(to_document(row, access))
@@ -415,7 +439,7 @@ pub async fn my_notes(
     let mut tx = state.db.begin_as(user).await?;
     let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
         "SELECT {SUMMARY_COLUMNS} FROM documents
-         WHERE owner_user_id = app_user_id() ORDER BY updated_at DESC"
+         WHERE owner_user_id = app_user_id() ORDER BY {TREE_ORDER}"
     ))
     .fetch_all(tx.conn())
     .await?;
@@ -435,13 +459,17 @@ pub async fn create_note(
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let id: DocumentId = sqlx::query_scalar("SELECT app_create_personal_note($1, $2, $3, $4)")
-            .bind(input.request_id)
-            .bind(&title)
-            .bind(SCHEMA_VERSION)
-            .bind(empty_body())
-            .fetch_one(tx.conn())
-            .await?;
+        let id: DocumentId =
+            sqlx::query_scalar("SELECT app_create_personal_note($1, $2, $3, $4, $5, $6)")
+                .bind(input.request_id)
+                .bind(&title)
+                .bind(SCHEMA_VERSION)
+                .bind(empty_body())
+                .bind(input.parent_id)
+                .bind(max_depth(&state.config.limits))
+                .fetch_one(tx.conn())
+                .await
+                .map_err(AppError::from_db_function)?;
         let (row, access) = load_with_access(&mut tx, id).await?;
         tx.commit().await?;
         Ok(to_document(row, access))
@@ -633,6 +661,66 @@ pub async fn save(
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     Ok(Json(to_document(row, access)).into_response())
+}
+
+// ---------------------------------------------------------------------------
+// 트리 (D-27)
+// ---------------------------------------------------------------------------
+
+/// 부모·순서 바꾸기 요청. `parent_id`가 없으면 최상위, `before_id`가 있으면 그 형제 바로 앞, 없으면 맨 끝.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetParent {
+    pub parent_id: Option<DocumentId>,
+    pub before_id: Option<DocumentId>,
+}
+
+/// DB 함수에 넘길 트리 깊이 한도.
+pub(crate) fn max_depth(limits: &Limits) -> i32 {
+    i32::try_from(limits.max_document_depth).unwrap_or(i32::MAX)
+}
+
+async fn set_parent_in(
+    tx: &mut UserTx,
+    limits: &Limits,
+    id: DocumentId,
+    parent: Option<DocumentId>,
+    before: Option<DocumentId>,
+) -> Result<(), AppError> {
+    sqlx::query("SELECT app_set_document_parent($1, $2, $3, $4)")
+        .bind(id)
+        .bind(parent)
+        .bind(before)
+        .bind(max_depth(limits))
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    Ok(())
+}
+
+/// 트리에서 부모·순서 바꾸기(쓰기 권한). 권한은 바뀌지 않는다. 부모는 같은 자리에 있어야 하고
+/// 자기 하위로는 옮길 수 없으며 깊이 한도(`FVOCI_MAX_DOCUMENT_DEPTH`)를 넘을 수 없다.
+#[utoipa::path(put, path = "/api/documents/{document_id}/parent",
+    params(("document_id" = String, Path, format = Uuid)), request_body = SetParent,
+    responses((status = 200, body = Document), (status = 400, body = ErrorBody),
+              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+pub async fn set_parent(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<DocumentId>,
+    Json(input): Json<SetParent>,
+) -> Result<Json<Document>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    set_parent_in(
+        &mut tx,
+        &state.config.limits,
+        id,
+        input.parent_id,
+        input.before_id,
+    )
+    .await?;
+    let (row, access) = load_with_access(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(to_document(row, access)))
 }
 
 // ---------------------------------------------------------------------------
@@ -855,6 +943,8 @@ pub struct MovePreview {
     pub history_moves_with_document: bool,
     /// 이동해도 유지되는 활성 공개 링크 수. 로그인 없이 계속 볼 수 있다.
     pub active_public_links: i64,
+    /// 원래 자리에 남는 하위 문서 수(내가 볼 수 있는 것). 이동하는 문서의 원래 부모에 붙는다.
+    pub children_left_behind: i64,
 }
 
 /// 이동 결과. 이동한 사람이 새 위치에서 문서를 볼 수 없으면 `document`가 없다
@@ -889,6 +979,12 @@ async fn preview(
         .await
         .map_err(AppError::from_db_function)?;
     // 공개 링크는 이동해도 유지된다. 비공개 항목으로 옮길 때 알 수 있게 개수를 보여 준다.
+    // 하위 문서는 원래 자리에 남는다(이동하는 문서의 원래 부모에 붙음). 볼 수 있는 것만 센다.
+    let children_left_behind: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM documents WHERE parent_id = $1")
+            .bind(id)
+            .fetch_one(tx.conn())
+            .await?;
     let active_public_links: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM public_links
          WHERE document_id = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())",
@@ -901,6 +997,7 @@ async fn preview(
         loses: loses.into_iter().map(|(_, n)| n).collect(),
         reference_changes: !keeps_number,
         active_public_links,
+        children_left_behind,
         history_moves_with_document: true,
     })
 }
@@ -934,6 +1031,13 @@ pub async fn move_document(
     Json(input): Json<MoveDocument>,
 ) -> Result<Response, AppError> {
     let mut tx = state.db.begin_as(user).await?;
+    // 잠금 순서(자리 → 문서 행 → 항목 → 번호): 원래 자리와 새 자리를 먼저 잠근다.
+    sqlx::query("SELECT app_lock_move($1, $2, $3)")
+        .bind(id)
+        .bind(input.target_workspace_id)
+        .bind(input.target_item_id)
+        .execute(tx.conn())
+        .await?;
     // 소유 권한자만 잠글 수 있다(RLS 갱신 정책). 다른 사람에게는 행이 없고, 아래 함수가 권한 오류를 낸다.
     sqlx::query("SELECT 1 FROM documents WHERE id = $1 FOR UPDATE")
         .bind(id)
@@ -993,6 +1097,7 @@ mod tests {
             max_document_bytes: max,
             max_title_chars: 10,
             max_references_per_document: 2,
+            max_document_depth: 3,
         }
     }
 

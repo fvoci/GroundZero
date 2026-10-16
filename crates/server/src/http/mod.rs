@@ -130,6 +130,7 @@ async fn api_not_found() -> AppError {
         documents::copy,
         documents::move_preview,
         documents::move_document,
+        documents::set_parent,
         revisions::list,
         revisions::get,
         revisions::restore,
@@ -208,6 +209,7 @@ async fn api_not_found() -> AppError {
         documents::MovePreview,
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
+        documents::SetParent,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -298,6 +300,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/public-links/{link_id}", delete(public_links::revoke))
         .route("/reference-candidates", get(references::candidates))
+        .route(
+            "/documents/{document_id}/parent",
+            put(documents::set_parent),
+        )
         .route("/documents/{document_id}/revisions", get(revisions::list))
         .route(
             "/documents/{document_id}/revisions/{revision}",

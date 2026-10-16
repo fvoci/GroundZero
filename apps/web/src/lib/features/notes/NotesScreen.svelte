@@ -1,7 +1,9 @@
 <script lang="ts">
   // 내 개인 노트 (D-22, D-49). 워크스페이스 관리자에게도 보이지 않는다.
   import type { SummaryView } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
+  import type { TreeMove } from '$lib/features/documents/tree';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { router, standalonePath } from '$lib/router.svelte';
 
@@ -33,20 +35,23 @@
   {:else if notes.length === 0}
     <p class="text-muted-foreground">노트가 없습니다.</p>
   {:else}
-    <ul class="flex flex-col gap-1" data-testid="note-list">
-      {#each notes as note (note.id)}
-        <li>
-          <a
-            class="block rounded px-2 py-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            href={standalonePath(note.id)}
-            onclick={(e: MouseEvent) => {
-              e.preventDefault();
-              router.navigate(standalonePath(note.id));
-            }}>{note.title}</a
-          >
-        </li>
-      {/each}
-    </ul>
+    <DocumentTree
+      docs={notes}
+      label="내 노트"
+      hrefFor={(id: string) => standalonePath(id)}
+      navigate={(path: string) => {
+        router.navigate(path);
+      }}
+      canWrite={true}
+      onmove={async (id: string, move: TreeMove) => {
+        await api.setParent(id, move.parentId, move.beforeId);
+        notes = await api.myNotes();
+      }}
+      oncreatechild={async (parentId: string) => {
+        const note = await api.createNote(newRequestId(), '새 노트', parentId);
+        router.navigate(standalonePath(note.id));
+      }}
+    />
   {/if}
   <CreateForm
     id="new-note"
