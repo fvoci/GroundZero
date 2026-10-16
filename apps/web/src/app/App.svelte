@@ -9,12 +9,16 @@
   import SharedScreen from '$lib/features/notes/SharedScreen.svelte';
   import PublicView from '$lib/features/public/PublicView.svelte';
   import MembersScreen from '$lib/features/members/MembersScreen.svelte';
+  import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
+  import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
   import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
-  import { membersPath, router, workspacePath } from '$lib/router.svelte';
+  import { itemPath, membersPath, router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Sidebar from '$lib/ui/sidebar';
+
+  import BackLink from './BackLink.svelte';
 
   type Session =
     | { state: 'loading' }
@@ -55,11 +59,18 @@
   }
 
   const route = $derived(router.route);
+  const WORKSPACE_ROUTES = new Set([
+    'workspace',
+    'document',
+    'members',
+    'module',
+    'item',
+    'item-document',
+  ]);
   const currentWorkspace = $derived.by(() => {
     if (session.state !== 'signed-in') return undefined;
-    if (route.name !== 'workspace' && route.name !== 'document' && route.name !== 'members') {
-      return undefined;
-    }
+    if (!WORKSPACE_ROUTES.has(route.name)) return undefined;
+    if (!('workspaceId' in route)) return undefined;
     const id = route.workspaceId;
     return session.workspaces.find((w) => w.id === id);
   });
@@ -185,7 +196,7 @@
             }}
             onjoined={reloadWorkspaces}
           />
-        {:else if route.name === 'workspace' || route.name === 'document' || route.name === 'members'}
+        {:else if WORKSPACE_ROUTES.has(route.name)}
           {#if currentWorkspace === undefined}
             <p role="alert">워크스페이스가 없거나 볼 권한이 없습니다.</p>
           {:else if route.name === 'members'}
@@ -206,17 +217,20 @@
               >
             </nav>
             <WorkspaceScreen workspace={currentWorkspace} />
-          {:else}
-            <nav aria-label="경로" class="text-sm">
-              <a
-                class="underline"
-                href={workspacePath(currentWorkspace.id)}
-                onclick={(e: MouseEvent) => {
-                  e.preventDefault();
-                  router.navigate(workspacePath(currentWorkspace.id));
-                }}>{currentWorkspace.name} 위키</a
-              >
-            </nav>
+          {:else if route.name === 'module'}
+            <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
+            <ModuleScreen workspace={currentWorkspace} moduleId={route.moduleId} />
+          {:else if route.name === 'item'}
+            <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
+            <ItemScreen workspace={currentWorkspace} itemId={route.itemId} />
+          {:else if route.name === 'item-document'}
+            <BackLink path={itemPath(currentWorkspace.id, route.itemId)} label="항목으로" />
+            <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
+          {:else if route.name === 'document'}
+            <BackLink
+              path={workspacePath(currentWorkspace.id)}
+              label={`${currentWorkspace.name} 위키`}
+            />
             <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
           {/if}
         {:else if route.name === 'notes'}

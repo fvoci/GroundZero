@@ -5,9 +5,12 @@ import type {
   Group,
   Health,
   Invitation,
+  Item,
   Me,
   Member,
   MembersView,
+  Module,
+  ModuleKind,
   ReceivedInvitation,
   Role,
   Workspace,
@@ -26,7 +29,9 @@ export interface DocumentView {
   id: string;
   /** 워크스페이스 문서면 소유 워크스페이스, 개인 노트는 null. */
   workspace_id: string | null;
-  placement: 'wiki' | 'personal';
+  placement: 'wiki' | 'module' | 'personal';
+  /** 모듈 항목 아래 문서면 그 항목. */
+  item_id: string | null;
   /** 사람이 보는 참조(WIKI-3). 개인 노트는 null. */
   reference: string | null;
   title: string;
@@ -140,14 +145,8 @@ export function parseSummary(value: Json): SummaryView {
 export function parseDocument(value: Json): DocumentView {
   const o = rec(value, 'document');
   const placement = str(o, 'placement');
-  if (placement !== 'wiki' && placement !== 'personal') throw new TypeError('unknown placement');
-  const access = str(o, 'access');
-  if (access !== 'owner' && access !== 'write' && access !== 'read') {
-    throw new TypeError('unknown access');
-  }
-  const visibility = str(o, 'visibility');
-  if (visibility !== 'workspace' && visibility !== 'private') {
-    throw new TypeError('unknown visibility');
+  if (placement !== 'wiki' && placement !== 'module' && placement !== 'personal') {
+    throw new TypeError('unknown placement');
   }
   const workspaceId = o.workspace_id ?? null;
   const reference = o.reference ?? null;
@@ -156,6 +155,7 @@ export function parseDocument(value: Json): DocumentView {
   return {
     id: str(o, 'id'),
     workspace_id: workspaceId,
+    item_id: optStr(o, 'item_id'),
     placement,
     reference,
     title: str(o, 'title'),
@@ -163,9 +163,9 @@ export function parseDocument(value: Json): DocumentView {
     schema_version: int(o, 'schema_version'),
     revision: int(o, 'revision'),
     updated_at: str(o, 'updated_at'),
-    access,
+    access: access(str(o, 'access')),
     can_edit: bool(o, 'can_edit'),
-    visibility,
+    visibility: visibility(str(o, 'visibility')),
     allow_copy: bool(o, 'allow_copy'),
   };
 }
@@ -347,6 +347,68 @@ export function parseGroup(value: Json): Group {
   };
 }
 
+export const MODULE_KINDS: readonly ModuleKind[] = [
+  'project',
+  'research',
+  'study',
+  'course',
+  'hobby',
+] as const;
+
+function moduleKind(value: string): ModuleKind {
+  const kind = MODULE_KINDS.find((k) => k === value);
+  if (kind === undefined) throw new TypeError(`unknown module kind ${value}`);
+  return kind;
+}
+
+function access(value: string): Access {
+  if (value === 'owner' || value === 'write' || value === 'read') return value;
+  throw new TypeError('unknown access');
+}
+
+function visibility(value: string): 'workspace' | 'private' {
+  if (value === 'workspace' || value === 'private') return value;
+  throw new TypeError('unknown visibility');
+}
+
+export function parseModule(value: Json): Module {
+  const o = rec(value, 'module');
+  return {
+    id: str(o, 'id'),
+    workspace_id: str(o, 'workspace_id'),
+    kind: moduleKind(str(o, 'kind')),
+    name: str(o, 'name'),
+    key: str(o, 'key'),
+    previous_keys: strings(o.previous_keys),
+    archived: bool(o, 'archived'),
+  };
+}
+
+/** 화면에서 쓰는 항목. 공개 범위를 좁힌 것 외에는 계약의 Item과 같다. */
+export type ItemView = Item & { visibility: 'workspace' | 'private' };
+
+export function parseItem(value: Json): ItemView {
+  const o = rec(value, 'item');
+  return {
+    id: str(o, 'id'),
+    module_id: str(o, 'module_id'),
+    workspace_id: str(o, 'workspace_id'),
+    reference: optStr(o, 'reference'),
+    title: str(o, 'title'),
+    description: str(o, 'description'),
+    visibility: visibility(str(o, 'visibility')),
+    access: access(str(o, 'access')),
+    archived: bool(o, 'archived'),
+    updated_at: str(o, 'updated_at'),
+  };
+}
+
+/** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
+export interface MoveTargetInput {
+  workspaceId: string;
+  itemId: string | null;
+}
+
 const none = (): undefined => undefined;
 
 async function request(
@@ -514,9 +576,54 @@ export const api = {
       target_workspace_id: targetWorkspaceId,
       title,
     }),
-  movePreview: (id: string, targetWorkspaceId: string) =>
+  movePreview: (id: string, target: MoveTargetInput) =>
     expectOk('POST', `/api/documents/${encodeURIComponent(id)}/move/preview`, parseMovePreview, {
-      target_workspace_id: targetWorkspaceId,
+      target_workspace_id: target.workspaceId,
+      target_item_id: target.itemId,
+    }),
+  modules: (ws: string) =>
+    expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/modules`, (v) =>
+      parseList(v, parseModule),
+    ),
+  module: (id: string) => expectOk('GET', `/api/modules/${encodeURIComponent(id)}`, parseModule),
+  createModule: (
+    ws: string,
+    input: { requestId: string; kind: ModuleKind; name: string; key: string },
+  ) =>
+    expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/modules`, parseModule, {
+      request_id: input.requestId,
+      kind: input.kind,
+      name: input.name,
+      key: input.key,
+    }),
+  updateModule: (id: string, name: string, key: string) =>
+    expectOk('PUT', `/api/modules/${encodeURIComponent(id)}`, parseModule, { name, key }),
+  archiveModule: (id: string, archived: boolean) =>
+    expectOk('PUT', `/api/modules/${encodeURIComponent(id)}/archived`, parseModule, { archived }),
+  items: (moduleId: string) =>
+    expectOk('GET', `/api/modules/${encodeURIComponent(moduleId)}/items`, (v) =>
+      parseList(v, parseItem),
+    ),
+  createItem: (moduleId: string, requestId: string, title: string) =>
+    expectOk('POST', `/api/modules/${encodeURIComponent(moduleId)}/items`, parseItem, {
+      request_id: requestId,
+      title,
+    }),
+  item: (id: string) => expectOk('GET', `/api/items/${encodeURIComponent(id)}`, parseItem),
+  updateItem: (
+    id: string,
+    input: { title: string; description: string; visibility: 'workspace' | 'private' },
+  ) => expectOk('PUT', `/api/items/${encodeURIComponent(id)}`, parseItem, input),
+  archiveItem: (id: string, archived: boolean) =>
+    expectOk('PUT', `/api/items/${encodeURIComponent(id)}/archived`, parseItem, { archived }),
+  itemDocuments: (itemId: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/documents`, (v) =>
+      parseList(v, parseSummary),
+    ),
+  createItemDocument: (itemId: string, requestId: string, title: string) =>
+    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/documents`, parseDocument, {
+      request_id: requestId,
+      title,
     }),
   publicLinks: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/public-links`, (v) =>
@@ -540,7 +647,7 @@ export const api = {
   /** 확인한 미리보기와 함께 이동한다. 그사이 접근 변화가 바뀌면 `{ kind: 'changed', preview }`. */
   async moveDocument(
     id: string,
-    targetWorkspaceId: string,
+    target: MoveTargetInput,
     acknowledged: MovePreviewView,
   ): Promise<
     { kind: 'moved'; outcome: MoveOutcomeView } | { kind: 'changed'; preview: MovePreviewView }
@@ -549,7 +656,8 @@ export const api = {
       'POST',
       `/api/documents/${encodeURIComponent(id)}/move`,
       {
-        target_workspace_id: targetWorkspaceId,
+        target_workspace_id: target.workspaceId,
+        target_item_id: target.itemId,
         acknowledged: { gains: acknowledged.gains, loses: acknowledged.loses },
       },
     );

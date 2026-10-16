@@ -27,7 +27,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::{member_role, validate_title};
 use crate::http::AppState;
-use crate::ids::{DocumentId, WorkspaceId};
+use crate::ids::{DocumentId, ItemId, WorkspaceId};
 
 /// 현재 본문 스키마 버전.
 pub const SCHEMA_VERSION: i32 = 1;
@@ -43,7 +43,7 @@ pub enum Access {
 }
 
 impl Access {
-    fn parse(raw: &str) -> Option<Self> {
+    pub(crate) fn parse(raw: &str) -> Option<Self> {
         match raw {
             "owner" => Some(Self::Owner),
             "write" => Some(Self::Write),
@@ -85,7 +85,9 @@ pub struct Document {
     pub id: DocumentId,
     /// 워크스페이스 문서면 소유 워크스페이스. 개인 노트는 없다.
     pub workspace_id: Option<WorkspaceId>,
-    /// `wiki` 또는 `personal`.
+    /// 모듈 항목 아래 문서면 그 항목 (D-59).
+    pub item_id: Option<ItemId>,
+    /// `wiki`, `module` 또는 `personal`.
     pub placement: String,
     pub reference: Option<String>,
     pub title: String,
@@ -133,7 +135,7 @@ pub struct ConflictBody {
     pub current: Document,
 }
 
-fn empty_body() -> Value {
+pub(crate) fn empty_body() -> Value {
     serde_json::json!({ "type": "doc", "content": [{ "type": "paragraph" }] })
 }
 
@@ -162,12 +164,12 @@ pub fn validate_body(body: &Value, limits: &Limits) -> Result<(), AppError> {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-struct DocRow {
+pub(crate) struct DocRow {
     id: DocumentId,
     workspace_id: Option<WorkspaceId>,
+    item_id: Option<ItemId>,
     placement: String,
-    scope: String,
-    number: Option<i64>,
+    reference: Option<String>,
     title: String,
     body: Value,
     schema_version: i32,
@@ -177,18 +179,16 @@ struct DocRow {
     allow_copy: bool,
 }
 
-const DOC_COLUMNS: &str = "id, workspace_id, placement, scope, number, title, body, schema_version, \
-                           revision, updated_at, visibility, allow_copy";
+/// 참조 문자열은 저장하지 않고 현재 키로 만든다(키가 바뀌어도 번호·id는 그대로, D-18).
+const DOC_COLUMNS: &str = "id, workspace_id, item_id, placement, app_document_reference(id) AS reference, \
+                           title, body, schema_version, revision, updated_at, visibility, allow_copy";
 
-fn reference(scope: &str, number: Option<i64>) -> Option<String> {
-    number.map(|n| format!("{scope}-{n}"))
-}
-
-fn to_document(row: DocRow, access: Access) -> Document {
+pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
     Document {
         id: row.id,
         workspace_id: row.workspace_id,
-        reference: reference(&row.scope, row.number),
+        item_id: row.item_id,
+        reference: row.reference,
         placement: row.placement,
         title: row.title,
         body: row.body,
@@ -224,20 +224,27 @@ async fn load_for_update(tx: &mut UserTx, id: DocumentId) -> Result<Option<DocRo
 }
 
 /// 문서와 권한을 함께 읽는다. 볼 수 없으면 404.
-async fn load_with_access(tx: &mut UserTx, id: DocumentId) -> Result<(DocRow, Access), AppError> {
+pub(crate) async fn load_with_access(
+    tx: &mut UserTx,
+    id: DocumentId,
+) -> Result<(DocRow, Access), AppError> {
     let access = access(tx, id).await?.ok_or(AppError::NotFound)?;
     let row = load(tx, id).await?.ok_or(AppError::NotFound)?;
     Ok((row, access))
 }
 
-type SummaryRow = (DocumentId, String, Option<i64>, String, i32, OffsetDateTime);
+/// 목록 조회 열. `SummaryRow`와 순서가 같다.
+pub(crate) const SUMMARY_COLUMNS: &str =
+    "id, app_document_reference(id) AS reference, title, revision, updated_at";
 
-fn to_summaries(rows: Vec<SummaryRow>) -> Vec<DocumentSummary> {
+pub(crate) type SummaryRow = (DocumentId, Option<String>, String, i32, OffsetDateTime);
+
+pub(crate) fn to_summaries(rows: Vec<SummaryRow>) -> Vec<DocumentSummary> {
     rows.into_iter()
         .map(
-            |(id, scope, number, title, revision, updated_at)| DocumentSummary {
+            |(id, reference, title, revision, updated_at)| DocumentSummary {
                 id,
-                reference: reference(&scope, number),
+                reference,
                 title,
                 revision,
                 updated_at,
@@ -261,10 +268,10 @@ pub async fn list_wiki(
 ) -> Result<Json<Vec<DocumentSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     member_role(&mut tx, ws).await?;
-    let rows: Vec<SummaryRow> = sqlx::query_as(
-        "SELECT id, scope, number, title, revision, updated_at FROM documents
-         WHERE workspace_id = $1 AND placement = 'wiki' ORDER BY number",
-    )
+    let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
+        "SELECT {SUMMARY_COLUMNS} FROM documents
+         WHERE workspace_id = $1 AND placement = 'wiki' ORDER BY number"
+    ))
     .bind(ws)
     .fetch_all(tx.conn())
     .await?;
@@ -326,10 +333,10 @@ pub async fn my_notes(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<DocumentSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let rows: Vec<SummaryRow> = sqlx::query_as(
-        "SELECT id, scope, number, title, revision, updated_at FROM documents
-         WHERE owner_user_id = app_user_id() ORDER BY updated_at DESC",
-    )
+    let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
+        "SELECT {SUMMARY_COLUMNS} FROM documents
+         WHERE owner_user_id = app_user_id() ORDER BY updated_at DESC"
+    ))
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;
@@ -712,12 +719,15 @@ pub async fn copy(
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MoveTarget {
     pub target_workspace_id: Option<WorkspaceId>,
+    /// 대상 워크스페이스의 모듈 항목. 없으면 그 워크스페이스의 위키 (D-59).
+    pub target_item_id: Option<ItemId>,
 }
 
 /// 이동 요청. 미리보기에서 접근 변화를 확인했다는 표시(`acknowledge`)가 있어야 이동한다.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MoveDocument {
     pub target_workspace_id: Option<WorkspaceId>,
+    pub target_item_id: Option<ItemId>,
     /// 사용자가 확인한 미리보기. 없거나 지금 계산한 것과 다르면 이동하지 않고 409와 새 미리보기를 돌려준다.
     pub acknowledged: Option<AcknowledgedPreview>,
 }
@@ -734,7 +744,7 @@ pub struct AcknowledgedPreview {
 pub struct MovePreview {
     pub gains: Vec<String>,
     pub loses: Vec<String>,
-    /// 이동하면 참조 번호가 대상 워크스페이스에서 새로 매겨진다. 링크는 id 기준이라 유지된다 (D-18).
+    /// 이동하면 참조 번호가 대상 위치(위키 또는 모듈)에서 새로 매겨진다. 링크는 id 기준이라 유지된다 (D-18).
     pub reference_changes: bool,
     /// 이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다.
     pub history_moves_with_document: bool,
@@ -753,11 +763,13 @@ async fn preview(
     tx: &mut UserTx,
     id: DocumentId,
     target: Option<WorkspaceId>,
+    item: Option<ItemId>,
 ) -> Result<MovePreview, AppError> {
     let rows: Vec<(String, String)> =
-        sqlx::query_as("SELECT change, display_name FROM app_move_preview($1, $2)")
+        sqlx::query_as("SELECT change, display_name FROM app_move_preview($1, $2, $3)")
             .bind(id)
             .bind(target)
+            .bind(item)
             .fetch_all(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;
@@ -782,7 +794,7 @@ pub async fn move_preview(
     Json(input): Json<MoveTarget>,
 ) -> Result<Json<MovePreview>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let p = preview(&mut tx, id, input.target_workspace_id).await?;
+    let p = preview(&mut tx, id, input.target_workspace_id, input.target_item_id).await?;
     tx.commit().await?;
     Ok(Json(p))
 }
@@ -805,7 +817,7 @@ pub async fn move_document(
         .execute(tx.conn())
         .await?;
     // 잠근 뒤 미리보기를 다시 계산해 사용자가 확인한 것과 같을 때만 옮긴다.
-    let current = preview(&mut tx, id, input.target_workspace_id).await?;
+    let current = preview(&mut tx, id, input.target_workspace_id, input.target_item_id).await?;
     let confirmed = input.acknowledged.as_ref().is_some_and(|ack| {
         let mut a = (ack.gains.clone(), ack.loses.clone());
         let mut b = (current.gains.clone(), current.loses.clone());
@@ -820,9 +832,10 @@ pub async fn move_document(
         return Ok((StatusCode::CONFLICT, Json(current)).into_response());
     }
     let (workspace_id, reference): (WorkspaceId, String) =
-        sqlx::query_as("SELECT workspace_id, reference FROM app_move_document($1, $2)")
+        sqlx::query_as("SELECT workspace_id, reference FROM app_move_document($1, $2, $3)")
             .bind(id)
             .bind(input.target_workspace_id)
+            .bind(input.target_item_id)
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;

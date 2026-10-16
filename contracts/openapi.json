@@ -1062,6 +1062,315 @@
         }
       }
     },
+    "/api/items/{item_id}": {
+      "get": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "항목 하나.",
+        "operationId": "get_item",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다.",
+        "operationId": "update_item",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateItem"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/archived": {
+      "put": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "항목 보관·해제(항목 소유 권한자).",
+        "operationId": "archive_item",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetArchived"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/documents": {
+      "get": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "항목 아래 문서 목록. 볼 수 있는 문서만 나온다.",
+        "operationId": "list_item_documents",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentSummary"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "항목 아래 문서 생성(항목 쓰기 권한). 모듈 번호열에서 번호를 받는다.",
+        "operationId": "create_item_document",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me": {
       "get": {
         "tags": [
@@ -1198,6 +1507,315 @@
             }
           },
           "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/modules/{module_id}": {
+      "get": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "모듈 하나(멤버).",
+        "operationId": "get_module",
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Module"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "모듈 이름·키 변경(관리자). 옛 키는 예전 키로 남아 다른 모듈이 쓰지 못한다.",
+        "operationId": "update_module",
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateModule"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Module"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/modules/{module_id}/archived": {
+      "put": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "모듈 보관·해제(관리자). 보관하면 항목과 문서가 읽기 전용이 된다.",
+        "operationId": "archive_module",
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetArchived"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Module"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/modules/{module_id}/items": {
+      "get": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "모듈의 항목 목록. 볼 수 있는 항목만(비공개 항목은 만든 사람·관리자에게만) 나온다.",
+        "operationId": "list_items",
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Item"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "항목 생성(작성자 이상). 모듈 번호열에서 번호를 받는다. 같은 `request_id`는 같은 항목을 돌려준다.",
+        "operationId": "create_item",
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateItem"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -1852,6 +2470,131 @@
         }
       }
     },
+    "/api/workspaces/{workspace_id}/modules": {
+      "get": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "워크스페이스의 모듈 목록(멤버).",
+        "operationId": "list_modules",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Module"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "모듈 생성(관리자). 키가 쓰였거나 예전에 쓰였으면 409.",
+        "operationId": "create_module",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateModule"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Module"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{workspace_id}/ownership": {
       "post": {
         "tags": [
@@ -2395,6 +3138,52 @@
           }
         }
       },
+      "CreateItem": {
+        "type": "object",
+        "description": "항목 생성 요청.",
+        "required": [
+          "request_id",
+          "title"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateModule": {
+        "type": "object",
+        "description": "모듈 생성 요청(관리자).",
+        "required": [
+          "request_id",
+          "kind",
+          "name",
+          "key"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "2~10자 영문·숫자, 영문으로 시작. 소문자는 대문자로 바꾼다. `WIKI`는 예약."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ModuleKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "CreatePublicLink": {
         "type": "object",
         "description": "공개 링크 생성 요청.",
@@ -2503,9 +3292,20 @@
           "id": {
             "$ref": "#/components/schemas/DocumentId"
           },
+          "item_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemId",
+                "description": "모듈 항목 아래 문서면 그 항목 (D-59)."
+              }
+            ]
+          },
           "placement": {
             "type": "string",
-            "description": "`wiki` 또는 `personal`."
+            "description": "`wiki`, `module` 또는 `personal`."
           },
           "reference": {
             "type": [
@@ -2686,6 +3486,64 @@
           }
         }
       },
+      "Item": {
+        "type": "object",
+        "description": "모듈 항목 (D-14). 새 항목은 기본 비공개다 (D-20).",
+        "required": [
+          "id",
+          "module_id",
+          "workspace_id",
+          "title",
+          "description",
+          "visibility",
+          "access",
+          "archived",
+          "updated_at"
+        ],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "module_id": {
+            "$ref": "#/components/schemas/ModuleId"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "예: `DEV-3`. 키를 볼 수 없으면 없다."
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "visibility": {
+            "type": "string",
+            "description": "`workspace` 또는 `private`."
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "ItemId": {
+        "type": "string",
+        "format": "uuid",
+        "description": "모듈 항목(개별 프로젝트·연구·스터디·강좌·취미 활동) 내부 ID (D-14)."
+      },
       "LogoutResponse": {
         "type": "object",
         "description": "로그아웃 결과. 클라이언트는 `redirect_to`로 이동해 제공자 세션도 끝낸다.",
@@ -2786,6 +3644,64 @@
           }
         }
       },
+      "Module": {
+        "type": "object",
+        "description": "모듈 인스턴스.",
+        "required": [
+          "id",
+          "workspace_id",
+          "kind",
+          "name",
+          "key",
+          "previous_keys",
+          "archived"
+        ],
+        "properties": {
+          "archived": {
+            "type": "boolean",
+            "description": "보관됨: 읽기 전용이며 번호·키는 그대로 남는다."
+          },
+          "id": {
+            "$ref": "#/components/schemas/ModuleId"
+          },
+          "key": {
+            "type": "string",
+            "description": "현재 키. 예: `DEV`."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ModuleKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "previous_keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "예전 키. `@` 검색과 옛 참조 해석에 쓴다 (D-18)."
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "ModuleId": {
+        "type": "string",
+        "format": "uuid",
+        "description": "모듈 인스턴스 내부 ID (D-15). 키가 바뀌어도 유지된다."
+      },
+      "ModuleKind": {
+        "type": "string",
+        "description": "모듈 기능 유형 (D-14). 만든 뒤 바꾸지 않는다 (D-16).",
+        "enum": [
+          "project",
+          "research",
+          "study",
+          "course",
+          "hobby"
+        ]
+      },
       "MoveDocument": {
         "type": "object",
         "description": "이동 요청. 미리보기에서 접근 변화를 확인했다는 표시(`acknowledge`)가 있어야 이동한다.",
@@ -2798,6 +3714,16 @@
               {
                 "$ref": "#/components/schemas/AcknowledgedPreview",
                 "description": "사용자가 확인한 미리보기. 없거나 지금 계산한 것과 다르면 이동하지 않고 409와 새 미리보기를 돌려준다."
+              }
+            ]
+          },
+          "target_item_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemId"
               }
             ]
           },
@@ -2867,7 +3793,7 @@
           },
           "reference_changes": {
             "type": "boolean",
-            "description": "이동하면 참조 번호가 대상 워크스페이스에서 새로 매겨진다. 링크는 id 기준이라 유지된다 (D-18)."
+            "description": "이동하면 참조 번호가 대상 위치(위키 또는 모듈)에서 새로 매겨진다. 링크는 id 기준이라 유지된다 (D-18)."
           }
         }
       },
@@ -2875,6 +3801,17 @@
         "type": "object",
         "description": "이동 대상.",
         "properties": {
+          "target_item_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemId",
+                "description": "대상 워크스페이스의 모듈 항목. 없으면 그 워크스페이스의 위키 (D-59)."
+              }
+            ]
+          },
           "target_workspace_id": {
             "oneOf": [
               {
@@ -3025,6 +3962,18 @@
           }
         }
       },
+      "SetArchived": {
+        "type": "object",
+        "description": "보관 상태 변경 요청.",
+        "required": [
+          "archived"
+        ],
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          }
+        }
+      },
       "SetRole": {
         "type": "object",
         "description": "역할 변경 요청.",
@@ -3090,6 +4039,43 @@
           }
         }
       },
+      "UpdateItem": {
+        "type": "object",
+        "description": "항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다.",
+        "required": [
+          "title",
+          "description",
+          "visibility"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "visibility": {
+            "type": "string",
+            "description": "`workspace` 또는 `private`."
+          }
+        }
+      },
+      "UpdateModule": {
+        "type": "object",
+        "description": "모듈 이름·키 변경 요청(관리자).",
+        "required": [
+          "name",
+          "key"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "UserId": {
         "type": "string",
         "format": "uuid",
@@ -3148,6 +4134,10 @@
     {
       "name": "members",
       "description": "멤버·초대·역할·그룹·소유권"
+    },
+    {
+      "name": "modules",
+      "description": "모듈 인스턴스·키·항목"
     }
   ]
 }

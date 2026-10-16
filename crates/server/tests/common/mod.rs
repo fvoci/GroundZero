@@ -11,7 +11,7 @@ use fvoci_server::features::accounts::{SESSION_COOKIE, VerifiedIdentity, start_s
 use fvoci_server::http::{AppState, router};
 use fvoci_server::ids::UserId;
 use http_body_util::BodyExt;
-use serde_json::Value;
+use serde_json::{Value, json};
 use tower::ServiceExt;
 
 /// 테스트 서버의 공개 원점. Origin 헤더 검사에 쓴다.
@@ -186,4 +186,36 @@ pub fn doc_body(text: &str) -> Value {
         "type": "doc",
         "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": text }] }]
     })
+}
+
+/// 초대와 수락으로 멤버를 넣는다. (사용자, 검증된 이메일)을 돌려준다.
+pub async fn add_member(
+    app: &Router,
+    state: &AppState,
+    admin: &TestUser,
+    ws: &str,
+    label: &str,
+    role: &str,
+) -> (TestUser, String) {
+    let email = unique_email(label);
+    let user = login_with_email(state, label, &email, true).await;
+    let inv = send(
+        app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/invitations"),
+        Some(admin),
+        Some(json!({ "email": email, "role": role })),
+    )
+    .await;
+    let id = inv.json["id"].as_str().unwrap();
+    let r = send(
+        app,
+        Method::POST,
+        &format!("/api/invitations/{id}/accept"),
+        Some(&user),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+    (user, email)
 }

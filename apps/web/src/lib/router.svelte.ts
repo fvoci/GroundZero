@@ -6,6 +6,9 @@ export type Route =
   | { name: 'workspace'; workspaceId: string }
   | { name: 'document'; workspaceId: string; documentId: string }
   | { name: 'members'; workspaceId: string }
+  | { name: 'module'; workspaceId: string; moduleId: string }
+  | { name: 'item'; workspaceId: string; itemId: string }
+  | { name: 'item-document'; workspaceId: string; itemId: string; documentId: string }
   | { name: 'notes' }
   | { name: 'shared' }
   | { name: 'standalone-document'; documentId: string }
@@ -19,6 +22,9 @@ const WORKSPACE = new RegExp(`^/w/(${UUID})/?$`);
 const DOCUMENT = new RegExp(`^/w/(${UUID})/wiki/(${UUID})/?$`);
 const MEMBERS = new RegExp(`^/w/(${UUID})/members/?$`);
 const STANDALONE = new RegExp(`^/d/(${UUID})/?$`);
+const MODULE = new RegExp(`^/w/(${UUID})/m/(${UUID})/?$`);
+const ITEM = new RegExp(`^/w/(${UUID})/i/(${UUID})/?$`);
+const ITEM_DOCUMENT = new RegExp(`^/w/(${UUID})/i/(${UUID})/d/(${UUID})/?$`);
 
 export function parseRoute(pathname: string): Route {
   if (pathname === '/' || pathname === '') return { name: 'home' };
@@ -29,6 +35,23 @@ export function parseRoute(pathname: string): Route {
   const standalone = STANDALONE.exec(pathname);
   if (standalone?.[1] !== undefined) {
     return { name: 'standalone-document', documentId: standalone[1] };
+  }
+  const mod = MODULE.exec(pathname);
+  if (mod?.[1] !== undefined && mod[2] !== undefined) {
+    return { name: 'module', workspaceId: mod[1], moduleId: mod[2] };
+  }
+  const item = ITEM.exec(pathname);
+  if (item?.[1] !== undefined && item[2] !== undefined) {
+    return { name: 'item', workspaceId: item[1], itemId: item[2] };
+  }
+  const itemDoc = ITEM_DOCUMENT.exec(pathname);
+  if (itemDoc?.[1] !== undefined && itemDoc[2] !== undefined && itemDoc[3] !== undefined) {
+    return {
+      name: 'item-document',
+      workspaceId: itemDoc[1],
+      itemId: itemDoc[2],
+      documentId: itemDoc[3],
+    };
   }
   const members = MEMBERS.exec(pathname);
   if (members?.[1] !== undefined) return { name: 'members', workspaceId: members[1] };
@@ -58,14 +81,28 @@ export function standalonePath(documentId: string): string {
   return `/d/${documentId}`;
 }
 
+export function modulePath(workspaceId: string, moduleId: string): string {
+  return `/w/${workspaceId}/m/${moduleId}`;
+}
+
+export function itemPath(workspaceId: string, itemId: string): string {
+  return `/w/${workspaceId}/i/${itemId}`;
+}
+
+export function itemDocumentPath(workspaceId: string, itemId: string, documentId: string): string {
+  return `/w/${workspaceId}/i/${itemId}/d/${documentId}`;
+}
+
 /** 문서가 놓인 곳에 맞는 경로. 내가 멤버인 워크스페이스 문서는 워크스페이스 경로로 연다. */
 export function pathFor(
-  doc: { id: string; workspace_id: string | null },
+  doc: { id: string; workspace_id: string | null; item_id?: string | null },
   memberOf: (ws: string) => boolean,
 ): string {
-  return doc.workspace_id !== null && memberOf(doc.workspace_id)
+  if (doc.workspace_id === null || !memberOf(doc.workspace_id)) return standalonePath(doc.id);
+  const itemId = doc.item_id ?? null;
+  return itemId === null
     ? documentPath(doc.workspace_id, doc.id)
-    : standalonePath(doc.id);
+    : itemDocumentPath(doc.workspace_id, itemId, doc.id);
 }
 
 class Router {

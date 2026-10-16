@@ -1,0 +1,641 @@
+//! 모듈 인스턴스·키·항목·항목 아래 문서 (D-14, D-15, D-16, D-17, D-18, D-48, D-59).
+//!
+//! 모듈은 같은 기능 유형을 여러 개 둘 수 있다(예: DEV·OPS 둘 다 프로젝트). 기능 유형은 만든 뒤 바꾸지 않는다.
+//! 키는 워크스페이스 안에서 대소문자 구분 없이 유일하고, 과거 키도 다른 모듈이 다시 쓰지 못한다.
+//! 번호는 모듈마다 하나의 번호열을 항목·문서·작업이 함께 쓴다. 할당은 DB 함수 `app_allocate_number`만 한다.
+//! 참조 문자열(`DEV-3`)은 저장하지 않고 현재 키로 만든다. 링크는 내부 id 기준이다.
+//!
+//! 권한은 DB 함수가 판정한다(`migrations/0006_modules_items.sql`). 모듈 관리는 관리자, 항목 생성은 작성자 이상,
+//! 항목 권한은 `app_item_access`, 항목 아래 문서는 `app_document_access`(항목 권한과 문서 규칙 중 낮은 쪽).
+
+use axum::Json;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
+use utoipa::ToSchema;
+use uuid::Uuid;
+
+use crate::db::{UserTx, is_unique_violation};
+use crate::error::{AppError, ErrorBody};
+use crate::features::accounts::CurrentUser;
+use crate::features::documents::{
+    Access, CreateDocument, Document, DocumentSummary, SCHEMA_VERSION, SUMMARY_COLUMNS, SummaryRow,
+    empty_body, load_with_access, to_document, to_summaries,
+};
+use crate::features::workspaces::{member_role, validate_title};
+use crate::http::AppState;
+use crate::ids::{DocumentId, ItemId, ModuleId, WorkspaceId};
+
+/// 설명 글 상한(문자). 제목보다 길게 받지만 본문은 문서로 쓴다.
+const MAX_DESCRIPTION_CHARS: usize = 2_000;
+
+/// 모듈 기능 유형 (D-14). 만든 뒤 바꾸지 않는다 (D-16).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleKind {
+    Project,
+    Research,
+    Study,
+    Course,
+    Hobby,
+}
+
+impl ModuleKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Project => "project",
+            Self::Research => "research",
+            Self::Study => "study",
+            Self::Course => "course",
+            Self::Hobby => "hobby",
+        }
+    }
+
+    fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "project" => Some(Self::Project),
+            "research" => Some(Self::Research),
+            "study" => Some(Self::Study),
+            "course" => Some(Self::Course),
+            "hobby" => Some(Self::Hobby),
+            _ => None,
+        }
+    }
+}
+
+/// 모듈 인스턴스.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct Module {
+    pub id: ModuleId,
+    pub workspace_id: WorkspaceId,
+    pub kind: ModuleKind,
+    pub name: String,
+    /// 현재 키. 예: `DEV`.
+    pub key: String,
+    /// 예전 키. `@` 검색과 옛 참조 해석에 쓴다 (D-18).
+    pub previous_keys: Vec<String>,
+    /// 보관됨: 읽기 전용이며 번호·키는 그대로 남는다.
+    pub archived: bool,
+}
+
+/// 모듈 생성 요청(관리자).
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateModule {
+    #[schema(value_type = String, format = Uuid)]
+    pub request_id: Uuid,
+    pub kind: ModuleKind,
+    pub name: String,
+    /// 2~10자 영문·숫자, 영문으로 시작. 소문자는 대문자로 바꾼다. `WIKI`는 예약.
+    pub key: String,
+}
+
+/// 모듈 이름·키 변경 요청(관리자).
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateModule {
+    pub name: String,
+    pub key: String,
+}
+
+/// 보관 상태 변경 요청.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetArchived {
+    pub archived: bool,
+}
+
+/// 모듈 항목 (D-14). 새 항목은 기본 비공개다 (D-20).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct Item {
+    pub id: ItemId,
+    pub module_id: ModuleId,
+    pub workspace_id: WorkspaceId,
+    /// 예: `DEV-3`. 키를 볼 수 없으면 없다.
+    pub reference: Option<String>,
+    pub title: String,
+    pub description: String,
+    /// `workspace` 또는 `private`.
+    pub visibility: String,
+    pub access: Access,
+    pub archived: bool,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub updated_at: OffsetDateTime,
+}
+
+/// 항목 생성 요청.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateItem {
+    #[schema(value_type = String, format = Uuid)]
+    pub request_id: Uuid,
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+/// 항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateItem {
+    pub title: String,
+    pub description: String,
+    /// `workspace` 또는 `private`.
+    pub visibility: String,
+}
+
+/// 키 정규화: 앞뒤 공백 제거, 대문자. 형식이 틀리면 400 (D-18).
+pub fn normalize_key(raw: &str) -> Result<String, AppError> {
+    let key = raw.trim().to_ascii_uppercase();
+    let mut chars = key.chars();
+    let starts_with_letter = chars.next().is_some_and(|c| c.is_ascii_uppercase());
+    let rest_ok = chars.all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+    if !(starts_with_letter && rest_ok && (2..=10).contains(&key.len())) {
+        return Err(AppError::BadRequest(
+            "key must be 2-10 letters or digits starting with a letter".into(),
+        ));
+    }
+    if key == "WIKI" {
+        return Err(AppError::BadRequest("WIKI is reserved".into()));
+    }
+    Ok(key)
+}
+
+fn validate_description(raw: &str) -> Result<String, AppError> {
+    let trimmed = raw.trim();
+    if trimmed.chars().count() > MAX_DESCRIPTION_CHARS {
+        return Err(AppError::BadRequest(format!(
+            "description must be at most {MAX_DESCRIPTION_CHARS} characters"
+        )));
+    }
+    if trimmed
+        .chars()
+        .any(|c| c.is_control() && c != '\n' && c != '\t')
+    {
+        return Err(AppError::BadRequest(
+            "description must not contain control characters".into(),
+        ));
+    }
+    Ok(trimmed.to_owned())
+}
+
+// ---------------------------------------------------------------------------
+// 읽기
+// ---------------------------------------------------------------------------
+
+type ModuleRow = (
+    ModuleId,
+    WorkspaceId,
+    String,
+    String,
+    String,
+    bool,
+    Vec<String>,
+);
+
+const MODULE_SELECT: &str =
+    "SELECT m.id, m.workspace_id, m.kind, m.name, k.key, m.archived_at IS NOT NULL,
+        coalesce((SELECT array_agg(o.key ORDER BY o.created_at) FROM module_keys o
+                  WHERE o.module_id = m.id AND o.retired_at IS NOT NULL), '{}')
+ FROM modules m JOIN module_keys k ON k.module_id = m.id AND k.retired_at IS NULL";
+
+fn to_module(
+    (id, workspace_id, kind, name, key, archived, previous_keys): ModuleRow,
+) -> Result<Module, AppError> {
+    let kind = ModuleKind::parse(&kind)
+        .ok_or_else(|| AppError::Config(format!("unknown module kind in database: {kind}")))?;
+    Ok(Module {
+        id,
+        workspace_id,
+        kind,
+        name,
+        key,
+        previous_keys,
+        archived,
+    })
+}
+
+async fn load_module(tx: &mut UserTx, id: ModuleId) -> Result<Module, AppError> {
+    let row: Option<ModuleRow> = sqlx::query_as(&format!("{MODULE_SELECT} WHERE m.id = $1"))
+        .bind(id)
+        .fetch_optional(tx.conn())
+        .await?;
+    to_module(row.ok_or(AppError::NotFound)?)
+}
+
+type ItemRow = (
+    ItemId,
+    ModuleId,
+    WorkspaceId,
+    Option<String>,
+    String,
+    String,
+    String,
+    String,
+    bool,
+    OffsetDateTime,
+);
+
+const ITEM_SELECT: &str =
+    "SELECT i.id, i.module_id, i.workspace_id, app_item_reference(i.id), i.title,
+        i.description, i.visibility, app_item_access(i.id), i.archived_at IS NOT NULL, i.updated_at
+ FROM items i";
+
+fn to_item(
+    (
+        id,
+        module_id,
+        workspace_id,
+        reference,
+        title,
+        description,
+        visibility,
+        access,
+        archived,
+        updated_at,
+    ): ItemRow,
+) -> Result<Item, AppError> {
+    let access = Access::parse(&access)
+        .ok_or_else(|| AppError::Config(format!("unknown item access: {access}")))?;
+    Ok(Item {
+        id,
+        module_id,
+        workspace_id,
+        reference,
+        title,
+        description,
+        visibility,
+        access,
+        archived,
+        updated_at,
+    })
+}
+
+/// 항목을 읽는다. 볼 수 없으면(RLS) 404.
+async fn load_item(tx: &mut UserTx, id: ItemId) -> Result<Item, AppError> {
+    let row: Option<ItemRow> = sqlx::query_as(&format!("{ITEM_SELECT} WHERE i.id = $1"))
+        .bind(id)
+        .fetch_optional(tx.conn())
+        .await?;
+    to_item(row.ok_or(AppError::NotFound)?)
+}
+
+/// 워크스페이스의 모듈 목록(멤버).
+#[utoipa::path(get, path = "/api/workspaces/{workspace_id}/modules",
+    params(("workspace_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = [Module]), (status = 404, body = ErrorBody)), tag = "modules")]
+pub async fn list_modules(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(ws): Path<WorkspaceId>,
+) -> Result<Json<Vec<Module>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    member_role(&mut tx, ws).await?;
+    let rows: Vec<ModuleRow> = sqlx::query_as(&format!(
+        "{MODULE_SELECT} WHERE m.workspace_id = $1 ORDER BY m.created_at, m.id"
+    ))
+    .bind(ws)
+    .fetch_all(tx.conn())
+    .await?;
+    tx.commit().await?;
+    rows.into_iter()
+        .map(to_module)
+        .collect::<Result<_, _>>()
+        .map(Json)
+}
+
+/// 모듈 하나(멤버).
+#[utoipa::path(get, path = "/api/modules/{module_id}",
+    params(("module_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = Module), (status = 404, body = ErrorBody)), tag = "modules")]
+pub async fn get_module(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<ModuleId>,
+) -> Result<Json<Module>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let module = load_module(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(module))
+}
+
+// ---------------------------------------------------------------------------
+// 모듈 관리(관리자)
+// ---------------------------------------------------------------------------
+
+/// 모듈 생성(관리자). 키가 쓰였거나 예전에 쓰였으면 409.
+#[utoipa::path(post, path = "/api/workspaces/{workspace_id}/modules",
+    params(("workspace_id" = String, Path, format = Uuid)), request_body = CreateModule,
+    responses((status = 201, body = Module), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
+pub async fn create_module(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(ws): Path<WorkspaceId>,
+    Json(input): Json<CreateModule>,
+) -> Result<(StatusCode, Json<Module>), AppError> {
+    let name = validate_title(&input.name, state.config.limits.max_title_chars, "name")?;
+    let key = normalize_key(&input.key)?;
+    let run = || async {
+        let mut tx = state.db.begin_as(user).await?;
+        let id: ModuleId = sqlx::query_scalar("SELECT app_create_module($1, $2, $3, $4, $5)")
+            .bind(ws)
+            .bind(input.request_id)
+            .bind(input.kind.as_str())
+            .bind(&name)
+            .bind(&key)
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+        let module = load_module(&mut tx, id).await?;
+        tx.commit().await?;
+        Ok(module)
+    };
+    match run().await {
+        Ok(m) => Ok((StatusCode::CREATED, Json(m))),
+        // 같은 요청이나 같은 키가 동시에 들어왔다. 다시 부르면 같은 모듈 또는 409를 받는다.
+        Err(AppError::Database(e)) if is_unique_violation(&e) => {
+            Ok((StatusCode::CREATED, Json(run().await?)))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// 모듈 이름·키 변경(관리자). 옛 키는 예전 키로 남아 다른 모듈이 쓰지 못한다.
+#[utoipa::path(put, path = "/api/modules/{module_id}",
+    params(("module_id" = String, Path, format = Uuid)), request_body = UpdateModule,
+    responses((status = 200, body = Module), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
+pub async fn update_module(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<ModuleId>,
+    Json(input): Json<UpdateModule>,
+) -> Result<Json<Module>, AppError> {
+    let name = validate_title(&input.name, state.config.limits.max_title_chars, "name")?;
+    let key = normalize_key(&input.key)?;
+    let mut tx = state.db.begin_as(user).await?;
+    let result = sqlx::query("SELECT app_update_module($1, $2, $3)")
+        .bind(id)
+        .bind(&name)
+        .bind(&key)
+        .execute(tx.conn())
+        .await;
+    match result {
+        Ok(_) => {}
+        Err(e) if is_unique_violation(&e) => {
+            return Err(AppError::Conflict(
+                "this key is in use or was used before".into(),
+            ));
+        }
+        Err(e) => return Err(AppError::from_db_function(e)),
+    }
+    let module = load_module(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(module))
+}
+
+/// 모듈 보관·해제(관리자). 보관하면 항목과 문서가 읽기 전용이 된다.
+#[utoipa::path(put, path = "/api/modules/{module_id}/archived",
+    params(("module_id" = String, Path, format = Uuid)), request_body = SetArchived,
+    responses((status = 200, body = Module), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody)), tag = "modules")]
+pub async fn archive_module(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<ModuleId>,
+    Json(input): Json<SetArchived>,
+) -> Result<Json<Module>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_archive_module($1, $2)")
+        .bind(id)
+        .bind(input.archived)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    let module = load_module(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(module))
+}
+
+// ---------------------------------------------------------------------------
+// 항목
+// ---------------------------------------------------------------------------
+
+/// 모듈의 항목 목록. 볼 수 있는 항목만(비공개 항목은 만든 사람·관리자에게만) 나온다.
+#[utoipa::path(get, path = "/api/modules/{module_id}/items",
+    params(("module_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = [Item]), (status = 404, body = ErrorBody)), tag = "modules")]
+pub async fn list_items(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<ModuleId>,
+) -> Result<Json<Vec<Item>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    load_module(&mut tx, id).await?;
+    let rows: Vec<ItemRow> = sqlx::query_as(&format!(
+        "{ITEM_SELECT} WHERE i.module_id = $1 ORDER BY i.created_at, i.id"
+    ))
+    .bind(id)
+    .fetch_all(tx.conn())
+    .await?;
+    tx.commit().await?;
+    rows.into_iter()
+        .map(to_item)
+        .collect::<Result<_, _>>()
+        .map(Json)
+}
+
+/// 항목 생성(작성자 이상). 모듈 번호열에서 번호를 받는다. 같은 `request_id`는 같은 항목을 돌려준다.
+#[utoipa::path(post, path = "/api/modules/{module_id}/items",
+    params(("module_id" = String, Path, format = Uuid)), request_body = CreateItem,
+    responses((status = 201, body = Item), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
+pub async fn create_item(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(module): Path<ModuleId>,
+    Json(input): Json<CreateItem>,
+) -> Result<(StatusCode, Json<Item>), AppError> {
+    let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
+    let description = validate_description(&input.description)?;
+    let run = || async {
+        let mut tx = state.db.begin_as(user).await?;
+        let id: ItemId = sqlx::query_scalar("SELECT app_create_item($1, $2, $3, $4)")
+            .bind(module)
+            .bind(input.request_id)
+            .bind(&title)
+            .bind(&description)
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+        let item = load_item(&mut tx, id).await?;
+        tx.commit().await?;
+        Ok(item)
+    };
+    match run().await {
+        Ok(item) => Ok((StatusCode::CREATED, Json(item))),
+        Err(AppError::Database(e)) if is_unique_violation(&e) => {
+            Ok((StatusCode::CREATED, Json(run().await?)))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// 항목 하나.
+#[utoipa::path(get, path = "/api/items/{item_id}",
+    params(("item_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = Item), (status = 404, body = ErrorBody)), tag = "modules")]
+pub async fn get_item(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<ItemId>,
+) -> Result<Json<Item>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let item = load_item(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(item))
+}
+
+/// 항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다.
+#[utoipa::path(put, path = "/api/items/{item_id}",
+    params(("item_id" = String, Path, format = Uuid)), request_body = UpdateItem,
+    responses((status = 200, body = Item), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
+pub async fn update_item(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<ItemId>,
+    Json(input): Json<UpdateItem>,
+) -> Result<Json<Item>, AppError> {
+    let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
+    let description = validate_description(&input.description)?;
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_update_item($1, $2, $3, $4)")
+        .bind(id)
+        .bind(&title)
+        .bind(&description)
+        .bind(&input.visibility)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    let item = load_item(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(item))
+}
+
+/// 항목 보관·해제(항목 소유 권한자).
+#[utoipa::path(put, path = "/api/items/{item_id}/archived",
+    params(("item_id" = String, Path, format = Uuid)), request_body = SetArchived,
+    responses((status = 200, body = Item), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody)), tag = "modules")]
+pub async fn archive_item(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<ItemId>,
+    Json(input): Json<SetArchived>,
+) -> Result<Json<Item>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_archive_item($1, $2)")
+        .bind(id)
+        .bind(input.archived)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    let item = load_item(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(item))
+}
+
+/// 항목 아래 문서 목록. 볼 수 있는 문서만 나온다.
+#[utoipa::path(get, path = "/api/items/{item_id}/documents",
+    params(("item_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = [DocumentSummary]), (status = 404, body = ErrorBody)), tag = "modules")]
+pub async fn list_item_documents(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<ItemId>,
+) -> Result<Json<Vec<DocumentSummary>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    load_item(&mut tx, id).await?;
+    let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
+        "SELECT {SUMMARY_COLUMNS} FROM documents WHERE item_id = $1 ORDER BY number"
+    ))
+    .bind(id)
+    .fetch_all(tx.conn())
+    .await?;
+    tx.commit().await?;
+    Ok(Json(to_summaries(rows)))
+}
+
+/// 항목 아래 문서 생성(항목 쓰기 권한). 모듈 번호열에서 번호를 받는다.
+#[utoipa::path(post, path = "/api/items/{item_id}/documents",
+    params(("item_id" = String, Path, format = Uuid)), request_body = CreateDocument,
+    responses((status = 201, body = Document), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
+pub async fn create_item_document(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(item): Path<ItemId>,
+    Json(input): Json<CreateDocument>,
+) -> Result<(StatusCode, Json<Document>), AppError> {
+    let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
+    let run = || async {
+        let mut tx = state.db.begin_as(user).await?;
+        let id: DocumentId =
+            sqlx::query_scalar("SELECT app_create_module_document($1, $2, $3, $4, $5)")
+                .bind(item)
+                .bind(input.request_id)
+                .bind(&title)
+                .bind(SCHEMA_VERSION)
+                .bind(empty_body())
+                .fetch_one(tx.conn())
+                .await
+                .map_err(AppError::from_db_function)?;
+        let (row, access) = load_with_access(&mut tx, id).await?;
+        tx.commit().await?;
+        Ok(to_document(row, access))
+    };
+    match run().await {
+        Ok(doc) => Ok((StatusCode::CREATED, Json(doc))),
+        Err(AppError::Database(e)) if is_unique_violation(&e) => {
+            Ok((StatusCode::CREATED, Json(run().await?)))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keys_are_normalized_to_uppercase() {
+        assert_eq!(normalize_key(" dev ").ok().as_deref(), Some("DEV"));
+        assert_eq!(normalize_key("Ops2").ok().as_deref(), Some("OPS2"));
+    }
+
+    #[test]
+    fn keys_reject_bad_shapes() {
+        for bad in ["", "D", "1AB", "DE-V", "ABCDEFGHIJK", "wiki", "가나"] {
+            assert!(normalize_key(bad).is_err(), "{bad} should be rejected");
+        }
+    }
+
+    #[test]
+    fn module_kind_round_trip() {
+        for kind in [
+            ModuleKind::Project,
+            ModuleKind::Research,
+            ModuleKind::Study,
+            ModuleKind::Course,
+            ModuleKind::Hobby,
+        ] {
+            assert_eq!(ModuleKind::parse(kind.as_str()), Some(kind));
+        }
+    }
+
+    #[test]
+    fn description_allows_newlines_only() {
+        assert!(validate_description("첫 줄\n둘째 줄").is_ok());
+        assert!(validate_description("a\u{0007}b").is_err());
+        assert!(validate_description(&"x".repeat(MAX_DESCRIPTION_CHARS + 1)).is_err());
+    }
+}

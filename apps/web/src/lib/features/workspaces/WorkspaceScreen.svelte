@@ -7,6 +7,8 @@
   import { api, ApiError } from '$lib/api/client';
   import { documentPath, router } from '$lib/router.svelte';
 
+  import ModulesSection from '$lib/features/modules/ModulesSection.svelte';
+
   import CreateForm from './CreateForm.svelte';
 
   interface Props {
@@ -79,3 +81,5 @@
     />
   {/if}
 </section>
+
+<ModulesSection {workspace} />

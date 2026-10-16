@@ -3,7 +3,13 @@
   // 화면은 현재 권한(access)에 맞는 동작만 보여준다. 이동은 서버 미리보기로 접근 변화를 보여준 뒤 확인받는다.
   import type { Workspace } from '@fvoci/api-client';
 
-  import type { DocumentView, MovePreviewView, PublicLinkView, ShareView } from '$lib/api/client';
+  import type {
+    DocumentView,
+    MovePreviewView,
+    MoveTargetInput,
+    PublicLinkView,
+    ShareView,
+  } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { pathFor, router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
@@ -47,11 +53,7 @@
       copyTarget = 'personal';
       copyRequest = newRequestId();
     }
-    if (next === 'move') {
-      moveTarget = writable.find((w) => w.id !== doc.workspace_id)?.id ?? '';
-      preview = undefined;
-      void loadPreview();
-    }
+    if (next === 'move') void openMove();
   }
 
   // --- 공유 ---------------------------------------------------------------
@@ -159,23 +161,72 @@
   }
 
   // --- 이동 ---------------------------------------------------------------
+  // 대상: 쓸 수 있는 워크스페이스의 위키, 그리고 그 안에서 내가 쓸 수 있는 항목 (D-59).
+  interface MoveOption {
+    value: string;
+    label: string;
+    target: MoveTargetInput;
+  }
+  let moveOptions = $state<MoveOption[]>([]);
   let moveTarget = $state('');
   let preview = $state<MovePreviewView | undefined>(undefined);
+  const selectedTarget = $derived(moveOptions.find((o) => o.value === moveTarget));
+
+  async function itemOptions(ws: Workspace): Promise<MoveOption[]> {
+    const modules = (await api.modules(ws.id)).filter((m) => !m.archived);
+    const lists = await Promise.all(modules.map((m) => api.items(m.id)));
+    return lists
+      .flat()
+      .filter((it) => !it.archived && it.access !== 'read' && it.id !== doc.item_id)
+      .map((it) => ({
+        value: `item:${it.id}`,
+        label: `${ws.name} · ${it.reference ?? ''} ${it.title}`,
+        target: { workspaceId: ws.id, itemId: it.id },
+      }));
+  }
+
+  async function openMove(): Promise<void> {
+    moveOptions = [];
+    moveTarget = '';
+    preview = undefined;
+    try {
+      const perWorkspace = await Promise.all(
+        writable.map(async (ws) => {
+          const wiki: MoveOption[] =
+            ws.id === doc.workspace_id && doc.item_id === null
+              ? []
+              : [
+                  {
+                    value: `wiki:${ws.id}`,
+                    label: `${ws.name} 위키`,
+                    target: { workspaceId: ws.id, itemId: null },
+                  },
+                ];
+          return [...wiki, ...(await itemOptions(ws))];
+        }),
+      );
+      moveOptions = perWorkspace.flat();
+      moveTarget = moveOptions[0]?.value ?? '';
+      await loadPreview();
+    } catch (e: unknown) {
+      fail(e);
+    }
+  }
 
   async function loadPreview(): Promise<void> {
     preview = undefined;
-    if (moveTarget === '') return;
+    if (selectedTarget === undefined) return;
     try {
-      preview = await api.movePreview(doc.id, moveTarget);
+      preview = await api.movePreview(doc.id, selectedTarget.target);
     } catch (e: unknown) {
       fail(e);
     }
   }
 
   async function confirmMove(): Promise<void> {
-    if (preview === undefined) return;
+    if (preview === undefined || selectedTarget === undefined) return;
     try {
-      const result = await api.moveDocument(doc.id, moveTarget, preview);
+      const result = await api.moveDocument(doc.id, selectedTarget.target, preview);
       if (result.kind === 'changed') {
         // 그사이 접근 변화가 바뀌었다. 새 미리보기를 보여주고 다시 확인받는다.
         preview = result.preview;
@@ -230,7 +281,7 @@
       }}>복제</Button
     >
   {/if}
-  {#if isOwner && writable.some((w) => w.id !== doc.workspace_id)}
+  {#if isOwner && writable.length > 0}
     <Button
       size="sm"
       variant="outline"
@@ -425,10 +476,10 @@
       </form>
     {:else if panel === 'move'}
       <Dialog.Header>
-        <Dialog.Title>다른 워크스페이스로 이동</Dialog.Title>
+        <Dialog.Title>문서 이동</Dialog.Title>
         <Dialog.Description>
-          이동하면 대상 워크스페이스의 번호가 새로 붙습니다. 기존 링크는 문서 ID로 연결되어 계속
-          열립니다.
+          위키나 모듈 항목으로 옮깁니다. 이동하면 대상의 번호가 새로 붙습니다(위키는 WIKI, 항목은
+          모듈 키). 기존 링크는 문서 ID로 연결되어 계속 열립니다.
         </Dialog.Description>
       </Dialog.Header>
       <div class="flex flex-col gap-1">
@@ -442,11 +493,11 @@
           }}
         >
           <Select.Trigger aria-labelledby="move-target-label"
-            >{targetLabel(moveTarget)}</Select.Trigger
+            >{selectedTarget?.label ?? '옮길 수 있는 곳이 없습니다'}</Select.Trigger
           >
           <Select.Content>
-            {#each writable.filter((w) => w.id !== doc.workspace_id) as w (w.id)}
-              <Select.Item value={w.id} label={w.name}>{w.name}</Select.Item>
+            {#each moveOptions as option (option.value)}
+              <Select.Item value={option.value} label={option.label}>{option.label}</Select.Item>
             {/each}
           </Select.Content>
         </Select.Root>

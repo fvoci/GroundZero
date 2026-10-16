@@ -269,6 +269,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 항목 하나. */
+        get: operations["get_item"];
+        /** 항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다. */
+        put: operations["update_item"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/archived": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 항목 보관·해제(항목 소유 권한자). */
+        put: operations["archive_item"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 항목 아래 문서 목록. 볼 수 있는 문서만 나온다. */
+        get: operations["list_item_documents"];
+        put?: never;
+        /** 항목 아래 문서 생성(항목 쓰기 권한). 모듈 번호열에서 번호를 받는다. */
+        post: operations["create_item_document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -315,6 +368,59 @@ export interface paths {
         get: operations["shared_with_me"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/modules/{module_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 모듈 하나(멤버). */
+        get: operations["get_module"];
+        /** 모듈 이름·키 변경(관리자). 옛 키는 예전 키로 남아 다른 모듈이 쓰지 못한다. */
+        put: operations["update_module"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/modules/{module_id}/archived": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 모듈 보관·해제(관리자). 보관하면 항목과 문서가 읽기 전용이 된다. */
+        put: operations["archive_module"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/modules/{module_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 모듈의 항목 목록. 볼 수 있는 항목만(비공개 항목은 만든 사람·관리자에게만) 나온다. */
+        get: operations["list_items"];
+        put?: never;
+        /** 항목 생성(작성자 이상). 모듈 번호열에서 번호를 받는다. 같은 `request_id`는 같은 항목을 돌려준다. */
+        post: operations["create_item"];
         delete?: never;
         options?: never;
         head?: never;
@@ -456,6 +562,24 @@ export interface paths {
         post?: never;
         /** 멤버 제거(관리자). 소유자는 제거할 수 없다. 팀 문서는 워크스페이스에 남는다 (D-25). */
         delete: operations["remove_member"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 워크스페이스의 모듈 목록(멤버). */
+        get: operations["list_modules"];
+        put?: never;
+        /** 모듈 생성(관리자). 키가 쓰였거나 예전에 쓰였으면 409. */
+        post: operations["create_module"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -634,6 +758,22 @@ export interface components {
             email: string;
             role: components["schemas"]["Role"];
         };
+        /** @description 항목 생성 요청. */
+        CreateItem: {
+            description?: string;
+            /** Format: uuid */
+            request_id: string;
+            title: string;
+        };
+        /** @description 모듈 생성 요청(관리자). */
+        CreateModule: {
+            /** @description 2~10자 영문·숫자, 영문으로 시작. 소문자는 대문자로 바꾼다. `WIKI`는 예약. */
+            key: string;
+            kind: components["schemas"]["ModuleKind"];
+            name: string;
+            /** Format: uuid */
+            request_id: string;
+        };
         /** @description 공개 링크 생성 요청. */
         CreatePublicLink: {
             /**
@@ -675,7 +815,8 @@ export interface components {
             /** @description 현재 사용자가 고칠 수 있는지. */
             can_edit: boolean;
             id: components["schemas"]["DocumentId"];
-            /** @description `wiki` 또는 `personal`. */
+            item_id?: null | components["schemas"]["ItemId"];
+            /** @description `wiki`, `module` 또는 `personal`. */
             placement: string;
             reference?: string | null;
             /** Format: int32 */
@@ -741,6 +882,27 @@ export interface components {
             id: string;
             role: components["schemas"]["Role"];
         };
+        /** @description 모듈 항목 (D-14). 새 항목은 기본 비공개다 (D-20). */
+        Item: {
+            access: components["schemas"]["Access"];
+            archived: boolean;
+            description: string;
+            id: components["schemas"]["ItemId"];
+            module_id: components["schemas"]["ModuleId"];
+            /** @description 예: `DEV-3`. 키를 볼 수 없으면 없다. */
+            reference?: string | null;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description `workspace` 또는 `private`. */
+            visibility: string;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /**
+         * Format: uuid
+         * @description 모듈 항목(개별 프로젝트·연구·스터디·강좌·취미 활동) 내부 ID (D-14).
+         */
+        ItemId: string;
         /** @description 로그아웃 결과. 클라이언트는 `redirect_to`로 이동해 제공자 세션도 끝낸다. */
         LogoutResponse: {
             redirect_to: string;
@@ -768,9 +930,33 @@ export interface components {
             my_role: components["schemas"]["Role"];
             pending_owner?: null | components["schemas"]["UserId"];
         };
+        /** @description 모듈 인스턴스. */
+        Module: {
+            /** @description 보관됨: 읽기 전용이며 번호·키는 그대로 남는다. */
+            archived: boolean;
+            id: components["schemas"]["ModuleId"];
+            /** @description 현재 키. 예: `DEV`. */
+            key: string;
+            kind: components["schemas"]["ModuleKind"];
+            name: string;
+            /** @description 예전 키. `@` 검색과 옛 참조 해석에 쓴다 (D-18). */
+            previous_keys: string[];
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /**
+         * Format: uuid
+         * @description 모듈 인스턴스 내부 ID (D-15). 키가 바뀌어도 유지된다.
+         */
+        ModuleId: string;
+        /**
+         * @description 모듈 기능 유형 (D-14). 만든 뒤 바꾸지 않는다 (D-16).
+         * @enum {string}
+         */
+        ModuleKind: "project" | "research" | "study" | "course" | "hobby";
         /** @description 이동 요청. 미리보기에서 접근 변화를 확인했다는 표시(`acknowledge`)가 있어야 이동한다. */
         MoveDocument: {
             acknowledged?: null | components["schemas"]["AcknowledgedPreview"];
+            target_item_id?: null | components["schemas"]["ItemId"];
             target_workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
         /**
@@ -788,11 +974,12 @@ export interface components {
             /** @description 이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다. */
             history_moves_with_document: boolean;
             loses: string[];
-            /** @description 이동하면 참조 번호가 대상 워크스페이스에서 새로 매겨진다. 링크는 id 기준이라 유지된다 (D-18). */
+            /** @description 이동하면 참조 번호가 대상 위치(위키 또는 모듈)에서 새로 매겨진다. 링크는 id 기준이라 유지된다 (D-18). */
             reference_changes: boolean;
         };
         /** @description 이동 대상. */
         MoveTarget: {
+            target_item_id?: null | components["schemas"]["ItemId"];
             target_workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
         /** @description 인계 제안 요청. */
@@ -847,6 +1034,10 @@ export interface components {
             request_id: string;
             title: string;
         };
+        /** @description 보관 상태 변경 요청. */
+        SetArchived: {
+            archived: boolean;
+        };
         /** @description 역할 변경 요청. */
         SetRole: {
             role: components["schemas"]["Role"];
@@ -869,6 +1060,18 @@ export interface components {
             title: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description 항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다. */
+        UpdateItem: {
+            description: string;
+            title: string;
+            /** @description `workspace` 또는 `private`. */
+            visibility: string;
+        };
+        /** @description 모듈 이름·키 변경 요청(관리자). */
+        UpdateModule: {
+            key: string;
+            name: string;
         };
         /**
          * Format: uuid
@@ -1647,6 +1850,219 @@ export interface operations {
             };
         };
     };
+    get_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateItem"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    archive_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetArchived"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_item_documents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentSummary"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_item_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDocument"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     me: {
         parameters: {
             query?: never;
@@ -1758,6 +2174,219 @@ export interface operations {
                 };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_module: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Module"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_module: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateModule"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Module"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    archive_module: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetArchived"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Module"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_items: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateItem"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2198,6 +2827,92 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_modules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Module"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_module: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateModule"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Module"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {

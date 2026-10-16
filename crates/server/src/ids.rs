@@ -52,3 +52,11 @@ impl Role {
         matches!(self, Self::Admin | Self::Writer)
     }
 }
+id_type!(
+    /// 모듈 인스턴스 내부 ID (D-15). 키가 바뀌어도 유지된다.
+    ModuleId
+);
+id_type!(
+    /// 모듈 항목(개별 프로젝트·연구·스터디·강좌·취미 활동) 내부 ID (D-14).
+    ItemId
+);

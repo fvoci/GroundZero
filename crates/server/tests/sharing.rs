@@ -10,43 +10,11 @@ mod common;
 use axum::Router;
 use axum::http::{Method, StatusCode};
 use common::{
-    TestUser, create_doc, create_workspace, doc_body, login, login_with_email, new_request_id,
-    send, unique_email,
+    TestUser, add_member, create_doc, create_workspace, doc_body, login, login_with_email,
+    new_request_id, send, unique_email,
 };
-use fvoci_server::http::AppState;
 use serde_json::{Value, json};
 use sqlx::Connection;
-
-async fn add_member(
-    app: &Router,
-    state: &AppState,
-    admin: &TestUser,
-    ws: &str,
-    label: &str,
-    role: &str,
-) -> (TestUser, String) {
-    let email = unique_email(label);
-    let user = login_with_email(state, label, &email, true).await;
-    let inv = send(
-        app,
-        Method::POST,
-        &format!("/api/workspaces/{ws}/invitations"),
-        Some(admin),
-        Some(json!({ "email": email, "role": role })),
-    )
-    .await;
-    let id = inv.json["id"].as_str().unwrap();
-    let r = send(
-        app,
-        Method::POST,
-        &format!("/api/invitations/{id}/accept"),
-        Some(&user),
-        None,
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK);
-    (user, email)
-}
 
 async fn create_note(app: &Router, user: &TestUser, title: &str) -> Value {
     let r = send(

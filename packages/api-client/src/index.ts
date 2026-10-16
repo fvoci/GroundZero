@@ -20,6 +20,9 @@ export type MembersView = Schemas['MembersView'];
 export type Invitation = Schemas['Invitation'];
 export type ReceivedInvitation = Schemas['ReceivedInvitation'];
 export type Group = Schemas['Group'];
+export type ModuleKind = Schemas['ModuleKind'];
+export type Module = Schemas['Module'];
+export type Item = Schemas['Item'];
 /** 본문은 계약상 임의 객체(`type: "doc"`)라 생성 타입에서는 구체화하지 않는다. */
 export type DocumentWire = Schemas['Document'];
 export type SaveDocumentWire = Schemas['SaveDocument'];

@@ -15,7 +15,7 @@ use utoipa::{OpenApi, ToSchema};
 use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
-use crate::features::{accounts, documents, members, public_links, workspaces};
+use crate::features::{accounts, documents, members, modules, public_links, workspaces};
 
 /// 핸들러가 공유하는 상태.
 #[derive(Debug, Clone)]
@@ -128,6 +128,18 @@ async fn api_not_found() -> AppError {
         documents::copy,
         documents::move_preview,
         documents::move_document,
+        modules::list_modules,
+        modules::get_module,
+        modules::create_module,
+        modules::update_module,
+        modules::archive_module,
+        modules::list_items,
+        modules::create_item,
+        modules::get_item,
+        modules::update_item,
+        modules::archive_item,
+        modules::list_item_documents,
+        modules::create_item_document,
         public_links::list,
         public_links::create,
         public_links::revoke,
@@ -185,6 +197,14 @@ async fn api_not_found() -> AppError {
         documents::MovePreview,
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
+        modules::ModuleKind,
+        modules::Module,
+        modules::CreateModule,
+        modules::UpdateModule,
+        modules::SetArchived,
+        modules::Item,
+        modules::CreateItem,
+        modules::UpdateItem,
         public_links::PublicLink,
         public_links::CreatePublicLink,
         public_links::CreatedPublicLink,
@@ -197,6 +217,7 @@ async fn api_not_found() -> AppError {
         (name = "workspaces", description = "워크스페이스"),
         (name = "documents", description = "위키 문서"),
         (name = "members", description = "멤버·초대·역할·그룹·소유권"),
+        (name = "modules", description = "모듈 인스턴스·키·항목"),
     )
 )]
 pub struct ApiDoc;
@@ -253,6 +274,31 @@ pub fn router(state: AppState) -> Router {
             get(public_links::list).post(public_links::create),
         )
         .route("/public-links/{link_id}", delete(public_links::revoke))
+        .route(
+            "/workspaces/{workspace_id}/modules",
+            get(modules::list_modules).post(modules::create_module),
+        )
+        .route(
+            "/modules/{module_id}",
+            get(modules::get_module).put(modules::update_module),
+        )
+        .route(
+            "/modules/{module_id}/archived",
+            put(modules::archive_module),
+        )
+        .route(
+            "/modules/{module_id}/items",
+            get(modules::list_items).post(modules::create_item),
+        )
+        .route(
+            "/items/{item_id}",
+            get(modules::get_item).put(modules::update_item),
+        )
+        .route("/items/{item_id}/archived", put(modules::archive_item))
+        .route(
+            "/items/{item_id}/documents",
+            get(modules::list_item_documents).post(modules::create_item_document),
+        )
         .route("/public/{token}", get(public_links::view))
         .route(
             "/documents/{document_id}",
