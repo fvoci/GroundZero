@@ -12,6 +12,7 @@
 
   import DocumentActions from './DocumentActions.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
+  import RevisionHistory from './RevisionHistory.svelte';
 
   interface Props {
     documentId: string;
@@ -22,6 +23,8 @@
 
   let doc = $state<DocumentView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
+  // 복원 뒤 편집기를 새 내용으로 다시 만든다(저장하지 않은 편집은 편집기의 초안 보존이 지킨다).
+  let epoch = $state(0);
 
   $effect(() => {
     const id = documentId;
@@ -68,19 +71,35 @@
 {:else if doc === undefined}
   <p aria-live="polite">불러오는 중…</p>
 {:else}
-  <DocumentActions
-    {doc}
-    {workspaces}
-    onchanged={(next: DocumentView) => {
-      // 설정·이동은 리비전을 바꾸지 않는다. 편집 중인 내용은 편집기가 그대로 가진다.
-      if (doc !== undefined)
-        doc = { ...doc, ...next, body: doc.body, title: doc.title, revision: doc.revision };
-    }}
-  />
-  {#key doc.id}
-    <DocumentEditor initial={doc} references={referencesFor(doc)} />
+  <div class="flex flex-wrap items-center gap-2">
+    <DocumentActions
+      {doc}
+      {workspaces}
+      onchanged={(next: DocumentView) => {
+        // 설정·이동은 리비전을 바꾸지 않는다. 편집 중인 내용은 편집기가 그대로 가진다.
+        if (doc !== undefined)
+          doc = { ...doc, ...next, body: doc.body, title: doc.title, revision: doc.revision };
+      }}
+    />
+    <RevisionHistory
+      {doc}
+      onrestored={(restored: DocumentView) => {
+        doc = restored;
+        epoch += 1;
+      }}
+    />
+  </div>
+  {#key `${doc.id}:${String(epoch)}`}
+    <DocumentEditor
+      initial={doc}
+      references={referencesFor(doc)}
+      onsaved={(saved: DocumentView) => {
+        // 기록 비교(지금과 비교)와 복원의 기준 리비전이 최신이 되도록 저장 결과를 따라간다.
+        doc = saved;
+      }}
+    />
   {/key}
-  {#key doc.id}
+  {#key `${doc.id}:${String(epoch)}`}
     <Backlinks kind="document" id={doc.id} {workspaces} />
   {/key}
 {/if}

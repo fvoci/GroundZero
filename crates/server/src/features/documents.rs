@@ -517,7 +517,7 @@ pub async fn get(
     Ok(Json(to_document(row, access)))
 }
 
-fn conflict(current: Document) -> Response {
+pub(crate) fn conflict(current: Document) -> Response {
     (
         StatusCode::CONFLICT,
         Json(ConflictBody {
@@ -563,15 +563,21 @@ pub async fn save(
 
     // 같은 사용자의 같은 요청 재시도. 그 요청이 만든 리비전이 아직 최신이면 성공으로 돌려주고,
     // 그 뒤에 다른 저장이 있었으면 충돌로 알린다(재시도한 클라이언트가 남의 최신본을 덮지 않게).
-    let replay: Option<i32> = sqlx::query_scalar(
-        "SELECT revision FROM document_revisions
+    let replay: Option<(i32, Option<i32>)> = sqlx::query_as(
+        "SELECT revision, restored_from FROM document_revisions
          WHERE document_id = $1 AND request_id = $2 AND author = app_user_id()",
     )
     .bind(id)
     .bind(input.request_id)
     .fetch_optional(tx.conn())
     .await?;
-    if let Some(revision) = replay {
+    if let Some((_, Some(_))) = replay {
+        // 복원에 쓴 request_id를 저장에 다시 쓰면 재시도로 보지 않는다(엉뚱한 성공 응답 방지).
+        return Err(AppError::BadRequest(
+            "request_id was already used for another change".into(),
+        ));
+    }
+    if let Some((revision, None)) = replay {
         tx.commit().await?;
         let doc = to_document(current, access);
         return Ok(if doc.revision == revision {

@@ -515,6 +515,49 @@ export function parseNotification(value: Json): NotificationView {
   };
 }
 
+// --- 리비전 -------------------------------------------------------------
+
+export interface RevisionSummaryView {
+  revision: number;
+  title: string;
+  author_name: string | null;
+  created_at: string;
+  restored_from: number | null;
+}
+
+export interface RevisionView extends RevisionSummaryView {
+  body: DocNode;
+  schema_version: number;
+}
+
+function optInt(o: Record<string, unknown>, key: string): number | null {
+  const v = o[key];
+  if (v === null || v === undefined) return null;
+  if (typeof v !== 'number' || !Number.isSafeInteger(v))
+    throw new TypeError(`expected integer at ${key}`);
+  return v;
+}
+
+export function parseRevisionSummary(value: Json): RevisionSummaryView {
+  const o = rec(value, 'revision');
+  return {
+    revision: int(o, 'revision'),
+    title: str(o, 'title'),
+    author_name: optStr(o, 'author_name'),
+    created_at: str(o, 'created_at'),
+    restored_from: optInt(o, 'restored_from'),
+  };
+}
+
+export function parseRevision(value: Json): RevisionView {
+  const o = rec(value, 'revision');
+  return {
+    ...parseRevisionSummary(o),
+    body: parseDocNode(o.body),
+    schema_version: int(o, 'schema_version'),
+  };
+}
+
 /** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
 export interface MoveTargetInput {
   workspaceId: string;
@@ -693,6 +736,37 @@ export const api = {
       target_workspace_id: target.workspaceId,
       target_item_id: target.itemId,
     }),
+  revisions: (id: string, before: number | null) =>
+    expectOk(
+      'GET',
+      `/api/documents/${encodeURIComponent(id)}/revisions${before === null ? '' : `?before=${String(before)}`}`,
+      (v) => parseList(v, parseRevisionSummary),
+    ),
+  revision: (id: string, revision: number) =>
+    expectOk(
+      'GET',
+      `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}`,
+      parseRevision,
+    ),
+  /** 옛 리비전 내용으로 새 리비전을 만든다. 보고 있던 리비전이 지났으면 `{ kind: 'conflict', current }`. */
+  async restoreRevision(
+    id: string,
+    revision: number,
+    input: { requestId: string; baseRevision: number },
+  ): Promise<
+    { kind: 'restored'; document: DocumentView } | { kind: 'conflict'; current: DocumentView }
+  > {
+    const { status, json } = await request(
+      'POST',
+      `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/restore`,
+      { request_id: input.requestId, base_revision: input.baseRevision },
+    );
+    if (status === 409) {
+      return { kind: 'conflict', current: parseDocument(rec(json, 'conflict').current) };
+    }
+    if (status !== 200) fail(status, json);
+    return { kind: 'restored', document: parseDocument(json) };
+  },
   referenceCandidates: (q: string, workspaceId: string | null) => {
     const params = new URLSearchParams({ q });
     if (workspaceId !== null) params.set('workspace_id', workspaceId);

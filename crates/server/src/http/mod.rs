@@ -16,7 +16,7 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, documents, members, modules, public_links, references, workspaces,
+    accounts, documents, members, modules, public_links, references, revisions, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -130,6 +130,9 @@ async fn api_not_found() -> AppError {
         documents::copy,
         documents::move_preview,
         documents::move_document,
+        revisions::list,
+        revisions::get,
+        revisions::restore,
         modules::list_modules,
         modules::get_module,
         modules::create_module,
@@ -205,6 +208,9 @@ async fn api_not_found() -> AppError {
         documents::MovePreview,
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
+        revisions::RevisionSummary,
+        revisions::Revision,
+        revisions::RestoreRevision,
         modules::ModuleKind,
         modules::Module,
         modules::CreateModule,
@@ -292,6 +298,15 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/public-links/{link_id}", delete(public_links::revoke))
         .route("/reference-candidates", get(references::candidates))
+        .route("/documents/{document_id}/revisions", get(revisions::list))
+        .route(
+            "/documents/{document_id}/revisions/{revision}",
+            get(revisions::get),
+        )
+        .route(
+            "/documents/{document_id}/revisions/{revision}/restore",
+            post(revisions::restore),
+        )
         .route("/references/resolve", post(references::resolve))
         .route(
             "/documents/{document_id}/backlinks",
@@ -400,4 +415,32 @@ pub fn router(state: AppState) -> Router {
     }
 
     app.with_state(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use utoipa::OpenApi;
+
+    use super::ApiDoc;
+
+    /// 핸들러 이름이 같으면(예: 두 모듈의 `list`) operationId가 겹쳐 생성 타입이 깨진다. 계약에서 미리 막는다.
+    #[test]
+    fn operation_ids_are_unique() {
+        let doc = ApiDoc::openapi();
+        let mut seen = HashSet::new();
+        for (path, item) in &doc.paths.paths {
+            for op in [&item.get, &item.post, &item.put, &item.delete, &item.patch]
+                .into_iter()
+                .flatten()
+            {
+                let id = op.operation_id.clone().unwrap_or_default();
+                assert!(
+                    seen.insert(id.clone()),
+                    "duplicate operationId {id} at {path}"
+                );
+            }
+        }
+    }
 }

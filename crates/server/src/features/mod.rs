@@ -6,4 +6,5 @@ pub mod members;
 pub mod modules;
 pub mod public_links;
 pub mod references;
+pub mod revisions;
 pub mod workspaces;

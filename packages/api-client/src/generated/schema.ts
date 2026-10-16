@@ -148,6 +148,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 리비전 목록(최신순, 한 번에 100개). 볼 수 없으면 404. */
+        get: operations["list_revisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/revisions/{revision}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 리비전 하나. 문서나 리비전이 없거나 볼 수 없으면 404. */
+        get: operations["get_revision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/revisions/{revision}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 옛 리비전의 내용으로 새 리비전을 만든다(쓰기 권한). 기준 리비전이 지났으면 409와 서버 최신본. */
+        post: operations["restore_revision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}/settings": {
         parameters: {
             query?: never;
@@ -1197,6 +1248,42 @@ export interface components {
             visible: boolean;
             workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
+        /** @description 복원 요청. `base_revision`은 사용자가 보고 있던 현재 리비전이다. */
+        RestoreRevision: {
+            /** Format: int32 */
+            base_revision: number;
+            /** Format: uuid */
+            request_id: string;
+        };
+        /** @description 리비전 하나(본문 포함). */
+        Revision: {
+            author_name?: string | null;
+            body: Record<string, never>;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int32 */
+            restored_from?: number | null;
+            /** Format: int32 */
+            revision: number;
+            /** Format: int32 */
+            schema_version: number;
+            title: string;
+        };
+        /** @description 리비전 목록 항목(본문 없음). */
+        RevisionSummary: {
+            /** @description 저장한 사람. 워크스페이스를 함께 쓰지 않으면(공유받은 개인 노트 등) 없을 수 있다. */
+            author_name?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: int32
+             * @description 복원으로 만든 리비전이면 원본 리비전 번호.
+             */
+            restored_from?: number | null;
+            /** Format: int32 */
+            revision: number;
+            title: string;
+        };
         /**
          * @description 워크스페이스 역할 (D-20).
          * @enum {string}
@@ -1671,6 +1758,117 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_revisions: {
+        parameters: {
+            query?: {
+                before?: number | null;
+            };
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionSummary"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_revision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                revision: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Revision"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    restore_revision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                revision: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreRevision"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictBody"];
                 };
             };
         };
