@@ -69,6 +69,7 @@ fn edit(task: &Value, changes: Value) -> Value {
         "base_version": task["version"], "title": task["title"], "description": task["description"],
         "status": task["status"], "priority": task["priority"], "start_date": task["start_date"],
         "due_date": task["due_date"], "estimate_minutes": task["estimate_minutes"], "tags": task["tags"],
+        "milestone": task["milestone"],
         "assignee_ids": task["assignees"].as_array().unwrap().iter().map(|a| a["user_id"].clone()).collect::<Vec<_>>(),
     });
     for (k, v) in changes.as_object().unwrap() {

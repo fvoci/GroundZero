@@ -131,6 +131,11 @@ pub struct Task {
     pub due_date: Option<String>,
     pub estimate_minutes: Option<i32>,
     pub tags: Vec<String>,
+    /// 마일스톤이면 마감일 하나만 쓴다.
+    pub milestone: bool,
+    /// 같은 항목 안의 선행 업무(끝나야 시작).
+    #[schema(value_type = Vec<String>)]
+    pub predecessor_ids: Vec<Uuid>,
     pub assignees: Vec<Assignee>,
     pub checklist_done: i64,
     pub checklist_total: i64,
@@ -179,7 +184,26 @@ pub struct UpdateTask {
     pub tags: Vec<String>,
     /// 담당자 전체 목록(빠지면 지우는 것이므로 생략할 수 없다).
     pub assignee_ids: Vec<UserId>,
+    /// 마일스톤이면 시작일 없이 마감일만.
+    pub milestone: bool,
+    /// 미리보기에서 사용자가 승인한 후속 업무 재배치. 같은 트랜잭션에서 함께 옮기며, 하나라도 기준 버전이
+    /// 지났으면 아무것도 바꾸지 않고 409(`shift_conflict`).
+    #[serde(default)]
+    pub successor_shifts: Vec<SuccessorShift>,
 }
+
+/// 승인한 후속 업무 재배치 한 건. 날짜가 있던 칸만 옮긴다.
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct SuccessorShift {
+    #[schema(value_type = String, format = Uuid)]
+    pub task_id: Uuid,
+    pub base_version: i32,
+    pub start_date: Option<String>,
+    pub due_date: Option<String>,
+}
+
+/// 한 번에 옮길 수 있는 후속 업무 수.
+const MAX_SHIFTS: usize = 500;
 
 /// 칸반 이동: 열(상태)과 그 안에서 바로 뒤에 올 업무(없으면 맨 끝).
 #[derive(Debug, Deserialize, ToSchema)]
@@ -226,7 +250,7 @@ pub struct TaskConflict {
     pub current: TaskDetail,
 }
 
-fn parse_date(raw: Option<&str>, field: &str) -> Result<Option<Date>, AppError> {
+pub(crate) fn parse_date(raw: Option<&str>, field: &str) -> Result<Option<Date>, AppError> {
     match raw.map(str::trim).filter(|s| !s.is_empty()) {
         None => Ok(None),
         // 시각이 붙은 값은 받지 않는다(날짜만 있는 일정은 날짜 그대로, D-50).
@@ -239,7 +263,7 @@ fn parse_date(raw: Option<&str>, field: &str) -> Result<Option<Date>, AppError> 
     }
 }
 
-fn format_date(date: Option<Date>) -> Option<String> {
+pub(crate) fn format_date(date: Option<Date>) -> Option<String> {
     date.map(|d| format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day()))
 }
 
@@ -295,6 +319,8 @@ struct TaskRow {
     due_date: Option<Date>,
     estimate_minutes: Option<i32>,
     tags: Vec<String>,
+    milestone: bool,
+    predecessor_ids: Vec<Uuid>,
     checklist_done: i64,
     checklist_total: i64,
     version: i32,
@@ -305,7 +331,9 @@ struct TaskRow {
 
 const TASK_SELECT: &str = "SELECT t.id, t.item_id, i.module_id, t.workspace_id, t.parent_id,
         app_task_reference(t.id) AS reference, t.title, t.description, t.status, t.priority,
-        t.start_date, t.due_date, t.estimate_minutes, t.tags,
+        t.start_date, t.due_date, t.estimate_minutes, t.tags, t.milestone,
+        ARRAY(SELECT d.predecessor_id FROM task_dependencies d WHERE d.successor_id = t.id
+              ORDER BY d.created_at, d.predecessor_id) AS predecessor_ids,
         c.done AS checklist_done, c.total AS checklist_total,
         t.version, t.completed_at, app_task_access(t.id) AS access, t.updated_at
  FROM tasks t JOIN items i ON i.id = t.item_id
@@ -359,6 +387,8 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 due_date,
                 estimate_minutes,
                 tags,
+                milestone,
+                predecessor_ids,
                 checklist_done,
                 checklist_total,
                 version,
@@ -387,6 +417,8 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 due_date: format_date(due_date),
                 estimate_minutes,
                 tags,
+                milestone,
+                predecessor_ids,
                 assignees: mine,
                 checklist_done,
                 checklist_total,
@@ -400,7 +432,7 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
         .collect()
 }
 
-async fn load_detail(tx: &mut UserTx, id: Uuid) -> Result<TaskDetail, AppError> {
+pub(crate) async fn load_detail(tx: &mut UserTx, id: Uuid) -> Result<TaskDetail, AppError> {
     let row: Option<TaskRow> = sqlx::query_as(&format!("{TASK_SELECT} WHERE t.id = $1"))
         .bind(id)
         .fetch_optional(tx.conn())
@@ -425,7 +457,7 @@ async fn load_detail(tx: &mut UserTx, id: Uuid) -> Result<TaskDetail, AppError> 
     })
 }
 
-/// 항목의 업무 목록(상위 업무 뒤에 하위 업무). 항목을 볼 수 없으면 404.
+/// 항목의 업무 목록(칸반 열 순서, 열 안은 위치 순). 항목을 볼 수 없으면 404.
 #[utoipa::path(get, path = "/api/items/{item_id}/tasks", operation_id = "list_tasks",
     params(("item_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Task]), (status = 404, body = ErrorBody)), tag = "tasks")]
@@ -555,37 +587,57 @@ pub async fn update(
         ));
     }
     let tags = validate_tags(&input.tags)?;
+    if input.successor_shifts.len() > MAX_SHIFTS {
+        return Err(AppError::BadRequest(format!(
+            "at most {MAX_SHIFTS} successor shifts"
+        )));
+    }
+    let mut shifts = Vec::with_capacity(input.successor_shifts.len());
+    for shift in &input.successor_shifts {
+        // 날짜 형식은 업무 날짜와 같은 규칙으로 확인한 뒤 DB에 넘긴다.
+        shifts.push(serde_json::json!({
+            "task_id": shift.task_id,
+            "base_version": shift.base_version,
+            "start_date": format_date(parse_date(shift.start_date.as_deref(), "start_date")?),
+            "due_date": format_date(parse_date(shift.due_date.as_deref(), "due_date")?),
+        }));
+    }
     let mut tx = state.db.begin_as(user).await?;
-    let outcome: String =
-        sqlx::query_scalar("SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
-            .bind(id)
-            .bind(input.base_version)
-            .bind(&title)
-            .bind(&description)
-            .bind(input.status.as_str())
-            .bind(input.priority.as_str())
-            .bind(start)
-            .bind(due)
-            .bind(input.estimate_minutes)
-            .bind(&tags)
-            .bind(&input.assignee_ids)
-            .fetch_one(tx.conn())
-            .await
-            .map_err(AppError::from_db_function)?;
+    let outcome: String = sqlx::query_scalar(
+        "SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+    )
+    .bind(id)
+    .bind(input.base_version)
+    .bind(&title)
+    .bind(&description)
+    .bind(input.status.as_str())
+    .bind(input.priority.as_str())
+    .bind(start)
+    .bind(due)
+    .bind(input.estimate_minutes)
+    .bind(&tags)
+    .bind(&input.assignee_ids)
+    .bind(input.milestone)
+    .bind(serde_json::Value::Array(shifts))
+    .fetch_one(tx.conn())
+    .await
+    .map_err(AppError::from_db_function)?;
     let detail = load_detail(&mut tx, id).await?;
     tx.commit().await?;
-    Ok(if outcome == "conflict" {
-        (
-            StatusCode::CONFLICT,
-            Json(TaskConflict {
-                error: "conflict",
-                current: detail,
-            }),
-        )
-            .into_response()
-    } else {
-        Json(detail).into_response()
-    })
+    let error = match outcome.as_str() {
+        "conflict" => "conflict",
+        // 승인할 때 본 후속 업무가 그사이 바뀌었다. 아무것도 바꾸지 않았으니 다시 미리 본다.
+        "shift_conflict" => "shift_conflict",
+        _ => return Ok(Json(detail).into_response()),
+    };
+    Ok((
+        StatusCode::CONFLICT,
+        Json(TaskConflict {
+            error,
+            current: detail,
+        }),
+    )
+        .into_response())
 }
 
 /// 칸반 이동(쓰기 권한). 버전과 상관없이 바로 반영한다.

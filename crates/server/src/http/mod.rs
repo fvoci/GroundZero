@@ -16,7 +16,8 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, documents, members, modules, public_links, references, revisions, tasks, workspaces,
+    accounts, documents, members, modules, public_links, references, revisions, schedule, tasks,
+    workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -141,6 +142,9 @@ async fn api_not_found() -> AppError {
         tasks::add_checklist,
         tasks::update_checklist_item,
         tasks::delete_checklist_item,
+        schedule::preview,
+        schedule::add_predecessor,
+        schedule::remove_predecessor,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -235,6 +239,9 @@ async fn api_not_found() -> AppError {
         tasks::AddChecklist,
         tasks::UpdateChecklistItem,
         tasks::TaskConflict,
+        tasks::SuccessorShift,
+        schedule::SchedulePreviewInput,
+        schedule::ShiftProposal,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -338,6 +345,11 @@ pub fn router(state: AppState) -> Router {
         .route("/tasks/{task_id}", get(tasks::get).put(tasks::update))
         .route("/tasks/{task_id}/position", put(tasks::move_task))
         .route("/tasks/{task_id}/parent", put(tasks::set_parent))
+        .route("/tasks/{task_id}/schedule-preview", post(schedule::preview))
+        .route(
+            "/tasks/{task_id}/predecessors/{predecessor_id}",
+            put(schedule::add_predecessor).delete(schedule::remove_predecessor),
+        )
         .route("/tasks/{task_id}/checklist", post(tasks::add_checklist))
         .route(
             "/tasks/{task_id}/backlinks",

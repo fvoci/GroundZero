@@ -13,6 +13,7 @@
   import type { BoardAction } from './board';
   import { lanes, listOrder, planBoardMove } from './board';
   import { PRIORITY_LABEL, STATUS_LABEL } from './labels';
+  import GanttChart from './GanttChart.svelte';
   import TaskDetail from './TaskDetail.svelte';
 
   interface Props {
@@ -25,7 +26,7 @@
   const { item, workspaces, openTaskId }: Props = $props();
 
   let tasks = $state<TaskView[]>([]);
-  let view = $state<'list' | 'board'>('board');
+  let view = $state<'list' | 'board' | 'gantt'>('board');
   let error = $state<string | undefined>(undefined);
   let status = $state('');
 
@@ -113,6 +114,12 @@
         aria-pressed={view === 'list'}
         onclick={() => (view = 'list')}>목록</Button
       >
+      <Button
+        size="sm"
+        variant={view === 'gantt' ? 'secondary' : 'ghost'}
+        aria-pressed={view === 'gantt'}
+        onclick={() => (view = 'gantt')}>간트</Button
+      >
     </div>
   </div>
   {#if error !== undefined}
@@ -196,6 +203,8 @@
         카드에서 Enter로 열고, Alt+왼쪽·오른쪽으로 열을, Alt+위·아래로 순서를 바꿉니다.
       </p>
     {/if}
+  {:else if view === 'gantt'}
+    <GanttChart {tasks} onopen={open} />
   {:else}
     <table class="w-full text-sm" data-testid="task-list">
       <thead class="text-left text-muted-foreground">
@@ -214,6 +223,7 @@
             <td class={t.parent_id === null ? '' : 'pl-4'}>
               <button
                 type="button"
+                data-task-card={t.id}
                 class="text-left hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 onclick={() => {
                   open(t.id);
@@ -278,7 +288,7 @@
       {#key openTaskId}
         <TaskDetail
           taskId={openTaskId}
-          subtasks={tasks.filter((t) => t.parent_id === openTaskId)}
+          {tasks}
           {workspaces}
           onchanged={() => void reload()}
           onopen={open}

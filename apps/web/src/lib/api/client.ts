@@ -601,6 +601,9 @@ export interface TaskView {
   due_date: string | null;
   estimate_minutes: number | null;
   tags: string[];
+  milestone: boolean;
+  /** 같은 항목 안의 선행 업무(끝나야 시작). */
+  predecessor_ids: string[];
   assignees: AssigneeView[];
   checklist_done: number;
   checklist_total: number;
@@ -630,6 +633,40 @@ export interface TaskInput {
   estimate_minutes: number | null;
   tags: string[];
   assignee_ids: string[];
+  milestone: boolean;
+}
+
+/** 선행 업무를 옮길 때 함께 옮길 후속 업무(현재 → 제안). 승인하면 그대로 `SuccessorShift`로 보낸다. */
+export interface ShiftProposalView {
+  task_id: string;
+  reference: string | null;
+  title: string;
+  base_version: number;
+  from_start_date: string | null;
+  from_due_date: string | null;
+  start_date: string | null;
+  due_date: string | null;
+}
+
+export interface SuccessorShift {
+  task_id: string;
+  base_version: number;
+  start_date: string | null;
+  due_date: string | null;
+}
+
+function parseShiftProposal(value: Json): ShiftProposalView {
+  const o = rec(value, 'shift proposal');
+  return {
+    task_id: str(o, 'task_id'),
+    reference: optStr(o, 'reference'),
+    title: str(o, 'title'),
+    base_version: int(o, 'base_version'),
+    from_start_date: optStr(o, 'from_start_date'),
+    from_due_date: optStr(o, 'from_due_date'),
+    start_date: optStr(o, 'start_date'),
+    due_date: optStr(o, 'due_date'),
+  };
 }
 
 function taskStatus(value: string): TaskStatus {
@@ -666,6 +703,8 @@ export function parseTask(value: Json): TaskView {
     due_date: optStr(o, 'due_date'),
     estimate_minutes: optInt(o, 'estimate_minutes'),
     tags: strings(o.tags),
+    milestone: bool(o, 'milestone'),
+    predecessor_ids: strings(o.predecessor_ids),
     assignees: parseList(o.assignees, parseAssignee),
     checklist_done: int(o, 'checklist_done'),
     checklist_total: int(o, 'checklist_total'),
@@ -892,20 +931,31 @@ export const api = {
       title,
       parent_id: parentId,
     }),
-  /** 필드 고치기. 기준 버전이 지났으면 `{ kind: 'conflict', current }`. */
+  /**
+   * 필드 고치기와 승인한 후속 재배치. 이 업무의 기준 버전이 지났으면 `conflict`, 승인한 후속 업무가 그사이
+   * 바뀌었으면 `shift_conflict`(아무것도 바뀌지 않았으니 다시 미리 본다).
+   */
   async updateTask(
     id: string,
     baseVersion: number,
     input: TaskInput,
+    successorShifts: SuccessorShift[] = [],
   ): Promise<
-    { kind: 'updated'; task: TaskDetailView } | { kind: 'conflict'; current: TaskDetailView }
+    | { kind: 'updated'; task: TaskDetailView }
+    | { kind: 'conflict'; current: TaskDetailView }
+    | { kind: 'shift_conflict'; current: TaskDetailView }
   > {
     const { status, json } = await request('PUT', `/api/tasks/${encodeURIComponent(id)}`, {
       base_version: baseVersion,
       ...input,
+      successor_shifts: successorShifts,
     });
     if (status === 409) {
-      return { kind: 'conflict', current: parseTaskDetail(rec(json, 'conflict').current) };
+      const body = rec(json, 'conflict');
+      const current = parseTaskDetail(body.current);
+      return str(body, 'error') === 'shift_conflict'
+        ? { kind: 'shift_conflict', current }
+        : { kind: 'conflict', current };
     }
     if (status !== 200) fail(status, json);
     return { kind: 'updated', task: parseTaskDetail(json) };
@@ -915,6 +965,25 @@ export const api = {
       status,
       before_id: beforeId,
     }),
+  previewSchedule: (id: string, startDate: string | null, dueDate: string | null) =>
+    expectOk(
+      'POST',
+      `/api/tasks/${encodeURIComponent(id)}/schedule-preview`,
+      (v) => parseList(v, parseShiftProposal),
+      { start_date: startDate, due_date: dueDate },
+    ),
+  addPredecessor: (id: string, predecessorId: string) =>
+    expectOk(
+      'PUT',
+      `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
+      parseTaskDetail,
+    ),
+  removePredecessor: (id: string, predecessorId: string) =>
+    expectOk(
+      'DELETE',
+      `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
+      parseTaskDetail,
+    ),
   setTaskParent: (id: string, parentId: string | null) =>
     expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/parent`, parseTaskDetail, {
       parent_id: parentId,

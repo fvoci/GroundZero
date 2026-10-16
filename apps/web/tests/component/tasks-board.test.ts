@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { lanes, listOrder, planBoardMove } from '$lib/features/tasks/board';
+import { dayNumber, fromDayNumber, ganttLayout } from '$lib/features/tasks/gantt';
 
 const tasks = [
   { id: 'a', status: 'todo' as const, parent_id: null },
@@ -30,5 +31,37 @@ describe('task board (D-31)', () => {
 
   it('lists subtasks right after their parent and orphans last', () => {
     expect(listOrder(tasks).map((t) => t.id)).toEqual(['a', 'a1', 'b', 'c', 'x1']);
+  });
+});
+
+describe('gantt layout (D-31, D-50)', () => {
+  const base = { status: 'todo' as const, milestone: false };
+  it('places dated tasks by day and keeps subtasks under their parent', () => {
+    const layout = ganttLayout([
+      { ...base, id: 'b', parent_id: null, start_date: '2026-10-30', due_date: '2026-11-02' },
+      { ...base, id: 'a', parent_id: null, start_date: null, due_date: null },
+      { ...base, id: 'b1', parent_id: 'b', start_date: null, due_date: '2026-10-28' },
+      {
+        ...base,
+        id: 'm',
+        parent_id: null,
+        start_date: null,
+        due_date: '2026-11-05',
+        milestone: true,
+      },
+    ]);
+    expect(layout.first).toBe('2026-10-28');
+    expect(layout.days).toBe(9);
+    expect(layout.rows.map((r) => [r.task.id, r.from, r.to])).toEqual([
+      ['b', 2, 5],
+      ['b1', 0, 0],
+      ['m', 8, 8],
+    ]);
+    expect(layout.undated.map((t) => t.id)).toEqual(['a']);
+  });
+
+  it('converts dates without time zone drift', () => {
+    expect(fromDayNumber(dayNumber('2026-03-29'))).toBe('2026-03-29');
+    expect(dayNumber('2026-01-01') - dayNumber('2025-12-31')).toBe(1);
   });
 });

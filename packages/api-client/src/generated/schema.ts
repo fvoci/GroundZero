@@ -469,7 +469,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 항목의 업무 목록(상위 업무 뒤에 하위 업무). 항목을 볼 수 없으면 404. */
+        /** 항목의 업무 목록(칸반 열 순서, 열 안은 위치 순). 항목을 볼 수 없으면 404. */
         get: operations["list_tasks"];
         put?: never;
         /** 업무 만들기(항목 쓰기 권한). 같은 `request_id`는 같은 업무를 돌려준다. */
@@ -767,6 +767,41 @@ export interface paths {
         /** 칸반 이동(쓰기 권한). 버전과 상관없이 바로 반영한다. */
         put: operations["move_task"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/predecessors/{predecessor_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 선행 업무 추가(후속 업무 쓰기 권한). 같은 항목만, 순환이면 400. 이미 있으면 그대로. */
+        put: operations["add_predecessor"];
+        post?: never;
+        /** 선행 업무 지우기(후속 업무 쓰기 권한). */
+        delete: operations["remove_predecessor"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/schedule-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 후속 재배치 미리보기(읽기). 아무것도 바꾸지 않는다. 업무를 볼 수 없으면 404. */
+        post: operations["preview_task_schedule"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1508,6 +1543,11 @@ export interface components {
             request_id: string;
             title: string;
         };
+        /** @description 미리보기 요청: 바꾸려는 날짜. */
+        SchedulePreviewInput: {
+            due_date?: string | null;
+            start_date?: string | null;
+        };
         /** @description 보관 상태 변경 요청. */
         SetArchived: {
             archived: boolean;
@@ -1545,6 +1585,31 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description 옮겨야 하는 후속 업무 한 건(현재 → 제안). */
+        ShiftProposal: {
+            /**
+             * Format: int32
+             * @description 승인할 때 그대로 보내는 기준 버전.
+             */
+            base_version: number;
+            due_date?: string | null;
+            from_due_date?: string | null;
+            from_start_date?: string | null;
+            reference?: string | null;
+            start_date?: string | null;
+            /** Format: uuid */
+            task_id: string;
+            title: string;
+        };
+        /** @description 승인한 후속 업무 재배치 한 건. 날짜가 있던 칸만 옮긴다. */
+        SuccessorShift: {
+            /** Format: int32 */
+            base_version: number;
+            due_date?: string | null;
+            start_date?: string | null;
+            /** Format: uuid */
+            task_id: string;
+        };
         /** @description 업무. */
         Task: {
             access: components["schemas"]["Access"];
@@ -1562,12 +1627,16 @@ export interface components {
             /** Format: uuid */
             id: string;
             item_id: components["schemas"]["ItemId"];
+            /** @description 마일스톤이면 마감일 하나만 쓴다. */
+            milestone: boolean;
             module_id: components["schemas"]["ModuleId"];
             /**
              * Format: uuid
              * @description 하위 업무면 상위 업무.
              */
             parent_id?: string | null;
+            /** @description 같은 항목 안의 선행 업무(끝나야 시작). */
+            predecessor_ids: string[];
             priority: components["schemas"]["TaskPriority"];
             /** @description 예: `DEV-5`. */
             reference?: string | null;
@@ -1631,9 +1700,16 @@ export interface components {
             due_date?: string | null;
             /** Format: int32 */
             estimate_minutes?: number | null;
+            /** @description 마일스톤이면 시작일 없이 마감일만. */
+            milestone: boolean;
             priority: components["schemas"]["TaskPriority"];
             start_date?: string | null;
             status: components["schemas"]["TaskStatus"];
+            /**
+             * @description 미리보기에서 사용자가 승인한 후속 업무 재배치. 같은 트랜잭션에서 함께 옮기며, 하나라도 기준 버전이
+             *     지났으면 아무것도 바꾸지 않고 409(`shift_conflict`).
+             */
+            successor_shifts?: components["schemas"]["SuccessorShift"][];
             tags: string[];
             title: string;
         };
@@ -3806,6 +3882,147 @@ export interface operations {
                 };
             };
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_predecessor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                predecessor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_predecessor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                predecessor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    preview_task_schedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SchedulePreviewInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftProposal"][];
+                };
+            };
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
