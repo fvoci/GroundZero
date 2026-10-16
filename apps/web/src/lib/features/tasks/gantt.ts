@@ -21,7 +21,12 @@ export interface GanttLayout<T> {
   days: number;
   rows: GanttRow<T>[];
   undated: T[];
+  /** 보이는 기간(최대 `MAX_GANTT_DAYS`일) 뒤에 있어 막대로 그리지 않은 업무. */
+  later: T[];
 }
+
+/** 한 번에 그리는 최대 날짜 수(열이 끝없이 늘지 않게). */
+export const MAX_GANTT_DAYS = 400;
 
 const DAY_MS = 86_400_000;
 
@@ -44,13 +49,19 @@ export function ganttLayout<T extends GanttTask>(tasks: readonly T[]): GanttLayo
     if (begin === null || end === null) undated.push(task);
     else spans.push({ task, begin: dayNumber(begin), end: dayNumber(end) });
   }
-  if (spans.length === 0) return { first: '', days: 0, rows: [], undated };
+  if (spans.length === 0) return { first: '', days: 0, rows: [], undated, later: [] };
   const first = Math.min(...spans.map((s) => s.begin));
-  const last = Math.max(...spans.map((s) => s.end));
+  const last = Math.min(Math.max(...spans.map((s) => s.end)), first + MAX_GANTT_DAYS - 1);
+  const shown = spans.filter((s) => s.begin <= last);
   return {
     first: fromDayNumber(first),
     days: last - first + 1,
-    rows: spans.map((s) => ({ task: s.task, from: s.begin - first, to: s.end - first })),
+    rows: shown.map((s) => ({
+      task: s.task,
+      from: s.begin - first,
+      to: Math.min(s.end, last) - first,
+    })),
     undated,
+    later: spans.filter((s) => s.begin > last).map((s) => s.task),
   };
 }

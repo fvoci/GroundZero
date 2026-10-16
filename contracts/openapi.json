@@ -1139,6 +1139,181 @@
         }
       }
     },
+    "/api/events/{event_id}": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "일정 하나. 볼 수 없거나 지웠으면 404.",
+        "operationId": "get_event",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "events"
+        ],
+        "summary": "일정 고치기(쓰기 권한). 기준 버전이 지났으면 409와 서버 최신본.",
+        "operationId": "update_event",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEvent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventConflict"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "events"
+        ],
+        "summary": "일정 지우기(쓰기 권한). 행은 남기고 목록·달력에서 뺀다.",
+        "operationId": "delete_event",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/groups/{group_id}": {
       "delete": {
         "tags": [
@@ -1828,6 +2003,131 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/events": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "항목의 일정(시작 순). 항목을 볼 수 없으면 404.",
+        "operationId": "list_item_events",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Event"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "events"
+        ],
+        "summary": "일정 만들기(항목 쓰기 권한). 같은 `request_id`로 재시도하면 같은 일정을 돌려준다.",
+        "operationId": "create_event",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEvent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
                 }
               }
             }
@@ -3397,6 +3697,82 @@
         }
       }
     },
+    "/api/workspaces/{workspace_id}/calendar": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "워크스페이스 달력(멤버). 볼 수 있는 업무와 일정만 나온다. 기간은 62일까지.",
+        "operationId": "workspace_calendar",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Calendar"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{workspace_id}/groups": {
       "get": {
         "tags": [
@@ -4523,6 +4899,104 @@
           }
         }
       },
+      "Calendar": {
+        "type": "object",
+        "description": "기간 안의 볼 수 있는 업무·일정.",
+        "required": [
+          "tasks",
+          "events",
+          "items"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarItem"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarTask"
+            }
+          }
+        }
+      },
+      "CalendarItem": {
+        "type": "object",
+        "description": "달력에 나온 항목의 이름(업무·일정이 어디에 속하는지 보이기 위해).",
+        "required": [
+          "id",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "CalendarTask": {
+        "type": "object",
+        "description": "달력의 업무(시작일~마감일).",
+        "required": [
+          "id",
+          "item_id",
+          "title",
+          "status",
+          "milestone"
+        ],
+        "properties": {
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "milestone": {
+            "type": "boolean"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
       "ChecklistItem": {
         "type": "object",
         "description": "체크리스트 항목.",
@@ -4614,6 +5088,26 @@
             "type": "string"
           }
         }
+      },
+      "CreateEvent": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EventInput"
+          },
+          {
+            "type": "object",
+            "required": [
+              "request_id"
+            ],
+            "properties": {
+              "request_id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "description": "일정 만들기."
       },
       "CreateGroup": {
         "type": "object",
@@ -4974,6 +5468,162 @@
             "description": "사람이 읽는 설명. 내부 세부는 담지 않는다."
           }
         }
+      },
+      "Event": {
+        "type": "object",
+        "description": "일정.",
+        "required": [
+          "id",
+          "item_id",
+          "workspace_id",
+          "kind",
+          "title",
+          "description",
+          "all_day",
+          "timezone",
+          "version",
+          "access"
+        ],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "all_day": {
+            "type": "boolean",
+            "description": "종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`."
+          },
+          "description": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EventKind"
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "starts_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "일정에 지정한 시간대(IANA). 반복 계산의 기준이다."
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "EventConflict": {
+        "type": "object",
+        "description": "409 응답: 서버 최신본.",
+        "required": [
+          "error",
+          "current"
+        ],
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/Event"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "EventInput": {
+        "type": "object",
+        "description": "일정 내용(만들기·고치기 공통).",
+        "required": [
+          "kind",
+          "title",
+          "description",
+          "all_day",
+          "timezone"
+        ],
+        "properties": {
+          "all_day": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ends_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EventKind"
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "starts_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 시각(오프셋 포함)."
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "EventKind": {
+        "type": "string",
+        "description": "일정 종류.",
+        "enum": [
+          "meeting",
+          "presentation",
+          "event"
+        ]
       },
       "Group": {
         "type": "object",
@@ -6317,6 +6967,26 @@
           }
         }
       },
+      "UpdateEvent": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EventInput"
+          },
+          {
+            "type": "object",
+            "required": [
+              "base_version"
+            ],
+            "properties": {
+              "base_version": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          }
+        ],
+        "description": "일정 고치기. `base_version`이 지났으면 409와 서버 최신본."
+      },
       "UpdateItem": {
         "type": "object",
         "description": "항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다.",
@@ -6499,6 +7169,10 @@
     {
       "name": "tasks",
       "description": "업무·하위 업무·담당자·체크리스트"
+    },
+    {
+      "name": "events",
+      "description": "회의·발표·행사 일정과 달력"
     }
   ]
 }

@@ -9,6 +9,7 @@
   import { forgetReferences } from '$lib/features/references/resolver';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
+  import ItemEvents from '$lib/features/events/ItemEvents.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { itemDocumentPath, modulePath, router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
@@ -233,6 +234,7 @@
       {/if}
     </section>
     <TaskBoard item={current} {workspaces} openTaskId={taskId} />
+    <ItemEvents item={current} />
     <Backlinks kind="item" id={current.id} {workspaces} />
   </section>
 {/if}

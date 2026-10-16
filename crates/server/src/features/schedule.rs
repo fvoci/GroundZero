@@ -52,12 +52,14 @@ impl Span {
 
 /// `origin`의 날짜를 `next`로 바꿀 때 뒤로 밀어야 하는 후속 업무와 새 날짜(위상 순서).
 ///
-/// 후속 업무는 바뀐 선행(직접·간접)의 마감 다음 날 이후에 시작해야 한다. 날짜가 없는 업무는 옮기지 않으며
-/// 그 뒤로는 제약을 전하지 않는다. 바뀌지 않는 다른 선행은 보지 않는다(이번 변경이 만든 영향만 제안).
+/// 후속 업무는 바뀐 선행(직접·간접)의 마감 다음 날 이후에 시작해야 한다. 이번에 옮겨진 선행만 보며, 그 선행이
+/// 원래 날짜였을 때보다 더 요구하는 만큼만 민다(전부터 겹쳐 있던 만큼은 제안하지 않는다). 날짜가 없는 업무와
+/// `fixed`(완료한 업무)는 옮기지 않고 그 뒤로 제약을 전하지 않는다.
 #[must_use]
 pub fn plan_shifts(
     spans: &HashMap<Uuid, Span>,
     edges: &[(Uuid, Uuid)],
+    fixed: &HashSet<Uuid>,
     origin: Uuid,
     next: Span,
 ) -> Vec<(Uuid, Span)> {
@@ -95,22 +97,29 @@ pub fn plan_shifts(
     ready.extend(sorted_ready);
     let mut current: HashMap<Uuid, Span> = spans.clone();
     current.insert(origin, next);
+    let mut moved_ids: HashSet<Uuid> = HashSet::from([origin]);
     let mut out = Vec::new();
     while let Some(id) = ready.pop_front() {
         if id != origin
+            && !fixed.contains(&id)
             && let Some(span) = current.get(&id).copied()
             && let Some(begin) = span.begin()
         {
-            let required = inner
-                .iter()
-                .filter(|&&(_, s)| s == id)
-                .filter_map(|&(p, _)| current.get(&p).and_then(|sp| sp.end()))
-                .filter_map(|end| end.next_day())
-                .max();
-            if let Some(required) = required
-                && begin < required
-                && let Some(moved) = span.shifted((required - begin).whole_days())
+            // 옮겨진 선행이 요구하는 시작일(새 날짜 기준, 원래 날짜 기준).
+            let required_by = |map: &HashMap<Uuid, Span>| {
+                inner
+                    .iter()
+                    .filter(|&&(p, s)| s == id && moved_ids.contains(&p))
+                    .filter_map(|&(p, _)| map.get(&p).and_then(|sp| sp.end()))
+                    .filter_map(Date::next_day)
+                    .max()
+            };
+            let base = required_by(spans).map_or(begin, |old| old.max(begin));
+            if let Some(required) = required_by(&current)
+                && base < required
+                && let Some(moved) = span.shifted((required - base).whole_days())
             {
+                moved_ids.insert(id);
                 current.insert(id, moved);
                 out.push((id, moved));
             }
@@ -169,6 +178,13 @@ pub async fn preview(
         start: parse_date(input.start_date.as_deref(), "start_date")?,
         due: parse_date(input.due_date.as_deref(), "due_date")?,
     };
+    if let (Some(start), Some(due)) = (next.start, next.due)
+        && start > due
+    {
+        return Err(AppError::BadRequest(
+            "the start date must not be after the due date".into(),
+        ));
+    }
     let mut tx = state.db.begin_as(user).await?;
     let item: Option<Uuid> = sqlx::query_scalar("SELECT item_id FROM tasks WHERE id = $1")
         .bind(id)
@@ -182,9 +198,11 @@ pub async fn preview(
         i32,
         Option<Date>,
         Option<Date>,
+        bool,
     );
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT id, app_task_reference(id), title, version, start_date, due_date FROM tasks WHERE item_id = $1",
+        "SELECT id, app_task_reference(id), title, version, start_date, due_date, status = 'done'
+         FROM tasks WHERE item_id = $1",
     )
     .bind(item)
     .fetch_all(tx.conn())
@@ -208,8 +226,10 @@ pub async fn preview(
             )
         })
         .collect();
+    // 완료한 업무는 옮기자고 하지 않는다.
+    let done: HashSet<Uuid> = rows.iter().filter(|r| r.6).map(|r| r.0).collect();
     let by_id: HashMap<Uuid, &Row> = rows.iter().map(|r| (r.0, r)).collect();
-    let proposals = plan_shifts(&spans, &edges, id, next)
+    let proposals = plan_shifts(&spans, &edges, &done, id, next)
         .into_iter()
         .filter_map(|(task, moved)| {
             let row = by_id.get(&task)?;
@@ -303,6 +323,7 @@ mod tests {
         let plan = plan_shifts(
             &spans,
             &edges,
+            &HashSet::new(),
             t[0],
             span(Some(d("2026-10-01")), Some(d("2026-10-10"))),
         );
@@ -324,9 +345,66 @@ mod tests {
             (t[2], span(Some(d("2026-10-06")), None)),
         ]);
         let edges = [(t[0], t[1]), (t[1], t[2])];
-        assert!(plan_shifts(&spans, &edges, t[0], span(None, Some(d("2026-10-01")))).is_empty());
+        assert!(
+            plan_shifts(
+                &spans,
+                &edges,
+                &HashSet::new(),
+                t[0],
+                span(None, Some(d("2026-10-01")))
+            )
+            .is_empty()
+        );
         // 날짜 없는 업무는 제약을 전하지 않는다.
-        assert!(plan_shifts(&spans, &edges, t[0], span(None, Some(d("2026-12-01")))).is_empty());
+        assert!(
+            plan_shifts(
+                &spans,
+                &edges,
+                &HashSet::new(),
+                t[0],
+                span(None, Some(d("2026-12-01")))
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn existing_overlaps_and_done_tasks_are_left_alone() {
+        let t = ids(4);
+        let spans = HashMap::from([
+            (t[0], span(None, Some(d("2026-10-01")))),
+            // 1은 0의 후속인데 전부터 0과 겹친다(0의 마감 10-01, 1의 시작 10-01).
+            (t[1], span(Some(d("2026-10-01")), Some(d("2026-10-02")))),
+            (t[2], span(Some(d("2026-10-03")), Some(d("2026-10-03")))),
+            (t[3], span(Some(d("2026-10-02")), Some(d("2026-10-02")))),
+        ]);
+        let edges = [(t[0], t[1]), (t[1], t[2]), (t[0], t[3])];
+        // 0을 앞당기면 아무것도 제안하지 않는다(전부터 겹친 1도 그대로).
+        assert!(
+            plan_shifts(
+                &spans,
+                &edges,
+                &HashSet::new(),
+                t[0],
+                span(None, Some(d("2026-09-20")))
+            )
+            .is_empty()
+        );
+        // 0을 이틀 미루면 1은 늘어난 이틀만큼, 3은 완료라 그대로.
+        let plan = plan_shifts(
+            &spans,
+            &edges,
+            &HashSet::from([t[3]]),
+            t[0],
+            span(None, Some(d("2026-10-03"))),
+        );
+        assert_eq!(
+            plan,
+            vec![
+                (t[1], span(Some(d("2026-10-03")), Some(d("2026-10-04")))),
+                (t[2], span(Some(d("2026-10-05")), Some(d("2026-10-05")))),
+            ]
+        );
     }
 
     #[test]
@@ -339,7 +417,13 @@ mod tests {
         ]);
         // 0 → 1 → 2, 0 → 2.
         let edges = [(t[0], t[1]), (t[1], t[2]), (t[0], t[2])];
-        let plan = plan_shifts(&spans, &edges, t[0], span(None, Some(d("2026-10-04"))));
+        let plan = plan_shifts(
+            &spans,
+            &edges,
+            &HashSet::new(),
+            t[0],
+            span(None, Some(d("2026-10-04"))),
+        );
         assert_eq!(
             plan,
             vec![

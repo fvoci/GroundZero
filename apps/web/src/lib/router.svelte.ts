@@ -6,6 +6,7 @@ export type Route =
   | { name: 'workspace'; workspaceId: string }
   | { name: 'document'; workspaceId: string; documentId: string }
   | { name: 'members'; workspaceId: string }
+  | { name: 'calendar'; workspaceId: string }
   | { name: 'module'; workspaceId: string; moduleId: string }
   | { name: 'item'; workspaceId: string; itemId: string; taskId?: string }
   | { name: 'item-document'; workspaceId: string; itemId: string; documentId: string }
@@ -22,6 +23,7 @@ const UUID = '[0-9a-fA-F-]{36}';
 const WORKSPACE = new RegExp(`^/w/(${UUID})/?$`);
 const DOCUMENT = new RegExp(`^/w/(${UUID})/wiki/(${UUID})/?$`);
 const MEMBERS = new RegExp(`^/w/(${UUID})/members/?$`);
+const CALENDAR = new RegExp(`^/w/(${UUID})/calendar/?$`);
 const STANDALONE = new RegExp(`^/d/(${UUID})/?$`);
 const MODULE = new RegExp(`^/w/(${UUID})/m/(${UUID})/?$`);
 const ITEM = new RegExp(`^/w/(${UUID})/i/(${UUID})/?$`);
@@ -61,6 +63,8 @@ export function parseRoute(pathname: string): Route {
       documentId: itemDoc[3],
     };
   }
+  const cal = CALENDAR.exec(pathname);
+  if (cal?.[1] !== undefined) return { name: 'calendar', workspaceId: cal[1] };
   const members = MEMBERS.exec(pathname);
   if (members?.[1] !== undefined) return { name: 'members', workspaceId: members[1] };
   const doc = DOCUMENT.exec(pathname);
@@ -78,6 +82,10 @@ export function workspacePath(workspaceId: string): string {
 
 export function membersPath(workspaceId: string): string {
   return `/w/${workspaceId}/members`;
+}
+
+export function calendarPath(workspaceId: string): string {
+  return `/w/${workspaceId}/calendar`;
 }
 
 export function documentPath(workspaceId: string, documentId: string): string {

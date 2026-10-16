@@ -1,6 +1,8 @@
 <script lang="ts">
   // 업무 상세 (D-31): 필드·담당자·하위 업무·체크리스트·역방향 링크.
   // 필드 저장은 기준 버전으로 충돌을 막는다. 충돌하면 입력을 지우지 않고 서버 내용과 함께 보여 준다(D-53과 같은 원칙).
+  import { tick } from 'svelte';
+
   import type { Workspace } from '@fvoci/api-client';
 
   import type {
@@ -50,9 +52,16 @@
   let conflict = $state<TaskDetailView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
   let saved = $state(false);
-  // 날짜를 바꿀 때 함께 옮길 후속 업무(미리보기). 있으면 저장 전에 사용자에게 묻는다(D-31).
-  let proposals = $state<ShiftProposalView[] | undefined>(undefined);
-  let proposalsRetried = $state(false);
+  // 날짜를 바꿀 때 함께 옮길 후속 업무(미리보기). 패널이 떠 있는 동안 폼은 잠그고, 승인하면 본 입력과 기준 버전
+  // 그대로 보낸다(D-31: 보여 준 영향을 사용자가 승인).
+  interface Pending {
+    proposals: ShiftProposalView[];
+    input: TaskInput;
+    baseVersion: number;
+    retried: boolean;
+  }
+  let pending = $state<Pending | undefined>(undefined);
+  let busy = $state(false);
   let predecessorChoice = $state('');
   const candidates = $derived(
     task === undefined
@@ -74,7 +83,7 @@
       assignee_ids: next.assignees.map((a) => a.user_id),
       milestone: next.milestone,
     };
-    proposals = undefined;
+    pending = undefined;
     tagsText = next.tags.join(', ');
     estimateText = next.estimate_minutes === null ? '' : String(next.estimate_minutes);
   }
@@ -121,63 +130,90 @@
     };
   }
 
-  /** 저장: 날짜가 바뀌고 후속 업무가 있으면 먼저 영향을 미리 보고, 옮길 것이 있으면 사용자에게 묻는다. */
-  async function submit(baseVersion: number): Promise<void> {
+  /** 저장: 서버 기준 내용과 날짜가 다르면 먼저 후속 업무 영향을 미리 보고, 옮길 것이 있으면 사용자에게 묻는다. */
+  async function submit(base: TaskDetailView): Promise<void> {
     const input = currentInput();
-    if (task === undefined || input === undefined) return;
-    const datesChanged = input.start_date !== task.start_date || input.due_date !== task.due_date;
-    const hasSuccessors = tasks.some((t) => t.predecessor_ids.includes(taskId));
-    if (datesChanged && hasSuccessors) {
-      error = undefined;
-      try {
-        const found = await api.previewSchedule(task.id, input.start_date, input.due_date);
-        if (found.length > 0) {
-          proposals = found;
-          proposalsRetried = false;
-          return;
-        }
-      } catch (e: unknown) {
-        error = e instanceof ApiError ? e.message : '후속 업무 영향을 계산하지 못했습니다.';
-        return;
-      }
-    }
-    await save(baseVersion, []);
-  }
-
-  async function save(baseVersion: number, shifts: ShiftProposalView[]): Promise<void> {
-    const input = currentInput();
-    if (task === undefined || input === undefined) return;
+    if (task === undefined || input === undefined || busy) return;
+    busy = true;
     error = undefined;
     saved = false;
     try {
-      const result = await api.updateTask(
-        task.id,
-        baseVersion,
-        input,
-        shifts.map((s) => ({
-          task_id: s.task_id,
-          base_version: s.base_version,
-          start_date: s.start_date,
-          due_date: s.due_date,
-        })),
-      );
-      if (result.kind === 'conflict') {
-        conflict = result.current;
-        return;
+      // 목록의 선행 정보는 오래됐을 수 있으므로 날짜가 바뀌면 언제나 서버에 묻는다.
+      if (input.start_date !== base.start_date || input.due_date !== base.due_date) {
+        const found = await api.previewSchedule(task.id, input.start_date, input.due_date);
+        if (found.length > 0) {
+          pending = { proposals: found, input, baseVersion: base.version, retried: false };
+          return;
+        }
       }
-      if (result.kind === 'shift_conflict') {
-        // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다.
-        proposals = await api.previewSchedule(task.id, input.start_date, input.due_date);
-        proposalsRetried = true;
-        return;
-      }
-      conflict = undefined;
-      fill(result.task);
-      saved = true;
-      onchanged();
+      await save(input, base.version, []);
     } catch (e: unknown) {
       error = e instanceof ApiError ? e.message : '저장하지 못했습니다.';
+    } finally {
+      busy = false;
     }
+  }
+
+  /** 미리보기 패널의 선택. 승인은 패널을 띄울 때 붙잡아 둔 입력과 기준 버전 그대로 보낸다. */
+  async function decide(withShifts: boolean): Promise<void> {
+    const p = pending;
+    if (p === undefined || busy) return;
+    busy = true;
+    error = undefined;
+    try {
+      await save(p.input, p.baseVersion, withShifts ? p.proposals : []);
+    } catch (e: unknown) {
+      error = e instanceof ApiError ? e.message : '저장하지 못했습니다.';
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function save(
+    input: TaskInput,
+    baseVersion: number,
+    shifts: ShiftProposalView[],
+  ): Promise<void> {
+    if (task === undefined) return;
+    const result = await api.updateTask(
+      task.id,
+      baseVersion,
+      input,
+      shifts.map((s) => ({
+        task_id: s.task_id,
+        base_version: s.base_version,
+        start_date: s.start_date,
+        due_date: s.due_date,
+      })),
+    );
+    if (result.kind === 'conflict') {
+      pending = undefined;
+      conflict = result.current;
+      return;
+    }
+    if (result.kind === 'shift_conflict') {
+      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
+      const found = await api.previewSchedule(task.id, input.start_date, input.due_date);
+      if (found.length === 0) {
+        await save(input, baseVersion, []);
+        return;
+      }
+      pending = { proposals: found, input, baseVersion, retried: true };
+      return;
+    }
+    conflict = undefined;
+    fill(result.task);
+    saved = true;
+    onchanged();
+    await focusSave();
+  }
+
+  // 패널이 사라질 때 대화상자의 초점 가두기가 첫 입력란으로 초점을 옮기므로, 그 뒤 프레임에서 저장 단추로 돌린다.
+  async function focusSave(): Promise<void> {
+    await tick();
+    requestAnimationFrame(() => {
+      document.getElementById('task-save')?.focus();
+    });
   }
 
   async function reloadChecklist(next: Promise<unknown>): Promise<void> {
@@ -211,7 +247,7 @@
 
   let shiftHeading = $state<HTMLElement | undefined>(undefined);
   $effect(() => {
-    if (proposals !== undefined) shiftHeading?.focus();
+    if (pending !== undefined) shiftHeading?.focus();
   });
 
   function toggleAssignee(id: string, on: boolean): void {
@@ -252,7 +288,7 @@
               conflict = undefined;
             }}>서버 내용 불러오기</Button
           >
-          <Button size="sm" onclick={() => void submit(latest.version)}
+          <Button size="sm" disabled={busy} onclick={() => void submit(latest)}
             >내 입력으로 다시 저장</Button
           >
         </div>
@@ -261,9 +297,10 @@
 
     <form
       class="grid gap-3 md:grid-cols-2"
+      inert={pending !== undefined}
       onsubmit={(e) => {
         e.preventDefault();
-        void submit(current.version);
+        void submit(current);
       }}
     >
       <div class="flex flex-col gap-1 md:col-span-2">
@@ -382,14 +419,14 @@
       </fieldset>
       {#if canEdit}
         <div class="flex items-center gap-2 md:col-span-2">
-          <Button type="submit">저장</Button>
+          <Button id="task-save" type="submit" disabled={busy}>저장</Button>
           {#if saved}<span class="text-sm" role="status">저장했습니다.</span>{/if}
         </div>
       {/if}
     </form>
 
-    {#if proposals !== undefined}
-      {@const shifts = proposals}
+    {#if pending !== undefined}
+      {@const shifts = pending.proposals}
       <section
         class="flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 text-sm"
         aria-labelledby="shift-heading"
@@ -397,7 +434,7 @@
         <h3 id="shift-heading" class="font-semibold" tabindex="-1" bind:this={shiftHeading}>
           후속 업무 {shifts.length}개와 날짜가 겹칩니다
         </h3>
-        {#if proposalsRetried}
+        {#if pending.retried}
           <p role="alert">후속 업무가 그사이 바뀌어 다시 계산했습니다.</p>
         {/if}
         <p class="text-muted-foreground">
@@ -415,13 +452,20 @@
           {/each}
         </ul>
         <div class="flex flex-wrap gap-2">
-          <Button size="sm" onclick={() => void save(current.version, shifts)}
+          <Button size="sm" disabled={busy} onclick={() => void decide(true)}
             >후속 업무도 옮겨 저장</Button
           >
-          <Button size="sm" variant="outline" onclick={() => void save(current.version, [])}
+          <Button size="sm" variant="outline" disabled={busy} onclick={() => void decide(false)}
             >이 업무만 저장</Button
           >
-          <Button size="sm" variant="ghost" onclick={() => (proposals = undefined)}>취소</Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onclick={() => {
+              pending = undefined;
+              void focusSave();
+            }}>취소</Button
+          >
         </div>
       </section>
     {/if}

@@ -97,6 +97,36 @@ CREATE FUNCTION app_remove_task_dependency(p_predecessor uuid, p_successor uuid)
   END
   $$;
 
+-- 업무 행 잠금: 그 업무들이 있는 열(과 옮겨 갈 열)을 (항목, 상태) 순으로 먼저 잠그고, 행을 id 순으로 잠근다.
+-- 열을 잠근 뒤 행을 잠그는 사이에 다른 열로 옮겨졌으면 40001(다시 시도)로 끝낸다. 이렇게 하면 열 다시 매기기가
+-- 기다리는 행을 가진 트랜잭션은 언제나 그 열의 잠금도 갖고 있어 서로 기다리는 고리가 생기지 않는다.
+CREATE FUNCTION app_lock_task_rows(p_ids uuid[], p_extra_status text) RETURNS void
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+  SET search_path = fvoci, pg_temp
+  AS $$
+  DECLARE
+    v_lane  record;
+    v_lanes text[] := '{}';
+  BEGIN
+    FOR v_lane IN
+      SELECT DISTINCT l.item_id, l.status FROM (
+        SELECT item_id, status FROM tasks WHERE id = ANY (p_ids)
+        UNION
+        SELECT item_id, p_extra_status FROM tasks WHERE id = p_ids[1] AND p_extra_status IS NOT NULL
+      ) l
+      ORDER BY l.item_id, l.status
+    LOOP
+      PERFORM app_lock_lane(v_lane.item_id, v_lane.status);
+      v_lanes := array_append(v_lanes, v_lane.item_id::text || ':' || v_lane.status);
+    END LOOP;
+    PERFORM 1 FROM tasks WHERE id = ANY (p_ids) ORDER BY id FOR UPDATE;
+    IF EXISTS (SELECT 1 FROM tasks WHERE id = ANY (p_ids)
+               AND NOT (item_id::text || ':' || status = ANY (v_lanes))) THEN
+      RAISE EXCEPTION 'a task moved while it was being changed; try again' USING ERRCODE = '40001';
+    END IF;
+  END
+  $$;
+
 -- 업무 고치기: 마일스톤과 승인한 후속 재배치(`p_shifts`: [{task_id, base_version, start_date, due_date}]).
 DROP FUNCTION app_update_task(uuid, integer, text, text, text, text, date, date, integer, text[], uuid[]);
 CREATE FUNCTION app_update_task(
@@ -117,27 +147,31 @@ CREATE FUNCTION app_update_task(
     v_start  date;
     v_due    date;
     v_new    uuid[];
+    v_lock   uuid[];
   BEGIN
     IF p_shifts IS NULL OR jsonb_typeof(p_shifts) <> 'array' THEN
       RAISE EXCEPTION 'shifts must be an array' USING ERRCODE = '22023';
     END IF;
     PERFORM app_require_task_write(p_task);
-    -- 열 잠금은 업무 행보다 먼저(다시 매기기와의 교착 방지). 항목은 바뀌지 않으므로 잠그기 전에 읽는다.
-    PERFORM app_lock_lane((SELECT item_id FROM tasks WHERE id = p_task), p_status);
-    -- 이 업무와 옮길 후속 업무의 행을 id 순으로 한 번에 잠근다(서로 다른 순서로 잠그는 교착 방지).
     SELECT array_agg(DISTINCT (s ->> 'task_id')::uuid) INTO v_ids FROM jsonb_array_elements(p_shifts) s;
+    IF coalesce(cardinality(v_ids), 0) <> jsonb_array_length(p_shifts) THEN
+      RAISE EXCEPTION 'each shifted task must appear once' USING ERRCODE = '22023';
+    END IF;
     IF p_task = ANY (coalesce(v_ids, '{}')) THEN
       RAISE EXCEPTION 'the edited task cannot also be a shifted successor' USING ERRCODE = '22023';
     END IF;
-    -- 다른 항목의 업무 id가 섞여 와도 그 행은 잠그지 않는다(아래 검사에서 거부).
-    PERFORM 1 FROM tasks
-    WHERE id = ANY (array_append(coalesce(v_ids, '{}'), p_task))
-      AND item_id = (SELECT item_id FROM tasks WHERE id = p_task)
-    ORDER BY id FOR UPDATE;
+    -- 이 업무와 옮길 후속 업무(같은 항목만, 다른 항목 id는 잠그지 않고 아래에서 거부)를 열 → 행 순으로 잠근다.
+    SELECT array_agg(id) INTO v_lock FROM tasks
+    WHERE id = ANY (coalesce(v_ids, '{}')) AND item_id = (SELECT item_id FROM tasks WHERE id = p_task);
+    PERFORM app_lock_task_rows(array_prepend(p_task, coalesce(v_lock, '{}')), p_status);
     SELECT * INTO v_task FROM tasks WHERE id = p_task;
     PERFORM app_lock_item(v_task.item_id);
     PERFORM app_require_task_write(p_task);
-    IF v_task.version <> p_base_version THEN
+    IF jsonb_array_length(p_shifts) > 0 THEN
+      -- 후속 여부 확인과 기록 사이에 선행 관계가 바뀌지 않게(항목 공유 → 관계 잠금 순서).
+      PERFORM app_lock_dependencies(v_task.item_id);
+    END IF;
+    IF v_task.version IS DISTINCT FROM p_base_version THEN
       RETURN 'conflict';
     END IF;
     IF p_status NOT IN ('todo', 'in_progress', 'done') THEN
@@ -166,7 +200,7 @@ CREATE FUNCTION app_update_task(
       ) THEN
         RAISE EXCEPTION 'a shifted task must be a successor of the edited task' USING ERRCODE = '22023';
       END IF;
-      IF v_other.version <> (v_shift ->> 'base_version')::integer THEN
+      IF v_other.version IS DISTINCT FROM (v_shift ->> 'base_version')::integer THEN
         RETURN 'shift_conflict';
       END IF;
       v_start := (v_shift ->> 'start_date')::date;
@@ -324,9 +358,9 @@ CREATE OR REPLACE FUNCTION app_move_task(p_task uuid, p_status text, p_before uu
     v_position numeric;
   BEGIN
     PERFORM app_require_task_write(p_task);
-    -- 항목은 바뀌지 않으므로 잠그기 전에 읽어 열부터 잠근다(다시 매기기와의 교착 방지).
-    PERFORM app_lock_lane((SELECT item_id FROM tasks WHERE id = p_task), p_status);
-    SELECT * INTO v_task FROM tasks WHERE id = p_task FOR UPDATE;
+    -- 지금 열과 옮겨 갈 열을 먼저, 그다음 행(다시 매기기와의 교착 방지).
+    PERFORM app_lock_task_rows(ARRAY[p_task], p_status);
+    SELECT * INTO v_task FROM tasks WHERE id = p_task;
     PERFORM app_lock_item(v_task.item_id);
     PERFORM app_require_task_write(p_task);
     IF p_status NOT IN ('todo', 'in_progress', 'done') THEN
@@ -364,12 +398,77 @@ CREATE OR REPLACE FUNCTION app_move_task(p_task uuid, p_status text, p_before uu
   END
   $$;
 
+CREATE OR REPLACE FUNCTION app_check_task_parent(p_task uuid, p_parent uuid, p_item uuid) RETURNS void
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+  SET search_path = fvoci, pg_temp
+  AS $$
+  DECLARE
+    v_parent tasks%ROWTYPE;
+  BEGIN
+    IF p_parent IS NULL THEN
+      RETURN;
+    END IF;
+    IF p_task IS NOT NULL AND p_parent = p_task THEN
+      RAISE EXCEPTION 'a task cannot be its own parent' USING ERRCODE = '22023';
+    END IF;
+    -- 볼 수 없는 업무는 잠그지 않는다(잠금 대기로 존재가 드러나지 않게). 잠근 뒤 다시 확인한다.
+    IF app_task_access(p_parent) IS NULL THEN
+      RAISE EXCEPTION 'parent task not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF p_task IS NOT NULL THEN
+      -- 두 업무의 열을 먼저, 그다음 행(app_lock_task_rows).
+      PERFORM app_lock_task_rows(ARRAY[p_task, p_parent], NULL);
+    ELSE
+      -- 새 업무: 만드는 쪽은 이미 할 일 열을 잡았고 이 행 뒤로는 다른 업무 행을 기다리지 않는다.
+      PERFORM 1 FROM tasks WHERE id = p_parent FOR UPDATE;
+    END IF;
+    SELECT * INTO v_parent FROM tasks WHERE id = p_parent;
+    IF v_parent.id IS NULL OR app_task_access(p_parent) IS NULL THEN
+      RAISE EXCEPTION 'parent task not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_parent.item_id <> p_item THEN
+      RAISE EXCEPTION 'the parent task must be in the same item' USING ERRCODE = '22023';
+    END IF;
+    IF v_parent.parent_id IS NOT NULL THEN
+      RAISE EXCEPTION 'subtasks can only be one level deep' USING ERRCODE = '22023';
+    END IF;
+    IF p_task IS NOT NULL AND EXISTS (SELECT 1 FROM tasks WHERE parent_id = p_task) THEN
+      RAISE EXCEPTION 'a task with subtasks cannot become a subtask' USING ERRCODE = '22023';
+    END IF;
+  END
+  $$;
+
+CREATE OR REPLACE FUNCTION app_set_task_parent(p_task uuid, p_parent uuid) RETURNS void
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+  SET search_path = fvoci, pg_temp
+  AS $$
+  DECLARE
+    v_task tasks%ROWTYPE;
+  BEGIN
+    PERFORM app_require_task_write(p_task);
+    SELECT * INTO v_task FROM tasks WHERE id = p_task;
+    PERFORM app_check_task_parent(p_task, p_parent, v_task.item_id);
+    IF p_parent IS NULL THEN
+      PERFORM app_lock_task_rows(ARRAY[p_task], NULL);
+    END IF;
+    PERFORM app_lock_item(v_task.item_id);
+    PERFORM app_require_task_write(p_task);
+    SELECT * INTO v_task FROM tasks WHERE id = p_task;
+    IF v_task.parent_id IS NOT DISTINCT FROM p_parent THEN
+      RETURN;
+    END IF;
+    UPDATE tasks SET parent_id = p_parent, updated_by = app_user_id(), updated_at = now() WHERE id = p_task;
+    PERFORM app_audit(v_task.workspace_id, 'reparent', 'task', p_task, jsonb_build_object('parent', p_parent));
+  END
+  $$;
+
 ALTER TABLE task_dependencies ENABLE ROW LEVEL SECURITY;
 CREATE POLICY task_dependencies_select ON task_dependencies FOR SELECT
   USING (app_task_access(predecessor_id) IS NOT NULL AND app_task_access(successor_id) IS NOT NULL);
 GRANT SELECT ON task_dependencies TO fvoci_app;
 
 REVOKE ALL ON FUNCTION app_lock_dependencies(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_lock_task_rows(uuid[], text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_add_task_dependency(uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_remove_task_dependency(uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_update_task(uuid, integer, text, text, text, text, date, date, integer, text[], uuid[],

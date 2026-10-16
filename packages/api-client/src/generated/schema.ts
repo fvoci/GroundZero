@@ -272,6 +272,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 일정 하나. 볼 수 없거나 지웠으면 404. */
+        get: operations["get_event"];
+        /** 일정 고치기(쓰기 권한). 기준 버전이 지났으면 409와 서버 최신본. */
+        put: operations["update_event"];
+        post?: never;
+        /** 일정 지우기(쓰기 권한). 행은 남기고 목록·달력에서 뺀다. */
+        delete: operations["delete_event"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/groups/{group_id}": {
         parameters: {
             query?: never;
@@ -456,6 +475,24 @@ export interface paths {
         put?: never;
         /** 항목 아래 문서 생성(항목 쓰기 권한). 모듈 번호열에서 번호를 받는다. */
         post: operations["create_item_document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 항목의 일정(시작 순). 항목을 볼 수 없으면 404. */
+        get: operations["list_item_events"];
+        put?: never;
+        /** 일정 만들기(항목 쓰기 권한). 같은 `request_id`로 재시도하면 같은 일정을 돌려준다. */
+        post: operations["create_event"];
         delete?: never;
         options?: never;
         head?: never;
@@ -826,6 +863,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/{workspace_id}/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 워크스페이스 달력(멤버). 볼 수 있는 업무와 일정만 나온다. 기간은 62일까지. */
+        get: operations["workspace_calendar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces/{workspace_id}/groups": {
         parameters: {
             query?: never;
@@ -1095,6 +1149,30 @@ export interface components {
             title: string;
             workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
+        /** @description 기간 안의 볼 수 있는 업무·일정. */
+        Calendar: {
+            events: components["schemas"]["Event"][];
+            items: components["schemas"]["CalendarItem"][];
+            tasks: components["schemas"]["CalendarTask"][];
+        };
+        /** @description 달력에 나온 항목의 이름(업무·일정이 어디에 속하는지 보이기 위해). */
+        CalendarItem: {
+            id: components["schemas"]["ItemId"];
+            reference?: string | null;
+            title: string;
+        };
+        /** @description 달력의 업무(시작일~마감일). */
+        CalendarTask: {
+            due_date?: string | null;
+            /** Format: uuid */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            milestone: boolean;
+            reference?: string | null;
+            start_date?: string | null;
+            status: components["schemas"]["TaskStatus"];
+            title: string;
+        };
         /** @description 체크리스트 항목. */
         ChecklistItem: {
             checked: boolean;
@@ -1120,6 +1198,11 @@ export interface components {
             /** Format: uuid */
             request_id: string;
             title: string;
+        };
+        /** @description 일정 만들기. */
+        CreateEvent: components["schemas"]["EventInput"] & {
+            /** Format: uuid */
+            request_id: string;
         };
         /** @description 그룹 생성 요청. */
         CreateGroup: {
@@ -1249,6 +1332,52 @@ export interface components {
             /** @description 사람이 읽는 설명. 내부 세부는 담지 않는다. */
             message: string;
         };
+        /** @description 일정. */
+        Event: {
+            access: components["schemas"]["Access"];
+            /** @description 종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`. */
+            all_day: boolean;
+            description: string;
+            end_date?: string | null;
+            /** Format: date-time */
+            ends_at?: string | null;
+            /** Format: uuid */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            kind: components["schemas"]["EventKind"];
+            start_date?: string | null;
+            /** Format: date-time */
+            starts_at?: string | null;
+            /** @description 일정에 지정한 시간대(IANA). 반복 계산의 기준이다. */
+            timezone: string;
+            title: string;
+            /** Format: int32 */
+            version: number;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /** @description 409 응답: 서버 최신본. */
+        EventConflict: {
+            current: components["schemas"]["Event"];
+            error: string;
+        };
+        /** @description 일정 내용(만들기·고치기 공통). */
+        EventInput: {
+            all_day: boolean;
+            description: string;
+            end_date?: string | null;
+            ends_at?: string | null;
+            kind: components["schemas"]["EventKind"];
+            start_date?: string | null;
+            /** @description RFC 3339 시각(오프셋 포함). */
+            starts_at?: string | null;
+            timezone: string;
+            title: string;
+        };
+        /**
+         * @description 일정 종류.
+         * @enum {string}
+         */
+        EventKind: "meeting" | "presentation" | "event";
         /** @description 그룹. */
         Group: {
             /** Format: uuid */
@@ -1677,6 +1806,11 @@ export interface components {
         UpdateChecklistItem: {
             checked: boolean;
             text: string;
+        };
+        /** @description 일정 고치기. `base_version`이 지났으면 409와 서버 최신본. */
+        UpdateEvent: components["schemas"]["EventInput"] & {
+            /** Format: int32 */
+            base_version: number;
         };
         /** @description 항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다. */
         UpdateItem: {
@@ -2512,6 +2646,135 @@ export interface operations {
             };
         };
     };
+    get_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEvent"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventConflict"];
+                };
+            };
+        };
+    };
+    delete_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     delete_group: {
         parameters: {
             query?: never;
@@ -2996,6 +3259,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Document"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_item_events: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEvent"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"];
                 };
             };
             400: {
@@ -4097,6 +4446,47 @@ export interface operations {
                 };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    workspace_calendar: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                tz: string;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

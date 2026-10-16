@@ -8,6 +8,7 @@
   import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
   import SharedScreen from '$lib/features/notes/SharedScreen.svelte';
   import PublicView from '$lib/features/public/PublicView.svelte';
+  import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
   import MembersScreen from '$lib/features/members/MembersScreen.svelte';
   import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
   import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
@@ -15,7 +16,7 @@
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
   import WorkspaceBadge from '$lib/features/workspaces/WorkspaceBadge.svelte';
   import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
-  import { itemPath, membersPath, router, workspacePath } from '$lib/router.svelte';
+  import { calendarPath, itemPath, membersPath, router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Sidebar from '$lib/ui/sidebar';
@@ -79,6 +80,7 @@
     'workspace',
     'document',
     'members',
+    'calendar',
     'module',
     'item',
     'item-document',
@@ -233,8 +235,19 @@
                   router.navigate(membersPath(currentWorkspace.id));
                 }}>멤버</a
               >
+              <a
+                class="ml-3 underline"
+                href={calendarPath(currentWorkspace.id)}
+                onclick={(e: MouseEvent) => {
+                  e.preventDefault();
+                  router.navigate(calendarPath(currentWorkspace.id));
+                }}>달력</a
+              >
             </nav>
             <WorkspaceScreen workspace={currentWorkspace} />
+          {:else if route.name === 'calendar'}
+            <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
+            <CalendarScreen workspace={currentWorkspace} />
           {:else if route.name === 'module'}
             <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
             <ModuleScreen workspace={currentWorkspace} moduleId={route.moduleId} />

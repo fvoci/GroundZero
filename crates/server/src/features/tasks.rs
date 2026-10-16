@@ -49,7 +49,7 @@ impl TaskStatus {
         }
     }
 
-    fn parse(raw: &str) -> Option<Self> {
+    pub(crate) fn parse(raw: &str) -> Option<Self> {
         match raw {
             "todo" => Some(Self::Todo),
             "in_progress" => Some(Self::InProgress),
@@ -267,7 +267,7 @@ pub(crate) fn format_date(date: Option<Date>) -> Option<String> {
     date.map(|d| format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day()))
 }
 
-fn validate_text(raw: &str, max: usize, field: &str) -> Result<String, AppError> {
+pub(crate) fn validate_text(raw: &str, max: usize, field: &str) -> Result<String, AppError> {
     let trimmed = raw.trim();
     if trimmed.chars().count() > max {
         return Err(AppError::BadRequest(format!(

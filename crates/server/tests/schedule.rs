@@ -353,3 +353,36 @@ async fn moving_a_predecessor_previews_impact_and_shifts_only_approved_successor
     .unwrap();
     assert_eq!(reasons, ["predecessor_moved", "predecessor_moved"]);
 }
+
+#[tokio::test]
+async fn malformed_reschedules_are_rejected() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "검증").await;
+    let item = module_item(&app, &admin, &ws, "VAL").await;
+    let a = dated(&app, &admin, &item, "A", "2026-10-01", "2026-10-05").await;
+    let b = dated(&app, &admin, &item, "B", "2026-10-06", "2026-10-07").await;
+    assert_eq!(link(&app, &admin, &a, &b).await, StatusCode::OK);
+
+    let preview = send(
+        &app,
+        Method::POST,
+        &format!("/api/tasks/{}/schedule-preview", a["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "start_date": "2026-10-09", "due_date": "2026-10-08" })),
+    )
+    .await;
+    assert_eq!(preview.status, StatusCode::BAD_REQUEST);
+
+    let shift = json!({ "task_id": b["id"], "base_version": b["version"], "start_date": "2026-10-11", "due_date": "2026-10-12" });
+    let (status, _) = update(
+        &app,
+        &admin,
+        &a,
+        json!({ "due_date": "2026-10-10", "successor_shifts": [shift.clone(), shift] }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(fetch(&app, &admin, &b).await["version"], b["version"]);
+}

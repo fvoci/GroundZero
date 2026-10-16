@@ -149,6 +149,11 @@
     </div>
   </div>
 {/if}
+{#if layout.later.length > 0}
+  <p class="text-sm text-muted-foreground">
+    {layout.days}일 뒤에 시작하는 업무 {layout.later.length}개는 목록 보기에서 볼 수 있습니다.
+  </p>
+{/if}
 {#if layout.undated.length > 0}
   <p class="text-sm text-muted-foreground">
     날짜 없는 업무 {layout.undated.length}개는 목록 보기에서 볼 수 있습니다.

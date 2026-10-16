@@ -66,6 +66,10 @@ impl AppError {
             Some("42501") => Self::Forbidden,
             Some("22023") => Self::BadRequest(message),
             Some("55000") => Self::Conflict(message),
+            // 동시에 같은 업무를 바꾸다 부딪힌 경우(교착 감지·다시 시도 요청): 아무것도 바뀌지 않았으니 다시 보내면 된다.
+            Some("40001" | "40P01") => {
+                Self::Conflict("the change collided with another one; try again".into())
+            }
             _ => Self::Database(err),
         }
     }

@@ -726,6 +726,103 @@ export function parseTaskDetail(value: Json): TaskDetailView {
   };
 }
 
+export const EVENT_KINDS = ['meeting', 'presentation', 'event'] as const;
+export type EventKind = (typeof EVENT_KINDS)[number];
+
+export interface EventView {
+  id: string;
+  item_id: string;
+  workspace_id: string;
+  kind: EventKind;
+  title: string;
+  description: string;
+  /** 종일이면 날짜(끝 포함), 아니면 UTC 시각. */
+  all_day: boolean;
+  start_date: string | null;
+  end_date: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  /** 일정에 지정한 시간대(IANA). */
+  timezone: string;
+  version: number;
+  access: Access;
+}
+
+export interface EventInput {
+  kind: EventKind;
+  title: string;
+  description: string;
+  all_day: boolean;
+  start_date: string | null;
+  end_date: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  timezone: string;
+}
+
+export function parseEvent(value: Json): EventView {
+  const o = rec(value, 'event');
+  const kind = EVENT_KINDS.find((k) => k === str(o, 'kind'));
+  if (kind === undefined) throw new TypeError(`unknown event kind ${str(o, 'kind')}`);
+  return {
+    id: str(o, 'id'),
+    item_id: str(o, 'item_id'),
+    workspace_id: str(o, 'workspace_id'),
+    kind,
+    title: str(o, 'title'),
+    description: str(o, 'description'),
+    all_day: bool(o, 'all_day'),
+    start_date: optStr(o, 'start_date'),
+    end_date: optStr(o, 'end_date'),
+    starts_at: optStr(o, 'starts_at'),
+    ends_at: optStr(o, 'ends_at'),
+    timezone: str(o, 'timezone'),
+    version: int(o, 'version'),
+    access: access(str(o, 'access')),
+  };
+}
+
+export interface CalendarTaskView {
+  id: string;
+  item_id: string;
+  reference: string | null;
+  title: string;
+  status: TaskStatus;
+  milestone: boolean;
+  start_date: string | null;
+  due_date: string | null;
+}
+
+export interface CalendarView {
+  tasks: CalendarTaskView[];
+  events: EventView[];
+  items: { id: string; reference: string | null; title: string }[];
+}
+
+function parseCalendar(value: Json): CalendarView {
+  const o = rec(value, 'calendar');
+  return {
+    tasks: parseList(o.tasks, (v): CalendarTaskView => {
+      const t = rec(v, 'calendar task');
+      return {
+        id: str(t, 'id'),
+        item_id: str(t, 'item_id'),
+        reference: optStr(t, 'reference'),
+        title: str(t, 'title'),
+        status: taskStatus(str(t, 'status')),
+        milestone: bool(t, 'milestone'),
+        start_date: optStr(t, 'start_date'),
+        due_date: optStr(t, 'due_date'),
+      };
+    }),
+    events: parseList(o.events, parseEvent),
+    items: parseList(o.items, (v) => {
+      const i = rec(v, 'calendar item');
+      return { id: str(i, 'id'), reference: optStr(i, 'reference'), title: str(i, 'title') };
+    }),
+  };
+}
+
 /** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
 export interface MoveTargetInput {
   workspaceId: string;
@@ -999,6 +1096,38 @@ export const api = {
   taskBacklinks: (id: string) =>
     expectOk('GET', `/api/tasks/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),
+    ),
+  itemEvents: (itemId: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/events`, (v) =>
+      parseList(v, parseEvent),
+    ),
+  event: (id: string) => expectOk('GET', `/api/events/${encodeURIComponent(id)}`, parseEvent),
+  createEvent: (itemId: string, requestId: string, input: EventInput) =>
+    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/events`, parseEvent, {
+      request_id: requestId,
+      ...input,
+    }),
+  /** 일정 고치기. 기준 버전이 지났으면 `{ kind: 'conflict', current }`. */
+  async updateEvent(
+    id: string,
+    baseVersion: number,
+    input: EventInput,
+  ): Promise<{ kind: 'updated'; event: EventView } | { kind: 'conflict'; current: EventView }> {
+    const { status, json } = await request('PUT', `/api/events/${encodeURIComponent(id)}`, {
+      base_version: baseVersion,
+      ...input,
+    });
+    if (status === 409)
+      return { kind: 'conflict', current: parseEvent(rec(json, 'conflict').current) };
+    if (status !== 200) fail(status, json);
+    return { kind: 'updated', event: parseEvent(json) };
+  },
+  deleteEvent: (id: string) => expectOk('DELETE', `/api/events/${encodeURIComponent(id)}`, none),
+  calendar: (workspaceId: string, from: string, to: string, tz: string) =>
+    expectOk(
+      'GET',
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/calendar?from=${from}&to=${to}&tz=${encodeURIComponent(tz)}`,
+      parseCalendar,
     ),
   revisions: (id: string, before: number | null) =>
     expectOk(

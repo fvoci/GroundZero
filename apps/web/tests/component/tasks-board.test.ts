@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { lanes, listOrder, planBoardMove } from '$lib/features/tasks/board';
-import { dayNumber, fromDayNumber, ganttLayout } from '$lib/features/tasks/gantt';
+import { dayNumber, fromDayNumber, ganttLayout, MAX_GANTT_DAYS } from '$lib/features/tasks/gantt';
 
 const tasks = [
   { id: 'a', status: 'todo' as const, parent_id: null },
@@ -63,5 +63,20 @@ describe('gantt layout (D-31, D-50)', () => {
   it('converts dates without time zone drift', () => {
     expect(fromDayNumber(dayNumber('2026-03-29'))).toBe('2026-03-29');
     expect(dayNumber('2026-01-01') - dayNumber('2025-12-31')).toBe(1);
+  });
+});
+
+describe('gantt range cap', () => {
+  it('draws at most MAX_GANTT_DAYS columns and lists later tasks separately', () => {
+    const base = { status: 'todo' as const, milestone: false, parent_id: null, start_date: null };
+    const layout = ganttLayout([
+      { ...base, id: 'a', due_date: '2026-01-01' },
+      { ...base, id: 'b', start_date: '2026-12-01', due_date: '2027-03-01' },
+      { ...base, id: 'c', due_date: '2029-01-01' },
+    ]);
+    expect(layout.days).toBe(MAX_GANTT_DAYS);
+    expect(layout.rows.map((r) => r.task.id)).toEqual(['a', 'b']);
+    expect(layout.rows[1]?.to).toBe(MAX_GANTT_DAYS - 1);
+    expect(layout.later.map((t) => t.id)).toEqual(['c']);
   });
 });

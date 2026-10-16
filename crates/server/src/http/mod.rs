@@ -16,8 +16,8 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, documents, members, modules, public_links, references, revisions, schedule, tasks,
-    workspaces,
+    accounts, documents, events, members, modules, public_links, references, revisions, schedule,
+    tasks, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -145,6 +145,12 @@ async fn api_not_found() -> AppError {
         schedule::preview,
         schedule::add_predecessor,
         schedule::remove_predecessor,
+        events::list,
+        events::get,
+        events::create,
+        events::update,
+        events::delete,
+        events::calendar,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -242,6 +248,15 @@ async fn api_not_found() -> AppError {
         tasks::SuccessorShift,
         schedule::SchedulePreviewInput,
         schedule::ShiftProposal,
+        events::EventKind,
+        events::Event,
+        events::EventInput,
+        events::CreateEvent,
+        events::UpdateEvent,
+        events::EventConflict,
+        events::CalendarTask,
+        events::CalendarItem,
+        events::Calendar,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -276,6 +291,7 @@ async fn api_not_found() -> AppError {
         (name = "modules", description = "모듈 인스턴스·키·항목"),
         (name = "references", description = "@ 링크·언급·역방향 링크·알림"),
         (name = "tasks", description = "업무·하위 업무·담당자·체크리스트"),
+        (name = "events", description = "회의·발표·행사 일정과 달력"),
     )
 )]
 pub struct ApiDoc;
@@ -346,6 +362,15 @@ pub fn router(state: AppState) -> Router {
         .route("/tasks/{task_id}/position", put(tasks::move_task))
         .route("/tasks/{task_id}/parent", put(tasks::set_parent))
         .route("/tasks/{task_id}/schedule-preview", post(schedule::preview))
+        .route(
+            "/items/{item_id}/events",
+            get(events::list).post(events::create),
+        )
+        .route(
+            "/events/{event_id}",
+            get(events::get).put(events::update).delete(events::delete),
+        )
+        .route("/workspaces/{workspace_id}/calendar", get(events::calendar))
         .route(
             "/tasks/{task_id}/predecessors/{predecessor_id}",
             put(schedule::add_predecessor).delete(schedule::remove_predecessor),
