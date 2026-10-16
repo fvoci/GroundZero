@@ -814,6 +814,11 @@ export interface components {
             body: Record<string, never>;
             /** @description 현재 사용자가 고칠 수 있는지. */
             can_edit: boolean;
+            /**
+             * @description 공유 철회·공개 링크 철회·비공개 전환처럼 노출을 줄이는 관리를 할 수 있는지.
+             *     보관된 항목 아래 문서는 `access`가 `read`여도 소유 권한자는 이 값이 참이다.
+             */
+            can_manage: boolean;
             id: components["schemas"]["DocumentId"];
             item_id?: null | components["schemas"]["ItemId"];
             /** @description `wiki`, `module` 또는 `personal`. */
@@ -970,11 +975,16 @@ export interface components {
         };
         /** @description 이동 미리보기: 접근이 생기는 사람과 사라지는 사람. */
         MovePreview: {
+            /**
+             * Format: int64
+             * @description 이동해도 유지되는 활성 공개 링크 수. 로그인 없이 계속 볼 수 있다.
+             */
+            active_public_links: number;
             gains: string[];
             /** @description 이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다. */
             history_moves_with_document: boolean;
             loses: string[];
-            /** @description 이동하면 참조 번호가 대상 위치(위키 또는 모듈)에서 새로 매겨진다. 링크는 id 기준이라 유지된다 (D-18). */
+            /** @description 참조 번호가 새로 매겨지는지. 같은 모듈의 다른 항목으로 옮기면 번호를 유지한다. 링크는 id 기준이라 유지된다 (D-18). */
             reference_changes: boolean;
         };
         /** @description 이동 대상. */

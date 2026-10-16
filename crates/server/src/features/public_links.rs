@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::{CurrentUser, random_token, token_hash};
-use crate::features::documents::{Access, access};
+use crate::features::documents::{Access, manager_access};
 use crate::http::AppState;
 use crate::ids::DocumentId;
 
@@ -74,7 +74,7 @@ pub async fn list(
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Vec<PublicLink>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    match access(&mut tx, id).await? {
+    match manager_access(&mut tx, id).await? {
         None => return Err(AppError::NotFound),
         Some(Access::Owner) => {}
         Some(_) => return Err(AppError::Forbidden),

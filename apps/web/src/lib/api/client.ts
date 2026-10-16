@@ -43,6 +43,8 @@ export interface DocumentView {
   can_edit: boolean;
   visibility: 'workspace' | 'private';
   allow_copy: boolean;
+  /** 노출을 줄이는 관리(공유·공개 링크 철회, 비공개 전환)를 할 수 있는지. 보관 중에도 소유 권한자는 참. */
+  can_manage: boolean;
 }
 
 export class ApiError extends Error {
@@ -167,6 +169,7 @@ export function parseDocument(value: Json): DocumentView {
     can_edit: bool(o, 'can_edit'),
     visibility: visibility(str(o, 'visibility')),
     allow_copy: bool(o, 'allow_copy'),
+    can_manage: bool(o, 'can_manage'),
   };
 }
 
@@ -197,6 +200,10 @@ export interface MovePreviewView {
   loses: string[];
   /** 이전 리비전 기록도 함께 옮겨진다. */
   history_moves_with_document: boolean;
+  /** 대상에서 번호가 새로 매겨지는지(같은 모듈 안 이동이면 유지). */
+  reference_changes: boolean;
+  /** 이동해도 유지되는 활성 공개 링크 수. */
+  active_public_links: number;
 }
 
 export interface MoveOutcomeView {
@@ -240,6 +247,8 @@ export function parseMovePreview(value: Json): MovePreviewView {
     gains: strings(o.gains),
     loses: strings(o.loses),
     history_moves_with_document: bool(o, 'history_moves_with_document'),
+    reference_changes: bool(o, 'reference_changes'),
+    active_public_links: int(o, 'active_public_links'),
   };
 }
 

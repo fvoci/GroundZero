@@ -32,6 +32,8 @@
   let error = $state<string | undefined>(undefined);
 
   const isOwner = $derived(doc.access === 'owner');
+  // 보관된 항목 아래 문서: 소유 권한자도 노출을 줄이는 변경만 할 수 있다.
+  const restrictOnly = $derived(!isOwner && doc.can_manage);
   const canCopy = $derived(isOwner || doc.allow_copy);
   const writable = $derived(workspaces.filter((w) => w.role !== 'reader'));
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
@@ -263,7 +265,7 @@
   {:else if doc.visibility === 'private'}
     <span class="rounded border px-1.5 text-sm text-muted-foreground">비공개 문서</span>
   {/if}
-  {#if isOwner}
+  {#if isOwner || doc.can_manage}
     <Button
       size="sm"
       variant="outline"
@@ -324,39 +326,47 @@
           <li class="text-sm text-muted-foreground">공유한 사람이 없습니다.</li>
         {/each}
       </ul>
-      <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addShare(e)}>
-        <div class="flex min-w-48 flex-1 flex-col gap-1">
-          <Label for="share-email">이메일</Label>
-          <Input
-            id="share-email"
-            type="email"
-            bind:value={shareEmail}
-            autocomplete="off"
-            required
-          />
-        </div>
-        <Select.Root
-          type="single"
-          value={sharePermission}
-          onValueChange={(v: string) => {
-            sharePermission = v === 'write' ? 'write' : 'read';
-          }}
-        >
-          <Select.Trigger class="w-24" aria-label="공유 권한"
-            >{sharePermission === 'write' ? '고치기' : '읽기'}</Select.Trigger
+      {#if restrictOnly}
+        <p class="text-sm text-muted-foreground" role="note">
+          보관된 항목 아래 문서입니다. 공유·공개 링크 철회와 비공개 전환처럼 노출을 줄이는 변경만 할
+          수 있습니다.
+        </p>
+      {:else}
+        <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addShare(e)}>
+          <div class="flex min-w-48 flex-1 flex-col gap-1">
+            <Label for="share-email">이메일</Label>
+            <Input
+              id="share-email"
+              type="email"
+              bind:value={shareEmail}
+              autocomplete="off"
+              required
+            />
+          </div>
+          <Select.Root
+            type="single"
+            value={sharePermission}
+            onValueChange={(v: string) => {
+              sharePermission = v === 'write' ? 'write' : 'read';
+            }}
           >
-          <Select.Content>
-            <Select.Item value="read" label="읽기">읽기</Select.Item>
-            <Select.Item value="write" label="고치기">고치기</Select.Item>
-          </Select.Content>
-        </Select.Root>
-        <Button type="submit" disabled={shareEmail.trim() === ''}>공유</Button>
-      </form>
+            <Select.Trigger class="w-24" aria-label="공유 권한"
+              >{sharePermission === 'write' ? '고치기' : '읽기'}</Select.Trigger
+            >
+            <Select.Content>
+              <Select.Item value="read" label="읽기">읽기</Select.Item>
+              <Select.Item value="write" label="고치기">고치기</Select.Item>
+            </Select.Content>
+          </Select.Root>
+          <Button type="submit" disabled={shareEmail.trim() === ''}>공유</Button>
+        </form>
+      {/if}
       <div class="flex flex-col gap-2 border-t pt-3">
-        {#if doc.placement === 'wiki'}
+        {#if doc.placement !== 'personal'}
           <div class="flex items-center gap-2">
             <Checkbox
               id="doc-private"
+              disabled={restrictOnly && doc.visibility === 'private'}
               checked={doc.visibility === 'private'}
               onCheckedChange={(v) =>
                 void setSettings(v === true ? 'private' : 'workspace', doc.allow_copy)}
@@ -367,6 +377,7 @@
         <div class="flex items-center gap-2">
           <Checkbox
             id="doc-allow-copy"
+            disabled={restrictOnly && !doc.allow_copy}
             checked={doc.allow_copy}
             onCheckedChange={(v) => void setSettings(doc.visibility, v === true)}
           />
@@ -416,25 +427,28 @@
             </li>
           {/each}
         </ul>
-        <div class="flex items-center gap-2">
-          <Select.Root
-            type="single"
-            value={linkExpiryDays}
-            onValueChange={(v: string) => {
-              linkExpiryDays = v;
-            }}
-          >
-            <Select.Trigger class="w-28" aria-label="공개 링크 만료"
-              >{expiryLabel(linkExpiryDays)}</Select.Trigger
+        {#if isOwner}
+          <div class="flex items-center gap-2">
+            <Select.Root
+              type="single"
+              value={linkExpiryDays}
+              onValueChange={(v: string) => {
+                linkExpiryDays = v;
+              }}
             >
-            <Select.Content>
-              {#each EXPIRY_OPTIONS as option (option.value)}
-                <Select.Item value={option.value} label={option.label}>{option.label}</Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
-          <Button size="sm" onclick={() => void createLink()}>공개 링크 만들기</Button>
-        </div>
+              <Select.Trigger class="w-28" aria-label="공개 링크 만료"
+                >{expiryLabel(linkExpiryDays)}</Select.Trigger
+              >
+              <Select.Content>
+                {#each EXPIRY_OPTIONS as option (option.value)}
+                  <Select.Item value={option.value} label={option.label}>{option.label}</Select.Item
+                  >
+                {/each}
+              </Select.Content>
+            </Select.Root>
+            <Button size="sm" onclick={() => void createLink()}>공개 링크 만들기</Button>
+          </div>
+        {/if}
       </section>
     {:else if panel === 'copy'}
       <Dialog.Header>
@@ -516,6 +530,17 @@
         {#if preview.history_moves_with_document}
           <p class="text-sm text-muted-foreground">
             이전 리비전 기록도 함께 옮겨져, 새로 볼 수 있게 되는 사람에게 보입니다.
+          </p>
+        {/if}
+        <p class="text-sm text-muted-foreground">
+          {preview.reference_changes
+            ? '대상에서 번호가 새로 붙습니다.'
+            : '같은 모듈 안 이동이라 번호가 그대로입니다.'}
+        </p>
+        {#if preview.active_public_links > 0}
+          <p class="text-sm" role="note">
+            활성 공개 링크 {preview.active_public_links}개가 그대로 유지되어 로그인 없이 계속 볼 수
+            있습니다. 막으려면 공유·설정에서 링크를 철회하세요.
           </p>
         {/if}
       {/if}

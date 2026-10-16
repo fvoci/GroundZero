@@ -66,6 +66,15 @@ pub async fn access(tx: &mut UserTx, id: DocumentId) -> Result<Option<Access>, A
     Ok(raw.as_deref().and_then(Access::parse))
 }
 
+/// 보관 상한을 뺀 권한. 노출을 줄이는 관리 화면(공유·공개 링크 목록)에만 쓴다.
+pub async fn manager_access(tx: &mut UserTx, id: DocumentId) -> Result<Option<Access>, AppError> {
+    let raw: Option<String> = sqlx::query_scalar("SELECT app_document_base_access($1)")
+        .bind(id)
+        .fetch_one(tx.conn())
+        .await?;
+    Ok(raw.as_deref().and_then(Access::parse))
+}
+
 /// 문서 목록 항목.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct DocumentSummary {
@@ -106,6 +115,9 @@ pub struct Document {
     pub visibility: String,
     /// 소유 권한자 외의 사람이 복제할 수 있는지 (D-20).
     pub allow_copy: bool,
+    /// 공유 철회·공개 링크 철회·비공개 전환처럼 노출을 줄이는 관리를 할 수 있는지.
+    /// 보관된 항목 아래 문서는 `access`가 `read`여도 소유 권한자는 이 값이 참이다.
+    pub can_manage: bool,
 }
 
 /// 문서 생성 요청.
@@ -177,11 +189,15 @@ pub(crate) struct DocRow {
     updated_at: OffsetDateTime,
     visibility: String,
     allow_copy: bool,
+    can_manage: bool,
 }
 
 /// 참조 문자열은 저장하지 않고 현재 키로 만든다(키가 바뀌어도 번호·id는 그대로, D-18).
-const DOC_COLUMNS: &str = "id, workspace_id, item_id, placement, app_document_reference(id) AS reference, \
-                           title, body, schema_version, revision, updated_at, visibility, allow_copy";
+/// 항목 id는 그 항목을 볼 수 있는 사람에게만 준다(공유로만 문서를 보는 사람에게 비공개 항목을 드러내지 않는다).
+const DOC_COLUMNS: &str = "id, workspace_id, \
+    CASE WHEN app_item_access(item_id) IS NOT NULL THEN item_id END AS item_id, placement, \
+    app_document_reference(id) AS reference, title, body, schema_version, revision, updated_at, \
+    visibility, allow_copy, coalesce(app_document_base_access(id) = 'owner', false) AS can_manage";
 
 pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
     Document {
@@ -199,6 +215,7 @@ pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
         can_edit: access.can_write(),
         visibility: row.visibility,
         allow_copy: row.allow_copy,
+        can_manage: row.can_manage,
     }
 }
 
@@ -467,6 +484,11 @@ pub async fn save(
     validate_body(&input.body, &state.config.limits)?;
 
     let mut tx = state.db.begin_as(user).await?;
+    // 항목 아래 문서면 항목·모듈을 먼저 공유 잠금한다(판정 뒤 보관·비공개 전환이 끼어들지 않게).
+    sqlx::query("SELECT app_lock_item((SELECT item_id FROM documents WHERE id = $1))")
+        .bind(id)
+        .execute(tx.conn())
+        .await?;
     // 잠그기 전에 권한을 판정한다(읽기 권한만 있으면 잠글 수 없고, 403과 404를 구분해야 한다).
     let access = access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
     if !access.can_write() {
@@ -518,8 +540,10 @@ pub async fn save(
     .bind(&title)
     .bind(&input.body)
     .bind(SCHEMA_VERSION)
-    .fetch_one(tx.conn())
-    .await?;
+    .fetch_optional(tx.conn())
+    .await?
+    // 잠금 뒤 권한이 바뀌어 갱신 정책이 행을 거른 경우(예: 그사이 항목 보관): 500이 아니라 403.
+    .ok_or(AppError::Forbidden)?;
     sqlx::query(
         "INSERT INTO document_revisions (document_id, revision, title, schema_version, body, author, request_id)
          VALUES ($1, $2, $3, $4, $5, app_user_id(), $6)",
@@ -601,7 +625,7 @@ pub async fn list_shares(
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Vec<Share>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    match access(&mut tx, id).await? {
+    match manager_access(&mut tx, id).await? {
         None => return Err(AppError::NotFound),
         Some(Access::Owner) => {}
         Some(_) => return Err(AppError::Forbidden),
@@ -744,10 +768,12 @@ pub struct AcknowledgedPreview {
 pub struct MovePreview {
     pub gains: Vec<String>,
     pub loses: Vec<String>,
-    /// 이동하면 참조 번호가 대상 위치(위키 또는 모듈)에서 새로 매겨진다. 링크는 id 기준이라 유지된다 (D-18).
+    /// 참조 번호가 새로 매겨지는지. 같은 모듈의 다른 항목으로 옮기면 번호를 유지한다. 링크는 id 기준이라 유지된다 (D-18).
     pub reference_changes: bool,
     /// 이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다.
     pub history_moves_with_document: bool,
+    /// 이동해도 유지되는 활성 공개 링크 수. 로그인 없이 계속 볼 수 있다.
+    pub active_public_links: i64,
 }
 
 /// 이동 결과. 이동한 사람이 새 위치에서 문서를 볼 수 없으면 `document`가 없다
@@ -774,10 +800,26 @@ async fn preview(
             .await
             .map_err(AppError::from_db_function)?;
     let (gains, loses): (Vec<_>, Vec<_>) = rows.into_iter().partition(|(c, _)| c == "gain");
+    let keeps_number: bool = sqlx::query_scalar("SELECT app_move_keeps_number($1, $2, $3)")
+        .bind(id)
+        .bind(target)
+        .bind(item)
+        .fetch_one(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    // 공개 링크는 이동해도 유지된다. 비공개 항목으로 옮길 때 알 수 있게 개수를 보여 준다.
+    let active_public_links: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM public_links
+         WHERE document_id = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())",
+    )
+    .bind(id)
+    .fetch_one(tx.conn())
+    .await?;
     Ok(MovePreview {
         gains: gains.into_iter().map(|(_, n)| n).collect(),
         loses: loses.into_iter().map(|(_, n)| n).collect(),
-        reference_changes: true,
+        reference_changes: !keeps_number,
+        active_public_links,
         history_moves_with_document: true,
     })
 }
@@ -816,6 +858,14 @@ pub async fn move_document(
         .bind(id)
         .execute(tx.conn())
         .await?;
+    // 원래 항목과 대상 항목(과 그 모듈)도 잠가, 확인한 접근 변화가 이동 시점과 같게 한다.
+    sqlx::query(
+        "SELECT app_lock_item((SELECT item_id FROM documents WHERE id = $1)), app_lock_item($2)",
+    )
+    .bind(id)
+    .bind(input.target_item_id)
+    .execute(tx.conn())
+    .await?;
     // 잠근 뒤 미리보기를 다시 계산해 사용자가 확인한 것과 같을 때만 옮긴다.
     let current = preview(&mut tx, id, input.target_workspace_id, input.target_item_id).await?;
     let confirmed = input.acknowledged.as_ref().is_some_and(|ack| {

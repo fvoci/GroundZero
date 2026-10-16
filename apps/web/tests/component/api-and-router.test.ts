@@ -39,6 +39,7 @@ describe('response validation', () => {
     can_edit: true,
     visibility: 'workspace',
     allow_copy: false,
+    can_manage: false,
   };
 
   it('accepts a well-formed document', () => {

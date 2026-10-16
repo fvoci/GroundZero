@@ -11,7 +11,8 @@ mod common;
 use axum::Router;
 use axum::http::{Method, StatusCode};
 use common::{
-    TestUser, add_member, create_doc, create_workspace, doc_body, login, new_request_id, send,
+    TestUser, add_member, create_doc, create_workspace, doc_body, login, login_with_email,
+    new_request_id, send, unique_email,
 };
 use serde_json::{Value, json};
 
@@ -576,4 +577,236 @@ async fn documents_move_between_wiki_and_items() {
         move_to(&app, &peer, &note.json, &ws, Some(&it)).await.0,
         StatusCode::NOT_FOUND
     );
+}
+
+/// 검토 반영: 보관 아래에서도 소유 권한자는 노출을 줄일 수 있고, 넓히는 변경은 막힌다.
+#[tokio::test]
+async fn archived_documents_can_still_be_restricted_by_their_owner() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "보관 관리").await;
+    let dev = module(&app, &admin, &ws, "DEV").await;
+    let it = item(&app, &admin, &dev, "항목").await;
+    let (_, doc) = item_doc(&app, &admin, &it, "문서").await;
+    let doc_id = doc["id"].as_str().unwrap();
+    let email = unique_email("guest");
+    let guest = login_with_email(&state, "guest", &email, true).await;
+    let share = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/shares"),
+        Some(&admin),
+        Some(json!({ "email": email, "permission": "write" })),
+    )
+    .await;
+    assert_eq!(share.status, StatusCode::CREATED, "{:?}", share.json);
+    let link = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/public-links"),
+        Some(&admin),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(link.status, StatusCode::CREATED, "{:?}", link.json);
+    // 공유받은 사람은 비공개 항목을 볼 수 없으므로 항목 id를 받지 않는다.
+    let seen = get(&app, &guest, &format!("/api/documents/{doc_id}"))
+        .await
+        .1;
+    assert_eq!(seen["item_id"], Value::Null);
+    assert_eq!(seen["access"], "write");
+
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{}/archived", dev["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+    let archived = get(&app, &admin, &format!("/api/documents/{doc_id}"))
+        .await
+        .1;
+    assert_eq!(archived["access"], "read");
+    assert_eq!(archived["can_manage"], true);
+    assert_eq!(
+        get(&app, &guest, &format!("/api/documents/{doc_id}"))
+            .await
+            .1["access"],
+        "read"
+    );
+
+    // 넓히는 변경은 409, 좁히는 변경은 된다.
+    let settings = format!("/api/documents/{doc_id}/settings");
+    let widen = send(
+        &app,
+        Method::PUT,
+        &settings,
+        Some(&admin),
+        Some(json!({ "visibility": "workspace", "allow_copy": true })),
+    )
+    .await;
+    assert_eq!(widen.status, StatusCode::CONFLICT);
+    let narrow = send(
+        &app,
+        Method::PUT,
+        &settings,
+        Some(&admin),
+        Some(json!({ "visibility": "private", "allow_copy": false })),
+    )
+    .await;
+    assert_eq!(narrow.status, StatusCode::OK, "{:?}", narrow.json);
+    let shares = get(&app, &admin, &format!("/api/documents/{doc_id}/shares")).await;
+    assert_eq!(shares.0, StatusCode::OK);
+    let share_id = shares.1[0]["id"].as_str().unwrap().to_owned();
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/document-shares/{share_id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    assert_eq!(
+        get(&app, &guest, &format!("/api/documents/{doc_id}"))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    let links = get(
+        &app,
+        &admin,
+        &format!("/api/documents/{doc_id}/public-links"),
+    )
+    .await;
+    assert_eq!(links.0, StatusCode::OK);
+    let link_id = links.1[0]["id"].as_str().unwrap().to_owned();
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/public-links/{link_id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    // 새 공유·새 링크는 보관 중에 만들 수 없다.
+    let share = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/shares"),
+        Some(&admin),
+        Some(json!({ "email": unique_email("x"), "permission": "read" })),
+    )
+    .await;
+    assert_eq!(share.status, StatusCode::FORBIDDEN);
+}
+
+/// 검토 반영: 사본·같은 모듈 안 이동·request_id 재사용·공개 링크 안내.
+#[tokio::test]
+async fn copies_moves_and_retries_respect_item_boundaries() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "경계").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
+    let dev = module(&app, &admin, &ws, "DEV").await;
+    let first = item(&app, &admin, &dev, "첫 항목").await;
+    let second = item(&app, &admin, &dev, "둘째 항목").await;
+    let (_, doc) = item_doc(&app, &admin, &first, "문서").await;
+    let doc_id = doc["id"].as_str().unwrap();
+    assert_eq!(doc["reference"], "DEV-3");
+
+    // 비공개 항목 아래 문서의 사본은 위키에서도 비공개다.
+    let copy = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/copy"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "target_workspace_id": ws, "title": "사본" })),
+    )
+    .await;
+    assert_eq!(copy.status, StatusCode::CREATED, "{:?}", copy.json);
+    assert_eq!(copy.json["visibility"], "private");
+    let copy_uri = format!("/api/documents/{}", copy.json["id"].as_str().unwrap());
+    assert_eq!(get(&app, &peer, &copy_uri).await.0, StatusCode::NOT_FOUND);
+
+    // 같은 모듈의 다른 항목으로 옮기면 번호를 유지한다. 활성 공개 링크 수를 미리보기에 보여 준다.
+    send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/public-links"),
+        Some(&admin),
+        Some(json!({})),
+    )
+    .await;
+    let preview = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/move/preview"),
+        Some(&admin),
+        Some(json!({ "target_workspace_id": ws, "target_item_id": second["id"] })),
+    )
+    .await;
+    assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
+    assert_eq!(preview.json["reference_changes"], false);
+    assert_eq!(preview.json["active_public_links"], 1);
+    let (status, moved) = move_to(&app, &admin, &doc, &ws, Some(&second)).await;
+    assert_eq!(status, StatusCode::OK, "{moved:?}");
+    assert_eq!(moved["reference"], "DEV-3");
+    // 다른 범위(위키)로 옮기면 새 번호를 받는다.
+    let preview = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/move/preview"),
+        Some(&admin),
+        Some(json!({ "target_workspace_id": ws })),
+    )
+    .await;
+    assert_eq!(preview.json["reference_changes"], true);
+
+    // 위키 생성에 쓴 request_id를 항목 문서 생성에 다시 쓰면 그 위키 문서를 돌려주지 않는다.
+    let rid = new_request_id();
+    let wiki = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/wiki/documents"),
+        Some(&admin),
+        Some(json!({ "request_id": rid, "title": "위키" })),
+    )
+    .await;
+    assert_eq!(wiki.status, StatusCode::CREATED);
+    let reused = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/documents", first["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": rid, "title": "항목 문서" })),
+    )
+    .await;
+    assert_eq!(reused.status, StatusCode::CONFLICT, "{:?}", reused.json);
+    let (_, item_doc_json) = item_doc(&app, &admin, &first, "항목 문서").await;
+    let rid2 = new_request_id();
+    let a = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/documents", first["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": rid2, "title": "재시도" })),
+    )
+    .await;
+    let b = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/documents", second["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": rid2, "title": "재시도" })),
+    )
+    .await;
+    assert_eq!(a.status, StatusCode::CREATED);
+    assert_eq!(b.status, StatusCode::CONFLICT, "{:?}", b.json);
+    assert_ne!(item_doc_json["id"], a.json["id"]);
 }
