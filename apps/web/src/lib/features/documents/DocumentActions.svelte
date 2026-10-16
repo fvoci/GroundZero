@@ -11,6 +11,7 @@
     ShareView,
   } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { workspaceLabel } from '$lib/features/workspaces/badge';
   import { pathFor, router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -182,7 +183,7 @@
       .filter((it) => !it.archived && it.access !== 'read' && it.id !== doc.item_id)
       .map((it) => ({
         value: `item:${it.id}`,
-        label: `${ws.name} · ${it.reference ?? ''} ${it.title}`,
+        label: `${workspaceLabel(ws, workspaces)} · ${it.reference ?? ''} ${it.title}`,
         target: { workspaceId: ws.id, itemId: it.id },
       }));
   }
@@ -200,7 +201,7 @@
               : [
                   {
                     value: `wiki:${ws.id}`,
-                    label: `${ws.name} 위키`,
+                    label: `${workspaceLabel(ws, workspaces)} 위키`,
                     target: { workspaceId: ws.id, itemId: null },
                   },
                 ];
@@ -249,8 +250,11 @@
     }
   }
 
-  const targetLabel = (id: string): string =>
-    id === 'personal' ? '내 노트' : (workspaces.find((w) => w.id === id)?.name ?? id);
+  function targetLabel(id: string): string {
+    if (id === 'personal') return '내 노트';
+    const ws = workspaces.find((w) => w.id === id);
+    return ws === undefined ? id : workspaceLabel(ws, workspaces);
+  }
 </script>
 
 <div class="flex flex-wrap items-center gap-2" role="toolbar" aria-label="문서 동작">
@@ -478,7 +482,9 @@
             <Select.Content>
               <Select.Item value="personal" label="내 노트">내 노트</Select.Item>
               {#each writable as w (w.id)}
-                <Select.Item value={w.id} label={w.name}>{w.name} 위키</Select.Item>
+                <Select.Item value={w.id} label={workspaceLabel(w, workspaces)}
+                  >{workspaceLabel(w, workspaces)} 위키</Select.Item
+                >
               {/each}
             </Select.Content>
           </Select.Root>

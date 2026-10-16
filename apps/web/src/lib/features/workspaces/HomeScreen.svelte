@@ -7,6 +7,7 @@
   import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
 
   import CreateForm from './CreateForm.svelte';
+  import WorkspaceBadge from './WorkspaceBadge.svelte';
 
   interface Props {
     workspaces: Workspace[];
@@ -27,14 +28,14 @@
       {#each workspaces as ws (ws.id)}
         <li>
           <a
-            class="block rounded px-2 py-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            class="flex items-baseline gap-2 rounded px-2 py-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             href={workspacePath(ws.id)}
             onclick={(e) => {
               e.preventDefault();
               router.navigate(workspacePath(ws.id));
             }}
           >
-            {ws.name}
+            <WorkspaceBadge workspace={ws} all={workspaces} />
             <span class="text-sm text-muted-foreground">({ws.role})</span>
           </a>
         </li>

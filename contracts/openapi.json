@@ -2083,7 +2083,7 @@
           {
             "name": "q",
             "in": "query",
-            "description": "제목·이름 일부 또는 참조(`DEV-3`, 예전 키도 됨).",
+            "description": "제목·이름 일부 또는 참조(`DEV-3`, 예전 키도 됨). `워크스페이스이름/질의`로 쓰면 내가 속한 워크스페이스 중\n이름이 그렇게 시작하는 곳(같은 이름이면 모두)에서 찾는다.",
             "required": false,
             "schema": {
               "type": "string"

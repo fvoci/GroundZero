@@ -2757,7 +2757,10 @@ export interface operations {
     candidates: {
         parameters: {
             query?: {
-                /** @description 제목·이름 일부 또는 참조(`DEV-3`, 예전 키도 됨). */
+                /**
+                 * @description 제목·이름 일부 또는 참조(`DEV-3`, 예전 키도 됨). `워크스페이스이름/질의`로 쓰면 내가 속한 워크스페이스 중
+                 *     이름이 그렇게 시작하는 곳(같은 이름이면 모두)에서 찾는다.
+                 */
                 q?: string;
                 /** @description 이 워크스페이스로 좁힌다. 없으면 내가 속한 모든 워크스페이스와 내 노트. */
                 workspace_id?: null | components["schemas"]["WorkspaceId"];

@@ -59,7 +59,14 @@
       navigate: ctx?.navigate ?? (() => undefined),
     });
     if (ctx === undefined || !canEdit) return [StarterKit, reference];
-    return [StarterKit, reference, ReferenceSuggestion.configure({ workspaceId: ctx.workspaceId })];
+    return [
+      StarterKit,
+      reference,
+      ReferenceSuggestion.configure({
+        workspaceId: ctx.workspaceId,
+        describeWorkspace: ctx.describeWorkspace,
+      }),
+    ];
   }
 
   onMount(() => {

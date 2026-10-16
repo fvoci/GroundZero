@@ -465,3 +465,107 @@ async fn copying_and_editing_does_not_resend_existing_mentions() {
     assert_eq!(inbox.as_array().unwrap().len(), 1);
     assert_eq!(inbox[0]["actor_name"], "editor");
 }
+
+/// O-33: 이름이 같은 워크스페이스를 `이름/질의`로 함께 찾고 워크스페이스 id로 구분한다. 선택한 대상은
+/// 내부 id로 저장되므로 키·제목이 바뀌어도 링크가 이어진다. 새 전역 고유 이름은 요구하지 않는다.
+#[tokio::test]
+async fn same_named_workspaces_are_searched_together_and_links_survive_renames() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let first = create_workspace(&app, &admin, "연구실").await;
+    let second = create_workspace(&app, &admin, "연구실").await;
+    let a = module_item(&app, &admin, &first, "DEV", "첫째 실험").await;
+    let b = module_item(&app, &admin, &second, "DEV", "둘째 실험").await;
+
+    // 문서의 워크스페이스(first)와 상관없이 이름 접두어로 고른 곳들에서 찾는다.
+    let uri = format!("/api/reference-candidates?workspace_id={first}&q=%EC%97%B0%EA%B5%AC/DEV-1");
+    let (status, found) = get(&app, &admin, &uri).await;
+    assert_eq!(status, StatusCode::OK, "{found:?}");
+    let mut hits: Vec<(String, String)> = found
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            (
+                c["id"].as_str().unwrap().to_owned(),
+                c["workspace_id"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    hits.sort();
+    let mut expected = vec![
+        (a["id"].as_str().unwrap().to_owned(), first.clone()),
+        (b["id"].as_str().unwrap().to_owned(), second.clone()),
+    ];
+    expected.sort();
+    assert_eq!(
+        hits, expected,
+        "both DEV-1 items, told apart by workspace id"
+    );
+    assert!(
+        found
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|c| c["workspace_name"] == "연구실")
+    );
+    // 내가 속하지 않은 같은 이름의 워크스페이스는 범위에 들지 않는다.
+    let stranger = login(&state, "stranger").await;
+    let theirs = create_workspace(&app, &stranger, "연구실").await;
+    module_item(&app, &stranger, &theirs, "DEV", "남의 실험").await;
+    let (_, again) = get(&app, &admin, &uri).await;
+    assert_eq!(again.as_array().unwrap().len(), 2);
+
+    // 둘째 워크스페이스의 항목을 고르면 본문에는 id만 남는다. 키·제목을 바꿔도 같은 대상으로 이어진다.
+    let doc = create_doc(&app, &admin, &first, "회의").await;
+    let (_, saved) = save_body(
+        &app,
+        &admin,
+        &doc,
+        body_with(vec![reference("item", &b["id"])]),
+    )
+    .await;
+    let module_id = get(
+        &app,
+        &admin,
+        &format!("/api/items/{}", b["id"].as_str().unwrap()),
+    )
+    .await
+    .1["module_id"]
+        .clone();
+    send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{}", module_id.as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "name": "개발", "key": "LAB" })),
+    )
+    .await;
+    send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{}", b["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "title": "둘째 실험 (수정)", "description": "", "visibility": "private" })),
+    )
+    .await;
+    let resolved = resolve(&app, &admin, json!([{ "kind": "item", "id": b["id"] }])).await;
+    assert_eq!(resolved[0]["reference"], "LAB-1");
+    assert_eq!(resolved[0]["title"], "둘째 실험 (수정)");
+    assert_eq!(resolved[0]["workspace_id"], second.as_str());
+    let (_, reopened) = get(
+        &app,
+        &admin,
+        &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
+    )
+    .await;
+    assert_eq!(reopened["body"], saved["body"], "the body did not change");
+    let (_, links) = get(
+        &app,
+        &admin,
+        &format!("/api/items/{}/backlinks", b["id"].as_str().unwrap()),
+    )
+    .await;
+    assert_eq!(links[0]["id"], doc["id"]);
+}

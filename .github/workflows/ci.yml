@@ -61,3 +61,31 @@ jobs:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - run: cargo xtask test --external-services
+
+  # Keycloak을 거치는 OIDC 로그인 테스트. 컨테이너 job 안에서는 Compose를 띄울 수 없으므로 GitHub 호스트 러너에서
+  # compose.test.yaml(oidc 프로필)로 서비스를 띄우고, 테스트는 위 job과 같은 베이스 이미지 안에서 같은 진입점으로 돈다.
+  # 프로젝트명에 실행 번호·재시도 번호를 넣어 실행마다 컨테이너·네트워크·볼륨을 분리하고, 결과와 상관없이 지운다.
+  # Docker 소켓은 테스트 컨테이너에 넘기지 않는다(체크아웃만 마운트).
+  oidc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      PROJECT: fvoci-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      IMAGE: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: services (postgres, meilisearch, keycloak)
+        run: docker compose --project-name "$PROJECT" --file deploy/compose.test.yaml --profile oidc up --detach --wait
+      - name: cargo xtask test --external-services --oidc (base image)
+        run: >-
+          docker run --rm --network "${PROJECT}_default"
+          --user "$(id -u):$(id -g)"
+          --volume "$GITHUB_WORKSPACE:/work" --workdir /work
+          --env HOME=/work/target/ci-home
+          --env CARGO_HOME=/work/target/ci-cargo
+          --env FVOCI_TEST_PG_HOST_PORT=postgres:5432
+          --env FVOCI_TEST_OIDC_ISSUER=http://keycloak:8080/realms/fvoci-test
+          "$IMAGE" cargo xtask test --external-services --oidc
+      - name: compose down
+        if: always()
+        run: docker compose --project-name "$PROJECT" --file deploy/compose.test.yaml --profile oidc down --volumes --remove-orphans

@@ -13,6 +13,7 @@
   import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
+  import WorkspaceBadge from '$lib/features/workspaces/WorkspaceBadge.svelte';
   import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
   import { itemPath, membersPath, router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
@@ -135,7 +136,7 @@
                         onclick={(e: MouseEvent) => {
                           e.preventDefault();
                           router.navigate(workspacePath(ws.id));
-                        }}>{ws.name}</a
+                        }}><WorkspaceBadge workspace={ws} all={signedIn.workspaces} /></a
                       >
                     {/snippet}
                   </Sidebar.MenuButton>

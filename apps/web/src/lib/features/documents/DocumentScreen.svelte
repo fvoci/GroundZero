@@ -7,6 +7,7 @@
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { referenceHref } from '$lib/features/references/context';
+  import { badgeColor, workspaceLabel } from '$lib/features/workspaces/badge';
   import { router } from '$lib/router.svelte';
 
   import DocumentActions from './DocumentActions.svelte';
@@ -48,6 +49,12 @@
   function referencesFor(d: DocumentView): ReferenceContext {
     return {
       workspaceId: d.workspace_id,
+      describeWorkspace: (id) => {
+        const ws = workspaces.find((w) => w.id === id);
+        return ws === undefined
+          ? undefined
+          : { label: workspaceLabel(ws, workspaces), color: badgeColor(ws.id) };
+      },
       hrefFor: (target) => referenceHref(target, memberOf),
       navigate: (path) => {
         router.navigate(path);

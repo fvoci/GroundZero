@@ -2,9 +2,13 @@
 import type { ResolvedReferenceView } from '$lib/api/client';
 import { itemPath, pathFor } from '$lib/router.svelte';
 
+import type { DescribeWorkspace } from './reference-extension';
+
 export interface ReferenceContext {
   /** 후보를 찾을 워크스페이스. 개인 노트는 null. */
   workspaceId: string | null;
+  /** 후보 목록에서 워크스페이스를 구분해 보여 준다(같은 이름이면 보조 정보). */
+  describeWorkspace: DescribeWorkspace;
   hrefFor: (target: ResolvedReferenceView) => string | null;
   navigate: (path: string) => void;
 }

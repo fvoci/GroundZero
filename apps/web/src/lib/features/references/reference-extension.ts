@@ -110,7 +110,10 @@ function optionId(listId: string, index: number): string {
   return `${listId}-${String(index)}`;
 }
 
-function createPopup(): {
+/** 워크스페이스 id → 표시 이름(같은 이름이면 보조 정보 포함)과 배지 색. 내가 속하지 않았으면 없다. */
+export type DescribeWorkspace = (id: string) => { label: string; color: string } | undefined;
+
+function createPopup(describeWorkspace: DescribeWorkspace): {
   onStart: (props: SuggestionProps<ReferenceCandidateView, ReferenceCandidateView>) => void;
   onUpdate: (props: SuggestionProps<ReferenceCandidateView, ReferenceCandidateView>) => void;
   onKeyDown: (props: SuggestionKeyDownProps) => boolean;
@@ -152,7 +155,15 @@ function createPopup(): {
       title.textContent = item.title;
       const where = document.createElement('span');
       where.className = 'ml-auto shrink-0 text-xs text-muted-foreground';
-      where.textContent = item.workspace_name ?? '';
+      const ws = item.workspace_id === null ? undefined : describeWorkspace(item.workspace_id);
+      if (ws === undefined) {
+        where.textContent = item.workspace_name ?? '';
+      } else {
+        const dot = document.createElement('span');
+        dot.setAttribute('aria-hidden', 'true');
+        dot.className = `mr-1 inline-block size-2 rounded-full ${ws.color}`;
+        where.append(dot, ws.label);
+      }
       option.append(kind, reference, title, where);
       option.addEventListener('mousedown', (event: MouseEvent) => {
         event.preventDefault();
@@ -247,17 +258,18 @@ function createPopup(): {
 export interface ReferenceSuggestionOptions {
   /** 후보를 찾을 워크스페이스. 개인 노트는 null(내가 속한 모든 워크스페이스). */
   workspaceId: string | null;
+  describeWorkspace: DescribeWorkspace;
 }
 
 export const ReferenceSuggestion = Extension.create<ReferenceSuggestionOptions>({
   name: 'referenceSuggestion',
 
   addOptions() {
-    return { workspaceId: null };
+    return { workspaceId: null, describeWorkspace: () => undefined };
   },
 
   addProseMirrorPlugins() {
-    const { workspaceId } = this.options;
+    const { workspaceId, describeWorkspace } = this.options;
     return [
       Suggestion<ReferenceCandidateView, ReferenceCandidateView>({
         editor: this.editor,
@@ -279,7 +291,7 @@ export const ReferenceSuggestion = Extension.create<ReferenceSuggestionOptions>(
             ])
             .run();
         },
-        render: createPopup,
+        render: () => createPopup(describeWorkspace),
       }),
     ];
   },

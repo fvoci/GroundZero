@@ -62,7 +62,8 @@ pub struct ReferenceCandidate {
 /// 후보 검색 조건.
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct CandidateQuery {
-    /// 제목·이름 일부 또는 참조(`DEV-3`, 예전 키도 됨).
+    /// 제목·이름 일부 또는 참조(`DEV-3`, 예전 키도 됨). `워크스페이스이름/질의`로 쓰면 내가 속한 워크스페이스 중
+    /// 이름이 그렇게 시작하는 곳(같은 이름이면 모두)에서 찾는다.
     #[serde(default)]
     pub q: String,
     /// 이 워크스페이스로 좁힌다. 없으면 내가 속한 모든 워크스페이스와 내 노트.
@@ -216,6 +217,20 @@ async fn search_scope(
     Ok(ids)
 }
 
+/// 내가 속한 워크스페이스 중 이름이 `prefix`로 시작하는 곳(대소문자 무시). 같은 이름이면 모두 돌려준다.
+async fn workspaces_named(tx: &mut UserTx, prefix: &str) -> Result<Vec<WorkspaceId>, AppError> {
+    let mut pattern = like_pattern(prefix);
+    pattern.remove(0); // 앞쪽 %를 빼 접두어 일치로 만든다.
+    let ids: Vec<WorkspaceId> = sqlx::query_scalar(
+        "SELECT w.id FROM workspaces w
+         WHERE w.id IN (SELECT app_my_workspace_ids()) AND w.name ILIKE $1",
+    )
+    .bind(pattern)
+    .fetch_all(tx.conn())
+    .await?;
+    Ok(ids)
+}
+
 /// 참조 번호로 찾기. 예전 키도 별칭으로 찾는다 (D-18). 볼 수 없는 대상은 RLS로 빠진다.
 async fn by_reference(
     tx: &mut UserTx,
@@ -264,7 +279,16 @@ pub async fn candidates(
         return Err(AppError::BadRequest("query is too long".into()));
     }
     let mut tx = state.db.begin_as(user).await?;
-    let scope = search_scope(&mut tx, query.workspace_id).await?;
+    // `이름/질의`: 내가 속한 워크스페이스 중 이름이 그렇게 시작하는 곳에서 찾는다(D-18의 `@A/DEV-1`).
+    // 이름은 중복될 수 있으므로(D-17) 맞는 곳을 모두 범위에 넣고, 결과의 워크스페이스로 사용자가 구분해 고른다.
+    let (scope, q, named) = match q.split_once('/') {
+        Some((name, rest)) => (
+            workspaces_named(&mut tx, name.trim()).await?,
+            rest.trim(),
+            true,
+        ),
+        None => (search_scope(&mut tx, query.workspace_id).await?, q, false),
+    };
     let pattern = like_pattern(q);
     let mut out = Vec::new();
 
@@ -315,7 +339,7 @@ pub async fn candidates(
     out.extend(to_candidates(docs));
 
     // 범위를 정하지 않았으면(개인 노트에서 입력) 내 개인 노트도 찾는다.
-    if query.workspace_id.is_none() {
+    if query.workspace_id.is_none() && !named {
         let notes: Vec<CandidateRow> = sqlx::query_as(
             "SELECT 'document', d.id, d.title, NULL::text, NULL::uuid, NULL::text
              FROM documents d
