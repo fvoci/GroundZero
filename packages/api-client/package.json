@@ -1,0 +1,16 @@
+{
+  "name": "@fvoci/api-client",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "generate": "openapi-typescript ../../contracts/openapi.json --output ./src/generated/schema.ts",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "echo \"no tests in @fvoci/api-client\""
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,35 @@
+# cargo-deny 설정. 라이선스 정책은 docs/decisions.md D-60.
+# 허용 목록 밖의 크레이트는 여기서 예외로 추가하지 않고 보고해 승인을 받는다.
+
+[graph]
+all-features = false
+targets = [
+  { triple = "x86_64-unknown-linux-gnu" },
+  { triple = "aarch64-unknown-linux-gnu" },
+  { triple = "aarch64-apple-darwin" },
+]
+
+[licenses]
+# 자체 크레이트는 publish = false. fvoci 자체 라이선스는 O-27에서 별도 결정.
+private = { ignore = true }
+unused-allowed-license = "allow"
+confidence-threshold = 0.9
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "PostgreSQL",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[advisories]
+yanked = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

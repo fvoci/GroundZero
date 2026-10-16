@@ -1,0 +1,32 @@
+[package]
+name = "fvoci-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+name = "fvoci_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fvoci-server"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+utoipa.workspace = true
+
+[dev-dependencies]
+tower = { version = "0.5", default-features = false, features = ["util"] }
+http-body-util = "0.1"
+
+[lints]
+workspace = true

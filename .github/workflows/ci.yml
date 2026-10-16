@@ -1,0 +1,45 @@
+# 로컬과 같은 진입점(`cargo xtask check`, `cargo xtask test`)만 실행한다. 검사 skip으로 통과시키지 않는다.
+# 이번 초기화에서는 작성만 했고 GitHub Actions에서 실행해 보지 않았다.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.0
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: cargo install cargo-deny --version 0.20.2 --locked
+      - run: pnpm install --frozen-lockfile
+      - run: cargo xtask check
+
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo xtask test

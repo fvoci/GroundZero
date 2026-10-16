@@ -1,0 +1,40 @@
+# 개발 환경. `cargo xtask dev`가 띄우고 포트를 출력한다. 데이터는 이 프로젝트의 named volume에 남는다.
+# `cargo xtask down`이 이 체크아웃의 볼륨만 지운다.
+name: fvoci-dev
+
+services:
+  postgres:
+    image: postgres:18.3-alpine
+    environment:
+      POSTGRES_USER: fvoci
+      POSTGRES_PASSWORD: fvoci-test-password
+      POSTGRES_DB: fvoci
+    ports:
+      - '127.0.0.1::5432'
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fvoci -d fvoci']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.37.0
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: fvoci-test-meili-master-key-16chars
+      MEILI_NO_ANALYTICS: 'true'
+    ports:
+      - '127.0.0.1::7700'
+    volumes:
+      - meilidata:/meili_data
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:7700/health || exit 1']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
+  meilidata:

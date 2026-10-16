@@ -1,0 +1,73 @@
+# 통합 테스트 환경. `cargo xtask test`가 체크아웃별 프로젝트명으로 띄우고 정리한다.
+# 호스트 포트는 동적으로 할당된다(병렬 실행 격리). 자격 증명은 테스트 전용 값이며 운영에 쓰지 않는다.
+name: fvoci-test
+
+services:
+  postgres:
+    image: postgres:18.3-alpine
+    environment:
+      POSTGRES_USER: fvoci
+      POSTGRES_PASSWORD: fvoci-test-password
+      POSTGRES_DB: fvoci
+    ports:
+      - '127.0.0.1::5432'
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fvoci -d fvoci']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.37.0
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: fvoci-test-meili-master-key-16chars
+      MEILI_NO_ANALYTICS: 'true'
+    ports:
+      - '127.0.0.1::7700'
+    tmpfs:
+      - /meili_data
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:7700/health || exit 1']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # OIDC 통합 테스트 전용. `cargo xtask test --oidc`로만 기동한다 (프로필 oidc).
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.5.4
+    profiles: ['oidc']
+    command: ['start-dev', '--import-realm', '--health-enabled=true']
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: fvoci-test-admin-password
+      KC_HEALTH_ENABLED: 'true'
+    volumes:
+      - ./keycloak/realm-test.json:/opt/keycloak/data/import/realm-test.json:ro
+    ports:
+      - '127.0.0.1::8080'
+    healthcheck:
+      # 이미지에 curl이 없어 bash의 /dev/tcp로 관리 포트(9000)의 ready 상태를 확인한다.
+      test:
+        [
+          'CMD-SHELL',
+          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\": \"UP\"' <&3",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
