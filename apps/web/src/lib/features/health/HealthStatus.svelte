@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
-  import type { HealthResult } from '../api/client';
+  import type { HealthResult } from '$lib/api/client';
 
   interface Props {
     load: () => Promise<HealthResult>;

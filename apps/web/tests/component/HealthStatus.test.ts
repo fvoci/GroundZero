@@ -1,9 +1,9 @@
 import { render, screen } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 
-import type { HealthResult } from '../../src/lib/api/client';
-import { fetchHealth } from '../../src/lib/api/client';
-import HealthStatus from '../../src/lib/ui/HealthStatus.svelte';
+import type { HealthResult } from '$lib/api/client';
+import { fetchHealth } from '$lib/api/client';
+import HealthStatus from '../../src/lib/features/health/HealthStatus.svelte';
 
 describe('HealthStatus', () => {
   it('renders ok state from loader', async () => {

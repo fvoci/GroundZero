@@ -46,6 +46,21 @@ export default tseslint.config(
     },
   },
   {
+    // shadcn-svelte 레지스트리에서 가져온 코드(apps/web/src/lib/ui/README.md). 외부 코드이므로 업데이트 비교를 위해
+    // 수정하지 않고, 실제로 걸리는 규칙만 끈다. 자체 코드에는 적용되지 않는다 (docs/development.md 4절).
+    files: ['apps/web/src/lib/ui/**', 'apps/web/src/lib/hooks/**', 'apps/web/src/lib/utils.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/restrict-template-expressions': 'off',
+      '@typescript-eslint/no-confusing-void-expression': 'off',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/no-useless-default-assignment': 'off',
+      '@typescript-eslint/consistent-type-definitions': 'off',
+      '@typescript-eslint/no-empty-function': 'off',
+    },
+  },
+  {
     files: ['**/*.svelte', '**/*.svelte.ts'],
     languageOptions: {
       parserOptions: {

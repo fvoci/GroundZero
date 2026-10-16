@@ -7,10 +7,17 @@ description: Svelte 컴포넌트·TypeScript 클라이언트 코드(apps/web, pa
 
 적용 대상: `apps/web/**`, `packages/api-client/**`, `eslint.config.mjs`, `tsconfig.base.json`.
 
+## 공통 UI (결정 D-66)
+
+- 기본 UI는 shadcn-svelte(Bits UI 기반) + Tailwind. 구성요소는 `$lib/ui`에 있고 출처·추가 명령·수정 기록은 `apps/web/src/lib/ui/README.md`. 새 구성요소는 같은 CLI로 추가하고 README에 적는다.
+- 디자인 변경은 `src/styles/app.css` 토큰으로. 가져온 컴포넌트 파일은 수정을 최소화한다. 자체 래퍼·모달·메뉴·포커스 관리자를 만들지 않는다.
+- 앱 고유 컴포넌트는 `$lib/features/<기능>/`. 글자 크기는 rem, CJK 줄 높이 토큰을 쓴다.
+
 ## 타입과 lint (docs/development.md 2절)
 
 - `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` 등은 `tsconfig.base.json`에 켜져 있다. 끄지 않는다.
 - `any`, `as unknown as T`, non-null `!`, `@ts-ignore`, `@ts-nocheck`는 ESLint가 거부한다. 타입 단언(`as`)도 금지다. 좁히기는 `in`·`typeof`·`instanceof`로 한다.
+- `.svelte` 컴포넌트에서 `export`한 타입은 ESLint가 해석하지 못해 `any`로 본다. 공유 타입은 `.ts` 파일에 두고 콜백 매개변수는 명시적으로 주석한다.
 - 외부 입력(API 응답·스토리지·메시지)은 `unknown`으로 받아 실제 형태를 확인한다. 예: `apps/web/src/lib/api/client.ts`의 `parseHealth`.
 - Promise는 반드시 처리한다(`no-floating-promises`). `void`를 붙이는 것은 처리가 아니다.
 
