@@ -13,7 +13,7 @@
 - `pnpm install --frozen-lockfile`
 - `cargo xtask check` — 포맷·lint·타입·단위 테스트·라이선스·계약
 - `cargo xtask test` — 격리된 Compose로 통합 테스트 (`--oidc`로 Keycloak 포함)
-- `cargo xtask dev`, `pnpm --filter @fvoci/web dev`, `cargo xtask down`
+- `cargo xtask dev [--oidc]`, `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`, `cargo xtask down`
 - `cargo xtask openapi` 후 `pnpm run generate:api`
 
 ## 변경 종류별 읽을 스킬

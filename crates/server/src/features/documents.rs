@@ -23,7 +23,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::{member_role, validate_title};
 use crate::http::AppState;
-use crate::ids::{DocumentId, Role, UserId, WorkspaceId};
+use crate::ids::{DocumentId, Role, WorkspaceId};
 
 /// 현재 본문 스키마 버전.
 pub const SCHEMA_VERSION: i32 = 1;
@@ -157,26 +157,15 @@ async fn load(tx: &mut UserTx, id: DocumentId) -> Result<Option<DocRow>, AppErro
     Ok(row)
 }
 
-async fn audit(
-    tx: &mut UserTx,
-    ws: WorkspaceId,
-    action: &str,
-    target: DocumentId,
-    detail: Value,
-) -> Result<(), AppError> {
-    let actor: UserId = tx.user();
-    sqlx::query(
-        "INSERT INTO audit_log (workspace_id, actor, action, target_type, target_id, detail)
-         VALUES ($1, $2, $3, 'document', $4, $5)",
-    )
-    .bind(ws)
-    .bind(actor)
-    .bind(action)
-    .bind(target)
-    .bind(detail)
-    .execute(tx.conn())
+/// 행을 잠그고 읽는다. 같은 문서의 저장은 직렬화되어 재시도 판단과 리비전 비교가 최신 행 기준이 된다.
+async fn load_for_update(tx: &mut UserTx, id: DocumentId) -> Result<Option<DocRow>, AppError> {
+    let row = sqlx::query_as(&format!(
+        "SELECT {DOC_COLUMNS} FROM documents WHERE id = $1 FOR UPDATE"
+    ))
+    .bind(id)
+    .fetch_optional(tx.conn())
     .await?;
-    Ok(())
+    Ok(row)
 }
 
 /// 위키 문서 목록.
@@ -213,23 +202,8 @@ pub async fn list_wiki(
     ))
 }
 
-async fn find_created(
-    tx: &mut UserTx,
-    ws: WorkspaceId,
-    request_id: Uuid,
-) -> Result<Option<DocRow>, AppError> {
-    let row = sqlx::query_as(&format!(
-        "SELECT {DOC_COLUMNS} FROM documents
-         WHERE workspace_id = $1 AND created_by = app_user_id() AND request_id = $2"
-    ))
-    .bind(ws)
-    .bind(request_id)
-    .fetch_optional(tx.conn())
-    .await?;
-    Ok(row)
-}
-
-/// 위키 문서 생성.
+/// 위키 문서 생성. 번호 할당·문서·리비전 1·감사 기록은 정의자 함수 `app_create_wiki_document`가
+/// 한 번에 만든다. 같은 사용자의 같은 `request_id`는 같은 문서를 돌려준다.
 #[utoipa::path(post, path = "/api/workspaces/{workspace_id}/wiki/documents",
     params(("workspace_id" = String, Path, format = Uuid)), request_body = CreateDocument,
     responses((status = 201, body = Document), (status = 400, body = ErrorBody),
@@ -241,71 +215,41 @@ pub async fn create_wiki(
     Json(input): Json<CreateDocument>,
 ) -> Result<(StatusCode, Json<Document>), AppError> {
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
-    let mut tx = state.db.begin_as(user).await?;
-    let role = member_role(&mut tx, ws).await?;
-    if !role.can_write() {
-        return Err(AppError::Forbidden);
-    }
-    if let Some(row) = find_created(&mut tx, ws, input.request_id).await? {
-        tx.commit().await?;
-        return Ok((StatusCode::CREATED, Json(to_document(row, role))));
-    }
-
-    let result: Result<DocRow, AppError> = async {
-        let number: i64 = sqlx::query_scalar(
-            "INSERT INTO reference_counters (workspace_id, scope, next_number) VALUES ($1, $2, 2)
-             ON CONFLICT (workspace_id, scope)
-               DO UPDATE SET next_number = reference_counters.next_number + 1
-             RETURNING next_number - 1",
-        )
-        .bind(ws)
-        .bind(WIKI_SCOPE)
-        .fetch_one(tx.conn())
-        .await?;
-        let body = empty_body();
-        let row: DocRow = sqlx::query_as(&format!(
-            "INSERT INTO documents (workspace_id, placement, scope, number, title, schema_version, body,
-                                    revision, created_by, updated_by, request_id)
-             VALUES ($1, 'wiki', $2, $3, $4, $5, $6, 1, app_user_id(), app_user_id(), $7)
-             RETURNING {DOC_COLUMNS}"
-        ))
-        .bind(ws)
-        .bind(WIKI_SCOPE)
-        .bind(number)
-        .bind(&title)
-        .bind(SCHEMA_VERSION)
-        .bind(&body)
-        .bind(input.request_id)
-        .fetch_one(tx.conn())
-        .await?;
-        sqlx::query(
-            "INSERT INTO document_revisions (document_id, revision, title, schema_version, body, author, request_id)
-             VALUES ($1, 1, $2, $3, $4, app_user_id(), $5)",
-        )
-        .bind(row.0)
-        .bind(&title)
-        .bind(SCHEMA_VERSION)
-        .bind(&body)
-        .bind(input.request_id)
-        .execute(tx.conn())
-        .await?;
-        audit(&mut tx, ws, "create", row.0, serde_json::json!({ "title": title })).await?;
-        Ok(row)
-    }
-    .await;
-
-    match result {
-        Ok(row) => {
-            tx.commit().await?;
-            Ok((StatusCode::CREATED, Json(to_document(row, role))))
+    let attempt = async {
+        let mut tx = state.db.begin_as(user).await?;
+        let role = member_role(&mut tx, ws).await?;
+        if !role.can_write() {
+            return Err(AppError::Forbidden);
         }
-        // 같은 request_id가 동시에 들어와 다른 쪽이 먼저 만들었다. 새 트랜잭션에서 그 결과를 돌려준다.
+        let id: DocumentId =
+            sqlx::query_scalar("SELECT app_create_wiki_document($1, $2, $3, $4, $5)")
+                .bind(ws)
+                .bind(input.request_id)
+                .bind(&title)
+                .bind(SCHEMA_VERSION)
+                .bind(empty_body())
+                .fetch_one(tx.conn())
+                .await?;
+        let row = load(&mut tx, id).await?.ok_or(AppError::NotFound)?;
+        tx.commit().await?;
+        Ok(to_document(row, role))
+    };
+    match attempt.await {
+        Ok(doc) => Ok((StatusCode::CREATED, Json(doc))),
+        // 같은 request_id가 동시에 들어와 다른 쪽이 먼저 만들었다. 다시 부르면 그 문서를 돌려받는다.
         Err(AppError::Database(e)) if is_unique_violation(&e) => {
-            drop(tx);
             let mut tx = state.db.begin_as(user).await?;
-            let row = find_created(&mut tx, ws, input.request_id)
-                .await?
-                .ok_or(AppError::Database(e))?;
+            let role = member_role(&mut tx, ws).await?;
+            let id: DocumentId =
+                sqlx::query_scalar("SELECT app_create_wiki_document($1, $2, $3, $4, $5)")
+                    .bind(ws)
+                    .bind(input.request_id)
+                    .bind(&title)
+                    .bind(SCHEMA_VERSION)
+                    .bind(empty_body())
+                    .fetch_one(tx.conn())
+                    .await?;
+            let row = load(&mut tx, id).await?.ok_or(AppError::NotFound)?;
             tx.commit().await?;
             Ok((StatusCode::CREATED, Json(to_document(row, role))))
         }
@@ -329,7 +273,21 @@ pub async fn get(
     Ok(Json(to_document(row, role)))
 }
 
+fn conflict(current: Document) -> Response {
+    (
+        StatusCode::CONFLICT,
+        Json(ConflictBody {
+            error: "conflict",
+            current,
+        }),
+    )
+        .into_response()
+}
+
 /// 문서 저장. 충돌 시 409 + 서버 최신본.
+///
+/// 순서: 권한 확인 → 행 잠금 → 재시도 판단 → 내용 동일 판단 → 리비전 비교 → 갱신·리비전 기록.
+/// 행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다.
 #[utoipa::path(put, path = "/api/documents/{document_id}",
     params(("document_id" = String, Path, format = Uuid)), request_body = SaveDocument,
     responses((status = 200, body = Document), (status = 400, body = ErrorBody),
@@ -345,52 +303,61 @@ pub async fn save(
     validate_body(&input.body, &state.config.limits)?;
 
     let mut tx = state.db.begin_as(user).await?;
-    let current = load(&mut tx, id).await?.ok_or(AppError::NotFound)?;
-    let ws = current.1;
-    let role = member_role(&mut tx, ws).await?;
+    // 잠그기 전에 읽어 멤버·역할을 판정한다(독자는 잠글 수 없고, 403과 404를 구분해야 한다).
+    let visible = load(&mut tx, id).await?.ok_or(AppError::NotFound)?;
+    let role = member_role(&mut tx, visible.1).await?;
     if !role.can_write() {
         return Err(AppError::Forbidden);
     }
+    let current = load_for_update(&mut tx, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
 
-    // 같은 요청의 재시도: 이미 만든 리비전이 있으면 현재 문서를 돌려준다.
+    // 같은 사용자의 같은 요청 재시도. 그 요청이 만든 리비전이 아직 최신이면 성공으로 돌려주고,
+    // 그 뒤에 다른 저장이 있었으면 충돌로 알린다(재시도한 클라이언트가 남의 최신본을 덮지 않게).
     let replay: Option<i32> = sqlx::query_scalar(
-        "SELECT revision FROM document_revisions WHERE document_id = $1 AND request_id = $2",
+        "SELECT revision FROM document_revisions
+         WHERE document_id = $1 AND request_id = $2 AND author = app_user_id()",
     )
     .bind(id)
     .bind(input.request_id)
     .fetch_optional(tx.conn())
     .await?;
-    if replay.is_some() {
+    if let Some(revision) = replay {
+        tx.commit().await?;
+        let doc = to_document(current, role);
+        return Ok(if doc.revision == revision {
+            Json(doc).into_response()
+        } else {
+            conflict(doc)
+        });
+    }
+
+    if current.7 != input.base_revision {
+        tx.commit().await?;
+        return Ok(conflict(to_document(current, role)));
+    }
+    // 내용이 같으면 새 리비전을 만들지 않는다. JSON 객체 비교는 키 순서와 무관하다.
+    if current.4 == title && current.5 == input.body {
         tx.commit().await?;
         return Ok(Json(to_document(current, role)).into_response());
     }
 
-    let previous_title = current.4.clone();
-    let updated: Option<DocRow> = sqlx::query_as(&format!(
+    // 제목 변경 감사 기록은 트리거가 남긴다(본문은 남기지 않는다).
+    let row: DocRow = sqlx::query_as(&format!(
         "UPDATE documents
-         SET title = $3, body = $4, schema_version = $5, revision = revision + 1,
+         SET title = $2, body = $3, schema_version = $4, revision = revision + 1,
              updated_by = app_user_id(), updated_at = now()
-         WHERE id = $1 AND revision = $2
+         WHERE id = $1
          RETURNING {DOC_COLUMNS}"
     ))
     .bind(id)
-    .bind(input.base_revision)
     .bind(&title)
     .bind(&input.body)
     .bind(SCHEMA_VERSION)
-    .fetch_optional(tx.conn())
+    .fetch_one(tx.conn())
     .await?;
-
-    let Some(row) = updated else {
-        tx.commit().await?;
-        let body = ConflictBody {
-            error: "conflict",
-            current: to_document(current, role),
-        };
-        return Ok((StatusCode::CONFLICT, Json(body)).into_response());
-    };
-
-    let inserted = sqlx::query(
+    sqlx::query(
         "INSERT INTO document_revisions (document_id, revision, title, schema_version, body, author, request_id)
          VALUES ($1, $2, $3, $4, $5, app_user_id(), $6)",
     )
@@ -401,30 +368,7 @@ pub async fn save(
     .bind(&input.body)
     .bind(input.request_id)
     .execute(tx.conn())
-    .await;
-    match inserted {
-        Ok(_) => {}
-        Err(e) if is_unique_violation(&e) => {
-            // 같은 request_id가 동시에 저장됐다. 이 시도는 버리고 최신본을 돌려준다.
-            drop(tx);
-            let mut tx = state.db.begin_as(user).await?;
-            let latest = load(&mut tx, id).await?.ok_or(AppError::NotFound)?;
-            tx.commit().await?;
-            return Ok(Json(to_document(latest, role)).into_response());
-        }
-        Err(e) => return Err(e.into()),
-    }
-
-    if previous_title != title {
-        audit(
-            &mut tx,
-            ws,
-            "rename",
-            id,
-            serde_json::json!({ "from": previous_title, "to": title }),
-        )
-        .await?;
-    }
+    .await?;
     tx.commit().await?;
     Ok(Json(to_document(row, role)).into_response())
 }

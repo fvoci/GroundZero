@@ -1,15 +1,20 @@
 //! OIDC 로그인·세션·로그아웃 (D-45).
 //!
-//! - Authorization Code + PKCE. 로그인 진행 상태(PKCE verifier, nonce, 돌아갈 경로)는
-//!   `oidc_login_states`에 두고 쿠키에는 그 id만 담는다. id는 OIDC `state` 값으로도 쓰인다.
+//! - Authorization Code + PKCE. 로그인 진행 상태(OIDC state, PKCE verifier, nonce, 돌아갈 경로)는
+//!   `oidc_login_states`에 두고, 브라우저 쿠키에는 별도의 무작위 비밀값만 담는다. 행은 그 비밀값의
+//!   해시로 찾고, 돌아온 `state`는 행에 저장한 값과 비교한다. 콜백 URL만 가진 사람은 로그인을 끝낼 수 없다.
 //! - 사용자는 ID 토큰의 (issuer, subject)로 식별한다. 이메일로 병합하지 않는다.
-//! - 세션 토큰 원문은 쿠키에만 있고 DB에는 SHA-256 해시만 저장한다. 절대 만료는 설정값.
-//! - 로그아웃은 서버 세션을 지우고, 제공자의 end_session_endpoint로 RP-initiated logout URL을 돌려준다.
+//! - 세션 토큰 원문은 쿠키에만 있고 DB에는 SHA-256 해시만 있다. 앱 역할은 세션·로그인 상태 테이블을
+//!   직접 읽지 못하고 해시를 받는 정의자 함수만 부른다. 로그인 때 기존 세션은 회전(삭제)한다.
+//! - https 공개 원점에서는 `__Host-` 쿠키 이름을 쓴다. 같은 이름의 쿠키가 둘 이상 오면 거부한다(쿠키 주입 방지).
+//! - 로그아웃은 서버 세션을 지우고 제공자의 end_session_endpoint로 RP-initiated logout URL을 돌려준다.
 
 use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{FromRequestParts, Query, State};
+use axum::http::HeaderMap;
+use axum::http::header::COOKIE;
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
@@ -27,19 +32,38 @@ use tokio::sync::RwLock;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::config::{Config, OidcConfig};
-use crate::db::{AnonTx, Db};
+use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::http::AppState;
 use crate::ids::UserId;
 
-/// 세션 쿠키 이름.
+/// http 공개 원점(개발·테스트)의 세션 쿠키 이름.
 pub const SESSION_COOKIE: &str = "fvoci_session";
-/// 로그인 진행 쿠키 이름.
-pub const LOGIN_COOKIE: &str = "fvoci_login";
+/// https 공개 원점의 세션 쿠키 이름. `__Host-`는 Secure·Path=/·Domain 없음을 브라우저가 강제한다.
+pub const SECURE_SESSION_COOKIE: &str = "__Host-fvoci_session";
+const LOGIN_COOKIE: &str = "fvoci_login";
+const SECURE_LOGIN_COOKIE: &str = "__Host-fvoci_login";
 /// 로그인 진행 상태 유효 시간(초). 제공자 로그인 화면을 거치는 동안만 필요하다.
-const LOGIN_STATE_TTL_SECS: i64 = 600;
+const LOGIN_STATE_TTL_SECS: i32 = 600;
 /// `return_to` 최대 길이.
 const MAX_RETURN_TO: usize = 512;
+
+/// 공개 원점에 맞는 세션 쿠키 이름.
+pub fn session_cookie_name(config: &Config) -> &'static str {
+    if config.secure_cookies() {
+        SECURE_SESSION_COOKIE
+    } else {
+        SESSION_COOKIE
+    }
+}
+
+fn login_cookie_name(config: &Config) -> &'static str {
+    if config.secure_cookies() {
+        SECURE_LOGIN_COOKIE
+    } else {
+        LOGIN_COOKIE
+    }
+}
 
 /// OIDC 제공자 연결. 디스커버리는 첫 사용 시 가져와 캐시한다(서버 시작을 제공자 기동에 묶지 않는다).
 #[derive(Debug)]
@@ -91,24 +115,39 @@ fn token_hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 
-fn cookie(
-    config: &Config,
-    name: &'static str,
-    value: String,
-    path: &'static str,
-) -> Cookie<'static> {
+fn cookie(config: &Config, name: &'static str, value: String) -> Cookie<'static> {
     let mut c = Cookie::new(name, value);
     c.set_http_only(true);
     c.set_same_site(SameSite::Lax);
     c.set_secure(config.secure_cookies());
-    c.set_path(path);
+    c.set_path("/");
     c
 }
 
-fn removal(config: &Config, name: &'static str, path: &'static str) -> Cookie<'static> {
-    let mut c = cookie(config, name, String::new(), path);
+fn removal(config: &Config, name: &'static str) -> Cookie<'static> {
+    let mut c = cookie(config, name, String::new());
     c.make_removal();
     c
+}
+
+/// 이름이 정확히 한 번 나온 쿠키 값. 없으면 `Ok(None)`, 둘 이상이면 오류.
+fn single_cookie(headers: &HeaderMap, name: &str) -> Result<Option<String>, ()> {
+    let mut found: Option<String> = None;
+    for header in headers.get_all(COOKIE) {
+        let Ok(raw) = header.to_str() else { continue };
+        for part in raw.split(';') {
+            let Some((k, v)) = part.trim().split_once('=') else {
+                continue;
+            };
+            if k == name {
+                if found.is_some() {
+                    return Err(());
+                }
+                found = Some(v.to_owned());
+            }
+        }
+    }
+    Ok(found)
 }
 
 /// `return_to`는 같은 원점의 상대 경로만 허용한다(오픈 리다이렉트 방지).
@@ -134,6 +173,23 @@ pub struct LoginQuery {
     pub return_to: Option<String>,
 }
 
+fn client_for(
+    provider: &OidcProvider,
+    meta: ProviderMetadataWithLogout,
+) -> impl FnOnce() -> openidconnect::core::CoreClient<
+    openidconnect::EndpointSet,
+    openidconnect::EndpointNotSet,
+    openidconnect::EndpointNotSet,
+    openidconnect::EndpointNotSet,
+    openidconnect::EndpointMaybeSet,
+    openidconnect::EndpointMaybeSet,
+> {
+    let id = ClientId::new(provider.config.client_id.clone());
+    let secret = ClientSecret::new(provider.config.client_secret.expose().to_owned());
+    let redirect = provider.redirect_url.clone();
+    move || CoreClient::from_provider_metadata(meta, id, Some(secret)).set_redirect_uri(redirect)
+}
+
 /// 로그인 시작: 제공자 인증 화면으로 보낸다.
 #[utoipa::path(get, path = "/auth/login", params(LoginQuery),
     responses((status = 303, description = "제공자 로그인 화면으로 이동")), tag = "auth")]
@@ -146,50 +202,41 @@ pub async fn login(
         .oidc
         .as_ref()
         .ok_or(AppError::Config("OIDC is not configured".into()))?;
-    let meta = provider.metadata().await?;
-    let client = CoreClient::from_provider_metadata(
-        meta,
-        ClientId::new(provider.config.client_id.clone()),
-        Some(ClientSecret::new(
-            provider.config.client_secret.expose().to_owned(),
-        )),
-    )
-    .set_redirect_uri(provider.redirect_url.clone());
+    let client = client_for(provider, provider.metadata().await?)();
 
-    let state_id = random_token();
+    let secret = random_token();
+    let oidc_state = random_token();
     let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
-    let state_for_url = state_id.clone();
+    let state_for_url = oidc_state.clone();
+    // openid 범위는 라이브러리가 붙인다.
     let (auth_url, _csrf, nonce) = client
         .authorize_url(
             CoreAuthenticationFlow::AuthorizationCode,
             move || CsrfToken::new(state_for_url),
             Nonce::new_random,
         )
-        .add_scope(Scope::new("openid".into()))
         .add_scope(Scope::new("profile".into()))
         .add_scope(Scope::new("email".into()))
         .set_pkce_challenge(challenge)
         .url();
 
     let mut tx = state.db.begin_anonymous().await?;
-    // 만료된 진행 상태를 함께 정리한다.
-    sqlx::query("DELETE FROM oidc_login_states WHERE expires_at < now()")
+    sqlx::query("SELECT app_create_login_state($1, $2, $3, $4, $5, $6)")
+        .bind(token_hash(&secret))
+        .bind(&oidc_state)
+        .bind(verifier.secret())
+        .bind(nonce.secret())
+        .bind(safe_return_to(query.return_to.as_deref()))
+        .bind(LOGIN_STATE_TTL_SECS)
         .execute(tx.conn())
         .await?;
-    sqlx::query(
-        "INSERT INTO oidc_login_states (id, pkce_verifier, nonce, return_to, expires_at)
-         VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5))",
-    )
-    .bind(&state_id)
-    .bind(verifier.secret())
-    .bind(nonce.secret())
-    .bind(safe_return_to(query.return_to.as_deref()))
-    .bind(LOGIN_STATE_TTL_SECS as f64)
-    .execute(tx.conn())
-    .await?;
     tx.commit().await?;
 
-    let jar = jar.add(cookie(&state.config, LOGIN_COOKIE, state_id, "/auth"));
+    let jar = jar.add(cookie(
+        &state.config,
+        login_cookie_name(&state.config),
+        secret,
+    ));
     Ok((jar, Redirect::to(auth_url.as_str())).into_response())
 }
 
@@ -199,27 +246,6 @@ pub struct CallbackQuery {
     pub code: Option<String>,
     pub state: Option<String>,
     pub error: Option<String>,
-}
-
-struct LoginState {
-    pkce_verifier: String,
-    nonce: String,
-    return_to: String,
-}
-
-async fn take_login_state(tx: &mut AnonTx, id: &str) -> Result<Option<LoginState>, AppError> {
-    let row: Option<(String, String, String)> = sqlx::query_as(
-        "DELETE FROM oidc_login_states WHERE id = $1 AND expires_at > now()
-         RETURNING pkce_verifier, nonce, return_to",
-    )
-    .bind(id)
-    .fetch_optional(tx.conn())
-    .await?;
-    Ok(row.map(|(pkce_verifier, nonce, return_to)| LoginState {
-        pkce_verifier,
-        nonce,
-        return_to,
-    }))
 }
 
 /// 인증된 신원. 콜백과 테스트가 같은 경로로 세션을 만든다.
@@ -232,12 +258,16 @@ pub struct VerifiedIdentity {
     pub id_token: String,
 }
 
-/// 사용자를 만들거나 갱신하고 세션을 발급한다. 반환값은 쿠키에 넣을 토큰 원문.
+/// 사용자를 만들거나 갱신하고 세션을 발급한다. `replaces`가 있으면 그 세션을 끝낸다(회전).
+/// 반환값은 쿠키에 넣을 토큰 원문.
 pub async fn start_session(
     db: &Db,
     ttl: std::time::Duration,
     identity: &VerifiedIdentity,
+    replaces: Option<&str>,
 ) -> Result<(UserId, String), AppError> {
+    let ttl_secs =
+        i64::try_from(ttl.as_secs()).map_err(|_| AppError::Config("session ttl".into()))?;
     let mut tx = db.begin_anonymous().await?;
     let user: UserId = sqlx::query_scalar("SELECT app_upsert_user($1, $2, $3, $4)")
         .bind(&identity.issuer)
@@ -247,28 +277,25 @@ pub async fn start_session(
         .fetch_one(tx.conn())
         .await?;
     let token = random_token();
-    let ttl_secs =
-        i64::try_from(ttl.as_secs()).map_err(|_| AppError::Config("session ttl".into()))?;
-    sqlx::query(
-        "INSERT INTO sessions (token_hash, user_id, id_token, expires_at)
-         VALUES ($1, $2, $3, now() + make_interval(secs => $4))",
-    )
-    .bind(token_hash(&token))
-    .bind(user)
-    .bind(&identity.id_token)
-    .bind(ttl_secs as f64)
-    .execute(tx.conn())
-    .await?;
+    sqlx::query("SELECT app_create_session($1, $2, $3, $4, $5)")
+        .bind(token_hash(&token))
+        .bind(user)
+        .bind(&identity.id_token)
+        .bind(ttl_secs)
+        .bind(replaces.map(token_hash))
+        .execute(tx.conn())
+        .await?;
     tx.commit().await?;
     Ok((user, token))
 }
 
-/// 제공자 콜백: 코드 교환, ID 토큰 검증, 세션 발급.
+/// 제공자 콜백: 상태 확인, 코드 교환, ID 토큰 검증, 세션 발급.
 #[utoipa::path(get, path = "/auth/callback", params(CallbackQuery),
     responses((status = 303, description = "로그인 완료 후 원래 경로로 이동"),
               (status = 400, description = "상태 불일치·만료", body = ErrorBody)), tag = "auth")]
 pub async fn callback(
     State(state): State<AppState>,
+    headers: HeaderMap,
     jar: CookieJar,
     Query(query): Query<CallbackQuery>,
 ) -> Result<Response, AppError> {
@@ -281,37 +308,32 @@ pub async fn callback(
             "login was not completed: {err}"
         )));
     }
-    let cookie_state = jar.get(LOGIN_COOKIE).map(|c| c.value().to_owned());
-    let (Some(code), Some(returned_state), Some(cookie_state)) =
-        (query.code, query.state, cookie_state)
-    else {
+    let secret = single_cookie(&headers, login_cookie_name(&state.config))
+        .map_err(|()| AppError::BadRequest("duplicate login cookie".into()))?;
+    let (Some(code), Some(returned_state), Some(secret)) = (query.code, query.state, secret) else {
         return Err(AppError::BadRequest("missing login state".into()));
     };
+
+    let mut tx = state.db.begin_anonymous().await?;
+    let row: Option<(String, String, String, String)> = sqlx::query_as(
+        "SELECT state, pkce_verifier, nonce, return_to FROM app_take_login_state($1)",
+    )
+    .bind(token_hash(&secret))
+    .fetch_optional(tx.conn())
+    .await?;
+    tx.commit().await?;
+    let (expected_state, pkce_verifier, nonce, return_to) =
+        row.ok_or_else(|| AppError::BadRequest("login state expired".into()))?;
     // 브라우저가 시작한 로그인과 돌아온 콜백이 같은지 확인한다 (CSRF).
-    if returned_state != cookie_state {
+    if returned_state != expected_state {
         return Err(AppError::BadRequest("login state mismatch".into()));
     }
 
-    let mut tx = state.db.begin_anonymous().await?;
-    let login = take_login_state(&mut tx, &cookie_state)
-        .await?
-        .ok_or_else(|| AppError::BadRequest("login state expired".into()))?;
-    tx.commit().await?;
-
-    let meta = provider.metadata().await?;
-    let client = CoreClient::from_provider_metadata(
-        meta,
-        ClientId::new(provider.config.client_id.clone()),
-        Some(ClientSecret::new(
-            provider.config.client_secret.expose().to_owned(),
-        )),
-    )
-    .set_redirect_uri(provider.redirect_url.clone());
-
+    let client = client_for(provider, provider.metadata().await?)();
     let token = client
         .exchange_code(AuthorizationCode::new(code))
         .map_err(|e| AppError::Oidc(format!("token endpoint: {e}")))?
-        .set_pkce_verifier(PkceCodeVerifier::new(login.pkce_verifier))
+        .set_pkce_verifier(PkceCodeVerifier::new(pkce_verifier))
         .request_async(&provider.http)
         .await
         .map_err(|e| AppError::Oidc(format!("code exchange failed: {e}")))?;
@@ -319,7 +341,7 @@ pub async fn callback(
         .id_token()
         .ok_or_else(|| AppError::Oidc("no id_token".into()))?;
     let claims = id_token
-        .claims(&client.id_token_verifier(), &Nonce::new(login.nonce))
+        .claims(&client.id_token_verifier(), &Nonce::new(nonce))
         .map_err(|e| AppError::Oidc(format!("id_token rejected: {e}")))?;
 
     let subject = claims.subject().as_str().to_owned();
@@ -339,12 +361,25 @@ pub async fn callback(
         id_token: id_token.to_string(),
     };
 
-    let (_user, session_token) =
-        start_session(&state.db, state.config.session_ttl, &identity).await?;
+    // 이미 로그인 중이었다면 그 세션은 끝낸다(회전). 중복 쿠키면 회전 대상 없이 진행한다.
+    let previous = single_cookie(&headers, session_cookie_name(&state.config))
+        .ok()
+        .flatten();
+    let (_user, session_token) = start_session(
+        &state.db,
+        state.config.session_ttl,
+        &identity,
+        previous.as_deref(),
+    )
+    .await?;
     let jar = jar
-        .remove(removal(&state.config, LOGIN_COOKIE, "/auth"))
-        .add(cookie(&state.config, SESSION_COOKIE, session_token, "/"));
-    Ok((jar, Redirect::to(&login.return_to)).into_response())
+        .remove(removal(&state.config, login_cookie_name(&state.config)))
+        .add(cookie(
+            &state.config,
+            session_cookie_name(&state.config),
+            session_token,
+        ));
+    Ok((jar, Redirect::to(&return_to)).into_response())
 }
 
 /// 로그아웃 결과. 클라이언트는 `redirect_to`로 이동해 제공자 세션도 끝낸다.
@@ -356,16 +391,21 @@ pub struct LogoutResponse {
 /// 로그아웃: 서버 세션 삭제 + 제공자 로그아웃 URL.
 #[utoipa::path(post, path = "/auth/logout",
     responses((status = 200, description = "세션 삭제됨", body = LogoutResponse)), tag = "auth")]
-pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> Result<Response, AppError> {
+pub async fn logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    jar: CookieJar,
+) -> Result<Response, AppError> {
     let home = state.config.public_url.as_str().to_owned();
     let mut redirect_to = home.clone();
-    if let Some(token) = jar.get(SESSION_COOKIE).map(|c| c.value().to_owned()) {
+    let token = single_cookie(&headers, session_cookie_name(&state.config))
+        .map_err(|()| AppError::Unauthorized)?;
+    if let Some(token) = token {
         let mut tx = state.db.begin_anonymous().await?;
-        let id_token: Option<String> =
-            sqlx::query_scalar("DELETE FROM sessions WHERE token_hash = $1 RETURNING id_token")
-                .bind(token_hash(&token))
-                .fetch_optional(tx.conn())
-                .await?;
+        let id_token: Option<String> = sqlx::query_scalar("SELECT app_end_session($1)")
+            .bind(token_hash(&token))
+            .fetch_one(tx.conn())
+            .await?;
         tx.commit().await?;
         if let (Some(id_token), Some(provider)) = (id_token, state.oidc.as_ref()) {
             let meta = provider.metadata().await?;
@@ -378,11 +418,11 @@ pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> Result<Res
             }
         }
     }
-    let jar = jar.remove(removal(&state.config, SESSION_COOKIE, "/"));
+    let jar = jar.remove(removal(&state.config, session_cookie_name(&state.config)));
     Ok((jar, Json(LogoutResponse { redirect_to })).into_response())
 }
 
-/// 요청한 사용자. 세션 쿠키가 없거나 만료되면 401.
+/// 요청한 사용자. 세션 쿠키가 없거나, 중복이거나, 만료되면 401.
 #[derive(Debug, Clone, Copy)]
 pub struct CurrentUser(pub UserId);
 
@@ -390,19 +430,14 @@ impl FromRequestParts<AppState> for CurrentUser {
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, AppError> {
-        let jar = CookieJar::from_headers(&parts.headers);
-        let token = jar
-            .get(SESSION_COOKIE)
-            .ok_or(AppError::Unauthorized)?
-            .value()
-            .to_owned();
+        let token = single_cookie(&parts.headers, session_cookie_name(&state.config))
+            .map_err(|()| AppError::Unauthorized)?
+            .ok_or(AppError::Unauthorized)?;
         let mut tx = state.db.begin_anonymous().await?;
-        let user: Option<UserId> = sqlx::query_scalar(
-            "SELECT user_id FROM sessions WHERE token_hash = $1 AND expires_at > now()",
-        )
-        .bind(token_hash(&token))
-        .fetch_optional(tx.conn())
-        .await?;
+        let user: Option<UserId> = sqlx::query_scalar("SELECT app_session_user($1)")
+            .bind(token_hash(&token))
+            .fetch_one(tx.conn())
+            .await?;
         tx.commit().await?;
         user.map(CurrentUser).ok_or(AppError::Unauthorized)
     }
@@ -456,7 +491,9 @@ pub type SharedProvider = Option<Arc<OidcProvider>>;
 
 #[cfg(test)]
 mod tests {
-    use super::safe_return_to;
+    use axum::http::HeaderValue;
+
+    use super::*;
 
     #[test]
     fn return_to_accepts_only_same_origin_paths() {
@@ -466,5 +503,18 @@ mod tests {
         assert_eq!(safe_return_to(Some("/\\evil")), "/");
         assert_eq!(safe_return_to(Some("/a\nb")), "/");
         assert_eq!(safe_return_to(None), "/");
+    }
+
+    #[test]
+    fn duplicate_cookies_are_rejected() {
+        let mut headers = HeaderMap::new();
+        headers.append(COOKIE, HeaderValue::from_static("a=1; fvoci_session=x"));
+        assert_eq!(
+            single_cookie(&headers, "fvoci_session"),
+            Ok(Some("x".to_owned()))
+        );
+        headers.append(COOKIE, HeaderValue::from_static("fvoci_session=y"));
+        assert_eq!(single_cookie(&headers, "fvoci_session"), Err(()));
+        assert_eq!(single_cookie(&HeaderMap::new(), "fvoci_session"), Ok(None));
     }
 }

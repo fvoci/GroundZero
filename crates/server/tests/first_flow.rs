@@ -153,6 +153,25 @@ async fn save_retry_is_idempotent_and_stale_save_conflicts() {
 
     let unchanged = send(&app, Method::GET, &uri, Some(&alice), None).await;
     assert_eq!(unchanged.json["revision"], 2);
+
+    // 같은 내용을 키 순서만 바꿔 다시 저장해도 새 리비전이 생기지 않는다(클라이언트 저장 반복 방지).
+    let reordered = json!({
+        "content": [{ "content": [{ "text": "첫 저장", "type": "text" }], "type": "paragraph" }],
+        "type": "doc"
+    });
+    let same = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&alice),
+        Some(json!({ "request_id": new_request_id(), "base_revision": 2, "title": "초안", "body": reordered })),
+    )
+    .await;
+    assert_eq!(same.status, StatusCode::OK);
+    assert_eq!(
+        same.json["revision"], 2,
+        "unchanged content must not add a revision"
+    );
 }
 
 #[tokio::test]
@@ -263,12 +282,14 @@ async fn rls_hides_rows_from_other_users_under_app_role() {
             .fetch_one(&mut *tx)
             .await
             .unwrap();
-            let updated = sqlx::query("UPDATE documents SET title = 'hacked' WHERE id = $1")
-                .bind(doc_id)
-                .execute(&mut *tx)
-                .await
-                .unwrap()
-                .rows_affected();
+            let updated = sqlx::query(
+                "UPDATE documents SET title = 'hacked', revision = revision + 1 WHERE id = $1",
+            )
+            .bind(doc_id)
+            .execute(&mut *tx)
+            .await
+            .unwrap()
+            .rows_affected();
             tx.rollback().await.unwrap();
             (docs, revisions, updated)
         }
@@ -392,7 +413,7 @@ async fn input_validation_and_origin_and_session_failures() {
         display_name: "expiring".into(),
         id_token: "t".into(),
     };
-    let (_, token) = start_session(&state.db, Duration::from_secs(1), &identity)
+    let (_, token) = start_session(&state.db, Duration::from_secs(1), &identity, None)
         .await
         .unwrap();
     let expiring = common::TestUser {
@@ -446,4 +467,118 @@ async fn data_and_session_survive_fresh_state() {
     assert_eq!(reopened.status, StatusCode::OK);
     assert_eq!(reopened.json["body"], doc_body("남아 있어야 함"));
     assert_eq!(reopened.json["revision"], 2);
+}
+
+/// 재시도한 요청이 만든 리비전 뒤에 다른 저장이 있었으면, 재시도 응답은 성공이 아니라 충돌이어야 한다.
+/// (성공으로 돌려주면 클라이언트가 남의 최신본을 확인 없이 덮어쓴다.)
+#[tokio::test]
+async fn replay_after_a_newer_save_reports_conflict() {
+    let state = common::state();
+    let app = common::app(&state);
+    let alice = login(&state, "alice").await;
+    let ws = create_workspace(&app, &alice, "재시도").await;
+    let doc = create_doc(&app, &alice, &ws, "문서").await;
+    let uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
+
+    let mine = json!({ "request_id": new_request_id(), "base_revision": 1, "title": "문서", "body": doc_body("내 저장") });
+    assert_eq!(
+        send(&app, Method::PUT, &uri, Some(&alice), Some(mine.clone()))
+            .await
+            .json["revision"],
+        2
+    );
+    let other = json!({ "request_id": new_request_id(), "base_revision": 2, "title": "문서", "body": doc_body("다른 탭") });
+    assert_eq!(
+        send(&app, Method::PUT, &uri, Some(&alice), Some(other))
+            .await
+            .json["revision"],
+        3
+    );
+
+    // 첫 저장의 응답을 잃어버린 클라이언트가 같은 request_id로 재시도한다.
+    let retry = send(&app, Method::PUT, &uri, Some(&alice), Some(mine)).await;
+    assert_eq!(retry.status, StatusCode::CONFLICT);
+    assert_eq!(retry.json["current"]["revision"], 3);
+    assert_eq!(retry.json["current"]["body"], doc_body("다른 탭"));
+}
+
+/// 앱 역할은 세션·로그인 상태·번호열·감사 기록을 직접 다룰 수 없고, 리비전을 되감을 수 없다.
+#[tokio::test]
+async fn app_role_cannot_touch_internal_tables_or_rewind_revisions() {
+    let state = common::state();
+    let app = common::app(&state);
+    let alice = login(&state, "alice").await;
+    let ws = create_workspace(&app, &alice, "불변식").await;
+    let doc = create_doc(&app, &alice, &ws, "문서").await;
+    let doc_id = uuid::Uuid::parse_str(doc["id"].as_str().unwrap()).unwrap();
+    let ws_id = uuid::Uuid::parse_str(&ws).unwrap();
+
+    let url = std::env::var("DATABASE_URL").unwrap();
+    let denied = |sql: &'static str, bind: Option<uuid::Uuid>| {
+        let url = url.clone();
+        let user = alice.id.0.to_string();
+        async move {
+            let mut conn = sqlx::PgConnection::connect(&url).await.unwrap();
+            let mut tx = conn.begin().await.unwrap();
+            sqlx::query("SELECT set_config('app.user_id', $1, true)")
+                .bind(user)
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            let mut q = sqlx::query(sql);
+            if let Some(b) = bind {
+                q = q.bind(b);
+            }
+            let err = q.execute(&mut *tx).await.unwrap_err();
+            err.as_database_error()
+                .and_then(|e| e.code())
+                .map(|c| c.into_owned())
+        }
+    };
+    let perm = Some("42501".to_owned());
+    assert_eq!(denied("SELECT * FROM sessions", None).await, perm);
+    assert_eq!(denied("SELECT * FROM oidc_login_states", None).await, perm);
+    assert_eq!(
+        denied("UPDATE reference_counters SET next_number = 1", None).await,
+        perm
+    );
+    assert_eq!(
+        denied(
+            "INSERT INTO audit_log (workspace_id, actor, action, target_type, target_id) VALUES ($1, app_user_id(), 'x', 'y', app_user_id())",
+            Some(ws_id),
+        )
+        .await,
+        perm
+    );
+    assert_eq!(
+        denied("INSERT INTO documents (workspace_id, placement, scope, number, title, schema_version, body, revision, created_by, updated_by, request_id) VALUES ($1, 'wiki', 'WIKI', 99, 't', 1, '{}', 1, app_user_id(), app_user_id(), gen_random_uuid())", Some(ws_id)).await,
+        perm
+    );
+    // 리비전은 1씩만 오른다(되감기·건너뛰기 거부).
+    assert_eq!(
+        denied(
+            "UPDATE documents SET revision = revision - 1 WHERE id = $1",
+            Some(doc_id)
+        )
+        .await,
+        Some("23514".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn duplicate_session_cookies_are_rejected() {
+    let state = common::state();
+    let app = common::app(&state);
+    let alice = login(&state, "alice").await;
+    let mallory = login(&state, "mallory").await;
+    let tossed = common::TestUser {
+        id: alice.id,
+        cookie: format!("{}; {}", alice.cookie, mallory.cookie),
+    };
+    assert_eq!(
+        send(&app, Method::GET, "/api/me", Some(&tossed), None)
+            .await
+            .status,
+        StatusCode::UNAUTHORIZED
+    );
 }

@@ -1,105 +1,167 @@
 <script lang="ts">
-  // 현재 화면: 서비스 상태 + 일반 체크리스트 폼 + 공통 UI(대화상자·메뉴) 동작 확인. 기능 화면은 첫 사용자 흐름에서 추가.
-  import { fetchHealth } from '$lib/api/client';
-  import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
-  import type { ChecklistItem } from '$lib/features/checklists/checklist-item';
-  import HealthStatus from '$lib/features/health/HealthStatus.svelte';
+  // 앱 셸: 로그인 확인 → 사이드바(워크스페이스) + 경로별 화면.
+  import type { Me, Workspace } from '@fvoci/api-client';
+
+  import { api } from '$lib/api/client';
+  import LoginScreen from '$lib/features/auth/LoginScreen.svelte';
+  import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
+  import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
+  import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
+  import { router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
-  import * as Dialog from '$lib/ui/dialog';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Sidebar from '$lib/ui/sidebar';
 
-  let items = $state<ChecklistItem[]>([]);
-  let dialogOpen = $state(false);
-  let lastMenuAction = $state<string | undefined>(undefined);
+  type Session =
+    | { state: 'loading' }
+    | { state: 'anonymous'; oidcEnabled: boolean }
+    | { state: 'signed-in'; me: Me; workspaces: Workspace[] }
+    | { state: 'error'; message: string };
+
+  let session = $state<Session>({ state: 'loading' });
+
+  async function load(): Promise<void> {
+    try {
+      const me = await api.me();
+      if (me === undefined) {
+        const info = await api.authInfo();
+        session = { state: 'anonymous', oidcEnabled: info.oidc_enabled };
+        return;
+      }
+      session = { state: 'signed-in', me, workspaces: await api.workspaces() };
+    } catch (e: unknown) {
+      session = {
+        state: 'error',
+        message: e instanceof Error ? e.message : '서버에 연결할 수 없습니다.',
+      };
+    }
+  }
+
+  void load();
+
+  async function logout(): Promise<void> {
+    const redirect = await api.logout();
+    window.location.assign(redirect);
+  }
+
+  const route = $derived(router.route);
+  const currentWorkspace = $derived.by(() => {
+    if (session.state !== 'signed-in') return undefined;
+    if (route.name !== 'workspace' && route.name !== 'document') return undefined;
+    const id = route.workspaceId;
+    return session.workspaces.find((w) => w.id === id);
+  });
 </script>
 
-<Sidebar.Provider>
-  <Sidebar.Root>
-    <Sidebar.Header>
-      <span class="px-2 text-base font-semibold">fvoci</span>
-    </Sidebar.Header>
-    <Sidebar.Content>
-      <Sidebar.Group>
-        <Sidebar.GroupLabel>워크스페이스</Sidebar.GroupLabel>
-        <Sidebar.GroupContent>
-          <Sidebar.Menu>
-            <Sidebar.MenuItem>
-              <Sidebar.MenuButton isActive>
-                {#snippet child({ props })}
-                  <a href="/" {...props}>홈</a>
-                {/snippet}
-              </Sidebar.MenuButton>
-            </Sidebar.MenuItem>
-          </Sidebar.Menu>
-        </Sidebar.GroupContent>
-      </Sidebar.Group>
-    </Sidebar.Content>
-  </Sidebar.Root>
+{#if session.state === 'loading'}
+  <p class="p-6" aria-live="polite">불러오는 중…</p>
+{:else if session.state === 'error'}
+  <p class="p-6 text-destructive" role="alert">{session.message}</p>
+{:else if session.state === 'anonymous'}
+  <LoginScreen oidcEnabled={session.oidcEnabled} returnTo={router.path} />
+{:else}
+  {@const signedIn = session}
+  <Sidebar.Provider>
+    <Sidebar.Root>
+      <Sidebar.Header>
+        <span class="px-2 text-base font-semibold">fvoci</span>
+      </Sidebar.Header>
+      <Sidebar.Content>
+        <Sidebar.Group>
+          <Sidebar.GroupLabel>워크스페이스</Sidebar.GroupLabel>
+          <Sidebar.GroupContent>
+            <Sidebar.Menu>
+              <Sidebar.MenuItem>
+                <Sidebar.MenuButton isActive={route.name === 'home'}>
+                  {#snippet child({ props })}
+                    <a
+                      href="/"
+                      {...props}
+                      onclick={(e: MouseEvent) => {
+                        e.preventDefault();
+                        router.navigate('/');
+                      }}>모든 워크스페이스</a
+                    >
+                  {/snippet}
+                </Sidebar.MenuButton>
+              </Sidebar.MenuItem>
+              {#each signedIn.workspaces as ws (ws.id)}
+                <Sidebar.MenuItem>
+                  <Sidebar.MenuButton isActive={currentWorkspace?.id === ws.id}>
+                    {#snippet child({ props })}
+                      <a
+                        href={workspacePath(ws.id)}
+                        {...props}
+                        onclick={(e: MouseEvent) => {
+                          e.preventDefault();
+                          router.navigate(workspacePath(ws.id));
+                        }}>{ws.name}</a
+                      >
+                    {/snippet}
+                  </Sidebar.MenuButton>
+                </Sidebar.MenuItem>
+              {/each}
+            </Sidebar.Menu>
+          </Sidebar.GroupContent>
+        </Sidebar.Group>
+      </Sidebar.Content>
+    </Sidebar.Root>
 
-  <Sidebar.Inset>
-    <header class="flex items-center gap-2 border-b px-4 py-2">
-      <Sidebar.Trigger />
-      <h1 class="text-lg font-semibold">홈</h1>
-      <div class="ml-auto flex items-center gap-2">
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            {#snippet child({ props })}
-              <Button variant="outline" {...props}>메뉴</Button>
-            {/snippet}
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end">
-            <DropdownMenu.Item
-              onSelect={() => {
-                lastMenuAction = '새 문서';
-              }}>새 문서</DropdownMenu.Item
-            >
-            <DropdownMenu.Item
-              onSelect={() => {
-                lastMenuAction = '새 업무';
-              }}>새 업무</DropdownMenu.Item
-            >
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-        <Button
-          onclick={() => {
-            dialogOpen = true;
-          }}>정보</Button
-        >
-      </div>
-    </header>
+    <Sidebar.Inset>
+      <header class="flex items-center gap-2 border-b px-4 py-2">
+        <Sidebar.Trigger />
+        <span class="text-base font-semibold">{currentWorkspace?.name ?? '홈'}</span>
+        <div class="ml-auto">
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Button variant="outline" {...props} data-testid="user-menu"
+                  >{signedIn.me.display_name}</Button
+                >
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              <DropdownMenu.Item onSelect={() => void logout()}>로그아웃</DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </div>
+      </header>
 
-    <main class="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-6">
-      <HealthStatus load={fetchHealth} />
-      {#if lastMenuAction !== undefined}
-        <p class="text-sm text-muted-foreground" data-testid="menu-result">
-          선택한 메뉴: {lastMenuAction}
-        </p>
-      {/if}
-      <ChecklistForm
-        {items}
-        onchange={(next: ChecklistItem[]) => {
-          items = next;
-        }}
-      />
-    </main>
-  </Sidebar.Inset>
-</Sidebar.Provider>
-
-<Dialog.Root bind:open={dialogOpen}>
-  <Dialog.Content>
-    <Dialog.Header>
-      <Dialog.Title>fvoci</Dialog.Title>
-      <Dialog.Description>
-        통합 작업·지식·학습 관리 앱. 초기화 단계이며 기능 화면은 아직 없습니다.
-      </Dialog.Description>
-    </Dialog.Header>
-    <Dialog.Footer>
-      <Dialog.Close>
-        {#snippet child({ props })}
-          <Button {...props}>닫기</Button>
-        {/snippet}
-      </Dialog.Close>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+      <main class="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-6">
+        {#if route.name === 'home'}
+          <HomeScreen
+            workspaces={signedIn.workspaces}
+            oncreated={(ws: Workspace) => {
+              if (
+                session.state === 'signed-in' &&
+                !session.workspaces.some((w) => w.id === ws.id)
+              ) {
+                session.workspaces = [...session.workspaces, ws];
+              }
+            }}
+          />
+        {:else if route.name === 'workspace' || route.name === 'document'}
+          {#if currentWorkspace === undefined}
+            <p role="alert">워크스페이스가 없거나 볼 권한이 없습니다.</p>
+          {:else if route.name === 'workspace'}
+            <WorkspaceScreen workspace={currentWorkspace} />
+          {:else}
+            <nav aria-label="경로" class="text-sm">
+              <a
+                class="underline"
+                href={workspacePath(currentWorkspace.id)}
+                onclick={(e: MouseEvent) => {
+                  e.preventDefault();
+                  router.navigate(workspacePath(currentWorkspace.id));
+                }}>{currentWorkspace.name} 위키</a
+              >
+            </nav>
+            <DocumentScreen documentId={route.documentId} />
+          {/if}
+        {:else}
+          <p role="alert">페이지를 찾을 수 없습니다.</p>
+        {/if}
+      </main>
+    </Sidebar.Inset>
+  </Sidebar.Provider>
+{/if}

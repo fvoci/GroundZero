@@ -62,7 +62,7 @@ pub async fn login(state: &AppState, label: &str) -> TestUser {
         display_name: label.to_owned(),
         id_token: "test-id-token".to_owned(),
     };
-    let (id, token) = start_session(&state.db, state.config.session_ttl, &identity)
+    let (id, token) = start_session(&state.db, state.config.session_ttl, &identity, None)
         .await
         .unwrap();
     TestUser {

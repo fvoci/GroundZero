@@ -1,5 +1,5 @@
 # 제품 실행 이미지. 서버 바이너리와 정적 웹 자산만 담는다.
-# 이번 초기화에서는 작성만 하고 빌드·배포는 검증하지 않았다 (승인 범위 밖).
+# 로컬 빌드·실행은 검증한다. 레지스트리 push·공개 배포는 별도 승인 대상이다.
 
 FROM rust:1.99.0-bookworm AS server-build
 WORKDIR /src
@@ -19,13 +19,14 @@ COPY contracts ./contracts
 RUN pnpm install --frozen-lockfile && pnpm --filter @fvoci/web run build
 
 FROM debian:bookworm-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10001 --create-home fvoci
 COPY --from=server-build /src/target/release/fvoci-server /usr/local/bin/fvoci-server
 COPY --from=web-build /src/apps/web/dist /srv/fvoci/web
 # 라이선스 고지는 라이선스 검사 통과 후 NOTICE 생성 단계를 추가한다 (D-60).
 USER fvoci
-ENV FVOCI_BIND=0.0.0.0:8080
+ENV FVOCI_BIND=0.0.0.0:8080 \
+    FVOCI_WEB_DIR=/srv/fvoci/web
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/fvoci-server"]

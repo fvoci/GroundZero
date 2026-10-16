@@ -12,9 +12,15 @@ export default defineConfig({
   resolve: {
     alias: { $lib: path.resolve(import.meta.dirname, 'src/lib') },
   },
+  // 개발 서버 원점은 서버의 FVOCI_PUBLIC_URL(기본 http://127.0.0.1:5173)과 같아야 한다.
+  // 쿠키·OIDC 리다이렉트·Origin 검사가 이 원점 기준이다. localhost가 아니라 127.0.0.1을 쓴다.
   server: {
+    host: '127.0.0.1',
+    port: 5173,
+    strictPort: true,
     proxy: {
       '/api': { target: apiUrl, changeOrigin: true },
+      '/auth': { target: apiUrl, changeOrigin: true },
       '/healthz': { target: apiUrl, changeOrigin: true },
     },
   },

@@ -1,20 +1,253 @@
-// 생성된 계약 타입을 쓰는 API 클라이언트. 생성 타입은 런타임 검증을 대신하지 않으므로
-// 응답은 unknown으로 받아 실제 형태를 확인한다 (docs/development.md 3절).
-import type { Health } from '@fvoci/api-client';
+// API 클라이언트. 타입은 계약에서 생성한 것(@fvoci/api-client)을 쓰고, 응답은 unknown으로 받아
+// 실제 형태를 확인한다(생성 타입은 런타임 검증을 대신하지 않는다 — docs/development.md 3절).
+import type { AuthInfo, DocumentSummary, Health, Me, Role, Workspace } from '@fvoci/api-client';
+
+/** Tiptap JSON 노드. 본문 최상위는 `type: "doc"`. */
+export interface DocNode {
+  type: string;
+  [key: string]: unknown;
+}
+
+/** 화면에서 쓰는 문서. 본문을 구체화한 것 외에는 계약의 Document와 같다. */
+export interface DocumentView {
+  id: string;
+  workspace_id: string;
+  reference: string;
+  title: string;
+  body: DocNode;
+  schema_version: number;
+  revision: number;
+  updated_at: string;
+  can_edit: boolean;
+}
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/** 네트워크 실패(응답 없음). 같은 request_id로 재시도할 수 있다. */
+export class NetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NetworkError';
+  }
+}
+
+type Json = unknown;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function str(o: Record<string, unknown>, key: string): string {
+  const v = o[key];
+  if (typeof v !== 'string') throw new TypeError(`expected string at ${key}`);
+  return v;
+}
+
+function int(o: Record<string, unknown>, key: string): number {
+  const v = o[key];
+  if (typeof v !== 'number' || !Number.isSafeInteger(v))
+    throw new TypeError(`expected integer at ${key}`);
+  return v;
+}
+
+function bool(o: Record<string, unknown>, key: string): boolean {
+  const v = o[key];
+  if (typeof v !== 'boolean') throw new TypeError(`expected boolean at ${key}`);
+  return v;
+}
+
+function rec(value: unknown, what: string): Record<string, unknown> {
+  if (!isRecord(value)) throw new TypeError(`expected object for ${what}`);
+  return value;
+}
+
+function role(value: string): Role {
+  if (value === 'admin' || value === 'writer' || value === 'reader') return value;
+  throw new TypeError(`unknown role ${value}`);
+}
+
+export function parseDocNode(value: unknown): DocNode {
+  const o = rec(value, 'document body');
+  const type = o.type;
+  if (type !== 'doc') throw new TypeError('document body must have type "doc"');
+  return { ...o, type };
+}
+
+export function parseHealth(value: Json): Health {
+  const o = rec(value, 'health');
+  return { status: str(o, 'status'), database: str(o, 'database') };
+}
+
+export function parseMe(value: Json): Me {
+  const o = rec(value, 'me');
+  const email = o.email;
+  return {
+    id: str(o, 'id'),
+    display_name: str(o, 'display_name'),
+    email: typeof email === 'string' ? email : null,
+  };
+}
+
+export function parseWorkspace(value: Json): Workspace {
+  const o = rec(value, 'workspace');
+  return { id: str(o, 'id'), name: str(o, 'name'), role: role(str(o, 'role')) };
+}
+
+export function parseSummary(value: Json): DocumentSummary {
+  const o = rec(value, 'document summary');
+  return {
+    id: str(o, 'id'),
+    reference: str(o, 'reference'),
+    title: str(o, 'title'),
+    revision: int(o, 'revision'),
+    updated_at: str(o, 'updated_at'),
+  };
+}
+
+export function parseDocument(value: Json): DocumentView {
+  const o = rec(value, 'document');
+  return {
+    id: str(o, 'id'),
+    workspace_id: str(o, 'workspace_id'),
+    reference: str(o, 'reference'),
+    title: str(o, 'title'),
+    body: parseDocNode(o.body),
+    schema_version: int(o, 'schema_version'),
+    revision: int(o, 'revision'),
+    updated_at: str(o, 'updated_at'),
+    can_edit: bool(o, 'can_edit'),
+  };
+}
+
+function parseList<T>(value: Json, item: (v: Json) => T): T[] {
+  if (!Array.isArray(value)) throw new TypeError('expected array');
+  return value.map(item);
+}
+
+async function request(
+  method: string,
+  path: string,
+  body?: Json,
+): Promise<{ status: number; json: Json }> {
+  let response: Response;
+  try {
+    const init: RequestInit = {
+      method,
+      credentials: 'same-origin',
+      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+    };
+    if (body !== undefined) init.body = JSON.stringify(body);
+    response = await fetch(path, init);
+  } catch (error: unknown) {
+    throw new NetworkError(error instanceof Error ? error.message : 'network error');
+  }
+  const text = await response.text();
+  let json: Json = null;
+  if (text !== '') {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = null;
+    }
+  }
+  return { status: response.status, json };
+}
+
+function fail(status: number, json: Json): never {
+  if (isRecord(json) && typeof json.error === 'string') {
+    const message = typeof json.message === 'string' ? json.message : json.error;
+    throw new ApiError(status, json.error, message);
+  }
+  throw new ApiError(status, 'unexpected', `unexpected response (${String(status)})`);
+}
+
+async function expectOk<T>(
+  method: string,
+  path: string,
+  parse: (v: Json) => T,
+  body?: Json,
+): Promise<T> {
+  const { status, json } = await request(method, path, body);
+  if (status < 200 || status >= 300) fail(status, json);
+  return parse(json);
+}
+
+export const api = {
+  health: () => expectOk('GET', '/healthz', parseHealth),
+  authInfo: () =>
+    expectOk('GET', '/api/auth-info', (v): AuthInfo => ({
+      oidc_enabled: bool(rec(v, 'auth info'), 'oidc_enabled'),
+    })),
+  /** 로그인하지 않았으면 undefined. */
+  async me(): Promise<Me | undefined> {
+    const { status, json } = await request('GET', '/api/me');
+    if (status === 401) return undefined;
+    if (status !== 200) fail(status, json);
+    return parseMe(json);
+  },
+  async logout(): Promise<string> {
+    return expectOk('POST', '/auth/logout', (v) => str(rec(v, 'logout'), 'redirect_to'));
+  },
+  workspaces: () => expectOk('GET', '/api/workspaces', (v) => parseList(v, parseWorkspace)),
+  createWorkspace: (requestId: string, name: string) =>
+    expectOk('POST', '/api/workspaces', parseWorkspace, { request_id: requestId, name }),
+  wikiDocuments: (workspaceId: string) =>
+    expectOk('GET', `/api/workspaces/${encodeURIComponent(workspaceId)}/wiki/documents`, (v) =>
+      parseList(v, parseSummary),
+    ),
+  createWikiDocument: (workspaceId: string, requestId: string, title: string) =>
+    expectOk(
+      'POST',
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/wiki/documents`,
+      parseDocument,
+      {
+        request_id: requestId,
+        title,
+      },
+    ),
+  document: (id: string) =>
+    expectOk('GET', `/api/documents/${encodeURIComponent(id)}`, parseDocument),
+  /** 저장. 충돌이면 `{ kind: 'conflict', current }`. */
+  async saveDocument(
+    id: string,
+    input: { requestId: string; baseRevision: number; title: string; body: DocNode },
+  ): Promise<
+    { kind: 'saved'; document: DocumentView } | { kind: 'conflict'; current: DocumentView }
+  > {
+    const { status, json } = await request('PUT', `/api/documents/${encodeURIComponent(id)}`, {
+      request_id: input.requestId,
+      base_revision: input.baseRevision,
+      title: input.title,
+      body: input.body,
+    });
+    if (status === 409) {
+      return { kind: 'conflict', current: parseDocument(rec(json, 'conflict').current) };
+    }
+    if (status !== 200) fail(status, json);
+    return { kind: 'saved', document: parseDocument(json) };
+  },
+};
+
+/** 요청 ID. 재시도 때 같은 값을 다시 보내면 서버가 중복을 막는다. */
+export function newRequestId(): string {
+  return crypto.randomUUID();
+}
 
 export type HealthResult =
   | { kind: 'ok'; health: Health }
   | { kind: 'degraded'; health: Health }
   | { kind: 'unreachable'; message: string };
 
-function parseHealth(value: unknown): Health | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  if (!('status' in value) || !('database' in value)) return undefined;
-  const { status, database } = value;
-  if (typeof status !== 'string' || typeof database !== 'string') return undefined;
-  return { status, database };
-}
-
+/** 상태 확인. 503도 형태가 맞으면 degraded로 본다. */
 export async function fetchHealth(fetchImpl: typeof fetch = fetch): Promise<HealthResult> {
   let response: Response;
   try {
@@ -24,8 +257,10 @@ export async function fetchHealth(fetchImpl: typeof fetch = fetch): Promise<Heal
     return { kind: 'unreachable', message };
   }
   const body: unknown = await response.json().catch(() => undefined);
-  const health = parseHealth(body);
-  if (health === undefined) {
+  let health: Health;
+  try {
+    health = parseHealth(body);
+  } catch {
     return { kind: 'unreachable', message: `unexpected response (${String(response.status)})` };
   }
   return response.ok ? { kind: 'ok', health } : { kind: 'degraded', health };

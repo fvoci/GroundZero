@@ -9,7 +9,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fvoci/api-client": "workspace:*"
+    "@fvoci/api-client": "workspace:*",
+    "@tiptap/core": "3.32.0",
+    "@tiptap/pm": "3.32.0",
+    "@tiptap/starter-kit": "3.32.0"
   },
   "devDependencies": {
     "@internationalized/date": "3.12.4",

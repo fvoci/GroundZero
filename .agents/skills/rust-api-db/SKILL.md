@@ -23,7 +23,8 @@ description: Rust 서버(crates/server)·HTTP API·PostgreSQL 스키마·권한 
 
 ## DB 변경
 
-- 스키마의 정본은 `crates/server/migrations/`다(첫 마이그레이션은 첫 사용자 흐름에서 추가).
+- 스키마의 정본은 `crates/server/migrations/`다. 적용된 마이그레이션은 고치지 말고 새 번호로 추가한다. 역할 준비는 `fvoci-server db bootstrap`, 적용은 `db migrate`.
+- 앱 역할이 직접 다루면 안 되는 불변식(번호 할당, 리비전 증가, 감사 기록, 세션)은 정의자 함수·트리거로 둔다. 정의자 함수는 `SET search_path = fvoci, pg_temp`, `REVOKE ... FROM PUBLIC`, `GRANT EXECUTE TO fvoci_app`. RLS는 `app_user_id()`가 NULL이면 거부되게 쓴다(`docs/development.md` 12절).
 - 모든 행에 소유 워크스페이스 또는 소유 사용자를 기록한다. RLS와 앱 권한 검사를 함께 둔다(결정 D-08, O-09).
 - `sqlx::query!` 매크로는 검사 단계에 DB가 필요하므로 쓰지 않는다. `sqlx::query`와 명시 타입을 쓴다.
 - 통합 테스트는 `crates/server/tests/`에 두고 `DATABASE_URL`이 없으면 실패하게 한다. `cargo xtask test`가 주입한다.
