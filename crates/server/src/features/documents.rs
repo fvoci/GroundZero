@@ -172,6 +172,48 @@ pub fn validate_body(body: &Value, limits: &Limits) -> Result<(), AppError> {
             limits.max_document_bytes
         )));
     }
+    validate_references(body, limits.max_references_per_document)
+}
+
+/// 참조 노드(`type: "reference"`) 검사: `attrs.kind`는 item·document·user, `attrs.id`는 UUID,
+/// 개수는 상한 이하. 표시 이름 같은 다른 속성은 받지 않는다(제목이 본문에 남지 않게, D-18).
+/// 깊은 중첩에서도 스택이 넘치지 않도록 반복으로 순회한다.
+fn validate_references(body: &Value, max: usize) -> Result<(), AppError> {
+    let mut stack = vec![body];
+    let mut count = 0usize;
+    while let Some(node) = stack.pop() {
+        match node {
+            Value::Array(items) => stack.extend(items),
+            Value::Object(map) => {
+                if map.get("type").and_then(Value::as_str) == Some("reference") {
+                    count += 1;
+                    if count > max {
+                        return Err(AppError::BadRequest(format!(
+                            "a document can hold at most {max} references"
+                        )));
+                    }
+                    check_reference_attrs(map.get("attrs"))?;
+                }
+                stack.extend(map.values());
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn check_reference_attrs(attrs: Option<&Value>) -> Result<(), AppError> {
+    let bad = || AppError::BadRequest("reference nodes need attrs {kind, id} only".into());
+    let attrs = attrs.and_then(Value::as_object).ok_or_else(bad)?;
+    if attrs.len() != 2 {
+        return Err(bad());
+    }
+    let kind = attrs.get("kind").and_then(Value::as_str);
+    if !matches!(kind, Some("item" | "document" | "user")) {
+        return Err(bad());
+    }
+    let id = attrs.get("id").and_then(Value::as_str).ok_or_else(bad)?;
+    Uuid::parse_str(id).map_err(|_| bad())?;
     Ok(())
 }
 
@@ -556,6 +598,12 @@ pub async fn save(
     .bind(input.request_id)
     .execute(tx.conn())
     .await?;
+    // 링크·언급은 방금 저장한 본문에서 뽑아 같은 트랜잭션에 기록한다.
+    sqlx::query("SELECT app_record_document_references($1, true)")
+        .bind(id)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     Ok(Json(to_document(row, access)).into_response())
 }
@@ -734,6 +782,12 @@ pub async fn copy(
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
+    // 사본의 링크도 기록한다. 언급 알림은 원작성자가 한 것이 아니므로 만들지 않는다.
+    sqlx::query("SELECT app_record_document_references($1, false)")
+        .bind(new_id)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
     let (row, access) = load_with_access(&mut tx, new_id).await?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(to_document(row, access))))
@@ -905,11 +959,13 @@ pub async fn move_document(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     fn limits(max: usize) -> Limits {
         Limits {
             max_document_bytes: max,
             max_title_chars: 10,
+            max_references_per_document: 2,
         }
     }
 
@@ -935,6 +991,34 @@ mod tests {
         assert!(validate_title("   ", 10, "title").is_err());
         assert!(validate_title("가나다라마바사아자차카", 10, "title").is_err());
         assert!(validate_title("a\u{0007}b", 10, "title").is_err());
+    }
+
+    #[test]
+    fn reference_nodes_are_checked_and_limited() {
+        let id = "0198f1f2-0000-7000-8000-000000000001";
+        let reference = |kind: &str, id: &str| json!({ "type": "reference", "attrs": { "kind": kind, "id": id } });
+        let doc = |nodes: Vec<Value>| json!({ "type": "doc", "content": [{ "type": "paragraph", "content": nodes }] });
+        let l = limits(10_000);
+        assert!(
+            validate_body(&doc(vec![reference("item", id), reference("user", id)]), &l).is_ok()
+        );
+        assert!(validate_body(&doc(vec![reference("task", id)]), &l).is_err());
+        assert!(validate_body(&doc(vec![reference("item", "DEV-1")]), &l).is_err());
+        let labelled =
+            json!({ "type": "reference", "attrs": { "kind": "item", "id": id, "label": "비밀" } });
+        assert!(
+            validate_body(&doc(vec![labelled]), &l).is_err(),
+            "labels are not stored"
+        );
+        let three = doc(vec![
+            reference("item", id),
+            reference("item", id),
+            reference("user", id),
+        ]);
+        assert!(
+            validate_body(&three, &l).is_err(),
+            "limit is 2 in this test"
+        );
     }
 
     #[test]

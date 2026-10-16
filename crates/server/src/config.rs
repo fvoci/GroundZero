@@ -44,6 +44,8 @@ pub struct Limits {
     pub max_document_bytes: usize,
     /// 제목·이름 글자 수 상한. `FVOCI_MAX_TITLE_CHARS`.
     pub max_title_chars: usize,
+    /// 문서 하나에 넣을 수 있는 참조(@ 링크·언급) 노드 수 상한. `FVOCI_MAX_REFERENCES_PER_DOCUMENT`.
+    pub max_references_per_document: usize,
 }
 
 /// 서버 실행 구성.
@@ -131,6 +133,11 @@ impl Config {
         let limits = Limits {
             max_document_bytes: parse_or(&lookup, "FVOCI_MAX_DOCUMENT_BYTES", 2_000_000)?,
             max_title_chars: parse_or(&lookup, "FVOCI_MAX_TITLE_CHARS", 200)?,
+            max_references_per_document: parse_or(
+                &lookup,
+                "FVOCI_MAX_REFERENCES_PER_DOCUMENT",
+                500,
+            )?,
         };
 
         Ok(Self {

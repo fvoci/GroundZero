@@ -197,6 +197,51 @@
         }
       }
     },
+    "/api/documents/{document_id}/backlinks": {
+      "get": {
+        "tags": [
+          "references"
+        ],
+        "summary": "이 문서를 가리키는 문서. 대상 문서를 볼 수 없으면 404.",
+        "operationId": "document_backlinks",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Backlink"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/documents/{document_id}/copy": {
       "post": {
         "tags": [
@@ -1246,6 +1291,51 @@
         }
       }
     },
+    "/api/items/{item_id}/backlinks": {
+      "get": {
+        "tags": [
+          "references"
+        ],
+        "summary": "이 항목을 가리키는 문서. 항목을 볼 수 없으면 404.",
+        "operationId": "item_backlinks",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Backlink"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/documents": {
       "get": {
         "tags": [
@@ -1471,6 +1561,74 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/notifications": {
+      "get": {
+        "tags": [
+          "references"
+        ],
+        "summary": "내 알림(최근 순). 문서를 볼 수 없게 되면 나오지 않는다.",
+        "operationId": "notifications",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Notification"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/notifications/read": {
+      "post": {
+        "tags": [
+          "references"
+        ],
+        "summary": "알림 읽음 표시. 내 알림만 바뀐다.",
+        "operationId": "mark_read",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkRead"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
           },
           "401": {
             "description": "",
@@ -1902,6 +2060,111 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reference-candidates": {
+      "get": {
+        "tags": [
+          "references"
+        ],
+        "summary": "@ 입력 후보: 사람·항목·문서를 종류별로 찾는다. 볼 수 있는 것만 나온다.",
+        "operationId": "candidates",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "제목·이름 일부 또는 참조(`DEV-3`, 예전 키도 됨).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "query",
+            "description": "이 워크스페이스로 좁힌다. 없으면 내가 속한 모든 워크스페이스와 내 노트.",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/WorkspaceId"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReferenceCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/references/resolve": {
+      "post": {
+        "tags": [
+          "references"
+        ],
+        "summary": "참조 해석. 볼 수 없는 대상과 없는 대상은 같은 모양으로 돌려준다.",
+        "operationId": "resolve",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveReferences"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResolvedReference"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -3050,6 +3313,48 @@
           }
         }
       },
+      "Backlink": {
+        "type": "object",
+        "description": "이 대상을 가리키는 문서(내가 볼 수 있는 것만).",
+        "required": [
+          "id",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DocumentId"
+          },
+          "item_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemId"
+              }
+            ]
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "workspace_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
+          }
+        }
+      },
       "ConflictBody": {
         "type": "object",
         "description": "저장 충돌 응답. `current`가 서버 최신본이다.",
@@ -3561,6 +3866,19 @@
           }
         }
       },
+      "MarkRead": {
+        "type": "object",
+        "description": "읽음 표시 요청. `id`가 없으면 모두 읽음.",
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "Me": {
         "type": "object",
         "description": "현재 사용자 정보.",
@@ -3835,6 +4153,71 @@
           }
         }
       },
+      "Notification": {
+        "type": "object",
+        "description": "알림. 지금 볼 수 있는 문서에 대한 것만 나온다.",
+        "required": [
+          "id",
+          "kind",
+          "document_id",
+          "document_title",
+          "actor_name",
+          "created_at",
+          "read"
+        ],
+        "properties": {
+          "actor_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "document_id": {
+            "$ref": "#/components/schemas/DocumentId"
+          },
+          "document_reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document_title": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemId"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "description": "현재는 `mention`."
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "workspace_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
+          }
+        }
+      },
       "OfferOwnership": {
         "type": "object",
         "description": "인계 제안 요청.",
@@ -3934,6 +4317,146 @@
           },
           "workspace_name": {
             "type": "string"
+          }
+        }
+      },
+      "ReferenceCandidate": {
+        "type": "object",
+        "description": "@ 입력 후보. 이름이 같은 후보는 참조 번호와 워크스페이스로 구분한다 (D-18).",
+        "required": [
+          "kind",
+          "id",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ReferenceKind"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "예: `DEV-3`, `WIKI-1`. 사람과 개인 노트는 없다."
+          },
+          "title": {
+            "type": "string",
+            "description": "항목·문서 제목 또는 사람 이름."
+          },
+          "workspace_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
+          },
+          "workspace_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ReferenceInput": {
+        "type": "object",
+        "description": "해석할 참조.",
+        "required": [
+          "kind",
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ReferenceKind"
+          }
+        }
+      },
+      "ReferenceKind": {
+        "type": "string",
+        "description": "참조 대상 종류.",
+        "enum": [
+          "item",
+          "document",
+          "user"
+        ]
+      },
+      "ResolveReferences": {
+        "type": "object",
+        "description": "해석 요청.",
+        "required": [
+          "refs"
+        ],
+        "properties": {
+          "refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReferenceInput"
+            }
+          }
+        }
+      },
+      "ResolvedReference": {
+        "type": "object",
+        "description": "해석 결과. 볼 수 없거나 없는 대상은 `visible: false`이고 다른 값은 모두 비어 있다.",
+        "required": [
+          "kind",
+          "id",
+          "visible"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemId",
+                "description": "문서가 항목 아래 있으면 그 항목(볼 수 있을 때만)."
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ReferenceKind"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "visible": {
+            "type": "boolean"
+          },
+          "workspace_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
           }
         }
       },
@@ -4149,6 +4672,10 @@
     {
       "name": "modules",
       "description": "모듈 인스턴스·키·항목"
+    },
+    {
+      "name": "references",
+      "description": "@ 링크·언급·역방향 링크·알림"
     }
   ]
 }

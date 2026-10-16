@@ -15,7 +15,9 @@ use utoipa::{OpenApi, ToSchema};
 use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
-use crate::features::{accounts, documents, members, modules, public_links, workspaces};
+use crate::features::{
+    accounts, documents, members, modules, public_links, references, workspaces,
+};
 
 /// 핸들러가 공유하는 상태.
 #[derive(Debug, Clone)]
@@ -140,6 +142,12 @@ async fn api_not_found() -> AppError {
         modules::archive_item,
         modules::list_item_documents,
         modules::create_item_document,
+        references::candidates,
+        references::resolve,
+        references::document_backlinks,
+        references::item_backlinks,
+        references::notifications,
+        references::mark_read,
         public_links::list,
         public_links::create,
         public_links::revoke,
@@ -205,6 +213,14 @@ async fn api_not_found() -> AppError {
         modules::Item,
         modules::CreateItem,
         modules::UpdateItem,
+        references::ReferenceKind,
+        references::ReferenceCandidate,
+        references::ReferenceInput,
+        references::ResolveReferences,
+        references::ResolvedReference,
+        references::Backlink,
+        references::Notification,
+        references::MarkRead,
         public_links::PublicLink,
         public_links::CreatePublicLink,
         public_links::CreatedPublicLink,
@@ -218,6 +234,7 @@ async fn api_not_found() -> AppError {
         (name = "documents", description = "위키 문서"),
         (name = "members", description = "멤버·초대·역할·그룹·소유권"),
         (name = "modules", description = "모듈 인스턴스·키·항목"),
+        (name = "references", description = "@ 링크·언급·역방향 링크·알림"),
     )
 )]
 pub struct ApiDoc;
@@ -274,6 +291,18 @@ pub fn router(state: AppState) -> Router {
             get(public_links::list).post(public_links::create),
         )
         .route("/public-links/{link_id}", delete(public_links::revoke))
+        .route("/reference-candidates", get(references::candidates))
+        .route("/references/resolve", post(references::resolve))
+        .route(
+            "/documents/{document_id}/backlinks",
+            get(references::document_backlinks),
+        )
+        .route(
+            "/items/{item_id}/backlinks",
+            get(references::item_backlinks),
+        )
+        .route("/me/notifications", get(references::notifications))
+        .route("/me/notifications/read", post(references::mark_read))
         .route(
             "/workspaces/{workspace_id}/modules",
             get(modules::list_modules).post(modules::create_module),

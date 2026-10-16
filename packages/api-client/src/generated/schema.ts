@@ -59,6 +59,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/backlinks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 이 문서를 가리키는 문서. 대상 문서를 볼 수 없으면 404. */
+        get: operations["document_backlinks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}/copy": {
         parameters: {
             query?: never;
@@ -304,6 +321,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/backlinks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 이 항목을 가리키는 문서. 항목을 볼 수 없으면 404. */
+        get: operations["item_backlinks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/documents": {
         parameters: {
             query?: never;
@@ -351,6 +385,40 @@ export interface paths {
         put?: never;
         /** 개인 노트 생성. */
         post: operations["create_note"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내 알림(최근 순). 문서를 볼 수 없게 되면 나오지 않는다. */
+        get: operations["notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notifications/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 알림 읽음 표시. 내 알림만 바뀐다. */
+        post: operations["mark_read"];
         delete?: never;
         options?: never;
         head?: never;
@@ -455,6 +523,40 @@ export interface paths {
         get: operations["view_public_document"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reference-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @ 입력 후보: 사람·항목·문서를 종류별로 찾는다. 볼 수 있는 것만 나온다. */
+        get: operations["candidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/references/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 참조 해석. 볼 수 없는 대상과 없는 대상은 같은 모양으로 돌려준다. */
+        post: operations["resolve"];
         delete?: never;
         options?: never;
         head?: never;
@@ -731,6 +833,14 @@ export interface components {
         AuthInfo: {
             oidc_enabled: boolean;
         };
+        /** @description 이 대상을 가리키는 문서(내가 볼 수 있는 것만). */
+        Backlink: {
+            id: components["schemas"]["DocumentId"];
+            item_id?: null | components["schemas"]["ItemId"];
+            reference?: string | null;
+            title: string;
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
+        };
         /** @description 저장 충돌 응답. `current`가 서버 최신본이다. */
         ConflictBody: {
             current: components["schemas"]["Document"];
@@ -912,6 +1022,11 @@ export interface components {
         LogoutResponse: {
             redirect_to: string;
         };
+        /** @description 읽음 표시 요청. `id`가 없으면 모두 읽음. */
+        MarkRead: {
+            /** Format: uuid */
+            id?: string | null;
+        };
         /** @description 현재 사용자 정보. */
         Me: {
             display_name: string;
@@ -992,6 +1107,22 @@ export interface components {
             target_item_id?: null | components["schemas"]["ItemId"];
             target_workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
+        /** @description 알림. 지금 볼 수 있는 문서에 대한 것만 나온다. */
+        Notification: {
+            actor_name: string;
+            /** Format: date-time */
+            created_at: string;
+            document_id: components["schemas"]["DocumentId"];
+            document_reference?: string | null;
+            document_title: string;
+            /** Format: uuid */
+            id: string;
+            item_id?: null | components["schemas"]["ItemId"];
+            /** @description 현재는 `mention`. */
+            kind: string;
+            read: boolean;
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
+        };
         /** @description 인계 제안 요청. */
         OfferOwnership: {
             to_user: components["schemas"]["UserId"];
@@ -1026,6 +1157,44 @@ export interface components {
             role: components["schemas"]["Role"];
             workspace_id: components["schemas"]["WorkspaceId"];
             workspace_name: string;
+        };
+        /** @description @ 입력 후보. 이름이 같은 후보는 참조 번호와 워크스페이스로 구분한다 (D-18). */
+        ReferenceCandidate: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["ReferenceKind"];
+            /** @description 예: `DEV-3`, `WIKI-1`. 사람과 개인 노트는 없다. */
+            reference?: string | null;
+            /** @description 항목·문서 제목 또는 사람 이름. */
+            title: string;
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
+            workspace_name?: string | null;
+        };
+        /** @description 해석할 참조. */
+        ReferenceInput: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["ReferenceKind"];
+        };
+        /**
+         * @description 참조 대상 종류.
+         * @enum {string}
+         */
+        ReferenceKind: "item" | "document" | "user";
+        /** @description 해석 요청. */
+        ResolveReferences: {
+            refs: components["schemas"]["ReferenceInput"][];
+        };
+        /** @description 해석 결과. 볼 수 없거나 없는 대상은 `visible: false`이고 다른 값은 모두 비어 있다. */
+        ResolvedReference: {
+            /** Format: uuid */
+            id: string;
+            item_id?: null | components["schemas"]["ItemId"];
+            kind: components["schemas"]["ReferenceKind"];
+            reference?: string | null;
+            title?: string | null;
+            visible: boolean;
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
         /**
          * @description 워크스페이스 역할 (D-20).
@@ -1247,6 +1416,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConflictBody"];
+                };
+            };
+        };
+    };
+    document_backlinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backlink"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -1987,6 +2185,35 @@ export interface operations {
             };
         };
     };
+    item_backlinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backlink"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_item_documents: {
         parameters: {
             query?: never;
@@ -2155,6 +2382,62 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    notifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Notification"][];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    mark_read: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkRead"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: {
                 headers: {
@@ -2461,6 +2744,69 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    candidates: {
+        parameters: {
+            query?: {
+                /** @description 제목·이름 일부 또는 참조(`DEV-3`, 예전 키도 됨). */
+                q?: string;
+                /** @description 이 워크스페이스로 좁힌다. 없으면 내가 속한 모든 워크스페이스와 내 노트. */
+                workspace_id?: null | components["schemas"]["WorkspaceId"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferenceCandidate"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    resolve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveReferences"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedReference"][];
+                };
+            };
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
