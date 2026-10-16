@@ -29,6 +29,12 @@ wildcards = "deny"
 
 [advisories]
 yanked = "deny"
+ignore = [
+  # rsa 0.9.10 (openidconnect 4.0.1 경유). Marvin 공격은 RSA 개인키 연산(복호화·서명)의 타이밍 누출이다.
+  # fvoci는 OIDC 제공자의 공개키로 ID 토큰 서명을 검증만 하고 RSA 개인키를 갖지 않는다.
+  # 패치가 나오면 이 항목을 지운다. 기록: docs/development.md 9절.
+  { id = "RUSTSEC-2023-0071", reason = "public-key signature verification only; no RSA private key operations in fvoci" },
+]
 
 [sources]
 unknown-registry = "deny"

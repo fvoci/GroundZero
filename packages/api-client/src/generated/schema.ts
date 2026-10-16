@@ -4,6 +4,144 @@
  */
 
 export interface paths {
+    "/api/auth-info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["auth_info"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 문서 조회. 볼 수 없으면 404. */
+        get: operations["get"];
+        /** 문서 저장. 충돌 시 409 + 서버 최신본. */
+        put: operations["save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 현재 로그인한 사용자. */
+        get: operations["me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내가 속한 워크스페이스. */
+        get: operations["list"];
+        put?: never;
+        /** 워크스페이스 생성. 생성자는 관리자가 된다. */
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/wiki/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 위키 문서 목록. */
+        get: operations["list_wiki"];
+        put?: never;
+        /** 위키 문서 생성. */
+        post: operations["create_wiki"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 제공자 콜백: 코드 교환, ID 토큰 검증, 세션 발급. */
+        get: operations["callback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 로그인 시작: 제공자 인증 화면으로 보낸다. */
+        get: operations["login"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 로그아웃: 서버 세션 삭제 + 제공자 로그아웃 URL. */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -25,6 +163,70 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description 로그인 가능 여부. 웹이 로그인 버튼 표시에 쓴다. */
+        AuthInfo: {
+            oidc_enabled: boolean;
+        };
+        /** @description 저장 충돌 응답. `current`가 서버 최신본이다. */
+        ConflictBody: {
+            current: components["schemas"]["Document"];
+            error: string;
+        };
+        /** @description 문서 생성 요청. */
+        CreateDocument: {
+            /** Format: uuid */
+            request_id: string;
+            title: string;
+        };
+        /** @description 워크스페이스 생성 요청. */
+        CreateWorkspace: {
+            name: string;
+            /**
+             * Format: uuid
+             * @description 클라이언트가 만든 요청 ID. 재시도 중복 방지.
+             */
+            request_id: string;
+        };
+        /** @description 문서 전체. */
+        Document: {
+            /** @description Tiptap JSON. `type`이 `doc`인 객체. */
+            body: Record<string, never>;
+            /** @description 현재 사용자가 고칠 수 있는지. */
+            can_edit: boolean;
+            id: components["schemas"]["DocumentId"];
+            reference: string;
+            /** Format: int32 */
+            revision: number;
+            /** Format: int32 */
+            schema_version: number;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /**
+         * Format: uuid
+         * @description 문서 내부 ID. CRDT 도입 후에도 유지된다 (D-62).
+         */
+        DocumentId: string;
+        /** @description 문서 목록 항목. */
+        DocumentSummary: {
+            id: components["schemas"]["DocumentId"];
+            /** @description 사람이 보는 참조. 예: `WIKI-3`. */
+            reference: string;
+            /** Format: int32 */
+            revision: number;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description 오류 응답 본문. */
+        ErrorBody: {
+            /** @description 기계가 읽는 오류 코드. */
+            error: string;
+            /** @description 사람이 읽는 설명. 내부 세부는 담지 않는다. */
+            message: string;
+        };
         /** @description 서비스 상태 응답. */
         Health: {
             /** @description 데이터베이스 왕복 결과. `ok` 또는 `error`. */
@@ -32,6 +234,50 @@ export interface components {
             /** @description 전체 상태. `ok` 또는 `degraded`. */
             status: string;
         };
+        /** @description 로그아웃 결과. 클라이언트는 `redirect_to`로 이동해 제공자 세션도 끝낸다. */
+        LogoutResponse: {
+            redirect_to: string;
+        };
+        /** @description 현재 사용자 정보. */
+        Me: {
+            display_name: string;
+            email?: string | null;
+            id: components["schemas"]["UserId"];
+        };
+        /**
+         * @description 워크스페이스 역할 (D-20).
+         * @enum {string}
+         */
+        Role: "admin" | "writer" | "reader";
+        /** @description 문서 저장 요청. */
+        SaveDocument: {
+            /**
+             * Format: int32
+             * @description 편집을 시작한 리비전.
+             */
+            base_revision: number;
+            body: Record<string, never>;
+            /** Format: uuid */
+            request_id: string;
+            title: string;
+        };
+        /**
+         * Format: uuid
+         * @description 사용자 내부 ID.
+         */
+        UserId: string;
+        /** @description 워크스페이스 요약. */
+        Workspace: {
+            id: components["schemas"]["WorkspaceId"];
+            name: string;
+            /** @description 현재 사용자의 역할. */
+            role: components["schemas"]["Role"];
+        };
+        /**
+         * Format: uuid
+         * @description 워크스페이스 내부 ID.
+         */
+        WorkspaceId: string;
     };
     responses: never;
     parameters: never;
@@ -41,6 +287,354 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    auth_info: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthInfo"];
+                };
+            };
+        };
+    };
+    get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveDocument"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictBody"];
+                };
+            };
+        };
+    };
+    me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workspace"][];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkspace"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workspace"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_wiki: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentSummary"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_wiki: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDocument"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    callback: {
+        parameters: {
+            query?: {
+                code?: string | null;
+                state?: string | null;
+                error?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 로그인 완료 후 원래 경로로 이동 */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 상태 불일치·만료 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    login: {
+        parameters: {
+            query?: {
+                /** @description 로그인 후 돌아갈 같은 원점 경로. 기본 `/`. */
+                return_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 제공자 로그인 화면으로 이동 */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 세션 삭제됨 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogoutResponse"];
+                };
+            };
+        };
+    };
     healthz: {
         parameters: {
             query?: never;

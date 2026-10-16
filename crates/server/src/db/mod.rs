@@ -1,24 +1,106 @@
-//! 연결 풀과 트랜잭션 경계. RLS 문맥 설정은 첫 사용자 흐름에서 추가한다.
+//! 연결 풀과 트랜잭션 경계.
+//!
+//! 요청 처리 코드는 원시 풀을 받지 않는다. 사용자 문맥이 필요한 작업은 [`Db::begin_as`]로
+//! 트랜잭션을 열어 `app.user_id`를 설정하고, 그 안에서만 RLS가 적용된 테이블을 읽고 쓴다.
+//! 로그인·세션 조회처럼 사용자 문맥 이전의 작업은 [`Db::begin_anonymous`]를 쓴다.
+
+pub mod admin;
 
 use std::time::Duration;
 
-use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::{PgConnection, PgPool, Postgres, Transaction};
 
 use crate::config::DatabaseUrl;
 use crate::error::AppError;
+use crate::ids::UserId;
 
-/// 연결 풀을 만든다. 실제 연결은 첫 사용 시점에 지연된다.
-pub fn connect_lazy(url: &DatabaseUrl) -> Result<PgPool, AppError> {
-    let pool = PgPoolOptions::new()
-        .max_connections(8)
-        .acquire_timeout(Duration::from_secs(5))
-        .connect_lazy(url.as_str())?;
-    Ok(pool)
+/// 앱 역할 연결 풀.
+#[derive(Debug, Clone)]
+pub struct Db {
+    pool: PgPool,
 }
 
-/// 왕복 쿼리로 연결 상태를 확인한다.
-pub async fn ping(pool: &PgPool) -> Result<(), AppError> {
-    sqlx::query("SELECT 1").execute(pool).await?;
-    Ok(())
+/// 사용자 문맥이 설정된 트랜잭션. `commit`하지 않고 버리면 롤백된다.
+#[derive(Debug)]
+pub struct UserTx {
+    tx: Transaction<'static, Postgres>,
+    user: UserId,
+}
+
+impl UserTx {
+    pub fn conn(&mut self) -> &mut PgConnection {
+        &mut self.tx
+    }
+
+    pub fn user(&self) -> UserId {
+        self.user
+    }
+
+    pub async fn commit(self) -> Result<(), AppError> {
+        self.tx.commit().await?;
+        Ok(())
+    }
+}
+
+/// 사용자 문맥 없는 트랜잭션. 로그인 상태·세션 테이블과 정의자 함수만 다룬다.
+#[derive(Debug)]
+pub struct AnonTx {
+    tx: Transaction<'static, Postgres>,
+}
+
+impl AnonTx {
+    pub fn conn(&mut self) -> &mut PgConnection {
+        &mut self.tx
+    }
+
+    pub async fn commit(self) -> Result<(), AppError> {
+        self.tx.commit().await?;
+        Ok(())
+    }
+}
+
+impl Db {
+    /// 연결 풀을 만든다. 실제 연결은 첫 사용 시점에 지연된다.
+    pub fn connect_lazy(url: &DatabaseUrl) -> Result<Self, AppError> {
+        let pool = PgPoolOptions::new()
+            .max_connections(16)
+            .acquire_timeout(Duration::from_secs(5))
+            .connect_lazy(url.expose())?;
+        Ok(Self { pool })
+    }
+
+    /// 왕복 쿼리로 연결 상태를 확인한다.
+    pub async fn ping(&self) -> Result<(), AppError> {
+        sqlx::query("SELECT 1").execute(&self.pool).await?;
+        Ok(())
+    }
+
+    /// 사용자 문맥 트랜잭션을 연다. `app.user_id`는 트랜잭션 범위(`is_local = true`)로만 설정된다.
+    pub async fn begin_as(&self, user: UserId) -> Result<UserTx, AppError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("SELECT set_config('app.user_id', $1, true)")
+            .bind(user.0.to_string())
+            .execute(&mut *tx)
+            .await?;
+        Ok(UserTx { tx, user })
+    }
+
+    /// 사용자 문맥 없는 트랜잭션을 연다.
+    pub async fn begin_anonymous(&self) -> Result<AnonTx, AppError> {
+        Ok(AnonTx {
+            tx: self.pool.begin().await?,
+        })
+    }
+
+    pub async fn close(&self) {
+        self.pool.close().await;
+    }
+}
+
+/// 유일 제약 위반(23505)인지.
+pub fn is_unique_violation(err: &sqlx::Error) -> bool {
+    err.as_database_error()
+        .and_then(|e| e.code())
+        .is_some_and(|c| c == "23505")
 }

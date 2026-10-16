@@ -1,0 +1,159 @@
+//! 통합 테스트 공통. `DATABASE_URL`(앱 역할)이 없으면 실패한다. `cargo xtask test`가 주입하고
+//! 역할 준비(`db bootstrap`)와 마이그레이션(`db migrate`)도 먼저 실행한다.
+#![allow(dead_code, reason = "각 테스트 바이너리가 헬퍼의 일부만 쓴다")]
+
+use axum::Router;
+use axum::body::Body;
+use axum::http::{Method, Request, StatusCode, header};
+use fvoci_server::app::build_state;
+use fvoci_server::config::Config;
+use fvoci_server::features::accounts::{SESSION_COOKIE, VerifiedIdentity, start_session};
+use fvoci_server::http::{AppState, router};
+use fvoci_server::ids::UserId;
+use http_body_util::BodyExt;
+use serde_json::Value;
+use tower::ServiceExt;
+
+/// 테스트 서버의 공개 원점. Origin 헤더 검사에 쓴다.
+pub const PUBLIC_URL: &str = "http://127.0.0.1:8080";
+
+/// 환경 변수 구성에 테스트 값을 덮어쓴다.
+pub fn config_with(overrides: &[(&str, &str)]) -> Config {
+    let overrides: Vec<(String, String)> = overrides
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .collect();
+    Config::from_lookup(move |k| {
+        if let Some((_, v)) = overrides.iter().find(|(key, _)| key == k) {
+            return Some(v.clone());
+        }
+        if k == "FVOCI_PUBLIC_URL" {
+            return Some(PUBLIC_URL.to_owned());
+        }
+        if k.starts_with("FVOCI_OIDC_") {
+            return None;
+        }
+        std::env::var(k).ok()
+    })
+    .unwrap() // DATABASE_URL must be set; run via `cargo xtask test`
+}
+
+pub fn state() -> AppState {
+    build_state(config_with(&[])).unwrap()
+}
+
+pub fn app(state: &AppState) -> Router {
+    router(state.clone())
+}
+
+/// 로그인한 사용자. OIDC 콜백과 같은 `start_session` 경로로 세션을 만든다.
+#[derive(Debug, Clone)]
+pub struct TestUser {
+    pub id: UserId,
+    pub cookie: String,
+}
+
+pub async fn login(state: &AppState, label: &str) -> TestUser {
+    let subject = format!("{label}-{}", uuid::Uuid::now_v7());
+    let identity = VerifiedIdentity {
+        issuer: "https://test-issuer.invalid".to_owned(),
+        subject,
+        email: None,
+        display_name: label.to_owned(),
+        id_token: "test-id-token".to_owned(),
+    };
+    let (id, token) = start_session(&state.db, state.config.session_ttl, &identity)
+        .await
+        .unwrap();
+    TestUser {
+        id,
+        cookie: format!("{SESSION_COOKIE}={token}"),
+    }
+}
+
+pub struct Reply {
+    pub status: StatusCode,
+    pub json: Value,
+}
+
+pub async fn send(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    user: Option<&TestUser>,
+    body: Option<Value>,
+) -> Reply {
+    send_with_origin(app, method, uri, user, body, Some(PUBLIC_URL)).await
+}
+
+pub async fn send_with_origin(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    user: Option<&TestUser>,
+    body: Option<Value>,
+    origin: Option<&str>,
+) -> Reply {
+    let mut req = Request::builder().method(method).uri(uri);
+    if let Some(u) = user {
+        req = req.header(header::COOKIE, &u.cookie);
+    }
+    if let Some(o) = origin {
+        req = req.header(header::ORIGIN, o);
+    }
+    let req = match body {
+        Some(b) => req
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(serde_json::to_vec(&b).unwrap()))
+            .unwrap(),
+        None => req.body(Body::empty()).unwrap(),
+    };
+    let res = app.clone().oneshot(req).await.unwrap();
+    let status = res.status();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let json = if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+    };
+    Reply { status, json }
+}
+
+pub fn new_request_id() -> String {
+    uuid::Uuid::now_v7().to_string()
+}
+
+/// 워크스페이스를 만들고 id를 돌려준다.
+pub async fn create_workspace(app: &Router, user: &TestUser, name: &str) -> String {
+    let r = send(
+        app,
+        Method::POST,
+        "/api/workspaces",
+        Some(user),
+        Some(serde_json::json!({ "request_id": new_request_id(), "name": name })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    r.json["id"].as_str().unwrap().to_owned()
+}
+
+/// 위키 문서를 만들고 응답 JSON을 돌려준다.
+pub async fn create_doc(app: &Router, user: &TestUser, ws: &str, title: &str) -> Value {
+    let r = send(
+        app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/wiki/documents"),
+        Some(user),
+        Some(serde_json::json!({ "request_id": new_request_id(), "title": title })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    r.json
+}
+
+pub fn doc_body(text: &str) -> Value {
+    serde_json::json!({
+        "type": "doc",
+        "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": text }] }]
+    })
+}

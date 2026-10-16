@@ -1,21 +1,41 @@
-//! 구성 읽기, 풀 생성, 서버 시작과 정상 종료를 연결한다.
+//! 구성 읽기, 상태 생성, 서버 시작과 정상 종료를 연결한다.
+
+use std::sync::Arc;
 
 use tokio::net::TcpListener;
 
 use crate::config::Config;
+use crate::db::Db;
 use crate::error::AppError;
+use crate::features::accounts::OidcProvider;
 use crate::http::{self, AppState};
+
+/// 구성으로 공유 상태를 만든다. 테스트도 같은 경로를 쓴다.
+pub fn build_state(config: Config) -> Result<AppState, AppError> {
+    let db = Db::connect_lazy(&config.database_url)?;
+    let oidc = match &config.oidc {
+        Some(oidc) => Some(Arc::new(OidcProvider::new(oidc, &config.public_url)?)),
+        None => None,
+    };
+    Ok(AppState {
+        db,
+        config: Arc::new(config),
+        oidc,
+    })
+}
 
 /// 구성대로 서버를 띄우고 종료 신호까지 실행한다.
 pub async fn run(config: Config) -> Result<(), AppError> {
-    let pool = crate::db::connect_lazy(&config.database_url)?;
-    let app = http::router(AppState { pool: pool.clone() });
-    let listener = TcpListener::bind(config.bind).await?;
-    tracing::info!(addr = %config.bind, "listening");
+    let bind = config.bind;
+    let state = build_state(config)?;
+    let db = state.db.clone();
+    let app = http::router(state);
+    let listener = TcpListener::bind(bind).await?;
+    tracing::info!(addr = %bind, "listening");
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
-    pool.close().await;
+    db.close().await;
     tracing::info!("shutdown complete");
     Ok(())
 }

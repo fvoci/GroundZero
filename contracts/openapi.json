@@ -9,6 +9,485 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/auth-info": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "auth_info",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{document_id}": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "문서 조회. 볼 수 없으면 404.",
+        "operationId": "get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "문서 저장. 충돌 시 409 + 서버 최신본.",
+        "operationId": "save",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "현재 로그인한 사용자.",
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces": {
+      "get": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "내가 속한 워크스페이스.",
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Workspace"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "워크스페이스 생성. 생성자는 관리자가 된다.",
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkspace"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workspace"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{workspace_id}/wiki/documents": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "위키 문서 목록.",
+        "operationId": "list_wiki",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentSummary"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "위키 문서 생성.",
+        "operationId": "create_wiki",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "제공자 콜백: 코드 교환, ID 토큰 검증, 세션 발급.",
+        "operationId": "callback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "로그인 완료 후 원래 경로로 이동"
+          },
+          "400": {
+            "description": "상태 불일치·만료",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "로그인 시작: 제공자 인증 화면으로 보낸다.",
+        "operationId": "login",
+        "parameters": [
+          {
+            "name": "return_to",
+            "in": "query",
+            "description": "로그인 후 돌아갈 같은 원점 경로. 기본 `/`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "제공자 로그인 화면으로 이동"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "로그아웃: 서버 세션 삭제 + 제공자 로그아웃 URL.",
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": "세션 삭제됨",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "tags": [
@@ -43,6 +522,172 @@
   },
   "components": {
     "schemas": {
+      "AuthInfo": {
+        "type": "object",
+        "description": "로그인 가능 여부. 웹이 로그인 버튼 표시에 쓴다.",
+        "required": [
+          "oidc_enabled"
+        ],
+        "properties": {
+          "oidc_enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ConflictBody": {
+        "type": "object",
+        "description": "저장 충돌 응답. `current`가 서버 최신본이다.",
+        "required": [
+          "error",
+          "current"
+        ],
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/Document"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateDocument": {
+        "type": "object",
+        "description": "문서 생성 요청.",
+        "required": [
+          "request_id",
+          "title"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateWorkspace": {
+        "type": "object",
+        "description": "워크스페이스 생성 요청.",
+        "required": [
+          "request_id",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "클라이언트가 만든 요청 ID. 재시도 중복 방지."
+          }
+        }
+      },
+      "Document": {
+        "type": "object",
+        "description": "문서 전체.",
+        "required": [
+          "id",
+          "workspace_id",
+          "reference",
+          "title",
+          "body",
+          "schema_version",
+          "revision",
+          "updated_at",
+          "can_edit"
+        ],
+        "properties": {
+          "body": {
+            "type": "object",
+            "description": "Tiptap JSON. `type`이 `doc`인 객체."
+          },
+          "can_edit": {
+            "type": "boolean",
+            "description": "현재 사용자가 고칠 수 있는지."
+          },
+          "id": {
+            "$ref": "#/components/schemas/DocumentId"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "DocumentId": {
+        "type": "string",
+        "format": "uuid",
+        "description": "문서 내부 ID. CRDT 도입 후에도 유지된다 (D-62)."
+      },
+      "DocumentSummary": {
+        "type": "object",
+        "description": "문서 목록 항목.",
+        "required": [
+          "id",
+          "reference",
+          "title",
+          "revision",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DocumentId"
+          },
+          "reference": {
+            "type": "string",
+            "description": "사람이 보는 참조. 예: `WIKI-3`."
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "description": "오류 응답 본문.",
+        "required": [
+          "error",
+          "message"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "기계가 읽는 오류 코드."
+          },
+          "message": {
+            "type": "string",
+            "description": "사람이 읽는 설명. 내부 세부는 담지 않는다."
+          }
+        }
+      },
       "Health": {
         "type": "object",
         "description": "서비스 상태 응답.",
@@ -60,6 +705,107 @@
             "description": "전체 상태. `ok` 또는 `degraded`."
           }
         }
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "description": "로그아웃 결과. 클라이언트는 `redirect_to`로 이동해 제공자 세션도 끝낸다.",
+        "required": [
+          "redirect_to"
+        ],
+        "properties": {
+          "redirect_to": {
+            "type": "string"
+          }
+        }
+      },
+      "Me": {
+        "type": "object",
+        "description": "현재 사용자 정보.",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "Role": {
+        "type": "string",
+        "description": "워크스페이스 역할 (D-20).",
+        "enum": [
+          "admin",
+          "writer",
+          "reader"
+        ]
+      },
+      "SaveDocument": {
+        "type": "object",
+        "description": "문서 저장 요청.",
+        "required": [
+          "request_id",
+          "base_revision",
+          "title",
+          "body"
+        ],
+        "properties": {
+          "base_revision": {
+            "type": "integer",
+            "format": "int32",
+            "description": "편집을 시작한 리비전."
+          },
+          "body": {
+            "type": "object"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "UserId": {
+        "type": "string",
+        "format": "uuid",
+        "description": "사용자 내부 ID."
+      },
+      "Workspace": {
+        "type": "object",
+        "description": "워크스페이스 요약.",
+        "required": [
+          "id",
+          "name",
+          "role"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role",
+            "description": "현재 사용자의 역할."
+          }
+        }
+      },
+      "WorkspaceId": {
+        "type": "string",
+        "format": "uuid",
+        "description": "워크스페이스 내부 ID."
       }
     }
   },
@@ -67,6 +813,18 @@
     {
       "name": "system",
       "description": "서비스 상태"
+    },
+    {
+      "name": "auth",
+      "description": "OIDC 로그인과 세션"
+    },
+    {
+      "name": "workspaces",
+      "description": "워크스페이스"
+    },
+    {
+      "name": "documents",
+      "description": "위키 문서"
     }
   ]
 }

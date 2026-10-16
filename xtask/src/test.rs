@@ -1,15 +1,28 @@
-//! 통합 테스트. 격리된 Compose 프로젝트를 띄우고 `DATABASE_URL`을 주입해 전체 테스트를 돌린다.
+//! 통합 테스트. 격리된 Compose 프로젝트를 띄우고 역할·마이그레이션을 준비한 뒤 앱 역할로 테스트한다.
+//!
+//! OIDC 테스트(`oidc_` 접두어)는 실제 Keycloak이 필요하다. `--oidc` 없이는 `--skip oidc_`로 제외하고
+//! "NOT RUN"을 출력한다. 제외는 명령 선택이며 통과로 간주하지 않는다.
 
 use std::path::Path;
 
-use anyhow::Result;
-use xshell::cmd;
+use anyhow::{Context, Result};
+use xshell::{Shell, cmd};
 
-use crate::compose::{self, Compose, Env};
+use crate::compose::{self, Compose, DbUrls, Env};
+
+fn run_tests(sh: &Shell, oidc: bool) -> Result<()> {
+    if oidc {
+        cmd!(sh, "cargo test --workspace --locked").run()?;
+    } else {
+        cmd!(sh, "cargo test --workspace --locked -- --skip oidc_").run()?;
+        println!("NOT RUN: OIDC integration tests (oidc_*). Use `cargo xtask test --oidc`.");
+    }
+    Ok(())
+}
 
 pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Result<()> {
     if external_services {
-        return run_external(root);
+        return run_external(root, oidc);
     }
     let mut compose = Compose::new(root, Env::Test);
     if oidc {
@@ -21,19 +34,21 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
 
     let result = (|| -> Result<()> {
         let pg_port = compose.host_port(&sh, "postgres", 5432)?;
-        let database_url = compose::test_database_url(pg_port);
         println!("==> postgres on 127.0.0.1:{pg_port}");
-        let _env = sh.push_env("DATABASE_URL", &database_url);
-        let _env2 = oidc.then(|| {
-            let kc = compose.host_port(&sh, "keycloak", 8080).unwrap_or(0);
+        let urls = DbUrls::local(pg_port);
+        compose::prepare_database(&sh, &urls)?;
+        let _env = sh.push_env("DATABASE_URL", &urls.app);
+        let _env2 = if oidc {
+            let kc = compose.host_port(&sh, "keycloak", 8080)?;
             println!("==> keycloak on 127.0.0.1:{kc}");
-            sh.push_env(
+            Some(sh.push_env(
                 "FVOCI_TEST_OIDC_ISSUER",
-                format!("http://127.0.0.1:{kc}/realms/fvoci-test"),
-            )
-        });
-        cmd!(sh, "cargo test --workspace --locked").run()?;
-        Ok(())
+                format!("http://127.0.0.1:{kc}/realms/{}", compose::OIDC_REALM),
+            ))
+        } else {
+            None
+        };
+        run_tests(&sh, oidc)
     })();
 
     if keep {
@@ -48,17 +63,25 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
     result
 }
 
-/// 외부에서 준비된 서비스로 테스트한다. 필요한 환경 변수가 없으면 건너뛰지 않고 실패한다.
-fn run_external(root: &Path) -> Result<()> {
-    let sh = xshell::Shell::new()?;
+/// 외부에서 준비된 서비스로 테스트한다(CI 컨테이너 job). 필요한 환경 변수가 없으면 실패한다.
+/// `DATABASE_ADMIN_URL`의 호스트로 세 역할 URL을 만든다.
+fn run_external(root: &Path, oidc: bool) -> Result<()> {
+    let sh = Shell::new()?;
     sh.change_dir(root);
-    if std::env::var("DATABASE_URL")
-        .map(|v| v.trim().is_empty())
-        .unwrap_or(true)
+    let host_port = std::env::var("FVOCI_TEST_PG_HOST_PORT")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .context("--external-services requires FVOCI_TEST_PG_HOST_PORT (e.g. postgres:5432)")?;
+    if oidc
+        && std::env::var("FVOCI_TEST_OIDC_ISSUER")
+            .map(|v| v.trim().is_empty())
+            .unwrap_or(true)
     {
-        anyhow::bail!("--external-services requires DATABASE_URL to be set");
+        anyhow::bail!("--oidc with --external-services requires FVOCI_TEST_OIDC_ISSUER");
     }
-    println!("==> using external services from environment");
-    cmd!(sh, "cargo test --workspace --locked").run()?;
-    Ok(())
+    println!("==> using external services at {host_port}");
+    let urls = DbUrls::at(&host_port);
+    compose::prepare_database(&sh, &urls)?;
+    let _env = sh.push_env("DATABASE_URL", &urls.app);
+    run_tests(&sh, oidc)
 }

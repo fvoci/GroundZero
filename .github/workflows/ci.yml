@@ -55,7 +55,8 @@ jobs:
           MEILI_MASTER_KEY: fvoci-test-meili-master-key-16chars
           MEILI_NO_ANALYTICS: 'true'
     env:
-      DATABASE_URL: postgres://fvoci:fvoci-test-password@postgres:5432/fvoci
+      # 관리자(fvoci)는 job 서비스의 POSTGRES_USER. 마이그레이션·앱 역할은 xtask가 `db bootstrap`으로 만든다.
+      FVOCI_TEST_PG_HOST_PORT: postgres:5432
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2

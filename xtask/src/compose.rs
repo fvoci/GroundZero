@@ -139,7 +139,55 @@ pub fn down_all(root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// 테스트 DB 접속 문자열. 자격 증명은 compose 파일의 테스트 전용 값과 같다.
-pub fn test_database_url(port: u16) -> String {
-    format!("postgres://fvoci:fvoci-test-password@127.0.0.1:{port}/fvoci")
+/// 개발·테스트용 DB 접속 정보. 모두 테스트 전용 값이며 운영에 쓰지 않는다.
+/// 관리자(`fvoci`)는 compose 파일의 `POSTGRES_USER`, 나머지 두 역할은 `db bootstrap`이 만든다.
+#[derive(Debug, Clone)]
+pub struct DbUrls {
+    pub admin: String,
+    pub migration: String,
+    pub app: String,
 }
+
+pub const TEST_MIGRATOR_PASSWORD: &str = "fvoci-test-migrator-password";
+pub const TEST_APP_PASSWORD: &str = "fvoci-test-app-password";
+
+impl DbUrls {
+    pub fn local(port: u16) -> Self {
+        Self::at(&format!("127.0.0.1:{port}"))
+    }
+
+    pub fn at(host_port: &str) -> Self {
+        Self {
+            admin: format!("postgres://fvoci:fvoci-test-password@{host_port}/fvoci"),
+            migration: format!(
+                "postgres://fvoci_migrator:{TEST_MIGRATOR_PASSWORD}@{host_port}/fvoci"
+            ),
+            app: format!("postgres://fvoci_app:{TEST_APP_PASSWORD}@{host_port}/fvoci"),
+        }
+    }
+}
+
+/// 운영자 절차와 같은 경로(`db bootstrap` → `db migrate`)로 역할과 스키마를 준비한다.
+pub fn prepare_database(sh: &Shell, urls: &DbUrls) -> Result<()> {
+    let _a = sh.push_env("DATABASE_ADMIN_URL", &urls.admin);
+    let _m = sh.push_env("DATABASE_MIGRATION_URL", &urls.migration);
+    let _mp = sh.push_env("FVOCI_DB_MIGRATOR_PASSWORD", TEST_MIGRATOR_PASSWORD);
+    let _ap = sh.push_env("FVOCI_DB_APP_PASSWORD", TEST_APP_PASSWORD);
+    println!("==> db bootstrap / db migrate");
+    cmd!(
+        sh,
+        "cargo run --quiet --package fvoci-server --locked -- db bootstrap"
+    )
+    .run()?;
+    cmd!(
+        sh,
+        "cargo run --quiet --package fvoci-server --locked -- db migrate"
+    )
+    .run()?;
+    Ok(())
+}
+
+/// Keycloak 개발·테스트 realm의 클라이언트 설정. `deploy/keycloak/realm-test.json`과 같다.
+pub const OIDC_CLIENT_ID: &str = "fvoci-web";
+pub const OIDC_CLIENT_SECRET: &str = "fvoci-test-client-secret";
+pub const OIDC_REALM: &str = "fvoci-test";

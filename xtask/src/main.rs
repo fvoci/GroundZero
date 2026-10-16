@@ -37,7 +37,11 @@ enum Command {
         external_services: bool,
     },
     /// 개발용 Compose를 띄우고 서버를 실행한다. 종료는 Ctrl-C.
-    Dev,
+    Dev {
+        /// 개발용 Keycloak을 띄우고 OIDC 로그인을 켠다.
+        #[arg(long)]
+        oidc: bool,
+    },
     /// 이 체크아웃이 만든 Compose 자원(dev·test)을 정리한다. 다른 체크아웃은 건드리지 않는다.
     Down,
     /// `contracts/openapi.json`을 서버 정의에서 다시 생성한다. `--check`는 최신 여부만 본다.
@@ -68,7 +72,7 @@ fn main() -> Result<()> {
             oidc,
             external_services,
         } => test::run(&root, keep, oidc, external_services),
-        Command::Dev => dev::run(&root),
+        Command::Dev { oidc } => dev::run(&root, oidc),
         Command::Down => compose::down_all(&root),
         Command::Openapi { check } => openapi::run(&root, check),
         Command::Licenses => licenses::run(&root),
