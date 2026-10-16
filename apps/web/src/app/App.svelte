@@ -243,6 +243,7 @@
             <ItemScreen
               workspace={currentWorkspace}
               itemId={route.itemId}
+              taskId={route.taskId}
               workspaces={signedIn.workspaces}
             />
           {:else if route.name === 'item-document'}

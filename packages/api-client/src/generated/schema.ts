@@ -1623,17 +1623,18 @@ export interface components {
         };
         /** @description 업무 고치기. `base_version`이 지났으면 409와 서버 최신본. */
         UpdateTask: {
-            assignee_ids?: components["schemas"]["UserId"][];
+            /** @description 담당자 전체 목록(빠지면 지우는 것이므로 생략할 수 없다). */
+            assignee_ids: components["schemas"]["UserId"][];
             /** Format: int32 */
             base_version: number;
-            description?: string;
+            description: string;
             due_date?: string | null;
             /** Format: int32 */
             estimate_minutes?: number | null;
             priority: components["schemas"]["TaskPriority"];
             start_date?: string | null;
             status: components["schemas"]["TaskStatus"];
-            tags?: string[];
+            tags: string[];
             title: string;
         };
         /**

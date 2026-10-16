@@ -12,10 +12,17 @@ import { api } from '$lib/api/client';
 
 import { referenceLabel, resolveReference } from './resolver';
 
-const KIND_LABEL: Record<ReferenceKind, string> = { item: '항목', document: '문서', user: '사람' };
+const KIND_LABEL: Record<ReferenceKind, string> = {
+  item: '항목',
+  document: '문서',
+  task: '업무',
+  user: '사람',
+};
 
 function asKind(value: unknown): ReferenceKind | undefined {
-  return value === 'item' || value === 'document' || value === 'user' ? value : undefined;
+  return value === 'item' || value === 'document' || value === 'task' || value === 'user'
+    ? value
+    : undefined;
 }
 
 export interface ReferenceOptions {

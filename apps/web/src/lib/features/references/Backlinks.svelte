@@ -8,7 +8,7 @@
 
   interface Props {
     /** 대상 종류와 id. */
-    kind: 'document' | 'item';
+    kind: 'document' | 'item' | 'task';
     id: string;
     workspaces: Workspace[];
   }
@@ -19,7 +19,12 @@
   let failed = $state(false);
 
   $effect(() => {
-    const run = kind === 'document' ? api.documentBacklinks : api.itemBacklinks;
+    const run =
+      kind === 'document'
+        ? api.documentBacklinks
+        : kind === 'item'
+          ? api.itemBacklinks
+          : api.taskBacklinks;
     const target = id;
     let cancelled = false;
     failed = false;

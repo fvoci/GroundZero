@@ -170,16 +170,14 @@ pub struct CreateTask {
 pub struct UpdateTask {
     pub base_version: i32,
     pub title: String,
-    #[serde(default)]
     pub description: String,
     pub status: TaskStatus,
     pub priority: TaskPriority,
     pub start_date: Option<String>,
     pub due_date: Option<String>,
     pub estimate_minutes: Option<i32>,
-    #[serde(default)]
     pub tags: Vec<String>,
-    #[serde(default)]
+    /// 담당자 전체 목록(빠지면 지우는 것이므로 생략할 수 없다).
     pub assignee_ids: Vec<UserId>,
 }
 
@@ -308,14 +306,14 @@ struct TaskRow {
 const TASK_SELECT: &str = "SELECT t.id, t.item_id, i.module_id, t.workspace_id, t.parent_id,
         app_task_reference(t.id) AS reference, t.title, t.description, t.status, t.priority,
         t.start_date, t.due_date, t.estimate_minutes, t.tags,
-        (SELECT count(*) FROM checklist_items c WHERE c.task_id = t.id AND c.checked) AS checklist_done,
-        (SELECT count(*) FROM checklist_items c WHERE c.task_id = t.id) AS checklist_total,
+        c.done AS checklist_done, c.total AS checklist_total,
         t.version, t.completed_at, app_task_access(t.id) AS access, t.updated_at
- FROM tasks t JOIN items i ON i.id = t.item_id LEFT JOIN tasks p ON p.id = t.parent_id";
+ FROM tasks t JOIN items i ON i.id = t.item_id
+ CROSS JOIN LATERAL app_task_checklist_counts(t.id) c";
 
-/// 업무 순서: 상위 업무 뒤에 그 하위 업무가 오도록, 같은 단계에서는 칸반 위치·번호 순.
-const TASK_ORDER: &str = "coalesce(p.position, t.position), coalesce(p.number, t.number), \
-     t.parent_id IS NOT NULL, t.position, t.number";
+/// 업무 순서: 칸반 열(상태) 안의 위치·번호 순. 목록 보기의 상위·하위 묶음은 화면에서 만든다.
+const TASK_ORDER: &str =
+    "array_position(ARRAY['todo', 'in_progress', 'done'], t.status), t.position, t.number";
 
 async fn assignees_of(tx: &mut UserTx, ids: &[Uuid]) -> Result<Vec<(Uuid, Assignee)>, AppError> {
     // 담당자 이름은 같은 항목을 볼 수 있는 사람이므로 워크스페이스를 함께 쓰는 사람이다(users RLS).

@@ -1,6 +1,6 @@
 // 편집기에 넘기는 참조 문맥: 후보를 찾을 워크스페이스와 대상 경로 계산.
 import type { ResolvedReferenceView } from '$lib/api/client';
-import { itemPath, pathFor } from '$lib/router.svelte';
+import { itemPath, itemTaskPath, pathFor } from '$lib/router.svelte';
 
 import type { DescribeWorkspace } from './reference-extension';
 
@@ -22,6 +22,11 @@ export function referenceHref(
   if (target.kind === 'item') {
     return target.workspace_id !== null && memberOf(target.workspace_id)
       ? itemPath(target.workspace_id, target.id)
+      : null;
+  }
+  if (target.kind === 'task') {
+    return target.workspace_id !== null && target.item_id !== null && memberOf(target.workspace_id)
+      ? itemTaskPath(target.workspace_id, target.item_id, target.id)
       : null;
   }
   if (target.kind === 'document') {

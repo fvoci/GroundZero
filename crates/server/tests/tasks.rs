@@ -206,7 +206,7 @@ async fn tasks_share_the_module_sequence_and_follow_item_access() {
         update(&app, &admin, &archived, json!({ "title": "보관 중" }))
             .await
             .0,
-        StatusCode::FORBIDDEN
+        StatusCode::CONFLICT
     );
 }
 
@@ -525,4 +525,57 @@ async fn tasks_are_reference_targets_and_concurrent_parent_swaps_do_not_cycle() 
             "{ra} {rb}"
         );
     }
+}
+
+#[tokio::test]
+async fn demotion_drops_assignments_on_items_the_member_can_no_longer_see() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "강등").await;
+    let (deputy, _) = add_member(&app, &state, &admin, &ws, "deputy", "admin").await;
+    // 비공개 항목: 관리자만 본다.
+    let item = module_item(&app, &admin, &ws, "SEC").await;
+    let t = task(&app, &admin, &item, "점검").await;
+    let (status, assigned) = update(
+        &app,
+        &admin,
+        &t,
+        json!({ "assignee_ids": [deputy.id.0.to_string()] }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{assigned:?}");
+
+    // 기존 담당자는 그대로 두고 다른 필드만 고쳐도 된다(새로 넣는 담당자만 확인한다).
+    let (status, renamed) = update(&app, &admin, &assigned, json!({ "title": "정기 점검" })).await;
+    assert_eq!(status, StatusCode::OK, "{renamed:?}");
+    assert_eq!(renamed["assignees"].as_array().unwrap().len(), 1);
+
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/members/{}", deputy.id.0),
+        Some(&admin),
+        Some(json!({ "role": "writer" })),
+    )
+    .await;
+    assert!(r.status.is_success(), "{:?}", r.json);
+    let (_, after) = get(
+        &app,
+        &admin,
+        &format!("/api/tasks/{}", t["id"].as_str().unwrap()),
+    )
+    .await;
+    assert_eq!(after["assignees"], json!([]));
+
+    let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    let reasons: Vec<String> = sqlx::query_scalar(
+        "SELECT detail->>'reason' FROM audit_log
+         WHERE target_id = $1::uuid AND target_type = 'task' AND action = 'unassign'",
+    )
+    .bind(t["id"].as_str().unwrap())
+    .fetch_all(tx.conn())
+    .await
+    .unwrap();
+    assert_eq!(reasons, vec!["role_change".to_owned()]);
 }

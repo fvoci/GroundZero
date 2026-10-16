@@ -423,10 +423,11 @@ export function parseItem(value: Json): ItemView {
 
 // --- @ 참조 -------------------------------------------------------------
 
-export type ReferenceKind = 'item' | 'document' | 'user';
+export type ReferenceKind = 'item' | 'document' | 'task' | 'user';
 
 function referenceKind(value: string): ReferenceKind {
-  if (value === 'item' || value === 'document' || value === 'user') return value;
+  if (value === 'item' || value === 'document' || value === 'task' || value === 'user')
+    return value;
   throw new TypeError(`unknown reference kind ${value}`);
 }
 
@@ -564,6 +565,125 @@ export function parseRevision(value: Json): RevisionView {
     ...parseRevisionSummary(o),
     body: parseDocNode(o.body),
     schema_version: int(o, 'schema_version'),
+  };
+}
+
+// --- 업무 -------------------------------------------------------------
+
+export type TaskStatus = 'todo' | 'in_progress' | 'done';
+export type TaskPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent';
+export const TASK_STATUSES: readonly TaskStatus[] = ['todo', 'in_progress', 'done'] as const;
+export const TASK_PRIORITIES: readonly TaskPriority[] = [
+  'none',
+  'low',
+  'medium',
+  'high',
+  'urgent',
+] as const;
+
+export interface AssigneeView {
+  user_id: string;
+  display_name: string;
+}
+
+export interface TaskView {
+  id: string;
+  item_id: string;
+  module_id: string;
+  workspace_id: string;
+  parent_id: string | null;
+  reference: string | null;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  start_date: string | null;
+  due_date: string | null;
+  estimate_minutes: number | null;
+  tags: string[];
+  assignees: AssigneeView[];
+  checklist_done: number;
+  checklist_total: number;
+  version: number;
+  completed_at: string | null;
+  access: Access;
+  updated_at: string;
+}
+
+export interface TaskChecklistItemView {
+  id: string;
+  text: string;
+  checked: boolean;
+}
+
+export interface TaskDetailView extends TaskView {
+  checklist: TaskChecklistItemView[];
+}
+
+export interface TaskInput {
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  start_date: string | null;
+  due_date: string | null;
+  estimate_minutes: number | null;
+  tags: string[];
+  assignee_ids: string[];
+}
+
+function taskStatus(value: string): TaskStatus {
+  const found = TASK_STATUSES.find((s) => s === value);
+  if (found === undefined) throw new TypeError(`unknown task status ${value}`);
+  return found;
+}
+
+function taskPriority(value: string): TaskPriority {
+  const found = TASK_PRIORITIES.find((p) => p === value);
+  if (found === undefined) throw new TypeError(`unknown priority ${value}`);
+  return found;
+}
+
+function parseAssignee(value: Json): AssigneeView {
+  const o = rec(value, 'assignee');
+  return { user_id: str(o, 'user_id'), display_name: str(o, 'display_name') };
+}
+
+export function parseTask(value: Json): TaskView {
+  const o = rec(value, 'task');
+  return {
+    id: str(o, 'id'),
+    item_id: str(o, 'item_id'),
+    module_id: str(o, 'module_id'),
+    workspace_id: str(o, 'workspace_id'),
+    parent_id: optStr(o, 'parent_id'),
+    reference: optStr(o, 'reference'),
+    title: str(o, 'title'),
+    description: str(o, 'description'),
+    status: taskStatus(str(o, 'status')),
+    priority: taskPriority(str(o, 'priority')),
+    start_date: optStr(o, 'start_date'),
+    due_date: optStr(o, 'due_date'),
+    estimate_minutes: optInt(o, 'estimate_minutes'),
+    tags: strings(o.tags),
+    assignees: parseList(o.assignees, parseAssignee),
+    checklist_done: int(o, 'checklist_done'),
+    checklist_total: int(o, 'checklist_total'),
+    version: int(o, 'version'),
+    completed_at: optStr(o, 'completed_at'),
+    access: access(str(o, 'access')),
+    updated_at: str(o, 'updated_at'),
+  };
+}
+
+export function parseTaskDetail(value: Json): TaskDetailView {
+  const o = rec(value, 'task detail');
+  return {
+    ...parseTask(o),
+    checklist: parseList(o.checklist, (v): TaskChecklistItemView => {
+      const c = rec(v, 'checklist item');
+      return { id: str(c, 'id'), text: str(c, 'text'), checked: bool(c, 'checked') };
+    }),
   };
 }
 
@@ -757,6 +877,60 @@ export const api = {
       target_workspace_id: target.workspaceId,
       target_item_id: target.itemId,
     }),
+  tasks: (itemId: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/tasks`, (v) =>
+      parseList(v, parseTask),
+    ),
+  assignable: (itemId: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/assignable`, (v) =>
+      parseList(v, parseAssignee),
+    ),
+  task: (id: string) => expectOk('GET', `/api/tasks/${encodeURIComponent(id)}`, parseTaskDetail),
+  createTask: (itemId: string, requestId: string, title: string, parentId: string | null = null) =>
+    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/tasks`, parseTaskDetail, {
+      request_id: requestId,
+      title,
+      parent_id: parentId,
+    }),
+  /** 필드 고치기. 기준 버전이 지났으면 `{ kind: 'conflict', current }`. */
+  async updateTask(
+    id: string,
+    baseVersion: number,
+    input: TaskInput,
+  ): Promise<
+    { kind: 'updated'; task: TaskDetailView } | { kind: 'conflict'; current: TaskDetailView }
+  > {
+    const { status, json } = await request('PUT', `/api/tasks/${encodeURIComponent(id)}`, {
+      base_version: baseVersion,
+      ...input,
+    });
+    if (status === 409) {
+      return { kind: 'conflict', current: parseTaskDetail(rec(json, 'conflict').current) };
+    }
+    if (status !== 200) fail(status, json);
+    return { kind: 'updated', task: parseTaskDetail(json) };
+  },
+  moveTask: (id: string, status: TaskStatus, beforeId: string | null) =>
+    expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/position`, parseTaskDetail, {
+      status,
+      before_id: beforeId,
+    }),
+  setTaskParent: (id: string, parentId: string | null) =>
+    expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/parent`, parseTaskDetail, {
+      parent_id: parentId,
+    }),
+  addChecklist: (taskId: string, items: { request_id: string; text: string; checked: boolean }[]) =>
+    expectOk('POST', `/api/tasks/${encodeURIComponent(taskId)}/checklist`, parseTaskDetail, {
+      items,
+    }),
+  updateChecklistItem: (id: string, text: string, checked: boolean) =>
+    expectOk('PUT', `/api/checklist-items/${encodeURIComponent(id)}`, none, { text, checked }),
+  deleteChecklistItem: (id: string) =>
+    expectOk('DELETE', `/api/checklist-items/${encodeURIComponent(id)}`, none),
+  taskBacklinks: (id: string) =>
+    expectOk('GET', `/api/tasks/${encodeURIComponent(id)}/backlinks`, (v) =>
+      parseList(v, parseBacklink),
+    ),
   revisions: (id: string, before: number | null) =>
     expectOk(
       'GET',

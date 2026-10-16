@@ -6031,15 +6031,19 @@
         "required": [
           "base_version",
           "title",
+          "description",
           "status",
-          "priority"
+          "priority",
+          "tags",
+          "assignee_ids"
         ],
         "properties": {
           "assignee_ids": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/UserId"
-            }
+            },
+            "description": "담당자 전체 목록(빠지면 지우는 것이므로 생략할 수 없다)."
           },
           "base_version": {
             "type": "integer",

@@ -36,6 +36,7 @@ CREATE TABLE tasks (
 );
 CREATE INDEX tasks_lane ON tasks (item_id, status, position);
 CREATE INDEX tasks_parent ON tasks (parent_id);
+CREATE INDEX tasks_workspace_updated ON tasks (workspace_id, updated_at DESC);
 
 CREATE TABLE task_assignees (
   task_id     uuid NOT NULL REFERENCES tasks (id),
@@ -85,20 +86,91 @@ CREATE FUNCTION app_task_access(p_task uuid) RETURNS text
   END
   $$;
 
--- 볼 수 없으면 P0002, 쓰기 권한이 아니면 42501.
+-- 볼 수 없으면 P0002, 보관 때문에 읽기 전용이면 55000(만들기와 같은 응답), 쓰기 권한이 아니면 42501.
 CREATE FUNCTION app_require_task_write(p_task uuid) RETURNS void
   LANGUAGE plpgsql STABLE SECURITY DEFINER
   SET search_path = fvoci, pg_temp
   AS $$
   DECLARE
     v_access text := app_task_access(p_task);
+    v_item   uuid;
   BEGIN
     IF v_access IS NULL THEN
       RAISE EXCEPTION 'task not found' USING ERRCODE = 'P0002';
     END IF;
     IF v_access NOT IN ('owner', 'write') THEN
+      SELECT item_id INTO v_item FROM tasks WHERE id = p_task;
+      IF app_item_archived(v_item) AND app_item_access(v_item) IN ('owner', 'write') THEN
+        RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+      END IF;
       RAISE EXCEPTION 'write access is required' USING ERRCODE = '42501';
     END IF;
+  END
+  $$;
+
+-- 열(항목·상태) 잠금: 같은 열의 위치 계산을 직렬화한다. 잠금 순서: 업무 행 → 항목 공유 → 열 → 번호.
+CREATE FUNCTION app_lock_lane(p_item uuid, p_status text) RETURNS void
+  LANGUAGE sql VOLATILE SECURITY DEFINER
+  SET search_path = fvoci, pg_temp
+  AS $$
+    SELECT pg_advisory_xact_lock(hashtextextended('fvoci-lane:' || p_item::text || ':' || p_status, 0))
+  $$;
+
+-- 가운데 값이 너무 길어지면(소수 자릿수 > 40) 그 열의 위치를 1, 2, 3...으로 다시 매긴다. 열 잠금 아래에서만 부른다.
+CREATE FUNCTION app_renumber_lane(p_item uuid, p_status text) RETURNS void
+  LANGUAGE sql VOLATILE SECURITY DEFINER
+  SET search_path = fvoci, pg_temp
+  AS $$
+    UPDATE tasks t SET position = r.pos
+    FROM (SELECT id, row_number() OVER (ORDER BY position, number) AS pos
+          FROM tasks WHERE item_id = p_item AND status = p_status) r
+    WHERE t.id = r.id
+  $$;
+
+-- 체크리스트 수(완료, 전체). 업무를 볼 수 있을 때만 센다(목록에서 체크리스트 행마다 권한 판정을 반복하지 않게).
+CREATE FUNCTION app_task_checklist_counts(p_task uuid) RETURNS TABLE (done bigint, total bigint)
+  LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path = fvoci, pg_temp
+  AS $$
+    SELECT count(*) FILTER (WHERE checked), count(*) FROM checklist_items
+    WHERE task_id = p_task AND app_task_access(p_task) IS NOT NULL
+  $$;
+
+-- 담당자 확인: 멤버 행을 공유 잠금해 제거·역할 변경이 확인과 기록 사이에 끼어들지 못하게 하고, 그 사람이 항목을 볼 수 있는지 본다.
+CREATE FUNCTION app_check_assignee(p_workspace uuid, p_item uuid, p_user uuid) RETURNS void
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+  SET search_path = fvoci, pg_temp
+  AS $$
+  BEGIN
+    PERFORM 1 FROM workspace_members WHERE workspace_id = p_workspace AND user_id = p_user FOR SHARE;
+    IF app_item_access_as(p_item, p_user) IS NULL THEN
+      RAISE EXCEPTION 'an assignee cannot see this item' USING ERRCODE = '22023';
+    END IF;
+  END
+  $$;
+
+-- 볼 수 없게 된 담당을 지운다(자동 해제도 감사 기록에 남긴다). 범위: 한 항목, 또는 워크스페이스의 한 사람.
+CREATE FUNCTION app_drop_unseen_assignees(p_item uuid, p_workspace uuid, p_user uuid, p_reason text)
+  RETURNS void
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+  SET search_path = fvoci, pg_temp
+  AS $$
+  DECLARE
+    v_row record;
+  BEGIN
+    FOR v_row IN
+      SELECT a.task_id, a.user_id, t.workspace_id, t.item_id
+      FROM task_assignees a JOIN tasks t ON t.id = a.task_id
+      WHERE (p_item IS NULL OR t.item_id = p_item)
+        AND (p_workspace IS NULL OR t.workspace_id = p_workspace)
+        AND (p_user IS NULL OR a.user_id = p_user)
+    LOOP
+      IF app_item_access_as(v_row.item_id, v_row.user_id) IS NULL THEN
+        DELETE FROM task_assignees WHERE task_id = v_row.task_id AND user_id = v_row.user_id;
+        PERFORM app_audit(v_row.workspace_id, 'unassign', 'task', v_row.task_id,
+                          jsonb_build_object('user', v_row.user_id, 'reason', p_reason));
+      END IF;
+    END LOOP;
   END
   $$;
 
@@ -153,6 +225,10 @@ CREATE FUNCTION app_check_task_parent(p_task uuid, p_parent uuid, p_item uuid) R
     IF p_task IS NOT NULL AND p_parent = p_task THEN
       RAISE EXCEPTION 'a task cannot be its own parent' USING ERRCODE = '22023';
     END IF;
+    -- 볼 수 없는 업무는 잠그지 않는다(잠금 대기로 존재가 드러나지 않게). 잠근 뒤 다시 확인한다.
+    IF app_task_access(p_parent) IS NULL THEN
+      RAISE EXCEPTION 'parent task not found' USING ERRCODE = 'P0002';
+    END IF;
     IF p_task IS NOT NULL THEN
       PERFORM 1 FROM tasks WHERE id IN (p_task, p_parent) ORDER BY id FOR UPDATE;
     ELSE
@@ -197,6 +273,7 @@ CREATE FUNCTION app_create_task(p_item uuid, p_request_id uuid, p_title text, p_
     END IF;
     PERFORM app_check_task_parent(NULL, p_parent, p_item);
     PERFORM app_lock_item(p_item);
+    PERFORM app_lock_lane(p_item, 'todo');
     IF app_item_archived(p_item) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
@@ -240,11 +317,15 @@ CREATE FUNCTION app_update_task(
     IF p_start IS NOT NULL AND p_due IS NOT NULL AND p_start > p_due THEN
       RAISE EXCEPTION 'the start date must not be after the due date' USING ERRCODE = '22023';
     END IF;
+    -- 새로 넣는 담당자만 확인한다(이미 있는 담당 때문에 다른 필드 고치기가 막히지 않게).
     FOREACH v_uid IN ARRAY coalesce(p_assignees, '{}') LOOP
-      IF app_item_access_as(v_task.item_id, v_uid) IS NULL THEN
-        RAISE EXCEPTION 'an assignee cannot see this item' USING ERRCODE = '22023';
+      IF NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = p_task AND a.user_id = v_uid) THEN
+        PERFORM app_check_assignee(v_task.workspace_id, v_task.item_id, v_uid);
       END IF;
     END LOOP;
+    IF p_status <> v_task.status THEN
+      PERFORM app_lock_lane(v_task.item_id, p_status);
+    END IF;
 
     UPDATE tasks SET
       title = btrim(p_title), description = coalesce(p_description, ''), status = p_status,
@@ -297,6 +378,7 @@ CREATE FUNCTION app_move_task(p_task uuid, p_status text, p_before uuid) RETURNS
     IF p_status NOT IN ('todo', 'in_progress', 'done') THEN
       RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
     END IF;
+    PERFORM app_lock_lane(v_task.item_id, p_status);
     IF p_before IS NOT NULL THEN
       SELECT * INTO v_before FROM tasks WHERE id = p_before;
       IF v_before.id IS NULL OR v_before.id = p_task OR v_before.item_id <> v_task.item_id
@@ -306,6 +388,14 @@ CREATE FUNCTION app_move_task(p_task uuid, p_status text, p_before uuid) RETURNS
       SELECT max(position) INTO v_lower FROM tasks
       WHERE item_id = v_task.item_id AND status = p_status AND id <> p_task AND position < v_before.position;
       v_position := (coalesce(v_lower, v_before.position - 1) + v_before.position) * 0.5;
+      IF scale(v_position) > 40 THEN
+        -- 같은 틈에 너무 많이 끼워 자릿수가 길어졌다. 열을 다시 매긴 뒤 계산한다.
+        PERFORM app_renumber_lane(v_task.item_id, p_status);
+        SELECT position INTO v_before.position FROM tasks WHERE id = p_before;
+        SELECT max(position) INTO v_lower FROM tasks
+        WHERE item_id = v_task.item_id AND status = p_status AND id <> p_task AND position < v_before.position;
+        v_position := (coalesce(v_lower, v_before.position - 1) + v_before.position) * 0.5;
+      END IF;
     ELSE
       SELECT coalesce(max(position), 0) + 1 INTO v_position FROM tasks
       WHERE item_id = v_task.item_id AND status = p_status AND id <> p_task;
@@ -389,6 +479,8 @@ CREATE FUNCTION app_update_checklist_item(p_id uuid, p_text text, p_checked bool
       RAISE EXCEPTION 'checklist item not found' USING ERRCODE = 'P0002';
     END IF;
     PERFORM app_require_task_write(v_task);
+    PERFORM app_lock_item((SELECT item_id FROM tasks WHERE id = v_task));
+    PERFORM app_require_task_write(v_task);
     UPDATE checklist_items SET text = btrim(p_text), checked = p_checked, updated_at = now() WHERE id = p_id;
   END
   $$;
@@ -404,6 +496,8 @@ CREATE FUNCTION app_delete_checklist_item(p_id uuid) RETURNS void
     IF v_task IS NULL OR app_task_access(v_task) IS NULL THEN
       RAISE EXCEPTION 'checklist item not found' USING ERRCODE = 'P0002';
     END IF;
+    PERFORM app_require_task_write(v_task);
+    PERFORM app_lock_item((SELECT item_id FROM tasks WHERE id = v_task));
     PERFORM app_require_task_write(v_task);
     DELETE FROM checklist_items WHERE id = p_id;
   END
@@ -424,12 +518,13 @@ CREATE OR REPLACE FUNCTION app_remove_member_internal(p_workspace uuid, p_member
     DELETE FROM group_members gm USING groups g
     WHERE gm.group_id = g.id AND g.workspace_id = p_workspace AND gm.user_id = p_member;
     DELETE FROM ownership_offers WHERE workspace_id = p_workspace AND to_user = p_member;
-    DELETE FROM task_assignees a USING tasks t
-    WHERE a.task_id = t.id AND t.workspace_id = p_workspace AND a.user_id = p_member;
+    -- 멤버 행을 먼저 잠근다: 동시에 담당자로 지정하는 쪽(멤버 행 공유 잠금)이 이 제거가 끝날 때까지 기다리게 한다.
+    PERFORM 1 FROM workspace_members WHERE workspace_id = p_workspace AND user_id = p_member FOR UPDATE;
     DELETE FROM workspace_members WHERE workspace_id = p_workspace AND user_id = p_member;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'member not found' USING ERRCODE = 'P0002';
     END IF;
+    PERFORM app_drop_unseen_assignees(NULL, p_workspace, p_member, p_action);
     PERFORM app_audit(p_workspace, p_action, 'member', p_member, '{}'::jsonb);
   END
   $$;
@@ -472,15 +567,34 @@ CREATE OR REPLACE FUNCTION app_update_item(p_item uuid, p_title text, p_descript
       PERFORM app_audit(v_item.workspace_id, 'change_visibility', 'item', p_item,
                         jsonb_build_object('from', v_item.visibility, 'to', p_visibility));
       -- 비공개가 되어 볼 수 없게 된 사람은 그 항목 업무의 담당에서 뺀다.
-      FOR v_uid IN
-        SELECT DISTINCT a.user_id FROM task_assignees a JOIN tasks t ON t.id = a.task_id WHERE t.item_id = p_item
-      LOOP
-        IF app_item_access_as(p_item, v_uid) IS NULL THEN
-          DELETE FROM task_assignees a USING tasks t
-          WHERE a.task_id = t.id AND t.item_id = p_item AND a.user_id = v_uid;
-        END IF;
-      END LOOP;
+      PERFORM app_drop_unseen_assignees(p_item, NULL, NULL, 'item_private');
     END IF;
+  END
+  $$;
+
+-- 역할이 바뀌어(예: 관리자 → 작성자) 볼 수 없게 된 항목의 담당을 지운다.
+CREATE OR REPLACE FUNCTION app_set_member_role(p_workspace uuid, p_member uuid, p_role text) RETURNS void
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+  SET search_path = fvoci, pg_temp
+  AS $$
+  DECLARE
+    v_old text;
+  BEGIN
+    PERFORM app_require_admin(p_workspace);
+    IF p_role NOT IN ('admin', 'writer', 'reader') THEN
+      RAISE EXCEPTION 'invalid role' USING ERRCODE = '22023';
+    END IF;
+    SELECT role INTO v_old FROM workspace_members WHERE workspace_id = p_workspace AND user_id = p_member FOR UPDATE;
+    IF v_old IS NULL THEN
+      RAISE EXCEPTION 'member not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF p_member = (SELECT owner_id FROM workspaces WHERE id = p_workspace) AND p_role <> 'admin' THEN
+      RAISE EXCEPTION 'the owner must stay an admin' USING ERRCODE = '55000';
+    END IF;
+    UPDATE workspace_members SET role = p_role WHERE workspace_id = p_workspace AND user_id = p_member;
+    PERFORM app_audit(p_workspace, 'change_role', 'member', p_member,
+                      jsonb_build_object('from', v_old, 'to', p_role));
+    PERFORM app_drop_unseen_assignees(NULL, p_workspace, p_member, 'role_change');
   END
   $$;
 
@@ -611,6 +725,11 @@ REVOKE ALL ON FUNCTION app_add_checklist_items(uuid, jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_update_checklist_item(uuid, text, boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_delete_checklist_item(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_item_assignable(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_lock_lane(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_renumber_lane(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_task_checklist_counts(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_check_assignee(uuid, uuid, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_drop_unseen_assignees(uuid, uuid, uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION
   app_task_access(uuid),
   app_task_reference(uuid),
@@ -621,5 +740,6 @@ GRANT EXECUTE ON FUNCTION
   app_add_checklist_items(uuid, jsonb),
   app_update_checklist_item(uuid, text, boolean),
   app_delete_checklist_item(uuid),
-  app_item_assignable(uuid)
+  app_item_assignable(uuid),
+  app_task_checklist_counts(uuid)
 TO fvoci_app;

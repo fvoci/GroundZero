@@ -8,6 +8,7 @@
   import type { TreeMove } from '$lib/features/documents/tree';
   import { forgetReferences } from '$lib/features/references/resolver';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
+  import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { itemDocumentPath, modulePath, router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
@@ -19,10 +20,14 @@
   interface Props {
     workspace: Workspace;
     itemId: string;
+    /** 주소에서 연 업무(상세 대화상자). */
+    taskId?: string | undefined;
     workspaces: Workspace[];
   }
 
-  const { workspace, itemId, workspaces }: Props = $props();
+  const { workspace, itemId, workspaces, taskId }: Props = $props();
+  // 주소 객체가 바뀌어도(업무 대화상자 열고 닫기) 같은 항목이면 다시 불러오지 않는다.
+  const currentItemId = $derived(itemId);
 
   let item = $state<ItemView | undefined>(undefined);
   let mod = $state<Module | undefined>(undefined);
@@ -43,7 +48,7 @@
   }
 
   $effect(() => {
-    const id = itemId;
+    const id = currentItemId;
     let cancelled = false;
     item = undefined;
     error = undefined;
@@ -227,6 +232,7 @@
         />
       {/if}
     </section>
+    <TaskBoard item={current} {workspaces} openTaskId={taskId} />
     <Backlinks kind="item" id={current.id} {workspaces} />
   </section>
 {/if}

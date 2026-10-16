@@ -7,7 +7,7 @@ export type Route =
   | { name: 'document'; workspaceId: string; documentId: string }
   | { name: 'members'; workspaceId: string }
   | { name: 'module'; workspaceId: string; moduleId: string }
-  | { name: 'item'; workspaceId: string; itemId: string }
+  | { name: 'item'; workspaceId: string; itemId: string; taskId?: string }
   | { name: 'item-document'; workspaceId: string; itemId: string; documentId: string }
   | { name: 'notes' }
   | { name: 'shared' }
@@ -25,6 +25,7 @@ const MEMBERS = new RegExp(`^/w/(${UUID})/members/?$`);
 const STANDALONE = new RegExp(`^/d/(${UUID})/?$`);
 const MODULE = new RegExp(`^/w/(${UUID})/m/(${UUID})/?$`);
 const ITEM = new RegExp(`^/w/(${UUID})/i/(${UUID})/?$`);
+const ITEM_TASK = new RegExp(`^/w/(${UUID})/i/(${UUID})/t/(${UUID})/?$`);
 const ITEM_DOCUMENT = new RegExp(`^/w/(${UUID})/i/(${UUID})/d/(${UUID})/?$`);
 
 export function parseRoute(pathname: string): Route {
@@ -46,6 +47,10 @@ export function parseRoute(pathname: string): Route {
   const item = ITEM.exec(pathname);
   if (item?.[1] !== undefined && item[2] !== undefined) {
     return { name: 'item', workspaceId: item[1], itemId: item[2] };
+  }
+  const itemTask = ITEM_TASK.exec(pathname);
+  if (itemTask?.[1] !== undefined && itemTask[2] !== undefined && itemTask[3] !== undefined) {
+    return { name: 'item', workspaceId: itemTask[1], itemId: itemTask[2], taskId: itemTask[3] };
   }
   const itemDoc = ITEM_DOCUMENT.exec(pathname);
   if (itemDoc?.[1] !== undefined && itemDoc[2] !== undefined && itemDoc[3] !== undefined) {
@@ -90,6 +95,10 @@ export function modulePath(workspaceId: string, moduleId: string): string {
 
 export function itemPath(workspaceId: string, itemId: string): string {
   return `/w/${workspaceId}/i/${itemId}`;
+}
+
+export function itemTaskPath(workspaceId: string, itemId: string, taskId: string): string {
+  return `/w/${workspaceId}/i/${itemId}/t/${taskId}`;
 }
 
 export function itemDocumentPath(workspaceId: string, itemId: string, documentId: string): string {
