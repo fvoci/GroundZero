@@ -7,6 +7,7 @@
   import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
   import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
   import SharedScreen from '$lib/features/notes/SharedScreen.svelte';
+  import PublicView from '$lib/features/public/PublicView.svelte';
   import MembersScreen from '$lib/features/members/MembersScreen.svelte';
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
   import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
@@ -64,7 +65,9 @@
   });
 </script>
 
-{#if session.state === 'loading'}
+{#if route.name === 'public'}
+  <PublicView token={route.token} />
+{:else if session.state === 'loading'}
   <p class="p-6" aria-live="polite">불러오는 중…</p>
 {:else if session.state === 'error'}
   <p class="p-6 text-destructive" role="alert">{session.message}</p>

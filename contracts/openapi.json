@@ -403,6 +403,131 @@
         }
       }
     },
+    "/api/documents/{document_id}/public-links": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "공개 링크 목록(소유 권한자).",
+        "operationId": "list_public_links",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublicLink"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "공개 링크 생성(소유 권한자).",
+        "operationId": "create_public_link",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePublicLink"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedPublicLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/documents/{document_id}/settings": {
       "put": {
         "tags": [
@@ -1073,6 +1198,92 @@
             }
           },
           "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public-links/{link_id}": {
+      "delete": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "공개 링크 철회(소유 권한자). 다음 요청부터 열리지 않는다.",
+        "operationId": "revoke_public_link",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/{token}": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "공개 보기(로그인 불필요, 읽기 전용). 철회·만료되면 404. 캐시에 남지 않게 `no-store`.",
+        "operationId": "view_public_document",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDocument"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -2184,6 +2395,20 @@
           }
         }
       },
+      "CreatePublicLink": {
+        "type": "object",
+        "description": "공개 링크 생성 요청.",
+        "properties": {
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "만료 시각(RFC 3339). 없으면 철회할 때까지 유효하다."
+          }
+        }
+      },
       "CreateShare": {
         "type": "object",
         "description": "공유 추가 요청. 같은 이메일이면 권한을 바꾼다.",
@@ -2216,6 +2441,30 @@
             "type": "string",
             "format": "uuid",
             "description": "클라이언트가 만든 요청 ID. 재시도 중복 방지."
+          }
+        }
+      },
+      "CreatedPublicLink": {
+        "type": "object",
+        "description": "만든 링크. `url`은 이때 한 번만 받을 수 있다.",
+        "required": [
+          "id",
+          "url"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "url": {
+            "type": "string"
           }
         }
       },
@@ -2647,6 +2896,62 @@
         "properties": {
           "to_user": {
             "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "PublicDocument": {
+        "type": "object",
+        "description": "공개 보기 응답.",
+        "required": [
+          "title",
+          "body",
+          "schema_version",
+          "updated_at"
+        ],
+        "properties": {
+          "body": {
+            "type": "object"
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PublicLink": {
+        "type": "object",
+        "description": "공개 링크(소유 권한자가 보는 목록 항목).",
+        "required": [
+          "id",
+          "created_at",
+          "active"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "철회·만료되지 않았는지."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },

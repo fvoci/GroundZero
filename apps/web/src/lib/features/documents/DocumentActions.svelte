@@ -3,7 +3,7 @@
   // 화면은 현재 권한(access)에 맞는 동작만 보여준다. 이동은 서버 미리보기로 접근 변화를 보여준 뒤 확인받는다.
   import type { Workspace } from '@fvoci/api-client';
 
-  import type { DocumentView, MovePreviewView, ShareView } from '$lib/api/client';
+  import type { DocumentView, MovePreviewView, PublicLinkView, ShareView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { pathFor, router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
@@ -37,7 +37,11 @@
   function open(next: Panel): void {
     error = undefined;
     panel = next;
-    if (next === 'share') void loadShares();
+    if (next === 'share') {
+      newLinkUrl = undefined;
+      void loadShares();
+      void loadLinks();
+    }
     if (next === 'copy') {
       copyTitle = `${doc.title} 사본`;
       copyTarget = 'personal';
@@ -93,6 +97,49 @@
       fail(e);
     }
   }
+
+  // --- 공개 링크 (D-20) ----------------------------------------------------
+  let links = $state<PublicLinkView[]>([]);
+  let linkExpiryDays = $state('7');
+  let newLinkUrl = $state<string | undefined>(undefined);
+
+  async function loadLinks(): Promise<void> {
+    try {
+      links = await api.publicLinks(doc.id);
+    } catch (e: unknown) {
+      fail(e);
+    }
+  }
+
+  async function createLink(): Promise<void> {
+    try {
+      const days = Number(linkExpiryDays);
+      const expiresAt =
+        days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString() : null;
+      newLinkUrl = (await api.createPublicLink(doc.id, expiresAt)).url;
+      await loadLinks();
+    } catch (e: unknown) {
+      fail(e);
+    }
+  }
+
+  async function revokeLink(id: string): Promise<void> {
+    try {
+      await api.revokePublicLink(id);
+      newLinkUrl = undefined;
+      await loadLinks();
+    } catch (e: unknown) {
+      fail(e);
+    }
+  }
+
+  const EXPIRY_OPTIONS = [
+    { value: '1', label: '1일' },
+    { value: '7', label: '7일' },
+    { value: '30', label: '30일' },
+    { value: '0', label: '만료 없음' },
+  ];
+  const expiryLabel = (v: string): string => EXPIRY_OPTIONS.find((o) => o.value === v)?.label ?? v;
 
   // --- 복제 ---------------------------------------------------------------
   let copyTitle = $state('');
@@ -278,6 +325,66 @@
           복제를 막아도 화면에 보이는 내용을 촬영하는 것까지 막지는 못합니다.
         </p>
       </div>
+      <section class="flex flex-col gap-2 border-t pt-3" aria-labelledby="public-link-heading">
+        <h3 id="public-link-heading" class="text-sm font-semibold">공개 링크</h3>
+        <p class="text-sm text-muted-foreground">
+          링크를 가진 사람은 로그인 없이 읽을 수 있습니다. 언제든 철회할 수 있습니다.
+        </p>
+        {#if newLinkUrl !== undefined}
+          <div class="flex flex-col gap-1 rounded border px-2 py-2" role="status">
+            <Label for="new-link-url">새 링크 (지금만 볼 수 있습니다)</Label>
+            <Input
+              id="new-link-url"
+              readonly
+              value={newLinkUrl}
+              onfocus={(e: FocusEvent) => {
+                if (e.currentTarget instanceof HTMLInputElement) e.currentTarget.select();
+              }}
+            />
+          </div>
+        {/if}
+        <ul class="flex flex-col gap-1 text-sm" data-testid="public-link-list">
+          {#each links as link (link.id)}
+            <li class="flex items-center gap-2">
+              <span>{new Date(link.created_at).toLocaleDateString()} 생성</span>
+              <span class="text-muted-foreground">
+                {link.active
+                  ? link.expires_at === null
+                    ? '만료 없음'
+                    : `~${new Date(link.expires_at).toLocaleDateString()}`
+                  : '닫힘'}
+              </span>
+              {#if link.active}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  class="ml-auto"
+                  onclick={() => void revokeLink(link.id)}>철회</Button
+                >
+              {/if}
+            </li>
+          {/each}
+        </ul>
+        <div class="flex items-center gap-2">
+          <Select.Root
+            type="single"
+            value={linkExpiryDays}
+            onValueChange={(v: string) => {
+              linkExpiryDays = v;
+            }}
+          >
+            <Select.Trigger class="w-28" aria-label="공개 링크 만료"
+              >{expiryLabel(linkExpiryDays)}</Select.Trigger
+            >
+            <Select.Content>
+              {#each EXPIRY_OPTIONS as option (option.value)}
+                <Select.Item value={option.value} label={option.label}>{option.label}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+          <Button size="sm" onclick={() => void createLink()}>공개 링크 만들기</Button>
+        </div>
+      </section>
     {:else if panel === 'copy'}
       <Dialog.Header>
         <Dialog.Title>복제</Dialog.Title>

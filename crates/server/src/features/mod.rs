@@ -3,4 +3,5 @@
 pub mod accounts;
 pub mod documents;
 pub mod members;
+pub mod public_links;
 pub mod workspaces;

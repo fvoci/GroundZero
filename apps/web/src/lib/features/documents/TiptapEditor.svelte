@@ -13,7 +13,7 @@
     content: DocNode;
     editable: boolean;
     label: string;
-    onchange: (body: DocNode) => void;
+    onchange?: (body: DocNode) => void;
   }
 
   const { content, editable, label, onchange }: Props = $props();
@@ -62,7 +62,7 @@
         },
       },
       onUpdate: ({ editor: e }) => {
-        onchange(parseDocNode(e.getJSON()));
+        onchange?.(parseDocNode(e.getJSON()));
       },
       onTransaction: ({ editor: e }) => {
         marks = readMarks(e);

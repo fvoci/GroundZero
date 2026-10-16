@@ -243,6 +243,34 @@ export function parseMovePreview(value: Json): MovePreviewView {
   };
 }
 
+export interface PublicLinkView {
+  id: string;
+  created_at: string;
+  expires_at: string | null;
+  active: boolean;
+}
+
+export interface PublicDocumentView {
+  title: string;
+  body: DocNode;
+  updated_at: string;
+}
+
+export function parsePublicLink(value: Json): PublicLinkView {
+  const o = rec(value, 'public link');
+  return {
+    id: str(o, 'id'),
+    created_at: str(o, 'created_at'),
+    expires_at: optStr(o, 'expires_at'),
+    active: bool(o, 'active'),
+  };
+}
+
+export function parsePublicDocument(value: Json): PublicDocumentView {
+  const o = rec(value, 'public document');
+  return { title: str(o, 'title'), body: parseDocNode(o.body), updated_at: str(o, 'updated_at') };
+}
+
 export function parseMoveOutcome(value: Json): MoveOutcomeView {
   const o = rec(value, 'move outcome');
   const doc = o.document ?? null;
@@ -490,6 +518,25 @@ export const api = {
     expectOk('POST', `/api/documents/${encodeURIComponent(id)}/move/preview`, parseMovePreview, {
       target_workspace_id: targetWorkspaceId,
     }),
+  publicLinks: (id: string) =>
+    expectOk('GET', `/api/documents/${encodeURIComponent(id)}/public-links`, (v) =>
+      parseList(v, parsePublicLink),
+    ),
+  /** 링크 주소는 이때 한 번만 받는다. */
+  createPublicLink: (id: string, expiresAt: string | null) =>
+    expectOk(
+      'POST',
+      `/api/documents/${encodeURIComponent(id)}/public-links`,
+      (v) => {
+        const o = rec(v, 'created link');
+        return { id: str(o, 'id'), url: str(o, 'url') };
+      },
+      expiresAt === null ? {} : { expires_at: expiresAt },
+    ),
+  revokePublicLink: (linkId: string) =>
+    expectOk('DELETE', `/api/public-links/${encodeURIComponent(linkId)}`, none),
+  publicDocument: (token: string) =>
+    expectOk('GET', `/api/public/${encodeURIComponent(token)}`, parsePublicDocument),
   /** 확인한 미리보기와 함께 이동한다. 그사이 접근 변화가 바뀌면 `{ kind: 'changed', preview }`. */
   async moveDocument(
     id: string,

@@ -113,6 +113,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/public-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 공개 링크 목록(소유 권한자). */
+        get: operations["list_public_links"];
+        put?: never;
+        /** 공개 링크 생성(소유 권한자). */
+        post: operations["create_public_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}/settings": {
         parameters: {
             query?: never;
@@ -295,6 +313,40 @@ export interface paths {
         };
         /** 나에게 공유된 문서(검증된 이메일 기준). */
         get: operations["shared_with_me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public-links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 공개 링크 철회(소유 권한자). 다음 요청부터 열리지 않는다. */
+        delete: operations["revoke_public_link"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 공개 보기(로그인 불필요, 읽기 전용). 철회·만료되면 404. 캐시에 남지 않게 `no-store`. */
+        get: operations["view_public_document"];
         put?: never;
         post?: never;
         delete?: never;
@@ -582,6 +634,14 @@ export interface components {
             email: string;
             role: components["schemas"]["Role"];
         };
+        /** @description 공개 링크 생성 요청. */
+        CreatePublicLink: {
+            /**
+             * Format: date-time
+             * @description 만료 시각(RFC 3339). 없으면 철회할 때까지 유효하다.
+             */
+            expires_at?: string | null;
+        };
         /** @description 공유 추가 요청. 같은 이메일이면 권한을 바꾼다. */
         CreateShare: {
             email: string;
@@ -596,6 +656,14 @@ export interface components {
              * @description 클라이언트가 만든 요청 ID. 재시도 중복 방지.
              */
             request_id: string;
+        };
+        /** @description 만든 링크. `url`은 이때 한 번만 받을 수 있다. */
+        CreatedPublicLink: {
+            /** Format: date-time */
+            expires_at?: string | null;
+            /** Format: uuid */
+            id: string;
+            url: string;
         };
         /** @description 문서 전체. */
         Document: {
@@ -730,6 +798,26 @@ export interface components {
         /** @description 인계 제안 요청. */
         OfferOwnership: {
             to_user: components["schemas"]["UserId"];
+        };
+        /** @description 공개 보기 응답. */
+        PublicDocument: {
+            body: Record<string, never>;
+            /** Format: int32 */
+            schema_version: number;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description 공개 링크(소유 권한자가 보는 목록 항목). */
+        PublicLink: {
+            /** @description 철회·만료되지 않았는지. */
+            active: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at?: string | null;
+            /** Format: uuid */
+            id: string;
         };
         /** @description 내가 받은 초대. */
         ReceivedInvitation: {
@@ -1080,6 +1168,92 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_public_links: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicLink"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_public_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePublicLink"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedPublicLink"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1584,6 +1758,70 @@ export interface operations {
                 };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    revoke_public_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    view_public_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicDocument"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

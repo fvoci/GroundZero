@@ -15,7 +15,7 @@ use utoipa::{OpenApi, ToSchema};
 use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
-use crate::features::{accounts, documents, members, workspaces};
+use crate::features::{accounts, documents, members, public_links, workspaces};
 
 /// 핸들러가 공유하는 상태.
 #[derive(Debug, Clone)]
@@ -128,6 +128,10 @@ async fn api_not_found() -> AppError {
         documents::copy,
         documents::move_preview,
         documents::move_document,
+        public_links::list,
+        public_links::create,
+        public_links::revoke,
+        public_links::view,
         members::list_members,
         members::set_role,
         members::remove_member,
@@ -181,6 +185,10 @@ async fn api_not_found() -> AppError {
         documents::MovePreview,
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
+        public_links::PublicLink,
+        public_links::CreatePublicLink,
+        public_links::CreatedPublicLink,
+        public_links::PublicDocument,
         crate::ids::Role,
     )),
     tags(
@@ -240,6 +248,12 @@ pub fn router(state: AppState) -> Router {
             "/documents/{document_id}/move",
             post(documents::move_document),
         )
+        .route(
+            "/documents/{document_id}/public-links",
+            get(public_links::list).post(public_links::create),
+        )
+        .route("/public-links/{link_id}", delete(public_links::revoke))
+        .route("/public/{token}", get(public_links::view))
         .route(
             "/documents/{document_id}",
             get(documents::get).put(documents::save),

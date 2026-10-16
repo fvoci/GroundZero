@@ -9,7 +9,10 @@ export type Route =
   | { name: 'notes' }
   | { name: 'shared' }
   | { name: 'standalone-document'; documentId: string }
+  | { name: 'public'; token: string }
   | { name: 'not-found' };
+
+const PUBLIC = /^\/p\/([A-Za-z0-9_-]{16,128})\/?$/;
 
 const UUID = '[0-9a-fA-F-]{36}';
 const WORKSPACE = new RegExp(`^/w/(${UUID})/?$`);
@@ -19,6 +22,8 @@ const STANDALONE = new RegExp(`^/d/(${UUID})/?$`);
 
 export function parseRoute(pathname: string): Route {
   if (pathname === '/' || pathname === '') return { name: 'home' };
+  const pub = PUBLIC.exec(pathname);
+  if (pub?.[1] !== undefined) return { name: 'public', token: pub[1] };
   if (pathname === '/notes' || pathname === '/notes/') return { name: 'notes' };
   if (pathname === '/shared' || pathname === '/shared/') return { name: 'shared' };
   const standalone = STANDALONE.exec(pathname);

@@ -105,13 +105,13 @@ impl OidcProvider {
     }
 }
 
-fn random_token() -> String {
+pub(crate) fn random_token() -> String {
     let mut bytes = [0_u8; 32];
     rand::rng().fill_bytes(&mut bytes);
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn token_hash(token: &str) -> Vec<u8> {
+pub(crate) fn token_hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 
