@@ -1,4 +1,4 @@
-//! 개발 실행. Compose를 띄우고 서버를 전경에서 실행한다. 웹 개발 서버는 `pnpm --filter web dev`.
+//! 개발 실행. Compose를 띄우고 서버를 전경에서 실행한다. 웹 개발 서버는 `pnpm --filter @fvoci/web dev`.
 
 use std::path::Path;
 
@@ -21,7 +21,7 @@ pub fn run(root: &Path) -> Result<()> {
     println!("postgres     127.0.0.1:{pg_port}");
     println!("meilisearch  127.0.0.1:{meili_port}");
     println!("server       {bind}");
-    println!("web          pnpm --filter web dev   (VITE_API_URL=http://{bind})");
+    println!("web          pnpm --filter @fvoci/web dev   (VITE_API_URL=http://{bind})");
     println!("stop         Ctrl-C, then `cargo xtask down` to remove containers");
 
     let _db = sh.push_env("DATABASE_URL", database_url);
