@@ -31,6 +31,7 @@ const NOTIFICATION_PAGE: i32 = 100;
 pub enum ReferenceKind {
     Item,
     Document,
+    Task,
     User,
 }
 
@@ -39,6 +40,7 @@ impl ReferenceKind {
         match raw {
             "item" => Some(Self::Item),
             "document" => Some(Self::Document),
+            "task" => Some(Self::Task),
             "user" => Some(Self::User),
             _ => None,
         }
@@ -247,8 +249,9 @@ async fn by_reference(
            WHERE k.key = $2 AND k.workspace_id = ANY($1)
          )
          SELECT n.target_kind, n.target_id,
-                coalesce(i.title, d.title),
+                coalesce(i.title, d.title, tk.title),
                 CASE n.target_kind WHEN 'item' THEN app_item_reference(n.target_id)
+                                   WHEN 'task' THEN app_task_reference(n.target_id)
                                    ELSE app_document_reference(n.target_id) END,
                 n.workspace_id, w.name
          FROM scopes s
@@ -256,7 +259,8 @@ async fn by_reference(
          JOIN workspaces w ON w.id = n.workspace_id
          LEFT JOIN items i ON n.target_kind = 'item' AND i.id = n.target_id
          LEFT JOIN documents d ON n.target_kind = 'document' AND d.id = n.target_id
-         WHERE coalesce(i.title, d.title) IS NOT NULL",
+         LEFT JOIN tasks tk ON n.target_kind = 'task' AND tk.id = n.target_id
+         WHERE coalesce(i.title, d.title, tk.title) IS NOT NULL",
     )
     .bind(scope)
     .bind(key)
@@ -324,6 +328,19 @@ pub async fn candidates(
     .fetch_all(tx.conn())
     .await?;
     out.extend(to_candidates(items));
+
+    let tasks: Vec<CandidateRow> = sqlx::query_as(
+        "SELECT 'task', t.id, t.title, app_task_reference(t.id), t.workspace_id, w.name
+         FROM tasks t JOIN workspaces w ON w.id = t.workspace_id
+         WHERE t.workspace_id = ANY($1) AND t.title ILIKE $2
+         ORDER BY t.updated_at DESC LIMIT $3",
+    )
+    .bind(&scope)
+    .bind(&pattern)
+    .bind(CANDIDATES_PER_KIND)
+    .fetch_all(tx.conn())
+    .await?;
+    out.extend(to_candidates(tasks));
 
     let docs: Vec<CandidateRow> = sqlx::query_as(
         "SELECT 'document', d.id, d.title, app_document_reference(d.id), d.workspace_id, w.name
@@ -404,11 +421,15 @@ pub async fn resolve(
          FROM documents d WHERE d.id = ANY($2)
          UNION ALL
          SELECT 'user', u.id, u.display_name, NULL::text, NULL::uuid, NULL::uuid
-         FROM users u WHERE u.id = ANY($3)",
+         FROM users u WHERE u.id = ANY($3)
+         UNION ALL
+         SELECT 'task', t.id, t.title, app_task_reference(t.id), t.workspace_id, t.item_id
+         FROM tasks t WHERE t.id = ANY($4)",
     )
     .bind(ids(ReferenceKind::Item))
     .bind(ids(ReferenceKind::Document))
     .bind(ids(ReferenceKind::User))
+    .bind(ids(ReferenceKind::Task))
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;
@@ -488,6 +509,28 @@ pub async fn document_backlinks(
     let mut tx = state.db.begin_as(user).await?;
     access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
     let links = backlinks_to(&mut tx, "document", id.0).await?;
+    tx.commit().await?;
+    Ok(Json(links))
+}
+
+/// 이 업무를 가리키는 문서. 업무를 볼 수 없으면 404.
+#[utoipa::path(get, path = "/api/tasks/{task_id}/backlinks",
+    params(("task_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = [Backlink]), (status = 404, body = ErrorBody)), tag = "references")]
+pub async fn task_backlinks(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<Backlink>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let visible: bool = sqlx::query_scalar("SELECT app_task_access($1) IS NOT NULL")
+        .bind(id)
+        .fetch_one(tx.conn())
+        .await?;
+    if !visible {
+        return Err(AppError::NotFound);
+    }
+    let links = backlinks_to(&mut tx, "task", id).await?;
     tx.commit().await?;
     Ok(Json(links))
 }

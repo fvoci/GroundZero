@@ -29,6 +29,114 @@
         }
       }
     },
+    "/api/checklist-items/{item_id}": {
+      "put": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "체크리스트 항목 고치기(쓰기 권한). 버전 없이 바로 반영한다.",
+        "operationId": "update_checklist_item",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateChecklistItem"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "체크리스트 항목 지우기(쓰기 권한).",
+        "operationId": "delete_checklist_item",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/document-shares/{share_id}": {
       "delete": {
         "tags": [
@@ -1552,6 +1660,51 @@
         }
       }
     },
+    "/api/items/{item_id}/assignable": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "담당자로 지정할 수 있는 사람(그 항목을 볼 수 있는 멤버).",
+        "operationId": "assignable",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Assignee"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/backlinks": {
       "get": {
         "tags": [
@@ -1675,6 +1828,131 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/tasks": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "항목의 업무 목록(상위 업무 뒤에 하위 업무). 항목을 볼 수 없으면 404.",
+        "operationId": "list_tasks",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Task"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "업무 만들기(항목 쓰기 권한). 같은 `request_id`는 같은 업무를 돌려준다.",
+        "operationId": "create_task",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetail"
                 }
               }
             }
@@ -2426,6 +2704,389 @@
             }
           },
           "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "업무 하나와 체크리스트.",
+        "operationId": "get_task",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "업무 고치기(쓰기 권한). 기준 버전이 지났으면 409와 서버 최신본(입력은 클라이언트가 보존).",
+        "operationId": "update_task",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskConflict"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/backlinks": {
+      "get": {
+        "tags": [
+          "references"
+        ],
+        "summary": "이 업무를 가리키는 문서. 업무를 볼 수 없으면 404.",
+        "operationId": "task_backlinks",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Backlink"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/checklist": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "체크리스트 덧붙이기(쓰기 권한). 항목별 `request_id`로 재시도해도 중복되지 않는다.",
+        "operationId": "add_checklist",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddChecklist"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/parent": {
+      "put": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "상위 업무 바꾸기(같은 항목, 한 단계).",
+        "operationId": "set_task_parent",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTaskParent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/position": {
+      "put": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "칸반 이동(쓰기 권한). 버전과 상관없이 바로 반영한다.",
+        "operationId": "move_task",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveTask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -3562,6 +4223,37 @@
           }
         }
       },
+      "AddChecklist": {
+        "type": "object",
+        "description": "체크리스트 덧붙이기(Markdown에서 펼친 항목을 사용자가 확인한 뒤 한 번에).",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NewChecklistItem"
+            }
+          }
+        }
+      },
+      "Assignee": {
+        "type": "object",
+        "description": "담당자.",
+        "required": [
+          "user_id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
       "AuthInfo": {
         "type": "object",
         "description": "로그인 가능 여부. 웹이 로그인 버튼 표시에 쓴다.",
@@ -3613,6 +4305,27 @@
                 "$ref": "#/components/schemas/WorkspaceId"
               }
             ]
+          }
+        }
+      },
+      "ChecklistItem": {
+        "type": "object",
+        "description": "체크리스트 항목.",
+        "required": [
+          "id",
+          "text",
+          "checked"
+        ],
+        "properties": {
+          "checked": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string"
           }
         }
       },
@@ -3789,6 +4502,31 @@
           "permission": {
             "type": "string",
             "description": "`read` 또는 `write`."
+          }
+        }
+      },
+      "CreateTask": {
+        "type": "object",
+        "description": "업무 만들기.",
+        "required": [
+          "request_id",
+          "title"
+        ],
+        "properties": {
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "하위 업무로 만들 때 상위 업무(같은 항목, 한 단계)."
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },
@@ -4453,6 +5191,45 @@
           }
         }
       },
+      "MoveTask": {
+        "type": "object",
+        "description": "칸반 이동: 열(상태)과 그 안에서 바로 뒤에 올 업무(없으면 맨 끝).",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "before_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          }
+        }
+      },
+      "NewChecklistItem": {
+        "type": "object",
+        "description": "덧붙일 체크리스트 항목.",
+        "required": [
+          "request_id",
+          "text"
+        ],
+        "properties": {
+          "checked": {
+            "type": "boolean"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
       "Notification": {
         "type": "object",
         "description": "알림. 지금 볼 수 있는 문서에 대한 것만 나온다.",
@@ -4691,6 +5468,7 @@
         "enum": [
           "item",
           "document",
+          "task",
           "user"
         ]
       },
@@ -4948,6 +5726,19 @@
           }
         }
       },
+      "SetTaskParent": {
+        "type": "object",
+        "description": "상위 업무 바꾸기. 없으면 최상위.",
+        "properties": {
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "Share": {
         "type": "object",
         "description": "공유 항목.",
@@ -5001,6 +5792,202 @@
           }
         }
       },
+      "Task": {
+        "type": "object",
+        "description": "업무.",
+        "required": [
+          "id",
+          "item_id",
+          "module_id",
+          "workspace_id",
+          "title",
+          "description",
+          "status",
+          "priority",
+          "tags",
+          "assignees",
+          "checklist_done",
+          "checklist_total",
+          "version",
+          "access",
+          "updated_at"
+        ],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "assignees": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Assignee"
+            }
+          },
+          "checklist_done": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "checklist_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "description": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estimate_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "module_id": {
+            "$ref": "#/components/schemas/ModuleId"
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "하위 업무면 상위 업무."
+          },
+          "priority": {
+            "$ref": "#/components/schemas/TaskPriority"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "예: `DEV-5`."
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`YYYY-MM-DD`. 시각 없는 날짜."
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "필드 고치기의 기준 버전."
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "TaskConflict": {
+        "type": "object",
+        "description": "409 응답: 서버 최신본.",
+        "required": [
+          "error",
+          "current"
+        ],
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/TaskDetail"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "TaskDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Task"
+          },
+          {
+            "type": "object",
+            "required": [
+              "checklist"
+            ],
+            "properties": {
+              "checklist": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChecklistItem"
+                }
+              }
+            }
+          }
+        ],
+        "description": "업무와 체크리스트."
+      },
+      "TaskPriority": {
+        "type": "string",
+        "description": "우선순위.",
+        "enum": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "urgent"
+        ]
+      },
+      "TaskStatus": {
+        "type": "string",
+        "description": "업무 상태. 완료 시각은 서버가 기록한다.",
+        "enum": [
+          "todo",
+          "in_progress",
+          "done"
+        ]
+      },
+      "UpdateChecklistItem": {
+        "type": "object",
+        "description": "체크리스트 항목 고치기.",
+        "required": [
+          "text",
+          "checked"
+        ],
+        "properties": {
+          "checked": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
       "UpdateItem": {
         "type": "object",
         "description": "항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다.",
@@ -5034,6 +6021,65 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateTask": {
+        "type": "object",
+        "description": "업무 고치기. `base_version`이 지났으면 409와 서버 최신본.",
+        "required": [
+          "base_version",
+          "title",
+          "status",
+          "priority"
+        ],
+        "properties": {
+          "assignee_ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserId"
+            }
+          },
+          "base_version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estimate_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/TaskPriority"
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
             "type": "string"
           }
         }
@@ -5104,6 +6150,10 @@
     {
       "name": "references",
       "description": "@ 링크·언급·역방향 링크·알림"
+    },
+    {
+      "name": "tasks",
+      "description": "업무·하위 업무·담당자·체크리스트"
     }
   ]
 }

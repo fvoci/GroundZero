@@ -20,6 +20,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/checklist-items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 체크리스트 항목 고치기(쓰기 권한). 버전 없이 바로 반영한다. */
+        put: operations["update_checklist_item"];
+        post?: never;
+        /** 체크리스트 항목 지우기(쓰기 권한). */
+        delete: operations["delete_checklist_item"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/document-shares/{share_id}": {
         parameters: {
             query?: never;
@@ -392,6 +410,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/assignable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 담당자로 지정할 수 있는 사람(그 항목을 볼 수 있는 멤버). */
+        get: operations["assignable"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/backlinks": {
         parameters: {
             query?: never;
@@ -421,6 +456,24 @@ export interface paths {
         put?: never;
         /** 항목 아래 문서 생성(항목 쓰기 권한). 모듈 번호열에서 번호를 받는다. */
         post: operations["create_item_document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 항목의 업무 목록(상위 업무 뒤에 하위 업무). 항목을 볼 수 없으면 404. */
+        get: operations["list_tasks"];
+        put?: never;
+        /** 업무 만들기(항목 쓰기 권한). 같은 `request_id`는 같은 업무를 돌려준다. */
+        post: operations["create_task"];
         delete?: never;
         options?: never;
         head?: never;
@@ -628,6 +681,92 @@ export interface paths {
         put?: never;
         /** 참조 해석. 볼 수 없는 대상과 없는 대상은 같은 모양으로 돌려준다. 한 번의 질의로 처리한다. */
         post: operations["resolve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 업무 하나와 체크리스트. */
+        get: operations["get_task"];
+        /** 업무 고치기(쓰기 권한). 기준 버전이 지났으면 409와 서버 최신본(입력은 클라이언트가 보존). */
+        put: operations["update_task"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/backlinks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 이 업무를 가리키는 문서. 업무를 볼 수 없으면 404. */
+        get: operations["task_backlinks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 체크리스트 덧붙이기(쓰기 권한). 항목별 `request_id`로 재시도해도 중복되지 않는다. */
+        post: operations["add_checklist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/parent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 상위 업무 바꾸기(같은 항목, 한 단계). */
+        put: operations["set_task_parent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/position": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 칸반 이동(쓰기 권한). 버전과 상관없이 바로 반영한다. */
+        put: operations["move_task"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -900,6 +1039,15 @@ export interface components {
             gains: string[];
             loses: string[];
         };
+        /** @description 체크리스트 덧붙이기(Markdown에서 펼친 항목을 사용자가 확인한 뒤 한 번에). */
+        AddChecklist: {
+            items: components["schemas"]["NewChecklistItem"][];
+        };
+        /** @description 담당자. */
+        Assignee: {
+            display_name: string;
+            user_id: components["schemas"]["UserId"];
+        };
         /** @description 로그인 가능 여부. 웹이 로그인 버튼 표시에 쓴다. */
         AuthInfo: {
             oidc_enabled: boolean;
@@ -911,6 +1059,13 @@ export interface components {
             reference?: string | null;
             title: string;
             workspace_id?: null | components["schemas"]["WorkspaceId"];
+        };
+        /** @description 체크리스트 항목. */
+        ChecklistItem: {
+            checked: boolean;
+            /** Format: uuid */
+            id: string;
+            text: string;
         };
         /** @description 저장 충돌 응답. `current`가 서버 최신본이다. */
         ConflictBody: {
@@ -969,6 +1124,17 @@ export interface components {
             email: string;
             /** @description `read` 또는 `write`. */
             permission: string;
+        };
+        /** @description 업무 만들기. */
+        CreateTask: {
+            /**
+             * Format: uuid
+             * @description 하위 업무로 만들 때 상위 업무(같은 항목, 한 단계).
+             */
+            parent_id?: string | null;
+            /** Format: uuid */
+            request_id: string;
+            title: string;
         };
         /** @description 워크스페이스 생성 요청. */
         CreateWorkspace: {
@@ -1186,6 +1352,19 @@ export interface components {
             target_item_id?: null | components["schemas"]["ItemId"];
             target_workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
+        /** @description 칸반 이동: 열(상태)과 그 안에서 바로 뒤에 올 업무(없으면 맨 끝). */
+        MoveTask: {
+            /** Format: uuid */
+            before_id?: string | null;
+            status: components["schemas"]["TaskStatus"];
+        };
+        /** @description 덧붙일 체크리스트 항목. */
+        NewChecklistItem: {
+            checked?: boolean;
+            /** Format: uuid */
+            request_id: string;
+            text: string;
+        };
         /** @description 알림. 지금 볼 수 있는 문서에 대한 것만 나온다. */
         Notification: {
             /** @description 언급한 사람. 워크스페이스를 함께 쓰지 않으면(공유받은 개인 노트 등) 없을 수 있다. */
@@ -1260,7 +1439,7 @@ export interface components {
          * @description 참조 대상 종류.
          * @enum {string}
          */
-        ReferenceKind: "item" | "document" | "user";
+        ReferenceKind: "item" | "document" | "task" | "user";
         /** @description 해석 요청. */
         ResolveReferences: {
             refs: components["schemas"]["ReferenceInput"][];
@@ -1342,6 +1521,11 @@ export interface components {
         SetRole: {
             role: components["schemas"]["Role"];
         };
+        /** @description 상위 업무 바꾸기. 없으면 최상위. */
+        SetTaskParent: {
+            /** Format: uuid */
+            parent_id?: string | null;
+        };
         /** @description 공유 항목. */
         Share: {
             email: string;
@@ -1361,6 +1545,70 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description 업무. */
+        Task: {
+            access: components["schemas"]["Access"];
+            assignees: components["schemas"]["Assignee"][];
+            /** Format: int64 */
+            checklist_done: number;
+            /** Format: int64 */
+            checklist_total: number;
+            /** Format: date-time */
+            completed_at?: string | null;
+            description: string;
+            due_date?: string | null;
+            /** Format: int32 */
+            estimate_minutes?: number | null;
+            /** Format: uuid */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            module_id: components["schemas"]["ModuleId"];
+            /**
+             * Format: uuid
+             * @description 하위 업무면 상위 업무.
+             */
+            parent_id?: string | null;
+            priority: components["schemas"]["TaskPriority"];
+            /** @description 예: `DEV-5`. */
+            reference?: string | null;
+            /** @description `YYYY-MM-DD`. 시각 없는 날짜. */
+            start_date?: string | null;
+            status: components["schemas"]["TaskStatus"];
+            tags: string[];
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            /**
+             * Format: int32
+             * @description 필드 고치기의 기준 버전.
+             */
+            version: number;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /** @description 409 응답: 서버 최신본. */
+        TaskConflict: {
+            current: components["schemas"]["TaskDetail"];
+            error: string;
+        };
+        /** @description 업무와 체크리스트. */
+        TaskDetail: components["schemas"]["Task"] & {
+            checklist: components["schemas"]["ChecklistItem"][];
+        };
+        /**
+         * @description 우선순위.
+         * @enum {string}
+         */
+        TaskPriority: "none" | "low" | "medium" | "high" | "urgent";
+        /**
+         * @description 업무 상태. 완료 시각은 서버가 기록한다.
+         * @enum {string}
+         */
+        TaskStatus: "todo" | "in_progress" | "done";
+        /** @description 체크리스트 항목 고치기. */
+        UpdateChecklistItem: {
+            checked: boolean;
+            text: string;
+        };
         /** @description 항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다. */
         UpdateItem: {
             description: string;
@@ -1372,6 +1620,21 @@ export interface components {
         UpdateModule: {
             key: string;
             name: string;
+        };
+        /** @description 업무 고치기. `base_version`이 지났으면 409와 서버 최신본. */
+        UpdateTask: {
+            assignee_ids?: components["schemas"]["UserId"][];
+            /** Format: int32 */
+            base_version: number;
+            description?: string;
+            due_date?: string | null;
+            /** Format: int32 */
+            estimate_minutes?: number | null;
+            priority: components["schemas"]["TaskPriority"];
+            start_date?: string | null;
+            status: components["schemas"]["TaskStatus"];
+            tags?: string[];
+            title: string;
         };
         /**
          * Format: uuid
@@ -1416,6 +1679,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthInfo"];
+                };
+            };
+        };
+    };
+    update_checklist_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateChecklistItem"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_checklist_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -2466,6 +2811,35 @@ export interface operations {
             };
         };
     };
+    assignable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Assignee"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     item_backlinks: {
         parameters: {
             query?: never;
@@ -2545,6 +2919,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Document"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_tasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_task: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTask"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
                 };
             };
             400: {
@@ -3091,6 +3551,268 @@ export interface operations {
                 };
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_task: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_task: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTask"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskConflict"];
+                };
+            };
+        };
+    };
+    task_backlinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backlink"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_checklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddChecklist"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_task_parent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetTaskParent"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    move_task: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveTask"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

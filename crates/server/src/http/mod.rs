@@ -16,7 +16,7 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, documents, members, modules, public_links, references, revisions, workspaces,
+    accounts, documents, members, modules, public_links, references, revisions, tasks, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -131,6 +131,17 @@ async fn api_not_found() -> AppError {
         documents::move_preview,
         documents::move_document,
         documents::set_parent,
+        tasks::list,
+        tasks::assignable,
+        tasks::get,
+        tasks::create,
+        tasks::update,
+        tasks::move_task,
+        tasks::set_parent,
+        tasks::add_checklist,
+        tasks::update_checklist_item,
+        tasks::delete_checklist_item,
+        references::task_backlinks,
         revisions::list,
         revisions::get,
         revisions::restore,
@@ -210,6 +221,20 @@ async fn api_not_found() -> AppError {
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
         documents::SetParent,
+        tasks::TaskStatus,
+        tasks::TaskPriority,
+        tasks::Assignee,
+        tasks::ChecklistItem,
+        tasks::Task,
+        tasks::TaskDetail,
+        tasks::CreateTask,
+        tasks::UpdateTask,
+        tasks::MoveTask,
+        tasks::SetTaskParent,
+        tasks::NewChecklistItem,
+        tasks::AddChecklist,
+        tasks::UpdateChecklistItem,
+        tasks::TaskConflict,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -243,6 +268,7 @@ async fn api_not_found() -> AppError {
         (name = "members", description = "멤버·초대·역할·그룹·소유권"),
         (name = "modules", description = "모듈 인스턴스·키·항목"),
         (name = "references", description = "@ 링크·언급·역방향 링크·알림"),
+        (name = "tasks", description = "업무·하위 업무·담당자·체크리스트"),
     )
 )]
 pub struct ApiDoc;
@@ -303,6 +329,23 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/documents/{document_id}/parent",
             put(documents::set_parent),
+        )
+        .route(
+            "/items/{item_id}/tasks",
+            get(tasks::list).post(tasks::create),
+        )
+        .route("/items/{item_id}/assignable", get(tasks::assignable))
+        .route("/tasks/{task_id}", get(tasks::get).put(tasks::update))
+        .route("/tasks/{task_id}/position", put(tasks::move_task))
+        .route("/tasks/{task_id}/parent", put(tasks::set_parent))
+        .route("/tasks/{task_id}/checklist", post(tasks::add_checklist))
+        .route(
+            "/tasks/{task_id}/backlinks",
+            get(references::task_backlinks),
+        )
+        .route(
+            "/checklist-items/{item_id}",
+            put(tasks::update_checklist_item).delete(tasks::delete_checklist_item),
         )
         .route("/documents/{document_id}/revisions", get(revisions::list))
         .route(

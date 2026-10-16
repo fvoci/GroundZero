@@ -226,7 +226,7 @@ fn check_reference_node(node: &serde_json::Map<String, Value>) -> Result<(), App
         return Err(bad());
     }
     let kind = attrs.get("kind").and_then(Value::as_str);
-    if !matches!(kind, Some("item" | "document" | "user")) {
+    if !matches!(kind, Some("item" | "document" | "task" | "user")) {
         return Err(bad());
     }
     let id = attrs.get("id").and_then(Value::as_str).ok_or_else(bad)?;
@@ -1134,7 +1134,7 @@ mod tests {
         assert!(
             validate_body(&doc(vec![reference("item", id), reference("user", id)]), &l).is_ok()
         );
-        assert!(validate_body(&doc(vec![reference("task", id)]), &l).is_err());
+        assert!(validate_body(&doc(vec![reference("workspace", id)]), &l).is_err());
         assert!(validate_body(&doc(vec![reference("item", "DEV-1")]), &l).is_err());
         // DB 추출과 같은 형식만: 하이픈 없는 형식·중괄호·urn은 거부한다.
         for odd in [
