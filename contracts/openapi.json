@@ -29,6 +29,51 @@
         }
       }
     },
+    "/api/document-shares/{share_id}": {
+      "delete": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "공유 철회(소유 권한자). 다음 요청부터 접근이 막힌다.",
+        "operationId": "delete_share",
+        "parameters": [
+          {
+            "name": "share_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/documents/{document_id}": {
       "get": {
         "tags": [
@@ -75,7 +120,7 @@
           "documents"
         ],
         "summary": "문서 저장. 충돌 시 409 + 서버 최신본.",
-        "description": "순서: 권한 확인 → 행 잠금 → 재시도 판단 → 내용 동일 판단 → 리비전 비교 → 갱신·리비전 기록.\n행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다.",
+        "description": "순서: 권한 확인 → 행 잠금 → 재시도 판단 → 리비전 비교 → 내용 동일 판단 → 갱신·리비전 기록.\n행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다.",
         "operationId": "save",
         "parameters": [
           {
@@ -145,6 +190,409 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConflictBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{document_id}/copy": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "복제. 새 문서(리비전 1)이며 이후 원본과 동기화하지 않는다 (D-23).\n소유 권한자는 항상, 그 밖의 사람은 원본이 복제를 허용할 때만 할 수 있다.",
+        "operationId": "copy",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{document_id}/move": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다.",
+        "operationId": "move_document",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveOutcome"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovePreview"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{document_id}/move/preview": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "이동 미리보기(소유 권한자).",
+        "operationId": "move_preview",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovePreview"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{document_id}/settings": {
+      "put": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "비공개·복제 허용 설정(소유 권한자). 감사 기록을 남긴다.",
+        "operationId": "set_settings",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{document_id}/shares": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "공유 목록(소유 권한자).",
+        "operationId": "list_shares",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Share"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "공유 추가(소유 권한자). 받는 사람은 그 이메일을 제공자가 검증한 계정으로 로그인해야 한다.",
+        "operationId": "create_share",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShare"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Share"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -503,6 +951,123 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/notes": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "내 개인 노트 목록. 워크스페이스 관리자에게도 보이지 않는다 (D-22, D-49).",
+        "operationId": "my_notes",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "개인 노트 생성.",
+        "operationId": "create_note",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/shared": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "나에게 공유된 문서(검증된 이메일 기준).",
+        "operationId": "shared_with_me",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SharedDocument"
+                  }
                 }
               }
             }
@@ -1224,7 +1789,7 @@
         "tags": [
           "documents"
         ],
-        "summary": "위키 문서 목록.",
+        "summary": "위키 문서 목록. 볼 수 있는 문서만(비공개 문서는 작성자·관리자·공유 대상에게만) 나온다.",
         "operationId": "list_wiki",
         "parameters": [
           {
@@ -1488,6 +2053,37 @@
           }
         }
       },
+      "Access": {
+        "type": "string",
+        "description": "문서에 대한 현재 사용자의 권한.",
+        "enum": [
+          "owner",
+          "write",
+          "read"
+        ]
+      },
+      "AcknowledgedPreview": {
+        "type": "object",
+        "description": "사용자가 확인한 접근 변화.",
+        "required": [
+          "gains",
+          "loses"
+        ],
+        "properties": {
+          "gains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "loses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "AuthInfo": {
         "type": "object",
         "description": "로그인 가능 여부. 웹이 로그인 버튼 표시에 쓴다.",
@@ -1512,6 +2108,33 @@
             "$ref": "#/components/schemas/Document"
           },
           "error": {
+            "type": "string"
+          }
+        }
+      },
+      "CopyDocument": {
+        "type": "object",
+        "description": "복제 요청. `target_workspace_id`가 없으면 내 개인 노트로 만든다.",
+        "required": [
+          "request_id",
+          "title"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_workspace_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
+          },
+          "title": {
             "type": "string"
           }
         }
@@ -1561,6 +2184,23 @@
           }
         }
       },
+      "CreateShare": {
+        "type": "object",
+        "description": "공유 추가 요청. 같은 이메일이면 권한을 바꾼다.",
+        "required": [
+          "email",
+          "permission"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string",
+            "description": "`read` 또는 `write`."
+          }
+        }
+      },
       "CreateWorkspace": {
         "type": "object",
         "description": "워크스페이스 생성 요청.",
@@ -1584,16 +2224,25 @@
         "description": "문서 전체.",
         "required": [
           "id",
-          "workspace_id",
-          "reference",
+          "placement",
           "title",
           "body",
           "schema_version",
           "revision",
           "updated_at",
-          "can_edit"
+          "access",
+          "can_edit",
+          "visibility",
+          "allow_copy"
         ],
         "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "allow_copy": {
+            "type": "boolean",
+            "description": "소유 권한자 외의 사람이 복제할 수 있는지 (D-20)."
+          },
           "body": {
             "type": "object",
             "description": "Tiptap JSON. `type`이 `doc`인 객체."
@@ -1605,8 +2254,15 @@
           "id": {
             "$ref": "#/components/schemas/DocumentId"
           },
+          "placement": {
+            "type": "string",
+            "description": "`wiki` 또는 `personal`."
+          },
           "reference": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "revision": {
             "type": "integer",
@@ -1623,8 +2279,20 @@
             "type": "string",
             "format": "date-time"
           },
+          "visibility": {
+            "type": "string",
+            "description": "`workspace` 또는 `private` (D-20, D-40). 개인 노트는 항상 `private`."
+          },
           "workspace_id": {
-            "$ref": "#/components/schemas/WorkspaceId"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId",
+                "description": "워크스페이스 문서면 소유 워크스페이스. 개인 노트는 없다."
+              }
+            ]
           }
         }
       },
@@ -1633,12 +2301,28 @@
         "format": "uuid",
         "description": "문서 내부 ID. CRDT 도입 후에도 유지된다 (D-62)."
       },
+      "DocumentSettings": {
+        "type": "object",
+        "description": "문서 설정 변경 요청.",
+        "required": [
+          "visibility",
+          "allow_copy"
+        ],
+        "properties": {
+          "allow_copy": {
+            "type": "boolean"
+          },
+          "visibility": {
+            "type": "string",
+            "description": "`workspace` 또는 `private`."
+          }
+        }
+      },
       "DocumentSummary": {
         "type": "object",
         "description": "문서 목록 항목.",
         "required": [
           "id",
-          "reference",
           "title",
           "revision",
           "updated_at"
@@ -1648,8 +2332,11 @@
             "$ref": "#/components/schemas/DocumentId"
           },
           "reference": {
-            "type": "string",
-            "description": "사람이 보는 참조. 예: `WIKI-3`."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "사람이 보는 참조. 예: `WIKI-3`. 개인 노트는 없다."
           },
           "revision": {
             "type": "integer",
@@ -1850,6 +2537,107 @@
           }
         }
       },
+      "MoveDocument": {
+        "type": "object",
+        "description": "이동 요청. 미리보기에서 접근 변화를 확인했다는 표시(`acknowledge`)가 있어야 이동한다.",
+        "properties": {
+          "acknowledged": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AcknowledgedPreview",
+                "description": "사용자가 확인한 미리보기. 없거나 지금 계산한 것과 다르면 이동하지 않고 409와 새 미리보기를 돌려준다."
+              }
+            ]
+          },
+          "target_workspace_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
+          }
+        }
+      },
+      "MoveOutcome": {
+        "type": "object",
+        "description": "이동 결과. 이동한 사람이 새 위치에서 문서를 볼 수 없으면 `document`가 없다\n(예: 비공개 문서를 작성 권한만 있는 워크스페이스로 옮긴 경우).",
+        "required": [
+          "workspace_id",
+          "reference"
+        ],
+        "properties": {
+          "document": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Document"
+              }
+            ]
+          },
+          "reference": {
+            "type": "string"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "MovePreview": {
+        "type": "object",
+        "description": "이동 미리보기: 접근이 생기는 사람과 사라지는 사람.",
+        "required": [
+          "gains",
+          "loses",
+          "reference_changes",
+          "history_moves_with_document"
+        ],
+        "properties": {
+          "gains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "history_moves_with_document": {
+            "type": "boolean",
+            "description": "이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다."
+          },
+          "loses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reference_changes": {
+            "type": "boolean",
+            "description": "이동하면 참조 번호가 대상 워크스페이스에서 새로 매겨진다. 링크는 id 기준이라 유지된다 (D-18)."
+          }
+        }
+      },
+      "MoveTarget": {
+        "type": "object",
+        "description": "이동 대상.",
+        "properties": {
+          "target_workspace_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
+          }
+        }
+      },
       "OfferOwnership": {
         "type": "object",
         "description": "인계 제안 요청.",
@@ -1941,6 +2729,59 @@
         "properties": {
           "role": {
             "$ref": "#/components/schemas/Role"
+          }
+        }
+      },
+      "Share": {
+        "type": "object",
+        "description": "공유 항목.",
+        "required": [
+          "id",
+          "email",
+          "permission"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "permission": {
+            "type": "string",
+            "description": "`read` 또는 `write`."
+          }
+        }
+      },
+      "SharedDocument": {
+        "type": "object",
+        "description": "공유받은 문서.",
+        "required": [
+          "id",
+          "title",
+          "permission",
+          "shared_by",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DocumentId"
+          },
+          "permission": {
+            "type": "string",
+            "description": "`read` 또는 `write`."
+          },
+          "shared_by": {
+            "type": "string",
+            "description": "공유한 사람의 이름. 워크스페이스 이름은 멤버가 아닌 사람에게 알리지 않는다."
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

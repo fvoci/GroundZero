@@ -6,15 +6,25 @@ export type Route =
   | { name: 'workspace'; workspaceId: string }
   | { name: 'document'; workspaceId: string; documentId: string }
   | { name: 'members'; workspaceId: string }
+  | { name: 'notes' }
+  | { name: 'shared' }
+  | { name: 'standalone-document'; documentId: string }
   | { name: 'not-found' };
 
 const UUID = '[0-9a-fA-F-]{36}';
 const WORKSPACE = new RegExp(`^/w/(${UUID})/?$`);
 const DOCUMENT = new RegExp(`^/w/(${UUID})/wiki/(${UUID})/?$`);
 const MEMBERS = new RegExp(`^/w/(${UUID})/members/?$`);
+const STANDALONE = new RegExp(`^/d/(${UUID})/?$`);
 
 export function parseRoute(pathname: string): Route {
   if (pathname === '/' || pathname === '') return { name: 'home' };
+  if (pathname === '/notes' || pathname === '/notes/') return { name: 'notes' };
+  if (pathname === '/shared' || pathname === '/shared/') return { name: 'shared' };
+  const standalone = STANDALONE.exec(pathname);
+  if (standalone?.[1] !== undefined) {
+    return { name: 'standalone-document', documentId: standalone[1] };
+  }
   const members = MEMBERS.exec(pathname);
   if (members?.[1] !== undefined) return { name: 'members', workspaceId: members[1] };
   const doc = DOCUMENT.exec(pathname);
@@ -36,6 +46,21 @@ export function membersPath(workspaceId: string): string {
 
 export function documentPath(workspaceId: string, documentId: string): string {
   return `/w/${workspaceId}/wiki/${documentId}`;
+}
+
+/** 워크스페이스 밖에서 여는 문서(개인 노트, 공유받은 문서)의 경로. */
+export function standalonePath(documentId: string): string {
+  return `/d/${documentId}`;
+}
+
+/** 문서가 놓인 곳에 맞는 경로. 내가 멤버인 워크스페이스 문서는 워크스페이스 경로로 연다. */
+export function pathFor(
+  doc: { id: string; workspace_id: string | null },
+  memberOf: (ws: string) => boolean,
+): string {
+  return doc.workspace_id !== null && memberOf(doc.workspace_id)
+    ? documentPath(doc.workspace_id, doc.id)
+    : standalonePath(doc.id);
 }
 
 class Router {

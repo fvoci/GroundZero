@@ -2,7 +2,6 @@
 // 실제 형태를 확인한다(생성 타입은 런타임 검증을 대신하지 않는다 — docs/development.md 3절).
 import type {
   AuthInfo,
-  DocumentSummary,
   Group,
   Health,
   Invitation,
@@ -21,16 +20,24 @@ export interface DocNode {
 }
 
 /** 화면에서 쓰는 문서. 본문을 구체화한 것 외에는 계약의 Document와 같다. */
+export type Access = 'owner' | 'write' | 'read';
+
 export interface DocumentView {
   id: string;
-  workspace_id: string;
-  reference: string;
+  /** 워크스페이스 문서면 소유 워크스페이스, 개인 노트는 null. */
+  workspace_id: string | null;
+  placement: 'wiki' | 'personal';
+  /** 사람이 보는 참조(WIKI-3). 개인 노트는 null. */
+  reference: string | null;
   title: string;
   body: DocNode;
   schema_version: number;
   revision: number;
   updated_at: string;
+  access: Access;
   can_edit: boolean;
+  visibility: 'workspace' | 'private';
+  allow_copy: boolean;
 }
 
 export class ApiError extends Error {
@@ -119,11 +126,11 @@ export function parseWorkspace(value: Json): Workspace {
   };
 }
 
-export function parseSummary(value: Json): DocumentSummary {
+export function parseSummary(value: Json): SummaryView {
   const o = rec(value, 'document summary');
   return {
     id: str(o, 'id'),
-    reference: str(o, 'reference'),
+    reference: optStr(o, 'reference'),
     title: str(o, 'title'),
     revision: int(o, 'revision'),
     updated_at: str(o, 'updated_at'),
@@ -132,16 +139,117 @@ export function parseSummary(value: Json): DocumentSummary {
 
 export function parseDocument(value: Json): DocumentView {
   const o = rec(value, 'document');
+  const placement = str(o, 'placement');
+  if (placement !== 'wiki' && placement !== 'personal') throw new TypeError('unknown placement');
+  const access = str(o, 'access');
+  if (access !== 'owner' && access !== 'write' && access !== 'read') {
+    throw new TypeError('unknown access');
+  }
+  const visibility = str(o, 'visibility');
+  if (visibility !== 'workspace' && visibility !== 'private') {
+    throw new TypeError('unknown visibility');
+  }
+  const workspaceId = o.workspace_id ?? null;
+  const reference = o.reference ?? null;
+  if (workspaceId !== null && typeof workspaceId !== 'string') throw new TypeError('workspace_id');
+  if (reference !== null && typeof reference !== 'string') throw new TypeError('reference');
   return {
     id: str(o, 'id'),
-    workspace_id: str(o, 'workspace_id'),
-    reference: str(o, 'reference'),
+    workspace_id: workspaceId,
+    placement,
+    reference,
     title: str(o, 'title'),
     body: parseDocNode(o.body),
     schema_version: int(o, 'schema_version'),
     revision: int(o, 'revision'),
     updated_at: str(o, 'updated_at'),
+    access,
     can_edit: bool(o, 'can_edit'),
+    visibility,
+    allow_copy: bool(o, 'allow_copy'),
+  };
+}
+
+export interface SummaryView {
+  id: string;
+  reference: string | null;
+  title: string;
+  revision: number;
+  updated_at: string;
+}
+
+export interface SharedView {
+  id: string;
+  title: string;
+  permission: 'read' | 'write';
+  shared_by: string;
+  updated_at: string;
+}
+
+export interface ShareView {
+  id: string;
+  email: string;
+  permission: 'read' | 'write';
+}
+
+export interface MovePreviewView {
+  gains: string[];
+  loses: string[];
+  /** 이전 리비전 기록도 함께 옮겨진다. */
+  history_moves_with_document: boolean;
+}
+
+export interface MoveOutcomeView {
+  workspace_id: string;
+  reference: string;
+  /** 옮긴 뒤 내가 볼 수 없으면 null. */
+  document: DocumentView | null;
+}
+
+function permission(value: string): 'read' | 'write' {
+  if (value === 'read' || value === 'write') return value;
+  throw new TypeError('unknown permission');
+}
+
+function strings(value: Json): string[] {
+  return parseList(value, (s) => {
+    if (typeof s !== 'string') throw new TypeError('expected string');
+    return s;
+  });
+}
+
+export function parseSharedView(value: Json): SharedView {
+  const o = rec(value, 'shared document');
+  return {
+    id: str(o, 'id'),
+    title: str(o, 'title'),
+    permission: permission(str(o, 'permission')),
+    shared_by: str(o, 'shared_by'),
+    updated_at: str(o, 'updated_at'),
+  };
+}
+
+export function parseShareView(value: Json): ShareView {
+  const o = rec(value, 'share');
+  return { id: str(o, 'id'), email: str(o, 'email'), permission: permission(str(o, 'permission')) };
+}
+
+export function parseMovePreview(value: Json): MovePreviewView {
+  const o = rec(value, 'move preview');
+  return {
+    gains: strings(o.gains),
+    loses: strings(o.loses),
+    history_moves_with_document: bool(o, 'history_moves_with_document'),
+  };
+}
+
+export function parseMoveOutcome(value: Json): MoveOutcomeView {
+  const o = rec(value, 'move outcome');
+  const doc = o.document ?? null;
+  return {
+    workspace_id: str(o, 'workspace_id'),
+    reference: str(o, 'reference'),
+    document: doc === null ? null : parseDocument(doc),
   };
 }
 
@@ -352,6 +460,58 @@ export const api = {
       `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`,
       none,
     ),
+  myNotes: () => expectOk('GET', '/api/me/notes', (v) => parseList(v, parseSummary)),
+  createNote: (requestId: string, title: string) =>
+    expectOk('POST', '/api/me/notes', parseDocument, { request_id: requestId, title }),
+  sharedWithMe: () => expectOk('GET', '/api/me/shared', (v) => parseList(v, parseSharedView)),
+  setSettings: (id: string, visibility: 'workspace' | 'private', allowCopy: boolean) =>
+    expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, {
+      visibility,
+      allow_copy: allowCopy,
+    }),
+  shares: (id: string) =>
+    expectOk('GET', `/api/documents/${encodeURIComponent(id)}/shares`, (v) =>
+      parseList(v, parseShareView),
+    ),
+  share: (id: string, email: string, perm: 'read' | 'write') =>
+    expectOk('POST', `/api/documents/${encodeURIComponent(id)}/shares`, parseShareView, {
+      email,
+      permission: perm,
+    }),
+  unshare: (shareId: string) =>
+    expectOk('DELETE', `/api/document-shares/${encodeURIComponent(shareId)}`, none),
+  copyDocument: (id: string, requestId: string, targetWorkspaceId: string | null, title: string) =>
+    expectOk('POST', `/api/documents/${encodeURIComponent(id)}/copy`, parseDocument, {
+      request_id: requestId,
+      target_workspace_id: targetWorkspaceId,
+      title,
+    }),
+  movePreview: (id: string, targetWorkspaceId: string) =>
+    expectOk('POST', `/api/documents/${encodeURIComponent(id)}/move/preview`, parseMovePreview, {
+      target_workspace_id: targetWorkspaceId,
+    }),
+  /** 확인한 미리보기와 함께 이동한다. 그사이 접근 변화가 바뀌면 `{ kind: 'changed', preview }`. */
+  async moveDocument(
+    id: string,
+    targetWorkspaceId: string,
+    acknowledged: MovePreviewView,
+  ): Promise<
+    { kind: 'moved'; outcome: MoveOutcomeView } | { kind: 'changed'; preview: MovePreviewView }
+  > {
+    const { status, json } = await request(
+      'POST',
+      `/api/documents/${encodeURIComponent(id)}/move`,
+      {
+        target_workspace_id: targetWorkspaceId,
+        acknowledged: { gains: acknowledged.gains, loses: acknowledged.loses },
+      },
+    );
+    if (status === 409 && isRecord(json) && 'gains' in json) {
+      return { kind: 'changed', preview: parseMovePreview(json) };
+    }
+    if (status !== 200) fail(status, json);
+    return { kind: 'moved', outcome: parseMoveOutcome(json) };
+  },
   /** 저장. 충돌이면 `{ kind: 'conflict', current }`. */
   async saveDocument(
     id: string,

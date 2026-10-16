@@ -5,6 +5,8 @@
   import { api } from '$lib/api/client';
   import LoginScreen from '$lib/features/auth/LoginScreen.svelte';
   import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
+  import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
+  import SharedScreen from '$lib/features/notes/SharedScreen.svelte';
   import MembersScreen from '$lib/features/members/MembersScreen.svelte';
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
   import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
@@ -113,13 +115,43 @@
             </Sidebar.Menu>
           </Sidebar.GroupContent>
         </Sidebar.Group>
+        <Sidebar.Group>
+          <Sidebar.GroupLabel>개인</Sidebar.GroupLabel>
+          <Sidebar.GroupContent>
+            <Sidebar.Menu>
+              {#each [{ path: '/notes', label: '내 노트', active: route.name === 'notes' }, { path: '/shared', label: '공유받은 문서', active: route.name === 'shared' }] as item (item.path)}
+                <Sidebar.MenuItem>
+                  <Sidebar.MenuButton isActive={item.active}>
+                    {#snippet child({ props })}
+                      <a
+                        href={item.path}
+                        {...props}
+                        onclick={(e: MouseEvent) => {
+                          e.preventDefault();
+                          router.navigate(item.path);
+                        }}>{item.label}</a
+                      >
+                    {/snippet}
+                  </Sidebar.MenuButton>
+                </Sidebar.MenuItem>
+              {/each}
+            </Sidebar.Menu>
+          </Sidebar.GroupContent>
+        </Sidebar.Group>
       </Sidebar.Content>
     </Sidebar.Root>
 
     <Sidebar.Inset>
       <header class="flex items-center gap-2 border-b px-4 py-2">
         <Sidebar.Trigger />
-        <span class="text-base font-semibold">{currentWorkspace?.name ?? '홈'}</span>
+        <span class="text-base font-semibold"
+          >{currentWorkspace?.name ??
+            (route.name === 'notes'
+              ? '내 노트'
+              : route.name === 'shared'
+                ? '공유받은 문서'
+                : '홈')}</span
+        >
         <div class="ml-auto">
           <DropdownMenu.Root>
             <DropdownMenu.Trigger>
@@ -182,8 +214,14 @@
                 }}>{currentWorkspace.name} 위키</a
               >
             </nav>
-            <DocumentScreen documentId={route.documentId} />
+            <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
           {/if}
+        {:else if route.name === 'notes'}
+          <NotesScreen />
+        {:else if route.name === 'shared'}
+          <SharedScreen />
+        {:else if route.name === 'standalone-document'}
+          <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
         {:else}
           <p role="alert">페이지를 찾을 수 없습니다.</p>
         {/if}

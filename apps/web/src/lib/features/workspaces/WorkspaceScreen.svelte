@@ -1,6 +1,8 @@
 <script lang="ts">
   // 워크스페이스의 위키 문서 목록과 새 문서 만들기.
-  import type { DocumentSummary, Workspace } from '@fvoci/api-client';
+  import type { Workspace } from '@fvoci/api-client';
+
+  import type { SummaryView } from '$lib/api/client';
 
   import { api, ApiError } from '$lib/api/client';
   import { documentPath, router } from '$lib/router.svelte';
@@ -13,7 +15,7 @@
 
   const { workspace }: Props = $props();
 
-  let docs = $state<DocumentSummary[] | undefined>(undefined);
+  let docs = $state<SummaryView[] | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
 
   $effect(() => {

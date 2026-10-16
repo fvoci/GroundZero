@@ -118,6 +118,16 @@ async fn api_not_found() -> AppError {
         documents::create_wiki,
         documents::get,
         documents::save,
+        documents::my_notes,
+        documents::create_note,
+        documents::shared_with_me,
+        documents::set_settings,
+        documents::list_shares,
+        documents::create_share,
+        documents::delete_share,
+        documents::copy,
+        documents::move_preview,
+        documents::move_document,
         members::list_members,
         members::set_role,
         members::remove_member,
@@ -160,6 +170,17 @@ async fn api_not_found() -> AppError {
         documents::CreateDocument,
         documents::SaveDocument,
         documents::ConflictBody,
+        documents::Access,
+        documents::SharedDocument,
+        documents::DocumentSettings,
+        documents::Share,
+        documents::CreateShare,
+        documents::CopyDocument,
+        documents::MoveTarget,
+        documents::MoveDocument,
+        documents::MovePreview,
+        documents::AcknowledgedPreview,
+        documents::MoveOutcome,
         crate::ids::Role,
     )),
     tags(
@@ -192,6 +213,32 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/workspaces/{workspace_id}/wiki/documents",
             get(documents::list_wiki).post(documents::create_wiki),
+        )
+        .route(
+            "/me/notes",
+            get(documents::my_notes).post(documents::create_note),
+        )
+        .route("/me/shared", get(documents::shared_with_me))
+        .route(
+            "/documents/{document_id}/settings",
+            put(documents::set_settings),
+        )
+        .route(
+            "/documents/{document_id}/shares",
+            get(documents::list_shares).post(documents::create_share),
+        )
+        .route(
+            "/document-shares/{share_id}",
+            delete(documents::delete_share),
+        )
+        .route("/documents/{document_id}/copy", post(documents::copy))
+        .route(
+            "/documents/{document_id}/move/preview",
+            post(documents::move_preview),
+        )
+        .route(
+            "/documents/{document_id}/move",
+            post(documents::move_document),
         )
         .route(
             "/documents/{document_id}",

@@ -9,7 +9,7 @@
 
   import type { DocNode, DocumentView } from '$lib/api/client';
   import { api, ApiError, NetworkError, newRequestId } from '$lib/api/client';
-  import { documentPath, router } from '$lib/router.svelte';
+  import { router, standalonePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
@@ -175,7 +175,8 @@
   async function keepMineAsCopy(): Promise<void> {
     const copyTitle = `${title.trim() === '' ? server.title : title.trim()} (내 초안)`;
     try {
-      const created = await api.createWikiDocument(server.workspace_id, newRequestId(), copyTitle);
+      // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다.
+      const created = await api.createNote(newRequestId(), copyTitle);
       const saved = await api.saveDocument(created.id, {
         requestId: newRequestId(),
         baseRevision: created.revision,
@@ -185,7 +186,7 @@
       if (saved.kind === 'conflict') throw new Error('copy conflicted');
       clearDraft(server.id);
       router.guard = undefined;
-      router.navigate(documentPath(server.workspace_id, created.id));
+      router.navigate(standalonePath(created.id));
     } catch (error: unknown) {
       message =
         error instanceof Error
@@ -241,7 +242,9 @@
 
 <article class="flex flex-col gap-4" aria-labelledby="doc-title-label">
   <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-    <span class="rounded border px-1.5 font-mono" title="문서 참조">{server.reference}</span>
+    {#if server.reference !== null}
+      <span class="rounded border px-1.5 font-mono" title="문서 참조">{server.reference}</span>
+    {/if}
     <span>리비전 {server.revision}</span>
     <span class="ml-auto" role="status" aria-live="polite" data-testid="save-status"
       >{statusText[status]}</span
@@ -312,7 +315,7 @@
         </div>
       </div>
       <div class="flex flex-wrap gap-2">
-        <Button size="sm" onclick={() => void keepMineAsCopy()}>내 초안을 새 문서로 보존</Button>
+        <Button size="sm" onclick={() => void keepMineAsCopy()}>내 초안을 내 노트로 보존</Button>
         <Button size="sm" variant="outline" onclick={() => (confirmOverwrite = true)}
           >내 초안으로 다시 저장</Button
         >

@@ -20,6 +20,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/document-shares/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 공유 철회(소유 권한자). 다음 요청부터 접근이 막힌다. */
+        delete: operations["delete_share"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}": {
         parameters: {
             query?: never;
@@ -31,11 +48,100 @@ export interface paths {
         get: operations["get"];
         /**
          * 문서 저장. 충돌 시 409 + 서버 최신본.
-         * @description 순서: 권한 확인 → 행 잠금 → 재시도 판단 → 내용 동일 판단 → 리비전 비교 → 갱신·리비전 기록.
+         * @description 순서: 권한 확인 → 행 잠금 → 재시도 판단 → 리비전 비교 → 내용 동일 판단 → 갱신·리비전 기록.
          *     행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다.
          */
         put: operations["save"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 복제. 새 문서(리비전 1)이며 이후 원본과 동기화하지 않는다 (D-23).
+         *     소유 권한자는 항상, 그 밖의 사람은 원본이 복제를 허용할 때만 할 수 있다.
+         */
+        post: operations["copy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. */
+        post: operations["move_document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/move/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 이동 미리보기(소유 권한자). */
+        post: operations["move_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 비공개·복제 허용 설정(소유 권한자). 감사 기록을 남긴다. */
+        put: operations["set_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 공유 목록(소유 권한자). */
+        get: operations["list_shares"];
+        put?: never;
+        /** 공유 추가(소유 권한자). 받는 사람은 그 이메일을 제공자가 검증한 계정으로 로그인해야 한다. */
+        post: operations["create_share"];
         delete?: never;
         options?: never;
         head?: never;
@@ -154,6 +260,41 @@ export interface paths {
         };
         /** 현재 로그인한 사용자. */
         get: operations["me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내 개인 노트 목록. 워크스페이스 관리자에게도 보이지 않는다 (D-22, D-49). */
+        get: operations["my_notes"];
+        put?: never;
+        /** 개인 노트 생성. */
+        post: operations["create_note"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/shared": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 나에게 공유된 문서(검증된 이메일 기준). */
+        get: operations["shared_with_me"];
         put?: never;
         post?: never;
         delete?: never;
@@ -310,7 +451,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 위키 문서 목록. */
+        /** 위키 문서 목록. 볼 수 있는 문서만(비공개 문서는 작성자·관리자·공유 대상에게만) 나온다. */
         get: operations["list_wiki"];
         put?: never;
         /**
@@ -400,6 +541,16 @@ export interface components {
         Accepted: {
             workspace_id: components["schemas"]["WorkspaceId"];
         };
+        /**
+         * @description 문서에 대한 현재 사용자의 권한.
+         * @enum {string}
+         */
+        Access: "owner" | "write" | "read";
+        /** @description 사용자가 확인한 접근 변화. */
+        AcknowledgedPreview: {
+            gains: string[];
+            loses: string[];
+        };
         /** @description 로그인 가능 여부. 웹이 로그인 버튼 표시에 쓴다. */
         AuthInfo: {
             oidc_enabled: boolean;
@@ -408,6 +559,13 @@ export interface components {
         ConflictBody: {
             current: components["schemas"]["Document"];
             error: string;
+        };
+        /** @description 복제 요청. `target_workspace_id`가 없으면 내 개인 노트로 만든다. */
+        CopyDocument: {
+            /** Format: uuid */
+            request_id: string;
+            target_workspace_id?: null | components["schemas"]["WorkspaceId"];
+            title: string;
         };
         /** @description 문서 생성 요청. */
         CreateDocument: {
@@ -424,6 +582,12 @@ export interface components {
             email: string;
             role: components["schemas"]["Role"];
         };
+        /** @description 공유 추가 요청. 같은 이메일이면 권한을 바꾼다. */
+        CreateShare: {
+            email: string;
+            /** @description `read` 또는 `write`. */
+            permission: string;
+        };
         /** @description 워크스페이스 생성 요청. */
         CreateWorkspace: {
             name: string;
@@ -435,12 +599,17 @@ export interface components {
         };
         /** @description 문서 전체. */
         Document: {
+            access: components["schemas"]["Access"];
+            /** @description 소유 권한자 외의 사람이 복제할 수 있는지 (D-20). */
+            allow_copy: boolean;
             /** @description Tiptap JSON. `type`이 `doc`인 객체. */
             body: Record<string, never>;
             /** @description 현재 사용자가 고칠 수 있는지. */
             can_edit: boolean;
             id: components["schemas"]["DocumentId"];
-            reference: string;
+            /** @description `wiki` 또는 `personal`. */
+            placement: string;
+            reference?: string | null;
             /** Format: int32 */
             revision: number;
             /** Format: int32 */
@@ -448,18 +617,26 @@ export interface components {
             title: string;
             /** Format: date-time */
             updated_at: string;
-            workspace_id: components["schemas"]["WorkspaceId"];
+            /** @description `workspace` 또는 `private` (D-20, D-40). 개인 노트는 항상 `private`. */
+            visibility: string;
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
         /**
          * Format: uuid
          * @description 문서 내부 ID. CRDT 도입 후에도 유지된다 (D-62).
          */
         DocumentId: string;
+        /** @description 문서 설정 변경 요청. */
+        DocumentSettings: {
+            allow_copy: boolean;
+            /** @description `workspace` 또는 `private`. */
+            visibility: string;
+        };
         /** @description 문서 목록 항목. */
         DocumentSummary: {
             id: components["schemas"]["DocumentId"];
-            /** @description 사람이 보는 참조. 예: `WIKI-3`. */
-            reference: string;
+            /** @description 사람이 보는 참조. 예: `WIKI-3`. 개인 노트는 없다. */
+            reference?: string | null;
             /** Format: int32 */
             revision: number;
             title: string;
@@ -523,6 +700,33 @@ export interface components {
             my_role: components["schemas"]["Role"];
             pending_owner?: null | components["schemas"]["UserId"];
         };
+        /** @description 이동 요청. 미리보기에서 접근 변화를 확인했다는 표시(`acknowledge`)가 있어야 이동한다. */
+        MoveDocument: {
+            acknowledged?: null | components["schemas"]["AcknowledgedPreview"];
+            target_workspace_id?: null | components["schemas"]["WorkspaceId"];
+        };
+        /**
+         * @description 이동 결과. 이동한 사람이 새 위치에서 문서를 볼 수 없으면 `document`가 없다
+         *     (예: 비공개 문서를 작성 권한만 있는 워크스페이스로 옮긴 경우).
+         */
+        MoveOutcome: {
+            document?: null | components["schemas"]["Document"];
+            reference: string;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /** @description 이동 미리보기: 접근이 생기는 사람과 사라지는 사람. */
+        MovePreview: {
+            gains: string[];
+            /** @description 이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다. */
+            history_moves_with_document: boolean;
+            loses: string[];
+            /** @description 이동하면 참조 번호가 대상 워크스페이스에서 새로 매겨진다. 링크는 id 기준이라 유지된다 (D-18). */
+            reference_changes: boolean;
+        };
+        /** @description 이동 대상. */
+        MoveTarget: {
+            target_workspace_id?: null | components["schemas"]["WorkspaceId"];
+        };
         /** @description 인계 제안 요청. */
         OfferOwnership: {
             to_user: components["schemas"]["UserId"];
@@ -558,6 +762,25 @@ export interface components {
         /** @description 역할 변경 요청. */
         SetRole: {
             role: components["schemas"]["Role"];
+        };
+        /** @description 공유 항목. */
+        Share: {
+            email: string;
+            /** Format: uuid */
+            id: string;
+            /** @description `read` 또는 `write`. */
+            permission: string;
+        };
+        /** @description 공유받은 문서. */
+        SharedDocument: {
+            id: components["schemas"]["DocumentId"];
+            /** @description `read` 또는 `write`. */
+            permission: string;
+            /** @description 공유한 사람의 이름. 워크스페이스 이름은 멤버가 아닌 사람에게 알리지 않는다. */
+            shared_by: string;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         /**
          * Format: uuid
@@ -602,6 +825,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthInfo"];
+                };
+            };
+        };
+    };
+    delete_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -688,6 +946,280 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConflictBody"];
+                };
+            };
+        };
+    };
+    copy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopyDocument"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    move_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveDocument"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoveOutcome"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovePreview"];
+                };
+            };
+        };
+    };
+    move_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveTarget"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovePreview"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentSettings"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_shares: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Share"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateShare"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Share"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -956,6 +1488,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    my_notes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentSummary"][];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_note: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDocument"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    shared_with_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedDocument"][];
                 };
             };
             401: {

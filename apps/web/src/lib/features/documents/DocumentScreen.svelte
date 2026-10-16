@@ -1,15 +1,19 @@
 <script lang="ts">
-  // 문서를 불러와 편집기에 넘긴다. 다른 문서로 바뀌면 편집기를 새로 만든다.
+  // 문서를 불러와 동작 막대와 편집기에 넘긴다. 다른 문서로 바뀌면 편집기를 새로 만든다.
+  import type { Workspace } from '@fvoci/api-client';
+
   import type { DocumentView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
 
+  import DocumentActions from './DocumentActions.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
 
   interface Props {
     documentId: string;
+    workspaces: Workspace[];
   }
 
-  const { documentId }: Props = $props();
+  const { documentId, workspaces }: Props = $props();
 
   let doc = $state<DocumentView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
@@ -42,6 +46,15 @@
 {:else if doc === undefined}
   <p aria-live="polite">불러오는 중…</p>
 {:else}
+  <DocumentActions
+    {doc}
+    {workspaces}
+    onchanged={(next: DocumentView) => {
+      // 설정·이동은 리비전을 바꾸지 않는다. 편집 중인 내용은 편집기가 그대로 가진다.
+      if (doc !== undefined)
+        doc = { ...doc, ...next, body: doc.body, title: doc.title, revision: doc.revision };
+    }}
+  />
   {#key doc.id}
     <DocumentEditor initial={doc} />
   {/key}

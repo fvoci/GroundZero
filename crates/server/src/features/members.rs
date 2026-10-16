@@ -212,7 +212,7 @@ pub struct Invitation {
     pub expires_at: OffsetDateTime,
 }
 
-fn validate_email(raw: &str) -> Result<String, AppError> {
+pub fn validate_email(raw: &str) -> Result<String, AppError> {
     let email = raw.trim().to_lowercase();
     let valid = email.len() <= MAX_EMAIL
         && email
