@@ -1,8 +1,13 @@
 <script lang="ts">
   // Tiptap 편집기 래퍼. 인스턴스는 마운트 때 한 번 만들고 해제 때 destroy한다.
   // 내용을 통째로 바꿀 때는 부모가 {#key}로 이 컴포넌트를 다시 만든다.
+  // 모드 (D-27): 서식 편집(기본), Markdown 원문 편집(추가 입력 방식), 읽기 미리보기.
+  // Markdown으로 바꿨다가 원문을 고치지 않고 돌아오면 원래 내용을 그대로 둔다. Markdown으로 다 표현하지 못하는
+  // 내용이면 들어갈 때 알려 주고, 원문을 고친 경우에만 원문에서 다시 만든 내용으로 바꾼다(조용한 손실 방지).
   import type { Extensions } from '@tiptap/core';
   import { Editor } from '@tiptap/core';
+  import { TaskItem, TaskList } from '@tiptap/extension-list';
+  import { Markdown } from '@tiptap/markdown';
   import StarterKit from '@tiptap/starter-kit';
   import { onMount, untrack } from 'svelte';
 
@@ -11,6 +16,8 @@
   import type { ReferenceContext } from '$lib/features/references/context';
   import { Reference, ReferenceSuggestion } from '$lib/features/references/reference-extension';
   import { Button } from '$lib/ui/button';
+
+  import { canonicalJson } from './drafts';
 
   interface Props {
     content: DocNode;
@@ -23,30 +30,31 @@
 
   const { content, editable, label, onchange, references }: Props = $props();
 
-  interface Marks {
-    bold: boolean;
-    italic: boolean;
-    heading: boolean;
-    bulletList: boolean;
-    codeBlock: boolean;
-  }
+  type Command = 'bold' | 'italic' | 'heading' | 'bulletList' | 'taskList' | 'codeBlock';
+  type Mode = 'rich' | 'markdown' | 'preview';
 
   let element: HTMLDivElement | undefined = $state();
   let editor: Editor | undefined;
-  let marks = $state<Marks>({
+  let marks = $state<Record<Command, boolean>>({
     bold: false,
     italic: false,
     heading: false,
     bulletList: false,
+    taskList: false,
     codeBlock: false,
   });
+  let mode = $state<Mode>('rich');
+  let markdownText = $state('');
+  let markdownAtEntry = '';
+  let lossy = $state(false);
 
-  function readMarks(e: Editor): Marks {
+  function readMarks(e: Editor): Record<Command, boolean> {
     return {
       bold: e.isActive('bold'),
       italic: e.isActive('italic'),
       heading: e.isActive('heading', { level: 2 }),
       bulletList: e.isActive('bulletList'),
+      taskList: e.isActive('taskList'),
       codeBlock: e.isActive('codeBlock'),
     };
   }
@@ -58,10 +66,22 @@
       hrefFor: ctx?.hrefFor ?? (() => null),
       navigate: ctx?.navigate ?? (() => undefined),
     });
-    if (ctx === undefined || !canEdit) return [StarterKit, reference];
-    return [
+    const base: Extensions = [
       StarterKit,
+      TaskList,
+      TaskItem.configure({
+        nested: true,
+        a11y: {
+          checkboxLabel: (node, checked) =>
+            `${checked ? '완료' : '미완료'} 항목: ${node.textContent || '빈 항목'}`,
+        },
+      }),
+      Markdown,
       reference,
+    ];
+    if (ctx === undefined || !canEdit) return base;
+    return [
+      ...base,
       ReferenceSuggestion.configure({
         workspaceId: ctx.workspaceId,
         describeWorkspace: ctx.describeWorkspace,
@@ -98,8 +118,6 @@
     };
   });
 
-  type Command = 'bold' | 'italic' | 'heading' | 'bulletList' | 'codeBlock';
-
   function run(command: Command): void {
     const chain = editor?.chain().focus();
     if (chain === undefined) return;
@@ -116,6 +134,9 @@
       case 'bulletList':
         chain.toggleBulletList().run();
         break;
+      case 'taskList':
+        chain.toggleTaskList().run();
+        break;
       case 'codeBlock':
         chain.toggleCodeBlock().run();
         break;
@@ -127,22 +148,96 @@
     { command: 'italic', label: '기울임' },
     { command: 'heading', label: '제목' },
     { command: 'bulletList', label: '목록' },
+    { command: 'taskList', label: '체크리스트' },
     { command: 'codeBlock', label: '코드' },
+  ];
+
+  /** 원문을 고쳤을 때만 원문에서 다시 만든 내용을 쓴다. */
+  function parsedMarkdown(e: Editor): DocNode | undefined {
+    if (markdownText === markdownAtEntry || e.markdown === undefined) return undefined;
+    return parseDocNode(e.markdown.parse(markdownText));
+  }
+
+  function switchMode(next: Mode): void {
+    const e = editor;
+    if (e === undefined || next === mode) return;
+    if (mode === 'markdown') {
+      const parsed = parsedMarkdown(e);
+      if (parsed !== undefined) e.commands.setContent(parsed, { emitUpdate: true });
+    }
+    if (next === 'markdown') {
+      markdownText = e.getMarkdown();
+      markdownAtEntry = markdownText;
+      const roundTrip = e.markdown?.parse(markdownText);
+      lossy = roundTrip === undefined || canonicalJson(roundTrip) !== canonicalJson(e.getJSON());
+    }
+    e.setEditable(next === 'rich');
+    mode = next;
+  }
+
+  function onMarkdownInput(): void {
+    const e = editor;
+    if (e === undefined) return;
+    const parsed = parsedMarkdown(e);
+    // 자동 저장은 원문에서 만든 내용으로 한다. 편집기는 모드를 바꿀 때 맞춘다.
+    if (parsed !== undefined) onchange?.(parsed);
+  }
+
+  const MODES: { mode: Mode; label: string }[] = [
+    { mode: 'rich', label: '서식 편집' },
+    { mode: 'markdown', label: 'Markdown' },
+    { mode: 'preview', label: '미리보기' },
   ];
 </script>
 
 {#if editable}
-  <div class="flex flex-wrap gap-1 border-b pb-2" role="toolbar" aria-label="서식">
-    {#each tools as tool (tool.command)}
-      <Button
-        variant={marks[tool.command] ? 'secondary' : 'ghost'}
-        size="sm"
-        aria-pressed={marks[tool.command]}
-        onclick={() => {
-          run(tool.command);
-        }}>{tool.label}</Button
-      >
-    {/each}
+  <div class="flex flex-wrap items-center gap-1 border-b pb-2">
+    <div class="flex gap-1" role="group" aria-label="편집 방식">
+      {#each MODES as m (m.mode)}
+        <Button
+          size="sm"
+          variant={mode === m.mode ? 'secondary' : 'ghost'}
+          aria-pressed={mode === m.mode}
+          onclick={() => {
+            switchMode(m.mode);
+          }}>{m.label}</Button
+        >
+      {/each}
+    </div>
+    {#if mode === 'rich'}
+      <div class="ml-2 flex flex-wrap gap-1 border-l pl-2" role="toolbar" aria-label="서식">
+        {#each tools as tool (tool.command)}
+          <Button
+            variant={marks[tool.command] ? 'secondary' : 'ghost'}
+            size="sm"
+            aria-pressed={marks[tool.command]}
+            onclick={() => {
+              run(tool.command);
+            }}>{tool.label}</Button
+          >
+        {/each}
+      </div>
+    {/if}
   </div>
 {/if}
-<div bind:this={element} class="min-h-[12rem] py-3" data-testid="editor"></div>
+{#if mode === 'markdown'}
+  {#if lossy}
+    <p class="mt-2 text-sm text-amber-700 dark:text-amber-400" role="note">
+      이 문서에는 Markdown으로 그대로 옮기지 못하는 서식이 있습니다. 원문을 고치지 않고 돌아가면
+      원래 내용이 그대로 남고, 고치면 원문에서 다시 만든 내용으로 저장됩니다.
+    </p>
+  {/if}
+  <label class="mt-2 block text-sm font-medium" for="markdown-source">Markdown 원문</label>
+  <textarea
+    id="markdown-source"
+    bind:value={markdownText}
+    oninput={onMarkdownInput}
+    spellcheck="false"
+    class="mt-1 min-h-[16rem] w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+  ></textarea>
+{/if}
+<div
+  bind:this={element}
+  class={`min-h-[12rem] py-3 ${mode === 'markdown' ? 'hidden' : ''}`}
+  data-testid="editor"
+></div>

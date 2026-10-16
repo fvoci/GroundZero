@@ -17,6 +17,12 @@ function children(node: { content?: unknown }): unknown[] {
   return Array.isArray(node.content) ? node.content : [];
 }
 
+function checked(attrs: unknown): boolean {
+  return (
+    typeof attrs === 'object' && attrs !== null && 'checked' in attrs && attrs.checked === true
+  );
+}
+
 function headingLevel(attrs: unknown): number {
   if (
     typeof attrs === 'object' &&
@@ -38,7 +44,12 @@ function linesOf(node: unknown, depth: number, out: string[]): void {
     case 'taskList': {
       let n = 1;
       for (const item of children(node)) {
-        const mark = node.type === 'orderedList' ? `${String(n)}.` : '-';
+        const mark =
+          node.type === 'orderedList'
+            ? `${String(n)}.`
+            : node.type === 'taskList'
+              ? `- [${isNode(item) && checked(item.attrs) ? 'x' : ' '}]`
+              : '-';
         n += 1;
         if (!isNode(item)) continue;
         const [first, ...rest] = children(item);

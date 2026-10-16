@@ -60,3 +60,21 @@ describe('revision diff', () => {
     expect(r.author_name).toBeNull();
   });
 });
+
+describe('revision diff for checklists', () => {
+  it('shows checked state so a toggle is a visible change', () => {
+    const item = (checked: boolean, text: string) => ({
+      type: 'taskItem',
+      attrs: { checked },
+      content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+    });
+    const before = { type: 'doc', content: [{ type: 'taskList', content: [item(false, '초안')] }] };
+    const after = { type: 'doc', content: [{ type: 'taskList', content: [item(true, '초안')] }] };
+    expect(blockLines(before)).toEqual(['- [ ] 초안']);
+    const lines = diffRevisions({ title: 't', body: before }, { title: 't', body: after });
+    expect(lines.filter((l) => l.kind !== 'same').map((l) => `${l.kind}:${l.text}`)).toEqual([
+      'removed:- [ ] 초안',
+      'added:- [x] 초안',
+    ]);
+  });
+});

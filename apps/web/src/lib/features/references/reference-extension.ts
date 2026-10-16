@@ -2,7 +2,7 @@
 // 노드는 종류와 id만 저장한다(표시 이름은 볼 때 권한을 확인해 만든다). 후보 목록은 키보드로 고르고
 // 편집기 쪽에 aria-activedescendant를 알려 화면 낭독기에서도 따라갈 수 있게 한다.
 import type { Editor } from '@tiptap/core';
-import { Extension, Node, mergeAttributes } from '@tiptap/core';
+import { Extension, Node, createInlineMarkdownSpec, mergeAttributes } from '@tiptap/core';
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
 import Suggestion from '@tiptap/suggestion';
 import { computePosition, flip, offset, shift } from '@floating-ui/dom';
@@ -30,6 +30,13 @@ export const Reference = Node.create<ReferenceOptions>({
   inline: true,
   atom: true,
   selectable: true,
+
+  // Markdown 모드에서도 참조가 사라지지 않게 `[reference kind="item" id="…"]` 형식으로 쓰고 읽는다(D-27).
+  ...createInlineMarkdownSpec({
+    nodeName: 'reference',
+    selfClosing: true,
+    allowedAttributes: ['kind', 'id'],
+  }),
 
   addOptions() {
     return { hrefFor: () => null, navigate: () => undefined };
