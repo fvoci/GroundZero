@@ -4,6 +4,7 @@
 
   import type { ItemView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
+  import { forgetReferences } from '$lib/features/references/resolver';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { itemPath, router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
@@ -70,6 +71,7 @@
     try {
       const before = mod.key;
       mod = await api.updateModule(mod.id, editName.trim(), key);
+      forgetReferences();
       editKey = mod.key;
       items = await api.items(mod.id);
       if (before !== mod.key) {

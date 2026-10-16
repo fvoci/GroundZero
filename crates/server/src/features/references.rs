@@ -133,7 +133,8 @@ pub struct Notification {
     pub document_reference: Option<String>,
     pub workspace_id: Option<WorkspaceId>,
     pub item_id: Option<ItemId>,
-    pub actor_name: String,
+    /// 언급한 사람. 워크스페이스를 함께 쓰지 않으면(공유받은 개인 노트 등) 없을 수 있다.
+    pub actor_name: Option<String>,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub created_at: OffsetDateTime,
@@ -199,18 +200,36 @@ fn to_candidates(rows: Vec<CandidateRow>) -> Vec<ReferenceCandidate> {
         .collect()
 }
 
+/// 검색 범위: 지정한 워크스페이스(멤버여야 함) 또는 내가 속한 모든 워크스페이스.
+/// 이 목록으로 먼저 좁혀 RLS 판정 함수가 다른 테넌트의 행에 돌지 않게 한다.
+async fn search_scope(
+    tx: &mut UserTx,
+    ws: Option<WorkspaceId>,
+) -> Result<Vec<WorkspaceId>, AppError> {
+    if let Some(ws) = ws {
+        crate::features::workspaces::member_role(tx, ws).await?;
+        return Ok(vec![ws]);
+    }
+    let ids: Vec<WorkspaceId> = sqlx::query_scalar("SELECT app_my_workspace_ids()")
+        .fetch_all(tx.conn())
+        .await?;
+    Ok(ids)
+}
+
 /// 참조 번호로 찾기. 예전 키도 별칭으로 찾는다 (D-18). 볼 수 없는 대상은 RLS로 빠진다.
 async fn by_reference(
     tx: &mut UserTx,
-    ws: Option<WorkspaceId>,
+    scope: &[WorkspaceId],
     key: &str,
     number: i64,
 ) -> Result<Vec<CandidateRow>, AppError> {
     let rows: Vec<CandidateRow> = sqlx::query_as(
         "WITH scopes AS (
-           SELECT w.id AS workspace_id, w.id AS scope_id FROM workspaces w WHERE $2 = 'WIKI'
+           SELECT w.id AS workspace_id, w.id AS scope_id FROM workspaces w
+           WHERE $2 = 'WIKI' AND w.id = ANY($1)
            UNION
-           SELECT k.workspace_id, k.module_id FROM module_keys k WHERE k.key = $2
+           SELECT k.workspace_id, k.module_id FROM module_keys k
+           WHERE k.key = $2 AND k.workspace_id = ANY($1)
          )
          SELECT n.target_kind, n.target_id,
                 coalesce(i.title, d.title),
@@ -218,14 +237,13 @@ async fn by_reference(
                                    ELSE app_document_reference(n.target_id) END,
                 n.workspace_id, w.name
          FROM scopes s
-         JOIN numbered_targets n ON n.scope_id = s.scope_id AND n.workspace_id = s.workspace_id
+         JOIN numbered_targets n ON n.scope_id = s.scope_id AND n.number = $3
          JOIN workspaces w ON w.id = n.workspace_id
          LEFT JOIN items i ON n.target_kind = 'item' AND i.id = n.target_id
          LEFT JOIN documents d ON n.target_kind = 'document' AND d.id = n.target_id
-         WHERE n.number = $3 AND ($1::uuid IS NULL OR n.workspace_id = $1)
-           AND coalesce(i.title, d.title) IS NOT NULL",
+         WHERE coalesce(i.title, d.title) IS NOT NULL",
     )
-    .bind(ws)
+    .bind(scope)
     .bind(key)
     .bind(number)
     .fetch_all(tx.conn())
@@ -246,27 +264,24 @@ pub async fn candidates(
         return Err(AppError::BadRequest("query is too long".into()));
     }
     let mut tx = state.db.begin_as(user).await?;
-    if let Some(ws) = query.workspace_id {
-        crate::features::workspaces::member_role(&mut tx, ws).await?;
-    }
-    let ws = query.workspace_id;
+    let scope = search_scope(&mut tx, query.workspace_id).await?;
     let pattern = like_pattern(q);
     let mut out = Vec::new();
 
     if let Some((key, number)) = parse_reference(q) {
         out.extend(to_candidates(
-            by_reference(&mut tx, ws, &key, number).await?,
+            by_reference(&mut tx, &scope, &key, number).await?,
         ));
     }
 
-    // 사람: 나와 워크스페이스를 함께 쓰는 사람(users RLS). 이메일은 내보내지 않는다.
+    // 사람: 범위 안 워크스페이스의 멤버. 이메일은 내보내지 않는다.
     let people: Vec<CandidateRow> = sqlx::query_as(
         "SELECT DISTINCT 'user', u.id, u.display_name, NULL::text, NULL::uuid, NULL::text
          FROM workspace_members m JOIN users u ON u.id = m.user_id
-         WHERE ($1::uuid IS NULL OR m.workspace_id = $1) AND u.display_name ILIKE $2
+         WHERE m.workspace_id = ANY($1) AND u.display_name ILIKE $2
          ORDER BY 3 LIMIT $3",
     )
-    .bind(ws)
+    .bind(&scope)
     .bind(&pattern)
     .bind(CANDIDATES_PER_KIND)
     .fetch_all(tx.conn())
@@ -276,30 +291,44 @@ pub async fn candidates(
     let items: Vec<CandidateRow> = sqlx::query_as(
         "SELECT 'item', i.id, i.title, app_item_reference(i.id), i.workspace_id, w.name
          FROM items i JOIN workspaces w ON w.id = i.workspace_id
-         WHERE ($1::uuid IS NULL OR i.workspace_id = $1) AND i.title ILIKE $2
+         WHERE i.workspace_id = ANY($1) AND i.title ILIKE $2
          ORDER BY i.updated_at DESC LIMIT $3",
     )
-    .bind(ws)
+    .bind(&scope)
     .bind(&pattern)
     .bind(CANDIDATES_PER_KIND)
     .fetch_all(tx.conn())
     .await?;
     out.extend(to_candidates(items));
 
-    // 문서: 워크스페이스 문서와(범위를 정하지 않았으면) 내가 볼 수 있는 개인 노트.
     let docs: Vec<CandidateRow> = sqlx::query_as(
         "SELECT 'document', d.id, d.title, app_document_reference(d.id), d.workspace_id, w.name
-         FROM documents d LEFT JOIN workspaces w ON w.id = d.workspace_id
-         WHERE (CASE WHEN $1::uuid IS NULL THEN true ELSE d.workspace_id = $1 END)
-           AND d.title ILIKE $2
+         FROM documents d JOIN workspaces w ON w.id = d.workspace_id
+         WHERE d.workspace_id = ANY($1) AND d.title ILIKE $2
          ORDER BY d.updated_at DESC LIMIT $3",
     )
-    .bind(ws)
+    .bind(&scope)
     .bind(&pattern)
     .bind(CANDIDATES_PER_KIND)
     .fetch_all(tx.conn())
     .await?;
     out.extend(to_candidates(docs));
+
+    // 범위를 정하지 않았으면(개인 노트에서 입력) 내 개인 노트도 찾는다.
+    if query.workspace_id.is_none() {
+        let notes: Vec<CandidateRow> = sqlx::query_as(
+            "SELECT 'document', d.id, d.title, NULL::text, NULL::uuid, NULL::text
+             FROM documents d
+             WHERE d.owner_user_id = $1 AND d.title ILIKE $2
+             ORDER BY d.updated_at DESC LIMIT $3",
+        )
+        .bind(user)
+        .bind(&pattern)
+        .bind(CANDIDATES_PER_KIND)
+        .fetch_all(tx.conn())
+        .await?;
+        out.extend(to_candidates(notes));
+    }
     tx.commit().await?;
 
     // 참조 번호로 찾은 것이 제목 검색에도 걸리면 한 번만 보여 준다.
@@ -308,7 +337,19 @@ pub async fn candidates(
     Ok(Json(out))
 }
 
-/// 참조 해석. 볼 수 없는 대상과 없는 대상은 같은 모양으로 돌려준다.
+/// 한 번에 해석할 수 있는 참조 수.
+const MAX_RESOLVE: usize = 100;
+
+type ResolveRow = (
+    String,
+    Uuid,
+    String,
+    Option<String>,
+    Option<WorkspaceId>,
+    Option<ItemId>,
+);
+
+/// 참조 해석. 볼 수 없는 대상과 없는 대상은 같은 모양으로 돌려준다. 한 번의 질의로 처리한다.
 #[utoipa::path(post, path = "/api/references/resolve", request_body = ResolveReferences,
     responses((status = 200, body = [ResolvedReference]), (status = 400, body = ErrorBody)), tag = "references")]
 pub async fn resolve(
@@ -316,76 +357,63 @@ pub async fn resolve(
     CurrentUser(user): CurrentUser,
     Json(input): Json<ResolveReferences>,
 ) -> Result<Json<Vec<ResolvedReference>>, AppError> {
-    if input.refs.len() > state.config.limits.max_references_per_document {
+    if input.refs.len() > MAX_RESOLVE {
         return Err(AppError::BadRequest(format!(
-            "at most {} references per request",
-            state.config.limits.max_references_per_document
+            "at most {MAX_RESOLVE} references per request"
         )));
     }
+    let ids = |kind: ReferenceKind| -> Vec<Uuid> {
+        input
+            .refs
+            .iter()
+            .filter(|r| r.kind == kind)
+            .map(|r| r.id)
+            .collect()
+    };
     let mut tx = state.db.begin_as(user).await?;
-    let mut out = Vec::with_capacity(input.refs.len());
-    for r in &input.refs {
-        let resolved = match r.kind {
-            ReferenceKind::Item => {
-                let row: Option<(String, Option<String>, WorkspaceId)> = sqlx::query_as(
-                    "SELECT title, app_item_reference(id), workspace_id FROM items WHERE id = $1",
-                )
-                .bind(r.id)
-                .fetch_optional(tx.conn())
-                .await?;
-                row.map(|(title, reference, ws)| ResolvedReference {
-                    kind: r.kind,
-                    id: r.id,
-                    visible: true,
-                    title: Some(title),
-                    reference,
-                    workspace_id: Some(ws),
-                    item_id: None,
-                })
-            }
-            ReferenceKind::Document => {
-                let row: Option<DocumentRefRow> = sqlx::query_as(
-                    "SELECT title, app_document_reference(id), workspace_id,
-                                CASE WHEN app_item_access(item_id) IS NOT NULL THEN item_id END
-                         FROM documents WHERE id = $1",
-                )
-                .bind(r.id)
-                .fetch_optional(tx.conn())
-                .await?;
-                row.map(|(title, reference, ws, item)| ResolvedReference {
-                    kind: r.kind,
-                    id: r.id,
-                    visible: true,
-                    title: Some(title),
-                    reference,
-                    workspace_id: ws,
-                    item_id: item,
-                })
-            }
-            ReferenceKind::User => {
-                let name: Option<String> =
-                    sqlx::query_scalar("SELECT display_name FROM users WHERE id = $1")
-                        .bind(r.id)
-                        .fetch_optional(tx.conn())
-                        .await?;
-                name.map(|title| ResolvedReference {
-                    kind: r.kind,
-                    id: r.id,
-                    visible: true,
-                    title: Some(title),
-                    reference: None,
-                    workspace_id: None,
-                    item_id: None,
-                })
-            }
-        };
-        out.push(resolved.unwrap_or_else(|| ResolvedReference::hidden(r)));
-    }
+    let rows: Vec<ResolveRow> = sqlx::query_as(
+        "SELECT 'item', i.id, i.title, app_item_reference(i.id), i.workspace_id, NULL::uuid
+         FROM items i WHERE i.id = ANY($1)
+         UNION ALL
+         SELECT 'document', d.id, d.title, app_document_reference(d.id), d.workspace_id,
+                CASE WHEN app_item_access(d.item_id) IS NOT NULL THEN d.item_id END
+         FROM documents d WHERE d.id = ANY($2)
+         UNION ALL
+         SELECT 'user', u.id, u.display_name, NULL::text, NULL::uuid, NULL::uuid
+         FROM users u WHERE u.id = ANY($3)",
+    )
+    .bind(ids(ReferenceKind::Item))
+    .bind(ids(ReferenceKind::Document))
+    .bind(ids(ReferenceKind::User))
+    .fetch_all(tx.conn())
+    .await?;
     tx.commit().await?;
-    Ok(Json(out))
-}
 
-type DocumentRefRow = (String, Option<String>, Option<WorkspaceId>, Option<ItemId>);
+    let mut found = std::collections::HashMap::new();
+    for (kind, id, title, reference, workspace_id, item_id) in rows {
+        if let Some(kind) = ReferenceKind::parse(&kind) {
+            found.insert((kind, id), (title, reference, workspace_id, item_id));
+        }
+    }
+    Ok(Json(
+        input
+            .refs
+            .iter()
+            .map(|r| match found.get(&(r.kind, r.id)) {
+                Some((title, reference, workspace_id, item_id)) => ResolvedReference {
+                    kind: r.kind,
+                    id: r.id,
+                    visible: true,
+                    title: Some(title.clone()),
+                    reference: reference.clone(),
+                    workspace_id: *workspace_id,
+                    item_id: *item_id,
+                },
+                None => ResolvedReference::hidden(r),
+            })
+            .collect(),
+    ))
+}
 
 type BacklinkRow = (
     DocumentId,
@@ -466,7 +494,7 @@ type NotificationRow = (
     Uuid,
     String,
     DocumentId,
-    String,
+    Option<String>,
     OffsetDateTime,
     Option<OffsetDateTime>,
     String,
@@ -542,9 +570,38 @@ pub async fn mark_read(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// 공개 보기용: 참조 노드를 자리표시 글자 노드로 바꾼다(내부 id와 대상 존재를 익명 방문자에게 숨긴다).
+/// 저장된 본문은 serde_json의 중첩 한도 안에서 읽혔으므로 재귀 깊이가 제한된다.
+pub fn strip_references(node: &mut serde_json::Value) {
+    use serde_json::Value;
+    match node {
+        Value::Array(items) => items.iter_mut().for_each(strip_references),
+        Value::Object(map) => {
+            if map.get("type").and_then(Value::as_str) == Some("reference") {
+                *node = serde_json::json!({ "type": "text", "text": "[참조]" });
+                return;
+            }
+            map.values_mut().for_each(strip_references);
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn public_bodies_drop_reference_ids() {
+        let id = "0198f1f2-0000-7000-8000-000000000001";
+        let mut body = serde_json::json!({ "type": "doc", "content": [{ "type": "paragraph", "content": [
+            { "type": "text", "text": "참고 " },
+            { "type": "reference", "attrs": { "kind": "item", "id": id } }
+        ] }] });
+        strip_references(&mut body);
+        assert!(!body.to_string().contains(id));
+        assert_eq!(body["content"][0]["content"][1]["text"], "[참조]");
+    }
 
     #[test]
     fn reference_queries_are_parsed_case_insensitively() {

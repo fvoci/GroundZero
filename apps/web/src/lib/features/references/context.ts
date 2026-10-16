@@ -1,0 +1,30 @@
+// 편집기에 넘기는 참조 문맥: 후보를 찾을 워크스페이스와 대상 경로 계산.
+import type { ResolvedReferenceView } from '$lib/api/client';
+import { itemPath, pathFor } from '$lib/router.svelte';
+
+export interface ReferenceContext {
+  /** 후보를 찾을 워크스페이스. 개인 노트는 null. */
+  workspaceId: string | null;
+  hrefFor: (target: ResolvedReferenceView) => string | null;
+  navigate: (path: string) => void;
+}
+
+/** 대상 경로. 사람은 경로가 없고, 내가 멤버가 아닌 워크스페이스의 항목은 열 수 없다. */
+export function referenceHref(
+  target: ResolvedReferenceView,
+  memberOf: (ws: string) => boolean,
+): string | null {
+  if (!target.visible) return null;
+  if (target.kind === 'item') {
+    return target.workspace_id !== null && memberOf(target.workspace_id)
+      ? itemPath(target.workspace_id, target.id)
+      : null;
+  }
+  if (target.kind === 'document') {
+    return pathFor(
+      { id: target.id, workspace_id: target.workspace_id, item_id: target.item_id },
+      memberOf,
+    );
+  }
+  return null;
+}

@@ -11,6 +11,7 @@
   import MembersScreen from '$lib/features/members/MembersScreen.svelte';
   import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
   import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
+  import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
   import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
   import { itemPath, membersPath, router, workspacePath } from '$lib/router.svelte';
@@ -48,6 +49,20 @@
   void load();
 
   /** 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스 목록을 다시 읽는다. */
+  // 읽지 않은 알림 수. 경로가 바뀔 때마다 다시 센다(알림은 접근 권한을 따라 서버가 거른다).
+  let unreadCount = $state(0);
+  async function refreshUnread(): Promise<void> {
+    if (session.state !== 'signed-in') return;
+    try {
+      unreadCount = (await api.notifications()).filter((n) => !n.read).length;
+    } catch {
+      unreadCount = 0;
+    }
+  }
+  $effect(() => {
+    if (session.state === 'signed-in' && router.path !== '') void refreshUnread();
+  });
+
   async function reloadWorkspaces(): Promise<void> {
     const workspaces = await api.workspaces();
     if (session.state === 'signed-in') session.workspaces = workspaces;
@@ -133,7 +148,7 @@
           <Sidebar.GroupLabel>개인</Sidebar.GroupLabel>
           <Sidebar.GroupContent>
             <Sidebar.Menu>
-              {#each [{ path: '/notes', label: '내 노트', active: route.name === 'notes' }, { path: '/shared', label: '공유받은 문서', active: route.name === 'shared' }] as item (item.path)}
+              {#each [{ path: '/notes', label: '내 노트', active: route.name === 'notes' }, { path: '/shared', label: '공유받은 문서', active: route.name === 'shared' }, { path: '/notifications', label: unreadCount > 0 ? `알림 (${String(unreadCount)})` : '알림', active: route.name === 'notifications' }] as item (item.path)}
                 <Sidebar.MenuItem>
                   <Sidebar.MenuButton isActive={item.active}>
                     {#snippet child({ props })}
@@ -162,9 +177,11 @@
           >{currentWorkspace?.name ??
             (route.name === 'notes'
               ? '내 노트'
-              : route.name === 'shared'
-                ? '공유받은 문서'
-                : '홈')}</span
+              : route.name === 'notifications'
+                ? '알림'
+                : route.name === 'shared'
+                  ? '공유받은 문서'
+                  : '홈')}</span
         >
         <div class="ml-auto">
           <DropdownMenu.Root>
@@ -222,7 +239,11 @@
             <ModuleScreen workspace={currentWorkspace} moduleId={route.moduleId} />
           {:else if route.name === 'item'}
             <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
-            <ItemScreen workspace={currentWorkspace} itemId={route.itemId} />
+            <ItemScreen
+              workspace={currentWorkspace}
+              itemId={route.itemId}
+              workspaces={signedIn.workspaces}
+            />
           {:else if route.name === 'item-document'}
             <BackLink path={itemPath(currentWorkspace.id, route.itemId)} label="항목으로" />
             <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
@@ -235,6 +256,11 @@
           {/if}
         {:else if route.name === 'notes'}
           <NotesScreen />
+        {:else if route.name === 'notifications'}
+          <NotificationsScreen
+            workspaces={signedIn.workspaces}
+            onchanged={() => void refreshUnread()}
+          />
         {:else if route.name === 'shared'}
           <SharedScreen />
         {:else if route.name === 'standalone-document'}

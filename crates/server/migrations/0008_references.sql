@@ -55,6 +55,8 @@ CREATE FUNCTION app_reference_nodes(p_body jsonb) RETURNS TABLE (kind text, id u
 
 -- 다른 사용자의 문서 권한(보관 상한 없음). 같은 판정 함수를 쓰려고 트랜잭션 안에서 사용자를 잠시 바꾼다.
 -- 앱 역할에는 주지 않는다(언급 알림 판정 전용).
+-- 바꾼 값은 끝에서 되돌린다. 예외가 나면 트랜잭션(또는 하위 트랜잭션) 되돌림이 set_config(..., true)도 되돌린다.
+-- (함수 정의에 SET app.user_id를 붙이는 방식은 마이그레이션 역할이 사용자 정의 설정을 지정할 권한이 없어 쓰지 않는다.)
 CREATE FUNCTION app_document_access_as(p_doc uuid, p_user uuid) RETURNS text
   LANGUAGE plpgsql VOLATILE SECURITY DEFINER
   SET search_path = fvoci, pg_temp
@@ -71,19 +73,23 @@ CREATE FUNCTION app_document_access_as(p_doc uuid, p_user uuid) RETURNS text
   $$;
 
 -- 저장된 본문에서 링크·언급을 다시 기록한다. 저장한 트랜잭션 안에서 부른다(쓰기 권한 필요).
--- p_notify가 거짓이면(복제 등) 언급 알림을 만들지 않는다.
+-- 언급 알림은 이번 저장에서 새로 넣은 언급(직전 리비전 본문에 없던 사람)에만, 저장한 사람 이름으로 만든다.
+-- p_notify가 거짓이면(복제 등) 알림을 만들지 않는다. 사본의 언급은 원작성자가 한 것이며, 이후 편집에서도
+-- 직전 리비전에 이미 있으므로 새 언급으로 보지 않는다.
 CREATE FUNCTION app_record_document_references(p_doc uuid, p_notify boolean) RETURNS void
   LANGUAGE plpgsql VOLATILE SECURITY DEFINER
   SET search_path = fvoci, pg_temp
   AS $$
   DECLARE
-    v_user uuid := app_user_id();
-    v_body jsonb;
-    v_uid  uuid;
-    v_new  integer;
+    v_user     uuid := app_user_id();
+    v_body     jsonb;
+    v_revision integer;
+    v_previous jsonb;
+    v_uid      uuid;
+    v_new      integer;
   BEGIN
     PERFORM app_require_document(p_doc, 'write');
-    SELECT body INTO v_body FROM documents WHERE id = p_doc;
+    SELECT body, revision INTO v_body, v_revision FROM documents WHERE id = p_doc;
 
     DELETE FROM document_links WHERE document_id = p_doc;
     INSERT INTO document_links (document_id, target_kind, target_id)
@@ -93,9 +99,13 @@ CREATE FUNCTION app_record_document_references(p_doc uuid, p_notify boolean) RET
     IF NOT p_notify THEN
       RETURN;
     END IF;
+    SELECT body INTO v_previous FROM document_revisions
+    WHERE document_id = p_doc AND revision = v_revision - 1;
     FOR v_uid IN
       SELECT r.id FROM app_reference_nodes(v_body) r JOIN users u ON u.id = r.id
       WHERE r.kind = 'user' AND r.id <> v_user
+        AND NOT EXISTS (SELECT 1 FROM app_reference_nodes(coalesce(v_previous, '{}'::jsonb)) p
+                        WHERE p.kind = 'user' AND p.id = r.id)
     LOOP
       -- 언급은 권한을 주지 않는다. 볼 수 없는 사람에게는 알리지 않는다.
       IF app_document_access_as(p_doc, v_uid) IS NOT NULL THEN
@@ -123,8 +133,11 @@ CREATE FUNCTION app_my_notifications(p_limit integer)
   LANGUAGE sql STABLE SECURITY DEFINER
   SET search_path = fvoci, pg_temp
   AS $$
-    SELECT n.id, n.kind, n.document_id, u.display_name, n.created_at, n.read_at
-    FROM notifications n JOIN users u ON u.id = n.actor
+    -- 언급한 사람 이름은 워크스페이스를 함께 쓰거나 그 개인 노트의 소유자일 때만 보인다(users RLS와 같은 기준).
+    SELECT n.id, n.kind, n.document_id,
+           CASE WHEN app_shares_workspace(n.actor) OR d.owner_user_id = n.actor THEN u.display_name END,
+           n.created_at, n.read_at
+    FROM notifications n JOIN users u ON u.id = n.actor JOIN documents d ON d.id = n.document_id
     WHERE n.user_id = app_user_id() AND app_document_access(n.document_id) IS NOT NULL
     ORDER BY n.created_at DESC, n.id DESC
     LIMIT p_limit
@@ -137,6 +150,23 @@ CREATE FUNCTION app_mark_notifications_read(p_id uuid) RETURNS void
     UPDATE notifications SET read_at = now()
     WHERE user_id = app_user_id() AND read_at IS NULL AND (p_id IS NULL OR id = p_id)
   $$;
+
+------------------------------------------------------------------------------
+-- 후보 검색 범위: 내가 속한 워크스페이스. 검색이 RLS 판정 함수를 모든 테넌트의 행에 돌리지 않도록
+-- 이 목록과 인덱스로 먼저 좁힌다(같음 비교는 RLS보다 먼저 적용될 수 있다).
+------------------------------------------------------------------------------
+
+CREATE FUNCTION app_my_workspace_ids() RETURNS SETOF uuid
+  LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path = fvoci, pg_temp
+  AS $$
+    SELECT workspace_id FROM workspace_members WHERE user_id = app_user_id()
+  $$;
+
+CREATE INDEX items_workspace_updated ON items (workspace_id, updated_at DESC);
+CREATE INDEX documents_workspace_updated ON documents (workspace_id, updated_at DESC);
+CREATE INDEX documents_owner_updated ON documents (owner_user_id, updated_at DESC)
+  WHERE owner_user_id IS NOT NULL;
 
 ------------------------------------------------------------------------------
 -- RLS·권한
@@ -159,8 +189,10 @@ REVOKE ALL ON FUNCTION app_document_access_as(uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_record_document_references(uuid, boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_my_notifications(integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_mark_notifications_read(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_my_workspace_ids() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION
   app_record_document_references(uuid, boolean),
   app_my_notifications(integer),
-  app_mark_notifications_read(uuid)
+  app_mark_notifications_read(uuid),
+  app_my_workspace_ids()
 TO fvoci_app;

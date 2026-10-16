@@ -9,6 +9,7 @@
 
   import type { DocNode, DocumentView } from '$lib/api/client';
   import { api, ApiError, NetworkError, newRequestId } from '$lib/api/client';
+  import type { ReferenceContext } from '$lib/features/references/context';
   import { router, standalonePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -21,9 +22,10 @@
   interface Props {
     initial: DocumentView;
     onsaved?: (doc: DocumentView) => void;
+    references?: ReferenceContext;
   }
 
-  const { initial, onsaved }: Props = $props();
+  const { initial, onsaved, references }: Props = $props();
 
   type Status = 'saved' | 'dirty' | 'saving' | 'retrying' | 'conflict' | 'error' | 'signed-out';
 
@@ -342,6 +344,7 @@
       content={body}
       editable={server.can_edit}
       label="본문"
+      {references}
       onchange={(next: DocNode) => {
         body = next;
         edited();

@@ -192,7 +192,7 @@ fn validate_references(body: &Value, max: usize) -> Result<(), AppError> {
                             "a document can hold at most {max} references"
                         )));
                     }
-                    check_reference_attrs(map.get("attrs"))?;
+                    check_reference_node(map)?;
                 }
                 stack.extend(map.values());
             }
@@ -202,9 +202,20 @@ fn validate_references(body: &Value, max: usize) -> Result<(), AppError> {
     Ok(())
 }
 
-fn check_reference_attrs(attrs: Option<&Value>) -> Result<(), AppError> {
+/// 참조 노드는 `type`·`attrs`(와 편집기가 붙이는 `marks`)만 가진다. 제목 같은 글자를 노드에 두지 않는다.
+/// id는 하이픈이 있는 36자 표준 형식만 받는다(DB 추출 함수와 같은 규칙).
+fn check_reference_node(node: &serde_json::Map<String, Value>) -> Result<(), AppError> {
     let bad = || AppError::BadRequest("reference nodes need attrs {kind, id} only".into());
-    let attrs = attrs.and_then(Value::as_object).ok_or_else(bad)?;
+    if node
+        .keys()
+        .any(|k| !matches!(k.as_str(), "type" | "attrs" | "marks"))
+    {
+        return Err(bad());
+    }
+    let attrs = node
+        .get("attrs")
+        .and_then(Value::as_object)
+        .ok_or_else(bad)?;
     if attrs.len() != 2 {
         return Err(bad());
     }
@@ -213,7 +224,17 @@ fn check_reference_attrs(attrs: Option<&Value>) -> Result<(), AppError> {
         return Err(bad());
     }
     let id = attrs.get("id").and_then(Value::as_str).ok_or_else(bad)?;
-    Uuid::parse_str(id).map_err(|_| bad())?;
+    let canonical = id.len() == 36
+        && id.char_indices().all(|(i, c)| {
+            if matches!(i, 8 | 13 | 18 | 23) {
+                c == '-'
+            } else {
+                c.is_ascii_hexdigit()
+            }
+        });
+    if !canonical {
+        return Err(bad());
+    }
     Ok(())
 }
 
@@ -1004,6 +1025,23 @@ mod tests {
         );
         assert!(validate_body(&doc(vec![reference("task", id)]), &l).is_err());
         assert!(validate_body(&doc(vec![reference("item", "DEV-1")]), &l).is_err());
+        // DB 추출과 같은 형식만: 하이픈 없는 형식·중괄호·urn은 거부한다.
+        for odd in [
+            "0198f1f20000700080000000000000001",
+            "{0198f1f2-0000-7000-8000-000000000001}",
+            "urn:uuid:0198f1f2-0000-7000-8000-000000000001",
+        ] {
+            assert!(
+                validate_body(&doc(vec![reference("item", odd)]), &l).is_err(),
+                "{odd}"
+            );
+        }
+        let with_text =
+            json!({ "type": "reference", "text": "비밀", "attrs": { "kind": "item", "id": id } });
+        assert!(
+            validate_body(&doc(vec![with_text]), &l).is_err(),
+            "no title outside attrs"
+        );
         let labelled =
             json!({ "type": "reference", "attrs": { "kind": "item", "id": id, "label": "비밀" } });
         assert!(

@@ -4,6 +4,8 @@
 
   import type { ItemView, SummaryView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
+  import { forgetReferences } from '$lib/features/references/resolver';
+  import Backlinks from '$lib/features/references/Backlinks.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { itemDocumentPath, modulePath, router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
@@ -15,9 +17,10 @@
   interface Props {
     workspace: Workspace;
     itemId: string;
+    workspaces: Workspace[];
   }
 
-  const { workspace, itemId }: Props = $props();
+  const { workspace, itemId, workspaces }: Props = $props();
 
   let item = $state<ItemView | undefined>(undefined);
   let mod = $state<Module | undefined>(undefined);
@@ -83,6 +86,7 @@
           visibility: shared ? 'workspace' : 'private',
         }),
       );
+      forgetReferences();
       saved = true;
     } catch (e: unknown) {
       formError = e instanceof ApiError ? e.message : '저장하지 못했습니다.';
@@ -216,5 +220,6 @@
         />
       {/if}
     </section>
+    <Backlinks kind="item" id={current.id} {workspaces} />
   </section>
 {/if}

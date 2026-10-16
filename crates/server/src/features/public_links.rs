@@ -175,7 +175,9 @@ pub async fn view(
     .fetch_optional(tx.conn())
     .await?;
     tx.commit().await?;
-    let (title, body, schema_version, updated_at) = row.ok_or(AppError::NotFound)?;
+    let (title, mut body, schema_version, updated_at) = row.ok_or(AppError::NotFound)?;
+    // 공개 보기는 로그인하지 않은 사람에게 내부 id를 내보내지 않는다. 참조 노드는 자리표시 글자로 바꾼다.
+    crate::features::references::strip_references(&mut body);
     let doc = PublicDocument {
         title,
         body,

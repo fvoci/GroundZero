@@ -1,12 +1,15 @@
 <script lang="ts">
   // Tiptap 편집기 래퍼. 인스턴스는 마운트 때 한 번 만들고 해제 때 destroy한다.
   // 내용을 통째로 바꿀 때는 부모가 {#key}로 이 컴포넌트를 다시 만든다.
+  import type { Extensions } from '@tiptap/core';
   import { Editor } from '@tiptap/core';
   import StarterKit from '@tiptap/starter-kit';
   import { onMount, untrack } from 'svelte';
 
   import type { DocNode } from '$lib/api/client';
   import { parseDocNode } from '$lib/api/client';
+  import type { ReferenceContext } from '$lib/features/references/context';
+  import { Reference, ReferenceSuggestion } from '$lib/features/references/reference-extension';
   import { Button } from '$lib/ui/button';
 
   interface Props {
@@ -14,9 +17,11 @@
     editable: boolean;
     label: string;
     onchange?: (body: DocNode) => void;
+    /** 참조 노드 표시와 @ 입력. 없으면 참조를 읽기만 하고 이동·입력은 하지 않는다. */
+    references?: ReferenceContext | undefined;
   }
 
-  const { content, editable, label, onchange }: Props = $props();
+  const { content, editable, label, onchange, references }: Props = $props();
 
   interface Marks {
     bold: boolean;
@@ -46,11 +51,22 @@
     };
   }
 
+  // 참조 노드는 항상 등록한다(모르는 노드는 Tiptap이 버리므로 읽기 화면에서도 필요하다).
+  // @ 입력은 고칠 수 있고 참조 문맥이 있을 때만 켠다.
+  function extensionsFor(ctx: ReferenceContext | undefined, canEdit: boolean): Extensions {
+    const reference = Reference.configure({
+      hrefFor: ctx?.hrefFor ?? (() => null),
+      navigate: ctx?.navigate ?? (() => undefined),
+    });
+    if (ctx === undefined || !canEdit) return [StarterKit, reference];
+    return [StarterKit, reference, ReferenceSuggestion.configure({ workspaceId: ctx.workspaceId })];
+  }
+
   onMount(() => {
     if (element === undefined) return;
     const instance = new Editor({
       element,
-      extensions: [StarterKit],
+      extensions: untrack(() => extensionsFor(references, editable)),
       content: untrack(() => ({ ...content })),
       editable: untrack(() => editable),
       editorProps: {

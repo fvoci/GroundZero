@@ -555,7 +555,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 참조 해석. 볼 수 없는 대상과 없는 대상은 같은 모양으로 돌려준다. */
+        /** 참조 해석. 볼 수 없는 대상과 없는 대상은 같은 모양으로 돌려준다. 한 번의 질의로 처리한다. */
         post: operations["resolve"];
         delete?: never;
         options?: never;
@@ -1109,7 +1109,8 @@ export interface components {
         };
         /** @description 알림. 지금 볼 수 있는 문서에 대한 것만 나온다. */
         Notification: {
-            actor_name: string;
+            /** @description 언급한 사람. 워크스페이스를 함께 쓰지 않으면(공유받은 개인 노트 등) 없을 수 있다. */
+            actor_name?: string | null;
             /** Format: date-time */
             created_at: string;
             document_id: components["schemas"]["DocumentId"];

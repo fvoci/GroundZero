@@ -61,6 +61,13 @@ export function plainText(node: unknown): string {
   if (typeof node !== 'object' || node === null) return '';
   const parts: string[] = [];
   if ('text' in node && typeof node.text === 'string') parts.push(node.text);
+  // 참조 노드는 글자가 없다. 참조만 다른 두 본문이 같아 보이지 않게 종류·id 자리표시를 넣는다.
+  if ('type' in node && node.type === 'reference' && 'attrs' in node) {
+    const attrs = node.attrs;
+    if (typeof attrs === 'object' && attrs !== null && 'kind' in attrs && 'id' in attrs) {
+      parts.push(`@[${String(attrs.kind)}:${String(attrs.id)}]`);
+    }
+  }
   if ('content' in node && Array.isArray(node.content)) {
     const block = 'type' in node && node.type !== 'text' && node.type !== 'doc';
     const inner = node.content.map((child: unknown) => plainText(child)).join(block ? '' : '\n');

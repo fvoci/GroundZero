@@ -412,6 +412,109 @@ export function parseItem(value: Json): ItemView {
   };
 }
 
+// --- @ 참조 -------------------------------------------------------------
+
+export type ReferenceKind = 'item' | 'document' | 'user';
+
+function referenceKind(value: string): ReferenceKind {
+  if (value === 'item' || value === 'document' || value === 'user') return value;
+  throw new TypeError(`unknown reference kind ${value}`);
+}
+
+export interface ReferenceCandidateView {
+  kind: ReferenceKind;
+  id: string;
+  title: string;
+  reference: string | null;
+  workspace_id: string | null;
+  workspace_name: string | null;
+}
+
+/** 해석 결과. 볼 수 없거나 없는 대상은 visible=false이고 나머지는 null이다. */
+export interface ResolvedReferenceView {
+  kind: ReferenceKind;
+  id: string;
+  visible: boolean;
+  title: string | null;
+  reference: string | null;
+  workspace_id: string | null;
+  item_id: string | null;
+}
+
+export interface BacklinkView {
+  id: string;
+  reference: string | null;
+  title: string;
+  workspace_id: string | null;
+  item_id: string | null;
+}
+
+export interface NotificationView {
+  id: string;
+  kind: string;
+  document_id: string;
+  document_title: string;
+  document_reference: string | null;
+  workspace_id: string | null;
+  item_id: string | null;
+  /** 워크스페이스를 함께 쓰지 않으면 없을 수 있다. */
+  actor_name: string | null;
+  created_at: string;
+  read: boolean;
+}
+
+export function parseCandidate(value: Json): ReferenceCandidateView {
+  const o = rec(value, 'reference candidate');
+  return {
+    kind: referenceKind(str(o, 'kind')),
+    id: str(o, 'id'),
+    title: str(o, 'title'),
+    reference: optStr(o, 'reference'),
+    workspace_id: optStr(o, 'workspace_id'),
+    workspace_name: optStr(o, 'workspace_name'),
+  };
+}
+
+export function parseResolved(value: Json): ResolvedReferenceView {
+  const o = rec(value, 'resolved reference');
+  return {
+    kind: referenceKind(str(o, 'kind')),
+    id: str(o, 'id'),
+    visible: bool(o, 'visible'),
+    title: optStr(o, 'title'),
+    reference: optStr(o, 'reference'),
+    workspace_id: optStr(o, 'workspace_id'),
+    item_id: optStr(o, 'item_id'),
+  };
+}
+
+export function parseBacklink(value: Json): BacklinkView {
+  const o = rec(value, 'backlink');
+  return {
+    id: str(o, 'id'),
+    reference: optStr(o, 'reference'),
+    title: str(o, 'title'),
+    workspace_id: optStr(o, 'workspace_id'),
+    item_id: optStr(o, 'item_id'),
+  };
+}
+
+export function parseNotification(value: Json): NotificationView {
+  const o = rec(value, 'notification');
+  return {
+    id: str(o, 'id'),
+    kind: str(o, 'kind'),
+    document_id: str(o, 'document_id'),
+    document_title: str(o, 'document_title'),
+    document_reference: optStr(o, 'document_reference'),
+    workspace_id: optStr(o, 'workspace_id'),
+    item_id: optStr(o, 'item_id'),
+    actor_name: optStr(o, 'actor_name'),
+    created_at: str(o, 'created_at'),
+    read: bool(o, 'read'),
+  };
+}
+
 /** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
 export interface MoveTargetInput {
   workspaceId: string;
@@ -590,6 +693,28 @@ export const api = {
       target_workspace_id: target.workspaceId,
       target_item_id: target.itemId,
     }),
+  referenceCandidates: (q: string, workspaceId: string | null) => {
+    const params = new URLSearchParams({ q });
+    if (workspaceId !== null) params.set('workspace_id', workspaceId);
+    return expectOk('GET', `/api/reference-candidates?${params.toString()}`, (v) =>
+      parseList(v, parseCandidate),
+    );
+  },
+  resolveReferences: (refs: { kind: ReferenceKind; id: string }[]) =>
+    expectOk('POST', '/api/references/resolve', (v) => parseList(v, parseResolved), { refs }),
+  documentBacklinks: (id: string) =>
+    expectOk('GET', `/api/documents/${encodeURIComponent(id)}/backlinks`, (v) =>
+      parseList(v, parseBacklink),
+    ),
+  itemBacklinks: (id: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(id)}/backlinks`, (v) =>
+      parseList(v, parseBacklink),
+    ),
+  notifications: () =>
+    expectOk('GET', '/api/me/notifications', (v) => parseList(v, parseNotification)),
+  /** id가 null이면 모두 읽음. */
+  markNotificationsRead: (id: string | null) =>
+    expectOk('POST', '/api/me/notifications/read', none, { id }),
   modules: (ws: string) =>
     expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/modules`, (v) =>
       parseList(v, parseModule),

@@ -4,6 +4,10 @@
 
   import type { DocumentView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
+  import Backlinks from '$lib/features/references/Backlinks.svelte';
+  import type { ReferenceContext } from '$lib/features/references/context';
+  import { referenceHref } from '$lib/features/references/context';
+  import { router } from '$lib/router.svelte';
 
   import DocumentActions from './DocumentActions.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
@@ -39,6 +43,17 @@
       cancelled = true;
     };
   });
+  const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
+
+  function referencesFor(d: DocumentView): ReferenceContext {
+    return {
+      workspaceId: d.workspace_id,
+      hrefFor: (target) => referenceHref(target, memberOf),
+      navigate: (path) => {
+        router.navigate(path);
+      },
+    };
+  }
 </script>
 
 {#if error !== undefined}
@@ -56,6 +71,9 @@
     }}
   />
   {#key doc.id}
-    <DocumentEditor initial={doc} />
+    <DocumentEditor initial={doc} references={referencesFor(doc)} />
+  {/key}
+  {#key doc.id}
+    <Backlinks kind="document" id={doc.id} {workspaces} />
   {/key}
 {/if}

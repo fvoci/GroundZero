@@ -401,3 +401,67 @@ fn urlencode(q: &str) -> String {
         })
         .collect()
 }
+
+/// 검토 반영: 사본을 고쳐 저장해도 원본에 있던 언급으로 알림을 보내지 않는다(새로 넣은 언급만 알린다).
+#[tokio::test]
+async fn copying_and_editing_does_not_resend_existing_mentions() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "사본 언급").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let (editor, _) = add_member(&app, &state, &admin, &ws, "editor", "writer").await;
+    let doc = create_doc(&app, &admin, &ws, "원본").await;
+    save_body(&app, &admin, &doc, body_with(vec![user_ref(&member)])).await;
+    assert_eq!(
+        get(&app, &member, "/api/me/notifications")
+            .await
+            .1
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+
+    let copy = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{}/copy", doc["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "target_workspace_id": ws, "title": "사본" })),
+    )
+    .await;
+    assert_eq!(copy.status, StatusCode::CREATED, "{:?}", copy.json);
+    // 다른 사람이 사본을 고쳐도(언급은 그대로) 알림이 늘지 않는다.
+    let mut edited = body_with(vec![user_ref(&member)]);
+    edited["content"][0]["content"][0]["text"] = json!("고친 ");
+    let (status, _) = save_body(&app, &editor, &copy.json, edited).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        get(&app, &member, "/api/me/notifications")
+            .await
+            .1
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    // 새로 넣은 언급은 그것을 넣은 사람 이름으로 알린다.
+    let (_, current) = get(
+        &app,
+        &editor,
+        &format!("/api/documents/{}", copy.json["id"].as_str().unwrap()),
+    )
+    .await;
+    let (status, _) = save_body(
+        &app,
+        &editor,
+        &current,
+        body_with(vec![user_ref(&member), user_ref(&admin)]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let inbox = get(&app, &admin, "/api/me/notifications").await.1;
+    assert_eq!(inbox.as_array().unwrap().len(), 1);
+    assert_eq!(inbox[0]["actor_name"], "editor");
+}
