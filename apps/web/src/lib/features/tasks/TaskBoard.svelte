@@ -39,8 +39,14 @@
     }
   }
 
+  // 쓰기 권한으로 항목을 열면 반복 업무의 회차를 먼저 맞춘다(독자는 만들지 않는다, O-19 전까지의 방식).
+  async function loadItem(itemId: string, write: boolean): Promise<void> {
+    if (write) await api.syncRecurrences(itemId).catch(() => 0);
+    await reload(itemId);
+  }
+
   $effect(() => {
-    void reload(item.id);
+    void loadItem(item.id, item.access !== 'read' && !item.archived);
   });
 
   const canWrite = $derived(item.access !== 'read' && !item.archived);

@@ -40,16 +40,20 @@
   } {
     const e = initial;
     const tz = e?.timezone ?? localTimeZone();
-    const day = today();
+    // 종일 ↔ 시각 전환 때도 그 일정의 날짜를 쓴다(오늘이 아니라).
+    const startWall = e?.starts_at != null ? wallTime(e.starts_at, tz) : undefined;
+    const endWall = e?.ends_at != null ? wallTime(e.ends_at, tz) : undefined;
+    const startDay = e?.start_date ?? startWall?.slice(0, 10) ?? today();
+    const endDay = e?.end_date ?? endWall?.slice(0, 10) ?? startDay;
     return {
       kind: e?.kind ?? 'meeting',
       title: e?.title ?? '',
       description: e?.description ?? '',
       allDay: e?.all_day ?? false,
-      startDate: e?.start_date ?? day,
-      endDate: e?.end_date ?? day,
-      startWall: e?.starts_at != null ? wallTime(e.starts_at, tz) : `${day}T09:00`,
-      endWall: e?.ends_at != null ? wallTime(e.ends_at, tz) : `${day}T10:00`,
+      startDate: startDay,
+      endDate: endDay,
+      startWall: startWall ?? `${startDay}T09:00`,
+      endWall: endWall ?? `${startDay}T10:00`,
       timezone: tz,
     };
   }

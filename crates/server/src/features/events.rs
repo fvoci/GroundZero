@@ -18,6 +18,7 @@ use crate::db::{UserTx, is_unique_violation};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::Access;
+use crate::features::recurrence::RecurrenceRule;
 use crate::features::tasks::{TaskStatus, format_date, parse_date, validate_text};
 use crate::features::workspaces::{member_role, validate_title};
 use crate::http::AppState;
@@ -79,6 +80,10 @@ pub struct Event {
     pub ends_at: Option<OffsetDateTime>,
     /// 일정에 지정한 시간대(IANA). 반복 계산의 기준이다.
     pub timezone: String,
+    /// 반복 규칙(없으면 한 번). 회차는 달력에서 펼친다.
+    pub recurrence: Option<RecurrenceRule>,
+    /// 뺀 회차(일정 시간대 기준 날짜).
+    pub excluded_dates: Vec<String>,
     pub version: i32,
     pub access: Access,
 }
@@ -221,13 +226,15 @@ struct EventRow {
     starts_at: Option<OffsetDateTime>,
     ends_at: Option<OffsetDateTime>,
     timezone: String,
+    recurrence: Option<serde_json::Value>,
+    excluded_dates: Vec<Date>,
     version: i32,
     access: String,
 }
 
 const EVENT_SELECT: &str =
     "SELECT e.id, e.item_id, e.workspace_id, e.kind, e.title, e.description, e.all_day,
-        e.start_date, e.end_date, e.starts_at, e.ends_at, e.timezone, e.version,
+        e.start_date, e.end_date, e.starts_at, e.ends_at, e.timezone, e.recurrence, e.excluded_dates, e.version,
         app_event_access(e.id) AS access
  FROM events e";
 
@@ -249,13 +256,19 @@ fn to_event(row: EventRow) -> Result<Event, AppError> {
         starts_at: row.starts_at,
         ends_at: row.ends_at,
         timezone: row.timezone,
+        recurrence: row.recurrence.map(RecurrenceRule::from_db).transpose()?,
+        excluded_dates: row
+            .excluded_dates
+            .into_iter()
+            .filter_map(|d| format_date(Some(d)))
+            .collect(),
         version: row.version,
         access: Access::parse(&row.access)
             .ok_or_else(|| AppError::Config(format!("unknown access {}", row.access)))?,
     })
 }
 
-async fn load(tx: &mut UserTx, id: Uuid) -> Result<Event, AppError> {
+pub(crate) async fn load(tx: &mut UserTx, id: Uuid) -> Result<Event, AppError> {
     let row: Option<EventRow> = sqlx::query_as(&format!(
         "{EVENT_SELECT} WHERE e.id = $1 AND e.deleted_at IS NULL"
     ))
@@ -449,15 +462,51 @@ pub struct CalendarItem {
     pub title: String,
 }
 
+/// 일정의 회차 하나(반복이 아니면 그 일정 자체). 종일이면 날짜, 아니면 UTC 시각.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct EventOccurrence {
+    #[schema(value_type = String, format = Uuid)]
+    pub event_id: Uuid,
+    /// 일정 시간대 기준의 회차 날짜(회차 빼기에 쓴다).
+    pub occurrence: String,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub starts_at: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub ends_at: Option<OffsetDateTime>,
+}
+
+/// 아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ProjectedTask {
+    #[schema(value_type = String, format = Uuid)]
+    pub series_id: Uuid,
+    /// 반복의 첫 회차(틀).
+    #[schema(value_type = String, format = Uuid)]
+    pub root_task_id: Uuid,
+    pub item_id: ItemId,
+    pub title: String,
+    pub milestone: bool,
+    pub occurrence: String,
+    pub start_date: Option<String>,
+    pub due_date: Option<String>,
+}
+
 /// 기간 안의 볼 수 있는 업무·일정.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Calendar {
     pub tasks: Vec<CalendarTask>,
+    pub projected_tasks: Vec<ProjectedTask>,
+    /// 기간 안에 회차가 있는 일정의 정의.
     pub events: Vec<Event>,
+    pub occurrences: Vec<EventOccurrence>,
     pub items: Vec<CalendarItem>,
 }
 
-/// 워크스페이스 달력(멤버). 볼 수 있는 업무와 일정만 나온다. 기간은 62일까지.
+/// 워크스페이스 달력(멤버). 볼 수 있는 업무·예정 회차·일정 회차만 나온다. 기간은 62일까지. 읽기 전용이다.
 #[utoipa::path(get, path = "/api/workspaces/{workspace_id}/calendar", operation_id = "workspace_calendar",
     params(("workspace_id" = String, Path, format = Uuid), CalendarRange),
     responses((status = 200, body = Calendar), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
@@ -477,13 +526,19 @@ pub async fn calendar(
             "the range must be 1 to {MAX_RANGE_DAYS} days"
         )));
     }
+    let tz = range.tz.trim();
     let mut tx = state.db.begin_as(user).await?;
     member_role(&mut tx, ws).await?;
-    sqlx::query("SELECT app_check_timezone($1)")
-        .bind(range.tz.trim())
-        .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
+    // 보는 사람의 날짜 경계. 모르는 시간대는 400.
+    let (from_at, to_at): (OffsetDateTime, OffsetDateTime) = sqlx::query_as(
+        "SELECT $1::date::timestamp AT TIME ZONE $3, ($2::date + 1)::timestamp AT TIME ZONE $3",
+    )
+    .bind(from)
+    .bind(to)
+    .bind(tz)
+    .fetch_one(tx.conn())
+    .await
+    .map_err(AppError::from_db_function)?;
     type TaskRow = (
         Uuid,
         ItemId,
@@ -506,21 +561,53 @@ pub async fn calendar(
     .bind(to)
     .fetch_all(tx.conn())
     .await?;
-    let event_rows: Vec<EventRow> = sqlx::query_as(&format!(
-        "{EVENT_SELECT}
-         WHERE e.workspace_id = $1 AND e.deleted_at IS NULL
-           AND ((e.all_day AND e.start_date <= $3 AND e.end_date >= $2)
-             OR (NOT e.all_day AND e.starts_at < ($3 + 1)::timestamp AT TIME ZONE $4
-                 AND e.ends_at >= $2::timestamp AT TIME ZONE $4))
-         ORDER BY {EVENT_ORDER}"
-    ))
+    type ProjectedRow = (
+        Uuid,
+        Uuid,
+        ItemId,
+        String,
+        bool,
+        Date,
+        Option<Date>,
+        Option<Date>,
+    );
+    let projected_rows: Vec<ProjectedRow> = sqlx::query_as(
+        "SELECT series_id, root_task_id, item_id, title, milestone, occurrence, start_date, due_date
+         FROM app_projected_occurrences($1, NULL, $2, $3) ORDER BY occurrence, series_id",
+    )
     .bind(ws)
     .bind(from)
     .bind(to)
-    .bind(range.tz.trim())
+    .fetch_all(tx.conn())
+    .await?;
+    type OccurrenceRow = (
+        Uuid,
+        Date,
+        Option<Date>,
+        Option<Date>,
+        Option<OffsetDateTime>,
+        Option<OffsetDateTime>,
+    );
+    let occurrence_rows: Vec<OccurrenceRow> =
+        sqlx::query_as("SELECT * FROM app_event_occurrences($1, $2, $3, $4, $5)")
+            .bind(ws)
+            .bind(from_at)
+            .bind(to_at)
+            .bind(from)
+            .bind(to)
+            .fetch_all(tx.conn())
+            .await?;
+    let mut event_ids: Vec<Uuid> = occurrence_rows.iter().map(|r| r.0).collect();
+    event_ids.sort_unstable();
+    event_ids.dedup();
+    let event_rows: Vec<EventRow> = sqlx::query_as(&format!(
+        "{EVENT_SELECT} WHERE e.id = ANY($1) AND e.deleted_at IS NULL ORDER BY {EVENT_ORDER}"
+    ))
+    .bind(&event_ids)
     .fetch_all(tx.conn())
     .await?;
     let mut item_ids: Vec<ItemId> = task_rows.iter().map(|r| r.1).collect();
+    item_ids.extend(projected_rows.iter().map(|r| r.2));
     item_ids.extend(event_rows.iter().map(|r| r.item_id));
     item_ids.sort_unstable_by_key(|id| id.0);
     item_ids.dedup();
@@ -551,10 +638,42 @@ pub async fn calendar(
         .collect::<Result<_, AppError>>()?;
     Ok(Json(Calendar {
         tasks,
+        projected_tasks: projected_rows
+            .into_iter()
+            .map(
+                |(series_id, root_task_id, item_id, title, milestone, occurrence, start, due)| {
+                    ProjectedTask {
+                        series_id,
+                        root_task_id,
+                        item_id,
+                        title,
+                        milestone,
+                        occurrence: format_date(Some(occurrence)).unwrap_or_default(),
+                        start_date: format_date(start),
+                        due_date: format_date(due),
+                    }
+                },
+            )
+            .collect(),
         events: event_rows
             .into_iter()
             .map(to_event)
             .collect::<Result<_, _>>()?,
+        occurrences: occurrence_rows
+            .into_iter()
+            .map(
+                |(event_id, occurrence, start_date, end_date, starts_at, ends_at)| {
+                    EventOccurrence {
+                        event_id,
+                        occurrence: format_date(Some(occurrence)).unwrap_or_default(),
+                        start_date: format_date(start_date),
+                        end_date: format_date(end_date),
+                        starts_at,
+                        ends_at,
+                    }
+                },
+            )
+            .collect(),
         items: items
             .into_iter()
             .map(|(id, reference, title)| CalendarItem {

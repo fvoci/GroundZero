@@ -1314,6 +1314,163 @@
         }
       }
     },
+    "/api/events/{event_id}/exclusions": {
+      "post": {
+        "tags": [
+          "events"
+        ],
+        "summary": "반복 일정의 회차 하나 빼기(쓰기 권한). 이미 뺐으면 그대로.",
+        "operationId": "exclude_event_occurrence",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExcludeOccurrence"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{event_id}/recurrence": {
+      "put": {
+        "tags": [
+          "events"
+        ],
+        "summary": "일정 반복 정하기·멈추기(쓰기 권한).",
+        "operationId": "set_event_recurrence",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEventRecurrence"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/groups/{group_id}": {
       "delete": {
         "tags": [
@@ -2138,6 +2295,68 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/recurrences/sync": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "항목의 반복 업무 회차 만들기(쓰기 권한). 화면이 쓰기 권한으로 항목을 열 때 보낸다. 독자는 403.",
+        "operationId": "sync_item_recurrences",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResult"
                 }
               }
             }
@@ -3549,6 +3768,88 @@
         }
       }
     },
+    "/api/tasks/{task_id}/recurrence": {
+      "put": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "반복 업무 정하기·바꾸기·멈추기(쓰기 권한, 첫 회차에서). 처음 정하면 그 업무가 첫 회차가 되고, 오늘까지의\n회차와 다음 회차를 만든다. 이미 만든 회차는 바꾸지 않는다.",
+        "operationId": "set_task_recurrence",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTaskRecurrence"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tasks/{task_id}/schedule-preview": {
       "post": {
         "tags": [
@@ -3702,7 +4003,7 @@
         "tags": [
           "events"
         ],
-        "summary": "워크스페이스 달력(멤버). 볼 수 있는 업무와 일정만 나온다. 기간은 62일까지.",
+        "summary": "워크스페이스 달력(멤버). 볼 수 있는 업무·예정 회차·일정 회차만 나온다. 기간은 62일까지. 읽기 전용이다.",
         "operationId": "workspace_calendar",
         "parameters": [
           {
@@ -4904,7 +5205,9 @@
         "description": "기간 안의 볼 수 있는 업무·일정.",
         "required": [
           "tasks",
+          "projected_tasks",
           "events",
+          "occurrences",
           "items"
         ],
         "properties": {
@@ -4912,12 +5215,25 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Event"
-            }
+            },
+            "description": "기간 안에 회차가 있는 일정의 정의."
           },
           "items": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CalendarItem"
+            }
+          },
+          "occurrences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventOccurrence"
+            }
+          },
+          "projected_tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectedTask"
             }
           },
           "tasks": {
@@ -5481,6 +5797,7 @@
           "description",
           "all_day",
           "timezone",
+          "excluded_dates",
           "version",
           "access"
         ],
@@ -5508,6 +5825,13 @@
             ],
             "format": "date-time"
           },
+          "excluded_dates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "뺀 회차(일정 시간대 기준 날짜)."
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -5517,6 +5841,17 @@
           },
           "kind": {
             "$ref": "#/components/schemas/EventKind"
+          },
+          "recurrence": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecurrenceRule",
+                "description": "반복 규칙(없으면 한 번). 회차는 달력에서 펼친다."
+              }
+            ]
           },
           "start_date": {
             "type": [
@@ -5623,6 +5958,73 @@
           "meeting",
           "presentation",
           "event"
+        ]
+      },
+      "EventOccurrence": {
+        "type": "object",
+        "description": "일정의 회차 하나(반복이 아니면 그 일정 자체). 종일이면 날짜, 아니면 UTC 시각.",
+        "required": [
+          "event_id",
+          "occurrence"
+        ],
+        "properties": {
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "occurrence": {
+            "type": "string",
+            "description": "일정 시간대 기준의 회차 날짜(회차 빼기에 쓴다)."
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "starts_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ExcludeOccurrence": {
+        "type": "object",
+        "description": "반복 일정의 회차 하나 빼기.",
+        "required": [
+          "date"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "일정 시간대 기준의 회차 날짜."
+          }
+        }
+      },
+      "Frequency": {
+        "type": "string",
+        "description": "반복 주기.",
+        "enum": [
+          "daily",
+          "weekly",
+          "monthly",
+          "yearly"
         ]
       },
       "Group": {
@@ -6175,6 +6577,53 @@
           }
         }
       },
+      "ProjectedTask": {
+        "type": "object",
+        "description": "아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다.",
+        "required": [
+          "series_id",
+          "root_task_id",
+          "item_id",
+          "title",
+          "milestone",
+          "occurrence"
+        ],
+        "properties": {
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "milestone": {
+            "type": "boolean"
+          },
+          "occurrence": {
+            "type": "string"
+          },
+          "root_task_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "반복의 첫 회차(틀)."
+          },
+          "series_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
       "PublicDocument": {
         "type": "object",
         "description": "공개 보기 응답.",
@@ -6262,6 +6711,51 @@
           },
           "workspace_name": {
             "type": "string"
+          }
+        }
+      },
+      "RecurrenceRule": {
+        "type": "object",
+        "description": "반복 규칙. 기준일이 첫 회차이고 `count`는 첫 회차를 포함한다. 매달 31일·2월 29일처럼 없는 날은 건너뛴다.",
+        "required": [
+          "freq",
+          "interval",
+          "weekdays"
+        ],
+        "properties": {
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "첫 회차를 포함한 횟수(1~1000).",
+            "minimum": 0
+          },
+          "freq": {
+            "$ref": "#/components/schemas/Frequency"
+          },
+          "interval": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1~99.",
+            "minimum": 0
+          },
+          "until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "이 날짜까지(포함). `count`와 함께 쓸 수 없다."
+          },
+          "weekdays": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "매주 반복의 요일(ISO, 월=1 … 일=7). 비우면 기준일의 요일."
           }
         }
       },
@@ -6571,6 +7065,22 @@
           }
         }
       },
+      "SetEventRecurrence": {
+        "type": "object",
+        "description": "일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜.",
+        "properties": {
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecurrenceRule"
+              }
+            ]
+          }
+        }
+      },
       "SetParent": {
         "type": "object",
         "description": "부모·순서 바꾸기 요청. `parent_id`가 없으면 최상위, `before_id`가 있으면 그 형제 바로 앞, 없으면 맨 끝.",
@@ -6619,6 +7129,29 @@
               "null"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "SetTaskRecurrence": {
+        "type": "object",
+        "description": "업무 반복 정하기. `rule`이 없으면 반복을 멈춘다(이미 만든 회차는 남는다).",
+        "required": [
+          "timezone"
+        ],
+        "properties": {
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecurrenceRule"
+              }
+            ]
+          },
+          "timezone": {
+            "type": "string",
+            "description": "\"오늘\"을 정하는 시간대(IANA). 공동 반복은 지정한 시간대를 따른다(D-50)."
           }
         }
       },
@@ -6758,6 +7291,20 @@
           }
         }
       },
+      "SyncResult": {
+        "type": "object",
+        "description": "동기화 결과.",
+        "required": [
+          "created"
+        ],
+        "properties": {
+          "created": {
+            "type": "integer",
+            "format": "int32",
+            "description": "이번에 만든 회차 수. 한 번에 50개까지 만들며 남은 것은 다음 요청에서 이어 만든다."
+          }
+        }
+      },
       "Task": {
         "type": "object",
         "description": "업무.",
@@ -6835,6 +7382,13 @@
           "module_id": {
             "$ref": "#/components/schemas/ModuleId"
           },
+          "occurrence_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "반복 회차의 날짜(규칙 기준)."
+          },
           "parent_id": {
             "type": [
               "string",
@@ -6859,6 +7413,17 @@
               "null"
             ],
             "description": "예: `DEV-5`."
+          },
+          "series": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TaskSeries",
+                "description": "반복 업무의 회차면 그 반복."
+              }
+            ]
           },
           "start_date": {
             "type": [
@@ -6941,6 +7506,40 @@
           "high",
           "urgent"
         ]
+      },
+      "TaskSeries": {
+        "type": "object",
+        "description": "반복 업무 정보.",
+        "required": [
+          "id",
+          "root_task_id",
+          "timezone"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "root_task_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "첫 회차(규칙은 여기서 바꾼다)."
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecurrenceRule",
+                "description": "멈췄으면 없다."
+              }
+            ]
+          },
+          "timezone": {
+            "type": "string"
+          }
+        }
       },
       "TaskStatus": {
         "type": "string",

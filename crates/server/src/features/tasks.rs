@@ -19,6 +19,7 @@ use crate::db::{UserTx, is_unique_violation};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::Access;
+use crate::features::recurrence::RecurrenceRule;
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use crate::ids::{ItemId, ModuleId, UserId, WorkspaceId};
@@ -136,6 +137,10 @@ pub struct Task {
     /// 같은 항목 안의 선행 업무(끝나야 시작).
     #[schema(value_type = Vec<String>)]
     pub predecessor_ids: Vec<Uuid>,
+    /// 반복 업무의 회차면 그 반복.
+    pub series: Option<TaskSeries>,
+    /// 반복 회차의 날짜(규칙 기준).
+    pub occurrence_date: Option<String>,
     pub assignees: Vec<Assignee>,
     pub checklist_done: i64,
     pub checklist_total: i64,
@@ -148,6 +153,19 @@ pub struct Task {
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub updated_at: OffsetDateTime,
+}
+
+/// 반복 업무 정보.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TaskSeries {
+    #[schema(value_type = String, format = Uuid)]
+    pub id: Uuid,
+    /// 첫 회차(규칙은 여기서 바꾼다).
+    #[schema(value_type = String, format = Uuid)]
+    pub root_task_id: Uuid,
+    /// 멈췄으면 없다.
+    pub rule: Option<RecurrenceRule>,
+    pub timezone: String,
 }
 
 /// 업무와 체크리스트.
@@ -321,6 +339,11 @@ struct TaskRow {
     tags: Vec<String>,
     milestone: bool,
     predecessor_ids: Vec<Uuid>,
+    series_id: Option<Uuid>,
+    series_root: Option<Uuid>,
+    series_rule: Option<serde_json::Value>,
+    series_timezone: Option<String>,
+    occurrence_date: Option<Date>,
     checklist_done: i64,
     checklist_total: i64,
     version: i32,
@@ -334,9 +357,12 @@ const TASK_SELECT: &str = "SELECT t.id, t.item_id, i.module_id, t.workspace_id, 
         t.start_date, t.due_date, t.estimate_minutes, t.tags, t.milestone,
         ARRAY(SELECT d.predecessor_id FROM task_dependencies d WHERE d.successor_id = t.id
               ORDER BY d.created_at, d.predecessor_id) AS predecessor_ids,
+        s.id AS series_id, s.root_task_id AS series_root, s.rule AS series_rule, s.timezone AS series_timezone,
+        t.occurrence_date,
         c.done AS checklist_done, c.total AS checklist_total,
         t.version, t.completed_at, app_task_access(t.id) AS access, t.updated_at
  FROM tasks t JOIN items i ON i.id = t.item_id
+ LEFT JOIN task_series s ON s.id = t.series_id
  CROSS JOIN LATERAL app_task_checklist_counts(t.id) c";
 
 /// 업무 순서: 칸반 열(상태) 안의 위치·번호 순. 목록 보기의 상위·하위 묶음은 화면에서 만든다.
@@ -389,6 +415,11 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 tags,
                 milestone,
                 predecessor_ids,
+                series_id,
+                series_root,
+                series_rule,
+                series_timezone,
+                occurrence_date,
                 checklist_done,
                 checklist_total,
                 version,
@@ -419,6 +450,16 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 tags,
                 milestone,
                 predecessor_ids,
+                series: match (series_id, series_root, series_timezone) {
+                    (Some(id), Some(root_task_id), Some(timezone)) => Some(TaskSeries {
+                        id,
+                        root_task_id,
+                        rule: series_rule.map(RecurrenceRule::from_db).transpose()?,
+                        timezone,
+                    }),
+                    _ => None,
+                },
+                occurrence_date: format_date(occurrence_date),
                 assignees: mine,
                 checklist_done,
                 checklist_total,
@@ -624,6 +665,13 @@ pub async fn update(
     .map_err(AppError::from_db_function)?;
     let detail = load_detail(&mut tx, id).await?;
     tx.commit().await?;
+    // 반복 업무를 고쳤으면 그 반복의 회차를 맞춘다(별도 트랜잭션). 실패해도 고치기는 이미 끝났으므로 기록만 한다.
+    if outcome == "updated"
+        && let Some(series) = detail.task.series.as_ref().filter(|s| s.rule.is_some())
+        && let Err(e) = crate::features::recurrence::sync_series(&state, user, series.id).await
+    {
+        tracing::warn!(error = %e, series = %series.id, "recurrence sync after task update failed");
+    }
     let error = match outcome.as_str() {
         "conflict" => "conflict",
         // 승인할 때 본 후속 업무가 그사이 바뀌었다. 아무것도 바꾸지 않았으니 다시 미리 본다.

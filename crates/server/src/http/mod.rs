@@ -16,8 +16,8 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, documents, events, members, modules, public_links, references, revisions, schedule,
-    tasks, workspaces,
+    accounts, documents, events, members, modules, public_links, recurrence, references, revisions,
+    schedule, tasks, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -151,6 +151,10 @@ async fn api_not_found() -> AppError {
         events::update,
         events::delete,
         events::calendar,
+        recurrence::set_task,
+        recurrence::sync_item,
+        recurrence::set_event,
+        recurrence::exclude_event,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -257,6 +261,15 @@ async fn api_not_found() -> AppError {
         events::CalendarTask,
         events::CalendarItem,
         events::Calendar,
+        events::EventOccurrence,
+        events::ProjectedTask,
+        recurrence::Frequency,
+        recurrence::RecurrenceRule,
+        recurrence::SetTaskRecurrence,
+        recurrence::SyncResult,
+        recurrence::SetEventRecurrence,
+        recurrence::ExcludeOccurrence,
+        tasks::TaskSeries,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -371,6 +384,16 @@ pub fn router(state: AppState) -> Router {
             get(events::get).put(events::update).delete(events::delete),
         )
         .route("/workspaces/{workspace_id}/calendar", get(events::calendar))
+        .route("/tasks/{task_id}/recurrence", put(recurrence::set_task))
+        .route(
+            "/items/{item_id}/recurrences/sync",
+            post(recurrence::sync_item),
+        )
+        .route("/events/{event_id}/recurrence", put(recurrence::set_event))
+        .route(
+            "/events/{event_id}/exclusions",
+            post(recurrence::exclude_event),
+        )
         .route(
             "/tasks/{task_id}/predecessors/{predecessor_id}",
             put(schedule::add_predecessor).delete(schedule::remove_predecessor),

@@ -1,6 +1,8 @@
 <script lang="ts">
   // 워크스페이스 달력 (D-31, D-50): 볼 수 있는 업무(마감·시작)와 일정을 달 단위로. 넓은 화면은 달 격자, 좁은 화면은
   // 날짜별 목록으로 같은 내용을 보인다. 업무는 그 업무 상세로, 일정은 일정 대화상자로 연다.
+  import { tick } from 'svelte';
+
   import type { Workspace } from '@fvoci/api-client';
 
   import type { CalendarView } from '$lib/api/client';
@@ -27,14 +29,24 @@
   let data = $state<CalendarView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
   let openEvent = $state<string | undefined>(undefined);
+  let openOccurrence = $state<string | undefined>(undefined);
   let returnTo: string | undefined;
+  let changed = false;
   let reloadKey = $state(0);
 
   const range = $derived(monthRange(month));
   const byDay = $derived(
     data === undefined
       ? new Map<string, CalendarEntry[]>()
-      : entriesByDay(data.tasks, data.events, range.from, range.to, zone),
+      : entriesByDay(
+          data.tasks,
+          data.projected_tasks,
+          data.events,
+          data.occurrences,
+          range.from,
+          range.to,
+          zone,
+        ),
   );
   const itemTitle = $derived(new Map((data?.items ?? []).map((i) => [i.id, i.title])));
   const weeks = $derived(Array.from({ length: 6 }, (_, w) => range.days.slice(w * 7, w * 7 + 7)));
@@ -52,6 +64,12 @@
         if (cancelled) return;
         data = c;
         error = undefined;
+        // 지운 일정의 칸처럼 초점이 있던 요소가 사라졌으면 달력 제목으로 돌린다.
+        void tick().then(() => {
+          if (changed && document.activeElement === document.body)
+            document.getElementById('calendar-heading')?.focus();
+          changed = false;
+        });
       })
       .catch((e: unknown) => {
         if (!cancelled) error = e instanceof ApiError ? e.message : '달력을 불러오지 못했습니다.';
@@ -65,19 +83,39 @@
     returnTo = key;
     if (entry.kind === 'task')
       router.navigate(itemTaskPath(workspace.id, entry.task.item_id, entry.task.id));
-    else openEvent = entry.event.id;
+    // 예정 회차는 아직 업무가 아니다. 반복의 첫 회차(틀)를 연다(쓰기 권한으로 항목을 열면 회차가 만들어진다).
+    else if (entry.kind === 'projected')
+      router.navigate(
+        itemTaskPath(workspace.id, entry.projected.item_id, entry.projected.root_task_id),
+      );
+    else {
+      openEvent = entry.event.id;
+      openOccurrence = entry.event.recurrence === null ? undefined : entry.occurrence;
+    }
   }
 
   const entryKey = (day: string, entry: CalendarEntry): string =>
-    `${day}:${entry.kind === 'task' ? entry.task.id : entry.event.id}`;
+    `${day}:${
+      entry.kind === 'task'
+        ? entry.task.id
+        : entry.kind === 'projected'
+          ? `${entry.projected.series_id}:${entry.projected.occurrence}`
+          : `${entry.event.id}:${entry.occurrence}`
+    }`;
   const itemOf = (entry: CalendarEntry): string =>
-    itemTitle.get(entry.kind === 'task' ? entry.task.item_id : entry.event.item_id) ?? '';
+    itemTitle.get(
+      entry.kind === 'task'
+        ? entry.task.item_id
+        : entry.kind === 'projected'
+          ? entry.projected.item_id
+          : entry.event.item_id,
+    ) ?? '';
   const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 </script>
 
 <section class="flex flex-col gap-3" aria-labelledby="calendar-heading">
   <div class="flex flex-wrap items-center gap-2">
-    <h1 id="calendar-heading" class="text-xl font-semibold">{title}</h1>
+    <h1 id="calendar-heading" class="text-xl font-semibold" tabindex="-1">{title}</h1>
     <div class="ml-auto flex gap-1" role="group" aria-label="달 이동">
       <Button size="sm" variant="outline" onclick={() => (month = shiftMonth(month, -1))}
         >← 이전 달</Button
@@ -173,8 +211,12 @@
 
 <EventDialog
   eventId={openEvent}
+  occurrence={openOccurrence}
   onclose={() => (openEvent = undefined)}
-  onchanged={() => (reloadKey += 1)}
+  onchanged={() => {
+    changed = true;
+    reloadKey += 1;
+  }}
   returnFocus={() =>
     returnTo === undefined
       ? null

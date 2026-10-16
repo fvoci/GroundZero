@@ -1,12 +1,25 @@
 // 달력 배치 (D-31, D-50). 달 보기는 일요일부터 6주(42일). 날짜 칸마다 업무(마감·시작)와 일정을 놓는다.
-import type { CalendarTaskView, EventView } from '$lib/api/client';
+import type {
+  CalendarTaskView,
+  EventOccurrenceView,
+  EventView,
+  ProjectedTaskView,
+} from '$lib/api/client';
 import { dayNumber, fromDayNumber } from '$lib/features/tasks/gantt';
 
 import { clock, dayIn } from './time';
 
 export type CalendarEntry =
   | { kind: 'task'; task: CalendarTaskView; label: string }
-  | { kind: 'event'; event: EventView; label: string; sortKey: string };
+  | { kind: 'projected'; projected: ProjectedTaskView; label: string }
+  | {
+      kind: 'event';
+      event: EventView;
+      /** 일정 시간대 기준 회차 날짜(회차 빼기에 쓴다). */
+      occurrence: string;
+      label: string;
+      sortKey: string;
+    };
 
 /** `YYYY-MM`의 달 보기 첫날과 끝날(끝 포함). */
 export function monthRange(month: string): { from: string; to: string; days: string[] } {
@@ -38,7 +51,9 @@ function eachDay(from: string, to: string, lo: string, hi: string): string[] {
  */
 export function entriesByDay(
   tasks: readonly CalendarTaskView[],
+  projected: readonly ProjectedTaskView[],
   events: readonly EventView[],
+  occurrences: readonly EventOccurrenceView[],
   from: string,
   to: string,
   viewerZone: string,
@@ -49,22 +64,36 @@ export function entriesByDay(
     if (list === undefined) out.set(day, [entry]);
     else list.push(entry);
   };
-  for (const event of events) {
-    if (event.all_day && event.start_date !== null && event.end_date !== null) {
-      for (const day of eachDay(event.start_date, event.end_date, from, to))
-        push(day, { kind: 'event', event, label: `종일 ${event.title}`, sortKey: '' });
-    } else if (event.starts_at !== null && event.ends_at !== null) {
-      const startDay = dayIn(event.starts_at, viewerZone);
-      const endDay = dayIn(event.ends_at, viewerZone);
-      const time = clock(event.starts_at, viewerZone);
+  const byId = new Map(events.map((e) => [e.id, e]));
+  for (const occ of occurrences) {
+    const event = byId.get(occ.event_id);
+    if (event === undefined) continue;
+    const base = { kind: 'event' as const, event, occurrence: occ.occurrence };
+    if (occ.start_date !== null && occ.end_date !== null) {
+      for (const day of eachDay(occ.start_date, occ.end_date, from, to))
+        push(day, { ...base, label: `종일 ${event.title}`, sortKey: '' });
+    } else if (occ.starts_at !== null && occ.ends_at !== null) {
+      const startDay = dayIn(occ.starts_at, viewerZone);
+      // 끝 시각은 포함하지 않는다(자정에 끝나면 다음 날에 걸치지 않음).
+      const endMs = Math.max(Date.parse(occ.starts_at), Date.parse(occ.ends_at) - 1);
+      const endDay = dayIn(new Date(endMs).toISOString(), viewerZone);
+      const time = clock(occ.starts_at, viewerZone);
       for (const day of eachDay(startDay, endDay, from, to))
         push(day, {
-          kind: 'event',
-          event,
+          ...base,
           label: day === startDay ? `${time} ${event.title}` : `(계속) ${event.title}`,
           sortKey: day === startDay ? time : '',
         });
     }
+  }
+  for (const p of projected) {
+    const day = p.due_date ?? p.start_date;
+    if (day === null || day < from || day > to) continue;
+    push(day, {
+      kind: 'projected',
+      projected: p,
+      label: `예정 ${p.milestone ? '◆ ' : ''}${p.title}`,
+    });
   }
   for (const task of tasks) {
     const day = task.due_date ?? task.start_date;

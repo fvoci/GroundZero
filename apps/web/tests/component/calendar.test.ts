@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { CalendarTaskView, EventView } from '$lib/api/client';
+import type { CalendarTaskView, EventOccurrenceView, EventView } from '$lib/api/client';
 import { entriesByDay, monthRange, shiftMonth } from '$lib/features/events/calendar';
 import { dayIn, instantOf, wallTime } from '$lib/features/events/time';
 
@@ -17,6 +17,8 @@ const event = (over: Partial<EventView>): EventView => ({
   starts_at: null,
   ends_at: null,
   timezone: 'Asia/Seoul',
+  recurrence: null,
+  excluded_dates: [],
   version: 1,
   access: 'write',
   ...over,
@@ -31,6 +33,20 @@ describe('time zones (D-50)', () => {
   });
 
   it('handles daylight saving transitions', () => {
+    // 없는 시각은 뒤로, 두 번 있는 시각은 앞의 것.
+    expect(wallTime(instantOf('2026-03-08T02:30', 'America/New_York'), 'America/New_York')).toBe(
+      '2026-03-08T03:30',
+    );
+    expect(wallTime(instantOf('2026-09-06T00:00', 'America/Santiago'), 'America/Santiago')).toBe(
+      '2026-09-06T01:00',
+    );
+    expect(instantOf('2026-11-01T01:30', 'America/New_York')).toBe('2026-11-01T05:30:00.000Z');
+    expect(wallTime(instantOf('2026-10-17T09:00', 'Asia/Kathmandu'), 'Asia/Kathmandu')).toBe(
+      '2026-10-17T09:00',
+    );
+    // 모르는 시간대: 입력은 거부하고 표시는 UTC로.
+    expect(() => instantOf('2026-10-17T09:00', 'Factory/Nowhere')).toThrow(RangeError);
+    expect(wallTime('2026-10-17T00:00:00Z', 'Factory/Nowhere')).toBe('2026-10-17T00:00');
     // 뉴욕 2026-11-01 01:30은 두 번 있다(첫 번째를 쓴다). 2026-03-08 02:30은 없다(뒤로 민다).
     expect(wallTime(instantOf('2026-11-01T09:00', 'America/New_York'), 'America/New_York')).toBe(
       '2026-11-01T09:00',
@@ -62,22 +78,39 @@ describe('month calendar', () => {
       start_date: '2026-10-28',
       due_date: '2026-11-03',
     };
+    const occ = (id: string, over: Partial<EventOccurrenceView>): EventOccurrenceView => ({
+      event_id: id,
+      occurrence: '2026-11-01',
+      start_date: null,
+      end_date: null,
+      starts_at: null,
+      ends_at: null,
+      ...over,
+    });
     const map = entriesByDay(
       [task],
       [
-        event({
-          id: 'a',
-          all_day: true,
-          start_date: '2026-11-02',
-          end_date: '2026-11-03',
-          title: '학회',
-        }),
-        event({
-          id: 'b',
-          starts_at: '2026-10-31T15:30:00Z',
-          ends_at: '2026-10-31T16:00:00Z',
-          title: '점검',
-        }),
+        {
+          series_id: 's',
+          root_task_id: 'r',
+          item_id: 'i',
+          title: '주간 보고',
+          milestone: false,
+          occurrence: '2026-11-04',
+          start_date: null,
+          due_date: '2026-11-04',
+        },
+      ],
+      [
+        event({ id: 'a', all_day: true, title: '학회' }),
+        event({ id: 'b', title: '점검' }),
+        event({ id: 'c', title: '야간 회의' }),
+      ],
+      [
+        occ('a', { start_date: '2026-11-02', end_date: '2026-11-03' }),
+        occ('b', { starts_at: '2026-10-31T15:30:00Z', ends_at: '2026-10-31T16:00:00Z' }),
+        // 서울 11-05 23:00~24:00: 다음 날에 걸치지 않는다.
+        occ('c', { starts_at: '2026-11-05T14:00:00Z', ends_at: '2026-11-05T15:00:00Z' }),
       ],
       '2026-11-01',
       '2026-11-30',
@@ -87,5 +120,8 @@ describe('month calendar', () => {
     expect(map.get('2026-11-02')?.map((e) => e.label)).toEqual(['종일 학회']);
     expect(map.get('2026-11-03')?.map((e) => e.label)).toEqual(['종일 학회', '마감 DEV-2 보고서']);
     expect(map.has('2026-10-28')).toBe(false);
+    expect(map.get('2026-11-04')?.map((e) => e.label)).toEqual(['예정 주간 보고']);
+    expect(map.get('2026-11-05')?.map((e) => e.label)).toEqual(['23:00 야간 회의']);
+    expect(map.has('2026-11-06')).toBe(false);
   });
 });

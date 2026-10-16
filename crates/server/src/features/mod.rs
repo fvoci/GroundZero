@@ -6,6 +6,7 @@ pub mod events;
 pub mod members;
 pub mod modules;
 pub mod public_links;
+pub mod recurrence;
 pub mod references;
 pub mod revisions;
 pub mod schedule;

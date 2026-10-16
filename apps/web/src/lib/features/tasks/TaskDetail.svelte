@@ -7,6 +7,7 @@
 
   import type {
     AssigneeView,
+    RecurrenceRule,
     ShiftProposalView,
     TaskDetailView,
     TaskInput,
@@ -17,6 +18,8 @@
   import { api, ApiError, TASK_PRIORITIES, TASK_STATUSES } from '$lib/api/client';
   import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
   import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
+  import RecurrenceEditor from '$lib/features/events/RecurrenceEditor.svelte';
+  import { localTimeZone } from '$lib/features/events/time';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { Button } from '$lib/ui/button';
@@ -225,6 +228,18 @@
     } else {
       fill(fresh);
     }
+    onchanged();
+  }
+
+  async function saveRule(rule: RecurrenceRule | null): Promise<void> {
+    if (task === undefined) return;
+    const fresh = await api.setTaskRecurrence(
+      task.id,
+      rule,
+      task.series?.timezone ?? localTimeZone(),
+    );
+    if (task.version === fresh.version) task = fresh;
+    else fill(fresh);
     onchanged();
   }
 
@@ -564,6 +579,38 @@
         </div>
       {/if}
     </section>
+
+    {#if current.parent_id === null}
+      {#if current.series !== null && current.series.root_task_id !== current.id}
+        {@const rootId = current.series.root_task_id}
+        <section class="flex flex-col gap-2" aria-labelledby="task-recurrence-heading">
+          <h3 id="task-recurrence-heading" class="text-sm font-semibold">반복</h3>
+          <p class="text-sm text-muted-foreground">
+            반복 업무의 {current.occurrence_date} 회차입니다. 규칙은 첫 회차에서 바꿉니다.
+          </p>
+          <div>
+            <Button
+              size="sm"
+              variant="outline"
+              onclick={() => {
+                onopen(rootId);
+              }}>첫 회차 열기</Button
+            >
+          </div>
+        </section>
+      {:else}
+        <RecurrenceEditor
+          idPrefix="task-recurrence"
+          rule={current.series?.rule ?? null}
+          canEdit={canEdit && (current.due_date !== null || current.start_date !== null)}
+          zoneNote={`"오늘"은 ${current.series?.timezone ?? localTimeZone()} 기준`}
+          onsave={saveRule}
+        />
+        {#if canEdit && current.due_date === null && current.start_date === null}
+          <p class="text-sm text-muted-foreground">날짜를 넣고 저장하면 반복을 정할 수 있습니다.</p>
+        {/if}
+      {/if}
+    {/if}
 
     <ChecklistForm
       idPrefix={`task-${current.id}`}

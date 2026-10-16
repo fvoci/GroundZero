@@ -1,5 +1,7 @@
 <script lang="ts">
   // 항목의 일정(회의·발표·행사, D-31): 목록, 추가, 상세 대화상자.
+  import { tick } from 'svelte';
+
   import type { EventInput, EventView, ItemView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { Button } from '$lib/ui/button';
@@ -28,6 +30,11 @@
     try {
       events = await api.itemEvents(itemId);
       error = undefined;
+      // 지운 일정의 단추처럼 초점이 있던 요소가 사라졌으면 이 영역 제목으로 돌린다.
+      await tick();
+      if (changed && document.activeElement === document.body)
+        document.getElementById('events-heading')?.focus();
+      changed = false;
     } catch (e: unknown) {
       error = e instanceof ApiError ? e.message : '일정을 불러오지 못했습니다.';
     }
@@ -45,11 +52,12 @@
   }
 
   let returnTo: string | undefined;
+  let changed = false;
 </script>
 
 <section class="flex flex-col gap-3" aria-labelledby="events-heading">
   <div class="flex items-center gap-2">
-    <h2 id="events-heading" class="text-lg font-semibold">일정</h2>
+    <h2 id="events-heading" class="text-lg font-semibold" tabindex="-1">일정</h2>
     {#if canWrite && !adding}
       <Button
         size="sm"
@@ -106,5 +114,8 @@
     returnTo === undefined
       ? null
       : document.querySelector<HTMLElement>(`[data-event-id="${CSS.escape(returnTo)}"]`)}
-  onchanged={() => void reload()}
+  onchanged={() => {
+    changed = true;
+    void reload();
+  }}
 />

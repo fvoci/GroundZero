@@ -1,13 +1,14 @@
 <script lang="ts">
   // 일정 상세 대화상자: 보기·고치기·지우기. 고치기는 기준 버전으로 충돌을 막고, 충돌하면 입력을 두고 서버 내용을
   // 보여 준다(D-53과 같은 원칙). 지우기는 한 번 더 묻는다(행은 남고 휴지통 조각에서 되살린다).
-  import type { EventInput, EventView } from '$lib/api/client';
+  import type { EventInput, EventView, RecurrenceRule } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
 
   import EventForm from './EventForm.svelte';
-  import { describeWhen, KIND_LABEL } from './labels';
+  import RecurrenceEditor from './RecurrenceEditor.svelte';
+  import { describeRule, describeWhen, KIND_LABEL } from './labels';
   import { localTimeZone } from './time';
 
   interface Props {
@@ -16,9 +17,11 @@
     onchanged: () => void;
     /** 닫은 뒤 초점을 돌려줄 요소(주소나 목록에서 열어 여는 단추를 대화상자가 모르는 경우). */
     returnFocus?: (() => HTMLElement | null) | undefined;
+    /** 달력에서 반복 일정의 한 회차를 열었으면 그 회차 날짜(일정 시간대 기준). */
+    occurrence?: string | undefined;
   }
 
-  const { eventId, onclose, onchanged, returnFocus }: Props = $props();
+  const { eventId, onclose, onchanged, returnFocus, occurrence }: Props = $props();
 
   let event = $state<EventView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
@@ -65,6 +68,24 @@
     event = result.event;
     epoch += 1;
     onchanged();
+  }
+
+  async function saveRule(rule: RecurrenceRule | null): Promise<void> {
+    if (event === undefined) return;
+    event = await api.setEventRecurrence(event.id, rule);
+    epoch += 1;
+    onchanged();
+  }
+
+  async function skipOccurrence(date: string): Promise<void> {
+    if (event === undefined) return;
+    try {
+      await api.excludeOccurrence(event.id, date);
+      onchanged();
+      onclose();
+    } catch (e: unknown) {
+      error = e instanceof ApiError ? e.message : '회차를 빼지 못했습니다.';
+    }
   }
 
   async function remove(): Promise<void> {
@@ -140,6 +161,23 @@
             onsubmit={(input: EventInput) => save(input, current.version)}
           />
         {/key}
+        {#key epoch}
+          <RecurrenceEditor
+            idPrefix="event-recurrence"
+            rule={current.recurrence}
+            canEdit={true}
+            zoneNote={`${current.timezone} 기준`}
+            onsave={saveRule}
+          />
+        {/key}
+        {#if occurrence !== undefined && current.recurrence !== null}
+          <div class="flex items-center gap-2 text-sm">
+            <span>{occurrence} 회차만</span>
+            <Button size="sm" variant="outline" onclick={() => void skipOccurrence(occurrence)}
+              >이 회차 빼기</Button
+            >
+          </div>
+        {/if}
         <div class="flex items-center gap-2 border-t pt-3">
           {#if confirmDelete}
             <span class="text-sm" role="status">이 일정을 지울까요?</span>
@@ -151,8 +189,13 @@
             >
           {/if}
         </div>
-      {:else if current.description !== ''}
-        <p class="text-sm whitespace-pre-wrap">{current.description}</p>
+      {:else}
+        {#if current.recurrence !== null}
+          <p class="text-sm text-muted-foreground">반복: {describeRule(current.recurrence)}</p>
+        {/if}
+        {#if current.description !== ''}
+          <p class="text-sm whitespace-pre-wrap">{current.description}</p>
+        {/if}
       {/if}
     {/if}
   </Dialog.Content>

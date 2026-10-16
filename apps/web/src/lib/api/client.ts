@@ -586,6 +586,40 @@ export interface AssigneeView {
   display_name: string;
 }
 
+export const FREQUENCIES = ['daily', 'weekly', 'monthly', 'yearly'] as const;
+export type Frequency = (typeof FREQUENCIES)[number];
+
+/** 반복 규칙. 기준일이 첫 회차, `count`는 첫 회차 포함, 없는 날(31일·2월 29일)은 건너뜀. */
+export interface RecurrenceRule {
+  freq: Frequency;
+  interval: number;
+  /** ISO 요일(월=1 … 일=7), 매주에만. */
+  weekdays: number[];
+  until: string | null;
+  count: number | null;
+}
+
+function parseRule(value: Json): RecurrenceRule | null {
+  if (value === null || value === undefined) return null;
+  const o = rec(value, 'recurrence');
+  const freq = FREQUENCIES.find((f) => f === str(o, 'freq'));
+  if (freq === undefined) throw new TypeError(`unknown frequency ${str(o, 'freq')}`);
+  return {
+    freq,
+    interval: int(o, 'interval'),
+    weekdays: Array.isArray(o.weekdays) ? o.weekdays.map((d) => Number(d)) : [],
+    until: optStr(o, 'until'),
+    count: optInt(o, 'count'),
+  };
+}
+
+export interface TaskSeriesView {
+  id: string;
+  root_task_id: string;
+  rule: RecurrenceRule | null;
+  timezone: string;
+}
+
 export interface TaskView {
   id: string;
   item_id: string;
@@ -604,6 +638,9 @@ export interface TaskView {
   milestone: boolean;
   /** 같은 항목 안의 선행 업무(끝나야 시작). */
   predecessor_ids: string[];
+  /** 반복 업무의 회차면 그 반복. */
+  series: TaskSeriesView | null;
+  occurrence_date: string | null;
   assignees: AssigneeView[];
   checklist_done: number;
   checklist_total: number;
@@ -705,6 +742,19 @@ export function parseTask(value: Json): TaskView {
     tags: strings(o.tags),
     milestone: bool(o, 'milestone'),
     predecessor_ids: strings(o.predecessor_ids),
+    series:
+      o.series === null || o.series === undefined
+        ? null
+        : ((): TaskSeriesView => {
+            const s = rec(o.series, 'series');
+            return {
+              id: str(s, 'id'),
+              root_task_id: str(s, 'root_task_id'),
+              rule: parseRule(s.rule),
+              timezone: str(s, 'timezone'),
+            };
+          })(),
+    occurrence_date: optStr(o, 'occurrence_date'),
     assignees: parseList(o.assignees, parseAssignee),
     checklist_done: int(o, 'checklist_done'),
     checklist_total: int(o, 'checklist_total'),
@@ -744,6 +794,9 @@ export interface EventView {
   ends_at: string | null;
   /** 일정에 지정한 시간대(IANA). */
   timezone: string;
+  recurrence: RecurrenceRule | null;
+  /** 뺀 회차(일정 시간대 기준 날짜). */
+  excluded_dates: string[];
   version: number;
   access: Access;
 }
@@ -777,6 +830,8 @@ export function parseEvent(value: Json): EventView {
     starts_at: optStr(o, 'starts_at'),
     ends_at: optStr(o, 'ends_at'),
     timezone: str(o, 'timezone'),
+    recurrence: parseRule(o.recurrence),
+    excluded_dates: strings(o.excluded_dates),
     version: int(o, 'version'),
     access: access(str(o, 'access')),
   };
@@ -793,9 +848,33 @@ export interface CalendarTaskView {
   due_date: string | null;
 }
 
+export interface EventOccurrenceView {
+  event_id: string;
+  /** 일정 시간대 기준의 회차 날짜. */
+  occurrence: string;
+  start_date: string | null;
+  end_date: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+}
+
+/** 아직 만들지 않은 반복 업무 회차(예정). */
+export interface ProjectedTaskView {
+  series_id: string;
+  root_task_id: string;
+  item_id: string;
+  title: string;
+  milestone: boolean;
+  occurrence: string;
+  start_date: string | null;
+  due_date: string | null;
+}
+
 export interface CalendarView {
   tasks: CalendarTaskView[];
+  projected_tasks: ProjectedTaskView[];
   events: EventView[];
+  occurrences: EventOccurrenceView[];
   items: { id: string; reference: string | null; title: string }[];
 }
 
@@ -815,7 +894,31 @@ function parseCalendar(value: Json): CalendarView {
         due_date: optStr(t, 'due_date'),
       };
     }),
+    projected_tasks: parseList(o.projected_tasks, (v): ProjectedTaskView => {
+      const p = rec(v, 'projected task');
+      return {
+        series_id: str(p, 'series_id'),
+        root_task_id: str(p, 'root_task_id'),
+        item_id: str(p, 'item_id'),
+        title: str(p, 'title'),
+        milestone: bool(p, 'milestone'),
+        occurrence: str(p, 'occurrence'),
+        start_date: optStr(p, 'start_date'),
+        due_date: optStr(p, 'due_date'),
+      };
+    }),
     events: parseList(o.events, parseEvent),
+    occurrences: parseList(o.occurrences, (v): EventOccurrenceView => {
+      const e = rec(v, 'occurrence');
+      return {
+        event_id: str(e, 'event_id'),
+        occurrence: str(e, 'occurrence'),
+        start_date: optStr(e, 'start_date'),
+        end_date: optStr(e, 'end_date'),
+        starts_at: optStr(e, 'starts_at'),
+        ends_at: optStr(e, 'ends_at'),
+      };
+    }),
     items: parseList(o.items, (v) => {
       const i = rec(v, 'calendar item');
       return { id: str(i, 'id'), reference: optStr(i, 'reference'), title: str(i, 'title') };
@@ -1047,7 +1150,8 @@ export const api = {
       ...input,
       successor_shifts: successorShifts,
     });
-    if (status === 409) {
+    // 409 중 기준 버전 충돌만 서버 최신본이 온다(보관·다시 시도 등은 일반 오류).
+    if (status === 409 && isRecord(json) && json.current !== undefined) {
       const body = rec(json, 'conflict');
       const current = parseTaskDetail(body.current);
       return str(body, 'error') === 'shift_conflict'
@@ -1117,12 +1221,28 @@ export const api = {
       base_version: baseVersion,
       ...input,
     });
-    if (status === 409)
+    if (status === 409 && isRecord(json) && json.current !== undefined)
       return { kind: 'conflict', current: parseEvent(rec(json, 'conflict').current) };
     if (status !== 200) fail(status, json);
     return { kind: 'updated', event: parseEvent(json) };
   },
   deleteEvent: (id: string) => expectOk('DELETE', `/api/events/${encodeURIComponent(id)}`, none),
+  setTaskRecurrence: (id: string, rule: RecurrenceRule | null, timezone: string) =>
+    expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/recurrence`, parseTaskDetail, {
+      rule: rule === null ? null : { ...rule },
+      timezone,
+    }),
+  /** 반복 업무 회차 만들기(쓰기 권한으로 항목을 열 때). 만든 수. */
+  syncRecurrences: (itemId: string) =>
+    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/recurrences/sync`, (v) =>
+      int(rec(v, 'sync'), 'created'),
+    ),
+  setEventRecurrence: (id: string, rule: RecurrenceRule | null) =>
+    expectOk('PUT', `/api/events/${encodeURIComponent(id)}/recurrence`, parseEvent, {
+      rule: rule === null ? null : { ...rule },
+    }),
+  excludeOccurrence: (id: string, date: string) =>
+    expectOk('POST', `/api/events/${encodeURIComponent(id)}/exclusions`, none, { date }),
   calendar: (workspaceId: string, from: string, to: string, tz: string) =>
     expectOk(
       'GET',
@@ -1154,7 +1274,7 @@ export const api = {
       `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/restore`,
       { request_id: input.requestId, base_revision: input.baseRevision },
     );
-    if (status === 409) {
+    if (status === 409 && isRecord(json) && json.current !== undefined) {
       return { kind: 'conflict', current: parseDocument(rec(json, 'conflict').current) };
     }
     if (status !== 200) fail(status, json);
@@ -1287,7 +1407,7 @@ export const api = {
       title: input.title,
       body: input.body,
     });
-    if (status === 409) {
+    if (status === 409 && isRecord(json) && json.current !== undefined) {
       return { kind: 'conflict', current: parseDocument(rec(json, 'conflict').current) };
     }
     if (status !== 200) fail(status, json);

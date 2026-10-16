@@ -291,6 +291,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/events/{event_id}/exclusions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 반복 일정의 회차 하나 빼기(쓰기 권한). 이미 뺐으면 그대로. */
+        post: operations["exclude_event_occurrence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/events/{event_id}/recurrence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 일정 반복 정하기·멈추기(쓰기 권한). */
+        put: operations["set_event_recurrence"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/groups/{group_id}": {
         parameters: {
             query?: never;
@@ -493,6 +527,23 @@ export interface paths {
         put?: never;
         /** 일정 만들기(항목 쓰기 권한). 같은 `request_id`로 재시도하면 같은 일정을 돌려준다. */
         post: operations["create_event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/recurrences/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 항목의 반복 업무 회차 만들기(쓰기 권한). 화면이 쓰기 권한으로 항목을 열 때 보낸다. 독자는 403. */
+        post: operations["sync_item_recurrences"];
         delete?: never;
         options?: never;
         head?: never;
@@ -828,6 +879,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tasks/{task_id}/recurrence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 반복 업무 정하기·바꾸기·멈추기(쓰기 권한, 첫 회차에서). 처음 정하면 그 업무가 첫 회차가 되고, 오늘까지의
+         *     회차와 다음 회차를 만든다. 이미 만든 회차는 바꾸지 않는다.
+         */
+        put: operations["set_task_recurrence"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks/{task_id}/schedule-preview": {
         parameters: {
             query?: never;
@@ -870,7 +941,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 워크스페이스 달력(멤버). 볼 수 있는 업무와 일정만 나온다. 기간은 62일까지. */
+        /** 워크스페이스 달력(멤버). 볼 수 있는 업무·예정 회차·일정 회차만 나온다. 기간은 62일까지. 읽기 전용이다. */
         get: operations["workspace_calendar"];
         put?: never;
         post?: never;
@@ -1151,8 +1222,11 @@ export interface components {
         };
         /** @description 기간 안의 볼 수 있는 업무·일정. */
         Calendar: {
+            /** @description 기간 안에 회차가 있는 일정의 정의. */
             events: components["schemas"]["Event"][];
             items: components["schemas"]["CalendarItem"][];
+            occurrences: components["schemas"]["EventOccurrence"][];
+            projected_tasks: components["schemas"]["ProjectedTask"][];
             tasks: components["schemas"]["CalendarTask"][];
         };
         /** @description 달력에 나온 항목의 이름(업무·일정이 어디에 속하는지 보이기 위해). */
@@ -1341,10 +1415,13 @@ export interface components {
             end_date?: string | null;
             /** Format: date-time */
             ends_at?: string | null;
+            /** @description 뺀 회차(일정 시간대 기준 날짜). */
+            excluded_dates: string[];
             /** Format: uuid */
             id: string;
             item_id: components["schemas"]["ItemId"];
             kind: components["schemas"]["EventKind"];
+            recurrence?: null | components["schemas"]["RecurrenceRule"];
             start_date?: string | null;
             /** Format: date-time */
             starts_at?: string | null;
@@ -1378,6 +1455,29 @@ export interface components {
          * @enum {string}
          */
         EventKind: "meeting" | "presentation" | "event";
+        /** @description 일정의 회차 하나(반복이 아니면 그 일정 자체). 종일이면 날짜, 아니면 UTC 시각. */
+        EventOccurrence: {
+            end_date?: string | null;
+            /** Format: date-time */
+            ends_at?: string | null;
+            /** Format: uuid */
+            event_id: string;
+            /** @description 일정 시간대 기준의 회차 날짜(회차 빼기에 쓴다). */
+            occurrence: string;
+            start_date?: string | null;
+            /** Format: date-time */
+            starts_at?: string | null;
+        };
+        /** @description 반복 일정의 회차 하나 빼기. */
+        ExcludeOccurrence: {
+            /** @description 일정 시간대 기준의 회차 날짜. */
+            date: string;
+        };
+        /**
+         * @description 반복 주기.
+         * @enum {string}
+         */
+        Frequency: "daily" | "weekly" | "monthly" | "yearly";
         /** @description 그룹. */
         Group: {
             /** Format: uuid */
@@ -1550,6 +1650,22 @@ export interface components {
         OfferOwnership: {
             to_user: components["schemas"]["UserId"];
         };
+        /** @description 아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다. */
+        ProjectedTask: {
+            due_date?: string | null;
+            item_id: components["schemas"]["ItemId"];
+            milestone: boolean;
+            occurrence: string;
+            /**
+             * Format: uuid
+             * @description 반복의 첫 회차(틀).
+             */
+            root_task_id: string;
+            /** Format: uuid */
+            series_id: string;
+            start_date?: string | null;
+            title: string;
+        };
         /** @description 공개 보기 응답. */
         PublicDocument: {
             body: Record<string, never>;
@@ -1580,6 +1696,24 @@ export interface components {
             role: components["schemas"]["Role"];
             workspace_id: components["schemas"]["WorkspaceId"];
             workspace_name: string;
+        };
+        /** @description 반복 규칙. 기준일이 첫 회차이고 `count`는 첫 회차를 포함한다. 매달 31일·2월 29일처럼 없는 날은 건너뛴다. */
+        RecurrenceRule: {
+            /**
+             * Format: int32
+             * @description 첫 회차를 포함한 횟수(1~1000).
+             */
+            count?: number | null;
+            freq: components["schemas"]["Frequency"];
+            /**
+             * Format: int32
+             * @description 1~99.
+             */
+            interval: number;
+            /** @description 이 날짜까지(포함). `count`와 함께 쓸 수 없다. */
+            until?: string | null;
+            /** @description 매주 반복의 요일(ISO, 월=1 … 일=7). 비우면 기준일의 요일. */
+            weekdays: number[];
         };
         /** @description @ 입력 후보. 이름이 같은 후보는 참조 번호와 워크스페이스로 구분한다 (D-18). */
         ReferenceCandidate: {
@@ -1681,6 +1815,10 @@ export interface components {
         SetArchived: {
             archived: boolean;
         };
+        /** @description 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. */
+        SetEventRecurrence: {
+            rule?: null | components["schemas"]["RecurrenceRule"];
+        };
         /** @description 부모·순서 바꾸기 요청. `parent_id`가 없으면 최상위, `before_id`가 있으면 그 형제 바로 앞, 없으면 맨 끝. */
         SetParent: {
             before_id?: null | components["schemas"]["DocumentId"];
@@ -1694,6 +1832,12 @@ export interface components {
         SetTaskParent: {
             /** Format: uuid */
             parent_id?: string | null;
+        };
+        /** @description 업무 반복 정하기. `rule`이 없으면 반복을 멈춘다(이미 만든 회차는 남는다). */
+        SetTaskRecurrence: {
+            rule?: null | components["schemas"]["RecurrenceRule"];
+            /** @description "오늘"을 정하는 시간대(IANA). 공동 반복은 지정한 시간대를 따른다(D-50). */
+            timezone: string;
         };
         /** @description 공유 항목. */
         Share: {
@@ -1739,6 +1883,14 @@ export interface components {
             /** Format: uuid */
             task_id: string;
         };
+        /** @description 동기화 결과. */
+        SyncResult: {
+            /**
+             * Format: int32
+             * @description 이번에 만든 회차 수. 한 번에 50개까지 만들며 남은 것은 다음 요청에서 이어 만든다.
+             */
+            created: number;
+        };
         /** @description 업무. */
         Task: {
             access: components["schemas"]["Access"];
@@ -1759,6 +1911,8 @@ export interface components {
             /** @description 마일스톤이면 마감일 하나만 쓴다. */
             milestone: boolean;
             module_id: components["schemas"]["ModuleId"];
+            /** @description 반복 회차의 날짜(규칙 기준). */
+            occurrence_date?: string | null;
             /**
              * Format: uuid
              * @description 하위 업무면 상위 업무.
@@ -1769,6 +1923,7 @@ export interface components {
             priority: components["schemas"]["TaskPriority"];
             /** @description 예: `DEV-5`. */
             reference?: string | null;
+            series?: null | components["schemas"]["TaskSeries"];
             /** @description `YYYY-MM-DD`. 시각 없는 날짜. */
             start_date?: string | null;
             status: components["schemas"]["TaskStatus"];
@@ -1797,6 +1952,18 @@ export interface components {
          * @enum {string}
          */
         TaskPriority: "none" | "low" | "medium" | "high" | "urgent";
+        /** @description 반복 업무 정보. */
+        TaskSeries: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description 첫 회차(규칙은 여기서 바꾼다).
+             */
+            root_task_id: string;
+            rule?: null | components["schemas"]["RecurrenceRule"];
+            timezone: string;
+        };
         /**
          * @description 업무 상태. 완료 시각은 서버가 기록한다.
          * @enum {string}
@@ -2775,6 +2942,118 @@ export interface operations {
             };
         };
     };
+    exclude_event_occurrence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExcludeOccurrence"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_event_recurrence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetEventRecurrence"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     delete_group: {
         parameters: {
             query?: never;
@@ -3353,6 +3632,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    sync_item_recurrences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncResult"];
                 };
             };
             403: {
@@ -4320,6 +4644,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_task_recurrence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetTaskRecurrence"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             403: {
