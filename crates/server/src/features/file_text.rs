@@ -22,6 +22,7 @@ enum Format {
     Pptx,
     Xlsx,
     Hwpx,
+    Pdf,
 }
 
 fn format(content_type: &str, name: &str) -> Option<Format> {
@@ -47,6 +48,7 @@ fn format(content_type: &str, name: &str) -> Option<Format> {
             Some(Format::Xlsx)
         }
         ("application/hwp+zip" | "application/haansofthwpx", _) | (_, "hwpx") => Some(Format::Hwpx),
+        ("application/pdf", _) | (_, "pdf") => Some(Format::Pdf),
         (
             _,
             "txt" | "md" | "markdown" | "csv" | "tsv" | "json" | "xml" | "yaml" | "yml" | "log",
@@ -178,6 +180,8 @@ pub fn extract(bytes: &[u8], content_type: &str, name: &str) -> Option<String> {
         Format::Hwpx => zip_xml_text(bytes, |n| {
             n.starts_with("Contents/section") && n.ends_with(".xml")
         })?,
+        // D-68: pdf-extract(MIT) → lopdf. 압축 풀기는 flate2의 miniz_oxide 경로. 읽지 못하는 PDF는 이름으로만 찾는다.
+        Format::Pdf => pdf_extract::extract_text_from_mem(bytes).ok()?,
     };
     let compact = text.split_whitespace().collect::<Vec<_>>().join(" ");
     Some(clip(compact))
@@ -232,6 +236,49 @@ mod tests {
             extract(&hwpx, "application/hwp+zip", "x.hwpx").as_deref(),
             Some("한글 문서 한")
         );
+    }
+
+    /// 표준 글꼴(Helvetica) 한 쪽짜리 PDF. 상호 참조 표의 위치를 직접 계산한다.
+    fn tiny_pdf(text: &str) -> Vec<u8> {
+        let stream = format!("BT /F1 12 Tf 72 720 Td ({text}) Tj ET");
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>".to_owned(),
+            format!("<< /Length {} >>\nstream\n{stream}\nendstream", stream.len()),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+        ];
+        let mut out = b"%PDF-1.4\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, body) in objects.iter().enumerate() {
+            offsets.push(out.len());
+            out.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+        }
+        let xref = out.len();
+        out.extend_from_slice(
+            format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes(),
+        );
+        for offset in offsets {
+            out.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+        }
+        out.extend_from_slice(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+                objects.len() + 1
+            )
+            .as_bytes(),
+        );
+        out
+    }
+
+    #[test]
+    fn reads_pdf_text() {
+        let pdf = tiny_pdf("Rainbow outcome was significant");
+        assert_eq!(
+            extract(&pdf, "application/pdf", "report.pdf").as_deref(),
+            Some("Rainbow outcome was significant")
+        );
+        assert!(supported("", "paper.PDF"));
     }
 
     #[test]

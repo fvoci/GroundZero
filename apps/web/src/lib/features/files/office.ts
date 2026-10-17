@@ -1,8 +1,8 @@
 // Office 미리보기(D-05, D-71 브라우저 우선). DOCX는 docx-preview(Apache-2.0)로 쪽 단위 HTML을 만들어 스크립트를 돌리지
 // 못하는 iframe(sandbox)에 넣고, XLSX는 read-excel-file(MIT)로 시트별 값 표를 만든다. 둘 다 필요할 때만 불러온다.
-// PPTX는 쓸 만한 브라우저 렌더러가 미승인 라이선스(0BSD·MPL-2.0)를 끌어와 아직 넣지 않았다(docs/development.md 57절).
+// PPTX는 @aiden0z/pptx-renderer(D-74)를 같은 출처가 아닌 격리 iframe(`pptx-frame.html`) 안에서 돌려 그린다.
 
-export type OfficeKind = 'docx' | 'xlsx';
+export type OfficeKind = 'docx' | 'xlsx' | 'pptx';
 
 /** 미리볼 수 있는 최대 크기. 더 크면 내려받아 연다. */
 export const OFFICE_PREVIEW_MAX_BYTES = 20 * 1024 * 1024;
@@ -20,7 +20,34 @@ export function officeKind(contentType: string, name: string): OfficeKind | unde
     ext === 'xlsx'
   )
     return 'xlsx';
+  if (
+    type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+    ext === 'pptx'
+  )
+    return 'pptx';
   return undefined;
+}
+
+/** PPTX를 그리는 프레임 스크립트(D-74). `vite.pptx-frame.config.ts`가 한 파일로 만든다. */
+export const PPTX_FRAME_SCRIPT_URL = '/pptx-frame.js';
+
+/** 프레임 스크립트를 HTML의 <script> 안에 그대로 넣을 수 있게 닫는 태그·주석 시작을 끊는다(자바스크립트 뜻은 같다). */
+export function inlineScript(code: string): string {
+  return code.replace(/<\/(script)/gi, '<\\/$1').replace(/<!--/g, '<\\!--');
+}
+
+/**
+ * PPTX 격리 프레임의 srcdoc(D-74). 프레임 스크립트를 이 원점에서 받아 nonce와 함께 문서 안에 넣는다. 프레임은
+ * `sandbox="allow-scripts"`(출처 없음)로 열려 앱의 쿠키·저장소·화면에 닿지 못하고, CSP가 그 스크립트 말고는 어떤
+ * 스크립트·요청도 막는다. 그림·글꼴은 파일 안의 것(blob:·data:)만.
+ */
+export async function pptxSrcdoc(): Promise<string> {
+  const response = await fetch(PPTX_FRAME_SCRIPT_URL, { credentials: 'omit' });
+  if (!response.ok) throw new Error(String(response.status));
+  const code = await response.text();
+  const nonce = crypto.randomUUID().replaceAll('-', '');
+  const csp = `default-src 'none'; script-src 'nonce-${nonce}'; img-src blob: data:; style-src 'unsafe-inline'; font-src blob: data:`;
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"></head><body style="margin:0;background:#e5e7eb"><div id="slides"></div><script nonce="${nonce}">${inlineScript(code)}</script></body></html>`;
 }
 
 /** iframe 안에서 바깥으로 나가는 요청(추적 그림 등)을 막는다. 그림·글꼴은 문서 안의 것(data:)만. */

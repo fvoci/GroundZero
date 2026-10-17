@@ -529,6 +529,39 @@ fn docx(text: &str) -> Vec<u8> {
     out.into_inner()
 }
 
+/// 표준 글꼴(Helvetica) 한 쪽짜리 PDF(D-73). 상호 참조 표의 위치를 직접 계산한다.
+fn pdf(text: &str) -> Vec<u8> {
+    let stream = format!("BT /F1 12 Tf 72 720 Td ({text}) Tj ET");
+    let objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>".to_owned(),
+        format!("<< /Length {} >>\nstream\n{stream}\nendstream", stream.len()),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+    ];
+    let mut out = b"%PDF-1.4\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in objects.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = out.len();
+    out.extend_from_slice(
+        format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes(),
+    );
+    for offset in offsets {
+        out.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            objects.len() + 1
+        )
+        .as_bytes(),
+    );
+    out
+}
+
 #[tokio::test]
 async fn filters_narrow_results_and_attachment_text_is_searchable() {
     let state = search_state().await;
@@ -654,6 +687,30 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
             .is_some_and(|s| s.contains("예산")),
         "{by_body:?}"
     );
+
+    // PDF 본문의 낱말로도 찾는다(D-73). 깨진 PDF는 이름으로만 색인되고 색인 작업을 멈추지 않는다.
+    let pdf_tok = token();
+    upload_bytes(
+        &app,
+        &admin,
+        &doc,
+        "논문.pdf",
+        "application/pdf",
+        &pdf(&format!("Rainbow {pdf_tok} outcome")),
+    )
+    .await;
+    upload_bytes(
+        &app,
+        &admin,
+        &doc,
+        "깨진.pdf",
+        "application/pdf",
+        b"%PDF-1.4 broken",
+    )
+    .await;
+    let by_pdf = settle(&state, &app, &admin, &pdf_tok, &["논문.pdf"]).await;
+    assert_eq!(by_pdf[0]["kind"], "file");
+    settle(&state, &app, &admin, "깨진.pdf", &["깨진.pdf"]).await;
 
     // 검색 서비스가 없을 때도 같은 필터를 쓴다(제목 검색).
     let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();

@@ -11,3 +11,6 @@ coverage/
 
 # 로컬 파일 저장소 기본 위치(FVOCI_STORAGE_DIR)
 /data/
+
+# PPTX 미리보기 프레임 스크립트(빌드 산출물, D-74)
+/apps/web/public/pptx-frame.js

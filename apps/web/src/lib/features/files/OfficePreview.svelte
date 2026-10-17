@@ -4,7 +4,13 @@
   import { Button } from '$lib/ui/button';
 
   import type { OfficeKind, SheetView } from './office';
-  import { docxSrcdoc, MAX_SHEET_ROWS, OFFICE_PREVIEW_MAX_BYTES, xlsxSheets } from './office';
+  import {
+    docxSrcdoc,
+    MAX_SHEET_ROWS,
+    OFFICE_PREVIEW_MAX_BYTES,
+    pptxSrcdoc,
+    xlsxSheets,
+  } from './office';
 
   interface Props {
     fileId: string;
@@ -20,14 +26,45 @@
   let sheets = $state<SheetView[] | undefined>(undefined);
   let active = $state(0);
   let error = $state<string | undefined>(undefined);
+  // PPTX: 격리 프레임에 넘길 바이트와 프레임이 알려 준 상태.
+  let pptxBytes = $state<ArrayBuffer | undefined>(undefined);
+  let pptxDoc = $state<string | undefined>(undefined);
+  let pptxSlides = $state<number | undefined>(undefined);
+  let frame = $state<HTMLIFrameElement | undefined>(undefined);
   // 늦게 끝난 이전 요청이 결과를 덮지 않게 요청마다 번호를 붙인다.
   let seq = 0;
+
+  function sendPptx(): void {
+    const target = frame?.contentWindow;
+    if (!target || pptxBytes === undefined) return;
+    // 격리 프레임은 출처가 없어(opaque) 대상 출처를 지정할 수 없다. 이 사람이 내려받을 수 있는 바이트만 보낸다.
+    target.postMessage({ type: 'pptx', bytes: pptxBytes }, '*');
+  }
+
+  $effect(() => {
+    const listener = (event: MessageEvent<unknown>): void => {
+      if (event.source === null || event.source !== frame?.contentWindow) return;
+      const data = event.data;
+      if (typeof data !== 'object' || data === null || !('type' in data)) return;
+      if (data.type === 'ready') sendPptx();
+      else if (data.type === 'rendered' && 'slides' in data && typeof data.slides === 'number')
+        pptxSlides = data.slides;
+      else if (data.type === 'failed') error = '미리보기를 만들지 못했습니다. 내려받아 여세요.';
+    };
+    window.addEventListener('message', listener);
+    return () => {
+      window.removeEventListener('message', listener);
+    };
+  });
 
   $effect(() => {
     const id = fileId;
     const mine = ++seq;
     srcdoc = undefined;
     sheets = undefined;
+    pptxBytes = undefined;
+    pptxDoc = undefined;
+    pptxSlides = undefined;
     error = undefined;
     if (size > OFFICE_PREVIEW_MAX_BYTES) {
       error = '파일이 커서 미리볼 수 없습니다. 내려받아 여세요.';
@@ -41,6 +78,12 @@
         if (kind === 'docx') {
           const html = await docxSrcdoc(bytes);
           if (mine === seq) srcdoc = html;
+        } else if (kind === 'pptx') {
+          const doc = await pptxSrcdoc();
+          if (mine === seq) {
+            pptxBytes = bytes;
+            pptxDoc = doc;
+          }
         } else {
           const result = await xlsxSheets(bytes);
           if (mine === seq) sheets = result;
@@ -70,6 +113,18 @@
       {srcdoc}
       class="h-[70vh] w-full rounded border bg-muted"
     ></iframe>
+  {:else if pptxBytes !== undefined && pptxDoc !== undefined}
+    <!-- 같은 출처가 아닌 격리 문서에서 그린다. 창 열기·이동·같은 출처 접근은 허용하지 않는다. -->
+    <iframe
+      bind:this={frame}
+      title={`${name} 미리보기`}
+      sandbox="allow-scripts"
+      srcdoc={pptxDoc}
+      class="h-[70vh] w-full rounded border bg-muted"
+    ></iframe>
+    <p aria-live="polite" class="text-xs text-muted-foreground">
+      {pptxSlides === undefined ? '슬라이드를 그리는 중…' : `슬라이드 ${String(pptxSlides)}장`}
+    </p>
   {:else if sheets !== undefined}
     {#if sheets.length > 1}
       <div class="flex flex-wrap gap-1" role="tablist" aria-label="시트">

@@ -13,6 +13,7 @@ export default tseslint.config(
       '**/dist/**',
       'target/**',
       'packages/api-client/src/generated/**',
+      'apps/web/public/pptx-frame.js',
       '**/*.config.{js,mjs,ts}',
     ],
   },

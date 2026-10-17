@@ -1,5 +1,5 @@
 # cargo-deny 설정. 라이선스 정책은 docs/decisions.md D-60.
-# 허용 목록 밖의 크레이트는 여기서 예외로 추가하지 않고 보고해 승인을 받는다.
+# 허용 목록 밖의 크레이트는 보고해 승인을 받는다. 승인된 것만 크레이트·판 단위 예외(exceptions)로 둔다.
 
 [graph]
 all-features = false
@@ -24,6 +24,30 @@ allow = [
   # Zlib: 사용자 승인 2026-10-17(D-68). foldhash(sqlx 경유)·zlib-rs(PDF·rhwp). 다른 라이선스는 승인하지 않았다.
   "Zlib",
 ]
+# Unicode-3.0: 사용자 승인 2026-10-17(D-72). 아래 크레이트·판에만 허용한다(허용 목록에는 넣지 않는다).
+# url → idna → idna_adapter → icu_* (서버 바이너리, 고지는 THIRD_PARTY_NOTICES.txt), derive와 unicode-ident는 빌드 때만.
+# 판이 바뀌면 이 목록이 맞지 않아 검사가 실패한다. 그때 다시 보고해 승인받는다.
+exceptions = [
+  { crate = "icu_collections@2.3.0", allow = ["Unicode-3.0"] },
+  { crate = "icu_locale_core@2.3.0", allow = ["Unicode-3.0"] },
+  { crate = "icu_normalizer@2.3.0", allow = ["Unicode-3.0"] },
+  { crate = "icu_normalizer_data@2.3.0", allow = ["Unicode-3.0"] },
+  { crate = "icu_properties@2.3.0", allow = ["Unicode-3.0"] },
+  { crate = "icu_properties_data@2.3.0", allow = ["Unicode-3.0"] },
+  { crate = "icu_provider@2.3.1", allow = ["Unicode-3.0"] },
+  { crate = "litemap@0.8.3", allow = ["Unicode-3.0"] },
+  { crate = "potential_utf@0.1.6", allow = ["Unicode-3.0"] },
+  { crate = "tinystr@0.8.4", allow = ["Unicode-3.0"] },
+  { crate = "unicode-ident@1.0.27", allow = ["Unicode-3.0"] },
+  { crate = "writeable@0.6.4", allow = ["Unicode-3.0"] },
+  { crate = "yoke@0.8.3", allow = ["Unicode-3.0"] },
+  { crate = "yoke-derive@0.8.4", allow = ["Unicode-3.0"] },
+  { crate = "zerofrom@0.1.8", allow = ["Unicode-3.0"] },
+  { crate = "zerofrom-derive@0.1.8", allow = ["Unicode-3.0"] },
+  { crate = "zerotrie@0.2.5", allow = ["Unicode-3.0"] },
+  { crate = "zerovec@0.11.8", allow = ["Unicode-3.0"] },
+  { crate = "zerovec-derive@0.11.6", allow = ["Unicode-3.0"] },
+]
 
 [bans]
 multiple-versions = "warn"
@@ -39,6 +63,10 @@ ignore = [
   # smallstr 0.3.1 (yrs 0.28.0 경유, 실시간 공동 편집 D-70). 취약점이 아닌 유지 중단 알림(informational = "unmaintained",
   # 수정 판 없음)이며 yrs가 글 조각 저장에 쓴다. 사용자 승인 2026-10-17(D-70). yrs가 smallstr를 떼면 이 항목을 지운다.
   { id = "RUSTSEC-2026-0215", reason = "informational unmaintained notice, no vulnerability; required by yrs (D-70); remove when yrs drops smallstr" },
+  # ttf-parser 0.25.1 (pdf-extract 0.12.1 → lopdf 0.42.0 경유, PDF 본문 검색 D-73). 취약점이 아닌 유지 중단 알림(수정 판 없음).
+  # lopdf가 PDF를 만들 때 글꼴을 넣는 데만 쓰고 글자 뽑기 경로에서는 쓰지 않는다. 사용자 승인 2026-10-17(D-73).
+  # lopdf가 ttf-parser를 떼거나 유지되는 판으로 바꾸면 이 항목을 지운다.
+  { id = "RUSTSEC-2026-0192", reason = "informational unmaintained notice, no vulnerability; ttf-parser via lopdf (PDF text search, D-73), not on the extraction path; remove when lopdf drops or replaces it" },
 ]
 
 [sources]

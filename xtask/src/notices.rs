@@ -25,6 +25,8 @@ struct Package {
     version: String,
     license: String,
     repository: String,
+    /// 이 판의 소스 묶음 주소(레지스트리). 파일 단위 카피레프트(MPL-2.0)는 소스 입수 경로를 함께 알린다(D-74).
+    archive: String,
     texts: Vec<(String, String)>,
 }
 
@@ -90,6 +92,12 @@ fn section(out: &mut String, title: &str, packages: &[Package], missing: &mut BT
         if !p.repository.is_empty() {
             out.push_str(&format!("Source: {}\n", p.repository));
         }
+        if spdx_ids(&p.license).iter().any(|id| id.starts_with("MPL-")) {
+            out.push_str(&format!(
+                "Source code of this version (MPL-2.0 section 3.2): {}\n",
+                p.archive
+            ));
+        }
         out.push('\n');
         if p.texts.is_empty() {
             out.push_str("(No license file shipped with the package; see the SPDX text in the appendix.)\n\n");
@@ -99,6 +107,17 @@ fn section(out: &mut String, title: &str, packages: &[Package], missing: &mut BT
             out.push_str(&format!("[{file}]\n{}\n\n", text));
         }
     }
+}
+
+/// crates.io에 올라간 이 판의 소스 묶음.
+fn crate_archive(name: &str, version: &str) -> String {
+    format!("https://static.crates.io/crates/{name}/{name}-{version}.crate")
+}
+
+/// npm 레지스트리에 올라간 이 판의 소스 묶음(범위 이름은 `@범위/이름/-/이름-판.tgz`).
+fn npm_archive(name: &str, version: &str) -> String {
+    let base = name.rsplit('/').next().unwrap_or(name);
+    format!("https://registry.npmjs.org/{name}/-/{base}-{version}.tgz")
 }
 
 fn spdx_ids(expr: &str) -> Vec<String> {
@@ -171,6 +190,10 @@ fn rust_packages(root: &Path) -> Result<Vec<Package>> {
             version: p["version"].as_str().unwrap_or_default().to_owned(),
             license,
             repository: p["repository"].as_str().unwrap_or_default().to_owned(),
+            archive: crate_archive(
+                p["name"].as_str().unwrap_or_default(),
+                p["version"].as_str().unwrap_or_default(),
+            ),
             texts: license_files(dir)?,
         });
     }
@@ -188,6 +211,14 @@ fn npm_packages(root: &Path) -> Result<Vec<Package>> {
     cmd!(
         sh,
         "pnpm exec vite build --sourcemap --outDir {out_arg} --emptyOutDir --logLevel error"
+    )
+    .quiet()
+    .run()?;
+    // PPTX 미리보기 프레임 스크립트(D-74)는 따로 한 파일로 묶여 배포된다.
+    let frame_out = out_dir.join("assets").to_string_lossy().into_owned();
+    cmd!(
+        sh,
+        "pnpm exec vite build -c vite.pptx-frame.config.ts --sourcemap --outDir {frame_out} --logLevel error"
     )
     .quiet()
     .run()?;
@@ -248,6 +279,10 @@ fn npm_packages(root: &Path) -> Result<Vec<Package>> {
             version: pkg["version"].as_str().unwrap_or_default().to_owned(),
             license,
             repository,
+            archive: npm_archive(
+                pkg["name"].as_str().unwrap_or_default(),
+                pkg["version"].as_str().unwrap_or_default(),
+            ),
             texts,
         });
     }
@@ -272,15 +307,30 @@ fn package_dir(base: &Path, source: &str) -> Option<PathBuf> {
 }
 
 /// 패키지 디렉터리 바로 아래의 라이선스·고지 파일(이름순).
+/// 패키지가 함께 배포하는 라이선스·고지 파일. 꾸러미 안에 묶인 다른 코드의 고지(`THIRD_PARTY_NOTICES*`)와
+/// `licenses/`·`LICENSES/` 폴더의 원문도 싣는다(예: 렌더러 번들 안의 MPL-2.0 코드, D-74).
 fn license_files(dir: &Path) -> Result<Vec<(String, String)>> {
     let mut files = Vec::new();
     for entry in fs::read_dir(dir).with_context(|| format!("read {}", dir.display()))? {
         let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            continue;
-        }
         let name = entry.file_name().to_string_lossy().into_owned();
         let upper = name.to_ascii_uppercase();
+        if entry.file_type()?.is_dir() {
+            if upper == "LICENSES" {
+                for inner in fs::read_dir(entry.path())? {
+                    let inner = inner?;
+                    if inner.file_type()?.is_file() {
+                        let bytes = fs::read(inner.path())?;
+                        let inner_name = inner.file_name().to_string_lossy().into_owned();
+                        files.push((
+                            format!("{name}/{inner_name}"),
+                            normalize(&String::from_utf8_lossy(&bytes)),
+                        ));
+                    }
+                }
+            }
+            continue;
+        }
         if [
             "LICENSE",
             "LICENCE",
@@ -288,6 +338,8 @@ fn license_files(dir: &Path) -> Result<Vec<(String, String)>> {
             "NOTICE",
             "UNLICENSE",
             "COPYRIGHT",
+            "THIRD_PARTY_NOTICES",
+            "THIRD-PARTY-NOTICES",
         ]
         .iter()
         .any(|p| upper.starts_with(p))
@@ -308,4 +360,25 @@ fn normalize(text: &str) -> String {
         .join("\n")
         .trim()
         .to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{crate_archive, npm_archive};
+
+    #[test]
+    fn source_archives_point_at_the_exact_version() {
+        assert_eq!(
+            npm_archive("mtx-decompressor", "1.8.0"),
+            "https://registry.npmjs.org/mtx-decompressor/-/mtx-decompressor-1.8.0.tgz"
+        );
+        assert_eq!(
+            npm_archive("@aiden0z/pptx-renderer", "1.3.0"),
+            "https://registry.npmjs.org/@aiden0z/pptx-renderer/-/pptx-renderer-1.3.0.tgz"
+        );
+        assert_eq!(
+            crate_archive("lopdf", "0.42.0"),
+            "https://static.crates.io/crates/lopdf/lopdf-0.42.0.crate"
+        );
+    }
 }

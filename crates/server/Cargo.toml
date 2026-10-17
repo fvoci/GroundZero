@@ -23,6 +23,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 hex = "0.4"
 hmac = "0.12"
 openidconnect = { version = "4", default-features = false, features = ["reqwest", "native-tls"] }
+pdf-extract = "0.12.1"
 rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json", "stream"] }
 serde.workspace = true

@@ -8,3 +8,6 @@ packages/api-client/src/generated
 # 실시간 공동 편집 기준 파일(웹 테스트가 생성, D-70)
 contracts/collab/stored.json
 contracts/collab/expected.json
+
+# PPTX 미리보기 프레임 스크립트(빌드 산출물, D-74)
+apps/web/public/pptx-frame.js
