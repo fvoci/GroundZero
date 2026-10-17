@@ -145,3 +145,26 @@ fn write_notices(root: &Path, out: &Path, hash: &str) -> Result<()> {
     println!("wrote {NOTICES}");
     Ok(())
 }
+
+/// 앞서 만든 결과(같은 입력)의 감사 작업 공간에서 보안 권고만 다시 본다. 권고 DB는 cargo-deny가 매번 새로 받는다.
+/// 입력이 같아 다시 빌드하지 않는 동안에도 새로 나온 권고를 놓치지 않기 위한 것이다(CI는 매 실행 돈다).
+pub fn audit(root: &Path) -> Result<()> {
+    let hash = input_hash(root)?;
+    let manifest = root
+        .join("target/rhwp")
+        .join(&hash)
+        .join("audit/Cargo.toml");
+    if !manifest.is_file() {
+        bail!("no rhwp build for inputs {hash}; run `cargo xtask rhwp` first");
+    }
+    let sh = Shell::new()?;
+    sh.change_dir(root);
+    let manifest = manifest.to_string_lossy().into_owned();
+    println!("==> cargo deny check advisories (rhwp WASM graph, inputs {hash})");
+    cmd!(
+        sh,
+        "cargo deny --locked --manifest-path {manifest} --config deploy/rhwp/deny.toml check advisories"
+    )
+    .run()?;
+    Ok(())
+}

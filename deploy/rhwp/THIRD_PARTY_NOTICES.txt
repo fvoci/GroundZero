@@ -1,4 +1,4 @@
-rhwp-wasm-inputs: 58c21300eb8f90e8
+rhwp-wasm-inputs: 8e5afd88811d30c6
 Rust crates compiled into the HWP/HWPX preview WebAssembly (rhwp, D-76): 131
 
 ---- adler2 2.0.1 ----

@@ -62,6 +62,9 @@ enum Command {
         /// 입력이 같아도 다시 빌드한다.
         #[arg(long)]
         force: bool,
+        /// 빌드하지 않고, 앞서 만든 결과의 브라우저 그래프에 새 보안 권고가 있는지만 다시 본다.
+        #[arg(long)]
+        audit: bool,
     },
     /// 배포물(서버 바이너리·웹 번들)에 든 패키지의 제3자 고지 `THIRD_PARTY_NOTICES.txt`를 만든다.
     /// `--check`는 최신 여부만 본다.
@@ -95,6 +98,12 @@ fn main() -> Result<()> {
         Command::Openapi { check } => openapi::run(&root, check),
         Command::Licenses => licenses::run(&root),
         Command::Notices { check } => notices::run(&root, check),
-        Command::Rhwp { force } => rhwp::run(&root, force),
+        Command::Rhwp { force, audit } => {
+            if audit {
+                rhwp::audit(&root)
+            } else {
+                rhwp::run(&root, force)
+            }
+        }
     }
 }

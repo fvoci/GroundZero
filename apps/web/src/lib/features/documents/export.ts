@@ -105,6 +105,23 @@ function safeName(name: string): string {
   return cleaned === '' ? '문서' : cleaned;
 }
 
+/**
+ * ZIP 안 파일 이름과 Markdown에서 가리킬 상대 주소. uuidv7 앞부분은 시각이라 겹칠 수 있어 뒤(무작위) 부분과 판을
+ * 붙인다. 주소는 경로 조각을 퍼센트 인코딩해 공백·괄호가 든 이름도 링크가 깨지지 않게 한다.
+ */
+export function zipPath(
+  f: { id: string; version: number | undefined },
+  name: string,
+): { entry: string; href: string } {
+  const tag = `${f.id.slice(-8)}${f.version === undefined ? '' : `-v${String(f.version)}`}`;
+  const file = `${tag}-${safeName(name)}`;
+  const href = encodeURIComponent(file).replace(
+    /[()]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return { entry: `files/${file}`, href: `files/${href}` };
+}
+
 export function exportFileName(title: string, format: ExportFormat): string {
   return `${safeName(title)}.${format === 'zip' ? 'zip' : format === 'pdf' ? 'pdf' : 'md'}`;
 }
@@ -163,11 +180,11 @@ export async function prepareExport(
       : await resolveAll([...refs.values()]);
   let hidden = 0;
 
-  // ZIP: 받을 수 있는 파일만 담는다. 이름이 겹치지 않게 앞에 짧은 id를 붙인다.
+  // ZIP: 받을 수 있는 파일만 담는다. PDF: 받을 수 있는 그림만 그 주소로 두고 나머지는 안내로 바꾼다.
   const files = new Map<string, Blob>();
   const local = new Map<string, string>();
   const missing: string[] = [];
-  if (options.format === 'zip') {
+  if (options.format === 'zip' || options.format === 'pdf') {
     for (const [key, f] of fileRefs) {
       let name = f.id;
       try {
@@ -180,11 +197,14 @@ export async function prepareExport(
           credentials: 'same-origin',
         });
         if (!response.ok) throw new Error(String(response.status));
-        // uuidv7 앞부분은 시각이라 겹칠 수 있어 뒤(무작위) 부분과 판을 붙인다.
-        const tag = `${f.id.slice(-8)}${f.version === undefined ? '' : `-v${String(f.version)}`}`;
-        const path = `files/${tag}-${safeName(name)}`;
-        files.set(path, await response.blob());
-        local.set(key, path);
+        if (options.format === 'zip') {
+          const { entry, href } = zipPath(f, name);
+          files.set(entry, await response.blob());
+          local.set(key, href);
+        } else {
+          await response.body?.cancel();
+          local.set(key, `${options.origin}${fileContentUrl(f.id, f.version)}`);
+        }
       } catch {
         missing.push(name === f.id ? '이름을 볼 수 없는 첨부' : name);
       }
@@ -194,7 +214,7 @@ export async function prepareExport(
         `내려받을 수 없는 그림·첨부 ${String(missing.length)}개는 넣지 않았습니다: ${missing.join(', ')}`,
       );
     }
-  } else if (fileRefs.size > 0 && options.format === 'markdown') {
+  } else if (fileRefs.size > 0) {
     notes.push(
       '그림·첨부는 fvoci 주소로 연결됩니다(열려면 로그인 필요). 파일까지 함께 담으려면 ZIP으로 내보내세요.',
     );
@@ -203,7 +223,7 @@ export async function prepareExport(
   const fileUrl = (raw: unknown): string | undefined => {
     const f = fileRef(raw);
     if (f === undefined) return undefined;
-    if (options.format === 'zip') return local.get(fileKey(f));
+    if (options.format !== 'markdown') return local.get(fileKey(f));
     return `${options.origin}${fileContentUrl(f.id, f.version)}`;
   };
 

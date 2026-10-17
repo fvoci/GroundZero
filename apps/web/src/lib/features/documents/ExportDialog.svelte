@@ -52,14 +52,27 @@
     error = undefined;
     notes = undefined;
     selected = doc.revision;
-    api
-      .revisions(doc.id, null)
-      .then((list) => {
-        revisions = list;
-      })
-      .catch(() => {
-        revisions = [];
-      });
+    void loadRevisions();
+  }
+
+  /** 모든 리비전(서버는 100개씩 나눠 준다). 오래된 리비전도 고를 수 있다. */
+  async function loadRevisions(): Promise<void> {
+    const all: RevisionSummaryView[] = [];
+    try {
+      let before: number | null = null;
+      // 끝없이 돌지 않게 쪽 수와 번호 감소를 함께 본다.
+      for (let i = 0; i < 200; i += 1) {
+        const page = await api.revisions(doc.id, before);
+        all.push(...page);
+        const last = page.at(-1);
+        if (last === undefined || last.revision <= 1) break;
+        if (before !== null && last.revision >= before) break;
+        before = last.revision;
+      }
+    } catch {
+      // 목록을 못 받으면 받은 것까지(없으면 최신 리비전만) 고를 수 있다.
+    }
+    revisions = all;
   }
 
   async function run(): Promise<void> {

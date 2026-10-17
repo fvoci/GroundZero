@@ -56,6 +56,10 @@
   $effect(() => {
     onunsaved?.(status !== 'saved');
   });
+  // 편집기가 사라지면(실시간 편집으로 바뀌는 등) 저장하지 않은 편집 표시도 거둔다.
+  $effect(() => () => {
+    onunsaved?.(false);
+  });
   let message = $state<string | undefined>(undefined);
   let conflict = $state<DocumentView | undefined>(undefined);
   // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다.

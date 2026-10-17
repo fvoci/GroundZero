@@ -7,6 +7,7 @@ import {
   prepareExport,
   printBodyHtml,
   toMarkdown,
+  zipPath,
 } from '$lib/features/documents/export';
 
 const visibleId = '0198f1f2-0000-7000-8000-000000000001';
@@ -205,5 +206,24 @@ describe('document export (D-75)', () => {
     expect(html).toContain('한글 문단');
     expect(exportFileName('a/b:c', 'zip')).toBe('a_b_c.zip');
     expect(exportFileName('  ', 'markdown')).toBe('문서.md');
+  });
+});
+
+describe('export paths and PDF images (review)', () => {
+  it('percent-encodes ZIP links so names with spaces and brackets stay linked', () => {
+    const p = zipPath({ id: okFile, version: 2 }, '회의 자료 (최종).png');
+    expect(p.entry).toBe(`files/${okFile.slice(-8)}-v2-회의 자료 (최종).png`);
+    expect(decodeURIComponent(p.href)).toBe(p.entry);
+    expect(p.href).not.toMatch(/[ ()]/);
+  });
+
+  it('replaces images the exporter cannot download in the PDF view and says so', async () => {
+    stubServer();
+    const prepared = await prepareExport('실험 노트', 4, body(), options('pdf'));
+    const html = await printBodyHtml(prepared);
+    expect(html).toContain(`https://fvoci.example.test/api/files/${okFile}/content?version=1`);
+    expect(html).not.toContain(deniedFile);
+    expect(html).toContain('(비공개 그림: 내려받을 수 없어 넣지 못함)');
+    expect(prepared.notes.some((n) => n.includes('내려받을 수 없는 그림·첨부 1개'))).toBe(true);
   });
 });

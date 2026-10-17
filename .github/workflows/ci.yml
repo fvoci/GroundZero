@@ -113,6 +113,8 @@ jobs:
   rhwp:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    env:
+      IMAGE: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -121,3 +123,11 @@ jobs:
           key: rhwp-${{ hashFiles('deploy/rhwp/build.sh', 'deploy/rhwp/inputs.env', 'deploy/rhwp/Cargo.lock', 'deploy/rhwp/deny.toml') }}
       - run: cargo xtask rhwp
       - run: git diff --exit-code -- deploy/rhwp/THIRD_PARTY_NOTICES.txt
+      # 다시 빌드하지 않은 실행에서도 새 보안 권고를 놓치지 않게 권고만 매번 새 DB로 다시 본다(cargo-deny는 베이스 이미지 안).
+      - name: cargo xtask rhwp --audit (base image)
+        run: >-
+          docker run --rm --user "$(id -u):$(id -g)"
+          --volume "$GITHUB_WORKSPACE:/work" --workdir /work
+          --env HOME=/work/target/ci-home
+          --env CARGO_HOME=/work/target/ci-cargo
+          "$IMAGE" cargo xtask rhwp --audit

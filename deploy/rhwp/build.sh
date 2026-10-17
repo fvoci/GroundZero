@@ -29,6 +29,8 @@ git checkout -q FETCH_HEAD
 test "$(git rev-parse HEAD)" = "$RHWP_COMMIT"
 # 일부만 받은 저장소는 cargo가 파일 목록을 git으로 읽다 실패하므로, 커밋을 확인한 뒤 git 정보를 지운다.
 rm -rf .git
+# 상위의 rust-toolchain.toml이 이 폴더에서 도구 모음을 고르므로 여기서도 판을 확인한다.
+rustc --version | grep -q "^rustc $RUST_VERSION " || { echo "rustc in /src must be $RUST_VERSION: $(rustc --version)"; exit 1; }
 cp "$here/Cargo.lock" Cargo.lock
 
 # 감사: 상위 작업 공간은 다른 구성원이 기본 기능(pdf-import)을 켜 cargo-deny가 기능을 합치므로, 구성원을 crates/*로
@@ -43,6 +45,9 @@ pkgs() { grep -A1 '^name = ' "$1" | grep -v '^--' | paste - - | sort; }
 added=$(pkgs Cargo.lock > /tmp/a; pkgs /audit/Cargo.lock > /tmp/b; comm -13 /tmp/a /tmp/b)
 test -z "$added" || { echo "audit lock changed versions: $added"; exit 1; }
 (cd /audit && cargo deny --locked --config "$here/deny.toml" check advisories bans licenses sources)
+# 같은 입력으로 다시 빌드하지 않을 때도 새 권고를 다시 볼 수 있게 감사 작업 공간을 결과에 남긴다(cargo xtask rhwp --audit).
+mkdir -p /out/audit
+(cd /audit && cp -R Cargo.toml Cargo.lock build.rs src crates vendor saved /out/audit/)
 
 # 빌드(브라우저용 라이브러리만, pdf-import 없음).
 cargo build --locked --lib --release --target wasm32-unknown-unknown --no-default-features --features "$FEATURES"
