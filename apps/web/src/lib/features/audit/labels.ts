@@ -39,6 +39,18 @@ export const AUDIT_ACTION: Record<string, string> = {
   set_recurrence: '반복 설정',
   exclude_occurrence: '회차 뺌',
   set_trash_retention: '휴지통 보존 기간 바꿈',
+  set_version_retention: '이전 버전 보존 기간 바꿈',
+  set_members: '항목 멤버 바꿈',
+  change_leader: '리더 바꿈',
+  unset_leader: '리더 해제',
+  change_status: '상태 바꿈',
+  create_record: '기록 만듦',
+  delete_record: '기록 지움',
+  add_episodes: '회차 더함',
+  delete_episode: '회차 지움',
+  update_course: '강의 정보 바꿈',
+  add_study_units: '학습 단위 더함',
+  delete_study_unit: '학습 단위 지움',
   export: '반출',
 };
 
