@@ -2,8 +2,10 @@
   // 문서·항목의 첨부 파일(D-06, D-35). 조각 업로드(끊기면 같은 파일을 다시 고르면 이어짐), 새 버전, 이전 버전
   // 내려받기, 이름 바꾸기, 휴지통. 권한은 서버가 판단하고 화면은 가능한 동작만 보인다.
   import type { FileTarget, FileVersionView, FileView } from '$lib/api/client';
-  import { api, ApiError, fileContentUrl } from '$lib/api/client';
-  import { localTimeZone, wallTime } from '$lib/features/events/time';
+  import { api, fileContentUrl } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { formatInstant } from '$lib/display';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
 
@@ -20,7 +22,6 @@
 
   const { target, canWrite }: Props = $props();
 
-  const zone = localTimeZone();
   const INLINE = new Set([
     'image/png',
     'image/jpeg',
@@ -55,14 +56,9 @@
         if (mine === seq) files = found;
       })
       .catch((e: unknown) => {
-        if (mine === seq)
-          error = e instanceof ApiError ? e.message : '첨부 파일을 불러오지 못했습니다.';
+        if (mine === seq) error = errorText(e, m.files_load_failed());
       });
   });
-
-  function message(e: unknown, fallback: string): string {
-    return e instanceof ApiError ? e.message : fallback;
-  }
 
   async function send(chosen: FileList | null): Promise<void> {
     if (chosen === null || chosen.length === 0) return;
@@ -84,11 +80,17 @@
             };
           },
         });
-        status = `올렸습니다: ${file.name}${done.version !== null && done.version > 1 ? ` (v${String(done.version)})` : ''}`;
+        status =
+          done.version !== null && done.version > 1
+            ? m.files_uploaded_version({ name: file.name, version: done.version })
+            : m.files_uploaded({ name: file.name });
       } catch (e: unknown) {
         error = cancel.signal.aborted
-          ? `취소했습니다: ${file.name}`
-          : `${file.name}: ${message(e, '올리지 못했습니다. 같은 파일을 다시 고르면 이어서 올립니다.')}`;
+          ? m.files_upload_cancelled({ name: file.name })
+          : m.files_named_error({
+              name: file.name,
+              error: errorText(e, m.files_upload_failed()),
+            });
         break;
       }
     }
@@ -112,7 +114,7 @@
       const detail = await api.file(id);
       versions = { id, list: detail.versions };
     } catch (e: unknown) {
-      error = message(e, '버전 기록을 불러오지 못했습니다.');
+      error = errorText(e, m.files_versions_load_failed());
     }
   }
 
@@ -123,16 +125,16 @@
       status = done;
       reloadKey += 1;
     } catch (e: unknown) {
-      error = message(e, '처리하지 못했습니다.');
+      error = errorText(e, m.files_action_failed());
     }
   }
 
-  const when = (iso: string): string => wallTime(iso, zone).replace('T', ' ');
+  const when = (iso: string): string => formatInstant(iso);
 </script>
 
 <section class="flex flex-col gap-3" aria-labelledby="attachments-heading">
   <div class="flex items-center gap-2">
-    <h2 id="attachments-heading" class="text-lg font-semibold">첨부 파일</h2>
+    <h2 id="attachments-heading" class="text-lg font-semibold">{m.files_heading()}</h2>
     {#if canWrite}
       <Button
         size="sm"
@@ -140,7 +142,7 @@
         onclick={() => {
           choose();
         }}
-        disabled={progress !== undefined}>파일 올리기</Button
+        disabled={progress !== undefined}>{m.files_upload()}</Button
       >
     {/if}
     <input
@@ -156,8 +158,10 @@
   </div>
   <p aria-live="polite" class="text-sm">
     {#if progress !== undefined}
-      {progress.name} 올리는 중… {progress.percent}%
-      <Button size="sm" variant="ghost" onclick={() => controller?.abort()}>취소</Button>
+      {m.files_uploading({ name: progress.name, percent: progress.percent })}
+      <Button size="sm" variant="ghost" onclick={() => controller?.abort()}
+        >{m.common_cancel()}</Button
+      >
     {:else if error !== undefined}
       <span class="text-destructive">{error}</span>
     {:else}
@@ -165,7 +169,7 @@
     {/if}
   </p>
   {#if files.length === 0}
-    <p class="text-sm text-muted-foreground">첨부 파일이 없습니다.</p>
+    <p class="text-sm text-muted-foreground">{m.files_empty()}</p>
   {:else}
     <ul class="flex flex-col gap-2" data-testid="attachments">
       {#each files as f (f.id)}
@@ -181,14 +185,14 @@
                   if (next !== undefined)
                     void act(
                       () => api.renameFile(next.id, next.name),
-                      `이름을 바꿨습니다: ${next.name}`,
+                      m.files_renamed({ name: next.name }),
                     );
                 }}
               >
-                <Input aria-label="새 이름" bind:value={renaming.name} maxlength={255} />
-                <Button size="sm" type="submit">저장</Button>
+                <Input aria-label={m.files_new_name()} bind:value={renaming.name} maxlength={255} />
+                <Button size="sm" type="submit">{m.common_save()}</Button>
                 <Button size="sm" variant="ghost" onclick={() => (renaming = undefined)}
-                  >취소</Button
+                  >{m.common_cancel()}</Button
                 >
               </form>
             {:else}
@@ -198,9 +202,8 @@
                   href={fileContentUrl(f.id)}>{f.name}</a
                 >
               {:else}
-                <span
-                  class="min-w-0 flex-1 truncate font-medium"
-                  title="내려받기가 허용되지 않은 문서의 첨부">{f.name}</span
+                <span class="min-w-0 flex-1 truncate font-medium" title={m.files_download_blocked()}
+                  >{f.name}</span
                 >
               {/if}
               <span class="text-xs text-muted-foreground"
@@ -216,61 +219,64 @@
                 href={fileContentUrl(f.id, undefined, true)}
                 target="_blank"
                 rel="noopener"
-                aria-label={`${f.name} 미리보기`}>미리보기</Button
+                aria-label={m.files_preview_aria({ name: f.name })}>{m.files_preview()}</Button
               >
             {:else if f.can_download && officeKind(f.content_type, f.name) !== undefined}
               {@const kind = officeKind(f.content_type, f.name)}
               <Button
                 size="sm"
                 variant="ghost"
-                aria-label={`${f.name} 미리보기`}
+                aria-label={m.files_preview_aria({ name: f.name })}
                 aria-expanded={office?.id === f.id}
                 onclick={() => {
                   office =
                     office?.id === f.id || kind === undefined
                       ? undefined
                       : { id: f.id, name: f.name, size: f.size, kind };
-                }}>미리보기</Button
+                }}>{m.files_preview()}</Button
               >
             {/if}
             <Button
               size="sm"
               variant="ghost"
-              aria-label={`${f.name} 버전 기록`}
+              aria-label={m.files_versions_aria({ name: f.name })}
               aria-expanded={versions?.id === f.id}
               onclick={() => {
                 if (versions?.id === f.id) versions = undefined;
                 else void showVersions(f.id);
-              }}>버전 기록</Button
+              }}>{m.files_versions()}</Button
             >
             {#if f.can_write}
               <Button
                 size="sm"
                 variant="ghost"
-                aria-label={`${f.name} 새 버전 올리기`}
+                aria-label={m.files_new_version_aria({ name: f.name })}
                 onclick={() => {
                   choose(f.id);
                 }}
-                disabled={progress !== undefined}>새 버전</Button
+                disabled={progress !== undefined}>{m.files_new_version()}</Button
               >
               <Button
                 size="sm"
                 variant="ghost"
-                aria-label={`${f.name} 이름 바꾸기`}
-                onclick={() => (renaming = { id: f.id, name: f.name })}>이름 바꾸기</Button
+                aria-label={m.files_rename_aria({ name: f.name })}
+                onclick={() => (renaming = { id: f.id, name: f.name })}>{m.files_rename()}</Button
               >
               <Button
                 size="sm"
                 variant="ghost"
-                aria-label={`${f.name} 휴지통으로`}
+                aria-label={m.files_trash_aria({ name: f.name })}
                 onclick={() =>
-                  void act(() => api.trashFile(f.id), `휴지통으로 옮겼습니다: ${f.name}`)}
-                >휴지통으로</Button
+                  void act(() => api.trashFile(f.id), m.files_trashed({ name: f.name }))}
+                >{m.files_trash()}</Button
               >
             {/if}
           </div>
           {#if versions?.id === f.id}
-            <ol class="flex flex-col gap-1 border-t pt-2" aria-label={`${f.name} 버전`}>
+            <ol
+              class="flex flex-col gap-1 border-t pt-2"
+              aria-label={m.files_version_list_aria({ name: f.name })}
+            >
               {#each versions.list as v (v.version)}
                 <li class="flex flex-wrap items-baseline gap-2">
                   {#if f.can_download}
@@ -289,12 +295,12 @@
                     <Button
                       size="sm"
                       variant="ghost"
-                      aria-label={`${f.name} v${String(v.version)} 지우기`}
+                      aria-label={m.files_delete_version_aria({ name: f.name, version: v.version })}
                       onclick={() =>
                         void act(
                           () => api.deleteFileVersion(f.id, v.version),
-                          `v${String(v.version)}을 지웠습니다: ${f.name}`,
-                        ).then(() => showVersions(f.id))}>지우기</Button
+                          m.files_version_deleted({ version: v.version, name: f.name }),
+                        ).then(() => showVersions(f.id))}>{m.files_delete()}</Button
                     >
                   {/if}
                 </li>

@@ -3,6 +3,8 @@
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
 
   import { api, ApiError, MODULE_KINDS, NetworkError, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { modulePath, router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
@@ -10,7 +12,7 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
-  import { asKind, KIND_LABEL, normalizeKey } from './kinds';
+  import { asKind, kindLabel, normalizeKey } from './kinds';
 
   interface Props {
     workspace: Workspace;
@@ -32,8 +34,7 @@
         if (!cancelled) modules = list;
       })
       .catch((e: unknown) => {
-        if (!cancelled)
-          loadError = e instanceof ApiError ? e.message : '모듈을 불러오지 못했습니다.';
+        if (!cancelled) loadError = errorText(e, m.modules_section_load_failed());
       });
     return () => {
       cancelled = true;
@@ -54,11 +55,11 @@
     const trimmed = name.trim();
     const normalized = normalizeKey(key);
     if (trimmed === '') {
-      formError = '이름을 입력하세요.';
+      formError = m.modules_name_required();
       return;
     }
     if (normalized === undefined) {
-      formError = '키는 영문으로 시작하는 2~10자 영문·숫자입니다. WIKI는 쓸 수 없습니다.';
+      formError = m.modules_key_invalid();
       return;
     }
     const signature = `${kind}|${trimmed}|${normalized}`;
@@ -77,12 +78,9 @@
       key = '';
       router.navigate(modulePath(workspace.id, created.id));
     } catch (e: unknown) {
-      if (e instanceof NetworkError)
-        formError = '서버에 연결할 수 없습니다. 다시 시도하면 중복 없이 처리됩니다.';
-      else if (e instanceof ApiError && e.status === 409)
-        formError = '이미 쓰고 있거나 예전에 쓴 키입니다. 다른 키를 고르세요.';
-      else if (e instanceof ApiError) formError = e.message;
-      else formError = '만들지 못했습니다.';
+      if (e instanceof NetworkError) formError = m.modules_create_network();
+      else if (e instanceof ApiError && e.status === 409) formError = m.modules_key_taken_new();
+      else formError = errorText(e, m.modules_create_failed());
     } finally {
       busy = false;
     }
@@ -90,31 +88,31 @@
 </script>
 
 <section class="flex flex-col gap-3" aria-labelledby="modules-heading">
-  <h2 id="modules-heading" class="text-lg font-semibold">모듈</h2>
+  <h2 id="modules-heading" class="text-lg font-semibold">{m.modules_heading()}</h2>
   {#if loadError !== undefined}
     <p role="alert" class="text-destructive">{loadError}</p>
   {:else if modules === undefined}
-    <p aria-live="polite">불러오는 중…</p>
+    <p aria-live="polite">{m.modules_loading()}</p>
   {:else if modules.length === 0}
     <p class="text-muted-foreground">
-      모듈이 없습니다.{isAdmin ? ' 아래에서 프로젝트·연구·스터디·강좌·취미 모듈을 만드세요.' : ''}
+      {m.modules_empty()}{isAdmin ? ` ${m.modules_empty_admin_hint()}` : ''}
     </p>
   {:else}
     <ul class="flex flex-col gap-1" data-testid="module-list">
-      {#each modules as m (m.id)}
+      {#each modules as mod (mod.id)}
         <li>
           <a
             class="flex items-baseline gap-2 rounded px-2 py-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            href={modulePath(workspace.id, m.id)}
+            href={modulePath(workspace.id, mod.id)}
             onclick={(e) => {
               e.preventDefault();
-              router.navigate(modulePath(workspace.id, m.id));
+              router.navigate(modulePath(workspace.id, mod.id));
             }}
           >
-            <span class="font-mono text-sm text-muted-foreground">{m.key}</span>
-            <span>{m.name}</span>
-            <Badge variant="outline">{KIND_LABEL[m.kind]}</Badge>
-            {#if m.archived}<Badge variant="secondary">보관됨</Badge>{/if}
+            <span class="font-mono text-sm text-muted-foreground">{mod.key}</span>
+            <span>{mod.name}</span>
+            <Badge variant="outline">{kindLabel(mod.kind)}</Badge>
+            {#if mod.archived}<Badge variant="secondary">{m.modules_archived()}</Badge>{/if}
           </a>
         </li>
       {/each}
@@ -126,10 +124,10 @@
       class="flex flex-wrap items-end gap-2"
       onsubmit={(e) => void create(e)}
       novalidate
-      aria-label="모듈 만들기"
+      aria-label={m.modules_create()}
     >
       <div class="flex flex-col gap-1">
-        <span class="text-sm font-medium" id="module-kind-label">유형</span>
+        <span class="text-sm font-medium" id="module-kind-label">{m.modules_kind()}</span>
         <Select.Root
           type="single"
           value={kind}
@@ -138,21 +136,26 @@
           }}
         >
           <Select.Trigger class="w-28" aria-labelledby="module-kind-label"
-            >{KIND_LABEL[kind]}</Select.Trigger
+            >{kindLabel(kind)}</Select.Trigger
           >
           <Select.Content>
             {#each MODULE_KINDS as k (k)}
-              <Select.Item value={k} label={KIND_LABEL[k]}>{KIND_LABEL[k]}</Select.Item>
+              <Select.Item value={k} label={kindLabel(k)}>{kindLabel(k)}</Select.Item>
             {/each}
           </Select.Content>
         </Select.Root>
       </div>
       <div class="flex min-w-40 flex-1 flex-col gap-1">
-        <Label for="module-name">이름</Label>
-        <Input id="module-name" bind:value={name} placeholder="예: 개발" maxlength={200} />
+        <Label for="module-name">{m.modules_name()}</Label>
+        <Input
+          id="module-name"
+          bind:value={name}
+          placeholder={m.modules_name_placeholder()}
+          maxlength={200}
+        />
       </div>
       <div class="flex w-28 flex-col gap-1">
-        <Label for="module-key">키</Label>
+        <Label for="module-key">{m.modules_key()}</Label>
         <Input
           id="module-key"
           bind:value={key}
@@ -164,7 +167,7 @@
           aria-describedby={formError !== undefined ? 'module-form-error' : undefined}
         />
       </div>
-      <Button type="submit" disabled={busy}>모듈 만들기</Button>
+      <Button type="submit" disabled={busy}>{m.modules_create()}</Button>
     </form>
     {#if formError !== undefined}
       <p id="module-form-error" class="text-sm text-destructive" role="alert">{formError}</p>

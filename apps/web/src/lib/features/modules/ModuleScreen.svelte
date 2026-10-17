@@ -4,6 +4,7 @@
 
   import type { ItemView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import { forgetReferences } from '$lib/features/references/resolver';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
@@ -16,8 +17,8 @@
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
 
-  import { KIND_LABEL, normalizeKey } from './kinds';
-  import { ITEM_STATUS_LABEL } from './profile';
+  import { kindLabel, normalizeKey } from './kinds';
+  import { itemStatusLabel, periodText } from './profile';
 
   interface Props {
     workspace: Workspace;
@@ -36,21 +37,21 @@
     mod = undefined;
     error = undefined;
     Promise.all([api.module(id), api.items(id)])
-      .then(([m, list]) => {
+      .then(([found, list]) => {
         if (cancelled) return;
-        mod = m;
+        mod = found;
         items = list;
-        editName = m.name;
-        editKey = m.key;
-        editIcon = m.icon;
-        editDescription = m.description;
+        editName = found.name;
+        editKey = found.key;
+        editIcon = found.icon;
+        editDescription = found.description;
       })
       .catch((e: unknown) => {
         if (cancelled) return;
         error =
           e instanceof ApiError && e.status === 404
-            ? '모듈이 없거나 볼 권한이 없습니다.'
-            : '모듈을 불러오지 못했습니다.';
+            ? m.modules_not_found()
+            : m.modules_load_failed();
       });
     return () => {
       cancelled = true;
@@ -72,7 +73,7 @@
     if (mod === undefined) return;
     const key = normalizeKey(editKey);
     if (editName.trim() === '' || key === undefined) {
-      settingsError = '이름과 올바른 키(영문으로 시작하는 2~10자)를 입력하세요.';
+      settingsError = m.modules_settings_invalid();
       return;
     }
     settingsError = undefined;
@@ -89,15 +90,13 @@
       items = await api.items(mod.id);
       notifyDone(m.common_saved());
       if (before !== mod.key) {
-        settingsNote = `키를 ${before}에서 ${mod.key}(으)로 바꿨습니다. 번호와 링크는 그대로이고, ${before}는 이 모듈의 예전 키로 남습니다.`;
+        settingsNote = m.modules_key_changed({ before, after: mod.key });
       }
     } catch (e: unknown) {
       settingsError =
         e instanceof ApiError && e.status === 409
-          ? '이미 쓰고 있거나 다른 모듈이 예전에 쓴 키입니다.'
-          : e instanceof ApiError
-            ? e.message
-            : '바꾸지 못했습니다.';
+          ? m.modules_key_taken()
+          : errorText(e, m.modules_change_failed());
     }
   }
 
@@ -111,7 +110,7 @@
   async function fromTemplate(moduleId: string): Promise<void> {
     const source = templateId === '' ? templates[0]?.id : templateId;
     if (source === undefined || templateTitle.trim() === '') {
-      templateError = '템플릿과 새 항목 제목을 고르세요.';
+      templateError = m.modules_template_required();
       return;
     }
     templateError = undefined;
@@ -126,7 +125,7 @@
       templateRequest = newRequestId();
       router.navigate(itemPath(workspace.id, copied.item_id));
     } catch (e: unknown) {
-      templateError = e instanceof ApiError ? e.message : '만들지 못했습니다.';
+      templateError = errorText(e, m.modules_create_failed());
     }
   }
 
@@ -135,7 +134,7 @@
     try {
       mod = await api.archiveModule(mod.id, !mod.archived);
     } catch (e: unknown) {
-      settingsError = e instanceof ApiError ? e.message : '바꾸지 못했습니다.';
+      settingsError = errorText(e, m.modules_change_failed());
     }
   }
 </script>
@@ -143,7 +142,7 @@
 {#if error !== undefined}
   <p role="alert" class="text-destructive">{error}</p>
 {:else if mod === undefined}
-  <p aria-live="polite">불러오는 중…</p>
+  <p aria-live="polite">{m.modules_loading()}</p>
 {:else}
   {@const current = mod}
   <section class="flex flex-col gap-6" aria-labelledby="module-heading">
@@ -153,12 +152,12 @@
         {current.name}
       </h1>
       <span class="font-mono text-sm text-muted-foreground">{current.key}</span>
-      <Badge variant="outline">{KIND_LABEL[current.kind]}</Badge>
-      {#if current.archived}<Badge variant="secondary">보관됨 · 읽기 전용</Badge>{/if}
+      <Badge variant="outline">{kindLabel(current.kind)}</Badge>
+      {#if current.archived}<Badge variant="secondary">{m.modules_archived_readonly()}</Badge>{/if}
       {#if isAdmin}
         <div class="ml-auto">
           <DeleteButton
-            what="모듈"
+            what={m.modules_delete_module_what()}
             remove={() => api.trashModule(current.id)}
             ondeleted={() => {
               router.navigate(workspacePath(workspace.id));
@@ -171,11 +170,13 @@
       <p class="whitespace-pre-wrap">{current.description}</p>
     {/if}
     {#if current.previous_keys.length > 0}
-      <p class="text-sm text-muted-foreground">예전 키: {current.previous_keys.join(', ')}</p>
+      <p class="text-sm text-muted-foreground">
+        {m.modules_former_keys({ keys: current.previous_keys.join(', ') })}
+      </p>
     {/if}
 
     {#if items.length === 0}
-      <p class="text-muted-foreground">볼 수 있는 항목이 없습니다.</p>
+      <p class="text-muted-foreground">{m.modules_items_empty()}</p>
     {:else}
       <ul class="flex flex-col gap-1" data-testid="item-list">
         {#each items as it (it.id)}
@@ -190,15 +191,16 @@
             >
               <span class="font-mono text-sm text-muted-foreground">{it.reference}</span>
               <span>{it.title}</span>
-              <Badge variant="outline">{ITEM_STATUS_LABEL[it.status]}</Badge>
+              <Badge variant="outline">{itemStatusLabel(it.status)}</Badge>
               {#if it.starts_on !== null || it.ends_on !== null}
                 <span class="text-sm text-muted-foreground"
-                  >{it.starts_on ?? ''} ~ {it.ends_on ?? ''}</span
+                  >{periodText(it.starts_on, it.ends_on)}</span
                 >
               {/if}
-              {#if it.visibility === 'private'}<Badge variant="outline">비공개</Badge>{/if}
-              {#if it.archived}<Badge variant="secondary">보관됨</Badge>{/if}
-              {#if it.is_template}<Badge variant="secondary">템플릿</Badge>{/if}
+              {#if it.visibility === 'private'}<Badge variant="outline">{m.modules_private()}</Badge
+                >{/if}
+              {#if it.archived}<Badge variant="secondary">{m.modules_archived()}</Badge>{/if}
+              {#if it.is_template}<Badge variant="secondary">{m.modules_template()}</Badge>{/if}
             </a>
           </li>
         {/each}
@@ -208,29 +210,26 @@
     {#if canCreate}
       <CreateForm
         id="new-item"
-        label="새 항목 제목"
-        placeholder="예: 로그인 개선"
-        submitLabel="항목 만들기"
+        label={m.modules_new_item_title()}
+        placeholder={m.modules_new_item_placeholder()}
+        submitLabel={m.modules_create_item()}
         create={async (requestId: string, title: string) => {
           const created = await api.createItem(current.id, requestId, title);
           router.navigate(itemPath(workspace.id, created.id));
         }}
       />
-      <p class="text-sm text-muted-foreground">
-        새 항목은 비공개로 만들어집니다. 만든 사람과 관리자만 보며, 항목 화면에서 공개할 수
-        있습니다.
-      </p>
+      <p class="text-sm text-muted-foreground">{m.modules_new_item_hint()}</p>
       {#if templates.length > 0}
         <form
           class="flex flex-wrap items-end gap-2"
-          aria-label="템플릿에서 만들기"
+          aria-label={m.modules_from_template()}
           onsubmit={(e: SubmitEvent) => {
             e.preventDefault();
             void fromTemplate(current.id);
           }}
         >
           <div class="flex flex-col gap-1">
-            <Label for="template-source">템플릿</Label>
+            <Label for="template-source">{m.modules_template()}</Label>
             <select
               id="template-source"
               class="h-9 rounded-md border border-input bg-transparent px-3 text-base"
@@ -240,10 +239,10 @@
             </select>
           </div>
           <div class="flex min-w-40 flex-1 flex-col gap-1">
-            <Label for="template-title">템플릿으로 만들 항목 제목</Label>
+            <Label for="template-title">{m.modules_template_item_title()}</Label>
             <Input id="template-title" bind:value={templateTitle} maxlength={200} />
           </div>
-          <Button type="submit" variant="outline">템플릿에서 만들기</Button>
+          <Button type="submit" variant="outline">{m.modules_from_template()}</Button>
         </form>
         {#if templateError !== undefined}
           <p class="text-sm text-destructive" role="alert">{templateError}</p>
@@ -258,14 +257,14 @@
         class="flex flex-wrap items-end gap-2 border-t pt-4"
         onsubmit={(e) => void saveSettings(e)}
         novalidate
-        aria-label="모듈 설정"
+        aria-label={m.modules_settings()}
       >
         <div class="flex min-w-40 flex-1 flex-col gap-1">
-          <Label for="module-edit-name">이름</Label>
+          <Label for="module-edit-name">{m.modules_name()}</Label>
           <Input id="module-edit-name" bind:value={editName} maxlength={200} />
         </div>
         <div class="flex w-28 flex-col gap-1">
-          <Label for="module-edit-key">키</Label>
+          <Label for="module-edit-key">{m.modules_key()}</Label>
           <Input
             id="module-edit-key"
             bind:value={editKey}
@@ -275,11 +274,16 @@
           />
         </div>
         <div class="flex w-24 flex-col gap-1">
-          <Label for="module-edit-icon">아이콘</Label>
-          <Input id="module-edit-icon" bind:value={editIcon} maxlength={16} placeholder="예: 🚀" />
+          <Label for="module-edit-icon">{m.modules_icon()}</Label>
+          <Input
+            id="module-edit-icon"
+            bind:value={editIcon}
+            maxlength={16}
+            placeholder={m.modules_icon_placeholder()}
+          />
         </div>
         <div class="flex w-full flex-col gap-1">
-          <Label for="module-edit-description">설명</Label>
+          <Label for="module-edit-description">{m.modules_description()}</Label>
           <textarea
             id="module-edit-description"
             bind:value={editDescription}
@@ -288,9 +292,9 @@
             class="rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           ></textarea>
         </div>
-        <Button type="submit" variant="outline">저장</Button>
+        <Button type="submit" variant="outline">{m.common_save()}</Button>
         <Button type="button" variant="outline" onclick={() => void toggleArchive()}
-          >{current.archived ? '보관 해제' : '보관'}</Button
+          >{current.archived ? m.modules_unarchive() : m.modules_archive()}</Button
         >
       </form>
       {#if settingsNote !== undefined}

@@ -1,5 +1,6 @@
 // 항목 기록의 입력 칸 ↔ 보낼 값, 표시용 요약. 칸 정의는 서버(`GET /api/record-kinds`)에서 받는다.
 import type { RecordFieldValue, RecordInput, RecordKindView, RecordView } from '$lib/api/client';
+import { m } from '$lib/paraglide/messages.js';
 import { isWebUrl } from '$lib/url';
 
 export interface FileLinkForm {
@@ -64,7 +65,7 @@ export function toInput(
     if (f.type === 'number') {
       const n = Number(raw);
       if (!Number.isFinite(n) || n < 0)
-        return { error: `${f.label}에는 0 이상의 수를 적어 주세요.` };
+        return { error: m.records_number_invalid({ label: f.label }) };
       fields[f.key] = n;
     } else if (f.type === 'tags') {
       const tags = [
@@ -112,7 +113,7 @@ export function summary(
   courses: ReadonlyMap<string, string>,
 ): SummaryLine[] {
   const lines: SummaryLine[] = [];
-  const person = (id: string): string => names.get(id) ?? '알 수 없는 사람';
+  const person = (id: string): string => names.get(id) ?? m.records_unknown_person();
   for (const f of def.fields) {
     const v = r.fields[f.key];
     if (v === undefined) continue;
@@ -121,7 +122,7 @@ export function summary(
     else if (f.type === 'person' && typeof v === 'string') text = person(v);
     else if (f.type === 'people' && Array.isArray(v)) text = v.map(person).join(', ');
     else if (f.type === 'course' && typeof v === 'string')
-      text = courses.get(v) ?? '볼 수 없는 강좌';
+      text = courses.get(v) ?? m.records_hidden_course();
     else text = Array.isArray(v) ? v.join(', ') : String(v);
     const line: SummaryLine = { label: f.label, text };
     if (f.type === 'url' && typeof v === 'string' && isWebUrl(v)) line.href = v;

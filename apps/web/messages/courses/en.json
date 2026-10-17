@@ -1,3 +1,119 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "courses_csv_title_missing": "Title is missing",
+  "courses_csv_title_too_long": "Title can be at most {max} characters",
+  "courses_csv_duration_invalid": "Unrecognized length: {value}",
+  "courses_csv_duration_too_long": "Length can be at most 100 hours: {value}",
+  "courses_csv_date_invalid": "Write dates as YYYY-MM-DD: {value}",
+  "courses_status_not_started": "Not started",
+  "courses_status_in_progress": "Watching",
+  "courses_status_done": "Done",
+  "courses_load_failed": "Couldn't load the course.",
+  "courses_action_failed": "Couldn't complete that.",
+  "courses_episode_number": "Ep. {number}",
+  "courses_episode_status": "Ep. {number}: {status}",
+  "courses_added": [
+    {
+      "declarations": [
+        "input count",
+        "input before",
+        "input after",
+        "local countPlural = count: plural"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Added {count} episode. Progress {before}% → {after}%",
+        "countPlural=other": "Added {count} episodes. Progress {before}% → {after}%"
+      }
+    }
+  ],
+  "courses_info": "Course details",
+  "courses_edit": "Edit",
+  "courses_url_invalid": "Links must start with http:// or https://.",
+  "courses_details_saved": "Course details saved.",
+  "courses_subject": "Subject",
+  "courses_instructor": "Instructor",
+  "courses_platform": "Platform",
+  "courses_url": "Link",
+  "courses_textbook": "Textbook",
+  "courses_starts_on": "Start date",
+  "courses_expires_on": "Access expires",
+  "courses_target_on": "Target completion date",
+  "courses_expired": "Your access has expired.",
+  "courses_expires_in": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Your access expires in {count} day.",
+        "countPlural=other": "Your access expires in {count} days."
+      }
+    }
+  ],
+  "courses_my_progress": "My progress",
+  "courses_progress": "Progress",
+  "courses_percent": "Episodes {byCount}% · Video {byDuration}%",
+  "courses_counts": "Done {done} · Watching {inProgress} · Left {remaining} / {total}",
+  "courses_today": "Today",
+  "courses_today_counts": "Planned {planned} · Done {done}",
+  "courses_overdue_count": "Overdue {count}",
+  "courses_remaining": "Remaining",
+  "courses_per_day": [
+    {
+      "declarations": ["input count", "input duration", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} episode a day · {duration} until the target date",
+        "countPlural=other": "{count} episodes a day · {duration} until the target date"
+      }
+    }
+  ],
+  "courses_overdue_list": "Overdue: {list} — you can set new plan dates below.",
+  "courses_episodes": "Episodes",
+  "courses_episodes_empty": "No episodes.",
+  "courses_watch_count": "watched {count} times",
+  "courses_mark_done": "Done",
+  "courses_mark_done_aria": "Mark episode {number} done",
+  "courses_rewatch": "Watch again",
+  "courses_rewatch_aria": "Watch episode {number} again",
+  "courses_watching": "Watching",
+  "courses_watching_aria": "Mark episode {number} as watching",
+  "courses_track": "Track",
+  "courses_track_aria": "Track lecture time for episode {number}",
+  "courses_track_started": "Started tracking lecture time for episode {number}.",
+  "courses_timer_busy": "A timer is already running. Stop it first.",
+  "courses_notes": "Notes & dates",
+  "courses_notes_aria": "My notes and dates for episode {number}",
+  "courses_delete": "Delete",
+  "courses_delete_aria": "Delete episode {number}",
+  "courses_deleted": "Deleted episode {number}.",
+  "courses_mine_saved": "Saved your notes and dates for episode {number}.",
+  "courses_my_planned": "My plan date",
+  "courses_last_position": "Last position (min:sec)",
+  "courses_my_note": "My note (only you can see it)",
+  "courses_new_invalid": "Check the title and length (minutes or min:sec).",
+  "courses_new_title": "New episode title",
+  "courses_chapter": "Chapter",
+  "courses_duration": "Length",
+  "courses_planned": "Plan date",
+  "courses_add_episode": "Add episode",
+  "courses_csv_summary": "Add several episodes from CSV",
+  "courses_csv_help": "One episode per line: title, chapter, length (minutes or min:sec), plan date (YYYY-MM-DD)",
+  "courses_csv_read": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Read {count} episode.",
+        "countPlural=other": "Read {count} episodes."
+      }
+    }
+  ],
+  "courses_csv_fix": "Lines to fix: {lines}",
+  "courses_csv_line": "line {line} ({reason})",
+  "courses_csv_add": "Add",
+  "courses_participants": "Learning together",
+  "courses_participants_hint": "Only the numbers of done, in-progress and overdue episodes are shared. Personal notes and time records are not shown.",
+  "courses_participant": "{name}: done {done} / {total} · watching {inProgress}",
+  "courses_participant_overdue": "overdue {count}"
 }

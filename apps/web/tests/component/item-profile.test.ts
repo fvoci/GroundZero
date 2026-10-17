@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { detailFields, peopleLabels, toDetails } from '$lib/features/modules/profile';
+import { setLocale } from '$lib/paraglide/runtime.js';
+
+beforeEach(async () => {
+  await setLocale('ko', { reload: false });
+});
 
 describe('item profile fields', () => {
   it('sends only the fields of the module kind, trimmed, with unique keywords', () => {

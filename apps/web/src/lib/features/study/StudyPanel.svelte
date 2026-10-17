@@ -8,14 +8,17 @@
     StudyUnitKind,
     StudyUnitView,
   } from '$lib/api/client';
-  import { api, ApiError, newRequestId, STUDY_UNIT_KINDS } from '$lib/api/client';
+  import { api, newRequestId, STUDY_UNIT_KINDS } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { formatDay } from '$lib/display';
   import { localTimeZone, wallTime } from '$lib/features/events/time';
   import { timer } from '$lib/features/time/timer.svelte';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
 
-  import { plannedOn, replan, studyProgress, UNIT_LABEL } from './progress';
+  import { plannedOn, replan, studyProgress, unitAmount, unitLabel } from './progress';
 
   interface Props {
     itemId: string;
@@ -24,11 +27,18 @@
   const { itemId }: Props = $props();
 
   const today = wallTime(new Date().toISOString(), localTimeZone()).slice(0, 10);
-  const STATUS_LABEL: Record<EpisodeStatus, string> = {
-    not_started: '시작 전',
-    in_progress: '진행 중',
-    done: '완료',
-  };
+
+  function statusLabel(status: EpisodeStatus): string {
+    switch (status) {
+      case 'not_started':
+        return m.study_status_not_started();
+      case 'in_progress':
+        return m.study_status_in_progress();
+      case 'done':
+        return m.study_status_done();
+    }
+  }
+
   const box =
     'h-9 rounded-md border border-input bg-transparent px-3 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 
@@ -71,8 +81,7 @@
         participants = list;
       })
       .catch((e: unknown) => {
-        if (!cancelled)
-          error = e instanceof ApiError ? e.message : '스터디 계획을 불러오지 못했습니다.';
+        if (!cancelled) error = errorText(e, m.study_load_failed());
       });
     return () => {
       cancelled = true;
@@ -87,7 +96,7 @@
       reloadKey += 1;
       return true;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '처리하지 못했습니다.';
+      error = errorText(e, m.study_action_failed());
       return false;
     }
   }
@@ -102,7 +111,7 @@
           note: u.mine.note,
           today,
         }),
-      `${String(u.number)}. ${u.title}: ${STATUS_LABEL[next]}`,
+      m.study_unit_status({ number: u.number, title: u.title, status: statusLabel(next) }),
     );
   }
 
@@ -123,7 +132,7 @@
     e.preventDefault();
     const amount = draft.amount.trim() === '' ? 0 : Number(draft.amount);
     if (draft.title.trim() === '' || !Number.isInteger(amount) || amount < 0) {
-      error = '제목과 분량(0 이상의 정수)을 확인해 주세요.';
+      error = m.study_unit_invalid();
       return;
     }
     const ok = await run(
@@ -138,7 +147,7 @@
             planned_on: draft.planned_on === '' ? null : draft.planned_on,
           },
         ]),
-      '단위를 더했습니다.',
+      m.study_unit_added(),
     );
     if (ok) {
       draft = { title: '', chapter: '', unit: draft.unit, amount: '', planned_on: '' };
@@ -154,28 +163,39 @@
   {@const p = progress}
   {@const current = plan}
   <section class="flex flex-col gap-3" aria-labelledby="study-heading">
-    <h2 id="study-heading" class="text-lg font-semibold">계획과 내 진행</h2>
+    <h2 id="study-heading" class="text-lg font-semibold">{m.study_heading()}</h2>
     <div class="grid gap-2 sm:grid-cols-3">
       <div class="rounded-md border p-2">
-        <div class="text-sm text-muted-foreground">진행률</div>
+        <div class="text-sm text-muted-foreground">{m.study_progress()}</div>
         <div class="text-lg font-semibold">{p.percent}%</div>
         <div class="text-sm">
-          완료 {p.done} · 진행 중 {p.inProgress} · 남음 {p.remaining} / {p.total}
+          {m.study_counts({
+            done: p.done,
+            inProgress: p.inProgress,
+            remaining: p.remaining,
+            total: p.total,
+          })}
         </div>
       </div>
       <div class="rounded-md border p-2">
-        <div class="text-sm text-muted-foreground">오늘</div>
-        <div class="text-lg font-semibold">예정 {p.todayPlanned} · 완료 {p.todayDone}</div>
-        <div class="text-sm">밀린 단위 {p.overdue.length}</div>
+        <div class="text-sm text-muted-foreground">{m.study_today()}</div>
+        <div class="text-lg font-semibold">
+          {m.study_today_counts({ planned: p.todayPlanned, done: p.todayDone })}
+        </div>
+        <div class="text-sm">{m.study_overdue_count({ count: p.overdue.length })}</div>
       </div>
       <div class="rounded-md border p-2">
-        <div class="text-sm text-muted-foreground">분량</div>
+        <div class="text-sm text-muted-foreground">{m.study_amount()}</div>
         {#each p.amounts as a (a.unit)}
           <div class="text-sm">
-            {a.done}/{a.target}{UNIT_LABEL[a.unit]} (남은 {a.target - a.done})
+            {m.study_amount_progress({
+              done: a.done,
+              amount: unitAmount(a.unit, a.target),
+              left: a.target - a.done,
+            })}
           </div>
         {:else}
-          <div class="text-sm">없음</div>
+          <div class="text-sm">{m.study_none()}</div>
         {/each}
       </div>
     </div>
@@ -183,27 +203,31 @@
     {#if p.overdue.length > 0}
       <form
         class="flex flex-wrap items-end gap-2 rounded-md border p-2 text-sm"
-        aria-label="밀린 단위 다시 배정"
+        aria-label={m.study_replan_form()}
         onsubmit={(e: SubmitEvent) => {
           e.preventDefault();
           const per = Number(replanPerDay);
           if (!Number.isInteger(per) || per < 1) {
-            error = '하루에 할 단위 수는 1 이상의 정수입니다.';
+            error = m.study_per_day_invalid();
             return;
           }
           void run(
             () => api.planStudyUnits(itemId, replan(p.overdue, replanStart, per)),
-            `밀린 ${String(p.overdue.length)}개를 ${replanStart}부터 하루 ${String(per)}개씩 다시 배정했습니다.`,
+            m.study_replanned({
+              count: p.overdue.length,
+              start: replanStart === '' ? '' : formatDay(replanStart),
+              perDay: per,
+            }),
           );
         }}
       >
-        <span>밀린 단위 {p.overdue.length}개를 내 계획으로 다시 배정:</span>
+        <span>{m.study_replan_intro({ count: p.overdue.length })}</span>
         <div class="flex flex-col gap-1">
-          <Label for="study-replan-start">시작일</Label>
+          <Label for="study-replan-start">{m.study_start_date()}</Label>
           <Input id="study-replan-start" type="date" bind:value={replanStart} class="w-40" />
         </div>
         <div class="flex flex-col gap-1">
-          <Label for="study-replan-per">하루에</Label>
+          <Label for="study-replan-per">{m.study_per_day()}</Label>
           <Input
             id="study-replan-per"
             type="number"
@@ -212,7 +236,7 @@
             class="w-20"
           />
         </div>
-        <Button type="submit" size="sm" variant="outline">다시 배정</Button>
+        <Button type="submit" size="sm" variant="outline">{m.study_replan()}</Button>
       </form>
     {/if}
 
@@ -224,16 +248,18 @@
             <span class="text-muted-foreground">{u.number}.</span>
             <span class="font-medium">{u.title}</span>
             {#if u.chapter !== ''}<span class="text-muted-foreground">{u.chapter}</span>{/if}
-            {#if u.amount > 0}<span>{u.amount}{UNIT_LABEL[u.unit]}</span>{/if}
+            {#if u.amount > 0}<span>{unitAmount(u.unit, u.amount)}</span>{/if}
             {#if planned !== null}
               <span
                 class={u.mine.status !== 'done' && planned < today
                   ? 'text-destructive'
                   : 'text-muted-foreground'}
-                >{planned}{u.mine.planned_on !== null ? '(내 날짜)' : ''}</span
+                >{u.mine.planned_on !== null
+                  ? m.study_planned_mine({ date: formatDay(planned) })
+                  : formatDay(planned)}</span
               >
             {/if}
-            <span class="ml-auto">{STATUS_LABEL[u.mine.status]}</span>
+            <span class="ml-auto">{statusLabel(u.mine.status)}</span>
           </div>
           <div class="flex flex-wrap gap-1">
             {#each ['not_started', 'in_progress', 'done'] as const as s (s)}
@@ -243,7 +269,7 @@
                   variant="ghost"
                   onclick={() => {
                     setStatus(u, s);
-                  }}>{STATUS_LABEL[s]}</Button
+                  }}>{statusLabel(s)}</Button
                 >
               {/if}
             {/each}
@@ -253,29 +279,29 @@
               aria-expanded={openUnit === u.id}
               onclick={() => {
                 openMine(u);
-              }}>내 분량·날짜·메모</Button
+              }}>{m.study_mine()}</Button
             >
             <Button
               size="sm"
               variant="ghost"
-              aria-label={`${u.title} 공부 시간 측정`}
+              aria-label={m.study_track_aria({ title: u.title })}
               onclick={() =>
                 void timer
                   .start('study', { kind: 'study_unit', id: u.id })
                   .then(() => {
-                    status = `${u.title}: 공부 시간 측정을 시작했습니다.`;
+                    status = m.study_track_started({ title: u.title });
                   })
                   .catch(() => {
-                    error = '이미 측정 중인 타이머가 있습니다. 먼저 끝내 주세요.';
-                  })}>측정</Button
+                    error = m.study_timer_busy();
+                  })}>{m.study_track()}</Button
             >
             {#if current.can_write}
               <Button
                 size="sm"
                 variant="ghost"
                 onclick={() =>
-                  void run(() => api.deleteStudyUnit(u.id), `${u.title}을(를) 지웠습니다.`)}
-                >지우기</Button
+                  void run(() => api.deleteStudyUnit(u.id), m.study_deleted({ title: u.title }))}
+                >{m.study_delete()}</Button
               >
             {/if}
           </div>
@@ -286,7 +312,7 @@
                 e.preventDefault();
                 const doneAmount = mine.done_amount.trim() === '' ? 0 : Number(mine.done_amount);
                 if (!Number.isInteger(doneAmount) || doneAmount < 0) {
-                  error = '한 분량은 0 이상의 정수입니다.';
+                  error = m.study_done_amount_invalid();
                   return;
                 }
                 void run(
@@ -298,12 +324,14 @@
                       note: mine.note,
                       today,
                     }),
-                  `${u.title}: 내 진행을 저장했습니다.`,
+                  m.study_progress_saved({ title: u.title }),
                 );
               }}
             >
               <div class="flex flex-col gap-1">
-                <Label for={`unit-done-${u.id}`}>한 분량({UNIT_LABEL[u.unit]})</Label>
+                <Label for={`unit-done-${u.id}`}
+                  >{m.study_done_amount({ unit: unitLabel(u.unit) })}</Label
+                >
                 <Input
                   id={`unit-done-${u.id}`}
                   type="number"
@@ -312,61 +340,66 @@
                 />
               </div>
               <div class="flex flex-col gap-1">
-                <Label for={`unit-plan-${u.id}`}>내 계획일</Label>
+                <Label for={`unit-plan-${u.id}`}>{m.study_my_planned()}</Label>
                 <Input id={`unit-plan-${u.id}`} type="date" bind:value={mine.planned_on} />
               </div>
               <div class="flex flex-col gap-1 sm:col-span-3">
-                <Label for={`unit-note-${u.id}`}>메모(나만 봄)</Label>
+                <Label for={`unit-note-${u.id}`}>{m.study_note()}</Label>
                 <textarea
                   id={`unit-note-${u.id}`}
                   class="rounded-md border border-input bg-transparent px-3 py-2 text-base"
                   rows={2}
                   bind:value={mine.note}></textarea>
               </div>
-              <div><Button type="submit" size="sm">저장</Button></div>
+              <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
             </form>
           {/if}
         </li>
       {:else}
-        <li class="text-sm text-muted-foreground">계획 단위가 없습니다.</li>
+        <li class="text-sm text-muted-foreground">{m.study_empty()}</li>
       {/each}
     </ol>
 
     {#if current.can_write}
       <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addUnit(e)} novalidate>
         <div class="flex flex-1 flex-col gap-1">
-          <Label for="study-unit-title">새 단위 제목</Label>
+          <Label for="study-unit-title">{m.study_new_title()}</Label>
           <Input id="study-unit-title" bind:value={draft.title} maxlength={300} />
         </div>
         <div class="flex flex-col gap-1">
-          <Label for="study-unit-chapter">교육과정·챕터</Label>
+          <Label for="study-unit-chapter">{m.study_chapter()}</Label>
           <Input id="study-unit-chapter" bind:value={draft.chapter} maxlength={300} />
         </div>
         <div class="flex w-24 flex-col gap-1">
-          <Label for="study-unit-amount">분량</Label>
+          <Label for="study-unit-amount">{m.study_amount()}</Label>
           <Input id="study-unit-amount" type="number" min={0} bind:value={draft.amount} />
         </div>
         <div class="flex flex-col gap-1">
-          <Label for="study-unit-kind">단위</Label>
+          <Label for="study-unit-kind">{m.study_unit()}</Label>
           <select id="study-unit-kind" class={box} bind:value={draft.unit}>
-            {#each STUDY_UNIT_KINDS as k (k)}<option value={k}>{UNIT_LABEL[k]}</option>{/each}
+            {#each STUDY_UNIT_KINDS as k (k)}<option value={k}>{unitLabel(k)}</option>{/each}
           </select>
         </div>
         <div class="flex flex-col gap-1">
-          <Label for="study-unit-planned">계획일</Label>
+          <Label for="study-unit-planned">{m.study_planned()}</Label>
           <Input id="study-unit-planned" type="date" bind:value={draft.planned_on} />
         </div>
-        <Button type="submit">단위 추가</Button>
+        <Button type="submit">{m.study_add_unit()}</Button>
       </form>
     {/if}
 
     {#if participants.length > 0}
       <section class="flex flex-col gap-1" aria-labelledby="study-participants-heading">
-        <h3 id="study-participants-heading" class="font-medium">함께 하는 사람</h3>
+        <h3 id="study-participants-heading" class="font-medium">{m.study_participants()}</h3>
         <ul class="text-sm">
           {#each participants as person (person.user_id)}
             <li>
-              {person.display_name}: 완료 {person.done} · 진행 중 {person.in_progress} · 밀림 {person.overdue}
+              {m.study_participant({
+                name: person.display_name,
+                done: person.done,
+                inProgress: person.in_progress,
+                overdue: person.overdue,
+              })}
             </li>
           {/each}
         </ul>
