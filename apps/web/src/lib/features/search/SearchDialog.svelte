@@ -5,6 +5,7 @@
   import type { SearchFilters, SearchKind, SearchResultView, TaskStatus } from '$lib/api/client';
   import { api } from '$lib/api/client';
   import { STATUS_LABEL } from '$lib/features/tasks/labels';
+  import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
   import { Checkbox } from '$lib/ui/checkbox';
   import * as Dialog from '$lib/ui/dialog';
@@ -12,7 +13,7 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
-  import { SEARCH_KIND_LABEL, SEARCH_KINDS, searchResultPath } from './search';
+  import { SEARCH_KINDS, searchKindLabel, searchResultPath } from './search';
 
   let { open = $bindable(false), memberOf }: { open?: boolean; memberOf: (ws: string) => boolean } =
     $props();
@@ -122,15 +123,13 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="max-h-[80vh] overflow-y-auto sm:max-w-xl">
     <Dialog.Header>
-      <Dialog.Title>검색</Dialog.Title>
-      <Dialog.Description
-        >문서·업무·항목·일정·파일(지원 형식은 본문까지)·기록에서 찾습니다. 볼 수 있는 것만 나옵니다.</Dialog.Description
-      >
+      <Dialog.Title>{m.search_title()}</Dialog.Title>
+      <Dialog.Description>{m.search_description()}</Dialog.Description>
     </Dialog.Header>
     <Input
       type="search"
-      aria-label="검색어"
-      placeholder="검색어"
+      aria-label={m.search_query()}
+      placeholder={m.search_query()}
       maxlength={200}
       value={query}
       oninput={(e: Event) => {
@@ -142,9 +141,9 @@
       data-testid="search-input"
     />
     <fieldset class="flex flex-wrap items-end gap-3 text-sm" data-testid="search-filters">
-      <legend class="sr-only">필터</legend>
+      <legend class="sr-only">{m.search_filters()}</legend>
       <div class="flex flex-col gap-1">
-        <span id="search-kind-label" class="font-medium">종류</span>
+        <span id="search-kind-label" class="font-medium">{m.search_kind()}</span>
         <Select.Root
           type="single"
           value={taskOnly ? 'task' : kind}
@@ -156,23 +155,21 @@
         >
           <Select.Trigger class="w-24" aria-labelledby="search-kind-label"
             >{taskOnly
-              ? SEARCH_KIND_LABEL.task
+              ? searchKindLabel('task')
               : kind === 'all'
-                ? '전체'
-                : SEARCH_KIND_LABEL[kind]}</Select.Trigger
+                ? m.search_all()
+                : searchKindLabel(kind)}</Select.Trigger
           >
           <Select.Content>
-            <Select.Item value="all" label="전체">전체</Select.Item>
+            <Select.Item value="all" label={m.search_all()}>{m.search_all()}</Select.Item>
             {#each SEARCH_KINDS as k (k)}
-              <Select.Item value={k} label={SEARCH_KIND_LABEL[k]}
-                >{SEARCH_KIND_LABEL[k]}</Select.Item
-              >
+              <Select.Item value={k} label={searchKindLabel(k)}>{searchKindLabel(k)}</Select.Item>
             {/each}
           </Select.Content>
         </Select.Root>
       </div>
       <div class="flex flex-col gap-1">
-        <span id="search-status-label" class="font-medium">업무 상태</span>
+        <span id="search-status-label" class="font-medium">{m.search_task_status()}</span>
         <Select.Root
           type="single"
           value={taskStatus}
@@ -182,10 +179,10 @@
           }}
         >
           <Select.Trigger class="w-24" aria-labelledby="search-status-label"
-            >{taskStatus === 'any' ? '전체' : STATUS_LABEL[taskStatus]}</Select.Trigger
+            >{taskStatus === 'any' ? m.search_all() : STATUS_LABEL[taskStatus]}</Select.Trigger
           >
           <Select.Content>
-            <Select.Item value="any" label="전체">전체</Select.Item>
+            <Select.Item value="any" label={m.search_all()}>{m.search_all()}</Select.Item>
             {#each TASK_STATUSES as s (s)}
               <Select.Item value={s} label={STATUS_LABEL[s]}>{STATUS_LABEL[s]}</Select.Item>
             {/each}
@@ -200,11 +197,11 @@
             refilter();
           }}
         />
-        <Label for="search-mine">내 담당</Label>
+        <Label for="search-mine">{m.search_mine()}</Label>
       </div>
       <div class="flex items-end gap-2">
         <div class="flex flex-col gap-1">
-          <Label for="search-from">날짜부터</Label>
+          <Label for="search-from">{m.search_from()}</Label>
           <Input
             id="search-from"
             type="date"
@@ -216,7 +213,7 @@
           />
         </div>
         <div class="flex flex-col gap-1">
-          <Label for="search-to">까지</Label>
+          <Label for="search-to">{m.search_to()}</Label>
           <Input
             id="search-to"
             type="date"
@@ -230,19 +227,19 @@
       </div>
     </fieldset>
     <p class="text-xs text-muted-foreground">
-      날짜는 업무의 기한(없으면 시작일), 일정의 시작일, 그 밖에는 고친 날로 봅니다.
+      {m.search_date_hint()}
     </p>
     <div aria-live="polite" class="text-sm text-muted-foreground">
       {#if reversed}
-        <span class="text-destructive">시작 날짜가 끝 날짜보다 늦습니다.</span>
+        <span class="text-destructive">{m.search_reversed()}</span>
       {:else if status === 'loading'}
-        찾는 중…
+        {m.search_searching()}
       {:else if status === 'error'}
-        <span class="text-destructive">검색하지 못했습니다. 잠시 뒤 다시 시도해 주세요.</span>
+        <span class="text-destructive">{m.search_failed()}</span>
       {:else if status === 'done' && results.length === 0}
-        찾은 것이 없습니다.
+        {m.search_no_results()}
       {:else if status === 'done'}
-        {results.length}건
+        {m.search_result_count({ count: results.length })}
       {/if}
     </div>
     {#if results.length > 0}
@@ -260,8 +257,7 @@
               }}
             >
               <span class="flex items-baseline gap-2">
-                <span class="shrink-0 text-xs text-muted-foreground"
-                  >{SEARCH_KIND_LABEL[r.kind]}</span
+                <span class="shrink-0 text-xs text-muted-foreground">{searchKindLabel(r.kind)}</span
                 >
                 {#if r.reference !== null}
                   <span class="shrink-0 font-mono text-xs text-muted-foreground">{r.reference}</span

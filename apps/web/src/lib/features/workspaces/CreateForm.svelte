@@ -1,6 +1,8 @@
 <script lang="ts">
   // 이름 하나를 받아 만드는 작은 폼. 같은 입력의 재시도는 같은 request_id를 쓴다.
-  import { ApiError, NetworkError, newRequestId } from '$lib/api/client';
+  import { NetworkError, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
@@ -24,7 +26,7 @@
     event.preventDefault();
     const trimmed = name.trim();
     if (trimmed === '') {
-      error = `${label}을(를) 입력하세요.`;
+      error = m.workspaces_name_required({ label });
       return;
     }
     if (pending?.name !== trimmed) pending = { requestId: newRequestId(), name: trimmed };
@@ -35,10 +37,11 @@
       pending = undefined;
       name = '';
     } catch (e: unknown) {
-      if (e instanceof NetworkError)
-        error = '서버에 연결할 수 없습니다. 다시 시도하면 중복 없이 처리됩니다.';
-      else if (e instanceof ApiError) error = e.message;
-      else error = '만들지 못했습니다.';
+      // 연결 실패는 다시 눌러도 같은 request_id라 중복되지 않는다는 점을 알린다.
+      error =
+        e instanceof NetworkError
+          ? m.workspaces_create_network_failed()
+          : errorText(e, m.workspaces_create_failed());
     } finally {
       busy = false;
     }
