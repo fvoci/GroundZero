@@ -202,29 +202,31 @@
         />
         <Label for="search-mine">내 담당</Label>
       </div>
-      <div class="flex flex-col gap-1">
-        <Label for="search-from">날짜부터</Label>
-        <Input
-          id="search-from"
-          type="date"
-          class="w-36"
-          bind:value={from}
-          onchange={() => {
-            refilter();
-          }}
-        />
-      </div>
-      <div class="flex flex-col gap-1">
-        <Label for="search-to">까지</Label>
-        <Input
-          id="search-to"
-          type="date"
-          class="w-36"
-          bind:value={to}
-          onchange={() => {
-            refilter();
-          }}
-        />
+      <div class="flex items-end gap-2">
+        <div class="flex flex-col gap-1">
+          <Label for="search-from">날짜부터</Label>
+          <Input
+            id="search-from"
+            type="date"
+            class="w-36"
+            bind:value={from}
+            onchange={() => {
+              refilter();
+            }}
+          />
+        </div>
+        <div class="flex flex-col gap-1">
+          <Label for="search-to">까지</Label>
+          <Input
+            id="search-to"
+            type="date"
+            class="w-36"
+            bind:value={to}
+            onchange={() => {
+              refilter();
+            }}
+          />
+        </div>
       </div>
     </fieldset>
     <p class="text-xs text-muted-foreground">
