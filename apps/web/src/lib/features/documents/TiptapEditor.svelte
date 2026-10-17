@@ -6,21 +6,16 @@
   // 내용이면 들어갈 때 알려 주고, 원문을 고친 경우에만 원문에서 다시 만든 내용으로 바꾼다(조용한 손실 방지).
   import type { Extensions } from '@tiptap/core';
   import { Editor } from '@tiptap/core';
-  import Image from '@tiptap/extension-image';
-  import { TaskItem, TaskList } from '@tiptap/extension-list';
-  import Mathematics from '@tiptap/extension-mathematics';
-  import { TableKit } from '@tiptap/extension-table';
-  import { Markdown } from '@tiptap/markdown';
-  import StarterKit from '@tiptap/starter-kit';
   import { onMount, untrack } from 'svelte';
 
   import type { DocNode } from '$lib/api/client';
   import { parseDocNode } from '$lib/api/client';
   import type { ReferenceContext } from '$lib/features/references/context';
-  import { Reference, ReferenceSuggestion } from '$lib/features/references/reference-extension';
+  import { ReferenceSuggestion } from '$lib/features/references/reference-extension';
   import { Button } from '$lib/ui/button';
 
   import { canonicalJson } from './drafts';
+  import { schemaExtensions } from './editor-schema';
 
   interface Props {
     content: DocNode;
@@ -159,38 +154,15 @@
   // 참조 노드는 항상 등록한다(모르는 노드는 Tiptap이 버리므로 읽기 화면에서도 필요하다).
   // @ 입력은 고칠 수 있고 참조 문맥이 있을 때만 켠다.
   function extensionsFor(ctx: ReferenceContext | undefined, canEdit: boolean): Extensions {
-    const reference = Reference.configure({
-      hrefFor: ctx?.hrefFor ?? (() => null),
-      navigate: ctx?.navigate ?? (() => undefined),
+    const base: Extensions = schemaExtensions({
+      reference: {
+        hrefFor: ctx?.hrefFor ?? (() => null),
+        navigate: ctx?.navigate ?? (() => undefined),
+      },
+      onMathClick: (kind, node, pos) => {
+        openMath(kind, String(node.attrs.latex ?? ''), pos);
+      },
     });
-    const base: Extensions = [
-      StarterKit,
-      TaskList,
-      TaskItem.configure({
-        nested: true,
-        a11y: {
-          checkboxLabel: (node, checked) =>
-            `${checked ? '완료' : '미완료'} 항목: ${node.textContent || '빈 항목'}`,
-        },
-      }),
-      Markdown,
-      reference,
-      TableKit.configure({ table: { resizable: false } }),
-      Image.configure({ inline: false, allowBase64: false }),
-      Mathematics.configure({
-        katexOptions: { throwOnError: false },
-        inlineOptions: {
-          onClick: (node, pos) => {
-            openMath('inline', String(node.attrs.latex ?? ''), pos);
-          },
-        },
-        blockOptions: {
-          onClick: (node, pos) => {
-            openMath('block', String(node.attrs.latex ?? ''), pos);
-          },
-        },
-      }),
-    ];
     if (ctx === undefined || !canEdit) return base;
     return [
       ...base,

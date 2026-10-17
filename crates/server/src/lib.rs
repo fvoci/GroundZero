@@ -2,6 +2,7 @@
 
 pub mod app;
 pub mod backup;
+pub mod collab;
 pub mod config;
 pub mod db;
 pub mod error;

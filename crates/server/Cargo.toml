@@ -39,12 +39,14 @@ tracing-subscriber.workspace = true
 url = "2"
 utoipa.workspace = true
 uuid = { version = "1", features = ["serde", "v7"] }
+yrs = "0.28.0"
 zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
 
 [dev-dependencies]
 tower = { version = "0.5", default-features = false, features = ["util"] }
 http-body-util = "0.1"
 reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json", "cookies"] }
+tokio-tungstenite = "0.28"
 
 [lints]
 workspace = true

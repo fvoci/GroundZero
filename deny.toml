@@ -36,6 +36,9 @@ ignore = [
   # fvoci는 OIDC 제공자의 공개키로 ID 토큰 서명을 검증만 하고 RSA 개인키를 갖지 않는다.
   # 패치가 나오면 이 항목을 지운다. 기록: docs/development.md 9절.
   { id = "RUSTSEC-2023-0071", reason = "public-key signature verification only; no RSA private key operations in fvoci" },
+  # smallstr 0.3.1 (yrs 0.28.0 경유, 실시간 공동 편집 D-70). 취약점이 아닌 유지 중단 알림(informational = "unmaintained",
+  # 수정 판 없음)이며 yrs가 글 조각 저장에 쓴다. 사용자 승인 2026-10-17(D-70). yrs가 smallstr를 떼면 이 항목을 지운다.
+  { id = "RUSTSEC-2026-0215", reason = "informational unmaintained notice, no vulnerability; required by yrs (D-70); remove when yrs drops smallstr" },
 ]
 
 [sources]

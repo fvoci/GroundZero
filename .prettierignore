@@ -4,3 +4,7 @@ target
 pnpm-lock.yaml
 contracts/openapi.json
 packages/api-client/src/generated
+
+# 실시간 공동 편집 기준 파일(웹 테스트가 생성, D-70)
+contracts/collab/stored.json
+contracts/collab/expected.json
