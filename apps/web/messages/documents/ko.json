@@ -218,5 +218,6 @@
   "documents_export_print_opened": "인쇄 창을 열었습니다.",
   "documents_exported": "내보냈습니다.",
   "documents_exporting": "내보내는 중…",
-  "documents_export_saved_revision": "저장된 리비전 {revision} 내보내기"
+  "documents_export_saved_revision": "저장된 리비전 {revision} 내보내기",
+  "documents_revision_label": "리비전"
 }

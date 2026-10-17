@@ -4,7 +4,7 @@
   "references_kind_document": "Document",
   "references_kind_task": "Task",
   "references_kind_user": "Person",
-  "references_hidden": "Hidden item",
+  "references_hidden": "Not visible",
   "references_suggest_prompt": "Type a name, title, or number",
   "references_suggest_empty": "No matches",
   "references_suggest_label": "Reference suggestions",

@@ -221,5 +221,6 @@
   "documents_export_print_opened": "Opened the print dialog.",
   "documents_exported": "Exported.",
   "documents_exporting": "Exporting…",
-  "documents_export_saved_revision": "Export saved revision {revision}"
+  "documents_export_saved_revision": "Export saved revision {revision}",
+  "documents_revision_label": "Revision"
 }

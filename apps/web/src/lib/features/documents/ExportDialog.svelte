@@ -126,7 +126,7 @@
     </Dialog.Header>
     <div class="flex flex-col gap-3 text-sm">
       <div class="flex flex-col gap-1">
-        <Label for="export-revision">{m.documents_revisions_label()}</Label>
+        <Label for="export-revision">{m.documents_revision_label()}</Label>
         <select
           id="export-revision"
           class="h-9 rounded-md border bg-background px-2"
