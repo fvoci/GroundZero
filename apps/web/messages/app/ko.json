@@ -33,5 +33,6 @@
   "app_health_checking": "서버 상태 확인 중…",
   "app_health_ok": "서버 정상 (database: {database})",
   "app_health_degraded": "서버 응답은 있으나 데이터베이스 연결 실패",
-  "app_health_unreachable": "서버에 연결할 수 없음: {message}"
+  "app_health_unreachable": "서버에 연결할 수 없음: {message}",
+  "app_toggle_sidebar": "사이드바 열고 닫기"
 }

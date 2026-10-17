@@ -6,6 +6,7 @@
   import { router, workspacePath } from '$lib/router.svelte';
 
   import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
+  import { roleLabel } from '$lib/features/members/roles';
 
   import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 
@@ -41,7 +42,7 @@
             }}
           >
             <WorkspaceBadge workspace={ws} all={workspaces} />
-            <span class="text-sm text-muted-foreground">({ws.role})</span>
+            <span class="text-sm text-muted-foreground">({roleLabel(ws.role)})</span>
           </a>
         </li>
       {/each}

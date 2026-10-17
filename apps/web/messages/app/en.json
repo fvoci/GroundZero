@@ -33,5 +33,6 @@
   "app_health_checking": "Checking server status…",
   "app_health_ok": "Server OK (database: {database})",
   "app_health_degraded": "The server responds, but the database connection failed",
-  "app_health_unreachable": "Can't reach the server: {message}"
+  "app_health_unreachable": "Can't reach the server: {message}",
+  "app_toggle_sidebar": "Toggle sidebar"
 }

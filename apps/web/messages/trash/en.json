@@ -114,7 +114,7 @@
   "trash_restored": "Restored: {label}",
   "trash_empty": "Trash is empty.",
   "trash_delete_failed": "Couldn't delete.",
-  "trash_move_question": "{what}: move to trash?",
+  "trash_move_question": "Move this {what} to the trash?",
   "trash_move": "Move to trash",
   "trash_delete_what": "Delete {what}",
   "trash_workspaces_load_failed": "Couldn't load deleted workspaces.",
