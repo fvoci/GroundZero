@@ -1,0 +1,65 @@
+# 개발 환경. `cargo xtask dev`가 띄우고 포트를 출력한다. 데이터는 이 프로젝트의 named volume에 남는다.
+# `cargo xtask down`이 이 체크아웃의 볼륨만 지운다.
+name: fvoci-dev
+
+services:
+  postgres:
+    image: postgres:18.3-alpine
+    environment:
+      POSTGRES_USER: fvoci
+      POSTGRES_PASSWORD: fvoci-test-password
+      POSTGRES_DB: fvoci
+    ports:
+      - '127.0.0.1::5432'
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fvoci -d fvoci']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.37.0
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: fvoci-test-meili-master-key-16chars
+      MEILI_NO_ANALYTICS: 'true'
+    ports:
+      - '127.0.0.1::7700'
+    volumes:
+      - meilidata:/meili_data
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:7700/health || exit 1']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # 개발용 로그인 제공자. `cargo xtask dev --oidc`로만 기동한다 (프로필 oidc). realm은 테스트와 같은 가짜 사용자.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.5.4
+    profiles: ['oidc']
+    command: ['start-dev', '--import-realm', '--health-enabled=true']
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: fvoci-test-admin-password
+      KC_HEALTH_ENABLED: 'true'
+    volumes:
+      - ./keycloak/realm-test.json:/opt/keycloak/data/import/realm-test.json:ro
+    ports:
+      - '127.0.0.1::8080'
+    healthcheck:
+      # 이미지에 curl이 없어 bash의 /dev/tcp로 관리 포트(9000)의 ready 상태를 확인한다.
+      test:
+        [
+          'CMD-SHELL',
+          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\": \"UP\"' <&3",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+
+volumes:
+  pgdata:
+  meilidata:

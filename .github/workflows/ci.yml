@@ -1,0 +1,133 @@
+# 제품 검사. 로컬과 같은 진입점(cargo xtask check / cargo xtask test)만 호출한다.
+# 모든 job은 base-image 워크플로가 게시한 같은 이미지 digest 안에서 돈다. 태그나 latest로 실행하지 않는다.
+# digest는 저장소 변수 CI_BASE_IMAGE_DIGEST (sha256:...)에 둔다. 비어 있으면 image 참조가 잘못되어 job이 시작 단계에서 실패한다. 성공으로 처리하지 않는다.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      # 라이선스는 아래 licenses job이 따로 보인다(D-60 승인 대기 중 실패가 다른 검사 결과를 가리지 않게).
+      - run: cargo xtask check --skip-licenses
+
+  # 의존성 라이선스(D-60). 허용 목록 밖이면 실패로 그대로 보인다. 다른 job은 이 결과를 기다리지 않는다.
+  licenses:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: pnpm install --frozen-lockfile
+      - run: cargo xtask licenses
+
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
+    # 컨테이너 job 안에서는 Compose를 띄울 수 없으므로 job 서비스로 격리한다. 자격 증명은 compose.test.yaml과 같은 테스트 값.
+    services:
+      postgres:
+        image: postgres:18.3-alpine
+        env:
+          POSTGRES_USER: fvoci
+          POSTGRES_PASSWORD: fvoci-test-password
+          POSTGRES_DB: fvoci
+        options: >-
+          --health-cmd "pg_isready -U fvoci -d fvoci"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+      meilisearch:
+        image: getmeili/meilisearch:v1.37.0
+        env:
+          MEILI_ENV: development
+          MEILI_MASTER_KEY: fvoci-test-meili-master-key-16chars
+          MEILI_NO_ANALYTICS: 'true'
+    env:
+      # 관리자(fvoci)는 job 서비스의 POSTGRES_USER. 마이그레이션·앱 역할은 xtask가 `db bootstrap`으로 만든다.
+      FVOCI_TEST_PG_HOST_PORT: postgres:5432
+      FVOCI_TEST_SEARCH_URL: http://meilisearch:7700
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo xtask test --external-services
+
+  # S3 저장소 테스트(s3_*)는 SeaweedFS에 시작 인자(사용 통계 끄기 등)가 필요해 job 서비스로 띄울 수 없으므로
+  # 아래 Compose job에서만 돈다(위 job은 NOT RUN으로 표시).
+  # Keycloak을 거치는 OIDC 로그인 테스트. 컨테이너 job 안에서는 Compose를 띄울 수 없으므로 GitHub 호스트 러너에서
+  # compose.test.yaml(oidc 프로필)로 서비스를 띄우고, 테스트는 위 job과 같은 베이스 이미지 안에서 같은 진입점으로 돈다.
+  # 프로젝트명에 실행 번호·재시도 번호를 넣어 실행마다 컨테이너·네트워크·볼륨을 분리하고, 결과와 상관없이 지운다.
+  # Docker 소켓은 테스트 컨테이너에 넘기지 않는다(체크아웃만 마운트).
+  oidc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      PROJECT: fvoci-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      IMAGE: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: services (postgres, meilisearch, keycloak)
+        run: docker compose --project-name "$PROJECT" --file deploy/compose.test.yaml --profile oidc up --detach --wait
+      - name: cargo xtask test --external-services --oidc (base image)
+        run: >-
+          docker run --rm --network "${PROJECT}_default"
+          --user "$(id -u):$(id -g)"
+          --volume "$GITHUB_WORKSPACE:/work" --workdir /work
+          --env HOME=/work/target/ci-home
+          --env CARGO_HOME=/work/target/ci-cargo
+          --env FVOCI_TEST_PG_HOST_PORT=postgres:5432
+          --env FVOCI_TEST_SEARCH_URL=http://meilisearch:7700
+          --env FVOCI_TEST_S3_ENDPOINT=http://seaweedfs:8333
+          --env FVOCI_TEST_OIDC_ISSUER=http://keycloak:8080/realms/fvoci-test
+          "$IMAGE" cargo xtask test --external-services --oidc
+      - name: compose down
+        if: always()
+        run: docker compose --project-name "$PROJECT" --file deploy/compose.test.yaml --profile oidc down --volumes --remove-orphans
+
+  # HWP·HWPX 미리보기 WASM(D-76). 제품 이미지와 같은 단계(rhwp-out)를 만든다. 빌드 안에서 브라우저에 들어가는
+  # 그래프만 cargo-deny로 검사한다(취약점·회수·라이선스, 예외는 deploy/rhwp/deny.toml의 HWP 용도 승인분만).
+  # 입력(deploy/rhwp의 네 파일)이 같으면 앞서 만든 결과를 다시 쓴다. 고지 파일이 그 결과와 같은지도 본다.
+  rhwp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      IMAGE: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: target/rhwp
+          key: rhwp-${{ hashFiles('deploy/rhwp/build.sh', 'deploy/rhwp/inputs.env', 'deploy/rhwp/Cargo.lock', 'deploy/rhwp/deny.toml') }}
+      - run: cargo xtask rhwp
+      - run: git diff --exit-code -- deploy/rhwp/THIRD_PARTY_NOTICES.txt
+      # 다시 빌드하지 않은 실행에서도 새 보안 권고를 놓치지 않게 권고만 매번 새 DB로 다시 본다(cargo-deny는 베이스 이미지 안).
+      - name: cargo xtask rhwp --audit (base image)
+        run: >-
+          docker run --rm --user "$(id -u):$(id -g)"
+          --volume "$GITHUB_WORKSPACE:/work" --workdir /work
+          --env HOME=/work/target/ci-home
+          --env CARGO_HOME=/work/target/ci-cargo
+          "$IMAGE" cargo xtask rhwp --audit

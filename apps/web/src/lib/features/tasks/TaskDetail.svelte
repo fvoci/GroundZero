@@ -1,0 +1,656 @@
+<script lang="ts">
+  // 업무 상세 (D-31): 필드·담당자·하위 업무·체크리스트·역방향 링크.
+  // 필드 저장은 기준 버전으로 충돌을 막는다. 충돌하면 입력을 지우지 않고 서버 내용과 함께 보여 준다(D-53과 같은 원칙).
+  import { tick } from 'svelte';
+
+  import type { Workspace } from '@fvoci/api-client';
+
+  import type {
+    AssigneeView,
+    RecurrenceRule,
+    ShiftProposalView,
+    TaskDetailView,
+    TaskInput,
+    TaskPriority,
+    TaskStatus,
+    TaskView,
+  } from '$lib/api/client';
+  import { api, ApiError, TASK_PRIORITIES, TASK_STATUSES } from '$lib/api/client';
+  import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
+  import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
+  import RecurrenceEditor from '$lib/features/events/RecurrenceEditor.svelte';
+  import TaskTimePanel from '$lib/features/time/TaskTimePanel.svelte';
+  import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
+  import MarkButtons from '$lib/features/home/MarkButtons.svelte';
+  import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
+  import { itemPath, router } from '$lib/router.svelte';
+  import { localTimeZone } from '$lib/features/events/time';
+  import Backlinks from '$lib/features/references/Backlinks.svelte';
+  import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
+  import { Button } from '$lib/ui/button';
+  import { Checkbox } from '$lib/ui/checkbox';
+  import { Input } from '$lib/ui/input';
+  import { Label } from '$lib/ui/label';
+  import * as Select from '$lib/ui/select';
+
+  import { PRIORITY_LABEL, STATUS_LABEL } from './labels';
+
+  interface Props {
+    taskId: string;
+    /** 같은 항목의 업무 전체(하위 업무·선행 후보·후속 확인용). */
+    tasks: TaskView[];
+    workspaces: Workspace[];
+    onchanged: () => void;
+    onopen: (taskId: string) => void;
+  }
+
+  const { taskId, tasks, workspaces, onchanged, onopen }: Props = $props();
+
+  const subtasks = $derived(tasks.filter((t) => t.parent_id === taskId));
+  const byId = $derived(new Map(tasks.map((t) => [t.id, t])));
+  const successors = $derived(tasks.filter((t) => t.predecessor_ids.includes(taskId)));
+  const label = (t: TaskView | undefined): string =>
+    t === undefined ? '' : `${t.reference ?? ''} ${t.title}`.trim();
+
+  let task = $state<TaskDetailView | undefined>(undefined);
+  let form = $state<TaskInput | undefined>(undefined);
+  let tagsText = $state('');
+  let estimateText = $state('');
+  let people = $state<AssigneeView[]>([]);
+  let conflict = $state<TaskDetailView | undefined>(undefined);
+  let error = $state<string | undefined>(undefined);
+  let saved = $state(false);
+  // 날짜를 바꿀 때 함께 옮길 후속 업무(미리보기). 패널이 떠 있는 동안 폼은 잠그고, 승인하면 본 입력과 기준 버전
+  // 그대로 보낸다(D-31: 보여 준 영향을 사용자가 승인).
+  interface Pending {
+    proposals: ShiftProposalView[];
+    input: TaskInput;
+    baseVersion: number;
+    retried: boolean;
+  }
+  let pending = $state<Pending | undefined>(undefined);
+  let busy = $state(false);
+  let predecessorChoice = $state('');
+  const candidates = $derived(
+    task === undefined
+      ? []
+      : tasks.filter((t) => t.id !== taskId && !(task?.predecessor_ids.includes(t.id) ?? false)),
+  );
+
+  function fill(next: TaskDetailView): void {
+    task = next;
+    form = {
+      title: next.title,
+      description: next.description,
+      status: next.status,
+      priority: next.priority,
+      start_date: next.start_date,
+      due_date: next.due_date,
+      estimate_minutes: next.estimate_minutes,
+      tags: next.tags,
+      assignee_ids: next.assignees.map((a) => a.user_id),
+      milestone: next.milestone,
+    };
+    pending = undefined;
+    tagsText = next.tags.join(', ');
+    estimateText = next.estimate_minutes === null ? '' : String(next.estimate_minutes);
+  }
+
+  $effect(() => {
+    const id = taskId;
+    let cancelled = false;
+    task = undefined;
+    conflict = undefined;
+    error = undefined;
+    void api
+      .task(id)
+      .then(async (detail) => {
+        if (cancelled) return;
+        fill(detail);
+        people = await api.assignable(detail.item_id);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled)
+          error =
+            e instanceof ApiError && e.status === 404
+              ? '업무가 없거나 볼 권한이 없습니다.'
+              : '업무를 불러오지 못했습니다.';
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  const canEdit = $derived(task !== undefined && task.access !== 'read');
+
+  function currentInput(): TaskInput | undefined {
+    if (form === undefined) return undefined;
+    const estimate = estimateText.trim() === '' ? null : Number.parseInt(estimateText, 10);
+    return {
+      ...form,
+      start_date: form.milestone || form.start_date === '' ? null : form.start_date,
+      due_date: form.due_date === '' ? null : form.due_date,
+      estimate_minutes: estimate !== null && Number.isFinite(estimate) ? estimate : null,
+      tags: tagsText
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t !== ''),
+    };
+  }
+
+  /** 저장: 서버 기준 내용과 날짜가 다르면 먼저 후속 업무 영향을 미리 보고, 옮길 것이 있으면 사용자에게 묻는다. */
+  async function submit(base: TaskDetailView): Promise<void> {
+    const input = currentInput();
+    if (task === undefined || input === undefined || busy) return;
+    busy = true;
+    error = undefined;
+    saved = false;
+    try {
+      // 목록의 선행 정보는 오래됐을 수 있으므로 날짜가 바뀌면 언제나 서버에 묻는다.
+      if (input.start_date !== base.start_date || input.due_date !== base.due_date) {
+        const found = await api.previewSchedule(task.id, input.start_date, input.due_date);
+        if (found.length > 0) {
+          pending = { proposals: found, input, baseVersion: base.version, retried: false };
+          return;
+        }
+      }
+      await save(input, base.version, []);
+    } catch (e: unknown) {
+      error = e instanceof ApiError ? e.message : '저장하지 못했습니다.';
+    } finally {
+      busy = false;
+    }
+  }
+
+  /** 미리보기 패널의 선택. 승인은 패널을 띄울 때 붙잡아 둔 입력과 기준 버전 그대로 보낸다. */
+  async function decide(withShifts: boolean): Promise<void> {
+    const p = pending;
+    if (p === undefined || busy) return;
+    busy = true;
+    error = undefined;
+    try {
+      await save(p.input, p.baseVersion, withShifts ? p.proposals : []);
+    } catch (e: unknown) {
+      error = e instanceof ApiError ? e.message : '저장하지 못했습니다.';
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function save(
+    input: TaskInput,
+    baseVersion: number,
+    shifts: ShiftProposalView[],
+  ): Promise<void> {
+    if (task === undefined) return;
+    const result = await api.updateTask(
+      task.id,
+      baseVersion,
+      input,
+      shifts.map((s) => ({
+        task_id: s.task_id,
+        base_version: s.base_version,
+        start_date: s.start_date,
+        due_date: s.due_date,
+      })),
+    );
+    if (result.kind === 'conflict') {
+      pending = undefined;
+      conflict = result.current;
+      return;
+    }
+    if (result.kind === 'shift_conflict') {
+      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
+      const found = await api.previewSchedule(task.id, input.start_date, input.due_date);
+      if (found.length === 0) {
+        await save(input, baseVersion, []);
+        return;
+      }
+      pending = { proposals: found, input, baseVersion, retried: true };
+      return;
+    }
+    conflict = undefined;
+    fill(result.task);
+    saved = true;
+    onchanged();
+    await focusSave();
+  }
+
+  // 패널이 사라질 때 대화상자의 초점 가두기가 첫 입력란으로 초점을 옮기므로, 그 뒤 프레임에서 저장 단추로 돌린다.
+  async function focusSave(): Promise<void> {
+    await tick();
+    requestAnimationFrame(() => {
+      document.getElementById('task-save')?.focus();
+    });
+  }
+
+  async function reloadChecklist(next: Promise<unknown>): Promise<void> {
+    await next;
+    if (task === undefined) return;
+    const fresh = await api.task(task.id);
+    if (task.version === fresh.version) {
+      task = fresh;
+    } else {
+      fill(fresh);
+    }
+    onchanged();
+  }
+
+  async function saveRule(rule: RecurrenceRule | null): Promise<void> {
+    if (task === undefined) return;
+    const fresh = await api.setTaskRecurrence(
+      task.id,
+      rule,
+      task.series?.timezone ?? localTimeZone(),
+    );
+    if (task.version === fresh.version) task = fresh;
+    else fill(fresh);
+    onchanged();
+  }
+
+  async function changePredecessor(action: Promise<TaskDetailView>): Promise<void> {
+    error = undefined;
+    try {
+      const fresh = await action;
+      if (task?.version === fresh.version) task = fresh;
+      else fill(fresh);
+      onchanged();
+    } catch (e: unknown) {
+      error = e instanceof ApiError ? e.message : '선행 업무를 바꾸지 못했습니다.';
+    }
+  }
+
+  const range = (start: string | null, due: string | null): string =>
+    start !== null && due !== null && start !== due
+      ? `${start}~${due}`
+      : (due ?? start ?? '날짜 없음');
+
+  let shiftHeading = $state<HTMLElement | undefined>(undefined);
+  $effect(() => {
+    if (pending !== undefined) shiftHeading?.focus();
+  });
+
+  function toggleAssignee(id: string, on: boolean): void {
+    if (form === undefined) return;
+    form.assignee_ids = on
+      ? [...new Set([...form.assignee_ids, id])]
+      : form.assignee_ids.filter((x) => x !== id);
+  }
+</script>
+
+{#if error !== undefined}
+  <p role="alert" class="text-sm text-destructive">{error}</p>
+{/if}
+{#if task !== undefined && form !== undefined}
+  {@const current = task}
+  {@const f = form}
+  <div class="flex flex-col gap-4">
+    <div class="flex flex-wrap items-baseline gap-2">
+      <span class="font-mono text-sm text-muted-foreground">{current.reference ?? ''}</span>
+      {#if current.access === 'read'}<span class="text-sm text-muted-foreground">읽기 전용</span
+        >{/if}
+      <div class="ml-auto flex flex-wrap items-center gap-1">
+        <MarkButtons kind="task" id={current.id} />
+        {#if canEdit}
+          <DeleteButton
+            what="업무"
+            remove={() => api.trashTask(current.id)}
+            ondeleted={() => {
+              onchanged();
+              router.navigate(itemPath(current.workspace_id, current.item_id));
+            }}
+          />
+        {/if}
+      </div>
+    </div>
+
+    {#if conflict !== undefined}
+      {@const latest = conflict}
+      <div class="rounded-md border border-amber-500/50 p-3 text-sm" role="alert">
+        <p>
+          그사이 다른 사람이 이 업무를 바꿨습니다(지금 제목: “{latest.title}”, 상태: {STATUS_LABEL[
+            latest.status
+          ]}). 내 입력은 그대로 있습니다.
+        </p>
+        <div class="mt-2 flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onclick={() => {
+              fill(latest);
+              conflict = undefined;
+            }}>서버 내용 불러오기</Button
+          >
+          <Button size="sm" disabled={busy} onclick={() => void submit(latest)}
+            >내 입력으로 다시 저장</Button
+          >
+        </div>
+      </div>
+    {/if}
+
+    <form
+      class="grid gap-3 md:grid-cols-2"
+      inert={pending !== undefined}
+      onsubmit={(e) => {
+        e.preventDefault();
+        void submit(current);
+      }}
+    >
+      <div class="flex flex-col gap-1 md:col-span-2">
+        <Label for="task-title">제목</Label>
+        <Input id="task-title" bind:value={f.title} disabled={!canEdit} maxlength={200} />
+      </div>
+      <div class="flex flex-col gap-1 md:col-span-2">
+        <Label for="task-description">설명</Label>
+        <textarea
+          id="task-description"
+          bind:value={f.description}
+          disabled={!canEdit}
+          rows={3}
+          class="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        ></textarea>
+      </div>
+      <div class="flex flex-col gap-1">
+        <span class="text-sm font-medium" id="task-status-label">상태</span>
+        <Select.Root
+          type="single"
+          value={f.status}
+          disabled={!canEdit}
+          onValueChange={(v: string) => {
+            const s = TASK_STATUSES.find((x) => x === v);
+            if (s !== undefined) f.status = s satisfies TaskStatus;
+          }}
+        >
+          <Select.Trigger aria-labelledby="task-status-label"
+            >{STATUS_LABEL[f.status]}</Select.Trigger
+          >
+          <Select.Content>
+            {#each TASK_STATUSES as s (s)}
+              <Select.Item value={s} label={STATUS_LABEL[s]}>{STATUS_LABEL[s]}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="flex flex-col gap-1">
+        <span class="text-sm font-medium" id="task-priority-label">우선순위</span>
+        <Select.Root
+          type="single"
+          value={f.priority}
+          disabled={!canEdit}
+          onValueChange={(v: string) => {
+            const p = TASK_PRIORITIES.find((x) => x === v);
+            if (p !== undefined) f.priority = p satisfies TaskPriority;
+          }}
+        >
+          <Select.Trigger aria-labelledby="task-priority-label"
+            >{PRIORITY_LABEL[f.priority]}</Select.Trigger
+          >
+          <Select.Content>
+            {#each TASK_PRIORITIES as p (p)}
+              <Select.Item value={p} label={PRIORITY_LABEL[p]}>{PRIORITY_LABEL[p]}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="flex flex-col gap-1">
+        <Label for="task-start">시작일</Label>
+        <Input
+          id="task-start"
+          type="date"
+          bind:value={f.start_date}
+          disabled={!canEdit || f.milestone}
+        />
+      </div>
+      <div class="flex flex-col gap-1">
+        <Label for="task-due">마감일</Label>
+        <Input id="task-due" type="date" bind:value={f.due_date} disabled={!canEdit} />
+      </div>
+      <div class="flex flex-col gap-1">
+        <Label for="task-estimate">예상 시간(분)</Label>
+        <Input
+          id="task-estimate"
+          inputmode="numeric"
+          bind:value={estimateText}
+          disabled={!canEdit}
+        />
+      </div>
+      <div class="flex flex-col gap-1">
+        <Label for="task-tags">태그(쉼표로 구분)</Label>
+        <Input id="task-tags" bind:value={tagsText} disabled={!canEdit} />
+      </div>
+      <div class="flex items-center gap-2 md:col-span-2">
+        <Checkbox
+          id="task-milestone"
+          checked={f.milestone}
+          disabled={!canEdit}
+          onCheckedChange={(v) => {
+            f.milestone = v === true;
+            if (f.milestone) f.start_date = null;
+          }}
+        />
+        <Label for="task-milestone">마일스톤 (마감일 하나만)</Label>
+      </div>
+      <fieldset class="flex flex-col gap-2 md:col-span-2">
+        <legend class="text-sm font-medium">담당자 (같은 완료 상태를 공유)</legend>
+        <div class="flex flex-wrap gap-3">
+          {#each people as person (person.user_id)}
+            <span class="flex items-center gap-1.5">
+              <Checkbox
+                id={`assignee-${person.user_id}`}
+                checked={f.assignee_ids.includes(person.user_id)}
+                disabled={!canEdit}
+                onCheckedChange={(v) => {
+                  toggleAssignee(person.user_id, v === true);
+                }}
+              />
+              <Label for={`assignee-${person.user_id}`}>{person.display_name}</Label>
+            </span>
+          {:else}
+            <span class="text-sm text-muted-foreground">지정할 수 있는 사람이 없습니다.</span>
+          {/each}
+        </div>
+      </fieldset>
+      {#if canEdit}
+        <div class="flex items-center gap-2 md:col-span-2">
+          <Button id="task-save" type="submit" disabled={busy}>저장</Button>
+          {#if saved}<span class="text-sm" role="status">저장했습니다.</span>{/if}
+        </div>
+      {/if}
+    </form>
+
+    {#if pending !== undefined}
+      {@const shifts = pending.proposals}
+      <section
+        class="flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 text-sm"
+        aria-labelledby="shift-heading"
+      >
+        <h3 id="shift-heading" class="font-semibold" tabindex="-1" bind:this={shiftHeading}>
+          후속 업무 {shifts.length}개와 날짜가 겹칩니다
+        </h3>
+        {#if pending.retried}
+          <p role="alert">후속 업무가 그사이 바뀌어 다시 계산했습니다.</p>
+        {/if}
+        <p class="text-muted-foreground">
+          선행 업무가 끝난 다음 날 시작하도록 옮기자고 제안합니다. 각 업무의 기간은 그대로입니다.
+        </p>
+        <ul class="flex flex-col gap-1">
+          {#each shifts as s (s.task_id)}
+            <li>
+              <span class="font-mono text-xs text-muted-foreground">{s.reference ?? ''}</span>
+              {s.title}: {range(s.from_start_date, s.from_due_date)} → {range(
+                s.start_date,
+                s.due_date,
+              )}
+            </li>
+          {/each}
+        </ul>
+        <div class="flex flex-wrap gap-2">
+          <Button size="sm" disabled={busy} onclick={() => void decide(true)}
+            >후속 업무도 옮겨 저장</Button
+          >
+          <Button size="sm" variant="outline" disabled={busy} onclick={() => void decide(false)}
+            >이 업무만 저장</Button
+          >
+          <Button
+            size="sm"
+            variant="ghost"
+            onclick={() => {
+              pending = undefined;
+              void focusSave();
+            }}>취소</Button
+          >
+        </div>
+      </section>
+    {/if}
+
+    {#if current.parent_id === null}
+      <section class="flex flex-col gap-2" aria-labelledby="subtasks-heading">
+        <h3 id="subtasks-heading" class="text-sm font-semibold">하위 업무</h3>
+        {#each subtasks as sub (sub.id)}
+          <button
+            type="button"
+            class="flex items-baseline gap-2 rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            onclick={() => {
+              onopen(sub.id);
+            }}
+          >
+            <span class="font-mono text-xs text-muted-foreground">{sub.reference ?? ''}</span>
+            <span>{sub.title}</span>
+            <span class="ml-auto text-xs text-muted-foreground">{STATUS_LABEL[sub.status]}</span>
+          </button>
+        {:else}
+          <p class="text-sm text-muted-foreground">없습니다.</p>
+        {/each}
+        {#if canEdit}
+          <CreateForm
+            id="new-subtask"
+            label="하위 업무 제목"
+            placeholder="예: 입력 검증"
+            submitLabel="하위 업무 추가"
+            create={async (requestId: string, title: string) => {
+              await api.createTask(current.item_id, requestId, title, current.id);
+              onchanged();
+            }}
+          />
+        {/if}
+      </section>
+    {/if}
+
+    <section class="flex flex-col gap-2" aria-labelledby="predecessors-heading">
+      <h3 id="predecessors-heading" class="text-sm font-semibold">선행 업무 (끝나야 시작)</h3>
+      {#each current.predecessor_ids as pid (pid)}
+        <div class="flex items-center gap-2 text-sm">
+          <button
+            type="button"
+            class="rounded px-2 py-1 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            onclick={() => {
+              onopen(pid);
+            }}>{label(byId.get(pid)) || '볼 수 없는 업무'}</button
+          >
+          {#if canEdit}
+            <Button
+              size="sm"
+              variant="ghost"
+              class="ml-auto"
+              aria-label={`${label(byId.get(pid))} 선행 관계 지우기`}
+              onclick={() => void changePredecessor(api.removePredecessor(current.id, pid))}
+              >지우기</Button
+            >
+          {/if}
+        </div>
+      {:else}
+        <p class="text-sm text-muted-foreground">없습니다.</p>
+      {/each}
+      {#if successors.length > 0}
+        <p class="text-sm text-muted-foreground">
+          이 업무 뒤에 오는 업무: {successors.map((t) => label(t)).join(', ')}
+        </p>
+      {/if}
+      {#if canEdit && candidates.length > 0}
+        <div class="flex flex-wrap items-center gap-2">
+          <span id="predecessor-label" class="text-sm font-medium">선행 업무 추가</span>
+          <Select.Root
+            type="single"
+            value={predecessorChoice}
+            onValueChange={(v: string) => (predecessorChoice = v)}
+          >
+            <Select.Trigger aria-labelledby="predecessor-label"
+              >{predecessorChoice === ''
+                ? '업무 고르기'
+                : label(byId.get(predecessorChoice))}</Select.Trigger
+            >
+            <Select.Content>
+              {#each candidates as c (c.id)}
+                <Select.Item value={c.id} label={label(c)}>{label(c)}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+          <Button
+            size="sm"
+            disabled={predecessorChoice === ''}
+            onclick={() => {
+              const chosen = predecessorChoice;
+              predecessorChoice = '';
+              void changePredecessor(api.addPredecessor(current.id, chosen));
+            }}>추가</Button
+          >
+        </div>
+      {/if}
+    </section>
+
+    {#if current.parent_id === null}
+      {#if current.series !== null && current.series.root_task_id !== current.id}
+        {@const rootId = current.series.root_task_id}
+        <section class="flex flex-col gap-2" aria-labelledby="task-recurrence-heading">
+          <h3 id="task-recurrence-heading" class="text-sm font-semibold">반복</h3>
+          <p class="text-sm text-muted-foreground">
+            반복 업무의 {current.occurrence_date} 회차입니다. 규칙은 첫 회차에서 바꿉니다.
+          </p>
+          <div>
+            <Button
+              size="sm"
+              variant="outline"
+              onclick={() => {
+                onopen(rootId);
+              }}>첫 회차 열기</Button
+            >
+          </div>
+        </section>
+      {:else}
+        <RecurrenceEditor
+          idPrefix="task-recurrence"
+          rule={current.series?.rule ?? null}
+          canEdit={canEdit && (current.due_date !== null || current.start_date !== null)}
+          zoneNote={`"오늘"은 ${current.series?.timezone ?? localTimeZone()} 기준`}
+          onsave={saveRule}
+        />
+        {#if canEdit && current.due_date === null && current.start_date === null}
+          <p class="text-sm text-muted-foreground">날짜를 넣고 저장하면 반복을 정할 수 있습니다.</p>
+        {/if}
+      {/if}
+    {/if}
+
+    <ChecklistForm
+      idPrefix={`task-${current.id}`}
+      items={current.checklist.map((c) => ({ id: c.id, text: c.text, done: c.checked }))}
+      {canEdit}
+      onadd={(entries: NewChecklistEntry[]) =>
+        reloadChecklist(
+          api.addChecklist(
+            current.id,
+            entries.map((e) => ({ request_id: e.requestId, text: e.text, checked: e.done })),
+          ),
+        )}
+      ontoggle={(id: string, done: boolean) => {
+        const entry = current.checklist.find((c) => c.id === id);
+        return reloadChecklist(api.updateChecklistItem(id, entry?.text ?? '', done));
+      }}
+      onremove={(id: string) => reloadChecklist(api.deleteChecklistItem(id))}
+    />
+
+    <TaskTimePanel taskId={current.id} />
+    <CommentsPanel target={{ kind: 'task', id: current.id }} />
+
+    <Backlinks kind="task" id={current.id} {workspaces} />
+  </div>
+{/if}

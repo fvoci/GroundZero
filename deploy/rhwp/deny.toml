@@ -1,0 +1,39 @@
+# HWP·HWPX 미리보기용 rhwp WASM 빌드(D-76)에서만 쓰는 cargo-deny 설정. 앱(`/deny.toml`)과 따로 둔다.
+# 검사 대상은 실제로 브라우저에 들어가는 그래프: wasm32, `pdf-import` 없이(`console_error_panic_hook`만).
+# 라이선스 허용 목록은 앱과 같고(D-60·D-68), 예외는 사용자가 승인한 패키지·판만 둔다.
+
+[graph]
+targets = [{ triple = "wasm32-unknown-unknown" }]
+no-default-features = true
+features = ["console_error_panic_hook"]
+exclude-dev = true
+
+[licenses]
+private = { ignore = true }
+unused-allowed-license = "allow"
+confidence-threshold = 0.9
+allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "PostgreSQL", "Zlib"]
+exceptions = [
+  # 빌드 때만 쓰는 proc-macro 의존성(WASM에 들지 않음). D-72에서 승인한 판으로 맞췄다(D-76).
+  { crate = "unicode-ident@1.0.27", allow = ["Unicode-3.0"] },
+]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+
+[advisories]
+yanked = "deny"
+unmaintained = "all"
+ignore = [
+  # 사용자 승인 2026-10-17(D-76): HWP·HWPX 미리보기 용도에 한정한 예외. 취약점이 아닌 유지 중단 알림이고 고친 판이 없다.
+  # rhwp가 글자 모양 계산·글꼴 읽기에 쓴다. rhwp가 harfrust·skrifa 등 유지되는 크레이트로 옮기면 지운다.
+  { id = "RUSTSEC-2026-0206", reason = "rustybuzz 0.20.1, unmaintained notice; HWP/HWPX preview only (D-76); remove when rhwp moves to a maintained shaper" },
+  { id = "RUSTSEC-2026-0192", reason = "ttf-parser 0.25.1, unmaintained notice; HWP/HWPX preview only (D-76); remove when rhwp moves to a maintained font parser" },
+  # paste는 proc-macro(빌드 때만, WASM에 들지 않음). 유지 중단 알림. rhwp가 떼면 지운다.
+  { id = "RUSTSEC-2024-0436", reason = "paste 1.0.15, build-time proc-macro only, unmaintained notice; remove when rhwp drops it" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

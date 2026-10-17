@@ -1,0 +1,787 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "integration test crate: every item is test code; failures must panic"
+)]
+//! 통합 검색 (D-39): 볼 수 있는 것만 나오고, 지우면 색인에서 빠지고, 되살리면 돌아온다.
+
+mod common;
+
+use std::time::Duration;
+
+use axum::Router;
+use axum::http::{Method, StatusCode};
+use common::{
+    TestUser, add_member, config_with, create_doc, create_workspace, doc_body, login,
+    new_request_id, send,
+};
+use fvoci_server::http::AppState;
+use fvoci_server::search::{SearchClient, drain, prepare};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+/// Meilisearch를 쓰는 상태. `cargo xtask test`가 테스트용 주소와 키를 넣는다.
+async fn search_state() -> AppState {
+    let url = std::env::var("FVOCI_TEST_SEARCH_URL").expect("run via `cargo xtask test`");
+    let key = std::env::var("FVOCI_TEST_SEARCH_KEY").expect("run via `cargo xtask test`");
+    let state = fvoci_server::app::build_state(config_with(&[
+        ("FVOCI_SEARCH_URL", &url),
+        ("FVOCI_SEARCH_KEY", &key),
+    ]))
+    .unwrap();
+    prepare(&state.db, state.search.as_ref().unwrap())
+        .await
+        .unwrap();
+    state
+}
+
+/// 테스트마다 겹치지 않는 검색어.
+fn token() -> String {
+    format!("zq{}", &Uuid::now_v7().simple().to_string()[20..])
+}
+
+fn client(state: &AppState) -> &SearchClient {
+    state.search.as_ref().unwrap()
+}
+
+async fn search(app: &Router, user: &TestUser, q: &str) -> Value {
+    let r = send(
+        app,
+        Method::GET,
+        &format!("/api/search?q={q}"),
+        Some(user),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    r.json
+}
+
+fn titles(results: &Value) -> Vec<String> {
+    let mut t: Vec<String> = results
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["title"].as_str().unwrap().to_owned())
+        .collect();
+    t.sort();
+    t
+}
+
+/// 대기열을 비우고 기대한 결과가 나올 때까지 기다린다(다른 테스트가 같은 대기열을 함께 비운다).
+async fn settle(state: &AppState, app: &Router, user: &TestUser, q: &str, want: &[&str]) -> Value {
+    let mut want: Vec<String> = want.iter().map(|s| (*s).to_owned()).collect();
+    want.sort();
+    let mut last = Value::Null;
+    for _ in 0..100 {
+        while drain(&state.db, client(state), Some(&state.storage))
+            .await
+            .unwrap()
+            > 0
+        {}
+        last = search(app, user, q).await;
+        if titles(&last) == want {
+            return last;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(titles(&last), want, "search for {q} never settled");
+    last
+}
+
+/// 색인에 그 대상이 있는지 직접 본다(접근 거르기 없이). 다른 테스트가 같은 대기열을 함께 비우므로 기대한 상태가
+/// 될 때까지 기다린 뒤 마지막 상태를 돌려준다.
+async fn indexed_eventually(state: &AppState, q: &str, id: &str, want: bool) -> bool {
+    let mut found = !want;
+    for _ in 0..100 {
+        while drain(&state.db, client(state), Some(&state.storage))
+            .await
+            .unwrap()
+            > 0
+        {}
+        found = !client(state)
+            .query(q, &format!("id = \"{id}\""), 0, 5)
+            .await
+            .unwrap()
+            .is_empty();
+        if found == want {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    found
+}
+
+async fn private_item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> Value {
+    let m = send(
+        app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "project", "name": key, "key": key })),
+    )
+    .await;
+    send(
+        app,
+        Method::POST,
+        &format!("/api/modules/{}/items", m.json["id"].as_str().unwrap()),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "title": key })),
+    )
+    .await
+    .json
+}
+
+#[tokio::test]
+async fn search_returns_only_what_each_person_can_see() {
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "검색").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let outsider = login(&state, "outsider").await;
+    let other_ws = create_workspace(&app, &outsider, "남의 공간").await;
+
+    let doc = create_doc(&app, &admin, &ws, &format!("회의록 {tok}")).await;
+    let saved = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "base_revision": 1,
+                     "title": format!("회의록 {tok}"),
+                     "body": doc_body(&format!("안건 정리와 {tok}body 결정")) })),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+    create_doc(&app, &outsider, &other_ws, &format!("남의 문서 {tok}")).await;
+    let it = private_item(&app, &admin, &ws, "SRC").await;
+    let task = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/tasks", it["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": format!("비공개 업무 {tok}") })),
+    )
+    .await;
+    assert_eq!(task.status, StatusCode::CREATED, "{:?}", task.json);
+    let note = send(
+        &app,
+        Method::POST,
+        "/api/me/notes",
+        Some(&writer),
+        Some(json!({ "request_id": new_request_id(), "title": format!("내 노트 {tok}") })),
+    )
+    .await;
+    assert_eq!(note.status, StatusCode::CREATED, "{:?}", note.json);
+
+    // 작성자: 워크스페이스 문서와 자기 노트. 남의 공간, 비공개 항목의 업무는 없다.
+    let mine = settle(
+        &state,
+        &app,
+        &writer,
+        &tok,
+        &[&format!("내 노트 {tok}"), &format!("회의록 {tok}")],
+    )
+    .await;
+    let found = mine
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["kind"] == "document" && r["id"] == doc["id"])
+        .unwrap();
+    assert_eq!(found["reference"], doc["reference"]);
+    // 관리자: 문서와 비공개 업무. 남의 개인 노트는 관리자에게도 없다.
+    settle(
+        &state,
+        &app,
+        &admin,
+        &tok,
+        &[&format!("비공개 업무 {tok}"), &format!("회의록 {tok}")],
+    )
+    .await;
+    settle(
+        &state,
+        &app,
+        &outsider,
+        &tok,
+        &[&format!("남의 문서 {tok}")],
+    )
+    .await;
+
+    // 본문으로도 찾고, 찾은 곳 근처 글자를 보여 준다.
+    let by_body = settle(
+        &state,
+        &app,
+        &writer,
+        &format!("{tok}body"),
+        &[&format!("회의록 {tok}")],
+    )
+    .await;
+    assert!(
+        by_body[0]["snippet"]
+            .as_str()
+            .unwrap()
+            .contains(&format!("{tok}body")),
+        "{by_body:?}"
+    );
+
+    // 다른 워크스페이스로 좁히면 멤버가 아니므로 없는 것과 같다.
+    let r = send(
+        &app,
+        Method::GET,
+        &format!("/api/search?q={tok}&workspace_id={other_ws}"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    let r = send(
+        &app,
+        Method::GET,
+        &format!("/api/search?q={tok}&kinds=nope"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    let r = send(
+        &app,
+        Method::GET,
+        &format!("/api/search?q={tok}&kinds=task"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(titles(&r.json), [format!("비공개 업무 {tok}")]);
+
+    // 멤버에서 빠지면 색인을 다시 만들지 않아도 바로 안 보인다.
+    let removed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{ws}/members/{}", writer.id.0),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(removed.status.is_success(), "{:?}", removed.json);
+    assert_eq!(
+        titles(&search(&app, &writer, &tok).await),
+        [format!("내 노트 {tok}")]
+    );
+
+    // Meilisearch가 없으면 제목만 DB에서 찾고 같은 규칙으로 거른다.
+    let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
+    let plain_app = common::app(&plain);
+    assert_eq!(
+        titles(&search(&plain_app, &admin, &tok).await),
+        [format!("비공개 업무 {tok}"), format!("회의록 {tok}")]
+    );
+    assert_eq!(
+        titles(&search(&plain_app, &writer, &tok).await),
+        [format!("내 노트 {tok}")]
+    );
+    assert_eq!(
+        titles(&search(&plain_app, &admin, &format!("{tok}body")).await),
+        Vec::<String>::new()
+    );
+}
+
+#[tokio::test]
+async fn trashed_content_leaves_the_index_and_returns_on_restore() {
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "검색 휴지통").await;
+    let doc = create_doc(&app, &admin, &ws, &format!("지울 문서 {tok}")).await;
+    let id = doc["id"].as_str().unwrap();
+    settle(&state, &app, &admin, &tok, &[&format!("지울 문서 {tok}")]).await;
+    assert!(indexed_eventually(&state, &tok, id, true).await);
+
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let batch = r.json["batch_id"].as_str().unwrap().to_owned();
+    // 거르기 덕분에 색인 반영 전에도 안 보이고, 반영 뒤에는 색인에서도 빠진다.
+    assert_eq!(
+        titles(&search(&app, &admin, &tok).await),
+        Vec::<String>::new()
+    );
+    settle(&state, &app, &admin, &tok, &[]).await;
+    assert!(!indexed_eventually(&state, &tok, id, false).await);
+
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/trash/{batch}/restore"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    settle(&state, &app, &admin, &tok, &[&format!("지울 문서 {tok}")]).await;
+    assert!(indexed_eventually(&state, &tok, id, true).await);
+
+    // 항목을 지우면 그 안의 문서·업무도 색인에서 빠지고, 되살리면 함께 돌아온다.
+    let it = private_item(&app, &admin, &ws, "SRT").await;
+    let item_id = it["id"].as_str().unwrap();
+    let inner = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/documents"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": format!("항목 문서 {tok}") })),
+    )
+    .await;
+    assert_eq!(inner.status, StatusCode::CREATED, "{:?}", inner.json);
+    let inner_id = inner.json["id"].as_str().unwrap().to_owned();
+    let task = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/tasks"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": format!("항목 업무 {tok}") })),
+    )
+    .await;
+    assert_eq!(task.status, StatusCode::CREATED, "{:?}", task.json);
+    let task_id = task.json["id"].as_str().unwrap().to_owned();
+    let all = [
+        format!("지울 문서 {tok}"),
+        format!("항목 문서 {tok}"),
+        format!("항목 업무 {tok}"),
+    ];
+    let all: Vec<&str> = all.iter().map(String::as_str).collect();
+    settle(&state, &app, &admin, &tok, &all).await;
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/items/{item_id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let item_batch = r.json["batch_id"].as_str().unwrap().to_owned();
+    settle(&state, &app, &admin, &tok, &[&format!("지울 문서 {tok}")]).await;
+    assert!(!indexed_eventually(&state, &tok, &inner_id, false).await);
+    assert!(!indexed_eventually(&state, &tok, &task_id, false).await);
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/trash/{item_batch}/restore"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    settle(&state, &app, &admin, &tok, &all).await;
+    assert!(indexed_eventually(&state, &tok, &inner_id, true).await);
+}
+
+#[tokio::test]
+async fn an_unreachable_search_service_falls_back_to_titles() {
+    let state = fvoci_server::app::build_state(config_with(&[
+        ("FVOCI_SEARCH_URL", "http://127.0.0.1:9"),
+        ("FVOCI_SEARCH_KEY", "unused-test-key"),
+    ]))
+    .unwrap();
+    let app = common::app(&state);
+    let tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "검색 대신").await;
+    create_doc(&app, &admin, &ws, &format!("제목만 {tok}")).await;
+    assert_eq!(
+        titles(&search(&app, &admin, &tok).await),
+        [format!("제목만 {tok}")]
+    );
+    // 검색 서비스가 없어도 다른 주기 작업은 계속 돈다.
+    let report =
+        fvoci_server::worker::run_once(&state.db, state.search.as_ref(), Some(&state.storage))
+            .await;
+    assert_eq!(report.indexed, 0);
+}
+
+#[tokio::test]
+async fn file_names_are_searchable_by_people_who_can_see_the_file() {
+    use sha2::{Digest, Sha256};
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "파일 검색").await;
+    let outsider = login(&state, "outsider").await;
+    let doc = create_doc(&app, &admin, &ws, "자료 모음").await;
+    let up = send(
+        &app,
+        Method::POST,
+        "/api/uploads",
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] },
+                     "name": format!("{tok}-결과.csv"), "size": 3, "content_type": "text/csv" })),
+    )
+    .await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+    let id = up.json["id"].as_str().unwrap();
+    let hash = hex::encode(Sha256::digest(b"a,b"));
+    let (status, _, _) = common::send_raw(
+        &app,
+        Method::PUT,
+        &format!("/api/uploads/{id}/parts/1"),
+        Some(&admin),
+        &[("x-content-sha256", hash.as_str())],
+        b"a,b".to_vec(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let done = send(
+        &app,
+        Method::POST,
+        &format!("/api/uploads/{id}/complete"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
+    let file_id = done.json["file_id"].as_str().unwrap().to_owned();
+
+    let found = settle(&state, &app, &admin, &tok, &[&format!("{tok}-결과.csv")]).await;
+    assert_eq!(found[0]["kind"], "file");
+    assert_eq!(found[0]["document_id"], doc["id"]);
+    settle(&state, &app, &outsider, &tok, &[]).await;
+
+    // 파일을 휴지통에 넣으면 빠진다.
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/files/{file_id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    settle(&state, &app, &admin, &tok, &[]).await;
+    assert!(!indexed_eventually(&state, &tok, &file_id, false).await);
+}
+
+async fn upload_bytes(
+    app: &Router,
+    user: &TestUser,
+    doc: &Value,
+    name: &str,
+    content_type: &str,
+    bytes: &[u8],
+) {
+    use sha2::{Digest, Sha256};
+    let up = send(
+        app,
+        Method::POST,
+        "/api/uploads",
+        Some(user),
+        Some(json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] },
+                     "name": name, "size": bytes.len(), "content_type": content_type })),
+    )
+    .await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+    let id = up.json["id"].as_str().unwrap();
+    let hash = hex::encode(Sha256::digest(bytes));
+    let (status, _, _) = common::send_raw(
+        app,
+        Method::PUT,
+        &format!("/api/uploads/{id}/parts/1"),
+        Some(user),
+        &[("x-content-sha256", hash.as_str())],
+        bytes.to_vec(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let done = send(
+        app,
+        Method::POST,
+        &format!("/api/uploads/{id}/complete"),
+        Some(user),
+        None,
+    )
+    .await;
+    assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
+}
+
+fn docx(text: &str) -> Vec<u8> {
+    use std::io::Write;
+    let mut out = std::io::Cursor::new(Vec::new());
+    let mut zip = zip::ZipWriter::new(&mut out);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file("word/document.xml", options).unwrap();
+    write!(
+        zip,
+        "<w:document><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>"
+    )
+    .unwrap();
+    zip.finish().unwrap();
+    out.into_inner()
+}
+
+/// 표준 글꼴(Helvetica) 한 쪽짜리 PDF(D-73). 상호 참조 표의 위치를 직접 계산한다.
+fn pdf(text: &str) -> Vec<u8> {
+    let stream = format!("BT /F1 12 Tf 72 720 Td ({text}) Tj ET");
+    let objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>".to_owned(),
+        format!("<< /Length {} >>\nstream\n{stream}\nendstream", stream.len()),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+    ];
+    let mut out = b"%PDF-1.4\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in objects.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = out.len();
+    out.extend_from_slice(
+        format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes(),
+    );
+    for offset in offsets {
+        out.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            objects.len() + 1
+        )
+        .as_bytes(),
+    );
+    out
+}
+
+#[tokio::test]
+async fn filters_narrow_results_and_attachment_text_is_searchable() {
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let body_tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "검색 필터").await;
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "FLT" }),
+        ),
+    )
+    .await
+    .json;
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", module["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "항목" })),
+    )
+    .await
+    .json;
+    let new_task = |title: String| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let item = item["id"].as_str().unwrap().to_owned();
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &format!("/api/items/{item}/tasks"),
+                Some(&admin),
+                Some(json!({ "request_id": new_request_id(), "title": title })),
+            )
+            .await
+            .json
+        }
+    };
+    let report = new_task(format!("{tok} 보고서")).await;
+    new_task(format!("{tok} 기획")).await;
+    let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", report["id"].as_str().unwrap()), Some(&admin), Some(json!({
+        "base_version": report["version"], "title": format!("{tok} 보고서"), "description": "", "status": "done",
+        "priority": "none", "start_date": null, "due_date": "2026-11-05", "estimate_minutes": null, "tags": [],
+        "milestone": false, "assignee_ids": [admin.id.0] }))).await;
+    assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
+    let doc = create_doc(&app, &admin, &ws, &format!("{tok} 회의록")).await;
+    upload_bytes(
+        &app,
+        &admin,
+        &doc,
+        "계획서.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        &docx(&format!("예산 {tok} {body_tok} 확정")),
+    )
+    .await;
+    settle(
+        &state,
+        &app,
+        &admin,
+        &tok,
+        &[
+            &format!("{tok} 기획"),
+            &format!("{tok} 보고서"),
+            &format!("{tok} 회의록"),
+            "계획서.docx",
+        ],
+    )
+    .await;
+
+    let found = |query: String| {
+        let app = app.clone();
+        let admin = admin.clone();
+        async move { titles(&search(&app, &admin, &query).await) }
+    };
+    // 업무를 고친 내용(상태·담당·기한)이 색인에 반영될 때까지 기다린다(제목만으로는 알 수 없다).
+    let report = format!("{tok} 보고서");
+    for filter in [
+        "status=done",
+        "assignee=me",
+        "from=2026-11-01&to=2026-11-30",
+    ] {
+        settle(&state, &app, &admin, &format!("{tok}&{filter}"), &[&report]).await;
+    }
+    assert_eq!(
+        found(format!(
+            "{tok}&module_id={}",
+            module["id"].as_str().unwrap()
+        ))
+        .await,
+        [format!("{tok} 기획"), format!("{tok} 보고서")]
+    );
+    let r = send(
+        &app,
+        Method::GET,
+        &format!("/api/search?q={tok}&status=late"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    let r = send(
+        &app,
+        Method::GET,
+        &format!("/api/search?q={tok}&from=2026/11/01"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+
+    // 첨부 본문(DOCX)의 낱말로 파일을 찾는다.
+    let by_body = settle(&state, &app, &admin, &body_tok, &["계획서.docx"]).await;
+    assert_eq!(by_body[0]["kind"], "file");
+    assert!(
+        by_body[0]["snippet"]
+            .as_str()
+            .is_some_and(|s| s.contains("예산")),
+        "{by_body:?}"
+    );
+
+    // PDF 본문의 낱말로도 찾는다(D-73). 깨진 PDF는 이름으로만 색인되고 색인 작업을 멈추지 않는다.
+    let pdf_tok = token();
+    upload_bytes(
+        &app,
+        &admin,
+        &doc,
+        "논문.pdf",
+        "application/pdf",
+        &pdf(&format!("Rainbow {pdf_tok} outcome")),
+    )
+    .await;
+    upload_bytes(
+        &app,
+        &admin,
+        &doc,
+        "깨진.pdf",
+        "application/pdf",
+        b"%PDF-1.4 broken",
+    )
+    .await;
+    let by_pdf = settle(&state, &app, &admin, &pdf_tok, &["논문.pdf"]).await;
+    assert_eq!(by_pdf[0]["kind"], "file");
+    settle(&state, &app, &admin, "깨진.pdf", &["깨진.pdf"]).await;
+
+    // 검색 서비스가 없을 때도 같은 필터를 쓴다(제목 검색).
+    let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
+    let plain_app = common::app(&plain);
+    assert_eq!(
+        titles(&search(&plain_app, &admin, &format!("{tok}&status=done")).await),
+        [format!("{tok} 보고서")]
+    );
+    assert_eq!(
+        titles(&search(&plain_app, &admin, &format!("{tok}&assignee=me&kinds=task")).await),
+        [format!("{tok} 보고서")]
+    );
+}
+
+/// 항목 기록(D-39 자료 검색): 제목·메모·칸의 글자로 찾고, 그 항목을 볼 수 있는 사람에게만 보인다.
+#[tokio::test]
+async fn item_records_are_searchable_by_people_who_see_the_item() {
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let field_tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "기록 검색").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "research", "name": "R", "key": "RSR" })),
+    )
+    .await
+    .json;
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", module["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "비공개 연구" })),
+    )
+    .await
+    .json;
+    let record = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/records", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "reference", "title": format!("{tok} 선행연구"),
+                     "body": "핵심 요약", "fields": { "summary": format!("요약 {field_tok}") } })),
+    )
+    .await;
+    assert_eq!(record.status, StatusCode::CREATED, "{:?}", record.json);
+
+    let found = settle(&state, &app, &admin, &tok, &[&format!("{tok} 선행연구")]).await;
+    assert_eq!(found[0]["kind"], "record");
+    assert_eq!(found[0]["item_id"], item["id"]);
+    settle(
+        &state,
+        &app,
+        &admin,
+        &field_tok,
+        &[&format!("{tok} 선행연구")],
+    )
+    .await;
+    // 비공개 항목이라 멤버에게는 보이지 않는다.
+    settle(&state, &app, &member, &tok, &[]).await;
+    // 검색 서비스가 없을 때의 제목 검색도 기록을 찾는다.
+    let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
+    let plain_app = common::app(&plain);
+    assert_eq!(
+        titles(&search(&plain_app, &admin, &format!("{tok}&kinds=record")).await),
+        [format!("{tok} 선행연구")]
+    );
+}

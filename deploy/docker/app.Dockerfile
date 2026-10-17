@@ -1,0 +1,55 @@
+# 제품 실행 이미지. 서버 바이너리와 정적 웹 자산만 담는다.
+# 로컬 빌드·실행은 검증한다. 레지스트리 push·공개 배포는 별도 승인 대상이다.
+
+FROM rust:1.99.0-bookworm AS server-build
+WORKDIR /src
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates ./crates
+COPY xtask ./xtask
+RUN cargo build --release --locked --package fvoci-server
+
+# HWP·HWPX 미리보기 WASM(D-76). 앱 도구 모음(위 server-build)과 따로, 고정한 rhwp 커밋·잠금 파일·기능·도구 판으로 만든다.
+# 입력(deploy/rhwp)이 같으면 이 단계의 캐시를 그대로 쓴다. 판은 deploy/rhwp/inputs.env와 같아야 한다(build.sh가 확인).
+FROM rust:1.93.1-bookworm AS rhwp-build
+RUN apt-get update && apt-get install -y --no-install-recommends jq brotli && rm -rf /var/lib/apt/lists/* \
+ && rustup target add wasm32-unknown-unknown \
+ && cargo install --locked wasm-bindgen-cli --version 0.2.127 \
+ && cargo install --locked cargo-deny --version 0.20.2
+COPY deploy/rhwp/build.sh deploy/rhwp/inputs.env deploy/rhwp/Cargo.lock deploy/rhwp/deny.toml /rhwp/
+RUN sh /rhwp/build.sh
+
+# `cargo xtask rhwp`가 이 단계만 꺼내 개발 서버와 고지 파일에 쓴다.
+FROM scratch AS rhwp-out
+COPY --from=rhwp-build /out /
+
+FROM node:24-bookworm-slim AS web-build
+ARG PNPM_VERSION=11.24.0
+RUN npm install -g pnpm@${PNPM_VERSION}
+WORKDIR /src
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json ./
+COPY apps ./apps
+COPY packages ./packages
+COPY contracts ./contracts
+# HWP·HWPX 미리보기 WASM은 public/rhwp/<입력 해시>/로 들어가 웹 빌드와 함께 나간다(미리보기를 열 때만 불러옴).
+COPY --from=rhwp-build /out/web ./apps/web/public/rhwp
+RUN pnpm install --frozen-lockfile && pnpm --filter @fvoci/web run build
+
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --system --uid 10001 --create-home fvoci \
+ # 파일 저장소·백업 볼륨이 앱 사용자 소유로 만들어지도록 미리 둔다(이름 있는 볼륨은 처음에 이 소유를 따른다).
+ && mkdir -p /data/files /backups && chown fvoci:fvoci /data/files /backups && chmod 0700 /data/files /backups
+COPY --from=server-build /src/target/release/fvoci-server /usr/local/bin/fvoci-server
+COPY --from=web-build /src/apps/web/dist /srv/fvoci/web
+# 제3자 고지(D-60, D-68). `cargo xtask notices`가 서버 바이너리와 웹 번들에 든 패키지로 만들고 `cargo xtask check`가
+# 최신 여부를 확인한다. 이미지 안 문서 위치와 웹(/THIRD_PARTY_NOTICES.txt) 두 곳에 둔다.
+COPY THIRD_PARTY_NOTICES.txt /usr/share/doc/fvoci/THIRD_PARTY_NOTICES.txt
+COPY THIRD_PARTY_NOTICES.txt /srv/fvoci/web/THIRD_PARTY_NOTICES.txt
+USER fvoci
+ENV FVOCI_BIND=0.0.0.0:8080 \
+    FVOCI_WEB_DIR=/srv/fvoci/web \
+    FVOCI_STORAGE_DIR=/data/files
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=5s --retries=6 CMD ["/usr/local/bin/fvoci-server", "healthcheck"]
+ENTRYPOINT ["/usr/local/bin/fvoci-server"]

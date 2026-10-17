@@ -1,0 +1,12 @@
+{
+  "description": "fvoci compression rules (D-77). PUT to /zones/{zone_id}/rulesets/phases/http_response_compression/entrypoint. The app already sends Cache-Control: no-transform on these paths, which stops Cloudflare compression; this rule says the same thing in the zone so a later setting cannot weaken the strong ETag used by If-Match. Static paths keep the default (Auto).",
+  "rules": [
+    {
+      "ref": "fvoci_api_identity",
+      "description": "Do not compress API and sign-in responses.",
+      "expression": "http.request.uri.path eq \"/api\" or starts_with(http.request.uri.path, \"/api/\") or http.request.uri.path eq \"/auth\" or starts_with(http.request.uri.path, \"/auth/\") or http.request.uri.path eq \"/healthz\"",
+      "action": "compress_response",
+      "action_parameters": { "algorithms": [{ "name": "none" }] }
+    }
+  ]
+}

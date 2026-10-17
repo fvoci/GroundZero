@@ -1,0 +1,782 @@
+//! 스톱워치·시간 기록 (D-08, D-32, D-50).
+//!
+//! 시간 기록은 사용자 소유이며 워크스페이스 관리자에게도 보이지 않는다(RLS: 본인만). 진행 중인 타이머는
+//! 사용자당 하나이고 서버 시각으로 재므로 앱을 닫아도 이어진다. 기록은 측정 뒤에 종류·대상을 정할 수 있고,
+//! 고치면 본인만 보는 수정 이력에 이전 값이 남는다. 집계는 보는 사람의 시간대 날짜로 하며 기록은 시작한 날에
+//! 센다. 공유는 사용자가 워크스페이스마다 고르며, 그 워크스페이스 업무에 연결된 시간의 합계만 보인다.
+//! 처리는 `migrations/0015_time_tracking.sql`.
+
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use serde::{Deserialize, Serialize};
+use time::format_description::well_known::Rfc3339;
+use time::{Date, OffsetDateTime};
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
+
+use crate::db::{UserTx, is_unique_violation};
+use crate::error::{AppError, ErrorBody};
+use crate::features::accounts::CurrentUser;
+use crate::features::tasks::{format_date, parse_date, validate_text};
+use crate::features::workspaces::member_role;
+use crate::http::AppState;
+use crate::ids::WorkspaceId;
+
+const MAX_MEMO_CHARS: usize = 2_000;
+/// 목록·집계 한 번의 최대 기간(일).
+const MAX_RANGE_DAYS: i64 = 400;
+
+/// 시간 기록 종류. `study`는 순공부(강의 시청 제외), `lecture`는 강의 시청, `rest`는 휴식.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TimeKind {
+    Work,
+    Study,
+    Lecture,
+    Rest,
+    Other,
+}
+
+impl TimeKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Work => "work",
+            Self::Study => "study",
+            Self::Lecture => "lecture",
+            Self::Rest => "rest",
+            Self::Other => "other",
+        }
+    }
+
+    fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "work" => Some(Self::Work),
+            "study" => Some(Self::Study),
+            "lecture" => Some(Self::Lecture),
+            "rest" => Some(Self::Rest),
+            "other" => Some(Self::Other),
+            _ => None,
+        }
+    }
+}
+
+/// 연결 대상 종류.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetKind {
+    Task,
+    Document,
+    Item,
+    /// 강의 회차(D-32).
+    Episode,
+    /// 스터디 단위(D-32 공부).
+    StudyUnit,
+}
+
+impl TargetKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Task => "task",
+            Self::Document => "document",
+            Self::Item => "item",
+            Self::Episode => "episode",
+            Self::StudyUnit => "study_unit",
+        }
+    }
+
+    fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "task" => Some(Self::Task),
+            "document" => Some(Self::Document),
+            "item" => Some(Self::Item),
+            "episode" => Some(Self::Episode),
+            "study_unit" => Some(Self::StudyUnit),
+            _ => None,
+        }
+    }
+}
+
+/// 연결 대상(보낼 때).
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+pub struct TargetInput {
+    pub kind: TargetKind,
+    #[schema(value_type = String, format = Uuid)]
+    pub id: Uuid,
+}
+
+/// 연결 대상(받을 때). 지금 볼 수 없으면 `label`이 없다.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct Target {
+    pub kind: TargetKind,
+    #[schema(value_type = String, format = Uuid)]
+    pub id: Uuid,
+    pub label: Option<String>,
+    pub workspace_id: Option<WorkspaceId>,
+}
+
+/// 시간 기록.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TimeEntry {
+    #[schema(value_type = String, format = Uuid)]
+    pub id: Uuid,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub started_at: OffsetDateTime,
+    /// 진행 중이면 없다.
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub ended_at: Option<OffsetDateTime>,
+    /// 일시정지 중이면 그 시각.
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub paused_at: Option<OffsetDateTime>,
+    pub paused_seconds: i32,
+    /// 지금까지의 길이(초). 진행 중이면 응답 시각 기준.
+    pub seconds: i64,
+    pub kind: TimeKind,
+    pub memo: String,
+    pub target: Option<Target>,
+    pub version: i32,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct EntryRow {
+    id: Uuid,
+    started_at: OffsetDateTime,
+    ended_at: Option<OffsetDateTime>,
+    paused_at: Option<OffsetDateTime>,
+    paused_seconds: i32,
+    seconds: i64,
+    kind: String,
+    memo: String,
+    target_kind: Option<String>,
+    target_id: Option<Uuid>,
+    target_label: Option<String>,
+    workspace_id: Option<WorkspaceId>,
+    version: i32,
+}
+
+const ENTRY_SELECT: &str = "SELECT e.id, e.started_at, e.ended_at, e.paused_at, e.paused_seconds,
+        app_entry_seconds(e) AS seconds, e.kind, e.memo, e.target_kind, e.target_id,
+        app_time_target_label(e.target_kind, e.target_id) AS target_label, e.workspace_id, e.version
+ FROM time_entries e";
+
+fn to_entry(row: EntryRow) -> Result<TimeEntry, AppError> {
+    let target = match (row.target_kind, row.target_id) {
+        (Some(kind), Some(id)) => Some(Target {
+            kind: TargetKind::parse(&kind)
+                .ok_or_else(|| AppError::Config(format!("unknown target kind {kind}")))?,
+            id,
+            label: row.target_label,
+            workspace_id: row.workspace_id,
+        }),
+        _ => None,
+    };
+    Ok(TimeEntry {
+        id: row.id,
+        started_at: row.started_at,
+        ended_at: row.ended_at,
+        paused_at: row.paused_at,
+        paused_seconds: row.paused_seconds,
+        seconds: row.seconds,
+        kind: TimeKind::parse(&row.kind)
+            .ok_or_else(|| AppError::Config(format!("unknown time kind {}", row.kind)))?,
+        memo: row.memo,
+        target,
+        version: row.version,
+    })
+}
+
+async fn load(tx: &mut UserTx, id: Uuid) -> Result<TimeEntry, AppError> {
+    let row: Option<EntryRow> = sqlx::query_as(&format!(
+        "{ENTRY_SELECT} WHERE e.id = $1 AND e.deleted_at IS NULL"
+    ))
+    .bind(id)
+    .fetch_optional(tx.conn())
+    .await?;
+    to_entry(row.ok_or(AppError::NotFound)?)
+}
+
+fn parse_instant(raw: &str, field: &str) -> Result<OffsetDateTime, AppError> {
+    OffsetDateTime::parse(raw.trim(), &Rfc3339).map_err(|_| {
+        AppError::BadRequest(format!(
+            "{field} must be a time like 2026-10-17T09:00:00+09:00"
+        ))
+    })
+}
+
+fn split_target(target: Option<TargetInput>) -> (Option<&'static str>, Option<Uuid>) {
+    target.map_or((None, None), |t| (Some(t.kind.as_str()), Some(t.id)))
+}
+
+/// 진행 중인 타이머(없으면 null).
+#[utoipa::path(get, path = "/api/me/timer", operation_id = "current_timer",
+    responses((status = 200, body = Option<TimeEntry>)), tag = "time")]
+pub async fn current(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Option<TimeEntry>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let row: Option<EntryRow> = sqlx::query_as(&format!(
+        "{ENTRY_SELECT} WHERE e.ended_at IS NULL AND e.deleted_at IS NULL"
+    ))
+    .fetch_optional(tx.conn())
+    .await?;
+    tx.commit().await?;
+    Ok(Json(row.map(to_entry).transpose()?))
+}
+
+/// 타이머 시작.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct StartTimer {
+    #[schema(value_type = String, format = Uuid)]
+    pub request_id: Uuid,
+    pub kind: TimeKind,
+    pub memo: String,
+    pub target: Option<TargetInput>,
+}
+
+/// 타이머 시작. 이미 진행 중인 타이머가 있으면 409(사용자당 하나, 모든 워크스페이스 통틀어).
+#[utoipa::path(post, path = "/api/me/timer", operation_id = "start_timer", request_body = StartTimer,
+    responses((status = 201, body = TimeEntry), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "time")]
+pub async fn start(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(input): Json<StartTimer>,
+) -> Result<(StatusCode, Json<TimeEntry>), AppError> {
+    let memo = validate_text(&input.memo, MAX_MEMO_CHARS, "memo")?;
+    let (target_kind, target_id) = split_target(input.target);
+    let run = || async {
+        let mut tx = state.db.begin_as(user).await?;
+        let id: Uuid = sqlx::query_scalar("SELECT app_start_timer($1, $2, $3, $4, $5)")
+            .bind(input.request_id)
+            .bind(input.kind.as_str())
+            .bind(&memo)
+            .bind(target_kind)
+            .bind(target_id)
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+        let entry = load(&mut tx, id).await?;
+        tx.commit().await?;
+        Ok(entry)
+    };
+    match run().await {
+        Ok(entry) => Ok((StatusCode::CREATED, Json(entry))),
+        // 같은 요청의 동시 재시도이거나 다른 타이머가 막 시작됐다. 다시 보면 둘 중 하나로 정해진다.
+        Err(AppError::Database(e)) if is_unique_violation(&e) => {
+            Ok((StatusCode::CREATED, Json(run().await?)))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// 타이머 동작.
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TimerAction {
+    Pause,
+    Resume,
+    Stop,
+}
+
+/// 타이머 일시정지·재개·종료 요청.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct TimerActionInput {
+    pub action: TimerAction,
+}
+
+/// 타이머 일시정지·재개·종료(본인). 이미 그 상태면 그대로.
+#[utoipa::path(post, path = "/api/time-entries/{entry_id}/timer", operation_id = "timer_action",
+    params(("entry_id" = String, Path, format = Uuid)), request_body = TimerActionInput,
+    responses((status = 200, body = TimeEntry), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
+    tag = "time")]
+pub async fn action(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<TimerActionInput>,
+) -> Result<Json<TimeEntry>, AppError> {
+    let action = match input.action {
+        TimerAction::Pause => "pause",
+        TimerAction::Resume => "resume",
+        TimerAction::Stop => "stop",
+    };
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_timer_action($1, $2)")
+        .bind(id)
+        .bind(action)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    let entry = load(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(entry))
+}
+
+/// 기간(보는 사람 시간대의 날짜, 끝 포함).
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct TimeRange {
+    pub from: String,
+    pub to: String,
+    pub tz: String,
+}
+
+struct Window {
+    from_at: OffsetDateTime,
+    to_at: OffsetDateTime,
+}
+
+async fn window(tx: &mut UserTx, range: &TimeRange) -> Result<Window, AppError> {
+    let from = parse_date(Some(&range.from), "from")?
+        .ok_or_else(|| AppError::BadRequest("from is required".into()))?;
+    let to = parse_date(Some(&range.to), "to")?
+        .ok_or_else(|| AppError::BadRequest("to is required".into()))?;
+    if to < from || (to - from).whole_days() >= MAX_RANGE_DAYS {
+        return Err(AppError::BadRequest(format!(
+            "the range must be 1 to {MAX_RANGE_DAYS} days"
+        )));
+    }
+    let (from_at, to_at): (OffsetDateTime, OffsetDateTime) = sqlx::query_as(
+        "SELECT $1::date::timestamp AT TIME ZONE $3, ($2::date + 1)::timestamp AT TIME ZONE $3",
+    )
+    .bind(from)
+    .bind(to)
+    .bind(range.tz.trim())
+    .fetch_one(tx.conn())
+    .await
+    .map_err(AppError::from_db_function)?;
+    Ok(Window { from_at, to_at })
+}
+
+/// 내 시간 기록(기간 안에 시작한 것, 최신순).
+#[utoipa::path(get, path = "/api/me/time-entries", operation_id = "list_time_entries", params(TimeRange),
+    responses((status = 200, body = [TimeEntry]), (status = 400, body = ErrorBody)), tag = "time")]
+pub async fn list(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Query(range): Query<TimeRange>,
+) -> Result<Json<Vec<TimeEntry>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let w = window(&mut tx, &range).await?;
+    let rows: Vec<EntryRow> = sqlx::query_as(&format!(
+        "{ENTRY_SELECT} WHERE e.deleted_at IS NULL AND e.started_at >= $1 AND e.started_at < $2
+         ORDER BY e.started_at DESC, e.id"
+    ))
+    .bind(w.from_at)
+    .bind(w.to_at)
+    .fetch_all(tx.conn())
+    .await?;
+    tx.commit().await?;
+    rows.into_iter()
+        .map(to_entry)
+        .collect::<Result<_, _>>()
+        .map(Json)
+}
+
+/// 기록 내용(수동 추가·고치기 공통).
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct EntryInput {
+    /// RFC 3339.
+    pub started_at: String,
+    /// RFC 3339. 진행 중인 타이머를 고칠 때만 없다.
+    pub ended_at: Option<String>,
+    pub paused_seconds: i32,
+    pub kind: TimeKind,
+    pub memo: String,
+    pub target: Option<TargetInput>,
+}
+
+/// 수동 기록 추가.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AddEntry {
+    #[schema(value_type = String, format = Uuid)]
+    pub request_id: Uuid,
+    #[serde(flatten)]
+    pub entry: EntryInput,
+}
+
+/// 기록 고치기. `base_version`이 지났으면 409와 서버 최신본.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateEntry {
+    pub base_version: i32,
+    #[serde(flatten)]
+    pub entry: EntryInput,
+}
+
+/// 409 응답: 서버 최신본.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TimeEntryConflict {
+    pub error: &'static str,
+    pub current: TimeEntry,
+}
+
+struct ValidEntry {
+    started: OffsetDateTime,
+    ended: Option<OffsetDateTime>,
+    memo: String,
+}
+
+fn validate_entry(input: &EntryInput) -> Result<ValidEntry, AppError> {
+    let started = parse_instant(&input.started_at, "started_at")?;
+    let ended = input
+        .ended_at
+        .as_deref()
+        .map(|s| parse_instant(s, "ended_at"))
+        .transpose()?;
+    if input.paused_seconds < 0 {
+        return Err(AppError::BadRequest(
+            "paused_seconds must not be negative".into(),
+        ));
+    }
+    Ok(ValidEntry {
+        started,
+        ended,
+        memo: validate_text(&input.memo, MAX_MEMO_CHARS, "memo")?,
+    })
+}
+
+/// 수동 기록 추가(끝난 기록). 같은 `request_id`면 같은 기록.
+#[utoipa::path(post, path = "/api/me/time-entries", operation_id = "add_time_entry", request_body = AddEntry,
+    responses((status = 201, body = TimeEntry), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
+    tag = "time")]
+pub async fn add(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(input): Json<AddEntry>,
+) -> Result<(StatusCode, Json<TimeEntry>), AppError> {
+    let valid = validate_entry(&input.entry)?;
+    let ended = valid
+        .ended
+        .ok_or_else(|| AppError::BadRequest("ended_at is required".into()))?;
+    let (target_kind, target_id) = split_target(input.entry.target);
+    let run = || async {
+        let mut tx = state.db.begin_as(user).await?;
+        let id: Uuid =
+            sqlx::query_scalar("SELECT app_add_time_entry($1, $2, $3, $4, $5, $6, $7, $8)")
+                .bind(input.request_id)
+                .bind(valid.started)
+                .bind(ended)
+                .bind(input.entry.paused_seconds)
+                .bind(input.entry.kind.as_str())
+                .bind(&valid.memo)
+                .bind(target_kind)
+                .bind(target_id)
+                .fetch_one(tx.conn())
+                .await
+                .map_err(AppError::from_db_function)?;
+        let entry = load(&mut tx, id).await?;
+        tx.commit().await?;
+        Ok(entry)
+    };
+    match run().await {
+        Ok(entry) => Ok((StatusCode::CREATED, Json(entry))),
+        Err(AppError::Database(e)) if is_unique_violation(&e) => {
+            Ok((StatusCode::CREATED, Json(run().await?)))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// 기록 고치기(본인). 이전 값은 수정 이력에 남는다. 진행 중이면 시작 시각·종류·메모·대상만 바꿀 수 있다.
+#[utoipa::path(put, path = "/api/time-entries/{entry_id}", operation_id = "update_time_entry",
+    params(("entry_id" = String, Path, format = Uuid)), request_body = UpdateEntry,
+    responses((status = 200, body = TimeEntry), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = TimeEntryConflict)), tag = "time")]
+pub async fn update(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<UpdateEntry>,
+) -> Result<Response, AppError> {
+    let valid = validate_entry(&input.entry)?;
+    let (target_kind, target_id) = split_target(input.entry.target);
+    let mut tx = state.db.begin_as(user).await?;
+    let outcome: String =
+        sqlx::query_scalar("SELECT app_update_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9)")
+            .bind(id)
+            .bind(input.base_version)
+            .bind(valid.started)
+            .bind(valid.ended)
+            .bind(input.entry.paused_seconds)
+            .bind(input.entry.kind.as_str())
+            .bind(&valid.memo)
+            .bind(target_kind)
+            .bind(target_id)
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+    let entry = load(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(if outcome == "conflict" {
+        (
+            StatusCode::CONFLICT,
+            Json(TimeEntryConflict {
+                error: "conflict",
+                current: entry,
+            }),
+        )
+            .into_response()
+    } else {
+        Json(entry).into_response()
+    })
+}
+
+/// 기록 지우기(본인).
+#[utoipa::path(delete, path = "/api/time-entries/{entry_id}", operation_id = "delete_time_entry",
+    params(("entry_id" = String, Path, format = Uuid)),
+    responses((status = 204), (status = 404, body = ErrorBody)), tag = "time")]
+pub async fn delete(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_delete_time_entry($1)")
+        .bind(id)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// 수정 이력 한 건(고치기 전 값).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TimeEntryRevision {
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub started_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub ended_at: Option<OffsetDateTime>,
+    pub paused_seconds: i32,
+    pub kind: TimeKind,
+    pub memo: String,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub changed_at: OffsetDateTime,
+}
+
+/// 기록의 수정 이력(본인, 최신순).
+#[utoipa::path(get, path = "/api/time-entries/{entry_id}/revisions", operation_id = "time_entry_revisions",
+    params(("entry_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = [TimeEntryRevision]), (status = 404, body = ErrorBody)), tag = "time")]
+pub async fn revisions(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<TimeEntryRevision>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    load(&mut tx, id).await?;
+    type Row = (
+        OffsetDateTime,
+        Option<OffsetDateTime>,
+        i32,
+        String,
+        String,
+        OffsetDateTime,
+    );
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT started_at, ended_at, paused_seconds, kind, memo, changed_at FROM time_entry_revisions
+         WHERE entry_id = $1 ORDER BY changed_at DESC, id DESC LIMIT 100",
+    )
+    .bind(id)
+    .fetch_all(tx.conn())
+    .await?;
+    tx.commit().await?;
+    rows.into_iter()
+        .map(
+            |(started_at, ended_at, paused_seconds, kind, memo, changed_at)| {
+                Ok(TimeEntryRevision {
+                    started_at,
+                    ended_at,
+                    paused_seconds,
+                    kind: TimeKind::parse(&kind)
+                        .ok_or_else(|| AppError::Config(format!("unknown time kind {kind}")))?,
+                    memo,
+                    changed_at,
+                })
+            },
+        )
+        .collect::<Result<_, AppError>>()
+        .map(Json)
+}
+
+/// 집계 단위.
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SummaryGroup {
+    Day,
+    Week,
+    Month,
+}
+
+/// 집계 조건. 주는 월요일부터.
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct SummaryQuery {
+    pub from: String,
+    pub to: String,
+    pub tz: String,
+    pub group: SummaryGroup,
+}
+
+/// 기간·종류별 합계.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TimeSummaryRow {
+    /// 기간의 첫날(`YYYY-MM-DD`).
+    pub period: String,
+    pub kind: TimeKind,
+    pub seconds: i64,
+}
+
+/// 내 시간 집계(일·주·월, 보는 사람 시간대, 기록은 시작한 날에 센다).
+#[utoipa::path(get, path = "/api/me/time-summary", operation_id = "time_summary", params(SummaryQuery),
+    responses((status = 200, body = [TimeSummaryRow]), (status = 400, body = ErrorBody)), tag = "time")]
+pub async fn summary(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Query(query): Query<SummaryQuery>,
+) -> Result<Json<Vec<TimeSummaryRow>>, AppError> {
+    let range = TimeRange {
+        from: query.from,
+        to: query.to,
+        tz: query.tz,
+    };
+    let unit = match query.group {
+        SummaryGroup::Day => "day",
+        SummaryGroup::Week => "week",
+        SummaryGroup::Month => "month",
+    };
+    let mut tx = state.db.begin_as(user).await?;
+    let w = window(&mut tx, &range).await?;
+    let rows: Vec<(Date, String, i64)> = sqlx::query_as(
+        "SELECT date_trunc($4, e.started_at AT TIME ZONE $3)::date AS period, e.kind,
+                sum(app_entry_seconds(e))::bigint
+         FROM time_entries e
+         WHERE e.deleted_at IS NULL AND e.started_at >= $1 AND e.started_at < $2
+         GROUP BY 1, 2 ORDER BY 1, 2",
+    )
+    .bind(w.from_at)
+    .bind(w.to_at)
+    .bind(range.tz.trim())
+    .bind(unit)
+    .fetch_all(tx.conn())
+    .await?;
+    tx.commit().await?;
+    rows.into_iter()
+        .map(|(period, kind, seconds)| {
+            Ok(TimeSummaryRow {
+                period: format_date(Some(period)).unwrap_or_default(),
+                kind: TimeKind::parse(&kind)
+                    .ok_or_else(|| AppError::Config(format!("unknown time kind {kind}")))?,
+                seconds,
+            })
+        })
+        .collect::<Result<_, AppError>>()
+        .map(Json)
+}
+
+/// 합계 공유 켜기·끄기.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetSharing {
+    pub enabled: bool,
+}
+
+/// 내 합계 공유 상태(워크스페이스별).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct Sharing {
+    pub workspace_id: WorkspaceId,
+    pub enabled: bool,
+}
+
+/// 이 워크스페이스에 내 업무 시간 합계 공유 켜기·끄기(멤버). 기록·메모·시각은 공유하지 않는다.
+#[utoipa::path(put, path = "/api/workspaces/{workspace_id}/time-sharing", operation_id = "set_time_sharing",
+    params(("workspace_id" = String, Path, format = Uuid)), request_body = SetSharing,
+    responses((status = 200, body = Sharing), (status = 404, body = ErrorBody)), tag = "time")]
+pub async fn set_sharing(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(ws): Path<WorkspaceId>,
+    Json(input): Json<SetSharing>,
+) -> Result<Json<Sharing>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_set_time_sharing($1, $2)")
+        .bind(ws)
+        .bind(input.enabled)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(Json(Sharing {
+        workspace_id: ws,
+        enabled: input.enabled,
+    }))
+}
+
+/// 이 워크스페이스의 내 합계 공유 상태(멤버).
+#[utoipa::path(get, path = "/api/workspaces/{workspace_id}/time-sharing", operation_id = "get_time_sharing",
+    params(("workspace_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = Sharing), (status = 404, body = ErrorBody)), tag = "time")]
+pub async fn get_sharing(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(ws): Path<WorkspaceId>,
+) -> Result<Json<Sharing>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    member_role(&mut tx, ws).await?;
+    let enabled: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM time_sharing WHERE workspace_id = $1)")
+            .bind(ws)
+            .fetch_one(tx.conn())
+            .await?;
+    tx.commit().await?;
+    Ok(Json(Sharing {
+        workspace_id: ws,
+        enabled,
+    }))
+}
+
+/// 업무의 예상 시간과 실제 시간.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TaskTime {
+    pub estimate_minutes: Option<i32>,
+    /// 내 기록의 합계(초).
+    pub mine_seconds: i64,
+    /// 이 워크스페이스에 공유를 켠 멤버들의 합계(초, 나도 켰으면 포함).
+    pub shared_seconds: i64,
+    pub shared_people: i32,
+}
+
+/// 업무의 예상·실제 시간(업무를 볼 수 있는 사람). 기록 하나하나는 돌려주지 않는다.
+#[utoipa::path(get, path = "/api/tasks/{task_id}/time", operation_id = "task_time",
+    params(("task_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = TaskTime), (status = 404, body = ErrorBody)), tag = "time")]
+pub async fn task_time(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<TaskTime>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let (mine_seconds, shared_seconds, shared_people): (i64, i64, i32) =
+        sqlx::query_as("SELECT * FROM app_task_time($1)")
+            .bind(id)
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+    let estimate_minutes: Option<i32> =
+        sqlx::query_scalar("SELECT estimate_minutes FROM tasks WHERE id = $1")
+            .bind(id)
+            .fetch_one(tx.conn())
+            .await?;
+    tx.commit().await?;
+    Ok(Json(TaskTime {
+        estimate_minutes,
+        mine_seconds,
+        shared_seconds,
+        shared_people,
+    }))
+}

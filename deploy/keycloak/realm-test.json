@@ -1,0 +1,46 @@
+{
+  "realm": "fvoci-test",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "fvoci-web",
+      "name": "fvoci web (dev/test only)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "fvoci-test-client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["*"],
+      "webOrigins": ["+"],
+      "attributes": {
+        "post.logout.redirect.uris": "*",
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocol": "openid-connect"
+    }
+  ],
+  "users": [
+    {
+      "username": "test-user",
+      "email": "test-user@example.test",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Test",
+      "lastName": "User",
+      "credentials": [
+        { "type": "password", "value": "fvoci-test-user-password", "temporary": false }
+      ]
+    },
+    {
+      "username": "test-user-2",
+      "email": "test-user-2@example.test",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Second",
+      "lastName": "User",
+      "credentials": [
+        { "type": "password", "value": "fvoci-test-user-2-password", "temporary": false }
+      ]
+    }
+  ]
+}

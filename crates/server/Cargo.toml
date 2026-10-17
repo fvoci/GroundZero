@@ -1,0 +1,53 @@
+[package]
+name = "fvoci-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+name = "fvoci_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fvoci-server"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+axum-extra = { version = "0.10", default-features = false, features = ["cookie"] }
+base64 = "0.22"
+bytes = "1"
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+hex = "0.4"
+hmac = "0.12"
+openidconnect = { version = "4", default-features = false, features = ["reqwest", "native-tls"] }
+pdf-extract = "0.12.1"
+rand = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json", "stream"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+sqlx.workspace = true
+thiserror.workspace = true
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+tokio.workspace = true
+tokio-util = { version = "0.7", default-features = false, features = ["io"] }
+tower-http = { version = "0.6", default-features = false, features = ["fs"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url = "2"
+utoipa.workspace = true
+uuid = { version = "1", features = ["serde", "v7"] }
+yrs = "0.28.0"
+zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
+
+[dev-dependencies]
+tower = { version = "0.5", default-features = false, features = ["util"] }
+http-body-util = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json", "cookies"] }
+tokio-tungstenite = "0.28"
+
+[lints]
+workspace = true

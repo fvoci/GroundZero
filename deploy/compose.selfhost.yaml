@@ -1,0 +1,137 @@
+# fvoci 셀프호스트 설치 (docs/self-hosting.md). 비밀 값은 이 파일이 아니라 운영자의 .env에서 읽는다.
+#   docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d --build
+# 로그인 제공자는 표준 OIDC면 어느 것이든 된다(D-45, O-25). 같이 띄울 Keycloak이 필요하면 `--profile keycloak`.
+name: fvoci
+
+x-app: &app
+  image: ${FVOCI_IMAGE:-fvoci:local}
+  build:
+    context: ..
+    dockerfile: deploy/docker/app.Dockerfile
+  environment: &app-env
+    DATABASE_ADMIN_URL: postgres://fvoci:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/fvoci
+    DATABASE_MIGRATION_URL: postgres://fvoci_migrator:${FVOCI_DB_MIGRATOR_PASSWORD:?set FVOCI_DB_MIGRATOR_PASSWORD in .env}@postgres:5432/fvoci
+    DATABASE_URL: postgres://fvoci_app:${FVOCI_DB_APP_PASSWORD:?set FVOCI_DB_APP_PASSWORD in .env}@postgres:5432/fvoci
+    FVOCI_DB_MIGRATOR_PASSWORD: ${FVOCI_DB_MIGRATOR_PASSWORD}
+    FVOCI_DB_APP_PASSWORD: ${FVOCI_DB_APP_PASSWORD}
+
+services:
+  postgres:
+    image: postgres:18.3-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fvoci
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: fvoci
+      # Keycloak 프로필을 쓸 때만: 처음 설치할 때 Keycloak 전용 DB와 계정을 만든다.
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fvoci -d fvoci']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.37.0
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: production
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY (16+ characters) in .env}
+      MEILI_NO_ANALYTICS: 'true'
+    volumes:
+      - meilidata:/meili_data
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:7700/health || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # 역할·스키마 준비와 마이그레이션(운영자 절차와 같은 명령). 여러 번 실행해도 같다.
+  bootstrap:
+    <<: *app
+    command: ['db', 'bootstrap']
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  migrate:
+    <<: *app
+    command: ['db', 'migrate']
+    restart: 'no'
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
+  app:
+    <<: *app
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      meilisearch:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+      FVOCI_PUBLIC_URL: ${FVOCI_PUBLIC_URL:?set FVOCI_PUBLIC_URL (the address people open) in .env}
+      FVOCI_OIDC_ISSUER: ${FVOCI_OIDC_ISSUER:?set FVOCI_OIDC_ISSUER in .env}
+      FVOCI_OIDC_CLIENT_ID: ${FVOCI_OIDC_CLIENT_ID:-fvoci-web}
+      FVOCI_OIDC_CLIENT_SECRET: ${FVOCI_OIDC_CLIENT_SECRET:?set FVOCI_OIDC_CLIENT_SECRET in .env}
+      # 초기 관리자(D-51): 이 OIDC subject가 처음 로그인하면 첫 워크스페이스의 소유자가 된다. 비우면 아무도 자동 관리자가 아니다.
+      FVOCI_INITIAL_ADMIN_SUBJECT: ${FVOCI_INITIAL_ADMIN_SUBJECT:-}
+      FVOCI_INITIAL_WORKSPACE: ${FVOCI_INITIAL_WORKSPACE:-fvoci}
+      FVOCI_SEARCH_URL: http://meilisearch:7700
+      FVOCI_SEARCH_KEY: ${MEILI_MASTER_KEY}
+      # 파일 저장소: 기본은 볼륨의 로컬 디렉터리. S3 호환(R2 등)은 .env에서 FVOCI_STORAGE=s3와 FVOCI_S3_*를 준다.
+      FVOCI_STORAGE: ${FVOCI_STORAGE:-local}
+      FVOCI_S3_ENDPOINT: ${FVOCI_S3_ENDPOINT:-}
+      FVOCI_S3_REGION: ${FVOCI_S3_REGION:-auto}
+      FVOCI_S3_BUCKET: ${FVOCI_S3_BUCKET:-}
+      FVOCI_S3_ACCESS_KEY: ${FVOCI_S3_ACCESS_KEY:-}
+      FVOCI_S3_SECRET_KEY: ${FVOCI_S3_SECRET_KEY:-}
+      FVOCI_MAX_FILE_BYTES: ${FVOCI_MAX_FILE_BYTES:-1073741824}
+      FVOCI_MAX_WORKSPACE_STORAGE_BYTES: ${FVOCI_MAX_WORKSPACE_STORAGE_BYTES:-53687091200}
+    ports:
+      # 기본은 이 컴퓨터에서만 열린다. 앞단 역방향 프록시(HTTPS)를 두는 것을 권한다.
+      - '${FVOCI_LISTEN:-127.0.0.1:8080}:8080'
+    volumes:
+      - files:/data/files
+      - backups:/backups
+
+  # 같이 띄우는 로그인 제공자(선택, O-25). 운영 모드이며 자체 DB를 쓴다. 사용자는 관리 콘솔에서 만든다.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.5.4
+    profiles: ['keycloak']
+    restart: unless-stopped
+    command: ['start', '--import-realm']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+      # 브라우저와 앱 서버가 같은 주소로 닿는 Keycloak 주소(예: https://auth.example.com). 발급자는 <이 주소>/realms/fvoci.
+      KC_HOSTNAME: ${KEYCLOAK_URL:-}
+      KC_HTTP_ENABLED: 'true'
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: 'true'
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      # 렐름 가져오기 틀의 자리 표시자(${...})를 채운다.
+      FVOCI_PUBLIC_URL: ${FVOCI_PUBLIC_URL}
+      FVOCI_OIDC_CLIENT_SECRET: ${FVOCI_OIDC_CLIENT_SECRET}
+    volumes:
+      - ./keycloak/realm-selfhost.json:/opt/keycloak/data/import/realm-fvoci.json:ro
+    ports:
+      - '${KEYCLOAK_LISTEN:-127.0.0.1:8081}:8080'
+
+volumes:
+  pgdata:
+  meilidata:
+  files:
+  backups:
