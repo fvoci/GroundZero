@@ -4,7 +4,7 @@
 
   import * as Select from '$lib/ui/select';
 
-  import { asRole, ROLE_LABEL, ROLES } from './roles';
+  import { asRole, roleLabel, ROLES } from './roles';
 
   interface Props {
     value: Role;
@@ -25,10 +25,10 @@
     if (role !== undefined && role !== value) onchange(role);
   }}
 >
-  <Select.Trigger class="w-28" aria-label={label}>{ROLE_LABEL[value]}</Select.Trigger>
+  <Select.Trigger class="w-28" aria-label={label}>{roleLabel(value)}</Select.Trigger>
   <Select.Content>
     {#each ROLES as role (role)}
-      <Select.Item value={role} label={ROLE_LABEL[role]}>{ROLE_LABEL[role]}</Select.Item>
+      <Select.Item value={role} label={roleLabel(role)}>{roleLabel(role)}</Select.Item>
     {/each}
   </Select.Content>
 </Select.Root>

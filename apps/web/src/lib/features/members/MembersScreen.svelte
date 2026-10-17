@@ -3,7 +3,9 @@
   import { formatInstant } from '$lib/display';
   import type { Group, Invitation, MembersView, Role, Workspace } from '@fvoci/api-client';
 
-  import { api, ApiError } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
@@ -12,7 +14,7 @@
   import { Label } from '$lib/ui/label';
 
   import RoleSelect from './RoleSelect.svelte';
-  import { ROLE_LABEL } from './roles';
+  import { roleLabel } from './roles';
 
   interface Props {
     workspace: Workspace;
@@ -44,7 +46,7 @@
       onchanged();
       router.navigate('/trash');
     } catch (e: unknown) {
-      deleteError = e instanceof ApiError ? e.message : '워크스페이스를 지우지 못했습니다.';
+      deleteError = errorText(e, m.members_delete_failed());
     } finally {
       deleting = false;
     }
@@ -56,7 +58,7 @@
   const isAdmin = $derived(view?.my_role === 'admin');
 
   function nameOf(userId: string): string {
-    return view?.members.find((m) => m.user_id === userId)?.display_name ?? userId;
+    return view?.members.find((member) => member.user_id === userId)?.display_name ?? userId;
   }
 
   async function load(wsId: string = workspace.id): Promise<void> {
@@ -67,7 +69,7 @@
       invitations = v.my_role === 'admin' ? await api.invitations(wsId) : [];
       error = undefined;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '멤버 정보를 불러오지 못했습니다.';
+      error = errorText(e, m.members_load_failed());
     }
   }
 
@@ -79,7 +81,7 @@
       await load();
       onchanged();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '요청을 처리하지 못했습니다.';
+      error = errorText(e, m.members_request_failed());
     }
   }
 
@@ -90,7 +92,9 @@
 </script>
 
 <section class="flex flex-col gap-8" aria-labelledby="members-heading">
-  <h1 id="members-heading" class="text-xl font-semibold">{workspace.name} · 멤버</h1>
+  <h1 id="members-heading" class="text-xl font-semibold">
+    {m.members_heading({ workspace: workspace.name })}
+  </h1>
 
   {#if error !== undefined}
     <p role="alert" class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2">
@@ -102,15 +106,17 @@
   {/if}
 
   {#if view === undefined}
-    <p aria-live="polite">불러오는 중…</p>
+    <p aria-live="polite">{m.app_loading()}</p>
   {:else}
     {@const v = view}
     <ul class="flex flex-col divide-y rounded border" data-testid="member-list">
       {#each v.members as member (member.user_id)}
         <li class="flex flex-wrap items-center gap-3 px-3 py-2">
           <span class="font-medium">{member.display_name}</span>
-          {#if member.is_owner}<Badge variant="secondary">소유자</Badge>{/if}
-          {#if v.pending_owner === member.user_id}<Badge variant="outline">인계 대기</Badge>{/if}
+          {#if member.is_owner}<Badge variant="secondary">{m.members_owner()}</Badge>{/if}
+          {#if v.pending_owner === member.user_id}<Badge variant="outline"
+              >{m.members_pending_owner()}</Badge
+            >{/if}
           {#if member.email !== null}
             <span class="text-sm text-muted-foreground">{member.email}</span>
           {/if}
@@ -118,11 +124,11 @@
             {#if isAdmin && !member.is_owner}
               <RoleSelect
                 value={member.role}
-                label={`${member.display_name} 역할`}
+                label={m.members_role_of({ name: member.display_name })}
                 onchange={(role: Role) =>
                   void act(
                     () => api.setRole(workspace.id, member.user_id, role),
-                    `${member.display_name}: ${ROLE_LABEL[role]}`,
+                    m.members_role_changed({ name: member.display_name, role: roleLabel(role) }),
                   )}
               />
               <Button
@@ -130,10 +136,10 @@
                 variant="ghost"
                 onclick={() =>
                   (confirm = {
-                    title: `${member.display_name}을(를) 제거할까요?`,
-                    body: '이 사람이 만든 팀 문서는 워크스페이스에 남습니다.',
+                    title: m.members_remove_title({ name: member.display_name }),
+                    body: m.members_remove_body(),
                     run: () => act(() => api.removeMember(workspace.id, member.user_id)),
-                  })}>제거</Button
+                  })}>{m.members_remove()}</Button
               >
               {#if v.i_am_owner}
                 <Button
@@ -141,14 +147,14 @@
                   variant="ghost"
                   onclick={() =>
                     (confirm = {
-                      title: `${member.display_name}에게 소유권을 넘길까요?`,
-                      body: '상대가 수락해야 완료됩니다. 수락 전에는 취소할 수 있습니다.',
+                      title: m.members_transfer_title({ name: member.display_name }),
+                      body: m.members_transfer_body(),
                       run: () => act(() => api.offerOwnership(workspace.id, member.user_id)),
-                    })}>소유권 인계</Button
+                    })}>{m.members_transfer()}</Button
                 >
               {/if}
             {:else}
-              <span class="text-sm">{ROLE_LABEL[member.role]}</span>
+              <span class="text-sm">{roleLabel(member.role)}</span>
             {/if}
           </span>
         </li>
@@ -160,22 +166,23 @@
       <div
         class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
         role="region"
-        aria-label="소유권 인계"
+        aria-label={m.members_transfer()}
       >
-        <span>{nameOf(pendingOwner)}에게 소유권 인계를 제안했습니다.</span>
+        <span>{m.members_transfer_offered({ name: nameOf(pendingOwner) })}</span>
         {#if v.i_am_owner}
           <Button
             size="sm"
             variant="ghost"
-            onclick={() => void act(() => api.cancelOwnershipOffer(workspace.id))}>제안 취소</Button
+            onclick={() => void act(() => api.cancelOwnershipOffer(workspace.id))}
+            >{m.members_cancel_offer()}</Button
           >
         {/if}
         {#if pendingOwner === meId}
           <Button
             size="sm"
             onclick={() =>
-              void act(() => api.acceptOwnership(workspace.id), '소유자가 되었습니다.')}
-            >소유권 받기</Button
+              void act(() => api.acceptOwnership(workspace.id), m.members_became_owner())}
+            >{m.members_accept_ownership()}</Button
           >
         {/if}
       </div>
@@ -183,24 +190,25 @@
 
     {#if isAdmin}
       <section class="flex flex-col gap-3" aria-labelledby="invite-heading">
-        <h2 id="invite-heading" class="font-semibold">초대</h2>
+        <h2 id="invite-heading" class="font-semibold">{m.members_invite_heading()}</h2>
         <p class="text-sm text-muted-foreground">
-          초대받은 사람은 로그인한 뒤 같은 이메일로 확인된 계정에서만 수락할 수 있습니다.
+          {m.members_invite_hint()}
         </p>
         <form
           class="flex flex-wrap items-end gap-2"
           onsubmit={(e) => {
             e.preventDefault();
             const email = inviteEmail;
-            void act(() => api.invite(workspace.id, email, inviteRole), `${email} 초대함`).then(
-              () => {
-                inviteEmail = '';
-              },
-            );
+            void act(
+              () => api.invite(workspace.id, email, inviteRole),
+              m.members_invited({ email }),
+            ).then(() => {
+              inviteEmail = '';
+            });
           }}
         >
           <div class="flex min-w-60 flex-1 flex-col gap-1">
-            <Label for="invite-email">이메일</Label>
+            <Label for="invite-email">{m.members_email()}</Label>
             <Input
               id="invite-email"
               type="email"
@@ -211,24 +219,27 @@
           </div>
           <RoleSelect
             value={inviteRole}
-            label="초대 역할"
+            label={m.members_invite_role()}
             onchange={(r: Role) => (inviteRole = r)}
           />
-          <Button type="submit" disabled={inviteEmail.trim() === ''}>초대</Button>
+          <Button type="submit" disabled={inviteEmail.trim() === ''}>{m.members_invite()}</Button>
         </form>
         {#if invitations.length > 0}
           <ul class="flex flex-col gap-1" data-testid="invitation-list">
             {#each invitations as inv (inv.id)}
               <li class="flex items-center gap-2 text-sm">
                 <span>{inv.email}</span>
-                <Badge variant="outline">{ROLE_LABEL[inv.role]}</Badge>
+                <Badge variant="outline">{roleLabel(inv.role)}</Badge>
                 <span class="text-muted-foreground"
-                  >~{formatInstant(inv.expires_at, { dateStyle: 'medium' })}</span
+                  >{m.members_invitation_expires({
+                    date: formatInstant(inv.expires_at, { dateStyle: 'medium' }),
+                  })}</span
                 >
                 <Button
                   size="sm"
                   variant="ghost"
-                  onclick={() => void act(() => api.revokeInvitation(inv.id))}>취소</Button
+                  onclick={() => void act(() => api.revokeInvitation(inv.id))}
+                  >{m.members_revoke()}</Button
                 >
               </li>
             {/each}
@@ -238,21 +249,24 @@
     {/if}
 
     <section class="flex flex-col gap-3" aria-labelledby="groups-heading">
-      <h2 id="groups-heading" class="font-semibold">그룹</h2>
+      <h2 id="groups-heading" class="font-semibold">{m.members_groups_heading()}</h2>
       {#if groups.length === 0}
-        <p class="text-sm text-muted-foreground">그룹이 없습니다.</p>
+        <p class="text-sm text-muted-foreground">{m.members_no_groups()}</p>
       {/if}
       {#each groups as group (group.id)}
         <div class="flex flex-col gap-2 rounded border px-3 py-2">
           <div class="flex items-center gap-2">
             <span class="font-medium">{group.name}</span>
-            <span class="text-sm text-muted-foreground">{group.members.length}명</span>
+            <span class="text-sm text-muted-foreground"
+              >{m.members_group_size({ count: group.members.length })}</span
+            >
             {#if isAdmin}
               <Button
                 size="sm"
                 variant="ghost"
                 class="ml-auto"
-                onclick={() => void act(() => api.deleteGroup(group.id))}>그룹 삭제</Button
+                onclick={() => void act(() => api.deleteGroup(group.id))}
+                >{m.members_delete_group()}</Button
               >
             {/if}
           </div>
@@ -288,30 +302,32 @@
           }}
         >
           <div class="flex flex-1 flex-col gap-1">
-            <Label for="group-name">새 그룹 이름</Label>
+            <Label for="group-name">{m.members_new_group_name()}</Label>
             <Input id="group-name" bind:value={groupName} maxlength={200} autocomplete="off" />
           </div>
-          <Button type="submit" disabled={groupName.trim() === ''}>그룹 만들기</Button>
+          <Button type="submit" disabled={groupName.trim() === ''}
+            >{m.members_create_group()}</Button
+          >
         </form>
       {/if}
     </section>
 
     {#if !v.i_am_owner}
       <section class="flex flex-col gap-2" aria-labelledby="leave-heading">
-        <h2 id="leave-heading" class="font-semibold">탈퇴</h2>
+        <h2 id="leave-heading" class="font-semibold">{m.members_leave_heading()}</h2>
         <div>
           <Button
             variant="outline"
             onclick={() =>
               (confirm = {
-                title: `${workspace.name}에서 탈퇴할까요?`,
-                body: '내가 만든 팀 문서는 워크스페이스에 남습니다. 다시 들어오려면 초대가 필요합니다.',
+                title: m.members_leave_title({ workspace: workspace.name }),
+                body: m.members_leave_body(),
                 run: async () => {
                   await api.leave(workspace.id);
                   onchanged();
                   router.navigate('/');
                 },
-              })}>워크스페이스 탈퇴</Button
+              })}>{m.members_leave()}</Button
           >
         </div>
       </section>
@@ -319,16 +335,15 @@
 
     {#if isAdmin}
       <section class="flex flex-col gap-2" aria-labelledby="export-heading">
-        <h2 id="export-heading" class="font-semibold">데이터 반출</h2>
+        <h2 id="export-heading" class="font-semibold">{m.members_export_heading()}</h2>
         <p class="text-sm text-muted-foreground">
-          문서·업무·일정·파일 버전·감사 기록을 ZIP으로 내려받습니다. 멤버의 개인 노트는 들어가지
-          않습니다.
+          {m.members_export_hint()}
         </p>
         <div>
           <Button
             variant="outline"
             href={`/api/workspaces/${encodeURIComponent(workspace.id)}/export`}
-            >ZIP으로 내려받기</Button
+            >{m.members_export_zip()}</Button
           >
         </div>
       </section>
@@ -336,11 +351,9 @@
 
     {#if v.i_am_owner}
       <section class="flex flex-col gap-2" aria-labelledby="delete-heading">
-        <h2 id="delete-heading" class="font-semibold">워크스페이스 삭제</h2>
+        <h2 id="delete-heading" class="font-semibold">{m.members_delete_heading()}</h2>
         <p class="text-sm text-muted-foreground">
-          지우면 곧바로 모든 멤버와 공유받은 사람이 볼 수 없게 됩니다. 소유자는 보존 기간 동안 '내
-          노트 휴지통'에서 되살리거나 영구 삭제할 수 있습니다. 소유권 인계가 진행 중이면 먼저
-          취소하세요.
+          {m.members_delete_hint()}
         </p>
         <form
           class="flex flex-wrap items-end gap-2"
@@ -350,14 +363,14 @@
           }}
         >
           <div class="flex flex-1 flex-col gap-1">
-            <Label for="delete-name">확인을 위해 이름 “{workspace.name}”을 입력하세요</Label>
+            <Label for="delete-name">{m.members_delete_name_label({ name: workspace.name })}</Label>
             <Input id="delete-name" bind:value={deleteName} autocomplete="off" />
           </div>
           <Button
             type="submit"
             variant="destructive"
             disabled={deleting || deleteName.trim() !== workspace.name.trim()}
-            >워크스페이스 삭제</Button
+            >{m.members_delete()}</Button
           >
         </form>
         {#if deleteError !== undefined}
@@ -380,16 +393,16 @@
       <Dialog.Description>{confirm?.body}</Dialog.Description>
     </Dialog.Header>
     <Dialog.Footer>
-      <Button variant="ghost" onclick={() => (confirm = undefined)}>취소</Button>
+      <Button variant="ghost" onclick={() => (confirm = undefined)}>{m.common_cancel()}</Button>
       <Button
         onclick={() => {
           const run = confirm?.run;
           confirm = undefined;
           if (run !== undefined)
             void run().catch((e: unknown) => {
-              error = e instanceof ApiError ? e.message : '요청을 처리하지 못했습니다.';
+              error = errorText(e, m.members_request_failed());
             });
-        }}>확인</Button
+        }}>{m.members_confirm()}</Button
       >
     </Dialog.Footer>
   </Dialog.Content>
