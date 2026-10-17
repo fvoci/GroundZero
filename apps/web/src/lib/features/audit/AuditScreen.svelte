@@ -3,11 +3,13 @@
   import type { Workspace } from '@fvoci/api-client';
 
   import type { AuditEntryView } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
-  import { localTimeZone, wallTime } from '$lib/features/events/time';
+  import { api } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { formatInstant } from '$lib/display';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
-  import { AUDIT_ACTION, AUDIT_TARGET, auditSubject } from './labels';
+  import { auditAction, auditSubject, auditTarget } from './labels';
 
   interface Props {
     /** 없으면 내 개인 영역 기록. */
@@ -16,7 +18,6 @@
 
   const { workspace }: Props = $props();
 
-  const zone = localTimeZone();
   let entries = $state<AuditEntryView[]>([]);
   let error = $state<string | undefined>(undefined);
   let more = $state(false);
@@ -32,7 +33,7 @@
       more = page.length === 100;
       error = undefined;
     } catch (e: unknown) {
-      if (mine === seq) error = e instanceof ApiError ? e.message : '기록을 불러오지 못했습니다.';
+      if (mine === seq) error = errorText(e, m.audit_load_failed());
     } finally {
       if (mine === seq) loading = false;
     }
@@ -44,17 +45,15 @@
     void load(undefined, seq);
   });
 
-  const when = (iso: string): string => wallTime(iso, zone).replace('T', ' ');
+  const when = (iso: string): string => formatInstant(iso);
 </script>
 
 <section class="flex flex-col gap-3" aria-labelledby="audit-heading">
   <h1 id="audit-heading" class="text-xl font-semibold">
-    {workspace === undefined ? '내 활동 기록' : '감사 기록'}
+    {workspace === undefined ? m.audit_my_heading() : m.audit_heading()}
   </h1>
   <p class="text-sm text-muted-foreground">
-    {workspace === undefined
-      ? '개인 노트·개인 파일·반출처럼 내 개인 영역에서 있었던 일입니다. 다른 사람은 볼 수 없습니다.'
-      : '이 워크스페이스에서 있었던 일입니다. 관리자만 봅니다. 멤버의 개인 노트는 들어가지 않습니다.'}
+    {workspace === undefined ? m.audit_my_hint() : m.audit_hint()}
   </p>
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive">{error}</p>
@@ -64,10 +63,13 @@
       <li class="flex flex-wrap items-baseline gap-2 border-b py-1">
         <span class="text-xs text-muted-foreground tabular-nums">{when(e.created_at)}</span>
         <span class="font-medium"
-          >{e.actor_name ?? (e.actor === null ? '자동 작업' : '알 수 없음')}</span
+          >{e.actor_name ?? (e.actor === null ? m.audit_system() : m.audit_unknown())}</span
         >
         <span
-          >{AUDIT_TARGET[e.target_type] ?? e.target_type} {AUDIT_ACTION[e.action] ?? e.action}</span
+          >{m.audit_entry({
+            target: auditTarget(e.target_type),
+            action: auditAction(e.action),
+          })}</span
         >
         {#if auditSubject(e.detail) !== ''}
           <span class="min-w-0 truncate text-muted-foreground">{auditSubject(e.detail)}</span>
@@ -75,7 +77,7 @@
       </li>
     {:else}
       {#if !loading}
-        <li class="text-muted-foreground">기록이 없습니다.</li>
+        <li class="text-muted-foreground">{m.audit_empty()}</li>
       {/if}
     {/each}
   </ol>
@@ -88,9 +90,9 @@
           const last = entries.at(-1)?.id;
           seq += 1;
           void load(last, seq);
-        }}>더 보기</Button
+        }}>{m.audit_more()}</Button
       >
     </div>
   {/if}
-  <p aria-live="polite" class="sr-only">{loading ? '불러오는 중' : ''}</p>
+  <p aria-live="polite" class="sr-only">{loading ? m.app_loading() : ''}</p>
 </section>
