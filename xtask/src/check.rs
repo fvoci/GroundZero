@@ -8,12 +8,13 @@ use xshell::{Shell, cmd};
 type Step<'a> = Box<dyn Fn(&Shell) -> Result<()> + 'a>;
 
 /// 검사 단계. 실패해도 나머지를 계속 돌리고 마지막에 모아서 실패시킨다.
-pub fn run(root: &Path) -> Result<()> {
+/// `skip_licenses`면 라이선스 단계를 뺀다(CI는 `cargo xtask licenses`를 따로 job으로 돌린다).
+pub fn run(root: &Path, skip_licenses: bool) -> Result<()> {
     let sh = Shell::new()?;
     sh.change_dir(root);
     let mut failed: Vec<&str> = Vec::new();
 
-    let steps: Vec<(&str, Step<'_>)> = vec![
+    let mut steps: Vec<(&str, Step<'_>)> = vec![
         (
             "cargo fmt --check",
             Box::new(|sh| Ok(cmd!(sh, "cargo fmt --all --check").run()?)),
@@ -32,9 +33,10 @@ pub fn run(root: &Path) -> Result<()> {
             "cargo test (unit)",
             Box::new(|sh| Ok(cmd!(sh, "cargo test --workspace --lib --bins --locked").run()?)),
         ),
+        // 라이선스는 아래 `licenses` 단계(cargo deny check licenses + pnpm)에서 본다.
         (
-            "cargo deny",
-            Box::new(|sh| Ok(cmd!(sh, "cargo deny --locked check").run()?)),
+            "cargo deny (advisories, bans, sources)",
+            Box::new(|sh| Ok(cmd!(sh, "cargo deny --locked check advisories bans sources").run()?)),
         ),
         (
             "openapi up to date",
@@ -56,11 +58,15 @@ pub fn run(root: &Path) -> Result<()> {
             "pnpm test",
             Box::new(|sh| Ok(cmd!(sh, "pnpm run test").run()?)),
         ),
-        (
-            "pnpm licenses",
-            Box::new(|_| crate::licenses::check_pnpm(root)),
-        ),
     ];
+    if skip_licenses {
+        println!("SKIP licenses (--skip-licenses; run `cargo xtask licenses` separately)");
+    } else {
+        steps.push((
+            "licenses (cargo deny, pnpm)",
+            Box::new(|_| crate::licenses::run(root)),
+        ));
+    }
 
     for (name, step) in &steps {
         println!("==> {name}");

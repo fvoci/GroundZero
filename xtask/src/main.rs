@@ -23,7 +23,11 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     /// 포맷·lint·타입·단위 테스트·라이선스·계약 최신 여부를 검사한다. 외부 서비스는 띄우지 않는다.
-    Check,
+    Check {
+        /// 라이선스 검사를 뺀다. CI는 라이선스를 따로 job(`cargo xtask licenses`)으로 돌려 결과를 나눠 보인다.
+        #[arg(long)]
+        skip_licenses: bool,
+    },
     /// 테스트용 Compose를 띄우고 통합 테스트까지 실행한 뒤 정리한다.
     Test {
         /// 실행 후 컨테이너를 남긴다.
@@ -66,7 +70,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let root = repo_root()?;
     match cli.command {
-        Command::Check => check::run(&root),
+        Command::Check { skip_licenses } => check::run(&root, skip_licenses),
         Command::Test {
             keep,
             oidc,

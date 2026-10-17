@@ -39,7 +39,7 @@ pub fn run(root: &Path) -> Result<()> {
 }
 
 /// pnpm 워크스페이스 전체(의존·개발 의존)의 라이선스를 허용 목록과 비교한다.
-pub fn check_pnpm(root: &Path) -> Result<()> {
+fn check_pnpm(root: &Path) -> Result<()> {
     let sh = Shell::new()?;
     sh.change_dir(root);
     let out = cmd!(sh, "pnpm licenses list --json --recursive")
@@ -84,16 +84,17 @@ pub fn check_pnpm(root: &Path) -> Result<()> {
     }
 }
 
-/// SPDX 식 중 OR 결합은 한 쪽이 허용되면 통과, AND 결합은 모두 허용되어야 통과.
+/// SPDX 식을 `spdx` 크레이트(cargo-deny와 같은 해석기)로 읽어 판정한다. 괄호·우선순위(AND가 OR보다 먼저)를
+/// 지키고, 한 쪽을 고를 수 있는 OR는 허용된 쪽이 있으면 통과, AND는 모두 허용되어야 통과한다. 예외 조항(WITH)이
+/// 붙은 항목, `+`(이후 판), 읽을 수 없는 식(예: `SEE LICENSE IN ...`, `Unknown`)은 허용하지 않고 보고한다.
 fn is_allowed(expr: &str) -> bool {
-    let expr = expr.trim().trim_start_matches('(').trim_end_matches(')');
-    if expr.contains(" OR ") {
-        return expr.split(" OR ").any(is_allowed);
-    }
-    if expr.contains(" AND ") {
-        return expr.split(" AND ").all(is_allowed);
-    }
-    ALLOWED.contains(&expr.trim())
+    let Ok(parsed) = spdx::Expression::parse_mode(expr.trim(), spdx::ParseMode::LAX) else {
+        return false;
+    };
+    parsed.evaluate(|req| {
+        req.addition.is_none()
+            && matches!(&req.license, spdx::LicenseItem::Spdx { id, or_later: false } if ALLOWED.contains(&id.name))
+    })
 }
 
 #[cfg(test)]
@@ -108,5 +109,27 @@ mod tests {
         assert!(!is_allowed("MIT AND GPL-3.0"));
         assert!(!is_allowed("Python-2.0"));
         assert!(!is_allowed("Unknown"));
+    }
+
+    /// 예전 판정은 바깥 괄호 한 쌍만 벗기고 " OR "로 먼저 나눠, 괄호 묶음 뒤의 AND 조건을 놓쳤다.
+    #[test]
+    fn compound_expressions_keep_grouping_and_precedence() {
+        // (MIT OR GPL) AND Zlib: Zlib이 반드시 붙으므로 허용 목록 밖이다.
+        assert!(!is_allowed("(MIT OR GPL-3.0-or-later) AND Zlib"));
+        assert!(!is_allowed("(MIT AND Zlib)"));
+        assert!(!is_allowed("MIT AND (Zlib OR GPL-2.0-only)"));
+        // AND가 OR보다 먼저 묶인다: MIT OR (Apache-2.0 AND Zlib) → MIT를 고를 수 있다.
+        assert!(is_allowed("MIT OR Apache-2.0 AND Zlib"));
+        assert!(!is_allowed("(MIT OR Apache-2.0) AND Zlib"));
+        assert!(is_allowed("(MIT OR GPL-3.0-or-later)"));
+        assert!(is_allowed("((MIT))"));
+        assert!(is_allowed("(Apache-2.0 OR MIT) AND BSD-3-Clause"));
+        // npm에 흔한 소문자 연산자.
+        assert!(is_allowed("MIT or Apache-2.0"));
+        // 예외 조항·이후 판·읽을 수 없는 식은 보고 대상.
+        assert!(!is_allowed("Apache-2.0 WITH LLVM-exception"));
+        assert!(!is_allowed("SEE LICENSE IN LICENSE.md"));
+        assert!(!is_allowed("(MIT OR Apache-2.0"));
+        assert!(!is_allowed(""));
     }
 }

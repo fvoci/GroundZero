@@ -28,7 +28,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
-      - run: cargo xtask check
+      # 라이선스는 아래 licenses job이 따로 보인다(D-60 승인 대기 중 실패가 다른 검사 결과를 가리지 않게).
+      - run: cargo xtask check --skip-licenses
+
+  # 의존성 라이선스(D-60). 허용 목록 밖이면 실패로 그대로 보인다. 다른 job은 이 결과를 기다리지 않는다.
+  licenses:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: pnpm install --frozen-lockfile
+      - run: cargo xtask licenses
 
   integration:
     runs-on: ubuntu-24.04
