@@ -55,6 +55,10 @@ pub fn run(root: &Path, skip_licenses: bool) -> Result<()> {
             Box::new(|sh| Ok(cmd!(sh, "pnpm run check").run()?)),
         ),
         (
+            "rhwp WASM notices match deploy/rhwp inputs",
+            Box::new(|_| crate::rhwp::check_notices(root)),
+        ),
+        (
             "third-party notices up to date",
             Box::new(|_| crate::notices::run(root, true)),
         ),

@@ -8,6 +8,20 @@ COPY crates ./crates
 COPY xtask ./xtask
 RUN cargo build --release --locked --package fvoci-server
 
+# HWP·HWPX 미리보기 WASM(D-76). 앱 도구 모음(위 server-build)과 따로, 고정한 rhwp 커밋·잠금 파일·기능·도구 판으로 만든다.
+# 입력(deploy/rhwp)이 같으면 이 단계의 캐시를 그대로 쓴다. 판은 deploy/rhwp/inputs.env와 같아야 한다(build.sh가 확인).
+FROM rust:1.93.1-bookworm AS rhwp-build
+RUN apt-get update && apt-get install -y --no-install-recommends jq brotli && rm -rf /var/lib/apt/lists/* \
+ && rustup target add wasm32-unknown-unknown \
+ && cargo install --locked wasm-bindgen-cli --version 0.2.127 \
+ && cargo install --locked cargo-deny --version 0.20.2
+COPY deploy/rhwp/build.sh deploy/rhwp/inputs.env deploy/rhwp/Cargo.lock deploy/rhwp/deny.toml /rhwp/
+RUN sh /rhwp/build.sh
+
+# `cargo xtask rhwp`가 이 단계만 꺼내 개발 서버와 고지 파일에 쓴다.
+FROM scratch AS rhwp-out
+COPY --from=rhwp-build /out /
+
 FROM node:24-bookworm-slim AS web-build
 ARG PNPM_VERSION=11.24.0
 RUN npm install -g pnpm@${PNPM_VERSION}
@@ -16,6 +30,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json .
 COPY apps ./apps
 COPY packages ./packages
 COPY contracts ./contracts
+# HWP·HWPX 미리보기 WASM은 public/rhwp/<입력 해시>/로 들어가 웹 빌드와 함께 나간다(미리보기를 열 때만 불러옴).
+COPY --from=rhwp-build /out/web ./apps/web/public/rhwp
 RUN pnpm install --frozen-lockfile && pnpm --filter @fvoci/web run build
 
 FROM debian:bookworm-slim AS runtime

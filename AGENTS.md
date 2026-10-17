@@ -15,6 +15,7 @@
 - `cargo xtask test` — 격리된 Compose로 통합 테스트 (`--oidc`로 Keycloak 포함)
 - `cargo xtask dev [--oidc]`, `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`, `cargo xtask down`
 - `cargo xtask openapi` 후 `pnpm run generate:api`
+- `cargo xtask rhwp` — HWP·HWPX 미리보기 WASM(D-76)을 제품 이미지와 같은 단계로 만들어 개발 서버 자리에 두고 고지를 갱신한다(입력이 같으면 다시 쓴다)
 
 ## 변경 종류별 읽을 스킬
 

@@ -65,6 +65,15 @@ fn render(root: &Path) -> Result<String> {
         &mut missing,
     );
     section(&mut out, "npm packages (web bundle)", &npm, &mut missing);
+    // HWP·HWPX 미리보기 WASM(D-76)의 크레이트. `cargo xtask rhwp`가 그 빌드에서 만든 고지를 그대로 싣는다.
+    let rhwp = fs::read_to_string(root.join(crate::rhwp::NOTICES))
+        .with_context(|| format!("read {} (run `cargo xtask rhwp`)", crate::rhwp::NOTICES))?;
+    let body = rhwp.split_once('\n').map_or("", |(_, rest)| rest);
+    out.push_str(
+        "==================== Rust crates (HWP/HWPX preview WebAssembly) ====================\n\n",
+    );
+    out.push_str(body);
+    out.push('\n');
     if !missing.is_empty() {
         out.push_str("==================== Appendix: SPDX license texts ====================\n\n");
         out.push_str("For packages above that do not ship their own license file.\n\n");

@@ -14,3 +14,6 @@ coverage/
 
 # PPTX 미리보기 프레임 스크립트(빌드 산출물, D-74)
 /apps/web/public/pptx-frame.js
+
+# HWP·HWPX 미리보기 WASM(cargo xtask rhwp가 둔다, D-76)
+/apps/web/public/rhwp/

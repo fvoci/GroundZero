@@ -14,6 +14,9 @@ describe('office preview kinds', () => {
       officeKind('application/vnd.openxmlformats-officedocument.presentationml.presentation', 'c'),
     ).toBe('pptx');
     expect(officeKind('', 'slides.PPTX')).toBe('pptx');
+    expect(officeKind('', '보고서.HWP')).toBe('hwp');
+    expect(officeKind('application/haansofthwpx', 'a')).toBe('hwp');
+    expect(officeKind('', 'form.hwpx')).toBe('hwp');
   });
 
   it('leaves other formats alone', () => {

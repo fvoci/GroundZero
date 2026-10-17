@@ -11,3 +11,4 @@ contracts/collab/expected.json
 
 # PPTX 미리보기 프레임 스크립트(빌드 산출물, D-74)
 apps/web/public/pptx-frame.js
+apps/web/public/rhwp

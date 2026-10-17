@@ -6,3 +6,5 @@ dist
 .env
 .env.*
 docs
+apps/web/public/rhwp
+apps/web/public/pptx-frame.js

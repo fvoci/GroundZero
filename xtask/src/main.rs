@@ -6,6 +6,7 @@ mod dev;
 mod licenses;
 mod notices;
 mod openapi;
+mod rhwp;
 mod test;
 
 use std::path::PathBuf;
@@ -56,6 +57,12 @@ enum Command {
     },
     /// Cargo·pnpm 의존성 라이선스를 허용 목록과 비교한다.
     Licenses,
+    /// HWP·HWPX 미리보기용 rhwp WASM을 만든다(D-76). 입력이 같으면 앞서 만든 결과를 다시 쓴다.
+    Rhwp {
+        /// 입력이 같아도 다시 빌드한다.
+        #[arg(long)]
+        force: bool,
+    },
     /// 배포물(서버 바이너리·웹 번들)에 든 패키지의 제3자 고지 `THIRD_PARTY_NOTICES.txt`를 만든다.
     /// `--check`는 최신 여부만 본다.
     Notices {
@@ -88,5 +95,6 @@ fn main() -> Result<()> {
         Command::Openapi { check } => openapi::run(&root, check),
         Command::Licenses => licenses::run(&root),
         Command::Notices { check } => notices::run(&root, check),
+        Command::Rhwp { force } => rhwp::run(&root, force),
     }
 }

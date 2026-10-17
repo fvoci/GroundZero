@@ -1,8 +1,11 @@
 // Office 미리보기(D-05, D-71 브라우저 우선). DOCX는 docx-preview(Apache-2.0)로 쪽 단위 HTML을 만들어 스크립트를 돌리지
 // 못하는 iframe(sandbox)에 넣고, XLSX는 read-excel-file(MIT)로 시트별 값 표를 만든다. 둘 다 필요할 때만 불러온다.
-// PPTX는 @aiden0z/pptx-renderer(D-74)를 같은 출처가 아닌 격리 iframe(`pptx-frame.html`) 안에서 돌려 그린다.
+// PPTX는 @aiden0z/pptx-renderer(D-74)를 같은 출처가 아닌 격리 iframe(프레임 스크립트 `pptx-frame.js`)에서 그리고,
+// HWP·HWPX는 rhwp WASM(D-76)을 Web Worker에서 돌려 쪽마다 SVG 그림으로 보인다(`hwp.ts`).
 
-export type OfficeKind = 'docx' | 'xlsx' | 'pptx';
+import { isHwp } from './hwp';
+
+export type OfficeKind = 'docx' | 'xlsx' | 'pptx' | 'hwp';
 
 /** 미리볼 수 있는 최대 크기. 더 크면 내려받아 연다. */
 export const OFFICE_PREVIEW_MAX_BYTES = 20 * 1024 * 1024;
@@ -25,6 +28,7 @@ export function officeKind(contentType: string, name: string): OfficeKind | unde
     ext === 'pptx'
   )
     return 'pptx';
+  if (isHwp(type, name)) return 'hwp';
   return undefined;
 }
 

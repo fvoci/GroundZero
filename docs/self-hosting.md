@@ -25,7 +25,7 @@ cd fvoci && cp deploy/selfhost.env.example .env && chmod 600 .env
 docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d --build --wait
 ```
 
-처음 실행하면 이미지를 만들고(수 분), PostgreSQL과 Meilisearch가 준비되면 역할·스키마 준비(`db bootstrap`)와 마이그레이션(`db migrate`)이 한 번씩 돌고 앱이 뜬다. 상태 확인:
+처음 실행하면 이미지를 만들고(수 분. HWP·HWPX 미리보기용 rhwp WASM을 고정한 상위 커밋에서 함께 빌드하므로 처음에는 10분 안팎과 Docker 디스크 수 GB가 더 들고, 입력이 같으면 다음부터는 캐시를 쓴다), PostgreSQL과 Meilisearch가 준비되면 역할·스키마 준비(`db bootstrap`)와 마이그레이션(`db migrate`)이 한 번씩 돌고 앱이 뜬다. 상태 확인:
 
 ```bash
 docker compose --env-file .env -f deploy/compose.selfhost.yaml ps
