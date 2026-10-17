@@ -836,7 +836,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 내 개인 자료 반출: 개인 노트·첨부·내 시간 기록·고정·즐겨찾기. */
+        /** 내 개인 자료 반출: 개인 노트·첨부·내 시간 기록·강의 진도·고정·즐겨찾기. */
         get: operations["export_mine"];
         put?: never;
         post?: never;
@@ -5863,6 +5863,14 @@ export interface operations {
                     "application/zip": number[];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     home: {
@@ -7883,6 +7891,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

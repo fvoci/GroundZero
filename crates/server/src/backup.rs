@@ -54,6 +54,8 @@ pub struct Manifest {
 pub struct TableEntry {
     pub name: String,
     pub rows: i64,
+    /// `db/<name>.copy` 파일의 SHA-256(복구 전에 확인).
+    pub sha256: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -121,6 +123,8 @@ pub async fn create(
     tokio::fs::create_dir_all(out.join("db"))
         .await
         .map_err(io)?;
+    private_dir(out).await?;
+    private_dir(&out.join("db")).await?;
     let storage = Storage::new(&config.storage);
     let url = need(db.migration_url.as_ref(), "DATABASE_MIGRATION_URL")?;
     let mut conn = PgConnection::connect(url.expose()).await?;
@@ -129,6 +133,10 @@ pub async fn create(
         .execute(&mut conn)
         .await?;
     let result = create_locked(&mut conn, &storage, out).await;
+    if result.is_err() {
+        // 실패한 읽기 트랜잭션을 닫아야 잠금 해제가 원래 오류를 덮지 않는다.
+        sqlx::query("ROLLBACK").execute(&mut conn).await.ok();
+    }
     sqlx::query("SELECT pg_advisory_unlock($1)")
         .bind(STORAGE_LOCK)
         .execute(&mut conn)
@@ -151,18 +159,23 @@ async fn create_locked(
         let rows: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM fvoci.{name}"))
             .fetch_one(&mut *conn)
             .await?;
-        let mut file = tokio::fs::File::create(out.join("db").join(format!("{name}.copy")))
-            .await
-            .map_err(io)?;
+        let mut file = private_file(&out.join("db").join(format!("{name}.copy"))).await?;
+        let mut hasher = Sha256::new();
         let mut stream = conn
             .copy_out_raw(&format!("COPY fvoci.{name} TO STDOUT"))
             .await?;
         while let Some(chunk) = stream.next().await {
-            file.write_all(&chunk?).await.map_err(io)?;
+            let chunk = chunk?;
+            hasher.update(&chunk);
+            file.write_all(&chunk).await.map_err(io)?;
         }
         drop(stream);
         file.sync_all().await.map_err(io)?;
-        entries.push(TableEntry { name, rows });
+        entries.push(TableEntry {
+            name,
+            rows,
+            sha256: hex::encode(hasher.finalize()),
+        });
     }
     let objects: Vec<(String, i64, String)> = sqlx::query_as(
         "SELECT storage_key, size, sha256 FROM fvoci.file_versions ORDER BY storage_key",
@@ -176,8 +189,9 @@ async fn create_locked(
         let path = object_path(out, &key)?;
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(io)?;
+            private_dir(parent).await?;
         }
-        let mut file = tokio::fs::File::create(&path).await.map_err(io)?;
+        let mut file = private_file(&path).await?;
         let mut stream = storage.get(&key).await?;
         let mut hasher = Sha256::new();
         let mut written = 0i64;
@@ -205,9 +219,9 @@ async fn create_locked(
     };
     let json = serde_json::to_vec_pretty(&manifest)
         .map_err(|e| AppError::Config(format!("manifest: {e}")))?;
-    tokio::fs::write(out.join("manifest.json"), json)
-        .await
-        .map_err(io)?;
+    let mut file = private_file(&out.join("manifest.json")).await?;
+    file.write_all(&json).await.map_err(io)?;
+    file.sync_all().await.map_err(io)?;
     Ok(manifest)
 }
 
@@ -281,11 +295,53 @@ async fn restore_locked(
     from: &Path,
     manifest: &Manifest,
 ) -> Result<(), AppError> {
+    // 0. 표 덤프가 백업 때 그대로인지(저장소를 건드리기 전에).
+    for table in &manifest.tables {
+        let mut file = tokio::fs::File::open(from.join("db").join(format!("{}.copy", table.name)))
+            .await
+            .map_err(io)?;
+        let mut hasher = Sha256::new();
+        let mut buf = vec![0u8; 1024 * 1024];
+        loop {
+            let n = file.read(&mut buf).await.map_err(io)?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+        }
+        if hex::encode(hasher.finalize()) != table.sha256 {
+            return Err(AppError::Config(format!(
+                "backup dump of {} is damaged (SHA-256 differs)",
+                table.name
+            )));
+        }
+    }
     // 1. 파일 내용(백업의 SHA-256과 맞는지 확인하며 올리고, 올린 뒤 저장소에서 다시 확인).
     for object in &manifest.objects {
-        let path = object_path(from, &object.key)?;
-        let mut file = tokio::fs::File::open(&path).await.map_err(io)?;
-        let upload = storage.begin(&object.key).await?;
+        restore_object(storage, from, object).await?;
+    }
+    // 2. 표(한 트랜잭션, 외래 키·트리거를 잠시 끔: 순서와 자기 참조에 상관없이 그대로 넣는다). 검색 색인 다시
+    //    만들기도 같은 트랜잭션에서 올린다(실패하면 모두 되돌려 다시 할 수 있게).
+    sqlx::query("BEGIN").execute(&mut *conn).await?;
+    let loaded = load_tables(conn, from, manifest).await;
+    if let Err(err) = loaded {
+        sqlx::query("ROLLBACK").execute(&mut *conn).await?;
+        return Err(err);
+    }
+    sqlx::query("COMMIT").execute(&mut *conn).await?;
+    Ok(())
+}
+
+/// 파일 내용 하나를 올린다. 도중에 실패하면 저장소의 여러 조각 업로드를 그만둔다.
+async fn restore_object(
+    storage: &Storage,
+    from: &Path,
+    object: &ObjectEntry,
+) -> Result<(), AppError> {
+    let path = object_path(from, &object.key)?;
+    let mut file = tokio::fs::File::open(&path).await.map_err(io)?;
+    let upload = storage.begin(&object.key).await?;
+    let sent = async {
         let mut parts = Vec::new();
         let mut hasher = Sha256::new();
         let mut number = 1u32;
@@ -315,33 +371,25 @@ async fn restore_locked(
             }
         }
         if hex::encode(hasher.finalize()) != object.sha256 {
-            storage.abort(&object.key, &upload).await?;
             return Err(AppError::Config(format!(
                 "backup copy of {} is damaged (SHA-256 differs)",
                 object.key
             )));
         }
-        storage.complete(&object.key, &upload, &parts).await?;
-        let (stored, size) = storage.digest(&object.key).await?;
-        if stored != object.sha256 || i64::try_from(size).ok() != Some(object.size) {
-            return Err(AppError::Storage(format!(
-                "restored content of {} does not match",
-                object.key
-            )));
-        }
+        storage.complete(&object.key, &upload, &parts).await
     }
-    // 2. 표(한 트랜잭션, 외래 키·트리거를 잠시 끔: 순서와 자기 참조에 상관없이 그대로 넣는다).
-    sqlx::query("BEGIN").execute(&mut *conn).await?;
-    let loaded = load_tables(conn, from, manifest).await;
-    if let Err(err) = loaded {
-        sqlx::query("ROLLBACK").execute(&mut *conn).await?;
+    .await;
+    if let Err(err) = sent {
+        storage.abort(&object.key, &upload).await.ok();
         return Err(err);
     }
-    sqlx::query("COMMIT").execute(&mut *conn).await?;
-    // 3. 검색 색인을 다시 만들도록 올린다.
-    sqlx::query("SELECT fvoci.app_system_search_enqueue_all()")
-        .execute(&mut *conn)
-        .await?;
+    let (stored, size) = storage.digest(&object.key).await?;
+    if stored != object.sha256 || i64::try_from(size).ok() != Some(object.size) {
+        return Err(AppError::Storage(format!(
+            "restored content of {} does not match",
+            object.key
+        )));
+    }
     Ok(())
 }
 
@@ -353,6 +401,27 @@ async fn load_tables(
     sqlx::query("SET LOCAL session_replication_role = replica")
         .execute(&mut *conn)
         .await?;
+    // 복구하는 동안 다른 쓰기가 끼어들지 않게 표를 잠그고 비어 있는지 다시 본다(서버는 멈춰 두는 것을 권한다).
+    for table in &manifest.tables {
+        sqlx::query(&format!(
+            "LOCK TABLE fvoci.{} IN EXCLUSIVE MODE",
+            table.name
+        ))
+        .execute(&mut *conn)
+        .await?;
+        let used: bool = sqlx::query_scalar(&format!(
+            "SELECT EXISTS (SELECT 1 FROM fvoci.{})",
+            table.name
+        ))
+        .fetch_one(&mut *conn)
+        .await?;
+        if used {
+            return Err(AppError::Config(format!(
+                "restore needs an empty database, but {} has rows",
+                table.name
+            )));
+        }
+    }
     for table in &manifest.tables {
         let mut file = tokio::fs::File::open(from.join("db").join(format!("{}.copy", table.name)))
             .await
@@ -376,5 +445,44 @@ async fn load_tables(
             )));
         }
     }
+    // 기록된 모든 파일 버전의 내용이 백업에 있어야 한다.
+    let keys: Vec<String> = manifest.objects.iter().map(|o| o.key.clone()).collect();
+    let missing: Option<String> = sqlx::query_scalar(
+        "SELECT storage_key FROM fvoci.file_versions WHERE NOT (storage_key = ANY ($1)) LIMIT 1",
+    )
+    .bind(&keys)
+    .fetch_optional(&mut *conn)
+    .await?;
+    if let Some(key) = missing {
+        return Err(AppError::Config(format!(
+            "the backup has no content for file version {key}"
+        )));
+    }
+    sqlx::query("SELECT fvoci.app_system_search_enqueue_all()")
+        .execute(&mut *conn)
+        .await?;
     Ok(())
+}
+
+/// 백업에는 모든 개인 노트와 첨부가 들어 있으므로 폴더는 소유자만(0700) 열 수 있게 한다.
+async fn private_dir(path: &Path) -> Result<(), AppError> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+            .await
+            .map_err(io)?;
+    }
+    #[cfg(not(unix))]
+    let _unused = path;
+    Ok(())
+}
+
+/// 소유자만 읽고 쓰는(0600) 새 파일.
+async fn private_file(path: &Path) -> Result<tokio::fs::File, AppError> {
+    let mut options = tokio::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    options.open(path).await.map_err(io)
 }

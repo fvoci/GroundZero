@@ -3617,7 +3617,7 @@
         "tags": [
           "export"
         ],
-        "summary": "내 개인 자료 반출: 개인 노트·첨부·내 시간 기록·고정·즐겨찾기.",
+        "summary": "내 개인 자료 반출: 개인 노트·첨부·내 시간 기록·강의 진도·고정·즐겨찾기.",
         "operationId": "export_mine",
         "responses": {
           "200": {
@@ -3631,6 +3631,16 @@
                     "format": "int32",
                     "minimum": 0
                   }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -6582,6 +6592,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {

@@ -162,6 +162,24 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
         ("DATABASE_URL", &target_app_url),
     ]))
     .unwrap();
+    // 백업 파일은 소유자만 읽는다.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(out.join("manifest.json"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o077, 0, "backup files are private");
+    }
+    // 손상된 덤프는 아무것도 건드리기 전에 거부한다.
+    let damaged = temp_dir("damaged");
+    copy_dir(&out, &damaged);
+    std::fs::write(damaged.join("db").join("documents.copy"), b"broken\n").unwrap();
+    let err = backup::restore(&restored.config, &restored_db, &damaged)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("damaged"), "{err}");
     backup::restore(&restored.config, &restored_db, &out)
         .await
         .unwrap();
@@ -215,4 +233,17 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
         .execute(&mut admin)
         .await
         .unwrap();
+}
+
+fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
 }

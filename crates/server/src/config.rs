@@ -81,6 +81,8 @@ pub struct FileLimits {
     pub upload_ttl: Duration,
     /// 서버 전체에서 동시에 받는 업로드 조각 수(조각마다 메모리에 담는다). `FVOCI_UPLOAD_CONCURRENCY`, 기본 8.
     pub upload_concurrency: usize,
+    /// 동시에 만드는 반출 ZIP 수. `FVOCI_EXPORT_CONCURRENCY`, 기본 2.
+    pub export_concurrency: usize,
 }
 
 /// 운영 한도 (D-52). 기본값은 `O-26`에서 사용량·테스트 결과로 조정한다.
@@ -301,7 +303,13 @@ impl Config {
             )?,
             upload_ttl: Duration::from_secs(parse_or(&lookup, "FVOCI_UPLOAD_TTL_SECS", 86_400)?),
             upload_concurrency: parse_or(&lookup, "FVOCI_UPLOAD_CONCURRENCY", 8)?,
+            export_concurrency: parse_or(&lookup, "FVOCI_EXPORT_CONCURRENCY", 2)?,
         };
+        if !(1..=64).contains(&files.export_concurrency) {
+            return Err(AppError::Config(
+                "FVOCI_EXPORT_CONCURRENCY must be between 1 and 64".into(),
+            ));
+        }
         if !(1..=256).contains(&files.upload_concurrency) {
             return Err(AppError::Config(
                 "FVOCI_UPLOAD_CONCURRENCY must be between 1 and 256".into(),

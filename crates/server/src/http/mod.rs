@@ -33,6 +33,8 @@ pub struct AppState {
     pub storage: crate::storage::Storage,
     /// 업로드 조각 동시 처리 한도(D-52).
     pub upload_permits: Arc<tokio::sync::Semaphore>,
+    /// 반출 ZIP 동시 처리 한도.
+    pub export_permits: Arc<tokio::sync::Semaphore>,
 }
 
 /// 서비스 상태 응답.
