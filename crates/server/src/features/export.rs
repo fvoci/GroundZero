@@ -133,6 +133,8 @@ fn stream_zip(
     // 블로킹 스레드에는 요청 id가 따라가지 않으므로 직접 넘긴다(D-83).
     let request_id = crate::logging::current_request_id();
     tokio::task::spawn_blocking(move || {
+        // 저장소 실패로 멈춘 경우의 분류(우리가 만든 안전한 문구). 그 밖에는 io 오류 종류만 남긴다.
+        let mut aborted: Option<String> = None;
         let result = (|| -> std::io::Result<()> {
             let mut zip = zip::ZipWriter::new_stream(BodyWriter {
                 tx: writer_tx,
@@ -145,17 +147,21 @@ fn stream_zip(
                 match msg {
                     Msg::Start(name) => zip.start_file(name, options).map_err(zip_error)?,
                     Msg::Data(bytes) => zip.write_all(&bytes)?,
-                    Msg::Abort(reason) => return Err(std::io::Error::other(reason)),
+                    Msg::Abort(reason) => {
+                        aborted = Some(reason.clone());
+                        return Err(std::io::Error::other(reason));
+                    }
                 }
             }
             let mut out = zip.finish().map_err(zip_error)?;
             out.flush()
         })();
         if let Err(err) = result {
+            let detail = aborted.unwrap_or_else(|| format!("io {:?}", err.kind()));
             tracing::warn!(
                 event = "export.stopped",
                 request_id = request_id.as_deref(),
-                detail = ?err.kind(),
+                detail,
                 "export stopped"
             );
             let _sent = body_tx.blocking_send(Err(err));
@@ -176,7 +182,9 @@ fn stream_zip(
                         true
                     }
                     Err(err) => {
-                        let _sent = msg_tx.send(Msg::Abort(err.to_string())).await;
+                        let _sent = msg_tx
+                            .send(Msg::Abort(crate::logging::safe_error(&err)))
+                            .await;
                         return;
                     }
                     Ok(mut stream) => {
@@ -186,7 +194,9 @@ fn stream_zip(
                                 None => break,
                                 Some(Ok(chunk)) => ok = msg_tx.send(Msg::Data(chunk)).await.is_ok(),
                                 Some(Err(err)) => {
-                                    let _sent = msg_tx.send(Msg::Abort(err.to_string())).await;
+                                    let _sent = msg_tx
+                                        .send(Msg::Abort(format!("storage read {:?}", err.kind())))
+                                        .await;
                                     return;
                                 }
                             }

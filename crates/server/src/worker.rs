@@ -140,6 +140,7 @@ async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
                         event = "storage.cleanup_gave_up",
                         error_code = err.code(),
                         detail = crate::logging::safe_error(&err),
+                        key = key.as_str(),
                         attempts = attempts + 1,
                         "storage cleanup gave up after 10 attempts"
                     );
@@ -148,6 +149,7 @@ async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
                         event = "storage.cleanup_retry",
                         error_code = err.code(),
                         detail = crate::logging::safe_error(&err),
+                        key = key.as_str(),
                         attempts = attempts + 1,
                         "storage cleanup failed; will retry"
                     );

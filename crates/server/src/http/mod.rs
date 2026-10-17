@@ -105,7 +105,7 @@ async fn require_same_origin(
             .get(header::ORIGIN)
             .and_then(|v| v.to_str().ok());
         if origin != Some(state.config.public_origin().as_str()) {
-            return (
+            let mut response = (
                 StatusCode::FORBIDDEN,
                 Json(ErrorBody {
                     error: "bad_origin",
@@ -114,6 +114,10 @@ async fn require_same_origin(
                 }),
             )
                 .into_response();
+            response
+                .extensions_mut()
+                .insert(crate::logging::ErrorCode("bad_origin"));
+            return response;
         }
     }
     next.run(request).await
@@ -160,26 +164,30 @@ async fn request_context(request: Request, next: Next) -> Response {
         .extensions()
         .get::<RouteTemplate>()
         .map_or("-", |r| r.0.as_str());
-    if quiet {
-        tracing::debug!(
-            event = "http.request",
-            request_id = %id,
-            method = %method,
-            route,
-            status_code,
-            duration_ms,
-            "request"
-        );
-    } else {
-        tracing::info!(
-            event = "http.request",
-            request_id = %id,
-            method = %method,
-            route,
-            status_code,
-            duration_ms,
-            "request"
-        );
+    // 4xx도 어떤 거절인지(bad_request·invalid_state·bad_origin 등) 접근 줄에서 보이게 응답 오류 코드를 붙인다.
+    let error_code = response
+        .extensions()
+        .get::<crate::logging::ErrorCode>()
+        .map(|c| c.0);
+    macro_rules! access {
+        ($level:ident) => {
+            tracing::$level!(
+                event = "http.request",
+                request_id = %id,
+                method = %method,
+                route,
+                status_code,
+                duration_ms,
+                error_code,
+                "request"
+            )
+        };
+    }
+    // 조용한 경로(상태 확인·정적 파일)라도 서버 쪽 실패는 보이게 WARN.
+    match (quiet, status_code >= 500) {
+        (true, false) => access!(debug),
+        (true, true) => access!(warn),
+        (false, _) => access!(info),
     }
     if let Ok(value) = HeaderValue::from_str(&id) {
         response.headers_mut().insert(REQUEST_ID_HEADER, value);
