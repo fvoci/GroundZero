@@ -3,7 +3,7 @@
   // 수 없다. 지운 뒤 할 일은 부르는 쪽이 정한다.
   import { tick } from 'svelte';
 
-  import { ApiError } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -45,7 +45,7 @@
       notifyDone(m.common_moved_to_trash());
       ondeleted();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '지우지 못했습니다.';
+      error = errorText(e, m.trash_delete_failed());
     } finally {
       busy = false;
     }
@@ -54,18 +54,18 @@
 
 <span class="flex flex-wrap items-center gap-1">
   {#if confirming}
-    <span class="text-sm" role="status">{what}: 휴지통으로 옮길까요?</span>
+    <span class="text-sm" role="status">{m.trash_move_question({ what })}</span>
     <Button
       size="sm"
       variant="destructive"
       bind:ref={confirmButton}
       disabled={busy}
-      onclick={() => void go()}>휴지통으로</Button
+      onclick={() => void go()}>{m.trash_move()}</Button
     >
-    <Button size="sm" variant="ghost" onclick={() => void cancel()}>취소</Button>
+    <Button size="sm" variant="ghost" onclick={() => void cancel()}>{m.common_cancel()}</Button>
   {:else}
     <Button size="sm" variant="ghost" bind:ref={startButton} onclick={() => void ask()}
-      >{what} 지우기</Button
+      >{m.trash_delete_what({ what })}</Button
     >
   {/if}
   {#if error !== undefined}<span role="alert" class="text-sm text-destructive">{error}</span>{/if}
