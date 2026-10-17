@@ -121,6 +121,8 @@ pub struct Document {
     /// 공유 철회·공개 링크 철회·비공개 전환처럼 노출을 줄이는 관리를 할 수 있는지.
     /// 보관된 항목 아래 문서는 `access`가 `read`여도 소유 권한자는 이 값이 참이다.
     pub can_manage: bool,
+    /// 휴지통으로 옮길 수 있는지(문서 소유 권한, 또는 쓰기 권한이 있고 내가 만든 문서).
+    pub can_delete: bool,
 }
 
 /// 문서 생성 요청.
@@ -260,6 +262,7 @@ pub(crate) struct DocRow {
     visibility: String,
     allow_copy: bool,
     can_manage: bool,
+    can_delete: bool,
 }
 
 /// 참조 문자열은 저장하지 않고 현재 키로 만든다(키가 바뀌어도 번호·id는 그대로, D-18).
@@ -268,7 +271,9 @@ const DOC_COLUMNS: &str = "id, workspace_id, \
     CASE WHEN app_item_access(item_id) IS NOT NULL THEN item_id END AS item_id, \
     CASE WHEN app_document_access(parent_id) IS NOT NULL THEN parent_id END AS parent_id, placement, \
     app_document_reference(id) AS reference, title, body, schema_version, revision, updated_at, \
-    visibility, allow_copy, coalesce(app_document_base_access(id) = 'owner', false) AS can_manage";
+    visibility, allow_copy, coalesce(app_document_base_access(id) = 'owner', false) AS can_manage, \
+    coalesce(app_document_access(id) = 'owner' \
+      OR (app_document_access(id) = 'write' AND created_by = app_user_id()), false) AS can_delete";
 
 pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
     Document {
@@ -288,6 +293,7 @@ pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
         visibility: row.visibility,
         allow_copy: row.allow_copy,
         can_manage: row.can_manage,
+        can_delete: row.can_delete,
     }
 }
 

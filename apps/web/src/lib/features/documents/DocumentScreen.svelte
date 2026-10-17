@@ -92,7 +92,7 @@
     />
     <div class="ml-auto flex flex-wrap items-center gap-1">
       <MarkButtons kind="document" id={doc.id} />
-      {#if doc.access !== 'read'}
+      {#if doc.can_delete}
         {@const d = doc}
         <DeleteButton
           what="문서"

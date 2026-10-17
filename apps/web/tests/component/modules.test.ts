@@ -94,6 +94,7 @@ describe('module validation', () => {
       visibility: 'workspace',
       allow_copy: false,
       can_manage: false,
+      can_delete: false,
     });
     expect(parsed.item_id).toBe(item);
     expect(parsed.placement).toBe('module');

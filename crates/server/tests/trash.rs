@@ -10,7 +10,8 @@ mod common;
 use axum::Router;
 use axum::http::{Method, StatusCode};
 use common::{
-    TestUser, add_member, create_doc, create_workspace, fixture_sql, login, new_request_id, send,
+    TestUser, add_member, create_doc, create_workspace, fixture_sql, login, login_with_email,
+    new_request_id, send, unique_email,
 };
 use serde_json::{Value, json};
 
@@ -311,4 +312,283 @@ async fn items_and_tasks_go_to_the_trash_together_and_expire() {
     .await
     .unwrap();
     assert_eq!(purged, 1);
+}
+
+#[tokio::test]
+async fn trashed_content_is_closed_everywhere_and_others_children_stay() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "닫기").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
+
+    // 공개 링크는 문서를 지우면 닫힌다.
+    let public = create_doc(&app, &admin, &ws, "공개").await;
+    let link = send(
+        &app,
+        Method::POST,
+        &format!(
+            "/api/documents/{}/public-links",
+            public["id"].as_str().unwrap()
+        ),
+        Some(&admin),
+        Some(json!({})),
+    )
+    .await
+    .json;
+    let token_path = format!(
+        "/api/public/{}",
+        link["url"].as_str().unwrap().rsplit('/').next().unwrap()
+    );
+    assert_eq!(
+        send(&app, Method::GET, &token_path, None, None)
+            .await
+            .status,
+        StatusCode::OK
+    );
+    send(
+        &app,
+        Method::DELETE,
+        &format!("/api/documents/{}", public["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(
+        send(&app, Method::GET, &token_path, None, None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+
+    // 항목이 휴지통에 있으면 그 안의 문서는 공유로도 볼 수 없다.
+    let it = item(&app, &admin, &ws, "SHR").await;
+    let doc = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/documents", it["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "항목 문서" })),
+    )
+    .await
+    .json;
+    let bob_email = unique_email("bob");
+    let bob = login_with_email(&state, "bob", &bob_email, true).await;
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{}/shares", doc["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "email": bob_email, "permission": "write" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    let doc_uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
+    assert_eq!(
+        send(&app, Method::GET, &doc_uri, Some(&bob), None)
+            .await
+            .status,
+        StatusCode::OK
+    );
+    let item_batch = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/items/{}", it["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json["batch_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        send(&app, Method::GET, &doc_uri, Some(&bob), None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(&app, Method::GET, "/api/me/shared", Some(&bob), None)
+            .await
+            .json,
+        json!([])
+    );
+
+    // 지우는 사람이 지울 수 없는 남의 하위 문서는 함께 지워지지 않고 부모 자리로 옮겨 남는다.
+    let parent = create_doc(&app, &writer, &ws, "상위").await;
+    let child = send(&app, Method::POST, &format!("/api/workspaces/{ws}/wiki/documents"), Some(&other),
+                     Some(json!({ "request_id": new_request_id(), "title": "남의 하위", "parent_id": parent["id"] }))).await.json;
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/documents/{}", parent["id"].as_str().unwrap()),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+    let mine = trash(&app, &writer, &ws).await;
+    let entry = mine["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["title"] == "상위")
+        .unwrap()
+        .clone();
+    assert_eq!(entry["member_count"], 1);
+    let kept = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{}", child["id"].as_str().unwrap()),
+        Some(&other),
+        None,
+    )
+    .await;
+    assert_eq!(kept.status, StatusCode::OK);
+    assert_eq!(kept.json["parent_id"], Value::Null);
+
+    // 항목이 휴지통에 있는 동안 그 안의 업무는 되살릴 수 없다(항목 먼저).
+    let it2 = item(&app, &admin, &ws, "RST").await;
+    let t = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/tasks", it2["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "업무" })),
+    )
+    .await
+    .json;
+    let task_batch = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/tasks/{}", t["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json["batch_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    send(
+        &app,
+        Method::DELETE,
+        &format!("/api/items/{}", it2["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(
+        send(
+            &app,
+            Method::POST,
+            &format!("/api/trash/{task_batch}/restore"),
+            Some(&admin),
+            None
+        )
+        .await
+        .status,
+        StatusCode::CONFLICT
+    );
+    // 다른 항목의 묶음을 되살리면 그 문서는 다시 공유로 보인다.
+    assert_eq!(
+        send(
+            &app,
+            Method::POST,
+            &format!("/api/trash/{item_batch}/restore"),
+            Some(&admin),
+            None
+        )
+        .await
+        .status,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        send(&app, Method::GET, &doc_uri, Some(&bob), None)
+            .await
+            .status,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn purged_repeating_occurrences_are_not_recreated() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "반복 삭제").await;
+    let it = item(&app, &admin, &ws, "RPT").await;
+    let t = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/tasks", it["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "점검" })),
+    )
+    .await
+    .json;
+    let yesterday: String = {
+        let mut tx = state.db.begin_as(admin.id).await.unwrap();
+        sqlx::query_scalar("SELECT ((now() AT TIME ZONE 'Asia/Seoul')::date - 1)::text")
+            .fetch_one(tx.conn())
+            .await
+            .unwrap()
+    };
+    send(&app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(&admin),
+         Some(json!({ "base_version": t["version"], "title": "점검", "description": "", "status": "todo", "priority": "none",
+                      "start_date": null, "due_date": yesterday, "estimate_minutes": null, "tags": [], "assignee_ids": [],
+                      "milestone": false }))).await;
+    send(&app, Method::PUT, &format!("/api/tasks/{}/recurrence", t["id"].as_str().unwrap()), Some(&admin),
+         Some(json!({ "rule": {"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null}, "timezone": "Asia/Seoul" }))).await;
+    let tasks = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{}/tasks", it["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    let second = tasks
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] != t["id"])
+        .unwrap()
+        .clone();
+    let batch = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/tasks/{}", second["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json["batch_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        send(
+            &app,
+            Method::DELETE,
+            &format!("/api/trash/{batch}"),
+            Some(&admin),
+            None
+        )
+        .await
+        .status,
+        StatusCode::NO_CONTENT
+    );
+    let sync = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/recurrences/sync", it["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(sync.json["created"], 0, "a purged occurrence stays gone");
 }

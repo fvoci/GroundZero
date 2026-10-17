@@ -40,6 +40,7 @@ describe('response validation', () => {
     visibility: 'workspace',
     allow_copy: false,
     can_manage: false,
+    can_delete: false,
   };
 
   it('accepts a well-formed document', () => {

@@ -23,6 +23,7 @@
   let status = $state('');
   let confirmPurge = $state<string | undefined>(undefined);
   let days = $state('');
+  let editingDays = false;
   let reloadKey = $state(0);
 
   const isAdmin = $derived(workspace === undefined || workspace.role === 'admin');
@@ -37,7 +38,8 @@
       .then((t) => {
         if (mine !== seq) return;
         trash = t;
-        days = String(t.retention_days);
+        // 입력 중인 보존 기간을 다시 불러온 값으로 덮지 않는다(처음과 저장한 뒤에만 채운다).
+        if (days === '' || !editingDays) days = String(t.retention_days);
         error = undefined;
       })
       .catch((e: unknown) => {
@@ -98,7 +100,13 @@
     >
       <div class="flex flex-col gap-1">
         <Label for="trash-retention">보존 기간(일)</Label>
-        <Input id="trash-retention" class="w-28" inputmode="numeric" bind:value={days} />
+        <Input
+          id="trash-retention"
+          class="w-28"
+          inputmode="numeric"
+          bind:value={days}
+          oninput={() => (editingDays = true)}
+        />
       </div>
       <Button type="submit" variant="outline">바꾸기</Button>
     </form>

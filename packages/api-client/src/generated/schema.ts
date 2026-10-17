@@ -1654,6 +1654,8 @@ export interface components {
             allow_copy: boolean;
             /** @description Tiptap JSON. `type`이 `doc`인 객체. */
             body: Record<string, never>;
+            /** @description 휴지통으로 옮길 수 있는지(문서 소유 권한, 또는 쓰기 권한이 있고 내가 만든 문서). */
+            can_delete: boolean;
             /** @description 현재 사용자가 고칠 수 있는지. */
             can_edit: boolean;
             /**

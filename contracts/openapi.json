@@ -6852,7 +6852,8 @@
           "can_edit",
           "visibility",
           "allow_copy",
-          "can_manage"
+          "can_manage",
+          "can_delete"
         ],
         "properties": {
           "access": {
@@ -6865,6 +6866,10 @@
           "body": {
             "type": "object",
             "description": "Tiptap JSON. `type`이 `doc`인 객체."
+          },
+          "can_delete": {
+            "type": "boolean",
+            "description": "휴지통으로 옮길 수 있는지(문서 소유 권한, 또는 쓰기 권한이 있고 내가 만든 문서)."
           },
           "can_edit": {
             "type": "boolean",
