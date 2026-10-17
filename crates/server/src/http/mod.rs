@@ -18,7 +18,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
     members, modules, public_links, records, recurrence, references, revisions, schedule,
-    search_api, tasks, time_tracking, trash, workspaces,
+    search_api, study, tasks, time_tracking, trash, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -210,6 +210,13 @@ async fn api_not_found() -> AppError {
         export::mine,
         audit::workspace,
         audit::mine,
+        study::get,
+        study::add_units,
+        study::update_unit,
+        study::delete_unit,
+        study::set_progress,
+        study::plan,
+        study::participants,
         records::kinds,
         records::list,
         records::create,
@@ -394,6 +401,18 @@ async fn api_not_found() -> AppError {
         files::RenameFile,
         files::FileTrashed,
         audit::AuditEntry,
+        study::MyUnitProgress,
+        study::StudyUnit,
+        study::StudyPlan,
+        study::NewStudyUnit,
+        study::AddStudyUnits,
+        study::UnitsAdded,
+        study::UpdateStudyUnit,
+        study::SetUnitProgress,
+        study::PlanEntry,
+        study::PlanUnits,
+        study::UnitsPlanned,
+        study::StudyParticipant,
         records::FieldType,
         records::ChoiceDef,
         records::FieldDef,
@@ -510,6 +529,18 @@ pub fn router(state: AppState) -> Router {
         .route("/workspaces/{workspace_id}/audit", get(audit::workspace))
         .route("/me/audit", get(audit::mine))
         .route("/record-kinds", get(records::kinds))
+        .route("/items/{item_id}/study", get(study::get))
+        .route("/items/{item_id}/study/units", post(study::add_units))
+        .route("/items/{item_id}/study/plan", put(study::plan))
+        .route(
+            "/items/{item_id}/study/participants",
+            get(study::participants),
+        )
+        .route(
+            "/study-units/{unit_id}",
+            put(study::update_unit).delete(study::delete_unit),
+        )
+        .route("/study-units/{unit_id}/progress", put(study::set_progress))
         .route(
             "/items/{item_id}/records",
             get(records::list).post(records::create),

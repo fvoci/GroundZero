@@ -330,6 +330,9 @@ SELECT json_build_object(
   'course_details', (SELECT coalesce(json_agg(c), '[]') FROM (
       SELECT cd.* FROM course_details cd JOIN items it ON it.id = cd.item_id
       WHERE cd.workspace_id = $1 AND it.deleted_at IS NULL) c),
+  'study_units', (SELECT coalesce(json_agg(s ORDER BY s.item_id, s.number), '[]') FROM (
+      SELECT su.* FROM study_units su JOIN items it ON it.id = su.item_id
+      WHERE su.workspace_id = $1 AND it.deleted_at IS NULL) s),
   'course_episodes', (SELECT coalesce(json_agg(c ORDER BY c.item_id, c.number), '[]') FROM (
       SELECT ce.* FROM course_episodes ce JOIN items it ON it.id = ce.item_id
       WHERE ce.workspace_id = $1 AND it.deleted_at IS NULL) c),
@@ -411,6 +414,8 @@ SELECT json_build_object(
   'marks', (SELECT coalesce(json_agg(m), '[]') FROM (SELECT * FROM user_marks WHERE user_id = $1) m),
   'episode_progress', (SELECT coalesce(json_agg(p), '[]') FROM (
       SELECT * FROM episode_progress WHERE user_id = $1) p),
+  'unit_progress', (SELECT coalesce(json_agg(p), '[]') FROM (
+      SELECT * FROM unit_progress WHERE user_id = $1) p),
   'audit_log', (SELECT coalesce(json_agg(a ORDER BY a.created_at), '[]') FROM (
       SELECT * FROM audit_log WHERE owner_user_id = $1 AND workspace_id IS NULL) a)
 ,

@@ -15,6 +15,7 @@
   import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
   import ItemEvents from '$lib/features/events/ItemEvents.svelte';
   import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
+  import StudyPanel from '$lib/features/study/StudyPanel.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { itemDocumentPath, modulePath, router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
@@ -227,6 +228,9 @@
 
     {#if mod?.kind === 'course'}
       <CoursePanel itemId={current.id} />
+    {/if}
+    {#if mod?.kind === 'study'}
+      <StudyPanel itemId={current.id} />
     {/if}
 
     <AttachmentsPanel target={{ kind: 'item', id: current.id }} canWrite={canEdit} />

@@ -669,6 +669,75 @@ export function parseRecord(value: Json): RecordView {
   };
 }
 
+// --- 스터디 계획 (D-36) ------------------------------------------------------
+
+export const STUDY_UNIT_KINDS = ['pages', 'problems', 'minutes', 'items'] as const;
+export type StudyUnitKind = (typeof STUDY_UNIT_KINDS)[number];
+
+export interface StudyUnitView {
+  id: string;
+  number: number;
+  title: string;
+  chapter: string;
+  unit: StudyUnitKind;
+  amount: number;
+  planned_on: string | null;
+  mine: {
+    status: EpisodeStatus;
+    done_amount: number;
+    planned_on: string | null;
+    completed_on: string | null;
+    note: string;
+  };
+}
+
+export interface StudyPlanView {
+  units: StudyUnitView[];
+  can_write: boolean;
+}
+
+export interface StudyParticipantView {
+  user_id: string;
+  display_name: string;
+  done: number;
+  in_progress: number;
+  overdue: number;
+  done_amount: number;
+}
+
+function studyUnitKind(value: string): StudyUnitKind {
+  const found = STUDY_UNIT_KINDS.find((k) => k === value);
+  if (found === undefined) throw new TypeError(`unknown study unit ${value}`);
+  return found;
+}
+
+export function parseStudyPlan(value: Json): StudyPlanView {
+  const o = rec(value, 'study plan');
+  return {
+    can_write: bool(o, 'can_write'),
+    units: parseList(o.units, (u): StudyUnitView => {
+      const r = rec(u, 'study unit');
+      const m = rec(r.mine, 'unit progress');
+      return {
+        id: str(r, 'id'),
+        number: int(r, 'number'),
+        title: str(r, 'title'),
+        chapter: str(r, 'chapter'),
+        unit: studyUnitKind(str(r, 'unit')),
+        amount: int(r, 'amount'),
+        planned_on: optStr(r, 'planned_on'),
+        mine: {
+          status: episodeStatus(str(m, 'status')),
+          done_amount: int(m, 'done_amount'),
+          planned_on: optStr(m, 'planned_on'),
+          completed_on: optStr(m, 'completed_on'),
+          note: str(m, 'note'),
+        },
+      };
+    }),
+  };
+}
+
 // --- @ 참조 -------------------------------------------------------------
 
 export type ReferenceKind = 'item' | 'document' | 'task' | 'user';
@@ -2026,6 +2095,62 @@ export const api = {
       'GET',
       `/api/items/${encodeURIComponent(item)}/course/participants?today=${encodeURIComponent(today)}`,
       (v) => parseList(v, parseParticipant),
+    ),
+  studyPlan: (item: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(item)}/study`, parseStudyPlan),
+  addStudyUnits: (
+    item: string,
+    units: {
+      request_id: string;
+      title: string;
+      chapter: string;
+      unit: StudyUnitKind;
+      amount: number;
+      planned_on: string | null;
+    }[],
+  ) =>
+    expectOk(
+      'POST',
+      `/api/items/${encodeURIComponent(item)}/study/units`,
+      (v) => int(rec(v, 'units added'), 'added'),
+      { units: units.map((u) => ({ ...u })) },
+    ),
+  deleteStudyUnit: (id: string) =>
+    expectOk('DELETE', `/api/study-units/${encodeURIComponent(id)}`, none),
+  setUnitProgress: (
+    id: string,
+    progress: {
+      status: EpisodeStatus;
+      done_amount: number;
+      planned_on: string | null;
+      note: string;
+      today: string;
+    },
+  ) =>
+    expectOk('PUT', `/api/study-units/${encodeURIComponent(id)}/progress`, none, { ...progress }),
+  planStudyUnits: (item: string, entries: { unit_id: string; planned_on: string | null }[]) =>
+    expectOk(
+      'PUT',
+      `/api/items/${encodeURIComponent(item)}/study/plan`,
+      (v) => int(rec(v, 'units planned'), 'planned'),
+      { entries: entries.map((e) => ({ ...e })) },
+    ),
+  studyParticipants: (item: string, today: string) =>
+    expectOk(
+      'GET',
+      `/api/items/${encodeURIComponent(item)}/study/participants?today=${encodeURIComponent(today)}`,
+      (v) =>
+        parseList(v, (p): StudyParticipantView => {
+          const o = rec(p, 'study participant');
+          return {
+            user_id: str(o, 'user_id'),
+            display_name: str(o, 'display_name'),
+            done: int(o, 'done'),
+            in_progress: int(o, 'in_progress'),
+            overdue: int(o, 'overdue'),
+            done_amount: int(o, 'done_amount'),
+          };
+        }),
     ),
   /** 감사 기록(워크스페이스, 또는 null이면 내 개인 영역). before는 마지막으로 받은 기록 id. */
   audit: (workspaceId: string | null, before?: string) => {

@@ -3907,6 +3907,246 @@
         }
       }
     },
+    "/api/items/{item_id}/study": {
+      "get": {
+        "tags": [
+          "study"
+        ],
+        "summary": "스터디 계획(볼 수 있는 사람). 스터디 모듈의 항목이 아니면 404.",
+        "operationId": "get_study_plan",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyPlan"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/study/participants": {
+      "get": {
+        "tags": [
+          "study"
+        ],
+        "summary": "함께 하는 사람들의 진행 집계(볼 수 있는 사람).",
+        "operationId": "study_participants",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "today",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudyParticipant"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/study/plan": {
+      "put": {
+        "tags": [
+          "study"
+        ],
+        "summary": "내 계획일 여러 개 바꾸기(밀린 단위 재배치).",
+        "operationId": "plan_study_units",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanUnits"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitsPlanned"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/study/units": {
+      "post": {
+        "tags": [
+          "study"
+        ],
+        "summary": "단위 여러 개 추가(쓸 수 있는 사람). 같은 요청 id는 한 번만.",
+        "operationId": "add_study_units",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddStudyUnits"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitsAdded"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/tasks": {
       "get": {
         "tags": [
@@ -5722,6 +5962,179 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study-units/{unit_id}": {
+      "put": {
+        "tags": [
+          "study"
+        ],
+        "summary": "단위 고치기(쓸 수 있는 사람).",
+        "operationId": "update_study_unit",
+        "parameters": [
+          {
+            "name": "unit_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStudyUnit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "study"
+        ],
+        "summary": "단위 지우기(쓸 수 있는 사람). 모든 사람의 그 단위 진행도 지워진다.",
+        "operationId": "delete_study_unit",
+        "parameters": [
+          {
+            "name": "unit_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study-units/{unit_id}/progress": {
+      "put": {
+        "tags": [
+          "study"
+        ],
+        "summary": "내 진행 바꾸기(스터디를 볼 수 있으면 누구나 자기 것).",
+        "operationId": "set_unit_progress",
+        "parameters": [
+          {
+            "name": "unit_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUnitProgress"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
           },
           "400": {
             "description": "",
@@ -8880,6 +9293,21 @@
           }
         }
       },
+      "AddStudyUnits": {
+        "type": "object",
+        "description": "단위 여러 개 추가(최대 1000개).",
+        "required": [
+          "units"
+        ],
+        "properties": {
+          "units": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NewStudyUnit"
+            }
+          }
+        }
+      },
       "Assignee": {
         "type": "object",
         "description": "담당자.",
@@ -11359,6 +11787,45 @@
           }
         }
       },
+      "MyUnitProgress": {
+        "type": "object",
+        "description": "내 진행.",
+        "required": [
+          "status",
+          "done_amount",
+          "note"
+        ],
+        "properties": {
+          "completed_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "done_amount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "한 분량(단위의 분량과 같은 단위)."
+          },
+          "note": {
+            "type": "string",
+            "description": "개인 메모(나만 봄)."
+          },
+          "planned_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "내 계획일(없으면 공통 계획일)."
+          },
+          "status": {
+            "type": "string",
+            "description": "`not_started`·`in_progress`·`done`."
+          }
+        }
+      },
       "NewChecklistItem": {
         "type": "object",
         "description": "덧붙일 체크리스트 항목.",
@@ -11501,6 +11968,47 @@
             "format": "uuid"
           },
           "title": {
+            "type": "string"
+          }
+        }
+      },
+      "NewStudyUnit": {
+        "type": "object",
+        "description": "추가할 단위.",
+        "required": [
+          "request_id",
+          "title"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "chapter": {
+            "type": "string"
+          },
+          "number": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "planned_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unit": {
             "type": "string"
           }
         }
@@ -11674,6 +12182,41 @@
           },
           "user_id": {
             "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "PlanEntry": {
+        "type": "object",
+        "description": "내 계획일 하나.",
+        "required": [
+          "unit_id"
+        ],
+        "properties": {
+          "planned_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "unit_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "PlanUnits": {
+        "type": "object",
+        "description": "내 계획일 여러 개(밀린 단위 재배치). 날짜는 사용자가 정한다.",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanEntry"
+            }
           }
         }
       },
@@ -12698,6 +13241,40 @@
           }
         }
       },
+      "SetUnitProgress": {
+        "type": "object",
+        "description": "내 진행 바꾸기.",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "done_amount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "note": {
+            "type": "string"
+          },
+          "planned_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "status": {
+            "type": "string"
+          },
+          "today": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "사용자 시간대의 오늘(완료한 날)."
+          }
+        }
+      },
       "Share": {
         "type": "object",
         "description": "공유 항목.",
@@ -12848,6 +13425,111 @@
                 "$ref": "#/components/schemas/TargetInput"
               }
             ]
+          }
+        }
+      },
+      "StudyParticipant": {
+        "type": "object",
+        "description": "함께 하는 사람의 진행 집계(메모·개인 날짜는 없음).",
+        "required": [
+          "user_id",
+          "display_name",
+          "done",
+          "in_progress",
+          "overdue",
+          "done_amount"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "done": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "done_amount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "in_progress": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "overdue": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "StudyPlan": {
+        "type": "object",
+        "description": "스터디 계획.",
+        "required": [
+          "units",
+          "can_write"
+        ],
+        "properties": {
+          "can_write": {
+            "type": "boolean",
+            "description": "단위를 고칠 수 있는지(진행은 볼 수 있으면 누구나 자기 것)."
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StudyUnit"
+            }
+          }
+        }
+      },
+      "StudyUnit": {
+        "type": "object",
+        "description": "계획 단위.",
+        "required": [
+          "id",
+          "number",
+          "title",
+          "chapter",
+          "unit",
+          "amount",
+          "mine"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "chapter": {
+            "type": "string",
+            "description": "교육과정·챕터·단계."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mine": {
+            "$ref": "#/components/schemas/MyUnitProgress"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "planned_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "공통 계획일."
+          },
+          "title": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string",
+            "description": "`pages`·`problems`·`minutes`·`items`."
           }
         }
       },
@@ -13523,6 +14205,32 @@
           }
         }
       },
+      "UnitsAdded": {
+        "type": "object",
+        "description": "추가한 수.",
+        "required": [
+          "added"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "UnitsPlanned": {
+        "type": "object",
+        "description": "바꾼 수.",
+        "required": [
+          "planned"
+        ],
+        "properties": {
+          "planned": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "UpdateChecklistItem": {
         "type": "object",
         "description": "체크리스트 항목 고치기.",
@@ -13649,6 +14357,41 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateStudyUnit": {
+        "type": "object",
+        "description": "단위 고치기.",
+        "required": [
+          "number",
+          "title",
+          "unit"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "chapter": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "planned_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unit": {
             "type": "string"
           }
         }

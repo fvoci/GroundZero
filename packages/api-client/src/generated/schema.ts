@@ -848,6 +848,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/study": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 스터디 계획(볼 수 있는 사람). 스터디 모듈의 항목이 아니면 404. */
+        get: operations["get_study_plan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/study/participants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 함께 하는 사람들의 진행 집계(볼 수 있는 사람). */
+        get: operations["study_participants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/study/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 내 계획일 여러 개 바꾸기(밀린 단위 재배치). */
+        put: operations["plan_study_units"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/study/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 단위 여러 개 추가(쓸 수 있는 사람). 같은 요청 id는 한 번만. */
+        post: operations["add_study_units"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/tasks": {
         parameters: {
             query?: never;
@@ -1342,6 +1410,41 @@ export interface paths {
         /** 통합 검색(로그인한 사람). 볼 수 있는 것만, 최대 20건. */
         get: operations["search"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study-units/{unit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 단위 고치기(쓸 수 있는 사람). */
+        put: operations["update_study_unit"];
+        post?: never;
+        /** 단위 지우기(쓸 수 있는 사람). 모든 사람의 그 단위 진행도 지워진다. */
+        delete: operations["delete_study_unit"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study-units/{unit_id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 내 진행 바꾸기(스터디를 볼 수 있으면 누구나 자기 것). */
+        put: operations["set_unit_progress"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2104,6 +2207,10 @@ export interface components {
         /** @description 회차 여러 개 추가(직접 입력·CSV 일괄 등록, 최대 1000개). */
         AddEpisodes: {
             episodes: components["schemas"]["NewEpisode"][];
+        };
+        /** @description 단위 여러 개 추가(최대 1000개). */
+        AddStudyUnits: {
+            units: components["schemas"]["NewStudyUnit"][];
         };
         /** @description 담당자. */
         Assignee: {
@@ -2893,6 +3000,25 @@ export interface components {
              */
             watch_count: number;
         };
+        /** @description 내 진행. */
+        MyUnitProgress: {
+            /** Format: date */
+            completed_on?: string | null;
+            /**
+             * Format: int32
+             * @description 한 분량(단위의 분량과 같은 단위).
+             */
+            done_amount: number;
+            /** @description 개인 메모(나만 봄). */
+            note: string;
+            /**
+             * Format: date
+             * @description 내 계획일(없으면 공통 계획일).
+             */
+            planned_on?: string | null;
+            /** @description `not_started`·`in_progress`·`done`. */
+            status: string;
+        };
         /** @description 덧붙일 체크리스트 항목. */
         NewChecklistItem: {
             checked?: boolean;
@@ -2940,6 +3066,20 @@ export interface components {
             /** Format: uuid */
             request_id: string;
             title: string;
+        };
+        /** @description 추가할 단위. */
+        NewStudyUnit: {
+            /** Format: int32 */
+            amount?: number;
+            chapter?: string;
+            /** Format: int32 */
+            number?: number | null;
+            /** Format: date */
+            planned_on?: string | null;
+            /** Format: uuid */
+            request_id: string;
+            title: string;
+            unit?: string;
         };
         /** @description 알림. 지금 볼 수 있는 문서에 대한 것만 나온다. */
         Notification: {
@@ -2998,6 +3138,17 @@ export interface components {
         PersonRef: {
             display_name: string;
             user_id: components["schemas"]["UserId"];
+        };
+        /** @description 내 계획일 하나. */
+        PlanEntry: {
+            /** Format: date */
+            planned_on?: string | null;
+            /** Format: uuid */
+            unit_id: string;
+        };
+        /** @description 내 계획일 여러 개(밀린 단위 재배치). 날짜는 사용자가 정한다. */
+        PlanUnits: {
+            entries: components["schemas"]["PlanEntry"][];
         };
         /** @description 아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다. */
         ProjectedTask: {
@@ -3336,6 +3487,20 @@ export interface components {
             /** @description "오늘"을 정하는 시간대(IANA). 공동 반복은 지정한 시간대를 따른다(D-50). */
             timezone: string;
         };
+        /** @description 내 진행 바꾸기. */
+        SetUnitProgress: {
+            /** Format: int32 */
+            done_amount?: number;
+            note?: string;
+            /** Format: date */
+            planned_on?: string | null;
+            status: string;
+            /**
+             * Format: date
+             * @description 사용자 시간대의 오늘(완료한 날).
+             */
+            today?: string | null;
+        };
         /** @description 공유 항목. */
         Share: {
             email: string;
@@ -3383,6 +3548,45 @@ export interface components {
             /** Format: uuid */
             request_id: string;
             target?: null | components["schemas"]["TargetInput"];
+        };
+        /** @description 함께 하는 사람의 진행 집계(메모·개인 날짜는 없음). */
+        StudyParticipant: {
+            display_name: string;
+            /** Format: int32 */
+            done: number;
+            /** Format: int64 */
+            done_amount: number;
+            /** Format: int32 */
+            in_progress: number;
+            /** Format: int32 */
+            overdue: number;
+            user_id: components["schemas"]["UserId"];
+        };
+        /** @description 스터디 계획. */
+        StudyPlan: {
+            /** @description 단위를 고칠 수 있는지(진행은 볼 수 있으면 누구나 자기 것). */
+            can_write: boolean;
+            units: components["schemas"]["StudyUnit"][];
+        };
+        /** @description 계획 단위. */
+        StudyUnit: {
+            /** Format: int32 */
+            amount: number;
+            /** @description 교육과정·챕터·단계. */
+            chapter: string;
+            /** Format: uuid */
+            id: string;
+            mine: components["schemas"]["MyUnitProgress"];
+            /** Format: int32 */
+            number: number;
+            /**
+             * Format: date
+             * @description 공통 계획일.
+             */
+            planned_on?: string | null;
+            title: string;
+            /** @description `pages`·`problems`·`minutes`·`items`. */
+            unit: string;
         };
         /** @description 승인한 후속 업무 재배치 한 건. 날짜가 있던 칸만 옮긴다. */
         SuccessorShift: {
@@ -3629,6 +3833,16 @@ export interface components {
             /** Format: uuid */
             batch_id: string;
         };
+        /** @description 추가한 수. */
+        UnitsAdded: {
+            /** Format: int32 */
+            added: number;
+        };
+        /** @description 바꾼 수. */
+        UnitsPlanned: {
+            /** Format: int32 */
+            planned: number;
+        };
         /** @description 체크리스트 항목 고치기. */
         UpdateChecklistItem: {
             checked: boolean;
@@ -3668,6 +3882,18 @@ export interface components {
         UpdateModule: {
             key: string;
             name: string;
+        };
+        /** @description 단위 고치기. */
+        UpdateStudyUnit: {
+            /** Format: int32 */
+            amount?: number;
+            chapter?: string;
+            /** Format: int32 */
+            number: number;
+            /** Format: date */
+            planned_on?: string | null;
+            title: string;
+            unit: string;
         };
         /** @description 업무 고치기. `base_version`이 지났으면 409와 서버 최신본. */
         UpdateTask: {
@@ -6502,6 +6728,164 @@ export interface operations {
             };
         };
     };
+    get_study_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyPlan"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    study_participants: {
+        parameters: {
+            query: {
+                today: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyParticipant"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    plan_study_units: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanUnits"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitsPlanned"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_study_units: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddStudyUnits"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitsAdded"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_tasks: {
         parameters: {
             query?: never;
@@ -7734,6 +8118,135 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SearchResult"][];
                 };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_study_unit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStudyUnit"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_study_unit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_unit_progress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetUnitProgress"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: {
                 headers: {

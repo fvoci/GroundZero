@@ -1,0 +1,246 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "integration test crate: every item is test code; failures must panic"
+)]
+//! 스터디 계획 (D-36): 계획 단위는 함께, 진행은 사람마다(본인만 읽음), 밀린 단위는 사용자가 정한 날짜로 재배치,
+//! 함께 하는 사람의 집계는 지금 볼 수 있는 사람만.
+
+mod common;
+
+use axum::Router;
+use axum::http::{Method, StatusCode};
+use common::{TestUser, add_member, create_workspace, login, new_request_id, send};
+use serde_json::{Value, json};
+
+async fn module(app: &Router, admin: &TestUser, ws: &str, kind: &str, key: &str) -> String {
+    let m = send(
+        app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "kind": kind, "name": key, "key": key })),
+    )
+    .await;
+    m.json["id"].as_str().unwrap().to_owned()
+}
+
+async fn open_item(app: &Router, admin: &TestUser, module: &str, title: &str) -> String {
+    let i = send(
+        app,
+        Method::POST,
+        &format!("/api/modules/{module}/items"),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "title": title })),
+    )
+    .await;
+    let id = i.json["id"].as_str().unwrap().to_owned();
+    send(
+        app,
+        Method::PUT,
+        &format!("/api/items/{id}"),
+        Some(admin),
+        Some(json!({ "title": title, "description": "", "visibility": "workspace" })),
+    )
+    .await;
+    id
+}
+
+async fn plan(app: &Router, user: &TestUser, item: &str) -> Value {
+    let r = send(
+        app,
+        Method::GET,
+        &format!("/api/items/{item}/study"),
+        Some(user),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    r.json
+}
+
+#[tokio::test]
+async fn study_units_are_shared_and_progress_is_personal() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "스터디").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let outsider = login(&state, "outsider").await;
+    let study = module(&app, &admin, &ws, "study", "STU").await;
+    let lecture = module(&app, &admin, &ws, "course", "LEC").await;
+    let item = open_item(&app, &admin, &study, "통계 스터디").await;
+    let course = open_item(&app, &admin, &lecture, "강좌").await;
+    let units_uri = format!("/api/items/{item}/study/units");
+
+    let first = new_request_id();
+    let body = json!({ "units": [
+        { "request_id": first, "title": "1장 기술통계", "chapter": "1부", "unit": "pages", "amount": 30, "planned_on": "2026-10-10" },
+        { "request_id": new_request_id(), "title": "연습문제", "unit": "problems", "amount": 50, "planned_on": "2026-10-12" },
+        { "request_id": new_request_id(), "title": "복습 강의", "unit": "minutes", "amount": 60 }
+    ]});
+    let added = send(
+        &app,
+        Method::POST,
+        &units_uri,
+        Some(&writer),
+        Some(body.clone()),
+    )
+    .await;
+    assert_eq!(added.json["added"], 3, "{:?}", added.json);
+    assert_eq!(
+        send(&app, Method::POST, &units_uri, Some(&writer), Some(body))
+            .await
+            .json["added"],
+        0
+    );
+    let bad =
+        json!({ "units": [{ "request_id": new_request_id(), "title": "x", "unit": "chapters" }] });
+    assert_eq!(
+        send(&app, Method::POST, &units_uri, Some(&writer), Some(bad))
+            .await
+            .status,
+        StatusCode::BAD_REQUEST
+    );
+    let reader_add = json!({ "units": [{ "request_id": new_request_id(), "title": "x" }] });
+    assert_eq!(
+        send(
+            &app,
+            Method::POST,
+            &units_uri,
+            Some(&reader),
+            Some(reader_add)
+        )
+        .await
+        .status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        send(
+            &app,
+            Method::GET,
+            &format!("/api/items/{item}/study"),
+            Some(&outsider),
+            None
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(
+            &app,
+            Method::GET,
+            &format!("/api/items/{course}/study"),
+            Some(&admin),
+            None
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+
+    // 진행은 사람마다. 독자도 자기 진행을 남긴다. 완료한 날은 사용자의 오늘.
+    let p = plan(&app, &reader, &item).await;
+    assert_eq!(p["can_write"], false);
+    let units = p["units"].as_array().unwrap().clone();
+    assert_eq!(units.len(), 3);
+    let today = time::OffsetDateTime::now_utc().date();
+    let progress =
+        |unit: &Value| format!("/api/study-units/{}/progress", unit["id"].as_str().unwrap());
+    let done = send(
+        &app,
+        Method::PUT,
+        &progress(&units[0]),
+        Some(&reader),
+        Some(json!({
+        "status": "done", "done_amount": 30, "note": "어려웠음", "today": today.to_string() })),
+    )
+    .await;
+    assert_eq!(done.status, StatusCode::NO_CONTENT, "{:?}", done.json);
+    let mine = plan(&app, &reader, &item).await;
+    assert_eq!(mine["units"][0]["mine"]["status"], "done");
+    assert_eq!(mine["units"][0]["mine"]["completed_on"], today.to_string());
+    assert_eq!(mine["units"][0]["mine"]["note"], "어려웠음");
+    let theirs = plan(&app, &writer, &item).await;
+    assert_eq!(theirs["units"][0]["mine"]["status"], "not_started");
+    assert_eq!(theirs["units"][0]["mine"]["note"], "");
+
+    // 밀린 단위를 사용자가 정한 날짜로 재배치(내 계획일만, 상태는 그대로).
+    let replan = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{item}/study/plan"),
+        Some(&reader),
+        Some(json!({
+        "entries": [
+            { "unit_id": units[1]["id"], "planned_on": "2026-10-20" },
+            { "unit_id": units[2]["id"], "planned_on": "2026-10-21" }
+        ] })),
+    )
+    .await;
+    assert_eq!(replan.json["planned"], 2, "{:?}", replan.json);
+    let mine = plan(&app, &reader, &item).await;
+    assert_eq!(mine["units"][1]["mine"]["planned_on"], "2026-10-20");
+    assert_eq!(mine["units"][1]["mine"]["status"], "not_started");
+    assert_eq!(mine["units"][0]["mine"]["status"], "done");
+    let foreign = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{course}/study/plan"),
+        Some(&reader),
+        Some(json!({
+        "entries": [{ "unit_id": units[1]["id"], "planned_on": "2026-10-20" }] })),
+    )
+    .await;
+    assert_eq!(foreign.status, StatusCode::NOT_FOUND);
+
+    // 함께 하는 사람: 진행을 남긴 사람의 집계만, 메모 없이. 볼 수 없게 되면 빠진다.
+    let participants = |user: TestUser| {
+        let app = app.clone();
+        let item = item.clone();
+        async move {
+            send(
+                &app,
+                Method::GET,
+                &format!("/api/items/{item}/study/participants?today=2026-10-30"),
+                Some(&user),
+                None,
+            )
+            .await
+            .json
+        }
+    };
+    let list = participants(writer.clone()).await;
+    assert_eq!(list[0]["display_name"], "reader", "{list:?}");
+    assert_eq!(list[0]["done"], 1);
+    assert_eq!(list[0]["done_amount"], 30);
+    assert_eq!(list[0]["overdue"], 2);
+    assert!(list[0].get("note").is_none());
+    send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{item}"),
+        Some(&admin),
+        Some(json!({ "title": "통계 스터디", "description": "", "visibility": "private" })),
+    )
+    .await;
+    assert_eq!(participants(admin.clone()).await, json!([]));
+
+    // 단위를 지우면 모든 사람의 그 진행도 지워진다.
+    let unit_uri = format!("/api/study-units/{}", units[0]["id"].as_str().unwrap());
+    assert_eq!(
+        send(&app, Method::DELETE, &unit_uri, Some(&admin), None)
+            .await
+            .status,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        plan(&app, &admin, &item).await["units"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
