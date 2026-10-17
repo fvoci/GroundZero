@@ -416,6 +416,55 @@
         }
       }
     },
+    "/api/document-templates": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "쓸 수 있는 문서 템플릿(읽을 수 있는 것만, 제목순).",
+        "operationId": "document_templates",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "query",
+            "description": "이 워크스페이스의 템플릿과 내 개인 노트 템플릿. 없으면 내 개인 노트 템플릿만.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentTemplate"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/documents/{document_id}": {
       "get": {
         "tags": [
@@ -1499,6 +1548,61 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{document_id}/template": {
+      "put": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "템플릿 표시·해제(문서 소유 권한자).",
+        "operationId": "set_document_template",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDocumentTemplate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
           },
           "403": {
             "description": "",
@@ -10125,6 +10229,14 @@
             "type": "string",
             "format": "uuid"
           },
+          "template_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "이 템플릿의 본문으로 시작한다(D-27). 읽을 수 있는 템플릿이어야 한다."
+          },
           "title": {
             "type": "string"
           }
@@ -10432,7 +10544,8 @@
           "visibility",
           "allow_copy",
           "can_manage",
-          "can_delete"
+          "can_delete",
+          "is_template"
         ],
         "properties": {
           "access": {
@@ -10460,6 +10573,10 @@
           },
           "id": {
             "$ref": "#/components/schemas/DocumentId"
+          },
+          "is_template": {
+            "type": "boolean",
+            "description": "템플릿으로 표시됨(D-27). 읽을 수 있는 사람이 새 문서의 본문으로 쓴다."
           },
           "item_id": {
             "oneOf": [
@@ -10588,6 +10705,34 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DocumentTemplate": {
+        "type": "object",
+        "description": "템플릿 하나.",
+        "required": [
+          "id",
+          "title",
+          "personal"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DocumentId"
+          },
+          "personal": {
+            "type": "boolean",
+            "description": "개인 노트 템플릿인지."
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "예: `WIKI-3`. 개인 노트면 없다."
+          },
+          "title": {
+            "type": "string"
           }
         }
       },
@@ -13375,6 +13520,18 @@
         ],
         "properties": {
           "archived": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SetDocumentTemplate": {
+        "type": "object",
+        "description": "템플릿 표시.",
+        "required": [
+          "template"
+        ],
+        "properties": {
+          "template": {
             "type": "boolean"
           }
         }

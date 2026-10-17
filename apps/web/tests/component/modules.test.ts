@@ -102,6 +102,7 @@ describe('module validation', () => {
       allow_copy: false,
       can_manage: false,
       can_delete: false,
+      is_template: false,
     });
     expect(parsed.item_id).toBe(item);
     expect(parsed.placement).toBe('module');

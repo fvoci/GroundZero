@@ -6,9 +6,13 @@
   // 내용이면 들어갈 때 알려 주고, 원문을 고친 경우에만 원문에서 다시 만든 내용으로 바꾼다(조용한 손실 방지).
   import type { Extensions } from '@tiptap/core';
   import { Editor } from '@tiptap/core';
+  import Image from '@tiptap/extension-image';
   import { TaskItem, TaskList } from '@tiptap/extension-list';
+  import Mathematics from '@tiptap/extension-mathematics';
+  import { TableKit } from '@tiptap/extension-table';
   import { Markdown } from '@tiptap/markdown';
   import StarterKit from '@tiptap/starter-kit';
+  import 'katex/dist/katex.min.css';
   import { onMount, untrack } from 'svelte';
 
   import type { DocNode } from '$lib/api/client';
@@ -26,9 +30,12 @@
     onchange?: (body: DocNode) => void;
     /** 참조 노드 표시와 @ 입력. 없으면 참조를 읽기만 하고 이동·입력은 하지 않는다. */
     references?: ReferenceContext | undefined;
+    /** 파일·이미지 넣기: 문서 첨부로 올리고 넣을 주소를 돌려준다. 없으면 단추를 보이지 않는다. */
+    insertFile?:
+      ((file: File) => Promise<{ href: string; name: string; image: boolean }>) | undefined;
   }
 
-  const { content, editable, label, onchange, references }: Props = $props();
+  const { content, editable, label, onchange, references, insertFile }: Props = $props();
 
   type Command = 'bold' | 'italic' | 'heading' | 'bulletList' | 'taskList' | 'codeBlock';
   type Mode = 'rich' | 'markdown' | 'preview';
@@ -47,6 +54,97 @@
   let markdownText = $state('');
   let markdownAtEntry = '';
   let lossy = $state(false);
+
+  // 표·수식·파일(D-27).
+  let inTable = $state(false);
+  let math = $state<
+    { kind: 'inline' | 'block'; latex: string; pos: number | undefined } | undefined
+  >(undefined);
+  let fileInput = $state<HTMLInputElement | undefined>();
+  let fileStatus = $state('');
+
+  function openMath(kind: 'inline' | 'block', latex: string, pos: number | undefined): void {
+    if (editor?.isEditable !== true) return;
+    math = { kind, latex, pos };
+  }
+
+  function applyMath(): void {
+    const e = editor;
+    const m = math;
+    if (e === undefined || m === undefined) return;
+    const latex = m.latex.trim();
+    const chain = e.chain().focus();
+    if (latex === '') {
+      if (m.pos !== undefined)
+        (m.kind === 'inline'
+          ? chain.deleteInlineMath({ pos: m.pos })
+          : chain.deleteBlockMath({ pos: m.pos })
+        ).run();
+    } else if (m.pos === undefined) {
+      (m.kind === 'inline'
+        ? chain.insertInlineMath({ latex })
+        : chain.insertBlockMath({ latex })
+      ).run();
+    } else {
+      (m.kind === 'inline'
+        ? chain.updateInlineMath({ latex, pos: m.pos })
+        : chain.updateBlockMath({ latex, pos: m.pos })
+      ).run();
+    }
+    math = undefined;
+  }
+
+  async function onFile(event: Event): Promise<void> {
+    const input = event.currentTarget;
+    if (!(input instanceof HTMLInputElement) || insertFile === undefined) return;
+    const file = input.files?.[0];
+    input.value = '';
+    if (file === undefined) return;
+    fileStatus = `${file.name} 올리는 중…`;
+    try {
+      const added = await insertFile(file);
+      const chain = editor?.chain().focus();
+      if (added.image) chain?.setImage({ src: added.href, alt: added.name }).run();
+      else
+        chain
+          ?.insertContent({
+            type: 'text',
+            text: added.name,
+            marks: [{ type: 'link', attrs: { href: added.href } }],
+          })
+          .run();
+      fileStatus = `${file.name}을(를) 넣었습니다(문서 첨부에도 있습니다).`;
+    } catch (e: unknown) {
+      fileStatus = e instanceof Error ? `넣지 못했습니다: ${e.message}` : '넣지 못했습니다.';
+    }
+  }
+
+  function table(
+    action: 'insert' | 'row' | 'column' | 'deleteRow' | 'deleteColumn' | 'delete',
+  ): void {
+    const chain = editor?.chain().focus();
+    if (chain === undefined) return;
+    switch (action) {
+      case 'insert':
+        chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        break;
+      case 'row':
+        chain.addRowAfter().run();
+        break;
+      case 'column':
+        chain.addColumnAfter().run();
+        break;
+      case 'deleteRow':
+        chain.deleteRow().run();
+        break;
+      case 'deleteColumn':
+        chain.deleteColumn().run();
+        break;
+      case 'delete':
+        chain.deleteTable().run();
+        break;
+    }
+  }
 
   function readMarks(e: Editor): Record<Command, boolean> {
     return {
@@ -78,6 +176,21 @@
       }),
       Markdown,
       reference,
+      TableKit.configure({ table: { resizable: false } }),
+      Image.configure({ inline: false, allowBase64: false }),
+      Mathematics.configure({
+        katexOptions: { throwOnError: false },
+        inlineOptions: {
+          onClick: (node, pos) => {
+            openMath('inline', String(node.attrs.latex ?? ''), pos);
+          },
+        },
+        blockOptions: {
+          onClick: (node, pos) => {
+            openMath('block', String(node.attrs.latex ?? ''), pos);
+          },
+        },
+      }),
     ];
     if (ctx === undefined || !canEdit) return base;
     return [
@@ -109,6 +222,7 @@
       },
       onTransaction: ({ editor: e }) => {
         marks = readMarks(e);
+        inTable = e.isActive('table');
       },
     });
     editor = instance;
@@ -216,9 +330,119 @@
             }}>{tool.label}</Button
           >
         {/each}
+        <Button
+          variant="ghost"
+          size="sm"
+          onclick={() => {
+            table('insert');
+          }}>표</Button
+        >
+        <Button
+          variant="ghost"
+          size="sm"
+          onclick={() => {
+            openMath('inline', '', undefined);
+          }}>수식</Button
+        >
+        {#if insertFile !== undefined}
+          <Button
+            variant="ghost"
+            size="sm"
+            onclick={() => {
+              fileInput?.click();
+            }}>파일·이미지</Button
+          >
+          <input
+            bind:this={fileInput}
+            type="file"
+            class="hidden"
+            aria-label="넣을 파일"
+            onchange={(e: Event) => void onFile(e)}
+          />
+        {/if}
       </div>
+      {#if inTable}
+        <div class="flex flex-wrap gap-1 border-l pl-2" role="toolbar" aria-label="표">
+          <Button
+            variant="ghost"
+            size="sm"
+            onclick={() => {
+              table('row');
+            }}>행 추가</Button
+          >
+          <Button
+            variant="ghost"
+            size="sm"
+            onclick={() => {
+              table('column');
+            }}>열 추가</Button
+          >
+          <Button
+            variant="ghost"
+            size="sm"
+            onclick={() => {
+              table('deleteRow');
+            }}>행 지우기</Button
+          >
+          <Button
+            variant="ghost"
+            size="sm"
+            onclick={() => {
+              table('deleteColumn');
+            }}>열 지우기</Button
+          >
+          <Button
+            variant="ghost"
+            size="sm"
+            onclick={() => {
+              table('delete');
+            }}>표 지우기</Button
+          >
+        </div>
+      {/if}
     {/if}
   </div>
+  {#if math !== undefined}
+    {@const current = math}
+    <form
+      class="flex flex-wrap items-end gap-2 border-b py-2 text-sm"
+      aria-label="수식"
+      onsubmit={(e: SubmitEvent) => {
+        e.preventDefault();
+        applyMath();
+      }}
+    >
+      <label class="flex flex-1 flex-col gap-1">
+        <span class="font-medium">수식(LaTeX)</span>
+        <input
+          class="h-8 rounded-md border border-input bg-transparent px-2 font-mono"
+          bind:value={current.latex}
+          placeholder="예: E = mc^2"
+        />
+      </label>
+      {#if current.pos === undefined}
+        <label class="flex items-center gap-1 pb-1.5">
+          <input
+            type="checkbox"
+            checked={current.kind === 'block'}
+            onchange={(e: Event) => {
+              if (e.currentTarget instanceof HTMLInputElement)
+                current.kind = e.currentTarget.checked ? 'block' : 'inline';
+            }}
+          />
+          따로 한 줄에
+        </label>
+      {/if}
+      <Button type="submit" size="sm">{current.pos === undefined ? '넣기' : '바꾸기'}</Button>
+      <Button type="button" size="sm" variant="ghost" onclick={() => (math = undefined)}
+        >취소</Button
+      >
+      {#if current.pos !== undefined}
+        <span class="w-full text-xs text-muted-foreground">비우고 바꾸면 수식을 지웁니다.</span>
+      {/if}
+    </form>
+  {/if}
+  {#if fileStatus !== ''}<p class="py-1 text-sm" aria-live="polite">{fileStatus}</p>{/if}
 {/if}
 {#if mode === 'markdown'}
   {#if lossy}

@@ -107,6 +107,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/document-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 쓸 수 있는 문서 템플릿(읽을 수 있는 것만, 제목순). */
+        get: operations["document_templates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}": {
         parameters: {
             query?: never;
@@ -353,6 +370,23 @@ export interface paths {
         put?: never;
         /** 공유 추가(소유 권한자). 받는 사람은 그 이메일을 제공자가 검증한 계정으로 로그인해야 한다. */
         post: operations["create_share"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 템플릿 표시·해제(문서 소유 권한자). */
+        put: operations["set_document_template"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2449,6 +2483,11 @@ export interface components {
             parent_id?: null | components["schemas"]["DocumentId"];
             /** Format: uuid */
             request_id: string;
+            /**
+             * Format: uuid
+             * @description 이 템플릿의 본문으로 시작한다(D-27). 읽을 수 있는 템플릿이어야 한다.
+             */
+            template_id?: string | null;
             title: string;
         };
         /** @description 일정 만들기. */
@@ -2573,6 +2612,8 @@ export interface components {
              */
             can_manage: boolean;
             id: components["schemas"]["DocumentId"];
+            /** @description 템플릿으로 표시됨(D-27). 읽을 수 있는 사람이 새 문서의 본문으로 쓴다. */
+            is_template: boolean;
             item_id?: null | components["schemas"]["ItemId"];
             parent_id?: null | components["schemas"]["DocumentId"];
             /** @description `wiki`, `module` 또는 `personal`. */
@@ -2611,6 +2652,15 @@ export interface components {
             title: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description 템플릿 하나. */
+        DocumentTemplate: {
+            id: components["schemas"]["DocumentId"];
+            /** @description 개인 노트 템플릿인지. */
+            personal: boolean;
+            /** @description 예: `WIKI-3`. 개인 노트면 없다. */
+            reference?: string | null;
+            title: string;
         };
         /**
          * @description Up Next 구분.
@@ -3521,6 +3571,10 @@ export interface components {
         SetArchived: {
             archived: boolean;
         };
+        /** @description 템플릿 표시. */
+        SetDocumentTemplate: {
+            template: boolean;
+        };
         /** @description 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. */
         SetEventRecurrence: {
             rule?: null | components["schemas"]["RecurrenceRule"];
@@ -4429,6 +4483,36 @@ export interface operations {
             };
         };
     };
+    document_templates: {
+        parameters: {
+            query?: {
+                /** @description 이 워크스페이스의 템플릿과 내 개인 노트 템플릿. 없으면 내 개인 노트 템플릿만. */
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentTemplate"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     get: {
         parameters: {
             query?: never;
@@ -5148,6 +5232,45 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_document_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetDocumentTemplate"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             403: {
                 headers: {

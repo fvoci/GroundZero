@@ -21,7 +21,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
     Access, CreateDocument, Document, DocumentSummary, SCHEMA_VERSION, SUMMARY_COLUMNS, SummaryRow,
-    TREE_ORDER, empty_body, load_with_access, max_depth, to_document, to_summaries,
+    TREE_ORDER, initial_body, load_with_access, max_depth, to_document, to_summaries,
 };
 use crate::features::workspaces::{member_role, validate_title};
 
@@ -609,13 +609,14 @@ pub async fn create_item_document(
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
+        let body = initial_body(&mut tx, input.template_id).await?;
         let id: DocumentId =
             sqlx::query_scalar("SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7)")
                 .bind(item)
                 .bind(input.request_id)
                 .bind(&title)
                 .bind(SCHEMA_VERSION)
-                .bind(empty_body())
+                .bind(body)
                 .bind(input.parent_id)
                 .bind(max_depth(&state.config.limits))
                 .fetch_one(tx.conn())

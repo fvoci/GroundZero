@@ -41,6 +41,7 @@ describe('response validation', () => {
     allow_copy: false,
     can_manage: false,
     can_delete: false,
+    is_template: false,
   };
 
   it('accepts a well-formed document', () => {

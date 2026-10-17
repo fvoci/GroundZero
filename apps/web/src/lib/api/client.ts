@@ -49,6 +49,8 @@ export interface DocumentView {
   can_manage: boolean;
   /** 휴지통으로 옮길 수 있는지. */
   can_delete: boolean;
+  /** 템플릿으로 표시됨(D-27). */
+  is_template: boolean;
 }
 
 export class ApiError extends Error {
@@ -177,6 +179,7 @@ export function parseDocument(value: Json): DocumentView {
     allow_copy: bool(o, 'allow_copy'),
     can_manage: bool(o, 'can_manage'),
     can_delete: bool(o, 'can_delete'),
+    is_template: bool(o, 'is_template'),
   };
 }
 
@@ -1983,12 +1986,13 @@ export const api = {
     requestId: string,
     title: string,
     parentId: string | null = null,
+    templateId: string | null = null,
   ) =>
     expectOk(
       'POST',
       `/api/workspaces/${encodeURIComponent(workspaceId)}/wiki/documents`,
       parseDocument,
-      { request_id: requestId, title, parent_id: parentId },
+      { request_id: requestId, title, parent_id: parentId, template_id: templateId },
     ),
   /** 트리에서 부모·순서를 바꾼다. parentId가 null이면 최상위, beforeId가 있으면 그 형제 바로 앞. */
   setParent: (id: string, parentId: string | null, beforeId: string | null) =>
@@ -2226,11 +2230,17 @@ export const api = {
       none,
     ),
   myNotes: () => expectOk('GET', '/api/me/notes', (v) => parseList(v, parseSummary)),
-  createNote: (requestId: string, title: string, parentId: string | null = null) =>
+  createNote: (
+    requestId: string,
+    title: string,
+    parentId: string | null = null,
+    templateId: string | null = null,
+  ) =>
     expectOk('POST', '/api/me/notes', parseDocument, {
       request_id: requestId,
       title,
       parent_id: parentId,
+      template_id: templateId,
     }),
   sharedWithMe: () => expectOk('GET', '/api/me/shared', (v) => parseList(v, parseSharedView)),
   setSettings: (id: string, visibility: 'workspace' | 'private', allowCopy: boolean) =>
@@ -2264,6 +2274,26 @@ export const api = {
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/tasks`, (v) =>
       parseList(v, parseTask),
     ),
+  /** 쓸 수 있는 문서 템플릿(D-27): 그 워크스페이스의 것과 내 개인 노트 템플릿. */
+  documentTemplates: (workspaceId: string | null) =>
+    expectOk(
+      'GET',
+      workspaceId === null
+        ? '/api/document-templates'
+        : `/api/document-templates?workspace_id=${encodeURIComponent(workspaceId)}`,
+      (v) =>
+        parseList(v, (t) => {
+          const o = rec(t, 'document template');
+          return {
+            id: str(o, 'id'),
+            title: str(o, 'title'),
+            reference: optStr(o, 'reference'),
+            personal: bool(o, 'personal'),
+          };
+        }),
+    ),
+  setDocumentTemplate: (id: string, template: boolean) =>
+    expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/template`, none, { template }),
   /** 이 항목의 내 저장한 보기(D-31). config는 화면이 해석한다. */
   savedViews: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/views`, (v) =>
@@ -2716,11 +2746,13 @@ export const api = {
     requestId: string,
     title: string,
     parentId: string | null = null,
+    templateId: string | null = null,
   ) =>
     expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/documents`, parseDocument, {
       request_id: requestId,
       title,
       parent_id: parentId,
+      template_id: templateId,
     }),
   publicLinks: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/public-links`, (v) =>

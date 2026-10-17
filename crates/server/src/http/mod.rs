@@ -210,6 +210,8 @@ async fn api_not_found() -> AppError {
         export::mine,
         audit::workspace,
         audit::mine,
+        documents::templates,
+        documents::set_template,
         saved_views::list,
         saved_views::save,
         saved_views::delete,
@@ -406,6 +408,8 @@ async fn api_not_found() -> AppError {
         files::RenameFile,
         files::FileTrashed,
         audit::AuditEntry,
+        documents::DocumentTemplate,
+        documents::SetDocumentTemplate,
         saved_views::SavedView,
         saved_views::SaveView,
         study::MyUnitProgress,
@@ -539,6 +543,11 @@ pub fn router(state: AppState) -> Router {
         .route("/workspaces/{workspace_id}/audit", get(audit::workspace))
         .route("/me/audit", get(audit::mine))
         .route("/record-kinds", get(records::kinds))
+        .route("/document-templates", get(documents::templates))
+        .route(
+            "/documents/{document_id}/template",
+            put(documents::set_template),
+        )
         .route(
             "/items/{item_id}/views",
             get(saved_views::list).post(saved_views::save),

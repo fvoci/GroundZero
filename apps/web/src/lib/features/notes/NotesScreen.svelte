@@ -3,11 +3,13 @@
   import type { SummaryView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
+  import TemplatePicker from '$lib/features/documents/TemplatePicker.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { router, standalonePath } from '$lib/router.svelte';
 
   let notes = $state<SummaryView[] | undefined>(undefined);
+  let templateId = $state('');
   let error = $state<string | undefined>(undefined);
 
   api
@@ -53,13 +55,19 @@
       }}
     />
   {/if}
+  <TemplatePicker workspaceId={null} id="new-note-template" bind:value={templateId} />
   <CreateForm
     id="new-note"
     label="새 노트 제목"
     placeholder="예: 아이디어"
     submitLabel="노트 만들기"
     create={async (requestId: string, title: string) => {
-      const note = await api.createNote(requestId, title);
+      const note = await api.createNote(
+        requestId,
+        title,
+        null,
+        templateId === '' ? null : templateId,
+      );
       router.navigate(standalonePath(note.id));
     }}
   />

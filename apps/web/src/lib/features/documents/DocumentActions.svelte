@@ -103,6 +103,15 @@
     }
   }
 
+  async function setTemplate(on: boolean): Promise<void> {
+    try {
+      await api.setDocumentTemplate(doc.id, on);
+      onchanged({ ...doc, is_template: on });
+    } catch (e: unknown) {
+      fail(e);
+    }
+  }
+
   // --- 공개 링크 (D-20) ----------------------------------------------------
   let links = $state<PublicLinkView[]>([]);
   let linkExpiryDays = $state('7');
@@ -387,6 +396,18 @@
           />
           <Label for="doc-allow-copy">볼 수 있는 사람의 복제 허용</Label>
         </div>
+        {#if isOwner}
+          <div class="flex items-center gap-2">
+            <Checkbox
+              id="doc-template"
+              checked={doc.is_template}
+              onCheckedChange={(v) => void setTemplate(v === true)}
+            />
+            <Label for="doc-template"
+              >템플릿으로 쓰기(볼 수 있는 사람이 새 문서를 이 본문으로 시작)</Label
+            >
+          </div>
+        {/if}
         <p class="text-sm text-muted-foreground">
           복제를 막아도 화면에 보이는 내용을 촬영하는 것까지 막지는 못합니다.
         </p>

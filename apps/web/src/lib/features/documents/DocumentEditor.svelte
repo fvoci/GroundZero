@@ -8,7 +8,8 @@
   import { onMount, untrack } from 'svelte';
 
   import type { DocNode, DocumentView } from '$lib/api/client';
-  import { api, ApiError, NetworkError, newRequestId } from '$lib/api/client';
+  import { api, ApiError, fileContentUrl, NetworkError, newRequestId } from '$lib/api/client';
+  import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { router, standalonePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
@@ -26,6 +27,20 @@
   }
 
   const { initial, onsaved, references }: Props = $props();
+
+  const INLINE_IMAGES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+  /** 본문에 넣을 파일: 이 문서의 첨부로 올리고 그 버전의 주소를 돌려준다(D-27 이미지·첨부). */
+  async function insertFile(file: File): Promise<{ href: string; name: string; image: boolean }> {
+    const done = await uploadFile(file, { target: { kind: 'document', id: server.id } });
+    if (done.file_id === null) throw new Error(done.failure ?? '업로드를 마치지 못했습니다');
+    const image = INLINE_IMAGES.includes(file.type);
+    return {
+      href: fileContentUrl(done.file_id, done.version ?? undefined, image),
+      name: file.name,
+      image,
+    };
+  }
 
   type Status = 'saved' | 'dirty' | 'saving' | 'retrying' | 'conflict' | 'error' | 'signed-out';
 
@@ -345,6 +360,7 @@
       editable={server.can_edit}
       label="본문"
       {references}
+      insertFile={server.can_edit ? insertFile : undefined}
       onchange={(next: DocNode) => {
         body = next;
         edited();

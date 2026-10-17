@@ -198,4 +198,43 @@
   .fvoci-prose blockquote {
     @apply border-l-4 pl-3 text-muted-foreground;
   }
+
+  /* 표·이미지·수식(D-27). */
+  .fvoci-prose table {
+    border-collapse: collapse;
+    width: 100%;
+    table-layout: fixed;
+    overflow: hidden;
+  }
+
+  .fvoci-prose th,
+  .fvoci-prose td {
+    @apply border px-2 py-1 align-top;
+  }
+
+  .fvoci-prose th {
+    @apply bg-muted text-left font-semibold;
+  }
+
+  .fvoci-prose .selectedCell {
+    @apply bg-accent;
+  }
+
+  .fvoci-prose img {
+    max-width: 100%;
+    height: auto;
+    @apply rounded-md;
+  }
+
+  .fvoci-prose img.ProseMirror-selectednode {
+    @apply ring-2 ring-ring;
+  }
+
+  .fvoci-prose a {
+    @apply text-primary underline;
+  }
+
+  .fvoci-prose [data-type='block-math'] {
+    @apply my-2 overflow-x-auto text-center;
+  }
 }

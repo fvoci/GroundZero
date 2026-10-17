@@ -11,6 +11,8 @@
 
   import ModulesSection from '$lib/features/modules/ModulesSection.svelte';
 
+  import TemplatePicker from '$lib/features/documents/TemplatePicker.svelte';
+
   import CreateForm from './CreateForm.svelte';
 
   interface Props {
@@ -20,6 +22,7 @@
   const { workspace }: Props = $props();
 
   let docs = $state<SummaryView[] | undefined>(undefined);
+  let templateId = $state('');
   let error = $state<string | undefined>(undefined);
 
   $effect(() => {
@@ -71,13 +74,20 @@
     />
   {/if}
   {#if canWrite}
+    <TemplatePicker workspaceId={workspace.id} id="new-document-template" bind:value={templateId} />
     <CreateForm
       id="new-document"
       label="새 문서 제목"
       placeholder="예: 회의록"
       submitLabel="문서 만들기"
       create={async (requestId: string, title: string) => {
-        const doc = await api.createWikiDocument(workspace.id, requestId, title);
+        const doc = await api.createWikiDocument(
+          workspace.id,
+          requestId,
+          title,
+          null,
+          templateId === '' ? null : templateId,
+        );
         router.navigate(documentPath(workspace.id, doc.id));
       }}
     />

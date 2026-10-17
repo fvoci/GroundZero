@@ -11,13 +11,13 @@
 //! 클라이언트는 초안을 버리지 않는다. 같은 `request_id`의 재시도는 이미 만든 리비전을 돌려준다.
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::config::Limits;
@@ -123,6 +123,8 @@ pub struct Document {
     pub can_manage: bool,
     /// 휴지통으로 옮길 수 있는지(문서 소유 권한, 또는 쓰기 권한이 있고 내가 만든 문서).
     pub can_delete: bool,
+    /// 템플릿으로 표시됨(D-27). 읽을 수 있는 사람이 새 문서의 본문으로 쓴다.
+    pub is_template: bool,
 }
 
 /// 문서 생성 요청.
@@ -134,6 +136,10 @@ pub struct CreateDocument {
     /// 이 문서 아래에 만든다(같은 자리의 문서). 없으면 최상위 맨 끝.
     #[serde(default)]
     pub parent_id: Option<DocumentId>,
+    /// 이 템플릿의 본문으로 시작한다(D-27). 읽을 수 있는 템플릿이어야 한다.
+    #[serde(default)]
+    #[schema(value_type = Option<String>, format = Uuid)]
+    pub template_id: Option<DocumentId>,
 }
 
 /// 문서 저장 요청.
@@ -157,6 +163,24 @@ pub struct ConflictBody {
 
 pub(crate) fn empty_body() -> Value {
     serde_json::json!({ "type": "doc", "content": [{ "type": "paragraph" }] })
+}
+
+/// 새 문서의 본문: 템플릿을 주면 그 본문(읽을 수 있는 템플릿이어야 함, 아니면 404), 아니면 빈 문서.
+pub(crate) async fn initial_body(
+    tx: &mut UserTx,
+    template: Option<DocumentId>,
+) -> Result<Value, AppError> {
+    let Some(template) = template else {
+        return Ok(empty_body());
+    };
+    // 문서 RLS가 읽을 수 없는 템플릿을 거른다.
+    let body: Option<Value> = sqlx::query_scalar(
+        "SELECT body FROM documents WHERE id = $1 AND is_template AND deleted_at IS NULL",
+    )
+    .bind(template)
+    .fetch_optional(tx.conn())
+    .await?;
+    body.ok_or(AppError::NotFound)
 }
 
 /// 본문 검증: `type: "doc"` 객체이고 직렬화 크기가 상한 이하.
@@ -185,7 +209,7 @@ pub fn validate_body(body: &Value, limits: &Limits) -> Result<(), AppError> {
 
 /// 참조 노드(`type: "reference"`) 검사: `attrs.kind`는 item·document·user, `attrs.id`는 UUID,
 /// 개수는 상한 이하. 표시 이름 같은 다른 속성은 받지 않는다(제목이 본문에 남지 않게, D-18).
-/// 깊은 중첩에서도 스택이 넘치지 않도록 반복으로 순회한다.
+/// 이미지 주소와 링크 주소도 같은 순회에서 확인한다(D-27). 깊은 중첩에서도 스택이 넘치지 않도록 반복으로 순회한다.
 fn validate_references(body: &Value, max: usize) -> Result<(), AppError> {
     let mut stack = vec![body];
     let mut count = 0usize;
@@ -193,6 +217,11 @@ fn validate_references(body: &Value, max: usize) -> Result<(), AppError> {
         match node {
             Value::Array(items) => stack.extend(items),
             Value::Object(map) => {
+                match map.get("type").and_then(Value::as_str) {
+                    Some("image") => check_image_node(map)?,
+                    Some("link") => check_link_mark(map)?,
+                    _ => {}
+                }
                 if map.get("type").and_then(Value::as_str) == Some("reference") {
                     count += 1;
                     if count > max {
@@ -208,6 +237,64 @@ fn validate_references(body: &Value, max: usize) -> Result<(), AppError> {
         }
     }
     Ok(())
+}
+
+/// 이미지 노드의 주소는 이 서비스의 첨부 파일 내용 주소만 받는다(D-27). 바깥 주소는 읽는 사람의 접속 정보를
+/// 남에게 보내므로(추적 이미지) 받지 않는다.
+fn check_image_node(node: &serde_json::Map<String, Value>) -> Result<(), AppError> {
+    let src = node
+        .get("attrs")
+        .and_then(|a| a.get("src"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let ok = src
+        .strip_prefix("/api/files/")
+        .and_then(|rest| rest.split_once("/content"))
+        .is_some_and(|(id, query)| {
+            Uuid::parse_str(id).is_ok()
+                && (query.is_empty()
+                    || query.strip_prefix('?').is_some_and(|q| {
+                        q.split('&').all(|pair| {
+                            matches!(pair.split_once('='), Some(("version", v)) if !v.is_empty() && v.bytes().all(|b| b.is_ascii_digit()))
+                                || pair == "inline=true"
+                        })
+                    }))
+        });
+    if ok {
+        Ok(())
+    } else {
+        Err(AppError::BadRequest(
+            "images must point to an attachment of this service".into(),
+        ))
+    }
+}
+
+/// 링크 표시의 주소: 스킴이 있으면 http·https·mailto만(`javascript:`·`data:` 등 거부), 없으면 상대 경로·앵커.
+fn check_link_mark(mark: &serde_json::Map<String, Value>) -> Result<(), AppError> {
+    let href = mark
+        .get("attrs")
+        .and_then(|a| a.get("href"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim();
+    let lower = href.to_ascii_lowercase();
+    // 스킴이 있으면 http·https·mailto만, 없으면(상대 경로·#앵커) 다른 호스트로 가는 `//`만 막는다.
+    let scheme = lower.split_once(':').map(|(s, _)| s).filter(|s| {
+        s.starts_with(|c: char| c.is_ascii_alphabetic())
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    });
+    let ok = match scheme {
+        Some(s) => matches!(s, "http" | "https" | "mailto"),
+        None => !href.starts_with("//"),
+    };
+    if ok && !href.chars().any(char::is_control) {
+        Ok(())
+    } else {
+        Err(AppError::BadRequest(
+            "links must be http, https, mailto or a relative path".into(),
+        ))
+    }
 }
 
 /// 참조 노드는 `type`·`attrs`(와 편집기가 붙이는 `marks`)만 가진다. 제목 같은 글자를 노드에 두지 않는다.
@@ -263,6 +350,7 @@ pub(crate) struct DocRow {
     allow_copy: bool,
     can_manage: bool,
     can_delete: bool,
+    is_template: bool,
 }
 
 /// 참조 문자열은 저장하지 않고 현재 키로 만든다(키가 바뀌어도 번호·id는 그대로, D-18).
@@ -273,7 +361,8 @@ const DOC_COLUMNS: &str = "id, workspace_id, \
     app_document_reference(id) AS reference, title, body, schema_version, revision, updated_at, \
     visibility, allow_copy, coalesce(app_document_base_access(id) = 'owner', false) AS can_manage, \
     coalesce(app_document_access(id) = 'owner' \
-      OR (app_document_access(id) = 'write' AND created_by = app_user_id()), false) AS can_delete";
+      OR (app_document_access(id) = 'write' AND created_by = app_user_id()), false) AS can_delete, \
+    is_template";
 
 pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
     Document {
@@ -294,6 +383,7 @@ pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
         allow_copy: row.allow_copy,
         can_manage: row.can_manage,
         can_delete: row.can_delete,
+        is_template: row.is_template,
     }
 }
 
@@ -405,13 +495,14 @@ pub async fn create_wiki(
         if !role.can_write() {
             return Err(AppError::Forbidden);
         }
+        let body = initial_body(&mut tx, input.template_id).await?;
         let id: DocumentId =
             sqlx::query_scalar("SELECT app_create_wiki_document($1, $2, $3, $4, $5, $6, $7)")
                 .bind(ws)
                 .bind(input.request_id)
                 .bind(&title)
                 .bind(SCHEMA_VERSION)
-                .bind(empty_body())
+                .bind(body)
                 .bind(input.parent_id)
                 .bind(max_depth(&state.config.limits))
                 .fetch_one(tx.conn())
@@ -465,12 +556,13 @@ pub async fn create_note(
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
+        let body = initial_body(&mut tx, input.template_id).await?;
         let id: DocumentId =
             sqlx::query_scalar("SELECT app_create_personal_note($1, $2, $3, $4, $5, $6)")
                 .bind(input.request_id)
                 .bind(&title)
                 .bind(SCHEMA_VERSION)
-                .bind(empty_body())
+                .bind(body)
                 .bind(input.parent_id)
                 .bind(max_depth(&state.config.limits))
                 .fetch_one(tx.conn())
@@ -1093,6 +1185,90 @@ pub async fn move_document(
     .into_response())
 }
 
+// ---------------------------------------------------------------------------
+// 문서 템플릿 (D-27)
+// ---------------------------------------------------------------------------
+
+/// 템플릿 목록 조건.
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct TemplateQuery {
+    /// 이 워크스페이스의 템플릿과 내 개인 노트 템플릿. 없으면 내 개인 노트 템플릿만.
+    #[param(value_type = Option<String>, format = Uuid)]
+    pub workspace_id: Option<WorkspaceId>,
+}
+
+/// 템플릿 하나.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DocumentTemplate {
+    pub id: DocumentId,
+    pub title: String,
+    /// 예: `WIKI-3`. 개인 노트면 없다.
+    pub reference: Option<String>,
+    /// 개인 노트 템플릿인지.
+    pub personal: bool,
+}
+
+/// 쓸 수 있는 문서 템플릿(읽을 수 있는 것만, 제목순).
+#[utoipa::path(get, path = "/api/document-templates", operation_id = "document_templates", params(TemplateQuery),
+    responses((status = 200, body = [DocumentTemplate]), (status = 404, body = ErrorBody)), tag = "documents")]
+pub async fn templates(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Query(query): Query<TemplateQuery>,
+) -> Result<Json<Vec<DocumentTemplate>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    if let Some(ws) = query.workspace_id {
+        member_role(&mut tx, ws).await?;
+    }
+    let rows: Vec<(DocumentId, String, Option<String>, bool)> = sqlx::query_as(
+        "SELECT id, title, app_document_reference(id), owner_user_id IS NOT NULL FROM documents
+         WHERE is_template AND deleted_at IS NULL
+           AND (owner_user_id = app_user_id() OR ($1::uuid IS NOT NULL AND workspace_id = $1))
+         ORDER BY title, id LIMIT 200",
+    )
+    .bind(query.workspace_id)
+    .fetch_all(tx.conn())
+    .await?;
+    tx.commit().await?;
+    Ok(Json(
+        rows.into_iter()
+            .map(|(id, title, reference, personal)| DocumentTemplate {
+                id,
+                title,
+                reference,
+                personal,
+            })
+            .collect(),
+    ))
+}
+
+/// 템플릿 표시.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetDocumentTemplate {
+    pub template: bool,
+}
+
+/// 템플릿 표시·해제(문서 소유 권한자).
+#[utoipa::path(put, path = "/api/documents/{document_id}/template", operation_id = "set_document_template",
+    params(("document_id" = String, Path, format = Uuid)), request_body = SetDocumentTemplate,
+    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+pub async fn set_template(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<DocumentId>,
+    Json(input): Json<SetDocumentTemplate>,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_set_document_template($1, $2)")
+        .bind(id)
+        .bind(input.template)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1182,5 +1358,46 @@ mod tests {
         assert!(Access::Write.can_write());
         assert!(!Access::Read.can_write());
         assert_eq!(Access::parse("other"), None);
+    }
+
+    #[test]
+    fn images_and_links_must_stay_inside_the_service() {
+        let doc = |node: serde_json::Value| json!({ "type": "doc", "content": [node] });
+        let image =
+            |src: &str| doc(json!({ "type": "image", "attrs": { "src": src, "alt": "x" } }));
+        let id = "01a1481e-6cb0-73cb-a92b-c7cf6cbc3ebf";
+        for ok in [
+            format!("/api/files/{id}/content"),
+            format!("/api/files/{id}/content?version=2&inline=true"),
+        ] {
+            assert!(validate_body(&image(&ok), &limits(10_000)).is_ok(), "{ok}");
+        }
+        for bad in [
+            "https://tracker.example/pixel.png".to_owned(),
+            format!("/api/files/{id}/content?version=1&x=1"),
+            "/api/files/not-an-id/content".to_owned(),
+            "javascript:alert(1)".to_owned(),
+        ] {
+            assert!(
+                validate_body(&image(&bad), &limits(10_000)).is_err(),
+                "{bad}"
+            );
+        }
+        let link = |href: &str| {
+            doc(
+                json!({ "type": "paragraph", "content": [{ "type": "text", "text": "a",
+                "marks": [{ "type": "link", "attrs": { "href": href } }] }] }),
+            )
+        };
+        for ok in [
+            "https://example.test",
+            "mailto:a@example.test",
+            "/api/files/x/content",
+        ] {
+            assert!(validate_body(&link(ok), &limits(10_000)).is_ok(), "{ok}");
+        }
+        for bad in ["javascript:alert(1)", "//evil.example", "data:text/html,x"] {
+            assert!(validate_body(&link(bad), &limits(10_000)).is_err(), "{bad}");
+        }
     }
 }

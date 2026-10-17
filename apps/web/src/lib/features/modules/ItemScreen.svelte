@@ -14,6 +14,7 @@
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
   import ItemEvents from '$lib/features/events/ItemEvents.svelte';
+  import TemplatePicker from '$lib/features/documents/TemplatePicker.svelte';
   import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
   import StudyPanel from '$lib/features/study/StudyPanel.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
@@ -49,6 +50,7 @@
   let shared = $state(false);
   let formError = $state<string | undefined>(undefined);
   let saved = $state(false);
+  let docTemplate = $state('');
 
   function fill(next: ItemView): void {
     item = next;
@@ -286,13 +288,24 @@
         />
       {/if}
       {#if canEdit}
+        <TemplatePicker
+          workspaceId={workspace.id}
+          id="new-item-document-template"
+          bind:value={docTemplate}
+        />
         <CreateForm
           id="new-item-document"
           label="새 문서 제목"
           placeholder="예: 설계 메모"
           submitLabel="문서 만들기"
           create={async (requestId: string, docTitle: string) => {
-            const doc = await api.createItemDocument(current.id, requestId, docTitle);
+            const doc = await api.createItemDocument(
+              current.id,
+              requestId,
+              docTitle,
+              null,
+              docTemplate === '' ? null : docTemplate,
+            );
             router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
           }}
         />
