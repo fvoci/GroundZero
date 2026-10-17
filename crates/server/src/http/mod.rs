@@ -35,6 +35,8 @@ pub struct AppState {
     pub upload_permits: Arc<tokio::sync::Semaphore>,
     /// 반출 ZIP 동시 처리 한도.
     pub export_permits: Arc<tokio::sync::Semaphore>,
+    /// 실시간 공동 편집 방(D-70). 한 앱 프로세스 안에서만 공유한다.
+    pub collab: crate::collab::Rooms,
 }
 
 /// 서비스 상태 응답.
@@ -128,6 +130,7 @@ async fn api_not_found() -> AppError {
         workspaces::list,
         workspaces::create,
         workspaces::delete,
+        workspaces::set_realtime,
         workspaces::deleted,
         workspaces::restore,
         workspaces::purge,
@@ -315,6 +318,7 @@ async fn api_not_found() -> AppError {
         workspaces::Workspace,
         workspaces::CreateWorkspace,
         workspaces::DeleteWorkspace,
+        workspaces::SetRealtime,
         workspaces::WorkspaceDeleted,
         workspaces::DeletedWorkspace,
         documents::DocumentSummary,
@@ -850,6 +854,14 @@ pub fn router(state: AppState) -> Router {
             get(documents::get)
                 .put(documents::save)
                 .delete(trash::trash_document),
+        )
+        .route(
+            "/documents/{document_id}/collab",
+            get(crate::collab::ws::connect),
+        )
+        .route(
+            "/workspaces/{workspace_id}/realtime",
+            put(workspaces::set_realtime),
         )
         .route(
             "/workspaces/{workspace_id}/members",

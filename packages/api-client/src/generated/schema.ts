@@ -2159,6 +2159,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/{workspace_id}/realtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 워크스페이스 문서의 실시간 공동 편집을 켜거나 끈다(관리자). 끄면 열려 있는 편집 방은 리비전을 남기고 닫힌다. */
+        put: operations["set_realtime"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces/{workspace_id}/time-sharing": {
         parameters: {
             query?: never;
@@ -2689,6 +2706,8 @@ export interface components {
             parent_id?: null | components["schemas"]["DocumentId"];
             /** @description `wiki`, `module` 또는 `personal`. */
             placement: string;
+            /** @description 실시간 공동 편집 중인 문서(워크스페이스가 켬, D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다. */
+            realtime: boolean;
             reference?: string | null;
             /** Format: int32 */
             revision: number;
@@ -3704,6 +3723,10 @@ export interface components {
              */
             today?: string | null;
         };
+        /** @description 실시간 공동 편집 켜고 끄기 요청(D-27, D-70). */
+        SetRealtime: {
+            enabled: boolean;
+        };
         /** @description 휴지통 보존 기간. */
         SetRetention: {
             /**
@@ -4242,6 +4265,8 @@ export interface components {
             /** @description 현재 사용자가 소유자인지 (D-51). */
             is_owner: boolean;
             name: string;
+            /** @description 워크스페이스 문서를 실시간 공동 편집으로 연다(D-27, D-70). 관리자가 켜고 끈다. */
+            realtime_enabled: boolean;
             /** @description 현재 사용자의 역할. */
             role: components["schemas"]["Role"];
         };
@@ -10676,6 +10701,45 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_realtime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRealtime"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {

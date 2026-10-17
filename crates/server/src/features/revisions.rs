@@ -194,9 +194,10 @@ pub async fn restore(
     let (row, access) = load_with_access(&mut tx, id).await?;
     tx.commit().await?;
     let doc = to_document(row, access);
-    Ok(if outcome == "conflict" {
-        conflict(doc)
-    } else {
-        Json(doc).into_response()
-    })
+    if outcome == "conflict" {
+        return Ok(conflict(doc));
+    }
+    // 실시간 편집 방이 열려 있으면 저장 없이 닫고 복원된 본문으로 다시 열게 한다(D-70).
+    state.collab.reset(id).await;
+    Ok(Json(doc).into_response())
 }

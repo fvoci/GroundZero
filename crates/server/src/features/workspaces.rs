@@ -24,6 +24,8 @@ pub struct Workspace {
     pub role: Role,
     /// 현재 사용자가 소유자인지 (D-51).
     pub is_owner: bool,
+    /// 워크스페이스 문서를 실시간 공동 편집으로 연다(D-27, D-70). 관리자가 켜고 끈다.
+    pub realtime_enabled: bool,
 }
 
 /// 워크스페이스 생성 요청.
@@ -66,7 +68,7 @@ pub async fn member_role(tx: &mut UserTx, ws: WorkspaceId) -> Result<Role, AppEr
 }
 
 fn row_to_workspace(
-    (id, name, role, is_owner): (WorkspaceId, String, String, bool),
+    (id, name, role, is_owner, realtime_enabled): (WorkspaceId, String, String, bool, bool),
 ) -> Result<Workspace, AppError> {
     let role = Role::parse(&role)
         .ok_or_else(|| AppError::Config(format!("unknown role in database: {role}")))?;
@@ -75,6 +77,7 @@ fn row_to_workspace(
         name,
         role,
         is_owner,
+        realtime_enabled,
     })
 }
 
@@ -86,8 +89,8 @@ pub async fn list(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<Workspace>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let rows: Vec<(WorkspaceId, String, String, bool)> = sqlx::query_as(
-        "SELECT w.id, w.name, m.role, w.owner_id = m.user_id
+    let rows: Vec<(WorkspaceId, String, String, bool, bool)> = sqlx::query_as(
+        "SELECT w.id, w.name, m.role, w.owner_id = m.user_id, w.realtime_enabled
          FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id
          WHERE m.user_id = app_user_id()
          ORDER BY w.created_at, w.id",
@@ -117,8 +120,8 @@ pub async fn create(
         .bind(&name)
         .fetch_one(tx.conn())
         .await?;
-    let row: (WorkspaceId, String, String, bool) = sqlx::query_as(
-        "SELECT w.id, w.name, m.role, w.owner_id = m.user_id FROM workspaces w
+    let row: (WorkspaceId, String, String, bool, bool) = sqlx::query_as(
+        "SELECT w.id, w.name, m.role, w.owner_id = m.user_id, w.realtime_enabled FROM workspaces w
          JOIN workspace_members m ON m.workspace_id = w.id AND m.user_id = app_user_id()
          WHERE w.id = $1",
     )
@@ -246,5 +249,36 @@ pub async fn purge(
         .await
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// 실시간 공동 편집 켜고 끄기 요청(D-27, D-70).
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetRealtime {
+    pub enabled: bool,
+}
+
+/// 워크스페이스 문서의 실시간 공동 편집을 켜거나 끈다(관리자). 끄면 열려 있는 편집 방은 리비전을 남기고 닫힌다.
+#[utoipa::path(put, path = "/api/workspaces/{workspace_id}/realtime",
+    params(("workspace_id" = String, Path, format = Uuid)), request_body = SetRealtime,
+    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)),
+    tag = "workspaces")]
+pub async fn set_realtime(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(ws): Path<WorkspaceId>,
+    Json(input): Json<SetRealtime>,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_set_workspace_realtime($1, $2)")
+        .bind(ws)
+        .bind(input.enabled)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    if !input.enabled {
+        state.collab.close_workspace(ws.0).await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }

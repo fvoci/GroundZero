@@ -116,6 +116,14 @@ pub(crate) fn token_hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 
+/// 요청의 세션 쿠키 토큰 해시(실시간 연결이 세션이 살아 있는지 다시 볼 때 쓴다).
+pub(crate) fn session_token_hash(headers: &HeaderMap, config: &Config) -> Option<Vec<u8>> {
+    single_cookie(headers, session_cookie_name(config))
+        .ok()
+        .flatten()
+        .map(|token| token_hash(&token))
+}
+
 fn cookie(config: &Config, name: &'static str, value: String) -> Cookie<'static> {
     let mut c = Cookie::new(name, value);
     c.set_http_only(true);

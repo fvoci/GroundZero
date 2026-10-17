@@ -119,6 +119,8 @@ pub struct Config {
     pub zotero_api_url: Url,
     /// 세션 절대 만료. `FVOCI_SESSION_TTL_SECS`, 기본 43200(12시간).
     pub session_ttl: Duration,
+    /// 실시간 편집 연결의 세션·권한 재확인 간격. `FVOCI_COLLAB_RECHECK_SECS`, 기본 30초(D-70).
+    pub collab_recheck: Duration,
     /// 정적 웹 자산 디렉터리. `FVOCI_WEB_DIR`. 없으면 API만 서빙한다.
     pub web_dir: Option<PathBuf>,
     pub limits: Limits,
@@ -218,6 +220,8 @@ impl Config {
         };
 
         let session_ttl = Duration::from_secs(parse_or(&lookup, "FVOCI_SESSION_TTL_SECS", 43_200)?);
+        let collab_recheck =
+            Duration::from_secs(parse_or(&lookup, "FVOCI_COLLAB_RECHECK_SECS", 30)?.max(1));
         let web_dir = lookup("FVOCI_WEB_DIR")
             .filter(|v| !v.trim().is_empty())
             .map(PathBuf::from);
@@ -354,6 +358,7 @@ impl Config {
             )
             .map_err(|e| AppError::Config(format!("FVOCI_ZOTERO_API_URL is invalid: {e}")))?,
             session_ttl,
+            collab_recheck,
             web_dir,
             limits,
             role,

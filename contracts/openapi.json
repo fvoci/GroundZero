@@ -9219,6 +9219,61 @@
         }
       }
     },
+    "/api/workspaces/{workspace_id}/realtime": {
+      "put": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "워크스페이스 문서의 실시간 공동 편집을 켜거나 끈다(관리자). 끄면 열려 있는 편집 방은 리비전을 남기고 닫힌다.",
+        "operationId": "set_realtime",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRealtime"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{workspace_id}/time-sharing": {
       "get": {
         "tags": [
@@ -10800,7 +10855,8 @@
           "allow_copy",
           "can_manage",
           "can_delete",
-          "is_template"
+          "is_template",
+          "realtime"
         ],
         "properties": {
           "access": {
@@ -10858,6 +10914,10 @@
           "placement": {
             "type": "string",
             "description": "`wiki`, `module` 또는 `personal`."
+          },
+          "realtime": {
+            "type": "boolean",
+            "description": "실시간 공동 편집 중인 문서(워크스페이스가 켬, D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다."
           },
           "reference": {
             "type": [
@@ -13981,6 +14041,18 @@
           }
         }
       },
+      "SetRealtime": {
+        "type": "object",
+        "description": "실시간 공동 편집 켜고 끄기 요청(D-27, D-70).",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
       "SetRetention": {
         "type": "object",
         "description": "휴지통 보존 기간.",
@@ -15480,7 +15552,8 @@
           "id",
           "name",
           "role",
-          "is_owner"
+          "is_owner",
+          "realtime_enabled"
         ],
         "properties": {
           "id": {
@@ -15492,6 +15565,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "realtime_enabled": {
+            "type": "boolean",
+            "description": "워크스페이스 문서를 실시간 공동 편집으로 연다(D-27, D-70). 관리자가 켜고 끈다."
           },
           "role": {
             "$ref": "#/components/schemas/Role",

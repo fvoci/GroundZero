@@ -51,7 +51,7 @@ impl Access {
         }
     }
 
-    fn can_write(self) -> bool {
+    pub(crate) fn can_write(self) -> bool {
         matches!(self, Self::Owner | Self::Write)
     }
 }
@@ -125,6 +125,8 @@ pub struct Document {
     pub can_delete: bool,
     /// 템플릿으로 표시됨(D-27). 읽을 수 있는 사람이 새 문서의 본문으로 쓴다.
     pub is_template: bool,
+    /// 실시간 공동 편집 중인 문서(워크스페이스가 켬, D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다.
+    pub realtime: bool,
 }
 
 /// 문서 생성 요청.
@@ -351,16 +353,17 @@ pub(crate) struct DocRow {
     parent_id: Option<DocumentId>,
     placement: String,
     reference: Option<String>,
-    title: String,
-    body: Value,
+    pub(crate) title: String,
+    pub(crate) body: Value,
     schema_version: i32,
-    revision: i32,
+    pub(crate) revision: i32,
     updated_at: OffsetDateTime,
     visibility: String,
     allow_copy: bool,
     can_manage: bool,
     can_delete: bool,
     is_template: bool,
+    pub(crate) realtime: bool,
 }
 
 /// 참조 문자열은 저장하지 않고 현재 키로 만든다(키가 바뀌어도 번호·id는 그대로, D-18).
@@ -372,7 +375,7 @@ const DOC_COLUMNS: &str = "id, workspace_id, \
     visibility, allow_copy, coalesce(app_document_base_access(id) = 'owner', false) AS can_manage, \
     coalesce(app_document_access(id) = 'owner' \
       OR (app_document_access(id) = 'write' AND created_by = app_user_id()), false) AS can_delete, \
-    is_template";
+    is_template, app_document_realtime(id) AS realtime";
 
 pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
     Document {
@@ -394,6 +397,7 @@ pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
         can_manage: row.can_manage,
         can_delete: row.can_delete,
         is_template: row.is_template,
+        realtime: row.realtime,
     }
 }
 
@@ -408,7 +412,10 @@ async fn load(tx: &mut UserTx, id: DocumentId) -> Result<Option<DocRow>, AppErro
 }
 
 /// 행을 잠그고 읽는다. 같은 문서의 저장은 직렬화되어 재시도 판단과 리비전 비교가 최신 행 기준이 된다.
-async fn load_for_update(tx: &mut UserTx, id: DocumentId) -> Result<Option<DocRow>, AppError> {
+pub(crate) async fn load_for_update(
+    tx: &mut UserTx,
+    id: DocumentId,
+) -> Result<Option<DocRow>, AppError> {
     let row = sqlx::query_as(&format!(
         "SELECT {DOC_COLUMNS} FROM documents WHERE id = $1 FOR UPDATE"
     ))
@@ -732,7 +739,27 @@ pub async fn save(
         tx.commit().await?;
         return Ok(Json(to_document(current, access)).into_response());
     }
+    // 실시간 편집 중이면 본문은 실시간 연결만 고친다(두 길로 본문이 갈라지지 않게). 제목은 여기서 바꾼다.
+    if current.realtime && current.body != input.body {
+        return Err(AppError::Conflict(
+            "realtime editing is on for this document; edit the body in the live editor".into(),
+        ));
+    }
 
+    let row = write_revision(&mut tx, id, &title, &input.body, input.request_id).await?;
+    tx.commit().await?;
+    Ok(Json(to_document(row, access)).into_response())
+}
+
+/// 저장의 끝부분: 문서 행을 새 리비전으로 바꾸고 리비전·링크·언급을 기록한다. 저장 API와 실시간 편집의
+/// 리비전(collab)이 같은 길을 쓴다. 호출하는 쪽이 문서 행을 잠그고 쓰기 권한을 확인한다.
+pub(crate) async fn write_revision(
+    tx: &mut UserTx,
+    id: DocumentId,
+    title: &str,
+    body: &Value,
+    request_id: Uuid,
+) -> Result<DocRow, AppError> {
     // 제목 변경 감사 기록은 트리거가 남긴다(본문은 남기지 않는다).
     let row: DocRow = sqlx::query_as(&format!(
         "UPDATE documents
@@ -742,8 +769,8 @@ pub async fn save(
          RETURNING {DOC_COLUMNS}"
     ))
     .bind(id)
-    .bind(&title)
-    .bind(&input.body)
+    .bind(title)
+    .bind(body)
     .bind(SCHEMA_VERSION)
     .fetch_optional(tx.conn())
     .await?
@@ -755,10 +782,10 @@ pub async fn save(
     )
     .bind(id)
     .bind(row.revision)
-    .bind(&title)
+    .bind(title)
     .bind(SCHEMA_VERSION)
-    .bind(&input.body)
-    .bind(input.request_id)
+    .bind(body)
+    .bind(request_id)
     .execute(tx.conn())
     .await?;
     // 링크·언급은 방금 저장한 본문에서 뽑아 같은 트랜잭션에 기록한다.
@@ -767,8 +794,7 @@ pub async fn save(
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-    tx.commit().await?;
-    Ok(Json(to_document(row, access)).into_response())
+    Ok(row)
 }
 
 // ---------------------------------------------------------------------------

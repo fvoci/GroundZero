@@ -32,6 +32,7 @@ pub fn build_state(config: Config) -> Result<AppState, AppError> {
         storage,
         upload_permits,
         export_permits,
+        collab: crate::collab::Rooms::default(),
     })
 }
 
