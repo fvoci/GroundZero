@@ -3720,6 +3720,131 @@
         }
       }
     },
+    "/api/items/{item_id}/records": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "항목의 기록(볼 수 있는 사람). 종류·날짜 순.",
+        "operationId": "item_records",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Record"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "records"
+        ],
+        "summary": "기록 만들기(항목에 쓸 수 있는 사람). 같은 요청 id면 같은 기록.",
+        "operationId": "create_record",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewRecord"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/recurrences/sync": {
       "post": {
         "tags": [
@@ -5205,6 +5330,165 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/record-kinds": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "기록 종류 정의 전체(화면이 입력 칸을 그린다).",
+        "operationId": "record_kinds",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecordKindDef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/records/{record_id}": {
+      "put": {
+        "tags": [
+          "records"
+        ],
+        "summary": "기록 고치기(항목에 쓸 수 있는 사람). 읽은 뒤 바뀌었으면 409.",
+        "operationId": "update_record",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditRecord"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordVersion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "records"
+        ],
+        "summary": "기록 지우기(만든 사람 또는 항목 소유 권한자).",
+        "operationId": "delete_record",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -8852,6 +9136,22 @@
           }
         }
       },
+      "ChoiceDef": {
+        "type": "object",
+        "description": "고를 수 있는 값.",
+        "required": [
+          "value",
+          "label"
+        ],
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
       "Comment": {
         "type": "object",
         "description": "댓글 하나.",
@@ -9554,6 +9854,42 @@
           }
         }
       },
+      "EditRecord": {
+        "type": "object",
+        "description": "기록 고치기. `version`은 읽은 판.",
+        "required": [
+          "version",
+          "title"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "object"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordFileInput"
+            }
+          },
+          "occurred_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "EntryInput": {
         "type": "object",
         "description": "기록 내용(수동 추가·고치기 공통).",
@@ -9910,6 +10246,49 @@
             "description": "일정 시간대 기준의 회차 날짜."
           }
         }
+      },
+      "FieldDef": {
+        "type": "object",
+        "description": "칸 정의.",
+        "required": [
+          "key",
+          "label",
+          "type",
+          "choices"
+        ],
+        "properties": {
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChoiceDef"
+            }
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/FieldType"
+          }
+        }
+      },
+      "FieldType": {
+        "type": "string",
+        "description": "칸의 형식.",
+        "enum": [
+          "text",
+          "long_text",
+          "date",
+          "number",
+          "choice",
+          "url",
+          "tags",
+          "person",
+          "people",
+          "course"
+        ]
       },
       "FileDetail": {
         "type": "object",
@@ -11086,6 +11465,46 @@
           }
         }
       },
+      "NewRecord": {
+        "type": "object",
+        "description": "기록 만들기.",
+        "required": [
+          "request_id",
+          "kind",
+          "title"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "object"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordFileInput"
+            }
+          },
+          "kind": {
+            "type": "string"
+          },
+          "occurred_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
       "Notification": {
         "type": "object",
         "description": "알림. 지금 볼 수 있는 문서에 대한 것만 나온다.",
@@ -11405,6 +11824,199 @@
           },
           "workspace_name": {
             "type": "string"
+          }
+        }
+      },
+      "Record": {
+        "type": "object",
+        "description": "항목 기록.",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "body",
+          "fields",
+          "files",
+          "created_by",
+          "updated_at",
+          "version",
+          "can_edit",
+          "can_delete"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "can_delete": {
+            "type": "boolean"
+          },
+          "can_edit": {
+            "type": "boolean"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "created_by_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fields": {
+            "type": "object"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordFile"
+            }
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "occurred_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "RecordFile": {
+        "type": "object",
+        "description": "연결한 파일 버전.",
+        "required": [
+          "role",
+          "file_name",
+          "version",
+          "sha256",
+          "size",
+          "available"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "그 버전을 지금도 열 수 있는지."
+          },
+          "file_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "파일이 영구 삭제되었으면 없다(이름·버전·SHA-256은 남는다)."
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "RecordFileInput": {
+        "type": "object",
+        "description": "연결할 파일 버전. 버전이 없으면 지금 버전.",
+        "required": [
+          "file_id",
+          "role"
+        ],
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string"
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "RecordKindDef": {
+        "type": "object",
+        "description": "기록 종류 정의.",
+        "required": [
+          "kind",
+          "label",
+          "module_kind",
+          "fields",
+          "file_roles"
+        ],
+        "properties": {
+          "date_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "기록 날짜 칸의 이름(예: 모임 날짜, 실행일). 없으면 날짜를 받지 않는다."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldDef"
+            }
+          },
+          "file_roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChoiceDef"
+            },
+            "description": "파일 연결 역할. 비었으면 파일을 연결하지 않는다."
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "module_kind": {
+            "$ref": "#/components/schemas/ModuleKind"
+          }
+        }
+      },
+      "RecordVersion": {
+        "type": "object",
+        "description": "새 판.",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

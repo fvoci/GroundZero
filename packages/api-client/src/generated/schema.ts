@@ -813,6 +813,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 항목의 기록(볼 수 있는 사람). 종류·날짜 순. */
+        get: operations["item_records"];
+        put?: never;
+        /** 기록 만들기(항목에 쓸 수 있는 사람). 같은 요청 id면 같은 기록. */
+        post: operations["create_record"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/recurrences/sync": {
         parameters: {
             query?: never;
@@ -1240,6 +1258,41 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/record-kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 기록 종류 정의 전체(화면이 입력 칸을 그린다). */
+        get: operations["record_kinds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/records/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 기록 고치기(항목에 쓸 수 있는 사람). 읽은 뒤 바뀌었으면 409. */
+        put: operations["update_record"];
+        post?: never;
+        /** 기록 지우기(만든 사람 또는 항목 소유 권한자). */
+        delete: operations["delete_record"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2119,6 +2172,11 @@ export interface components {
             id: string;
             text: string;
         };
+        /** @description 고를 수 있는 값. */
+        ChoiceDef: {
+            label: string;
+            value: string;
+        };
         /** @description 댓글 하나. */
         Comment: {
             author_id: components["schemas"]["UserId"];
@@ -2365,6 +2423,17 @@ export interface components {
         EditComment: {
             body: string;
         };
+        /** @description 기록 고치기. `version`은 읽은 판. */
+        EditRecord: {
+            body?: string;
+            fields?: Record<string, never>;
+            files?: components["schemas"]["RecordFileInput"][];
+            /** Format: date */
+            occurred_on?: string | null;
+            title: string;
+            /** Format: int32 */
+            version: number;
+        };
         /** @description 기록 내용(수동 추가·고치기 공통). */
         EntryInput: {
             /** @description RFC 3339. 진행 중인 타이머를 고칠 때만 없다. */
@@ -2475,6 +2544,18 @@ export interface components {
             /** @description 일정 시간대 기준의 회차 날짜. */
             date: string;
         };
+        /** @description 칸 정의. */
+        FieldDef: {
+            choices: components["schemas"]["ChoiceDef"][];
+            key: string;
+            label: string;
+            type: components["schemas"]["FieldType"];
+        };
+        /**
+         * @description 칸의 형식.
+         * @enum {string}
+         */
+        FieldType: "text" | "long_text" | "date" | "number" | "choice" | "url" | "tags" | "person" | "people" | "course";
         /** @description 파일과 모든 버전(최신 먼저). */
         FileDetail: {
             file: components["schemas"]["FileView"];
@@ -2848,6 +2929,18 @@ export interface components {
             title: string;
             url?: string;
         };
+        /** @description 기록 만들기. */
+        NewRecord: {
+            body?: string;
+            fields?: Record<string, never>;
+            files?: components["schemas"]["RecordFileInput"][];
+            kind: string;
+            /** Format: date */
+            occurred_on?: string | null;
+            /** Format: uuid */
+            request_id: string;
+            title: string;
+        };
         /** @description 알림. 지금 볼 수 있는 문서에 대한 것만 나온다. */
         Notification: {
             /** @description 한 사람. 워크스페이스를 함께 쓰지 않거나(공유받은 개인 노트 등) 자동 알림(기한)이면 없다. */
@@ -2957,6 +3050,67 @@ export interface components {
             role: components["schemas"]["Role"];
             workspace_id: components["schemas"]["WorkspaceId"];
             workspace_name: string;
+        };
+        /** @description 항목 기록. */
+        Record: {
+            body: string;
+            can_delete: boolean;
+            can_edit: boolean;
+            created_by: components["schemas"]["UserId"];
+            created_by_name?: string | null;
+            fields: Record<string, never>;
+            files: components["schemas"]["RecordFile"][];
+            /** Format: uuid */
+            id: string;
+            kind: string;
+            /** Format: date */
+            occurred_on?: string | null;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description 연결한 파일 버전. */
+        RecordFile: {
+            /** @description 그 버전을 지금도 열 수 있는지. */
+            available: boolean;
+            /**
+             * Format: uuid
+             * @description 파일이 영구 삭제되었으면 없다(이름·버전·SHA-256은 남는다).
+             */
+            file_id?: string | null;
+            file_name: string;
+            role: string;
+            sha256: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description 연결할 파일 버전. 버전이 없으면 지금 버전. */
+        RecordFileInput: {
+            /** Format: uuid */
+            file_id: string;
+            role: string;
+            /** Format: int32 */
+            version?: number | null;
+        };
+        /** @description 기록 종류 정의. */
+        RecordKindDef: {
+            /** @description 기록 날짜 칸의 이름(예: 모임 날짜, 실행일). 없으면 날짜를 받지 않는다. */
+            date_label?: string | null;
+            fields: components["schemas"]["FieldDef"][];
+            /** @description 파일 연결 역할. 비었으면 파일을 연결하지 않는다. */
+            file_roles: components["schemas"]["ChoiceDef"][];
+            kind: string;
+            label: string;
+            module_kind: components["schemas"]["ModuleKind"];
+        };
+        /** @description 새 판. */
+        RecordVersion: {
+            /** Format: int32 */
+            version: number;
         };
         /** @description 반복 규칙. 기준일이 첫 회차이고 `count`는 첫 회차를 포함한다. 매달 31일·2월 29일처럼 없는 날은 건너뛴다. */
         RecurrenceRule: {
@@ -6217,6 +6371,92 @@ export interface operations {
             };
         };
     };
+    item_records: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Record"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewRecord"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     sync_item_recurrences: {
         parameters: {
             query?: never;
@@ -7268,6 +7508,125 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    record_kinds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordKindDef"][];
+                };
+            };
+        };
+    };
+    update_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditRecord"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordVersion"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

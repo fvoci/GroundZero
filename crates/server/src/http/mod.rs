@@ -17,8 +17,8 @@ use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
-    members, modules, public_links, recurrence, references, revisions, schedule, search_api, tasks,
-    time_tracking, trash, workspaces,
+    members, modules, public_links, records, recurrence, references, revisions, schedule,
+    search_api, tasks, time_tracking, trash, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -210,6 +210,11 @@ async fn api_not_found() -> AppError {
         export::mine,
         audit::workspace,
         audit::mine,
+        records::kinds,
+        records::list,
+        records::create,
+        records::update,
+        records::delete,
         item_profile::get,
         item_profile::set,
         item_profile::set_members,
@@ -389,6 +394,16 @@ async fn api_not_found() -> AppError {
         files::RenameFile,
         files::FileTrashed,
         audit::AuditEntry,
+        records::FieldType,
+        records::ChoiceDef,
+        records::FieldDef,
+        records::RecordKindDef,
+        records::Record,
+        records::RecordFile,
+        records::RecordFileInput,
+        records::NewRecord,
+        records::EditRecord,
+        records::RecordVersion,
         item_profile::ItemDetails,
         item_profile::ItemProfile,
         item_profile::PersonRef,
@@ -494,6 +509,15 @@ pub fn router(state: AppState) -> Router {
         .route("/me/export", get(export::mine))
         .route("/workspaces/{workspace_id}/audit", get(audit::workspace))
         .route("/me/audit", get(audit::mine))
+        .route("/record-kinds", get(records::kinds))
+        .route(
+            "/items/{item_id}/records",
+            get(records::list).post(records::create),
+        )
+        .route(
+            "/records/{record_id}",
+            put(records::update).delete(records::delete),
+        )
         .route(
             "/items/{item_id}/profile",
             get(item_profile::get).put(item_profile::set),
