@@ -46,6 +46,10 @@ pub fn run(root: &Path, oidc: bool) -> Result<()> {
     // 개발 중에는 검색 색인·반복 생성이 빨리 보이도록 짧게.
     let interval = std::env::var("FVOCI_WORKER_INTERVAL_SECS").unwrap_or_else(|_| "5".to_owned());
     let _interval = sh.push_env("FVOCI_WORKER_INTERVAL_SECS", interval);
+    // 개발 파일은 빌드 산출물 옆에 둔다(저장소에 섞이지 않게).
+    let files =
+        std::env::var("FVOCI_STORAGE_DIR").unwrap_or_else(|_| "target/dev-files".to_owned());
+    let _files = sh.push_env("FVOCI_STORAGE_DIR", files);
     let _oidc = if oidc {
         let kc = compose.host_port(&sh, "keycloak", 8080)?;
         let issuer = format!("http://127.0.0.1:{kc}/realms/{}", compose::OIDC_REALM);

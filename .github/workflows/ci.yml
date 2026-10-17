@@ -63,6 +63,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo xtask test --external-services
 
+  # S3 저장소 테스트(s3_*)는 SeaweedFS에 시작 인자(사용 통계 끄기 등)가 필요해 job 서비스로 띄울 수 없으므로
+  # 아래 Compose job에서만 돈다(위 job은 NOT RUN으로 표시).
   # Keycloak을 거치는 OIDC 로그인 테스트. 컨테이너 job 안에서는 Compose를 띄울 수 없으므로 GitHub 호스트 러너에서
   # compose.test.yaml(oidc 프로필)로 서비스를 띄우고, 테스트는 위 job과 같은 베이스 이미지 안에서 같은 진입점으로 돈다.
   # 프로젝트명에 실행 번호·재시도 번호를 넣어 실행마다 컨테이너·네트워크·볼륨을 분리하고, 결과와 상관없이 지운다.
@@ -86,6 +88,7 @@ jobs:
           --env CARGO_HOME=/work/target/ci-cargo
           --env FVOCI_TEST_PG_HOST_PORT=postgres:5432
           --env FVOCI_TEST_SEARCH_URL=http://meilisearch:7700
+          --env FVOCI_TEST_S3_ENDPOINT=http://seaweedfs:8333
           --env FVOCI_TEST_OIDC_ISSUER=http://keycloak:8080/realms/fvoci-test
           "$IMAGE" cargo xtask test --external-services --oidc
       - name: compose down

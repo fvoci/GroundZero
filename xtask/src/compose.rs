@@ -193,3 +193,7 @@ pub const OIDC_CLIENT_SECRET: &str = "fvoci-test-client-secret";
 pub const OIDC_REALM: &str = "fvoci-test";
 /// compose.dev·test.yaml과 CI 서비스의 Meilisearch 테스트 마스터 키(명백한 테스트 값).
 pub const SEARCH_TEST_KEY: &str = "fvoci-test-meili-master-key-16chars";
+/// compose.test.yaml의 SeaweedFS 버킷·자격 증명(명백한 테스트 값).
+pub const S3_TEST_BUCKET: &str = "fvoci-test";
+pub const S3_TEST_ACCESS_KEY: &str = "fvoci-test-s3-key";
+pub const S3_TEST_SECRET_KEY: &str = "fvoci-test-s3-secret";

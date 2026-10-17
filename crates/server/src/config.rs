@@ -13,6 +13,12 @@ use crate::error::AppError;
 pub struct Secret(String);
 
 impl Secret {
+    /// 값을 감싼다(테스트·명령 구성용).
+    #[must_use]
+    pub fn new(value: String) -> Self {
+        Self(value)
+    }
+
     /// 원문. 연결·요청에만 쓴다.
     pub fn expose(&self) -> &str {
         &self.0
@@ -42,6 +48,37 @@ pub struct OidcConfig {
 pub struct SearchConfig {
     pub url: String,
     pub key: Secret,
+}
+
+/// S3 호환 저장소 연결 (D-61). 경로 방식 주소를 쓴다. R2의 지역은 `auto`.
+#[derive(Debug, Clone)]
+pub struct S3Config {
+    pub endpoint: Url,
+    pub region: String,
+    pub bucket: String,
+    pub access_key: String,
+    pub secret_key: Secret,
+}
+
+/// 파일 저장소 (D-06). `FVOCI_STORAGE=local|s3`, 기본 local(`FVOCI_STORAGE_DIR`, 기본 `data/files`).
+#[derive(Debug, Clone)]
+pub enum StorageConfig {
+    Local { dir: PathBuf },
+    S3(S3Config),
+}
+
+/// 파일 한도 (D-52). 기본값은 O-26 제안값이며 운영 설정으로 바꾼다.
+#[derive(Debug, Clone, Copy)]
+pub struct FileLimits {
+    /// 파일 하나의 최대 크기(바이트). `FVOCI_MAX_FILE_BYTES`, 기본 1 GiB.
+    pub max_file_bytes: u64,
+    /// 업로드 조각 크기(바이트). `FVOCI_UPLOAD_CHUNK_BYTES`, 기본 8 MiB, 5 MiB~64 MiB(S3 최소 조각 5 MiB,
+    /// Cloudflare 요청 한도 100 MB보다 충분히 작게).
+    pub chunk_bytes: u64,
+    /// 워크스페이스(개인 영역은 사람마다) 총 저장량(바이트). `FVOCI_MAX_WORKSPACE_STORAGE_BYTES`, 기본 50 GiB.
+    pub max_storage_bytes: u64,
+    /// 마치지 않은 업로드를 버리기까지의 시간. `FVOCI_UPLOAD_TTL_SECS`, 기본 24시간.
+    pub upload_ttl: Duration,
 }
 
 /// 운영 한도 (D-52). 기본값은 `O-26`에서 사용량·테스트 결과로 조정한다.
@@ -79,6 +116,10 @@ pub struct Config {
     /// 백그라운드 작업 확인 간격. `FVOCI_WORKER_INTERVAL_SECS`, 기본 60, 5~3600.
     pub worker_interval: Duration,
     pub search: Option<SearchConfig>,
+    /// 파일 저장소.
+    pub storage: StorageConfig,
+    /// 파일 한도.
+    pub files: FileLimits,
 }
 
 /// 실행 역할(O-19): API와 백그라운드 작업을 한 바이너리에 두고 실행할 때 고른다.
@@ -214,6 +255,62 @@ impl Config {
             ));
         }
 
+        let storage = match lookup("FVOCI_STORAGE").as_deref().map(str::trim) {
+            None | Some("" | "local") => StorageConfig::Local {
+                dir: PathBuf::from(
+                    lookup("FVOCI_STORAGE_DIR")
+                        .filter(|v| !v.trim().is_empty())
+                        .unwrap_or_else(|| "data/files".to_owned()),
+                ),
+            },
+            Some("s3") => {
+                let endpoint = required(&lookup, "FVOCI_S3_ENDPOINT")?;
+                let endpoint = Url::parse(endpoint.trim())
+                    .map_err(|e| AppError::Config(format!("FVOCI_S3_ENDPOINT is invalid: {e}")))?;
+                if endpoint.cannot_be_a_base() || endpoint.host_str().is_none() {
+                    return Err(AppError::Config(
+                        "FVOCI_S3_ENDPOINT must be an absolute http(s) URL".into(),
+                    ));
+                }
+                StorageConfig::S3(S3Config {
+                    endpoint,
+                    region: lookup("FVOCI_S3_REGION")
+                        .filter(|v| !v.trim().is_empty())
+                        .unwrap_or_else(|| "auto".to_owned()),
+                    bucket: required(&lookup, "FVOCI_S3_BUCKET")?,
+                    access_key: required(&lookup, "FVOCI_S3_ACCESS_KEY")?,
+                    secret_key: Secret(required(&lookup, "FVOCI_S3_SECRET_KEY")?),
+                })
+            }
+            Some(other) => {
+                return Err(AppError::Config(format!(
+                    "FVOCI_STORAGE must be local or s3 (got {other})"
+                )));
+            }
+        };
+        const MIB: u64 = 1024 * 1024;
+        let files = FileLimits {
+            max_file_bytes: parse_or(&lookup, "FVOCI_MAX_FILE_BYTES", 1024 * MIB)?,
+            chunk_bytes: parse_or(&lookup, "FVOCI_UPLOAD_CHUNK_BYTES", 8 * MIB)?,
+            max_storage_bytes: parse_or(
+                &lookup,
+                "FVOCI_MAX_WORKSPACE_STORAGE_BYTES",
+                50 * 1024 * MIB,
+            )?,
+            upload_ttl: Duration::from_secs(parse_or(&lookup, "FVOCI_UPLOAD_TTL_SECS", 86_400)?),
+        };
+        if !(5 * MIB..=64 * MIB).contains(&files.chunk_bytes) {
+            return Err(AppError::Config(
+                "FVOCI_UPLOAD_CHUNK_BYTES must be between 5 MiB and 64 MiB".into(),
+            ));
+        }
+        // S3는 한 업로드에 조각 10000개까지.
+        if files.max_file_bytes == 0 || files.max_file_bytes > files.chunk_bytes * 10_000 {
+            return Err(AppError::Config(
+                "FVOCI_MAX_FILE_BYTES must be positive and at most 10000 chunks".into(),
+            ));
+        }
+
         Ok(Self {
             bind,
             database_url,
@@ -225,6 +322,8 @@ impl Config {
             role,
             worker_interval: Duration::from_secs(worker_interval),
             search,
+            storage,
+            files,
         })
     }
 

@@ -43,6 +43,27 @@ services:
         limits:
           memory: 512m
 
+  # 파일 저장소 S3 호환 시험(D-61, O-31). Apache-2.0(태그 4.48의 LICENSE 확인). 사용 통계 전송은 끈다.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.48
+    command: ['mini', '-dir=/data', '-master.telemetry=false', '-bucket=fvoci-test']
+    environment:
+      AWS_ACCESS_KEY_ID: fvoci-test-s3-key
+      AWS_SECRET_ACCESS_KEY: fvoci-test-s3-secret
+    ports:
+      - '127.0.0.1::8333'
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O- http://127.0.0.1:8333/healthz || exit 1']
+      interval: 2s
+      timeout: 3s
+      retries: 60
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
   # OIDC 통합 테스트 전용. `cargo xtask test --oidc`로만 기동한다 (프로필 oidc).
   keycloak:
     image: quay.io/keycloak/keycloak:26.5.4

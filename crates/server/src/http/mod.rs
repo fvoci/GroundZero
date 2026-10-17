@@ -28,6 +28,8 @@ pub struct AppState {
     pub oidc: accounts::SharedProvider,
     /// 통합 검색(없으면 제목만 DB에서).
     pub search: Option<crate::search::SearchClient>,
+    /// 파일 저장소(D-06).
+    pub storage: crate::storage::Storage,
 }
 
 /// 서비스 상태 응답.

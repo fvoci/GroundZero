@@ -473,6 +473,15 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 - **영구 삭제 범위(구현 선택)**: 업무·문서(리비전·공유·공개 링크·링크·언급·알림)·일정·항목·모듈·키·번호·그룹·초대·인계·시간 공유·멤버·휴지통 묶음을 지운다. 각자의 개인 시간 기록은 남기고 워크스페이스 연결만 끊는다(대상 이름은 사라짐). 감사 기록은 지우지 않고 워크스페이스 연결을 끊어 소유자 영역(`owner_user_id`)으로 옮기며, 영구 삭제 자체도 소유자 영역에 남긴다(작업 프로세스가 지우면 system 표시).
 - **검증**: 통합 테스트 2건(관리자 403·이름 틀림 400·밖의 사람 404, 지운 뒤 목록·문서·멤버 화면·받은 공유·공개 링크·초대 수락·검색 모두 닫힘, 지운 목록은 소유자만, 되살리면 같은 번호·공유 복구, 인계 중 409; 모듈·항목·하위 업무·일정·항목 문서·휴지통 묶음·그룹까지 있는 워크스페이스 영구 삭제와 개인 시간 기록 유지, 만료 뒤 되살리기 409와 작업 프로세스 영구 삭제). 브라우저(`cargo xtask dev --oidc` + Vite): 이름 입력 전 버튼 비활성, 지운 뒤 사이드바에서 빠지고 휴지통 화면으로 이동, 되살리면 사이드바에 돌아옴.
 
+## 30. 파일 저장소 (2026-10-17, D-06·D-61, O-31 해소)
+
+- **구조**: `crates/server/src/storage/`. 서버 로컬 디렉터리(`FVOCI_STORAGE=local`, 기본, `FVOCI_STORAGE_DIR` 기본 `data/files`)와 S3 호환 저장소(`FVOCI_STORAGE=s3`, `FVOCI_S3_ENDPOINT`·`FVOCI_S3_REGION`(기본 `auto`, R2)·`FVOCI_S3_BUCKET`·`FVOCI_S3_ACCESS_KEY`·`FVOCI_S3_SECRET_KEY`)가 같은 여러 조각 업로드 모양(시작·조각 넣기·받은 조각 보기·마치기·그만두기·읽기·지우기)을 따른다. S3는 기존 `reqwest`로 요청하고 AWS 서명 v4만 직접 만든다(경로 방식 주소, 조각은 본문 SHA-256으로 서명). SDK·자체 S3 서버는 쓰지 않는다. 새 의존성은 이미 잠금 파일에 있던 `hmac`·`hex`·`bytes`·`futures-util`·`tokio-util`와 reqwest `stream` 기능(새로 잠금에 든 것은 `futures-macro`·`wasm-streams`, 둘 다 MIT OR Apache-2.0).
+- **무결성**: 조각마다 SHA-256(S3는 서명으로 저장소가 확인), 마친 뒤 저장된 내용 전체를 다시 읽어 SHA-256과 크기를 계산한다(`digest`). 로컬은 조각과 완성본을 임시 파일에 쓴 뒤 이름을 바꿔 넣는다. 키는 서버가 만든 `[a-z0-9/-]`만 받는다.
+- **한도(D-52, O-26 제안값)**: `FVOCI_MAX_FILE_BYTES` 1 GiB, `FVOCI_UPLOAD_CHUNK_BYTES` 8 MiB(5~64 MiB, S3 최소 조각과 Cloudflare 요청 한도 사이), `FVOCI_MAX_WORKSPACE_STORAGE_BYTES` 50 GiB, `FVOCI_UPLOAD_TTL_SECS` 24시간.
+- **SeaweedFS(O-31 권장안 채택)**: 테스트 Compose에 `chrislusf/seaweedfs:4.48`(태그의 LICENSE: Apache-2.0)을 `mini` 모드로 두고 사용 통계 전송을 끈다(`-master.telemetry=false`, 기본은 켜짐). 자격 증명은 환경 변수의 명백한 테스트 값, 버킷은 시작 때 만든다. 시작 인자가 필요해 GitHub job 서비스로는 띄울 수 없으므로 S3 시험(`s3_*`)은 로컬 `cargo xtask test`와 CI의 Compose job에서만 돌고 컨테이너 job에서는 NOT RUN이다.
+- **호환성 확인 결과**: 서명·여러 조각 시작·조각 넣기·같은 번호 다시 넣기·받은 조각 보기·마치기·그만두기·읽기·지우기·틀린 비밀 키 거부를 SeaweedFS와 로컬에서 확인. SeaweedFS는 받은 조각 목록에서 ETag를 숫자 엔티티(`&#34;`)로 쓰고 다시 올린 조각 번호를 두 줄로 보여 주므로, 마치기에는 조각을 넣을 때 받은 ETag를 쓰고 목록은 이어 올리기 확인에만 쓴다. R2 실검증은 승인된 테스트 대상·자격 증명이 없어 NOT RUN.
+- **검증**: 통합 테스트 3건(로컬·S3 왕복, 틀린 비밀 키). 단위 테스트(키 검사, AWS 문서 예시와 같은 서명, 목록 XML 읽기).
+
 ## 참고 자료
 
 - [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict.html)

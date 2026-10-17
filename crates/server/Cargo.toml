@@ -17,9 +17,13 @@ path = "src/main.rs"
 axum.workspace = true
 axum-extra = { version = "0.10", default-features = false, features = ["cookie"] }
 base64 = "0.22"
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+hex = "0.4"
+hmac = "0.12"
 openidconnect = { version = "4", default-features = false, features = ["reqwest", "native-tls"] }
 rand = "0.9"
-reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json", "stream"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"
@@ -27,6 +31,7 @@ sqlx.workspace = true
 thiserror.workspace = true
 time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
 tokio.workspace = true
+tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 tower-http = { version = "0.6", default-features = false, features = ["fs"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

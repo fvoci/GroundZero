@@ -51,6 +51,9 @@ pub enum AppError {
     /// 현재 상태에서 할 수 없는 요청(예: 소유자 탈퇴, 이미 닫힌 초대).
     #[error("invalid state: {0}")]
     Conflict(String),
+    /// 파일 저장소(로컬·S3) 실패.
+    #[error("storage error: {0}")]
+    Storage(String),
 }
 
 impl AppError {
@@ -82,6 +85,7 @@ impl AppError {
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             Self::Conflict(_) => (StatusCode::CONFLICT, "invalid_state"),
             Self::Oidc(_) => (StatusCode::BAD_GATEWAY, "oidc_error"),
+            Self::Storage(_) => (StatusCode::BAD_GATEWAY, "storage_error"),
             Self::Config(_) | Self::Database(_) | Self::Migrate(_) | Self::Io(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")
             }

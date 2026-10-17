@@ -21,11 +21,13 @@ pub fn build_state(config: Config) -> Result<AppState, AppError> {
         None => None,
     };
     let search = config.search.as_ref().map(SearchClient::new);
+    let storage = crate::storage::Storage::new(&config.storage);
     Ok(AppState {
         db,
         config: Arc::new(config),
         oidc,
         search,
+        storage,
     })
 }
 
