@@ -73,6 +73,11 @@
   } as const;
   const when = (iso: string): string => wallTime(iso, zone).replace('T', ' ');
   const expiredCount = $derived(trash?.entries.filter((e) => e.expired).length ?? 0);
+  // 만료된 것 일괄 삭제 확인(관리자 직접 삭제는 참조 때문에 남긴 묶음도 지운다, O-34의 기존 정책).
+  const EXPIRED = 'expired';
+  const keptCount = $derived(
+    trash?.entries.filter((e) => e.expired && e.kept_for_references).length ?? 0,
+  );
   const label = (e: TrashEntryView): string =>
     `${KIND[e.kind]} “${e.title}”${e.member_count > 1 ? `(하위 포함 ${String(e.member_count)}개)` : ''}`;
 </script>
@@ -158,16 +163,31 @@
   {/if}
 
   {#if isAdmin && expiredCount > 0}
-    <div>
-      <Button
-        variant="destructive"
-        size="sm"
-        onclick={() =>
-          void run(
-            () => api.purgeExpiredTrash(workspace?.id ?? null),
-            `만료된 ${String(expiredCount)}개를 영구 삭제했습니다.`,
-          )}>만료된 {expiredCount}개 영구 삭제</Button
-      >
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+      {#if confirmPurge === EXPIRED}
+        <span role="status">
+          되돌릴 수 없습니다.
+          {#if keptCount > 0}
+            그중 {keptCount}개는 기록이나 문서가 가리키는 버전이 있어 지우면 그 그림·파일 연결이
+            끊깁니다.
+          {/if}
+          만료된 {expiredCount}개를 영구 삭제할까요?
+        </span>
+        <Button
+          variant="destructive"
+          size="sm"
+          onclick={() =>
+            void run(
+              () => api.purgeExpiredTrash(workspace?.id ?? null),
+              `만료된 ${String(expiredCount)}개를 영구 삭제했습니다.`,
+            )}>영구 삭제</Button
+        >
+        <Button size="sm" variant="ghost" onclick={() => (confirmPurge = undefined)}>취소</Button>
+      {:else}
+        <Button variant="destructive" size="sm" onclick={() => (confirmPurge = EXPIRED)}
+          >만료된 {expiredCount}개 영구 삭제…</Button
+        >
+      {/if}
     </div>
   {/if}
 
@@ -197,7 +217,11 @@
         {/if}
         {#if e.can_purge}
           {#if confirmPurge === e.id}
-            <span role="status">되돌릴 수 없습니다. 영구 삭제할까요?</span>
+            <span role="status"
+              >되돌릴 수 없습니다.{e.kept_for_references
+                ? ' 이 파일의 버전을 가리키는 그림·파일 연결이 끊깁니다.'
+                : ''} 영구 삭제할까요?</span
+            >
             <Button
               size="sm"
               variant="destructive"
