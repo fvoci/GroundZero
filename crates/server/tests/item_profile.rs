@@ -654,3 +654,200 @@ async fn items_copy_with_fresh_numbers_and_templates() {
         .clone();
     assert_eq!(listed["is_template"], true);
 }
+
+/// 리뷰 반영: 그룹에서 빠지거나 그룹이 지워지면 담당·리더에서도 빠진다. 이동 미리보기와 담당자 후보는 항목 멤버를
+/// 센다. 워크스페이스를 떠난 사람은 다시 초대돼도 예전 비공개 항목이 열리지 않는다.
+#[tokio::test]
+async fn group_changes_and_leaving_end_item_roles() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "그룹 정리").await;
+    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "writer").await;
+    let (grouped, email) = add_member(&app, &state, &admin, &ws, "grouped", "writer").await;
+    let m = module(&app, &admin, &ws, "project", "GRP").await;
+    let it = item(&app, &owner, &m, "비공개").await;
+    let item_uri = format!("/api/items/{it}");
+    let members_uri = format!("/api/items/{it}/members");
+    let profile_uri = format!("/api/items/{it}/profile");
+
+    let new_group = || async {
+        let g = send(
+            &app,
+            Method::POST,
+            &format!("/api/workspaces/{ws}/groups"),
+            Some(&admin),
+            Some(json!({ "name": format!("그룹 {}", new_request_id()) })),
+        )
+        .await;
+        let gid = g.json["id"].as_str().unwrap().to_owned();
+        let joined = send(
+            &app,
+            Method::PUT,
+            &format!("/api/groups/{gid}/members/{}", grouped.id.0),
+            Some(&admin),
+            None,
+        )
+        .await;
+        assert_eq!(joined.status, StatusCode::NO_CONTENT, "{:?}", joined.json);
+        let set = send(
+            &app,
+            Method::PUT,
+            &members_uri,
+            Some(&owner),
+            Some(json!({ "user_ids": [], "group_ids": [gid] })),
+        )
+        .await;
+        assert_eq!(set.status, StatusCode::NO_CONTENT, "{:?}", set.json);
+        gid
+    };
+    let task = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{it}/tasks"),
+        Some(&owner),
+        Some(json!({ "request_id": new_request_id(), "title": "할 일" })),
+    )
+    .await;
+    let task_uri = format!("/api/tasks/{}", task.json["id"].as_str().unwrap());
+    // 리더와 담당으로 정하고, 둘 다 정해졌는지 돌려준다.
+    let take_roles = || async {
+        let p = send(
+            &app,
+            Method::PUT,
+            &profile_uri,
+            Some(&owner),
+            Some(json!({
+            "leader_id": grouped.id.0, "goal": "", "scope": "", "starts_on": null, "ends_on": null,
+            "status": "active", "details": {} })),
+        )
+        .await;
+        assert_eq!(p.status, StatusCode::NO_CONTENT, "{:?}", p.json);
+        let t = send(&app, Method::GET, &task_uri, Some(&owner), None).await;
+        let a = send(&app, Method::PUT, &task_uri, Some(&owner), Some(json!({
+            "base_version": t.json["version"], "title": "할 일", "description": "", "status": "todo",
+            "priority": "none", "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [],
+            "milestone": false, "assignee_ids": [grouped.id.0] }))).await;
+        assert_eq!(a.status, StatusCode::OK, "{:?}", a.json);
+    };
+    let roles_cleared = || async {
+        let p = send(&app, Method::GET, &profile_uri, Some(&owner), None).await;
+        let t = send(&app, Method::GET, &task_uri, Some(&owner), None).await;
+        p.json["leader"].is_null() && t.json["assignees"] == json!([])
+    };
+
+    // 그룹 멤버도 담당자 후보이고, 이동 미리보기에 "새로 보게 되는 사람"으로 나온다.
+    let gid = new_group().await;
+    let assignable = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{it}/assignable"),
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert!(
+        assignable
+            .json
+            .to_string()
+            .contains(&grouped.id.0.to_string()),
+        "{:?}",
+        assignable.json
+    );
+    let doc = common::create_doc(&app, &owner, &ws, "옮길 문서").await;
+    let doc_id = doc["id"].as_str().unwrap();
+    let preview = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/move/preview"),
+        Some(&admin),
+        Some(json!({ "target_workspace_id": ws, "target_item_id": it })),
+    )
+    .await;
+    assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
+    assert!(
+        !preview.json["loses"].to_string().contains("grouped"),
+        "{:?}",
+        preview.json
+    );
+
+    // 그룹에서 빠지면 리더·담당에서도 빠진다.
+    take_roles().await;
+    assert!(!roles_cleared().await);
+    send(
+        &app,
+        Method::DELETE,
+        &format!("/api/groups/{gid}/members/{}", grouped.id.0),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(roles_cleared().await);
+
+    // 그룹이 지워져도 마찬가지.
+    let gid = new_group().await;
+    take_roles().await;
+    let deleted = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/groups/{gid}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(deleted.status, StatusCode::NO_CONTENT, "{:?}", deleted.json);
+    assert!(roles_cleared().await);
+    assert_eq!(
+        status_of(&app, &grouped, Method::GET, &item_uri, None).await,
+        StatusCode::NOT_FOUND
+    );
+
+    // 직접 멤버였다가 워크스페이스를 떠나면, 다시 초대돼도 비공개 항목은 열리지 않는다.
+    send(
+        &app,
+        Method::PUT,
+        &members_uri,
+        Some(&owner),
+        Some(json!({ "user_ids": [grouped.id.0], "group_ids": [] })),
+    )
+    .await;
+    assert_eq!(
+        status_of(&app, &grouped, Method::GET, &item_uri, None).await,
+        StatusCode::OK
+    );
+    let removed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{ws}/members/{}", grouped.id.0),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT, "{:?}", removed.json);
+    let inv = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/invitations"),
+        Some(&admin),
+        Some(json!({ "email": email, "role": "writer" })),
+    )
+    .await;
+    let accepted = send(
+        &app,
+        Method::POST,
+        &format!(
+            "/api/invitations/{}/accept",
+            inv.json["id"].as_str().unwrap()
+        ),
+        Some(&grouped),
+        None,
+    )
+    .await;
+    assert_eq!(accepted.status, StatusCode::OK, "{:?}", accepted.json);
+    assert_eq!(
+        status_of(&app, &grouped, Method::GET, &item_uri, None).await,
+        StatusCode::NOT_FOUND
+    );
+    let p = send(&app, Method::GET, &profile_uri, Some(&owner), None).await;
+    assert_eq!(p.json["members"], json!([]), "{:?}", p.json);
+}

@@ -247,20 +247,7 @@ fn check_image_node(node: &serde_json::Map<String, Value>) -> Result<(), AppErro
         .and_then(|a| a.get("src"))
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let ok = src
-        .strip_prefix("/api/files/")
-        .and_then(|rest| rest.split_once("/content"))
-        .is_some_and(|(id, query)| {
-            Uuid::parse_str(id).is_ok()
-                && (query.is_empty()
-                    || query.strip_prefix('?').is_some_and(|q| {
-                        q.split('&').all(|pair| {
-                            matches!(pair.split_once('='), Some(("version", v)) if !v.is_empty() && v.bytes().all(|b| b.is_ascii_digit()))
-                                || pair == "inline=true"
-                        })
-                    }))
-        });
-    if ok {
+    if is_file_url(src) {
         Ok(())
     } else {
         Err(AppError::BadRequest(
@@ -269,14 +256,37 @@ fn check_image_node(node: &serde_json::Map<String, Value>) -> Result<(), AppErro
     }
 }
 
+/// 첨부 주소의 표준형: `/api/files/{소문자 하이픈 id}/content` 뒤에 없음·`?inline=true`·`?version=N`·
+/// `?version=N&inline=true`(N은 0으로 시작하지 않는 양의 32비트 정수). 화면(`fileContentUrl`)이 만드는 꼴이고,
+/// DB가 리비전 본문에서 버전 참조를 뽑는 규칙(D-56)이 이 꼴을 빠짐없이 알아본다.
+fn is_file_url(url: &str) -> bool {
+    let Some((id, query)) = url
+        .strip_prefix("/api/files/")
+        .and_then(|rest| rest.split_once("/content"))
+    else {
+        return false;
+    };
+    let version_ok = |v: &str| {
+        !v.starts_with('0') && v.bytes().all(|b| b.is_ascii_digit()) && v.parse::<i32>().is_ok()
+    };
+    Uuid::parse_str(id).is_ok_and(|u| u.hyphenated().to_string() == id)
+        && match query {
+            "" | "?inline=true" => true,
+            q => q
+                .strip_prefix("?version=")
+                .is_some_and(|v| version_ok(v.strip_suffix("&inline=true").unwrap_or(v))),
+        }
+}
+
 /// 링크 표시의 주소: 스킴이 있으면 http·https·mailto만(`javascript:`·`data:` 등 거부), 없으면 상대 경로·앵커.
 fn check_link_mark(mark: &serde_json::Map<String, Value>) -> Result<(), AppError> {
     let href = mark
         .get("attrs")
         .and_then(|a| a.get("href"))
         .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim();
+        .unwrap_or_default();
+    let raw = href;
+    let href = href.trim();
     let lower = href.to_ascii_lowercase();
     // 스킴이 있으면 http·https·mailto만, 없으면(상대 경로·#앵커) 다른 호스트로 가는 `//`만 막는다.
     let scheme = lower.split_once(':').map(|(s, _)| s).filter(|s| {
@@ -286,7 +296,7 @@ fn check_link_mark(mark: &serde_json::Map<String, Value>) -> Result<(), AppError
     });
     let ok = match scheme {
         Some(s) => matches!(s, "http" | "https" | "mailto"),
-        None => !href.starts_with("//"),
+        None => !href.starts_with("//") && (!lower.starts_with("/api/files/") || is_file_url(raw)),
     };
     if ok && !href.chars().any(char::is_control) {
         Ok(())
@@ -1369,6 +1379,8 @@ mod tests {
         for ok in [
             format!("/api/files/{id}/content"),
             format!("/api/files/{id}/content?version=2&inline=true"),
+            format!("/api/files/{id}/content?inline=true"),
+            format!("/api/files/{id}/content?version=2147483647"),
         ] {
             assert!(validate_body(&image(&ok), &limits(10_000)).is_ok(), "{ok}");
         }
@@ -1377,6 +1389,14 @@ mod tests {
             format!("/api/files/{id}/content?version=1&x=1"),
             "/api/files/not-an-id/content".to_owned(),
             "javascript:alert(1)".to_owned(),
+            // 표준형이 아니면 버전 참조(D-56)를 놓치므로 받지 않는다.
+            format!("/api/files/{}/content?version=1", id.to_uppercase()),
+            format!("/api/files/{}/content?version=1", id.replace('-', "")),
+            format!("/api/files/{id}/content?inline=true&version=1"),
+            format!("/api/files/{id}/content?version=01"),
+            format!("/api/files/{id}/content?version=+1"),
+            format!("/api/files/{id}/content?version=0"),
+            format!("/api/files/{id}/content?version=99999999999"),
         ] {
             assert!(
                 validate_body(&image(&bad), &limits(10_000)).is_err(),
@@ -1392,11 +1412,19 @@ mod tests {
         for ok in [
             "https://example.test",
             "mailto:a@example.test",
-            "/api/files/x/content",
+            "/docs/somewhere",
+            "/api/files/01a1481e-6cb0-73cb-a92b-c7cf6cbc3ebf/content?version=3",
         ] {
             assert!(validate_body(&link(ok), &limits(10_000)).is_ok(), "{ok}");
         }
-        for bad in ["javascript:alert(1)", "//evil.example", "data:text/html,x"] {
+        for bad in [
+            "javascript:alert(1)",
+            "//evil.example",
+            "data:text/html,x",
+            "/api/files/x/content",
+            "/API/files/01a1481e-6cb0-73cb-a92b-c7cf6cbc3ebf/content?version=03",
+            " /api/files/01a1481e-6cb0-73cb-a92b-c7cf6cbc3ebf/content?version=3 ",
+        ] {
             assert!(validate_body(&link(bad), &limits(10_000)).is_err(), "{bad}");
         }
     }

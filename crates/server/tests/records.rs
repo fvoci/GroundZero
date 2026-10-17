@@ -494,3 +494,175 @@ async fn old_versions_expire_unless_something_refers_to_them() {
     kept.sort_unstable();
     assert_eq!(kept, [1, 3, 4], "{:?}", detail.json);
 }
+
+/// 리뷰 반영(D-56): 보존 기간은 다음 버전이 올라온 때부터 센다. 붙잡힌 오래된 버전이 500개를 넘어도 다른 버전
+/// 정리가 멈추지 않는다. 다른 곳(남의 개인 노트)의 문서가 주소를 적어도 버전을 붙잡지 못한다. 첨부 주소는
+/// 표준형만 받는다.
+#[tokio::test]
+async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let outsider = login(&state, "outsider").await;
+    let ws = create_workspace(&app, &admin, "버전 보존 2").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let research = module(&app, &admin, &ws, "research", "KEEP2").await;
+    let item = open_item(&app, &admin, &research, "보존 연구").await;
+    let two_versions = |name: &'static str| {
+        let (app, writer, item) = (app.clone(), writer.clone(), item.clone());
+        async move {
+            let id = new_file(&app, &writer, &item, name, b"one").await;
+            upload(
+                &app,
+                &writer,
+                json!({ "request_id": new_request_id(), "file_id": id, "size": 3 }),
+                b"two",
+            )
+            .await;
+            uuid::Uuid::parse_str(&id).unwrap()
+        }
+    };
+    let fresh = two_versions("fresh.csv").await;
+    let pinned = two_versions("pinned.csv").await;
+    let foreign = two_versions("foreign.csv").await;
+    let retention = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/version-retention"),
+        Some(&admin),
+        Some(json!({ "days": 1 })),
+    )
+    .await;
+    assert_eq!(retention.status, StatusCode::NO_CONTENT);
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let age = |file: uuid::Uuid, version: i32, days: i32| {
+        let owner = owner.clone();
+        async move {
+            sqlx::query(
+                "UPDATE fvoci.file_versions SET created_at = now() - make_interval(days => $3)
+                 WHERE file_id = $1 AND version = $2",
+            )
+            .bind(file)
+            .bind(version)
+            .bind(days)
+            .execute(&owner)
+            .await
+            .unwrap();
+        }
+    };
+    let versions = |file: uuid::Uuid| {
+        let owner = owner.clone();
+        async move {
+            sqlx::query_scalar::<_, i32>(
+                "SELECT version FROM fvoci.file_versions WHERE file_id = $1 ORDER BY version",
+            )
+            .bind(file)
+            .fetch_all(&owner)
+            .await
+            .unwrap()
+        }
+    };
+    let run = || async {
+        fvoci_server::worker::run_all_now(&state.db, None, None)
+            .await
+            .unwrap();
+    };
+
+    // 열흘 전에 올린 v1이라도 v2가 방금 올라왔으면 남는다.
+    age(fresh, 1, 10).await;
+    run().await;
+    assert_eq!(versions(fresh).await, [1, 2]);
+
+    // 같은 워크스페이스 문서가 붙잡은 오래된 버전 501개(정리 후보 맨 앞)가 있어도 다른 버전은 정리된다.
+    let doc = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item}/documents"),
+        Some(&writer),
+        Some(json!({ "request_id": new_request_id(), "title": "붙잡기" })),
+    )
+    .await;
+    let doc_id = uuid::Uuid::parse_str(doc.json["id"].as_str().unwrap()).unwrap();
+    sqlx::query(
+        "INSERT INTO fvoci.file_versions (file_id, version, size, sha256, content_type, storage_key, uploaded_by, created_at)
+         SELECT $1, n, 0, repeat('0', 64), 'text/csv', 'test-pinned/' || $1 || '/' || n, $2, now() - interval '20 days'
+         FROM generate_series(1000, 1501) n",
+    )
+    .bind(pinned)
+    .bind(writer.id.0)
+    .execute(&owner)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO fvoci.document_file_refs (document_id, revision, file_id, version)
+         SELECT $1, 1, $2, n FROM generate_series(1000, 1501) n",
+    )
+    .bind(doc_id)
+    .bind(pinned)
+    .execute(&owner)
+    .await
+    .unwrap();
+
+    // 워크스페이스 밖 사람이 개인 노트에 이 파일 v1 주소를 적는다. 표준형이 아니면 400.
+    let note = send(
+        &app,
+        Method::POST,
+        "/api/me/notes",
+        Some(&outsider),
+        Some(json!({ "request_id": new_request_id(), "title": "남의 버전" })),
+    )
+    .await;
+    let note_id = note.json["id"].as_str().unwrap().to_owned();
+    let save = |src: String| {
+        let (app, outsider, note_id) = (app.clone(), outsider.clone(), note_id.clone());
+        async move {
+            send(&app, Method::PUT, &format!("/api/documents/{note_id}"), Some(&outsider), Some(json!({
+                "request_id": new_request_id(), "base_revision": 1, "title": "남의 버전",
+                "body": { "type": "doc", "content": [{ "type": "image", "attrs": { "src": src } }] } })))
+            .await
+            .status
+        }
+    };
+    let upper = foreign.to_string().to_uppercase();
+    assert_eq!(
+        save(format!("/api/files/{upper}/content?version=1")).await,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        save(format!(
+            "/api/files/{foreign}/content?inline=true&version=1"
+        ))
+        .await,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        save(format!("/api/files/{foreign}/content?version=1")).await,
+        StatusCode::OK
+    );
+    let recorded: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM fvoci.document_file_refs WHERE file_id = $1 AND version = 1",
+    )
+    .bind(foreign)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert_eq!(recorded, 1);
+
+    age(fresh, 2, 2).await;
+    age(foreign, 1, 10).await;
+    age(foreign, 2, 10).await;
+    run().await;
+    assert_eq!(versions(fresh).await, [2]);
+    assert_eq!(versions(foreign).await, [2]);
+    // 붙잡힌 502개는 그대로(v1은 가짜 새 버전들 때문에 오래전에 바뀐 것으로 보여 정리된다).
+    assert_eq!(
+        versions(pinned)
+            .await
+            .iter()
+            .filter(|v| **v >= 1000)
+            .count(),
+        502
+    );
+    owner.close().await;
+}
