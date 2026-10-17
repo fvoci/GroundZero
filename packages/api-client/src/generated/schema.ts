@@ -674,6 +674,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내 개인 영역 감사 기록(개인 노트·개인 파일·반출, 영구 삭제한 내 워크스페이스의 기록). 최신 먼저 100건씩. */
+        get: operations["my_audit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/deleted-workspaces": {
         parameters: {
             query?: never;
@@ -1429,6 +1446,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/{workspace_id}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 워크스페이스 감사 기록(관리자). 최신 먼저 100건씩. */
+        get: operations["workspace_audit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces/{workspace_id}/calendar": {
         parameters: {
             query?: never;
@@ -1793,6 +1827,22 @@ export interface components {
         Assignee: {
             display_name: string;
             user_id: components["schemas"]["UserId"];
+        };
+        /** @description 감사 기록 한 건. */
+        AuditEntry: {
+            /** @description 예: `create`·`rename`·`delete`·`restore`·`purge`·`invite`·`change_role`·`export`. */
+            action: string;
+            actor?: null | components["schemas"]["UserId"];
+            actor_name?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            detail: unknown;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            target_id: string;
+            /** @description 예: `document`·`task`·`item`·`file`·`member`·`workspace`. */
+            target_type: string;
         };
         /** @description 로그인 가능 여부. 웹이 로그인 버튼 표시에 쓴다. */
         AuthInfo: {
@@ -5169,6 +5219,28 @@ export interface operations {
             };
         };
     };
+    my_audit: {
+        parameters: {
+            query?: {
+                /** @description 마지막으로 받은 기록 id(이것보다 오래된 것을 받는다). */
+                before?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEntry"][];
+                };
+            };
+        };
+    };
     deleted_workspaces: {
         parameters: {
             query?: never;
@@ -7169,6 +7241,46 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    workspace_audit: {
+        parameters: {
+            query?: {
+                /** @description 마지막으로 받은 기록 id(이것보다 오래된 것을 받는다). */
+                before?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEntry"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

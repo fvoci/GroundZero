@@ -10,6 +10,7 @@
   import PublicView from '$lib/features/public/PublicView.svelte';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
   import TrashScreen from '$lib/features/trash/TrashScreen.svelte';
+  import AuditScreen from '$lib/features/audit/AuditScreen.svelte';
   import DeletedWorkspaces from '$lib/features/trash/DeletedWorkspaces.svelte';
   import MembersScreen from '$lib/features/members/MembersScreen.svelte';
   import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
@@ -26,6 +27,7 @@
     itemPath,
     membersPath,
     router,
+    auditPath,
     trashPath,
     workspacePath,
   } from '$lib/router.svelte';
@@ -95,6 +97,7 @@
     'members',
     'calendar',
     'trash',
+    'audit',
     'module',
     'item',
     'item-document',
@@ -179,7 +182,7 @@
           <Sidebar.GroupLabel>개인</Sidebar.GroupLabel>
           <Sidebar.GroupContent>
             <Sidebar.Menu>
-              {#each [{ path: '/notes', label: '내 노트', active: route.name === 'notes' }, { path: '/shared', label: '공유받은 문서', active: route.name === 'shared' }, { path: '/time', label: '내 시간', active: route.name === 'time' }, { path: '/trash', label: '내 노트 휴지통', active: route.name === 'my-trash' }, { path: '/notifications', label: unreadCount > 0 ? `알림 (${String(unreadCount)})` : '알림', active: route.name === 'notifications' }] as item (item.path)}
+              {#each [{ path: '/notes', label: '내 노트', active: route.name === 'notes' }, { path: '/shared', label: '공유받은 문서', active: route.name === 'shared' }, { path: '/time', label: '내 시간', active: route.name === 'time' }, { path: '/trash', label: '내 노트 휴지통', active: route.name === 'my-trash' }, { path: '/audit', label: '내 활동 기록', active: route.name === 'my-audit' }, { path: '/notifications', label: unreadCount > 0 ? `알림 (${String(unreadCount)})` : '알림', active: route.name === 'notifications' }] as item (item.path)}
                 <Sidebar.MenuItem>
                   <Sidebar.MenuButton isActive={item.active}>
                     {#snippet child({ props })}
@@ -285,11 +288,24 @@
                   router.navigate(trashPath(currentWorkspace.id));
                 }}>휴지통</a
               >
+              {#if currentWorkspace.role === 'admin'}
+                <a
+                  class="ml-3 underline"
+                  href={auditPath(currentWorkspace.id)}
+                  onclick={(e: MouseEvent) => {
+                    e.preventDefault();
+                    router.navigate(auditPath(currentWorkspace.id));
+                  }}>감사 기록</a
+                >
+              {/if}
             </nav>
             <WorkspaceScreen workspace={currentWorkspace} />
           {:else if route.name === 'trash'}
             <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
             <TrashScreen workspace={currentWorkspace} />
+          {:else if route.name === 'audit'}
+            <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
+            <AuditScreen workspace={currentWorkspace} />
           {:else if route.name === 'calendar'}
             <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
             <CalendarScreen workspace={currentWorkspace} />
@@ -321,6 +337,8 @@
             workspaces={signedIn.workspaces}
             onchanged={() => void refreshUnread()}
           />
+        {:else if route.name === 'my-audit'}
+          <AuditScreen workspace={undefined} />
         {:else if route.name === 'my-trash'}
           <div class="flex flex-col gap-8">
             <TrashScreen workspace={undefined} />

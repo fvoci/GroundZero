@@ -1311,6 +1311,31 @@ async function putPart(upload: string, number: number, body: Blob, sha256: strin
   }
 }
 
+export interface AuditEntryView {
+  id: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  actor: string | null;
+  actor_name: string | null;
+  detail: unknown;
+  created_at: string;
+}
+
+function parseAudit(value: Json): AuditEntryView {
+  const o = rec(value, 'audit entry');
+  return {
+    id: str(o, 'id'),
+    action: str(o, 'action'),
+    target_type: str(o, 'target_type'),
+    target_id: str(o, 'target_id'),
+    actor: optStr(o, 'actor'),
+    actor_name: optStr(o, 'actor_name'),
+    detail: o.detail,
+    created_at: str(o, 'created_at'),
+  };
+}
+
 export interface DeletedWorkspaceView {
   id: string;
   name: string;
@@ -1531,6 +1556,15 @@ export const api = {
   completeUpload: (id: string) =>
     expectOk('POST', `/api/uploads/${encodeURIComponent(id)}/complete`, parseUpload),
   abortUpload: (id: string) => expectOk('DELETE', `/api/uploads/${encodeURIComponent(id)}`, none),
+  /** 감사 기록(워크스페이스, 또는 null이면 내 개인 영역). before는 마지막으로 받은 기록 id. */
+  audit: (workspaceId: string | null, before?: string) => {
+    const base =
+      workspaceId === null
+        ? '/api/me/audit'
+        : `/api/workspaces/${encodeURIComponent(workspaceId)}/audit`;
+    const query = before === undefined ? '' : `?before=${encodeURIComponent(before)}`;
+    return expectOk('GET', `${base}${query}`, (v) => parseList(v, parseAudit));
+  },
   deletedWorkspaces: () =>
     expectOk('GET', '/api/me/deleted-workspaces', (v) => parseList(v, parseDeletedWorkspace)),
   restoreWorkspace: (ws: string) =>

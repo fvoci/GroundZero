@@ -16,8 +16,9 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, documents, events, export, files, home, members, modules, public_links, recurrence,
-    references, revisions, schedule, search_api, tasks, time_tracking, trash, workspaces,
+    accounts, audit, documents, events, export, files, home, members, modules, public_links,
+    recurrence, references, revisions, schedule, search_api, tasks, time_tracking, trash,
+    workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -205,6 +206,8 @@ async fn api_not_found() -> AppError {
         files::delete_version,
         export::workspace,
         export::mine,
+        audit::workspace,
+        audit::mine,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -366,6 +369,7 @@ async fn api_not_found() -> AppError {
         files::FileDetail,
         files::RenameFile,
         files::FileTrashed,
+        audit::AuditEntry,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -407,6 +411,7 @@ async fn api_not_found() -> AppError {
         (name = "search", description = "통합 검색"),
         (name = "files", description = "파일 첨부·버전·업로드"),
         (name = "export", description = "데이터 반출"),
+        (name = "audit", description = "감사 기록"),
     )
 )]
 pub struct ApiDoc;
@@ -444,6 +449,8 @@ pub fn router(state: AppState) -> Router {
         .route("/me/deleted-workspaces", get(workspaces::deleted))
         .route("/workspaces/{workspace_id}/export", get(export::workspace))
         .route("/me/export", get(export::mine))
+        .route("/workspaces/{workspace_id}/audit", get(audit::workspace))
+        .route("/me/audit", get(audit::mine))
         .route(
             "/me/deleted-workspaces/{workspace_id}",
             delete(workspaces::purge),

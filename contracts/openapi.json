@@ -3045,6 +3045,45 @@
         }
       }
     },
+    "/api/me/audit": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "내 개인 영역 감사 기록(개인 노트·개인 파일·반출, 영구 삭제한 내 워크스페이스의 기록). 최신 먼저 100건씩.",
+        "operationId": "my_audit",
+        "parameters": [
+          {
+            "name": "before",
+            "in": "query",
+            "description": "마지막으로 받은 기록 id(이것보다 오래된 것을 받는다).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/deleted-workspaces": {
       "get": {
         "tags": [
@@ -5930,6 +5969,74 @@
         }
       }
     },
+    "/api/workspaces/{workspace_id}/audit": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "워크스페이스 감사 기록(관리자). 최신 먼저 100건씩.",
+        "operationId": "workspace_audit",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "description": "마지막으로 받은 기록 id(이것보다 오래된 것을 받는다).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEntry"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{workspace_id}/calendar": {
       "get": {
         "tags": [
@@ -7403,6 +7510,58 @@
           },
           "user_id": {
             "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "AuditEntry": {
+        "type": "object",
+        "description": "감사 기록 한 건.",
+        "required": [
+          "id",
+          "action",
+          "target_type",
+          "target_id",
+          "detail",
+          "created_at"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "예: `create`·`rename`·`delete`·`restore`·`purge`·`invite`·`change_role`·`export`."
+          },
+          "actor": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId",
+                "description": "한 사람(없으면 백그라운드 작업)."
+              }
+            ]
+          },
+          "actor_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "detail": {},
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_type": {
+            "type": "string",
+            "description": "예: `document`·`task`·`item`·`file`·`member`·`workspace`."
           }
         }
       },
@@ -11314,6 +11473,10 @@
     {
       "name": "export",
       "description": "데이터 반출"
+    },
+    {
+      "name": "audit",
+      "description": "감사 기록"
     }
   ]
 }
