@@ -1,3 +1,26 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "workspaces_name_required": "{label} is required.",
+  "workspaces_create_network_failed": "Can't reach the server. Trying again won't create a duplicate.",
+  "workspaces_create_failed": "Couldn't create it.",
+  "workspaces_hint_title": "Tells apart workspaces with the same name",
+  "workspaces_heading": "Workspaces",
+  "workspaces_empty": "No workspaces yet. Create your first one.",
+  "workspaces_new_name": "New workspace name",
+  "workspaces_new_placeholder": "e.g. Research lab",
+  "workspaces_create": "Create",
+  "workspaces_docs_load_failed": "Couldn't load the documents.",
+  "workspaces_realtime_on": "Real-time co-editing is on. Reopen a document to edit it together.",
+  "workspaces_realtime_off": "Real-time co-editing is off.",
+  "workspaces_realtime_failed": "Couldn't change the setting.",
+  "workspaces_wiki_heading": "{workspace} · Wiki",
+  "workspaces_admin_notice": "Admins of this workspace can see every document in it, including private ones. Personal notes and personal time records stay hidden, even from admins.",
+  "workspaces_realtime_label": "Real-time co-editing (several people edit a document at once)",
+  "workspaces_realtime_hint": "When on, people edit the text of this workspace's documents together, and a revision is saved when editing pauses or everyone leaves. Personal notes are not affected.",
+  "workspaces_wiki_empty": "No wiki documents yet.",
+  "workspaces_wiki_tree": "{workspace} wiki documents",
+  "workspaces_untitled_document": "New document",
+  "workspaces_new_doc_title": "New document title",
+  "workspaces_new_doc_placeholder": "e.g. Meeting notes",
+  "workspaces_create_doc": "Create document"
 }

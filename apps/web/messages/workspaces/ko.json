@@ -1,3 +1,26 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "workspaces_name_required": "{label}을(를) 입력하세요.",
+  "workspaces_create_network_failed": "서버에 연결할 수 없습니다. 다시 시도하면 중복 없이 처리됩니다.",
+  "workspaces_create_failed": "만들지 못했습니다.",
+  "workspaces_hint_title": "같은 이름의 워크스페이스를 구분하는 표시",
+  "workspaces_heading": "워크스페이스",
+  "workspaces_empty": "아직 워크스페이스가 없습니다. 첫 워크스페이스를 만드세요.",
+  "workspaces_new_name": "새 워크스페이스 이름",
+  "workspaces_new_placeholder": "예: 연구실",
+  "workspaces_create": "만들기",
+  "workspaces_docs_load_failed": "목록을 불러오지 못했습니다.",
+  "workspaces_realtime_on": "실시간 공동 편집을 켰습니다. 문서를 다시 열면 함께 고칠 수 있습니다.",
+  "workspaces_realtime_off": "실시간 공동 편집을 껐습니다.",
+  "workspaces_realtime_failed": "바꾸지 못했습니다.",
+  "workspaces_wiki_heading": "{workspace} · 위키",
+  "workspaces_admin_notice": "이 워크스페이스의 관리자는 비공개 문서를 포함해 이 공간의 모든 문서를 볼 수 있습니다. 각자의 개인 노트와 개인 시간 기록은 관리자에게도 보이지 않습니다.",
+  "workspaces_realtime_label": "실시간 공동 편집(문서를 여럿이 동시에 고침)",
+  "workspaces_realtime_hint": "켜면 이 워크스페이스 문서의 본문을 바로 함께 고치고, 조용해지거나 모두 나가면 리비전으로 남깁니다. 개인 노트는 해당하지 않습니다.",
+  "workspaces_wiki_empty": "위키 문서가 없습니다.",
+  "workspaces_wiki_tree": "{workspace} 위키 문서",
+  "workspaces_untitled_document": "새 문서",
+  "workspaces_new_doc_title": "새 문서 제목",
+  "workspaces_new_doc_placeholder": "예: 회의록",
+  "workspaces_create_doc": "문서 만들기"
 }

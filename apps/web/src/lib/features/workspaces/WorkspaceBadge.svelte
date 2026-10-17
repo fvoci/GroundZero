@@ -1,6 +1,8 @@
 <script lang="ts">
   // 워크스페이스 이름 앞의 색 배지와 같은 이름일 때의 보조 정보 (D-17).
   import type { NamedWorkspace } from './badge';
+  import { m } from '$lib/paraglide/messages.js';
+
   import { badgeColor, workspaceHint } from './badge';
 
   interface Props {
@@ -17,9 +19,8 @@
   ></span>
   <span class="truncate">{workspace.name}</span>
   {#if hint !== null}
-    <span
-      class="shrink-0 font-mono text-xs text-muted-foreground"
-      title="같은 이름의 워크스페이스를 구분하는 표시">{hint}</span
+    <span class="shrink-0 font-mono text-xs text-muted-foreground" title={m.workspaces_hint_title()}
+      >{hint}</span
     >
   {/if}
 </span>
