@@ -341,3 +341,127 @@ async fn course_episodes_and_personal_progress() {
         StatusCode::NOT_FOUND
     );
 }
+
+/// 리뷰 반영: 완료한 날은 사용자의 오늘, 완료를 풀면 지움. 링크는 http·https만. 비공개로 바뀐 강좌의 집계에서
+/// 볼 수 없게 된 멤버는 빠진다.
+#[tokio::test]
+async fn completion_dates_links_and_participant_visibility() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "강의 리뷰").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let item = course(&app, &admin, &ws).await;
+
+    let bad = json!({ "subject": "", "instructor": "", "platform": "", "url": "javascript:alert(1)",
+                      "textbook": "", "starts_on": null, "expires_on": null, "target_on": null });
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{item}/course"),
+        Some(&admin),
+        Some(bad),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+    let episodes_uri = format!("/api/items/{item}/episodes");
+    let r = send(
+        &app,
+        Method::POST,
+        &episodes_uri,
+        Some(&admin),
+        Some(
+            json!({ "episodes": [{ "request_id": new_request_id(), "title": "나쁜 링크",
+                                    "url": "data:text/html,hi" }] }),
+        ),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+    let r = send(
+        &app,
+        Method::POST,
+        &episodes_uri,
+        Some(&admin),
+        Some(
+            json!({ "episodes": [{ "request_id": new_request_id(), "title": "벡터",
+                                    "url": "https://example.test/1" }] }),
+        ),
+    )
+    .await;
+    assert_eq!(r.json["added"], 1, "{:?}", r.json);
+
+    let episode = get(&app, &writer, &item).await["episodes"][0].clone();
+    let today = time::OffsetDateTime::now_utc().date();
+    let local = today.next_day().unwrap();
+    let far = today.saturating_add(time::Duration::days(5));
+    assert_eq!(
+        progress(
+            &app,
+            &writer,
+            &episode,
+            json!({ "status": "done", "note": "", "today": far.to_string() })
+        )
+        .await,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        progress(
+            &app,
+            &writer,
+            &episode,
+            json!({ "status": "done", "note": "", "today": local.to_string() })
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    let mine = |c: Value| c["episodes"][0]["mine"].clone();
+    assert_eq!(
+        mine(get(&app, &writer, &item).await)["completed_on"],
+        local.to_string()
+    );
+    assert_eq!(
+        progress(
+            &app,
+            &writer,
+            &episode,
+            json!({ "status": "in_progress", "note": "", "today": local.to_string() })
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    assert!(mine(get(&app, &writer, &item).await)["completed_on"].is_null());
+
+    let participants = |user: TestUser| {
+        let app = app.clone();
+        let item = item.clone();
+        async move {
+            send(
+                &app,
+                Method::GET,
+                &format!("/api/items/{item}/course/participants?today={today}"),
+                Some(&user),
+                None,
+            )
+            .await
+            .json
+        }
+    };
+    let names = |v: Value| -> Vec<String> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["display_name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(names(participants(admin.clone()).await), ["writer"]);
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{item}"),
+        Some(&admin),
+        Some(json!({ "title": "선형대수", "description": "", "visibility": "private" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    assert!(names(participants(admin.clone()).await).is_empty());
+}

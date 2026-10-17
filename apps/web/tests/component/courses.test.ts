@@ -56,6 +56,15 @@ describe('course progress', () => {
     expect(p.perDayEpisodes).toBe(1);
   });
 
+  it('counts today only for episodes still done', () => {
+    const p = courseProgress(
+      [ep(1, { status: 'in_progress', completed_on: '2026-10-17' })],
+      '2026-10-17',
+      null,
+    );
+    expect(p.todayDone).toBe(0);
+  });
+
   it('has no pace without a future target', () => {
     expect(courseProgress([ep(1)], '2026-10-17', '2026-10-01').perDayEpisodes).toBeNull();
     expect(courseProgress([], '2026-10-17', null).percentByCount).toBe(0);
@@ -79,5 +88,17 @@ describe('episode CSV', () => {
     const r = parseEpisodesCsv('벡터,,abc,\n,1장,,\n좋음,,,2026/10/20');
     expect(r.errors.map((e) => e.line)).toEqual([1, 2, 3]);
     expect(parseDuration('')).toBe(0);
+  });
+
+  it('keeps quoted line breaks, skips a header after a BOM or blank lines, checks limits', () => {
+    const long = '가'.repeat(301);
+    const r = parseEpisodesCsv(
+      `\uFEFF\n제목,챕터,길이,계획일\n"여러\n줄",1장,10,\n${long},,1,\n긴 회차,,6001,`,
+    );
+    expect(r.rows.map((x) => x.title)).toEqual(['여러\n줄']);
+    expect(r.errors).toEqual([
+      { line: 5, reason: '제목은 300자까지입니다' },
+      { line: 6, reason: '길이는 100시간까지입니다: 6001' },
+    ]);
   });
 });

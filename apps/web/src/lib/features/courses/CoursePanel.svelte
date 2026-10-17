@@ -9,7 +9,9 @@
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { isWebUrl } from '$lib/url';
 
+  import type { EpisodeRow } from './csv';
   import { parseDuration, parseEpisodesCsv } from './csv';
   import { courseProgress, daysUntil, plannedOn } from './progress';
 
@@ -107,6 +109,7 @@
           planned_on: e.mine.planned_on,
           last_position_seconds: e.mine.last_position_seconds,
           note: e.mine.note,
+          today,
         }),
       `${String(e.number)}회 ${STATUS_LABEL[next]}`,
     );
@@ -126,28 +129,40 @@
     };
   }
 
-  async function addEpisodes(
-    rows: { title: string; chapter: string; duration_seconds: number; planned_on: string | null }[],
-  ): Promise<void> {
-    if (course === undefined || rows.length === 0) return;
+  const csv = $derived(csvText.trim() === '' ? undefined : parseEpisodesCsv(csvText));
+
+  // 요청 id는 입력을 시작할 때 정하고 성공할 때까지 지킨다. 응답을 잃고 다시 눌러도 서버가 같은 회차로 본다.
+  let draftId = newRequestId();
+  const csvIds = $derived(csv === undefined ? [] : csv.rows.map(() => newRequestId()));
+
+  /** 회차를 더한다. 성공하면 true. */
+  async function addEpisodes(rows: EpisodeRow[], ids: readonly string[]): Promise<boolean> {
+    if (course === undefined || rows.length === 0) return false;
     const before = progress?.percentByCount ?? 0;
-    await run(
-      () =>
-        api.addEpisodes(
-          itemId,
-          rows.map((r) => ({ request_id: newRequestId(), url: '', materials: '', ...r })),
-        ),
-      '',
-    );
-    if (error !== undefined) return;
+    error = undefined;
+    let added: number;
+    try {
+      added = await api.addEpisodes(
+        itemId,
+        rows.map((r, i) => ({
+          request_id: ids[i] ?? newRequestId(),
+          url: '',
+          materials: '',
+          ...r,
+        })),
+      );
+    } catch (e: unknown) {
+      error = e instanceof ApiError ? e.message : '처리하지 못했습니다.';
+      return false;
+    }
     const after = await api.course(itemId);
     course = after;
+    reloadKey += 1;
     const now = courseProgress(after.episodes, today, after.details.target_on).percentByCount;
     // 목차가 늘면 진행률이 바뀐다는 것을 알린다(D-37).
-    status = `회차 ${String(rows.length)}개를 더했습니다. 진행률 ${String(before)}% → ${String(now)}%`;
+    status = `회차 ${String(added)}개를 더했습니다. 진행률 ${String(before)}% → ${String(now)}%`;
+    return true;
   }
-
-  const csv = $derived(csvText.trim() === '' ? undefined : parseEpisodesCsv(csvText));
 </script>
 
 {#if error !== undefined}
@@ -176,6 +191,10 @@
         class="grid gap-2 sm:grid-cols-2"
         onsubmit={(e: SubmitEvent) => {
           e.preventDefault();
+          if (details.url.trim() !== '' && !isWebUrl(details.url.trim())) {
+            error = '링크는 http:// 또는 https://로 시작해야 합니다.';
+            return;
+          }
           editing = false;
           void run(
             () =>
@@ -218,7 +237,7 @@
             <dd>{value}</dd>
           {/if}
         {/each}
-        {#if c.details.url !== ''}
+        {#if isWebUrl(c.details.url)}
           <dt class="text-muted-foreground">링크</dt>
           <dd>
             <a class="underline" href={c.details.url} target="_blank" rel="noopener noreferrer"
@@ -281,7 +300,7 @@
             <span class="w-10 shrink-0 tabular-nums text-muted-foreground">{e.number}회</span>
             {#if e.chapter !== ''}<span class="text-xs text-muted-foreground">{e.chapter}</span
               >{/if}
-            {#if e.url !== ''}
+            {#if isWebUrl(e.url)}
               <a
                 class="min-w-0 flex-1 truncate underline"
                 href={e.url}
@@ -387,6 +406,7 @@
                       planned_on: orNull(mine.planned_on),
                       last_position_seconds: mine.position === '' ? null : position,
                       note: mine.note,
+                      today,
                     }),
                   `${String(e.number)}회 내 메모·날짜를 저장했습니다.`,
                 );
@@ -434,8 +454,11 @@
             duration_seconds: seconds,
             planned_on: orNull(newEpisode.planned_on),
           };
-          newEpisode = { title: '', chapter: '', duration: '', planned_on: '' };
-          void addEpisodes([row]);
+          void addEpisodes([row], [draftId]).then((ok) => {
+            if (!ok) return;
+            newEpisode = { title: '', chapter: '', duration: '', planned_on: '' };
+            draftId = newRequestId();
+          });
         }}
       >
         <div class="flex flex-1 flex-col gap-1">
@@ -484,8 +507,9 @@
               disabled={csv === undefined || csv.rows.length === 0 || csv.errors.length > 0}
               onclick={() => {
                 const rows = csv?.rows ?? [];
-                csvText = '';
-                void addEpisodes(rows);
+                void addEpisodes(rows, csvIds).then((ok) => {
+                  if (ok) csvText = '';
+                });
               }}>등록</Button
             >
           </div>

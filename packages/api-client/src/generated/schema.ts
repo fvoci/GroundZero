@@ -3017,6 +3017,11 @@ export interface components {
             planned_on?: string | null;
             /** @description `not_started`·`in_progress`·`done`. */
             status: string;
+            /**
+             * Format: date
+             * @description 사용자 시간대의 오늘(완료한 날). 없으면 서버 날짜.
+             */
+            today?: string | null;
         };
         /** @description 휴지통 보존 기간. */
         SetRetention: {

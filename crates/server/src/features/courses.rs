@@ -151,6 +151,10 @@ pub struct SetProgress {
     pub last_position_seconds: Option<i32>,
     #[serde(default)]
     pub note: String,
+    /// 사용자 시간대의 오늘(완료한 날). 없으면 서버 날짜.
+    #[serde(default, with = "day::option")]
+    #[schema(value_type = Option<String>, format = Date)]
+    pub today: Option<Date>,
 }
 
 /// 함께 수강하는 사람의 진도 집계(메모·위치·시간은 없음).
@@ -387,12 +391,13 @@ pub async fn set_progress(
     Json(input): Json<SetProgress>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_episode_progress($1, $2, $3, $4, $5)")
+    sqlx::query("SELECT app_set_episode_progress($1, $2, $3, $4, $5, $6)")
         .bind(episode)
         .bind(&input.status)
         .bind(input.planned_on)
         .bind(input.last_position_seconds)
         .bind(&input.note)
+        .bind(input.today)
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

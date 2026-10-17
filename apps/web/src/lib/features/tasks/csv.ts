@@ -1,7 +1,10 @@
 // 업무 일괄 등록용 CSV 읽기(D-39). 열: 제목, 설명, 상태, 우선순위, 시작일, 기한, 예상(분), 담당자(이름, ;로 여럿), 태그(;로 여럿).
 // 첫 줄이 머리글(제목/title)이면 건너뛴다. 상태·우선순위는 한국어나 영어 값을 받는다.
 import type { AssigneeView, TaskPriority, TaskStatus } from '$lib/api/client';
-import { csvDate, splitCsvLine } from '$lib/csv';
+import { csvDate, csvRecords, isHeader } from '$lib/csv';
+
+/** 업무 제목 한도(서버 기본 FVOCI_MAX_TITLE_CHARS). */
+const MAX_TITLE = 200;
 
 export interface TaskRow {
   title: string;
@@ -53,8 +56,8 @@ const list = (raw: string): string[] =>
 export function parseTasksCsv(text: string, assignable: readonly AssigneeView[]): TaskCsvResult {
   const rows: TaskRow[] = [];
   const errors: { line: number; reason: string }[] = [];
-  text.split(/\r?\n/).forEach((line, index) => {
-    if (line.trim() === '') return;
+  csvRecords(text).forEach((record, index) => {
+    if (isHeader(record, index)) return;
     const [
       title = '',
       description = '',
@@ -65,14 +68,17 @@ export function parseTasksCsv(text: string, assignable: readonly AssigneeView[])
       estimate = '',
       people = '',
       tags = '',
-    ] = splitCsvLine(line);
-    if (index === 0 && ['제목', 'title'].includes(title.toLowerCase())) return;
-    const lineNo = index + 1;
+    ] = record.cells;
+    const lineNo = record.line;
     const fail = (reason: string): void => {
       errors.push({ line: lineNo, reason });
     };
     if (title === '') {
       fail('제목이 없습니다');
+      return;
+    }
+    if (title.length > MAX_TITLE) {
+      fail(`제목은 ${String(MAX_TITLE)}자까지입니다`);
       return;
     }
     const st = STATUS[status.toLowerCase()];

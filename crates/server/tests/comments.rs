@@ -10,7 +10,11 @@ mod common;
 
 use axum::Router;
 use axum::http::{Method, StatusCode};
-use common::{TestUser, add_member, create_doc, create_workspace, login, new_request_id, send};
+use std::io::Read;
+
+use common::{
+    TestUser, add_member, create_doc, create_workspace, login, new_request_id, send, send_raw,
+};
 use serde_json::{Value, json};
 
 async fn comment(app: &Router, user: &TestUser, body: Value) -> (StatusCode, Value) {
@@ -312,4 +316,187 @@ async fn comments_threads_and_notifications_follow_access() {
     )
     .await;
     assert!(notes(&app, &reader).await.is_empty());
+}
+
+/// 문서를 옮긴 뒤 옛 워크스페이스 영구 삭제·새 워크스페이스 반출, 알림 첫 부분은 지금의 댓글에서,
+/// 만든 사람이 담당자여도 알림은 한 번.
+#[tokio::test]
+async fn moved_documents_live_excerpts_and_single_notifications() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let old = create_workspace(&app, &admin, "옛 공간").await;
+    let new = create_workspace(&app, &admin, "새 공간").await;
+    let (member, _) = add_member(&app, &state, &admin, &old, "member", "writer").await;
+    let doc = create_doc(&app, &admin, &old, "옮길 문서").await;
+    let doc_id = doc["id"].as_str().unwrap().to_owned();
+    let open = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{doc_id}/settings"),
+        Some(&admin),
+        Some(json!({ "visibility": "workspace", "allow_copy": false })),
+    )
+    .await;
+    assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
+
+    // 알림의 첫 부분은 고친 글을 따르고, 지운 댓글이면 없다.
+    let (status, root) = comment(
+        &app,
+        &member,
+        json!({ "document_id": doc_id, "body": "처음 글" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{root:?}");
+    let root_uri = format!("/api/comments/{}", root["id"].as_str().unwrap());
+    let edited = send(
+        &app,
+        Method::PUT,
+        &root_uri,
+        Some(&member),
+        Some(json!({ "body": "고친 글" })),
+    )
+    .await;
+    assert!(edited.status.is_success(), "{:?}", edited.json);
+    assert_eq!(notes(&app, &admin).await[0]["excerpt"], "고친 글");
+    let (status, _) = comment(
+        &app,
+        &admin,
+        json!({ "document_id": doc_id, "parent_id": root["id"], "body": "답" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let removed = send(&app, Method::DELETE, &root_uri, Some(&member), None).await;
+    assert!(removed.status.is_success(), "{:?}", removed.json);
+    let n = notes(&app, &admin).await;
+    assert_eq!(n[0]["kind"], "comment");
+    assert!(n[0]["excerpt"].is_null(), "{n:?}");
+
+    // 댓글이 달린 문서를 새 공간으로 옮기면 옛 공간을 영구 삭제할 수 있고, 반출은 새 공간에서 댓글을 담는다.
+    let preview = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/move"),
+        Some(&admin),
+        Some(json!({ "target_workspace_id": new })),
+    )
+    .await;
+    let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    let moved = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/move"),
+        Some(&admin),
+        Some(json!({ "target_workspace_id": new, "acknowledged": ack })),
+    )
+    .await;
+    assert!(moved.status.is_success(), "{:?}", moved.json);
+    let gone = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{old}"),
+        Some(&admin),
+        Some(json!({ "name": "옛 공간" })),
+    )
+    .await;
+    assert_eq!(gone.status, StatusCode::OK, "{:?}", gone.json);
+    let purge = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/me/deleted-workspaces/{old}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(purge.status, StatusCode::NO_CONTENT, "{:?}", purge.json);
+    let list = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{doc_id}/comments"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(list.json.as_array().unwrap().len(), 2, "{:?}", list.json);
+    let (status, _, bytes) = send_raw(
+        &app,
+        Method::GET,
+        &format!("/api/workspaces/{new}/export"),
+        Some(&admin),
+        &[],
+        Vec::new(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut json_text = String::new();
+    zip.by_name("export.json")
+        .unwrap()
+        .read_to_string(&mut json_text)
+        .unwrap();
+    let exported: Value = serde_json::from_str(&json_text).unwrap();
+    assert_eq!(
+        exported["comments"].as_array().unwrap().len(),
+        2,
+        "{}",
+        exported["comments"]
+    );
+
+    // 업무를 만든 사람이 담당자이기도 하면 댓글 알림은 한 번.
+    let (other, _) = add_member(&app, &state, &admin, &new, "other", "writer").await;
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{new}/modules"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "DUP" }),
+        ),
+    )
+    .await
+    .json;
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", module["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "항목" })),
+    )
+    .await
+    .json;
+    send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{}", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+    )
+    .await;
+    let task = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/tasks", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "내 업무" })),
+    )
+    .await
+    .json;
+    let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", task["id"].as_str().unwrap()), Some(&admin), Some(json!({
+        "base_version": task["version"], "title": "내 업무", "description": "", "status": "todo", "priority": task["priority"],
+        "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
+        "assignee_ids": [admin.id.0] }))).await;
+    assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
+    let (status, _) = comment(
+        &app,
+        &other,
+        json!({ "task_id": task["id"], "body": "확인 부탁" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let on_task = notes(&app, &admin)
+        .await
+        .into_iter()
+        .filter(|x| x["task_id"] == task["id"])
+        .count();
+    assert_eq!(on_task, 1);
 }

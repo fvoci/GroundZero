@@ -33,10 +33,16 @@ describe('task CSV', () => {
 
   it('reports each bad line by number', () => {
     const r = parseTasksCsv(
-      ',,\n일,,끝남\n일,,,급함\n일,,,,2026-10-30,2026-10-01\n일,,,,,,오래\n일,,,,,,,박민수',
+      ',설명만\n일,,끝남\n일,,,급함\n일,,,,2026-10-30,2026-10-01\n일,,,,,,오래\n일,,,,,,,박민수',
       people,
     );
     expect(r.errors.map((e) => e.line)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(r.rows).toEqual([]);
+  });
+
+  it('skips rows of empty cells and reports a long title on its own line', () => {
+    const r = parseTasksCsv(`,,,\n"둘째\n줄",,\n${'가'.repeat(201)}`, people);
+    expect(r.rows.map((x) => x.title)).toEqual(['둘째\n줄']);
+    expect(r.errors).toEqual([{ line: 4, reason: '제목은 200자까지입니다' }]);
   });
 });

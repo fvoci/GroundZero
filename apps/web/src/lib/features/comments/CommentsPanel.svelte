@@ -19,6 +19,9 @@
   let draft = $state('');
   let replyTo = $state<string | undefined>(undefined);
   let replyDraft = $state('');
+  // 요청 id는 성공할 때까지 지킨다. 응답을 잃고 다시 눌러도 같은 댓글이 된다.
+  let draftId = newRequestId();
+  let replyId = newRequestId();
   let showResolved = $state<Set<string>>(new Set());
   let busy = $state(false);
   let reloadKey = $state(0);
@@ -58,17 +61,27 @@
   async function post(): Promise<void> {
     const body = draft.trim();
     if (body === '') return;
-    if (await run(() => api.addComment(target, body, null, newRequestId()), '댓글을 달았습니다.'))
+    if (await run(() => api.addComment(target, body, null, draftId), '댓글을 달았습니다.')) {
       draft = '';
+      draftId = newRequestId();
+    }
   }
 
   async function reply(root: string): Promise<void> {
     const body = replyDraft.trim();
     if (body === '') return;
-    if (await run(() => api.addComment(target, body, root, newRequestId()), '답글을 달았습니다.')) {
+    if (await run(() => api.addComment(target, body, root, replyId), '답글을 달았습니다.')) {
       replyDraft = '';
+      replyId = newRequestId();
       replyTo = undefined;
     }
+  }
+
+  let heading = $state<HTMLHeadingElement | undefined>();
+
+  /** 지운 댓글이 사라져도 키보드 초점을 잃지 않게 댓글 제목으로 옮긴다. */
+  async function remove(id: string): Promise<void> {
+    if (await run(() => api.deleteComment(id), '댓글을 지웠습니다.')) heading?.focus();
   }
 
   /** 답글 칸이 열리면 바로 쓸 수 있게 초점을 옮긴다(키보드 사용). */
@@ -85,7 +98,14 @@
 </script>
 
 <section class="flex flex-col gap-3" aria-labelledby="comments-heading">
-  <h2 id="comments-heading" class="text-lg font-semibold">댓글</h2>
+  <h2
+    id="comments-heading"
+    class="text-lg font-semibold focus-visible:outline-none"
+    tabindex="-1"
+    bind:this={heading}
+  >
+    댓글
+  </h2>
   <p aria-live="polite" class="text-sm">
     {#if error !== undefined}<span class="text-destructive">{error}</span>{:else}{status}{/if}
   </p>
@@ -107,7 +127,7 @@
             {busy}
             onedit={(body: string) =>
               run(() => api.editComment(t.root.id, body), '댓글을 고쳤습니다.')}
-            ondelete={() => void run(() => api.deleteComment(t.root.id), '댓글을 지웠습니다.')}
+            ondelete={() => void remove(t.root.id)}
           />
           {#each t.replies as r (r.id)}
             <div class="ml-4 border-l pl-3">
@@ -116,7 +136,7 @@
                 {busy}
                 onedit={(body: string) =>
                   run(() => api.editComment(r.id, body), '댓글을 고쳤습니다.')}
-                ondelete={() => void run(() => api.deleteComment(r.id), '댓글을 지웠습니다.')}
+                ondelete={() => void remove(r.id)}
               />
             </div>
           {/each}
@@ -125,7 +145,11 @@
               <Button
                 size="sm"
                 variant="outline"
-                onclick={() => ((replyTo = t.root.id), (replyDraft = ''))}>답글</Button
+                onclick={() => {
+                  replyTo = t.root.id;
+                  replyDraft = '';
+                  replyId = newRequestId();
+                }}>답글</Button
               >
             {/if}
             {#if t.root.can_resolve}

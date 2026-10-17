@@ -1772,6 +1772,8 @@ export const api = {
       planned_on: string | null;
       last_position_seconds: number | null;
       note: string;
+      /** 사용자 시간대의 오늘(완료한 날). */
+      today: string;
     },
   ) => expectOk('PUT', `/api/episodes/${encodeURIComponent(id)}/progress`, none, { ...progress }),
   courseParticipants: (item: string, today: string) =>

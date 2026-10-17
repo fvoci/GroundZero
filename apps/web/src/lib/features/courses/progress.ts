@@ -49,7 +49,7 @@ export function courseProgress(
   const remaining = total - done.length;
   const remainingSeconds = totalSeconds - doneSeconds;
   const todayPlanned = episodes.filter((e) => plannedOn(e) === today).length;
-  const todayDone = episodes.filter((e) => e.mine.completed_on === today).length;
+  const todayDone = done.filter((e) => e.mine.completed_on === today).length;
   const overdue = episodes.filter((e) => {
     const planned = plannedOn(e);
     return e.mine.status !== 'done' && planned !== null && planned < today;

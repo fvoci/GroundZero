@@ -13,11 +13,16 @@
   const { comment, busy, onedit, ondelete }: Props = $props();
 
   let editing = $state<string | undefined>(undefined);
+  let confirming = $state(false);
+
+  function focusOnMount(node: HTMLElement): void {
+    node.focus();
+  }
 </script>
 
 <div class="flex flex-col gap-1">
   <div class="flex flex-wrap items-baseline gap-2 text-sm">
-    <span class="font-medium">{comment.author_name ?? '공유받은 사람'}</span>
+    <span class="font-medium">{comment.author_name ?? '이름을 볼 수 없는 사람'}</span>
     <span class="text-xs text-muted-foreground"
       >{new Date(comment.created_at).toLocaleString()}{comment.edited ? ' · 고침' : ''}</span
     >
@@ -51,8 +56,23 @@
     {#if comment.can_edit && editing === undefined}
       <Button size="sm" variant="ghost" onclick={() => (editing = comment.body)}>고치기</Button>
     {/if}
-    {#if comment.can_delete}
-      <Button size="sm" variant="ghost" onclick={ondelete}>지우기</Button>
+    {#if comment.can_delete && !confirming}
+      <Button size="sm" variant="ghost" onclick={() => (confirming = true)}>지우기</Button>
+    {:else if comment.can_delete}
+      <span class="flex items-center gap-1 text-sm" role="group" aria-label="댓글 지우기 확인">
+        이 댓글을 지울까요?
+        <button
+          type="button"
+          class="rounded px-2 py-1 text-destructive hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          disabled={busy}
+          use:focusOnMount
+          onclick={() => {
+            confirming = false;
+            ondelete();
+          }}>지우기</button
+        >
+        <Button size="sm" variant="ghost" onclick={() => (confirming = false)}>취소</Button>
+      </span>
     {/if}
   </div>
 </div>

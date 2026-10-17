@@ -312,7 +312,9 @@ SELECT json_build_object(
   'comments', (SELECT coalesce(json_agg(c ORDER BY c.created_at), '[]') FROM (
       SELECT cm.id, cm.document_id, cm.task_id, cm.parent_id, cm.body, cm.created_by, cm.created_at, cm.edited,
              cm.deleted_at, cm.resolved_at
-      FROM comments cm WHERE cm.workspace_id = $1) c),
+      FROM comments cm
+      LEFT JOIN documents cd ON cd.id = cm.document_id LEFT JOIN tasks ct ON ct.id = cm.task_id
+      WHERE coalesce(cd.workspace_id, ct.workspace_id) = $1) c),
   'course_details', (SELECT coalesce(json_agg(c), '[]') FROM (
       SELECT cd.* FROM course_details cd JOIN items it ON it.id = cd.item_id
       WHERE cd.workspace_id = $1 AND it.deleted_at IS NULL) c),
