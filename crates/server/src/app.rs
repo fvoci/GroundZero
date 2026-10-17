@@ -3,12 +3,14 @@
 use std::sync::Arc;
 
 use tokio::net::TcpListener;
+use tokio::sync::watch;
 
 use crate::config::Config;
 use crate::db::Db;
 use crate::error::AppError;
 use crate::features::accounts::OidcProvider;
 use crate::http::{self, AppState};
+use crate::worker;
 
 /// 구성으로 공유 상태를 만든다. 테스트도 같은 경로를 쓴다.
 pub fn build_state(config: Config) -> Result<AppState, AppError> {
@@ -24,17 +26,37 @@ pub fn build_state(config: Config) -> Result<AppState, AppError> {
     })
 }
 
-/// 구성대로 서버를 띄우고 종료 신호까지 실행한다.
+/// 구성대로 서버(와 실행 역할에 따라 백그라운드 작업)를 띄우고 종료 신호까지 실행한다.
 pub async fn run(config: Config) -> Result<(), AppError> {
     let bind = config.bind;
+    let role = config.role;
+    let interval = config.worker_interval;
     let state = build_state(config)?;
     let db = state.db.clone();
-    let app = http::router(state);
-    let listener = TcpListener::bind(bind).await?;
-    tracing::info!(addr = %bind, "listening");
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    let (stop, stopped) = watch::channel(false);
+    let worker = role
+        .runs_worker()
+        .then(|| worker::spawn(db.clone(), interval, stopped));
+    if role.serves_http() {
+        let app = http::router(state);
+        let listener = TcpListener::bind(bind).await?;
+        tracing::info!(addr = %bind, ?role, "listening");
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal())
+            .await?;
+    } else {
+        tracing::info!(?role, "background worker only");
+        shutdown_signal().await;
+    }
+    // 받는 쪽(작업)이 이미 끝났으면 보낼 곳이 없을 뿐이다.
+    if stop.send(true).is_err() {
+        tracing::debug!("background worker already stopped");
+    }
+    if let Some(handle) = worker
+        && let Err(err) = handle.await
+    {
+        tracing::warn!(error = %err, "background worker stopped abnormally");
+    }
     db.close().await;
     tracing::info!("shutdown complete");
     Ok(())

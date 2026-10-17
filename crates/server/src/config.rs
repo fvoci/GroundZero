@@ -67,6 +67,35 @@ pub struct Config {
     /// 정적 웹 자산 디렉터리. `FVOCI_WEB_DIR`. 없으면 API만 서빙한다.
     pub web_dir: Option<PathBuf>,
     pub limits: Limits,
+    /// 이 프로세스가 맡을 일. `FVOCI_ROLE`(`all`·`api`·`worker`), 기본 `all`(셀프호스트 한 프로세스).
+    pub role: RunRole,
+    /// 백그라운드 작업 확인 간격. `FVOCI_WORKER_INTERVAL_SECS`, 기본 60, 5~3600.
+    pub worker_interval: Duration,
+}
+
+/// 실행 역할(O-19): API와 백그라운드 작업을 한 바이너리에 두고 실행할 때 고른다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunRole {
+    /// HTTP API와 백그라운드 작업을 함께.
+    All,
+    /// HTTP API만.
+    Api,
+    /// 백그라운드 작업만(HTTP를 열지 않는다).
+    Worker,
+}
+
+impl RunRole {
+    /// HTTP를 여는지.
+    #[must_use]
+    pub fn serves_http(self) -> bool {
+        matches!(self, Self::All | Self::Api)
+    }
+
+    /// 백그라운드 작업을 도는지.
+    #[must_use]
+    pub fn runs_worker(self) -> bool {
+        matches!(self, Self::All | Self::Worker)
+    }
 }
 
 fn parse_or<T: std::str::FromStr>(
@@ -149,6 +178,23 @@ impl Config {
             ));
         }
 
+        let role = match lookup("FVOCI_ROLE").as_deref().map(str::trim) {
+            None | Some("" | "all") => RunRole::All,
+            Some("api") => RunRole::Api,
+            Some("worker") => RunRole::Worker,
+            Some(other) => {
+                return Err(AppError::Config(format!(
+                    "FVOCI_ROLE must be all, api or worker (got {other})"
+                )));
+            }
+        };
+        let worker_interval: u64 = parse_or(&lookup, "FVOCI_WORKER_INTERVAL_SECS", 60)?;
+        if !(5..=3600).contains(&worker_interval) {
+            return Err(AppError::Config(
+                "FVOCI_WORKER_INTERVAL_SECS must be between 5 and 3600".into(),
+            ));
+        }
+
         Ok(Self {
             bind,
             database_url,
@@ -157,6 +203,8 @@ impl Config {
             session_ttl,
             web_dir,
             limits,
+            role,
+            worker_interval: Duration::from_secs(worker_interval),
         })
     }
 

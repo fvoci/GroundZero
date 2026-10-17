@@ -53,7 +53,7 @@ fvoci/
 │       │   ├── error.rs
 │       │   ├── http/         # 라우팅·HTTP 공통 경계
 │       │   ├── db/           # 풀·트랜잭션·RLS 문맥
-│       │   ├── jobs/         # 비동기 작업 실행·재시도
+│       │   ├── worker.rs     # 백그라운드 작업(O-19, 실행 역할로 켬)
 │       │   ├── storage/      # 로컬·S3 구현
 │       │   ├── search/       # Meilisearch 연결
 │       │   └── features/
@@ -159,7 +159,7 @@ fvoci/
 
 구조 기준 자체는 승인되었다. 아래는 초기화 시 D-47에 따라 검토자가 판단하고 이유를 기록할 사항이다.
 
-- 결정 기록과 맞는 점: `contracts/openapi.json`을 Rust 정의에서 생성하고 `packages/api-client`를 그 계약에서 생성하는 구조는 O-22 권장안과 일치한다. `crates/server/src/jobs/`는 O-19 권장안(단일 바이너리 내 워커, PostgreSQL 큐)과 양립한다. `features/documents/`가 개인 노트까지 담는 것은 O-02(개인 노트 소유 구조)의 결과에 따라 분리될 수 있다.
+- 결정 기록과 맞는 점: `contracts/openapi.json`을 Rust 정의에서 생성하고 `packages/api-client`를 그 계약에서 생성하는 구조는 O-22 권장안과 일치한다. 백그라운드 작업은 O-19 권장안대로 `crates/server/src/worker.rs`(단일 바이너리, 실행 역할, PostgreSQL 기록)로 두었다. `features/documents/`가 개인 노트까지 담는 것은 O-02(개인 노트 소유 구조)의 결과에 따라 분리될 수 있다.
 - 프론트엔드 `features/`에 `projects`, `hobbies`, `notifications`, `audit`, `modules`가 없다. 서버 쪽에는 있으므로 의도적 생략인지 확인이 필요하다.
 - `deploy/compose.test.yaml`에 Keycloak이 들어가야 한다(D-45, D-10). `compose.selfhost.yaml`의 Keycloak 포함 여부는 O-25.
 - `docs/development.md`는 기존 `development-guidelines.md`를 이 이름으로 옮겼다. `product.md`, `architecture.md`, `testing.md`, `security.md`, `self-hosting.md`는 아직 없다.
