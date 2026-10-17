@@ -1,0 +1,31 @@
+{
+  "realm": "fvoci",
+  "enabled": true,
+  "displayName": "fvoci",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "sslRequired": "external",
+  "clients": [
+    {
+      "clientId": "fvoci-web",
+      "name": "fvoci",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${FVOCI_OIDC_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${FVOCI_PUBLIC_URL}/auth/callback"],
+      "webOrigins": ["${FVOCI_PUBLIC_URL}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${FVOCI_PUBLIC_URL}/*"
+      }
+    }
+  ]
+}
