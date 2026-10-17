@@ -66,6 +66,8 @@ pub struct HomeItem {
     pub title: String,
     pub tasks_done: i64,
     pub tasks_total: i64,
+    /// 이 항목에 업무·일정을 더할 수 있는지(빠른 추가).
+    pub can_write: bool,
 }
 
 /// 고정·즐겨찾기 대상.
@@ -236,6 +238,7 @@ pub async fn home(
          FROM tasks t JOIN items i ON i.id = t.item_id JOIN modules m ON m.id = i.module_id
          WHERE t.status <> 'done' AND t.due_date IS NOT NULL AND t.due_date <= $1 + 7
            AND i.archived_at IS NULL AND m.archived_at IS NULL
+           AND t.workspace_id IN (SELECT app_my_workspace_ids())
            AND (EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = app_user_id())
                 OR (NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id)
                     AND t.created_by = app_user_id()))
@@ -272,14 +275,19 @@ pub async fn home(
         String,
         i64,
         i64,
+        String,
     );
     let active_items: Vec<ItemRow> = sqlx::query_as(
-        "SELECT i.id, i.workspace_id, m.kind, app_item_reference(i.id), i.title,
-                (SELECT count(*) FROM tasks t WHERE t.item_id = i.id AND t.status = 'done'),
-                (SELECT count(*) FROM tasks t WHERE t.item_id = i.id)
+        "SELECT i.id, i.workspace_id, m.kind, app_item_reference(i.id), i.title, c.done, c.total,
+                app_item_access(i.id)
          FROM items i JOIN modules m ON m.id = i.module_id
+         CROSS JOIN LATERAL (
+           SELECT count(*) FILTER (WHERE t.status = 'done') AS done, count(*) AS total, max(t.updated_at) AS active
+           FROM tasks t WHERE t.item_id = i.id
+         ) c
          WHERE i.archived_at IS NULL AND m.archived_at IS NULL
-         ORDER BY greatest(i.updated_at, (SELECT max(t.updated_at) FROM tasks t WHERE t.item_id = i.id)) DESC, i.id
+           AND i.workspace_id IN (SELECT app_my_workspace_ids())
+         ORDER BY greatest(i.updated_at, c.active) DESC, i.id
          LIMIT 8",
     )
     .fetch_all(tx.conn())
@@ -313,7 +321,7 @@ pub async fn home(
         active_items: active_items
             .into_iter()
             .map(
-                |(id, workspace_id, kind, reference, title, tasks_done, tasks_total)| {
+                |(id, workspace_id, kind, reference, title, tasks_done, tasks_total, access)| {
                     Ok(HomeItem {
                         id,
                         workspace_id,
@@ -324,6 +332,7 @@ pub async fn home(
                         title,
                         tasks_done,
                         tasks_total,
+                        can_write: access != "read",
                     })
                 },
             )

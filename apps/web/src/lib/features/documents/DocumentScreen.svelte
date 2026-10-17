@@ -9,7 +9,8 @@
   import type { ReferenceContext } from '$lib/features/references/context';
   import { referenceHref } from '$lib/features/references/context';
   import { badgeColor, workspaceLabel } from '$lib/features/workspaces/badge';
-  import { router } from '$lib/router.svelte';
+  import { itemPath, router, workspacePath } from '$lib/router.svelte';
+  import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
 
   import DocumentActions from './DocumentActions.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
@@ -89,7 +90,25 @@
         epoch += 1;
       }}
     />
-    <div class="ml-auto"><MarkButtons kind="document" id={doc.id} /></div>
+    <div class="ml-auto flex flex-wrap items-center gap-1">
+      <MarkButtons kind="document" id={doc.id} />
+      {#if doc.access !== 'read'}
+        {@const d = doc}
+        <DeleteButton
+          what="문서"
+          remove={() => api.trashDocument(d.id)}
+          ondeleted={() => {
+            router.navigate(
+              d.workspace_id === null
+                ? '/notes'
+                : d.item_id === null
+                  ? workspacePath(d.workspace_id)
+                  : itemPath(d.workspace_id, d.item_id),
+            );
+          }}
+        />
+      {/if}
+    </div>
   </div>
   {#key `${doc.id}:${String(epoch)}`}
     <DocumentEditor

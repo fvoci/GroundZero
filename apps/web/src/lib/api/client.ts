@@ -1045,6 +1045,7 @@ export interface HomeView {
     title: string;
     tasks_done: number;
     tasks_total: number;
+    can_write: boolean;
   }[];
   pins: MarkedTargetView[];
   favorites: MarkedTargetView[];
@@ -1118,6 +1119,7 @@ function parseHome(value: Json): HomeView {
         title: str(i, 'title'),
         tasks_done: int(i, 'tasks_done'),
         tasks_total: int(i, 'tasks_total'),
+        can_write: bool(i, 'can_write'),
       };
     }),
     pins: parseList(o.pins, parseMarked),
@@ -1129,6 +1131,53 @@ function parseMarkState(value: Json): { pin: boolean; favorite: boolean } {
   const o = rec(value, 'mark state');
   return { pin: bool(o, 'pin'), favorite: bool(o, 'favorite') };
 }
+
+export interface TrashEntryView {
+  id: string;
+  kind: 'item' | 'document' | 'task' | 'event';
+  root_id: string;
+  title: string;
+  member_count: number;
+  deleted_by: string;
+  deleted_by_name: string | null;
+  deleted_at: string;
+  expires_at: string;
+  expired: boolean;
+  can_purge: boolean;
+}
+
+export interface TrashView {
+  retention_days: number;
+  entries: TrashEntryView[];
+}
+
+function parseTrash(value: Json): TrashView {
+  const o = rec(value, 'trash');
+  return {
+    retention_days: int(o, 'retention_days'),
+    entries: parseList(o.entries, (v): TrashEntryView => {
+      const e = rec(v, 'trash entry');
+      const kind = str(e, 'kind');
+      if (kind !== 'item' && kind !== 'document' && kind !== 'task' && kind !== 'event')
+        throw new TypeError(`unknown trash kind ${kind}`);
+      return {
+        id: str(e, 'id'),
+        kind,
+        root_id: str(e, 'root_id'),
+        title: str(e, 'title'),
+        member_count: int(e, 'member_count'),
+        deleted_by: str(e, 'deleted_by'),
+        deleted_by_name: optStr(e, 'deleted_by_name'),
+        deleted_at: str(e, 'deleted_at'),
+        expires_at: str(e, 'expires_at'),
+        expired: bool(e, 'expired'),
+        can_purge: bool(e, 'can_purge'),
+      };
+    }),
+  };
+}
+
+const parseBatch = (v: Json): string => str(rec(v, 'trashed'), 'batch_id');
 
 /** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
 export interface MoveTargetInput {
@@ -1447,6 +1496,35 @@ export const api = {
     }),
   excludeOccurrence: (id: string, date: string) =>
     expectOk('POST', `/api/events/${encodeURIComponent(id)}/exclusions`, none, { date }),
+  trashDocument: (id: string) =>
+    expectOk('DELETE', `/api/documents/${encodeURIComponent(id)}`, parseBatch),
+  trashTask: (id: string) => expectOk('DELETE', `/api/tasks/${encodeURIComponent(id)}`, parseBatch),
+  trashItem: (id: string) => expectOk('DELETE', `/api/items/${encodeURIComponent(id)}`, parseBatch),
+  /** 워크스페이스 휴지통, 또는 null이면 내 개인 노트 휴지통. */
+  trash: (workspaceId: string | null) =>
+    expectOk(
+      'GET',
+      workspaceId === null
+        ? '/api/me/trash'
+        : `/api/workspaces/${encodeURIComponent(workspaceId)}/trash`,
+      parseTrash,
+    ),
+  restoreTrash: (batch: string) =>
+    expectOk('POST', `/api/trash/${encodeURIComponent(batch)}/restore`, none),
+  purgeTrash: (batch: string) =>
+    expectOk('DELETE', `/api/trash/${encodeURIComponent(batch)}`, none),
+  purgeExpiredTrash: (workspaceId: string | null) =>
+    expectOk(
+      'POST',
+      workspaceId === null
+        ? '/api/me/trash/purge-expired'
+        : `/api/workspaces/${encodeURIComponent(workspaceId)}/trash/purge-expired`,
+      (v) => int(rec(v, 'purged'), 'purged'),
+    ),
+  setTrashRetention: (workspaceId: string, days: number) =>
+    expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/trash-retention`, none, {
+      days,
+    }),
   home: (tz: string) => expectOk('GET', `/api/me/home?tz=${encodeURIComponent(tz)}`, parseHome),
   mark: (kind: MarkTarget, id: string) =>
     expectOk('GET', `/api/me/marks/${kind}/${encodeURIComponent(id)}`, parseMarkState),

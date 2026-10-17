@@ -38,6 +38,8 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
         let urls = DbUrls::local(pg_port);
         compose::prepare_database(&sh, &urls)?;
         let _env = sh.push_env("DATABASE_URL", &urls.app);
+        // 시험 데이터의 시각을 옮기는 일(예: 휴지통 만료)에만 쓰는 테스트 전용 마이그레이션 역할 주소.
+        let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
         let _env2 = if oidc {
             let kc = compose.host_port(&sh, "keycloak", 8080)?;
             println!("==> keycloak on 127.0.0.1:{kc}");
@@ -83,5 +85,6 @@ fn run_external(root: &Path, oidc: bool) -> Result<()> {
     let urls = DbUrls::at(&host_port);
     compose::prepare_database(&sh, &urls)?;
     let _env = sh.push_env("DATABASE_URL", &urls.app);
+    let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
     run_tests(&sh, oidc)
 }

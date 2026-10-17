@@ -33,6 +33,14 @@
     timer.entry !== null && timer.entry.target?.kind === 'task' && timer.entry.target.id === taskId,
   );
 
+  // 이 업무의 타이머가 다른 곳(머리글)에서 끝나면 끝난 기록이 합계에 들도록 다시 불러온다.
+  let wasRunning = false;
+  $effect(() => {
+    const now = runningHere;
+    if (wasRunning && !now) void reload();
+    wasRunning = now;
+  });
+
   async function startHere(): Promise<void> {
     error = undefined;
     try {

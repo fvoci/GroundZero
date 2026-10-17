@@ -55,8 +55,12 @@
         const n = dayNumber(h.today);
         const from = fromDayNumber(n - ((n + 3) % 7));
         const to = fromDayNumber(dayNumber(from) + 6);
-        const calendars: CalendarView[] = await Promise.all(
+        // 워크스페이스 하나의 달력이 실패해도(그사이 나간 경우 등) 나머지는 보인다.
+        const settled = await Promise.allSettled(
           list.map((w) => api.calendar(w.id, from, to, zone)),
+        );
+        const calendars: CalendarView[] = settled.flatMap((s) =>
+          s.status === 'fulfilled' ? [s.value] : [],
         );
         const merged = entriesByDay(
           calendars.flatMap((c) => c.tasks),
@@ -117,7 +121,7 @@
   let quickRequest = newRequestId();
   let quickStatus = $state('');
   let quickError = $state<string | undefined>(undefined);
-  const writableItems = $derived(home?.active_items ?? []);
+  const writableItems = $derived((home?.active_items ?? []).filter((i) => i.can_write));
 
   async function addQuick(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -355,7 +359,7 @@
           class="rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           onclick={() => {
             router.navigate(pathFor(d, memberOf));
-          }}>📄 {d.reference ?? ''} {d.title}</button
+          }}><span aria-hidden="true">📄</span> {d.reference ?? ''} {d.title}</button
         >
       {/each}
       {#each home?.recent_tasks ?? [] as t (t.id)}
@@ -364,7 +368,7 @@
           class="rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           onclick={() => {
             openTask(t);
-          }}>☑ {t.reference ?? ''} {t.title}</button
+          }}><span aria-hidden="true">☑</span> {t.reference ?? ''} {t.title}</button
         >
       {/each}
       {#if home?.recent_documents.length === 0 && home.recent_tasks.length === 0}

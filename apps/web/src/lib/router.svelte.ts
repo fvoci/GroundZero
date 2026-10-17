@@ -7,6 +7,8 @@ export type Route =
   | { name: 'document'; workspaceId: string; documentId: string }
   | { name: 'members'; workspaceId: string }
   | { name: 'calendar'; workspaceId: string }
+  | { name: 'trash'; workspaceId: string }
+  | { name: 'my-trash' }
   | { name: 'module'; workspaceId: string; moduleId: string }
   | { name: 'item'; workspaceId: string; itemId: string; taskId?: string }
   | { name: 'item-document'; workspaceId: string; itemId: string; documentId: string }
@@ -25,6 +27,7 @@ const WORKSPACE = new RegExp(`^/w/(${UUID})/?$`);
 const DOCUMENT = new RegExp(`^/w/(${UUID})/wiki/(${UUID})/?$`);
 const MEMBERS = new RegExp(`^/w/(${UUID})/members/?$`);
 const CALENDAR = new RegExp(`^/w/(${UUID})/calendar/?$`);
+const TRASH = new RegExp(`^/w/(${UUID})/trash/?$`);
 const STANDALONE = new RegExp(`^/d/(${UUID})/?$`);
 const MODULE = new RegExp(`^/w/(${UUID})/m/(${UUID})/?$`);
 const ITEM = new RegExp(`^/w/(${UUID})/i/(${UUID})/?$`);
@@ -38,6 +41,7 @@ export function parseRoute(pathname: string): Route {
   if (pathname === '/notes' || pathname === '/notes/') return { name: 'notes' };
   if (pathname === '/shared' || pathname === '/shared/') return { name: 'shared' };
   if (pathname === '/time' || pathname === '/time/') return { name: 'time' };
+  if (pathname === '/trash' || pathname === '/trash/') return { name: 'my-trash' };
   if (pathname === '/notifications' || pathname === '/notifications/')
     return { name: 'notifications' };
   const standalone = STANDALONE.exec(pathname);
@@ -65,6 +69,8 @@ export function parseRoute(pathname: string): Route {
       documentId: itemDoc[3],
     };
   }
+  const tr = TRASH.exec(pathname);
+  if (tr?.[1] !== undefined) return { name: 'trash', workspaceId: tr[1] };
   const cal = CALENDAR.exec(pathname);
   if (cal?.[1] !== undefined) return { name: 'calendar', workspaceId: cal[1] };
   const members = MEMBERS.exec(pathname);
@@ -88,6 +94,10 @@ export function membersPath(workspaceId: string): string {
 
 export function calendarPath(workspaceId: string): string {
   return `/w/${workspaceId}/calendar`;
+}
+
+export function trashPath(workspaceId: string): string {
+  return `/w/${workspaceId}/trash`;
 }
 
 export function documentPath(workspaceId: string, documentId: string): string {

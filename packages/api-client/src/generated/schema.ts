@@ -71,7 +71,8 @@ export interface paths {
          */
         put: operations["save"];
         post?: never;
-        delete?: never;
+        /** 문서 지우기(하위 문서까지). 문서 소유 권한이나, 쓰기 권한이 있고 내가 만든 문서. */
+        delete: operations["trash_document"];
         options?: never;
         head?: never;
         patch?: never;
@@ -440,7 +441,8 @@ export interface paths {
         /** 항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다. */
         put: operations["update_item"];
         post?: never;
-        delete?: never;
+        /** 항목 지우기(항목 소유 권한). 그 안의 업무·문서·일정은 항목과 함께 보이지 않는다. */
+        delete: operations["trash_item"];
         options?: never;
         head?: never;
         patch?: never;
@@ -742,6 +744,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내 개인 노트 휴지통(보존 30일). */
+        get: operations["my_trash"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/trash/purge-expired": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 내 개인 노트 휴지통의 만료된 묶음 비우기. */
+        post: operations["purge_my_expired_trash"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/modules/{module_id}": {
         parameters: {
             query?: never;
@@ -875,7 +911,8 @@ export interface paths {
         /** 업무 고치기(쓰기 권한). 기준 버전이 지났으면 409와 서버 최신본(입력은 클라이언트가 보존). */
         put: operations["update_task"];
         post?: never;
-        delete?: never;
+        /** 업무 지우기(하위 업무까지, 쓰기 권한). */
+        delete: operations["trash_task"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1073,6 +1110,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trash/{batch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 영구 삭제(관리자, 개인 노트는 소유자). 되돌릴 수 없다. 번호는 다시 쓰지 않는다. */
+        delete: operations["purge_trash"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trash/{batch_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 되살리기(관리자·지운 사람·개인 노트 소유자). 보존 기간이 지났으면 409. */
+        post: operations["restore_trash"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces": {
         parameters: {
             query?: never;
@@ -1261,6 +1332,57 @@ export interface paths {
         /** 이 워크스페이스에 내 업무 시간 합계 공유 켜기·끄기(멤버). 기록·메모·시각은 공유하지 않는다. */
         put: operations["set_time_sharing"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 워크스페이스 휴지통(관리자는 전부, 작성자는 자기가 지운 것만). */
+        get: operations["workspace_trash"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/trash-retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 휴지통 보존 기간 바꾸기(관리자). 이미 지운 것에도 지금 기간이 적용된다. */
+        put: operations["set_trash_retention"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/trash/purge-expired": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 만료된 묶음 비우기(관리자). */
+        post: operations["purge_expired_trash"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1716,6 +1838,8 @@ export interface components {
          *     업무 완료 비율(완료한 업무 수 / 업무 수)이며 강의 이수율·공부 목표 달성률은 각 모듈 조각에서 더한다.
          */
         HomeItem: {
+            /** @description 이 항목에 업무·일정을 더할 수 있는지(빠른 추가). */
+            can_write: boolean;
             id: components["schemas"]["ItemId"];
             module_kind: components["schemas"]["ModuleKind"];
             reference?: string | null;
@@ -1956,6 +2080,11 @@ export interface components {
             /** Format: uuid */
             id: string;
         };
+        /** @description 비운 수. */
+        Purged: {
+            /** Format: int32 */
+            purged: number;
+        };
         /** @description 내가 받은 초대. */
         ReceivedInvitation: {
             /** Format: date-time */
@@ -2098,6 +2227,14 @@ export interface components {
         SetParent: {
             before_id?: null | components["schemas"]["DocumentId"];
             parent_id?: null | components["schemas"]["DocumentId"];
+        };
+        /** @description 휴지통 보존 기간. */
+        SetRetention: {
+            /**
+             * Format: int32
+             * @description 1~3650일.
+             */
+            days: number;
         };
         /** @description 역할 변경 요청. */
         SetRole: {
@@ -2370,6 +2507,46 @@ export interface components {
         /** @description 타이머 일시정지·재개·종료 요청. */
         TimerActionInput: {
             action: components["schemas"]["TimerAction"];
+        };
+        /** @description 휴지통. */
+        Trash: {
+            entries: components["schemas"]["TrashEntry"][];
+            /** Format: int32 */
+            retention_days: number;
+        };
+        /** @description 휴지통 묶음. */
+        TrashEntry: {
+            /** @description 영구 삭제할 수 있는지(관리자·개인 노트 소유자). */
+            can_purge: boolean;
+            /** Format: date-time */
+            deleted_at: string;
+            deleted_by: components["schemas"]["UserId"];
+            deleted_by_name?: string | null;
+            /** @description 보존 기간이 지나 되살릴 수 없다(영구 삭제 대기). */
+            expired: boolean;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["TrashKind"];
+            /**
+             * Format: int32
+             * @description 함께 지워진 수(하위 문서·하위 업무 포함).
+             */
+            member_count: number;
+            /** Format: uuid */
+            root_id: string;
+            title: string;
+        };
+        /**
+         * @description 휴지통 묶음의 맨 위 대상 종류.
+         * @enum {string}
+         */
+        TrashKind: "item" | "document" | "task" | "event";
+        /** @description 지운 결과(되살릴 때 쓰는 휴지통 묶음). */
+        Trashed: {
+            /** Format: uuid */
+            batch_id: string;
         };
         /** @description 체크리스트 항목 고치기. */
         UpdateChecklistItem: {
@@ -2667,6 +2844,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConflictBody"];
+                };
+            };
+        };
+    };
+    trash_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trashed"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -3796,6 +4018,43 @@ export interface operations {
             };
         };
     };
+    trash_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trashed"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     archive_item: {
         parameters: {
             query?: never;
@@ -4635,6 +4894,44 @@ export interface operations {
             };
         };
     };
+    my_trash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trash"];
+                };
+            };
+        };
+    };
+    purge_my_expired_trash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Purged"];
+                };
+            };
+        };
+    };
     get_module: {
         parameters: {
             query?: never;
@@ -5060,6 +5357,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskConflict"];
+                };
+            };
+        };
+    };
+    trash_task: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trashed"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -5594,6 +5936,76 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TimeEntry"];
                 };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    purge_trash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    restore_trash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             404: {
                 headers: {
@@ -6293,6 +6705,119 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Sharing"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    workspace_trash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trash"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_trash_retention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRetention"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    purge_expired_trash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Purged"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {

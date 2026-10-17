@@ -13,4 +13,5 @@ pub mod revisions;
 pub mod schedule;
 pub mod tasks;
 pub mod time_tracking;
+pub mod trash;
 pub mod workspaces;

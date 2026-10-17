@@ -17,7 +17,7 @@ use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
     accounts, documents, events, home, members, modules, public_links, recurrence, references,
-    revisions, schedule, tasks, time_tracking, workspaces,
+    revisions, schedule, tasks, time_tracking, trash, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -170,6 +170,16 @@ async fn api_not_found() -> AppError {
         home::home,
         home::set_mark,
         home::get_mark,
+        trash::trash_document,
+        trash::trash_task,
+        trash::trash_item,
+        trash::workspace_trash,
+        trash::my_trash,
+        trash::restore,
+        trash::purge,
+        trash::purge_expired,
+        trash::purge_my_expired,
+        trash::set_retention,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -313,6 +323,12 @@ async fn api_not_found() -> AppError {
         home::Home,
         home::SetMark,
         home::MarkState,
+        trash::Trashed,
+        trash::TrashKind,
+        trash::TrashEntry,
+        trash::Trash,
+        trash::Purged,
+        trash::SetRetention,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -350,6 +366,7 @@ async fn api_not_found() -> AppError {
         (name = "events", description = "회의·발표·행사 일정과 달력"),
         (name = "time", description = "스톱워치·개인 시간 기록·집계"),
         (name = "home", description = "홈·고정·즐겨찾기"),
+        (name = "trash", description = "휴지통·복원·영구 삭제"),
     )
 )]
 pub struct ApiDoc;
@@ -416,7 +433,10 @@ pub fn router(state: AppState) -> Router {
             get(tasks::list).post(tasks::create),
         )
         .route("/items/{item_id}/assignable", get(tasks::assignable))
-        .route("/tasks/{task_id}", get(tasks::get).put(tasks::update))
+        .route(
+            "/tasks/{task_id}",
+            get(tasks::get).put(tasks::update).delete(trash::trash_task),
+        )
         .route("/tasks/{task_id}/position", put(tasks::move_task))
         .route("/tasks/{task_id}/parent", put(tasks::set_parent))
         .route("/tasks/{task_id}/schedule-preview", post(schedule::preview))
@@ -466,6 +486,22 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/tasks/{task_id}/time", get(time_tracking::task_time))
         .route("/me/home", get(home::home))
+        .route(
+            "/workspaces/{workspace_id}/trash",
+            get(trash::workspace_trash),
+        )
+        .route(
+            "/workspaces/{workspace_id}/trash/purge-expired",
+            post(trash::purge_expired),
+        )
+        .route(
+            "/workspaces/{workspace_id}/trash-retention",
+            put(trash::set_retention),
+        )
+        .route("/me/trash", get(trash::my_trash))
+        .route("/me/trash/purge-expired", post(trash::purge_my_expired))
+        .route("/trash/{batch_id}", delete(trash::purge))
+        .route("/trash/{batch_id}/restore", post(trash::restore))
         .route(
             "/me/marks/{target_kind}/{target_id}",
             get(home::get_mark).put(home::set_mark),
@@ -521,7 +557,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/items/{item_id}",
-            get(modules::get_item).put(modules::update_item),
+            get(modules::get_item)
+                .put(modules::update_item)
+                .delete(trash::trash_item),
         )
         .route("/items/{item_id}/archived", put(modules::archive_item))
         .route(
@@ -531,7 +569,9 @@ pub fn router(state: AppState) -> Router {
         .route("/public/{token}", get(public_links::view))
         .route(
             "/documents/{document_id}",
-            get(documents::get).put(documents::save),
+            get(documents::get)
+                .put(documents::save)
+                .delete(trash::trash_document),
         )
         .route(
             "/workspaces/{workspace_id}/members",

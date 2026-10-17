@@ -50,7 +50,8 @@
 
   function fill(e: TimeEntryView): void {
     base = e;
-    form = {
+    // 지역 값으로 만든 뒤 넣는다(효과 안에서 방금 넣은 $state를 다시 읽으면 효과가 자기 자신을 다시 부른다).
+    const next: Form = {
       start: wallTime(e.started_at, zone),
       end: e.ended_at === null ? '' : wallTime(e.ended_at, zone),
       pausedMinutes: String(Math.round(e.paused_seconds / 60)),
@@ -61,7 +62,8 @@
           ? null
           : { kind: e.target.kind, id: e.target.id, label: e.target.label ?? '볼 수 없는 대상' },
     };
-    initial = { start: form.start, end: form.end, pausedMinutes: form.pausedMinutes };
+    initial = { start: next.start, end: next.end, pausedMinutes: next.pausedMinutes };
+    form = next;
   }
 
   $effect(() => {

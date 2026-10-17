@@ -45,13 +45,14 @@
       size="sm"
       variant={marks.pin ? 'secondary' : 'ghost'}
       aria-pressed={marks.pin}
-      onclick={() => void toggle('pin')}>{marks.pin ? '고정됨' : '홈에 고정'}</Button
+      onclick={() => void toggle('pin')}>홈에 고정</Button
     >
     <Button
       size="sm"
       variant={marks.favorite ? 'secondary' : 'ghost'}
       aria-pressed={marks.favorite}
-      onclick={() => void toggle('favorite')}>{marks.favorite ? '★ 즐겨찾기' : '☆ 즐겨찾기'}</Button
+      onclick={() => void toggle('favorite')}
+      ><span aria-hidden="true">{marks.favorite ? '★' : '☆'}</span> 즐겨찾기</Button
     >
     {#if error !== undefined}<span role="alert" class="text-sm text-destructive">{error}</span>{/if}
   </div>

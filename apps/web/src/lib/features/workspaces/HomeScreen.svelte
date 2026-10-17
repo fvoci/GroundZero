@@ -24,7 +24,7 @@
 
 <section class="flex flex-col gap-6" aria-labelledby="home-heading">
   <ReceivedInvitations onaccepted={onjoined} />
-  <h1 id="home-heading" class="text-xl font-semibold">워크스페이스</h1>
+  <h2 id="home-heading" class="text-xl font-semibold">워크스페이스</h2>
   {#if workspaces.length === 0}
     <p class="text-muted-foreground">아직 워크스페이스가 없습니다. 첫 워크스페이스를 만드세요.</p>
   {:else}

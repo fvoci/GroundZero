@@ -219,3 +219,12 @@ pub async fn add_member(
     assert_eq!(r.status, StatusCode::OK);
     (user, email)
 }
+
+/// 시험 데이터의 시각을 옮기는 SQL(예: 휴지통 만료)을 테이블 소유 역할로 실행한다. 앱 권한 검사를 거치지 않으므로
+/// 시험 준비에만 쓴다. `cargo xtask test`가 `FVOCI_TEST_MIGRATION_URL`을 넣는다.
+pub async fn fixture_sql(sql: &str, id: &str) {
+    use sqlx::Connection;
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let mut conn = sqlx::PgConnection::connect(&url).await.unwrap();
+    sqlx::query(sql).bind(id).execute(&mut conn).await.unwrap();
+}

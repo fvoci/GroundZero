@@ -21,6 +21,8 @@
   import RecurrenceEditor from '$lib/features/events/RecurrenceEditor.svelte';
   import TaskTimePanel from '$lib/features/time/TaskTimePanel.svelte';
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
+  import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
+  import { itemPath, router } from '$lib/router.svelte';
   import { localTimeZone } from '$lib/features/events/time';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
@@ -286,7 +288,19 @@
       <span class="font-mono text-sm text-muted-foreground">{current.reference ?? ''}</span>
       {#if current.access === 'read'}<span class="text-sm text-muted-foreground">읽기 전용</span
         >{/if}
-      <div class="ml-auto"><MarkButtons kind="task" id={current.id} /></div>
+      <div class="ml-auto flex flex-wrap items-center gap-1">
+        <MarkButtons kind="task" id={current.id} />
+        {#if canEdit}
+          <DeleteButton
+            what="업무"
+            remove={() => api.trashTask(current.id)}
+            ondeleted={() => {
+              onchanged();
+              router.navigate(itemPath(current.workspace_id, current.item_id));
+            }}
+          />
+        {/if}
+      </div>
     </div>
 
     {#if conflict !== undefined}
