@@ -1312,7 +1312,7 @@ function parseCalendar(value: Json): CalendarView {
   };
 }
 
-export const TIME_KINDS = ['work', 'study', 'lecture', 'rest', 'other'] as const;
+export const TIME_KINDS = ['work', 'study', 'lecture', 'hobby', 'rest', 'other'] as const;
 export type TimeKind = (typeof TIME_KINDS)[number];
 export type TimeTargetKind = 'task' | 'document' | 'item' | 'episode' | 'study_unit';
 
@@ -1360,6 +1360,12 @@ export interface TaskTimeView {
   mine_seconds: number;
   shared_seconds: number;
   shared_people: number;
+}
+
+/** 항목의 시간 합계(D-78). 기록이 있는 종류만. */
+export interface ItemTimeView {
+  estimate_minutes: number;
+  kinds: { kind: TimeKind; mine_seconds: number; shared_seconds: number; shared_people: number }[];
 }
 
 function timeKind(value: string): TimeKind {
@@ -2715,6 +2721,23 @@ export const api = {
       (v) => bool(rec(v, 'sharing'), 'enabled'),
       { enabled },
     ),
+  itemTime: (itemId: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/time`, (v): ItemTimeView => {
+      const o = rec(v, 'item time');
+      if (!Array.isArray(o.kinds)) throw new TypeError('item time kinds');
+      return {
+        estimate_minutes: int(o, 'estimate_minutes'),
+        kinds: o.kinds.map((k: Json) => {
+          const r = rec(k, 'item time kind');
+          return {
+            kind: timeKind(str(r, 'kind')),
+            mine_seconds: int(r, 'mine_seconds'),
+            shared_seconds: int(r, 'shared_seconds'),
+            shared_people: int(r, 'shared_people'),
+          };
+        }),
+      };
+    }),
   taskTime: (taskId: string) =>
     expectOk('GET', `/api/tasks/${encodeURIComponent(taskId)}/time`, (v): TaskTimeView => {
       const o = rec(v, 'task time');

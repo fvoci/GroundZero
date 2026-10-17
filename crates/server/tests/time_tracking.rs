@@ -497,3 +497,136 @@ async fn task_totals_include_only_people_who_chose_to_share() {
         .unwrap();
     assert_eq!(left, 0);
 }
+
+/// 항목의 시간 합계(D-78): 항목과 그 아래 업무의 기록을 종류별로, 내 것과 공유를 켠 사람의 합계만. 취미 종류.
+#[tokio::test]
+async fn item_totals_group_entries_under_the_item_by_kind() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "항목 시간").await;
+    let (sharer, _) = add_member(&app, &state, &admin, &ws, "sharer", "writer").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let outsider = login(&state, "outsider").await;
+    let task = task_in_public_item(&app, &admin, &ws).await;
+    let item = task["item_id"].as_str().unwrap().to_owned();
+    let post = |user: TestUser, body: Value| {
+        let app = app.clone();
+        async move {
+            let r = send(
+                &app,
+                Method::POST,
+                "/api/me/time-entries",
+                Some(&user),
+                Some(body),
+            )
+            .await;
+            assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+        }
+    };
+    let on_task = json!({ "kind": "task", "id": task["id"] });
+    let on_item = json!({ "kind": "item", "id": item });
+    post(
+        admin.clone(),
+        manual(
+            "2026-10-21T09:00:00Z",
+            "2026-10-21T10:00:00Z",
+            "work",
+            on_task.clone(),
+        ),
+    )
+    .await;
+    post(
+        admin.clone(),
+        manual(
+            "2026-10-21T11:00:00Z",
+            "2026-10-21T11:30:00Z",
+            "hobby",
+            on_item.clone(),
+        ),
+    )
+    .await;
+    post(
+        admin.clone(),
+        manual(
+            "2026-10-21T12:00:00Z",
+            "2026-10-21T12:20:00Z",
+            "study",
+            on_item.clone(),
+        ),
+    )
+    .await;
+    // 대상 없는 기록은 어느 항목에도 들지 않는다.
+    post(
+        admin.clone(),
+        manual(
+            "2026-10-21T13:00:00Z",
+            "2026-10-21T14:00:00Z",
+            "work",
+            Value::Null,
+        ),
+    )
+    .await;
+    post(
+        sharer.clone(),
+        manual(
+            "2026-10-21T09:00:00Z",
+            "2026-10-21T09:30:00Z",
+            "work",
+            on_task,
+        ),
+    )
+    .await;
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/time-sharing"),
+        Some(&sharer),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+
+    let uri = format!("/api/items/{item}/time");
+    let kinds = |v: &Value| -> Vec<(String, i64, i64, i64)> {
+        v["kinds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|k| {
+                (
+                    k["kind"].as_str().unwrap().to_owned(),
+                    k["mine_seconds"].as_i64().unwrap(),
+                    k["shared_seconds"].as_i64().unwrap(),
+                    k["shared_people"].as_i64().unwrap(),
+                )
+            })
+            .collect()
+    };
+    let mine = send(&app, Method::GET, &uri, Some(&admin), None).await;
+    assert_eq!(mine.status, StatusCode::OK, "{:?}", mine.json);
+    assert_eq!(mine.json["estimate_minutes"], 0);
+    assert_eq!(
+        kinds(&mine.json),
+        vec![
+            ("hobby".to_owned(), 1800, 0, 0),
+            ("study".to_owned(), 1200, 0, 0),
+            ("work".to_owned(), 3600, 1800, 1),
+        ]
+    );
+    let seen_by_reader = send(&app, Method::GET, &uri, Some(&reader), None).await;
+    assert_eq!(
+        kinds(&seen_by_reader.json),
+        vec![
+            ("hobby".to_owned(), 0, 0, 0),
+            ("study".to_owned(), 0, 0, 0),
+            ("work".to_owned(), 0, 1800, 1),
+        ]
+    );
+    assert_eq!(
+        send(&app, Method::GET, &uri, Some(&outsider), None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+}

@@ -5,6 +5,7 @@ export const TIME_KIND_LABEL: Record<TimeKind, string> = {
   work: '작업',
   study: '순공부',
   lecture: '강의 시청',
+  hobby: '취미',
   rest: '휴식',
   other: '기타',
 };

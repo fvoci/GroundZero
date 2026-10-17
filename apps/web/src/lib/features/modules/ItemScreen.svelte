@@ -17,6 +17,7 @@
   import TemplatePicker from '$lib/features/documents/TemplatePicker.svelte';
   import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
   import StudyPanel from '$lib/features/study/StudyPanel.svelte';
+  import ItemTimePanel from '$lib/features/time/ItemTimePanel.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { itemDocumentPath, modulePath, router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
@@ -255,6 +256,10 @@
     {/if}
     {#if mod?.kind === 'study'}
       <StudyPanel itemId={current.id} />
+    {/if}
+
+    {#if mod !== undefined}
+      <ItemTimePanel itemId={current.id} moduleKind={mod.kind} canTrack={!current.archived} />
     {/if}
 
     <AttachmentsPanel target={{ kind: 'item', id: current.id }} canWrite={canEdit} />

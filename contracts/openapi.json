@@ -4665,6 +4665,48 @@
         }
       }
     },
+    "/api/items/{item_id}/time": {
+      "get": {
+        "tags": [
+          "time"
+        ],
+        "summary": "항목의 예상·실제 시간(항목을 볼 수 있는 사람). 기록 하나하나는 돌려주지 않는다.",
+        "operationId": "item_time",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemTime"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/views": {
       "get": {
         "tags": [
@@ -12315,6 +12357,57 @@
           }
         }
       },
+      "ItemTime": {
+        "type": "object",
+        "description": "항목의 시간 합계(D-78): 항목 자체와 그 아래 업무·문서·강의 회차·스터디 단위의 기록을 종류별로 모은다.",
+        "required": [
+          "estimate_minutes",
+          "kinds"
+        ],
+        "properties": {
+          "estimate_minutes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "항목의 휴지통에 없는 업무 예상 시간 합(분)."
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemTimeKind"
+            },
+            "description": "기록이 있는 종류만, 종류 이름 순."
+          }
+        }
+      },
+      "ItemTimeKind": {
+        "type": "object",
+        "description": "항목의 시간 합계 한 종류.",
+        "required": [
+          "kind",
+          "mine_seconds",
+          "shared_seconds",
+          "shared_people"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/TimeKind"
+          },
+          "mine_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "내 끝난 기록의 합계(초)."
+          },
+          "shared_people": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "shared_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "이 워크스페이스에 공유를 켠 멤버들의 합계(초, 나도 켰으면 포함)."
+          }
+        }
+      },
       "LogoutResponse": {
         "type": "object",
         "description": "로그아웃 결과. 클라이언트는 `redirect_to`로 이동해 제공자 세션도 끝낸다.",
@@ -15144,11 +15237,12 @@
       },
       "TimeKind": {
         "type": "string",
-        "description": "시간 기록 종류. `study`는 순공부(강의 시청 제외), `lecture`는 강의 시청, `rest`는 휴식.",
+        "description": "시간 기록 종류. `study`는 순공부(강의 시청 제외), `lecture`는 강의 시청, `hobby`는 취미 활동, `rest`는 휴식.",
         "enum": [
           "work",
           "study",
           "lecture",
+          "hobby",
           "rest",
           "other"
         ]
