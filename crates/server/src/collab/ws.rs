@@ -90,7 +90,11 @@ async fn run(
         Err(err) => {
             let reason = match err {
                 AppError::Conflict(_) => CloseReason::RealtimeOff,
-                _ => CloseReason::AccessLost,
+                AppError::NotFound | AppError::Forbidden | AppError::Unauthorized => {
+                    CloseReason::AccessLost
+                }
+                // 방을 열지 못한 일시적인 문제(DB 등)는 다시 붙게 한다.
+                _ => CloseReason::Busy,
             };
             let _ignored = sink.send(close(reason)).await;
             return;

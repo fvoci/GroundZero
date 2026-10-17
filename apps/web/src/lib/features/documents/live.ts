@@ -1,6 +1,6 @@
 // 실시간 공동 편집 연결(D-70). 서버(`/api/documents/{id}/collab`)와 y-websocket 메시지로 동기화한다.
-// 닫기 코드: 4400 잘못된 변경, 4403 권한·세션 끝, 4409 문서가 다른 길로 바뀜(새 문서로 다시 연다),
-// 4410 실시간 꺼짐(일반 편집으로 돌아간다), 4429 너무 느림(다시 붙는다).
+// 닫기 코드: 4400 잘못된 변경, 4403 권한·세션 끝, 4409 문서가 다른 길로 바뀌었거나 상태가 어긋남(새 문서로 다시 연다),
+// 4410 실시간 꺼짐(일반 편집으로 돌아간다). 4503 너무 많음·느림과 1012 서버 다시 시작은 y-websocket이 스스로 다시 붙는다.
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
@@ -58,7 +58,11 @@ export function openLive(documentId: string, user: LiveUser): LiveSession {
   const document = new Y.Doc();
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const base = `${scheme}://${window.location.host}/api/documents/${encodeURIComponent(documentId)}`;
-  const provider = new WebsocketProvider(base, 'collab', document, { maxBackoffTime: 10_000 });
+  // 같은 브라우저의 다른 탭끼리 서버를 거치지 않고 주고받지 않게 한다(모든 변경이 서버 검사를 거친다).
+  const provider = new WebsocketProvider(base, 'collab', document, {
+    maxBackoffTime: 10_000,
+    disableBc: true,
+  });
   provider.awareness.setLocalStateField('user', user);
   return { document, provider, user };
 }

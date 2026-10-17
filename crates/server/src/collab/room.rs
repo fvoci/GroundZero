@@ -1,11 +1,15 @@
 //! 문서 하나의 실시간 편집 방(D-70). 방마다 작업 하나가 Yjs 문서를 혼자 맡고(잠금 없음), 연결은 메시지만 주고받는다.
 //!
-//! - **경계**: 쓰기 권한이 있는 연결의 변경만, 같은 내용 검사(`validate_body`)를 거친 뒤 방 문서에 넣고 다른
-//!   연결에 보낸다. 검사는 방 문서를 복사한 임시 문서에 그 변경을 먼저 넣어 본다. 통과하지 못하면 버리고 그 연결을
-//!   닫는다. 읽기 연결은 내용을 바꾸지 못한다(커서·참여자 표시만).
+//! - **경계**: 쓰기 권한이 있는 연결의 변경만 받는다. 연결마다 모인 변경을 합쳐, 방 문서를 복사한 임시 문서에 먼저
+//!   넣고 편집기 스키마 모양(`convert::check_shape`)과 저장 API의 본문 검사(`validate_body`)를 통과해야 방 문서에 넣고
+//!   다른 연결에 보낸다. 검사는 블로킹 작업으로 돌린다. 통과하지 못하면 버리고 그 연결을 닫는다(4400). 읽기 연결의
+//!   변경은 받지 않고 버린다(편집기가 스스로 고친 것일 수 있어 닫지는 않는다).
+//! - **한도**: 한 프레임의 메시지 수, 연결마다 초당 바이트·메시지 수, Yjs 상태 크기, 참여자 표시 수·크기.
 //! - **저장**: 몇 초마다 Yjs 상태를 저장하고, 60초 조용하거나 마지막 사람이 나가면 저장 API와 같은 길
-//!   (`documents::write_revision`)으로 리비전을 만든다. 그 사이 본문이 다른 길(복원)로 바뀌었으면 쓰지 않고 방을 닫는다.
-//! - **한 서버**: 방은 메모리에 있다. 셀프호스트의 한 앱 프로세스(`role=All`)를 전제로 한다.
+//!   (`documents::write_revision`)으로 리비전을 만든다. 마지막으로 고친 사람이 쓸 수 없으면 연결된 다른 작성자로 쓴다.
+//!   그 사이 본문이 다른 길(복원)로 바뀌었으면 쓰지 않고 방을 닫는다.
+//! - **한 서버**: 방은 메모리에 있다. 셀프호스트의 한 앱 프로세스(`role=All`)를 전제로 한다. 끝낼 때 모든 방의 리비전을
+//!   남긴다.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -34,20 +38,30 @@ const FLUSH_EVERY: Duration = Duration::from_millis(100);
 const PERSIST_EVERY: Duration = Duration::from_secs(3);
 /// 이만큼 조용하면 리비전을 만든다.
 const SNAPSHOT_IDLE: Duration = Duration::from_secs(60);
+/// 한 프레임에 담을 수 있는 메시지 수(y-websocket은 보통 하나).
+const MAX_MESSAGES_PER_FRAME: usize = 16;
+/// 연결마다 1초에 받을 수 있는 메시지 수와 바이트(넘치면 닫고 다시 붙게 한다).
+const MAX_MESSAGES_PER_SECOND: u32 = 120;
+const MAX_BYTES_PER_SECOND: usize = 4 * 1024 * 1024;
+/// 한 연결이 알릴 수 있는 참여자 id 수와 항목 크기.
+const MAX_PRESENCE_IDS: usize = 4;
+const MAX_PRESENCE_BYTES: usize = 4 * 1024;
 
-/// 닫는 이유(웹소켓 닫기 코드). 4000번대는 앱 정의.
+/// 닫는 이유(웹소켓 닫기 코드). 4400~4499는 y-websocket이 다시 붙지 않는 코드다.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloseReason {
-    /// 내용 검사 실패, 읽기 연결의 쓰기 등 잘못된 메시지.
+    /// 내용 검사 실패, 잘못된 메시지. 다시 붙지 않는다.
     Invalid,
-    /// 권한·세션이 끝남.
+    /// 권한·세션이 끝남. 다시 붙지 않는다.
     AccessLost,
-    /// 문서가 다른 길로 바뀌어(복원) 다시 열어야 함.
+    /// 문서가 다른 길로 바뀌었거나 클라이언트 상태가 맞지 않아 새 문서로 다시 열어야 함.
     Reload,
     /// 워크스페이스가 실시간을 끔.
     RealtimeOff,
-    /// 너무 느려 보낼 것이 쌓임.
-    Slow,
+    /// 너무 느리거나 너무 많이 보냄. 잠시 뒤 다시 붙는다.
+    Busy,
+    /// 서버를 다시 시작함. 다시 붙는다.
+    Restart,
 }
 
 impl CloseReason {
@@ -58,7 +72,8 @@ impl CloseReason {
             Self::AccessLost => 4403,
             Self::Reload => 4409,
             Self::RealtimeOff => 4410,
-            Self::Slow => 4429,
+            Self::Busy => 4503,
+            Self::Restart => 1012,
         }
     }
 
@@ -69,7 +84,8 @@ impl CloseReason {
             Self::AccessLost => "access ended",
             Self::Reload => "document changed; reload",
             Self::RealtimeOff => "realtime editing turned off",
-            Self::Slow => "connection too slow",
+            Self::Busy => "too much traffic; reconnect later",
+            Self::Restart => "server restarting",
         }
     }
 }
@@ -116,6 +132,7 @@ struct Handle {
     generation: u64,
     workspace: Option<Uuid>,
     tx: mpsc::Sender<Command>,
+    done: Arc<tokio::sync::Notify>,
 }
 
 /// 열린 방 목록.
@@ -147,6 +164,7 @@ impl Membership {
 
 impl Drop for Membership {
     fn drop(&mut self) {
+        // 대기열이 가득 차 못 보내도 방은 닫힌 연결을 주기적으로 걸러 낸다.
         let _ignored = self.tx.try_send(Command::Leave { conn: self.conn });
     }
 }
@@ -168,7 +186,7 @@ impl Rooms {
         workspace: Option<Uuid>,
         peer: Peer,
     ) -> Result<Membership, AppError> {
-        for _ in 0..3 {
+        for _ in 0..5 {
             let handle = {
                 let mut rooms = self.lock();
                 if let Some(h) = rooms.get(&doc).filter(|h| !h.tx.is_closed()) {
@@ -180,6 +198,7 @@ impl Rooms {
                         generation,
                         workspace,
                         tx,
+                        done: Arc::new(tokio::sync::Notify::new()),
                     };
                     rooms.insert(doc, handle.clone());
                     let room = Room::new(
@@ -190,7 +209,7 @@ impl Rooms {
                         recheck_every,
                         self.clone(),
                     );
-                    tokio::spawn(room.run(rx));
+                    tokio::spawn(room.run(rx, handle.done.clone()));
                     handle
                 }
             };
@@ -216,11 +235,11 @@ impl Rooms {
                     });
                 }
                 Ok(Err(err)) => return Err(err),
-                // 방이 닫히는 중이었다. 새로 연다.
-                Err(_) => {}
+                // 방이 닫히는 중이었다(답 없이 버려짐). 새로 연다.
+                Err(_) => tokio::task::yield_now().await,
             }
         }
-        Err(AppError::Conflict(
+        Err(AppError::Upstream(
             "could not open the live editing room".into(),
         ))
     }
@@ -239,7 +258,7 @@ impl Rooms {
         }
     }
 
-    /// 워크스페이스가 실시간을 껐다. 그 워크스페이스의 방은 리비전을 남기고 닫는다.
+    /// 워크스페이스가 실시간을 끈다(또는 껐다). 그 워크스페이스의 방은 리비전을 남기고 닫는다. 끝날 때까지 기다린다.
     pub async fn close_workspace(&self, workspace: Uuid) {
         let handles: Vec<Handle> = self
             .lock()
@@ -247,15 +266,13 @@ impl Rooms {
             .filter(|h| h.workspace == Some(workspace))
             .cloned()
             .collect();
-        for handle in handles {
-            let _ignored = handle
-                .tx
-                .send(Command::Shutdown {
-                    reason: CloseReason::RealtimeOff,
-                    snapshot: true,
-                })
-                .await;
-        }
+        close_all(handles, CloseReason::RealtimeOff).await;
+    }
+
+    /// 서버를 끝낸다. 모든 방의 리비전을 남기고 닫는다(클라이언트는 다시 붙는다).
+    pub async fn shutdown(&self) {
+        let handles: Vec<Handle> = self.lock().values().cloned().collect();
+        close_all(handles, CloseReason::Restart).await;
     }
 
     fn remove(&self, doc: DocumentId, generation: u64) {
@@ -266,10 +283,39 @@ impl Rooms {
     }
 }
 
+async fn close_all(handles: Vec<Handle>, reason: CloseReason) {
+    let mut waits = Vec::new();
+    for handle in handles {
+        let done = handle.done.clone();
+        let notified = async move { done.notified().await };
+        if handle
+            .tx
+            .send(Command::Shutdown {
+                reason,
+                snapshot: true,
+            })
+            .await
+            .is_ok()
+        {
+            waits.push(notified);
+        }
+    }
+    // 리비전 쓰기가 오래 걸리면 끝까지 기다리지는 않는다.
+    let _ignored = tokio::time::timeout(
+        Duration::from_secs(10),
+        futures_util::future::join_all(waits),
+    )
+    .await;
+}
+
 struct Connection {
     peer: Peer,
-    /// 이 연결이 알린 참여자(awareness) id. 나가면 지운다.
+    /// 이 연결이 알린 참여자(awareness) id. 다른 연결은 이 id를 바꿀 수 없고, 나가면 지운다.
     clients: HashSet<ClientID>,
+    /// 1초 창의 받은 메시지·바이트.
+    window: Instant,
+    messages: u32,
+    bytes: usize,
 }
 
 struct Pending {
@@ -287,6 +333,8 @@ struct Room {
     doc: Option<Doc>,
     /// 참여자 표시(커서·이름). 서버는 내용을 보지 않고 각 참여자의 최신 항목(시계가 큰 것)만 들고 있다가 전한다.
     presence: HashMap<ClientID, AwarenessUpdateEntry>,
+    /// 참여자 id를 처음 알린 연결.
+    presence_owner: HashMap<ClientID, u64>,
     conns: HashMap<u64, Connection>,
     pending: Vec<Pending>,
     /// 방 문서가 이어받은 리비전과 그때의 본문(본문이 다른 길로 바뀌었는지 보려고).
@@ -298,7 +346,8 @@ struct Room {
     dirty_state: bool,
     dirty_since_snapshot: bool,
     last_change: Instant,
-    last_editor: Option<UserId>,
+    /// 고친 사람(마지막이 앞). 리비전 작성자를 고를 때 쓴다.
+    editors: Vec<UserId>,
     last_recheck: Instant,
     /// 연결의 세션·권한을 다시 확인하는 간격(`FVOCI_COLLAB_RECHECK_SECS`).
     recheck_every: Duration,
@@ -321,6 +370,7 @@ impl Room {
             rooms,
             doc: None,
             presence: HashMap::new(),
+            presence_owner: HashMap::new(),
             conns: HashMap::new(),
             pending: Vec::new(),
             base_revision: 0,
@@ -329,13 +379,21 @@ impl Room {
             dirty_state: false,
             dirty_since_snapshot: false,
             last_change: Instant::now(),
-            last_editor: None,
+            editors: Vec::new(),
             last_recheck: Instant::now(),
             recheck_every,
         }
     }
 
-    async fn run(mut self, mut rx: mpsc::Receiver<Command>) {
+    /// Yjs 상태 크기 한도: 본문 한도의 네 배(지운 흔적 등 Yjs의 덧붙는 몫을 둔다).
+    fn max_state_bytes(&self) -> usize {
+        self.limits
+            .max_document_bytes
+            .saturating_mul(4)
+            .max(1 << 20)
+    }
+
+    async fn run(mut self, mut rx: mpsc::Receiver<Command>, done: Arc<tokio::sync::Notify>) {
         let mut flush = tokio::time::interval(FLUSH_EVERY);
         let mut persist = tokio::time::interval(PERSIST_EVERY);
         loop {
@@ -346,8 +404,9 @@ impl Room {
                         break;
                     }
                 }
-                _ = flush.tick() => self.flush(),
+                _ = flush.tick() => self.flush().await,
                 _ = persist.tick() => {
+                    self.prune();
                     self.persist().await;
                     if self.dirty_since_snapshot && self.last_change.elapsed() >= SNAPSHOT_IDLE {
                         self.snapshot().await;
@@ -358,20 +417,17 @@ impl Room {
                 }
             }
             if self.doc.is_some() && self.conns.is_empty() {
-                self.flush();
+                self.flush().await;
                 self.snapshot().await;
                 self.persist().await;
                 break;
             }
         }
         self.rooms.remove(self.doc_id, self.generation);
-        // 닫히는 동안 들어온 참여 요청은 실패시켜 새 방을 열게 한다.
+        // 닫히는 동안 들어온 참여 요청은 답하지 않고 버려 새 방을 열게 한다.
         rx.close();
-        while let Ok(cmd) = rx.try_recv() {
-            if let Command::Join { reply, .. } = cmd {
-                let _ignored = reply.send(Err(AppError::Conflict("room closed".into())));
-            }
-        }
+        while rx.try_recv().is_ok() {}
+        done.notify_waiters();
     }
 
     /// 거짓이면 방을 닫는다.
@@ -388,13 +444,15 @@ impl Room {
                     }
                 }
                 let start = self.start_messages();
-                let accepted = peer.out.try_send(Outbound::Binary(start)).is_ok();
-                if accepted {
+                if peer.out.try_send(Outbound::Binary(start)).is_ok() {
                     self.conns.insert(
                         conn,
                         Connection {
                             peer,
                             clients: HashSet::new(),
+                            window: Instant::now(),
+                            messages: 0,
+                            bytes: 0,
                         },
                     );
                 }
@@ -411,7 +469,7 @@ impl Room {
             }
             Command::Shutdown { reason, snapshot } => {
                 if snapshot {
-                    self.flush();
+                    self.flush().await;
                     self.snapshot().await;
                     self.persist().await;
                 }
@@ -423,7 +481,7 @@ impl Room {
         }
     }
 
-    /// 저장된 Yjs 상태(리비전이 같을 때) 또는 본문에서 방 문서를 만든다. 들어오는 사람의 권한으로 읽는다.
+    /// 저장된 Yjs 상태(그 뒤로 본문이 바뀌지 않았을 때) 또는 본문에서 방 문서를 만든다. 들어오는 사람의 권한으로 읽는다.
     async fn load(&mut self, user: UserId) -> Result<Doc, AppError> {
         let mut tx = self.db.begin_as(user).await?;
         let (revision, _title, body, state): (i32, String, Value, Option<Vec<u8>>) =
@@ -434,17 +492,22 @@ impl Room {
                 .map_err(AppError::from_db_function)?;
         tx.commit().await?;
         let doc = Doc::new();
-        let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
         let restored = state
             .and_then(|bytes| Update::decode_v1(&bytes).ok())
             .is_some_and(|update| doc.transact_mut().apply_update(update).is_ok());
-        if !restored {
+        if !restored || lineage_of(&doc).is_none() {
+            let doc = Doc::new();
+            let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
             let map = meta(&doc);
             let mut txn = doc.transact_mut();
             convert::write_doc(&mut txn, &fragment, &body);
             map.insert(&mut txn, LINEAGE, Uuid::now_v7().to_string());
             drop(txn);
             self.dirty_state = true;
+            self.lineage = lineage_of(&doc).unwrap_or_default();
+            self.base_revision = revision;
+            self.base_body = body;
+            return Ok(doc);
         }
         self.lineage = lineage_of(&doc).unwrap_or_default();
         self.base_revision = revision;
@@ -469,10 +532,24 @@ impl Room {
         let clients: HashMap<ClientID, AwarenessUpdateEntry> = self
             .presence
             .iter()
-            .filter(|(_, e)| &*e.json != "null")
             .map(|(id, e)| (*id, e.clone()))
             .collect();
         (!clients.is_empty()).then_some(AwarenessUpdate { clients })
+    }
+
+    /// 1초 창 안의 메시지·바이트가 한도 안이면 참.
+    fn within_rate(&mut self, conn: u64, messages: u32, bytes: usize) -> bool {
+        let Some(c) = self.conns.get_mut(&conn) else {
+            return false;
+        };
+        if c.window.elapsed() >= Duration::from_secs(1) {
+            c.window = Instant::now();
+            c.messages = 0;
+            c.bytes = 0;
+        }
+        c.messages = c.messages.saturating_add(messages);
+        c.bytes = c.bytes.saturating_add(bytes);
+        c.messages <= MAX_MESSAGES_PER_SECOND && c.bytes <= MAX_BYTES_PER_SECOND
     }
 
     fn incoming(&mut self, conn: u64, data: &[u8]) {
@@ -486,10 +563,16 @@ impl Room {
         );
         let mut decoder = DecoderV1::from(data);
         let messages: Vec<Message> = MessageReader::new(&mut decoder)
+            .take(MAX_MESSAGES_PER_FRAME + 1)
             .collect::<Result<_, _>>()
             .unwrap_or_default();
-        if messages.is_empty() && !data.is_empty() {
+        if (messages.is_empty() && !data.is_empty()) || messages.len() > MAX_MESSAGES_PER_FRAME {
             self.close(conn, CloseReason::Invalid);
+            return;
+        }
+        let count = u32::try_from(messages.len()).unwrap_or(u32::MAX);
+        if !self.within_rate(conn, count, data.len()) {
+            self.close(conn, CloseReason::Busy);
             return;
         }
         for message in messages {
@@ -511,8 +594,9 @@ impl Room {
                         continue;
                     }
                     if !can_write {
-                        self.close(conn, CloseReason::Invalid);
-                        return;
+                        // 읽기 연결의 변경은 받지 않는다(편집기가 스스로 맞춘 것일 수 있어 닫지는 않는다).
+                        tracing::debug!(document = %self.doc_id.0, "ignored a change from a read-only connection");
+                        continue;
                     }
                     self.pending.push(Pending { conn, user, update });
                 }
@@ -528,100 +612,130 @@ impl Room {
     }
 
     fn awareness_update(&mut self, conn: u64, update: AwarenessUpdate) {
-        // 더 새로운(시계가 큰) 항목만 받는다. 표시 내용(JSON 글)은 서버가 해석하지 않고 그대로 전한다.
+        // 이 연결이 처음 알린 id만, 더 새로운(시계가 큰) 항목만 받는다. 표시 내용(JSON 글)은 해석하지 않고 그대로 전한다.
         let mut fresh = HashMap::new();
         for (id, entry) in update.clients {
+            let owner = self.presence_owner.get(&id).copied();
+            if owner.is_some_and(|o| o != conn) {
+                continue;
+            }
+            let owned_count = self.conns.get(&conn).map_or(0, |c| c.clients.len());
+            if owner.is_none() && owned_count >= MAX_PRESENCE_IDS {
+                continue;
+            }
             let newer = self
                 .presence
                 .get(&id)
                 .is_none_or(|old| entry.clock > old.clock);
-            if newer && entry.json.len() <= 16 * 1024 {
-                self.presence.insert(id, entry.clone());
-                fresh.insert(id, entry);
+            if !newer || entry.json.len() > MAX_PRESENCE_BYTES {
+                continue;
             }
+            if &*entry.json == "null" {
+                // 그 참여자가 떠났다.
+                self.presence.remove(&id);
+            } else {
+                self.presence.insert(id, entry.clone());
+            }
+            self.presence_owner.insert(id, conn);
+            if let Some(c) = self.conns.get_mut(&conn) {
+                c.clients.insert(id);
+            }
+            fresh.insert(id, entry);
         }
         if fresh.is_empty() {
             return;
         }
-        let ids: Vec<ClientID> = fresh.keys().copied().collect();
         let encoded = Message::Awareness(AwarenessUpdate { clients: fresh }).encode_v1();
-        if let Some(c) = self.conns.get_mut(&conn) {
-            c.clients.extend(ids);
-        }
         self.broadcast(&encoded, Some(conn));
     }
 
-    /// 모인 변경을 하나씩 검사해 방 문서에 넣고 다른 연결에 보낸다.
-    fn flush(&mut self) {
+    /// 모인 변경을 연결마다 합쳐 검사(블로킹 작업)한 뒤 방 문서에 넣고 다른 연결에 보낸다.
+    async fn flush(&mut self) {
         if self.pending.is_empty() {
             return;
         }
         let pending = std::mem::take(&mut self.pending);
+        let mut order: Vec<u64> = Vec::new();
+        let mut by_conn: HashMap<u64, (UserId, Vec<Vec<u8>>)> = HashMap::new();
         for item in pending {
-            if !self.conns.contains_key(&item.conn) {
+            if !order.contains(&item.conn) {
+                order.push(item.conn);
+            }
+            by_conn
+                .entry(item.conn)
+                .or_insert_with(|| (item.user, Vec::new()))
+                .1
+                .push(item.update);
+        }
+        for conn in order {
+            let Some((user, updates)) = by_conn.remove(&conn) else {
+                continue;
+            };
+            if !self.conns.contains_key(&conn) {
                 continue;
             }
-            if self.foreign_lineage(&item.update) {
-                self.close(item.conn, CloseReason::Reload);
+            let Ok(merged) = yrs::merge_updates_v1(&updates) else {
+                self.close(conn, CloseReason::Invalid);
                 continue;
-            }
-            if !self.passes_checks(&item.update) {
-                tracing::warn!(document = %self.doc_id.0, "rejected a live edit that fails document checks");
-                self.close(item.conn, CloseReason::Invalid);
-                continue;
+            };
+            let Some(doc) = &self.doc else {
+                return;
+            };
+            let state = doc
+                .transact()
+                .encode_state_as_update_v1(&StateVector::default());
+            let limits = self.limits;
+            let lineage = self.lineage.clone();
+            let max_state = self.max_state_bytes();
+            let candidate = merged.clone();
+            let verdict = tokio::task::spawn_blocking(move || {
+                check_update(&state, &candidate, &lineage, &limits, max_state)
+            })
+            .await
+            .unwrap_or(Verdict::Invalid);
+            match verdict {
+                Verdict::Ok => {}
+                Verdict::Reload => {
+                    self.close(conn, CloseReason::Reload);
+                    continue;
+                }
+                Verdict::Invalid => {
+                    tracing::warn!(document = %self.doc_id.0, "rejected a live edit that fails document checks");
+                    self.close(conn, CloseReason::Invalid);
+                    continue;
+                }
             }
             let Some(doc) = &self.doc else {
                 return;
             };
-            let applied = Update::decode_v1(&item.update)
+            let applied = Update::decode_v1(&merged)
                 .ok()
                 .is_some_and(|u| doc.transact_mut().apply_update(u).is_ok());
             if !applied {
-                self.close(item.conn, CloseReason::Invalid);
+                self.close(conn, CloseReason::Invalid);
                 continue;
             }
             self.dirty_state = true;
             self.dirty_since_snapshot = true;
             self.last_change = Instant::now();
-            self.last_editor = Some(item.user);
-            let message = Message::Sync(SyncMessage::Update(item.update)).encode_v1();
-            self.broadcast(&message, Some(item.conn));
+            self.editors.retain(|u| *u != user);
+            self.editors.insert(0, user);
+            let message = Message::Sync(SyncMessage::Update(merged)).encode_v1();
+            self.broadcast(&message, Some(conn));
         }
     }
 
-    /// 변경에 다른 계보 표시가 들어 있으면(방이 본문에서 새로 만들어진 뒤 옛 상태로 다시 붙은 클라이언트) 참.
-    fn foreign_lineage(&self, update: &[u8]) -> bool {
-        let probe = Doc::new();
-        let applied = Update::decode_v1(update)
-            .ok()
-            .is_some_and(|u| probe.transact_mut().apply_update(u).is_ok());
-        applied && lineage_of(&probe).is_some_and(|l| l != self.lineage)
-    }
-
-    /// 방 문서를 복사한 임시 문서에 변경을 넣어 본문 검사를 통과하는지 본다.
-    fn passes_checks(&self, update: &[u8]) -> bool {
-        let Some(doc) = &self.doc else {
-            return false;
-        };
-        let state = doc
-            .transact()
-            .encode_state_as_update_v1(&StateVector::default());
-        let scratch = Doc::new();
-        let fragment = scratch.get_or_insert_xml_fragment(FRAGMENT);
-        let ok = [state.as_slice(), update].iter().all(|bytes| {
-            Update::decode_v1(bytes)
-                .ok()
-                .is_some_and(|u| scratch.transact_mut().apply_update(u).is_ok())
-        });
-        if !ok {
-            return false;
+    /// 닫힌 연결(웹소켓이 끝났는데 나감 알림이 대기열에 못 들어간 것)을 걸러 낸다.
+    fn prune(&mut self) {
+        let closed: Vec<u64> = self
+            .conns
+            .iter()
+            .filter(|(_, c)| c.peer.out.is_closed())
+            .map(|(id, _)| *id)
+            .collect();
+        for id in closed {
+            self.leave(id);
         }
-        // 적용하지 못하고 남은 부분(아직 오지 않은 앞선 변경에 기대는 것)이 있으면 받지 않는다.
-        if scratch.transact().has_missing_updates() {
-            return false;
-        }
-        let body = convert::read_doc(&scratch.transact(), &fragment);
-        documents::validate_body(&body, &self.limits).is_ok()
     }
 
     fn leave(&mut self, conn: u64) {
@@ -631,6 +745,7 @@ impl Room {
         // 나간 연결의 참여자 표시를 지운다(시계를 올린 "null" 항목을 보내면 브라우저도 지운다).
         let mut gone = HashMap::new();
         for id in connection.clients {
+            self.presence_owner.remove(&id);
             if let Some(old) = self.presence.remove(&id) {
                 gone.insert(
                     id,
@@ -658,7 +773,7 @@ impl Room {
 
     fn send(&mut self, out: &mpsc::Sender<Outbound>, bytes: Vec<u8>, conn: u64) {
         if out.try_send(Outbound::Binary(bytes)).is_err() {
-            self.close(conn, CloseReason::Slow);
+            self.close(conn, CloseReason::Busy);
         }
     }
 
@@ -676,7 +791,7 @@ impl Room {
             .map(|(id, _)| *id)
             .collect();
         for id in slow {
-            self.close(id, CloseReason::Slow);
+            self.close(id, CloseReason::Busy);
         }
     }
 
@@ -706,17 +821,18 @@ impl Room {
         match result {
             Ok(_) => self.dirty_state = false,
             Err(err) => {
-                tracing::warn!(document = %self.doc_id.0, error = %err, "could not store live editing state")
+                tracing::warn!(document = %self.doc_id.0, error = %err, "could not store live editing state");
             }
         }
     }
 
-    /// 방 문서를 저장 API와 같은 길로 리비전에 남긴다(마지막으로 고친 사람이 작성자).
+    /// 방 문서를 저장 API와 같은 길로 리비전에 남긴다. 작성자는 마지막으로 고친 사람, 그 사람이 쓸 수 없으면
+    /// 최근에 고친 다른 사람, 그다음은 연결된 작성자 순.
     async fn snapshot(&mut self) {
         if !self.dirty_since_snapshot {
             return;
         }
-        let (Some(doc), Some(editor)) = (&self.doc, self.last_editor) else {
+        let Some(doc) = &self.doc else {
             return;
         };
         let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
@@ -725,25 +841,41 @@ impl Room {
             tracing::warn!(document = %self.doc_id.0, "live document failed checks; not saved as a revision");
             return;
         }
-        match self.write_snapshot(editor, &body).await {
-            Ok(Some(revision)) => {
-                self.base_revision = revision;
-                self.base_body = body;
-                self.dirty_since_snapshot = false;
-                self.dirty_state = true;
-            }
-            Ok(None) => {
-                // 본문이 다른 길로 바뀌었다(복원). 덮어쓰지 않고 다시 열게 한다.
-                for (_, c) in self.conns.drain() {
-                    let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
-                }
-                self.dirty_since_snapshot = false;
-                self.dirty_state = false;
-            }
-            Err(err) => {
-                tracing::warn!(document = %self.doc_id.0, error = %err, "could not save the live document as a revision");
+        let mut authors = self.editors.clone();
+        for c in self.conns.values().filter(|c| c.peer.can_write) {
+            if !authors.contains(&c.peer.user) {
+                authors.push(c.peer.user);
             }
         }
+        for author in authors {
+            match self.write_snapshot(author, &body).await {
+                Ok(Some(revision)) => {
+                    self.base_revision = revision;
+                    self.base_body = body;
+                    self.dirty_since_snapshot = false;
+                    self.dirty_state = true;
+                    // 리비전 번호와 상태가 어긋난 채로 멈추지 않도록 바로 저장한다.
+                    self.persist().await;
+                    return;
+                }
+                Ok(None) => {
+                    // 본문이 다른 길로 바뀌었다(복원). 덮어쓰지 않고 다시 열게 한다.
+                    tracing::warn!(document = %self.doc_id.0, "document changed outside live editing; reopening");
+                    for (_, c) in self.conns.drain() {
+                        let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
+                    }
+                    self.dirty_since_snapshot = false;
+                    self.dirty_state = false;
+                    return;
+                }
+                Err(AppError::Forbidden | AppError::NotFound) => {}
+                Err(err) => {
+                    tracing::warn!(document = %self.doc_id.0, error = %err, "could not save the live document as a revision");
+                    return;
+                }
+            }
+        }
+        tracing::warn!(document = %self.doc_id.0, "no editor can save the live document; keeping the live state");
     }
 
     /// 새 리비전 번호, 또는 본문이 다른 길로 바뀌었으면 `None`.
@@ -777,7 +909,8 @@ impl Room {
         Ok(Some(row.revision))
     }
 
-    /// 연결마다 세션과 권한을 다시 본다. 끝났으면 닫고, 쓰기 권한이 바뀌었으면 따른다.
+    /// 연결마다 세션과 권한을 다시 본다. 끝났으면 닫고, 실시간이 꺼졌으면 리비전을 남기고 닫으며, 쓰기 권한이
+    /// 바뀌었으면 따른다. 일시적인 DB 오류로는 닫지 않는다.
     async fn recheck(&mut self) {
         self.last_recheck = Instant::now();
         let peers: Vec<(u64, Peer)> = self
@@ -785,39 +918,135 @@ impl Room {
             .iter()
             .map(|(id, c)| (*id, c.peer.clone()))
             .collect();
+        let mut off = false;
         for (conn, peer) in peers {
             match peer_access(&self.db, self.doc_id, &peer).await {
-                Some(can_write) => {
+                PeerAccess::Allowed { can_write } => {
                     if let Some(c) = self.conns.get_mut(&conn) {
                         c.peer.can_write = can_write;
                     }
                 }
-                None => self.close(conn, CloseReason::AccessLost),
+                PeerAccess::Denied => self.close(conn, CloseReason::AccessLost),
+                PeerAccess::RealtimeOff => off = true,
+                PeerAccess::Unknown => {}
+            }
+        }
+        if off {
+            self.flush().await;
+            self.snapshot().await;
+            self.persist().await;
+            for (_, c) in self.conns.drain() {
+                let _ignored = c
+                    .peer
+                    .out
+                    .try_send(Outbound::Close(CloseReason::RealtimeOff));
             }
         }
     }
 }
 
-/// 세션이 살아 있고 문서를 실시간으로 열 수 있으면 쓰기 가능 여부.
-pub async fn peer_access(db: &Db, doc: DocumentId, peer: &Peer) -> Option<bool> {
-    let mut tx = db.begin_anonymous().await.ok()?;
-    let user: Option<UserId> = sqlx::query_scalar("SELECT app_session_user($1)")
-        .bind(&peer.session)
-        .fetch_one(tx.conn())
-        .await
-        .ok()?;
-    tx.commit().await.ok()?;
-    if user != Some(peer.user) {
-        return None;
+enum Verdict {
+    Ok,
+    Invalid,
+    Reload,
+}
+
+/// 방 상태에 변경을 넣은 임시 문서가 계보·모양·크기·본문 검사를 통과하는지(블로킹 작업에서 돈다).
+fn check_update(
+    state: &[u8],
+    update: &[u8],
+    lineage: &str,
+    limits: &Limits,
+    max_state: usize,
+) -> Verdict {
+    // 변경 혼자에 다른 계보 표시가 있으면 옛 상태로 다시 붙은 클라이언트다.
+    let probe = Doc::new();
+    let Ok(alone) = Update::decode_v1(update) else {
+        return Verdict::Invalid;
+    };
+    if probe.transact_mut().apply_update(alone).is_err() {
+        return Verdict::Invalid;
     }
-    let mut tx = db.begin_as(peer.user).await.ok()?;
-    let access: String = sqlx::query_scalar("SELECT app_collab_access($1)")
-        .bind(doc)
-        .fetch_one(tx.conn())
-        .await
-        .ok()?;
-    tx.commit().await.ok()?;
-    Some(matches!(access.as_str(), "owner" | "write"))
+    if lineage_of(&probe).is_some_and(|l| l != lineage) {
+        return Verdict::Reload;
+    }
+    let scratch = Doc::new();
+    let fragment = scratch.get_or_insert_xml_fragment(FRAGMENT);
+    let applied = [state, update].iter().all(|bytes| {
+        Update::decode_v1(bytes)
+            .ok()
+            .is_some_and(|u| scratch.transact_mut().apply_update(u).is_ok())
+    });
+    if !applied {
+        return Verdict::Invalid;
+    }
+    let txn = scratch.transact();
+    // 앞선 변경이 빠져 적용하지 못하고 남은 것이 있으면 이 클라이언트 상태는 서버와 어긋났다. 새로 열게 한다.
+    if txn.has_missing_updates() {
+        return Verdict::Reload;
+    }
+    if txn.encode_state_as_update_v1(&StateVector::default()).len() > max_state {
+        return Verdict::Invalid;
+    }
+    if convert::check_shape(&txn).is_err() {
+        return Verdict::Invalid;
+    }
+    let body = convert::read_doc(&txn, &fragment);
+    if documents::validate_body(&body, limits).is_ok() {
+        Verdict::Ok
+    } else {
+        Verdict::Invalid
+    }
+}
+
+/// 다시 확인한 연결의 상태.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PeerAccess {
+    Allowed {
+        can_write: bool,
+    },
+    Denied,
+    RealtimeOff,
+    /// DB 오류 등으로 알 수 없음. 다음에 다시 본다.
+    Unknown,
+}
+
+/// 세션이 살아 있고 문서를 실시간으로 열 수 있는지.
+pub async fn peer_access(db: &Db, doc: DocumentId, peer: &Peer) -> PeerAccess {
+    let session = async {
+        let mut tx = db.begin_anonymous().await?;
+        let user: Option<UserId> = sqlx::query_scalar("SELECT app_session_user($1)")
+            .bind(&peer.session)
+            .fetch_one(tx.conn())
+            .await?;
+        tx.commit().await?;
+        Ok::<Option<UserId>, AppError>(user)
+    }
+    .await;
+    match session {
+        Ok(user) if user == Some(peer.user) => {}
+        Ok(_) => return PeerAccess::Denied,
+        Err(_) => return PeerAccess::Unknown,
+    }
+    let access = async {
+        let mut tx = db.begin_as(peer.user).await?;
+        let access: String = sqlx::query_scalar("SELECT app_collab_access($1)")
+            .bind(doc)
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+        tx.commit().await?;
+        Ok::<String, AppError>(access)
+    }
+    .await;
+    match access {
+        Ok(a) => PeerAccess::Allowed {
+            can_write: matches!(a.as_str(), "owner" | "write"),
+        },
+        Err(AppError::NotFound | AppError::Forbidden) => PeerAccess::Denied,
+        Err(AppError::Conflict(_)) => PeerAccess::RealtimeOff,
+        Err(_) => PeerAccess::Unknown,
+    }
 }
 
 /// 계보 표시를 두는 Yjs 맵. 편집기(조각 `default`)는 이 맵을 보지 않는다.

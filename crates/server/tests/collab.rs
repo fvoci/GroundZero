@@ -40,6 +40,8 @@ async fn serve(app: Router) -> SocketAddr {
 struct Client {
     ws: WebSocketStream<MaybeTlsStream<TcpStream>>,
     doc: Doc,
+    /// 받은 참여자 표시(client id → JSON 글).
+    presence: std::collections::HashMap<u64, String>,
 }
 
 /// 연결. 실패하면 HTTP 상태.
@@ -75,7 +77,11 @@ async fn connect_with(
     }
     match tokio_tungstenite::connect_async(request).await {
         Ok((ws, _)) => {
-            let mut client = Client { ws, doc: local };
+            let mut client = Client {
+                ws,
+                doc: local,
+                presence: std::collections::HashMap::new(),
+            };
             client.sync().await;
             Ok(client)
         }
@@ -134,6 +140,11 @@ impl Client {
                         Message::Sync(SyncMessage::SyncStep2(u) | SyncMessage::Update(u)) => {
                             let update = Update::decode_v1(&u).unwrap();
                             self.doc.transact_mut().apply_update(update).unwrap();
+                        }
+                        Message::Awareness(update) => {
+                            for (id, entry) in update.clients {
+                                self.presence.insert(id.get(), entry.json.to_string());
+                            }
                         }
                         _ => {}
                     }
@@ -281,11 +292,15 @@ async fn live_editing_end_to_end() {
     assert!(a.until(|c| c.text().contains("B가 씀")).await);
     assert_eq!(a.text(), b.text());
 
-    // 읽기 연결은 내용을 받지만 쓰면 닫힌다.
+    // 읽기 연결은 내용을 받지만 그 변경은 받지 않는다(편집기가 스스로 맞춘 것일 수 있어 연결은 그대로).
     let mut r = connect(addr, Some(&reader), &id, true).await.unwrap();
     assert!(r.text().contains("B가 씀"));
     r.paragraph("독자가 씀").await;
-    assert_eq!(r.closed().await, Some(4400));
+    assert!(matches!(
+        r.next(Duration::from_millis(700)).await,
+        Event::Timeout | Event::Data
+    ));
+    r.close().await;
 
     // 내용 검사를 통과하지 못하는 변경(바깥 주소 그림)은 버리고 그 연결을 닫는다.
     let mut bad = connect(addr, Some(&writer2), &id, true).await.unwrap();
@@ -426,5 +441,195 @@ async fn live_editing_end_to_end() {
         connect(addr, Some(&writer3), &id, true).await.err(),
         Some(StatusCode::CONFLICT)
     );
+    owner.close().await;
+}
+
+impl Client {
+    async fn send_raw_frame(&mut self, bytes: Vec<u8>) {
+        self.ws.send(WsMessage::Binary(bytes.into())).await.unwrap();
+    }
+
+    async fn announce(&mut self, client: u64, clock: u32, json: &str) {
+        let mut clients = std::collections::HashMap::new();
+        clients.insert(
+            yrs::block::ClientID::new(client),
+            yrs::sync::awareness::AwarenessUpdateEntry {
+                clock,
+                json: std::sync::Arc::from(json),
+            },
+        );
+        self.send(Message::Awareness(yrs::sync::AwarenessUpdate { clients }))
+            .await;
+    }
+}
+
+/// 리뷰 반영(D-70): 편집기 스키마 밖의 변경(해시 붙은 표시 이름, 모르는 최상위·노드), 한 프레임의 메시지 수,
+/// 앞선 변경이 빠진 변경, 참여자 표시 가로채기를 막고, 마지막으로 고친 사람이 쓸 수 없게 되면 다른 작성자로
+/// 리비전을 남긴다.
+#[tokio::test]
+async fn live_editing_guards() {
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "실시간 경계").await;
+    let (w1, _) = add_member(&app, &state, &admin, &ws, "w1", "writer").await;
+    let (w2, _) = add_member(&app, &state, &admin, &ws, "w2", "writer").await;
+    let doc = common::create_doc(&app, &w1, &ws, "경계 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let saved = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{id}"),
+        Some(&w1),
+        Some(json!({
+        "request_id": new_request_id(), "base_revision": 1, "title": "경계 문서",
+        "body": common::doc_body("처음") })),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::OK);
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+    let mut watcher = connect(addr, Some(&w2), &id, true).await.unwrap();
+
+    // 해시 붙은 표시 이름(브라우저가 `link`로 읽음)으로 링크 검사를 피하려 하면 닫는다.
+    let mut bad = connect(addr, Some(&w1), &id, true).await.unwrap();
+    bad.edit(|txn, fragment| {
+        let p = fragment.push_back(txn, XmlElementPrelim::empty("paragraph"));
+        let t = p.push_back(txn, XmlTextPrelim::new(""));
+        let mut attrs = std::collections::HashMap::new();
+        let mut href = std::collections::HashMap::new();
+        href.insert("href".to_owned(), yrs::Any::from("//evil.example/login"));
+        attrs.insert(std::sync::Arc::from("link--AAAAAAAA"), yrs::Any::from(href));
+        yrs::Text::insert_with_attributes(&t, txn, 0, "가짜 링크", attrs);
+    })
+    .await;
+    assert_eq!(bad.closed().await, Some(4400));
+
+    // 모르는 최상위 이름, 모르는 노드 이름도 닫는다.
+    let mut bad = connect(addr, Some(&w1), &id, true).await.unwrap();
+    {
+        let before = bad.doc.transact().state_vector();
+        let junk = bad.doc.get_or_insert_map("junk");
+        yrs::Map::insert(&junk, &mut bad.doc.transact_mut(), "big", "x".repeat(1000));
+        let diff = bad.doc.transact().encode_state_as_update_v1(&before);
+        bad.send(Message::Sync(SyncMessage::Update(diff))).await;
+    }
+    assert_eq!(bad.closed().await, Some(4400));
+    let mut bad = connect(addr, Some(&w1), &id, true).await.unwrap();
+    bad.edit(|txn, fragment| {
+        fragment.push_back(txn, XmlElementPrelim::empty("script"));
+    })
+    .await;
+    assert_eq!(bad.closed().await, Some(4400));
+
+    // 한 프레임에 메시지를 너무 많이 담으면 닫는다.
+    let mut bad = connect(addr, Some(&w1), &id, true).await.unwrap();
+    let mut frame = Vec::new();
+    for _ in 0..20 {
+        frame.extend(Message::AwarenessQuery.encode_v1());
+    }
+    bad.send_raw_frame(frame).await;
+    assert_eq!(bad.closed().await, Some(4400));
+
+    // 앞선 변경이 빠진 변경(서버와 어긋난 클라이언트)은 새로 열게 한다.
+    let mut gap = connect(addr, Some(&w1), &id, true).await.unwrap();
+    {
+        let fragment = gap.doc.get_or_insert_xml_fragment(FRAGMENT);
+        let p = fragment.push_back(
+            &mut gap.doc.transact_mut(),
+            XmlElementPrelim::empty("paragraph"),
+        );
+        let before = gap.doc.transact().state_vector();
+        p.push_back(
+            &mut gap.doc.transact_mut(),
+            XmlTextPrelim::new("앞이 빠진 글"),
+        );
+        let diff = gap.doc.transact().encode_state_as_update_v1(&before);
+        gap.send(Message::Sync(SyncMessage::Update(diff))).await;
+    }
+    assert_eq!(gap.closed().await, Some(4409));
+    let _ = watcher.next(Duration::from_millis(300)).await;
+    let seen = watcher.text();
+    assert!(
+        !seen.contains("가짜") && !seen.contains("script") && !seen.contains("앞이 빠진"),
+        "{seen}"
+    );
+
+    // 참여자 표시: 다른 연결이 알린 id는 가로챌 수 없다.
+    let mut a = connect(addr, Some(&w1), &id, true).await.unwrap();
+    a.announce(777, 1, r#"{"user":{"name":"w1"}}"#).await;
+    let _ = watcher.until(|c| c.presence.contains_key(&777)).await;
+    let mut spoof = connect(addr, Some(&w2), &id, true).await.unwrap();
+    spoof.announce(777, 9, r#"{"user":{"name":"가짜"}}"#).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let mut fresh = connect(addr, Some(&w2), &id, true).await.unwrap();
+    let _ = fresh.until(|c| c.presence.contains_key(&777)).await;
+    assert_eq!(
+        fresh.presence.get(&777).map(String::as_str),
+        Some(r#"{"user":{"name":"w1"}}"#)
+    );
+    spoof.close().await;
+    fresh.close().await;
+
+    // 두 작성자가 고친 뒤 마지막으로 고친 사람(w1)이 독자로 바뀌면, 리비전은 다른 작성자(w2)로 남는다.
+    watcher.paragraph("w2가 씀").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    a.paragraph("w1이 마지막에 씀").await;
+    assert!(
+        watcher
+            .until(|c| c.text().contains("w1이 마지막에 씀"))
+            .await
+    );
+    let demoted = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/members/{}", w1.id.0),
+        Some(&admin),
+        Some(json!({ "role": "reader" })),
+    )
+    .await;
+    assert!(demoted.status.is_success(), "{:?}", demoted.json);
+    a.close().await;
+    watcher.close().await;
+    let mut body = String::new();
+    for _ in 0..40 {
+        let d = send(
+            &app,
+            Method::GET,
+            &format!("/api/documents/{id}"),
+            Some(&admin),
+            None,
+        )
+        .await
+        .json;
+        body = d["body"].to_string();
+        if body.contains("w1이 마지막에 씀") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    assert!(
+        body.contains("w1이 마지막에 씀") && body.contains("w2가 씀"),
+        "{body}"
+    );
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let author: uuid::Uuid = sqlx::query_scalar(
+        "SELECT author FROM fvoci.document_revisions WHERE document_id = $1::uuid ORDER BY revision DESC LIMIT 1",
+    )
+    .bind(&id)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert_eq!(author, w2.id.0);
     owner.close().await;
 }

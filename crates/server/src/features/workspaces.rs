@@ -269,6 +269,19 @@ pub async fn set_realtime(
     Path(ws): Path<WorkspaceId>,
     Json(input): Json<SetRealtime>,
 ) -> Result<StatusCode, AppError> {
+    // 끌 때는 먼저 열린 방의 리비전을 남기고 닫는다(실시간이 켜진 동안이라 저장 API의 본문 변경이 끼어들지 못한다).
+    // 끈 뒤에도 그 사이 열린 방을 한 번 더 닫는다.
+    if !input.enabled {
+        let mut tx = state.db.begin_as(user).await?;
+        let role: Option<String> = sqlx::query_scalar("SELECT app_member_role($1)")
+            .bind(ws)
+            .fetch_one(tx.conn())
+            .await?;
+        tx.commit().await?;
+        if role.as_deref() == Some("admin") {
+            state.collab.close_workspace(ws.0).await;
+        }
+    }
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_set_workspace_realtime($1, $2)")
         .bind(ws)

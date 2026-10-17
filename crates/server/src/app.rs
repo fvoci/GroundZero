@@ -53,6 +53,7 @@ pub async fn run(config: Config) -> Result<(), AppError> {
             stopped,
         )
     });
+    let rooms = state.collab.clone();
     if role.serves_http() {
         let app = http::router(state);
         let listener = TcpListener::bind(bind).await?;
@@ -60,6 +61,8 @@ pub async fn run(config: Config) -> Result<(), AppError> {
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal())
             .await?;
+        // 실시간 편집 방은 리비전을 남기고 닫는다(클라이언트는 다시 붙는다, D-70).
+        rooms.shutdown().await;
     } else {
         tracing::info!(?role, "background worker only");
         shutdown_signal().await;

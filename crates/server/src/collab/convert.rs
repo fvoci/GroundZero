@@ -10,7 +10,7 @@ use serde_json::{Map, Value};
 use yrs::types::Attrs;
 use yrs::types::text::YChange;
 use yrs::types::xml::{Xml, XmlElementPrelim, XmlFragment, XmlOut, XmlTextPrelim};
-use yrs::{Any, Number, Out, ReadTxn, Text, TransactionMut, XmlFragmentRef, XmlTextRef};
+use yrs::{Any, Map as _, Number, Out, ReadTxn, Text, TransactionMut, XmlFragmentRef, XmlTextRef};
 
 /// 브라우저 편집기(Collaboration 확장)가 쓰는 조각 이름.
 pub const FRAGMENT: &str = "default";
@@ -158,6 +158,103 @@ fn read_children<T: ReadTxn>(txn: &T, children: impl Iterator<Item = XmlOut>) ->
         }
     }
     out
+}
+
+/// 편집기 스키마(`apps/web/src/lib/features/documents/editor-schema.ts`)의 노드 이름.
+pub const NODES: &[&str] = &[
+    "paragraph",
+    "heading",
+    "blockquote",
+    "bulletList",
+    "orderedList",
+    "listItem",
+    "codeBlock",
+    "hardBreak",
+    "horizontalRule",
+    "taskList",
+    "taskItem",
+    "table",
+    "tableRow",
+    "tableHeader",
+    "tableCell",
+    "image",
+    "inlineMath",
+    "blockMath",
+    "reference",
+];
+/// 편집기 스키마의 표시 이름. 모두 자기와 겹치지 않는 표시라 y-tiptap이 이름 뒤에 해시(`--xxxxxxxx`)를 붙이지 않는다.
+pub const MARKS: &[&str] = &["bold", "italic", "strike", "code", "underline", "link"];
+/// Yjs 문서의 최상위 이름: 본문 조각과 서버의 계보 맵.
+pub const ROOTS: &[&str] = &[FRAGMENT, "fvoci"];
+
+/// 실시간 변경을 받은 뒤의 Yjs 문서가 편집기 스키마 안인지 본다(D-70 내용 검사 경계). 본문 검사(`validate_body`)는
+/// JSON으로 바꾼 뒤에 하므로, JSON으로 옮겨지지 않는 것(모르는 최상위·노드·표시 이름, 끼운 값, 값이 아닌 속성)은
+/// 여기서 막는다. 브라우저는 표시 이름 끝의 `--xxxxxxxx`를 지우고 읽으므로 이름은 정확히 같아야 한다.
+pub fn check_shape<T: ReadTxn>(txn: &T) -> Result<(), &'static str> {
+    for (name, _) in txn.root_refs() {
+        if !ROOTS.contains(&name) {
+            return Err("unknown top-level type");
+        }
+    }
+    if let Some(meta) = txn.get_map("fvoci") {
+        for (key, value) in meta.iter(txn) {
+            let short_string = matches!(&value, Out::Any(Any::String(s)) if s.len() <= 64);
+            if key != "lineage" || !short_string {
+                return Err("unexpected server metadata");
+            }
+        }
+    }
+    let Some(fragment) = txn.get_xml_fragment(FRAGMENT) else {
+        return Ok(());
+    };
+    check_children(txn, fragment.children(txn), 0)
+}
+
+fn check_children<T: ReadTxn>(
+    txn: &T,
+    children: impl Iterator<Item = XmlOut>,
+    depth: usize,
+) -> Result<(), &'static str> {
+    if depth > 64 {
+        return Err("nested too deep");
+    }
+    for child in children {
+        match child {
+            XmlOut::Element(element) => {
+                if !NODES.contains(&element.tag().as_ref()) {
+                    return Err("unknown node type");
+                }
+                for (_, value) in element.attributes(txn) {
+                    if !matches!(value, Out::Any(_)) {
+                        return Err("attribute is not a plain value");
+                    }
+                }
+                check_children(txn, element.children(txn), depth + 1)?;
+            }
+            XmlOut::Text(text) => {
+                for (_, value) in text.attributes(txn) {
+                    if !matches!(value, Out::Any(_)) {
+                        return Err("attribute is not a plain value");
+                    }
+                }
+                for diff in text.diff(txn, YChange::identity) {
+                    if !matches!(diff.insert, Out::Any(Any::String(_))) {
+                        return Err("embedded value in text");
+                    }
+                    for (name, value) in diff.attributes.into_iter().flat_map(|a| a.into_iter()) {
+                        if !MARKS.contains(&name.as_ref()) {
+                            return Err("unknown mark");
+                        }
+                        if !matches!(value, Any::Map(_) | Any::Null) {
+                            return Err("mark attributes are not an object");
+                        }
+                    }
+                }
+            }
+            XmlOut::Fragment(_) => return Err("nested fragment"),
+        }
+    }
+    Ok(())
 }
 
 fn to_any(value: &Value) -> Any {
