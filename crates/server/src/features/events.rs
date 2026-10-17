@@ -529,6 +529,12 @@ pub async fn calendar(
     let tz = range.tz.trim();
     let mut tx = state.db.begin_as(user).await?;
     member_role(&mut tx, ws).await?;
+    // 보는 사람의 시간대: 브라우저가 아는 이름만(일정 시간대와 같은 규칙).
+    sqlx::query("SELECT app_check_timezone($1)")
+        .bind(tz)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
     // 보는 사람의 날짜 경계. 모르는 시간대는 400.
     let (from_at, to_at): (OffsetDateTime, OffsetDateTime) = sqlx::query_as(
         "SELECT $1::date::timestamp AT TIME ZONE $3, ($2::date + 1)::timestamp AT TIME ZONE $3",

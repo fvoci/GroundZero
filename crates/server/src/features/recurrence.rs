@@ -35,7 +35,7 @@ pub enum Frequency {
 pub struct RecurrenceRule {
     pub freq: Frequency,
     /// 1~99.
-    pub interval: u8,
+    pub interval: u16,
     /// 매주 반복의 요일(ISO, 월=1 … 일=7). 비우면 기준일의 요일.
     pub weekdays: Vec<u8>,
     /// 이 날짜까지(포함). `count`와 함께 쓸 수 없다.
@@ -122,8 +122,11 @@ pub async fn set_task(
         .await
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
-    if let Some(series) = series {
-        sync_series(&state, user, series).await?;
+    // 규칙은 이미 저장됐다. 회차 맞추기가 실패해도(잠금 충돌 등) 다음 쓰기 요청이나 항목 열기에서 이어 한다.
+    if let Some(series) = series
+        && let Err(e) = sync_series(&state, user, series).await
+    {
+        tracing::warn!(error = %e, %series, "recurrence sync after rule change failed");
     }
     let mut tx = state.db.begin_as(user).await?;
     let detail = load_detail(&mut tx, id).await?;

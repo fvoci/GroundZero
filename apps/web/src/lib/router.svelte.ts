@@ -13,6 +13,7 @@ export type Route =
   | { name: 'notes' }
   | { name: 'shared' }
   | { name: 'notifications' }
+  | { name: 'time' }
   | { name: 'standalone-document'; documentId: string }
   | { name: 'public'; token: string }
   | { name: 'not-found' };
@@ -36,6 +37,7 @@ export function parseRoute(pathname: string): Route {
   if (pub?.[1] !== undefined) return { name: 'public', token: pub[1] };
   if (pathname === '/notes' || pathname === '/notes/') return { name: 'notes' };
   if (pathname === '/shared' || pathname === '/shared/') return { name: 'shared' };
+  if (pathname === '/time' || pathname === '/time/') return { name: 'time' };
   if (pathname === '/notifications' || pathname === '/notifications/')
     return { name: 'notifications' };
   const standalone = STANDALONE.exec(pathname);

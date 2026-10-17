@@ -53,27 +53,41 @@
   let error = $state<string | undefined>(undefined);
   let saved = $state(false);
 
-  function build(): RecurrenceRule | null {
+  /** 입력을 규칙으로. 틀린 값은 조용히 바꾸지 않고 오류 글로 돌려준다. */
+  function build(): RecurrenceRule | null | string {
     if (f.freq === 'none') return null;
-    const interval = Number.parseInt(f.interval, 10);
-    const count = Number.parseInt(f.count, 10);
+    const interval = Number(f.interval.trim());
+    if (!Number.isInteger(interval) || interval < 1 || interval > 99)
+      return '간격은 1~99 사이의 정수여야 합니다.';
+    let count: number | null = null;
+    if (f.end === 'count') {
+      count = Number(f.count.trim());
+      if (!Number.isInteger(count) || count < 1 || count > 1000)
+        return '횟수는 1~1000 사이의 정수여야 합니다.';
+    }
+    if (f.end === 'until' && f.until === '') return '끝 날짜를 고르세요.';
     return {
       freq: f.freq,
-      interval: Number.isFinite(interval) ? interval : 1,
+      interval,
       weekdays: f.freq === 'weekly' ? [...f.weekdays].sort((a, b) => a - b) : [],
-      until: f.end === 'until' && f.until !== '' ? f.until : null,
-      count: f.end === 'count' && Number.isFinite(count) ? count : null,
+      until: f.end === 'until' ? f.until : null,
+      count,
     };
   }
 
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (busy) return;
-    busy = true;
     error = undefined;
     saved = false;
+    const rule = build();
+    if (typeof rule === 'string') {
+      error = rule;
+      return;
+    }
+    busy = true;
     try {
-      await onsave(build());
+      await onsave(rule);
       saved = true;
     } catch (e: unknown) {
       error = e instanceof Error ? e.message : '반복을 저장하지 못했습니다.';

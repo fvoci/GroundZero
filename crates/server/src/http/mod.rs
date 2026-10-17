@@ -17,7 +17,7 @@ use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
     accounts, documents, events, members, modules, public_links, recurrence, references, revisions,
-    schedule, tasks, workspaces,
+    schedule, tasks, time_tracking, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -155,6 +155,18 @@ async fn api_not_found() -> AppError {
         recurrence::sync_item,
         recurrence::set_event,
         recurrence::exclude_event,
+        time_tracking::current,
+        time_tracking::start,
+        time_tracking::action,
+        time_tracking::list,
+        time_tracking::add,
+        time_tracking::update,
+        time_tracking::delete,
+        time_tracking::revisions,
+        time_tracking::summary,
+        time_tracking::set_sharing,
+        time_tracking::get_sharing,
+        time_tracking::task_time,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -270,6 +282,24 @@ async fn api_not_found() -> AppError {
         recurrence::SetEventRecurrence,
         recurrence::ExcludeOccurrence,
         tasks::TaskSeries,
+        time_tracking::TimeKind,
+        time_tracking::TargetKind,
+        time_tracking::TargetInput,
+        time_tracking::Target,
+        time_tracking::TimeEntry,
+        time_tracking::StartTimer,
+        time_tracking::TimerAction,
+        time_tracking::TimerActionInput,
+        time_tracking::EntryInput,
+        time_tracking::AddEntry,
+        time_tracking::UpdateEntry,
+        time_tracking::TimeEntryConflict,
+        time_tracking::TimeEntryRevision,
+        time_tracking::SummaryGroup,
+        time_tracking::TimeSummaryRow,
+        time_tracking::SetSharing,
+        time_tracking::Sharing,
+        time_tracking::TaskTime,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -305,6 +335,7 @@ async fn api_not_found() -> AppError {
         (name = "references", description = "@ 링크·언급·역방향 링크·알림"),
         (name = "tasks", description = "업무·하위 업무·담당자·체크리스트"),
         (name = "events", description = "회의·발표·행사 일정과 달력"),
+        (name = "time", description = "스톱워치·개인 시간 기록·집계"),
     )
 )]
 pub struct ApiDoc;
@@ -394,6 +425,32 @@ pub fn router(state: AppState) -> Router {
             "/events/{event_id}/exclusions",
             post(recurrence::exclude_event),
         )
+        .route(
+            "/me/timer",
+            get(time_tracking::current).post(time_tracking::start),
+        )
+        .route(
+            "/time-entries/{entry_id}/timer",
+            post(time_tracking::action),
+        )
+        .route(
+            "/me/time-entries",
+            get(time_tracking::list).post(time_tracking::add),
+        )
+        .route(
+            "/time-entries/{entry_id}",
+            put(time_tracking::update).delete(time_tracking::delete),
+        )
+        .route(
+            "/time-entries/{entry_id}/revisions",
+            get(time_tracking::revisions),
+        )
+        .route("/me/time-summary", get(time_tracking::summary))
+        .route(
+            "/workspaces/{workspace_id}/time-sharing",
+            get(time_tracking::get_sharing).put(time_tracking::set_sharing),
+        )
+        .route("/tasks/{task_id}/time", get(time_tracking::task_time))
         .route(
             "/tasks/{task_id}/predecessors/{predecessor_id}",
             put(schedule::add_predecessor).delete(schedule::remove_predecessor),

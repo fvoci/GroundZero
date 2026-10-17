@@ -129,6 +129,22 @@ async fn rules_expand_with_skips_counts_and_limits() {
             "2026-12-31",
             vec!["2026-10-05", "2026-10-08", "2026-10-19", "2026-10-22"],
         ),
+        // 기준일(월)이 규칙 요일(화·목)이 아니어도 첫 회차이고 횟수에 든다.
+        (
+            json!({"freq":"weekly","interval":1,"weekdays":[2,4],"until":null,"count":3}),
+            "2026-10-05",
+            "2026-10-01",
+            "2026-12-31",
+            vec!["2026-10-05", "2026-10-06", "2026-10-08"],
+        ),
+        // 먼 기간도 회차 단위로만 계산한다(횟수 없는 매일 규칙의 2199년 한 주).
+        (
+            json!({"freq":"daily","interval":7,"weekdays":[],"until":null,"count":null}),
+            "1900-01-01",
+            "2199-12-25",
+            "2199-12-31",
+            vec!["2199-12-30"],
+        ),
         // 사흘마다, 끝 날짜까지.
         (
             json!({"freq":"daily","interval":3,"weekdays":[],"until":"2026-10-10","count":null}),
@@ -448,4 +464,84 @@ async fn repeating_events_keep_their_wall_clock_across_daylight_saving() {
     assert_eq!(r.status, StatusCode::NO_CONTENT);
     let c = cal(app.clone(), admin.clone(), ws.clone()).await;
     assert_eq!(starts(&c), ["2026-10-26T13:00:00Z", "2026-11-09T14:00:00Z"]);
+}
+
+#[tokio::test]
+async fn changing_a_rule_applies_from_today_and_the_template_stays_top_level() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "규칙 변경").await;
+    let item = module_item(&app, &admin, &ws, "CHG").await;
+    let today = seoul_today(&state, &admin).await;
+    let root = dated_task(
+        &app,
+        &admin,
+        &item,
+        "정리",
+        &day(today - time::Duration::days(28)),
+    )
+    .await;
+    let weekly = json!({"freq":"weekly","interval":1,"weekdays":[],"until":null,"count":null});
+    assert_eq!(repeat(&app, &admin, &root, weekly).await.0, StatusCode::OK);
+    // 4주 전부터 매주: 기준일 포함 5개 + 다음 하나.
+    let before = tasks(&app, &admin, &item).await.len();
+    assert_eq!(before, 6);
+    // 매일로 바꾸면 지난 28일을 채우지 않고 오늘부터만(오늘·내일, 이미 있는 날은 그대로).
+    let daily = json!({"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null});
+    assert_eq!(repeat(&app, &admin, &root, daily).await.0, StatusCode::OK);
+    let after = tasks(&app, &admin, &item).await;
+    let new_dates: Vec<String> = after
+        .iter()
+        .map(|t| t["occurrence_date"].as_str().unwrap().to_owned())
+        .filter(|d| *d >= day(today))
+        .collect();
+    assert!(after.len() <= before + 2, "{} -> {}", before, after.len());
+    assert!(
+        new_dates.contains(&day(today))
+            && new_dates.contains(&day(today + time::Duration::days(1))),
+        "{new_dates:?}"
+    );
+
+    // 반복이 켜진 첫 회차는 하위 업무가 되거나 날짜를 모두 잃을 수 없다.
+    let parent = dated_task(&app, &admin, &item, "상위", &day(today)).await;
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/tasks/{}/parent", root["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "parent_id": parent["id"] })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+    let fresh = send(
+        &app,
+        Method::GET,
+        &format!("/api/tasks/{}", root["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    let r = send(&app, Method::PUT, &format!("/api/tasks/{}", root["id"].as_str().unwrap()), Some(&admin),
+                 Some(json!({ "base_version": fresh["version"], "title": "정리", "description": "", "status": "todo",
+                              "priority": "none", "start_date": null, "due_date": null, "estimate_minutes": null,
+                              "tags": [], "assignee_ids": [], "milestone": false }))).await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+    // 끝 날짜가 첫 회차보다 앞서면 400, 터무니없는 날짜도 400.
+    let early =
+        json!({"freq":"daily","interval":1,"weekdays":[],"until":"2000-01-01","count":null});
+    assert_eq!(
+        repeat(&app, &admin, &root, early).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    let cal = send(
+        &app,
+        Method::GET,
+        &format!("/api/workspaces/{ws}/calendar?from=9999-12-01&to=9999-12-31&tz=UTC"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(cal.status, StatusCode::BAD_REQUEST);
 }

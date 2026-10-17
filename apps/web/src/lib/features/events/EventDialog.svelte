@@ -72,8 +72,8 @@
 
   async function saveRule(rule: RecurrenceRule | null): Promise<void> {
     if (event === undefined) return;
+    // 편집 중인 일정 입력과 반복 편집기의 상태(저장 알림·초점)를 지우지 않게 다시 그리지 않는다.
     event = await api.setEventRecurrence(event.id, rule);
-    epoch += 1;
     onchanged();
   }
 
@@ -161,15 +161,13 @@
             onsubmit={(input: EventInput) => save(input, current.version)}
           />
         {/key}
-        {#key epoch}
-          <RecurrenceEditor
-            idPrefix="event-recurrence"
-            rule={current.recurrence}
-            canEdit={true}
-            zoneNote={`${current.timezone} 기준`}
-            onsave={saveRule}
-          />
-        {/key}
+        <RecurrenceEditor
+          idPrefix="event-recurrence"
+          rule={current.recurrence}
+          canEdit={true}
+          zoneNote={`${current.timezone} 기준`}
+          onsave={saveRule}
+        />
         {#if occurrence !== undefined && current.recurrence !== null}
           <div class="flex items-center gap-2 text-sm">
             <span>{occurrence} 회차만</span>

@@ -926,6 +926,91 @@ function parseCalendar(value: Json): CalendarView {
   };
 }
 
+export const TIME_KINDS = ['work', 'study', 'lecture', 'rest', 'other'] as const;
+export type TimeKind = (typeof TIME_KINDS)[number];
+export type TimeTargetKind = 'task' | 'document' | 'item';
+
+export interface TimeTargetView {
+  kind: TimeTargetKind;
+  id: string;
+  /** 지금 볼 수 없으면 없다. */
+  label: string | null;
+  workspace_id: string | null;
+}
+
+export interface TimeEntryView {
+  id: string;
+  started_at: string;
+  /** 진행 중이면 없다. */
+  ended_at: string | null;
+  /** 일시정지 중이면 그 시각. */
+  paused_at: string | null;
+  paused_seconds: number;
+  /** 응답 시각까지의 길이(초). */
+  seconds: number;
+  kind: TimeKind;
+  memo: string;
+  target: TimeTargetView | null;
+  version: number;
+}
+
+export interface TimeEntryInput {
+  started_at: string;
+  ended_at: string | null;
+  paused_seconds: number;
+  kind: TimeKind;
+  memo: string;
+  target: { kind: TimeTargetKind; id: string } | null;
+}
+
+export interface TimeSummaryRowView {
+  period: string;
+  kind: TimeKind;
+  seconds: number;
+}
+
+export interface TaskTimeView {
+  estimate_minutes: number | null;
+  mine_seconds: number;
+  shared_seconds: number;
+  shared_people: number;
+}
+
+function timeKind(value: string): TimeKind {
+  const found = TIME_KINDS.find((k) => k === value);
+  if (found === undefined) throw new TypeError(`unknown time kind ${value}`);
+  return found;
+}
+
+export function parseTimeEntry(value: Json): TimeEntryView {
+  const o = rec(value, 'time entry');
+  let target: TimeTargetView | null = null;
+  if (o.target !== null && o.target !== undefined) {
+    const t = rec(o.target, 'time target');
+    const kind = str(t, 'kind');
+    if (kind !== 'task' && kind !== 'document' && kind !== 'item')
+      throw new TypeError(`unknown target kind ${kind}`);
+    target = {
+      kind,
+      id: str(t, 'id'),
+      label: optStr(t, 'label'),
+      workspace_id: optStr(t, 'workspace_id'),
+    };
+  }
+  return {
+    id: str(o, 'id'),
+    started_at: str(o, 'started_at'),
+    ended_at: optStr(o, 'ended_at'),
+    paused_at: optStr(o, 'paused_at'),
+    paused_seconds: int(o, 'paused_seconds'),
+    seconds: int(o, 'seconds'),
+    kind: timeKind(str(o, 'kind')),
+    memo: str(o, 'memo'),
+    target,
+    version: int(o, 'version'),
+  };
+}
+
 /** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
 export interface MoveTargetInput {
   workspaceId: string;
@@ -1243,6 +1328,105 @@ export const api = {
     }),
   excludeOccurrence: (id: string, date: string) =>
     expectOk('POST', `/api/events/${encodeURIComponent(id)}/exclusions`, none, { date }),
+  currentTimer: () =>
+    expectOk('GET', '/api/me/timer', (v) => (v === null ? null : parseTimeEntry(v))),
+  startTimer: (
+    requestId: string,
+    kind: TimeKind,
+    memo: string,
+    target: { kind: TimeTargetKind; id: string } | null,
+  ) =>
+    expectOk('POST', '/api/me/timer', parseTimeEntry, {
+      request_id: requestId,
+      kind,
+      memo,
+      target: target === null ? null : { ...target },
+    }),
+  timerAction: (id: string, action: 'pause' | 'resume' | 'stop') =>
+    expectOk('POST', `/api/time-entries/${encodeURIComponent(id)}/timer`, parseTimeEntry, {
+      action,
+    }),
+  timeEntries: (from: string, to: string, tz: string) =>
+    expectOk(
+      'GET',
+      `/api/me/time-entries?from=${from}&to=${to}&tz=${encodeURIComponent(tz)}`,
+      (v) => parseList(v, parseTimeEntry),
+    ),
+  addTimeEntry: (requestId: string, input: TimeEntryInput) =>
+    expectOk('POST', '/api/me/time-entries', parseTimeEntry, {
+      request_id: requestId,
+      ...input,
+      target: input.target === null ? null : { ...input.target },
+    }),
+  /** 기록 고치기. 기준 버전이 지났으면 `{ kind: 'conflict', current }`. */
+  async updateTimeEntry(
+    id: string,
+    baseVersion: number,
+    input: TimeEntryInput,
+  ): Promise<
+    { kind: 'updated'; entry: TimeEntryView } | { kind: 'conflict'; current: TimeEntryView }
+  > {
+    const { status, json } = await request('PUT', `/api/time-entries/${encodeURIComponent(id)}`, {
+      base_version: baseVersion,
+      ...input,
+      target: input.target === null ? null : { ...input.target },
+    });
+    if (status === 409 && isRecord(json) && json.current !== undefined)
+      return { kind: 'conflict', current: parseTimeEntry(rec(json, 'conflict').current) };
+    if (status !== 200) fail(status, json);
+    return { kind: 'updated', entry: parseTimeEntry(json) };
+  },
+  deleteTimeEntry: (id: string) =>
+    expectOk('DELETE', `/api/time-entries/${encodeURIComponent(id)}`, none),
+  timeEntryRevisions: (id: string) =>
+    expectOk('GET', `/api/time-entries/${encodeURIComponent(id)}/revisions`, (v) =>
+      parseList(v, (r) => {
+        const o = rec(r, 'revision');
+        return {
+          started_at: str(o, 'started_at'),
+          ended_at: optStr(o, 'ended_at'),
+          paused_seconds: int(o, 'paused_seconds'),
+          kind: timeKind(str(o, 'kind')),
+          memo: str(o, 'memo'),
+          changed_at: str(o, 'changed_at'),
+        };
+      }),
+    ),
+  timeSummary: (from: string, to: string, tz: string, group: 'day' | 'week' | 'month') =>
+    expectOk(
+      'GET',
+      `/api/me/time-summary?from=${from}&to=${to}&tz=${encodeURIComponent(tz)}&group=${group}`,
+      (v) =>
+        parseList(v, (r): TimeSummaryRowView => {
+          const o = rec(r, 'summary row');
+          return {
+            period: str(o, 'period'),
+            kind: timeKind(str(o, 'kind')),
+            seconds: int(o, 'seconds'),
+          };
+        }),
+    ),
+  timeSharing: (workspaceId: string) =>
+    expectOk('GET', `/api/workspaces/${encodeURIComponent(workspaceId)}/time-sharing`, (v) =>
+      bool(rec(v, 'sharing'), 'enabled'),
+    ),
+  setTimeSharing: (workspaceId: string, enabled: boolean) =>
+    expectOk(
+      'PUT',
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/time-sharing`,
+      (v) => bool(rec(v, 'sharing'), 'enabled'),
+      { enabled },
+    ),
+  taskTime: (taskId: string) =>
+    expectOk('GET', `/api/tasks/${encodeURIComponent(taskId)}/time`, (v): TaskTimeView => {
+      const o = rec(v, 'task time');
+      return {
+        estimate_minutes: optInt(o, 'estimate_minutes'),
+        mine_seconds: int(o, 'mine_seconds'),
+        shared_seconds: int(o, 'shared_seconds'),
+        shared_people: int(o, 'shared_people'),
+      };
+    }),
   calendar: (workspaceId: string, from: string, to: string, tz: string) =>
     expectOk(
       'GET',

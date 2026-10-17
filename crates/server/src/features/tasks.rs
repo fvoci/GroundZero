@@ -275,9 +275,18 @@ pub(crate) fn parse_date(raw: Option<&str>, field: &str) -> Result<Option<Date>,
         Some(s) if s.len() != 10 => Err(AppError::BadRequest(format!(
             "{field} must be a date like 2026-10-17"
         ))),
-        Some(s) => Date::parse(s, &Iso8601::DATE)
-            .map(Some)
-            .map_err(|_| AppError::BadRequest(format!("{field} must be a date like 2026-10-17"))),
+        Some(s) => {
+            let date = Date::parse(s, &Iso8601::DATE).map_err(|_| {
+                AppError::BadRequest(format!("{field} must be a date like 2026-10-17"))
+            })?;
+            // 터무니없이 먼 날짜는 받지 않는다(반복 펼치기·달력 계산이 그 거리만큼 커지지 않게).
+            if !(1900..=2200).contains(&date.year()) {
+                return Err(AppError::BadRequest(format!(
+                    "{field} must be between 1900 and 2200"
+                )));
+            }
+            Ok(Some(date))
+        }
     }
 }
 

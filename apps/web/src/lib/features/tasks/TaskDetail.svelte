@@ -19,6 +19,7 @@
   import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
   import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
   import RecurrenceEditor from '$lib/features/events/RecurrenceEditor.svelte';
+  import TaskTimePanel from '$lib/features/time/TaskTimePanel.svelte';
   import { localTimeZone } from '$lib/features/events/time';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
@@ -629,6 +630,8 @@
       }}
       onremove={(id: string) => reloadChecklist(api.deleteChecklistItem(id))}
     />
+
+    <TaskTimePanel taskId={current.id} />
 
     <Backlinks kind="task" id={current.id} {workspaces} />
   </div>

@@ -72,6 +72,7 @@
         });
       })
       .catch((e: unknown) => {
+        changed = false;
         if (!cancelled) error = e instanceof ApiError ? e.message : '달력을 불러오지 못했습니다.';
       });
     return () => {

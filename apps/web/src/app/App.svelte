@@ -13,6 +13,8 @@
   import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
   import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
+  import TimeScreen from '$lib/features/time/TimeScreen.svelte';
+  import TimerWidget from '$lib/features/time/TimerWidget.svelte';
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
   import WorkspaceBadge from '$lib/features/workspaces/WorkspaceBadge.svelte';
   import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
@@ -151,7 +153,7 @@
           <Sidebar.GroupLabel>개인</Sidebar.GroupLabel>
           <Sidebar.GroupContent>
             <Sidebar.Menu>
-              {#each [{ path: '/notes', label: '내 노트', active: route.name === 'notes' }, { path: '/shared', label: '공유받은 문서', active: route.name === 'shared' }, { path: '/notifications', label: unreadCount > 0 ? `알림 (${String(unreadCount)})` : '알림', active: route.name === 'notifications' }] as item (item.path)}
+              {#each [{ path: '/notes', label: '내 노트', active: route.name === 'notes' }, { path: '/shared', label: '공유받은 문서', active: route.name === 'shared' }, { path: '/time', label: '내 시간', active: route.name === 'time' }, { path: '/notifications', label: unreadCount > 0 ? `알림 (${String(unreadCount)})` : '알림', active: route.name === 'notifications' }] as item (item.path)}
                 <Sidebar.MenuItem>
                   <Sidebar.MenuButton isActive={item.active}>
                     {#snippet child({ props })}
@@ -186,7 +188,8 @@
                   ? '공유받은 문서'
                   : '홈')}</span
         >
-        <div class="ml-auto">
+        <div class="ml-auto flex items-center gap-2">
+          <TimerWidget />
           <DropdownMenu.Root>
             <DropdownMenu.Trigger>
               {#snippet child({ props })}
@@ -276,6 +279,8 @@
             workspaces={signedIn.workspaces}
             onchanged={() => void refreshUnread()}
           />
+        {:else if route.name === 'time'}
+          <TimeScreen workspaces={signedIn.workspaces} />
         {:else if route.name === 'shared'}
           <SharedScreen />
         {:else if route.name === 'standalone-document'}

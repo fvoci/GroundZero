@@ -654,6 +654,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/time-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내 시간 기록(기간 안에 시작한 것, 최신순). */
+        get: operations["list_time_entries"];
+        put?: never;
+        /** 수동 기록 추가(끝난 기록). 같은 `request_id`면 같은 기록. */
+        post: operations["add_time_entry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/time-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내 시간 집계(일·주·월, 보는 사람 시간대, 기록은 시작한 날에 센다). */
+        get: operations["time_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/timer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 진행 중인 타이머(없으면 null). */
+        get: operations["current_timer"];
+        put?: never;
+        /** 타이머 시작. 이미 진행 중인 타이머가 있으면 409(사용자당 하나, 모든 워크스페이스 통틀어). */
+        post: operations["start_timer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/modules/{module_id}": {
         parameters: {
             query?: never;
@@ -916,6 +969,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tasks/{task_id}/time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 업무의 예상·실제 시간(업무를 볼 수 있는 사람). 기록 하나하나는 돌려주지 않는다. */
+        get: operations["task_time"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/time-entries/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 기록 고치기(본인). 이전 값은 수정 이력에 남는다. 진행 중이면 시작 시각·종류·메모·대상만 바꿀 수 있다. */
+        put: operations["update_time_entry"];
+        post?: never;
+        /** 기록 지우기(본인). */
+        delete: operations["delete_time_entry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/time-entries/{entry_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 기록의 수정 이력(본인, 최신순). */
+        get: operations["time_entry_revisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/time-entries/{entry_id}/timer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 타이머 일시정지·재개·종료(본인). 이미 그 상태면 그대로. */
+        post: operations["timer_action"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces": {
         parameters: {
             query?: never;
@@ -1092,6 +1214,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/{workspace_id}/time-sharing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 이 워크스페이스의 내 합계 공유 상태(멤버). */
+        get: operations["get_time_sharing"];
+        /** 이 워크스페이스에 내 업무 시간 합계 공유 켜기·끄기(멤버). 기록·메모·시각은 공유하지 않는다. */
+        put: operations["set_time_sharing"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces/{workspace_id}/wiki/documents": {
         parameters: {
             query?: never;
@@ -1202,6 +1342,11 @@ export interface components {
         /** @description 체크리스트 덧붙이기(Markdown에서 펼친 항목을 사용자가 확인한 뒤 한 번에). */
         AddChecklist: {
             items: components["schemas"]["NewChecklistItem"][];
+        };
+        /** @description 수동 기록 추가. */
+        AddEntry: components["schemas"]["EntryInput"] & {
+            /** Format: uuid */
+            request_id: string;
         };
         /** @description 담당자. */
         Assignee: {
@@ -1398,6 +1543,18 @@ export interface components {
             title: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description 기록 내용(수동 추가·고치기 공통). */
+        EntryInput: {
+            /** @description RFC 3339. 진행 중인 타이머를 고칠 때만 없다. */
+            ended_at?: string | null;
+            kind: components["schemas"]["TimeKind"];
+            memo: string;
+            /** Format: int32 */
+            paused_seconds: number;
+            /** @description RFC 3339. */
+            started_at: string;
+            target?: null | components["schemas"]["TargetInput"];
         };
         /** @description 오류 응답 본문. */
         ErrorBody: {
@@ -1828,6 +1985,10 @@ export interface components {
         SetRole: {
             role: components["schemas"]["Role"];
         };
+        /** @description 합계 공유 켜기·끄기. */
+        SetSharing: {
+            enabled: boolean;
+        };
         /** @description 상위 업무 바꾸기. 없으면 최상위. */
         SetTaskParent: {
             /** Format: uuid */
@@ -1858,6 +2019,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description 내 합계 공유 상태(워크스페이스별). */
+        Sharing: {
+            enabled: boolean;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
         /** @description 옮겨야 하는 후속 업무 한 건(현재 → 제안). */
         ShiftProposal: {
             /**
@@ -1874,6 +2040,14 @@ export interface components {
             task_id: string;
             title: string;
         };
+        /** @description 타이머 시작. */
+        StartTimer: {
+            kind: components["schemas"]["TimeKind"];
+            memo: string;
+            /** Format: uuid */
+            request_id: string;
+            target?: null | components["schemas"]["TargetInput"];
+        };
         /** @description 승인한 후속 업무 재배치 한 건. 날짜가 있던 칸만 옮긴다. */
         SuccessorShift: {
             /** Format: int32 */
@@ -1883,6 +2057,11 @@ export interface components {
             /** Format: uuid */
             task_id: string;
         };
+        /**
+         * @description 집계 단위.
+         * @enum {string}
+         */
+        SummaryGroup: "day" | "week" | "month";
         /** @description 동기화 결과. */
         SyncResult: {
             /**
@@ -1891,6 +2070,25 @@ export interface components {
              */
             created: number;
         };
+        /** @description 연결 대상(받을 때). 지금 볼 수 없으면 `label`이 없다. */
+        Target: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["TargetKind"];
+            label?: string | null;
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
+        };
+        /** @description 연결 대상(보낼 때). */
+        TargetInput: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["TargetKind"];
+        };
+        /**
+         * @description 연결 대상 종류.
+         * @enum {string}
+         */
+        TargetKind: "task" | "document" | "item";
         /** @description 업무. */
         Task: {
             access: components["schemas"]["Access"];
@@ -1969,10 +2167,101 @@ export interface components {
          * @enum {string}
          */
         TaskStatus: "todo" | "in_progress" | "done";
+        /** @description 업무의 예상 시간과 실제 시간. */
+        TaskTime: {
+            /** Format: int32 */
+            estimate_minutes?: number | null;
+            /**
+             * Format: int64
+             * @description 내 기록의 합계(초).
+             */
+            mine_seconds: number;
+            /** Format: int32 */
+            shared_people: number;
+            /**
+             * Format: int64
+             * @description 이 워크스페이스에 공유를 켠 멤버들의 합계(초, 나도 켰으면 포함).
+             */
+            shared_seconds: number;
+        };
+        /** @description 시간 기록. */
+        TimeEntry: {
+            /**
+             * Format: date-time
+             * @description 진행 중이면 없다.
+             */
+            ended_at?: string | null;
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["TimeKind"];
+            memo: string;
+            /**
+             * Format: date-time
+             * @description 일시정지 중이면 그 시각.
+             */
+            paused_at?: string | null;
+            /** Format: int32 */
+            paused_seconds: number;
+            /**
+             * Format: int64
+             * @description 지금까지의 길이(초). 진행 중이면 응답 시각 기준.
+             */
+            seconds: number;
+            /** Format: date-time */
+            started_at: string;
+            target?: null | components["schemas"]["Target"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description 409 응답: 서버 최신본. */
+        TimeEntryConflict: {
+            current: components["schemas"]["TimeEntry"];
+            error: string;
+        };
+        /** @description 수정 이력 한 건(고치기 전 값). */
+        TimeEntryRevision: {
+            /** Format: date-time */
+            changed_at: string;
+            /** Format: date-time */
+            ended_at?: string | null;
+            kind: components["schemas"]["TimeKind"];
+            memo: string;
+            /** Format: int32 */
+            paused_seconds: number;
+            /** Format: date-time */
+            started_at: string;
+        };
+        /**
+         * @description 시간 기록 종류. `study`는 순공부(강의 시청 제외), `lecture`는 강의 시청, `rest`는 휴식.
+         * @enum {string}
+         */
+        TimeKind: "work" | "study" | "lecture" | "rest" | "other";
+        /** @description 기간·종류별 합계. */
+        TimeSummaryRow: {
+            kind: components["schemas"]["TimeKind"];
+            /** @description 기간의 첫날(`YYYY-MM-DD`). */
+            period: string;
+            /** Format: int64 */
+            seconds: number;
+        };
+        /**
+         * @description 타이머 동작.
+         * @enum {string}
+         */
+        TimerAction: "pause" | "resume" | "stop";
+        /** @description 타이머 일시정지·재개·종료 요청. */
+        TimerActionInput: {
+            action: components["schemas"]["TimerAction"];
+        };
         /** @description 체크리스트 항목 고치기. */
         UpdateChecklistItem: {
             checked: boolean;
             text: string;
+        };
+        /** @description 기록 고치기. `base_version`이 지났으면 409와 서버 최신본. */
+        UpdateEntry: components["schemas"]["EntryInput"] & {
+            /** Format: int32 */
+            base_version: number;
         };
         /** @description 일정 고치기. `base_version`이 지났으면 409와 서버 최신본. */
         UpdateEvent: components["schemas"]["EventInput"] & {
@@ -3967,6 +4256,174 @@ export interface operations {
             };
         };
     };
+    list_time_entries: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                tz: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntry"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_time_entry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddEntry"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntry"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    time_summary: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                tz: string;
+                group: components["schemas"]["SummaryGroup"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeSummaryRow"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    current_timer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null | components["schemas"]["TimeEntry"];
+                };
+            };
+        };
+    };
+    start_timer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartTimer"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntry"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     get_module: {
         parameters: {
             query?: never;
@@ -4770,6 +5227,181 @@ export interface operations {
             };
         };
     };
+    task_time: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskTime"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_time_entry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEntry"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntry"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryConflict"];
+                };
+            };
+        };
+    };
+    delete_time_entry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    time_entry_revisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryRevision"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    timer_action: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimerActionInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntry"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list: {
         parameters: {
             query?: never;
@@ -5389,6 +6021,68 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_time_sharing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sharing"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_time_sharing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetSharing"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sharing"];
+                };
             };
             404: {
                 headers: {

@@ -2735,6 +2735,270 @@
         }
       }
     },
+    "/api/me/time-entries": {
+      "get": {
+        "tags": [
+          "time"
+        ],
+        "summary": "내 시간 기록(기간 안에 시작한 것, 최신순).",
+        "operationId": "list_time_entries",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimeEntry"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "time"
+        ],
+        "summary": "수동 기록 추가(끝난 기록). 같은 `request_id`면 같은 기록.",
+        "operationId": "add_time_entry",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddEntry"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimeEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/time-summary": {
+      "get": {
+        "tags": [
+          "time"
+        ],
+        "summary": "내 시간 집계(일·주·월, 보는 사람 시간대, 기록은 시작한 날에 센다).",
+        "operationId": "time_summary",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SummaryGroup"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimeSummaryRow"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/timer": {
+      "get": {
+        "tags": [
+          "time"
+        ],
+        "summary": "진행 중인 타이머(없으면 null).",
+        "operationId": "current_timer",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TimeEntry"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "time"
+        ],
+        "summary": "타이머 시작. 이미 진행 중인 타이머가 있으면 409(사용자당 하나, 모든 워크스페이스 통틀어).",
+        "operationId": "start_timer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartTimer"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimeEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/modules/{module_id}": {
       "get": {
         "tags": [
@@ -3915,6 +4179,260 @@
         }
       }
     },
+    "/api/tasks/{task_id}/time": {
+      "get": {
+        "tags": [
+          "time"
+        ],
+        "summary": "업무의 예상·실제 시간(업무를 볼 수 있는 사람). 기록 하나하나는 돌려주지 않는다.",
+        "operationId": "task_time",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskTime"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/time-entries/{entry_id}": {
+      "put": {
+        "tags": [
+          "time"
+        ],
+        "summary": "기록 고치기(본인). 이전 값은 수정 이력에 남는다. 진행 중이면 시작 시각·종류·메모·대상만 바꿀 수 있다.",
+        "operationId": "update_time_entry",
+        "parameters": [
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEntry"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimeEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimeEntryConflict"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "time"
+        ],
+        "summary": "기록 지우기(본인).",
+        "operationId": "delete_time_entry",
+        "parameters": [
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/time-entries/{entry_id}/revisions": {
+      "get": {
+        "tags": [
+          "time"
+        ],
+        "summary": "기록의 수정 이력(본인, 최신순).",
+        "operationId": "time_entry_revisions",
+        "parameters": [
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimeEntryRevision"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/time-entries/{entry_id}/timer": {
+      "post": {
+        "tags": [
+          "time"
+        ],
+        "summary": "타이머 일시정지·재개·종료(본인). 이미 그 상태면 그대로.",
+        "operationId": "timer_action",
+        "parameters": [
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimerActionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimeEntry"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces": {
       "get": {
         "tags": [
@@ -4815,6 +5333,98 @@
         }
       }
     },
+    "/api/workspaces/{workspace_id}/time-sharing": {
+      "get": {
+        "tags": [
+          "time"
+        ],
+        "summary": "이 워크스페이스의 내 합계 공유 상태(멤버).",
+        "operationId": "get_time_sharing",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sharing"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "time"
+        ],
+        "summary": "이 워크스페이스에 내 업무 시간 합계 공유 켜기·끄기(멤버). 기록·메모·시각은 공유하지 않는다.",
+        "operationId": "set_time_sharing",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSharing"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sharing"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{workspace_id}/wiki/documents": {
       "get": {
         "tags": [
@@ -5129,6 +5739,26 @@
             }
           }
         }
+      },
+      "AddEntry": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EntryInput"
+          },
+          {
+            "type": "object",
+            "required": [
+              "request_id"
+            ],
+            "properties": {
+              "request_id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "description": "수동 기록 추가."
       },
       "Assignee": {
         "type": "object",
@@ -5764,6 +6394,49 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "EntryInput": {
+        "type": "object",
+        "description": "기록 내용(수동 추가·고치기 공통).",
+        "required": [
+          "started_at",
+          "paused_seconds",
+          "kind",
+          "memo"
+        ],
+        "properties": {
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339. 진행 중인 타이머를 고칠 때만 없다."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TimeKind"
+          },
+          "memo": {
+            "type": "string"
+          },
+          "paused_seconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "started_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TargetInput"
+              }
+            ]
           }
         }
       },
@@ -7119,6 +7792,18 @@
           }
         }
       },
+      "SetSharing": {
+        "type": "object",
+        "description": "합계 공유 켜기·끄기.",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
       "SetTaskParent": {
         "type": "object",
         "description": "상위 업무 바꾸기. 없으면 최상위.",
@@ -7208,6 +7893,22 @@
           }
         }
       },
+      "Sharing": {
+        "type": "object",
+        "description": "내 합계 공유 상태(워크스페이스별).",
+        "required": [
+          "workspace_id",
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
       "ShiftProposal": {
         "type": "object",
         "description": "옮겨야 하는 후속 업무 한 건(현재 → 제안).",
@@ -7261,6 +7962,37 @@
           }
         }
       },
+      "StartTimer": {
+        "type": "object",
+        "description": "타이머 시작.",
+        "required": [
+          "request_id",
+          "kind",
+          "memo"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/TimeKind"
+          },
+          "memo": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TargetInput"
+              }
+            ]
+          }
+        }
+      },
       "SuccessorShift": {
         "type": "object",
         "description": "승인한 후속 업무 재배치 한 건. 날짜가 있던 칸만 옮긴다.",
@@ -7291,6 +8023,15 @@
           }
         }
       },
+      "SummaryGroup": {
+        "type": "string",
+        "description": "집계 단위.",
+        "enum": [
+          "day",
+          "week",
+          "month"
+        ]
+      },
       "SyncResult": {
         "type": "object",
         "description": "동기화 결과.",
@@ -7304,6 +8045,65 @@
             "description": "이번에 만든 회차 수. 한 번에 50개까지 만들며 남은 것은 다음 요청에서 이어 만든다."
           }
         }
+      },
+      "Target": {
+        "type": "object",
+        "description": "연결 대상(받을 때). 지금 볼 수 없으면 `label`이 없다.",
+        "required": [
+          "kind",
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TargetKind"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "workspace_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
+          }
+        }
+      },
+      "TargetInput": {
+        "type": "object",
+        "description": "연결 대상(보낼 때).",
+        "required": [
+          "kind",
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TargetKind"
+          }
+        }
+      },
+      "TargetKind": {
+        "type": "string",
+        "description": "연결 대상 종류.",
+        "enum": [
+          "task",
+          "document",
+          "item"
+        ]
       },
       "Task": {
         "type": "object",
@@ -7550,6 +8350,214 @@
           "done"
         ]
       },
+      "TaskTime": {
+        "type": "object",
+        "description": "업무의 예상 시간과 실제 시간.",
+        "required": [
+          "mine_seconds",
+          "shared_seconds",
+          "shared_people"
+        ],
+        "properties": {
+          "estimate_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "mine_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "내 기록의 합계(초)."
+          },
+          "shared_people": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "shared_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "이 워크스페이스에 공유를 켠 멤버들의 합계(초, 나도 켰으면 포함)."
+          }
+        }
+      },
+      "TimeEntry": {
+        "type": "object",
+        "description": "시간 기록.",
+        "required": [
+          "id",
+          "started_at",
+          "paused_seconds",
+          "seconds",
+          "kind",
+          "memo",
+          "version"
+        ],
+        "properties": {
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "진행 중이면 없다."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TimeKind"
+          },
+          "memo": {
+            "type": "string"
+          },
+          "paused_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "일시정지 중이면 그 시각."
+          },
+          "paused_seconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "지금까지의 길이(초). 진행 중이면 응답 시각 기준."
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Target"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TimeEntryConflict": {
+        "type": "object",
+        "description": "409 응답: 서버 최신본.",
+        "required": [
+          "error",
+          "current"
+        ],
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/TimeEntry"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "TimeEntryRevision": {
+        "type": "object",
+        "description": "수정 이력 한 건(고치기 전 값).",
+        "required": [
+          "started_at",
+          "paused_seconds",
+          "kind",
+          "memo",
+          "changed_at"
+        ],
+        "properties": {
+          "changed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TimeKind"
+          },
+          "memo": {
+            "type": "string"
+          },
+          "paused_seconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TimeKind": {
+        "type": "string",
+        "description": "시간 기록 종류. `study`는 순공부(강의 시청 제외), `lecture`는 강의 시청, `rest`는 휴식.",
+        "enum": [
+          "work",
+          "study",
+          "lecture",
+          "rest",
+          "other"
+        ]
+      },
+      "TimeSummaryRow": {
+        "type": "object",
+        "description": "기간·종류별 합계.",
+        "required": [
+          "period",
+          "kind",
+          "seconds"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/TimeKind"
+          },
+          "period": {
+            "type": "string",
+            "description": "기간의 첫날(`YYYY-MM-DD`)."
+          },
+          "seconds": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "TimerAction": {
+        "type": "string",
+        "description": "타이머 동작.",
+        "enum": [
+          "pause",
+          "resume",
+          "stop"
+        ]
+      },
+      "TimerActionInput": {
+        "type": "object",
+        "description": "타이머 일시정지·재개·종료 요청.",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/TimerAction"
+          }
+        }
+      },
       "UpdateChecklistItem": {
         "type": "object",
         "description": "체크리스트 항목 고치기.",
@@ -7565,6 +8573,26 @@
             "type": "string"
           }
         }
+      },
+      "UpdateEntry": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EntryInput"
+          },
+          {
+            "type": "object",
+            "required": [
+              "base_version"
+            ],
+            "properties": {
+              "base_version": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          }
+        ],
+        "description": "기록 고치기. `base_version`이 지났으면 409와 서버 최신본."
       },
       "UpdateEvent": {
         "allOf": [
@@ -7772,6 +8800,10 @@
     {
       "name": "events",
       "description": "회의·발표·행사 일정과 달력"
+    },
+    {
+      "name": "time",
+      "description": "스톱워치·개인 시간 기록·집계"
     }
   ]
 }
