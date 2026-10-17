@@ -1260,11 +1260,33 @@ export interface ProjectedTaskView {
   due_date: string | null;
 }
 
+export const CALENDAR_DATE_KINDS = [
+  'episode',
+  'study_unit',
+  'submission',
+  'revision_due',
+  'deliverable',
+] as const;
+export type CalendarDateKind = (typeof CALENDAR_DATE_KINDS)[number];
+
+/** 업무·일정 밖의 날짜(D-80): 강의·스터디 계획일, 투고·산출물 날짜. */
+export interface CalendarDateView {
+  kind: CalendarDateKind;
+  id: string;
+  item_id: string;
+  title: string;
+  date: string;
+  /** 내 계획일(본인만 봄). */
+  personal: boolean;
+  done: boolean;
+}
+
 export interface CalendarView {
   tasks: CalendarTaskView[];
   projected_tasks: ProjectedTaskView[];
   events: EventView[];
   occurrences: EventOccurrenceView[];
+  dates: CalendarDateView[];
   items: { id: string; reference: string | null; title: string }[];
 }
 
@@ -1298,6 +1320,20 @@ function parseCalendar(value: Json): CalendarView {
       };
     }),
     events: parseList(o.events, parseEvent),
+    dates: parseList(o.dates, (v): CalendarDateView => {
+      const d = rec(v, 'calendar date');
+      const kind = CALENDAR_DATE_KINDS.find((k) => k === str(d, 'kind'));
+      if (kind === undefined) throw new TypeError('unknown calendar date kind');
+      return {
+        kind,
+        id: str(d, 'id'),
+        item_id: str(d, 'item_id'),
+        title: str(d, 'title'),
+        date: str(d, 'date'),
+        personal: bool(d, 'personal'),
+        done: bool(d, 'done'),
+      };
+    }),
     occurrences: parseList(o.occurrences, (v): EventOccurrenceView => {
       const e = rec(v, 'occurrence');
       return {
@@ -2768,12 +2804,23 @@ export const api = {
         shared_people: int(o, 'shared_people'),
       };
     }),
-  calendar: (workspaceId: string, from: string, to: string, tz: string) =>
-    expectOk(
+  /** 달력(D-80). `scope`로 모듈·항목 범위로 좁힌다(같은 데이터, 사본 없음). */
+  calendar: (
+    workspaceId: string,
+    from: string,
+    to: string,
+    tz: string,
+    scope: { moduleId?: string | undefined; itemId?: string | undefined } = {},
+  ) => {
+    const params = new URLSearchParams({ from, to, tz });
+    if (scope.moduleId !== undefined) params.set('module_id', scope.moduleId);
+    if (scope.itemId !== undefined) params.set('item_id', scope.itemId);
+    return expectOk(
       'GET',
-      `/api/workspaces/${encodeURIComponent(workspaceId)}/calendar?from=${from}&to=${to}&tz=${encodeURIComponent(tz)}`,
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/calendar?${params.toString()}`,
       parseCalendar,
-    ),
+    );
+  },
   revisions: (id: string, before: number | null) =>
     expectOk(
       'GET',

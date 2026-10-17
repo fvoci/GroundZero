@@ -433,11 +433,65 @@ pub async fn delete(
 }
 
 /// 달력 기간. `from`·`to`는 날짜(끝 포함), `tz`는 보는 사람의 시간대(시각 있는 일정의 날짜 경계).
+/// `module_id`·`item_id`로 범위를 그 모듈·항목으로 좁힌다(D-80, 같은 데이터를 거를 뿐 사본은 없다).
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct CalendarRange {
     pub from: String,
     pub to: String,
     pub tz: String,
+    /// 이 모듈의 항목만.
+    #[serde(default)]
+    #[param(value_type = Option<String>, format = Uuid)]
+    pub module_id: Option<Uuid>,
+    /// 이 항목만.
+    #[serde(default)]
+    #[param(value_type = Option<String>, format = Uuid)]
+    pub item_id: Option<Uuid>,
+}
+
+/// 업무·일정 밖의 날짜 출처(D-80). 원래 자리의 날짜를 그대로 읽는다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CalendarDateKind {
+    /// 강의 회차 수강 예정일(내 계획일, 없으면 공통 계획일).
+    Episode,
+    /// 스터디 계획 단위 계획일(내 계획일, 없으면 공통 계획일).
+    StudyUnit,
+    /// 연구 투고 제출 예정일.
+    Submission,
+    /// 연구 투고 수정 마감일.
+    RevisionDue,
+    /// 프로젝트 산출물 마감일.
+    Deliverable,
+}
+
+impl CalendarDateKind {
+    fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "episode" => Some(Self::Episode),
+            "study_unit" => Some(Self::StudyUnit),
+            "submission" => Some(Self::Submission),
+            "revision_due" => Some(Self::RevisionDue),
+            "deliverable" => Some(Self::Deliverable),
+            _ => None,
+        }
+    }
+}
+
+/// 달력의 날짜 하나(D-80).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CalendarDate {
+    pub kind: CalendarDateKind,
+    /// 원래 대상(회차·스터디 단위·기록)의 id.
+    #[schema(value_type = String, format = Uuid)]
+    pub id: Uuid,
+    pub item_id: ItemId,
+    pub title: String,
+    pub date: String,
+    /// 내 계획일이면 참(본인만 보는 개인 일정), 공통 계획일·기록 날짜면 거짓.
+    pub personal: bool,
+    /// 끝난 것(내가 이수·완료, 게재·거절·승인·완료 상태).
+    pub done: bool,
 }
 
 /// 달력의 업무(시작일~마감일).
@@ -503,6 +557,8 @@ pub struct Calendar {
     /// 기간 안에 회차가 있는 일정의 정의.
     pub events: Vec<Event>,
     pub occurrences: Vec<EventOccurrence>,
+    /// 강의·스터디 계획일, 투고·산출물 날짜(D-80).
+    pub dates: Vec<CalendarDate>,
     pub items: Vec<CalendarItem>,
 }
 
@@ -555,7 +611,7 @@ pub async fn calendar(
         Option<Date>,
         Option<Date>,
     );
-    let task_rows: Vec<TaskRow> = sqlx::query_as(
+    let mut task_rows: Vec<TaskRow> = sqlx::query_as(
         "SELECT t.id, t.item_id, app_task_reference(t.id), t.title, t.status, t.milestone, t.start_date, t.due_date
          FROM tasks t
          WHERE t.workspace_id = $1
@@ -577,7 +633,7 @@ pub async fn calendar(
         Option<Date>,
         Option<Date>,
     );
-    let projected_rows: Vec<ProjectedRow> = sqlx::query_as(
+    let mut projected_rows: Vec<ProjectedRow> = sqlx::query_as(
         "SELECT series_id, root_task_id, item_id, title, milestone, occurrence, start_date, due_date
          FROM app_projected_occurrences($1, NULL, $2, $3) ORDER BY occurrence, series_id",
     )
@@ -594,7 +650,7 @@ pub async fn calendar(
         Option<OffsetDateTime>,
         Option<OffsetDateTime>,
     );
-    let occurrence_rows: Vec<OccurrenceRow> =
+    let mut occurrence_rows: Vec<OccurrenceRow> =
         sqlx::query_as("SELECT * FROM app_event_occurrences($1, $2, $3, $4, $5)")
             .bind(ws)
             .bind(from_at)
@@ -606,13 +662,68 @@ pub async fn calendar(
     let mut event_ids: Vec<Uuid> = occurrence_rows.iter().map(|r| r.0).collect();
     event_ids.sort_unstable();
     event_ids.dedup();
-    let event_rows: Vec<EventRow> = sqlx::query_as(&format!(
+    let mut event_rows: Vec<EventRow> = sqlx::query_as(&format!(
         "{EVENT_SELECT} WHERE e.id = ANY($1) AND e.deleted_at IS NULL ORDER BY {EVENT_ORDER}"
     ))
     .bind(&event_ids)
     .fetch_all(tx.conn())
     .await?;
+    // 강의·스터디 계획일은 내 계획일이 있으면 그것(본인 진도 행만 읽힌다), 없으면 공통 계획일. 투고·산출물은 기록의
+    // 날짜. 모두 그 항목을 볼 수 있을 때만 나온다(RLS·app_item_access).
+    type DateRow = (String, Uuid, ItemId, String, Date, bool, bool);
+    let mut date_rows: Vec<DateRow> = sqlx::query_as(
+        "SELECT 'episode', e.id, e.item_id, e.number::text || '. ' || e.title,
+                coalesce(p.planned_on, e.planned_on), p.planned_on IS NOT NULL, coalesce(p.status = 'done', false)
+         FROM course_episodes e
+         LEFT JOIN episode_progress p ON p.episode_id = e.id AND p.user_id = app_user_id()
+         WHERE e.workspace_id = $1 AND coalesce(p.planned_on, e.planned_on) BETWEEN $2 AND $3
+           AND app_item_access(e.item_id) IS NOT NULL
+         UNION ALL
+         SELECT 'study_unit', u.id, u.item_id, u.number::text || '. ' || u.title,
+                coalesce(p.planned_on, u.planned_on), p.planned_on IS NOT NULL, coalesce(p.status = 'done', false)
+         FROM study_units u
+         LEFT JOIN unit_progress p ON p.unit_id = u.id AND p.user_id = app_user_id()
+         WHERE u.workspace_id = $1 AND coalesce(p.planned_on, u.planned_on) BETWEEN $2 AND $3
+           AND app_item_access(u.item_id) IS NOT NULL
+         UNION ALL
+         SELECT 'submission', r.id, r.item_id, r.title, r.occurred_on, false,
+                coalesce(r.fields->>'status' IN ('published', 'rejected'), false)
+         FROM item_records r
+         WHERE r.workspace_id = $1 AND r.kind = 'submission' AND r.occurred_on BETWEEN $2 AND $3
+           AND app_item_access(r.item_id) IS NOT NULL
+         UNION ALL
+         SELECT 'revision_due', r.id, r.item_id, r.title, (r.fields->>'revision_due')::date, false,
+                coalesce(r.fields->>'status' IN ('accepted', 'published', 'rejected'), false)
+         FROM item_records r
+         WHERE r.workspace_id = $1 AND r.kind = 'submission'
+           AND r.fields->>'revision_due' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+           AND (r.fields->>'revision_due')::date BETWEEN $2 AND $3
+           AND app_item_access(r.item_id) IS NOT NULL
+         UNION ALL
+         SELECT 'deliverable', r.id, r.item_id, r.title, r.occurred_on, false,
+                coalesce(r.fields->>'status' IN ('done', 'accepted'), false)
+         FROM item_records r
+         WHERE r.workspace_id = $1 AND r.kind = 'deliverable' AND r.occurred_on BETWEEN $2 AND $3
+           AND app_item_access(r.item_id) IS NOT NULL
+         ORDER BY 5, 1, 4",
+    )
+    .bind(ws)
+    .bind(from)
+    .bind(to)
+    .fetch_all(tx.conn())
+    .await?;
+    // 범위(D-80): 모듈·항목으로 좁히면 그 안의 볼 수 있는 항목만 남긴다. 범위 밖이거나 볼 수 없으면 404.
+    if let Some(scope) = calendar_scope(&mut tx, ws, &range).await? {
+        let keep = |item: &ItemId| scope.contains(item);
+        task_rows.retain(|r| keep(&r.1));
+        projected_rows.retain(|r| keep(&r.2));
+        event_rows.retain(|e| keep(&e.item_id));
+        let kept: std::collections::HashSet<Uuid> = event_rows.iter().map(|e| e.id).collect();
+        occurrence_rows.retain(|r| kept.contains(&r.0));
+        date_rows.retain(|r| keep(&r.2));
+    }
     let mut item_ids: Vec<ItemId> = task_rows.iter().map(|r| r.1).collect();
+    item_ids.extend(date_rows.iter().map(|r| r.2));
     item_ids.extend(projected_rows.iter().map(|r| r.2));
     item_ids.extend(event_rows.iter().map(|r| r.item_id));
     item_ids.sort_unstable_by_key(|id| id.0);
@@ -680,6 +791,21 @@ pub async fn calendar(
                 },
             )
             .collect(),
+        dates: date_rows
+            .into_iter()
+            .map(|(kind, id, item_id, title, date, personal, done)| {
+                Ok(CalendarDate {
+                    kind: CalendarDateKind::parse(&kind)
+                        .ok_or_else(|| AppError::Config(format!("unknown calendar date {kind}")))?,
+                    id,
+                    item_id,
+                    title,
+                    date: format_date(Some(date)).unwrap_or_default(),
+                    personal,
+                    done,
+                })
+            })
+            .collect::<Result<_, AppError>>()?,
         items: items
             .into_iter()
             .map(|(id, reference, title)| CalendarItem {
@@ -689,4 +815,53 @@ pub async fn calendar(
             })
             .collect(),
     }))
+}
+
+/// 달력 범위(D-80): 항목이면 그 항목 하나, 모듈이면 그 모듈의 볼 수 있는 항목들. 범위가 없으면 `None`(워크스페이스 전체).
+/// 그 워크스페이스에 없거나 볼 수 없으면 404.
+async fn calendar_scope(
+    tx: &mut UserTx,
+    ws: WorkspaceId,
+    range: &CalendarRange,
+) -> Result<Option<std::collections::HashSet<ItemId>>, AppError> {
+    if let Some(item) = range.item_id {
+        let found: Option<ItemId> =
+            sqlx::query_scalar("SELECT id FROM items WHERE id = $1 AND workspace_id = $2")
+                .bind(item)
+                .bind(ws)
+                .fetch_optional(tx.conn())
+                .await?;
+        let item = found.ok_or(AppError::NotFound)?;
+        if let Some(module) = range.module_id {
+            let inside: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM items WHERE id = $1 AND module_id = $2)",
+            )
+            .bind(item)
+            .bind(module)
+            .fetch_one(tx.conn())
+            .await?;
+            if !inside {
+                return Err(AppError::NotFound);
+            }
+        }
+        return Ok(Some(std::iter::once(item).collect()));
+    }
+    if let Some(module) = range.module_id {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM modules WHERE id = $1 AND workspace_id = $2)",
+        )
+        .bind(module)
+        .bind(ws)
+        .fetch_one(tx.conn())
+        .await?;
+        if !exists {
+            return Err(AppError::NotFound);
+        }
+        let items: Vec<ItemId> = sqlx::query_scalar("SELECT id FROM items WHERE module_id = $1")
+            .bind(module)
+            .fetch_all(tx.conn())
+            .await?;
+        return Ok(Some(items.into_iter().collect()));
+    }
+    Ok(None)
 }

@@ -1,13 +1,16 @@
 <script lang="ts">
-  // 워크스페이스 달력 (D-31, D-50): 볼 수 있는 업무(마감·시작)와 일정을 달 단위로. 넓은 화면은 달 격자, 좁은 화면은
-  // 날짜별 목록으로 같은 내용을 보인다. 업무는 그 업무 상세로, 일정은 일정 대화상자로 연다.
+  // 달력 (D-31, D-50, D-80): 볼 수 있는 업무(마감·시작)·일정·강의·스터디 계획일·투고·산출물 날짜를 달 단위로.
+  // 같은 달력을 워크스페이스 전체(모듈·항목 거르기), 모듈 화면(그 모듈), 항목 화면(그 항목)에서 범위만 바꿔 쓴다.
+  // 넓은 화면은 달 격자, 좁은 화면은 날짜별 목록으로 같은 내용을 보인다. 업무는 그 업무 상세로, 일정은 일정 대화상자로,
+  // 그 밖의 날짜는 그 항목으로 연다.
   import { tick } from 'svelte';
 
-  import type { Workspace } from '@fvoci/api-client';
+  import type { Module, Workspace } from '@fvoci/api-client';
 
-  import type { CalendarView } from '$lib/api/client';
+  import type { CalendarView, ItemView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
-  import { itemTaskPath, router } from '$lib/router.svelte';
+  import { displaySettings, formatMonth, weekdays } from '$lib/display';
+  import { itemPath, itemTaskPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
 
   import type { CalendarEntry } from './calendar';
@@ -15,13 +18,58 @@
   import CalendarEntryButton from './CalendarEntryButton.svelte';
   import EventDialog from './EventDialog.svelte';
   import { dayIn } from './time';
-  import { displaySettings, formatMonth, weekdays } from '$lib/display';
 
   interface Props {
     workspace: Workspace;
+    /** 정한 범위(모듈 화면·항목 화면). 없으면 워크스페이스 전체이고 모듈·항목 거르기를 보인다. */
+    scope?: { moduleId?: string | undefined; itemId?: string | undefined } | undefined;
+    /** 다른 화면 안에 넣을 때(제목 단계를 낮춘다). */
+    embedded?: boolean;
   }
 
-  const { workspace }: Props = $props();
+  const { workspace, scope, embedded = false }: Props = $props();
+
+  // 워크스페이스 달력의 거르기: 모듈 → 그 모듈의 항목.
+  let modules = $state<Module[]>([]);
+  let moduleItems = $state<ItemView[]>([]);
+  let filterModule = $state('');
+  let filterItem = $state('');
+  $effect(() => {
+    if (scope !== undefined) return;
+    const ws = workspace.id;
+    let cancelled = false;
+    api
+      .modules(ws)
+      .then((list) => {
+        if (!cancelled) modules = list;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  });
+  $effect(() => {
+    const id = filterModule;
+    filterItem = '';
+    moduleItems = [];
+    if (id === '') return;
+    let cancelled = false;
+    api
+      .items(id)
+      .then((list) => {
+        if (!cancelled) moduleItems = list;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  });
+  const effectiveScope = $derived(
+    scope ?? {
+      moduleId: filterModule === '' ? undefined : filterModule,
+      itemId: filterItem === '' ? undefined : filterItem,
+    },
+  );
 
   // 오늘·주 시작·달 이름은 사용자 표시 설정을 따른다(D-81). 브라우저 지역 시간에 기대지 않는다.
   const settings = displaySettings();
@@ -48,6 +96,7 @@
           range.from,
           range.to,
           zone,
+          data.dates,
         ),
   );
   const itemTitle = $derived(new Map((data?.items ?? []).map((i) => [i.id, i.title])));
@@ -55,13 +104,19 @@
   const title = $derived(formatMonth(month, settings));
 
   // 달·워크스페이스가 바뀌거나 일정이 바뀌면(reloadKey) 다시 불러온다.
-  const request = $derived({ from: range.from, to: range.to, ws: workspace.id, key: reloadKey });
+  const request = $derived({
+    from: range.from,
+    to: range.to,
+    ws: workspace.id,
+    scope: effectiveScope,
+    key: reloadKey,
+  });
 
   $effect(() => {
-    const { from, to, ws } = request;
+    const { from, to, ws, scope: within } = request;
     let cancelled = false;
     api
-      .calendar(ws, from, to, zone)
+      .calendar(ws, from, to, zone, within)
       .then((c) => {
         if (cancelled) return;
         data = c;
@@ -91,6 +146,7 @@
       router.navigate(
         itemTaskPath(workspace.id, entry.projected.item_id, entry.projected.root_task_id),
       );
+    else if (entry.kind === 'date') router.navigate(itemPath(workspace.id, entry.date.item_id));
     else {
       openEvent = entry.event.id;
       openOccurrence = entry.event.recurrence === null ? undefined : entry.occurrence;
@@ -103,7 +159,9 @@
         ? entry.task.id
         : entry.kind === 'projected'
           ? `${entry.projected.series_id}:${entry.projected.occurrence}`
-          : `${entry.event.id}:${entry.occurrence}`
+          : entry.kind === 'date'
+            ? `${entry.date.kind}:${entry.date.id}`
+            : `${entry.event.id}:${entry.occurrence}`
     }`;
   const itemOf = (entry: CalendarEntry): string =>
     itemTitle.get(
@@ -111,14 +169,22 @@
         ? entry.task.item_id
         : entry.kind === 'projected'
           ? entry.projected.item_id
-          : entry.event.item_id,
+          : entry.kind === 'date'
+            ? entry.date.item_id
+            : entry.event.item_id,
     ) ?? '';
+  const fieldBox =
+    'h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
   const WEEKDAYS = weekdays(settings).map((w) => w.short);
 </script>
 
 <section class="flex flex-col gap-3" aria-labelledby="calendar-heading">
   <div class="flex flex-wrap items-center gap-2">
-    <h1 id="calendar-heading" class="text-xl font-semibold" tabindex="-1">{title}</h1>
+    {#if embedded}
+      <h2 id="calendar-heading" class="text-lg font-semibold" tabindex="-1">달력 · {title}</h2>
+    {:else}
+      <h1 id="calendar-heading" class="text-xl font-semibold" tabindex="-1">{title}</h1>
+    {/if}
     <div class="ml-auto flex gap-1" role="group" aria-label="달 이동">
       <Button size="sm" variant="outline" onclick={() => (month = shiftMonth(month, -1))}
         >← 이전 달</Button
@@ -131,8 +197,29 @@
       >
     </div>
   </div>
+  {#if scope === undefined}
+    <div class="flex flex-wrap items-end gap-2" role="group" aria-label="달력 범위">
+      <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+        모듈
+        <select class={fieldBox} bind:value={filterModule}>
+          <option value="">전체</option>
+          {#each modules as m (m.id)}<option value={m.id}>{m.name} ({m.key})</option>{/each}
+        </select>
+      </label>
+      {#if filterModule !== ''}
+        <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+          항목
+          <select class={fieldBox} bind:value={filterItem}>
+            <option value="">모듈 전체</option>
+            {#each moduleItems as it (it.id)}<option value={it.id}>{it.title}</option>{/each}
+          </select>
+        </label>
+      {/if}
+    </div>
+  {/if}
   <p class="text-sm text-muted-foreground">
-    볼 수 있는 업무의 마감일(◆ 마일스톤)과 일정을 보입니다. 시각은 {zone} 기준입니다.
+    볼 수 있는 업무의 마감일(◆ 마일스톤)·일정·수강·공부 계획일·제출·마감일을 보입니다. "(내 계획)"은
+    나만 보는 날짜입니다. 시각은 {zone} 기준입니다.
   </p>
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive">{error}</p>

@@ -125,3 +125,40 @@ describe('month calendar', () => {
     expect(map.has('2026-11-06')).toBe(false);
   });
 });
+
+describe('calendar date sources (D-80)', () => {
+  it('places plan and record dates on their day and marks personal plans', () => {
+    const map = entriesByDay([], [], [], [], '2026-11-01', '2026-11-30', 'Asia/Seoul', [
+      {
+        kind: 'episode',
+        id: 'ep',
+        item_id: 'c',
+        title: '2. 행렬',
+        date: '2026-11-10',
+        personal: true,
+        done: false,
+      },
+      {
+        kind: 'revision_due',
+        id: 'r',
+        item_id: 'p',
+        title: '학회 투고',
+        date: '2026-11-12',
+        personal: false,
+        done: false,
+      },
+      {
+        kind: 'deliverable',
+        id: 'd',
+        item_id: 'p',
+        title: '밖',
+        date: '2026-12-01',
+        personal: false,
+        done: true,
+      },
+    ]);
+    expect(map.get('2026-11-10')?.map((e) => e.label)).toEqual(['수강(내 계획) 2. 행렬']);
+    expect(map.get('2026-11-12')?.map((e) => e.label)).toEqual(['수정 마감 학회 투고']);
+    expect(map.has('2026-12-01')).toBe(false);
+  });
+});

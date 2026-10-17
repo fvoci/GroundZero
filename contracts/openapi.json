@@ -8693,6 +8693,32 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "module_id",
+            "in": "query",
+            "description": "이 모듈의 항목만.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "query",
+            "description": "이 항목만.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -10467,9 +10493,17 @@
           "projected_tasks",
           "events",
           "occurrences",
+          "dates",
           "items"
         ],
         "properties": {
+          "dates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarDate"
+            },
+            "description": "강의·스터디 계획일, 투고·산출물 날짜(D-80)."
+          },
           "events": {
             "type": "array",
             "items": {
@@ -10502,6 +10536,57 @@
             }
           }
         }
+      },
+      "CalendarDate": {
+        "type": "object",
+        "description": "달력의 날짜 하나(D-80).",
+        "required": [
+          "kind",
+          "id",
+          "item_id",
+          "title",
+          "date",
+          "personal",
+          "done"
+        ],
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "done": {
+            "type": "boolean",
+            "description": "끝난 것(내가 이수·완료, 게재·거절·승인·완료 상태)."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "원래 대상(회차·스터디 단위·기록)의 id."
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CalendarDateKind"
+          },
+          "personal": {
+            "type": "boolean",
+            "description": "내 계획일이면 참(본인만 보는 개인 일정), 공통 계획일·기록 날짜면 거짓."
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "CalendarDateKind": {
+        "type": "string",
+        "description": "업무·일정 밖의 날짜 출처(D-80). 원래 자리의 날짜를 그대로 읽는다.",
+        "enum": [
+          "episode",
+          "study_unit",
+          "submission",
+          "revision_due",
+          "deliverable"
+        ]
       },
       "CalendarItem": {
         "type": "object",

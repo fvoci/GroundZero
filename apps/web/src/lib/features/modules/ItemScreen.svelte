@@ -14,6 +14,7 @@
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
   import ItemEvents from '$lib/features/events/ItemEvents.svelte';
+  import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
   import TemplatePicker from '$lib/features/documents/TemplatePicker.svelte';
   import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
   import StudyPanel from '$lib/features/study/StudyPanel.svelte';
@@ -318,6 +319,7 @@
     </section>
     <TaskBoard item={current} {workspaces} openTaskId={taskId} />
     <ItemEvents item={current} />
+    <CalendarScreen {workspace} scope={{ itemId: current.id }} embedded />
     <Backlinks kind="item" id={current.id} {workspaces} />
   </section>
 {/if}

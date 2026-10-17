@@ -369,6 +369,8 @@ async fn api_not_found() -> AppError {
         events::EventConflict,
         events::CalendarTask,
         events::CalendarItem,
+        events::CalendarDate,
+        events::CalendarDateKind,
         events::Calendar,
         events::EventOccurrence,
         events::ProjectedTask,

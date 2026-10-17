@@ -1,5 +1,7 @@
 // 달력 배치 (D-31, D-50, D-81). 달 보기는 사용자의 한 주 시작(월·일)부터 6주(42일). 날짜 칸마다 업무(마감·시작)와 일정을 놓는다.
 import type {
+  CalendarDateKind,
+  CalendarDateView,
   CalendarTaskView,
   EventOccurrenceView,
   EventView,
@@ -13,6 +15,7 @@ import { clock, dayIn } from './time';
 export type CalendarEntry =
   | { kind: 'task'; task: CalendarTaskView; label: string }
   | { kind: 'projected'; projected: ProjectedTaskView; label: string }
+  | { kind: 'date'; date: CalendarDateView; label: string }
   | {
       kind: 'event';
       event: EventView;
@@ -62,6 +65,7 @@ export function entriesByDay(
   from: string,
   to: string,
   viewerZone: string,
+  dates: readonly CalendarDateView[] = [],
 ): Map<string, CalendarEntry[]> {
   const out = new Map<string, CalendarEntry[]>();
   const push = (day: string, entry: CalendarEntry): void => {
@@ -106,6 +110,14 @@ export function entriesByDay(
     const what = task.milestone ? '◆' : task.due_date === null ? '시작' : '마감';
     push(day, { kind: 'task', task, label: `${what} ${task.reference ?? ''} ${task.title}` });
   }
+  for (const d of dates) {
+    if (d.date < from || d.date > to) continue;
+    push(d.date, {
+      kind: 'date',
+      date: d,
+      label: `${DATE_LABEL[d.kind]}${d.personal ? '(내 계획)' : ''} ${d.title}`,
+    });
+  }
   for (const list of out.values()) {
     list.sort((a, b) => {
       const ka = a.kind === 'event' ? `0${a.sortKey}` : '1';
@@ -124,3 +136,12 @@ export function startOfWeek(day: string, weekStart: WeekStart): string {
   const lead = weekStart === 'mon' ? (weekday + 6) % 7 : weekday;
   return fromDayNumber(n - lead);
 }
+
+/** 업무·일정 밖 날짜(D-80)의 머리말. */
+export const DATE_LABEL: Record<CalendarDateKind, string> = {
+  episode: '수강',
+  study_unit: '공부',
+  submission: '제출 예정',
+  revision_due: '수정 마감',
+  deliverable: '산출물 마감',
+};
