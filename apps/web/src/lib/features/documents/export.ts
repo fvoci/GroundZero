@@ -46,7 +46,16 @@ export function toJson(node: unknown): JSONContent {
   if (typeof o.type === 'string') out.type = o.type;
   if (typeof o.text === 'string') out.text = o.text;
   if (typeof o.attrs === 'object' && o.attrs !== null) out.attrs = { ...o.attrs };
-  if (Array.isArray(o.marks)) out.marks = o.marks.map((m) => toJson(m));
+  if (Array.isArray(o.marks)) {
+    // 표시는 종류 이름이 있어야 한다. 없는 것은 버린다(편집기도 읽지 못한다).
+    out.marks = o.marks.flatMap((m) => {
+      const mark = toJson(m);
+      if (typeof mark.type !== 'string') return [];
+      return [
+        mark.attrs === undefined ? { type: mark.type } : { type: mark.type, attrs: mark.attrs },
+      ];
+    });
+  }
   if (Array.isArray(o.content)) out.content = o.content.map((c) => toJson(c));
   return out;
 }
