@@ -193,6 +193,7 @@ async fn api_not_found() -> AppError {
         trash::trash_document,
         trash::trash_task,
         trash::trash_item,
+        trash::trash_module,
         trash::workspace_trash,
         trash::my_trash,
         trash::restore,
@@ -266,6 +267,7 @@ async fn api_not_found() -> AppError {
         modules::create_module,
         modules::update_module,
         modules::archive_module,
+        modules::set_description,
         modules::list_items,
         modules::create_item,
         modules::get_item,
@@ -488,6 +490,7 @@ async fn api_not_found() -> AppError {
         modules::Module,
         modules::CreateModule,
         modules::UpdateModule,
+        modules::SetModuleDescription,
         modules::SetArchived,
         modules::Item,
         modules::CreateItem,
@@ -608,6 +611,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/modules/{module_id}/icon",
             put(item_profile::set_module_icon),
+        )
+        .route(
+            "/modules/{module_id}/description",
+            put(modules::set_description),
         )
         .route(
             "/items/{item_id}/course",
@@ -840,7 +847,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/modules/{module_id}",
-            get(modules::get_module).put(modules::update_module),
+            get(modules::get_module)
+                .put(modules::update_module)
+                .delete(trash::trash_module),
         )
         .route(
             "/modules/{module_id}/archived",

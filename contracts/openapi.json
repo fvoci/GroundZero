@@ -5918,6 +5918,56 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "trash"
+        ],
+        "summary": "모듈 지우기(관리자, D-78). 모듈 행만 휴지통에 들고 그 아래 항목은 모듈과 함께 보이지 않는다. 되살리면 모듈만\n돌아오고, 그 전에 따로 지운 항목은 자기 휴지통 묶음에 그대로 남는다.",
+        "operationId": "trash_module",
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trashed"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/modules/{module_id}/archived": {
@@ -5955,6 +6005,78 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Module"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/modules/{module_id}/description": {
+      "put": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "모듈 설명 바꾸기(관리자, D-78).",
+        "operationId": "set_module_description",
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetModuleDescription"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Module"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -12612,12 +12734,17 @@
           "key",
           "previous_keys",
           "archived",
-          "icon"
+          "icon",
+          "description"
         ],
         "properties": {
           "archived": {
             "type": "boolean",
             "description": "보관됨: 읽기 전용이며 번호·키는 그대로 남는다."
+          },
+          "description": {
+            "type": "string",
+            "description": "설명(관리자가 쓰는 글, 없으면 빈 문자열)."
           },
           "icon": {
             "type": "string",
@@ -14242,6 +14369,19 @@
           }
         }
       },
+      "SetModuleDescription": {
+        "type": "object",
+        "description": "모듈 설명 바꾸기 요청(관리자).",
+        "required": [
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "빈 문자열이면 지운다."
+          }
+        }
+      },
       "SetModuleIcon": {
         "type": "object",
         "description": "모듈 아이콘(관리자).",
@@ -15393,7 +15533,8 @@
           "document",
           "task",
           "event",
-          "file"
+          "file",
+          "module"
         ]
       },
       "Trashed": {

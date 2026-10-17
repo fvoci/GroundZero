@@ -1405,7 +1405,11 @@ export interface paths {
         /** 모듈 이름·키 변경(관리자). 옛 키는 예전 키로 남아 다른 모듈이 쓰지 못한다. */
         put: operations["update_module"];
         post?: never;
-        delete?: never;
+        /**
+         * 모듈 지우기(관리자, D-78). 모듈 행만 휴지통에 들고 그 아래 항목은 모듈과 함께 보이지 않는다. 되살리면 모듈만
+         *     돌아오고, 그 전에 따로 지운 항목은 자기 휴지통 묶음에 그대로 남는다.
+         */
+        delete: operations["trash_module"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1421,6 +1425,23 @@ export interface paths {
         get?: never;
         /** 모듈 보관·해제(관리자). 보관하면 항목과 문서가 읽기 전용이 된다. */
         put: operations["archive_module"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/modules/{module_id}/description": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 모듈 설명 바꾸기(관리자, D-78). */
+        put: operations["set_module_description"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3231,6 +3252,8 @@ export interface components {
         Module: {
             /** @description 보관됨: 읽기 전용이며 번호·키는 그대로 남는다. */
             archived: boolean;
+            /** @description 설명(관리자가 쓰는 글, 없으면 빈 문자열). */
+            description: string;
             /** @description 아이콘(그림 문자 등, 없으면 빈 문자열). */
             icon: string;
             id: components["schemas"]["ModuleId"];
@@ -3785,6 +3808,11 @@ export interface components {
             mark: components["schemas"]["MarkKind"];
             on: boolean;
         };
+        /** @description 모듈 설명 바꾸기 요청(관리자). */
+        SetModuleDescription: {
+            /** @description 빈 문자열이면 지운다. */
+            description: string;
+        };
         /** @description 모듈 아이콘(관리자). */
         SetModuleIcon: {
             icon: string;
@@ -4199,7 +4227,7 @@ export interface components {
          * @description 휴지통 묶음의 맨 위 대상 종류.
          * @enum {string}
          */
-        TrashKind: "item" | "document" | "task" | "event" | "file";
+        TrashKind: "item" | "document" | "task" | "event" | "file" | "module";
         /** @description 지운 결과(되살릴 때 쓰는 휴지통 묶음). */
         Trashed: {
             /** Format: uuid */
@@ -8518,6 +8546,43 @@ export interface operations {
             };
         };
     };
+    trash_module: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trashed"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     archive_module: {
         parameters: {
             query?: never;
@@ -8539,6 +8604,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Module"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_module_description: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetModuleDescription"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Module"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             403: {

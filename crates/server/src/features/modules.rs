@@ -81,6 +81,8 @@ pub struct Module {
     pub archived: bool,
     /// 아이콘(그림 문자 등, 없으면 빈 문자열).
     pub icon: String,
+    /// 설명(관리자가 쓰는 글, 없으면 빈 문자열).
+    pub description: String,
 }
 
 /// 모듈 생성 요청(관리자).
@@ -203,17 +205,18 @@ type ModuleRow = (
     bool,
     Vec<String>,
     String,
+    String,
 );
 
 const MODULE_SELECT: &str =
     "SELECT m.id, m.workspace_id, m.kind, m.name, k.key, m.archived_at IS NOT NULL,
         coalesce((SELECT array_agg(o.key ORDER BY o.created_at) FROM module_keys o
                   WHERE o.module_id = m.id AND o.retired_at IS NOT NULL), '{}'),
-        m.icon
+        m.icon, m.description
  FROM modules m JOIN module_keys k ON k.module_id = m.id AND k.retired_at IS NULL";
 
 fn to_module(
-    (id, workspace_id, kind, name, key, archived, previous_keys, icon): ModuleRow,
+    (id, workspace_id, kind, name, key, archived, previous_keys, icon, description): ModuleRow,
 ) -> Result<Module, AppError> {
     let kind = ModuleKind::parse(&kind)
         .ok_or_else(|| AppError::Config(format!("unknown module kind in database: {kind}")))?;
@@ -226,6 +229,7 @@ fn to_module(
         previous_keys,
         archived,
         icon,
+        description,
     })
 }
 
@@ -437,6 +441,37 @@ pub async fn archive_module(
     sqlx::query("SELECT app_archive_module($1, $2)")
         .bind(id)
         .bind(input.archived)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    let module = load_module(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(module))
+}
+
+/// 모듈 설명 바꾸기 요청(관리자).
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetModuleDescription {
+    /// 빈 문자열이면 지운다.
+    pub description: String,
+}
+
+/// 모듈 설명 바꾸기(관리자, D-78).
+#[utoipa::path(put, path = "/api/modules/{module_id}/description", operation_id = "set_module_description",
+    params(("module_id" = String, Path, format = Uuid)), request_body = SetModuleDescription,
+    responses((status = 200, body = Module), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody)), tag = "modules")]
+pub async fn set_description(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<ModuleId>,
+    Json(input): Json<SetModuleDescription>,
+) -> Result<Json<Module>, AppError> {
+    let description = validate_description(&input.description)?;
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_set_module_description($1, $2)")
+        .bind(id)
+        .bind(&description)
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

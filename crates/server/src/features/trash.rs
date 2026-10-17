@@ -18,7 +18,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::member_role;
 use crate::http::AppState;
-use crate::ids::{DocumentId, ItemId, UserId, WorkspaceId};
+use crate::ids::{DocumentId, ItemId, ModuleId, UserId, WorkspaceId};
 
 /// 지운 결과(되살릴 때 쓰는 휴지통 묶음).
 #[derive(Debug, Serialize, ToSchema)]
@@ -37,6 +37,8 @@ pub enum TrashKind {
     Event,
     /// 첨부 파일(모든 버전).
     File,
+    /// 모듈(그 아래 항목은 모듈과 함께 보이지 않음, D-78).
+    Module,
 }
 
 impl TrashKind {
@@ -47,6 +49,7 @@ impl TrashKind {
             "task" => Some(Self::Task),
             "event" => Some(Self::Event),
             "file" => Some(Self::File),
+            "module" => Some(Self::Module),
             _ => None,
         }
     }
@@ -203,6 +206,21 @@ pub async fn trash_item(
     Path(id): Path<ItemId>,
 ) -> Result<Json<Trashed>, AppError> {
     let batch_id = trash_call(&state, user, "SELECT app_trash_item($1)", id.0).await?;
+    Ok(Json(Trashed { batch_id }))
+}
+
+/// 모듈 지우기(관리자, D-78). 모듈 행만 휴지통에 들고 그 아래 항목은 모듈과 함께 보이지 않는다. 되살리면 모듈만
+/// 돌아오고, 그 전에 따로 지운 항목은 자기 휴지통 묶음에 그대로 남는다.
+#[utoipa::path(delete, path = "/api/modules/{module_id}", operation_id = "trash_module",
+    params(("module_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = Trashed), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)),
+    tag = "trash")]
+pub async fn trash_module(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<ModuleId>,
+) -> Result<Json<Trashed>, AppError> {
+    let batch_id = trash_call(&state, user, "SELECT app_trash_module($1)", id.0).await?;
     Ok(Json(Trashed { batch_id }))
 }
 

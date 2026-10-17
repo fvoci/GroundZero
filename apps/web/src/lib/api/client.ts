@@ -437,6 +437,7 @@ export function parseModule(value: Json): Module {
     previous_keys: strings(o.previous_keys),
     archived: bool(o, 'archived'),
     icon: str(o, 'icon'),
+    description: str(o, 'description'),
   };
 }
 
@@ -1532,7 +1533,7 @@ function parseMarkState(value: Json): { pin: boolean; favorite: boolean } {
 
 export interface TrashEntryView {
   id: string;
-  kind: 'item' | 'document' | 'task' | 'event' | 'file';
+  kind: 'item' | 'document' | 'task' | 'event' | 'file' | 'module';
   root_id: string;
   title: string;
   member_count: number;
@@ -1567,7 +1568,8 @@ function parseTrash(value: Json): TrashView {
         kind !== 'document' &&
         kind !== 'task' &&
         kind !== 'event' &&
-        kind !== 'file'
+        kind !== 'file' &&
+        kind !== 'module'
       )
         throw new TypeError(`unknown trash kind ${kind}`);
       return {
@@ -2463,6 +2465,11 @@ export const api = {
     expectOk('PUT', `/api/items/${encodeURIComponent(itemId)}/template`, none, { template }),
   setModuleIcon: (moduleId: string, icon: string) =>
     expectOk('PUT', `/api/modules/${encodeURIComponent(moduleId)}/icon`, none, { icon }),
+  /** 모듈 설명(관리자, D-78). 빈 문자열이면 지운다. */
+  setModuleDescription: (moduleId: string, description: string) =>
+    expectOk('PUT', `/api/modules/${encodeURIComponent(moduleId)}/description`, parseModule, {
+      description,
+    }),
   assignable: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/assignable`, (v) =>
       parseList(v, parseAssignee),
@@ -2590,6 +2597,9 @@ export const api = {
     expectOk('DELETE', `/api/documents/${encodeURIComponent(id)}`, parseBatch),
   trashTask: (id: string) => expectOk('DELETE', `/api/tasks/${encodeURIComponent(id)}`, parseBatch),
   trashItem: (id: string) => expectOk('DELETE', `/api/items/${encodeURIComponent(id)}`, parseBatch),
+  /** 모듈을 휴지통으로(관리자, D-78). 항목은 모듈과 함께 보이지 않고, 되살리면 모듈만 돌아온다. */
+  trashModule: (id: string) =>
+    expectOk('DELETE', `/api/modules/${encodeURIComponent(id)}`, parseBatch),
   /** 워크스페이스 휴지통, 또는 null이면 내 개인 노트 휴지통. */
   trash: (workspaceId: string | null) =>
     expectOk(
