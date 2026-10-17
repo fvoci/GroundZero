@@ -7,6 +7,9 @@
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
 
+  import type { OfficeKind } from './office';
+  import { officeKind } from './office';
+  import OfficePreview from './OfficePreview.svelte';
   import { formatBytes, uploadFile } from './upload';
 
   interface Props {
@@ -34,6 +37,10 @@
   let versions = $state<{ id: string; list: FileVersionView[] } | undefined>(undefined);
   let renaming = $state<{ id: string; name: string } | undefined>(undefined);
   let reloadKey = $state(0);
+  // 열려 있는 Office 미리보기(DOCX·XLSX, D-71).
+  let office = $state<{ id: string; name: string; size: number; kind: OfficeKind } | undefined>(
+    undefined,
+  );
   let picker = $state<HTMLInputElement | undefined>(undefined);
   let versionFor: string | undefined;
   let controller: AbortController | undefined;
@@ -211,6 +218,20 @@
                 rel="noopener"
                 aria-label={`${f.name} 미리보기`}>미리보기</Button
               >
+            {:else if f.can_download && officeKind(f.content_type, f.name) !== undefined}
+              {@const kind = officeKind(f.content_type, f.name)}
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={`${f.name} 미리보기`}
+                aria-expanded={office?.id === f.id}
+                onclick={() => {
+                  office =
+                    office?.id === f.id || kind === undefined
+                      ? undefined
+                      : { id: f.id, name: f.name, size: f.size, kind };
+                }}>미리보기</Button
+              >
             {/if}
             <Button
               size="sm"
@@ -283,5 +304,18 @@
         </li>
       {/each}
     </ul>
+  {/if}
+  {#if office !== undefined}
+    {#key office.id}
+      <OfficePreview
+        fileId={office.id}
+        name={office.name}
+        size={office.size}
+        kind={office.kind}
+        onclose={() => {
+          office = undefined;
+        }}
+      />
+    {/key}
   {/if}
 </section>
