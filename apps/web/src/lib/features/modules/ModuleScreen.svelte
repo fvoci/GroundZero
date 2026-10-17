@@ -3,7 +3,7 @@
   import type { Module, Workspace } from '@fvoci/api-client';
 
   import type { ItemView } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { api, ApiError, newRequestId } from '$lib/api/client';
   import { forgetReferences } from '$lib/features/references/resolver';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { itemPath, router } from '$lib/router.svelte';
@@ -91,6 +91,35 @@
     }
   }
 
+  // 템플릿에서 만들기(D-33): 새로 시작(상태·날짜·체크 비우기)으로 복제한다.
+  const templates = $derived(items.filter((i) => i.is_template && !i.archived));
+  let templateId = $state('');
+  let templateTitle = $state('');
+  let templateError = $state<string | undefined>(undefined);
+  let templateRequest = newRequestId();
+
+  async function fromTemplate(moduleId: string): Promise<void> {
+    const source = templateId === '' ? templates[0]?.id : templateId;
+    if (source === undefined || templateTitle.trim() === '') {
+      templateError = '템플릿과 새 항목 제목을 고르세요.';
+      return;
+    }
+    templateError = undefined;
+    try {
+      const copied = await api.copyItem(
+        source,
+        templateRequest,
+        moduleId,
+        templateTitle.trim(),
+        true,
+      );
+      templateRequest = newRequestId();
+      router.navigate(itemPath(workspace.id, copied.item_id));
+    } catch (e: unknown) {
+      templateError = e instanceof ApiError ? e.message : '만들지 못했습니다.';
+    }
+  }
+
   async function toggleArchive(): Promise<void> {
     if (mod === undefined) return;
     try {
@@ -145,6 +174,7 @@
               {/if}
               {#if it.visibility === 'private'}<Badge variant="outline">비공개</Badge>{/if}
               {#if it.archived}<Badge variant="secondary">보관됨</Badge>{/if}
+              {#if it.is_template}<Badge variant="secondary">템플릿</Badge>{/if}
             </a>
           </li>
         {/each}
@@ -166,6 +196,35 @@
         새 항목은 비공개로 만들어집니다. 만든 사람과 관리자만 보며, 항목 화면에서 공개할 수
         있습니다.
       </p>
+      {#if templates.length > 0}
+        <form
+          class="flex flex-wrap items-end gap-2"
+          aria-label="템플릿에서 만들기"
+          onsubmit={(e: SubmitEvent) => {
+            e.preventDefault();
+            void fromTemplate(current.id);
+          }}
+        >
+          <div class="flex flex-col gap-1">
+            <Label for="template-source">템플릿</Label>
+            <select
+              id="template-source"
+              class="h-9 rounded-md border border-input bg-transparent px-3 text-base"
+              bind:value={templateId}
+            >
+              {#each templates as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
+            </select>
+          </div>
+          <div class="flex min-w-40 flex-1 flex-col gap-1">
+            <Label for="template-title">템플릿으로 만들 항목 제목</Label>
+            <Input id="template-title" bind:value={templateTitle} maxlength={200} />
+          </div>
+          <Button type="submit" variant="outline">템플릿에서 만들기</Button>
+        </form>
+        {#if templateError !== undefined}
+          <p class="text-sm text-destructive" role="alert">{templateError}</p>
+        {/if}
+      {/if}
     {/if}
 
     {#if isAdmin}

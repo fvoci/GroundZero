@@ -2984,6 +2984,88 @@
         }
       }
     },
+    "/api/items/{item_id}/copy": {
+      "post": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "항목 복제(볼 수 있는 사람, 대상 모듈에 항목을 만들 수 있어야 함). 담당자·반복 규칙·기록·첨부·진도는 옮기지\n않는다. 복제를 허용하지 않은 문서는 건너뛴다(D-20).",
+        "operationId": "copy_item",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyItem"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopiedItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/course": {
       "get": {
         "tags": [
@@ -4238,6 +4320,71 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/template": {
+      "put": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "템플릿 표시·해제(쓸 수 있는 사람).",
+        "operationId": "set_item_template",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTemplate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
           },
           "403": {
             "description": "",
@@ -9677,6 +9824,24 @@
           }
         }
       },
+      "CopiedItem": {
+        "type": "object",
+        "description": "복제 결과.",
+        "required": [
+          "item_id",
+          "skipped_documents"
+        ],
+        "properties": {
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "skipped_documents": {
+            "type": "integer",
+            "format": "int32",
+            "description": "복제를 허용하지 않아 건너뛴 문서 수."
+          }
+        }
+      },
       "CopyDocument": {
         "type": "object",
         "description": "복제 요청. `target_workspace_id`가 없으면 내 개인 노트로 만든다.",
@@ -9701,6 +9866,31 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "CopyItem": {
+        "type": "object",
+        "description": "항목 복제(D-33). 같은 워크스페이스의 같은 종류 모듈 안에 비공개 새 항목을 만든다.",
+        "required": [
+          "request_id",
+          "module_id"
+        ],
+        "properties": {
+          "module_id": {
+            "$ref": "#/components/schemas/ModuleId"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reset": {
+            "type": "boolean",
+            "description": "새로 시작(템플릿 사용): 업무 상태·날짜·체크 표시와 항목 상태·기간을 비운다."
+          },
+          "title": {
+            "type": "string",
+            "description": "비우면 원래 제목."
           }
         }
       },
@@ -11129,7 +11319,8 @@
           "access",
           "archived",
           "updated_at",
-          "status"
+          "status",
+          "is_template"
         ],
         "properties": {
           "access": {
@@ -11150,6 +11341,10 @@
           },
           "id": {
             "$ref": "#/components/schemas/ItemId"
+          },
+          "is_template": {
+            "type": "boolean",
+            "description": "재사용 템플릿으로 표시됨(D-33)."
           },
           "module_id": {
             "$ref": "#/components/schemas/ModuleId"
@@ -13238,6 +13433,18 @@
           "timezone": {
             "type": "string",
             "description": "\"오늘\"을 정하는 시간대(IANA). 공동 반복은 지정한 시간대를 따른다(D-50)."
+          }
+        }
+      },
+      "SetTemplate": {
+        "type": "object",
+        "description": "템플릿 표시.",
+        "required": [
+          "template"
+        ],
+        "properties": {
+          "template": {
+            "type": "boolean"
           }
         }
       },

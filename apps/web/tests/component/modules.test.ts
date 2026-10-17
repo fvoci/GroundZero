@@ -76,6 +76,7 @@ describe('module validation', () => {
       status: 'active',
       starts_on: null,
       ends_on: '2026-12-31',
+      is_template: false,
     });
     expect(parsed.reference).toBe('DEV-1');
     expect(parsed.ends_on).toBe('2026-12-31');

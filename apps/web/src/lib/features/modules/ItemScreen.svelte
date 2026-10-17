@@ -24,6 +24,7 @@
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
 
+  import ItemCopy from './ItemCopy.svelte';
   import ItemProfilePanel from './ItemProfilePanel.svelte';
 
   interface Props {
@@ -109,6 +110,16 @@
     }
   }
 
+  async function toggleTemplate(): Promise<void> {
+    if (item === undefined) return;
+    try {
+      await api.setItemTemplate(item.id, !item.is_template);
+      fill(await api.item(item.id));
+    } catch (e: unknown) {
+      formError = e instanceof ApiError ? e.message : '바꾸지 못했습니다.';
+    }
+  }
+
   async function toggleArchive(): Promise<void> {
     if (item === undefined) return;
     try {
@@ -146,6 +157,7 @@
         >{current.visibility === 'private' ? '비공개' : '워크스페이스 공개'}</Badge
       >
       {#if current.archived}<Badge variant="secondary">보관됨 · 읽기 전용</Badge>{/if}
+      {#if current.is_template}<Badge variant="secondary">템플릿</Badge>{/if}
       <div class="ml-auto flex flex-wrap items-center gap-1">
         <MarkButtons kind="item" id={current.id} />
         {#if isOwner}
@@ -224,6 +236,16 @@
         }}
       />
       <RecordsPanel item={current} kind={mod.kind} canWrite={canEdit} />
+      {#if workspace.role !== 'reader'}
+        <div class="flex flex-wrap items-start gap-2">
+          <ItemCopy item={current} module={mod} />
+          {#if canEdit}
+            <Button size="sm" variant="outline" onclick={() => void toggleTemplate()}
+              >{current.is_template ? '템플릿 해제' : '템플릿으로 표시'}</Button
+            >
+          {/if}
+        </div>
+      {/if}
     {/if}
 
     {#if mod?.kind === 'course'}

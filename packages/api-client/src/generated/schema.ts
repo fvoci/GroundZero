@@ -673,6 +673,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 항목 복제(볼 수 있는 사람, 대상 모듈에 항목을 만들 수 있어야 함). 담당자·반복 규칙·기록·첨부·진도는 옮기지
+         *     않는다. 복제를 허용하지 않은 문서는 건너뛴다(D-20).
+         */
+        post: operations["copy_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/course": {
         parameters: {
             query?: never;
@@ -928,6 +948,23 @@ export interface paths {
         put?: never;
         /** 업무 만들기(항목 쓰기 권한). 같은 `request_id`는 같은 업무를 돌려준다. */
         post: operations["create_task"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 템플릿 표시·해제(쓸 수 있는 사람). */
+        put: operations["set_item_template"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2319,12 +2356,31 @@ export interface components {
             current: components["schemas"]["Document"];
             error: string;
         };
+        /** @description 복제 결과. */
+        CopiedItem: {
+            item_id: components["schemas"]["ItemId"];
+            /**
+             * Format: int32
+             * @description 복제를 허용하지 않아 건너뛴 문서 수.
+             */
+            skipped_documents: number;
+        };
         /** @description 복제 요청. `target_workspace_id`가 없으면 내 개인 노트로 만든다. */
         CopyDocument: {
             /** Format: uuid */
             request_id: string;
             target_workspace_id?: null | components["schemas"]["WorkspaceId"];
             title: string;
+        };
+        /** @description 항목 복제(D-33). 같은 워크스페이스의 같은 종류 모듈 안에 비공개 새 항목을 만든다. */
+        CopyItem: {
+            module_id: components["schemas"]["ModuleId"];
+            /** Format: uuid */
+            request_id: string;
+            /** @description 새로 시작(템플릿 사용): 업무 상태·날짜·체크 표시와 항목 상태·기간을 비운다. */
+            reset?: boolean;
+            /** @description 비우면 원래 제목. */
+            title?: string;
         };
         /** @description 강좌: 정보·회차(번호순)·내 진도. */
         Course: {
@@ -2792,6 +2848,8 @@ export interface components {
             /** Format: date */
             ends_on?: string | null;
             id: components["schemas"]["ItemId"];
+            /** @description 재사용 템플릿으로 표시됨(D-33). */
+            is_template: boolean;
             module_id: components["schemas"]["ModuleId"];
             /** @description 예: `DEV-3`. 키를 볼 수 없으면 없다. */
             reference?: string | null;
@@ -3486,6 +3544,10 @@ export interface components {
             rule?: null | components["schemas"]["RecurrenceRule"];
             /** @description "오늘"을 정하는 시간대(IANA). 공동 반복은 지정한 시간대를 따른다(D-50). */
             timezone: string;
+        };
+        /** @description 템플릿 표시. */
+        SetTemplate: {
+            template: boolean;
         };
         /** @description 내 진행 바꾸기. */
         SetUnitProgress: {
@@ -6085,6 +6147,63 @@ export interface operations {
             };
         };
     };
+    copy_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopyItem"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CopiedItem"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     get_course: {
         parameters: {
             query?: never;
@@ -6945,6 +7064,53 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_item_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetTemplate"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             403: {
                 headers: {

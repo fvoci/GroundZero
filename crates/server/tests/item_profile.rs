@@ -364,3 +364,293 @@ async fn profile_fields_follow_the_module_kind() {
     .await;
     assert_eq!(m.json["icon"], "🏺");
 }
+
+/// 복제(D-33): 같은 종류 모듈로, 업무·하위 업무·체크리스트·선행 관계·문서 트리를 새 번호로. 새로 시작이면 상태·날짜·체크를
+/// 비운다. 복제를 허용하지 않은 남의 문서는 건너뛴다(D-20). 템플릿 표시.
+#[tokio::test]
+async fn items_copy_with_fresh_numbers_and_templates() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "항목 복제").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "writer").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let p1 = module(&app, &admin, &ws, "project", "ONE").await;
+    let p2 = module(&app, &admin, &ws, "project", "TWO").await;
+    let research = module(&app, &admin, &ws, "research", "RES").await;
+    let src = item(&app, &writer, &p1, "출시 준비").await;
+    send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{src}/members"),
+        Some(&writer),
+        Some(json!({ "user_ids": [mate.id.0, reader.id.0], "group_ids": [] })),
+    )
+    .await;
+
+    let task = |title: &str, parent: Option<&str>| {
+        let app = app.clone();
+        let writer = writer.clone();
+        let src = src.clone();
+        let body = json!({ "request_id": new_request_id(), "title": title, "parent_id": parent });
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &format!("/api/items/{src}/tasks"),
+                Some(&writer),
+                Some(body),
+            )
+            .await
+            .json
+        }
+    };
+    let a = task("설계", None).await;
+    let a_id = a["id"].as_str().unwrap().to_owned();
+    task("화면 설계", Some(&a_id)).await;
+    let b = task("구현", None).await;
+    let b_id = b["id"].as_str().unwrap().to_owned();
+    let done = send(&app, Method::PUT, &format!("/api/tasks/{a_id}"), Some(&writer), Some(json!({
+        "base_version": a["version"], "title": "설계", "description": "", "status": "done", "priority": "high",
+        "start_date": null, "due_date": "2026-11-01", "estimate_minutes": 120, "tags": ["ux"], "milestone": false,
+        "assignee_ids": [writer.id.0] }))).await;
+    assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
+    send(
+        &app,
+        Method::POST,
+        &format!("/api/tasks/{b_id}/checklist"),
+        Some(&writer),
+        Some(json!({
+        "items": [{ "request_id": new_request_id(), "text": "API", "checked": true },
+                  { "request_id": new_request_id(), "text": "화면" }] })),
+    )
+    .await;
+    let dep = send(
+        &app,
+        Method::PUT,
+        &format!("/api/tasks/{b_id}/predecessors/{a_id}"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert!(dep.status.is_success(), "{:?}", dep.json);
+    let doc = |user: &TestUser, title: &str| {
+        let app = app.clone();
+        let user = user.clone();
+        let src = src.clone();
+        let body = json!({ "request_id": new_request_id(), "title": title });
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &format!("/api/items/{src}/documents"),
+                Some(&user),
+                Some(body),
+            )
+            .await
+        }
+    };
+    let mine = doc(&writer, "요구사항").await;
+    assert_eq!(mine.status, StatusCode::CREATED, "{:?}", mine.json);
+    let theirs = doc(&mate, "남의 메모").await;
+    assert_eq!(theirs.status, StatusCode::CREATED, "{:?}", theirs.json);
+    // 팀 문서의 소유 권한은 관리자에게 있다. 작성자가 복제하려면 복제 허용이 필요하다(D-20).
+    let allow = send(
+        &app,
+        Method::PUT,
+        &format!(
+            "/api/documents/{}/settings",
+            mine.json["id"].as_str().unwrap()
+        ),
+        Some(&admin),
+        Some(json!({ "visibility": "workspace", "allow_copy": true })),
+    )
+    .await;
+    assert_eq!(allow.status, StatusCode::OK, "{:?}", allow.json);
+
+    // 다른 종류 모듈로는 400, 독자는 대상 모듈에 항목을 만들 수 없다.
+    let copy_uri = format!("/api/items/{src}/copy");
+    let body = |module: &str, reset: bool| {
+        json!({ "request_id": new_request_id(), "module_id": module,
+        "title": "", "reset": reset })
+    };
+    assert_eq!(
+        send(
+            &app,
+            Method::POST,
+            &copy_uri,
+            Some(&writer),
+            Some(body(&research, true))
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        send(
+            &app,
+            Method::POST,
+            &copy_uri,
+            Some(&reader),
+            Some(body(&p2, true))
+        )
+        .await
+        .status,
+        StatusCode::FORBIDDEN
+    );
+    let request = body(&p2, true);
+    let copied = send(
+        &app,
+        Method::POST,
+        &copy_uri,
+        Some(&writer),
+        Some(request.clone()),
+    )
+    .await;
+    assert_eq!(copied.status, StatusCode::CREATED, "{:?}", copied.json);
+    assert_eq!(copied.json["skipped_documents"], 1);
+    let new_id = copied.json["item_id"].as_str().unwrap().to_owned();
+    // 같은 요청 id면 같은 항목.
+    let again = send(&app, Method::POST, &copy_uri, Some(&writer), Some(request)).await;
+    assert_eq!(again.json["item_id"], copied.json["item_id"]);
+
+    let new_item = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{new_id}"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert_eq!(new_item.json["title"], "출시 준비");
+    assert_eq!(new_item.json["visibility"], "private");
+    assert_eq!(new_item.json["module_id"], p2.as_str());
+    // 새 항목은 비공개: 원래 항목의 멤버였던 사람도 보지 못한다.
+    assert_eq!(
+        send(
+            &app,
+            Method::GET,
+            &format!("/api/items/{new_id}"),
+            Some(&mate),
+            None
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+    let tasks = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{new_id}/tasks"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    let tasks = tasks.json.as_array().unwrap().clone();
+    assert_eq!(tasks.len(), 3, "{tasks:?}");
+    let by = |title: &str| tasks.iter().find(|t| t["title"] == title).unwrap().clone();
+    let (na, na1, nb) = (by("설계"), by("화면 설계"), by("구현"));
+    assert!(
+        na["reference"].as_str().unwrap().starts_with("TWO-"),
+        "{na:?}"
+    );
+    assert_eq!(na["status"], "todo");
+    assert!(na["due_date"].is_null());
+    assert_eq!(na["priority"], "high");
+    assert_eq!(na["estimate_minutes"], 120);
+    assert_eq!(na["assignees"], json!([]));
+    assert_eq!(na1["parent_id"], na["id"]);
+    assert_eq!(nb["predecessor_ids"], json!([na["id"]]));
+    assert_eq!(nb["checklist_total"], 2);
+    assert_eq!(nb["checklist_done"], 0);
+    let docs = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{new_id}/documents"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    let titles: Vec<&str> = docs
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| d["title"].as_str().unwrap())
+        .collect();
+    assert_eq!(titles, ["요구사항"]);
+
+    // 그대로 복제(새로 시작이 아님)는 상태·날짜를 지킨다.
+    let kept = send(
+        &app,
+        Method::POST,
+        &copy_uri,
+        Some(&writer),
+        Some(body(&p1, false)),
+    )
+    .await;
+    let kept_id = kept.json["item_id"].as_str().unwrap().to_owned();
+    let kept_tasks = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{kept_id}/tasks"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    let design = kept_tasks
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["title"] == "설계")
+        .unwrap()
+        .clone();
+    assert_eq!(design["status"], "done");
+    assert_eq!(design["due_date"], "2026-11-01");
+
+    // 템플릿 표시는 쓸 수 있는 사람이, 목록에 보인다.
+    let template = format!("/api/items/{src}/template");
+    assert_eq!(
+        send(
+            &app,
+            Method::PUT,
+            &template,
+            Some(&reader),
+            Some(json!({ "template": true }))
+        )
+        .await
+        .status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        send(
+            &app,
+            Method::PUT,
+            &template,
+            Some(&mate),
+            Some(json!({ "template": true }))
+        )
+        .await
+        .status,
+        StatusCode::NO_CONTENT
+    );
+    let list = send(
+        &app,
+        Method::GET,
+        &format!("/api/modules/{p1}/items"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    let listed = list
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["id"] == src.as_str())
+        .unwrap()
+        .clone();
+    assert_eq!(listed["is_template"], true);
+}

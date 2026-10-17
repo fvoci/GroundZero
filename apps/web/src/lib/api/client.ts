@@ -435,6 +435,7 @@ export function parseItem(value: Json): ItemView {
     status: itemStatus(str(o, 'status')),
     starts_on: optStr(o, 'starts_on'),
     ends_on: optStr(o, 'ends_on'),
+    is_template: bool(o, 'is_template'),
   };
 }
 
@@ -2295,6 +2296,19 @@ export const api = {
       user_ids: userIds,
       group_ids: groupIds,
     }),
+  /** 항목 복제. reset이면 업무 상태·날짜·체크와 항목 상태·기간을 비운다(템플릿 사용). */
+  copyItem: (itemId: string, requestId: string, moduleId: string, title: string, reset: boolean) =>
+    expectOk(
+      'POST',
+      `/api/items/${encodeURIComponent(itemId)}/copy`,
+      (v) => {
+        const o = rec(v, 'copied item');
+        return { item_id: str(o, 'item_id'), skipped_documents: int(o, 'skipped_documents') };
+      },
+      { request_id: requestId, module_id: moduleId, title, reset },
+    ),
+  setItemTemplate: (itemId: string, template: boolean) =>
+    expectOk('PUT', `/api/items/${encodeURIComponent(itemId)}/template`, none, { template }),
   setModuleIcon: (moduleId: string, icon: string) =>
     expectOk('PUT', `/api/modules/${encodeURIComponent(moduleId)}/icon`, none, { icon }),
   assignable: (itemId: string) =>

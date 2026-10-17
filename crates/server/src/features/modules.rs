@@ -132,6 +132,8 @@ pub struct Item {
     #[serde(with = "item_day::option")]
     #[schema(value_type = Option<String>, format = Date)]
     pub ends_on: Option<Date>,
+    /// 재사용 템플릿으로 표시됨(D-33).
+    pub is_template: bool,
 }
 
 /// 항목 생성 요청.
@@ -249,12 +251,13 @@ type ItemRow = (
     String,
     Option<Date>,
     Option<Date>,
+    bool,
 );
 
 const ITEM_SELECT: &str =
     "SELECT i.id, i.module_id, i.workspace_id, app_item_reference(i.id), i.title,
         i.description, i.visibility, app_item_access(i.id), i.archived_at IS NOT NULL, i.updated_at,
-        i.status, i.starts_on, i.ends_on
+        i.status, i.starts_on, i.ends_on, i.is_template
  FROM items i";
 
 fn to_item(
@@ -272,6 +275,7 @@ fn to_item(
         status,
         starts_on,
         ends_on,
+        is_template,
     ): ItemRow,
 ) -> Result<Item, AppError> {
     let access = Access::parse(&access)
@@ -290,6 +294,7 @@ fn to_item(
         status,
         starts_on,
         ends_on,
+        is_template,
     })
 }
 

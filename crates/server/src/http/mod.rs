@@ -226,6 +226,8 @@ async fn api_not_found() -> AppError {
         item_profile::set,
         item_profile::set_members,
         item_profile::set_module_icon,
+        item_profile::copy,
+        item_profile::set_template,
         courses::get,
         courses::set_details,
         courses::add_episodes,
@@ -430,6 +432,9 @@ async fn api_not_found() -> AppError {
         item_profile::SetItemProfile,
         item_profile::SetItemMembers,
         item_profile::SetModuleIcon,
+        item_profile::CopyItem,
+        item_profile::CopiedItem,
+        item_profile::SetTemplate,
         courses::CourseDetails,
         courses::MyProgress,
         courses::Episode,
@@ -554,6 +559,8 @@ pub fn router(state: AppState) -> Router {
             get(item_profile::get).put(item_profile::set),
         )
         .route("/items/{item_id}/members", put(item_profile::set_members))
+        .route("/items/{item_id}/copy", post(item_profile::copy))
+        .route("/items/{item_id}/template", put(item_profile::set_template))
         .route(
             "/modules/{module_id}/icon",
             put(item_profile::set_module_icon),

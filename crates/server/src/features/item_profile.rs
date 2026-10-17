@@ -391,3 +391,89 @@ mod tests {
         );
     }
 }
+
+/// 항목 복제(D-33). 같은 워크스페이스의 같은 종류 모듈 안에 비공개 새 항목을 만든다.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CopyItem {
+    #[schema(value_type = String, format = Uuid)]
+    pub request_id: Uuid,
+    pub module_id: ModuleId,
+    /// 비우면 원래 제목.
+    #[serde(default)]
+    pub title: String,
+    /// 새로 시작(템플릿 사용): 업무 상태·날짜·체크 표시와 항목 상태·기간을 비운다.
+    #[serde(default)]
+    pub reset: bool,
+}
+
+/// 복제 결과.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CopiedItem {
+    pub item_id: ItemId,
+    /// 복제를 허용하지 않아 건너뛴 문서 수.
+    pub skipped_documents: i32,
+}
+
+/// 템플릿 표시.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetTemplate {
+    pub template: bool,
+}
+
+/// 항목 복제(볼 수 있는 사람, 대상 모듈에 항목을 만들 수 있어야 함). 담당자·반복 규칙·기록·첨부·진도는 옮기지
+/// 않는다. 복제를 허용하지 않은 문서는 건너뛴다(D-20).
+#[utoipa::path(post, path = "/api/items/{item_id}/copy", operation_id = "copy_item",
+    params(("item_id" = String, Path, format = Uuid)), request_body = CopyItem,
+    responses((status = 201, body = CopiedItem), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
+pub async fn copy(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(item): Path<ItemId>,
+    Json(input): Json<CopyItem>,
+) -> Result<(StatusCode, Json<CopiedItem>), AppError> {
+    if input.title.trim().chars().count() > state.config.limits.max_title_chars {
+        return Err(AppError::BadRequest("the title is too long".into()));
+    }
+    let mut tx = state.db.begin_as(user).await?;
+    let (item_id, skipped_documents): (ItemId, i32) =
+        sqlx::query_as("SELECT copied_item, skipped_count FROM app_copy_item($1, $2, $3, $4, $5)")
+            .bind(item)
+            .bind(input.module_id)
+            .bind(input.request_id)
+            .bind(input.title.trim())
+            .bind(input.reset)
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(CopiedItem {
+            item_id,
+            skipped_documents,
+        }),
+    ))
+}
+
+/// 템플릿 표시·해제(쓸 수 있는 사람).
+#[utoipa::path(put, path = "/api/items/{item_id}/template", operation_id = "set_item_template",
+    params(("item_id" = String, Path, format = Uuid)), request_body = SetTemplate,
+    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "modules")]
+pub async fn set_template(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(item): Path<ItemId>,
+    Json(input): Json<SetTemplate>,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_set_item_template($1, $2)")
+        .bind(item)
+        .bind(input.template)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
