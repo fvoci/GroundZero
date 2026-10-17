@@ -22,6 +22,7 @@
   // 요청 id는 성공할 때까지 지킨다. 응답을 잃고 다시 눌러도 같은 댓글이 된다.
   let draftId = newRequestId();
   let replyId = newRequestId();
+  let lastTarget = '';
   let showResolved = $state<Set<string>>(new Set());
   let busy = $state(false);
   let reloadKey = $state(0);
@@ -30,6 +31,12 @@
   $effect(() => {
     const t = { kind: target.kind, id: target.id };
     if (reloadKey < 0) return;
+    // 대상이 바뀌면 남은 요청 id를 새로 정한다(다른 대상에 옛 id가 쓰이지 않게).
+    if (t.id !== lastTarget) {
+      lastTarget = t.id;
+      draftId = newRequestId();
+      replyId = newRequestId();
+    }
     const mine = ++seq;
     api
       .comments(t)
