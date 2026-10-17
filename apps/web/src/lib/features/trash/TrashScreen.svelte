@@ -182,11 +182,12 @@
           </span>
           {#if e.kept_for_references}
             <span class="block text-xs text-muted-foreground">
-              기록이나 문서가 이 파일의 버전을 가리키고 있어 자동으로 지우지 않습니다.
+              기록이나 문서가 이 파일의 버전을 가리키고 있어 자동으로 지우지 않습니다. 기한이
+              지났어도 되살릴 수 있습니다.
             </span>
           {/if}
         </span>
-        {#if !e.expired}
+        {#if !e.expired || e.kept_for_references}
           <Button
             size="sm"
             variant="outline"

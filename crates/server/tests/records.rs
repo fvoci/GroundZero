@@ -927,7 +927,9 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
             .await
             .unwrap();
     let mut purging = owner.begin().await.unwrap();
-    sqlx::query("SELECT fvoci.app_system_purge_expired()")
+    // 작업 프로세스의 묶음 정리와 같은 경로를 이 묶음에만 쓴다(열어 둔 트랜잭션이 다른 테스트의 묶음까지 잡지 않게).
+    sqlx::query("SELECT fvoci.app_purge_batch_as($1, true)")
+        .bind(batch)
         .execute(&mut *purging)
         .await
         .unwrap();
@@ -961,8 +963,18 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
     }
+    let waiting: Vec<(Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT wait_event_type, left(query, 120) FROM pg_stat_activity
+         WHERE datname = current_database() AND state <> 'idle' AND pid <> pg_backend_pid()",
+    )
+    .fetch_all(&watcher)
+    .await
+    .unwrap();
     watcher.close().await;
-    assert!(waited, "the save waits for the purge's row lock");
+    if !waited {
+        let finished = late.is_finished();
+        panic!("no lock wait seen (save finished: {finished}); active: {waiting:?}");
+    }
     assert!(!late.is_finished());
     purging.commit().await.unwrap();
     assert_eq!(late.await.unwrap(), StatusCode::OK);
@@ -1050,6 +1062,139 @@ async fn trash_expiry_of_documents_honours_live_references_and_breaks_cycles() {
     assert!(
         !file_exists(&owner, &file_b).await,
         "cycle between expired documents"
+    );
+    owner.close().await;
+}
+
+/// D-69(O-35): 참조 때문에 자동 삭제를 미룬 만료 묶음은 기한이 지나도 되살릴 수 있다. 되살리기 권한은 그대로이고
+/// (지운 사람·관리자), 되살리면 문서 그림·기록이 가리키던 원래 버전이 다시 열린다. 참조 없는 만료 묶음은 여전히 409.
+#[tokio::test]
+async fn kept_expired_bundles_restore_with_existing_permissions() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "보존 되살리기").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let research = module(&app, &admin, &ws, "research", "KEPT").await;
+    let item = open_item(&app, &admin, &research, "보존 연구").await;
+    let file = new_file(&app, &writer, &item, "plot.png", b"one").await;
+    upload(
+        &app,
+        &writer,
+        json!({ "request_id": new_request_id(), "file_id": file, "size": 3 }),
+        b"two",
+    )
+    .await;
+    let record = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item}/records"),
+        Some(&writer),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "analysis", "title": "고정",
+            "files": [{ "file_id": file, "version": 1, "role": "result" }] }),
+        ),
+    )
+    .await;
+    assert_eq!(record.status, StatusCode::CREATED, "{:?}", record.json);
+    let wiki = common::create_doc(&app, &writer, &ws, "그림").await;
+    let wiki_id = wiki["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        save_image(&app, &writer, &wiki_id, &file).await,
+        StatusCode::OK
+    );
+    let loose = new_file(&app, &writer, &item, "loose.csv", b"x").await;
+
+    let owner = owner_pool().await;
+    for f in [&file, &loose] {
+        trash_file(&app, &writer, f).await;
+        expire_trash(&owner, f).await;
+    }
+    let batch_of = |f: String| {
+        let owner = owner.clone();
+        async move {
+            sqlx::query_scalar::<_, uuid::Uuid>(
+                "SELECT trash_batch_id FROM fvoci.files WHERE id = $1::uuid",
+            )
+            .bind(f)
+            .fetch_one(&owner)
+            .await
+            .unwrap()
+        }
+    };
+    let kept_batch = batch_of(file.clone()).await;
+    let loose_batch = batch_of(loose.clone()).await;
+    let restore = |user: &TestUser, batch: uuid::Uuid| {
+        let (app, user) = (app.clone(), user.clone());
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &format!("/api/trash/{batch}/restore"),
+                Some(&user),
+                None,
+            )
+            .await
+            .status
+        }
+    };
+    // 참조 없는 만료 묶음은 되살릴 수 없다(기존 규칙).
+    assert_eq!(restore(&writer, loose_batch).await, StatusCode::CONFLICT);
+
+    fvoci_server::worker::run_all_now(&state.db, None, None)
+        .await
+        .unwrap();
+    assert!(file_exists(&owner, &file).await, "kept for references");
+    let image = format!("/api/files/{file}/content?version=1");
+    assert_eq!(
+        send_raw(&app, Method::GET, &image, Some(&reader), &[], Vec::new())
+            .await
+            .0,
+        StatusCode::NOT_FOUND,
+        "a trashed file is not readable"
+    );
+
+    // 권한은 넓어지지 않는다: 지우지 않은 작성자·독자는 404, 지운 사람은 되살린다.
+    assert_eq!(restore(&other, kept_batch).await, StatusCode::NOT_FOUND);
+    assert_eq!(restore(&reader, kept_batch).await, StatusCode::NOT_FOUND);
+    let restored = restore(&writer, kept_batch).await;
+    assert!(restored.is_success(), "{restored}");
+
+    // 원래 버전을 가리키던 그림과 기록이 다시 열린다(독자에게도, 기존 읽기 권한대로).
+    let (status, _, body) =
+        send_raw(&app, Method::GET, &image, Some(&reader), &[], Vec::new()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, b"one");
+    let doc = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{wiki_id}"),
+        Some(&reader),
+        None,
+    )
+    .await;
+    assert!(doc.json["body"].to_string().contains(&image));
+    let (_, list) = records(&app, &reader, &item).await;
+    assert_eq!(list[0]["files"][0]["version"], 1, "{list:?}");
+    assert_eq!(list[0]["files"][0]["available"], true, "{list:?}");
+    let trash = send(
+        &app,
+        Method::GET,
+        &format!("/api/workspaces/{ws}/trash"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(
+        trash.json["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|e| e["id"] != kept_batch.to_string()),
+        "{:?}",
+        trash.json
     );
     owner.close().await;
 }
