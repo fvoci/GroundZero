@@ -10,13 +10,15 @@
     MarkedTargetView,
     NotificationView,
   } from '$lib/api/client';
-  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { api, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import type { CalendarEntry } from '$lib/features/events/calendar';
   import { entriesByDay, startOfWeek } from '$lib/features/events/calendar';
-  import { displaySettings, weekdays } from '$lib/display';
+  import { displaySettings, formatDay, weekdays } from '$lib/display';
   import { dayNumber, fromDayNumber } from '$lib/features/tasks/gantt';
   import { clockText } from '$lib/features/time/format';
   import { timer } from '$lib/features/time/timer.svelte';
+  import { m } from '$lib/paraglide/messages.js';
   import { itemPath, itemTaskPath, pathFor, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
@@ -78,31 +80,33 @@
         notifications = notes.filter((x) => !x.read).slice(0, 5);
         error = undefined;
       } catch (e: unknown) {
-        if (mine === loadSeq)
-          error = e instanceof ApiError ? e.message : '홈을 불러오지 못했습니다.';
+        if (mine === loadSeq) error = errorText(e, m.home_load_failed());
       }
     })();
   });
 
-  const BUCKET_LABEL = { overdue: '기한 지남', today: '오늘', upcoming: '다가오는 일' } as const;
+  function bucketLabel(b: 'overdue' | 'today' | 'upcoming'): string {
+    if (b === 'overdue') return m.home_bucket_overdue();
+    return b === 'today' ? m.home_bucket_today() : m.home_bucket_upcoming();
+  }
   const bucketOf = (b: 'overdue' | 'today' | 'upcoming'): HomeTaskView[] =>
     home?.up_next.filter((t) => t.bucket === b) ?? [];
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
   const workspaceName = (ws: string | null): string =>
-    ws === null ? '개인' : (workspaces.find((w) => w.id === ws)?.name ?? '');
+    ws === null ? m.home_personal() : (workspaces.find((w) => w.id === ws)?.name ?? '');
 
   function openTask(t: { workspace_id: string; item_id: string; id: string }): void {
     router.navigate(itemTaskPath(t.workspace_id, t.item_id, t.id));
   }
 
-  function openMarked(m: MarkedTargetView): void {
-    if (m.kind === 'item' && m.workspace_id !== null)
-      router.navigate(itemPath(m.workspace_id, m.id));
-    else if (m.kind === 'task' && m.workspace_id !== null && m.item_id !== null)
-      router.navigate(itemTaskPath(m.workspace_id, m.item_id, m.id));
-    else if (m.kind === 'document')
+  function openMarked(mark: MarkedTargetView): void {
+    if (mark.kind === 'item' && mark.workspace_id !== null)
+      router.navigate(itemPath(mark.workspace_id, mark.id));
+    else if (mark.kind === 'task' && mark.workspace_id !== null && mark.item_id !== null)
+      router.navigate(itemTaskPath(mark.workspace_id, mark.item_id, mark.id));
+    else if (mark.kind === 'document')
       router.navigate(
-        pathFor({ id: m.id, workspace_id: m.workspace_id, item_id: m.item_id }, memberOf),
+        pathFor({ id: mark.id, workspace_id: mark.workspace_id, item_id: mark.item_id }, memberOf),
       );
   }
 
@@ -131,13 +135,13 @@
     try {
       if (quick.what === 'memo') {
         const note = await api.createNote(quickRequest, title);
-        quickStatus = `메모를 만들었습니다: “${note.title}”`;
+        quickStatus = m.home_memo_created({ title: note.title });
       } else if (quick.item === '') {
-        quickError = '어느 항목에 넣을지 고르세요.';
+        quickError = m.home_pick_item_required();
         return;
       } else if (quick.what === 'task') {
         await api.createTask(quick.item, quickRequest, title);
-        quickStatus = `업무를 만들었습니다: “${title}”`;
+        quickStatus = m.home_task_created({ title });
       } else {
         const date = quick.date === '' ? (home?.today ?? '') : quick.date;
         await api.createEvent(quick.item, quickRequest, {
@@ -151,24 +155,29 @@
           ends_at: null,
           timezone: zone,
         });
-        quickStatus = `일정을 만들었습니다: “${title}”(${date})`;
+        quickStatus = m.home_event_created({ title, date: date === '' ? '' : formatDay(date) });
       }
       quickRequest = newRequestId();
       quick.title = '';
       reloadKey += 1;
     } catch (e: unknown) {
-      quickError = e instanceof ApiError ? e.message : '만들지 못했습니다.';
+      quickError = errorText(e, m.home_create_failed());
     }
   }
 
-  const WHAT_LABEL = { memo: '메모', task: '업무', event: '일정(종일)' } as const;
+  function whatLabel(what: 'memo' | 'task' | 'event'): string {
+    if (what === 'memo') return m.home_what_memo();
+    return what === 'task' ? m.home_what_task() : m.home_what_event();
+  }
   const WEEKDAY = weekdays(settings).map((w) => w.short);
 </script>
 
 <section class="flex flex-col gap-6" aria-labelledby="dashboard-heading">
   <div class="flex flex-wrap items-baseline gap-2">
-    <h1 id="dashboard-heading" class="text-xl font-semibold">오늘</h1>
-    {#if home !== undefined}<span class="text-muted-foreground">{home.today}</span>{/if}
+    <h1 id="dashboard-heading" class="text-xl font-semibold">{m.home_today_heading()}</h1>
+    {#if home !== undefined}<span class="text-muted-foreground"
+        >{formatDay(home.today, { dateStyle: 'full' })}</span
+      >{/if}
   </div>
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive">{error}</p>
@@ -177,10 +186,10 @@
   <form
     class="flex flex-wrap items-end gap-2"
     onsubmit={(e) => void addQuick(e)}
-    aria-label="빠른 추가"
+    aria-label={m.home_quick_add()}
   >
     <div class="flex flex-col gap-1">
-      <span class="text-sm font-medium" id="quick-what-label">빠른 추가</span>
+      <span class="text-sm font-medium" id="quick-what-label">{m.home_quick_add()}</span>
       <Select.Root
         type="single"
         value={quick.what}
@@ -188,17 +197,17 @@
           if (v === 'memo' || v === 'task' || v === 'event') quick.what = v;
         }}
       >
-        <Select.Trigger aria-labelledby="quick-what-label">{WHAT_LABEL[quick.what]}</Select.Trigger>
+        <Select.Trigger aria-labelledby="quick-what-label">{whatLabel(quick.what)}</Select.Trigger>
         <Select.Content>
           {#each ['memo', 'task', 'event'] as const as w (w)}
-            <Select.Item value={w} label={WHAT_LABEL[w]}>{WHAT_LABEL[w]}</Select.Item>
+            <Select.Item value={w} label={whatLabel(w)}>{whatLabel(w)}</Select.Item>
           {/each}
         </Select.Content>
       </Select.Root>
     </div>
     {#if quick.what !== 'memo'}
       <div class="flex flex-col gap-1">
-        <span class="text-sm font-medium" id="quick-item-label">항목</span>
+        <span class="text-sm font-medium" id="quick-item-label">{m.home_item()}</span>
         <Select.Root
           type="single"
           value={quick.item}
@@ -206,7 +215,7 @@
         >
           <Select.Trigger aria-labelledby="quick-item-label"
             >{writableItems.find((i) => i.id === quick.item)?.title ??
-              '항목 고르기'}</Select.Trigger
+              m.home_pick_item()}</Select.Trigger
           >
           <Select.Content>
             {#each writableItems as i (i.id)}
@@ -220,15 +229,15 @@
     {/if}
     {#if quick.what === 'event'}
       <div class="flex flex-col gap-1">
-        <Label for="quick-date">날짜</Label>
+        <Label for="quick-date">{m.home_date()}</Label>
         <Input id="quick-date" type="date" bind:value={quick.date} />
       </div>
     {/if}
     <div class="flex min-w-48 flex-1 flex-col gap-1">
-      <Label for="quick-title">제목</Label>
+      <Label for="quick-title">{m.home_title()}</Label>
       <Input id="quick-title" bind:value={quick.title} maxlength={200} />
     </div>
-    <Button type="submit">추가</Button>
+    <Button type="submit">{m.home_add()}</Button>
   </form>
   {#if quickError !== undefined}<p role="alert" class="text-sm text-destructive">
       {quickError}
@@ -237,27 +246,29 @@
 
   {#if timer.entry !== null}
     <p class="rounded-md border p-2 text-sm">
-      실행 중인 스톱워치: <span class="font-mono">{clockText(timer.seconds)}</span>
-      {timer.entry.target?.label ?? ''}{timer.entry.paused_at === null ? '' : ' (일시정지)'} ·
+      {m.home_timer_running()} <span class="font-mono">{clockText(timer.seconds)}</span>
+      {timer.entry.target?.label ?? ''}{timer.entry.paused_at === null
+        ? ''
+        : ` ${m.home_timer_paused()}`} ·
       <a
         class="underline"
         href="/time"
         onclick={(e: MouseEvent) => {
           e.preventDefault();
           router.navigate('/time');
-        }}>내 시간</a
+        }}>{m.app_nav_time()}</a
       >
     </p>
   {/if}
 
   <div class="grid gap-6 md:grid-cols-2">
     <section class="flex flex-col gap-2" aria-labelledby="up-next-heading">
-      <h2 id="up-next-heading" class="text-lg font-semibold">Up Next</h2>
+      <h2 id="up-next-heading" class="text-lg font-semibold">{m.home_up_next()}</h2>
       {#each ['overdue', 'today', 'upcoming'] as const as b (b)}
         {@const list = bucketOf(b)}
         {#if list.length > 0}
           <h3 class={['text-sm font-semibold', b === 'overdue' && 'text-destructive']}>
-            {BUCKET_LABEL[b]}
+            {bucketLabel(b)}
             {list.length}
           </h3>
           <ul class="flex flex-col gap-0.5">
@@ -272,7 +283,9 @@
                 >
                   <span class="font-mono text-xs text-muted-foreground">{t.reference ?? ''}</span>
                   <span class="min-w-0 flex-1 truncate">{t.title}</span>
-                  <span class="text-xs text-muted-foreground">{t.due_date}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >{t.due_date === null ? '' : formatDay(t.due_date)}</span
+                  >
                 </button>
               </li>
             {/each}
@@ -280,12 +293,12 @@
         {/if}
       {/each}
       {#if home?.up_next.length === 0}
-        <p class="text-sm text-muted-foreground">이번 주까지 마감인 내 업무가 없습니다.</p>
+        <p class="text-sm text-muted-foreground">{m.home_up_next_empty()}</p>
       {/if}
     </section>
 
     <section class="flex flex-col gap-2" aria-labelledby="week-heading">
-      <h2 id="week-heading" class="text-lg font-semibold">이번 주</h2>
+      <h2 id="week-heading" class="text-lg font-semibold">{m.home_week()}</h2>
       <ol class="flex flex-col gap-1">
         {#each weekDays as d, i (d)}
           {@const entries = week.get(d) ?? []}
@@ -299,28 +312,27 @@
       </ol>
     </section>
 
-    {#each [{ id: 'pins', label: '고정', list: home?.pins ?? [] }, { id: 'favorites', label: '즐겨찾기', list: home?.favorites ?? [] }] as group (group.id)}
+    {#each [{ id: 'pins', label: m.home_pins(), empty: m.home_pins_empty(), list: home?.pins ?? [] }, { id: 'favorites', label: m.home_favorites(), empty: m.home_favorites_empty(), list: home?.favorites ?? [] }] as group (group.id)}
       <section class="flex flex-col gap-2" aria-labelledby={`${group.id}-heading`}>
         <h2 id={`${group.id}-heading`} class="text-lg font-semibold">{group.label}</h2>
-        {#each group.list as m (`${m.kind}:${m.id}`)}
+        {#each group.list as mark (`${mark.kind}:${mark.id}`)}
           <button
             type="button"
             class="rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             onclick={() => {
-              openMarked(m);
-            }}>{m.label}</button
+              openMarked(mark);
+            }}>{mark.label}</button
           >
         {:else}
           <p class="text-sm text-muted-foreground">
-            항목·문서·업무 화면의 “{group.label === '고정' ? '홈에 고정' : '즐겨찾기'}”로 더할 수
-            있습니다.
+            {group.empty}
           </p>
         {/each}
       </section>
     {/each}
 
     <section class="flex flex-col gap-2" aria-labelledby="active-heading">
-      <h2 id="active-heading" class="text-lg font-semibold">진행 중인 항목</h2>
+      <h2 id="active-heading" class="text-lg font-semibold">{m.home_active()}</h2>
       {#each home?.active_items ?? [] as i (i.id)}
         <button
           type="button"
@@ -342,17 +354,17 @@
                   style:width={`${String(Math.round((i.tasks_done / i.tasks_total) * 100))}%`}
                 ></span>
               </span>
-              업무 {i.tasks_done}/{i.tasks_total} 완료
+              {m.home_tasks_done({ done: i.tasks_done, total: i.tasks_total })}
             </span>
           {/if}
         </button>
       {:else}
-        <p class="text-sm text-muted-foreground">진행 중인 항목이 없습니다.</p>
+        <p class="text-sm text-muted-foreground">{m.home_active_empty()}</p>
       {/each}
     </section>
 
     <section class="flex flex-col gap-2" aria-labelledby="recent-heading">
-      <h2 id="recent-heading" class="text-lg font-semibold">최근 작업</h2>
+      <h2 id="recent-heading" class="text-lg font-semibold">{m.home_recent()}</h2>
       {#each home?.recent_documents ?? [] as d (d.id)}
         <button
           type="button"
@@ -372,19 +384,22 @@
         >
       {/each}
       {#if home?.recent_documents.length === 0 && home.recent_tasks.length === 0}
-        <p class="text-sm text-muted-foreground">최근에 고친 문서·업무가 없습니다.</p>
+        <p class="text-sm text-muted-foreground">{m.home_recent_empty()}</p>
       {/if}
     </section>
 
     <section class="flex flex-col gap-2" aria-labelledby="notes-heading">
-      <h2 id="notes-heading" class="text-lg font-semibold">알림</h2>
+      <h2 id="notes-heading" class="text-lg font-semibold">{m.home_notifications()}</h2>
       {#each notifications as n (n.id)}
         <p class="text-sm">
-          {n.actor_name ?? '누군가'}님이 {n.document_reference ?? ''} “{n.document_title}”에서 나를
-          언급했습니다.
+          {m.home_mentioned({
+            actor: n.actor_name ?? m.home_someone(),
+            reference: n.document_reference ?? '',
+            title: n.document_title,
+          })}
         </p>
       {:else}
-        <p class="text-sm text-muted-foreground">읽지 않은 알림이 없습니다.</p>
+        <p class="text-sm text-muted-foreground">{m.home_notifications_empty()}</p>
       {/each}
       <a
         class="text-sm underline"
@@ -392,7 +407,7 @@
         onclick={(e: MouseEvent) => {
           e.preventDefault();
           router.navigate('/notifications');
-        }}>알림 모두 보기</a
+        }}>{m.home_all_notifications()}</a
       >
     </section>
   </div>
