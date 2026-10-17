@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { TimeEntryView } from '$lib/api/client';
 import { clockText, durationText, liveSeconds } from '$lib/features/time/format';
+import { setLocale } from '$lib/paraglide/runtime.js';
 
 const entry = (over: Partial<TimeEntryView>): TimeEntryView => ({
   id: 'e',
@@ -18,6 +19,10 @@ const entry = (over: Partial<TimeEntryView>): TimeEntryView => ({
 });
 
 describe('time display (D-32)', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+  });
+
   it('formats a stopwatch and totals', () => {
     expect(clockText(3725)).toBe('1:02:05');
     expect(durationText(59)).toBe('0분');

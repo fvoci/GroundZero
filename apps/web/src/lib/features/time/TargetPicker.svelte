@@ -2,6 +2,7 @@
   // 시간 기록의 연결 대상 고르기(업무·문서·항목). @ 링크와 같은 후보 검색을 쓴다(볼 수 있는 대상만 나온다).
   import type { ReferenceCandidateView, TimeTargetKind } from '$lib/api/client';
   import { api } from '$lib/api/client';
+  import { m } from '$lib/paraglide/messages.js';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
 
@@ -47,18 +48,21 @@
 </script>
 
 <div class="flex flex-col gap-1">
-  <Label for={`${idPrefix}-target-search`}>연결할 업무·문서·항목 찾기</Label>
+  <Label for={`${idPrefix}-target-search`}>{m.time_target_search()}</Label>
   <Input
     id={`${idPrefix}-target-search`}
     bind:value={query}
     autocomplete="off"
-    placeholder="제목이나 번호(예: DEV-3)"
+    placeholder={m.time_target_placeholder()}
     oninput={() => {
       search(query);
     }}
   />
   {#if results.length > 0}
-    <ul class="flex max-h-40 flex-col overflow-y-auto rounded-md border" aria-label="찾은 대상">
+    <ul
+      class="flex max-h-40 flex-col overflow-y-auto rounded-md border"
+      aria-label={m.time_target_results()}
+    >
       {#each results as c (`${c.kind}:${c.id}`)}
         {#if c.kind !== 'user'}
           {@const kind = c.kind}

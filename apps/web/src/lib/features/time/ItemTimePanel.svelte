@@ -5,7 +5,9 @@
   import type { ModuleKind } from '@fvoci/api-client';
 
   import type { ItemTimeView, TimeKind } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
   import { durationText, TIME_KIND_LABEL } from './format';
@@ -70,7 +72,7 @@
       confirmSwitch = false;
       await timer.start(START_KIND[moduleKind], { kind: 'item', id: itemId });
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '타이머를 시작하지 못했습니다.';
+      error = errorText(e, m.time_start_failed());
     }
   }
 
@@ -80,7 +82,7 @@
       await timer.act('stop');
       await reload();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '타이머를 끝내지 못했습니다.';
+      error = errorText(e, m.time_stop_failed());
     }
   }
 
@@ -90,19 +92,22 @@
 </script>
 
 <section class="flex flex-col gap-2" aria-labelledby="item-time-heading">
-  <h2 id="item-time-heading" class="text-lg font-semibold">시간</h2>
+  <h2 id="item-time-heading" class="text-lg font-semibold">{m.time_heading()}</h2>
   {#if time !== undefined}
     <p class="text-sm">
-      업무 예상 {time.estimate_minutes > 0 ? durationText(time.estimate_minutes * 60) : '없음'} · 내 시간
-      합계 {durationText(mineTotal)}
+      {m.time_item_summary({
+        estimate:
+          time.estimate_minutes > 0 ? durationText(time.estimate_minutes * 60) : m.time_none(),
+        mine: durationText(mineTotal),
+      })}
     </p>
     {#if time.kinds.length > 0}
       <table class="text-sm" data-testid="item-time">
         <thead class="text-left text-muted-foreground">
           <tr
-            ><th class="pr-4 font-medium">종류</th><th class="pr-4 font-medium">내 시간</th><th
-              class="font-medium">공유된 합계</th
-            ></tr
+            ><th class="pr-4 font-medium">{m.time_kind()}</th><th class="pr-4 font-medium"
+              >{m.time_my_time()}</th
+            ><th class="font-medium">{m.time_shared_total()}</th></tr
           >
         </thead>
         <tbody>
@@ -112,7 +117,10 @@
               <td class="pr-4">{durationText(k.mine_seconds)}</td>
               <td
                 >{k.shared_people > 0
-                  ? `${durationText(k.shared_seconds)}(${String(k.shared_people)}명)`
+                  ? m.time_with_people({
+                      total: durationText(k.shared_seconds),
+                      count: k.shared_people,
+                    })
                   : '—'}</td
               >
             </tr>
@@ -120,23 +128,25 @@
         </tbody>
       </table>
     {:else}
-      <p class="text-sm text-muted-foreground">아직 이 항목의 시간 기록이 없습니다.</p>
+      <p class="text-sm text-muted-foreground">{m.time_item_empty()}</p>
     {/if}
   {/if}
   {#if canTrack}
     <div class="flex flex-wrap items-center gap-2">
       {#if runningHere}
-        <span class="text-sm" role="status">이 항목의 타이머가 돌고 있습니다.</span>
-        <Button size="sm" variant="outline" onclick={() => void stopHere()}>타이머 끝내기</Button>
-      {:else if confirmSwitch}
-        <span class="text-sm" role="status"
-          >다른 타이머가 돌고 있습니다. 끝내고 이 항목으로 시작할까요?</span
+        <span class="text-sm" role="status">{m.time_item_running()}</span>
+        <Button size="sm" variant="outline" onclick={() => void stopHere()}
+          >{m.time_stop_timer()}</Button
         >
-        <Button size="sm" onclick={() => void startHere()}>끝내고 시작</Button>
-        <Button size="sm" variant="ghost" onclick={() => (confirmSwitch = false)}>취소</Button>
+      {:else if confirmSwitch}
+        <span class="text-sm" role="status">{m.time_item_switch_confirm()}</span>
+        <Button size="sm" onclick={() => void startHere()}>{m.time_stop_and_start()}</Button>
+        <Button size="sm" variant="ghost" onclick={() => (confirmSwitch = false)}
+          >{m.common_cancel()}</Button
+        >
       {:else}
         <Button size="sm" variant="outline" onclick={() => void startHere()}
-          >이 항목 시간 재기({TIME_KIND_LABEL[START_KIND[moduleKind]]})</Button
+          >{m.time_track_item({ kind: TIME_KIND_LABEL[START_KIND[moduleKind]] })}</Button
         >
       {/if}
     </div>
