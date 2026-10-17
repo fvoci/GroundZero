@@ -5,7 +5,9 @@
   import { formatInstant } from '$lib/display';
   import type { DocumentView, RevisionSummaryView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import type { ReferenceContext } from '$lib/features/references/context';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Label } from '$lib/ui/label';
@@ -31,19 +33,20 @@
   let error = $state<string | undefined>(undefined);
   let notes = $state<string[] | undefined>(undefined);
 
-  const FORMATS: { value: ExportFormat; label: string; hint: string }[] = [
-    { value: 'markdown', label: 'Markdown (.md)', hint: '그림·첨부는 fvoci 주소로 연결됩니다.' },
+  // 화면 문구만 번역한다. 내보낸 파일 내용(알림 주석, 자리표시 글자)은 export.ts가 언어와 상관없이 만든다.
+  const FORMATS = $derived<{ value: ExportFormat; label: string; hint: string }[]>([
+    { value: 'markdown', label: 'Markdown (.md)', hint: m.documents_export_markdown_hint() },
     {
       value: 'zip',
-      label: 'Markdown + 그림·첨부 (.zip)',
-      hint: '내려받을 수 있는 그림·첨부를 함께 담고 상대 경로로 잇습니다.',
+      label: m.documents_export_zip_label(),
+      hint: m.documents_export_zip_hint(),
     },
     {
       value: 'pdf',
-      label: 'PDF (인쇄)',
-      hint: '인쇄 창에서 “PDF로 저장”을 고르세요. 이 기기의 글꼴로 만듭니다.',
+      label: m.documents_export_pdf_label(),
+      hint: m.documents_export_pdf_hint(),
     },
-  ];
+  ]);
 
   const when = (iso: string): string => formatInstant(iso);
   const latest = $derived(selected === doc.revision);
@@ -99,46 +102,46 @@
         saveBlob(blob, exportFileName(rev.title, format));
         notes = [
           ...prepared.notes,
-          ...(lossy.length > 0
-            ? [
-                `Markdown으로 그대로 옮기지 못한 블록: ${lossy.join(', ')} (파일 맨 위 주석에도 적었습니다)`,
-              ]
-            : []),
+          ...(lossy.length > 0 ? [m.documents_export_lossy({ blocks: lossy.join(', ') })] : []),
         ];
       }
     } catch (e: unknown) {
       error =
         e instanceof ApiError && e.status === 403
-          ? '이 문서는 내보낼 수 없습니다(소유자가 복제·내려받기를 허용하지 않음).'
-          : '내보내지 못했습니다.';
+          ? m.documents_export_forbidden()
+          : errorText(e, m.documents_export_failed());
     } finally {
       busy = false;
     }
   }
 </script>
 
-<Button size="sm" variant="outline" onclick={openDialog}>내보내기</Button>
+<Button size="sm" variant="outline" onclick={openDialog}>{m.documents_export()}</Button>
 
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-lg">
     <Dialog.Header>
-      <Dialog.Title>내보내기</Dialog.Title>
-      <Dialog.Description>저장된 리비전 하나를 파일로 내보냅니다.</Dialog.Description>
+      <Dialog.Title>{m.documents_export()}</Dialog.Title>
+      <Dialog.Description>{m.documents_export_description()}</Dialog.Description>
     </Dialog.Header>
     <div class="flex flex-col gap-3 text-sm">
       <div class="flex flex-col gap-1">
-        <Label for="export-revision">리비전</Label>
+        <Label for="export-revision">{m.documents_revisions_label()}</Label>
         <select
           id="export-revision"
           class="h-9 rounded-md border bg-background px-2"
           bind:value={selected}
         >
           {#if revisions.length === 0}
-            <option value={doc.revision}>리비전 {doc.revision} (최신)</option>
+            <option value={doc.revision}
+              >{m.documents_revision_latest({ revision: doc.revision })}</option
+            >
           {/if}
           {#each revisions as rev (rev.revision)}
             <option value={rev.revision}>
-              리비전 {rev.revision}{rev.revision === doc.revision ? ' (최신)' : ''} · {when(
+              {rev.revision === doc.revision
+                ? m.documents_revision_latest({ revision: rev.revision })
+                : m.documents_revision_n({ revision: rev.revision })} · {when(
                 rev.created_at,
               )}{rev.author_name === null ? '' : ` · ${rev.author_name}`}
             </option>
@@ -147,18 +150,16 @@
       </div>
       {#if latest && unsaved}
         <p role="status" class="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900">
-          저장하지 않은 편집이 있습니다. 그 내용까지 내보내려면 먼저 저장하세요. 지금 내보내면
-          저장된 리비전 {doc.revision}의 내용이 나갑니다.
+          {m.documents_export_unsaved({ revision: doc.revision })}
         </p>
       {/if}
       {#if latest && doc.realtime}
         <p role="status" class="text-muted-foreground">
-          실시간 편집 중인 문서는 리비전으로 남은 내용까지 내보냅니다(조용해지거나 모두 나가면
-          리비전으로 남습니다).
+          {m.documents_export_live()}
         </p>
       {/if}
       <fieldset class="flex flex-col gap-1">
-        <legend class="mb-1 font-medium">형식</legend>
+        <legend class="mb-1 font-medium">{m.documents_export_format()}</legend>
         {#each FORMATS as f (f.value)}
           <label class="flex items-start gap-2">
             <input
@@ -180,7 +181,7 @@
       {/if}
       {#if notes !== undefined}
         <div role="status" class="flex flex-col gap-1">
-          <p>{format === 'pdf' ? '인쇄 창을 열었습니다.' : '내보냈습니다.'}</p>
+          <p>{format === 'pdf' ? m.documents_export_print_opened() : m.documents_exported()}</p>
           {#if notes.length > 0}
             <ul class="list-disc pl-5 text-muted-foreground">
               {#each notes as note, i (i)}
@@ -192,13 +193,13 @@
       {/if}
     </div>
     <Dialog.Footer>
-      <Button variant="ghost" onclick={() => (open = false)}>닫기</Button>
+      <Button variant="ghost" onclick={() => (open = false)}>{m.documents_close()}</Button>
       <Button disabled={busy} onclick={() => void run()}>
         {busy
-          ? '내보내는 중…'
+          ? m.documents_exporting()
           : latest && unsaved
-            ? `저장된 리비전 ${String(selected)} 내보내기`
-            : '내보내기'}
+            ? m.documents_export_saved_revision({ revision: selected })
+            : m.documents_export()}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

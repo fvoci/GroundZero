@@ -2,6 +2,8 @@
 // 줄 단위 차이를 jsdiff로 계산한다. 참조 노드는 plainText와 같은 자리표시(@[종류:id])로 나온다.
 import { diffArrays } from 'diff';
 
+import { m } from '$lib/paraglide/messages.js';
+
 import { plainText } from './drafts';
 
 export interface DiffLine {
@@ -89,8 +91,8 @@ export function diffRevisions(
   before: { title: string; body: unknown },
   after: { title: string; body: unknown },
 ): DiffLine[] {
-  const a = [`제목: ${before.title}`, ...blockLines(before.body)];
-  const b = [`제목: ${after.title}`, ...blockLines(after.body)];
+  const a = [m.documents_diff_title_line({ title: before.title }), ...blockLines(before.body)];
+  const b = [m.documents_diff_title_line({ title: after.title }), ...blockLines(after.body)];
   const out: DiffLine[] = [];
   for (const part of diffArrays(a, b)) {
     const kind = part.added ? 'added' : part.removed ? 'removed' : 'same';

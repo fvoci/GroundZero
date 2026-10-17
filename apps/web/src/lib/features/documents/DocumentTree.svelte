@@ -6,6 +6,7 @@
   import { SvelteSet } from 'svelte/reactivity';
 
   import type { SummaryView } from '$lib/api/client';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
 
@@ -47,12 +48,18 @@
     else collapsed.add(id);
   }
 
-  const ACTION_LABEL: Record<TreeAction, string> = {
-    up: '위로 옮겼습니다',
-    down: '아래로 옮겼습니다',
-    indent: '들여썼습니다',
-    outdent: '내어썼습니다',
-  };
+  function actionLabel(action: TreeAction): string {
+    switch (action) {
+      case 'up':
+        return m.documents_tree_moved_up();
+      case 'down':
+        return m.documents_tree_moved_down();
+      case 'indent':
+        return m.documents_tree_indented();
+      case 'outdent':
+        return m.documents_tree_outdented();
+    }
+  }
 
   async function act(id: string, action: TreeAction): Promise<void> {
     const move = planMove(docs, id, action);
@@ -61,7 +68,7 @@
     try {
       if (action === 'indent' && move.parentId !== null) toggle(move.parentId, true);
       await onmove(id, move);
-      status = ACTION_LABEL[action];
+      status = actionLabel(action);
       await focusRow(id);
     } finally {
       busy = false;
@@ -213,7 +220,7 @@
                   tabindex={-1}
                   size="sm"
                   variant="ghost"
-                  aria-label={`${row.doc.title} 문서 동작`}
+                  aria-label={m.documents_tree_actions({ title: row.doc.title })}
                   class="opacity-60 group-focus-within:opacity-100 group-hover:opacity-100"
                   >⋯</Button
                 >
@@ -221,25 +228,25 @@
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
               <DropdownMenu.Item onSelect={() => void createChild(id)}
-                >하위 문서 만들기</DropdownMenu.Item
+                >{m.documents_tree_create_child()}</DropdownMenu.Item
               >
               <DropdownMenu.Item
                 disabled={planMove(docs, id, 'up') === undefined}
-                onSelect={() => void act(id, 'up')}>위로</DropdownMenu.Item
+                onSelect={() => void act(id, 'up')}>{m.documents_tree_up()}</DropdownMenu.Item
               >
               <DropdownMenu.Item
                 disabled={planMove(docs, id, 'down') === undefined}
-                onSelect={() => void act(id, 'down')}>아래로</DropdownMenu.Item
+                onSelect={() => void act(id, 'down')}>{m.documents_tree_down()}</DropdownMenu.Item
               >
               <DropdownMenu.Item
                 disabled={planMove(docs, id, 'indent') === undefined}
                 onSelect={() => void act(id, 'indent')}
-                >들여쓰기(앞 문서의 하위로)</DropdownMenu.Item
+                >{m.documents_tree_indent()}</DropdownMenu.Item
               >
               <DropdownMenu.Item
                 disabled={planMove(docs, id, 'outdent') === undefined}
                 onSelect={() => void act(id, 'outdent')}
-                >내어쓰기(상위 문서 다음으로)</DropdownMenu.Item
+                >{m.documents_tree_outdent()}</DropdownMenu.Item
               >
             </DropdownMenu.Content>
           </DropdownMenu.Root>
@@ -249,7 +256,7 @@
   </ul>
   {#if canWrite}
     <p class="text-xs text-muted-foreground">
-      키보드: Alt+위·아래 순서, Alt+오른쪽·왼쪽 들여쓰기·내어쓰기, Alt+Enter 하위 문서.
+      {m.documents_tree_keyboard_hint()}
     </p>
   {/if}
   <p class="sr-only" aria-live="polite">{status}</p>

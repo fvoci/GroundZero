@@ -11,8 +11,10 @@
     PublicLinkView,
     ShareView,
   } from '$lib/api/client';
-  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { api, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import { workspaceLabel } from '$lib/features/workspaces/badge';
+  import { m } from '$lib/paraglide/messages.js';
   import { pathFor, router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -41,7 +43,7 @@
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
 
   function fail(e: unknown): void {
-    error = e instanceof ApiError ? e.message : '요청을 처리하지 못했습니다.';
+    error = errorText(e, m.documents_request_failed());
   }
 
   function open(next: Panel): void {
@@ -53,7 +55,7 @@
       void loadLinks();
     }
     if (next === 'copy') {
-      copyTitle = `${doc.title} 사본`;
+      copyTitle = m.documents_copy_default_title({ title: doc.title });
       copyTarget = 'personal';
       copyRequest = newRequestId();
     }
@@ -148,13 +150,9 @@
     }
   }
 
-  const EXPIRY_OPTIONS = [
-    { value: '1', label: '1일' },
-    { value: '7', label: '7일' },
-    { value: '30', label: '30일' },
-    { value: '0', label: '만료 없음' },
-  ];
-  const expiryLabel = (v: string): string => EXPIRY_OPTIONS.find((o) => o.value === v)?.label ?? v;
+  const EXPIRY_DAYS = ['1', '7', '30', '0'];
+  const expiryLabel = (v: string): string =>
+    v === '0' ? m.documents_expiry_none() : m.documents_expiry_days({ days: Number(v) });
 
   // --- 복제 ---------------------------------------------------------------
   let copyTitle = $state('');
@@ -186,8 +184,8 @@
   const selectedTarget = $derived(moveOptions.find((o) => o.value === moveTarget));
 
   async function itemOptions(ws: Workspace): Promise<MoveOption[]> {
-    const modules = (await api.modules(ws.id)).filter((m) => !m.archived);
-    const lists = await Promise.all(modules.map((m) => api.items(m.id)));
+    const modules = (await api.modules(ws.id)).filter((mod) => !mod.archived);
+    const lists = await Promise.all(modules.map((mod) => api.items(mod.id)));
     return lists
       .flat()
       .filter((it) => !it.archived && it.access !== 'read' && it.id !== doc.item_id)
@@ -211,7 +209,7 @@
               : [
                   {
                     value: `wiki:${ws.id}`,
-                    label: `${workspaceLabel(ws, workspaces)} 위키`,
+                    label: m.documents_wiki({ workspace: workspaceLabel(ws, workspaces) }),
                     target: { workspaceId: ws.id, itemId: null },
                   },
                 ];
@@ -243,7 +241,7 @@
       if (result.kind === 'changed') {
         // 그사이 접근 변화가 바뀌었다. 새 미리보기를 보여주고 다시 확인받는다.
         preview = result.preview;
-        error = '그사이 접근할 수 있는 사람이 바뀌었습니다. 다시 확인하세요.';
+        error = m.documents_move_changed();
         return;
       }
       panel = undefined;
@@ -261,23 +259,29 @@
   }
 
   function targetLabel(id: string): string {
-    if (id === 'personal') return '내 노트';
+    if (id === 'personal') return m.documents_my_notes();
     const ws = workspaces.find((w) => w.id === id);
     return ws === undefined ? id : workspaceLabel(ws, workspaces);
   }
 </script>
 
-<div class="flex flex-wrap items-center gap-2" role="toolbar" aria-label="문서 동작">
+<div
+  class="flex flex-wrap items-center gap-2"
+  role="toolbar"
+  aria-label={m.documents_actions_label()}
+>
   {#if doc.placement === 'personal' && isOwner}
     <span class="rounded border px-1.5 text-sm text-muted-foreground"
-      >개인 노트 · 공유한 사람만 봄</span
+      >{m.documents_personal_owner()}</span
     >
   {:else if doc.placement === 'personal'}
     <span class="rounded border px-1.5 text-sm text-muted-foreground"
-      >공유받은 개인 노트 · {doc.access === 'write' ? '고치기' : '읽기'}</span
+      >{doc.access === 'write'
+        ? m.documents_personal_shared_write()
+        : m.documents_personal_shared_read()}</span
     >
   {:else if doc.visibility === 'private'}
-    <span class="rounded border px-1.5 text-sm text-muted-foreground">비공개 문서</span>
+    <span class="rounded border px-1.5 text-sm text-muted-foreground">{m.documents_private()}</span>
   {/if}
   {#if isOwner || doc.can_manage}
     <Button
@@ -285,7 +289,7 @@
       variant="outline"
       onclick={() => {
         open('share');
-      }}>공유·설정</Button
+      }}>{m.documents_share_settings()}</Button
     >
   {/if}
   {#if canCopy}
@@ -294,7 +298,7 @@
       variant="outline"
       onclick={() => {
         open('copy');
-      }}>복제</Button
+      }}>{m.documents_copy()}</Button
     >
   {/if}
   {#if isOwner && writable.length > 0}
@@ -303,7 +307,7 @@
       variant="outline"
       onclick={() => {
         open('move');
-      }}>이동</Button
+      }}>{m.documents_move()}</Button
     >
   {/if}
 </div>
@@ -317,12 +321,11 @@
   <Dialog.Content>
     {#if panel === 'share'}
       <Dialog.Header>
-        <Dialog.Title>공유와 설정</Dialog.Title>
+        <Dialog.Title>{m.documents_share_title()}</Dialog.Title>
         <Dialog.Description>
-          공유받은 사람은 이 원본을 읽거나 고칩니다. 받는 사람은 이 이메일로 확인된 계정으로
-          로그인해야 합니다.
+          {m.documents_share_description()}
           {#if doc.placement === 'personal'}
-            개인 노트는 공유해도 내 소유이며 받는 사람의 워크스페이스 관리자에게는 보이지 않습니다.
+            {m.documents_share_description_personal()}
           {/if}
         </Dialog.Description>
       </Dialog.Header>
@@ -330,25 +333,27 @@
         {#each shares as s (s.id)}
           <li class="flex items-center gap-2 text-sm">
             <span>{s.email}</span>
-            <span class="text-muted-foreground">{s.permission === 'write' ? '고치기' : '읽기'}</span
+            <span class="text-muted-foreground"
+              >{s.permission === 'write'
+                ? m.documents_permission_write()
+                : m.documents_permission_read()}</span
             >
             <Button size="sm" variant="ghost" class="ml-auto" onclick={() => void removeShare(s.id)}
-              >철회</Button
+              >{m.documents_revoke()}</Button
             >
           </li>
         {:else}
-          <li class="text-sm text-muted-foreground">공유한 사람이 없습니다.</li>
+          <li class="text-sm text-muted-foreground">{m.documents_share_empty()}</li>
         {/each}
       </ul>
       {#if restrictOnly}
         <p class="text-sm text-muted-foreground" role="note">
-          보관된 항목 아래 문서입니다. 공유·공개 링크 철회와 비공개 전환처럼 노출을 줄이는 변경만 할
-          수 있습니다.
+          {m.documents_restrict_only()}
         </p>
       {:else}
         <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addShare(e)}>
           <div class="flex min-w-48 flex-1 flex-col gap-1">
-            <Label for="share-email">이메일</Label>
+            <Label for="share-email">{m.documents_email()}</Label>
             <Input
               id="share-email"
               type="email"
@@ -364,15 +369,21 @@
               sharePermission = v === 'write' ? 'write' : 'read';
             }}
           >
-            <Select.Trigger class="w-24" aria-label="공유 권한"
-              >{sharePermission === 'write' ? '고치기' : '읽기'}</Select.Trigger
+            <Select.Trigger class="w-24" aria-label={m.documents_share_permission()}
+              >{sharePermission === 'write'
+                ? m.documents_permission_write()
+                : m.documents_permission_read()}</Select.Trigger
             >
             <Select.Content>
-              <Select.Item value="read" label="읽기">읽기</Select.Item>
-              <Select.Item value="write" label="고치기">고치기</Select.Item>
+              <Select.Item value="read" label={m.documents_permission_read()}
+                >{m.documents_permission_read()}</Select.Item
+              >
+              <Select.Item value="write" label={m.documents_permission_write()}
+                >{m.documents_permission_write()}</Select.Item
+              >
             </Select.Content>
           </Select.Root>
-          <Button type="submit" disabled={shareEmail.trim() === ''}>공유</Button>
+          <Button type="submit" disabled={shareEmail.trim() === ''}>{m.documents_share()}</Button>
         </form>
       {/if}
       <div class="flex flex-col gap-2 border-t pt-3">
@@ -385,7 +396,7 @@
               onCheckedChange={(v) =>
                 void setSettings(v === true ? 'private' : 'workspace', doc.allow_copy)}
             />
-            <Label for="doc-private">비공개 (작성자·관리자·공유받은 사람만)</Label>
+            <Label for="doc-private">{m.documents_private_label()}</Label>
           </div>
         {/if}
         <div class="flex items-center gap-2">
@@ -395,7 +406,7 @@
             checked={doc.allow_copy}
             onCheckedChange={(v) => void setSettings(doc.visibility, v === true)}
           />
-          <Label for="doc-allow-copy">볼 수 있는 사람의 복제 허용</Label>
+          <Label for="doc-allow-copy">{m.documents_allow_copy()}</Label>
         </div>
         {#if isOwner}
           <div class="flex items-center gap-2">
@@ -404,23 +415,21 @@
               checked={doc.is_template}
               onCheckedChange={(v) => void setTemplate(v === true)}
             />
-            <Label for="doc-template"
-              >템플릿으로 쓰기(볼 수 있는 사람이 새 문서를 이 본문으로 시작)</Label
-            >
+            <Label for="doc-template">{m.documents_use_as_template()}</Label>
           </div>
         {/if}
         <p class="text-sm text-muted-foreground">
-          복제를 막아도 화면에 보이는 내용을 촬영하는 것까지 막지는 못합니다.
+          {m.documents_copy_limit()}
         </p>
       </div>
       <section class="flex flex-col gap-2 border-t pt-3" aria-labelledby="public-link-heading">
-        <h3 id="public-link-heading" class="text-sm font-semibold">공개 링크</h3>
+        <h3 id="public-link-heading" class="text-sm font-semibold">{m.documents_public_link()}</h3>
         <p class="text-sm text-muted-foreground">
-          링크를 가진 사람은 로그인 없이 읽을 수 있습니다. 언제든 철회할 수 있습니다.
+          {m.documents_public_link_hint()}
         </p>
         {#if newLinkUrl !== undefined}
           <div class="flex flex-col gap-1 rounded border px-2 py-2" role="status">
-            <Label for="new-link-url">새 링크 (지금만 볼 수 있습니다)</Label>
+            <Label for="new-link-url">{m.documents_new_link()}</Label>
             <Input
               id="new-link-url"
               readonly
@@ -434,20 +443,26 @@
         <ul class="flex flex-col gap-1 text-sm" data-testid="public-link-list">
           {#each links as link (link.id)}
             <li class="flex items-center gap-2">
-              <span>{formatInstant(link.created_at, { dateStyle: 'medium' })} 생성</span>
+              <span
+                >{m.documents_link_created({
+                  date: formatInstant(link.created_at, { dateStyle: 'medium' }),
+                })}</span
+              >
               <span class="text-muted-foreground">
                 {link.active
                   ? link.expires_at === null
-                    ? '만료 없음'
-                    : `~${formatInstant(link.expires_at, { dateStyle: 'medium' })}`
-                  : '닫힘'}
+                    ? m.documents_expiry_none()
+                    : m.documents_link_until({
+                        date: formatInstant(link.expires_at, { dateStyle: 'medium' }),
+                      })
+                  : m.documents_link_closed()}
               </span>
               {#if link.active}
                 <Button
                   size="sm"
                   variant="ghost"
                   class="ml-auto"
-                  onclick={() => void revokeLink(link.id)}>철회</Button
+                  onclick={() => void revokeLink(link.id)}>{m.documents_revoke()}</Button
                 >
               {/if}
             </li>
@@ -462,34 +477,36 @@
                 linkExpiryDays = v;
               }}
             >
-              <Select.Trigger class="w-28" aria-label="공개 링크 만료"
+              <Select.Trigger class="w-28" aria-label={m.documents_link_expiry_label()}
                 >{expiryLabel(linkExpiryDays)}</Select.Trigger
               >
               <Select.Content>
-                {#each EXPIRY_OPTIONS as option (option.value)}
-                  <Select.Item value={option.value} label={option.label}>{option.label}</Select.Item
+                {#each EXPIRY_DAYS as days (days)}
+                  <Select.Item value={days} label={expiryLabel(days)}
+                    >{expiryLabel(days)}</Select.Item
                   >
                 {/each}
               </Select.Content>
             </Select.Root>
-            <Button size="sm" onclick={() => void createLink()}>공개 링크 만들기</Button>
+            <Button size="sm" onclick={() => void createLink()}>{m.documents_create_link()}</Button>
           </div>
         {/if}
       </section>
     {:else if panel === 'copy'}
       <Dialog.Header>
-        <Dialog.Title>복제</Dialog.Title>
+        <Dialog.Title>{m.documents_copy()}</Dialog.Title>
         <Dialog.Description>
-          독립된 새 문서를 만듭니다. 이후 원본과 서로 동기화되지 않습니다.
+          {m.documents_copy_description()}
         </Dialog.Description>
       </Dialog.Header>
       <form class="flex flex-col gap-3" onsubmit={(e) => void submitCopy(e)}>
         <div class="flex flex-col gap-1">
-          <Label for="copy-title">새 제목</Label>
+          <Label for="copy-title">{m.documents_new_title()}</Label>
           <Input id="copy-title" bind:value={copyTitle} maxlength={200} required />
         </div>
         <div class="flex flex-col gap-1">
-          <span class="text-sm font-medium" id="copy-target-label">만들 곳</span>
+          <span class="text-sm font-medium" id="copy-target-label">{m.documents_copy_target()}</span
+          >
           <Select.Root
             type="single"
             value={copyTarget}
@@ -502,30 +519,33 @@
               >{targetLabel(copyTarget)}</Select.Trigger
             >
             <Select.Content>
-              <Select.Item value="personal" label="내 노트">내 노트</Select.Item>
+              <Select.Item value="personal" label={m.documents_my_notes()}
+                >{m.documents_my_notes()}</Select.Item
+              >
               {#each writable as w (w.id)}
                 <Select.Item value={w.id} label={workspaceLabel(w, workspaces)}
-                  >{workspaceLabel(w, workspaces)} 위키</Select.Item
+                  >{m.documents_wiki({ workspace: workspaceLabel(w, workspaces) })}</Select.Item
                 >
               {/each}
             </Select.Content>
           </Select.Root>
         </div>
         <Dialog.Footer>
-          <Button variant="ghost" type="button" onclick={() => (panel = undefined)}>취소</Button>
-          <Button type="submit" disabled={copyTitle.trim() === ''}>복제</Button>
+          <Button variant="ghost" type="button" onclick={() => (panel = undefined)}
+            >{m.common_cancel()}</Button
+          >
+          <Button type="submit" disabled={copyTitle.trim() === ''}>{m.documents_copy()}</Button>
         </Dialog.Footer>
       </form>
     {:else if panel === 'move'}
       <Dialog.Header>
-        <Dialog.Title>문서 이동</Dialog.Title>
+        <Dialog.Title>{m.documents_move_title()}</Dialog.Title>
         <Dialog.Description>
-          위키나 모듈 항목으로 옮깁니다. 이동하면 대상의 번호가 새로 붙습니다(위키는 WIKI, 항목은
-          모듈 키). 기존 링크는 문서 ID로 연결되어 계속 열립니다.
+          {m.documents_move_description()}
         </Dialog.Description>
       </Dialog.Header>
       <div class="flex flex-col gap-1">
-        <span class="text-sm font-medium" id="move-target-label">대상</span>
+        <span class="text-sm font-medium" id="move-target-label">{m.documents_move_target()}</span>
         <Select.Root
           type="single"
           value={moveTarget}
@@ -535,7 +555,7 @@
           }}
         >
           <Select.Trigger aria-labelledby="move-target-label"
-            >{selectedTarget?.label ?? '옮길 수 있는 곳이 없습니다'}</Select.Trigger
+            >{selectedTarget?.label ?? m.documents_move_none()}</Select.Trigger
           >
           <Select.Content>
             {#each moveOptions as option (option.value)}
@@ -547,40 +567,40 @@
       {#if preview !== undefined}
         <div class="grid gap-2 text-sm md:grid-cols-2" data-testid="move-preview">
           <div>
-            <h3 class="font-semibold">새로 볼 수 있게 되는 사람</h3>
-            <p>{preview.gains.length === 0 ? '없음' : preview.gains.join(', ')}</p>
+            <h3 class="font-semibold">{m.documents_move_gains()}</h3>
+            <p>{preview.gains.length === 0 ? m.documents_none() : preview.gains.join(', ')}</p>
           </div>
           <div>
-            <h3 class="font-semibold">더 이상 볼 수 없게 되는 사람</h3>
-            <p>{preview.loses.length === 0 ? '없음' : preview.loses.join(', ')}</p>
+            <h3 class="font-semibold">{m.documents_move_loses()}</h3>
+            <p>{preview.loses.length === 0 ? m.documents_none() : preview.loses.join(', ')}</p>
           </div>
         </div>
         {#if preview.history_moves_with_document}
           <p class="text-sm text-muted-foreground">
-            이전 리비전 기록도 함께 옮겨져, 새로 볼 수 있게 되는 사람에게 보입니다.
+            {m.documents_move_history()}
           </p>
         {/if}
         <p class="text-sm text-muted-foreground">
           {preview.reference_changes
-            ? '대상에서 번호가 새로 붙습니다.'
-            : '같은 모듈 안 이동이라 번호가 그대로입니다.'}
+            ? m.documents_move_reference_changes()
+            : m.documents_move_reference_same()}
         </p>
         {#if preview.children_left_behind > 0}
           <p class="text-sm" role="note">
-            하위 문서 {preview.children_left_behind}개는 지금 자리에 남아 이 문서의 상위 문서 아래로
-            옮겨집니다.
+            {m.documents_move_children({ count: preview.children_left_behind })}
           </p>
         {/if}
         {#if preview.active_public_links > 0}
           <p class="text-sm" role="note">
-            활성 공개 링크 {preview.active_public_links}개가 그대로 유지되어 로그인 없이 계속 볼 수
-            있습니다. 막으려면 공유·설정에서 링크를 철회하세요.
+            {m.documents_move_public_links({ count: preview.active_public_links })}
           </p>
         {/if}
       {/if}
       <Dialog.Footer>
-        <Button variant="ghost" onclick={() => (panel = undefined)}>취소</Button>
-        <Button disabled={preview === undefined} onclick={() => void confirmMove()}>이동</Button>
+        <Button variant="ghost" onclick={() => (panel = undefined)}>{m.common_cancel()}</Button>
+        <Button disabled={preview === undefined} onclick={() => void confirmMove()}
+          >{m.documents_move()}</Button
+        >
       </Dialog.Footer>
     {/if}
     {#if error !== undefined}

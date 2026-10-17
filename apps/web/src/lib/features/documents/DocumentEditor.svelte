@@ -10,8 +10,10 @@
 
   import type { DocNode, DocumentView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, NetworkError, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
+  import { m } from '$lib/paraglide/messages.js';
   import { router, standalonePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -36,7 +38,7 @@
   /** 본문에 넣을 파일: 이 문서의 첨부로 올리고 그 버전의 주소를 돌려준다(D-27 이미지·첨부). */
   async function insertFile(file: File): Promise<{ href: string; name: string; image: boolean }> {
     const done = await uploadFile(file, { target: { kind: 'document', id: server.id } });
-    if (done.file_id === null) throw new Error(done.failure ?? '업로드를 마치지 못했습니다');
+    if (done.file_id === null) throw new Error(done.failure ?? m.documents_upload_failed());
     const image = INLINE_IMAGES.includes(file.type);
     return {
       href: fileContentUrl(done.file_id, done.version ?? undefined, image),
@@ -130,7 +132,7 @@
     }
     if (title.trim() === '') {
       status = 'error';
-      message = '제목을 입력하세요.';
+      message = m.documents_title_required();
       return;
     }
     const snap = snapshot();
@@ -178,14 +180,14 @@
       if (destroyed) return;
       if (error instanceof NetworkError) {
         status = 'retrying';
-        message = '서버에 연결할 수 없어 다시 시도합니다. 편집 내용은 이 브라우저에 보관됩니다.';
+        message = m.documents_save_retrying();
         schedule(RETRY_DELAY_MS);
       } else if (error instanceof ApiError && error.status === 401) {
         status = 'signed-out';
-        message = '로그인이 만료됐습니다. 편집 내용은 이 브라우저에 보관됩니다. 다시 로그인하세요.';
+        message = m.documents_signed_out();
       } else {
         status = 'error';
-        message = error instanceof Error ? error.message : '저장하지 못했습니다.';
+        message = errorText(error, m.documents_save_failed());
       }
     }
   }
@@ -214,7 +216,9 @@
   }
 
   async function keepMineAsCopy(): Promise<void> {
-    const copyTitle = `${title.trim() === '' ? server.title : title.trim()} (내 초안)`;
+    const copyTitle = m.documents_draft_copy_title({
+      title: title.trim() === '' ? server.title : title.trim(),
+    });
     try {
       // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다.
       const created = await api.createNote(newRequestId(), copyTitle);
@@ -229,10 +233,7 @@
       router.guard = undefined;
       router.navigate(standalonePath(created.id));
     } catch (error: unknown) {
-      message =
-        error instanceof Error
-          ? `복사본을 만들지 못했습니다: ${error.message}`
-          : '복사본을 만들지 못했습니다.';
+      message = errorText(error, m.documents_copy_failed());
     }
   }
 
@@ -252,26 +253,31 @@
     restorable = undefined;
   }
 
-  const statusText: Record<Status, string> = {
-    saved: '저장됨',
-    dirty: '저장 대기',
-    saving: '저장 중…',
-    retrying: '재시도 대기',
-    conflict: '충돌 — 선택 필요',
-    error: '저장 실패',
-    'signed-out': '로그인 필요',
-  };
+  function statusText(s: Status): string {
+    switch (s) {
+      case 'saved':
+        return m.documents_status_saved();
+      case 'dirty':
+        return m.documents_status_dirty();
+      case 'saving':
+        return m.documents_status_saving();
+      case 'retrying':
+        return m.documents_status_retrying();
+      case 'conflict':
+        return m.documents_status_conflict();
+      case 'error':
+        return m.documents_status_error();
+      case 'signed-out':
+        return m.documents_status_signed_out();
+    }
+  }
 
   onMount(() => {
     const beforeUnload = (event: BeforeUnloadEvent): void => {
       if (isDirty()) event.preventDefault();
     };
     window.addEventListener('beforeunload', beforeUnload);
-    router.guard = () =>
-      !isDirty() ||
-      window.confirm(
-        '저장하지 않은 변경이 있습니다. 이동할까요? (초안은 이 브라우저에 보관됩니다)',
-      );
+    router.guard = () => !isDirty() || window.confirm(m.documents_leave_confirm());
     return () => {
       destroyed = true;
       if (timer !== undefined) clearTimeout(timer);
@@ -284,20 +290,22 @@
 <article class="flex flex-col gap-4" aria-labelledby="doc-title-label">
   <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
     {#if server.reference !== null}
-      <span class="rounded border px-1.5 font-mono" title="문서 참조">{server.reference}</span>
+      <span class="rounded border px-1.5 font-mono" title={m.documents_reference_title()}
+        >{server.reference}</span
+      >
     {/if}
-    <span>리비전 {server.revision}</span>
+    <span>{m.documents_revision_n({ revision: server.revision })}</span>
     <span class="ml-auto" role="status" aria-live="polite" data-testid="save-status"
-      >{statusText[status]}</span
+      >{statusText(status)}</span
     >
     {#if server.can_edit}
       <Button
         size="sm"
         disabled={status === 'saving' || status === 'conflict'}
-        onclick={() => void save()}>저장</Button
+        onclick={() => void save()}>{m.common_save()}</Button
       >
     {:else}
-      <span>읽기 전용</span>
+      <span>{m.documents_read_only()}</span>
     {/if}
   </div>
 
@@ -309,7 +317,7 @@
       {message}
       {#if status === 'signed-out'}
         <a class="underline" href={`/auth/login?return_to=${encodeURIComponent(router.path)}`}
-          >다시 로그인</a
+          >{m.documents_sign_in_again()}</a
         >
       {/if}
     </p>
@@ -319,12 +327,14 @@
     <div
       class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
       role="region"
-      aria-label="보관된 초안"
+      aria-label={m.documents_draft_region()}
     >
-      <span>이 브라우저에 저장하지 않은 초안이 있습니다 ({formatInstant(restorable.savedAt)}).</span
+      <span>{m.documents_draft_found({ time: formatInstant(restorable.savedAt) })}</span>
+      <Button size="sm" variant="outline" onclick={restoreDraft}
+        >{m.documents_draft_restore()}</Button
       >
-      <Button size="sm" variant="outline" onclick={restoreDraft}>초안 복원</Button>
-      <Button size="sm" variant="ghost" onclick={discardDraft}>초안 버리기</Button>
+      <Button size="sm" variant="ghost" onclick={discardDraft}>{m.documents_draft_discard()}</Button
+      >
     </div>
   {/if}
 
@@ -333,37 +343,42 @@
       class="flex flex-col gap-3 rounded border border-amber-500/60 px-3 py-3"
       aria-labelledby="conflict-heading"
     >
-      <h2 id="conflict-heading" class="font-semibold">다른 곳에서 먼저 저장됐습니다</h2>
+      <h2 id="conflict-heading" class="font-semibold">{m.documents_conflict_heading()}</h2>
       <p class="text-sm">
-        서버에는 리비전 {conflict.revision}이 있습니다. 내 초안은 그대로 남아 있습니다. 비교한 뒤
-        선택하세요.
+        {m.documents_conflict_body({ revision: conflict.revision })}
       </p>
       <div class="grid gap-3 md:grid-cols-2">
         <div>
-          <h3 class="text-sm font-semibold">서버 버전 — {conflict.title}</h3>
+          <h3 class="text-sm font-semibold">
+            {m.documents_conflict_server({ title: conflict.title })}
+          </h3>
           <pre
             class="max-h-60 overflow-auto rounded bg-muted p-2 text-sm whitespace-pre-wrap"
             data-testid="conflict-server">{plainText(conflict.body)}</pre>
         </div>
         <div>
-          <h3 class="text-sm font-semibold">내 초안 — {title}</h3>
+          <h3 class="text-sm font-semibold">{m.documents_conflict_mine({ title })}</h3>
           <pre
             class="max-h-60 overflow-auto rounded bg-muted p-2 text-sm whitespace-pre-wrap"
             data-testid="conflict-mine">{plainText(body)}</pre>
         </div>
       </div>
       <div class="flex flex-wrap gap-2">
-        <Button size="sm" onclick={() => void keepMineAsCopy()}>내 초안을 내 노트로 보존</Button>
-        <Button size="sm" variant="outline" onclick={() => (confirmOverwrite = true)}
-          >내 초안으로 다시 저장</Button
+        <Button size="sm" onclick={() => void keepMineAsCopy()}
+          >{m.documents_conflict_keep_copy()}</Button
         >
-        <Button size="sm" variant="ghost" onclick={useServerVersion}>서버 버전으로 바꾸기</Button>
+        <Button size="sm" variant="outline" onclick={() => (confirmOverwrite = true)}
+          >{m.documents_conflict_overwrite()}</Button
+        >
+        <Button size="sm" variant="ghost" onclick={useServerVersion}
+          >{m.documents_conflict_use_server()}</Button
+        >
       </div>
     </section>
   {/if}
 
   <div class="flex flex-col gap-1">
-    <Label id="doc-title-label" for="doc-title">제목</Label>
+    <Label id="doc-title-label" for="doc-title">{m.documents_title_label()}</Label>
     <Input
       id="doc-title"
       bind:value={title}
@@ -379,7 +394,7 @@
     <TiptapEditor
       content={body}
       editable={server.can_edit}
-      label="본문"
+      label={m.documents_body_label()}
       {references}
       insertFile={server.can_edit ? insertFile : undefined}
       onchange={(next: DocNode) => {
@@ -393,19 +408,18 @@
 <Dialog.Root bind:open={confirmOverwrite}>
   <Dialog.Content>
     <Dialog.Header>
-      <Dialog.Title>내 초안으로 다시 저장할까요?</Dialog.Title>
+      <Dialog.Title>{m.documents_overwrite_title()}</Dialog.Title>
       <Dialog.Description>
-        서버의 리비전 {conflict?.revision}을 기준으로 내 초안을 새 리비전으로 저장합니다. 서버
-        버전은 리비전 기록에 남습니다.
+        {m.documents_overwrite_description({ revision: conflict?.revision ?? '' })}
       </Dialog.Description>
     </Dialog.Header>
     <Dialog.Footer>
       <Dialog.Close>
         {#snippet child({ props })}
-          <Button variant="ghost" {...props}>취소</Button>
+          <Button variant="ghost" {...props}>{m.common_cancel()}</Button>
         {/snippet}
       </Dialog.Close>
-      <Button onclick={() => void overwriteWithMine()}>다시 저장</Button>
+      <Button onclick={() => void overwriteWithMine()}>{m.documents_overwrite_confirm()}</Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

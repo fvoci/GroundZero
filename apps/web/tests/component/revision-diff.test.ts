@@ -1,11 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { parseRevision } from '$lib/api/client';
 import { blockLines, diffRevisions } from '$lib/features/documents/revision-diff';
+import { setLocale } from '$lib/paraglide/runtime.js';
 
 const p = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
 
 describe('revision diff', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+  });
+
   it('flattens blocks into readable lines', () => {
     const body = {
       type: 'doc',

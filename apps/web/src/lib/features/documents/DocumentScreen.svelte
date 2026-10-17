@@ -11,6 +11,7 @@
   import type { ReferenceContext } from '$lib/features/references/context';
   import { referenceHref } from '$lib/features/references/context';
   import { badgeColor, workspaceLabel } from '$lib/features/workspaces/badge';
+  import { m } from '$lib/paraglide/messages.js';
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
 
@@ -48,8 +49,8 @@
         if (cancelled) return;
         error =
           e instanceof ApiError && e.status === 404
-            ? '문서가 없거나 볼 권한이 없습니다.'
-            : '문서를 불러오지 못했습니다.';
+            ? m.documents_not_found()
+            : m.documents_load_failed();
       });
     return () => {
       cancelled = true;
@@ -77,7 +78,7 @@
 {#if error !== undefined}
   <p role="alert" class="text-destructive">{error}</p>
 {:else if doc === undefined}
-  <p aria-live="polite">불러오는 중…</p>
+  <p aria-live="polite">{m.documents_loading()}</p>
 {:else}
   <div class="flex flex-wrap items-center gap-2">
     <DocumentActions
@@ -104,7 +105,7 @@
       {#if doc.can_delete}
         {@const d = doc}
         <DeleteButton
-          what="문서"
+          what={m.documents_delete_what()}
           remove={() => api.trashDocument(d.id)}
           ondeleted={() => {
             router.navigate(
