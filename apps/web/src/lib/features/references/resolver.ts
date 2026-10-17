@@ -67,7 +67,10 @@ export function forgetReferences(): void {
   cache.clear();
 }
 
-/** 화면에 보일 글자. 볼 수 없는 대상은 제목 없이 같은 문구로 보인다. */
+/**
+ * 화면·내보내기 파일에 보일 글자. 볼 수 없는 대상은 제목 없이 같은 문구로 보인다. 이 문구는 내보내기 파일 내용이라
+ * 화면 언어를 따르지 않는다(편집기 화면은 reference-extension이 번역된 문구로 바꾼다, D-81).
+ */
 export function referenceLabel(r: ResolvedReferenceView): string {
   if (!r.visible || r.title === null) return '볼 수 없는 대상';
   if (r.kind === 'user') return `@${r.title}`;
