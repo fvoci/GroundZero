@@ -11,6 +11,7 @@
   import RecordEditor from './RecordEditor.svelte';
   import type { RecordForm } from './records';
   import { emptyForm, formOf, summary, toInput } from './records';
+  import ZoteroImport from './ZoteroImport.svelte';
 
   interface Props {
     item: ItemView;
@@ -160,6 +161,14 @@
     <p aria-live="polite" class="text-sm">{status}</p>
     {#if current !== undefined}
       {@const def = current}
+      {#if def.kind === 'reference' && canWrite}
+        <ZoteroImport
+          itemId={item.id}
+          onimported={() => {
+            reloadKey += 1;
+          }}
+        />
+      {/if}
       {#if creating}
         <RecordEditor
           {def}

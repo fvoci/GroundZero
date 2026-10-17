@@ -1023,6 +1023,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/zotero/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Zotero에서 문헌 가져오기(연구 항목에 쓸 수 있는 사람). 같은 Zotero 문헌은 새로 만들지 않고 서지만 고친다. */
+        post: operations["zotero_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -2246,6 +2263,23 @@ export interface paths {
          *     한 번에 만든다. 같은 사용자의 같은 `request_id`는 같은 문서를 돌려준다.
          */
         post: operations["create_wiki"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/zotero/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 내 Zotero 라이브러리의 컬렉션(로그인한 사람). 키는 저장하지 않는다. */
+        post: operations["zotero_collections"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4219,6 +4253,37 @@ export interface components {
          * @description 워크스페이스 내부 ID.
          */
         WorkspaceId: string;
+        /** @description 컬렉션. */
+        ZoteroCollection: {
+            key: string;
+            name: string;
+        };
+        /** @description 가져오기. */
+        ZoteroImport: components["schemas"]["ZoteroLibrary"] & {
+            /** @description 이 컬렉션만. 없으면 라이브러리의 최상위 문헌 전부. */
+            collection_key?: string | null;
+        };
+        /** @description 가져온 결과. */
+        ZoteroImported: {
+            /** Format: int32 */
+            created: number;
+            /**
+             * Format: int32
+             * @description 첨부·메모처럼 문헌이 아닌 것과 제목 없는 것.
+             */
+            skipped: number;
+            /** Format: int32 */
+            updated: number;
+        };
+        /** @description 어느 Zotero 라이브러리인지. 키는 저장하지 않는다. */
+        ZoteroLibrary: {
+            /** @description Zotero 설정의 API 키(읽기 권한). 이 요청에만 쓴다. */
+            api_key: string;
+            /** @description 사용자 ID 또는 그룹 ID(숫자). */
+            library_id: string;
+            /** @description `user` 또는 `group`. */
+            library_type: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -7433,6 +7498,71 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    zotero_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZoteroImport"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoteroImported"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10846,6 +10976,45 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    zotero_collections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZoteroLibrary"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoteroCollection"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

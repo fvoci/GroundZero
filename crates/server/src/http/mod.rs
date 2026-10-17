@@ -18,7 +18,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
     members, modules, public_links, records, recurrence, references, revisions, saved_views,
-    schedule, search_api, study, tasks, time_tracking, trash, workspaces,
+    schedule, search_api, study, tasks, time_tracking, trash, workspaces, zotero,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -224,6 +224,8 @@ async fn api_not_found() -> AppError {
         study::set_progress,
         study::plan,
         study::participants,
+        zotero::list_collections,
+        zotero::import,
         records::kinds,
         records::list,
         records::create,
@@ -428,6 +430,10 @@ async fn api_not_found() -> AppError {
         study::PlanUnits,
         study::UnitsPlanned,
         study::StudyParticipant,
+        zotero::ZoteroLibrary,
+        zotero::ZoteroCollection,
+        zotero::ZoteroImport,
+        zotero::ZoteroImported,
         records::FieldType,
         records::ChoiceDef,
         records::FieldDef,
@@ -548,6 +554,8 @@ pub fn router(state: AppState) -> Router {
         .route("/workspaces/{workspace_id}/audit", get(audit::workspace))
         .route("/me/audit", get(audit::mine))
         .route("/record-kinds", get(records::kinds))
+        .route("/zotero/collections", post(zotero::list_collections))
+        .route("/items/{item_id}/zotero/import", post(zotero::import))
         .route("/document-templates", get(documents::templates))
         .route(
             "/documents/{document_id}/template",

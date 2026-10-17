@@ -674,6 +674,14 @@ export function parseRecord(value: Json): RecordView {
   };
 }
 
+// --- Zotero 읽기 (D-34) ------------------------------------------------------
+
+export interface ZoteroLibraryInput {
+  api_key: string;
+  library_type: 'user' | 'group';
+  library_id: string;
+}
+
 // --- 저장한 보기 (D-31) ------------------------------------------------------
 
 export interface SavedViewView {
@@ -2287,6 +2295,33 @@ export const api = {
   tasks: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/tasks`, (v) =>
       parseList(v, parseTask),
+    ),
+  /** Zotero 컬렉션(D-34). 키는 이 요청에만 쓰고 서버가 저장하지 않는다. */
+  zoteroCollections: (library: ZoteroLibraryInput) =>
+    expectOk(
+      'POST',
+      '/api/zotero/collections',
+      (v) =>
+        parseList(v, (c) => {
+          const o = rec(c, 'zotero collection');
+          return { key: str(o, 'key'), name: str(o, 'name') };
+        }),
+      { ...library },
+    ),
+  /** Zotero 문헌을 연구 항목의 문헌 기록으로 가져온다(같은 문헌은 서지만 새로). */
+  zoteroImport: (itemId: string, library: ZoteroLibraryInput, collectionKey: string | null) =>
+    expectOk(
+      'POST',
+      `/api/items/${encodeURIComponent(itemId)}/zotero/import`,
+      (v) => {
+        const o = rec(v, 'zotero import');
+        return {
+          created: int(o, 'created'),
+          updated: int(o, 'updated'),
+          skipped: int(o, 'skipped'),
+        };
+      },
+      { ...library, collection_key: collectionKey },
     ),
   /** 쓸 수 있는 문서 템플릿(D-27): 그 워크스페이스의 것과 내 개인 노트 템플릿. */
   documentTemplates: (workspaceId: string | null) =>

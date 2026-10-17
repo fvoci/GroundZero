@@ -248,6 +248,8 @@ pub fn record_kinds() -> Vec<RecordKindDef> {
                 f("citation", "인용", LongText),
                 f("pages", "페이지", Text),
                 f("zotero_key", "Zotero 키", Text),
+                f("zotero_link", "Zotero 원본", Url),
+                f("zotero_collections", "Zotero 컬렉션", Tags),
             ],
             &[c("reference", "PDF·원문")],
         ),
@@ -743,7 +745,7 @@ fn normalize_fields(
 }
 
 /// 종류·칸·사람·강좌·파일 역할을 확인한다.
-async fn validate(
+pub(crate) async fn validate(
     tx: &mut UserTx,
     item: ItemId,
     kind_name: &str,

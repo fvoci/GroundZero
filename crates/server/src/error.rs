@@ -54,6 +54,9 @@ pub enum AppError {
     /// 파일 저장소(로컬·S3) 실패.
     #[error("storage error: {0}")]
     Storage(String),
+    /// 바깥 서비스(예: Zotero) 응답 실패. 메시지는 사용자에게 보인다(자격 증명을 넣지 않는다).
+    #[error("upstream error: {0}")]
+    Upstream(String),
 }
 
 impl AppError {
@@ -86,6 +89,7 @@ impl AppError {
             Self::Conflict(_) => (StatusCode::CONFLICT, "invalid_state"),
             Self::Oidc(_) => (StatusCode::BAD_GATEWAY, "oidc_error"),
             Self::Storage(_) => (StatusCode::BAD_GATEWAY, "storage_error"),
+            Self::Upstream(_) => (StatusCode::BAD_GATEWAY, "upstream_error"),
             Self::Config(_) | Self::Database(_) | Self::Migrate(_) | Self::Io(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")
             }
@@ -97,7 +101,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error) = self.status_and_code();
         let message = match &self {
-            Self::BadRequest(msg) | Self::Conflict(msg) => msg.clone(),
+            Self::BadRequest(msg) | Self::Conflict(msg) | Self::Upstream(msg) => msg.clone(),
             other => {
                 if status.is_server_error() {
                     // 내부 오류 세부는 로그에만 남긴다.

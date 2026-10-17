@@ -115,6 +115,8 @@ pub struct Config {
     pub initial_admin_subject: Option<String>,
     /// 그 첫 워크스페이스 이름. `FVOCI_INITIAL_WORKSPACE`, 기본 `fvoci`.
     pub initial_workspace: String,
+    /// Zotero Web API 주소(D-34 읽기 연동). `FVOCI_ZOTERO_API_URL`, 기본 `https://api.zotero.org`(테스트는 대역 서버).
+    pub zotero_api_url: Url,
     /// 세션 절대 만료. `FVOCI_SESSION_TTL_SECS`, 기본 43200(12시간).
     pub session_ttl: Duration,
     /// 정적 웹 자산 디렉터리. `FVOCI_WEB_DIR`. 없으면 API만 서빙한다.
@@ -344,6 +346,13 @@ impl Config {
                 .map(|v| v.trim().to_owned())
                 .filter(|v| !v.is_empty())
                 .unwrap_or_else(|| "fvoci".to_owned()),
+            zotero_api_url: Url::parse(
+                lookup("FVOCI_ZOTERO_API_URL")
+                    .filter(|v| !v.trim().is_empty())
+                    .as_deref()
+                    .unwrap_or("https://api.zotero.org"),
+            )
+            .map_err(|e| AppError::Config(format!("FVOCI_ZOTERO_API_URL is invalid: {e}")))?,
             session_ttl,
             web_dir,
             limits,

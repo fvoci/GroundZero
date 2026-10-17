@@ -4628,6 +4628,98 @@
         }
       }
     },
+    "/api/items/{item_id}/zotero/import": {
+      "post": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Zotero에서 문헌 가져오기(연구 항목에 쓸 수 있는 사람). 같은 Zotero 문헌은 새로 만들지 않고 서지만 고친다.",
+        "operationId": "zotero_import",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ZoteroImport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoteroImported"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me": {
       "get": {
         "tags": [
@@ -9546,6 +9638,60 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zotero/collections": {
+      "post": {
+        "tags": [
+          "records"
+        ],
+        "summary": "내 Zotero 라이브러리의 컬렉션(로그인한 사람). 키는 저장하지 않는다.",
+        "operationId": "zotero_collections",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ZoteroLibrary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ZoteroCollection"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
             "description": "",
             "content": {
               "application/json": {
@@ -15365,6 +15511,89 @@
         "type": "string",
         "format": "uuid",
         "description": "워크스페이스 내부 ID."
+      },
+      "ZoteroCollection": {
+        "type": "object",
+        "description": "컬렉션.",
+        "required": [
+          "key",
+          "name"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ZoteroImport": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ZoteroLibrary"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "collection_key": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "이 컬렉션만. 없으면 라이브러리의 최상위 문헌 전부."
+              }
+            }
+          }
+        ],
+        "description": "가져오기."
+      },
+      "ZoteroImported": {
+        "type": "object",
+        "description": "가져온 결과.",
+        "required": [
+          "created",
+          "updated",
+          "skipped"
+        ],
+        "properties": {
+          "created": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32",
+            "description": "첨부·메모처럼 문헌이 아닌 것과 제목 없는 것."
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ZoteroLibrary": {
+        "type": "object",
+        "description": "어느 Zotero 라이브러리인지. 키는 저장하지 않는다.",
+        "required": [
+          "api_key",
+          "library_type",
+          "library_id"
+        ],
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "description": "Zotero 설정의 API 키(읽기 권한). 이 요청에만 쓴다."
+          },
+          "library_id": {
+            "type": "string",
+            "description": "사용자 ID 또는 그룹 ID(숫자)."
+          },
+          "library_type": {
+            "type": "string",
+            "description": "`user` 또는 `group`."
+          }
+        }
       }
     }
   },
