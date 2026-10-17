@@ -860,8 +860,8 @@ async fn trash_expiry_keeps_files_with_referenced_versions() {
 }
 
 /// O-34 동시성: 자동 정리와 새 문서 참조가 겹쳐도 참조된 버전을 지우지 않는다. 저장이 버전 행을 먼저 잡으면
-/// 정리는 저장이 끝나기를 기다린 뒤 새 참조를 보고 건너뛴다. 정리가 먼저 지웠으면 저장은 오류 없이 끝나고
-/// (지워진 뒤의 주소일 뿐) 남은 참조가 지울 것을 붙잡지 않는다.
+/// 정리는 기다리지 않고 그 묶음을 이번 실행에서 건너뛰며, 저장이 끝난 뒤에는 새 참조를 보고 남긴다. 정리가 먼저
+/// 잡았으면 저장은 기다렸다가 오류 없이 끝난다(지워진 뒤의 주소일 뿐).
 #[tokio::test]
 async fn trash_expiry_and_a_new_reference_race_safely() {
     let state = common::state();
@@ -898,19 +898,19 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
     .execute(&mut *save)
     .await
     .unwrap();
-    let db = state.db.clone();
-    let purge = tokio::spawn(async move {
-        fvoci_server::worker::run_all_now(&db, None, None)
+    // 정리는 저장이 잡은 행을 기다리지 않고(SKIP LOCKED) 이번 실행에서 이 묶음을 건너뛴다.
+    let run = || async {
+        fvoci_server::worker::run_all_now(&state.db, None, None)
             .await
             .unwrap();
-    });
-    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    };
+    run().await;
     assert!(
-        !purge.is_finished(),
-        "purge waits for the saving transaction"
+        file_exists(&owner, &first).await,
+        "skipped while a save holds the version"
     );
     save.commit().await.unwrap();
-    purge.await.unwrap();
+    run().await;
     assert!(
         file_exists(&owner, &first).await,
         "the version referenced by the committed save is kept"
@@ -920,20 +920,136 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
     let second = new_file(&app, &writer, &item, "second.png", b"one").await;
     trash_file(&app, &writer, &second).await;
     expire_trash(&owner, &second).await;
+    let batch: uuid::Uuid =
+        sqlx::query_scalar("SELECT trash_batch_id FROM fvoci.files WHERE id = $1::uuid")
+            .bind(&second)
+            .fetch_one(&owner)
+            .await
+            .unwrap();
     let mut purging = owner.begin().await.unwrap();
-    let made: i32 = sqlx::query_scalar("SELECT fvoci.app_system_purge_expired()")
-        .fetch_one(&mut *purging)
+    sqlx::query("SELECT fvoci.app_system_purge_expired()")
+        .execute(&mut *purging)
         .await
         .unwrap();
-    assert_eq!(made, 1, "only the unreferenced bundle is purged");
+    let purged: bool =
+        sqlx::query_scalar("SELECT purged_at IS NOT NULL FROM fvoci.trash_batches WHERE id = $1")
+            .bind(batch)
+            .fetch_one(&mut *purging)
+            .await
+            .unwrap();
+    assert!(purged, "the unreferenced bundle is purged");
     let doc2 = common::create_doc(&app, &writer, &ws, "늦은 참조").await;
     let doc2_id = doc2["id"].as_str().unwrap().to_owned();
     let (app2, writer2, second2) = (app.clone(), writer.clone(), second.clone());
     let late = tokio::spawn(async move { save_image(&app2, &writer2, &doc2_id, &second2).await });
-    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
-    assert!(!late.is_finished(), "the save waits for the purge");
+    // 저장이 정리의 행 잠금을 실제로 기다리는지 서버 상태로 확인한다(시간 추측 대신).
+    // 다른 역할의 쿼리 글은 관리 역할만 볼 수 있다.
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let watcher = sqlx::PgPool::connect(&admin_url).await.unwrap();
+    let mut waited = false;
+    for _ in 0..200 {
+        let n: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM pg_stat_activity
+             WHERE wait_event_type = 'Lock' AND query LIKE '%INSERT INTO document_revisions%'",
+        )
+        .fetch_one(&watcher)
+        .await
+        .unwrap();
+        if n > 0 {
+            waited = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    watcher.close().await;
+    assert!(waited, "the save waits for the purge's row lock");
+    assert!(!late.is_finished());
     purging.commit().await.unwrap();
     assert_eq!(late.await.unwrap(), StatusCode::OK);
     assert!(!file_exists(&owner, &second).await);
+    owner.close().await;
+}
+
+/// O-34 리뷰 반영: 문서 묶음의 첨부를 바깥의 살아 있는 문서가 가리키면 남기고, 만료된 두 문서가 서로의 첨부를
+/// 가리키면(둘 다 되살릴 수 없음) 둘 다 지운다.
+#[tokio::test]
+async fn trash_expiry_of_documents_honours_live_references_and_breaks_cycles() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "문서 만료").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let doc = |title: &'static str| {
+        let (app, writer, ws) = (app.clone(), writer.clone(), ws.clone());
+        async move {
+            common::create_doc(&app, &writer, &ws, title).await["id"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        }
+    };
+    let attach = |doc: String, name: &'static str| {
+        let (app, writer) = (app.clone(), writer.clone());
+        async move {
+            upload(
+                &app,
+                &writer,
+                json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc },
+                        "name": name, "size": 3, "content_type": "image/png" }),
+                b"png",
+            )
+            .await
+        }
+    };
+    let (a, b, live, gone) = (
+        doc("A").await,
+        doc("B").await,
+        doc("살아 있음").await,
+        doc("지움").await,
+    );
+    let file_a = attach(a.clone(), "a.png").await;
+    let file_b = attach(b.clone(), "b.png").await;
+    let file_gone = attach(gone.clone(), "d.png").await;
+    assert_eq!(save_image(&app, &writer, &a, &file_b).await, StatusCode::OK);
+    assert_eq!(save_image(&app, &writer, &b, &file_a).await, StatusCode::OK);
+    assert_eq!(
+        save_image(&app, &writer, &live, &file_gone).await,
+        StatusCode::OK
+    );
+    for d in [&a, &b, &gone] {
+        let r = send(
+            &app,
+            Method::DELETE,
+            &format!("/api/documents/{d}"),
+            Some(&writer),
+            None,
+        )
+        .await;
+        assert!(r.status.is_success(), "{:?}", r.json);
+    }
+    let owner = owner_pool().await;
+    sqlx::query(
+        "UPDATE fvoci.trash_batches SET deleted_at = now() - interval '400 days'
+         WHERE root_kind = 'document' AND root_id = ANY ($1::uuid[])",
+    )
+    .bind(vec![a.clone(), b.clone(), gone.clone()])
+    .execute(&owner)
+    .await
+    .unwrap();
+    fvoci_server::worker::run_all_now(&state.db, None, None)
+        .await
+        .unwrap();
+    assert!(
+        file_exists(&owner, &file_gone).await,
+        "a live document still shows it"
+    );
+    assert!(
+        !file_exists(&owner, &file_a).await,
+        "cycle between expired documents"
+    );
+    assert!(
+        !file_exists(&owner, &file_b).await,
+        "cycle between expired documents"
+    );
     owner.close().await;
 }
