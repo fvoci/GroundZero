@@ -3,6 +3,7 @@
   import type { PublicDocumentView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
   import TiptapEditor from '$lib/features/documents/TiptapEditor.svelte';
+  import { m } from '$lib/paraglide/messages.js';
 
   interface Props {
     token: string;
@@ -24,9 +25,7 @@
       .catch((e: unknown) => {
         if (cancelled) return;
         error =
-          e instanceof ApiError && e.status === 404
-            ? '링크가 없거나 만료·철회되었습니다.'
-            : '문서를 불러오지 못했습니다.';
+          e instanceof ApiError && e.status === 404 ? m.public_link_gone() : m.public_load_failed();
       });
     return () => {
       cancelled = true;
@@ -38,10 +37,10 @@
   {#if error !== undefined}
     <p role="alert">{error}</p>
   {:else if doc === undefined}
-    <p aria-live="polite">불러오는 중…</p>
+    <p aria-live="polite">{m.public_loading()}</p>
   {:else}
-    <p class="text-sm text-muted-foreground">공개 링크로 보는 읽기 전용 문서입니다.</p>
+    <p class="text-sm text-muted-foreground">{m.public_read_only_hint()}</p>
     <h1 class="text-2xl font-semibold">{doc.title}</h1>
-    <TiptapEditor content={doc.body} editable={false} label="본문" />
+    <TiptapEditor content={doc.body} editable={false} label={m.public_body_label()} />
   {/if}
 </main>
