@@ -16,8 +16,8 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, documents, events, members, modules, public_links, recurrence, references, revisions,
-    schedule, tasks, time_tracking, workspaces,
+    accounts, documents, events, home, members, modules, public_links, recurrence, references,
+    revisions, schedule, tasks, time_tracking, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -167,6 +167,9 @@ async fn api_not_found() -> AppError {
         time_tracking::set_sharing,
         time_tracking::get_sharing,
         time_tracking::task_time,
+        home::home,
+        home::set_mark,
+        home::get_mark,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -300,6 +303,16 @@ async fn api_not_found() -> AppError {
         time_tracking::SetSharing,
         time_tracking::Sharing,
         time_tracking::TaskTime,
+        home::DueBucket,
+        home::HomeTask,
+        home::HomeDocument,
+        home::HomeItem,
+        home::MarkTarget,
+        home::MarkKind,
+        home::MarkedTarget,
+        home::Home,
+        home::SetMark,
+        home::MarkState,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -336,6 +349,7 @@ async fn api_not_found() -> AppError {
         (name = "tasks", description = "업무·하위 업무·담당자·체크리스트"),
         (name = "events", description = "회의·발표·행사 일정과 달력"),
         (name = "time", description = "스톱워치·개인 시간 기록·집계"),
+        (name = "home", description = "홈·고정·즐겨찾기"),
     )
 )]
 pub struct ApiDoc;
@@ -451,6 +465,11 @@ pub fn router(state: AppState) -> Router {
             get(time_tracking::get_sharing).put(time_tracking::set_sharing),
         )
         .route("/tasks/{task_id}/time", get(time_tracking::task_time))
+        .route("/me/home", get(home::home))
+        .route(
+            "/me/marks/{target_kind}/{target_id}",
+            get(home::get_mark).put(home::set_mark),
+        )
         .route(
             "/tasks/{task_id}/predecessors/{predecessor_id}",
             put(schedule::add_predecessor).delete(schedule::remove_predecessor),

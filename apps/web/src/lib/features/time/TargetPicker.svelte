@@ -15,6 +15,12 @@
   let query = $state('');
   let results = $state<ReferenceCandidateView[]>([]);
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // 늦게 온 이전 검색 결과가 새 결과를 덮지 않게 순번을 붙인다.
+  let seq = 0;
+
+  $effect(() => () => {
+    clearTimeout(timer);
+  });
 
   function search(q: string): void {
     clearTimeout(timer);
@@ -22,11 +28,12 @@
       results = [];
       return;
     }
+    const mine = ++seq;
     timer = setTimeout(() => {
       api
         .referenceCandidates(q.trim(), null)
         .then((found) => {
-          results = found.filter((c) => c.kind !== 'user');
+          if (mine === seq) results = found.filter((c) => c.kind !== 'user');
         })
         .catch(() => {
           results = [];

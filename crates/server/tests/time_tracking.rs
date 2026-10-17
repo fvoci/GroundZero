@@ -443,6 +443,12 @@ async fn task_totals_include_only_people_who_chose_to_share() {
     );
     assert_eq!(time(outsider.clone()).await.status, StatusCode::NOT_FOUND);
 
+    // 진행 중인 남의 타이머는 공유 합계에 들어가지 않는다(시작·멈춤 시각이 드러나지 않게).
+    let r = send(&app, Method::POST, "/api/me/timer", Some(&sharer),
+                 Some(json!({ "request_id": new_request_id(), "kind": "work", "memo": "", "target": { "kind": "task", "id": task["id"] } }))).await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    assert_eq!(time(reader.clone()).await.json["shared_seconds"], 1800);
+
     let r = send(
         &app,
         Method::PUT,
@@ -465,4 +471,29 @@ async fn task_totals_include_only_people_who_chose_to_share() {
         .status,
         StatusCode::NOT_FOUND
     );
+
+    // 워크스페이스에서 빠지면 공유 선택도 사라진다(다시 들어와도 묻지 않고 공유되지 않음).
+    send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/time-sharing"),
+        Some(&sharer),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{ws}/members/{}", sharer.id.0),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(r.status.is_success(), "{:?}", r.json);
+    let mut tx = state.db.begin_as(sharer.id).await.unwrap();
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM time_sharing")
+        .fetch_one(tx.conn())
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
 }

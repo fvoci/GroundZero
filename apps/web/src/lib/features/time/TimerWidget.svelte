@@ -12,6 +12,7 @@
 
   $effect(() => {
     void timer.load();
+    return timer.watchVisibility();
   });
 
   async function run(action: () => Promise<unknown>, done: string): Promise<void> {

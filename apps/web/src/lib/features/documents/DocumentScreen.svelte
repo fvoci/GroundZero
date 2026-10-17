@@ -1,5 +1,6 @@
 <script lang="ts">
   // 문서를 불러와 동작 막대와 편집기에 넘긴다. 다른 문서로 바뀌면 편집기를 새로 만든다.
+  import MarkButtons from '$lib/features/home/MarkButtons.svelte';
   import type { Workspace } from '@fvoci/api-client';
 
   import type { DocumentView } from '$lib/api/client';
@@ -88,6 +89,7 @@
         epoch += 1;
       }}
     />
+    <div class="ml-auto"><MarkButtons kind="document" id={doc.id} /></div>
   </div>
   {#key `${doc.id}:${String(epoch)}`}
     <DocumentEditor

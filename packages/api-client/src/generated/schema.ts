@@ -585,6 +585,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 홈(로그인한 사람). 모든 워크스페이스에서 볼 수 있는 것만 모은다. */
+        get: operations["home"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/marks/{target_kind}/{target_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 한 대상의 내 표시 상태. */
+        get: operations["get_mark"];
+        /** 대상의 고정·즐겨찾기 켜기·끄기(본인). 켤 때 볼 수 없으면 404. */
+        put: operations["set_mark"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/notes": {
         parameters: {
             query?: never;
@@ -1544,6 +1579,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /**
+         * @description Up Next 구분.
+         * @enum {string}
+         */
+        DueBucket: "overdue" | "today" | "upcoming";
         /** @description 기록 내용(수동 추가·고치기 공통). */
         EntryInput: {
             /** @description RFC 3339. 진행 중인 타이머를 고칠 때만 없다. */
@@ -1649,6 +1689,55 @@ export interface components {
             /** @description 전체 상태. `ok` 또는 `degraded`. */
             status: string;
         };
+        /** @description 홈. */
+        Home: {
+            active_items: components["schemas"]["HomeItem"][];
+            favorites: components["schemas"]["MarkedTarget"][];
+            pins: components["schemas"]["MarkedTarget"][];
+            recent_documents: components["schemas"]["HomeDocument"][];
+            recent_tasks: components["schemas"]["HomeTask"][];
+            /** @description 보는 사람 시간대의 오늘. */
+            today: string;
+            up_next: components["schemas"]["HomeTask"][];
+        };
+        /** @description 홈의 문서 한 줄. */
+        HomeDocument: {
+            /** Format: uuid */
+            id: string;
+            item_id?: null | components["schemas"]["ItemId"];
+            reference?: string | null;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
+        };
+        /**
+         * @description 진행 중인 항목과 진행률. 진행률은 활동의 의미대로 계산하며 서로 다른 종류를 합산하지 않는다(D-19). 지금은
+         *     업무 완료 비율(완료한 업무 수 / 업무 수)이며 강의 이수율·공부 목표 달성률은 각 모듈 조각에서 더한다.
+         */
+        HomeItem: {
+            id: components["schemas"]["ItemId"];
+            module_kind: components["schemas"]["ModuleKind"];
+            reference?: string | null;
+            /** Format: int64 */
+            tasks_done: number;
+            /** Format: int64 */
+            tasks_total: number;
+            title: string;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /** @description 홈의 업무 한 줄. */
+        HomeTask: {
+            bucket?: null | components["schemas"]["DueBucket"];
+            due_date?: string | null;
+            /** Format: uuid */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            reference?: string | null;
+            status: components["schemas"]["TaskStatus"];
+            title: string;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
         /** @description 관리자가 보는 초대. */
         Invitation: {
             email: string;
@@ -1683,10 +1772,34 @@ export interface components {
         LogoutResponse: {
             redirect_to: string;
         };
+        /**
+         * @description 고정 또는 즐겨찾기.
+         * @enum {string}
+         */
+        MarkKind: "pin" | "favorite";
         /** @description 읽음 표시 요청. `id`가 없으면 모두 읽음. */
         MarkRead: {
             /** Format: uuid */
             id?: string | null;
+        };
+        /** @description 한 대상의 표시 상태. */
+        MarkState: {
+            favorite: boolean;
+            pin: boolean;
+        };
+        /**
+         * @description 고정·즐겨찾기 대상.
+         * @enum {string}
+         */
+        MarkTarget: "item" | "document" | "task";
+        /** @description 표시한 대상(지금 볼 수 있는 것만). */
+        MarkedTarget: {
+            /** Format: uuid */
+            id: string;
+            item_id?: null | components["schemas"]["ItemId"];
+            kind: components["schemas"]["MarkTarget"];
+            label: string;
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
         /** @description 현재 사용자 정보. */
         Me: {
@@ -1975,6 +2088,11 @@ export interface components {
         /** @description 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. */
         SetEventRecurrence: {
             rule?: null | components["schemas"]["RecurrenceRule"];
+        };
+        /** @description 고정·즐겨찾기 켜기·끄기. */
+        SetMark: {
+            mark: components["schemas"]["MarkKind"];
+            on: boolean;
         };
         /** @description 부모·순서 바꾸기 요청. `parent_id`가 없으면 최상위, `before_id`가 있으면 그 형제 바로 앞, 없으면 맨 끝. */
         SetParent: {
@@ -4098,6 +4216,99 @@ export interface operations {
                 };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    home: {
+        parameters: {
+            query: {
+                tz: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Home"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_mark: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                target_kind: components["schemas"]["MarkTarget"];
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkState"];
+                };
+            };
+        };
+    };
+    set_mark: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                target_kind: components["schemas"]["MarkTarget"];
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetMark"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkState"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

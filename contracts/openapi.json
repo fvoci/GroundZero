@@ -2550,6 +2550,155 @@
         }
       }
     },
+    "/api/me/home": {
+      "get": {
+        "tags": [
+          "home"
+        ],
+        "summary": "홈(로그인한 사람). 모든 워크스페이스에서 볼 수 있는 것만 모은다.",
+        "operationId": "home",
+        "parameters": [
+          {
+            "name": "tz",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Home"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/marks/{target_kind}/{target_id}": {
+      "get": {
+        "tags": [
+          "home"
+        ],
+        "summary": "한 대상의 내 표시 상태.",
+        "operationId": "get_mark",
+        "parameters": [
+          {
+            "name": "target_kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MarkTarget"
+            }
+          },
+          {
+            "name": "target_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkState"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "home"
+        ],
+        "summary": "대상의 고정·즐겨찾기 켜기·끄기(본인). 켤 때 볼 수 없으면 404.",
+        "operationId": "set_mark",
+        "parameters": [
+          {
+            "name": "target_kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MarkTarget"
+            }
+          },
+          {
+            "name": "target_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetMark"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/notes": {
       "get": {
         "tags": [
@@ -6397,6 +6546,15 @@
           }
         }
       },
+      "DueBucket": {
+        "type": "string",
+        "description": "Up Next 구분.",
+        "enum": [
+          "overdue",
+          "today",
+          "upcoming"
+        ]
+      },
       "EntryInput": {
         "type": "object",
         "description": "기록 내용(수동 추가·고치기 공통).",
@@ -6742,6 +6900,202 @@
           }
         }
       },
+      "Home": {
+        "type": "object",
+        "description": "홈.",
+        "required": [
+          "today",
+          "up_next",
+          "recent_tasks",
+          "recent_documents",
+          "active_items",
+          "pins",
+          "favorites"
+        ],
+        "properties": {
+          "active_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomeItem"
+            }
+          },
+          "favorites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarkedTarget"
+            }
+          },
+          "pins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarkedTarget"
+            }
+          },
+          "recent_documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomeDocument"
+            }
+          },
+          "recent_tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomeTask"
+            }
+          },
+          "today": {
+            "type": "string",
+            "description": "보는 사람 시간대의 오늘."
+          },
+          "up_next": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomeTask"
+            }
+          }
+        }
+      },
+      "HomeDocument": {
+        "type": "object",
+        "description": "홈의 문서 한 줄.",
+        "required": [
+          "id",
+          "title",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemId"
+              }
+            ]
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "workspace_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId",
+                "description": "개인 노트면 없다."
+              }
+            ]
+          }
+        }
+      },
+      "HomeItem": {
+        "type": "object",
+        "description": "진행 중인 항목과 진행률. 진행률은 활동의 의미대로 계산하며 서로 다른 종류를 합산하지 않는다(D-19). 지금은\n업무 완료 비율(완료한 업무 수 / 업무 수)이며 강의 이수율·공부 목표 달성률은 각 모듈 조각에서 더한다.",
+        "required": [
+          "id",
+          "workspace_id",
+          "module_kind",
+          "title",
+          "tasks_done",
+          "tasks_total"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "module_kind": {
+            "$ref": "#/components/schemas/ModuleKind"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tasks_done": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tasks_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "HomeTask": {
+        "type": "object",
+        "description": "홈의 업무 한 줄.",
+        "required": [
+          "id",
+          "item_id",
+          "workspace_id",
+          "title",
+          "status"
+        ],
+        "properties": {
+          "bucket": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DueBucket",
+                "description": "Up Next에서만."
+              }
+            ]
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "title": {
+            "type": "string"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
       "Invitation": {
         "type": "object",
         "description": "관리자가 보는 초대.",
@@ -6838,6 +7192,14 @@
           }
         }
       },
+      "MarkKind": {
+        "type": "string",
+        "description": "고정 또는 즐겨찾기.",
+        "enum": [
+          "pin",
+          "favorite"
+        ]
+      },
       "MarkRead": {
         "type": "object",
         "description": "읽음 표시 요청. `id`가 없으면 모두 읽음.",
@@ -6848,6 +7210,73 @@
               "null"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "MarkState": {
+        "type": "object",
+        "description": "한 대상의 표시 상태.",
+        "required": [
+          "pin",
+          "favorite"
+        ],
+        "properties": {
+          "favorite": {
+            "type": "boolean"
+          },
+          "pin": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MarkTarget": {
+        "type": "string",
+        "description": "고정·즐겨찾기 대상.",
+        "enum": [
+          "item",
+          "document",
+          "task"
+        ]
+      },
+      "MarkedTarget": {
+        "type": "object",
+        "description": "표시한 대상(지금 볼 수 있는 것만).",
+        "required": [
+          "kind",
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemId",
+                "description": "업무·항목 문서면 그 항목."
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MarkTarget"
+          },
+          "label": {
+            "type": "string"
+          },
+          "workspace_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
           }
         }
       },
@@ -7751,6 +8180,22 @@
                 "$ref": "#/components/schemas/RecurrenceRule"
               }
             ]
+          }
+        }
+      },
+      "SetMark": {
+        "type": "object",
+        "description": "고정·즐겨찾기 켜기·끄기.",
+        "required": [
+          "mark",
+          "on"
+        ],
+        "properties": {
+          "mark": {
+            "$ref": "#/components/schemas/MarkKind"
+          },
+          "on": {
+            "type": "boolean"
           }
         }
       },
@@ -8804,6 +9249,10 @@
     {
       "name": "time",
       "description": "스톱워치·개인 시간 기록·집계"
+    },
+    {
+      "name": "home",
+      "description": "홈·고정·즐겨찾기"
     }
   ]
 }

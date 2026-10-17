@@ -32,6 +32,8 @@
   }
 
   let form = $state<Form | undefined>(undefined);
+  // 고치지 않은 칸은 원래 값(초 단위)을 그대로 보낸다. 입력란은 분 단위라 다시 계산하면 길이가 바뀐다.
+  let initial = { start: '', end: '', pausedMinutes: '' };
   let base = $state<TimeEntryView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
   let busy = $state(false);
@@ -59,6 +61,7 @@
           ? null
           : { kind: e.target.kind, id: e.target.id, label: e.target.label ?? '볼 수 없는 대상' },
     };
+    initial = { start: form.start, end: form.end, pausedMinutes: form.pausedMinutes };
   }
 
   $effect(() => {
@@ -90,16 +93,25 @@
     error = undefined;
     try {
       const result = await api.updateTimeEntry(base.id, base.version, {
-        started_at: instantOf(form.start, zone),
-        ended_at: form.end === '' ? null : instantOf(form.end, zone),
-        // 진행 중인 타이머는 멈춘 시간을 바꾸지 않는다.
-        paused_seconds: base.ended_at === null ? base.paused_seconds : paused * 60,
+        started_at: form.start === initial.start ? base.started_at : instantOf(form.start, zone),
+        ended_at:
+          form.end === ''
+            ? null
+            : form.end === initial.end && base.ended_at !== null
+              ? base.ended_at
+              : instantOf(form.end, zone),
+        // 진행 중인 타이머와 고치지 않은 멈춘 시간은 원래 초 단위 값 그대로.
+        paused_seconds:
+          base.ended_at === null || form.pausedMinutes === initial.pausedMinutes
+            ? base.paused_seconds
+            : paused * 60,
         kind: form.kind,
         memo: form.memo,
         target: form.target === null ? null : { kind: form.target.kind, id: form.target.id },
       });
       if (result.kind === 'conflict') {
         fill(result.current);
+        history = await api.timeEntryRevisions(result.current.id).catch(() => history);
         error = '그사이 이 기록이 바뀌었습니다. 지금 내용을 불러왔으니 다시 고쳐 주세요.';
         return;
       }

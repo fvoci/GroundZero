@@ -52,7 +52,7 @@ impl ModuleKind {
         }
     }
 
-    fn parse(raw: &str) -> Option<Self> {
+    pub(crate) fn parse(raw: &str) -> Option<Self> {
         match raw {
             "project" => Some(Self::Project),
             "research" => Some(Self::Research),

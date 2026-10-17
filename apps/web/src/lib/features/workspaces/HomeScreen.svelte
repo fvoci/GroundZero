@@ -6,6 +6,8 @@
 
   import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
 
+  import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
+
   import CreateForm from './CreateForm.svelte';
   import WorkspaceBadge from './WorkspaceBadge.svelte';
 
@@ -17,6 +19,8 @@
 
   const { workspaces, oncreated, onjoined }: Props = $props();
 </script>
+
+<HomeDashboard {workspaces} />
 
 <section class="flex flex-col gap-6" aria-labelledby="home-heading">
   <ReceivedInvitations onaccepted={onjoined} />

@@ -1011,6 +1011,125 @@ export function parseTimeEntry(value: Json): TimeEntryView {
   };
 }
 
+export type MarkTarget = 'item' | 'document' | 'task';
+export type MarkKind = 'pin' | 'favorite';
+
+export interface HomeTaskView {
+  id: string;
+  item_id: string;
+  workspace_id: string;
+  reference: string | null;
+  title: string;
+  status: TaskStatus;
+  due_date: string | null;
+  bucket: 'overdue' | 'today' | 'upcoming' | null;
+}
+
+export interface HomeView {
+  today: string;
+  up_next: HomeTaskView[];
+  recent_tasks: HomeTaskView[];
+  recent_documents: {
+    id: string;
+    title: string;
+    reference: string | null;
+    workspace_id: string | null;
+    item_id: string | null;
+    updated_at: string;
+  }[];
+  active_items: {
+    id: string;
+    workspace_id: string;
+    module_kind: ModuleKind;
+    reference: string | null;
+    title: string;
+    tasks_done: number;
+    tasks_total: number;
+  }[];
+  pins: MarkedTargetView[];
+  favorites: MarkedTargetView[];
+}
+
+export interface MarkedTargetView {
+  kind: MarkTarget;
+  id: string;
+  label: string;
+  workspace_id: string | null;
+  item_id: string | null;
+}
+
+function markTarget(value: string): MarkTarget {
+  if (value === 'item' || value === 'document' || value === 'task') return value;
+  throw new TypeError(`unknown mark target ${value}`);
+}
+
+function parseHomeTask(value: Json): HomeTaskView {
+  const o = rec(value, 'home task');
+  const bucket = optStr(o, 'bucket');
+  if (bucket !== null && bucket !== 'overdue' && bucket !== 'today' && bucket !== 'upcoming')
+    throw new TypeError(`unknown bucket ${bucket}`);
+  return {
+    id: str(o, 'id'),
+    item_id: str(o, 'item_id'),
+    workspace_id: str(o, 'workspace_id'),
+    reference: optStr(o, 'reference'),
+    title: str(o, 'title'),
+    status: taskStatus(str(o, 'status')),
+    due_date: optStr(o, 'due_date'),
+    bucket,
+  };
+}
+
+function parseMarked(value: Json): MarkedTargetView {
+  const o = rec(value, 'marked target');
+  return {
+    kind: markTarget(str(o, 'kind')),
+    id: str(o, 'id'),
+    label: str(o, 'label'),
+    workspace_id: optStr(o, 'workspace_id'),
+    item_id: optStr(o, 'item_id'),
+  };
+}
+
+function parseHome(value: Json): HomeView {
+  const o = rec(value, 'home');
+  return {
+    today: str(o, 'today'),
+    up_next: parseList(o.up_next, parseHomeTask),
+    recent_tasks: parseList(o.recent_tasks, parseHomeTask),
+    recent_documents: parseList(o.recent_documents, (v) => {
+      const d = rec(v, 'home document');
+      return {
+        id: str(d, 'id'),
+        title: str(d, 'title'),
+        reference: optStr(d, 'reference'),
+        workspace_id: optStr(d, 'workspace_id'),
+        item_id: optStr(d, 'item_id'),
+        updated_at: str(d, 'updated_at'),
+      };
+    }),
+    active_items: parseList(o.active_items, (v) => {
+      const i = rec(v, 'home item');
+      return {
+        id: str(i, 'id'),
+        workspace_id: str(i, 'workspace_id'),
+        module_kind: moduleKind(str(i, 'module_kind')),
+        reference: optStr(i, 'reference'),
+        title: str(i, 'title'),
+        tasks_done: int(i, 'tasks_done'),
+        tasks_total: int(i, 'tasks_total'),
+      };
+    }),
+    pins: parseList(o.pins, parseMarked),
+    favorites: parseList(o.favorites, parseMarked),
+  };
+}
+
+function parseMarkState(value: Json): { pin: boolean; favorite: boolean } {
+  const o = rec(value, 'mark state');
+  return { pin: bool(o, 'pin'), favorite: bool(o, 'favorite') };
+}
+
 /** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
 export interface MoveTargetInput {
   workspaceId: string;
@@ -1328,6 +1447,14 @@ export const api = {
     }),
   excludeOccurrence: (id: string, date: string) =>
     expectOk('POST', `/api/events/${encodeURIComponent(id)}/exclusions`, none, { date }),
+  home: (tz: string) => expectOk('GET', `/api/me/home?tz=${encodeURIComponent(tz)}`, parseHome),
+  mark: (kind: MarkTarget, id: string) =>
+    expectOk('GET', `/api/me/marks/${kind}/${encodeURIComponent(id)}`, parseMarkState),
+  setMark: (kind: MarkTarget, id: string, mark: MarkKind, on: boolean) =>
+    expectOk('PUT', `/api/me/marks/${kind}/${encodeURIComponent(id)}`, parseMarkState, {
+      mark,
+      on,
+    }),
   currentTimer: () =>
     expectOk('GET', '/api/me/timer', (v) => (v === null ? null : parseTimeEntry(v))),
   startTimer: (

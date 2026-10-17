@@ -52,8 +52,13 @@
   }
 
   async function stopHere(): Promise<void> {
-    await timer.act('stop');
-    await reload();
+    error = undefined;
+    try {
+      await timer.act('stop');
+      await reload();
+    } catch (e: unknown) {
+      error = e instanceof ApiError ? e.message : '타이머를 끝내지 못했습니다.';
+    }
   }
 </script>
 

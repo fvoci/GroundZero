@@ -3,6 +3,7 @@
 pub mod accounts;
 pub mod documents;
 pub mod events;
+pub mod home;
 pub mod members;
 pub mod modules;
 pub mod public_links;

@@ -1,5 +1,6 @@
 <script lang="ts">
   // 항목 하나: 제목·설명·공개 범위, 보관, 항목 아래 문서 (D-14, D-20, D-59).
+  import MarkButtons from '$lib/features/home/MarkButtons.svelte';
   import type { Module, Workspace } from '@fvoci/api-client';
 
   import type { ItemView, SummaryView } from '$lib/api/client';
@@ -138,6 +139,7 @@
         >{current.visibility === 'private' ? '비공개' : '워크스페이스 공개'}</Badge
       >
       {#if current.archived}<Badge variant="secondary">보관됨 · 읽기 전용</Badge>{/if}
+      <div class="ml-auto"><MarkButtons kind="item" id={current.id} /></div>
     </div>
 
     {#if canEdit}

@@ -45,14 +45,36 @@ class TimerStore {
     target: { kind: TimeTargetKind; id: string } | null = null,
     memo = '',
   ): Promise<void> {
-    this.#set(await api.startTimer(newRequestId(), kind, memo, target));
+    try {
+      this.#set(await api.startTimer(newRequestId(), kind, memo, target));
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 409) await this.load();
+      throw e;
+    }
   }
 
   async act(action: 'pause' | 'resume' | 'stop'): Promise<TimeEntryView | undefined> {
     if (this.entry === null) return undefined;
-    const next = await api.timerAction(this.entry.id, action);
-    this.#set(action === 'stop' ? null : next);
-    return next;
+    try {
+      const next = await api.timerAction(this.entry.id, action);
+      this.#set(action === 'stop' ? null : next);
+      return next;
+    } catch (e: unknown) {
+      // 다른 탭·기기에서 이미 바뀌었다. 서버 상태로 맞춘 뒤 알린다.
+      if (e instanceof ApiError && (e.status === 404 || e.status === 409)) await this.load();
+      throw e;
+    }
+  }
+
+  /** 탭을 다시 볼 때 다른 탭·기기의 변경을 따라잡는다. */
+  watchVisibility(): () => void {
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') void this.load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }
 }
 
