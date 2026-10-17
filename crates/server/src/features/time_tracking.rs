@@ -618,13 +618,16 @@ pub enum SummaryGroup {
     Month,
 }
 
-/// 집계 조건. 주는 월요일부터.
+/// 집계 조건. 주는 `week_start`(`mon` 기본·`sun`)부터.
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct SummaryQuery {
     pub from: String,
     pub to: String,
     pub tz: String,
     pub group: SummaryGroup,
+    /// 한 주 시작(D-81): `mon`(기본)·`sun`.
+    #[serde(default)]
+    pub week_start: Option<String>,
 }
 
 /// 기간·종류별 합계.
@@ -636,7 +639,8 @@ pub struct TimeSummaryRow {
     pub seconds: i64,
 }
 
-/// 내 시간 집계(일·주·월, 보는 사람 시간대, 기록은 시작한 날에 센다).
+/// 내 시간 집계(일·주·월, 보는 사람 시간대). 기록 원본은 그대로 두고 합계만 그 시간대의 자정에서 나눈다(D-81).
+/// 일시정지 시각은 저장하지 않으므로 일시정지 시간은 경과 비율로 나눈다. 나눈 초의 합은 기록의 초와 같다.
 #[utoipa::path(get, path = "/api/me/time-summary", operation_id = "time_summary", params(SummaryQuery),
     responses((status = 200, body = [TimeSummaryRow]), (status = 400, body = ErrorBody)), tag = "time")]
 pub async fn summary(
@@ -654,19 +658,55 @@ pub async fn summary(
         SummaryGroup::Week => "week",
         SummaryGroup::Month => "month",
     };
+    let week_offset: i32 = match query.week_start.as_deref().unwrap_or("mon") {
+        "mon" => 0,
+        "sun" => 1,
+        _ => return Err(AppError::BadRequest("week_start must be mon or sun".into())),
+    };
     let mut tx = state.db.begin_as(user).await?;
     let w = window(&mut tx, &range).await?;
+    // 기록을 보는 사람 시간대의 날짜마다 조각으로 나누고, 조각의 초는 누적 경과 비율의 내림 차로 정해 조각의 합이
+    // 기록의 초(app_entry_seconds)와 정확히 같게 한다. 기간 경계도 그 시간대의 자정이다.
     let rows: Vec<(Date, String, i64)> = sqlx::query_as(
-        "SELECT date_trunc($4, e.started_at AT TIME ZONE $3)::date AS period, e.kind,
-                sum(app_entry_seconds(e))::bigint
-         FROM time_entries e
-         WHERE e.deleted_at IS NULL AND e.started_at >= $1 AND e.started_at < $2
+        "WITH e AS (
+           SELECT e.kind, e.started_at AS s, coalesce(e.ended_at, now()) AS f, app_entry_seconds(e)::bigint AS active
+           FROM time_entries e
+           WHERE e.deleted_at IS NULL AND e.started_at < $2 AND coalesce(e.ended_at, now()) >= $1
+         ),
+         seg AS (
+           SELECT e.kind, e.active, e.s, e.f, g.day,
+                  greatest(e.s, g.day::timestamp AT TIME ZONE $3) AS ss,
+                  least(e.f, (g.day + 1)::timestamp AT TIME ZONE $3) AS sf
+           FROM e
+           CROSS JOIN LATERAL (
+             SELECT d::date AS day
+             FROM generate_series((e.s AT TIME ZONE $3)::date, (e.f AT TIME ZONE $3)::date, interval '1 day') d
+           ) g
+         ),
+         part AS (
+           SELECT kind, day, ss,
+                  CASE WHEN f = s THEN CASE WHEN ss = s THEN active ELSE 0 END
+                       ELSE floor(active * extract(epoch FROM sf - s) / extract(epoch FROM f - s))::bigint
+                          - floor(active * extract(epoch FROM ss - s) / extract(epoch FROM f - s))::bigint
+                  END AS seconds
+           FROM seg
+           WHERE sf > ss OR f = s
+         )
+         SELECT CASE $4
+                  WHEN 'day' THEN day
+                  WHEN 'week' THEN (date_trunc('week', day + $5) - make_interval(days => $5))::date
+                  ELSE date_trunc('month', day)::date
+                END AS period,
+                kind, sum(seconds)::bigint
+         FROM part
+         WHERE ss >= $1 AND ss < $2
          GROUP BY 1, 2 ORDER BY 1, 2",
     )
     .bind(w.from_at)
     .bind(w.to_at)
     .bind(range.tz.trim())
     .bind(unit)
+    .bind(week_offset)
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;

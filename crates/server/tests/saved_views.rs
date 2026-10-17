@@ -8,7 +8,7 @@
 mod common;
 
 use axum::http::{Method, StatusCode};
-use common::{add_member, create_workspace, login, new_request_id, send};
+use common::{TestUser, add_member, create_workspace, login, new_request_id, send};
 use serde_json::json;
 
 #[tokio::test]
@@ -165,6 +165,74 @@ async fn time_zone_is_a_personal_setting() {
             .json["time_zone"],
         ""
     );
+}
+
+/// 표시 설정(D-81): 언어·주 시작·시각 표시를 따로 저장하고, 보내지 않은 칸은 그대로 둔다. 본인만 보고 모르는 값은 400.
+#[tokio::test]
+async fn display_settings_are_personal_and_kept_independently() {
+    let state = common::state();
+    let app = common::app(&state);
+    let me = login(&state, "display-me").await;
+    let other = login(&state, "display-other").await;
+    let put = |body: serde_json::Value| {
+        let app = app.clone();
+        let me = me.clone();
+        async move {
+            send(&app, Method::PUT, "/api/me/settings", Some(&me), Some(body))
+                .await
+                .status
+        }
+    };
+    let fields = |user: TestUser| {
+        let app = app.clone();
+        async move {
+            let v = send(&app, Method::GET, "/api/me", Some(&user), None)
+                .await
+                .json;
+            [
+                v["time_zone"].as_str().unwrap().to_owned(),
+                v["locale"].as_str().unwrap().to_owned(),
+                v["week_start"].as_str().unwrap().to_owned(),
+                v["hour_cycle"].as_str().unwrap().to_owned(),
+            ]
+        }
+    };
+    // 처음에는 아무것도 고르지 않았다(화면이 브라우저·로케일로 제안).
+    assert_eq!(fields(me.clone()).await, ["", "", "", ""]);
+    assert_eq!(
+        put(json!({ "time_zone": "Asia/Seoul", "locale": "en", "week_start": "sun", "hour_cycle": "h12" })).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(fields(me.clone()).await, ["Asia/Seoul", "en", "sun", "h12"]);
+    // 한 칸만 바꾸면 나머지는 그대로다(예전 화면은 시간대만 보낸다).
+    assert_eq!(
+        put(json!({ "time_zone": "America/New_York" })).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        put(json!({ "week_start": "mon" })).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        fields(me.clone()).await,
+        ["America/New_York", "en", "mon", "h12"]
+    );
+    for bad in [
+        json!({ "locale": "fr" }),
+        json!({ "week_start": "sat" }),
+        json!({ "hour_cycle": "h24" }),
+        json!({ "time_zone": "Mars/Olympus" }),
+    ] {
+        assert_eq!(put(bad).await, StatusCode::BAD_REQUEST);
+    }
+    assert_eq!(
+        fields(me.clone()).await,
+        ["America/New_York", "en", "mon", "h12"]
+    );
+    assert_eq!(fields(other.clone()).await, ["", "", "", ""]);
+    // 빈 값은 "고르지 않음"으로 되돌린다.
+    assert_eq!(put(json!({ "locale": "" })).await, StatusCode::NO_CONTENT);
+    assert_eq!(fields(me.clone()).await[1], "");
 }
 
 /// 초기 관리자(D-51): 운영자가 지정한 OIDC subject가 로그인하면 첫 워크스페이스의 소유자가 된다. 한 번만, 다른 사람은

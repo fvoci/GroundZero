@@ -2,6 +2,7 @@
   // 문서 한 건 내보내기(D-75). 저장된 리비전을 골라 Markdown·ZIP(Markdown과 그림·첨부)·PDF(브라우저 인쇄)로 내보낸다.
   // 권한은 서버가 확인하고(내려받기와 같은 규칙) 화면은 `can_export`일 때만 보인다. 저장하지 않은 편집이 있으면
   // 먼저 저장하거나 저장된 리비전을 내보낼지 알린다. 변환 결과와 제한(옮기지 못한 블록, 넣지 못한 첨부)을 보여 준다.
+  import { formatInstant } from '$lib/display';
   import type { DocumentView, RevisionSummaryView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
   import type { ReferenceContext } from '$lib/features/references/context';
@@ -44,7 +45,7 @@
     },
   ];
 
-  const when = (iso: string): string => new Date(iso).toLocaleString();
+  const when = (iso: string): string => formatInstant(iso);
   const latest = $derived(selected === doc.revision);
 
   function openDialog(): void {

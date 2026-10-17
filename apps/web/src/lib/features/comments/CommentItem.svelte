@@ -1,5 +1,6 @@
 <script lang="ts">
   // 댓글 하나: 쓴 사람·시각, 본문, 고치기(쓴 사람)·지우기(쓴 사람·소유자).
+  import { formatInstant } from '$lib/display';
   import type { CommentView } from '$lib/api/client';
   import { Button } from '$lib/ui/button';
 
@@ -24,7 +25,7 @@
   <div class="flex flex-wrap items-baseline gap-2 text-sm">
     <span class="font-medium">{comment.author_name ?? '이름을 볼 수 없는 사람'}</span>
     <span class="text-xs text-muted-foreground"
-      >{new Date(comment.created_at).toLocaleString()}{comment.edited ? ' · 고침' : ''}</span
+      >{formatInstant(comment.created_at)}{comment.edited ? ' · 고침' : ''}</span
     >
   </div>
   {#if editing !== undefined}

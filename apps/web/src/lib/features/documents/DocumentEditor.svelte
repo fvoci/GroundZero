@@ -5,6 +5,7 @@
   // - 서버가 409를 주면 초안을 버리지 않고, 서버 버전과 비교해 사용자가 고른다 (D-53).
   // - 미저장 초안은 로컬에 보관하고, 저장 전 이탈을 경고한다 (D-27).
   // 이 저장 방식은 JSON 리비전 저장이며 공동 편집이 아니다 (D-62).
+  import { formatInstant } from '$lib/display';
   import { onMount, untrack } from 'svelte';
 
   import type { DocNode, DocumentView } from '$lib/api/client';
@@ -320,10 +321,7 @@
       role="region"
       aria-label="보관된 초안"
     >
-      <span
-        >이 브라우저에 저장하지 않은 초안이 있습니다 ({new Date(
-          restorable.savedAt,
-        ).toLocaleString()}).</span
+      <span>이 브라우저에 저장하지 않은 초안이 있습니다 ({formatInstant(restorable.savedAt)}).</span
       >
       <Button size="sm" variant="outline" onclick={restoreDraft}>초안 복원</Button>
       <Button size="sm" variant="ghost" onclick={discardDraft}>초안 버리기</Button>

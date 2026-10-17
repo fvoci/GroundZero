@@ -1,5 +1,6 @@
 <script lang="ts">
   // 내 알림. 지금 볼 수 있는 문서에 대한 것만 서버가 돌려준다 (D-39).
+  import { formatInstant } from '$lib/display';
   import type { Workspace } from '@fvoci/api-client';
 
   import type { NotificationView } from '$lib/api/client';
@@ -116,7 +117,7 @@
               {/if}
             </span>
             <span class="ml-auto shrink-0 text-sm text-muted-foreground"
-              >{new Date(n.created_at).toLocaleString()}</span
+              >{formatInstant(n.created_at)}</span
             >
           </button>
         </li>

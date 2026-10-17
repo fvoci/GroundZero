@@ -16,7 +16,8 @@
   import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
   import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
   import SearchDialog from '$lib/features/search/SearchDialog.svelte';
-  import TimeZoneDialog from '$lib/features/settings/TimeZoneDialog.svelte';
+  import { displaySettings } from '$lib/display';
+  import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
   import TimeScreen from '$lib/features/time/TimeScreen.svelte';
   import TimerWidget from '$lib/features/time/TimerWidget.svelte';
@@ -47,7 +48,7 @@
 
   let session = $state<Session>({ state: 'loading' });
   let searchOpen = $state(false);
-  let timeZoneOpen = $state(false);
+  let displayOpen = $state(false);
 
   async function load(): Promise<void> {
     try {
@@ -59,7 +60,12 @@
       }
       currentUser.userId = me.id;
       currentUser.timeZone = me.time_zone;
+      currentUser.locale = me.locale;
+      currentUser.weekStart = me.week_start;
+      currentUser.hourCycle = me.hour_cycle;
       currentUser.displayName = me.display_name;
+      // 화면 낭독기·브라우저가 쓰는 문서 언어(D-81).
+      document.documentElement.lang = displaySettings().locale;
       session = { state: 'signed-in', me, workspaces: await api.workspaces() };
     } catch (e: unknown) {
       session = {
@@ -131,7 +137,7 @@
     bind:open={searchOpen}
     memberOf={(ws: string) => signedIn.workspaces.some((w) => w.id === ws)}
   />
-  <TimeZoneDialog bind:open={timeZoneOpen} />
+  <DisplaySettingsDialog bind:open={displayOpen} />
   <Sidebar.Provider>
     <Sidebar.Root>
       <Sidebar.Header>
@@ -240,8 +246,7 @@
                   window.location.assign('/api/me/export');
                 }}>내 자료 내려받기 (ZIP)</DropdownMenu.Item
               >
-              <DropdownMenu.Item onSelect={() => (timeZoneOpen = true)}>내 시간대</DropdownMenu.Item
-              >
+              <DropdownMenu.Item onSelect={() => (displayOpen = true)}>표시 설정</DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => void logout()}>로그아웃</DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Root>

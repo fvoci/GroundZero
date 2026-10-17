@@ -493,8 +493,14 @@ pub struct Me {
     pub id: UserId,
     pub display_name: String,
     pub email: Option<String>,
-    /// 내 시간대(IANA 이름, D-50). 비었으면 화면이 브라우저 시간대를 쓴다. 본인에게만 보인다.
+    /// 내 시간대(IANA 이름, D-50). 비었으면 아직 고르지 않음(화면이 브라우저 시간대를 쓴다). 본인에게만 보인다.
     pub time_zone: String,
+    /// 표시 언어(D-81): `ko`·`en`, 비었으면 아직 고르지 않음.
+    pub locale: String,
+    /// 한 주 시작(D-81): `mon`·`sun`, 비었으면 아직 고르지 않음.
+    pub week_start: String,
+    /// 시각 표시(D-81): `h12`·`h23`, 비었으면 아직 고르지 않음.
+    pub hour_cycle: String,
 }
 
 /// 현재 로그인한 사용자.
@@ -505,8 +511,10 @@ pub async fn me(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Me>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let (display_name, email, time_zone): (String, Option<String>, String) = sqlx::query_as(
-        "SELECT u.display_name, u.email, coalesce(s.time_zone, '')
+    type MeRow = (String, Option<String>, String, String, String, String);
+    let (display_name, email, time_zone, locale, week_start, hour_cycle): MeRow = sqlx::query_as(
+        "SELECT u.display_name, u.email, coalesce(s.time_zone, ''), coalesce(s.locale, ''),
+                coalesce(s.week_start, ''), coalesce(s.hour_cycle, '')
          FROM users u LEFT JOIN user_settings s ON s.user_id = u.id WHERE u.id = $1",
     )
     .bind(user)
@@ -519,17 +527,31 @@ pub async fn me(
         display_name,
         email,
         time_zone,
+        locale,
+        week_start,
+        hour_cycle,
     }))
 }
 
-/// 내 설정 바꾸기.
+/// 내 표시 설정 바꾸기. 보내지 않은 칸은 그대로 둔다.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MySettings {
     /// IANA 시간대 이름(예: `Asia/Seoul`). 빈 문자열이면 지운다.
-    pub time_zone: String,
+    #[serde(default)]
+    pub time_zone: Option<String>,
+    /// `ko`·`en`, 빈 문자열이면 지운다.
+    #[serde(default)]
+    pub locale: Option<String>,
+    /// `mon`·`sun`, 빈 문자열이면 지운다.
+    #[serde(default)]
+    pub week_start: Option<String>,
+    /// `h12`·`h23`, 빈 문자열이면 지운다.
+    #[serde(default)]
+    pub hour_cycle: Option<String>,
 }
 
-/// 내 설정 바꾸기(D-50 시간대). 모르는 시간대면 400.
+/// 내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.
+/// 모르는 값이면 400.
 #[utoipa::path(put, path = "/api/me/settings", operation_id = "set_my_settings", request_body = MySettings,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody)), tag = "auth")]
 pub async fn set_settings(
@@ -538,8 +560,11 @@ pub async fn set_settings(
     Json(input): Json<MySettings>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_time_zone($1)")
-        .bind(&input.time_zone)
+    sqlx::query("SELECT app_set_display_settings($1, $2, $3, $4)")
+        .bind(input.time_zone.as_deref())
+        .bind(input.locale.as_deref())
+        .bind(input.week_start.as_deref())
+        .bind(input.hour_cycle.as_deref())
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

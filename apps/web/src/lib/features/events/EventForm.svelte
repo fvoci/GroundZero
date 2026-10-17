@@ -10,7 +10,7 @@
   import * as Select from '$lib/ui/select';
 
   import { KIND_LABEL } from './labels';
-  import { instantOf, localTimeZone, wallTime } from './time';
+  import { dayIn, instantOf, localTimeZone, wallTime } from './time';
 
   interface Props {
     idPrefix: string;
@@ -22,9 +22,9 @@
 
   const { idPrefix, initial, submitLabel, onsubmit, oncancel }: Props = $props();
 
+  /** 오늘(사용자 시간대, D-81). */
   function today(): string {
-    const now = new Date();
-    return `${String(now.getFullYear())}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return dayIn(new Date().toISOString(), localTimeZone());
   }
 
   function initialState(): {

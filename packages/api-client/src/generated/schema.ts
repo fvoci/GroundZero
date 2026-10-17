@@ -1280,7 +1280,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 내 설정 바꾸기(D-50 시간대). 모르는 시간대면 400. */
+        /**
+         * 내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.
+         *     모르는 값이면 400.
+         */
         put: operations["set_my_settings"];
         post?: never;
         delete?: never;
@@ -1331,7 +1334,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 내 시간 집계(일·주·월, 보는 사람 시간대, 기록은 시작한 날에 센다). */
+        /**
+         * 내 시간 집계(일·주·월, 보는 사람 시간대). 기록 원본은 그대로 두고 합계만 그 시간대의 자정에서 나눈다(D-81).
+         *     일시정지 시각은 저장하지 않으므로 일시정지 시간은 경과 비율로 나눈다. 나눈 초의 합은 기록의 초와 같다.
+         */
         get: operations["time_summary"];
         put?: never;
         post?: never;
@@ -3227,9 +3233,15 @@ export interface components {
         Me: {
             display_name: string;
             email?: string | null;
+            /** @description 시각 표시(D-81): `h12`·`h23`, 비었으면 아직 고르지 않음. */
+            hour_cycle: string;
             id: components["schemas"]["UserId"];
-            /** @description 내 시간대(IANA 이름, D-50). 비었으면 화면이 브라우저 시간대를 쓴다. 본인에게만 보인다. */
+            /** @description 표시 언어(D-81): `ko`·`en`, 비었으면 아직 고르지 않음. */
+            locale: string;
+            /** @description 내 시간대(IANA 이름, D-50). 비었으면 아직 고르지 않음(화면이 브라우저 시간대를 쓴다). 본인에게만 보인다. */
             time_zone: string;
+            /** @description 한 주 시작(D-81): `mon`·`sun`, 비었으면 아직 고르지 않음. */
+            week_start: string;
         };
         /** @description 워크스페이스 멤버. */
         Member: {
@@ -3344,10 +3356,16 @@ export interface components {
              */
             watch_count: number;
         };
-        /** @description 내 설정 바꾸기. */
+        /** @description 내 표시 설정 바꾸기. 보내지 않은 칸은 그대로 둔다. */
         MySettings: {
+            /** @description `h12`·`h23`, 빈 문자열이면 지운다. */
+            hour_cycle?: string | null;
+            /** @description `ko`·`en`, 빈 문자열이면 지운다. */
+            locale?: string | null;
             /** @description IANA 시간대 이름(예: `Asia/Seoul`). 빈 문자열이면 지운다. */
-            time_zone: string;
+            time_zone?: string | null;
+            /** @description `mon`·`sun`, 빈 문자열이면 지운다. */
+            week_start?: string | null;
         };
         /** @description 내 진행. */
         MyUnitProgress: {
@@ -8331,6 +8349,8 @@ export interface operations {
                 to: string;
                 tz: string;
                 group: components["schemas"]["SummaryGroup"];
+                /** @description 한 주 시작(D-81): `mon`(기본)·`sun`. */
+                week_start?: string | null;
             };
             header?: never;
             path?: never;

@@ -5419,7 +5419,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "내 설정 바꾸기(D-50 시간대). 모르는 시간대면 400.",
+        "summary": "내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.\n모르는 값이면 400.",
         "operationId": "set_my_settings",
         "requestBody": {
           "content": {
@@ -5606,7 +5606,7 @@
         "tags": [
           "time"
         ],
-        "summary": "내 시간 집계(일·주·월, 보는 사람 시간대, 기록은 시작한 날에 센다).",
+        "summary": "내 시간 집계(일·주·월, 보는 사람 시간대). 기록 원본은 그대로 두고 합계만 그 시간대의 자정에서 나눈다(D-81).\n일시정지 시각은 저장하지 않으므로 일시정지 시간은 경과 비율로 나눈다. 나눈 초의 합은 기록의 초와 같다.",
         "operationId": "time_summary",
         "parameters": [
           {
@@ -5639,6 +5639,18 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/SummaryGroup"
+            }
+          },
+          {
+            "name": "week_start",
+            "in": "query",
+            "description": "한 주 시작(D-81): `mon`(기본)·`sun`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         ],
@@ -12636,7 +12648,10 @@
         "required": [
           "id",
           "display_name",
-          "time_zone"
+          "time_zone",
+          "locale",
+          "week_start",
+          "hour_cycle"
         ],
         "properties": {
           "display_name": {
@@ -12648,12 +12663,24 @@
               "null"
             ]
           },
+          "hour_cycle": {
+            "type": "string",
+            "description": "시각 표시(D-81): `h12`·`h23`, 비었으면 아직 고르지 않음."
+          },
           "id": {
             "$ref": "#/components/schemas/UserId"
           },
+          "locale": {
+            "type": "string",
+            "description": "표시 언어(D-81): `ko`·`en`, 비었으면 아직 고르지 않음."
+          },
           "time_zone": {
             "type": "string",
-            "description": "내 시간대(IANA 이름, D-50). 비었으면 화면이 브라우저 시간대를 쓴다. 본인에게만 보인다."
+            "description": "내 시간대(IANA 이름, D-50). 비었으면 아직 고르지 않음(화면이 브라우저 시간대를 쓴다). 본인에게만 보인다."
+          },
+          "week_start": {
+            "type": "string",
+            "description": "한 주 시작(D-81): `mon`·`sun`, 비었으면 아직 고르지 않음."
           }
         }
       },
@@ -12993,14 +13020,35 @@
       },
       "MySettings": {
         "type": "object",
-        "description": "내 설정 바꾸기.",
-        "required": [
-          "time_zone"
-        ],
+        "description": "내 표시 설정 바꾸기. 보내지 않은 칸은 그대로 둔다.",
         "properties": {
+          "hour_cycle": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`h12`·`h23`, 빈 문자열이면 지운다."
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`ko`·`en`, 빈 문자열이면 지운다."
+          },
           "time_zone": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "IANA 시간대 이름(예: `Asia/Seoul`). 빈 문자열이면 지운다."
+          },
+          "week_start": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`mon`·`sun`, 빈 문자열이면 지운다."
           }
         }
       },

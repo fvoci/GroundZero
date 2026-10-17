@@ -12,8 +12,8 @@
   } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import type { CalendarEntry } from '$lib/features/events/calendar';
-  import { entriesByDay } from '$lib/features/events/calendar';
-  import { localTimeZone } from '$lib/features/events/time';
+  import { entriesByDay, startOfWeek } from '$lib/features/events/calendar';
+  import { displaySettings, weekdays } from '$lib/display';
   import { dayNumber, fromDayNumber } from '$lib/features/tasks/gantt';
   import { clockText } from '$lib/features/time/format';
   import { timer } from '$lib/features/time/timer.svelte';
@@ -29,7 +29,9 @@
 
   const { workspaces }: Props = $props();
 
-  const zone = localTimeZone();
+  // 오늘·주 시작은 사용자 표시 설정(D-81).
+  const settings = displaySettings();
+  const zone = settings.timeZone;
   let home = $state<HomeView | undefined>(undefined);
   let week = $state<Map<string, CalendarEntry[]>>(new Map());
   let notifications = $state<NotificationView[]>([]);
@@ -38,9 +40,8 @@
 
   const weekDays = $derived.by(() => {
     if (home === undefined) return [];
-    const n = dayNumber(home.today);
-    const monday = n - ((n + 3) % 7);
-    return Array.from({ length: 7 }, (_, i) => fromDayNumber(monday + i));
+    const first = dayNumber(startOfWeek(home.today, settings.weekStart));
+    return Array.from({ length: 7 }, (_, i) => fromDayNumber(first + i));
   });
 
   // 빠른 추가 뒤(reloadKey)나 워크스페이스가 바뀌면 다시 불러온다. 늦게 온 이전 응답은 버린다.
@@ -52,8 +53,7 @@
     void (async () => {
       try {
         const h = await api.home(zone);
-        const n = dayNumber(h.today);
-        const from = fromDayNumber(n - ((n + 3) % 7));
+        const from = startOfWeek(h.today, settings.weekStart);
         const to = fromDayNumber(dayNumber(from) + 6);
         // 워크스페이스 하나의 달력이 실패해도(그사이 나간 경우 등) 나머지는 보인다.
         const settled = await Promise.allSettled(
@@ -162,7 +162,7 @@
   }
 
   const WHAT_LABEL = { memo: '메모', task: '업무', event: '일정(종일)' } as const;
-  const WEEKDAY = ['월', '화', '수', '목', '금', '토', '일'];
+  const WEEKDAY = weekdays(settings).map((w) => w.short);
 </script>
 
 <section class="flex flex-col gap-6" aria-labelledby="dashboard-heading">

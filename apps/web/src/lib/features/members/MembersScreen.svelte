@@ -1,5 +1,6 @@
 <script lang="ts">
   // 멤버·초대·그룹·소유권 화면 (D-20, D-51). 권한 판단은 서버가 하고, 화면은 가능한 동작만 보여준다.
+  import { formatInstant } from '$lib/display';
   import type { Group, Invitation, MembersView, Role, Workspace } from '@fvoci/api-client';
 
   import { api, ApiError } from '$lib/api/client';
@@ -222,7 +223,7 @@
                 <span>{inv.email}</span>
                 <Badge variant="outline">{ROLE_LABEL[inv.role]}</Badge>
                 <span class="text-muted-foreground"
-                  >~{new Date(inv.expires_at).toLocaleDateString()}</span
+                  >~{formatInstant(inv.expires_at, { dateStyle: 'medium' })}</span
                 >
                 <Button
                   size="sm"
