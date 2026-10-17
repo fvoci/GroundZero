@@ -73,6 +73,8 @@ pub struct TrashEntry {
     pub expires_at: OffsetDateTime,
     /// 보존 기간이 지나 되살릴 수 없다(영구 삭제 대기).
     pub expired: bool,
+    /// 만료됐지만 살아 있는 기록·문서가 참조하는 파일 버전이 있어 자동으로 영구 삭제하지 않는다(D-56).
+    pub kept_for_references: bool,
     /// 영구 삭제할 수 있는지(관리자·개인 노트 소유자).
     pub can_purge: bool,
 }
@@ -108,6 +110,15 @@ async fn entries(
         .fetch_all(tx.conn())
         .await?;
     let now = OffsetDateTime::now_utc();
+    let expired: Vec<Uuid> = rows.iter().filter(|r| r.8 <= now).map(|r| r.0).collect();
+    let kept: Vec<Uuid> = if expired.is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query_scalar("SELECT * FROM app_trash_kept_for_references($1)")
+            .bind(&expired)
+            .fetch_all(tx.conn())
+            .await?
+    };
     rows.into_iter()
         .map(
             |(
@@ -134,6 +145,7 @@ async fn entries(
                     deleted_at,
                     expires_at,
                     expired: expires_at <= now,
+                    kept_for_references: kept.contains(&id),
                     can_purge,
                 })
             },

@@ -584,22 +584,19 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     )
     .await;
     let doc_id = uuid::Uuid::parse_str(doc.json["id"].as_str().unwrap()).unwrap();
+    // 버전과 참조를 한 문장으로 넣는다(동시에 도는 다른 테스트의 정리 작업이 참조 없는 순간을 보지 않게).
     sqlx::query(
-        "INSERT INTO fvoci.file_versions (file_id, version, size, sha256, content_type, storage_key, uploaded_by, created_at)
-         SELECT $1, n, 0, repeat('0', 64), 'text/csv', 'test-pinned/' || $1 || '/' || n, $2, now() - interval '20 days'
-         FROM generate_series(1000, 1501) n",
+        "WITH v AS (
+           INSERT INTO fvoci.file_versions (file_id, version, size, sha256, content_type, storage_key, uploaded_by, created_at)
+           SELECT $1, n, 0, repeat('0', 64), 'text/csv', 'test-pinned/' || $1 || '/' || n, $2, now() - interval '20 days'
+           FROM generate_series(1000, 1501) n
+           RETURNING version)
+         INSERT INTO fvoci.document_file_refs (document_id, revision, file_id, version)
+         SELECT $3, 1, $1, version FROM v",
     )
     .bind(pinned)
     .bind(writer.id.0)
-    .execute(&owner)
-    .await
-    .unwrap();
-    sqlx::query(
-        "INSERT INTO fvoci.document_file_refs (document_id, revision, file_id, version)
-         SELECT $1, 1, $2, n FROM generate_series(1000, 1501) n",
-    )
     .bind(doc_id)
-    .bind(pinned)
     .execute(&owner)
     .await
     .unwrap();
@@ -664,5 +661,279 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
             .count(),
         502
     );
+    owner.close().await;
+}
+
+async fn owner_pool() -> sqlx::PgPool {
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    sqlx::PgPool::connect(&url).await.unwrap()
+}
+
+/// 휴지통 묶음을 보존 기간보다 오래전에 지운 것으로 만든다(테이블 소유 역할로 시각만 바꾼다).
+async fn expire_trash(owner: &sqlx::PgPool, file: &str) {
+    sqlx::query(
+        "UPDATE fvoci.trash_batches SET deleted_at = now() - interval '400 days'
+         WHERE id = (SELECT trash_batch_id FROM fvoci.files WHERE id = $1::uuid)",
+    )
+    .bind(file)
+    .execute(owner)
+    .await
+    .unwrap();
+}
+
+async fn file_exists(owner: &sqlx::PgPool, file: &str) -> bool {
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM fvoci.files WHERE id = $1::uuid)")
+        .bind(file)
+        .fetch_one(owner)
+        .await
+        .unwrap()
+}
+
+async fn save_image(app: &Router, user: &TestUser, doc: &str, file: &str) -> StatusCode {
+    let body = json!({ "type": "doc", "content": [{ "type": "image",
+        "attrs": { "src": format!("/api/files/{file}/content?version=1") } }] });
+    send(
+        app,
+        Method::PUT,
+        &format!("/api/documents/{doc}"),
+        Some(user),
+        Some(json!({ "request_id": new_request_id(), "base_revision": 1, "title": "참조", "body": body })),
+    )
+    .await
+    .status
+}
+
+async fn trash_file(app: &Router, user: &TestUser, file: &str) {
+    let r = send(
+        app,
+        Method::DELETE,
+        &format!("/api/files/{file}"),
+        Some(user),
+        None,
+    )
+    .await;
+    assert!(r.status.is_success(), "{:?}", r.json);
+}
+
+/// O-34(D-56): 휴지통 만료로 자동 영구 삭제할 때, 함께 사라지지 않는 기록·문서가 참조하는 버전이 있는 파일은 남기고
+/// 화면에 알린다. 참조가 묶음 안에서 함께 사라지면(항목째 지움) 그대로 지운다. 관리자 직접 영구 삭제는 바꾸지 않는다.
+#[tokio::test]
+async fn trash_expiry_keeps_files_with_referenced_versions() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "만료 보호").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let research = module(&app, &admin, &ws, "research", "EXP").await;
+    let item = open_item(&app, &admin, &research, "만료 연구").await;
+    let with_v2 = |name: &'static str, item: String| {
+        let (app, writer) = (app.clone(), writer.clone());
+        async move {
+            let id = new_file(&app, &writer, &item, name, b"one").await;
+            upload(
+                &app,
+                &writer,
+                json!({ "request_id": new_request_id(), "file_id": id, "size": 3 }),
+                b"two",
+            )
+            .await;
+            id
+        }
+    };
+    let pinned = with_v2("pinned.csv", item.clone()).await;
+    let pictured = with_v2("pictured.png", item.clone()).await;
+    let loose = with_v2("loose.csv", item.clone()).await;
+    let record = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item}/records"),
+        Some(&writer),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "analysis", "title": "고정",
+            "files": [{ "file_id": pinned, "version": 1, "role": "input" }] }),
+        ),
+    )
+    .await;
+    assert_eq!(record.status, StatusCode::CREATED, "{:?}", record.json);
+    let wiki = common::create_doc(&app, &writer, &ws, "그림 문서").await;
+    let wiki_id = wiki["id"].as_str().unwrap();
+    assert_eq!(
+        save_image(&app, &writer, wiki_id, &pictured).await,
+        StatusCode::OK
+    );
+
+    let owner = owner_pool().await;
+    for f in [&pinned, &pictured, &loose] {
+        trash_file(&app, &writer, f).await;
+        expire_trash(&owner, f).await;
+    }
+    let run = || async {
+        fvoci_server::worker::run_all_now(&state.db, None, None)
+            .await
+            .unwrap();
+    };
+    run().await;
+    assert!(
+        file_exists(&owner, &pinned).await,
+        "record-linked version kept"
+    );
+    assert!(
+        file_exists(&owner, &pictured).await,
+        "document-linked version kept"
+    );
+    assert!(
+        !file_exists(&owner, &loose).await,
+        "unreferenced file purged"
+    );
+
+    // 화면은 만료된 묶음 중 참조 때문에 남긴 것을 알린다.
+    let trash = send(
+        &app,
+        Method::GET,
+        &format!("/api/workspaces/{ws}/trash"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    let entries = trash.json["entries"].as_array().unwrap();
+    assert_eq!(entries.len(), 2, "{:?}", trash.json);
+    assert!(
+        entries
+            .iter()
+            .all(|e| e["expired"] == true && e["kept_for_references"] == true)
+    );
+
+    // 기록이 연결을 놓으면 다음 실행에서 지운다.
+    let (_, list) = records(&app, &writer, &item).await;
+    let r = &list[0];
+    let unlinked = send(
+        &app,
+        Method::PUT,
+        &format!("/api/records/{}", r["id"].as_str().unwrap()),
+        Some(&writer),
+        Some(
+            json!({ "version": r["version"], "title": "고정", "occurred_on": null, "body": "",
+            "fields": r["fields"], "files": [] }),
+        ),
+    )
+    .await;
+    assert_eq!(unlinked.status, StatusCode::OK, "{:?}", unlinked.json);
+    run().await;
+    assert!(!file_exists(&owner, &pinned).await);
+    assert!(file_exists(&owner, &pictured).await);
+
+    // 기록과 파일이 같은 항목에 있고 항목째 휴지통에서 만료되면, 참조도 함께 사라지므로 지운다.
+    let gone_item = open_item(&app, &admin, &research, "함께 지울 연구").await;
+    let inner = with_v2("inner.csv", gone_item.clone()).await;
+    let inner_record = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{gone_item}/records"),
+        Some(&writer),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "analysis", "title": "안쪽",
+            "files": [{ "file_id": inner, "version": 1, "role": "input" }] }),
+        ),
+    )
+    .await;
+    assert_eq!(inner_record.status, StatusCode::CREATED);
+    let trashed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/items/{gone_item}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(trashed.status.is_success(), "{:?}", trashed.json);
+    sqlx::query(
+        "UPDATE fvoci.trash_batches SET deleted_at = now() - interval '400 days'
+         WHERE root_kind = 'item' AND root_id = $1::uuid",
+    )
+    .bind(&gone_item)
+    .execute(&owner)
+    .await
+    .unwrap();
+    run().await;
+    assert!(!file_exists(&owner, &inner).await);
+    owner.close().await;
+}
+
+/// O-34 동시성: 자동 정리와 새 문서 참조가 겹쳐도 참조된 버전을 지우지 않는다. 저장이 버전 행을 먼저 잡으면
+/// 정리는 저장이 끝나기를 기다린 뒤 새 참조를 보고 건너뛴다. 정리가 먼저 지웠으면 저장은 오류 없이 끝나고
+/// (지워진 뒤의 주소일 뿐) 남은 참조가 지울 것을 붙잡지 않는다.
+#[tokio::test]
+async fn trash_expiry_and_a_new_reference_race_safely() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "만료 경합").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let research = module(&app, &admin, &ws, "research", "RACE").await;
+    let item = open_item(&app, &admin, &research, "경합 연구").await;
+    let owner = owner_pool().await;
+    let wiki = common::create_doc(&app, &writer, &ws, "경합 문서").await;
+    let wiki_id = uuid::Uuid::parse_str(wiki["id"].as_str().unwrap()).unwrap();
+
+    // 1) 저장이 먼저: 리비전을 넣는 트랜잭션을 열어 둔 채(참조 트리거가 버전 행을 공유 잠금) 정리를 돌린다.
+    let first = new_file(&app, &writer, &item, "first.png", b"one").await;
+    trash_file(&app, &writer, &first).await;
+    expire_trash(&owner, &first).await;
+    // 서버의 저장과 같은 두 문장(문서 갱신, 리비전 추가)을 한 트랜잭션에서 하고 끝내지 않는다.
+    let mut save = owner.begin().await.unwrap();
+    let body = json!({ "type": "doc", "content": [{ "type": "image",
+        "attrs": { "src": format!("/api/files/{first}/content?version=1") } }] });
+    sqlx::query("UPDATE fvoci.documents SET body = $2, revision = revision + 1 WHERE id = $1")
+        .bind(wiki_id)
+        .bind(&body)
+        .execute(&mut *save)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO fvoci.document_revisions (document_id, revision, title, schema_version, body, author, request_id)
+         SELECT d.id, d.revision, d.title, d.schema_version, d.body, d.created_by, gen_random_uuid()
+         FROM fvoci.documents d WHERE d.id = $1",
+    )
+    .bind(wiki_id)
+    .execute(&mut *save)
+    .await
+    .unwrap();
+    let db = state.db.clone();
+    let purge = tokio::spawn(async move {
+        fvoci_server::worker::run_all_now(&db, None, None)
+            .await
+            .unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    assert!(
+        !purge.is_finished(),
+        "purge waits for the saving transaction"
+    );
+    save.commit().await.unwrap();
+    purge.await.unwrap();
+    assert!(
+        file_exists(&owner, &first).await,
+        "the version referenced by the committed save is kept"
+    );
+
+    // 2) 정리가 먼저: 정리 트랜잭션을 열어 둔 채 저장하면 저장은 기다렸다가 오류 없이 끝나고, 파일은 지워져 있다.
+    let second = new_file(&app, &writer, &item, "second.png", b"one").await;
+    trash_file(&app, &writer, &second).await;
+    expire_trash(&owner, &second).await;
+    let mut purging = owner.begin().await.unwrap();
+    let made: i32 = sqlx::query_scalar("SELECT fvoci.app_system_purge_expired()")
+        .fetch_one(&mut *purging)
+        .await
+        .unwrap();
+    assert_eq!(made, 1, "only the unreferenced bundle is purged");
+    let doc2 = common::create_doc(&app, &writer, &ws, "늦은 참조").await;
+    let doc2_id = doc2["id"].as_str().unwrap().to_owned();
+    let (app2, writer2, second2) = (app.clone(), writer.clone(), second.clone());
+    let late = tokio::spawn(async move { save_image(&app2, &writer2, &doc2_id, &second2).await });
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    assert!(!late.is_finished(), "the save waits for the purge");
+    purging.commit().await.unwrap();
+    assert_eq!(late.await.unwrap(), StatusCode::OK);
+    assert!(!file_exists(&owner, &second).await);
     owner.close().await;
 }

@@ -1505,6 +1505,8 @@ export interface TrashEntryView {
   deleted_at: string;
   expires_at: string;
   expired: boolean;
+  /** 만료됐지만 살아 있는 기록·문서가 참조하는 버전이 있어 자동으로 지우지 않는다(D-56). */
+  kept_for_references: boolean;
   can_purge: boolean;
 }
 
@@ -1543,6 +1545,7 @@ function parseTrash(value: Json): TrashView {
         deleted_at: str(e, 'deleted_at'),
         expires_at: str(e, 'expires_at'),
         expired: bool(e, 'expired'),
+        kept_for_references: bool(e, 'kept_for_references'),
         can_purge: bool(e, 'can_purge'),
       };
     }),

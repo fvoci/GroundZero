@@ -4074,6 +4074,8 @@ export interface components {
             expires_at: string;
             /** Format: uuid */
             id: string;
+            /** @description 만료됐지만 살아 있는 기록·문서가 참조하는 파일 버전이 있어 자동으로 영구 삭제하지 않는다(D-56). */
+            kept_for_references: boolean;
             kind: components["schemas"]["TrashKind"];
             /**
              * Format: int32

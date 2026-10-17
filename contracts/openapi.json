@@ -14981,6 +14981,7 @@
           "deleted_at",
           "expires_at",
           "expired",
+          "kept_for_references",
           "can_purge"
         ],
         "properties": {
@@ -15012,6 +15013,10 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "kept_for_references": {
+            "type": "boolean",
+            "description": "만료됐지만 살아 있는 기록·문서가 참조하는 파일 버전이 있어 자동으로 영구 삭제하지 않는다(D-56)."
           },
           "kind": {
             "$ref": "#/components/schemas/TrashKind"
