@@ -1,3 +1,103 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "study_unit_pages": "Pages",
+  "study_unit_problems": "Problems",
+  "study_unit_minutes": "Minutes",
+  "study_unit_items": "Items",
+  "study_amount_pages": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{count} page", "countPlural=other": "{count} pages" }
+    }
+  ],
+  "study_amount_problems": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{count} problem", "countPlural=other": "{count} problems" }
+    }
+  ],
+  "study_amount_minutes": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{count} minute", "countPlural=other": "{count} minutes" }
+    }
+  ],
+  "study_amount_items": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{count} item", "countPlural=other": "{count} items" }
+    }
+  ],
+  "study_amount_progress": "{done}/{amount} ({left} left)",
+  "study_status_not_started": "Not started",
+  "study_status_in_progress": "In progress",
+  "study_status_done": "Done",
+  "study_load_failed": "Couldn't load the study plan.",
+  "study_action_failed": "Couldn't complete that.",
+  "study_unit_status": "{number}. {title}: {status}",
+  "study_unit_invalid": "Check the title and amount (a whole number, 0 or more).",
+  "study_unit_added": "Unit added.",
+  "study_heading": "Plan and my progress",
+  "study_progress": "Progress",
+  "study_counts": "Done {done} · In progress {inProgress} · Left {remaining} / {total}",
+  "study_today": "Today",
+  "study_today_counts": "Planned {planned} · Done {done}",
+  "study_overdue_count": "Overdue units {count}",
+  "study_amount": "Amount",
+  "study_none": "None",
+  "study_replan_form": "Reschedule overdue units",
+  "study_per_day_invalid": "Units per day must be a whole number, 1 or more.",
+  "study_replanned": [
+    {
+      "declarations": [
+        "input count",
+        "input start",
+        "input perDay",
+        "local countPlural = count: plural"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Rescheduled {count} overdue unit from {start}, {perDay} a day.",
+        "countPlural=other": "Rescheduled {count} overdue units from {start}, {perDay} a day."
+      }
+    }
+  ],
+  "study_replan_intro": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Reschedule {count} overdue unit in my plan:",
+        "countPlural=other": "Reschedule {count} overdue units in my plan:"
+      }
+    }
+  ],
+  "study_start_date": "Start date",
+  "study_per_day": "Per day",
+  "study_replan": "Reschedule",
+  "study_planned_mine": "{date} (my date)",
+  "study_mine": "My amount, dates & note",
+  "study_track": "Track",
+  "study_track_aria": "Track study time for {title}",
+  "study_track_started": "{title}: started tracking study time.",
+  "study_timer_busy": "A timer is already running. Stop it first.",
+  "study_delete": "Delete",
+  "study_deleted": "Deleted {title}.",
+  "study_done_amount_invalid": "The amount done must be a whole number, 0 or more.",
+  "study_progress_saved": "{title}: progress saved.",
+  "study_done_amount": "Amount done ({unit})",
+  "study_my_planned": "My plan date",
+  "study_note": "Note (only you can see it)",
+  "study_empty": "No plan units.",
+  "study_new_title": "New unit title",
+  "study_chapter": "Curriculum / chapter",
+  "study_unit": "Unit",
+  "study_planned": "Plan date",
+  "study_add_unit": "Add unit",
+  "study_participants": "Studying together",
+  "study_participant": "{name}: done {done} · in progress {inProgress} · overdue {overdue}"
 }

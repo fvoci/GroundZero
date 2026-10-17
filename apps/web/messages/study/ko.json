@@ -1,3 +1,101 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "study_unit_pages": "쪽",
+  "study_unit_problems": "문제",
+  "study_unit_minutes": "분",
+  "study_unit_items": "개",
+  "study_amount_pages": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "{count}쪽" }
+    }
+  ],
+  "study_amount_problems": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "{count}문제" }
+    }
+  ],
+  "study_amount_minutes": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "{count}분" }
+    }
+  ],
+  "study_amount_items": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "{count}개" }
+    }
+  ],
+  "study_amount_progress": "{done}/{amount} (남은 {left})",
+  "study_status_not_started": "시작 전",
+  "study_status_in_progress": "진행 중",
+  "study_status_done": "완료",
+  "study_load_failed": "스터디 계획을 불러오지 못했습니다.",
+  "study_action_failed": "처리하지 못했습니다.",
+  "study_unit_status": "{number}. {title}: {status}",
+  "study_unit_invalid": "제목과 분량(0 이상의 정수)을 확인해 주세요.",
+  "study_unit_added": "단위를 더했습니다.",
+  "study_heading": "계획과 내 진행",
+  "study_progress": "진행률",
+  "study_counts": "완료 {done} · 진행 중 {inProgress} · 남음 {remaining} / {total}",
+  "study_today": "오늘",
+  "study_today_counts": "예정 {planned} · 완료 {done}",
+  "study_overdue_count": "밀린 단위 {count}",
+  "study_amount": "분량",
+  "study_none": "없음",
+  "study_replan_form": "밀린 단위 다시 배정",
+  "study_per_day_invalid": "하루에 할 단위 수는 1 이상의 정수입니다.",
+  "study_replanned": [
+    {
+      "declarations": [
+        "input count",
+        "input start",
+        "input perDay",
+        "local countPlural = count: plural"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "밀린 {count}개를 {start}부터 하루 {perDay}개씩 다시 배정했습니다."
+      }
+    }
+  ],
+  "study_replan_intro": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "밀린 단위 {count}개를 내 계획으로 다시 배정:"
+      }
+    }
+  ],
+  "study_start_date": "시작일",
+  "study_per_day": "하루에",
+  "study_replan": "다시 배정",
+  "study_planned_mine": "{date}(내 날짜)",
+  "study_mine": "내 분량·날짜·메모",
+  "study_track": "측정",
+  "study_track_aria": "{title} 공부 시간 측정",
+  "study_track_started": "{title}: 공부 시간 측정을 시작했습니다.",
+  "study_timer_busy": "이미 측정 중인 타이머가 있습니다. 먼저 끝내 주세요.",
+  "study_delete": "지우기",
+  "study_deleted": "{title}을(를) 지웠습니다.",
+  "study_done_amount_invalid": "한 분량은 0 이상의 정수입니다.",
+  "study_progress_saved": "{title}: 내 진행을 저장했습니다.",
+  "study_done_amount": "한 분량({unit})",
+  "study_my_planned": "내 계획일",
+  "study_note": "메모(나만 봄)",
+  "study_empty": "계획 단위가 없습니다.",
+  "study_new_title": "새 단위 제목",
+  "study_chapter": "교육과정·챕터",
+  "study_unit": "단위",
+  "study_planned": "계획일",
+  "study_add_unit": "단위 추가",
+  "study_participants": "함께 하는 사람",
+  "study_participant": "{name}: 완료 {done} · 진행 중 {inProgress} · 밀림 {overdue}"
 }

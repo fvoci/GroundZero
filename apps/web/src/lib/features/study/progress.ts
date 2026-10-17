@@ -1,13 +1,35 @@
 // 스터디 계획 대비 진행(D-36): 완료·진행 중·남은 단위, 분량 종류별 한 분량, 오늘 예정·완료, 밀린 단위.
 // 밀린 단위 재배치는 사용자가 고른 시작일과 하루 단위 수로만 날짜를 정한다(X-07: 자동 추정 없음).
 import type { StudyUnitKind, StudyUnitView } from '$lib/api/client';
+import { m } from '$lib/paraglide/messages.js';
 
-export const UNIT_LABEL: Record<StudyUnitKind, string> = {
-  pages: '쪽',
-  problems: '문제',
-  minutes: '분',
-  items: '개',
-};
+/** 분량 종류 이름. 언어가 바뀔 수 있어 부를 때마다 만든다(D-81). */
+export function unitLabel(unit: StudyUnitKind): string {
+  switch (unit) {
+    case 'pages':
+      return m.study_unit_pages();
+    case 'problems':
+      return m.study_unit_problems();
+    case 'minutes':
+      return m.study_unit_minutes();
+    case 'items':
+      return m.study_unit_items();
+  }
+}
+
+/** 분량(예: "12쪽", "12 pages"). */
+export function unitAmount(unit: StudyUnitKind, count: number): string {
+  switch (unit) {
+    case 'pages':
+      return m.study_amount_pages({ count });
+    case 'problems':
+      return m.study_amount_problems({ count });
+    case 'minutes':
+      return m.study_amount_minutes({ count });
+    case 'items':
+      return m.study_amount_items({ count });
+  }
+}
 
 /** 내 계획일(없으면 공통 계획일). */
 export const plannedOn = (u: StudyUnitView): string | null => u.mine.planned_on ?? u.planned_on;
