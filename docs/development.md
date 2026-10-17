@@ -174,6 +174,8 @@ Cargo (cargo deny가 거부하는 것):
 
 대안: Cargo 쪽은 sqlx·url이 요구해 피할 수 없다(url의 idna 백엔드는 sqlx 경유로 바꿀 수 없음). npm 쪽은 vite·tailwind·eslint·jsdom·openapi-typescript의 기본 의존이라 바꾸려면 도구 자체를 바꿔야 한다. 권장은 위 목록의 라이선스 식을 허용 목록에 추가하는 것이며, 그 경우 `deny.toml`·`xtask/src/licenses.rs`의 허용 목록과 제품 이미지의 제3자 고지 파일을 함께 바꾼다.
 
+KaTeX 글꼴(47절): `katex@0.18.10` 패키지는 MIT지만 `dist/fonts`의 KaTeX_* 글꼴 60개(ttf·woff·woff2)는 글꼴 자체의 name 표에 `SIL Open Font License 1.1`(OFL-1.1, Reserved Font Name 포함, 저작권 Design Science·Khan Academy)로 적혀 있다. 도입 경로 `@fvoci/web → katex@0.18.10 → dist/fonts`. 허용 목록 밖이라 승인 전에는 브라우저 번들에 넣지 않는다: KaTeX의 MIT 스타일에서 `@font-face`만 뺀 `apps/web/src/styles/katex-layout.css`를 쓰고 수식은 시스템 글꼴로 배치한다(운영 빌드에 글꼴 파일 0개). OFL-1.1을 승인하면 `katex/dist/katex.min.css`를 가져오도록 한 줄 바꾼다. `pnpm licenses`는 package.json의 라이선스만 읽어 이 경우를 잡지 못한다.
+
 PDF 본문 검색(38절 후속) 후보: `lopdf` 0.45.0(MIT, 기본 기능 끔)은 잠금에 약 30개 크레이트를 더하고 그중 `zlib-rs`가 `Zlib`이라 위 `foldhash`와 같은 승인 대상이다. Zlib을 허용 목록에 넣는 결정이 나면 PDF 글자 뽑기를 더한다(지금은 PDF를 이름으로만 찾는다).
 
 OR 결합으로 허용 쪽을 선택해 자동 통과한 것(선택 근거 기록): aho-corasick·byteorder·memchr `Unlicense OR MIT` → MIT. tinyvec `Zlib OR Apache-2.0 OR MIT` → MIT. whoami `Apache-2.0 OR BSL-1.0 OR MIT` → MIT.
@@ -214,7 +216,7 @@ fvoci 자체 라이선스는 미정(O-27)이다. unlicensed 경고를 없애려�
 
 ### 미확인 (도입 전 확인 필요)
 
-rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언트 크레이트, Office 뷰어 후보, Playwright, 웹 폰트(현재는 시스템 글꼴만). 아직 의존성으로 추가하지 않았다.
+rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언트 크레이트, Office 뷰어 후보, Playwright. 웹 폰트는 KaTeX 글꼴(OFL-1.1)을 확인했고 승인 전까지 넣지 않는다(위 O-30 메모). 아직 의존성으로 추가하지 않았다.
 
 ## 10. CI 구조 (D-64)
 
@@ -640,7 +642,7 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 - **이미지·첨부**: "파일·이미지"가 고른 파일을 이 문서의 첨부로 올린 뒤(31절과 같은 업로드), 그림 형식(PNG·JPEG·GIF·WebP)이면 그 버전의 미리보기 주소로 이미지를, 그 밖이면 파일 이름 링크를 본문에 넣는다. 이미지는 첨부를 볼 수 있는 사람에게 보인다(공개 링크로 보는 사람에게는 보이지 않는다).
 - **본문 안전 규칙(서버)**: 이미지 노드의 주소는 이 서비스의 첨부 내용 주소(`/api/files/{id}/content`, `version`·`inline`만)만 받는다. 바깥 주소는 읽는 사람의 접속 정보를 남에게 보내므로(추적 이미지) 400. 링크는 스킴이 있으면 http·https·mailto만 받고(`javascript:`·`data:` 거부), 스킴이 없는 상대 경로·앵커는 받되 다른 호스트로 가는 `//`는 막는다.
 - **문서 템플릿**: 문서의 소유 권한자(팀 문서는 관리자, 개인 노트는 본인)가 "템플릿으로 쓰기"를 켠다(복제 허용과 같은 소유자 결정, D-20). 위키·항목 문서·개인 노트를 만들 때 "템플릿"에서 고르면 그 본문으로 시작한다. 목록은 그 워크스페이스에서 내가 읽을 수 있는 템플릿과 내 개인 노트 템플릿이고, 읽을 수 없게 된 템플릿은 404. 표시·해제는 감사 기록에 남는다.
-- **새 의존성**: `@tiptap/extension-table`·`@tiptap/extension-image`·`@tiptap/extension-mathematics` 3.32.0(MIT, 기존 Tiptap과 같은 판), `katex` 0.18.10(MIT, 수식 확장이 받는 범위의 최신 정상판. 0.18.11은 배포자가 철회 표시, 0.19는 범위 밖).
+- **새 의존성**: `@tiptap/extension-table`·`@tiptap/extension-image`·`@tiptap/extension-mathematics` 3.32.0(MIT, 기존 Tiptap과 같은 판), `katex` 0.18.10(MIT, 수식 확장이 받는 범위의 최신 정상판. 0.18.11은 배포자가 철회 표시, 0.19는 범위 밖). KaTeX 글꼴은 OFL-1.1이라 승인 전에는 넣지 않고 시스템 글꼴로 그린다(9절).
 - **아직 없음**: 이미지 크기 조절·정렬, 표 칸 합치기 단추(키보드 명령은 Tiptap 기본). 참조 확인(49절)은 문서 리비전 본문을 글자로 찾으므로 리비전이 아주 많아지면 느려질 수 있다(셀프호스트 규모에서는 문제없음).
 - **검증**: 통합 테스트(템플릿 표시 권한·목록·밖의 사람 404, 템플릿 본문으로 만들기, 템플릿이 아니거나 볼 수 없으면 404, 개인 노트 템플릿은 본인 목록에만, 바깥 이미지·`javascript:` 링크 400, 첨부 이미지·표 저장). 단위 테스트(이미지·링크 주소 규칙). 브라우저: 표 넣기와 표 도구, 표 안의 수식, PNG 넣기(첨부로 올라가고 미리보기 주소로 보임) 후 저장, 템플릿으로 표시하고 위키에서 그 템플릿으로 새 문서를 만들어 표·수식·이미지가 그대로 옴.
 
@@ -676,7 +678,7 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 | R2 실검증                                                   | NOT RUN | 승인된 테스트 대상과 자격 증명이 없다(자체 S3 서버를 만들지 않음)                                                                                                                                                                                                |
 | 원격 CI·CI의 OIDC 테스트(D-63·D-64)                         | NOT RUN | 원격 push 승인 전                                                                                                                                                                                                                                                |
 
-검증 뒤 두 설치와 볼륨은 이 프로젝트 이름으로만 내렸다(전역 정리 없음). 커밋 `0375362` 뒤에는 이 문서만 바뀌었다.
+검증 뒤 두 설치와 볼륨은 이 프로젝트 이름으로만 내렸다(전역 정리 없음). 검증 뒤 바뀐 것: KaTeX 글꼴(OFL-1.1, 9절)을 번들에서 뺀 웹 변경 하나. 형식·타입·린트·웹 테스트·운영 빌드(글꼴 파일 0개)와 시스템 글꼴 수식 표시를 다시 확인했다. 서버·마이그레이션·배포 파일은 바뀌지 않았다.
 
 ## 참고 자료
 

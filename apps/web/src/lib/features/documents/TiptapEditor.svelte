@@ -12,7 +12,6 @@
   import { TableKit } from '@tiptap/extension-table';
   import { Markdown } from '@tiptap/markdown';
   import StarterKit from '@tiptap/starter-kit';
-  import 'katex/dist/katex.min.css';
   import { onMount, untrack } from 'svelte';
 
   import type { DocNode } from '$lib/api/client';
