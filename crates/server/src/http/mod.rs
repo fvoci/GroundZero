@@ -3,9 +3,10 @@
 pub mod cache;
 
 use std::sync::Arc;
+use std::time::Instant;
 
-use axum::extract::{DefaultBodyLimit, Request, State};
-use axum::http::{Method, StatusCode, header};
+use axum::extract::{DefaultBodyLimit, MatchedPath, Request, State};
+use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
@@ -70,7 +71,12 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
             }),
         ),
         Err(err) => {
-            tracing::warn!(error = %err, "database ping failed");
+            tracing::warn!(
+                event = "health.database_unavailable",
+                error_code = err.code(),
+                detail = crate::logging::safe_error(&err),
+                "database ping failed"
+            );
             (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(Health {
@@ -104,12 +110,81 @@ async fn require_same_origin(
                 Json(ErrorBody {
                     error: "bad_origin",
                     message: "cross-origin request rejected".into(),
+                    request_id: crate::logging::current_request_id(),
                 }),
             )
                 .into_response();
         }
     }
     next.run(request).await
+}
+
+/// 요청과 그 오류를 잇는 id(D-83). 앞단 프록시가 준 `x-request-id`가 안전한 모양이면 그대로, 아니면 새로 만든다.
+const REQUEST_ID_HEADER: &str = "x-request-id";
+
+/// 맞은 경로의 틀(`/api/items/{item_id}`). 접근 줄에 실제 경로·쿼리(공개 링크 토큰 등) 대신 쓴다.
+#[derive(Debug, Clone)]
+struct RouteTemplate(String);
+
+async fn record_route(request: Request, next: Next) -> Response {
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|p| p.as_str().to_owned());
+    let mut response = next.run(request).await;
+    if let Some(route) = route {
+        response.extensions_mut().insert(RouteTemplate(route));
+    }
+    response
+}
+
+/// 요청마다 id를 정하고(로그 줄·오류 본문·응답 머리글에 같은 값), 끝나면 접근 줄을 하나 남긴다. 접근 줄에는 방법·경로
+/// 틀·상태·처리 시간만 쓴다(쿼리·머리글·본문 없음). 상태 확인(`/healthz`)과 정적 웹 파일은 반복 잡음이라 DEBUG.
+async fn request_context(request: Request, next: Next) -> Response {
+    let id = request
+        .headers()
+        .get(REQUEST_ID_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .filter(|v| crate::logging::acceptable_request_id(v))
+        .map_or_else(|| uuid::Uuid::now_v7().to_string(), str::to_owned);
+    let method = request.method().clone();
+    let path = request.uri().path();
+    let quiet = path == "/healthz" || !(path.starts_with("/api/") || path.starts_with("/auth/"));
+    let started = Instant::now();
+    let mut response = crate::logging::REQUEST_ID
+        .scope(id.clone(), next.run(request))
+        .await;
+    let duration_ms = (started.elapsed().as_secs_f64() * 1_000_000.0).round() / 1000.0;
+    let status_code = response.status().as_u16();
+    let route = response
+        .extensions()
+        .get::<RouteTemplate>()
+        .map_or("-", |r| r.0.as_str());
+    if quiet {
+        tracing::debug!(
+            event = "http.request",
+            request_id = %id,
+            method = %method,
+            route,
+            status_code,
+            duration_ms,
+            "request"
+        );
+    } else {
+        tracing::info!(
+            event = "http.request",
+            request_id = %id,
+            method = %method,
+            route,
+            status_code,
+            duration_ms,
+            "request"
+        );
+    }
+    if let Ok(value) = HeaderValue::from_str(&id) {
+        response.headers_mut().insert(REQUEST_ID_HEADER, value);
+    }
+    response
 }
 
 /// 알 수 없는 API 경로는 웹 fallback이 아니라 404 JSON.
@@ -941,6 +1016,7 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(healthz))
         .nest("/api", api)
         .nest("/auth", auth)
+        .route_layer(middleware::from_fn(record_route))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_same_origin,
@@ -965,6 +1041,7 @@ pub fn router(state: AppState) -> Router {
     }
 
     app.layer(middleware::from_fn(cache::policy))
+        .layer(middleware::from_fn(request_context))
         .with_state(state)
 }
 

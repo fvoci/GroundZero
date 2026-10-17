@@ -130,6 +130,8 @@ fn stream_zip(
     let (body_tx, body_rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(8);
     let (msg_tx, mut msg_rx) = mpsc::channel::<Msg>(8);
     let writer_tx = body_tx.clone();
+    // 블로킹 스레드에는 요청 id가 따라가지 않으므로 직접 넘긴다(D-83).
+    let request_id = crate::logging::current_request_id();
     tokio::task::spawn_blocking(move || {
         let result = (|| -> std::io::Result<()> {
             let mut zip = zip::ZipWriter::new_stream(BodyWriter {
@@ -150,7 +152,12 @@ fn stream_zip(
             out.flush()
         })();
         if let Err(err) = result {
-            tracing::warn!(error = %err, "export stopped");
+            tracing::warn!(
+                event = "export.stopped",
+                request_id = request_id.as_deref(),
+                detail = ?err.kind(),
+                "export stopped"
+            );
             let _sent = body_tx.blocking_send(Err(err));
         }
     });

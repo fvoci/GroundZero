@@ -126,7 +126,7 @@ pub async fn set_task(
     if let Some(series) = series
         && let Err(e) = sync_series(&state, user, series).await
     {
-        tracing::warn!(error = %e, %series, "recurrence sync after rule change failed");
+        tracing::warn!(event = "recurrence.sync_failed", error_code = e.code(), detail = crate::logging::safe_error(&e), %series, "recurrence sync after rule change failed");
     }
     let mut tx = state.db.begin_as(user).await?;
     let detail = load_detail(&mut tx, id).await?;

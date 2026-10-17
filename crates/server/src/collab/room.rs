@@ -341,7 +341,7 @@ impl Rooms {
         match room.load(admin).await {
             Ok(loaded) => room.doc = Some(loaded),
             Err(err) => {
-                tracing::warn!(document = %doc.0, error = %err, "could not load a pending live state");
+                tracing::warn!(event = "collab.load_failed", document = %doc.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not load a pending live state");
                 return false;
             }
         }
@@ -697,7 +697,7 @@ impl Room {
                     }
                     if !can_write {
                         // 읽기 연결의 변경은 받지 않는다(편집기가 스스로 맞춘 것일 수 있어 닫지는 않는다).
-                        tracing::debug!(document = %self.doc_id.0, "ignored a change from a read-only connection");
+                        tracing::debug!(event = "collab.read_only_change", document = %self.doc_id.0, "ignored a change from a read-only connection");
                         continue;
                     }
                     self.pending.push(Pending { conn, user, update });
@@ -802,7 +802,7 @@ impl Room {
                     continue;
                 }
                 Verdict::Invalid => {
-                    tracing::warn!(document = %self.doc_id.0, "rejected a live edit that fails document checks");
+                    tracing::warn!(event = "collab.edit_rejected", document = %self.doc_id.0, "rejected a live edit that fails document checks");
                     self.close(conn, CloseReason::Invalid);
                     continue;
                 }
@@ -925,7 +925,7 @@ impl Room {
         match result {
             Ok(_) => self.dirty_state = false,
             Err(err) => {
-                tracing::warn!(document = %self.doc_id.0, error = %err, "could not store live editing state");
+                tracing::warn!(event = "collab.store_failed", document = %self.doc_id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not store live editing state");
             }
         }
     }
@@ -947,7 +947,7 @@ impl Room {
         let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
         let body = convert::read_doc(&doc.transact(), &fragment);
         if documents::validate_body(&body, &self.limits).is_err() {
-            tracing::warn!(document = %self.doc_id.0, "live document failed checks; not saved as a revision");
+            tracing::warn!(event = "collab.invalid_document", document = %self.doc_id.0, "live document failed checks; not saved as a revision");
             return false;
         }
         let mut authors = self.editors.clone();
@@ -972,7 +972,7 @@ impl Room {
                 }
                 Ok(None) => {
                     // 본문이 다른 길로 바뀌었다(복원). 덮어쓰지 않고 다시 열게 한다.
-                    tracing::warn!(document = %self.doc_id.0, "document changed outside live editing; reopening");
+                    tracing::warn!(event = "collab.changed_outside", document = %self.doc_id.0, "document changed outside live editing; reopening");
                     for (_, c) in self.conns.drain() {
                         let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
                     }
@@ -982,12 +982,12 @@ impl Room {
                 }
                 Err(AppError::Forbidden | AppError::NotFound) => {}
                 Err(err) => {
-                    tracing::warn!(document = %self.doc_id.0, error = %err, "could not save the live document as a revision");
+                    tracing::warn!(event = "collab.save_failed", document = %self.doc_id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not save the live document as a revision");
                     return false;
                 }
             }
         }
-        tracing::warn!(document = %self.doc_id.0, "no editor can save the live document; keeping the live state");
+        tracing::warn!(event = "collab.no_editor", document = %self.doc_id.0, "no editor can save the live document; keeping the live state");
         false
     }
 

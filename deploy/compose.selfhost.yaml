@@ -3,8 +3,17 @@
 # 로그인 제공자는 표준 OIDC면 어느 것이든 된다(D-45, O-25). 같이 띄울 Keycloak이 필요하면 `--profile keycloak`.
 name: fvoci
 
+# 운영 로그(D-83): 컨테이너는 stdout에만 쓰고, Docker가 json-file로 남기며 크기·개수로 돌린다(서비스마다 기본
+# 10 MB × 5개). 앱 안에서 따로 파일 로그를 쓰지 않는다. 보기: `docker compose logs app`.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${FVOCI_LOG_MAX_SIZE:-10m}
+    max-file: '${FVOCI_LOG_MAX_FILE:-5}'
+
 x-app: &app
   image: ${FVOCI_IMAGE:-fvoci:local}
+  logging: *logging
   build:
     context: ..
     dockerfile: deploy/docker/app.Dockerfile
@@ -14,11 +23,15 @@ x-app: &app
     DATABASE_URL: postgres://fvoci_app:${FVOCI_DB_APP_PASSWORD:?set FVOCI_DB_APP_PASSWORD in .env}@postgres:5432/fvoci
     FVOCI_DB_MIGRATOR_PASSWORD: ${FVOCI_DB_MIGRATOR_PASSWORD}
     FVOCI_DB_APP_PASSWORD: ${FVOCI_DB_APP_PASSWORD}
+    # 레벨·모듈 거르기(예: info,fvoci_server::collab=debug)와 형식(json|pretty). 바꾸면 컨테이너를 다시 만든다.
+    FVOCI_LOG: ${FVOCI_LOG:-info}
+    FVOCI_LOG_FORMAT: ${FVOCI_LOG_FORMAT:-json}
 
 services:
   postgres:
     image: postgres:18.3-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: fvoci
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -37,6 +50,7 @@ services:
   meilisearch:
     image: getmeili/meilisearch:v1.37.0
     restart: unless-stopped
+    logging: *logging
     environment:
       MEILI_ENV: production
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY (16+ characters) in .env}
@@ -106,6 +120,7 @@ services:
     image: quay.io/keycloak/keycloak:26.5.4
     profiles: ['keycloak']
     restart: unless-stopped
+    logging: *logging
     command: ['start', '--import-realm']
     depends_on:
       postgres:

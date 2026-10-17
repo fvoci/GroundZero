@@ -414,7 +414,7 @@ async fn finish(
     {
         Ok(()) | Err(AppError::NotFound) => {}
         Err(err) => {
-            tracing::warn!(upload = %id.0, error = %err, "storage could not assemble the upload");
+            tracing::warn!(event = "upload.assemble_failed", upload = %id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "storage could not assemble the upload");
             let mut tx = state.db.begin_as(user).await?;
             sqlx::query("SELECT app_reset_upload($1)")
                 .bind(id)

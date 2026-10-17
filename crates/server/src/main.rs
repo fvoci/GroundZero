@@ -109,12 +109,13 @@ fn main() -> ExitCode {
         };
     }
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    match fvoci_server::logging::settings(|key| std::env::var(key).ok()) {
+        Ok((filter, format)) => fvoci_server::logging::init(filter, format),
+        Err(err) => {
+            eprintln!("{err}");
+            return ExitCode::FAILURE;
+        }
+    }
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -130,7 +131,12 @@ fn main() -> ExitCode {
     match runtime.block_on(run(command)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            tracing::error!(error = %err, "exited with error");
+            tracing::error!(
+                event = "server.exit_error",
+                error_code = err.code(),
+                detail = fvoci_server::logging::safe_error(&err),
+                "exited with error"
+            );
             ExitCode::FAILURE
         }
     }

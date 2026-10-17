@@ -2915,6 +2915,8 @@ export interface components {
             error: string;
             /** @description 사람이 읽는 설명. 내부 세부는 담지 않는다. */
             message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다). 운영 로그에서 같은 요청의 줄을 찾을 때 쓴다(D-83). */
+            request_id?: string;
         };
         /** @description 일정. */
         Event: {

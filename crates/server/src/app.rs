@@ -57,34 +57,45 @@ pub async fn run(config: Config) -> Result<(), AppError> {
     if role.serves_http() {
         let app = http::router(state);
         let listener = TcpListener::bind(bind).await?;
-        tracing::info!(addr = %bind, ?role, "listening");
+        tracing::info!(event = "server.listening", addr = %bind, ?role, "listening");
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal())
             .await?;
         // 실시간 편집 방은 리비전을 남기고 닫는다(클라이언트는 다시 붙는다, D-70).
         rooms.shutdown().await;
     } else {
-        tracing::info!(?role, "background worker only");
+        tracing::info!(
+            event = "server.worker_only",
+            ?role,
+            "background worker only"
+        );
         shutdown_signal().await;
     }
     // 받는 쪽(작업)이 이미 끝났으면 보낼 곳이 없을 뿐이다.
     if stop.send(true).is_err() {
-        tracing::debug!("background worker already stopped");
+        tracing::debug!(
+            event = "server.worker_already_stopped",
+            "background worker already stopped"
+        );
     }
     if let Some(handle) = worker
         && let Err(err) = handle.await
     {
-        tracing::warn!(error = %err, "background worker stopped abnormally");
+        tracing::error!(
+            event = "server.worker_stopped",
+            panicked = err.is_panic(),
+            "background worker stopped abnormally"
+        );
     }
     db.close().await;
-    tracing::info!("shutdown complete");
+    tracing::info!(event = "server.shutdown", "shutdown complete");
     Ok(())
 }
 
 async fn shutdown_signal() {
     // ctrl_c 등록 실패는 신호 없이 계속 실행하는 것으로 처리한다. 로그로만 남긴다.
     if let Err(err) = tokio::signal::ctrl_c().await {
-        tracing::error!(error = %err, "failed to listen for shutdown signal");
+        tracing::error!(event = "server.signal_failed", detail = ?err.kind(), "failed to listen for shutdown signal");
         std::future::pending::<()>().await;
     }
 }

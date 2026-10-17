@@ -136,9 +136,21 @@ async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
             Ok(()) => done += 1,
             Err(err) => {
                 if attempts >= 9 {
-                    tracing::error!(key, error = %err, "storage cleanup gave up after 10 attempts");
+                    tracing::error!(
+                        event = "storage.cleanup_gave_up",
+                        error_code = err.code(),
+                        detail = crate::logging::safe_error(&err),
+                        attempts = attempts + 1,
+                        "storage cleanup gave up after 10 attempts"
+                    );
                 } else {
-                    tracing::warn!(key, error = %err, "storage cleanup failed; will retry");
+                    tracing::warn!(
+                        event = "storage.cleanup_retry",
+                        error_code = err.code(),
+                        detail = crate::logging::safe_error(&err),
+                        attempts = attempts + 1,
+                        "storage cleanup failed; will retry"
+                    );
                 }
                 sqlx::query("SELECT app_system_storage_retry($1, $2, $3)")
                     .bind(&key)
@@ -153,12 +165,24 @@ async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
     Ok(done)
 }
 
-/// 일 하나의 실패를 기록하고 0으로 본다. 한 일이 실패해도(예: 검색 서비스 중단) 다른 일은 계속한다.
-fn logged(job: &str, result: Result<i32, AppError>) -> i32 {
-    result.unwrap_or_else(|err| {
-        tracing::warn!(job, error = %err, "background job failed");
-        0
+/// 일 하나를 작업 id 안에서 하고(그 안의 로그 줄에 `job`·`job_id`, D-83), 실패를 기록하고 0으로 본다. 한 일이
+/// 실패해도(예: 검색 서비스 중단) 다른 일은 계속한다.
+async fn logged(
+    job: &'static str,
+    work: impl std::future::Future<Output = Result<i32, AppError>>,
+) -> i32 {
+    crate::logging::in_job(job, async {
+        work.await.unwrap_or_else(|err| {
+            tracing::warn!(
+                event = "job.failed",
+                error_code = err.code(),
+                detail = crate::logging::safe_error(&err),
+                "background job failed"
+            );
+            0
+        })
     })
+    .await
 }
 
 async fn index(db: &Db, client: &SearchClient, storage: Option<&Storage>) -> Result<i32, AppError> {
@@ -182,19 +206,20 @@ pub async fn run_once(
 ) -> TickReport {
     TickReport {
         cleaned: match storage {
-            Some(storage) => logged("storage", clean_storage(db, storage).await),
+            Some(storage) => logged("storage", clean_storage(db, storage)).await,
             None => 0,
         },
         indexed: match search {
-            Some(client) => logged("search", index(db, client, storage).await),
+            Some(client) => logged("search", index(db, client, storage)).await,
             None => 0,
         },
-        purged: logged("trash_purge", when_due(db, PURGE, PURGE_SQL).await),
+        purged: logged("trash_purge", when_due(db, PURGE, PURGE_SQL)).await,
         occurrences: logged(
             "recurrence",
-            when_due(db, RECURRENCE, "SELECT app_system_recurrence_tick()").await,
-        ),
-        notified: logged("due_notify", when_due(db, DUE, DUE_SQL).await),
+            when_due(db, RECURRENCE, "SELECT app_system_recurrence_tick()"),
+        )
+        .await,
+        notified: logged("due_notify", when_due(db, DUE, DUE_SQL)).await,
     }
 }
 
@@ -211,6 +236,7 @@ pub fn spawn(
             let report = run_once(&db, search.as_ref(), Some(&storage)).await;
             if report != TickReport::default() {
                 tracing::info!(
+                    event = "job.tick",
                     purged = report.purged,
                     occurrences = report.occurrences,
                     indexed = report.indexed,

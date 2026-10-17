@@ -17,5 +17,7 @@
   "common_saved": "Saved.",
   "common_moved_to_trash": "Moved to trash.",
   "common_restored": "Restored.",
-  "common_retry": "Try again"
+  "common_retry": "Try again",
+  "common_server_error": "The server could not handle the request. If it keeps happening, give your administrator request ID {requestId}.",
+  "common_request_id": "Request ID {requestId}"
 }

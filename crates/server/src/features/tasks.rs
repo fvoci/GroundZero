@@ -679,7 +679,7 @@ pub async fn update(
         && let Some(series) = detail.task.series.as_ref().filter(|s| s.rule.is_some())
         && let Err(e) = crate::features::recurrence::sync_series(&state, user, series.id).await
     {
-        tracing::warn!(error = %e, series = %series.id, "recurrence sync after task update failed");
+        tracing::warn!(event = "recurrence.sync_failed", error_code = e.code(), detail = crate::logging::safe_error(&e), series = %series.id, "recurrence sync after task update failed");
     }
     let error = match outcome.as_str() {
         "conflict" => "conflict",
