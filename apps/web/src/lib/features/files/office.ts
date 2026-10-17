@@ -31,9 +31,12 @@ export function officeKind(contentType: string, name: string): OfficeKind | unde
 /** PPTX를 그리는 프레임 스크립트(D-74). `vite.pptx-frame.config.ts`가 한 파일로 만든다. */
 export const PPTX_FRAME_SCRIPT_URL = '/pptx-frame.js';
 
-/** 프레임 스크립트를 HTML의 <script> 안에 그대로 넣을 수 있게 닫는 태그·주석 시작을 끊는다(자바스크립트 뜻은 같다). */
-export function inlineScript(code: string): string {
-  return code.replace(/<\/(script)/gi, '<\\/$1').replace(/<!--/g, '<\\!--');
+/**
+ * 프레임 스크립트를 HTML의 <script> 안에 그대로 넣어도 되는지. 닫는 태그나 주석 시작이 있으면 넣지 않는다(고쳐 쓰면
+ * 정규식 안 등에서 뜻이 바뀔 수 있다). 빌드된 스크립트에는 없고, 생기면 미리보기가 안전하게 실패한다.
+ */
+export function inlineSafe(code: string): boolean {
+  return !/<\/script|<!--/i.test(code);
 }
 
 /**
@@ -45,9 +48,10 @@ export async function pptxSrcdoc(): Promise<string> {
   const response = await fetch(PPTX_FRAME_SCRIPT_URL, { credentials: 'omit' });
   if (!response.ok) throw new Error(String(response.status));
   const code = await response.text();
+  if (!inlineSafe(code)) throw new Error('pptx frame script cannot be inlined');
   const nonce = crypto.randomUUID().replaceAll('-', '');
   const csp = `default-src 'none'; script-src 'nonce-${nonce}'; img-src blob: data:; style-src 'unsafe-inline'; font-src blob: data:`;
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"></head><body style="margin:0;background:#e5e7eb"><div id="slides"></div><script nonce="${nonce}">${inlineScript(code)}</script></body></html>`;
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"></head><body style="margin:0;background:#e5e7eb"><div id="slides"></div><script nonce="${nonce}">${code}</script></body></html>`;
 }
 
 /** iframe 안에서 바깥으로 나가는 요청(추적 그림 등)을 막는다. 그림·글꼴은 문서 안의 것(data:)만. */

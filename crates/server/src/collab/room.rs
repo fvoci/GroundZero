@@ -126,6 +126,8 @@ enum Command {
         snapshot: bool,
         /// 닫기 전에 방의 편집이 모두 리비전으로 남았는지(남길 것이 없었으면 참).
         saved: Option<oneshot::Sender<bool>>,
+        /// 편집한 사람들이 리비전을 남길 수 없을 때 대신 작성자가 될 사람(실시간을 끄는 관리자).
+        fallback: Option<UserId>,
     },
 }
 
@@ -141,7 +143,7 @@ struct Handle {
 pub struct Rooms {
     inner: Arc<Mutex<HashMap<DocumentId, Handle>>>,
     /// 실시간을 끄는 중인 워크스페이스. 이 동안은 방을 새로 열지 않는다(방 목록과 같은 잠금 아래에서 본다).
-    closing: Arc<Mutex<HashSet<Uuid>>>,
+    closing: Arc<Mutex<HashMap<Uuid, usize>>>,
     next: Arc<AtomicU64>,
 }
 
@@ -155,7 +157,14 @@ pub struct ClosingGuard {
 impl Drop for ClosingGuard {
     fn drop(&mut self) {
         let _rooms = self.rooms.lock();
-        self.rooms.closing_set().remove(&self.workspace);
+        let mut closing = self.rooms.closing_set();
+        // 같은 워크스페이스를 동시에 끄는 다른 요청이 있으면 그 막음은 남긴다.
+        if let Some(count) = closing.get_mut(&self.workspace) {
+            *count -= 1;
+            if *count == 0 {
+                closing.remove(&self.workspace);
+            }
+        }
     }
 }
 
@@ -194,7 +203,7 @@ impl Rooms {
     }
 
     /// 끄는 중인 워크스페이스 목록. 늘 방 목록 잠금(`lock`)을 먼저 잡은 뒤에 잡는다.
-    fn closing_set(&self) -> std::sync::MutexGuard<'_, HashSet<Uuid>> {
+    fn closing_set(&self) -> std::sync::MutexGuard<'_, HashMap<Uuid, usize>> {
         self.closing
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -203,7 +212,7 @@ impl Rooms {
     /// 이 워크스페이스에 방이 새로 열리지 않게 한다(실시간 끄기 동안). 이미 열린 방은 `close_workspace`로 닫는다.
     pub fn begin_closing(&self, workspace: Uuid) -> ClosingGuard {
         let _rooms = self.lock();
-        self.closing_set().insert(workspace);
+        *self.closing_set().entry(workspace).or_default() += 1;
         ClosingGuard {
             rooms: self.clone(),
             workspace,
@@ -224,7 +233,7 @@ impl Rooms {
             let handle = {
                 let mut rooms = self.lock();
                 // 실시간을 끄는 중이면 열지 않는다. 클라이언트는 잠시 뒤 다시 붙고, 그때 꺼졌으면 4410을 받는다.
-                if workspace.is_some_and(|w| self.closing_set().contains(&w)) {
+                if workspace.is_some_and(|w| self.closing_set().contains_key(&w)) {
                     return Err(AppError::Upstream(
                         "live editing is being turned off".into(),
                     ));
@@ -293,6 +302,7 @@ impl Rooms {
                     reason: CloseReason::Reload,
                     snapshot: false,
                     saved: None,
+                    fallback: None,
                 })
                 .await;
         }
@@ -300,20 +310,49 @@ impl Rooms {
 
     /// 워크스페이스가 실시간을 끈다(또는 껐다). 그 워크스페이스의 방은 리비전을 남기고 닫는다. 끝날 때까지 기다린다.
     /// 모든 방의 편집이 리비전으로 남았으면 참(`begin_closing`과 함께 써서 그동안 새 방이 열리지 않게 한다).
-    pub async fn close_workspace(&self, workspace: Uuid) -> bool {
+    pub async fn close_workspace(&self, workspace: Uuid, admin: UserId) -> bool {
         let handles: Vec<Handle> = self
             .lock()
             .values()
             .filter(|h| h.workspace == Some(workspace))
             .cloned()
             .collect();
-        close_all(handles, CloseReason::RealtimeOff).await
+        close_all(handles, CloseReason::RealtimeOff, Some(admin)).await
+    }
+
+    /// 방 없이 남은 실시간 상태(리비전으로 남지 않은 편집)를 리비전으로 남긴다. 실시간을 끄기 전, 방을 모두 닫은
+    /// 뒤(`begin_closing` 아래)에 쓴다. 작성자는 실시간을 끄는 관리자. 남겼거나 남길 것이 없으면 참.
+    pub async fn save_pending(
+        &self,
+        db: &Db,
+        limits: &Limits,
+        doc: DocumentId,
+        admin: UserId,
+    ) -> bool {
+        let generation = self.next.fetch_add(1, Ordering::Relaxed);
+        let mut room = Room::new(
+            doc,
+            generation,
+            db.clone(),
+            *limits,
+            Duration::from_secs(30),
+            self.clone(),
+        );
+        match room.load(admin).await {
+            Ok(loaded) => room.doc = Some(loaded),
+            Err(err) => {
+                tracing::warn!(document = %doc.0, error = %err, "could not load a pending live state");
+                return false;
+            }
+        }
+        room.dirty_since_snapshot = true;
+        room.snapshot_with(Some(admin)).await
     }
 
     /// 서버를 끝낸다. 모든 방의 리비전을 남기고 닫는다(클라이언트는 다시 붙는다).
     pub async fn shutdown(&self) {
         let handles: Vec<Handle> = self.lock().values().cloned().collect();
-        let _saved = close_all(handles, CloseReason::Restart).await;
+        let _saved = close_all(handles, CloseReason::Restart, None).await;
     }
 
     fn remove(&self, doc: DocumentId, generation: u64) {
@@ -325,7 +364,7 @@ impl Rooms {
 }
 
 /// 방마다 리비전을 남기고 닫게 한 뒤 답을 기다린다. 모두 남겼으면 참. 이미 닫힌 방은 남길 것이 없다.
-async fn close_all(handles: Vec<Handle>, reason: CloseReason) -> bool {
+async fn close_all(handles: Vec<Handle>, reason: CloseReason, fallback: Option<UserId>) -> bool {
     let mut waits = Vec::new();
     for handle in handles {
         let (saved, answer) = oneshot::channel();
@@ -335,6 +374,7 @@ async fn close_all(handles: Vec<Handle>, reason: CloseReason) -> bool {
                 reason,
                 snapshot: true,
                 saved: Some(saved),
+                fallback,
             })
             .await
             .is_ok()
@@ -514,10 +554,11 @@ impl Room {
                 reason,
                 snapshot,
                 saved,
+                fallback,
             } => {
                 let kept = if snapshot {
                     self.flush().await;
-                    let kept = self.snapshot().await;
+                    let kept = self.snapshot_with(fallback).await;
                     self.persist().await;
                     kept
                 } else {
@@ -869,10 +910,12 @@ impl Room {
             .encode_state_as_update_v1(&StateVector::default());
         let result = async {
             let mut tx = self.db.begin_anonymous().await?;
-            let stored: bool = sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3)")
+            // 리비전으로 아직 남지 않은 편집이 있는지도 적는다(실시간을 끄기 전에 남긴다, 마이그레이션 0050).
+            let stored: bool = sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3, $4)")
                 .bind(self.doc_id)
                 .bind(self.base_revision)
                 .bind(state)
+                .bind(self.dirty_since_snapshot)
                 .fetch_one(tx.conn())
                 .await?;
             tx.commit().await?;
@@ -890,6 +933,11 @@ impl Room {
     /// 방 문서를 저장 API와 같은 길로 리비전에 남긴다. 작성자는 마지막으로 고친 사람, 그 사람이 쓸 수 없으면
     /// 최근에 고친 다른 사람, 그다음은 연결된 작성자 순.
     async fn snapshot(&mut self) -> bool {
+        self.snapshot_with(None).await
+    }
+
+    /// `fallback`: 편집한 사람·연결된 작성자 모두 남길 수 없을 때의 작성자(실시간을 끄는 관리자).
+    async fn snapshot_with(&mut self, fallback: Option<UserId>) -> bool {
         if !self.dirty_since_snapshot {
             return true;
         }
@@ -907,6 +955,9 @@ impl Room {
             if !authors.contains(&c.peer.user) {
                 authors.push(c.peer.user);
             }
+        }
+        if let Some(admin) = fallback.filter(|a| !authors.contains(a)) {
+            authors.push(admin);
         }
         for author in authors {
             match self.write_snapshot(author, &body).await {

@@ -13,7 +13,7 @@ use crate::db::UserTx;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
-use crate::ids::{Role, WorkspaceId};
+use crate::ids::{DocumentId, Role, WorkspaceId};
 
 /// 워크스페이스 요약.
 #[derive(Debug, Serialize, ToSchema)]
@@ -285,7 +285,24 @@ pub async fn set_realtime(
         tx.commit().await?;
         if role.as_deref() == Some("admin") {
             let guard = state.collab.begin_closing(ws.0);
-            if !state.collab.close_workspace(ws.0).await {
+            let mut saved = state.collab.close_workspace(ws.0, user).await;
+            // 방 없이 남은 실시간 상태(방이 리비전을 남기지 못하고 닫힌 것)도 끄기 전에 리비전으로 남긴다.
+            if saved {
+                let mut tx = state.db.begin_as(user).await?;
+                let pending: Vec<Uuid> = sqlx::query_scalar("SELECT app_collab_pending($1)")
+                    .bind(ws)
+                    .fetch_all(tx.conn())
+                    .await
+                    .map_err(AppError::from_db_function)?;
+                tx.commit().await?;
+                for doc in pending {
+                    saved &= state
+                        .collab
+                        .save_pending(&state.db, &state.config.limits, DocumentId(doc), user)
+                        .await;
+                }
+            }
+            if !saved {
                 return Err(AppError::Conflict(
                     "some live documents could not be saved as revisions; realtime stays on, try again"
                         .into(),

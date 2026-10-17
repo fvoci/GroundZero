@@ -1,4 +1,4 @@
-import { inlineScript, officeKind } from '$lib/features/files/office';
+import { inlineSafe, officeKind } from '$lib/features/files/office';
 
 describe('office preview kinds', () => {
   it('recognises DOCX, XLSX and PPTX by type or extension', () => {
@@ -24,12 +24,10 @@ describe('office preview kinds', () => {
 });
 
 describe('pptx frame script inlining', () => {
-  it('breaks closing tags and comment openers without changing the script', () => {
-    const code = 'const a = "</script><!-- x"; const b = "</SCRIPT>";';
-    const inlined = inlineScript(code);
-    expect(inlined).not.toMatch(/<\/script/i);
-    expect(inlined).not.toContain('<!--');
-    // 자바스크립트 문자열로는 같은 값이다(`\/`와 `\!`는 그 글자 그대로).
-    expect(inlined).toBe(String.raw`const a = "<\/script><\!-- x"; const b = "<\/SCRIPT>";`);
+  it('refuses scripts that would close the inline script element', () => {
+    expect(inlineSafe('const a = 1 < 2;')).toBe(true);
+    expect(inlineSafe('const a = "</script>";')).toBe(false);
+    expect(inlineSafe('const a = "</SCRIPT >";')).toBe(false);
+    expect(inlineSafe('const a = "<!-- x";')).toBe(false);
   });
 });

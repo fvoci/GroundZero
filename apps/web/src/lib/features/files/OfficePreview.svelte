@@ -34,9 +34,13 @@
   // 늦게 끝난 이전 요청이 결과를 덮지 않게 요청마다 번호를 붙인다.
   let seq = 0;
 
+  // 바이트는 프레임마다 한 번만 보낸다(다시 알리는 'ready'에 또 보내지 않는다).
+  let sentTo: Window | undefined;
+
   function sendPptx(): void {
     const target = frame?.contentWindow;
-    if (!target || pptxBytes === undefined) return;
+    if (!target || pptxBytes === undefined || sentTo === target) return;
+    sentTo = target;
     // 격리 프레임은 출처가 없어(opaque) 대상 출처를 지정할 수 없다. 이 사람이 내려받을 수 있는 바이트만 보낸다.
     target.postMessage({ type: 'pptx', bytes: pptxBytes }, '*');
   }
@@ -64,6 +68,7 @@
     sheets = undefined;
     pptxBytes = undefined;
     pptxDoc = undefined;
+    sentTo = undefined;
     pptxSlides = undefined;
     error = undefined;
     if (size > OFFICE_PREVIEW_MAX_BYTES) {

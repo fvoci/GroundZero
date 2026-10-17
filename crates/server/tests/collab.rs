@@ -654,9 +654,9 @@ async fn refused_code(addr: SocketAddr, user: &TestUser, doc: &str) -> Option<u1
     client.closed().await
 }
 
-/// 실시간 끄기 회귀(사용자 지시 2026-10-17): 끄는 동안 새 방이 열리지 않고, 열린 방의 편집은 리비전으로 남은 뒤에만
-/// 꺼진다. 리비전을 남길 수 없으면(쓸 수 있는 사람이 없음) 끄지 않고 409, 편집과 연결은 그대로이며, 다시 쓸 수
-/// 있게 되면 끄기가 되고 편집이 리비전에 있다. 끈 뒤의 저장 API는 그 리비전 위에서만 성공한다.
+/// 실시간 끄기 회귀(사용자 지시 2026-10-17, 리뷰 반영): 끄는 동안 새 방이 열리지 않고(4503), 열린 방과 방 없이 남은
+/// 실시간 상태의 편집이 모두 리비전으로 남은 뒤에만 꺼진다. 편집한 사람이 더는 쓸 수 없으면 끄는 관리자가 작성자가
+/// 된다. 같은 워크스페이스를 동시에 끄는 요청이 겹쳐도 편집이 남는다. 끈 뒤 저장 API는 그 리비전 위에서만 성공한다.
 #[tokio::test]
 async fn turning_realtime_off_keeps_live_edits() {
     let state =
@@ -667,9 +667,6 @@ async fn turning_realtime_off_keeps_live_edits() {
     let ws = create_workspace(&app, &admin, "끄기 보존").await;
     let ws_id = uuid::Uuid::parse_str(&ws).unwrap();
     let (w1, _) = add_member(&app, &state, &admin, &ws, "w1", "writer").await;
-    let doc = common::create_doc(&app, &w1, &ws, "끄기 문서").await;
-    let id = doc["id"].as_str().unwrap().to_owned();
-    let doc_uri = format!("/api/documents/{id}");
     let set = |enabled: bool| {
         let app = app.clone();
         let admin = admin.clone();
@@ -703,57 +700,100 @@ async fn turning_realtime_off_keeps_live_edits() {
             assert!(res.status.is_success(), "{:?}", res.json);
         }
     };
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let last_author = |id: String| {
+        let owner = owner.clone();
+        async move {
+            let author: uuid::Uuid = sqlx::query_scalar(
+                "SELECT author FROM fvoci.document_revisions WHERE document_id = $1::uuid ORDER BY revision DESC LIMIT 1",
+            )
+            .bind(id)
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+            author
+        }
+    };
+    let a_doc = common::create_doc(&app, &w1, &ws, "열린 방 문서").await;
+    let a_id = a_doc["id"].as_str().unwrap().to_owned();
+    let b_doc = common::create_doc(&app, &w1, &ws, "닫힌 방 문서").await;
+    let b_id = b_doc["id"].as_str().unwrap().to_owned();
     assert_eq!(set(true).await, StatusCode::NO_CONTENT);
 
     // 끄는 중(막음이 걸린 동안)에는 방에 새로 들어가지 못하고 다시 붙으라는 4503을 받는다.
-    let mut a = connect(addr, Some(&w1), &id, true).await.unwrap();
+    let mut a = connect(addr, Some(&w1), &a_id, true).await.unwrap();
     {
         let _closing = state.collab.begin_closing(ws_id);
-        assert_eq!(refused_code(addr, &w1, &id).await, Some(4503));
+        assert_eq!(refused_code(addr, &w1, &a_id).await, Some(4503));
     }
 
-    // 리비전을 남길 수 없으면 끄지 않는다: 마지막으로 고친 w1이 독자가 되고 쓸 수 있는 다른 연결도 없다.
-    a.paragraph("끄기 직전 실시간 글").await;
+    // 문서 B: w1이 고친 뒤 독자가 되어 나가면 방은 리비전을 남기지 못하고(쓸 수 있는 사람이 없음) 실시간 상태만 남는다.
+    let mut b = connect(addr, Some(&w1), &b_id, true).await.unwrap();
+    b.paragraph("닫힌 방에 남은 글").await;
+    // 문서 A: w1이 고친 채로 연결이 열려 있다.
+    a.paragraph("열린 방의 글").await;
     tokio::time::sleep(Duration::from_millis(400)).await;
     role("reader").await;
     tokio::time::sleep(Duration::from_millis(1500)).await;
-    assert_eq!(set(false).await, StatusCode::CONFLICT);
-    let still = send(&app, Method::GET, &doc_uri, Some(&admin), None)
+    b.close().await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    let b_before = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{b_id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    assert!(
+        !b_before["body"].to_string().contains("닫힌 방에 남은 글"),
+        "{b_before:?}"
+    );
+
+    // 같은 워크스페이스를 끄는 요청 둘이 겹쳐도 둘 다 성공하고 두 문서의 편집이 리비전으로 남는다(관리자가 작성자).
+    let (first, second) = tokio::join!(set(false), set(false));
+    assert_eq!(first, StatusCode::NO_CONTENT);
+    assert_eq!(second, StatusCode::NO_CONTENT);
+    assert_eq!(a.closed().await, Some(4410));
+    for (id, text) in [(&a_id, "열린 방의 글"), (&b_id, "닫힌 방에 남은 글")] {
+        let doc = send(
+            &app,
+            Method::GET,
+            &format!("/api/documents/{id}"),
+            Some(&admin),
+            None,
+        )
         .await
         .json;
-    assert_eq!(still["realtime"], true, "{still:?}");
-    assert!(
-        !still["body"].to_string().contains("끄기 직전"),
-        "{still:?}"
-    );
-    // 연결은 닫히지 않았다.
-    assert!(matches!(
-        a.next(Duration::from_millis(500)).await,
-        Event::Data | Event::Timeout
-    ));
+        assert_eq!(doc["realtime"], false);
+        assert!(doc["body"].to_string().contains(text), "{doc:?}");
+        assert_eq!(last_author(id.clone()).await, admin.id.0);
+    }
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM fvoci.document_collab_states WHERE pending AND document_id IN ($1::uuid, $2::uuid)",
+    )
+    .bind(&a_id)
+    .bind(&b_id)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert_eq!(pending, 0);
 
-    // 다시 쓸 수 있게 되면 끄기가 되고, 그 편집이 리비전에 있다.
+    // 끈 뒤 저장 API는 그 리비전을 바탕으로만 저장된다(예전 리비전을 바탕으로 하면 충돌, 실시간 편집을 덮지 않음).
     role("writer").await;
-    tokio::time::sleep(Duration::from_millis(1500)).await;
-    assert_eq!(set(false).await, StatusCode::NO_CONTENT);
-    assert_eq!(a.closed().await, Some(4410));
+    let doc_uri = format!("/api/documents/{a_id}");
     let after = send(&app, Method::GET, &doc_uri, Some(&w1), None)
         .await
         .json;
-    assert_eq!(after["realtime"], false);
-    assert!(
-        after["body"].to_string().contains("끄기 직전 실시간 글"),
-        "{after:?}"
-    );
-
-    // 끈 뒤 저장 API는 그 리비전을 바탕으로만 저장된다(예전 리비전을 바탕으로 하면 충돌, 실시간 편집을 덮지 않음).
     let stale = send(
         &app,
         Method::PUT,
         &doc_uri,
         Some(&w1),
         Some(
-            json!({ "request_id": new_request_id(), "base_revision": 1, "title": "끄기 문서",
+            json!({ "request_id": new_request_id(), "base_revision": 1, "title": "열린 방 문서",
             "body": common::doc_body("옛 바탕") }),
         ),
     )
@@ -766,9 +806,10 @@ async fn turning_realtime_off_keeps_live_edits() {
         Some(&w1),
         Some(
             json!({ "request_id": new_request_id(), "base_revision": after["revision"],
-            "title": "끄기 문서", "body": common::doc_body("끈 뒤 저장") }),
+            "title": "열린 방 문서", "body": common::doc_body("끈 뒤 저장") }),
         ),
     )
     .await;
     assert_eq!(fresh.status, StatusCode::OK, "{:?}", fresh.json);
+    owner.close().await;
 }

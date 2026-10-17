@@ -740,7 +740,12 @@ pub async fn save(
         return Ok(Json(to_document(current, access)).into_response());
     }
     // 실시간 편집 중이면 본문은 실시간 연결만 고친다(두 길로 본문이 갈라지지 않게). 제목은 여기서 바꾼다.
-    if current.realtime && current.body != input.body {
+    // 워크스페이스 행을 공유 잠금하고 다시 읽어, 켜기·끄기와 엇갈려 꺼진 줄 알고 쓴 본문이 켜진 뒤 들어오지 않게 한다.
+    let realtime: bool = sqlx::query_scalar("SELECT app_document_realtime_locked($1)")
+        .bind(id)
+        .fetch_one(tx.conn())
+        .await?;
+    if realtime && current.body != input.body {
         return Err(AppError::Conflict(
             "realtime editing is on for this document; edit the body in the live editor".into(),
         ));
