@@ -5,6 +5,7 @@
 
   import type { TrashEntryView, TrashView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { localTimeZone, wallTime } from '$lib/features/events/time';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
@@ -57,6 +58,7 @@
     try {
       await action();
       status = done;
+      notifyDone(done);
       confirmPurge = undefined;
       reloadKey += 1;
     } catch (e: unknown) {

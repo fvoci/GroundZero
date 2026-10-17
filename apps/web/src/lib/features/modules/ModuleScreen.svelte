@@ -6,6 +6,8 @@
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { forgetReferences } from '$lib/features/references/resolver';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { m } from '$lib/paraglide/messages.js';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
@@ -85,6 +87,7 @@
       forgetReferences();
       editKey = mod.key;
       items = await api.items(mod.id);
+      notifyDone(m.common_saved());
       if (before !== mod.key) {
         settingsNote = `키를 ${before}에서 ${mod.key}(으)로 바꿨습니다. 번호와 링크는 그대로이고, ${before}는 이 모듈의 예전 키로 남습니다.`;
       }

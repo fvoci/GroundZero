@@ -11,5 +11,11 @@
         "countPlural=other": "{count} items"
       }
     }
-  ]
+  ],
+  "common_connection_lost": "Can't reach the server. Checking until it's back. Nothing you typed is discarded.",
+  "common_notifications_region": "Notifications",
+  "common_saved": "Saved.",
+  "common_moved_to_trash": "Moved to trash.",
+  "common_restored": "Restored.",
+  "common_retry": "Try again"
 }

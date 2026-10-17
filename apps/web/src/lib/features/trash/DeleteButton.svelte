@@ -4,6 +4,8 @@
   import { tick } from 'svelte';
 
   import { ApiError } from '$lib/api/client';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
   interface Props {
@@ -40,6 +42,7 @@
     try {
       await remove();
       confirming = false;
+      notifyDone(m.common_moved_to_trash());
       ondeleted();
     } catch (e: unknown) {
       error = e instanceof ApiError ? e.message : '지우지 못했습니다.';
