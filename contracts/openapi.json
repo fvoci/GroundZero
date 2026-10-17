@@ -11837,7 +11837,8 @@
         "description": "일정의 회차 하나(반복이 아니면 그 일정 자체). 종일이면 날짜, 아니면 UTC 시각.",
         "required": [
           "event_id",
-          "occurrence"
+          "occurrence",
+          "skipped"
         ],
         "properties": {
           "end_date": {
@@ -11860,6 +11861,10 @@
           "occurrence": {
             "type": "string",
             "description": "일정 시간대 기준의 회차 날짜(회차 빼기에 쓴다)."
+          },
+          "skipped": {
+            "type": "boolean",
+            "description": "반복 회차의 현지 시각이 그 시간대에 없어(여름시간 시작) 건너뛴 회차(D-81). 시각은 없다."
           },
           "start_date": {
             "type": [

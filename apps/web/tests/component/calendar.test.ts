@@ -85,6 +85,7 @@ describe('month calendar', () => {
       end_date: null,
       starts_at: null,
       ends_at: null,
+      skipped: false,
       ...over,
     });
     const map = entriesByDay(
@@ -160,5 +161,45 @@ describe('calendar date sources (D-80)', () => {
     expect(map.get('2026-11-10')?.map((e) => e.label)).toEqual(['수강(내 계획) 2. 행렬']);
     expect(map.get('2026-11-12')?.map((e) => e.label)).toEqual(['수정 마감 학회 투고']);
     expect(map.has('2026-12-01')).toBe(false);
+  });
+});
+
+describe('skipped repeating occurrences (D-81)', () => {
+  it('shows an occurrence whose local time does not exist as skipped on its date', () => {
+    const map = entriesByDay(
+      [],
+      [],
+      [
+        event({
+          id: 'e',
+          title: '새벽 점검',
+          starts_at: '2026-03-01T07:30:00Z',
+          ends_at: '2026-03-01T08:00:00Z',
+          timezone: 'America/New_York',
+        }),
+      ],
+      [
+        {
+          event_id: 'e',
+          occurrence: '2026-03-08',
+          start_date: null,
+          end_date: null,
+          starts_at: null,
+          ends_at: null,
+          skipped: true,
+        },
+      ],
+      '2026-03-01',
+      '2026-03-31',
+      'America/New_York',
+    );
+    expect(map.get('2026-03-08')?.map((e) => e.label)).toEqual(['건너뜀(그 시각 없음) 새벽 점검']);
+  });
+
+  it('flags wall times that do not exist in the zone', async () => {
+    const { isMissingLocalTime } = await import('$lib/features/events/time');
+    expect(isMissingLocalTime('2026-03-08T02:30', 'America/New_York')).toBe(true);
+    expect(isMissingLocalTime('2026-11-01T01:30', 'America/New_York')).toBe(false);
+    expect(isMissingLocalTime('2026-03-08T02:30', 'Asia/Seoul')).toBe(false);
   });
 });

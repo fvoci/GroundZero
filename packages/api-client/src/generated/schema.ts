@@ -2974,6 +2974,8 @@ export interface components {
             event_id: string;
             /** @description 일정 시간대 기준의 회차 날짜(회차 빼기에 쓴다). */
             occurrence: string;
+            /** @description 반복 회차의 현지 시각이 그 시간대에 없어(여름시간 시작) 건너뛴 회차(D-81). 시각은 없다. */
+            skipped: boolean;
             start_date?: string | null;
             /** Format: date-time */
             starts_at?: string | null;

@@ -93,6 +93,13 @@ export function entriesByDay(
           label: day === startDay ? `${time} ${event.title}` : `(계속) ${event.title}`,
           sortKey: day === startDay ? time : '',
         });
+    } else if (occ.skipped && occ.occurrence >= from && occ.occurrence <= to) {
+      // 일정 시간대에 없는 현지 시각이라 만들지 않은 반복 회차(D-81). 날짜는 일정 시간대 기준.
+      push(occ.occurrence, {
+        ...base,
+        label: `건너뜀(그 시각 없음) ${event.title}`,
+        sortKey: '',
+      });
     }
   }
   for (const p of projected) {

@@ -545,3 +545,133 @@ async fn changing_a_rule_applies_from_today_and_the_template_stays_top_level() {
     .await;
     assert_eq!(cal.status, StatusCode::BAD_REQUEST);
 }
+
+/// 반복 일정의 DST(D-81): 일정 시간대에 없는 현지 시각의 회차는 건너뛰고(건너뜀으로 표시), 두 번 있는 시각은 앞선
+/// 시각에 한 번만. 보는 사람의 시간대가 달라도 회차 시점은 같다.
+#[tokio::test]
+async fn weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_ones() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "여름시간").await;
+    let item = module_item(&app, &admin, &ws, "DST").await;
+    let weekly = |title: &'static str, starts: &'static str, ends: &'static str| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let item = item["id"].as_str().unwrap().to_owned();
+        async move {
+            let r = send(&app, Method::POST, &format!("/api/items/{item}/events"), Some(&admin),
+                Some(json!({ "request_id": new_request_id(), "kind": "meeting", "title": title, "description": "",
+                             "all_day": false, "start_date": null, "end_date": null,
+                             "starts_at": starts, "ends_at": ends, "timezone": "America/New_York" }))).await;
+            assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+            let id = r.json["id"].as_str().unwrap().to_owned();
+            let set = send(&app, Method::PUT, &format!("/api/events/{id}/recurrence"), Some(&admin),
+                Some(json!({ "rule": {"freq":"weekly","interval":1,"weekdays":[],"until":null,"count":null} }))).await;
+            assert_eq!(set.status, StatusCode::OK, "{:?}", set.json);
+            id
+        }
+    };
+    // 일요일 02:30(뉴욕). 2026-03-08 02:00에 03:00으로 건너뛴다.
+    let spring = weekly(
+        "새벽 점검",
+        "2026-03-01T02:30:00-05:00",
+        "2026-03-01T03:00:00-05:00",
+    )
+    .await;
+    // 일요일 01:30(뉴욕). 2026-11-01 02:00에 01:00으로 돌아가 01:30이 두 번 있다.
+    let fall = weekly(
+        "새벽 백업",
+        "2026-10-25T01:30:00-04:00",
+        "2026-10-25T02:00:00-04:00",
+    )
+    .await;
+
+    let occurrences = |from: &'static str, to: &'static str, tz: &'static str, id: String| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let ws = ws.clone();
+        async move {
+            let r = send(
+                &app,
+                Method::GET,
+                &format!("/api/workspaces/{ws}/calendar?from={from}&to={to}&tz={tz}"),
+                Some(&admin),
+                None,
+            )
+            .await;
+            assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+            r.json["occurrences"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|o| o["event_id"] == id.as_str())
+                .map(|o| {
+                    (
+                        o["occurrence"].as_str().unwrap().to_owned(),
+                        o["starts_at"].as_str().map(str::to_owned),
+                        o["skipped"].as_bool().unwrap(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        }
+    };
+    let march = occurrences(
+        "2026-03-01",
+        "2026-03-21",
+        "America/New_York",
+        spring.clone(),
+    )
+    .await;
+    assert_eq!(
+        march,
+        vec![
+            (
+                "2026-03-01".to_owned(),
+                Some("2026-03-01T07:30:00Z".to_owned()),
+                false
+            ),
+            ("2026-03-08".to_owned(), None, true),
+            (
+                "2026-03-15".to_owned(),
+                Some("2026-03-15T06:30:00Z".to_owned()),
+                false
+            ),
+        ]
+    );
+    // 보는 사람의 시간대가 서울이어도 회차 시점은 같다(반복 기준은 일정의 시간대).
+    let seen_from_seoul = occurrences("2026-03-01", "2026-03-21", "Asia/Seoul", spring).await;
+    assert_eq!(
+        seen_from_seoul
+            .iter()
+            .map(|o| o.1.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            Some("2026-03-01T07:30:00Z".to_owned()),
+            None,
+            Some("2026-03-15T06:30:00Z".to_owned())
+        ]
+    );
+    let november = occurrences("2026-10-25", "2026-11-08", "America/New_York", fall).await;
+    assert_eq!(
+        november,
+        vec![
+            (
+                "2026-10-25".to_owned(),
+                Some("2026-10-25T05:30:00Z".to_owned()),
+                false
+            ),
+            // 01:30 EDT(앞선 시각) 한 번만.
+            (
+                "2026-11-01".to_owned(),
+                Some("2026-11-01T05:30:00Z".to_owned()),
+                false
+            ),
+            (
+                "2026-11-08".to_owned(),
+                Some("2026-11-08T06:30:00Z".to_owned()),
+                false
+            ),
+        ]
+    );
+}

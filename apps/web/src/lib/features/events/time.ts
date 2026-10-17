@@ -98,3 +98,11 @@ export function instantOf(wall: string, timeZone: string): string {
 export function clock(iso: string, timeZone: string): string {
   return wallTime(iso, timeZone).slice(11);
 }
+
+/**
+ * 그 시간대에 없는 벽시계 시각인지(여름시간이 시작되며 건너뛰는 시각, D-81). 단건 일정은 이런 시각을 조용히 옮겨
+ * 저장하지 않고 다른 시각을 고르게 한다. 모르는 시간대면 RangeError.
+ */
+export function isMissingLocalTime(wall: string, timeZone: string): boolean {
+  return wallTime(instantOf(wall, timeZone), timeZone) !== wall;
+}

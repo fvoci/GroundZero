@@ -10,7 +10,7 @@
   import * as Select from '$lib/ui/select';
 
   import { KIND_LABEL } from './labels';
-  import { dayIn, instantOf, localTimeZone, wallTime } from './time';
+  import { dayIn, instantOf, isMissingLocalTime, localTimeZone, wallTime } from './time';
 
   interface Props {
     idPrefix: string;
@@ -68,6 +68,14 @@
     error = undefined;
     let input: EventInput;
     try {
+      const zone = f.timezone.trim();
+      if (
+        !f.allDay &&
+        (isMissingLocalTime(f.startWall, zone) || isMissingLocalTime(f.endWall, zone))
+      ) {
+        error = `그 시각은 ${zone}에 없습니다(여름시간이 시작되는 날 건너뛰는 시각). 다른 시각을 고르세요.`;
+        return;
+      }
       input = {
         kind: f.kind,
         title: f.title,
