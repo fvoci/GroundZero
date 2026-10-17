@@ -518,6 +518,14 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 - **아직 없음**: 외부 플랫폼 자동 시청 추적(H-02 보류), 만료·마감 알림을 알림함으로 보내기(지금은 화면 안내).
 - **검증**: 통합 테스트(강좌 정보 쓰기 권한, 밖의 사람 404, 일괄 추가·같은 요청 id·빈 제목·읽기 전용 거부, 진도는 사람마다·다시 보기·메모 비공개, 함께 수강 집계, 회차를 시간 기록 대상으로, 회차 고치기·지우기, 강의가 아닌 항목은 404). 웹 테스트(진행률·밀린 회차·하루 필요 분량, CSV 읽기). 브라우저(`cargo xtask dev --oidc` + Vite): CSV로 3회차 등록, 완료 표시 후 회차 33%·영상 13%, 오늘 예정·완료, 함께 수강 집계.
 
+## 35. 셀프호스트 설치 재현 (2026-10-17, O-25 해소)
+
+- **구성(O-25 권장안 채택)**: `deploy/compose.selfhost.yaml`(PostgreSQL·Meilisearch·한 번 도는 `db bootstrap`·`db migrate`·앱, 비밀 값은 운영자 `.env`에서만, 빠지면 Compose가 이유를 말하며 멈춤), 선택 프로필 `keycloak`(운영 모드, 같은 PostgreSQL의 전용 DB를 첫 설치 때 만듦, 렐름 틀 `deploy/keycloak/realm-selfhost.json`은 사용자 없이 `.env` 값으로 채움). 운영자 안내는 `docs/self-hosting.md`. 이미지는 앱 사용자 소유의 `/data/files`·`/backups`와 `fvoci-server healthcheck`(이미지에 curl 없음)를 갖는다.
+- **재현(커밋 `36331a0`의 새 worktree, 임의 생성 테스트 비밀 값, Keycloak 프로필)**: 이미지 빌드와 기동, bootstrap·migrate 완료, 모든 서비스 healthy, `/healthz` ok, 렐름 틀의 되돌아올 주소·출처·클라이언트 비밀이 `.env` 값으로 채워짐, Keycloak 관리 CLI로 사용자 생성, 브라우저에서 OIDC 로그인 → 워크스페이스 만들기 → 위키 문서 작성·저장(리비전 2) → 새로 고침 → 스택 재시작 뒤 세션·내용 유지 → 첨부 올리기 → `backup create`(36개 표, 파일 1개, 폴더·파일 0700/0600) → 앱 멈춤 → **다른 새 설치**(새 DB·검색 비밀 값)에 `backup restore` → 같은 사용자로 다시 로그인(옛 세션 무효) → 문서(번호·리비전·본문)·첨부 내용·검색(문서·파일 이름) 그대로. 확인 뒤 두 설치 모두 `down -v`, 이미지·worktree 삭제.
+- **재현에서 찾아 고친 것**: `docker cp`로 넣은 백업은 호스트 사용자 소유라 앱 사용자가 읽지 못한다 → 복구 절차에 소유자 넘기기(`chown`)를 넣었다.
+- **로컬 재현만의 장치**: 브라우저와 앱 컨테이너가 같은 주소로 Keycloak에 닿도록 `auth.localhost`와 앱 컨테이너의 `extra_hosts`(host-gateway)를 쓴 덮어쓰기 파일(커밋하지 않음). 실제 설치는 공개 도메인이므로 필요 없다.
+- **아직 없음**: HTTPS 역방향 프록시 설정 예시는 운영자가 고른 프록시에 맡긴다. 실시간 협업은 보류 중.
+
 ## 참고 자료
 
 - [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict.html)

@@ -11,7 +11,7 @@
 - `apps/web/`: Vite + Svelte 5 SPA, `src/app/`, `src/lib/{api,ui}/`, `src/styles/`, `tests/component/`
 - `packages/api-client/`: `src/index.ts`, `src/generated/schema.ts`(생성)
 - `contracts/openapi.json`(생성)
-- `deploy/`: `compose.dev.yaml`, `compose.test.yaml`, `keycloak/realm-test.json`, `docker/{dev,app}.Dockerfile`. `compose.selfhost.yaml`은 O-25 결정 후.
+- `deploy/`: `compose.dev.yaml`, `compose.test.yaml`, `keycloak/realm-test.json`, `docker/{dev,app}.Dockerfile`. `compose.selfhost.yaml`·`selfhost.env.example`·`postgres/initdb/`·`keycloak/realm-selfhost.json`(O-25 해소 뒤 추가).
 - `.agents/skills/{rust-api-db,svelte-ui,test-docker-ci}/SKILL.md`
 - `.github/workflows/{base-image,ci}.yml`
 - `docs/`: `decisions.md`, `development.md`, `repo-structure.md`. 나머지 문서는 실제 내용이 생길 때 만든다.
@@ -139,7 +139,10 @@ fvoci/
 │   │   └── app.Dockerfile
 │   ├── compose.dev.yaml
 │   ├── compose.test.yaml
-│   └── compose.selfhost.yaml
+│   ├── compose.selfhost.yaml   # 셀프호스트(docs/self-hosting.md)
+│   ├── selfhost.env.example
+│   ├── postgres/initdb/       # 첫 설치 때 Keycloak DB(선택)
+│   └── keycloak/              # 테스트 렐름, 셀프호스트 렐름 틀
 │
 ├── docs/
 │   ├── decisions.md
@@ -162,6 +165,6 @@ fvoci/
 
 - 결정 기록과 맞는 점: `contracts/openapi.json`을 Rust 정의에서 생성하고 `packages/api-client`를 그 계약에서 생성하는 구조는 O-22 권장안과 일치한다. 백그라운드 작업은 O-19 권장안대로 `crates/server/src/worker.rs`(단일 바이너리, 실행 역할, PostgreSQL 기록)로 두었다. `features/documents/`가 개인 노트까지 담는 것은 O-02(개인 노트 소유 구조)의 결과에 따라 분리될 수 있다.
 - 프론트엔드 `features/`에 `projects`, `hobbies`, `notifications`, `audit`, `modules`가 없다. 서버 쪽에는 있으므로 의도적 생략인지 확인이 필요하다.
-- `deploy/compose.test.yaml`에 Keycloak이 들어가야 한다(D-45, D-10). `compose.selfhost.yaml`의 Keycloak 포함 여부는 O-25.
+- `deploy/compose.test.yaml`에 Keycloak이 들어가야 한다(D-45, D-10). `compose.selfhost.yaml`의 Keycloak은 선택 프로필(O-25 해소).
 - `docs/development.md`는 기존 `development-guidelines.md`를 이 이름으로 옮겼다. `product.md`, `architecture.md`, `testing.md`, `security.md`, `self-hosting.md`는 아직 없다.
 - `AGENTS.md`와 `.agents/skills/`의 역할과 내용은 별도 지침이 필요하다.
