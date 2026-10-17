@@ -217,3 +217,118 @@ async fn bodies_reject_outside_images_and_unsafe_links() {
         { "type": "tableHeader", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "항목" }] }] }] }] });
     assert_eq!(save(2, table).await, StatusCode::OK);
 }
+
+/// 문서 복원 규칙(D-58, D-29): 문서를 옛 리비전으로 되돌려도 본문 안의 체크리스트만 돌아가고, 항목의 업무 완료 상태나
+/// 강의 진도는 그대로다.
+#[tokio::test]
+async fn restoring_a_document_leaves_tasks_and_progress_alone() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "복원 규칙").await;
+    let m = send(&app, Method::POST, &format!("/api/workspaces/{ws}/modules"), Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "course", "name": "강의", "key": "RST" }))).await;
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", m.json["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "강좌" })),
+    )
+    .await;
+    let item_id = item.json["id"].as_str().unwrap().to_owned();
+    let task = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/tasks"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "과제" })),
+    )
+    .await;
+    send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/episodes"),
+        Some(&admin),
+        Some(json!({ "episodes": [{ "request_id": new_request_id(), "title": "1강" }] })),
+    )
+    .await;
+    let doc = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/documents"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "노트" })),
+    )
+    .await;
+    let doc_id = doc.json["id"].as_str().unwrap().to_owned();
+    let checklist = |checked: bool| {
+        json!({ "type": "doc", "content": [{ "type": "taskList", "content": [
+        { "type": "taskItem", "attrs": { "checked": checked },
+          "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "복습" }] }] }] }] })
+    };
+    let v2 = send(&app, Method::PUT, &format!("/api/documents/{doc_id}"), Some(&admin), Some(json!({
+        "request_id": new_request_id(), "base_revision": 1, "title": "노트", "body": checklist(false) }))).await;
+    assert_eq!(v2.status, StatusCode::OK, "{:?}", v2.json);
+    let v3 = send(&app, Method::PUT, &format!("/api/documents/{doc_id}"), Some(&admin), Some(json!({
+        "request_id": new_request_id(), "base_revision": 2, "title": "노트", "body": checklist(true) }))).await;
+    assert_eq!(v3.status, StatusCode::OK, "{:?}", v3.json);
+
+    // 업무 완료, 강의 완료 표시.
+    let task_id = task.json["id"].as_str().unwrap().to_owned();
+    let done = send(&app, Method::PUT, &format!("/api/tasks/{task_id}"), Some(&admin), Some(json!({
+        "base_version": task.json["version"], "title": "과제", "description": "", "status": "done", "priority": "none",
+        "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
+        "assignee_ids": [] }))).await;
+    assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
+    let course = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{item_id}/course"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    let episode = course.json["episodes"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    send(
+        &app,
+        Method::PUT,
+        &format!("/api/episodes/{episode}/progress"),
+        Some(&admin),
+        Some(json!({ "status": "done", "note": "" })),
+    )
+    .await;
+
+    // 체크 표시 전(리비전 2)으로 되돌린다: 본문 체크리스트만 돌아간다.
+    let restored = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/revisions/2/restore"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "base_revision": 3 })),
+    )
+    .await;
+    assert_eq!(restored.status, StatusCode::OK, "{:?}", restored.json);
+    assert_eq!(restored.json["body"], checklist(false));
+    let task_now = send(
+        &app,
+        Method::GET,
+        &format!("/api/tasks/{task_id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(task_now.json["status"], "done");
+    let course_now = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{item_id}/course"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(course_now.json["episodes"][0]["mine"]["status"], "done");
+}

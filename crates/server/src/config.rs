@@ -110,6 +110,11 @@ pub struct Config {
     pub public_url: Url,
     /// OIDC 설정. `FVOCI_OIDC_ISSUER`·`FVOCI_OIDC_CLIENT_ID`·`FVOCI_OIDC_CLIENT_SECRET`. 없으면 로그인 불가.
     pub oidc: Option<OidcConfig>,
+    /// 초기 관리자(D-51): 이 OIDC subject(설정한 발급자의 것)가 처음 로그인하면 첫 워크스페이스의 소유자가 된다.
+    /// `FVOCI_INITIAL_ADMIN_SUBJECT`. 없으면 아무도 자동으로 관리자가 되지 않는다(X-10).
+    pub initial_admin_subject: Option<String>,
+    /// 그 첫 워크스페이스 이름. `FVOCI_INITIAL_WORKSPACE`, 기본 `fvoci`.
+    pub initial_workspace: String,
     /// 세션 절대 만료. `FVOCI_SESSION_TTL_SECS`, 기본 43200(12시간).
     pub session_ttl: Duration,
     /// 정적 웹 자산 디렉터리. `FVOCI_WEB_DIR`. 없으면 API만 서빙한다.
@@ -332,6 +337,13 @@ impl Config {
             database_url,
             public_url,
             oidc,
+            initial_admin_subject: lookup("FVOCI_INITIAL_ADMIN_SUBJECT")
+                .map(|v| v.trim().to_owned())
+                .filter(|v| !v.is_empty()),
+            initial_workspace: lookup("FVOCI_INITIAL_WORKSPACE")
+                .map(|v| v.trim().to_owned())
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| "fvoci".to_owned()),
             session_ttl,
             web_dir,
             limits,

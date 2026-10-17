@@ -194,6 +194,7 @@ async fn api_not_found() -> AppError {
         trash::purge_expired,
         trash::purge_my_expired,
         trash::set_retention,
+        trash::set_version_retention,
         search_api::search,
         files::create_upload,
         files::get_upload,
@@ -400,6 +401,7 @@ async fn api_not_found() -> AppError {
         trash::Trash,
         trash::Purged,
         trash::SetRetention,
+        trash::SetVersionRetention,
         search_api::SearchResult,
         files::UploadTarget,
         files::CreateUpload,
@@ -732,6 +734,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/workspaces/{workspace_id}/trash-retention",
             put(trash::set_retention),
+        )
+        .route(
+            "/workspaces/{workspace_id}/version-retention",
+            put(trash::set_version_retention),
         )
         .route("/me/trash", get(trash::my_trash))
         .route("/search", get(search_api::search))

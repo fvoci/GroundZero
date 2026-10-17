@@ -345,3 +345,152 @@ async fn study_materials_link_courses_and_kinds_are_published() {
     );
     assert!(list.iter().all(|k| k["module_kind"] != "course"));
 }
+
+/// 이전 버전 보존 기간(D-56): 기간이 지난 이전 버전은 작업이 지우지만, 기록이 연결한 버전·문서 리비전이 가리키는 버전·
+/// 지금 버전은 남는다. 리비전이 가리키는 버전은 하나만 따로 지우려 해도 409.
+#[tokio::test]
+async fn old_versions_expire_unless_something_refers_to_them() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "버전 보존").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let research = module(&app, &admin, &ws, "research", "KEEP").await;
+    let item = open_item(&app, &admin, &research, "보존 연구").await;
+    // 파일 하나에 버전 4개: v1(기록이 연결), v2(아무도 안 씀), v3(문서 리비전의 이미지), v4(지금).
+    let file = new_file(&app, &writer, &item, "data.csv", b"v1").await;
+    for body in [&b"v2"[..], b"v3", b"v4"] {
+        upload(
+            &app,
+            &writer,
+            json!({ "request_id": new_request_id(), "file_id": file, "size": body.len() }),
+            body,
+        )
+        .await;
+    }
+    let pin = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item}/records"),
+        Some(&writer),
+        Some(json!({
+        "request_id": new_request_id(), "kind": "analysis", "title": "고정",
+        "files": [{ "file_id": file, "version": 1, "role": "input" }] })),
+    )
+    .await;
+    assert_eq!(pin.status, StatusCode::CREATED, "{:?}", pin.json);
+    let doc = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item}/documents"),
+        Some(&writer),
+        Some(json!({ "request_id": new_request_id(), "title": "그림" })),
+    )
+    .await;
+    let doc_id = doc.json["id"].as_str().unwrap().to_owned();
+    let image = json!({ "type": "doc", "content": [{ "type": "image",
+        "attrs": { "src": format!("/api/files/{file}/content?version=3&inline=true") } }] });
+    let saved = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{doc_id}"),
+        Some(&writer),
+        Some(json!({
+        "request_id": new_request_id(), "base_revision": 1, "title": "그림", "body": image })),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+    // 리비전이 가리키는 버전은 따로 지울 수 없다.
+    assert_eq!(
+        send(
+            &app,
+            Method::DELETE,
+            &format!("/api/files/{file}/versions/3"),
+            Some(&writer),
+            None
+        )
+        .await
+        .status,
+        StatusCode::CONFLICT
+    );
+
+    // 보존 기간: 관리자만, 1~3650일.
+    let retention = format!("/api/workspaces/{ws}/version-retention");
+    assert_eq!(
+        send(
+            &app,
+            Method::PUT,
+            &retention,
+            Some(&writer),
+            Some(json!({ "days": 1 }))
+        )
+        .await
+        .status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        send(
+            &app,
+            Method::PUT,
+            &retention,
+            Some(&admin),
+            Some(json!({ "days": 0 }))
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        send(
+            &app,
+            Method::PUT,
+            &retention,
+            Some(&admin),
+            Some(json!({ "days": 1 }))
+        )
+        .await
+        .status,
+        StatusCode::NO_CONTENT
+    );
+    let trash = send(
+        &app,
+        Method::GET,
+        &format!("/api/workspaces/{ws}/trash"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(trash.json["version_retention_days"], 1);
+
+    // 버전들을 열흘 전 것으로 만든 뒤 작업을 돌린다(테이블 소유 역할로 시각만 바꾼다).
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    sqlx::query(
+        "UPDATE fvoci.file_versions SET created_at = now() - interval '10 days' WHERE file_id = $1",
+    )
+    .bind(uuid::Uuid::parse_str(&file).unwrap())
+    .execute(&owner)
+    .await
+    .unwrap();
+    owner.close().await;
+    fvoci_server::worker::run_all_now(&state.db, None, None)
+        .await
+        .unwrap();
+
+    let detail = send(
+        &app,
+        Method::GET,
+        &format!("/api/files/{file}"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    let mut kept: Vec<i64> = detail.json["versions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v["version"].as_i64().unwrap())
+        .collect();
+    kept.sort_unstable();
+    assert_eq!(kept, [1, 3, 4], "{:?}", detail.json);
+}

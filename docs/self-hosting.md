@@ -31,7 +31,7 @@ docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d --build --w
 docker compose --env-file .env -f deploy/compose.selfhost.yaml ps
 ```
 
-앱이 `healthy`이면 역방향 프록시가 `FVOCI_LISTEN`(기본 `127.0.0.1:8080`)으로 보내도록 설정하고 `FVOCI_PUBLIC_URL`을 연다. 처음 로그인한 사람은 워크스페이스를 직접 만들거나 초대를 받는다(첫 로그인 사용자를 자동으로 관리자로 만들지 않는다, X-10).
+앱이 `healthy`이면 역방향 프록시가 `FVOCI_LISTEN`(기본 `127.0.0.1:8080`)으로 보내도록 설정하고 `FVOCI_PUBLIC_URL`을 연다. 처음 로그인한 사람은 워크스페이스를 직접 만들거나 초대를 받는다(첫 로그인 사용자를 자동으로 관리자로 만들지 않는다, X-10). 운영자가 `.env`의 `FVOCI_INITIAL_ADMIN_SUBJECT`에 관리자로 정한 사람의 OIDC subject(Keycloak은 사용자 화면의 ID)를 넣으면, 그 사람이 처음 로그인할 때 `FVOCI_INITIAL_WORKSPACE` 이름(기본 `fvoci`)의 첫 워크스페이스가 만들어지고 그 사람이 소유자가 된다(D-51, 한 번만).
 
 ## 3. 무엇이 어디에 저장되나
 

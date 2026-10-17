@@ -81,6 +81,8 @@ pub struct TrashEntry {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Trash {
     pub retention_days: i32,
+    /// 이전 파일 버전 보존 기간(일, D-56). 없으면 영구 보존. 개인 휴지통에서는 없다.
+    pub version_retention_days: Option<i32>,
     pub entries: Vec<TrashEntry>,
 }
 
@@ -203,15 +205,17 @@ pub async fn workspace_trash(
 ) -> Result<Json<Trash>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     member_role(&mut tx, ws).await?;
-    let retention_days: i32 =
-        sqlx::query_scalar("SELECT trash_retention_days FROM workspaces WHERE id = $1")
-            .bind(ws)
-            .fetch_one(tx.conn())
-            .await?;
+    let (retention_days, version_retention_days): (i32, Option<i32>) = sqlx::query_as(
+        "SELECT trash_retention_days, version_retention_days FROM workspaces WHERE id = $1",
+    )
+    .bind(ws)
+    .fetch_one(tx.conn())
+    .await?;
     let entries = entries(&mut tx, Some(ws)).await?;
     tx.commit().await?;
     Ok(Json(Trash {
         retention_days,
+        version_retention_days,
         entries,
     }))
 }
@@ -228,6 +232,7 @@ pub async fn my_trash(
     tx.commit().await?;
     Ok(Json(Trash {
         retention_days: 30,
+        version_retention_days: None,
         entries,
     }))
 }
@@ -333,6 +338,36 @@ pub async fn set_retention(
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_set_trash_retention($1, $2)")
+        .bind(ws)
+        .bind(input.days)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// 이전 파일 버전 보존 기간.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetVersionRetention {
+    /// 1~3650일. 없으면 영구 보존.
+    pub days: Option<i32>,
+}
+
+/// 이전 파일 버전 보존 기간 바꾸기(관리자, D-56). 기간이 지난 이전 버전은 작업 프로세스가 지우되, 기록이 연결하거나
+/// 문서 리비전이 가리키는 버전은 지우지 않는다.
+#[utoipa::path(put, path = "/api/workspaces/{workspace_id}/version-retention", operation_id = "set_version_retention",
+    params(("workspace_id" = String, Path, format = Uuid)), request_body = SetVersionRetention,
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody)), tag = "trash")]
+pub async fn set_version_retention(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(ws): Path<WorkspaceId>,
+    Json(input): Json<SetVersionRetention>,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_set_version_retention($1, $2)")
         .bind(ws)
         .bind(input.days)
         .execute(tx.conn())

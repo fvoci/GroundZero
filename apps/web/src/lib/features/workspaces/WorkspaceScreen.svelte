@@ -48,6 +48,10 @@
 
 <section class="flex flex-col gap-6" aria-labelledby="ws-heading">
   <h1 id="ws-heading" class="text-xl font-semibold">{workspace.name} · 위키</h1>
+  <p class="text-sm text-muted-foreground">
+    이 워크스페이스의 관리자는 비공개 문서를 포함해 이 공간의 모든 문서를 볼 수 있습니다. 각자의
+    개인 노트와 개인 시간 기록은 관리자에게도 보이지 않습니다.
+  </p>
   {#if error !== undefined}
     <p role="alert" class="text-destructive">{error}</p>
   {:else if docs === undefined}

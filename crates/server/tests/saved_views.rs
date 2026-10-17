@@ -166,3 +166,70 @@ async fn time_zone_is_a_personal_setting() {
         ""
     );
 }
+
+/// 초기 관리자(D-51): 운영자가 지정한 OIDC subject가 로그인하면 첫 워크스페이스의 소유자가 된다. 한 번만, 다른 사람은
+/// 아무것도 얻지 않는다(첫 로그인 사용자 자동 관리자 없음, X-10).
+#[tokio::test]
+async fn the_designated_initial_admin_gets_the_first_workspace_once() {
+    use fvoci_server::features::accounts::{
+        SESSION_COOKIE, VerifiedIdentity, claim_initial_admin, start_session,
+    };
+    let subject = format!("operator-{}", uuid::Uuid::now_v7());
+    let config = common::config_with(&[
+        ("FVOCI_OIDC_ISSUER", "https://test-issuer.invalid"),
+        ("FVOCI_OIDC_CLIENT_ID", "fvoci-test"),
+        ("FVOCI_OIDC_CLIENT_SECRET", "test-only-secret"),
+        ("FVOCI_INITIAL_ADMIN_SUBJECT", &subject),
+        ("FVOCI_INITIAL_WORKSPACE", "우리 팀"),
+    ]);
+    let state = fvoci_server::app::build_state(config).unwrap();
+    let app = common::app(&state);
+    let identity = |subject: &str| VerifiedIdentity {
+        issuer: "https://test-issuer.invalid".to_owned(),
+        subject: subject.to_owned(),
+        email: None,
+        email_verified: false,
+        display_name: "운영자".to_owned(),
+        id_token: "test-id-token".to_owned(),
+    };
+    // 다른 사람이 먼저 로그인해도 관리자가 되지 않는다.
+    let stranger = identity("someone-else");
+    let (stranger_id, _) = start_session(&state.db, state.config.session_ttl, &stranger, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        claim_initial_admin(&state.db, &state.config, &stranger, stranger_id)
+            .await
+            .unwrap(),
+        None
+    );
+
+    let operator = identity(&subject);
+    let (user, token) = start_session(&state.db, state.config.session_ttl, &operator, None)
+        .await
+        .unwrap();
+    let ws = claim_initial_admin(&state.db, &state.config, &operator, user)
+        .await
+        .unwrap();
+    assert!(ws.is_some());
+    assert_eq!(
+        claim_initial_admin(&state.db, &state.config, &operator, user)
+            .await
+            .unwrap(),
+        None
+    );
+    let me = common::TestUser {
+        id: user,
+        cookie: format!("{SESSION_COOKIE}={token}"),
+    };
+    let list = send(&app, Method::GET, "/api/workspaces", Some(&me), None).await;
+    let first = list
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|w| w["name"] == "우리 팀")
+        .unwrap()
+        .clone();
+    assert_eq!(first["role"], "admin");
+}

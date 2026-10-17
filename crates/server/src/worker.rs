@@ -32,6 +32,8 @@ pub struct TickReport {
 
 /// 주기 작업 이름과 간격.
 const PURGE: (&str, &str) = ("trash_purge", "1 hour");
+/// 휴지통 만료와 보존 기간이 지난 이전 파일 버전 정리(D-41, D-56).
+const PURGE_SQL: &str = "SELECT app_system_purge_expired() + app_system_purge_old_versions()";
 const RECURRENCE: (&str, &str) = ("recurrence_tick", "15 minutes");
 /// 업무 기한 알림(하루 전·당일, 같은 날 같은 업무는 한 번).
 const DUE: (&str, &str) = ("due_notify", "1 hour");
@@ -62,7 +64,7 @@ pub async fn run_all_now(
     search: Option<&SearchClient>,
     storage: Option<&Storage>,
 ) -> Result<TickReport, AppError> {
-    let purged = system_call(db, "SELECT app_system_purge_expired()").await?;
+    let purged = system_call(db, PURGE_SQL).await?;
     let occurrences = system_call(db, "SELECT app_system_recurrence_tick()").await?;
     // 기한 알림은 반복 회차를 만든 뒤에(오늘 만든 회차도 알린다).
     let notified = system_call(db, DUE_SQL).await?;
@@ -187,10 +189,7 @@ pub async fn run_once(
             Some(client) => logged("search", index(db, client, storage).await),
             None => 0,
         },
-        purged: logged(
-            "trash_purge",
-            when_due(db, PURGE, "SELECT app_system_purge_expired()").await,
-        ),
+        purged: logged("trash_purge", when_due(db, PURGE, PURGE_SQL).await),
         occurrences: logged(
             "recurrence",
             when_due(db, RECURRENCE, "SELECT app_system_recurrence_tick()").await,

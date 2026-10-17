@@ -9378,6 +9378,71 @@
         }
       }
     },
+    "/api/workspaces/{workspace_id}/version-retention": {
+      "put": {
+        "tags": [
+          "trash"
+        ],
+        "summary": "이전 파일 버전 보존 기간 바꾸기(관리자, D-56). 기간이 지난 이전 버전은 작업 프로세스가 지우되, 기록이 연결하거나\n문서 리비전이 가리키는 버전은 지우지 않는다.",
+        "operationId": "set_version_retention",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetVersionRetention"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{workspace_id}/wiki/documents": {
       "get": {
         "tags": [
@@ -13890,6 +13955,20 @@
           }
         }
       },
+      "SetVersionRetention": {
+        "type": "object",
+        "description": "이전 파일 버전 보존 기간.",
+        "properties": {
+          "days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "1~3650일. 없으면 영구 보존."
+          }
+        }
+      },
       "Share": {
         "type": "object",
         "description": "공유 항목.",
@@ -14732,6 +14811,14 @@
           "retention_days": {
             "type": "integer",
             "format": "int32"
+          },
+          "version_retention_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "이전 파일 버전 보존 기간(일, D-56). 없으면 영구 보존. 개인 휴지통에서는 없다."
           }
         }
       },

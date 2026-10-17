@@ -2211,6 +2211,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/{workspace_id}/version-retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 이전 파일 버전 보존 기간 바꾸기(관리자, D-56). 기간이 지난 이전 버전은 작업 프로세스가 지우되, 기록이 연결하거나
+         *     문서 리비전이 가리키는 버전은 지우지 않는다.
+         */
+        put: operations["set_version_retention"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces/{workspace_id}/wiki/documents": {
         parameters: {
             query?: never;
@@ -3695,6 +3715,14 @@ export interface components {
              */
             today?: string | null;
         };
+        /** @description 이전 파일 버전 보존 기간. */
+        SetVersionRetention: {
+            /**
+             * Format: int32
+             * @description 1~3650일. 없으면 영구 보존.
+             */
+            days?: number | null;
+        };
         /** @description 공유 항목. */
         Share: {
             email: string;
@@ -3992,6 +4020,11 @@ export interface components {
             entries: components["schemas"]["TrashEntry"][];
             /** Format: int32 */
             retention_days: number;
+            /**
+             * Format: int32
+             * @description 이전 파일 버전 보존 기간(일, D-56). 없으면 영구 보존. 개인 휴지통에서는 없다.
+             */
+            version_retention_days?: number | null;
         };
         /** @description 휴지통 묶음. */
         TrashEntry: {
@@ -10677,6 +10710,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Purged"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_version_retention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetVersionRetention"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             403: {

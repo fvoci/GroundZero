@@ -24,6 +24,8 @@
   let confirmPurge = $state<string | undefined>(undefined);
   let days = $state('');
   let editingDays = false;
+  let versionDays = $state('');
+  let editingVersionDays = false;
   let reloadKey = $state(0);
 
   const isAdmin = $derived(workspace === undefined || workspace.role === 'admin');
@@ -40,6 +42,8 @@
         trash = t;
         // 입력 중인 보존 기간을 다시 불러온 값으로 덮지 않는다(처음과 저장한 뒤에만 채운다).
         if (days === '' || !editingDays) days = String(t.retention_days);
+        if (!editingVersionDays)
+          versionDays = t.version_retention_days === null ? '' : String(t.version_retention_days);
         error = undefined;
       })
       .catch((e: unknown) => {
@@ -115,6 +119,41 @@
         />
       </div>
       <Button type="submit" variant="outline">바꾸기</Button>
+    </form>
+    <form
+      class="flex flex-wrap items-end gap-2"
+      aria-label="이전 파일 버전 보존"
+      onsubmit={(e) => {
+        e.preventDefault();
+        const raw = versionDays.trim();
+        const n = raw === '' ? null : Number(raw);
+        if (n !== null && (!Number.isInteger(n) || n < 1 || n > 3650)) {
+          error = '이전 버전 보존 기간은 1~3650일이거나 비워 둡니다(영구 보존).';
+          return;
+        }
+        void run(
+          () => api.setVersionRetention(workspace.id, n),
+          n === null
+            ? '이전 파일 버전을 영구 보존합니다.'
+            : `이전 파일 버전을 ${String(n)}일 보존합니다.`,
+        );
+      }}
+    >
+      <div class="flex flex-col gap-1">
+        <Label for="version-retention">이전 파일 버전 보존(일, 비우면 영구)</Label>
+        <Input
+          id="version-retention"
+          class="w-28"
+          inputmode="numeric"
+          bind:value={versionDays}
+          oninput={() => (editingVersionDays = true)}
+        />
+      </div>
+      <Button type="submit" variant="outline">바꾸기</Button>
+      <p class="w-full text-sm text-muted-foreground">
+        기간이 지난 이전 버전은 자동으로 지웁니다. 분석 등 기록이 연결했거나 문서가 가리키는 버전과
+        지금 버전은 지우지 않습니다.
+      </p>
     </form>
   {/if}
 

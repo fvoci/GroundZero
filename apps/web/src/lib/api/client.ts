@@ -1502,6 +1502,8 @@ export interface TrashEntryView {
 
 export interface TrashView {
   retention_days: number;
+  /** 이전 파일 버전 보존 기간(일, D-56). null이면 영구 보존. */
+  version_retention_days: number | null;
   entries: TrashEntryView[];
 }
 
@@ -1509,6 +1511,8 @@ function parseTrash(value: Json): TrashView {
   const o = rec(value, 'trash');
   return {
     retention_days: int(o, 'retention_days'),
+    version_retention_days:
+      typeof o.version_retention_days === 'number' ? o.version_retention_days : null,
     entries: parseList(o.entries, (v): TrashEntryView => {
       const e = rec(v, 'trash entry');
       const kind = str(e, 'kind');
@@ -2528,6 +2532,11 @@ export const api = {
         : `/api/workspaces/${encodeURIComponent(workspaceId)}/trash/purge-expired`,
       (v) => int(rec(v, 'purged'), 'purged'),
     ),
+  /** 이전 파일 버전 보존 기간(D-56). null이면 영구 보존. */
+  setVersionRetention: (workspaceId: string, days: number | null) =>
+    expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/version-retention`, none, {
+      days,
+    }),
   setTrashRetention: (workspaceId: string, days: number) =>
     expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/trash-retention`, none, {
       days,

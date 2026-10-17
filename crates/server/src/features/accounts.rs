@@ -36,6 +36,7 @@ use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::http::AppState;
 use crate::ids::UserId;
+use uuid::Uuid;
 
 /// http 공개 원점(개발·테스트)의 세션 쿠키 이름.
 pub const SESSION_COOKIE: &str = "fvoci_session";
@@ -292,6 +293,36 @@ pub async fn start_session(
     Ok((user, token))
 }
 
+/// 운영자가 지정한 초기 관리자(D-51)가 로그인하면 첫 워크스페이스를 만들어 소유자로 둔다. 인스턴스에서 한 번만.
+/// 지정이 없거나 다른 사람이면 아무것도 하지 않는다(첫 로그인 사용자를 자동 관리자로 만들지 않음, X-10).
+pub async fn claim_initial_admin(
+    db: &Db,
+    config: &Config,
+    identity: &VerifiedIdentity,
+    user: UserId,
+) -> Result<Option<Uuid>, AppError> {
+    let (Some(subject), Some(oidc)) = (
+        config.initial_admin_subject.as_deref(),
+        config.oidc.as_ref(),
+    ) else {
+        return Ok(None);
+    };
+    let same_issuer =
+        identity.issuer.trim_end_matches('/') == oidc.issuer.as_str().trim_end_matches('/');
+    if !same_issuer || identity.subject != subject {
+        return Ok(None);
+    }
+    let mut tx = db.begin_anonymous().await?;
+    let workspace: Option<Uuid> =
+        sqlx::query_scalar("SELECT app_system_claim_initial_workspace($1, $2)")
+            .bind(user)
+            .bind(&config.initial_workspace)
+            .fetch_one(tx.conn())
+            .await?;
+    tx.commit().await?;
+    Ok(workspace)
+}
+
 /// 제공자 콜백: 상태 확인, 코드 교환, ID 토큰 검증, 세션 발급.
 #[utoipa::path(get, path = "/auth/callback", params(CallbackQuery),
     responses((status = 303, description = "로그인 완료 후 원래 경로로 이동"),
@@ -367,13 +398,14 @@ pub async fn callback(
     let previous = single_cookie(&headers, session_cookie_name(&state.config))
         .ok()
         .flatten();
-    let (_user, session_token) = start_session(
+    let (user, session_token) = start_session(
         &state.db,
         state.config.session_ttl,
         &identity,
         previous.as_deref(),
     )
     .await?;
+    claim_initial_admin(&state.db, &state.config, &identity, user).await?;
     let jar = jar
         .remove(removal(&state.config, login_cookie_name(&state.config)))
         .add(cookie(

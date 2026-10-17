@@ -80,6 +80,9 @@ services:
       FVOCI_OIDC_ISSUER: ${FVOCI_OIDC_ISSUER:?set FVOCI_OIDC_ISSUER in .env}
       FVOCI_OIDC_CLIENT_ID: ${FVOCI_OIDC_CLIENT_ID:-fvoci-web}
       FVOCI_OIDC_CLIENT_SECRET: ${FVOCI_OIDC_CLIENT_SECRET:?set FVOCI_OIDC_CLIENT_SECRET in .env}
+      # 초기 관리자(D-51): 이 OIDC subject가 처음 로그인하면 첫 워크스페이스의 소유자가 된다. 비우면 아무도 자동 관리자가 아니다.
+      FVOCI_INITIAL_ADMIN_SUBJECT: ${FVOCI_INITIAL_ADMIN_SUBJECT:-}
+      FVOCI_INITIAL_WORKSPACE: ${FVOCI_INITIAL_WORKSPACE:-fvoci}
       FVOCI_SEARCH_URL: http://meilisearch:7700
       FVOCI_SEARCH_KEY: ${MEILI_MASTER_KEY}
       # 파일 저장소: 기본은 볼륨의 로컬 디렉터리. S3 호환(R2 등)은 .env에서 FVOCI_STORAGE=s3와 FVOCI_S3_*를 준다.
