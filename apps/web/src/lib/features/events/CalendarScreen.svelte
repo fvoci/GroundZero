@@ -8,7 +8,8 @@
   import type { Module, Workspace } from '@fvoci/api-client';
 
   import type { CalendarView, ItemView } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import { displaySettings, formatMonth, weekdays } from '$lib/display';
   import { m } from '$lib/paraglide/messages.js';
   import { itemPath, itemTaskPath, router } from '$lib/router.svelte';
@@ -131,7 +132,7 @@
       })
       .catch((e: unknown) => {
         changed = false;
-        if (!cancelled) error = e instanceof ApiError ? e.message : m.events_load_failed();
+        if (!cancelled) error = errorText(e, m.events_load_failed());
       });
     return () => {
       cancelled = true;

@@ -1,6 +1,8 @@
 // 진행 중인 타이머(사용자당 하나, D-32). 화면 어디서나 같은 상태를 보도록 하나만 둔다.
 import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
 import { api, ApiError, newRequestId } from '$lib/api/client';
+import { errorText } from '$lib/api/errors';
+import { m } from '$lib/paraglide/messages.js';
 
 import { liveSeconds } from './format';
 
@@ -35,7 +37,7 @@ class TimerStore {
       this.#set(await api.currentTimer());
       this.error = undefined;
     } catch (e: unknown) {
-      this.error = e instanceof ApiError ? e.message : '타이머를 불러오지 못했습니다.';
+      this.error = errorText(e, m.time_timer_load_failed());
     }
   }
 

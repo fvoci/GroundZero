@@ -1,3 +1,204 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "tasks_status_todo": "할 일",
+  "tasks_status_in_progress": "진행 중",
+  "tasks_status_done": "완료",
+  "tasks_priority_none": "없음",
+  "tasks_priority_low": "낮음",
+  "tasks_priority_medium": "보통",
+  "tasks_priority_high": "높음",
+  "tasks_priority_urgent": "긴급",
+  "tasks_csv_no_title": "제목이 없습니다",
+  "tasks_csv_title_too_long": "제목은 {max}자까지입니다",
+  "tasks_csv_unknown_status": "상태를 알 수 없습니다: {value}",
+  "tasks_csv_unknown_priority": "우선순위를 알 수 없습니다: {value}",
+  "tasks_csv_bad_date": "날짜는 YYYY-MM-DD로 적어 주세요",
+  "tasks_csv_start_after_due": "시작일이 기한보다 늦습니다",
+  "tasks_csv_bad_estimate": "예상 시간(분)은 숫자로 적어 주세요: {value}",
+  "tasks_csv_unknown_assignee": "담당자를 찾을 수 없습니다: {name}",
+  "tasks_csv_ambiguous_assignee": "같은 이름이 여럿입니다: {name}",
+  "tasks_csv_conflict": "{title}: 다른 변경과 겹쳤습니다. 다시 눌러 주세요.",
+  "tasks_csv_progress": "{done} / {total}개 넣는 중…",
+  "tasks_csv_imported": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "업무 {count}개를 등록했습니다."
+      }
+    }
+  ],
+  "tasks_csv_import_failed": "등록하지 못했습니다.",
+  "tasks_csv_import_error": "{reason} ({count}개 등록됨, 다시 누르면 나머지를 이어서 넣습니다)",
+  "tasks_csv_summary": "CSV로 여러 업무 등록",
+  "tasks_csv_label": "한 줄에 한 업무: 제목, 설명, 상태(할 일·진행 중·완료), 우선순위(없음·낮음·보통·높음·긴급), 시작일, 기한(YYYY-MM-DD), 예상(분), 담당자(이름, ;로 여럿), 태그(;로 여럿)",
+  "tasks_csv_read": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{count}개 업무를 읽었습니다."
+      }
+    }
+  ],
+  "tasks_csv_fix_lines": "고칠 줄: {lines}",
+  "tasks_csv_line_error": "{line}번째({reason})",
+  "tasks_csv_import": "등록",
+  "tasks_view_name_required": "보기 이름을 적어 주세요.",
+  "tasks_view_saved": "보기 \"{name}\"을(를) 저장했습니다.",
+  "tasks_view_save_failed": "보기를 저장하지 못했습니다.",
+  "tasks_view_deleted": "보기를 지웠습니다.",
+  "tasks_view_delete_failed": "보기를 지우지 못했습니다.",
+  "tasks_view_board": "칸반",
+  "tasks_view_list": "목록",
+  "tasks_view_gantt": "간트",
+  "tasks_view_calendar": "달력",
+  "tasks_sort_position": "기본 순서",
+  "tasks_sort_due": "마감일",
+  "tasks_sort_priority": "우선순위",
+  "tasks_sort_title": "제목",
+  "tasks_sort_updated": "최근 고침",
+  "tasks_load_failed": "업무를 불러오지 못했습니다.",
+  "tasks_moved_up": "{title}: 위로 옮겼습니다({status}).",
+  "tasks_moved_down": "{title}: 아래로 옮겼습니다({status}).",
+  "tasks_moved_left": "{title}: 왼쪽 열로 옮겼습니다({status}).",
+  "tasks_moved_right": "{title}: 오른쪽 열로 옮겼습니다({status}).",
+  "tasks_move_failed": "옮기지 못했습니다.",
+  "tasks_heading": "업무",
+  "tasks_view": "보기",
+  "tasks_filter_region": "업무 거르기",
+  "tasks_filter_find": "찾기",
+  "tasks_filter_find_placeholder": "제목·번호",
+  "tasks_status": "상태",
+  "tasks_filter_status_aria": "상태로 거르기",
+  "tasks_filter_all": "전체",
+  "tasks_assignee": "담당",
+  "tasks_filter_assignee_aria": "담당으로 거르기",
+  "tasks_filter_mine": "내 담당",
+  "tasks_filter_unassigned": "담당 없음",
+  "tasks_priority": "우선순위",
+  "tasks_filter_priority_aria": "우선순위로 거르기",
+  "tasks_tag": "태그",
+  "tasks_filter_tag_aria": "태그로 거르기",
+  "tasks_filter_due_from": "마감부터",
+  "tasks_filter_due_from_aria": "마감 시작일",
+  "tasks_filter_due_to": "까지",
+  "tasks_filter_due_to_aria": "마감 끝일",
+  "tasks_sort": "정렬",
+  "tasks_filter_reset": "초기화",
+  "tasks_saved_views": "저장한 보기",
+  "tasks_saved_view_choose": "선택",
+  "tasks_view_name": "이름",
+  "tasks_view_name_aria": "보기 이름",
+  "tasks_view_save": "지금 보기 저장",
+  "tasks_view_delete": "보기 지우기",
+  "tasks_filter_shown": "{shown}/{total}개 보임",
+  "tasks_lane_aria": "{status} 열",
+  "tasks_card_due": "마감 {date}",
+  "tasks_board_hint": "카드에서 Enter로 열고, Alt+왼쪽·오른쪽으로 열을, Alt+위·아래로 순서를 바꿉니다.",
+  "tasks_col_number": "번호",
+  "tasks_col_due": "마감",
+  "tasks_col_checklist": "체크",
+  "tasks_empty": "업무가 없습니다.",
+  "tasks_new_title": "새 업무 제목",
+  "tasks_new_placeholder": "예: 로그인 화면",
+  "tasks_create": "업무 만들기",
+  "tasks_task": "업무",
+  "tasks_dialog_description": "업무의 상태·담당·일정·체크리스트를 고칩니다.",
+  "tasks_gantt_milestone": "마일스톤 {date}",
+  "tasks_gantt_predecessors": "선행 {refs}",
+  "tasks_gantt_empty": "날짜가 있는 업무가 없습니다. 업무 상세에서 시작일·마감일을 넣으면 여기에 막대로 보입니다.",
+  "tasks_gantt_nav": "간트 기간 이동",
+  "tasks_gantt_back": "← 2주 앞",
+  "tasks_today": "오늘",
+  "tasks_gantt_forward": "2주 뒤 →",
+  "tasks_gantt_later": [
+    {
+      "declarations": ["input days", "input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{days}일 뒤에 시작하는 업무 {count}개는 목록 보기에서 볼 수 있습니다."
+      }
+    }
+  ],
+  "tasks_gantt_undated": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "날짜 없는 업무 {count}개는 목록 보기에서 볼 수 있습니다."
+      }
+    }
+  ],
+  "tasks_prev_month": "이전 달",
+  "tasks_next_month": "다음 달",
+  "tasks_calendar_aria": "{month} 업무 달력",
+  "tasks_calendar_day_aria": [
+    {
+      "declarations": ["input day", "input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{day} 업무 {count}개"
+      }
+    }
+  ],
+  "tasks_calendar_undated": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "날짜 없는 업무 {count}개는 목록·칸반에서 볼 수 있습니다."
+      }
+    }
+  ],
+  "tasks_not_found": "업무가 없거나 볼 권한이 없습니다.",
+  "tasks_task_load_failed": "업무를 불러오지 못했습니다.",
+  "tasks_save_failed": "저장하지 못했습니다.",
+  "tasks_predecessor_failed": "선행 업무를 바꾸지 못했습니다.",
+  "tasks_no_dates": "날짜 없음",
+  "tasks_read_only": "읽기 전용",
+  "tasks_conflict": "그사이 다른 사람이 이 업무를 바꿨습니다(지금 제목: “{title}”, 상태: {status}). 내 입력은 그대로 있습니다.",
+  "tasks_load_server": "서버 내용 불러오기",
+  "tasks_save_mine": "내 입력으로 다시 저장",
+  "tasks_title": "제목",
+  "tasks_description": "설명",
+  "tasks_start_date": "시작일",
+  "tasks_due_date": "마감일",
+  "tasks_estimate": "예상 시간(분)",
+  "tasks_tags": "태그(쉼표로 구분)",
+  "tasks_milestone": "마일스톤 (마감일 하나만)",
+  "tasks_assignees": "담당자 (같은 완료 상태를 공유)",
+  "tasks_no_assignable": "지정할 수 있는 사람이 없습니다.",
+  "tasks_shift_heading": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "후속 업무 {count}개와 날짜가 겹칩니다"
+      }
+    }
+  ],
+  "tasks_shift_retried": "후속 업무가 그사이 바뀌어 다시 계산했습니다.",
+  "tasks_shift_hint": "선행 업무가 끝난 다음 날 시작하도록 옮기자고 제안합니다. 각 업무의 기간은 그대로입니다.",
+  "tasks_shift_save_all": "후속 업무도 옮겨 저장",
+  "tasks_shift_save_this": "이 업무만 저장",
+  "tasks_subtasks": "하위 업무",
+  "tasks_none": "없습니다.",
+  "tasks_subtask_title": "하위 업무 제목",
+  "tasks_subtask_placeholder": "예: 입력 검증",
+  "tasks_subtask_add": "하위 업무 추가",
+  "tasks_predecessors": "선행 업무 (끝나야 시작)",
+  "tasks_hidden_task": "볼 수 없는 업무",
+  "tasks_predecessor_remove_aria": "{task} 선행 관계 지우기",
+  "tasks_remove": "지우기",
+  "tasks_successors": "이 업무 뒤에 오는 업무: {tasks}",
+  "tasks_predecessor_add": "선행 업무 추가",
+  "tasks_predecessor_choose": "업무 고르기",
+  "tasks_add": "추가",
+  "tasks_recurrence": "반복",
+  "tasks_occurrence_note": "반복 업무의 {date} 회차입니다. 규칙은 첫 회차에서 바꿉니다.",
+  "tasks_open_first": "첫 회차 열기",
+  "tasks_recurrence_zone": "\"오늘\"은 {zone} 기준",
+  "tasks_recurrence_needs_date": "날짜를 넣고 저장하면 반복을 정할 수 있습니다.",
+  "tasks_noun_task": "업무"
 }

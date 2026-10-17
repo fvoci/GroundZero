@@ -2,8 +2,10 @@
   // 시간 기록 고치기(본인만): 시작·끝(보는 사람 시간대)·멈춘 시간·종류·메모·연결 대상, 수정 이력, 지우기.
   // 기준 버전으로 충돌을 막고, 충돌하면 서버 내용을 보여 준 뒤 다시 고치게 한다.
   import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
-  import { api, ApiError, TIME_KINDS } from '$lib/api/client';
+  import { api, TIME_KINDS } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import { instantOf, wallTime } from '$lib/features/events/time';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
@@ -60,7 +62,11 @@
       target:
         e.target === null
           ? null
-          : { kind: e.target.kind, id: e.target.id, label: e.target.label ?? '볼 수 없는 대상' },
+          : {
+              kind: e.target.kind,
+              id: e.target.id,
+              label: e.target.label ?? m.time_target_hidden(),
+            },
     };
     initial = { start: next.start, end: next.end, pausedMinutes: next.pausedMinutes };
     form = next;
@@ -88,7 +94,7 @@
     if (base === undefined || form === undefined || busy) return;
     const paused = Number(form.pausedMinutes.trim() === '' ? '0' : form.pausedMinutes);
     if (!Number.isInteger(paused) || paused < 0) {
-      error = '멈춘 시간은 0 이상의 분이어야 합니다.';
+      error = m.time_paused_invalid();
       return;
     }
     busy = true;
@@ -114,13 +120,13 @@
       if (result.kind === 'conflict') {
         fill(result.current);
         history = await api.timeEntryRevisions(result.current.id).catch(() => history);
-        error = '그사이 이 기록이 바뀌었습니다. 지금 내용을 불러왔으니 다시 고쳐 주세요.';
+        error = m.time_entry_conflict();
         return;
       }
       onchanged();
       onclose();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '저장하지 못했습니다.';
+      error = errorText(e, m.time_save_failed());
     } finally {
       busy = false;
     }
@@ -133,7 +139,7 @@
       onchanged();
       onclose();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '지우지 못했습니다.';
+      error = errorText(e, m.time_delete_failed());
     }
   }
 </script>
@@ -146,9 +152,12 @@
 >
   <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">
     <Dialog.Header>
-      <Dialog.Title>시간 기록 고치기</Dialog.Title>
+      <Dialog.Title>{m.time_edit_title()}</Dialog.Title>
       <Dialog.Description>
-        {#if base !== undefined}{durationText(base.seconds)} · 시각은 {zone} 기준{/if}
+        {#if base !== undefined}{m.time_edit_description({
+            duration: durationText(base.seconds),
+            zone,
+          })}{/if}
       </Dialog.Description>
     </Dialog.Header>
     {#if form !== undefined && base !== undefined}
@@ -156,11 +165,11 @@
       {@const running = base.ended_at === null}
       <form class="grid gap-3 sm:grid-cols-2" onsubmit={(e) => void save(e)}>
         <div class="flex flex-col gap-1">
-          <Label for="time-edit-start">시작</Label>
+          <Label for="time-edit-start">{m.time_start()}</Label>
           <Input id="time-edit-start" type="datetime-local" bind:value={f.start} required />
         </div>
         <div class="flex flex-col gap-1">
-          <Label for="time-edit-end">끝</Label>
+          <Label for="time-edit-end">{m.time_end()}</Label>
           <Input
             id="time-edit-end"
             type="datetime-local"
@@ -170,7 +179,7 @@
           />
         </div>
         <div class="flex flex-col gap-1">
-          <Label for="time-edit-paused">멈춘 시간(분)</Label>
+          <Label for="time-edit-paused">{m.time_paused_minutes()}</Label>
           <Input
             id="time-edit-paused"
             inputmode="numeric"
@@ -179,7 +188,7 @@
           />
         </div>
         <div class="flex flex-col gap-1">
-          <span class="text-sm font-medium" id="time-edit-kind-label">종류</span>
+          <span class="text-sm font-medium" id="time-edit-kind-label">{m.time_kind()}</span>
           <Select.Root
             type="single"
             value={f.kind}
@@ -199,18 +208,20 @@
           </Select.Root>
         </div>
         <div class="flex flex-col gap-1 sm:col-span-2">
-          <Label for="time-edit-memo">메모</Label>
+          <Label for="time-edit-memo">{m.time_memo()}</Label>
           <Input id="time-edit-memo" bind:value={f.memo} maxlength={2000} />
         </div>
         <div class="flex flex-col gap-2 sm:col-span-2">
-          <span class="text-sm font-medium">연결 대상</span>
+          <span class="text-sm font-medium">{m.time_target()}</span>
           {#if f.target !== null}
             <div class="flex items-center gap-2 text-sm">
               <span>{f.target.label}</span>
-              <Button size="sm" variant="ghost" onclick={() => (f.target = null)}>연결 해제</Button>
+              <Button size="sm" variant="ghost" onclick={() => (f.target = null)}
+                >{m.time_unlink()}</Button
+              >
             </div>
           {:else}
-            <span class="text-sm text-muted-foreground">없음</span>
+            <span class="text-sm text-muted-foreground">{m.time_none()}</span>
           {/if}
           <TargetPicker
             idPrefix="time-edit"
@@ -223,32 +234,39 @@
           <p role="alert" class="text-sm text-destructive sm:col-span-2">{error}</p>
         {/if}
         <div class="flex flex-wrap items-center gap-2 sm:col-span-2">
-          <Button type="submit" disabled={busy}>저장</Button>
+          <Button type="submit" disabled={busy}>{m.common_save()}</Button>
           {#if confirmDelete}
-            <span class="text-sm" role="status">이 기록을 지울까요?</span>
-            <Button size="sm" variant="destructive" onclick={() => void remove()}>지우기</Button>
-            <Button size="sm" variant="ghost" onclick={() => (confirmDelete = false)}>취소</Button>
+            <span class="text-sm" role="status">{m.time_delete_confirm()}</span>
+            <Button size="sm" variant="destructive" onclick={() => void remove()}
+              >{m.time_delete()}</Button
+            >
+            <Button size="sm" variant="ghost" onclick={() => (confirmDelete = false)}
+              >{m.common_cancel()}</Button
+            >
           {:else}
             <Button size="sm" variant="outline" onclick={() => (confirmDelete = true)}
-              >기록 지우기</Button
+              >{m.time_delete_entry()}</Button
             >
           {/if}
         </div>
       </form>
       {#if history.length > 0}
         <section class="flex flex-col gap-1 border-t pt-2" aria-labelledby="time-history-heading">
-          <h3 id="time-history-heading" class="text-sm font-semibold">수정 이력(고치기 전 값)</h3>
+          <h3 id="time-history-heading" class="text-sm font-semibold">
+            {m.time_history_heading()}
+          </h3>
           <ul class="flex flex-col gap-1 text-sm text-muted-foreground">
             {#each history as h (h.changed_at)}
               <li>
-                {wallTime(h.changed_at, zone).replace('T', ' ')}에 고침: {wallTime(
-                  h.started_at,
-                  zone,
-                ).replace('T', ' ')} ~ {h.ended_at === null
-                  ? '진행 중'
-                  : wallTime(h.ended_at, zone).slice(11)} · {TIME_KIND_LABEL[h.kind]}{h.memo === ''
-                  ? ''
-                  : ` · ${h.memo}`}
+                {m.time_history_entry({
+                  changed: wallTime(h.changed_at, zone).replace('T', ' '),
+                  start: wallTime(h.started_at, zone).replace('T', ' '),
+                  end:
+                    h.ended_at === null
+                      ? m.time_in_progress()
+                      : wallTime(h.ended_at, zone).slice(11),
+                  kind: TIME_KIND_LABEL[h.kind],
+                })}{h.memo === '' ? '' : ` · ${h.memo}`}
               </li>
             {/each}
           </ul>

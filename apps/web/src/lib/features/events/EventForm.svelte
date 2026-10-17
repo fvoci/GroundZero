@@ -3,6 +3,8 @@
   // 종일 일정은 날짜 그대로 보낸다.
   import type { EventInput, EventKind, EventView } from '$lib/api/client';
   import { EVENT_KINDS } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
@@ -73,7 +75,7 @@
         !f.allDay &&
         (isMissingLocalTime(f.startWall, zone) || isMissingLocalTime(f.endWall, zone))
       ) {
-        error = `그 시각은 ${zone}에 없습니다(여름시간이 시작되는 날 건너뛰는 시각). 다른 시각을 고르세요.`;
+        error = m.events_missing_time({ zone });
         return;
       }
       input = {
@@ -88,14 +90,14 @@
         timezone: f.timezone.trim(),
       };
     } catch {
-      error = '시간대 이름을 확인하세요(예: Asia/Seoul).';
+      error = m.events_zone_invalid();
       return;
     }
     busy = true;
     try {
       await onsubmit(input);
     } catch (e: unknown) {
-      error = e instanceof Error ? e.message : '저장하지 못했습니다.';
+      error = errorText(e, m.events_save_failed());
     } finally {
       busy = false;
     }
@@ -104,11 +106,11 @@
 
 <form class="grid gap-3 md:grid-cols-2" onsubmit={(e) => void submit(e)}>
   <div class="flex flex-col gap-1 md:col-span-2">
-    <Label for={`${idPrefix}-title`}>제목</Label>
+    <Label for={`${idPrefix}-title`}>{m.events_title()}</Label>
     <Input id={`${idPrefix}-title`} bind:value={f.title} maxlength={200} required />
   </div>
   <div class="flex flex-col gap-1">
-    <span class="text-sm font-medium" id={`${idPrefix}-kind-label`}>종류</span>
+    <span class="text-sm font-medium" id={`${idPrefix}-kind-label`}>{m.events_kind()}</span>
     <Select.Root
       type="single"
       value={f.kind}
@@ -135,33 +137,33 @@
         f.allDay = v === true;
       }}
     />
-    <Label for={`${idPrefix}-all-day`}>종일</Label>
+    <Label for={`${idPrefix}-all-day`}>{m.events_all_day()}</Label>
   </div>
   {#if f.allDay}
     <div class="flex flex-col gap-1">
-      <Label for={`${idPrefix}-start-date`}>시작일</Label>
+      <Label for={`${idPrefix}-start-date`}>{m.events_start_date()}</Label>
       <Input id={`${idPrefix}-start-date`} type="date" bind:value={f.startDate} required />
     </div>
     <div class="flex flex-col gap-1">
-      <Label for={`${idPrefix}-end-date`}>종료일</Label>
+      <Label for={`${idPrefix}-end-date`}>{m.events_end_date()}</Label>
       <Input id={`${idPrefix}-end-date`} type="date" bind:value={f.endDate} required />
     </div>
   {:else}
     <div class="flex flex-col gap-1">
-      <Label for={`${idPrefix}-starts`}>시작</Label>
+      <Label for={`${idPrefix}-starts`}>{m.events_starts()}</Label>
       <Input id={`${idPrefix}-starts`} type="datetime-local" bind:value={f.startWall} required />
     </div>
     <div class="flex flex-col gap-1">
-      <Label for={`${idPrefix}-ends`}>종료</Label>
+      <Label for={`${idPrefix}-ends`}>{m.events_ends()}</Label>
       <Input id={`${idPrefix}-ends`} type="datetime-local" bind:value={f.endWall} required />
     </div>
     <div class="flex flex-col gap-1 md:col-span-2">
-      <Label for={`${idPrefix}-tz`}>시간대 (시작·종료 시각의 기준)</Label>
+      <Label for={`${idPrefix}-tz`}>{m.events_time_zone()}</Label>
       <Input id={`${idPrefix}-tz`} bind:value={f.timezone} autocomplete="off" required />
     </div>
   {/if}
   <div class="flex flex-col gap-1 md:col-span-2">
-    <Label for={`${idPrefix}-description`}>설명</Label>
+    <Label for={`${idPrefix}-description`}>{m.events_description()}</Label>
     <textarea
       id={`${idPrefix}-description`}
       bind:value={f.description}
@@ -175,7 +177,7 @@
   <div class="flex gap-2 md:col-span-2">
     <Button type="submit" disabled={busy}>{submitLabel}</Button>
     {#if oncancel !== undefined}
-      <Button type="button" variant="ghost" onclick={oncancel}>취소</Button>
+      <Button type="button" variant="ghost" onclick={oncancel}>{m.common_cancel()}</Button>
     {/if}
   </div>
 </form>

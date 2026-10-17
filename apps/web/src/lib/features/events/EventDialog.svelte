@@ -3,6 +3,8 @@
   // 보여 준다(D-53과 같은 원칙). 지우기는 한 번 더 묻는다(행은 남고 휴지통 조각에서 되살린다).
   import type { EventInput, EventView, RecurrenceRule } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
 
@@ -47,8 +49,8 @@
         if (!cancelled)
           error =
             e instanceof ApiError && e.status === 404
-              ? '일정이 없거나 볼 권한이 없습니다.'
-              : '일정을 불러오지 못했습니다.';
+              ? m.events_not_found()
+              : errorText(e, m.events_event_load_failed());
       });
     return () => {
       cancelled = true;
@@ -84,7 +86,7 @@
       onchanged();
       onclose();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '회차를 빼지 못했습니다.';
+      error = errorText(e, m.events_skip_failed());
     }
   }
 
@@ -95,7 +97,7 @@
       onchanged();
       onclose();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '지우지 못했습니다.';
+      error = errorText(e, m.events_delete_failed());
     }
   }
 </script>
@@ -117,7 +119,7 @@
     }}
   >
     <Dialog.Header>
-      <Dialog.Title>{event?.title ?? '일정'}</Dialog.Title>
+      <Dialog.Title>{event?.title ?? m.events_event()}</Dialog.Title>
       <Dialog.Description>
         {#if event !== undefined}{KIND_LABEL[event.kind]} · {describeWhen(event, zone)}{/if}
       </Dialog.Description>
@@ -131,10 +133,7 @@
         {@const c = conflict}
         <div class="rounded-md border border-amber-500/50 p-3 text-sm" role="alert">
           <p>
-            그사이 다른 사람이 이 일정을 바꿨습니다(지금: “{c.current.title}”, {describeWhen(
-              c.current,
-              zone,
-            )}). 내 입력은 그대로 있습니다.
+            {m.events_conflict({ title: c.current.title, when: describeWhen(c.current, zone) })}
           </p>
           <div class="mt-2 flex gap-2">
             <Button
@@ -144,10 +143,10 @@
                 event = c.current;
                 conflict = undefined;
                 epoch += 1;
-              }}>서버 내용 불러오기</Button
+              }}>{m.events_load_server()}</Button
             >
             <Button size="sm" onclick={() => void save(c.input, c.current.version)}
-              >내 입력으로 다시 저장</Button
+              >{m.events_save_mine()}</Button
             >
           </div>
         </div>
@@ -157,7 +156,7 @@
           <EventForm
             idPrefix="event-edit"
             initial={current}
-            submitLabel="저장"
+            submitLabel={m.common_save()}
             onsubmit={(input: EventInput) => save(input, current.version)}
           />
         {/key}
@@ -165,31 +164,37 @@
           idPrefix="event-recurrence"
           rule={current.recurrence}
           canEdit={true}
-          zoneNote={`${current.timezone} 기준`}
+          zoneNote={m.events_zone_note({ zone: current.timezone })}
           onsave={saveRule}
         />
         {#if occurrence !== undefined && current.recurrence !== null}
           <div class="flex items-center gap-2 text-sm">
-            <span>{occurrence} 회차만</span>
+            <span>{m.events_occurrence_only({ date: occurrence })}</span>
             <Button size="sm" variant="outline" onclick={() => void skipOccurrence(occurrence)}
-              >이 회차 빼기</Button
+              >{m.events_skip_occurrence()}</Button
             >
           </div>
         {/if}
         <div class="flex items-center gap-2 border-t pt-3">
           {#if confirmDelete}
-            <span class="text-sm" role="status">이 일정을 지울까요?</span>
-            <Button size="sm" variant="destructive" onclick={() => void remove()}>지우기</Button>
-            <Button size="sm" variant="ghost" onclick={() => (confirmDelete = false)}>취소</Button>
+            <span class="text-sm" role="status">{m.events_delete_confirm()}</span>
+            <Button size="sm" variant="destructive" onclick={() => void remove()}
+              >{m.events_delete()}</Button
+            >
+            <Button size="sm" variant="ghost" onclick={() => (confirmDelete = false)}
+              >{m.common_cancel()}</Button
+            >
           {:else}
             <Button size="sm" variant="outline" onclick={() => (confirmDelete = true)}
-              >일정 지우기</Button
+              >{m.events_delete_event()}</Button
             >
           {/if}
         </div>
       {:else}
         {#if current.recurrence !== null}
-          <p class="text-sm text-muted-foreground">반복: {describeRule(current.recurrence)}</p>
+          <p class="text-sm text-muted-foreground">
+            {m.events_recurrence_line({ rule: describeRule(current.recurrence) })}
+          </p>
         {/if}
         {#if current.description !== ''}
           <p class="text-sm whitespace-pre-wrap">{current.description}</p>

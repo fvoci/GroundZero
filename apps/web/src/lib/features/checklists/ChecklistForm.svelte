@@ -7,6 +7,8 @@
   import { Label } from '$lib/ui/label';
 
   import { newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
 
   import type { ChecklistItem, NewChecklistEntry } from './checklist-item';
   import { parseMarkdownChecklist } from './checklist-item';
@@ -38,7 +40,7 @@
     try {
       await action();
     } catch (e: unknown) {
-      error = e instanceof Error ? e.message : '처리하지 못했습니다.';
+      error = errorText(e, m.checklists_action_failed());
     } finally {
       busy = false;
     }
@@ -75,7 +77,8 @@
 
 <section aria-labelledby={`${idPrefix}-heading`} class="flex flex-col gap-3">
   <h3 id={`${idPrefix}-heading`} class="text-sm font-semibold">
-    체크리스트 <span class="font-normal text-muted-foreground">{done}/{items.length}</span>
+    {m.checklists_heading()}
+    <span class="font-normal text-muted-foreground">{done}/{items.length}</span>
   </h3>
 
   <ul class="flex flex-col gap-2" data-testid="checklist-items">
@@ -86,7 +89,9 @@
           checked={item.done}
           disabled={!canEdit || busy}
           onCheckedChange={(value) => void guard(() => ontoggle(item.id, value === true))}
-          aria-label={`${item.done ? '완료' : '미완료'} 항목: ${item.text}`}
+          aria-label={item.done
+            ? m.checklists_item_done_aria({ text: item.text })
+            : m.checklists_item_open_aria({ text: item.text })}
         />
         <Label
           for={`${idPrefix}-check-${item.id}`}
@@ -97,14 +102,14 @@
             variant="ghost"
             size="sm"
             class="ml-auto"
-            aria-label={`${item.text} 삭제`}
+            aria-label={m.checklists_delete_aria({ text: item.text })}
             disabled={busy}
-            onclick={() => void guard(() => onremove(item.id))}>삭제</Button
+            onclick={() => void guard(() => onremove(item.id))}>{m.checklists_delete()}</Button
           >
         {/if}
       </li>
     {:else}
-      <li class="text-sm text-muted-foreground">항목이 없습니다.</li>
+      <li class="text-sm text-muted-foreground">{m.checklists_empty()}</li>
     {/each}
   </ul>
 
@@ -117,22 +122,22 @@
       }}
     >
       <div class="flex flex-1 flex-col gap-1">
-        <Label for={`${idPrefix}-new`}>새 항목</Label>
+        <Label for={`${idPrefix}-new`}>{m.checklists_new_item()}</Label>
         <Input
           id={`${idPrefix}-new`}
           bind:value={draft}
-          placeholder="할 일을 입력"
+          placeholder={m.checklists_new_item_placeholder()}
           autocomplete="off"
         />
       </div>
-      <Button type="submit" disabled={busy || draft.trim() === ''}>추가</Button>
+      <Button type="submit" disabled={busy || draft.trim() === ''}>{m.checklists_add()}</Button>
       <Button type="button" variant="outline" onclick={() => (pasteOpen = !pasteOpen)}
-        >Markdown 붙여넣기</Button
+        >{m.checklists_paste_markdown()}</Button
       >
     </form>
     {#if pasteOpen}
       <div class="flex flex-col gap-2 rounded-md border p-3">
-        <Label for={`${idPrefix}-paste`}>붙여넣을 체크리스트 (`- [x] 완료`, `- [ ] 미완료`)</Label>
+        <Label for={`${idPrefix}-paste`}>{m.checklists_paste_label()}</Label>
         <textarea
           id={`${idPrefix}-paste`}
           bind:value={pasted}
@@ -141,24 +146,22 @@
         ></textarea>
         <div>
           <Button size="sm" variant="outline" onclick={expand} disabled={pasted.trim() === ''}
-            >항목으로 펼치기</Button
+            >{m.checklists_expand()}</Button
           >
         </div>
         {#if preview.length > 0}
-          <p class="text-sm text-muted-foreground">
-            확인하고 고친 뒤 덧붙이세요. 기존 항목은 그대로 둡니다.
-          </p>
-          <ul class="flex flex-col gap-2" aria-label="덧붙일 항목">
+          <p class="text-sm text-muted-foreground">{m.checklists_preview_hint()}</p>
+          <ul class="flex flex-col gap-2" aria-label={m.checklists_preview_list()}>
             {#each preview as entry, index (index)}
               <li class="flex items-center gap-2">
                 <Checkbox
                   checked={entry.done}
                   onCheckedChange={(value) => (preview[index] = { ...entry, done: value === true })}
-                  aria-label={`${entry.text} 완료 여부`}
+                  aria-label={m.checklists_preview_done_aria({ text: entry.text })}
                 />
                 <Input
                   value={entry.text}
-                  aria-label={`항목 ${String(index + 1)} 내용`}
+                  aria-label={m.checklists_preview_text_aria({ index: String(index + 1) })}
                   oninput={(e: Event) => {
                     const target = e.currentTarget;
                     if (target instanceof HTMLInputElement)
@@ -170,11 +173,11 @@
           </ul>
           <div>
             <Button size="sm" disabled={busy} onclick={confirmPaste}
-              >{preview.length}개 덧붙이기</Button
+              >{m.checklists_append_count({ count: preview.length })}</Button
             >
           </div>
         {:else if pasted.trim() !== ''}
-          <p class="text-sm text-muted-foreground">펼치기를 누르면 항목을 미리 봅니다.</p>
+          <p class="text-sm text-muted-foreground">{m.checklists_expand_hint()}</p>
         {/if}
       </div>
     {/if}

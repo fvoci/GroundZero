@@ -4,6 +4,7 @@
   import { monthRange, shiftMonth } from '$lib/features/events/calendar';
   import { displaySettings, formatMonth, weekdays } from '$lib/display';
   import { dayIn } from '$lib/features/events/time';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
   import { tasksByDay } from './filters';
@@ -30,22 +31,24 @@
     <Button
       size="sm"
       variant="outline"
-      aria-label="이전 달"
+      aria-label={m.tasks_prev_month()}
       onclick={() => (month = shiftMonth(month, -1))}>‹</Button
     >
     <span class="font-medium" aria-live="polite">{formatMonth(month, settings)}</span>
     <Button
       size="sm"
       variant="outline"
-      aria-label="다음 달"
+      aria-label={m.tasks_next_month()}
       onclick={() => (month = shiftMonth(month, 1))}>›</Button
     >
-    <Button size="sm" variant="ghost" onclick={() => (month = today.slice(0, 7))}>오늘</Button>
+    <Button size="sm" variant="ghost" onclick={() => (month = today.slice(0, 7))}
+      >{m.tasks_today()}</Button
+    >
   </div>
   <div
     class="grid grid-cols-7 gap-px rounded-md border bg-border text-xs"
     role="grid"
-    aria-label={`${month} 업무 달력`}
+    aria-label={m.tasks_calendar_aria({ month })}
   >
     {#each WEEKDAYS as w (w)}
       <div class="bg-background p-1 text-center font-medium" role="columnheader">{w}</div>
@@ -59,7 +62,7 @@
           day === today ? 'ring-1 ring-primary ring-inset' : '',
         ]}
         role="gridcell"
-        aria-label={`${day} 업무 ${String(list.length)}개`}
+        aria-label={m.tasks_calendar_day_aria({ day, count: list.length })}
       >
         <span>{Number(day.slice(8))}</span>
         {#each list as t (t.id)}
@@ -80,7 +83,7 @@
   </div>
   {#if undated.length > 0}
     <p class="text-sm text-muted-foreground">
-      날짜 없는 업무 {undated.length}개는 목록·칸반에서 볼 수 있습니다.
+      {m.tasks_calendar_undated({ count: undated.length })}
     </p>
   {/if}
 </div>
