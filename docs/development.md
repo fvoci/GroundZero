@@ -174,6 +174,8 @@ Cargo (cargo deny가 거부하는 것):
 
 대안: Cargo 쪽은 sqlx·url이 요구해 피할 수 없다(url의 idna 백엔드는 sqlx 경유로 바꿀 수 없음). npm 쪽은 vite·tailwind·eslint·jsdom·openapi-typescript의 기본 의존이라 바꾸려면 도구 자체를 바꿔야 한다. 권장은 위 목록의 라이선스 식을 허용 목록에 추가하는 것이며, 그 경우 `deny.toml`·`xtask/src/licenses.rs`의 허용 목록과 제품 이미지의 제3자 고지 파일을 함께 바꾼다.
 
+PDF 본문 검색(38절 후속) 후보: `lopdf` 0.45.0(MIT, 기본 기능 끔)은 잠금에 약 30개 크레이트를 더하고 그중 `zlib-rs`가 `Zlib`이라 위 `foldhash`와 같은 승인 대상이다. Zlib을 허용 목록에 넣는 결정이 나면 PDF 글자 뽑기를 더한다(지금은 PDF를 이름으로만 찾는다).
+
 OR 결합으로 허용 쪽을 선택해 자동 통과한 것(선택 근거 기록): aho-corasick·byteorder·memchr `Unlicense OR MIT` → MIT. tinyvec `Zlib OR Apache-2.0 OR MIT` → MIT. whoami `Apache-2.0 OR BSL-1.0 OR MIT` → MIT.
 
 ### 보안 권고 예외 (cargo-deny advisories)
