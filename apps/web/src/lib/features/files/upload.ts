@@ -123,24 +123,75 @@ export async function uploadFile(
     forget(key);
     return up;
   }
-  if (up.state !== 'uploading') {
+  if (up.state === 'completing') {
+    // 앞선 마치기가 끊겼다: 다시 올리지 않고 결과를 기다린다.
+    const done = await finish(up.id);
+    forget(key);
+    return done;
+  }
+  if (up.state !== 'uploading' || Date.parse(up.expires_at) <= Date.now()) {
     // 기한이 지났거나 그만둔 업로드면 새로 시작한다.
     forget(key);
     up = await start();
   }
-  const total = up.parts_total;
-  let sent = up.received.length;
-  opts.onProgress?.({ sent: Math.min(file.size, sent * up.chunk_bytes), total: file.size });
-  for (const n of missingParts(total, up.received)) {
+  const id = up.id;
+  try {
+    // 저장소가 조각을 합치지 못하면 서버가 받은 조각을 비우고 다시 받는다(한 번 더 보낸다).
+    for (let round = 0; ; round += 1) {
+      await sendParts(file, up, opts);
+      try {
+        const done = await finish(id);
+        forget(key);
+        return done;
+      } catch (e: unknown) {
+        if (!(e instanceof ApiError) || e.status !== 409 || round >= 1) throw e;
+        up = await api.upload(id);
+        if (up.state !== 'uploading') throw e;
+      }
+    }
+  } catch (e: unknown) {
+    if (opts.signal?.aborted === true) {
+      forget(key);
+      await api.abortUpload(id).catch(() => undefined);
+    }
+    throw e;
+  }
+}
+
+async function sendParts(
+  file: File,
+  up: UploadView,
+  opts: { onProgress?: (p: UploadProgress) => void; signal?: AbortSignal },
+): Promise<void> {
+  opts.onProgress?.({
+    sent: Math.min(file.size, up.received.length * up.chunk_bytes),
+    total: file.size,
+  });
+  for (const n of missingParts(up.parts_total, up.received)) {
+    opts.signal?.throwIfAborted();
     const [from, to] = partRange(n, up.chunk_bytes, file.size);
     const piece = file.slice(from, to);
     const hash = await sha256Hex(piece);
-    const id = up.id;
-    await withRetry(() => api.putUploadPart(id, n, piece, hash), opts.signal);
-    sent += 1;
+    await withRetry(() => api.putUploadPart(up.id, n, piece, hash), opts.signal);
     opts.onProgress?.({ sent: Math.min(file.size, to), total: file.size });
   }
-  const done = await api.completeUpload(up.id);
-  forget(key);
-  return done;
+}
+
+/** 마치기. 다른 요청이 마치는 중이면(409) 잠시 기다렸다가 다시 묻는다. */
+async function finish(id: string): Promise<UploadView> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await api.completeUpload(id);
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 409 && attempt < 20) {
+        const now = await api.upload(id);
+        if (now.state === 'done') return now;
+        if (now.state === 'completing') {
+          await wait(3000);
+          continue;
+        }
+      }
+      throw e;
+    }
+  }
 }

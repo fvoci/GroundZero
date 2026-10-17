@@ -233,6 +233,40 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     assert_eq!(listed.json[0]["name"], "data.csv");
     assert_eq!(listed.json[0]["can_write"], false);
     assert_eq!(listed.json[0]["size"], data.len());
+    // D-20: 내려받기는 고칠 수 있는 사람이나, 소유자가 복제·다운로드를 허용한 문서의 독자만.
+    assert_eq!(listed.json[0]["can_download"], false);
+    assert_eq!(
+        download(&app, &reader, &format!("/api/files/{file_id}/content"))
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        download(
+            &app,
+            &reader,
+            &format!("/api/files/{file_id}/content?inline=true")
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN,
+        "CSV cannot be viewed inline, so it is a download"
+    );
+    assert_eq!(
+        download(&app, &writer, &format!("/api/files/{file_id}/content"))
+            .await
+            .0,
+        StatusCode::OK
+    );
+    let allowed = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{doc_id}/settings"),
+        Some(&admin),
+        Some(json!({ "visibility": "workspace", "allow_copy": true })),
+    )
+    .await;
+    assert_eq!(allowed.status, StatusCode::OK, "{:?}", allowed.json);
     assert_eq!(
         send(
             &app,
@@ -560,6 +594,80 @@ async fn limits_abort_expiry_and_private_notes() {
             .2,
         b"abc"
     );
+}
+
+#[tokio::test]
+async fn concurrent_starts_and_old_version_cleanup() {
+    let state = state_with(&[]);
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "버전 정리").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let doc = create_doc(&app, &admin, &ws, "자료").await;
+    let body = json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] },
+                       "name": "v.txt", "size": 3, "content_type": "text/plain" });
+    // 같은 요청이 동시에 와도 업로드는 하나.
+    let (a, b) = tokio::join!(
+        start(&app, &admin, body.clone()),
+        start(&app, &admin, body.clone())
+    );
+    assert_eq!(a.0, StatusCode::CREATED, "{:?}", a.1);
+    assert_eq!(b.0, StatusCode::CREATED, "{:?}", b.1);
+    assert_eq!(a.1["id"], b.1["id"]);
+    let first = upload_all(&app, &admin, body, b"one").await;
+    let file_id = first["file_id"].as_str().unwrap().to_owned();
+    upload_all(
+        &app,
+        &admin,
+        json!({ "request_id": new_request_id(), "file_id": file_id, "size": 3 }),
+        b"two",
+    )
+    .await;
+    let version = |n: i32| format!("/api/files/{file_id}/versions/{n}");
+    assert_eq!(
+        send(&app, Method::DELETE, &version(1), Some(&reader), None)
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        send(&app, Method::DELETE, &version(2), Some(&admin), None)
+            .await
+            .status,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        send(&app, Method::DELETE, &version(9), Some(&admin), None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(&app, Method::DELETE, &version(1), Some(&admin), None)
+            .await
+            .status,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        download(
+            &app,
+            &admin,
+            &format!("/api/files/{file_id}/content?version=1")
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        download(&app, &admin, &format!("/api/files/{file_id}/content"))
+            .await
+            .2,
+        b"two"
+    );
+    let report = fvoci_server::worker::run_all_now(&state.db, None, Some(&state.storage))
+        .await
+        .unwrap();
+    assert!(report.cleaned >= 1, "{report:?}");
 }
 
 #[tokio::test]

@@ -116,6 +116,10 @@ impl LocalStore {
     ) -> Result<(), AppError> {
         check_upload(upload_id)?;
         let dir = self.upload(upload_id);
+        // 앞선 시도가 이미 합쳤으면 업로드 폴더가 없다(S3의 NoSuchUpload와 같게).
+        if !tokio::fs::try_exists(&dir).await.map_err(io)? {
+            return Err(AppError::NotFound);
+        }
         let temp = self.temp();
         tokio::fs::create_dir_all(self.dir.join("tmp"))
             .await

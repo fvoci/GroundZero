@@ -91,14 +91,18 @@ async fn drain_all(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
 /// 다시 넣어 다음 주기에 한다(10번까지).
 async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
     system_call(db, "SELECT app_system_expire_uploads()").await?;
-    let mut tx = db.begin_anonymous().await?;
-    let rows: Vec<(String, String, i32)> = sqlx::query_as(
-        "SELECT storage_key, storage_upload_id, attempts FROM app_system_storage_claim(200)",
-    )
-    .fetch_all(tx.conn())
-    .await?;
     let mut done = 0;
-    for (key, upload, attempts) in rows {
+    // 하나씩 꺼내 지우고 바로 끝낸다(저장소 호출 동안 트랜잭션을 길게 열지 않는다). 한 주기에 200개까지.
+    for _ in 0..200 {
+        let mut tx = db.begin_anonymous().await?;
+        let Some((key, upload, attempts)): Option<(String, String, i32)> = sqlx::query_as(
+            "SELECT storage_key, storage_upload_id, attempts FROM app_system_storage_claim(1)",
+        )
+        .fetch_optional(tx.conn())
+        .await?
+        else {
+            break;
+        };
         let result = if upload.is_empty() {
             storage.delete(&key).await
         } else {
@@ -107,7 +111,11 @@ async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
         match result {
             Ok(()) => done += 1,
             Err(err) => {
-                tracing::warn!(key, error = %err, "storage cleanup failed; will retry");
+                if attempts >= 9 {
+                    tracing::error!(key, error = %err, "storage cleanup gave up after 10 attempts");
+                } else {
+                    tracing::warn!(key, error = %err, "storage cleanup failed; will retry");
+                }
                 sqlx::query("SELECT app_system_storage_retry($1, $2, $3)")
                     .bind(&key)
                     .bind(&upload)
@@ -116,8 +124,8 @@ async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
                     .await?;
             }
         }
+        tx.commit().await?;
     }
-    tx.commit().await?;
     Ok(done)
 }
 

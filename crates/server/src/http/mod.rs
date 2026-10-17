@@ -30,6 +30,8 @@ pub struct AppState {
     pub search: Option<crate::search::SearchClient>,
     /// 파일 저장소(D-06).
     pub storage: crate::storage::Storage,
+    /// 업로드 조각 동시 처리 한도(D-52).
+    pub upload_permits: Arc<tokio::sync::Semaphore>,
 }
 
 /// 서비스 상태 응답.
@@ -200,6 +202,7 @@ async fn api_not_found() -> AppError {
         files::rename_file,
         files::trash_file,
         files::content,
+        files::delete_version,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -406,6 +409,14 @@ async fn api_not_found() -> AppError {
 pub struct ApiDoc;
 
 /// 라우터를 조립한다.
+/// 업로드 조각은 서버 전체에서 정해진 수만 동시에 받는다(본문을 읽기 전에 자리를 잡는다, D-52).
+async fn upload_slot(State(state): State<AppState>, req: Request, next: Next) -> Response {
+    let Ok(_permit) = state.upload_permits.clone().acquire_owned().await else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    next.run(req).await
+}
+
 pub fn router(state: AppState) -> Router {
     // JSON 직렬화 여유를 두고 문서 상한보다 조금 크게 받는다. 정확한 상한 검사는 핸들러가 한다.
     let body_limit = state
@@ -555,7 +566,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/uploads/{upload_id}/parts/{number}",
-            put(files::put_part).layer(DefaultBodyLimit::max(part_limit)),
+            put(files::put_part)
+                .layer(DefaultBodyLimit::max(part_limit))
+                .layer(middleware::from_fn_with_state(state.clone(), upload_slot)),
         )
         .route(
             "/uploads/{upload_id}/complete",
@@ -570,6 +583,10 @@ pub fn router(state: AppState) -> Router {
                 .delete(files::trash_file),
         )
         .route("/files/{file_id}/content", get(files::content))
+        .route(
+            "/files/{file_id}/versions/{version}",
+            delete(files::delete_version),
+        )
         .route("/me/trash/purge-expired", post(trash::purge_my_expired))
         .route("/trash/{batch_id}", delete(trash::purge))
         .route("/trash/{batch_id}/restore", post(trash::restore))

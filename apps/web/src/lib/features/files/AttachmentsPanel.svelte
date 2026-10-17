@@ -36,6 +36,7 @@
   let reloadKey = $state(0);
   let picker = $state<HTMLInputElement | undefined>(undefined);
   let versionFor: string | undefined;
+  let controller: AbortController | undefined;
   let seq = 0;
 
   $effect(() => {
@@ -61,11 +62,14 @@
     const fileId = versionFor;
     versionFor = undefined;
     error = undefined;
+    const cancel = new AbortController();
+    controller = cancel;
     for (const file of Array.from(chosen)) {
       progress = { name: file.name, percent: 0 };
       try {
         const done = await uploadFile(file, {
           ...(fileId === undefined ? { target } : { fileId }),
+          signal: cancel.signal,
           onProgress: (p) => {
             progress = {
               name: file.name,
@@ -75,10 +79,13 @@
         });
         status = `올렸습니다: ${file.name}${done.version !== null && done.version > 1 ? ` (v${String(done.version)})` : ''}`;
       } catch (e: unknown) {
-        error = `${file.name}: ${message(e, '올리지 못했습니다. 같은 파일을 다시 고르면 이어서 올립니다.')}`;
+        error = cancel.signal.aborted
+          ? `취소했습니다: ${file.name}`
+          : `${file.name}: ${message(e, '올리지 못했습니다. 같은 파일을 다시 고르면 이어서 올립니다.')}`;
         break;
       }
     }
+    controller = undefined;
     progress = undefined;
     reloadKey += 1;
     if (versions !== undefined) await showVersions(versions.id);
@@ -143,6 +150,7 @@
   <p aria-live="polite" class="text-sm">
     {#if progress !== undefined}
       {progress.name} 올리는 중… {progress.percent}%
+      <Button size="sm" variant="ghost" onclick={() => controller?.abort()}>취소</Button>
     {:else if error !== undefined}
       <span class="text-destructive">{error}</span>
     {:else}
@@ -177,10 +185,17 @@
                 >
               </form>
             {:else}
-              <a
-                class="min-w-0 flex-1 truncate font-medium underline-offset-2 hover:underline"
-                href={fileContentUrl(f.id)}>{f.name}</a
-              >
+              {#if f.can_download}
+                <a
+                  class="min-w-0 flex-1 truncate font-medium underline-offset-2 hover:underline"
+                  href={fileContentUrl(f.id)}>{f.name}</a
+                >
+              {:else}
+                <span
+                  class="min-w-0 flex-1 truncate font-medium"
+                  title="내려받기가 허용되지 않은 문서의 첨부">{f.name}</span
+                >
+              {/if}
               <span class="text-xs text-muted-foreground"
                 >v{f.current_version} · {formatBytes(f.size)} · {when(f.updated_at)}</span
               >
@@ -237,14 +252,30 @@
             <ol class="flex flex-col gap-1 border-t pt-2" aria-label={`${f.name} 버전`}>
               {#each versions.list as v (v.version)}
                 <li class="flex flex-wrap items-baseline gap-2">
-                  <a
-                    class="underline-offset-2 hover:underline"
-                    href={fileContentUrl(f.id, v.version)}>v{v.version}</a
-                  >
+                  {#if f.can_download}
+                    <a
+                      class="underline-offset-2 hover:underline"
+                      href={fileContentUrl(f.id, v.version)}>v{v.version}</a
+                    >
+                  {:else}
+                    <span>v{v.version}</span>
+                  {/if}
                   <span class="text-xs text-muted-foreground"
                     >{formatBytes(v.size)} · {v.uploaded_by_name ?? ''} · {when(v.created_at)}</span
                   >
                   {#if v.note !== ''}<span>{v.note}</span>{/if}
+                  {#if f.can_write && v.version !== f.current_version}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`${f.name} v${String(v.version)} 지우기`}
+                      onclick={() =>
+                        void act(
+                          () => api.deleteFileVersion(f.id, v.version),
+                          `v${String(v.version)}을 지웠습니다: ${f.name}`,
+                        ).then(() => showVersions(f.id))}>지우기</Button
+                    >
+                  {/if}
                 </li>
               {/each}
             </ol>

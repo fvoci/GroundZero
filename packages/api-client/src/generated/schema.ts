@@ -379,6 +379,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/{file_id}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 현재가 아닌 버전 하나를 영구 삭제(쓸 수 있는 사람, D-56). 저장소의 내용은 백그라운드 작업이 지운다. */
+        delete: operations["delete_file_version"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/groups/{group_id}": {
         parameters: {
             query?: never;
@@ -2077,6 +2094,11 @@ export interface components {
         };
         /** @description 첨부 파일. */
         FileView: {
+            /**
+             * @description 내려받을 수 있는지(D-20: 문서 첨부는 고칠 수 있는 사람, 또는 소유자가 복제·다운로드를 허용한 문서).
+             *     아니어도 안전한 형식은 브라우저 안에서 볼 수 있다.
+             */
+            can_download: boolean;
             /** @description 새 버전·이름 바꾸기·지우기를 할 수 있는지. */
             can_write: boolean;
             content_type: string;
@@ -4225,6 +4247,50 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_file_version: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

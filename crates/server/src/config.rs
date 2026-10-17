@@ -79,6 +79,8 @@ pub struct FileLimits {
     pub max_storage_bytes: u64,
     /// 마치지 않은 업로드를 버리기까지의 시간. `FVOCI_UPLOAD_TTL_SECS`, 기본 24시간.
     pub upload_ttl: Duration,
+    /// 서버 전체에서 동시에 받는 업로드 조각 수(조각마다 메모리에 담는다). `FVOCI_UPLOAD_CONCURRENCY`, 기본 8.
+    pub upload_concurrency: usize,
 }
 
 /// 운영 한도 (D-52). 기본값은 `O-26`에서 사용량·테스트 결과로 조정한다.
@@ -298,7 +300,13 @@ impl Config {
                 50 * 1024 * MIB,
             )?,
             upload_ttl: Duration::from_secs(parse_or(&lookup, "FVOCI_UPLOAD_TTL_SECS", 86_400)?),
+            upload_concurrency: parse_or(&lookup, "FVOCI_UPLOAD_CONCURRENCY", 8)?,
         };
+        if !(1..=256).contains(&files.upload_concurrency) {
+            return Err(AppError::Config(
+                "FVOCI_UPLOAD_CONCURRENCY must be between 1 and 256".into(),
+            ));
+        }
         if !(5 * MIB..=64 * MIB).contains(&files.chunk_bytes) {
             return Err(AppError::Config(
                 "FVOCI_UPLOAD_CHUNK_BYTES must be between 5 MiB and 64 MiB".into(),

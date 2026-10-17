@@ -105,6 +105,9 @@ pub struct FileView {
     pub updated_at: OffsetDateTime,
     /// 새 버전·이름 바꾸기·지우기를 할 수 있는지.
     pub can_write: bool,
+    /// 내려받을 수 있는지(D-20: 문서 첨부는 고칠 수 있는 사람, 또는 소유자가 복제·다운로드를 허용한 문서).
+    /// 아니어도 안전한 형식은 브라우저 안에서 볼 수 있다.
+    pub can_download: bool,
 }
 
 /// 파일과 모든 버전(최신 먼저).
@@ -372,64 +375,94 @@ pub async fn complete_upload(
     .await?;
     tx.commit().await?;
     if row.state != "done" {
-        let storage_upload = row.storage_upload_id.clone().unwrap_or_default();
-        let parts: Vec<Part> = parts
-            .into_iter()
-            .map(|(number, etag, size)| Part {
-                number: u32::try_from(number).unwrap_or_default(),
-                etag,
-                size: u64::try_from(size).unwrap_or_default(),
-            })
-            .collect();
-        // 앞선 시도가 저장소에서는 마쳤을 수 있다(업로드가 이미 없음). 그러면 내용 확인으로 넘어간다.
-        match state
-            .storage
-            .complete(&row.storage_key, &storage_upload, &parts)
+        // 연결이 끊겨도(프록시 시간 제한 등) 합치기·확인·기록은 끝까지 한다. 다시 요청하면 결과를 본다.
+        let worker = state.clone();
+        tokio::spawn(async move { finish(&worker, user, id, row, parts).await })
             .await
-        {
-            Ok(()) | Err(AppError::NotFound) => {}
-            Err(err) => return Err(err),
-        }
-        let checked = state.storage.digest(&row.storage_key).await;
-        let failure = match &checked {
-            Ok((_, size)) if i64::try_from(*size).ok() == Some(row.size) => None,
-            Ok((_, size)) => Some(format!("stored {size} bytes, expected {}", row.size)),
-            Err(AppError::NotFound) => Some("the stored content is missing".to_owned()),
-            Err(_) => None,
-        };
-        if let Some(reason) = failure {
-            fail(&state, user, id, &reason).await?;
-            return Err(AppError::Conflict(format!("the upload failed: {reason}")));
-        }
-        let (sha256, _) = checked?;
-        let mut tx = state.db.begin_as(user).await?;
-        let finished = sqlx::query("SELECT app_finish_upload($1, $2, $3)")
-            .bind(id)
-            .bind(&sha256)
-            .bind(i64::try_from(state.config.files.max_storage_bytes).unwrap_or(i64::MAX))
-            .execute(tx.conn())
-            .await
-            .map_err(AppError::from_db_function);
-        match finished {
-            Ok(_) => tx.commit().await?,
-            Err(err) => {
-                drop(tx);
-                // 대상을 볼 수 없게 됐거나 저장량이 모자라면 업로드를 닫는다(다시 해도 같다).
-                if matches!(
-                    err,
-                    AppError::NotFound | AppError::Forbidden | AppError::Conflict(_)
-                ) {
-                    fail(&state, user, id, &err.to_string()).await?;
-                }
-                return Err(err);
-            }
-        }
+            .map_err(|e| AppError::Config(format!("upload completion task: {e}")))??;
     }
     let mut tx = state.db.begin_as(user).await?;
     let row = my_upload(&mut tx, id).await?;
     let out = view(&mut tx, row).await?;
     tx.commit().await?;
     Ok(Json(out))
+}
+
+/// 저장소에서 조각을 합치고 내용을 확인한 뒤 파일·버전을 기록한다.
+async fn finish(
+    state: &AppState,
+    user: UserId,
+    id: UploadId,
+    row: UploadRow,
+    parts: Vec<(i32, String, i64)>,
+) -> Result<(), AppError> {
+    let storage_upload = row.storage_upload_id.clone().unwrap_or_default();
+    let parts: Vec<Part> = parts
+        .into_iter()
+        .map(|(number, etag, size)| Part {
+            number: u32::try_from(number).unwrap_or_default(),
+            etag,
+            size: u64::try_from(size).unwrap_or_default(),
+        })
+        .collect();
+    // 앞선 시도가 저장소에서는 마쳤을 수 있다(업로드가 이미 없음). 그러면 내용 확인으로 넘어간다. 다른 이유로
+    // 합치지 못하면(조각 표시가 어긋남 등) 처음부터 다시 받는다.
+    match state
+        .storage
+        .complete(&row.storage_key, &storage_upload, &parts)
+        .await
+    {
+        Ok(()) | Err(AppError::NotFound) => {}
+        Err(err) => {
+            tracing::warn!(upload = %id.0, error = %err, "storage could not assemble the upload");
+            let mut tx = state.db.begin_as(user).await?;
+            sqlx::query("SELECT app_reset_upload($1)")
+                .bind(id)
+                .execute(tx.conn())
+                .await
+                .map_err(AppError::from_db_function)?;
+            tx.commit().await?;
+            return Err(AppError::Conflict(
+                "the storage could not assemble the parts; send them again".into(),
+            ));
+        }
+    }
+    let checked = state.storage.digest(&row.storage_key).await;
+    let failure = match &checked {
+        Ok((_, size)) if i64::try_from(*size).ok() == Some(row.size) => None,
+        Ok((_, size)) => Some(format!("stored {size} bytes, expected {}", row.size)),
+        Err(AppError::NotFound) => Some("the stored content is missing".to_owned()),
+        Err(_) => None,
+    };
+    if let Some(reason) = failure {
+        fail(state, user, id, &reason).await?;
+        return Err(AppError::Conflict(format!("the upload failed: {reason}")));
+    }
+    let (sha256, _) = checked?;
+    let mut tx = state.db.begin_as(user).await?;
+    let finished = sqlx::query("SELECT app_finish_upload($1, $2, $3)")
+        .bind(id)
+        .bind(&sha256)
+        .bind(i64::try_from(state.config.files.max_storage_bytes).unwrap_or(i64::MAX))
+        .execute(tx.conn())
+        .await;
+    match finished {
+        Ok(_) => tx.commit().await,
+        Err(err) => {
+            drop(tx);
+            // 대상을 볼 수 없게 됐거나 쓸 수 없거나 저장량이 모자라면 업로드를 닫는다(다시 해도 같다). 잠깐의
+            // 충돌(직렬화·교착)은 닫지 않고 다시 요청하게 한다.
+            let lasting = err
+                .as_database_error()
+                .and_then(|d| d.code())
+                .is_some_and(|c| matches!(c.as_ref(), "P0002" | "42501" | "55000"));
+            let err = AppError::from_db_function(err);
+            if lasting {
+                fail(state, user, id, &err.to_string()).await?;
+            }
+            Err(err)
+        }
+    }
 }
 
 async fn fail(state: &AppState, user: UserId, id: UploadId, reason: &str) -> Result<(), AppError> {
@@ -472,16 +505,27 @@ type FileRow = (
     Option<String>,
     OffsetDateTime,
     Option<String>,
+    bool,
 );
 
 const FILE_SELECT: &str = "SELECT f.id, f.name, f.document_id, f.item_id, f.current_version, v.size, v.content_type,
-                                  f.updated_at, app_file_access(f.id)
+                                  f.updated_at, app_file_access(f.id), app_file_can_download(f.id)
                            FROM files f
                            LEFT JOIN file_versions v ON v.file_id = f.id AND v.version = f.current_version";
 
 fn file_view(row: FileRow) -> FileView {
-    let (id, name, document_id, item_id, current_version, size, content_type, updated_at, access) =
-        row;
+    let (
+        id,
+        name,
+        document_id,
+        item_id,
+        current_version,
+        size,
+        content_type,
+        updated_at,
+        access,
+        can_download,
+    ) = row;
     FileView {
         id,
         name,
@@ -492,6 +536,7 @@ fn file_view(row: FileRow) -> FileView {
         content_type: content_type.unwrap_or_else(|| "application/octet-stream".into()),
         updated_at,
         can_write: matches!(access.as_deref(), Some("owner" | "write")),
+        can_download,
     }
 }
 
@@ -661,6 +706,27 @@ pub async fn trash_file(
     Ok(Json(FileTrashed { batch_id }))
 }
 
+/// 현재가 아닌 버전 하나를 영구 삭제(쓸 수 있는 사람, D-56). 저장소의 내용은 백그라운드 작업이 지운다.
+#[utoipa::path(delete, path = "/api/files/{file_id}/versions/{version}", operation_id = "delete_file_version",
+    params(("file_id" = String, Path, format = Uuid), ("version" = i32, Path)),
+    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "files")]
+pub async fn delete_version(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((id, version)): Path<(FileId, i32)>,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_delete_file_version($1, $2)")
+        .bind(id)
+        .bind(version)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// 브라우저 안에서 열어도 되는 형식(스크립트를 실행할 수 없는 것만). SVG·HTML은 늘 내려받기.
 const INLINE_TYPES: &[&str] = &[
     "image/png",
@@ -743,7 +809,12 @@ pub async fn content(
     tx.commit().await?;
     let (key, size, content_type) = found.ok_or(AppError::NotFound)?;
     let content_type = safe_type(&content_type);
-    let inline = query.inline && INLINE_TYPES.contains(&content_type.as_str());
+    let viewable = INLINE_TYPES.contains(&content_type.as_str());
+    // 내려받기가 허용되지 않으면 안전한 형식을 브라우저 안에서 보는 것만 된다.
+    if !file.can_download && !(query.inline && viewable) {
+        return Err(AppError::Forbidden);
+    }
+    let inline = query.inline && viewable;
     let stream = state.storage.get(&key).await?;
     let mut response = Body::from_stream(stream).into_response();
     let headers = response.headers_mut();

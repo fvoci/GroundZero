@@ -1196,6 +1196,7 @@ export interface FileView {
   content_type: string;
   updated_at: string;
   can_write: boolean;
+  can_download: boolean;
 }
 
 export interface FileVersionView {
@@ -1240,6 +1241,7 @@ function parseFile(value: Json): FileView {
     content_type: str(o, 'content_type'),
     updated_at: str(o, 'updated_at'),
     can_write: bool(o, 'can_write'),
+    can_download: bool(o, 'can_download'),
   };
 }
 
@@ -1494,6 +1496,8 @@ export const api = {
     }),
   renameFile: (id: string, name: string) =>
     expectOk('PUT', `/api/files/${encodeURIComponent(id)}`, parseFile, { name }),
+  deleteFileVersion: (id: string, version: number) =>
+    expectOk('DELETE', `/api/files/${encodeURIComponent(id)}/versions/${String(version)}`, none),
   trashFile: (id: string) => expectOk('DELETE', `/api/files/${encodeURIComponent(id)}`, parseBatch),
   /** 업로드 시작. 같은 requestId면 같은 업로드(이어 올리기). */
   createUpload: (input: {

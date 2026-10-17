@@ -115,7 +115,9 @@ impl S3Store {
             access_key: config.access_key.clone(),
             secret_key: config.secret_key.clone(),
             http: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(300))
+                // 큰 파일을 흘려보내는 동안 끊지 않도록 전체 시간 대신 연결·읽기 대기 시간만 제한한다.
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .read_timeout(std::time::Duration::from_secs(120))
                 .build()
                 .unwrap_or_default(),
         }
