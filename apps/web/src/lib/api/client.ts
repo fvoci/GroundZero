@@ -55,6 +55,29 @@ export interface DocumentView {
   realtime: boolean;
   /** 내보낼 수 있는지(D-75). 첨부 내려받기와 같은 규칙. */
   can_export: boolean;
+  /**
+   * 단건 조회·저장·복원·충돌 응답이 준 ETag(D-77). 저장 때 `If-Match`로 보낸다. 다른 경로(목록·설정 변경)에서 받은
+   * 문서에는 없다.
+   */
+  etag?: string;
+}
+
+/** 강한 ETag인지. CDN 등이 압축하며 약하게(`W/`) 바꾼 값은 `If-Match`에 쓰지 않는다(약한 값은 맞지 않음, D-77). */
+export function isStrongEtag(etag: string | undefined): etag is string {
+  return etag !== undefined && etag.startsWith('"') && etag.endsWith('"') && etag.length >= 2;
+}
+
+function withEtag(doc: DocumentView, etag: string | null | undefined): DocumentView {
+  return typeof etag === 'string' && etag !== '' ? { ...doc, etag } : doc;
+}
+
+/** 409(기준 리비전이 지남)·412(`If-Match`가 맞지 않음)의 서버 최신본. 둘 다 초안은 클라이언트가 보존한다. */
+function conflictCurrent(status: number, json: Json): DocumentView | undefined {
+  if ((status !== 409 && status !== 412) || !isRecord(json) || json.current === undefined) {
+    return undefined;
+  }
+  const body = rec(json, 'conflict');
+  return withEtag(parseDocument(body.current), typeof body.etag === 'string' ? body.etag : null);
 }
 
 export class ApiError extends Error {
@@ -1943,13 +1966,14 @@ async function request(
   method: string,
   path: string,
   body?: Json,
-): Promise<{ status: number; json: Json }> {
+  extra: Record<string, string> = {},
+): Promise<{ status: number; json: Json; etag: string | null }> {
   let response: Response;
   try {
     const init: RequestInit = {
       method,
       credentials: 'same-origin',
-      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+      headers: body === undefined ? extra : { ...extra, 'Content-Type': 'application/json' },
     };
     if (body !== undefined) init.body = JSON.stringify(body);
     response = await fetch(path, init);
@@ -1965,7 +1989,7 @@ async function request(
       json = null;
     }
   }
-  return { status: response.status, json };
+  return { status: response.status, json, etag: response.headers.get('ETag') };
 }
 
 function fail(status: number, json: Json): never {
@@ -2032,8 +2056,12 @@ export const api = {
       parent_id: parentId,
       before_id: beforeId,
     }),
-  document: (id: string) =>
-    expectOk('GET', `/api/documents/${encodeURIComponent(id)}`, parseDocument),
+  /** 문서 한 건. 브라우저 캐시가 ETag로 서버에 재검증하고(304면 저장본), 응답의 ETag를 문서에 붙인다(D-77). */
+  async document(id: string): Promise<DocumentView> {
+    const { status, json, etag } = await request('GET', `/api/documents/${encodeURIComponent(id)}`);
+    if (status !== 200) fail(status, json);
+    return withEtag(parseDocument(json), etag);
+  },
   members: (ws: string) =>
     expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/members`, parseMembersView),
   setRole: (ws: string, userId: string, newRole: Role) =>
@@ -2731,16 +2759,15 @@ export const api = {
   ): Promise<
     { kind: 'restored'; document: DocumentView } | { kind: 'conflict'; current: DocumentView }
   > {
-    const { status, json } = await request(
+    const { status, json, etag } = await request(
       'POST',
       `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/restore`,
       { request_id: input.requestId, base_revision: input.baseRevision },
     );
-    if (status === 409 && isRecord(json) && json.current !== undefined) {
-      return { kind: 'conflict', current: parseDocument(rec(json, 'conflict').current) };
-    }
+    const current = conflictCurrent(status, json);
+    if (current !== undefined) return { kind: 'conflict', current };
     if (status !== 200) fail(status, json);
-    return { kind: 'restored', document: parseDocument(json) };
+    return { kind: 'restored', document: withEtag(parseDocument(json), etag) };
   },
   /** 통합 검색. 볼 수 있는 것만, 최대 20건. */
   search: (q: string, workspaceId: string | null, filters: SearchFilters = {}) => {
@@ -2872,24 +2899,37 @@ export const api = {
     if (status !== 200) fail(status, json);
     return { kind: 'moved', outcome: parseMoveOutcome(json) };
   },
-  /** 저장. 충돌이면 `{ kind: 'conflict', current }`. */
+  /**
+   * 저장. 충돌(409 기준 리비전이 지남, 412 `If-Match`가 맞지 않음)이면 `{ kind: 'conflict', current }`.
+   * `etag`가 강한 값일 때만 `If-Match`로 보낸다(D-77). 없거나 약하면 `base_revision`만으로 판단한다.
+   */
   async saveDocument(
     id: string,
-    input: { requestId: string; baseRevision: number; title: string; body: DocNode },
+    input: {
+      requestId: string;
+      baseRevision: number;
+      title: string;
+      body: DocNode;
+      etag?: string | undefined;
+    },
   ): Promise<
     { kind: 'saved'; document: DocumentView } | { kind: 'conflict'; current: DocumentView }
   > {
-    const { status, json } = await request('PUT', `/api/documents/${encodeURIComponent(id)}`, {
-      request_id: input.requestId,
-      base_revision: input.baseRevision,
-      title: input.title,
-      body: input.body,
-    });
-    if (status === 409 && isRecord(json) && json.current !== undefined) {
-      return { kind: 'conflict', current: parseDocument(rec(json, 'conflict').current) };
-    }
+    const { status, json, etag } = await request(
+      'PUT',
+      `/api/documents/${encodeURIComponent(id)}`,
+      {
+        request_id: input.requestId,
+        base_revision: input.baseRevision,
+        title: input.title,
+        body: input.body,
+      },
+      isStrongEtag(input.etag) ? { 'If-Match': input.etag } : {},
+    );
+    const current = conflictCurrent(status, json);
+    if (current !== undefined) return { kind: 'conflict', current };
     if (status !== 200) fail(status, json);
-    return { kind: 'saved', document: parseDocument(json) };
+    return { kind: 'saved', document: withEtag(parseDocument(json), etag) };
   },
 };
 

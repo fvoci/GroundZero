@@ -81,6 +81,8 @@
 
   // 진행 중이거나 실패한 저장 시도. 내용이 같으면 같은 request_id로 재시도한다.
   let attempt: { requestId: string; snapshot: string } | undefined;
+  // 표현만 바뀐 412에서 한 번 다시 저장했는지(되풀이 방지).
+  let representationRetried = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let destroyed = false;
 
@@ -141,13 +143,25 @@
         baseRevision: server.revision,
         title: title.trim(),
         body,
+        etag: server.etag,
       });
       if (destroyed) return;
       if (result.kind === 'conflict') {
+        if (result.current.revision === server.revision && !representationRetried) {
+          // 412인데 리비전이 그대로다: 내용은 같고 이 사람에게 보이는 표현(권한 표시 등)만 바뀌었다.
+          // 새 ETag로 한 번만 다시 저장한다(D-77). 다시 맞지 않으면 아래의 충돌 화면으로 간다.
+          representationRetried = true;
+          server = result.current;
+          status = 'dirty';
+          void save();
+          return;
+        }
+        representationRetried = false;
         conflict = result.current;
         status = 'conflict';
         return;
       }
+      representationRetried = false;
       attempt = undefined;
       server = result.document;
       onsaved?.(result.document);

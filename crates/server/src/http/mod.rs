@@ -1,5 +1,7 @@
 //! 라우팅과 HTTP 공통 경계: 상태, Origin 검사, 본문 크기 제한, 정적 웹 서빙, OpenAPI 계약.
 
+pub mod cache;
+
 use std::sync::Arc;
 
 use axum::extract::{DefaultBodyLimit, Request, State};
@@ -930,41 +932,25 @@ pub fn router(state: AppState) -> Router {
         ))
         .layer(DefaultBodyLimit::max(body_limit));
 
-    // 정적 웹: 파일이 없으면 index.html을 돌려 SPA 경로(새로고침)를 지원한다.
+    // 정적 웹: 파일이 없으면 index.html을 돌려 SPA 경로(새로고침)를 지원한다. 해시 파일명 자원(`/assets`)과
+    // HWP·HWPX 미리보기 WASM(`/rhwp`, D-76)은 따로 내보내 없는 파일이 SPA 화면(200)이 아니라 404가 되게 한다
+    // (오래 캐시되는 주소에 HTML이 남지 않게). `/rhwp`는 빌드가 만든 br·gzip 사본을 그대로 보낸다.
+    // 캐시 머리글은 맨 바깥 층(`cache::policy`, D-77)이 경로별로 정한다.
     if let Some(dir) = state.config.web_dir.clone() {
         let index = dir.join("index.html");
-        // HWP·HWPX 미리보기 WASM(D-76): 빌드가 만든 br·gzip을 그대로 보내고, 입력 해시 폴더 안의 파일은 바뀌지
-        // 않으므로 오래 캐시한다. 어느 폴더인지 알려 주는 manifest.json만 매번 확인한다.
-        let rhwp = Router::new()
-            .fallback_service(
+        app = app
+            .nest_service("/assets", ServeDir::new(dir.join("assets")))
+            .nest_service(
+                "/rhwp",
                 ServeDir::new(dir.join("rhwp"))
                     .precompressed_br()
                     .precompressed_gzip(),
             )
-            .layer(middleware::from_fn(rhwp_cache));
-        app = app
-            .nest_service("/rhwp", rhwp)
             .fallback_service(ServeDir::new(dir).fallback(ServeFile::new(index)));
     }
 
-    app.with_state(state)
-}
-
-async fn rhwp_cache(request: Request, next: Next) -> Response {
-    let manifest = request.uri().path() == "/manifest.json";
-    let mut response = next.run(request).await;
-    if response.status().is_success() {
-        let value = if manifest {
-            "no-cache"
-        } else {
-            "public, max-age=31536000, immutable"
-        };
-        response.headers_mut().insert(
-            header::CACHE_CONTROL,
-            header::HeaderValue::from_static(value),
-        );
-    }
-    response
+    app.layer(middleware::from_fn(cache::policy))
+        .with_state(state)
 }
 
 #[cfg(test)]

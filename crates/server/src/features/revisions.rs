@@ -7,7 +7,7 @@
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
@@ -17,8 +17,8 @@ use uuid::Uuid;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
-    ConflictBody, Document, SCHEMA_VERSION, access, conflict, load_with_access, to_document,
-    validate_body,
+    ConflictBody, Document, SCHEMA_VERSION, access, conflict, document_reply, load_with_access,
+    to_document, validate_body,
 };
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
@@ -256,9 +256,9 @@ pub async fn restore(
     tx.commit().await?;
     let doc = to_document(row, access);
     if outcome == "conflict" {
-        return Ok(conflict(doc));
+        return conflict(user, doc);
     }
     // 실시간 편집 방이 열려 있으면 저장 없이 닫고 복원된 본문으로 다시 열게 한다(D-70).
     state.collab.reset(id).await;
-    Ok(Json(doc).into_response())
+    document_reply(user, &doc)
 }

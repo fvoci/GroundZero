@@ -131,12 +131,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 문서 조회. 볼 수 없으면 404. */
+        /**
+         * 문서 조회. 볼 수 없으면 404.
+         * @description 강한 ETag를 준다(D-77). `If-None-Match`는 세션과 권한을 확인한 뒤에만 비교하고 같으면 304다. 권한이 철회되면
+         *     404, 로그아웃이면 401이라 이전 ETag로 304를 받지 못한다. 브라우저만 저장하고 매번 재검증한다.
+         */
         get: operations["get"];
         /**
-         * 문서 저장. 충돌 시 409 + 서버 최신본.
-         * @description 순서: 권한 확인 → 행 잠금 → 재시도 판단 → 리비전 비교 → 내용 동일 판단 → 갱신·리비전 기록.
-         *     행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다.
+         * 문서 저장. 충돌 시 409(또는 `If-Match`가 맞지 않으면 412) + 서버 최신본.
+         * @description 순서: 권한 확인 → 행 잠금 → 재시도 판단 → `If-Match`(있으면) → 리비전 비교 → 내용 동일 판단 → 갱신·리비전 기록.
+         *     행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다. `If-Match`는 잠근 행으로 만든 지금
+         *     표현의 ETag와 강하게 비교한다(D-77). 같은 요청의 재시도는 `If-Match`보다 먼저 판단해 멱등 응답을 지킨다.
          */
         put: operations["save"];
         post?: never;
@@ -2535,7 +2540,10 @@ export interface components {
         /** @description 저장 충돌 응답. `current`가 서버 최신본이다. */
         ConflictBody: {
             current: components["schemas"]["Document"];
+            /** @description `conflict`(409, `base_revision`이 지남) 또는 `precondition_failed`(412, `If-Match`가 맞지 않음). */
             error: string;
+            /** @description `current`를 이 사람이 단건 조회했을 때의 ETag(D-77). 서버 최신본을 받아들인 뒤 `If-Match`로 쓴다. */
+            etag: string;
         };
         /** @description 복제 결과. */
         CopiedItem: {
@@ -4700,7 +4708,10 @@ export interface operations {
     get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 앞서 받은 ETag. 같으면 304 */
+                "If-None-Match"?: string | null;
+            };
             path: {
                 document_id: string;
             };
@@ -4710,11 +4721,21 @@ export interface operations {
         responses: {
             200: {
                 headers: {
+                    /** @description 강한 ETag */
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Document"];
                 };
+            };
+            /** @description 바뀌지 않음 */
+            304: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             404: {
                 headers: {
@@ -4729,7 +4750,10 @@ export interface operations {
     save: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 단건 조회의 강한 ETag. 다르면 412 */
+                "If-Match"?: string | null;
+            };
             path: {
                 document_id: string;
             };
@@ -4743,6 +4767,8 @@ export interface operations {
         responses: {
             200: {
                 headers: {
+                    /** @description 저장 뒤 표현의 ETag */
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4774,6 +4800,14 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictBody"];
+                };
+            };
+            412: {
                 headers: {
                     [name: string]: unknown;
                 };

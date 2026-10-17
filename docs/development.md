@@ -882,6 +882,17 @@ HWP·HWPX는 rhwp(`@rhwp/core` 0.8.7, MIT, npm 의존성 없음, WASM 약 11.8 M
 - **남은 것**: wasm-opt로 크기를 더 줄이는 것은 하지 않았다(도구가 하나 더 필요). rustybuzz·ttf-parser 유지 중단 알림은 rhwp가 후속 크레이트로 옮기면 예외를 지운다.
 - **검토 뒤 고침**: build.sh가 받은 소스 안에서 rustc 판을 다시 확인하고 감사 작업 공간을 결과(`audit/`)에 남긴다. `cargo xtask rhwp --audit`이 그 작업 공간으로 권고만 다시 본다(입력이 같아 다시 빌드하지 않는 동안 새 권고를 놓치지 않게, CI `rhwp` job이 매번 실행). 내보내기: ZIP 안 파일 링크를 퍼센트 인코딩(공백·괄호가 든 이름도 링크 유지), PDF도 그림을 내려받을 수 있는지 먼저 보고 못 넣은 그림은 안내 문구로 바꿈, 리비전 목록을 끝까지 넘겨 오래된 리비전도 고를 수 있음, 편집기를 닫으면 "저장하지 않은 편집" 표시를 지움. 웹 단위 테스트 2건 추가.
 
+## 62. ETag·조건부 요청·캐시 범위 (2026-10-17, D-77)
+
+- **캐시 범위**: `crates/server/src/http/cache.rs`의 `policy`가 라우터 맨 바깥 층에서 경로별 `Cache-Control`을 정한다(표는 `docs/self-hosting.md` 7절). `/api`·`/auth`·`/healthz`는 핸들러가 재검증을 허용한 GET·HEAD의 200·304만 `private, no-cache, no-transform`이고 나머지는 핸들러 값과 상관없이 `no-store, no-transform`. `/assets`는 `/rhwp`처럼 따로 내보내 없는 해시 자원이 SPA 화면(200)이 아니라 404(`no-store`)가 된다(오래 캐시되는 주소에 HTML이 남지 않게). 이전의 `rhwp_cache`는 이 층으로 합쳤다.
+- **문서 ETag**: `documents::representation`이 단건 조회 응답 바이트와 사용자 ID로 강한 ETag(SHA-256 앞 16바이트, 따옴표 포함)를 만든다. 조회·저장·복원·충돌이 같은 계산을 쓴다. 바이트를 해시하므로 제목·본문·사용자별 필드(`can_edit`·`can_export` 등)·직렬화 형식이 모두 반영되고, 사용자를 넣어 브라우저에서 사용자를 바꿔도 앞 사람의 검증자로 304가 나지 않는다. 앱은 API를 압축하지 않으므로 압축 변형은 하나(identity)다. `If-None-Match`(약한 비교, `*`·목록)는 세션(401)·권한(404) 확인 뒤에만 본다.
+- **저장 If-Match**: 문서 행을 `FOR UPDATE`로 잠근 뒤 같은 `request_id` 재시도 판단 → `If-Match`(있을 때, 잠근 행으로 만든 지금 표현과 강한 비교, 약한 태그·빈 값은 불일치, `*`는 통과) → `base_revision` 비교 순서. 불일치면 412 `precondition_failed`와 서버 최신본·그 ETag(`ConflictBody.etag`, 409도 같음). 저장·복원 200도 `ETag`를 준다(곧바로 조회한 값과 같음, 테스트로 확인). 실시간 편집의 제목 저장·CRDT·저장 확인은 바꾸지 않았다(`If-Match`를 보내지 않음).
+- **웹**: `api.document`·저장·복원이 응답의 `ETag`를 `DocumentView.etag`에 붙이고, 저장은 강한 값일 때만 `If-Match`를 보낸다(약하거나 없으면 `base_revision`만). 409·412는 같은 충돌 화면(초안 보존). 412인데 리비전이 그대로면(권한 표시만 바뀜) 새 ETag로 한 번만 다시 저장한다. 문서 조회는 브라우저 HTTP 캐시가 `If-None-Match`로 알아서 재검증한다.
+- **CDN 예시**: `deploy/cdn/`의 Cloudflare 캐시 규칙·압축 규칙과 CloudFront 행동 조각. 관리형 정책 ID는 AWS 문서(관리형 캐시 정책·관리형 원본 요청 정책)에서 확인했고, Cloudflare의 Respect Strong ETags·압축과 ETag 약화 표·`no-transform`이면 압축하지 않음·캐시 규칙 겹침(뒤가 이김)은 Cloudflare 문서에서 확인했다. 단위 테스트 `cdn_examples_match_the_scopes`가 예시의 경로·정책이 `cache.rs`의 범위와 맞는지 본다.
+- **검증**: 통합 테스트 `tests/cache.rs` 3건 — 같은 조회 304(강한·`W/`·목록), 압축 요청 유무와 상관없이 같은 바이트·ETag·`Content-Encoding` 없음, 사용자 전환 200·다른 ETag, 변경 뒤 200·새 ETag와 저장 응답 ETag 일치, 권한 철회(멤버 제거) 뒤 이전 ETag로 404, 로그아웃 뒤 401(`Set-Cookie` 유지); 같은 ETag로 동시 저장 → 200 하나·412 하나(412의 최신본은 이긴 쪽, 진 쪽 내용 미저장), 이긴 요청 재시도는 낡은 `If-Match`여도 멱등 200, 약한 `If-Match` 412, `*` 통과, `If-Match` 없이 낡은 기준 409(ETag 포함); 정적 범위(해시 자원 immutable, HTML·SPA·`pptx-frame.js`·manifest `no-cache`, 없는 해시 자원 404·HTML 아님, 모두 `Vary`)와 민감 응답 12종(성공·401·404·로그인 시작(`/auth/login`)·로그아웃·내보내기·반출 ZIP·공개 링크)이 모두 `no-store, no-transform`. 단위 테스트(범위, ETag, 약한/강한 비교, CDN 예시)와 웹 단위 테스트(ETag 보관, 강한 값만 `If-Match`, 412·409 충돌과 ETag).
+- **NOT RUN**: 실제 Cloudflare·CloudFront(승인된 대상·계정 없음). 예시는 문서 확인과 정합성 테스트까지다.
+- **판단**: 문서 단건 조회 말고는 재검증(ETag)을 두지 않고 `no-store`로 둔다(개인 데이터를 브라우저 디스크에 남기지 않음). 문서 JSON은 CDN·프록시에서도 압축 없이 오간다(강한 ETag를 지키기 위한 선택, 문서 크기 한도 안).
+
 ## 참고 자료
 
 - [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict.html)

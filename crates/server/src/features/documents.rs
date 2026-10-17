@@ -12,7 +12,7 @@
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -26,7 +26,8 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::{member_role, validate_title};
 use crate::http::AppState;
-use crate::ids::{DocumentId, ItemId, WorkspaceId};
+use crate::http::cache;
+use crate::ids::{DocumentId, ItemId, UserId, WorkspaceId};
 
 /// 현재 본문 스키마 버전.
 pub const SCHEMA_VERSION: i32 = 1;
@@ -161,8 +162,11 @@ pub struct SaveDocument {
 /// 저장 충돌 응답. `current`가 서버 최신본이다.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ConflictBody {
+    /// `conflict`(409, `base_revision`이 지남) 또는 `precondition_failed`(412, `If-Match`가 맞지 않음).
     pub error: &'static str,
     pub current: Document,
+    /// `current`를 이 사람이 단건 조회했을 때의 ETag(D-77). 서버 최신본을 받아들인 뒤 `If-Match`로 쓴다.
+    pub etag: String,
 }
 
 pub(crate) fn empty_body() -> Value {
@@ -347,7 +351,7 @@ fn check_reference_node(node: &serde_json::Map<String, Value>) -> Result<(), App
     Ok(())
 }
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub(crate) struct DocRow {
     id: DocumentId,
     workspace_id: Option<WorkspaceId>,
@@ -649,45 +653,111 @@ pub async fn shared_with_me(
 // 조회·저장
 // ---------------------------------------------------------------------------
 
-/// 문서 조회. 볼 수 없으면 404.
-#[utoipa::path(get, path = "/api/documents/{document_id}",
-    params(("document_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = Document), (status = 404, body = ErrorBody)), tag = "documents")]
-pub async fn get(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(id): Path<DocumentId>,
-) -> Result<Json<Document>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    let (row, access) = load_with_access(&mut tx, id).await?;
-    tx.commit().await?;
-    Ok(Json(to_document(row, access)))
+/// 문서 표현(D-77): 단건 조회가 내보내는 바이트와 그 강한 ETag. 조회·저장·충돌이 같은 계산을 쓴다.
+pub(crate) fn representation(user: UserId, doc: &Document) -> Result<(Vec<u8>, String), AppError> {
+    let bytes = serde_json::to_vec(doc).map_err(|err| AppError::Io(err.into()))?;
+    let etag = cache::strong_etag(user.0.as_bytes(), &bytes);
+    Ok((bytes, etag))
 }
 
-pub(crate) fn conflict(current: Document) -> Response {
+fn with_etag(mut response: Response, etag: &str) -> Response {
+    if let Ok(value) = HeaderValue::from_str(etag) {
+        response.headers_mut().insert(header::ETAG, value);
+    }
+    response
+}
+
+fn json_bytes(bytes: Vec<u8>) -> Response {
     (
-        StatusCode::CONFLICT,
-        Json(ConflictBody {
-            error: "conflict",
-            current,
-        }),
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        )],
+        bytes,
     )
         .into_response()
 }
 
-/// 문서 저장. 충돌 시 409 + 서버 최신본.
+/// 문서 한 건 응답. 본문은 단건 조회와 같은 바이트이고 `ETag`를 붙인다(저장·복원 결과).
+pub(crate) fn document_reply(user: UserId, doc: &Document) -> Result<Response, AppError> {
+    let (bytes, etag) = representation(user, doc)?;
+    Ok(with_etag(json_bytes(bytes), &etag))
+}
+
+/// 문서 조회. 볼 수 없으면 404.
 ///
-/// 순서: 권한 확인 → 행 잠금 → 재시도 판단 → 리비전 비교 → 내용 동일 판단 → 갱신·리비전 기록.
-/// 행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다.
+/// 강한 ETag를 준다(D-77). `If-None-Match`는 세션과 권한을 확인한 뒤에만 비교하고 같으면 304다. 권한이 철회되면
+/// 404, 로그아웃이면 401이라 이전 ETag로 304를 받지 못한다. 브라우저만 저장하고 매번 재검증한다.
+#[utoipa::path(get, path = "/api/documents/{document_id}",
+    params(("document_id" = String, Path, format = Uuid),
+           ("If-None-Match" = Option<String>, Header, description = "앞서 받은 ETag. 같으면 304")),
+    responses((status = 200, body = Document, headers(("ETag" = String, description = "강한 ETag"))),
+              (status = 304, description = "바뀌지 않음", headers(("ETag" = String))),
+              (status = 404, body = ErrorBody)), tag = "documents")]
+pub async fn get(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<DocumentId>,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let (row, access) = load_with_access(&mut tx, id).await?;
+    tx.commit().await?;
+    let (bytes, etag) = representation(user, &to_document(row, access))?;
+    let response = if cache::none_match(&headers, &etag) {
+        StatusCode::NOT_MODIFIED.into_response()
+    } else {
+        json_bytes(bytes)
+    };
+    let mut response = with_etag(response, &etag);
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static(cache::PRIVATE_REVALIDATE),
+    );
+    Ok(response)
+}
+
+fn conflict_reply(
+    status: StatusCode,
+    error: &'static str,
+    user: UserId,
+    current: Document,
+) -> Result<Response, AppError> {
+    let (_, etag) = representation(user, &current)?;
+    Ok((
+        status,
+        Json(ConflictBody {
+            error,
+            current,
+            etag,
+        }),
+    )
+        .into_response())
+}
+
+/// 409: `base_revision`이 지났다. 서버 최신본과 그 ETag를 준다.
+pub(crate) fn conflict(user: UserId, current: Document) -> Result<Response, AppError> {
+    conflict_reply(StatusCode::CONFLICT, "conflict", user, current)
+}
+
+/// 문서 저장. 충돌 시 409(또는 `If-Match`가 맞지 않으면 412) + 서버 최신본.
+///
+/// 순서: 권한 확인 → 행 잠금 → 재시도 판단 → `If-Match`(있으면) → 리비전 비교 → 내용 동일 판단 → 갱신·리비전 기록.
+/// 행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다. `If-Match`는 잠근 행으로 만든 지금
+/// 표현의 ETag와 강하게 비교한다(D-77). 같은 요청의 재시도는 `If-Match`보다 먼저 판단해 멱등 응답을 지킨다.
 #[utoipa::path(put, path = "/api/documents/{document_id}",
-    params(("document_id" = String, Path, format = Uuid)), request_body = SaveDocument,
-    responses((status = 200, body = Document), (status = 400, body = ErrorBody),
+    params(("document_id" = String, Path, format = Uuid),
+           ("If-Match" = Option<String>, Header, description = "단건 조회의 강한 ETag. 다르면 412")),
+    request_body = SaveDocument,
+    responses((status = 200, body = Document, headers(("ETag" = String, description = "저장 뒤 표현의 ETag"))),
+              (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 409, body = ConflictBody)), tag = "documents")]
+              (status = 409, body = ConflictBody), (status = 412, body = ConflictBody)), tag = "documents")]
 pub async fn save(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
+    headers: HeaderMap,
     Json(input): Json<SaveDocument>,
 ) -> Result<Response, AppError> {
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
@@ -727,21 +797,34 @@ pub async fn save(
     if let Some((revision, None)) = replay {
         tx.commit().await?;
         let doc = to_document(current, access);
-        return Ok(if doc.revision == revision {
-            Json(doc).into_response()
+        return if doc.revision == revision {
+            document_reply(user, &doc)
         } else {
-            conflict(doc)
-        });
+            conflict(user, doc)
+        };
     }
 
+    if headers.contains_key(header::IF_MATCH) {
+        let now = to_document(current.clone(), access);
+        let (_, etag) = representation(user, &now)?;
+        if cache::if_match(&headers, &etag) == Some(false) {
+            tx.commit().await?;
+            return conflict_reply(
+                StatusCode::PRECONDITION_FAILED,
+                "precondition_failed",
+                user,
+                now,
+            );
+        }
+    }
     if current.revision != input.base_revision {
         tx.commit().await?;
-        return Ok(conflict(to_document(current, access)));
+        return conflict(user, to_document(current, access));
     }
     // 내용이 같으면 새 리비전을 만들지 않는다. JSON 객체 비교는 키 순서와 무관하다.
     if current.title == title && current.body == input.body {
         tx.commit().await?;
-        return Ok(Json(to_document(current, access)).into_response());
+        return document_reply(user, &to_document(current, access));
     }
     // 실시간 편집 중이면 본문은 실시간 연결만 고친다(두 길로 본문이 갈라지지 않게). 제목은 여기서 바꾼다.
     // 워크스페이스 행을 공유 잠금하고 다시 읽어, 켜기·끄기와 엇갈려 꺼진 줄 알고 쓴 본문이 켜진 뒤 들어오지 않게 한다.
@@ -757,7 +840,7 @@ pub async fn save(
 
     let row = write_revision(&mut tx, id, &title, &input.body, input.request_id).await?;
     tx.commit().await?;
-    Ok(Json(to_document(row, access)).into_response())
+    document_reply(user, &to_document(row, access))
 }
 
 /// 저장의 끝부분: 문서 행을 새 리비전으로 바꾸고 리비전·링크·언급을 기록한다. 저장 API와 실시간 편집의

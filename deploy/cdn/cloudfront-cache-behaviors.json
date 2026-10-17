@@ -1,0 +1,96 @@
+{
+  "Comment": "fvoci cache behaviors (D-77): a fragment of a CloudFront DistributionConfig. Origin id fvoci-app is the app (HTTPS). Managed policies: CachingDisabled 4135ea2d-6df8-44a3-9df3-4b5a84be39ad, CachingOptimized 658327ea-f89d-4fab-a63d-7e88639e58f6, AllViewer 216adef6-5c7f-47e4-b989-5492eafa07d3 (all headers incl. Cookie, Authorization, Origin, If-Match, If-None-Match and WebSocket headers; all cookies; all query strings). Behaviors are matched in order.",
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "fvoci-app",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "AllowedMethods": {
+      "Quantity": 3,
+      "Items": ["GET", "HEAD", "OPTIONS"],
+      "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+    },
+    "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+    "OriginRequestPolicyId": "216adef6-5c7f-47e4-b989-5492eafa07d3",
+    "Compress": false
+  },
+  "CacheBehaviors": {
+    "Quantity": 6,
+    "Items": [
+      {
+        "PathPattern": "/rhwp/manifest.json",
+        "TargetOriginId": "fvoci-app",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "AllowedMethods": {
+          "Quantity": 2,
+          "Items": ["GET", "HEAD"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+        "OriginRequestPolicyId": "216adef6-5c7f-47e4-b989-5492eafa07d3",
+        "Compress": false
+      },
+      {
+        "PathPattern": "/assets/*",
+        "TargetOriginId": "fvoci-app",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "AllowedMethods": {
+          "Quantity": 2,
+          "Items": ["GET", "HEAD"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+        "Compress": true
+      },
+      {
+        "PathPattern": "/rhwp/*",
+        "TargetOriginId": "fvoci-app",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "AllowedMethods": {
+          "Quantity": 2,
+          "Items": ["GET", "HEAD"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+        "Compress": true
+      },
+      {
+        "PathPattern": "/api/*",
+        "TargetOriginId": "fvoci-app",
+        "ViewerProtocolPolicy": "https-only",
+        "AllowedMethods": {
+          "Quantity": 7,
+          "Items": ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+        "OriginRequestPolicyId": "216adef6-5c7f-47e4-b989-5492eafa07d3",
+        "Compress": false
+      },
+      {
+        "PathPattern": "/auth/*",
+        "TargetOriginId": "fvoci-app",
+        "ViewerProtocolPolicy": "https-only",
+        "AllowedMethods": {
+          "Quantity": 7,
+          "Items": ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+        "OriginRequestPolicyId": "216adef6-5c7f-47e4-b989-5492eafa07d3",
+        "Compress": false
+      },
+      {
+        "PathPattern": "/healthz",
+        "TargetOriginId": "fvoci-app",
+        "ViewerProtocolPolicy": "https-only",
+        "AllowedMethods": {
+          "Quantity": 2,
+          "Items": ["GET", "HEAD"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+        "OriginRequestPolicyId": "216adef6-5c7f-47e4-b989-5492eafa07d3",
+        "Compress": false
+      }
+    ]
+  }
+}

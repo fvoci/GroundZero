@@ -98,7 +98,26 @@ git pull && docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d
 
 새 마이그레이션은 앱이 뜨기 전에 `migrate`가 적용한다. 올리기 전에 백업을 만든다. 되돌릴 때는 이전 릴리스로 새로 설치한 뒤 그 릴리스에서 만든 백업을 복구한다(마이그레이션은 되돌리지 않는다).
 
-## 7. 알아 둘 것
+## 7. 캐시와 CDN(D-77)
+
+앱이 경로마다 `Cache-Control`을 정하므로 CDN 없이 역방향 프록시만 두어도, Cloudflare·CloudFront를 앞에 두어도 같은 규칙으로 동작한다. 프록시·CDN은 이 머리글을 바꾸지 않아야 한다.
+
+| 경로                                                                                            | 앱이 보내는 값                                                 | 뜻                                                                      |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `/assets/*`, `/rhwp/<입력 해시>/*`                                                              | `public, max-age=31536000, immutable`, `Vary: Accept-Encoding` | 파일 이름에 해시가 있어 바뀌지 않는다. 없는 파일은 404(SPA 화면이 아님) |
+| `/`, SPA 경로, `/pptx-frame.js`, `/rhwp/manifest.json`                                          | `no-cache`, `Vary: Accept-Encoding`                            | 매번 재검증                                                             |
+| `GET /api/documents/{id}`의 200·304                                                             | `private, no-cache, no-transform` + 강한 `ETag`                | 브라우저만 저장, 매번 세션·권한 확인 뒤 같으면 304                      |
+| 그 밖의 `/api/*`, `/auth/*`, `/healthz`(오류·로그인·로그아웃·내보내기·첨부·익명 공유 링크 포함) | `no-store, no-transform`                                       | 어디에도 남기지 않는다                                                  |
+
+- **조건부 요청**: 문서 저장(`PUT /api/documents/{id}`)은 `If-Match`(단건 조회의 ETag)를 받아 잠근 행 기준으로 비교하고, 다르면 412와 서버 최신본을 준다(편집 화면은 내 초안을 지킨다). `If-Match`가 없으면 기존 `base_revision`(409)으로 판단한다. 약한 ETag(`W/"…"`)는 `If-Match`에서 맞지 않으므로 프록시·CDN이 API 응답을 압축하거나 고치면 안 된다. 앱은 API 응답을 압축하지 않고 `no-transform`을 붙인다.
+- **역방향 프록시(CDN 없음)**: 앞의 표대로 머리글을 그대로 넘긴다. `/api`·`/auth`에 압축(`encode`·`gzip on`)을 켜지 않는다(nginx `gzip`은 강한 ETag를 약하게 바꾼다). 메서드·`Cookie`·`Set-Cookie`·`Origin`·`If-Match`·`If-None-Match`와 304·412 응답, 웹소켓 업그레이드를 그대로 넘긴다.
+- **Cloudflare**: `deploy/cdn/cloudflare-cache-rules.json`(캐시 규칙)과 `cloudflare-compression-rules.json`(압축 규칙)이 예시다. 민감 경로를 Bypass하는 규칙을 **맨 뒤**에 둔다(캐시 규칙은 겹쳐 적용되고 뒤의 규칙이 이긴다. 페이지 규칙의 Cache Everything은 캐시 규칙보다 약하다). 그 규칙에서 Respect Strong ETags를 켜고 브라우저 TTL은 원본을 따른다. 해시 자원만 캐시하고 Cloudflare가 다시 압축하게 둔다. 영역 전체의 Browser Cache TTL 덮어쓰기와 Cache Response Rules로 민감 경로를 캐시하게 만들지 않는다. 앱 주소에는 Rocket Loader·Email Obfuscation·Automatic HTTPS Rewrites를 켜지 않는다(본문을 고침). 네트워크 설정의 WebSockets를 켠다. 업로드 조각은 요청마다 `FVOCI_UPLOAD_CHUNK_BYTES`(기본 8 MiB, 최대 64 MiB)이므로 요금제의 요청 본문 한도보다 작게 둔다(한도는 Cloudflare 문서에서 지금 값을 확인).
+- **CloudFront**: `deploy/cdn/cloudfront-cache-behaviors.json`이 배포 설정의 행동 부분 예시다. `/api/*`·`/auth/*`·`/healthz`와 기본 행동(HTML)은 관리형 CachingDisabled + AllViewer(모든 머리글·쿠키·쿼리 전달: `Cookie`·`Authorization`·`Origin`·`If-Match`·`If-None-Match`·웹소켓 머리글), 쓰기 메서드 허용, 압축 끔. `/assets/*`·`/rhwp/*`만 CachingOptimized(최소 TTL 1초라 `no-cache` 응답도 1초 남으므로 HTML·manifest에는 쓰지 않는다). 원본이 자기 이름의 `Host`를 요구하면 AllViewerExceptHostHeader를 쓴다. `FVOCI_PUBLIC_URL`은 CloudFront 주소(앱이 `Origin`을 이것과 비교).
+- **격리를 캐시 키로 대신하지 않는다**: 사용자 쿠키를 캐시 키에 넣어 개인 응답을 나눠 캐시하는 설정을 쓰지 않는다. 민감 경로는 캐시하지 않는 것이 규칙이다.
+- **세 가지 ETag·체크섬을 섞지 않는다**: 객체 저장소(R2·S3)의 객체·조각 ETag는 저장소가 조각을 맞추는 데만 쓰고(앱 밖으로 내보내지 않음), 파일 무결성은 조각마다 `x-content-sha256`과 완성 파일의 SHA-256으로 확인하며, API의 ETag는 JSON 표현의 검증자다. 비공개 첨부는 앱이 권한을 확인하고 내려주며(`no-store`) 영구 공개 URL로 바꾸지 않는다. 업로드 완료 단계는 파일을 다시 보내지 않는다.
+- **확인**: `curl -sI https://<주소>/assets/<파일>`은 `immutable`, `curl -sI https://<주소>/api/me`는 `no-store`와 CDN의 캐시 상태가 우회(Cloudflare `cf-cache-status: BYPASS`/`DYNAMIC`, CloudFront `x-cache: Miss from cloudfront`)여야 한다. 실제 CDN 계정 설정·유료 서비스 생성은 운영자가 따로 정한다.
+
+## 8. 알아 둘 것
 
 - 비밀 값은 `.env`에만 있고 이미지·로그에 쓰지 않는다. `.env`는 소유자만 읽게 둔다.
 - Meilisearch는 사용 통계 전송을 끈 운영 모드로 뜬다. 색인이 지워지면 앱이 다시 만든다.
