@@ -6,6 +6,7 @@
   import type { ItemView, TaskView } from '$lib/api/client';
   import { api, ApiError, TASK_STATUSES } from '$lib/api/client';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
+  import TaskCsvImport from './TaskCsvImport.svelte';
   import { itemPath, itemTaskPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -263,6 +264,7 @@
         await reload();
       }}
     />
+    <TaskCsvImport itemId={item.id} onimported={reload} />
   {/if}
   <p class="sr-only" aria-live="polite">{status}</p>
 </section>
