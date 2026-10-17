@@ -16,9 +16,9 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, audit, documents, events, export, files, home, members, modules, public_links,
-    recurrence, references, revisions, schedule, search_api, tasks, time_tracking, trash,
-    workspaces,
+    accounts, audit, courses, documents, events, export, files, home, members, modules,
+    public_links, recurrence, references, revisions, schedule, search_api, tasks, time_tracking,
+    trash, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -208,6 +208,13 @@ async fn api_not_found() -> AppError {
         export::mine,
         audit::workspace,
         audit::mine,
+        courses::get,
+        courses::set_details,
+        courses::add_episodes,
+        courses::update_episode,
+        courses::delete_episode,
+        courses::set_progress,
+        courses::participants,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -370,6 +377,16 @@ async fn api_not_found() -> AppError {
         files::RenameFile,
         files::FileTrashed,
         audit::AuditEntry,
+        courses::CourseDetails,
+        courses::MyProgress,
+        courses::Episode,
+        courses::Course,
+        courses::NewEpisode,
+        courses::AddEpisodes,
+        courses::EpisodesAdded,
+        courses::UpdateEpisode,
+        courses::SetProgress,
+        courses::Participant,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -412,6 +429,7 @@ async fn api_not_found() -> AppError {
         (name = "files", description = "파일 첨부·버전·업로드"),
         (name = "export", description = "데이터 반출"),
         (name = "audit", description = "감사 기록"),
+        (name = "courses", description = "강의: 강좌·회차·개인별 진도"),
     )
 )]
 pub struct ApiDoc;
@@ -451,6 +469,23 @@ pub fn router(state: AppState) -> Router {
         .route("/me/export", get(export::mine))
         .route("/workspaces/{workspace_id}/audit", get(audit::workspace))
         .route("/me/audit", get(audit::mine))
+        .route(
+            "/items/{item_id}/course",
+            get(courses::get).put(courses::set_details),
+        )
+        .route(
+            "/items/{item_id}/course/participants",
+            get(courses::participants),
+        )
+        .route("/items/{item_id}/episodes", post(courses::add_episodes))
+        .route(
+            "/episodes/{episode_id}",
+            put(courses::update_episode).delete(courses::delete_episode),
+        )
+        .route(
+            "/episodes/{episode_id}/progress",
+            put(courses::set_progress),
+        )
         .route(
             "/me/deleted-workspaces/{workspace_id}",
             delete(workspaces::purge),

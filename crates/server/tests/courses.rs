@@ -1,0 +1,343 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "integration test crate: every item is test code; failures must panic"
+)]
+//! 강의 모듈 (D-37, D-32): 강좌 정보·회차·CSV식 일괄 등록·개인별 진도·함께 수강하는 사람의 집계.
+
+mod common;
+
+use axum::Router;
+use axum::http::{Method, StatusCode};
+use common::{TestUser, add_member, create_workspace, login, new_request_id, send};
+use serde_json::{Value, json};
+
+async fn course(app: &Router, admin: &TestUser, ws: &str) -> String {
+    let m = send(
+        app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "course", "name": "강의", "key": "LEC" })),
+    )
+    .await;
+    assert_eq!(m.status, StatusCode::CREATED, "{:?}", m.json);
+    let i = send(
+        app,
+        Method::POST,
+        &format!("/api/modules/{}/items", m.json["id"].as_str().unwrap()),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "title": "선형대수" })),
+    )
+    .await;
+    let id = i.json["id"].as_str().unwrap().to_owned();
+    // 함께 수강하도록 워크스페이스에 공개한다.
+    let r = send(
+        app,
+        Method::PUT,
+        &format!("/api/items/{id}"),
+        Some(admin),
+        Some(json!({ "title": "선형대수", "description": "", "visibility": "workspace" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    id
+}
+
+async fn get(app: &Router, user: &TestUser, item: &str) -> Value {
+    let r = send(
+        app,
+        Method::GET,
+        &format!("/api/items/{item}/course"),
+        Some(user),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    r.json
+}
+
+async fn progress(app: &Router, user: &TestUser, episode: &Value, body: Value) -> StatusCode {
+    send(
+        app,
+        Method::PUT,
+        &format!("/api/episodes/{}/progress", episode["id"].as_str().unwrap()),
+        Some(user),
+        Some(body),
+    )
+    .await
+    .status
+}
+
+#[tokio::test]
+async fn course_episodes_and_personal_progress() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "강의").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let outsider = login(&state, "outsider").await;
+    let item = course(&app, &admin, &ws).await;
+
+    // 강좌 정보(쓸 수 있는 사람).
+    let details = json!({ "subject": "수학", "instructor": "김강사", "platform": "온라인", "url": "https://example.test",
+                          "textbook": "교재", "starts_on": "2026-10-01", "expires_on": "2027-01-31",
+                          "target_on": "2026-12-31" });
+    let uri = format!("/api/items/{item}/course");
+    assert_eq!(
+        send(
+            &app,
+            Method::PUT,
+            &uri,
+            Some(&reader),
+            Some(details.clone())
+        )
+        .await
+        .status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        send(
+            &app,
+            Method::PUT,
+            &uri,
+            Some(&writer),
+            Some(details.clone())
+        )
+        .await
+        .status,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        send(&app, Method::GET, &uri, Some(&outsider), None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+
+    // CSV 일괄 등록과 같은 길: 여러 회차를 한 번에, 같은 요청 id는 한 번만.
+    let first = new_request_id();
+    let rows = json!({ "episodes": [
+        { "request_id": first, "title": "벡터", "chapter": "1장", "duration_seconds": 1200, "planned_on": "2026-10-10" },
+        { "request_id": new_request_id(), "title": "행렬", "chapter": "1장", "duration_seconds": 1800, "planned_on": "2026-10-20" },
+        { "request_id": new_request_id(), "title": "행렬식", "chapter": "2장", "duration_seconds": 600 }
+    ]});
+    let episodes_uri = format!("/api/items/{item}/episodes");
+    let added = send(
+        &app,
+        Method::POST,
+        &episodes_uri,
+        Some(&writer),
+        Some(rows.clone()),
+    )
+    .await;
+    assert_eq!(added.json["added"], 3, "{:?}", added.json);
+    let again = send(
+        &app,
+        Method::POST,
+        &episodes_uri,
+        Some(&writer),
+        Some(json!({ "episodes": [
+        { "request_id": first, "title": "벡터" }] })),
+    )
+    .await;
+    assert_eq!(again.json["added"], 0);
+    assert_eq!(
+        send(
+            &app,
+            Method::POST,
+            &episodes_uri,
+            Some(&writer),
+            Some(json!({ "episodes": [
+            { "request_id": new_request_id(), "title": "  " }] }))
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        send(
+            &app,
+            Method::POST,
+            &episodes_uri,
+            Some(&reader),
+            Some(json!({ "episodes": [
+            { "request_id": new_request_id(), "title": "몰래" }] }))
+        )
+        .await
+        .status,
+        StatusCode::FORBIDDEN
+    );
+    let view = get(&app, &reader, &item).await;
+    assert_eq!(view["details"]["instructor"], "김강사");
+    assert_eq!(view["can_write"], false);
+    let eps = view["episodes"].as_array().unwrap().clone();
+    assert_eq!(
+        eps.iter()
+            .map(|e| e["number"].as_i64().unwrap())
+            .collect::<Vec<_>>(),
+        [1, 2, 3]
+    );
+    assert_eq!(eps[0]["mine"]["status"], "not_started");
+
+    // 진도는 사람마다(읽기만 하는 사람도 자기 진도는 남긴다). 다시 보아 완료해도 완료는 한 번.
+    assert_eq!(
+        progress(&app, &reader, &eps[0], json!({ "status": "done" })).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        progress(
+            &app,
+            &reader,
+            &eps[0],
+            json!({ "status": "in_progress", "last_position_seconds": 300,
+                                                        "note": "다시 보기" })
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        progress(
+            &app,
+            &reader,
+            &eps[0],
+            json!({ "status": "done", "note": "다시 보기" })
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        progress(
+            &app,
+            &reader,
+            &eps[1],
+            json!({ "status": "in_progress", "planned_on": "2026-10-25" })
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        progress(&app, &outsider, &eps[1], json!({ "status": "done" })).await,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        progress(&app, &reader, &eps[1], json!({ "status": "finished" })).await,
+        StatusCode::BAD_REQUEST
+    );
+    let mine = get(&app, &reader, &item).await;
+    assert_eq!(mine["episodes"][0]["mine"]["status"], "done");
+    assert_eq!(mine["episodes"][0]["mine"]["watch_count"], 2);
+    assert_eq!(mine["episodes"][0]["mine"]["note"], "다시 보기");
+    assert_eq!(mine["episodes"][1]["mine"]["planned_on"], "2026-10-25");
+    // 다른 사람에게는 내 진도·메모가 보이지 않는다.
+    let theirs = get(&app, &writer, &item).await;
+    assert_eq!(theirs["episodes"][0]["mine"]["status"], "not_started");
+    assert_eq!(theirs["episodes"][0]["mine"]["note"], "");
+
+    // 함께 수강하는 사람의 진도는 집계만(완료 1, 수강 중 1, 밀린 회차: 행렬식은 계획일이 없음).
+    let parts = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{item}/course/participants?today=2026-10-30"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert_eq!(parts.status, StatusCode::OK, "{:?}", parts.json);
+    let p = parts
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["display_name"] == "reader")
+        .unwrap()
+        .clone();
+    assert_eq!(p["done"], 1);
+    assert_eq!(p["in_progress"], 1);
+    assert_eq!(p["overdue"], 1);
+    assert_eq!(p["done_seconds"], 1200);
+    assert!(p.get("note").is_none());
+
+    // 회차를 시간 기록 대상으로 고를 수 있다.
+    let entry = send(
+        &app,
+        Method::POST,
+        "/api/me/time-entries",
+        Some(&reader),
+        Some(json!({ "request_id": new_request_id(), "started_at": "2026-10-20T09:00:00+09:00",
+                     "ended_at": "2026-10-20T09:20:00+09:00", "paused_seconds": 0, "kind": "lecture",
+                     "memo": "", "target": { "kind": "episode", "id": eps[1]["id"] } })),
+    )
+    .await;
+    assert_eq!(entry.status, StatusCode::CREATED, "{:?}", entry.json);
+    assert!(
+        entry.json["target"]["label"]
+            .as_str()
+            .unwrap()
+            .contains("행렬"),
+        "{:?}",
+        entry.json
+    );
+
+    // 회차 고치기·지우기(쓸 수 있는 사람). 지우면 그 회차의 진도도 사라진다.
+    let ep = |e: &Value| format!("/api/episodes/{}", e["id"].as_str().unwrap());
+    assert_eq!(
+        send(
+            &app,
+            Method::PUT,
+            &ep(&eps[2]),
+            Some(&writer),
+            Some(json!({ "number": 3, "title": "행렬식과 역행렬", "duration_seconds": 900 }))
+        )
+        .await
+        .status,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        send(&app, Method::DELETE, &ep(&eps[0]), Some(&reader), None)
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        send(&app, Method::DELETE, &ep(&eps[0]), Some(&writer), None)
+            .await
+            .status,
+        StatusCode::NO_CONTENT
+    );
+    let after = get(&app, &reader, &item).await;
+    assert_eq!(after["episodes"].as_array().unwrap().len(), 2);
+    assert_eq!(after["episodes"][1]["title"], "행렬식과 역행렬");
+    // 강의가 아닌 항목은 강좌가 아니다.
+    let m = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "PRJ" }),
+        ),
+    )
+    .await;
+    let other = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", m.json["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "프로젝트" })),
+    )
+    .await;
+    assert_eq!(
+        send(
+            &app,
+            Method::GET,
+            &format!("/api/items/{}/course", other.json["id"].as_str().unwrap()),
+            Some(&admin),
+            None
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+}

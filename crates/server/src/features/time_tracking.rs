@@ -69,6 +69,8 @@ pub enum TargetKind {
     Task,
     Document,
     Item,
+    /// 강의 회차(D-32).
+    Episode,
 }
 
 impl TargetKind {
@@ -77,6 +79,7 @@ impl TargetKind {
             Self::Task => "task",
             Self::Document => "document",
             Self::Item => "item",
+            Self::Episode => "episode",
         }
     }
 
@@ -85,6 +88,7 @@ impl TargetKind {
             "task" => Some(Self::Task),
             "document" => Some(Self::Document),
             "item" => Some(Self::Item),
+            "episode" => Some(Self::Episode),
             _ => None,
         }
     }

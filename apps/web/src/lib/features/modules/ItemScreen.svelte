@@ -7,6 +7,7 @@
   import type { ItemView, SummaryView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
+  import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
   import { forgetReferences } from '$lib/features/references/resolver';
@@ -205,6 +206,10 @@
     {#if saved}<p class="text-sm" role="status">저장했습니다.</p>{/if}
     {#if formError !== undefined}
       <p class="text-sm text-destructive" role="alert">{formError}</p>
+    {/if}
+
+    {#if mod?.kind === 'course'}
+      <CoursePanel itemId={current.id} />
     {/if}
 
     <AttachmentsPanel target={{ kind: 'item', id: current.id }} canWrite={canEdit} />

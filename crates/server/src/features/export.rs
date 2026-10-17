@@ -222,6 +222,12 @@ SELECT json_build_object(
   'task_series', (SELECT coalesce(json_agg(s), '[]') FROM (SELECT * FROM task_series WHERE workspace_id = $1) s),
   'events', (SELECT coalesce(json_agg(e ORDER BY e.created_at), '[]') FROM (
       SELECT * FROM events WHERE workspace_id = $1 AND deleted_at IS NULL) e),
+  'course_details', (SELECT coalesce(json_agg(c), '[]') FROM (
+      SELECT cd.* FROM course_details cd JOIN items it ON it.id = cd.item_id
+      WHERE cd.workspace_id = $1 AND it.deleted_at IS NULL) c),
+  'course_episodes', (SELECT coalesce(json_agg(c ORDER BY c.item_id, c.number), '[]') FROM (
+      SELECT ce.* FROM course_episodes ce JOIN items it ON it.id = ce.item_id
+      WHERE ce.workspace_id = $1 AND it.deleted_at IS NULL) c),
   'files', (SELECT coalesce(json_agg(f ORDER BY f.created_at), '[]') FROM (
       SELECT fl.id, fl.name, fl.document_id, fl.item_id, fl.current_version, fl.created_at,
              (SELECT json_agg(json_build_object('version', v.version, 'size', v.size, 'sha256', v.sha256,
@@ -302,6 +308,8 @@ SELECT json_build_object(
              created_at, updated_at
       FROM time_entries WHERE user_id = $1 AND deleted_at IS NULL) t),
   'marks', (SELECT coalesce(json_agg(m), '[]') FROM (SELECT * FROM user_marks WHERE user_id = $1) m),
+  'episode_progress', (SELECT coalesce(json_agg(p), '[]') FROM (
+      SELECT * FROM episode_progress WHERE user_id = $1) p),
   'audit_log', (SELECT coalesce(json_agg(a ORDER BY a.created_at), '[]') FROM (
       SELECT * FROM audit_log WHERE owner_user_id = $1 AND workspace_id IS NULL) a)
 )";

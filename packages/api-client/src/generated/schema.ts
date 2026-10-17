@@ -290,6 +290,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/episodes/{episode_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 회차 고치기(쓸 수 있는 사람). */
+        put: operations["update_episode"];
+        post?: never;
+        /** 회차 지우기(쓸 수 있는 사람). 모든 사람의 그 회차 진도도 지워진다. */
+        delete: operations["delete_episode"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/episodes/{episode_id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 내 진도 바꾸기(강좌를 볼 수 있으면 누구나 자기 것). 완료는 직접 표시한다. */
+        put: operations["set_episode_progress"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/events/{event_id}": {
         parameters: {
             query?: never;
@@ -569,6 +604,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/course": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 강좌(볼 수 있는 사람). 강의 모듈의 항목이 아니면 404. */
+        get: operations["get_course"];
+        /** 강좌 정보 고치기(쓸 수 있는 사람). */
+        put: operations["set_course_details"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/course/participants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 함께 수강하는 사람들의 진도 집계(볼 수 있는 사람). */
+        get: operations["course_participants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/documents": {
         parameters: {
             query?: never;
@@ -581,6 +651,23 @@ export interface paths {
         put?: never;
         /** 항목 아래 문서 생성(항목 쓰기 권한). 모듈 번호열에서 번호를 받는다. */
         post: operations["create_item_document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/episodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 회차 추가(쓸 수 있는 사람). 직접 입력과 CSV 일괄 등록이 같은 길을 쓴다. */
+        post: operations["add_episodes"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1823,6 +1910,10 @@ export interface components {
             /** Format: uuid */
             request_id: string;
         };
+        /** @description 회차 여러 개 추가(직접 입력·CSV 일괄 등록, 최대 1000개). */
+        AddEpisodes: {
+            episodes: components["schemas"]["NewEpisode"][];
+        };
         /** @description 담당자. */
         Assignee: {
             display_name: string;
@@ -1901,6 +1992,33 @@ export interface components {
             request_id: string;
             target_workspace_id?: null | components["schemas"]["WorkspaceId"];
             title: string;
+        };
+        /** @description 강좌: 정보·회차(번호순)·내 진도. */
+        Course: {
+            /** @description 강좌 정보·회차를 고칠 수 있는지(진도는 볼 수 있으면 누구나 자기 것). */
+            can_write: boolean;
+            details: components["schemas"]["CourseDetails"];
+            episodes: components["schemas"]["Episode"][];
+        };
+        /** @description 강좌 정보. */
+        CourseDetails: {
+            /**
+             * Format: date
+             * @description 수강권 만료일.
+             */
+            expires_on?: string | null;
+            instructor?: string;
+            platform?: string;
+            /** Format: date */
+            starts_on?: string | null;
+            subject?: string;
+            /**
+             * Format: date
+             * @description 목표 완료일.
+             */
+            target_on?: string | null;
+            textbook?: string;
+            url?: string;
         };
         /** @description 문서 생성 요청. */
         CreateDocument: {
@@ -2086,6 +2204,30 @@ export interface components {
             /** @description RFC 3339. */
             started_at: string;
             target?: null | components["schemas"]["TargetInput"];
+        };
+        /** @description 회차. */
+        Episode: {
+            chapter: string;
+            /** Format: int32 */
+            duration_seconds: number;
+            /** Format: uuid */
+            id: string;
+            materials: string;
+            mine: components["schemas"]["MyProgress"];
+            /** Format: int32 */
+            number: number;
+            /**
+             * Format: date
+             * @description 공통 계획일.
+             */
+            planned_on?: string | null;
+            title: string;
+            url: string;
+        };
+        /** @description 추가한 수(같은 요청 id로 이미 있던 것은 빠짐). */
+        EpisodesAdded: {
+            /** Format: int32 */
+            added: number;
         };
         /** @description 오류 응답 본문. */
         ErrorBody: {
@@ -2421,12 +2563,54 @@ export interface components {
             before_id?: string | null;
             status: components["schemas"]["TaskStatus"];
         };
+        /** @description 내 진도. */
+        MyProgress: {
+            /**
+             * Format: date
+             * @description 처음 완료한 날.
+             */
+            completed_on?: string | null;
+            /** Format: int32 */
+            last_position_seconds?: number | null;
+            /** @description 개인 메모(나만 봄). */
+            note: string;
+            /**
+             * Format: date
+             * @description 내 계획일(없으면 공통 계획일).
+             */
+            planned_on?: string | null;
+            /** @description `not_started`·`in_progress`·`done`. */
+            status: string;
+            /**
+             * Format: int32
+             * @description 완료로 표시한 횟수(다시 보기 포함). 완료 회차 수는 한 번만 센다.
+             */
+            watch_count: number;
+        };
         /** @description 덧붙일 체크리스트 항목. */
         NewChecklistItem: {
             checked?: boolean;
             /** Format: uuid */
             request_id: string;
             text: string;
+        };
+        /** @description 추가할 회차. */
+        NewEpisode: {
+            chapter?: string;
+            /** Format: int32 */
+            duration_seconds?: number;
+            materials?: string;
+            /**
+             * Format: int32
+             * @description 없으면 마지막 다음 번호.
+             */
+            number?: number | null;
+            /** Format: date */
+            planned_on?: string | null;
+            /** Format: uuid */
+            request_id: string;
+            title: string;
+            url?: string;
         };
         /** @description 알림. 지금 볼 수 있는 문서에 대한 것만 나온다. */
         Notification: {
@@ -2448,6 +2632,22 @@ export interface components {
         /** @description 인계 제안 요청. */
         OfferOwnership: {
             to_user: components["schemas"]["UserId"];
+        };
+        /** @description 함께 수강하는 사람의 진도 집계(메모·위치·시간은 없음). */
+        Participant: {
+            display_name: string;
+            /** Format: int32 */
+            done: number;
+            /** Format: int64 */
+            done_seconds: number;
+            /** Format: int32 */
+            in_progress: number;
+            /**
+             * Format: int32
+             * @description 계획일이 지났는데 완료하지 않은 회차 수.
+             */
+            overdue: number;
+            user_id: components["schemas"]["UserId"];
         };
         /** @description 아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다. */
         ProjectedTask: {
@@ -2657,6 +2857,16 @@ export interface components {
             before_id?: null | components["schemas"]["DocumentId"];
             parent_id?: null | components["schemas"]["DocumentId"];
         };
+        /** @description 내 진도 바꾸기. */
+        SetProgress: {
+            /** Format: int32 */
+            last_position_seconds?: number | null;
+            note?: string;
+            /** Format: date */
+            planned_on?: string | null;
+            /** @description `not_started`·`in_progress`·`done`. */
+            status: string;
+        };
         /** @description 휴지통 보존 기간. */
         SetRetention: {
             /**
@@ -2772,7 +2982,7 @@ export interface components {
          * @description 연결 대상 종류.
          * @enum {string}
          */
-        TargetKind: "task" | "document" | "item";
+        TargetKind: "task" | "document" | "item" | "episode";
         /** @description 업무. */
         Task: {
             access: components["schemas"]["Access"];
@@ -2986,6 +3196,19 @@ export interface components {
         UpdateEntry: components["schemas"]["EntryInput"] & {
             /** Format: int32 */
             base_version: number;
+        };
+        /** @description 회차 고치기. */
+        UpdateEpisode: {
+            chapter?: string;
+            /** Format: int32 */
+            duration_seconds?: number;
+            materials?: string;
+            /** Format: int32 */
+            number: number;
+            /** Format: date */
+            planned_on?: string | null;
+            title: string;
+            url?: string;
         };
         /** @description 일정 고치기. `base_version`이 지났으면 409와 서버 최신본. */
         UpdateEvent: components["schemas"]["EventInput"] & {
@@ -3955,6 +4178,135 @@ export interface operations {
             };
         };
     };
+    update_episode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                episode_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEpisode"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_episode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                episode_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_episode_progress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                episode_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetProgress"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     get_event: {
         parameters: {
             query?: never;
@@ -4860,6 +5212,121 @@ export interface operations {
             };
         };
     };
+    get_course: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Course"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_course_details: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourseDetails"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    course_participants: {
+        parameters: {
+            query: {
+                today: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Participant"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_item_documents: {
         parameters: {
             query?: never;
@@ -4910,6 +5377,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Document"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_episodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddEpisodes"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodesAdded"];
                 };
             };
             400: {

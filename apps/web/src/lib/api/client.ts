@@ -931,7 +931,7 @@ function parseCalendar(value: Json): CalendarView {
 
 export const TIME_KINDS = ['work', 'study', 'lecture', 'rest', 'other'] as const;
 export type TimeKind = (typeof TIME_KINDS)[number];
-export type TimeTargetKind = 'task' | 'document' | 'item';
+export type TimeTargetKind = 'task' | 'document' | 'item' | 'episode';
 
 export interface TimeTargetView {
   kind: TimeTargetKind;
@@ -991,7 +991,7 @@ export function parseTimeEntry(value: Json): TimeEntryView {
   if (o.target !== null && o.target !== undefined) {
     const t = rec(o.target, 'time target');
     const kind = str(t, 'kind');
-    if (kind !== 'task' && kind !== 'document' && kind !== 'item')
+    if (kind !== 'task' && kind !== 'document' && kind !== 'item' && kind !== 'episode')
       throw new TypeError(`unknown target kind ${kind}`);
     target = {
       kind,
@@ -1336,6 +1336,121 @@ function parseAudit(value: Json): AuditEntryView {
   };
 }
 
+export type EpisodeStatus = 'not_started' | 'in_progress' | 'done';
+
+export interface CourseDetailsView {
+  subject: string;
+  instructor: string;
+  platform: string;
+  url: string;
+  textbook: string;
+  starts_on: string | null;
+  expires_on: string | null;
+  target_on: string | null;
+}
+
+export interface EpisodeView {
+  id: string;
+  number: number;
+  title: string;
+  chapter: string;
+  duration_seconds: number;
+  url: string;
+  materials: string;
+  planned_on: string | null;
+  mine: {
+    status: EpisodeStatus;
+    planned_on: string | null;
+    completed_on: string | null;
+    watch_count: number;
+    last_position_seconds: number | null;
+    note: string;
+  };
+}
+
+export interface CourseView {
+  details: CourseDetailsView;
+  episodes: EpisodeView[];
+  can_write: boolean;
+}
+
+export interface ParticipantView {
+  user_id: string;
+  display_name: string;
+  done: number;
+  in_progress: number;
+  overdue: number;
+  done_seconds: number;
+}
+
+export interface NewEpisodeInput {
+  request_id: string;
+  number?: number;
+  title: string;
+  chapter: string;
+  duration_seconds: number;
+  url: string;
+  materials: string;
+  planned_on: string | null;
+}
+
+function episodeStatus(value: string): EpisodeStatus {
+  if (value === 'not_started' || value === 'in_progress' || value === 'done') return value;
+  throw new TypeError(`unknown episode status ${value}`);
+}
+
+function parseCourse(value: Json): CourseView {
+  const o = rec(value, 'course');
+  const d = rec(o.details, 'course details');
+  return {
+    details: {
+      subject: str(d, 'subject'),
+      instructor: str(d, 'instructor'),
+      platform: str(d, 'platform'),
+      url: str(d, 'url'),
+      textbook: str(d, 'textbook'),
+      starts_on: optStr(d, 'starts_on'),
+      expires_on: optStr(d, 'expires_on'),
+      target_on: optStr(d, 'target_on'),
+    },
+    episodes: parseList(o.episodes, (v): EpisodeView => {
+      const e = rec(v, 'episode');
+      const m = rec(e.mine, 'episode progress');
+      return {
+        id: str(e, 'id'),
+        number: int(e, 'number'),
+        title: str(e, 'title'),
+        chapter: str(e, 'chapter'),
+        duration_seconds: int(e, 'duration_seconds'),
+        url: str(e, 'url'),
+        materials: str(e, 'materials'),
+        planned_on: optStr(e, 'planned_on'),
+        mine: {
+          status: episodeStatus(str(m, 'status')),
+          planned_on: optStr(m, 'planned_on'),
+          completed_on: optStr(m, 'completed_on'),
+          watch_count: int(m, 'watch_count'),
+          last_position_seconds: optInt(m, 'last_position_seconds'),
+          note: str(m, 'note'),
+        },
+      };
+    }),
+    can_write: bool(o, 'can_write'),
+  };
+}
+
+function parseParticipant(value: Json): ParticipantView {
+  const o = rec(value, 'participant');
+  return {
+    user_id: str(o, 'user_id'),
+    display_name: str(o, 'display_name'),
+    done: int(o, 'done'),
+    in_progress: int(o, 'in_progress'),
+    overdue: int(o, 'overdue'),
+    done_seconds: int(o, 'done_seconds'),
+  };
+}
+
 export interface DeletedWorkspaceView {
   id: string;
   name: string;
@@ -1556,6 +1671,36 @@ export const api = {
   completeUpload: (id: string) =>
     expectOk('POST', `/api/uploads/${encodeURIComponent(id)}/complete`, parseUpload),
   abortUpload: (id: string) => expectOk('DELETE', `/api/uploads/${encodeURIComponent(id)}`, none),
+  course: (item: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(item)}/course`, parseCourse),
+  setCourseDetails: (item: string, details: CourseDetailsView) =>
+    expectOk('PUT', `/api/items/${encodeURIComponent(item)}/course`, none, { ...details }),
+  addEpisodes: (item: string, episodes: NewEpisodeInput[]) =>
+    expectOk(
+      'POST',
+      `/api/items/${encodeURIComponent(item)}/episodes`,
+      (v) => int(rec(v, 'episodes added'), 'added'),
+      { episodes: episodes.map((e) => ({ ...e })) },
+    ),
+  updateEpisode: (id: string, episode: Omit<NewEpisodeInput, 'request_id'> & { number: number }) =>
+    expectOk('PUT', `/api/episodes/${encodeURIComponent(id)}`, none, { ...episode }),
+  deleteEpisode: (id: string) =>
+    expectOk('DELETE', `/api/episodes/${encodeURIComponent(id)}`, none),
+  setEpisodeProgress: (
+    id: string,
+    progress: {
+      status: EpisodeStatus;
+      planned_on: string | null;
+      last_position_seconds: number | null;
+      note: string;
+    },
+  ) => expectOk('PUT', `/api/episodes/${encodeURIComponent(id)}/progress`, none, { ...progress }),
+  courseParticipants: (item: string, today: string) =>
+    expectOk(
+      'GET',
+      `/api/items/${encodeURIComponent(item)}/course/participants?today=${encodeURIComponent(today)}`,
+      (v) => parseList(v, parseParticipant),
+    ),
   /** 감사 기록(워크스페이스, 또는 null이면 내 개인 영역). before는 마지막으로 받은 기록 id. */
   audit: (workspaceId: string | null, before?: string) => {
     const base =

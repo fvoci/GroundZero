@@ -1244,6 +1244,179 @@
         }
       }
     },
+    "/api/episodes/{episode_id}": {
+      "put": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "회차 고치기(쓸 수 있는 사람).",
+        "operationId": "update_episode",
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEpisode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "회차 지우기(쓸 수 있는 사람). 모든 사람의 그 회차 진도도 지워진다.",
+        "operationId": "delete_episode",
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/episodes/{episode_id}/progress": {
+      "put": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "내 진도 바꾸기(강좌를 볼 수 있으면 누구나 자기 것). 완료는 직접 표시한다.",
+        "operationId": "set_episode_progress",
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetProgress"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/events/{event_id}": {
       "get": {
         "tags": [
@@ -2532,6 +2705,175 @@
         }
       }
     },
+    "/api/items/{item_id}/course": {
+      "get": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "강좌(볼 수 있는 사람). 강의 모듈의 항목이 아니면 404.",
+        "operationId": "get_course",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Course"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "강좌 정보 고치기(쓸 수 있는 사람).",
+        "operationId": "set_course_details",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseDetails"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/course/participants": {
+      "get": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "함께 수강하는 사람들의 진도 집계(볼 수 있는 사람).",
+        "operationId": "course_participants",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "today",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Participant"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/documents": {
       "get": {
         "tags": [
@@ -2610,6 +2952,88 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/episodes": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "회차 추가(쓸 수 있는 사람). 직접 입력과 CSV 일괄 등록이 같은 길을 쓴다.",
+        "operationId": "add_episodes",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddEpisodes"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodesAdded"
                 }
               }
             }
@@ -7497,6 +7921,21 @@
         ],
         "description": "수동 기록 추가."
       },
+      "AddEpisodes": {
+        "type": "object",
+        "description": "회차 여러 개 추가(직접 입력·CSV 일괄 등록, 최대 1000개).",
+        "required": [
+          "episodes"
+        ],
+        "properties": {
+          "episodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NewEpisode"
+            }
+          }
+        }
+      },
       "Assignee": {
         "type": "object",
         "description": "담당자.",
@@ -7792,6 +8231,74 @@
             ]
           },
           "title": {
+            "type": "string"
+          }
+        }
+      },
+      "Course": {
+        "type": "object",
+        "description": "강좌: 정보·회차(번호순)·내 진도.",
+        "required": [
+          "details",
+          "episodes",
+          "can_write"
+        ],
+        "properties": {
+          "can_write": {
+            "type": "boolean",
+            "description": "강좌 정보·회차를 고칠 수 있는지(진도는 볼 수 있으면 누구나 자기 것)."
+          },
+          "details": {
+            "$ref": "#/components/schemas/CourseDetails"
+          },
+          "episodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Episode"
+            }
+          }
+        }
+      },
+      "CourseDetails": {
+        "type": "object",
+        "description": "강좌 정보.",
+        "properties": {
+          "expires_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "수강권 만료일."
+          },
+          "instructor": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "starts_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "target_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "목표 완료일."
+          },
+          "textbook": {
+            "type": "string"
+          },
+          "url": {
             "type": "string"
           }
         }
@@ -8334,6 +8841,70 @@
                 "$ref": "#/components/schemas/TargetInput"
               }
             ]
+          }
+        }
+      },
+      "Episode": {
+        "type": "object",
+        "description": "회차.",
+        "required": [
+          "id",
+          "number",
+          "title",
+          "chapter",
+          "duration_seconds",
+          "url",
+          "materials",
+          "mine"
+        ],
+        "properties": {
+          "chapter": {
+            "type": "string"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "materials": {
+            "type": "string"
+          },
+          "mine": {
+            "$ref": "#/components/schemas/MyProgress"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "planned_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "공통 계획일."
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "EpisodesAdded": {
+        "type": "object",
+        "description": "추가한 수(같은 요청 id로 이미 있던 것은 빠짐).",
+        "required": [
+          "added"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -9425,6 +9996,53 @@
           }
         }
       },
+      "MyProgress": {
+        "type": "object",
+        "description": "내 진도.",
+        "required": [
+          "status",
+          "watch_count",
+          "note"
+        ],
+        "properties": {
+          "completed_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "처음 완료한 날."
+          },
+          "last_position_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "note": {
+            "type": "string",
+            "description": "개인 메모(나만 봄)."
+          },
+          "planned_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "내 계획일(없으면 공통 계획일)."
+          },
+          "status": {
+            "type": "string",
+            "description": "`not_started`·`in_progress`·`done`."
+          },
+          "watch_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "완료로 표시한 횟수(다시 보기 포함). 완료 회차 수는 한 번만 센다."
+          }
+        }
+      },
       "NewChecklistItem": {
         "type": "object",
         "description": "덧붙일 체크리스트 항목.",
@@ -9441,6 +10059,51 @@
             "format": "uuid"
           },
           "text": {
+            "type": "string"
+          }
+        }
+      },
+      "NewEpisode": {
+        "type": "object",
+        "description": "추가할 회차.",
+        "required": [
+          "request_id",
+          "title"
+        ],
+        "properties": {
+          "chapter": {
+            "type": "string"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "materials": {
+            "type": "string"
+          },
+          "number": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "없으면 마지막 다음 번호."
+          },
+          "planned_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
             "type": "string"
           }
         }
@@ -9521,6 +10184,43 @@
         ],
         "properties": {
           "to_user": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "Participant": {
+        "type": "object",
+        "description": "함께 수강하는 사람의 진도 집계(메모·위치·시간은 없음).",
+        "required": [
+          "user_id",
+          "display_name",
+          "done",
+          "in_progress",
+          "overdue",
+          "done_seconds"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "done": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "done_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "in_progress": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "overdue": {
+            "type": "integer",
+            "format": "int32",
+            "description": "계획일이 지났는데 완료하지 않은 회차 수."
+          },
+          "user_id": {
             "$ref": "#/components/schemas/UserId"
           }
         }
@@ -10153,6 +10853,36 @@
           }
         }
       },
+      "SetProgress": {
+        "type": "object",
+        "description": "내 진도 바꾸기.",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "last_position_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "note": {
+            "type": "string"
+          },
+          "planned_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "status": {
+            "type": "string",
+            "description": "`not_started`·`in_progress`·`done`."
+          }
+        }
+      },
       "SetRetention": {
         "type": "object",
         "description": "휴지통 보존 기간.",
@@ -10489,7 +11219,8 @@
         "enum": [
           "task",
           "document",
-          "item"
+          "item",
+          "episode"
         ]
       },
       "Task": {
@@ -11087,6 +11818,43 @@
         ],
         "description": "기록 고치기. `base_version`이 지났으면 409와 서버 최신본."
       },
+      "UpdateEpisode": {
+        "type": "object",
+        "description": "회차 고치기.",
+        "required": [
+          "number",
+          "title"
+        ],
+        "properties": {
+          "chapter": {
+            "type": "string"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "materials": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "planned_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
       "UpdateEvent": {
         "allOf": [
           {
@@ -11477,6 +12245,10 @@
     {
       "name": "audit",
       "description": "감사 기록"
+    },
+    {
+      "name": "courses",
+      "description": "강의: 강좌·회차·개인별 진도"
     }
   ]
 }
