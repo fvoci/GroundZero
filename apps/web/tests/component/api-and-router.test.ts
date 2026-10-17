@@ -42,6 +42,7 @@ describe('response validation', () => {
     can_manage: false,
     can_delete: false,
     is_template: false,
+    realtime: false,
   };
 
   it('accepts a well-formed document', () => {

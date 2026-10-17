@@ -44,6 +44,25 @@
   });
 
   const canWrite = $derived(workspace.role !== 'reader');
+
+  // 실시간 공동 편집(D-27, D-70). 관리자만 켜고 끈다. 끄면 열린 편집은 리비전을 남기고 닫힌다.
+  let realtime = $state(false);
+  let realtimeMessage = $state('');
+  $effect(() => {
+    realtime = workspace.realtime_enabled;
+    realtimeMessage = '';
+  });
+  async function setRealtime(on: boolean): Promise<void> {
+    try {
+      await api.setWorkspaceRealtime(workspace.id, on);
+      realtime = on;
+      realtimeMessage = on
+        ? '실시간 공동 편집을 켰습니다. 문서를 다시 열면 함께 고칠 수 있습니다.'
+        : '실시간 공동 편집을 껐습니다.';
+    } catch (e: unknown) {
+      realtimeMessage = e instanceof ApiError ? e.message : '바꾸지 못했습니다.';
+    }
+  }
 </script>
 
 <section class="flex flex-col gap-6" aria-labelledby="ws-heading">
@@ -52,6 +71,26 @@
     이 워크스페이스의 관리자는 비공개 문서를 포함해 이 공간의 모든 문서를 볼 수 있습니다. 각자의
     개인 노트와 개인 시간 기록은 관리자에게도 보이지 않습니다.
   </p>
+  {#if workspace.role === 'admin'}
+    <div class="flex flex-col gap-1 text-sm">
+      <label class="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={realtime}
+          onchange={(e: Event) => {
+            if (e.currentTarget instanceof HTMLInputElement)
+              void setRealtime(e.currentTarget.checked);
+          }}
+        />
+        실시간 공동 편집(문서를 여럿이 동시에 고침)
+      </label>
+      <p class="text-muted-foreground">
+        켜면 이 워크스페이스 문서의 본문을 바로 함께 고치고, 조용해지거나 모두 나가면 리비전으로
+        남깁니다. 개인 노트는 해당하지 않습니다.
+      </p>
+      <p aria-live="polite">{realtimeMessage}</p>
+    </div>
+  {/if}
   {#if error !== undefined}
     <p role="alert" class="text-destructive">{error}</p>
   {:else if docs === undefined}

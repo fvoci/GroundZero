@@ -16,6 +16,7 @@
 
   import DocumentActions from './DocumentActions.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
+  import LiveDocumentEditor from './LiveDocumentEditor.svelte';
   import RevisionHistory from './RevisionHistory.svelte';
 
   interface Props {
@@ -112,15 +113,35 @@
       {/if}
     </div>
   </div>
-  {#key `${doc.id}:${String(epoch)}`}
-    <DocumentEditor
-      initial={doc}
-      references={referencesFor(doc)}
-      onsaved={(saved: DocumentView) => {
-        // 기록 비교(지금과 비교)와 복원의 기준 리비전이 최신이 되도록 저장 결과를 따라간다.
-        doc = saved;
-      }}
-    />
+  {#key `${doc.id}:${String(epoch)}:${String(doc.realtime)}`}
+    {#if doc.realtime}
+      <LiveDocumentEditor
+        initial={doc}
+        references={referencesFor(doc)}
+        onsaved={(saved: DocumentView) => {
+          doc = saved;
+        }}
+        onrealtimeoff={() => {
+          // 실시간이 꺼지면 남은 리비전을 다시 읽어 일반 편집으로 돌아간다.
+          const id = documentId;
+          void api.document(id).then((d) => {
+            if (id === documentId) {
+              doc = d;
+              epoch += 1;
+            }
+          });
+        }}
+      />
+    {:else}
+      <DocumentEditor
+        initial={doc}
+        references={referencesFor(doc)}
+        onsaved={(saved: DocumentView) => {
+          // 기록 비교(지금과 비교)와 복원의 기준 리비전이 최신이 되도록 저장 결과를 따라간다.
+          doc = saved;
+        }}
+      />
+    {/if}
   {/key}
   <AttachmentsPanel
     target={{ kind: 'document', id: doc.id }}

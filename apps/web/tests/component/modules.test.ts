@@ -77,6 +77,7 @@ describe('module validation', () => {
       starts_on: null,
       ends_on: '2026-12-31',
       is_template: false,
+      realtime: false,
     });
     expect(parsed.reference).toBe('DEV-1');
     expect(parsed.ends_on).toBe('2026-12-31');
@@ -103,6 +104,7 @@ describe('module validation', () => {
       can_manage: false,
       can_delete: false,
       is_template: false,
+      realtime: false,
     });
     expect(parsed.item_id).toBe(item);
     expect(parsed.placement).toBe('module');

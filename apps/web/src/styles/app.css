@@ -238,3 +238,28 @@
     @apply my-2 overflow-x-auto text-center;
   }
 }
+
+/* 실시간 공동 편집의 다른 사람 커서와 이름표(D-70). 색은 각 사용자 색(인라인 스타일). */
+.collaboration-carets__caret {
+  position: relative;
+  margin-right: -1px;
+  margin-left: -1px;
+  border-right: 1px solid;
+  border-left: 1px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+
+.collaboration-carets__label {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.2rem 0.2rem 0.2rem 0;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: normal;
+  white-space: nowrap;
+  user-select: none;
+}

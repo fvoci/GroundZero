@@ -6,6 +6,8 @@
   // 내용이면 들어갈 때 알려 주고, 원문을 고친 경우에만 원문에서 다시 만든 내용으로 바꾼다(조용한 손실 방지).
   import type { Extensions } from '@tiptap/core';
   import { Editor } from '@tiptap/core';
+  import Collaboration from '@tiptap/extension-collaboration';
+  import CollaborationCaret from '@tiptap/extension-collaboration-caret';
   import { onMount, untrack } from 'svelte';
 
   import type { DocNode } from '$lib/api/client';
@@ -16,6 +18,7 @@
 
   import { canonicalJson } from './drafts';
   import { schemaExtensions } from './editor-schema';
+  import type { LiveSession } from './live';
 
   interface Props {
     content: DocNode;
@@ -27,9 +30,11 @@
     /** 파일·이미지 넣기: 문서 첨부로 올리고 넣을 주소를 돌려준다. 없으면 단추를 보이지 않는다. */
     insertFile?:
       ((file: File) => Promise<{ href: string; name: string; image: boolean }>) | undefined;
+    /** 실시간 공동 편집(D-70). 있으면 본문은 이 Yjs 문서가 맡고 `content`는 쓰지 않는다. */
+    collab?: LiveSession | undefined;
   }
 
-  const { content, editable, label, onchange, references, insertFile }: Props = $props();
+  const { content, editable, label, onchange, references, insertFile, collab }: Props = $props();
 
   type Command = 'bold' | 'italic' | 'heading' | 'bulletList' | 'taskList' | 'codeBlock';
   type Mode = 'rich' | 'markdown' | 'preview';
@@ -153,8 +158,12 @@
 
   // 참조 노드는 항상 등록한다(모르는 노드는 Tiptap이 버리므로 읽기 화면에서도 필요하다).
   // @ 입력은 고칠 수 있고 참조 문맥이 있을 때만 켠다.
-  function extensionsFor(ctx: ReferenceContext | undefined, canEdit: boolean): Extensions {
-    const base: Extensions = schemaExtensions({
+  function extensionsFor(
+    ctx: ReferenceContext | undefined,
+    canEdit: boolean,
+    live: LiveSession | undefined,
+  ): Extensions {
+    const schema: Extensions = schemaExtensions({
       reference: {
         hrefFor: ctx?.hrefFor ?? (() => null),
         navigate: ctx?.navigate ?? (() => undefined),
@@ -162,7 +171,17 @@
       onMathClick: (kind, node, pos) => {
         openMath(kind, String(node.attrs.latex ?? ''), pos);
       },
+      collaborative: live !== undefined,
     });
+    // 실시간이면 본문은 Yjs 문서(조각 `default`, 서버와 같은 이름)가 맡고 참여자 커서를 보인다.
+    const base: Extensions =
+      live === undefined
+        ? schema
+        : [
+            ...schema,
+            Collaboration.configure({ document: live.document, field: 'default' }),
+            CollaborationCaret.configure({ provider: live.provider, user: live.user }),
+          ];
     if (ctx === undefined || !canEdit) return base;
     return [
       ...base,
@@ -177,8 +196,9 @@
     if (element === undefined) return;
     const instance = new Editor({
       element,
-      extensions: untrack(() => extensionsFor(references, editable)),
-      content: untrack(() => ({ ...content })),
+      extensions: untrack(() => extensionsFor(references, editable, collab)),
+      // 실시간이면 처음 내용은 서버의 Yjs 문서에서 온다.
+      content: untrack(() => (collab === undefined ? { ...content } : null)),
       editable: untrack(() => editable),
       editorProps: {
         attributes: {
@@ -278,7 +298,7 @@
 {#if editable}
   <div class="flex flex-wrap items-center gap-1 border-b pb-2">
     <div class="flex gap-1" role="group" aria-label="편집 방식">
-      {#each MODES as m (m.mode)}
+      {#each collab === undefined ? MODES : [] as m (m.mode)}
         <Button
           size="sm"
           variant={mode === m.mode ? 'secondary' : 'ghost'}

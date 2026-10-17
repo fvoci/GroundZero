@@ -59,6 +59,7 @@
       }
       currentUser.userId = me.id;
       currentUser.timeZone = me.time_zone;
+      currentUser.displayName = me.display_name;
       session = { state: 'signed-in', me, workspaces: await api.workspaces() };
     } catch (e: unknown) {
       session = {

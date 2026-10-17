@@ -51,6 +51,8 @@ export interface DocumentView {
   can_delete: boolean;
   /** 템플릿으로 표시됨(D-27). */
   is_template: boolean;
+  /** 실시간 공동 편집 중(D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다. */
+  realtime: boolean;
 }
 
 export class ApiError extends Error {
@@ -137,6 +139,7 @@ export function parseWorkspace(value: Json): Workspace {
     name: str(o, 'name'),
     role: role(str(o, 'role')),
     is_owner: bool(o, 'is_owner'),
+    realtime_enabled: bool(o, 'realtime_enabled'),
   };
 }
 
@@ -181,6 +184,7 @@ export function parseDocument(value: Json): DocumentView {
     can_manage: bool(o, 'can_manage'),
     can_delete: bool(o, 'can_delete'),
     is_template: bool(o, 'is_template'),
+    realtime: bool(o, 'realtime'),
   };
 }
 
@@ -2574,6 +2578,10 @@ export const api = {
   setVersionRetention: (workspaceId: string, days: number | null) =>
     expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/version-retention`, none, {
       days,
+    }),
+  setWorkspaceRealtime: (workspaceId: string, enabled: boolean) =>
+    expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/realtime`, none, {
+      enabled,
     }),
   setTrashRetention: (workspaceId: string, days: number) =>
     expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/trash-retention`, none, {

@@ -19,7 +19,8 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      '/api': { target: apiUrl, changeOrigin: true },
+      // 실시간 공동 편집 웹소켓(/api/documents/{id}/collab)도 같은 경로로 넘긴다.
+      '/api': { target: apiUrl, changeOrigin: true, ws: true },
       '/auth': { target: apiUrl, changeOrigin: true },
       '/healthz': { target: apiUrl, changeOrigin: true },
     },
