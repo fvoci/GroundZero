@@ -13,7 +13,7 @@ import { schemaExtensions } from '$lib/features/documents/editor-schema';
 const dir = path.resolve(import.meta.dirname, '../../../contracts/collab');
 const read = (name: string): string => readFileSync(path.join(dir, name), 'utf8');
 const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
-const update = process.env['FVOCI_UPDATE_COLLAB_FIXTURES'] === '1';
+const update = process.env.FVOCI_UPDATE_COLLAB_FIXTURES === '1';
 
 function fragmentJson(bytes: Uint8Array): unknown {
   const doc = new Y.Doc();
@@ -52,7 +52,7 @@ describe('collaboration fixtures', () => {
     const fromRust = new Uint8Array(Buffer.from(read('from-rust.b64').trim(), 'base64'));
     expect(fragmentJson(fromRust)).toEqual(expected);
     // 서버가 만든 문서를 편집기 스키마로 다시 읽어도 같은 문서다.
-    const reread = schema.nodeFromJSON(fragmentJson(fromRust)).toJSON();
+    const reread: unknown = schema.nodeFromJSON(fragmentJson(fromRust)).toJSON();
     expect(reread).toEqual(stored);
   });
 });
