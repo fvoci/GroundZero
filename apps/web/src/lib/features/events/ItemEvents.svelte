@@ -3,7 +3,9 @@
   import { tick } from 'svelte';
 
   import type { EventInput, EventView, ItemView } from '$lib/api/client';
-  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { api, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
   import EventDialog from './EventDialog.svelte';
@@ -36,7 +38,7 @@
         document.getElementById('events-heading')?.focus();
       changed = false;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '일정을 불러오지 못했습니다.';
+      error = errorText(e, m.events_list_load_failed());
     }
   }
 
@@ -57,7 +59,7 @@
 
 <section class="flex flex-col gap-3" aria-labelledby="events-heading">
   <div class="flex items-center gap-2">
-    <h2 id="events-heading" class="text-lg font-semibold" tabindex="-1">일정</h2>
+    <h2 id="events-heading" class="text-lg font-semibold" tabindex="-1">{m.events_heading()}</h2>
     {#if canWrite && !adding}
       <Button
         size="sm"
@@ -66,7 +68,7 @@
         onclick={() => {
           requestId = newRequestId();
           adding = true;
-        }}>일정 추가</Button
+        }}>{m.events_add()}</Button
       >
     {/if}
   </div>
@@ -78,7 +80,7 @@
       <EventForm
         idPrefix="event-new"
         initial={undefined}
-        submitLabel="일정 만들기"
+        submitLabel={m.events_create()}
         onsubmit={create}
         oncancel={() => (adding = false)}
       />
@@ -102,7 +104,7 @@
         </button>
       </li>
     {:else}
-      <li class="text-sm text-muted-foreground">일정이 없습니다.</li>
+      <li class="text-sm text-muted-foreground">{m.events_list_empty()}</li>
     {/each}
   </ul>
 </section>
