@@ -259,9 +259,11 @@ pub struct SetRealtime {
 }
 
 /// 워크스페이스 문서의 실시간 공동 편집을 켜거나 끈다(관리자). 끄면 열려 있는 편집 방은 리비전을 남기고 닫힌다.
+/// 리비전을 남기지 못한 방이 있으면 끄지 않고 409.
 #[utoipa::path(put, path = "/api/workspaces/{workspace_id}/realtime",
     params(("workspace_id" = String, Path, format = Uuid)), request_body = SetRealtime,
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)),
+    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody)),
     tag = "workspaces")]
 pub async fn set_realtime(
     State(state): State<AppState>,
@@ -269,9 +271,12 @@ pub async fn set_realtime(
     Path(ws): Path<WorkspaceId>,
     Json(input): Json<SetRealtime>,
 ) -> Result<StatusCode, AppError> {
-    // 끌 때는 먼저 열린 방의 리비전을 남기고 닫는다(실시간이 켜진 동안이라 저장 API의 본문 변경이 끼어들지 못한다).
-    // 끈 뒤에도 그 사이 열린 방을 한 번 더 닫는다.
-    if !input.enabled {
+    // 끌 때: 새 방이 열리지 않게 막고, 열린 방의 편집을 모두 리비전으로 남긴 뒤에만 끈다. 실시간이 켜진 동안에는 저장
+    // API의 본문 변경이 막혀(409) 그 사이에 끼어들 수 없고, 끈 뒤에는 남은 방이 없다. 리비전을 남기지 못한 방이
+    // 있으면 끄지 않는다(편집을 버리지 않는다). 막음은 이 요청이 끝날 때 풀린다.
+    let _closing = if input.enabled {
+        None
+    } else {
         let mut tx = state.db.begin_as(user).await?;
         let role: Option<String> = sqlx::query_scalar("SELECT app_member_role($1)")
             .bind(ws)
@@ -279,9 +284,18 @@ pub async fn set_realtime(
             .await?;
         tx.commit().await?;
         if role.as_deref() == Some("admin") {
-            state.collab.close_workspace(ws.0).await;
+            let guard = state.collab.begin_closing(ws.0);
+            if !state.collab.close_workspace(ws.0).await {
+                return Err(AppError::Conflict(
+                    "some live documents could not be saved as revisions; realtime stays on, try again"
+                        .into(),
+                ));
+            }
+            Some(guard)
+        } else {
+            None
         }
-    }
+    };
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_set_workspace_realtime($1, $2)")
         .bind(ws)
@@ -290,8 +304,5 @@ pub async fn set_realtime(
         .await
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
-    if !input.enabled {
-        state.collab.close_workspace(ws.0).await;
-    }
     Ok(StatusCode::NO_CONTENT)
 }

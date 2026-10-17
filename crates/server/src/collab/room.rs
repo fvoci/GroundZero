@@ -124,6 +124,8 @@ enum Command {
     Shutdown {
         reason: CloseReason,
         snapshot: bool,
+        /// 닫기 전에 방의 편집이 모두 리비전으로 남았는지(남길 것이 없었으면 참).
+        saved: Option<oneshot::Sender<bool>>,
     },
 }
 
@@ -132,14 +134,29 @@ struct Handle {
     generation: u64,
     workspace: Option<Uuid>,
     tx: mpsc::Sender<Command>,
-    done: Arc<tokio::sync::Notify>,
 }
 
 /// 열린 방 목록.
 #[derive(Debug, Clone, Default)]
 pub struct Rooms {
     inner: Arc<Mutex<HashMap<DocumentId, Handle>>>,
+    /// 실시간을 끄는 중인 워크스페이스. 이 동안은 방을 새로 열지 않는다(방 목록과 같은 잠금 아래에서 본다).
+    closing: Arc<Mutex<HashSet<Uuid>>>,
     next: Arc<AtomicU64>,
+}
+
+/// 실시간을 끄는 동안 그 워크스페이스에 방이 새로 열리지 않게 막는다. 놓으면 풀린다.
+#[derive(Debug)]
+pub struct ClosingGuard {
+    rooms: Rooms,
+    workspace: Uuid,
+}
+
+impl Drop for ClosingGuard {
+    fn drop(&mut self) {
+        let _rooms = self.rooms.lock();
+        self.rooms.closing_set().remove(&self.workspace);
+    }
 }
 
 /// 방에 들어간 연결. 떨어지면 방에서 나간다.
@@ -176,6 +193,23 @@ impl Rooms {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    /// 끄는 중인 워크스페이스 목록. 늘 방 목록 잠금(`lock`)을 먼저 잡은 뒤에 잡는다.
+    fn closing_set(&self) -> std::sync::MutexGuard<'_, HashSet<Uuid>> {
+        self.closing
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// 이 워크스페이스에 방이 새로 열리지 않게 한다(실시간 끄기 동안). 이미 열린 방은 `close_workspace`로 닫는다.
+    pub fn begin_closing(&self, workspace: Uuid) -> ClosingGuard {
+        let _rooms = self.lock();
+        self.closing_set().insert(workspace);
+        ClosingGuard {
+            rooms: self.clone(),
+            workspace,
+        }
+    }
+
     /// 방에 들어간다(없으면 연다). 문서를 읽을 수 없으면 오류.
     pub async fn join(
         &self,
@@ -189,6 +223,12 @@ impl Rooms {
         for _ in 0..5 {
             let handle = {
                 let mut rooms = self.lock();
+                // 실시간을 끄는 중이면 열지 않는다. 클라이언트는 잠시 뒤 다시 붙고, 그때 꺼졌으면 4410을 받는다.
+                if workspace.is_some_and(|w| self.closing_set().contains(&w)) {
+                    return Err(AppError::Upstream(
+                        "live editing is being turned off".into(),
+                    ));
+                }
                 if let Some(h) = rooms.get(&doc).filter(|h| !h.tx.is_closed()) {
                     h.clone()
                 } else {
@@ -198,7 +238,6 @@ impl Rooms {
                         generation,
                         workspace,
                         tx,
-                        done: Arc::new(tokio::sync::Notify::new()),
                     };
                     rooms.insert(doc, handle.clone());
                     let room = Room::new(
@@ -209,7 +248,7 @@ impl Rooms {
                         recheck_every,
                         self.clone(),
                     );
-                    tokio::spawn(room.run(rx, handle.done.clone()));
+                    tokio::spawn(room.run(rx));
                     handle
                 }
             };
@@ -253,26 +292,28 @@ impl Rooms {
                 .send(Command::Shutdown {
                     reason: CloseReason::Reload,
                     snapshot: false,
+                    saved: None,
                 })
                 .await;
         }
     }
 
     /// 워크스페이스가 실시간을 끈다(또는 껐다). 그 워크스페이스의 방은 리비전을 남기고 닫는다. 끝날 때까지 기다린다.
-    pub async fn close_workspace(&self, workspace: Uuid) {
+    /// 모든 방의 편집이 리비전으로 남았으면 참(`begin_closing`과 함께 써서 그동안 새 방이 열리지 않게 한다).
+    pub async fn close_workspace(&self, workspace: Uuid) -> bool {
         let handles: Vec<Handle> = self
             .lock()
             .values()
             .filter(|h| h.workspace == Some(workspace))
             .cloned()
             .collect();
-        close_all(handles, CloseReason::RealtimeOff).await;
+        close_all(handles, CloseReason::RealtimeOff).await
     }
 
     /// 서버를 끝낸다. 모든 방의 리비전을 남기고 닫는다(클라이언트는 다시 붙는다).
     pub async fn shutdown(&self) {
         let handles: Vec<Handle> = self.lock().values().cloned().collect();
-        close_all(handles, CloseReason::Restart).await;
+        let _saved = close_all(handles, CloseReason::Restart).await;
     }
 
     fn remove(&self, doc: DocumentId, generation: u64) {
@@ -283,29 +324,32 @@ impl Rooms {
     }
 }
 
-async fn close_all(handles: Vec<Handle>, reason: CloseReason) {
+/// 방마다 리비전을 남기고 닫게 한 뒤 답을 기다린다. 모두 남겼으면 참. 이미 닫힌 방은 남길 것이 없다.
+async fn close_all(handles: Vec<Handle>, reason: CloseReason) -> bool {
     let mut waits = Vec::new();
     for handle in handles {
-        let done = handle.done.clone();
-        let notified = async move { done.notified().await };
+        let (saved, answer) = oneshot::channel();
         if handle
             .tx
             .send(Command::Shutdown {
                 reason,
                 snapshot: true,
+                saved: Some(saved),
             })
             .await
             .is_ok()
         {
-            waits.push(notified);
+            // 답 없이 끝난 방(닫히는 중이던 방)은 이미 마지막 리비전을 남겼다.
+            waits.push(async move { answer.await.unwrap_or(true) });
         }
     }
-    // 리비전 쓰기가 오래 걸리면 끝까지 기다리지는 않는다.
-    let _ignored = tokio::time::timeout(
+    // 리비전 쓰기가 오래 걸리면 끝까지 기다리지는 않는다(그때는 남겼다고 보지 않는다).
+    tokio::time::timeout(
         Duration::from_secs(10),
         futures_util::future::join_all(waits),
     )
-    .await;
+    .await
+    .is_ok_and(|all| all.into_iter().all(|saved| saved))
 }
 
 struct Connection {
@@ -393,7 +437,7 @@ impl Room {
             .max(1 << 20)
     }
 
-    async fn run(mut self, mut rx: mpsc::Receiver<Command>, done: Arc<tokio::sync::Notify>) {
+    async fn run(mut self, mut rx: mpsc::Receiver<Command>) {
         let mut flush = tokio::time::interval(FLUSH_EVERY);
         let mut persist = tokio::time::interval(PERSIST_EVERY);
         loop {
@@ -427,7 +471,6 @@ impl Room {
         // 닫히는 동안 들어온 참여 요청은 답하지 않고 버려 새 방을 열게 한다.
         rx.close();
         while rx.try_recv().is_ok() {}
-        done.notify_waiters();
     }
 
     /// 거짓이면 방을 닫는다.
@@ -467,14 +510,32 @@ impl Room {
                 self.leave(conn);
                 true
             }
-            Command::Shutdown { reason, snapshot } => {
-                if snapshot {
+            Command::Shutdown {
+                reason,
+                snapshot,
+                saved,
+            } => {
+                let kept = if snapshot {
                     self.flush().await;
-                    self.snapshot().await;
+                    let kept = self.snapshot().await;
                     self.persist().await;
+                    kept
+                } else {
+                    true
+                };
+                // 실시간을 끄려는데 리비전을 남기지 못했으면 방을 닫지 않는다. 끄기는 거절되고(켜진 채), 편집은 방에
+                // 그대로 남아 다음 시도에서 다시 리비전으로 남긴다.
+                if !kept && reason == CloseReason::RealtimeOff {
+                    if let Some(saved) = saved {
+                        let _ignored = saved.send(false);
+                    }
+                    return true;
                 }
                 for (_, c) in self.conns.drain() {
                     let _ignored = c.peer.out.try_send(Outbound::Close(reason));
+                }
+                if let Some(saved) = saved {
+                    let _ignored = saved.send(kept);
                 }
                 false
             }
@@ -828,18 +889,18 @@ impl Room {
 
     /// 방 문서를 저장 API와 같은 길로 리비전에 남긴다. 작성자는 마지막으로 고친 사람, 그 사람이 쓸 수 없으면
     /// 최근에 고친 다른 사람, 그다음은 연결된 작성자 순.
-    async fn snapshot(&mut self) {
+    async fn snapshot(&mut self) -> bool {
         if !self.dirty_since_snapshot {
-            return;
+            return true;
         }
         let Some(doc) = &self.doc else {
-            return;
+            return true;
         };
         let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
         let body = convert::read_doc(&doc.transact(), &fragment);
         if documents::validate_body(&body, &self.limits).is_err() {
             tracing::warn!(document = %self.doc_id.0, "live document failed checks; not saved as a revision");
-            return;
+            return false;
         }
         let mut authors = self.editors.clone();
         for c in self.conns.values().filter(|c| c.peer.can_write) {
@@ -856,7 +917,7 @@ impl Room {
                     self.dirty_state = true;
                     // 리비전 번호와 상태가 어긋난 채로 멈추지 않도록 바로 저장한다.
                     self.persist().await;
-                    return;
+                    return true;
                 }
                 Ok(None) => {
                     // 본문이 다른 길로 바뀌었다(복원). 덮어쓰지 않고 다시 열게 한다.
@@ -866,16 +927,17 @@ impl Room {
                     }
                     self.dirty_since_snapshot = false;
                     self.dirty_state = false;
-                    return;
+                    return true;
                 }
                 Err(AppError::Forbidden | AppError::NotFound) => {}
                 Err(err) => {
                     tracing::warn!(document = %self.doc_id.0, error = %err, "could not save the live document as a revision");
-                    return;
+                    return false;
                 }
             }
         }
         tracing::warn!(document = %self.doc_id.0, "no editor can save the live document; keeping the live state");
+        false
     }
 
     /// 새 리비전 번호, 또는 본문이 다른 길로 바뀌었으면 `None`.

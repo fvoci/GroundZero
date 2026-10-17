@@ -9224,7 +9224,7 @@
         "tags": [
           "workspaces"
         ],
-        "summary": "워크스페이스 문서의 실시간 공동 편집을 켜거나 끈다(관리자). 끄면 열려 있는 편집 방은 리비전을 남기고 닫힌다.",
+        "summary": "워크스페이스 문서의 실시간 공동 편집을 켜거나 끈다(관리자). 끄면 열려 있는 편집 방은 리비전을 남기고 닫힌다.\n리비전을 남기지 못한 방이 있으면 끄지 않고 409.",
         "operationId": "set_realtime",
         "parameters": [
           {
@@ -9262,6 +9262,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {

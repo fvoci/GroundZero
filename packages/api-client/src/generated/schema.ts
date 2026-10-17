@@ -2167,7 +2167,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 워크스페이스 문서의 실시간 공동 편집을 켜거나 끈다(관리자). 끄면 열려 있는 편집 방은 리비전을 남기고 닫힌다. */
+        /**
+         * 워크스페이스 문서의 실시간 공동 편집을 켜거나 끈다(관리자). 끄면 열려 있는 편집 방은 리비전을 남기고 닫힌다.
+         *     리비전을 남기지 못한 방이 있으면 끄지 않고 409.
+         */
         put: operations["set_realtime"];
         post?: never;
         delete?: never;
@@ -10742,6 +10745,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
