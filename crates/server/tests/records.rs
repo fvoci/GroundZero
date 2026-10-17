@@ -1,6 +1,7 @@
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
+    clippy::panic,
     reason = "integration test crate: every item is test code; failures must panic"
 )]
 //! 항목 기록 (D-33·D-34·D-35·D-36·D-38): 항목 권한을 그대로 따르고, 종류·칸은 서버가 확인하며, 분석에 연결한
@@ -1140,8 +1141,22 @@ async fn kept_expired_bundles_restore_with_existing_permissions() {
             .status
         }
     };
-    // 참조 없는 만료 묶음은 되살릴 수 없다(기존 규칙).
-    assert_eq!(restore(&writer, loose_batch).await, StatusCode::CONFLICT);
+    // 참조 없는 만료 묶음은 되살릴 수 없다(기존 규칙). 같은 DB를 쓰는 다른 테스트의 정리 작업이 먼저 영구
+    // 삭제했으면 404인데, 그때도 작업 프로세스가 지운 것인지 확인한다(둘 다 "되살릴 수 없음").
+    match restore(&writer, loose_batch).await {
+        StatusCode::CONFLICT => {}
+        StatusCode::NOT_FOUND => {
+            let purged: bool = sqlx::query_scalar(
+                "SELECT purged_at IS NOT NULL FROM fvoci.trash_batches WHERE id = $1",
+            )
+            .bind(loose_batch)
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+            assert!(purged, "404 only because the expired bundle was purged");
+        }
+        other => panic!("unexpected restore status {other}"),
+    }
 
     fvoci_server::worker::run_all_now(&state.db, None, None)
         .await
