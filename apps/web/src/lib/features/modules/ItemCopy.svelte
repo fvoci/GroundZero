@@ -4,7 +4,9 @@
   import type { Module } from '@fvoci/api-client';
 
   import type { ItemView } from '$lib/api/client';
-  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { api, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { itemPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -32,20 +34,20 @@
     result = undefined;
     try {
       const all = await api.modules(item.workspace_id);
-      targets = all.filter((m) => m.kind === module.kind && !m.archived);
+      targets = all.filter((mod) => mod.kind === module.kind && !mod.archived);
       target = module.archived ? (targets[0]?.id ?? '') : module.id;
-      title = `${item.title} 사본`;
+      title = m.modules_copy_title_default({ title: item.title });
       requestId = newRequestId();
       open = true;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '모듈 목록을 불러오지 못했습니다.';
+      error = errorText(e, m.modules_list_load_failed());
     }
   }
 
   async function submit(e: SubmitEvent): Promise<void> {
     e.preventDefault();
     if (target === '') {
-      error = '옮길 모듈을 고르세요.';
+      error = m.modules_copy_pick_module();
       return;
     }
     error = undefined;
@@ -55,52 +57,54 @@
       result = { id: copied.item_id, skipped: copied.skipped_documents };
       open = false;
     } catch (err: unknown) {
-      error = err instanceof ApiError ? err.message : '복제하지 못했습니다.';
+      error = errorText(err, m.modules_copy_failed());
     }
   }
 </script>
 
 <div class="flex flex-col gap-2 text-sm">
   {#if !open}
-    <div><Button size="sm" variant="outline" onclick={() => void start()}>복제</Button></div>
+    <div>
+      <Button size="sm" variant="outline" onclick={() => void start()}>{m.modules_copy()}</Button>
+    </div>
   {:else}
     <form
       class="flex flex-wrap items-end gap-2 rounded-md border p-2"
       onsubmit={(e) => void submit(e)}
-      aria-label="항목 복제"
+      aria-label={m.modules_copy_form()}
     >
       <div class="flex flex-col gap-1">
-        <Label for="copy-target">모듈</Label>
+        <Label for="copy-target">{m.modules_copy_module()}</Label>
         <select
           id="copy-target"
           class="h-9 rounded-md border border-input bg-transparent px-3 text-base"
           bind:value={target}
         >
-          {#each targets as m (m.id)}<option value={m.id}>{m.name} ({m.key})</option>{/each}
+          {#each targets as mod (mod.id)}<option value={mod.id}>{mod.name} ({mod.key})</option
+            >{/each}
         </select>
       </div>
       <div class="flex min-w-48 flex-1 flex-col gap-1">
-        <Label for="copy-title">새 제목</Label>
+        <Label for="copy-title">{m.modules_copy_new_title()}</Label>
         <Input id="copy-title" bind:value={title} maxlength={200} />
       </div>
       <div class="flex items-center gap-2 pb-2">
         <Checkbox id="copy-reset" bind:checked={reset} />
-        <Label for="copy-reset">새로 시작(상태·날짜·체크 비우기)</Label>
+        <Label for="copy-reset">{m.modules_copy_reset()}</Label>
       </div>
-      <Button type="submit" size="sm">복제</Button>
-      <Button type="button" size="sm" variant="ghost" onclick={() => (open = false)}>취소</Button>
-      <p class="w-full text-muted-foreground">
-        업무·하위 업무·체크리스트·선행 관계·문서를 새 번호로 옮깁니다. 담당자·반복
-        규칙·기록·첨부·진도는 옮기지 않고, 새 항목은 비공개입니다.
-      </p>
+      <Button type="submit" size="sm">{m.modules_copy()}</Button>
+      <Button type="button" size="sm" variant="ghost" onclick={() => (open = false)}
+        >{m.common_cancel()}</Button
+      >
+      <p class="w-full text-muted-foreground">{m.modules_copy_hint()}</p>
     </form>
   {/if}
   {#if error !== undefined}<p role="alert" class="text-destructive">{error}</p>{/if}
   {#if result !== undefined}
     {@const done = result}
     <p role="status">
-      복제했습니다.{done.skipped > 0
-        ? ` 복제가 허용되지 않은 문서 ${String(done.skipped)}개는 건너뛰었습니다.`
+      {m.modules_copy_done()}{done.skipped > 0
+        ? ` ${m.modules_copy_skipped({ count: done.skipped })}`
         : ''}
       <a
         class="underline"
@@ -108,7 +112,7 @@
         onclick={(e: MouseEvent) => {
           e.preventDefault();
           router.navigate(itemPath(item.workspace_id, done.id));
-        }}>새 항목 열기</a
+        }}>{m.modules_copy_open()}</a
       >
     </p>
   {/if}

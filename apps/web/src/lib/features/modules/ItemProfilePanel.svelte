@@ -4,7 +4,9 @@
   import type { ModuleKind } from '@fvoci/api-client';
 
   import type { AssigneeView, ItemProfileView, ItemStatus, ItemView } from '$lib/api/client';
-  import { api, ApiError, ITEM_STATUSES } from '$lib/api/client';
+  import { api, ITEM_STATUSES } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -12,7 +14,7 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
-  import { detailFields, ITEM_STATUS_LABEL, peopleLabels, toDetails } from './profile';
+  import { detailFields, itemStatusLabel, peopleLabels, periodText, toDetails } from './profile';
 
   interface Props {
     item: ItemView;
@@ -71,8 +73,7 @@
         if (!cancelled) profile = p;
       })
       .catch((e: unknown) => {
-        if (!cancelled)
-          error = e instanceof ApiError ? e.message : '항목 정보를 불러오지 못했습니다.';
+        if (!cancelled) error = errorText(e, m.modules_profile_load_failed());
       });
     return () => {
       cancelled = true;
@@ -97,7 +98,7 @@
   async function save(e: SubmitEvent): Promise<void> {
     e.preventDefault();
     if (form.starts_on !== '' && form.ends_on !== '' && form.starts_on > form.ends_on) {
-      error = '기간의 끝이 시작보다 앞섭니다.';
+      error = m.modules_period_invalid();
       return;
     }
     error = undefined;
@@ -112,11 +113,11 @@
         details: toDetails(kind, form.values, form.keywords),
       });
       editing = false;
-      status = '항목 정보를 저장했습니다.';
+      status = m.modules_profile_saved();
       reloadKey += 1;
       onchanged();
     } catch (err: unknown) {
-      error = err instanceof ApiError ? err.message : '저장하지 못했습니다.';
+      error = errorText(err, m.modules_save_failed());
     }
   }
 
@@ -127,13 +128,13 @@
         api.members(item.workspace_id),
         api.groups(item.workspace_id),
       ]);
-      candidates = view.members.map((m) => ({ id: m.user_id, name: m.display_name }));
+      candidates = view.members.map((x) => ({ id: x.user_id, name: x.display_name }));
       groupChoices = groups.map((g) => ({ id: g.id, name: g.name }));
-      memberIds = p.members.map((m) => m.user_id);
+      memberIds = p.members.map((x) => x.user_id);
       groupIds = p.groups.map((g) => g.id);
       managing = true;
     } catch (err: unknown) {
-      error = err instanceof ApiError ? err.message : '멤버 목록을 불러오지 못했습니다.';
+      error = errorText(err, m.modules_members_load_failed());
     }
   }
 
@@ -147,30 +148,32 @@
     try {
       await api.setItemMembers(item.id, memberIds, groupIds);
       managing = false;
-      status = `${labels.members}을(를) 저장했습니다.`;
+      status = m.modules_people_saved({ label: labels.members });
       reloadKey += 1;
     } catch (err: unknown) {
-      error = err instanceof ApiError ? err.message : '저장하지 못했습니다.';
+      error = errorText(err, m.modules_save_failed());
     }
   }
 </script>
 
 <section class="flex flex-col gap-3" aria-labelledby="item-profile-heading">
   <div class="flex items-center gap-2">
-    <h2 id="item-profile-heading" class="text-lg font-semibold">정보</h2>
+    <h2 id="item-profile-heading" class="text-lg font-semibold">{m.modules_profile()}</h2>
     {#if profile !== undefined && profile.can_edit && !editing}
       {@const p = profile}
-      <Button size="sm" variant="outline" onclick={() => void startEdit(p)}>고치기</Button>
+      <Button size="sm" variant="outline" onclick={() => void startEdit(p)}
+        >{m.modules_edit()}</Button
+      >
     {/if}
   </div>
   {#if error !== undefined}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
   <p aria-live="polite" class="text-sm">{status}</p>
   {#if profile === undefined}
-    <p class="text-sm text-muted-foreground">불러오는 중…</p>
+    <p class="text-sm text-muted-foreground">{m.modules_loading()}</p>
   {:else if editing}
     <form class="grid gap-3 sm:grid-cols-2" onsubmit={(e) => void save(e)} novalidate>
       <div class="flex flex-col gap-1">
-        <span id="item-status-label" class="text-sm font-medium">상태</span>
+        <span id="item-status-label" class="text-sm font-medium">{m.modules_status()}</span>
         <Select.Root
           type="single"
           value={form.status}
@@ -179,13 +182,11 @@
           }}
         >
           <Select.Trigger class="w-32" aria-labelledby="item-status-label"
-            >{ITEM_STATUS_LABEL[form.status]}</Select.Trigger
+            >{itemStatusLabel(form.status)}</Select.Trigger
           >
           <Select.Content>
             {#each ITEM_STATUSES as s (s)}
-              <Select.Item value={s} label={ITEM_STATUS_LABEL[s]}
-                >{ITEM_STATUS_LABEL[s]}</Select.Item
-              >
+              <Select.Item value={s} label={itemStatusLabel(s)}>{itemStatusLabel(s)}</Select.Item>
             {/each}
           </Select.Content>
         </Select.Root>
@@ -202,10 +203,10 @@
           <Select.Trigger class="w-48" aria-labelledby="item-leader-label"
             >{people.find((p) => p.user_id === form.leader)?.display_name ??
               profile.leader?.display_name ??
-              '없음'}</Select.Trigger
+              m.modules_none()}</Select.Trigger
           >
           <Select.Content>
-            <Select.Item value="none" label="없음">없음</Select.Item>
+            <Select.Item value="none" label={m.modules_none()}>{m.modules_none()}</Select.Item>
             {#each people as p (p.user_id)}
               <Select.Item value={p.user_id} label={p.display_name}>{p.display_name}</Select.Item>
             {/each}
@@ -213,26 +214,26 @@
         </Select.Root>
       </div>
       <div class="flex flex-col gap-1">
-        <Label for="item-starts">시작일</Label>
+        <Label for="item-starts">{m.modules_starts_on()}</Label>
         <Input id="item-starts" type="date" bind:value={form.starts_on} />
       </div>
       <div class="flex flex-col gap-1">
-        <Label for="item-ends">종료일</Label>
+        <Label for="item-ends">{m.modules_ends_on()}</Label>
         <Input id="item-ends" type="date" bind:value={form.ends_on} />
       </div>
       <div class="flex flex-col gap-1 sm:col-span-2">
-        <Label for="item-goal">목표</Label>
+        <Label for="item-goal">{m.modules_goal()}</Label>
         <textarea id="item-goal" class={textarea} rows={2} maxlength={4000} bind:value={form.goal}
         ></textarea>
       </div>
       <div class="flex flex-col gap-1 sm:col-span-2">
-        <Label for="item-scope">범위</Label>
+        <Label for="item-scope">{m.modules_scope()}</Label>
         <textarea id="item-scope" class={textarea} rows={2} maxlength={4000} bind:value={form.scope}
         ></textarea>
       </div>
       {#if kind === 'research'}
         <div class="flex flex-col gap-1 sm:col-span-2">
-          <Label for="item-keywords">키워드(쉼표로 여럿)</Label>
+          <Label for="item-keywords">{m.modules_keywords_input()}</Label>
           <Input id="item-keywords" bind:value={form.keywords} />
         </div>
       {/if}
@@ -252,31 +253,33 @@
         </div>
       {/each}
       <div class="flex gap-2 sm:col-span-2">
-        <Button type="submit">저장</Button>
-        <Button type="button" variant="ghost" onclick={() => (editing = false)}>취소</Button>
+        <Button type="submit">{m.common_save()}</Button>
+        <Button type="button" variant="ghost" onclick={() => (editing = false)}
+          >{m.common_cancel()}</Button
+        >
       </div>
     </form>
   {:else}
     {@const p = profile}
     <dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-      <dt class="text-muted-foreground">상태</dt>
-      <dd><Badge variant="outline">{ITEM_STATUS_LABEL[p.status]}</Badge></dd>
+      <dt class="text-muted-foreground">{m.modules_status()}</dt>
+      <dd><Badge variant="outline">{itemStatusLabel(p.status)}</Badge></dd>
       {#if p.starts_on !== null || p.ends_on !== null}
-        <dt class="text-muted-foreground">기간</dt>
-        <dd>{p.starts_on ?? ''} ~ {p.ends_on ?? ''}</dd>
+        <dt class="text-muted-foreground">{m.modules_period()}</dt>
+        <dd>{periodText(p.starts_on, p.ends_on)}</dd>
       {/if}
       <dt class="text-muted-foreground">{labels.leader}</dt>
-      <dd>{p.leader?.display_name ?? '없음'}</dd>
+      <dd>{p.leader?.display_name ?? m.modules_none()}</dd>
       {#if p.goal !== ''}
-        <dt class="text-muted-foreground">목표</dt>
+        <dt class="text-muted-foreground">{m.modules_goal()}</dt>
         <dd class="whitespace-pre-wrap">{p.goal}</dd>
       {/if}
       {#if p.scope !== ''}
-        <dt class="text-muted-foreground">범위</dt>
+        <dt class="text-muted-foreground">{m.modules_scope()}</dt>
         <dd class="whitespace-pre-wrap">{p.scope}</dd>
       {/if}
       {#if (p.details.keywords ?? []).length > 0}
-        <dt class="text-muted-foreground">키워드</dt>
+        <dt class="text-muted-foreground">{m.modules_keywords()}</dt>
         <dd>{(p.details.keywords ?? []).join(', ')}</dd>
       {/if}
       {#each fields as f (f.key)}
@@ -294,17 +297,19 @@
       <div class="flex items-center gap-2">
         <span class="font-medium">{labels.members}</span>
         {#if p.can_manage_members && !managing}
-          <Button size="sm" variant="outline" onclick={() => void startMembers(p)}>정하기</Button>
+          <Button size="sm" variant="outline" onclick={() => void startMembers(p)}
+            >{m.modules_manage_members()}</Button
+          >
         {/if}
       </div>
       <p class="text-muted-foreground">
         {item.visibility === 'private'
-          ? '비공개 항목은 만든 사람·관리자와 여기의 사람·그룹만 봅니다(작성자는 고치고 독자는 읽기).'
-          : '워크스페이스에 공개된 항목이라 멤버 모두가 봅니다. 비공개로 바꾸면 여기의 사람·그룹만 봅니다.'}
+          ? m.modules_members_private_hint()
+          : m.modules_members_shared_hint()}
       </p>
       {#if managing}
         <fieldset class="flex flex-col gap-2 rounded-md border p-2">
-          <legend class="px-1">사람</legend>
+          <legend class="px-1">{m.modules_people()}</legend>
           {#each candidates as c (c.id)}
             <div class="flex items-center gap-2">
               <Checkbox
@@ -320,7 +325,7 @@
         </fieldset>
         {#if groupChoices.length > 0}
           <fieldset class="flex flex-col gap-2 rounded-md border p-2">
-            <legend class="px-1">그룹</legend>
+            <legend class="px-1">{m.modules_groups()}</legend>
             {#each groupChoices as g (g.id)}
               <div class="flex items-center gap-2">
                 <Checkbox
@@ -336,18 +341,20 @@
           </fieldset>
         {/if}
         <div class="flex gap-2">
-          <Button size="sm" onclick={() => void saveMembers()}>저장</Button>
-          <Button size="sm" variant="ghost" onclick={() => (managing = false)}>취소</Button>
+          <Button size="sm" onclick={() => void saveMembers()}>{m.common_save()}</Button>
+          <Button size="sm" variant="ghost" onclick={() => (managing = false)}
+            >{m.common_cancel()}</Button
+          >
         </div>
       {:else if p.members.length === 0 && p.groups.length === 0}
-        <p>없음</p>
+        <p>{m.modules_none()}</p>
       {:else}
         <ul class="flex flex-wrap gap-1" aria-label={labels.members}>
-          {#each p.members as m (m.user_id)}<li>
-              <Badge variant="secondary">{m.display_name}</Badge>
+          {#each p.members as member (member.user_id)}<li>
+              <Badge variant="secondary">{member.display_name}</Badge>
             </li>{/each}
           {#each p.groups as g (g.id)}<li>
-              <Badge variant="outline">그룹 · {g.name}</Badge>
+              <Badge variant="outline">{m.modules_group_badge({ name: g.name })}</Badge>
             </li>{/each}
         </ul>
       {/if}
