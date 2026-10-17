@@ -74,7 +74,11 @@ async fn settle(state: &AppState, app: &Router, user: &TestUser, q: &str, want: 
     want.sort();
     let mut last = Value::Null;
     for _ in 0..100 {
-        while drain(&state.db, client(state)).await.unwrap() > 0 {}
+        while drain(&state.db, client(state), Some(&state.storage))
+            .await
+            .unwrap()
+            > 0
+        {}
         last = search(app, user, q).await;
         if titles(&last) == want {
             return last;
@@ -90,7 +94,11 @@ async fn settle(state: &AppState, app: &Router, user: &TestUser, q: &str, want: 
 async fn indexed_eventually(state: &AppState, q: &str, id: &str, want: bool) -> bool {
     let mut found = !want;
     for _ in 0..100 {
-        while drain(&state.db, client(state)).await.unwrap() > 0 {}
+        while drain(&state.db, client(state), Some(&state.storage))
+            .await
+            .unwrap()
+            > 0
+        {}
         found = !client(state)
             .query(q, &format!("id = \"{id}\""), 0, 5)
             .await
@@ -461,4 +469,204 @@ async fn file_names_are_searchable_by_people_who_can_see_the_file() {
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
     settle(&state, &app, &admin, &tok, &[]).await;
     assert!(!indexed_eventually(&state, &tok, &file_id, false).await);
+}
+
+async fn upload_bytes(
+    app: &Router,
+    user: &TestUser,
+    doc: &Value,
+    name: &str,
+    content_type: &str,
+    bytes: &[u8],
+) {
+    use sha2::{Digest, Sha256};
+    let up = send(
+        app,
+        Method::POST,
+        "/api/uploads",
+        Some(user),
+        Some(json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] },
+                     "name": name, "size": bytes.len(), "content_type": content_type })),
+    )
+    .await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+    let id = up.json["id"].as_str().unwrap();
+    let hash = hex::encode(Sha256::digest(bytes));
+    let (status, _, _) = common::send_raw(
+        app,
+        Method::PUT,
+        &format!("/api/uploads/{id}/parts/1"),
+        Some(user),
+        &[("x-content-sha256", hash.as_str())],
+        bytes.to_vec(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let done = send(
+        app,
+        Method::POST,
+        &format!("/api/uploads/{id}/complete"),
+        Some(user),
+        None,
+    )
+    .await;
+    assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
+}
+
+fn docx(text: &str) -> Vec<u8> {
+    use std::io::Write;
+    let mut out = std::io::Cursor::new(Vec::new());
+    let mut zip = zip::ZipWriter::new(&mut out);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file("word/document.xml", options).unwrap();
+    write!(
+        zip,
+        "<w:document><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>"
+    )
+    .unwrap();
+    zip.finish().unwrap();
+    out.into_inner()
+}
+
+#[tokio::test]
+async fn filters_narrow_results_and_attachment_text_is_searchable() {
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let body_tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "검색 필터").await;
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "FLT" }),
+        ),
+    )
+    .await
+    .json;
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", module["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "항목" })),
+    )
+    .await
+    .json;
+    let new_task = |title: String| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let item = item["id"].as_str().unwrap().to_owned();
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &format!("/api/items/{item}/tasks"),
+                Some(&admin),
+                Some(json!({ "request_id": new_request_id(), "title": title })),
+            )
+            .await
+            .json
+        }
+    };
+    let report = new_task(format!("{tok} 보고서")).await;
+    new_task(format!("{tok} 기획")).await;
+    let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", report["id"].as_str().unwrap()), Some(&admin), Some(json!({
+        "base_version": report["version"], "title": format!("{tok} 보고서"), "description": "", "status": "done",
+        "priority": "none", "start_date": null, "due_date": "2026-11-05", "estimate_minutes": null, "tags": [],
+        "milestone": false, "assignee_ids": [admin.id.0] }))).await;
+    assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
+    let doc = create_doc(&app, &admin, &ws, &format!("{tok} 회의록")).await;
+    upload_bytes(
+        &app,
+        &admin,
+        &doc,
+        "계획서.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        &docx(&format!("예산 {tok} {body_tok} 확정")),
+    )
+    .await;
+    settle(
+        &state,
+        &app,
+        &admin,
+        &tok,
+        &[
+            &format!("{tok} 기획"),
+            &format!("{tok} 보고서"),
+            &format!("{tok} 회의록"),
+            "계획서.docx",
+        ],
+    )
+    .await;
+
+    let found = |query: String| {
+        let app = app.clone();
+        let admin = admin.clone();
+        async move { titles(&search(&app, &admin, &query).await) }
+    };
+    assert_eq!(
+        found(format!("{tok}&status=done")).await,
+        [format!("{tok} 보고서")]
+    );
+    assert_eq!(
+        found(format!("{tok}&assignee=me")).await,
+        [format!("{tok} 보고서")]
+    );
+    assert_eq!(
+        found(format!("{tok}&from=2026-11-01&to=2026-11-30")).await,
+        [format!("{tok} 보고서")]
+    );
+    assert_eq!(
+        found(format!(
+            "{tok}&module_id={}",
+            module["id"].as_str().unwrap()
+        ))
+        .await,
+        [format!("{tok} 기획"), format!("{tok} 보고서")]
+    );
+    let r = send(
+        &app,
+        Method::GET,
+        &format!("/api/search?q={tok}&status=late"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    let r = send(
+        &app,
+        Method::GET,
+        &format!("/api/search?q={tok}&from=2026/11/01"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+
+    // 첨부 본문(DOCX)의 낱말로 파일을 찾는다.
+    let by_body = settle(&state, &app, &admin, &body_tok, &["계획서.docx"]).await;
+    assert_eq!(by_body[0]["kind"], "file");
+    assert!(
+        by_body[0]["snippet"]
+            .as_str()
+            .is_some_and(|s| s.contains("예산")),
+        "{by_body:?}"
+    );
+
+    // 검색 서비스가 없을 때도 같은 필터를 쓴다(제목 검색).
+    let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
+    let plain_app = common::app(&plain);
+    assert_eq!(
+        titles(&search(&plain_app, &admin, &format!("{tok}&status=done")).await),
+        [format!("{tok} 보고서")]
+    );
+    assert_eq!(
+        titles(&search(&plain_app, &admin, &format!("{tok}&assignee=me&kinds=task")).await),
+        [format!("{tok} 보고서")]
+    );
 }

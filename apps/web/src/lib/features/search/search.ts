@@ -2,6 +2,8 @@
 import type { SearchKind, SearchResultView } from '$lib/api/client';
 import { calendarPath, itemPath, itemTaskPath, pathFor } from '$lib/router.svelte';
 
+export const SEARCH_KINDS: SearchKind[] = ['document', 'task', 'item', 'event', 'file'];
+
 export const SEARCH_KIND_LABEL: Record<SearchKind, string> = {
   document: '문서',
   task: '업무',

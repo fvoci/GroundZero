@@ -19,7 +19,10 @@ use uuid::Uuid;
 use crate::config::SearchConfig;
 use crate::db::Db;
 use crate::error::AppError;
+use crate::features::file_text;
 use crate::features::search_text::plain_text;
+use crate::storage::Storage;
+use futures_util::StreamExt;
 
 /// 색인 이름.
 const INDEX: &str = "fvoci";
@@ -51,6 +54,14 @@ pub struct IndexDoc {
     pub title: String,
     pub reference: Option<String>,
     pub text: String,
+    /// 필터용: 모듈.
+    pub module_id: Option<String>,
+    /// 필터용: 업무 상태.
+    pub status: Option<String>,
+    /// 필터용: 업무 담당자.
+    pub assignee_ids: Vec<String>,
+    /// 필터용 날짜(YYYYMMDD 숫자): 업무는 기한(없으면 시작일), 일정은 시작일, 그 밖은 고친 날.
+    pub day: Option<i32>,
 }
 
 /// 검색 결과 후보.
@@ -156,7 +167,7 @@ impl SearchClient {
                 .request(reqwest::Method::PATCH, &format!("/indexes/{INDEX}/settings"))
                 .json(&json!({
                     "searchableAttributes": ["title", "reference", "text"],
-                    "filterableAttributes": ["kind", "workspace_id", "owner_user_id", "id"],
+                    "filterableAttributes": ["kind", "workspace_id", "owner_user_id", "id", "module_id", "status", "assignee_ids", "day"],
                     "displayedAttributes": ["kind", "id", "title", "reference", "workspace_id", "item_id", "text"]
                 }))
                 .send()
@@ -233,18 +244,53 @@ impl SearchClient {
     }
 }
 
-type PayloadRow = (
-    String,
-    Uuid,
-    Option<bool>,
-    Option<Uuid>,
-    Option<Uuid>,
-    Option<Uuid>,
-    Option<String>,
-    Option<String>,
-    Option<Value>,
-    Option<String>,
-);
+#[derive(Debug, sqlx::FromRow)]
+struct PayloadRow {
+    kind: String,
+    id: Uuid,
+    live: Option<bool>,
+    workspace_id: Option<Uuid>,
+    owner_user_id: Option<Uuid>,
+    item_id: Option<Uuid>,
+    title: Option<String>,
+    reference: Option<String>,
+    body: Option<Value>,
+    description: Option<String>,
+    module_id: Option<Uuid>,
+    status: Option<String>,
+    assignee_ids: Option<Vec<Uuid>>,
+    day: Option<time::Date>,
+    file_key: Option<String>,
+    file_type: Option<String>,
+    file_size: Option<i64>,
+}
+
+/// 날짜를 필터용 숫자(YYYYMMDD)로.
+fn day_number(day: time::Date) -> i32 {
+    day.year() * 10_000 + i32::from(u8::from(day.month())) * 100 + i32::from(day.day())
+}
+
+/// 첨부 본문(지원 형식, 크기 제한 안). 읽지 못하면 이름으로만 색인한다.
+async fn file_text(storage: &Storage, row: &PayloadRow) -> Option<String> {
+    let key = row.file_key.as_deref()?;
+    let name = row.title.as_deref().unwrap_or_default();
+    let content_type = row.file_type.as_deref().unwrap_or_default();
+    let size = u64::try_from(row.file_size?).ok()?;
+    if size > file_text::MAX_EXTRACT_BYTES || !file_text::supported(content_type, name) {
+        return None;
+    }
+    let mut stream = storage.get(key).await.ok()?;
+    let mut bytes = Vec::with_capacity(usize::try_from(size).unwrap_or_default());
+    while let Some(chunk) = stream.next().await {
+        bytes.extend_from_slice(&chunk.ok()?);
+    }
+    let content_type = content_type.to_owned();
+    let name = name.to_owned();
+    tokio::task::spawn_blocking(move || file_text::extract(&bytes, &content_type, &name))
+        .await
+        .ok()
+        .flatten()
+}
 
 /// 색인 준비: 색인이 없으면 만들고 모든 것을 대기열에 올린다.
 pub async fn prepare(db: &Db, client: &SearchClient) -> Result<(), AppError> {
@@ -279,7 +325,11 @@ async fn upsert_each(client: &SearchClient, docs: &[IndexDoc]) -> Vec<String> {
 
 /// 대기열을 한 번(최대 200개) 꺼내 색인에 반영한다. 꺼낸 수를 돌려준다. 반영하지 못한 것은 표시가 풀린 뒤
 /// 다시 시도한다(대기열 행을 잠근 채 Meilisearch를 기다리지 않는다).
-pub async fn drain(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
+pub async fn drain(
+    db: &Db,
+    client: &SearchClient,
+    storage: Option<&Storage>,
+) -> Result<i32, AppError> {
     let mut tx = db.begin_anonymous().await?;
     let claimed: Vec<(String, Uuid, OffsetDateTime)> =
         sqlx::query_as("SELECT kind, target_id, queued_at FROM app_system_search_claim($1)")
@@ -294,7 +344,8 @@ pub async fn drain(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
     let ids: Vec<Uuid> = claimed.iter().map(|(_, id, _)| *id).collect();
     let mut tx = db.begin_anonymous().await?;
     let rows: Vec<PayloadRow> = sqlx::query_as(
-        "SELECT kind, id, live, workspace_id, owner_user_id, item_id, title, reference, body, description
+        "SELECT kind, id, live, workspace_id, owner_user_id, item_id, title, reference, body, description,
+                module_id, status, assignee_ids, day, file_key, file_type, file_size
          FROM app_system_search_payload($1, $2)",
     )
     .bind(&kinds)
@@ -304,26 +355,38 @@ pub async fn drain(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
     tx.commit().await?;
     let mut upserts = Vec::new();
     let mut deletes = Vec::new();
-    for (kind, id, live, workspace_id, owner, item_id, title, reference, body, description) in rows
-    {
-        if live != Some(true) {
-            deletes.push(uid(&kind, id));
+    for row in rows {
+        if row.live != Some(true) {
+            deletes.push(uid(&row.kind, row.id));
             continue;
         }
-        let text = match body {
-            Some(body) => plain_text(&body),
-            None => description.unwrap_or_default(),
+        let text = match (&row.body, row.kind.as_str()) {
+            (Some(body), _) => plain_text(body),
+            (None, "file") => match storage {
+                Some(storage) => file_text(storage, &row).await.unwrap_or_default(),
+                None => String::new(),
+            },
+            _ => row.description.clone().unwrap_or_default(),
         };
         upserts.push(IndexDoc {
-            uid: uid(&kind, id),
-            kind,
-            id: id.to_string(),
-            workspace_id: workspace_id.map(|w| w.to_string()),
-            owner_user_id: owner.map(|o| o.to_string()),
-            item_id: item_id.map(|i| i.to_string()),
-            title: title.unwrap_or_default(),
-            reference,
+            uid: uid(&row.kind, row.id),
+            id: row.id.to_string(),
+            workspace_id: row.workspace_id.map(|w| w.to_string()),
+            owner_user_id: row.owner_user_id.map(|o| o.to_string()),
+            item_id: row.item_id.map(|i| i.to_string()),
+            title: row.title.unwrap_or_default(),
+            reference: row.reference,
             text,
+            module_id: row.module_id.map(|m| m.to_string()),
+            status: row.status,
+            assignee_ids: row
+                .assignee_ids
+                .unwrap_or_default()
+                .iter()
+                .map(Uuid::to_string)
+                .collect(),
+            day: row.day.map(day_number),
+            kind: row.kind,
         });
     }
     let mut done: HashSet<String> = upsert_each(client, &upserts).await.into_iter().collect();

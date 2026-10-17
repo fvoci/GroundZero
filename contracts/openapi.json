@@ -5107,6 +5107,67 @@
                 "null"
               ]
             }
+          },
+          {
+            "name": "module_id",
+            "in": "query",
+            "description": "이 모듈 안의 것만.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "업무 상태(`todo`·`in_progress`·`done`). 주면 업무만 나온다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "assignee",
+            "in": "query",
+            "description": "담당자(`me` 또는 사용자 id). 주면 업무만 나온다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "날짜 범위 시작(YYYY-MM-DD): 업무는 기한(없으면 시작일), 일정은 시작일, 그 밖은 고친 날.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "날짜 범위 끝(YYYY-MM-DD, 포함).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         ],
         "responses": {

@@ -7,6 +7,7 @@ pub mod courses;
 pub mod documents;
 pub mod events;
 pub mod export;
+pub mod file_text;
 pub mod files;
 pub mod home;
 pub mod members;

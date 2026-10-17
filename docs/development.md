@@ -541,6 +541,14 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 - CSV 줄 나누기는 회차 일괄 등록과 함께 쓰는 `apps/web/src/lib/csv.ts`.
 - **검증**: 웹 테스트(필드·한국어 값·담당자 이름 맞추기·따옴표, 줄 번호별 오류). 서버 경로는 기존 업무 테스트가 덮는다.
 
+## 38. 검색 필터와 첨부 본문 검색 (2026-10-17, D-39, 마이그레이션 0033)
+
+- **필터**: `GET /api/search`에 `module_id`(그 모듈 안), `status`(`todo`·`in_progress`·`done`), `assignee`(`me` 또는 사용자 id), `from`·`to`(YYYY-MM-DD, 끝 포함)를 더한다. 상태·담당자를 주면 업무만 나온다. 날짜는 업무는 기한(없으면 시작일), 일정은 시작일, 그 밖은 고친 날로 본다. 잘못된 값은 400. Meilisearch에는 걸러 낼 속성(`module_id`·`status`·`assignee_ids`·`day`)을 두고 권한 범위 필터에 덧붙이며, 결과는 그대로 `app_search_visible`로 다시 거른다. 검색 서비스가 없을 때의 제목 검색도 같은 필터를 쓴다. 담당자가 바뀌면 그 업무를 다시 색인한다.
+- **첨부 본문**: 파일의 현재 버전에서 글자를 뽑아 색인한다. 글자 형식(text/\*, JSON·XML·YAML, `.md`·`.csv`·`.log` 등), DOCX(본문·머리글·바닥글), PPTX(슬라이드), XLSX(공유 문자열·시트), HWPX(구역). 이 넷은 ZIP 안의 XML이라 메모리에서 읽고 태그를 걷어 낸다(디스크에 풀지 않음, 항목당 32 MiB까지 읽어 압축 폭탄을 막음). 20 MiB보다 큰 파일과 PDF·HWP(이진)·옛 Office 이진 형식은 아직 이름으로만 찾는다. 뽑은 글자는 색인에만 두고 DB에 저장하지 않는다.
+- **권한**: 본문 일치와 요약은 그 파일을 볼 수 있는 사람에게만 보인다. 요약은 읽기에 해당하므로 다운로드 허용(D-20 복제·다운로드)과 따로 묻지 않는다.
+- **새 의존성**: DOCX 등의 압축을 풀기 위해 `zip`의 `deflate-flate2` 기능과 `flate2` 1.1(순수 Rust 백엔드). 잠금에 새로 든 것은 `flate2`(MIT OR Apache-2.0), `miniz_oxide`(MIT OR Zlib OR Apache-2.0), `adler2`(0BSD OR MIT OR Apache-2.0), `simd-adler32`(MIT). `cargo deny`가 새로 실패하지 않는다.
+- **검증**: 단위 테스트(DOCX·HWPX 글자 뽑기). 통합 테스트(상태·`assignee=me`·날짜 범위·모듈 필터, 잘못된 값 400, DOCX 본문 검색과 요약, 검색 서비스 없을 때의 필터).
+
 ## 참고 자료
 
 - [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict.html)

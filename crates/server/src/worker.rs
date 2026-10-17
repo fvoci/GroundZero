@@ -76,7 +76,7 @@ pub async fn run_all_now(
         indexed: match search {
             Some(client) => {
                 prepare(db, client).await?;
-                drain_all(db, client).await?
+                drain_all(db, client, storage).await?
             }
             None => 0,
         },
@@ -84,10 +84,14 @@ pub async fn run_all_now(
 }
 
 /// 검색 대기열을 빌 때까지 반영한다(한 번에 최대 20회).
-async fn drain_all(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
+async fn drain_all(
+    db: &Db,
+    client: &SearchClient,
+    storage: Option<&Storage>,
+) -> Result<i32, AppError> {
     let mut total = 0;
     for _ in 0..20 {
-        let n = drain(db, client).await?;
+        let n = drain(db, client, storage).await?;
         total += n;
         if n == 0 {
             break;
@@ -154,9 +158,9 @@ fn logged(job: &str, result: Result<i32, AppError>) -> i32 {
     })
 }
 
-async fn index(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
+async fn index(db: &Db, client: &SearchClient, storage: Option<&Storage>) -> Result<i32, AppError> {
     prepare(db, client).await?;
-    drain_all(db, client).await
+    drain_all(db, client, storage).await
 }
 
 async fn when_due(db: &Db, schedule: (&str, &str), sql: &str) -> Result<i32, AppError> {
@@ -179,7 +183,7 @@ pub async fn run_once(
             None => 0,
         },
         indexed: match search {
-            Some(client) => logged("search", index(db, client).await),
+            Some(client) => logged("search", index(db, client, storage).await),
             None => 0,
         },
         purged: logged(

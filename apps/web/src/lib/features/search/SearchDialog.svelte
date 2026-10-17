@@ -2,16 +2,22 @@
   // 통합 검색 창(D-39). 사이드바 단추나 Ctrl/⌘+K로 연다. 볼 수 있는 것만 서버가 돌려준다.
   import { onMount } from 'svelte';
 
-  import type { SearchResultView } from '$lib/api/client';
+  import type { SearchFilters, SearchKind, SearchResultView, TaskStatus } from '$lib/api/client';
   import { api } from '$lib/api/client';
+  import { STATUS_LABEL } from '$lib/features/tasks/labels';
   import { router } from '$lib/router.svelte';
+  import { Checkbox } from '$lib/ui/checkbox';
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
+  import { Label } from '$lib/ui/label';
+  import * as Select from '$lib/ui/select';
 
-  import { SEARCH_KIND_LABEL, searchResultPath } from './search';
+  import { SEARCH_KIND_LABEL, SEARCH_KINDS, searchResultPath } from './search';
 
   let { open = $bindable(false), memberOf }: { open?: boolean; memberOf: (ws: string) => boolean } =
     $props();
+
+  const TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'done'];
 
   let query = $state('');
   let results = $state<SearchResultView[]>([]);
@@ -19,23 +25,48 @@
   let seq = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  async function run(q: string, mine: number): Promise<void> {
+  // 필터(D-39). 상태·내 담당을 고르면 업무만 나온다.
+  let kind = $state<SearchKind | 'all'>('all');
+  let taskStatus = $state<TaskStatus | 'any'>('any');
+  let mine = $state(false);
+  let from = $state('');
+  let to = $state('');
+  const taskOnly = $derived(taskStatus !== 'any' || mine);
+  const reversed = $derived(from !== '' && to !== '' && from > to);
+
+  function filters(): SearchFilters {
+    const f: SearchFilters = {};
+    if (taskOnly) f.kind = 'task';
+    else if (kind !== 'all') f.kind = kind;
+    if (taskStatus !== 'any') f.status = taskStatus;
+    if (mine) f.assignee = 'me';
+    if (from !== '') f.from = from;
+    if (to !== '') f.to = to;
+    return f;
+  }
+
+  /** 필터를 바꾸면 같은 검색어로 바로 다시 찾는다. */
+  function refilter(): void {
+    changed(query, 0);
+  }
+
+  async function run(q: string, ticket: number): Promise<void> {
     try {
-      const found = await api.search(q, null);
-      if (mine !== seq) return;
+      const found = await api.search(q, null, filters());
+      if (ticket !== seq) return;
       results = found;
       status = 'done';
     } catch {
-      if (mine !== seq) return;
+      if (ticket !== seq) return;
       results = [];
       status = 'error';
     }
   }
 
-  function changed(value: string): void {
+  function changed(value: string, delay = 250): void {
     query = value;
     seq += 1;
-    const mine = seq;
+    const ticket = seq;
     if (timer !== undefined) clearTimeout(timer);
     const q = value.trim();
     if (q === '') {
@@ -45,8 +76,8 @@
     }
     status = 'loading';
     timer = setTimeout(() => {
-      run(q, mine).catch(() => undefined);
-    }, 250);
+      run(q, ticket).catch(() => undefined);
+    }, delay);
   }
 
   let list = $state<HTMLUListElement | undefined>();
@@ -93,7 +124,7 @@
     <Dialog.Header>
       <Dialog.Title>검색</Dialog.Title>
       <Dialog.Description
-        >문서·업무·항목·일정에서 찾습니다. 볼 수 있는 것만 나옵니다.</Dialog.Description
+        >문서·업무·항목·일정·파일(지원 형식은 본문까지)에서 찾습니다. 볼 수 있는 것만 나옵니다.</Dialog.Description
       >
     </Dialog.Header>
     <Input
@@ -110,8 +141,99 @@
       }}
       data-testid="search-input"
     />
+    <fieldset class="flex flex-wrap items-end gap-3 text-sm" data-testid="search-filters">
+      <legend class="sr-only">필터</legend>
+      <div class="flex flex-col gap-1">
+        <span id="search-kind-label" class="font-medium">종류</span>
+        <Select.Root
+          type="single"
+          value={taskOnly ? 'task' : kind}
+          disabled={taskOnly}
+          onValueChange={(v: string) => {
+            kind = v === 'all' ? 'all' : (SEARCH_KINDS.find((k) => k === v) ?? 'all');
+            refilter();
+          }}
+        >
+          <Select.Trigger class="w-24" aria-labelledby="search-kind-label"
+            >{taskOnly
+              ? SEARCH_KIND_LABEL.task
+              : kind === 'all'
+                ? '전체'
+                : SEARCH_KIND_LABEL[kind]}</Select.Trigger
+          >
+          <Select.Content>
+            <Select.Item value="all" label="전체">전체</Select.Item>
+            {#each SEARCH_KINDS as k (k)}
+              <Select.Item value={k} label={SEARCH_KIND_LABEL[k]}
+                >{SEARCH_KIND_LABEL[k]}</Select.Item
+              >
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="flex flex-col gap-1">
+        <span id="search-status-label" class="font-medium">업무 상태</span>
+        <Select.Root
+          type="single"
+          value={taskStatus}
+          onValueChange={(v: string) => {
+            taskStatus = TASK_STATUSES.find((s) => s === v) ?? 'any';
+            refilter();
+          }}
+        >
+          <Select.Trigger class="w-24" aria-labelledby="search-status-label"
+            >{taskStatus === 'any' ? '전체' : STATUS_LABEL[taskStatus]}</Select.Trigger
+          >
+          <Select.Content>
+            <Select.Item value="any" label="전체">전체</Select.Item>
+            {#each TASK_STATUSES as s (s)}
+              <Select.Item value={s} label={STATUS_LABEL[s]}>{STATUS_LABEL[s]}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="flex items-center gap-2 pb-2">
+        <Checkbox
+          id="search-mine"
+          bind:checked={mine}
+          onCheckedChange={() => {
+            refilter();
+          }}
+        />
+        <Label for="search-mine">내 담당</Label>
+      </div>
+      <div class="flex flex-col gap-1">
+        <Label for="search-from">날짜부터</Label>
+        <Input
+          id="search-from"
+          type="date"
+          class="w-36"
+          bind:value={from}
+          onchange={() => {
+            refilter();
+          }}
+        />
+      </div>
+      <div class="flex flex-col gap-1">
+        <Label for="search-to">까지</Label>
+        <Input
+          id="search-to"
+          type="date"
+          class="w-36"
+          bind:value={to}
+          onchange={() => {
+            refilter();
+          }}
+        />
+      </div>
+    </fieldset>
+    <p class="text-xs text-muted-foreground">
+      날짜는 업무의 기한(없으면 시작일), 일정의 시작일, 그 밖에는 고친 날로 봅니다.
+    </p>
     <div aria-live="polite" class="text-sm text-muted-foreground">
-      {#if status === 'loading'}
+      {#if reversed}
+        <span class="text-destructive">시작 날짜가 끝 날짜보다 늦습니다.</span>
+      {:else if status === 'loading'}
         찾는 중…
       {:else if status === 'error'}
         <span class="text-destructive">검색하지 못했습니다. 잠시 뒤 다시 시도해 주세요.</span>

@@ -40,6 +40,85 @@ pub struct SearchQuery {
     pub workspace_id: Option<WorkspaceId>,
     /// 쉼표로 구분한 종류(`document,task,item,event,file`). 없으면 전부.
     pub kinds: Option<String>,
+    /// 이 모듈 안의 것만.
+    #[param(value_type = Option<String>, format = Uuid)]
+    pub module_id: Option<Uuid>,
+    /// 업무 상태(`todo`·`in_progress`·`done`). 주면 업무만 나온다.
+    pub status: Option<String>,
+    /// 담당자(`me` 또는 사용자 id). 주면 업무만 나온다.
+    pub assignee: Option<String>,
+    /// 날짜 범위 시작(YYYY-MM-DD): 업무는 기한(없으면 시작일), 일정은 시작일, 그 밖은 고친 날.
+    pub from: Option<String>,
+    /// 날짜 범위 끝(YYYY-MM-DD, 포함).
+    pub to: Option<String>,
+}
+
+/// 검색 조건 중 필터.
+#[derive(Debug, Default)]
+struct Filters {
+    module: Option<Uuid>,
+    status: Option<String>,
+    assignee: Option<Uuid>,
+    from: Option<time::Date>,
+    to: Option<time::Date>,
+}
+
+fn parse_day(raw: Option<&str>, name: &str) -> Result<Option<time::Date>, AppError> {
+    let Some(raw) = raw.filter(|r| !r.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let format = time::macros::format_description!("[year]-[month]-[day]");
+    time::Date::parse(raw.trim(), &format)
+        .map(Some)
+        .map_err(|_| AppError::BadRequest(format!("{name} must be YYYY-MM-DD")))
+}
+
+fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
+    let status = match query.status.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(s @ ("todo" | "in_progress" | "done")) => Some(s.to_owned()),
+        Some(other) => return Err(AppError::BadRequest(format!("unknown status {other}"))),
+    };
+    let assignee = match query.assignee.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some("me") => Some(me.0),
+        Some(raw) => Some(
+            Uuid::parse_str(raw)
+                .map_err(|_| AppError::BadRequest("assignee must be me or a user id".into()))?,
+        ),
+    };
+    Ok(Filters {
+        module: query.module_id,
+        status,
+        assignee,
+        from: parse_day(query.from.as_deref(), "from")?,
+        to: parse_day(query.to.as_deref(), "to")?,
+    })
+}
+
+fn day_number(day: time::Date) -> i32 {
+    day.year() * 10_000 + i32::from(u8::from(day.month())) * 100 + i32::from(day.day())
+}
+
+/// Meilisearch 필터에 더할 조건(값은 UUID·고정 낱말·숫자뿐이라 따옴표 밖으로 나갈 수 없다).
+fn meili_filters(f: &Filters) -> String {
+    let mut out = String::new();
+    if let Some(m) = f.module {
+        out.push_str(&format!(" AND module_id = \"{m}\""));
+    }
+    if let Some(s) = &f.status {
+        out.push_str(&format!(" AND status = \"{s}\""));
+    }
+    if let Some(a) = f.assignee {
+        out.push_str(&format!(" AND assignee_ids = \"{a}\""));
+    }
+    if let Some(d) = f.from {
+        out.push_str(&format!(" AND day >= {}", day_number(d)));
+    }
+    if let Some(d) = f.to {
+        out.push_str(&format!(" AND day <= {}", day_number(d)));
+    }
+    out
 }
 
 /// 검색 결과 한 건.
@@ -188,21 +267,26 @@ pub async fn search(
         )));
     }
     let kinds = parse_kinds(query.kinds.as_deref())?;
+    let wanted = filters(&query, user)?;
     let Some(client) = &state.search else {
         let mut tx = state.db.begin_as(user).await?;
-        let results = fallback(&mut tx, q, query.workspace_id, &kinds).await?;
+        let results = fallback(&mut tx, q, query.workspace_id, &kinds, &wanted).await?;
         tx.commit().await?;
         return Ok(Json(results));
     };
     let mut tx = state.db.begin_as(user).await?;
-    let filter = scope_filter(&mut tx, query.workspace_id, &kinds).await?;
+    let filter = format!(
+        "({}){}",
+        scope_filter(&mut tx, query.workspace_id, &kinds).await?,
+        meili_filters(&wanted)
+    );
     tx.commit().await?;
     if let Some(results) = indexed(&state, client, user, q, &filter).await? {
         return Ok(Json(results));
     }
     // 검색 서비스가 응답하지 않으면 제목 검색으로 대신한다.
     let mut tx = state.db.begin_as(user).await?;
-    let results = fallback(&mut tx, q, query.workspace_id, &kinds).await?;
+    let results = fallback(&mut tx, q, query.workspace_id, &kinds, &wanted).await?;
     tx.commit().await?;
     Ok(Json(results))
 }
@@ -277,6 +361,7 @@ async fn fallback(
     q: &str,
     workspace: Option<WorkspaceId>,
     kinds: &[&str],
+    wanted: &Filters,
 ) -> Result<Vec<SearchResult>, AppError> {
     if let Some(ws) = workspace {
         member_role(tx, ws).await?;
@@ -290,28 +375,47 @@ async fn fallback(
     type Row = (String, Uuid, String, Option<Uuid>, Option<Uuid>);
     let rows: Vec<Row> = sqlx::query_as(
         "SELECT kind, id, title, workspace_id, item_id FROM (
-           SELECT 'document' AS kind, id, title, workspace_id, item_id, updated_at
-           FROM documents WHERE title ILIKE $1 AND deleted_at IS NULL
+           SELECT 'document' AS kind, d.id, d.title, d.workspace_id, d.item_id, d.updated_at,
+                  (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status,
+                  NULL::uuid[] AS assignees, d.updated_at::date AS day
+           FROM documents d WHERE d.title ILIKE $1 AND d.deleted_at IS NULL
            UNION ALL
-           SELECT 'task', id, title, workspace_id, item_id, updated_at
-           FROM tasks WHERE title ILIKE $1 AND deleted_at IS NULL
+           SELECT 'task', t.id, t.title, t.workspace_id, t.item_id, t.updated_at,
+                  (SELECT module_id FROM items WHERE id = t.item_id), t.status,
+                  ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id), coalesce(t.due_date, t.start_date)
+           FROM tasks t WHERE t.title ILIKE $1 AND t.deleted_at IS NULL
            UNION ALL
-           SELECT 'item', id, title, workspace_id, NULL, updated_at
-           FROM items WHERE title ILIKE $1 AND deleted_at IS NULL
+           SELECT 'item', i.id, i.title, i.workspace_id, NULL, i.updated_at, i.module_id, NULL, NULL,
+                  i.updated_at::date
+           FROM items i WHERE i.title ILIKE $1 AND i.deleted_at IS NULL
            UNION ALL
-           SELECT 'event', id, title, workspace_id, item_id, updated_at
-           FROM events WHERE title ILIKE $1 AND deleted_at IS NULL
+           SELECT 'event', e.id, e.title, e.workspace_id, e.item_id, e.updated_at,
+                  (SELECT module_id FROM items WHERE id = e.item_id), NULL, NULL,
+                  coalesce(e.start_date, (e.starts_at AT TIME ZONE e.timezone)::date)
+           FROM events e WHERE e.title ILIKE $1 AND e.deleted_at IS NULL
            UNION ALL
-           SELECT 'file', f.id, f.name, f.workspace_id, coalesce(f.item_id, d.item_id), f.updated_at
+           SELECT 'file', f.id, f.name, f.workspace_id, coalesce(f.item_id, d.item_id), f.updated_at,
+                  (SELECT module_id FROM items WHERE id = coalesce(f.item_id, d.item_id)), NULL, NULL,
+                  f.updated_at::date
            FROM files f LEFT JOIN documents d ON d.id = f.document_id
            WHERE f.name ILIKE $1 AND f.deleted_at IS NULL
          ) r
          WHERE r.kind = ANY($2) AND ($3::uuid IS NULL OR r.workspace_id = $3)
+           AND ($4::uuid IS NULL OR r.module_id = $4)
+           AND ($5::text IS NULL OR r.status = $5)
+           AND ($6::uuid IS NULL OR $6 = ANY (r.assignees))
+           AND ($7::date IS NULL OR r.day >= $7)
+           AND ($8::date IS NULL OR r.day <= $8)
          ORDER BY r.updated_at DESC LIMIT 60",
     )
     .bind(&pattern)
     .bind(kinds)
     .bind(workspace)
+    .bind(wanted.module)
+    .bind(wanted.status.as_deref())
+    .bind(wanted.assignee)
+    .bind(wanted.from)
+    .bind(wanted.to)
     .fetch_all(tx.conn())
     .await?;
     let candidates: Vec<(String, Uuid)> = rows.iter().map(|r| (r.0.clone(), r.1)).collect();

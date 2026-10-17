@@ -1520,6 +1520,17 @@ function parseDeletedWorkspace(value: Json): DeletedWorkspaceView {
 
 export type SearchKind = 'document' | 'task' | 'item' | 'event' | 'file';
 
+/** 검색 필터(D-39). 상태·담당자를 주면 업무만 나온다. 날짜는 YYYY-MM-DD(끝 포함). */
+export interface SearchFilters {
+  kind?: SearchKind;
+  moduleId?: string;
+  status?: TaskStatus;
+  /** `me` 또는 사용자 id. */
+  assignee?: string;
+  from?: string;
+  to?: string;
+}
+
 export interface SearchResultView {
   kind: SearchKind;
   id: string;
@@ -2160,9 +2171,15 @@ export const api = {
     return { kind: 'restored', document: parseDocument(json) };
   },
   /** 통합 검색. 볼 수 있는 것만, 최대 20건. */
-  search: (q: string, workspaceId: string | null) => {
+  search: (q: string, workspaceId: string | null, filters: SearchFilters = {}) => {
     const params = new URLSearchParams({ q });
     if (workspaceId !== null) params.set('workspace_id', workspaceId);
+    if (filters.kind !== undefined) params.set('kinds', filters.kind);
+    if (filters.moduleId !== undefined) params.set('module_id', filters.moduleId);
+    if (filters.status !== undefined) params.set('status', filters.status);
+    if (filters.assignee !== undefined) params.set('assignee', filters.assignee);
+    if (filters.from !== undefined) params.set('from', filters.from);
+    if (filters.to !== undefined) params.set('to', filters.to);
     return expectOk('GET', `/api/search?${params.toString()}`, (v) =>
       parseList(v, parseSearchResult),
     );
