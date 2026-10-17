@@ -141,6 +141,10 @@ impl IntoResponse for AppError {
             message,
             request_id: crate::logging::current_request_id(),
         };
-        (status, Json(body)).into_response()
+        let mut response = (status, Json(body)).into_response();
+        response
+            .extensions_mut()
+            .insert(crate::logging::ErrorCode(error));
+        response
     }
 }

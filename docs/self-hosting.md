@@ -121,9 +121,9 @@ git pull && docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d
 
 앱은 stdout에 한 줄에 JSON 객체 하나(JSON Lines)를 쓴다. Docker가 이것을 `json-file`로 남기고 서비스마다 `FVOCI_LOG_MAX_SIZE`(기본 `10m`) × `FVOCI_LOG_MAX_FILE`(기본 `5`)까지만 두고 돌린다. 앱이 따로 로그 파일을 쓰지 않으며 로그 서버·외부 전송은 없다.
 
-- **필드**: 모든 줄에 `timestamp`(UTC RFC 3339), `level`, `target`(모듈), `event`(기계용 코드, 예: `http.request`·`http.error`·`job.failed`), `message`. 요청 중이면 `request_id`, 주기 작업 중이면 `job`·`job_id`. 요청마다 접근 줄 하나(`http.request`: `method`, `route`(경로 틀, 쿼리 없음), `status_code`, `duration_ms`). 서버 쪽 실패는 한 번 `error_code`·`detail`(분류만)과 함께 남는다. 입력 오류·권한 거부(4xx)는 오류 줄을 남기지 않는다. `/healthz`와 정적 파일은 DEBUG.
-- **남기지 않는 것**: 비밀번호·토큰·쿠키·`Authorization`·OIDC 코드·서명 URL·문서 본문·첨부 내용, 요청·응답 본문, 머리글, 쿼리, 설정 값, DB 바인딩 값, 바깥 서비스 오류 원문. 레벨을 올려도 같다(HTTP·TLS·DB 라이브러리는 `info`까지만 나온다).
-- **사용자 화면과 잇기**: 서버 오류 화면에는 요청 ID가 나온다(응답 머리글 `x-request-id`와 같다). 앞단 프록시가 안전한 모양(영문·숫자·`-_.` 8~64자)의 `x-request-id`를 주면 그 값을 쓴다.
+- **필드**: 모든 줄에 `timestamp`(UTC RFC 3339), `level`, `target`(모듈), `event`(기계용 코드, 예: `http.request`·`http.error`·`job.failed`), `message`. 요청 중이면 `request_id`, 주기 작업 중이면 `job`·`job_id`. 요청마다 접근 줄 하나(`http.request`: `method`, `route`(경로 틀, 쿼리 없음), `status_code`, `duration_ms`, 거절이면 `error_code`). 서버 쪽 실패는 한 번 `error_code`·`detail`(분류만)과 함께 남는다. 입력 오류·권한 거부(4xx)는 오류 줄을 남기지 않는다. `/healthz`와 정적 파일은 DEBUG(5xx면 WARN). 패닉은 위치만 담은 `event: "panic"` 한 줄로 남는다.
+- **남기지 않는 것**: 비밀번호·토큰·쿠키·`Authorization`·OIDC 코드·서명 URL·문서 본문·첨부 내용, 요청·응답 본문, 머리글, 쿼리, 설정 값, DB 바인딩 값, 바깥 서비스 오류 원문. SQL 문장(느린 쿼리 포함)도 남기지 않는다. 레벨을 올려도 같다(HTTP·TLS·DB 라이브러리는 `info`까지만, 첨부 내용을 찍는 PDF 라이브러리는 아예 나오지 않는다).
+- **사용자 화면과 잇기**: 서버 오류 화면에는 요청 ID가 나온다(응답 머리글 `x-request-id`와 같다). 앞단 프록시가 안전한 모양(영문·숫자·`-_.` 8~64자)의 `x-request-id`를 주면 그 값을 쓴다(추적용일 뿐 권한과 상관없다).
 - **감사 기록은 따로**: 생성·삭제·이름 변경·권한 변경 같은 감사 이벤트는 DB(`audit_log`)에 남고 로그 레벨과 상관없다.
 
 ```bash

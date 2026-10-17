@@ -173,7 +173,8 @@ async fn every_line_is_json_even_with_concurrent_requests() {
         access
             .iter()
             .any(|l| l["route"] == "/api/workspaces/{workspace_id}/modules"
-                && l["status_code"] == 404)
+                && l["status_code"] == 404
+                && l["error_code"] == "not_found")
     );
     assert!(
         !lines.iter().any(|l| l["level"] == "ERROR"
@@ -368,9 +369,18 @@ async fn filters_apply_by_level_and_module() {
         let (buf, _guard) = scoped("trace");
         tracing::debug!(target: "reqwest::connect", event = "test.lib_debug", "hidden");
         tracing::info!(target: "reqwest::connect", event = "test.lib_info", "shown");
+        // PDF 뽑기 라이브러리는 경고·오류에 파일 내용을 찍으므로 어느 레벨에서도 내보내지 않는다.
+        tracing::error!(target: "pdf_extract", event = "test.pdf", "Stream: FAKE-PDF-7f3a");
+        tracing::warn!(target: "lopdf::reader", event = "test.pdf", "Object load error");
+        // 사건 필드가 공통 필드를 덮지 못한다.
+        tracing::info!(target: "fvoci_server::probe", event = "test.collide", level = "FAKE", "x");
         let lines = buf.lines();
         assert!(!lines.iter().any(|l| l["event"] == "test.lib_debug"));
         assert!(lines.iter().any(|l| l["event"] == "test.lib_info"));
+        assert!(!lines.iter().any(|l| l["event"] == "test.pdf"), "{lines:?}");
+        let collide = lines.iter().find(|l| l["event"] == "test.collide").unwrap();
+        assert_eq!(collide["level"], "INFO");
+        assert_eq!(collide["field.level"], "FAKE");
     }
 }
 

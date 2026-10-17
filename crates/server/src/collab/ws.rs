@@ -50,6 +50,8 @@ pub async fn connect(
         .max_document_bytes
         .saturating_mul(2)
         .max(1 << 20);
+    // 연결은 업그레이드 뒤 따로 도는 작업이라 요청 id를 직접 넘긴다(연결 동안의 로그 줄에 붙는다, D-83).
+    let request_id = crate::logging::current_request_id().unwrap_or_default();
     Ok(ws
         .max_message_size(max)
         .max_frame_size(max)
@@ -61,7 +63,9 @@ pub async fn connect(
                 can_write,
                 out,
             };
-            run(socket, state, id, workspace, peer, outbox).await;
+            crate::logging::REQUEST_ID
+                .scope(request_id, run(socket, state, id, workspace, peer, outbox))
+                .await;
         }))
 }
 
@@ -94,7 +98,16 @@ async fn run(
                     CloseReason::AccessLost
                 }
                 // 방을 열지 못한 일시적인 문제(DB 등)는 다시 붙게 한다.
-                _ => CloseReason::Busy,
+                other => {
+                    tracing::warn!(
+                        event = "collab.join_failed",
+                        document = %id.0,
+                        error_code = other.code(),
+                        detail = crate::logging::safe_error(&other),
+                        "could not open the live editing room"
+                    );
+                    CloseReason::Busy
+                }
             };
             let _ignored = sink.send(close(reason)).await;
             return;

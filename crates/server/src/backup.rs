@@ -127,7 +127,7 @@ pub async fn create(
     private_dir(&out.join("db")).await?;
     let storage = Storage::new(&config.storage);
     let url = need(db.migration_url.as_ref(), "DATABASE_MIGRATION_URL")?;
-    let mut conn = PgConnection::connect(url.expose()).await?;
+    let mut conn = PgConnection::connect_with(&crate::db::connect_options(url)?).await?;
     sqlx::query("SELECT pg_advisory_lock($1)")
         .bind(STORAGE_LOCK)
         .execute(&mut conn)
@@ -248,7 +248,7 @@ pub async fn restore(
         )));
     }
     let url = need(db.admin_url.as_ref(), "DATABASE_ADMIN_URL")?;
-    let mut conn = PgConnection::connect(url.expose()).await?;
+    let mut conn = PgConnection::connect_with(&crate::db::connect_options(url)?).await?;
     let version = migration_version(&mut conn).await?;
     if version != manifest.migration_version {
         return Err(AppError::Config(format!(

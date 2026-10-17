@@ -8,7 +8,8 @@ pub mod admin;
 
 use std::time::Duration;
 
-use sqlx::postgres::PgPoolOptions;
+use sqlx::ConnectOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::{PgConnection, PgPool, Postgres, Transaction};
 
 use crate::config::DatabaseUrl;
@@ -66,7 +67,7 @@ impl Db {
         let pool = PgPoolOptions::new()
             .max_connections(16)
             .acquire_timeout(Duration::from_secs(5))
-            .connect_lazy(url.expose())?;
+            .connect_lazy_with(connect_options(url)?);
         Ok(Self { pool })
     }
 
@@ -103,4 +104,12 @@ pub fn is_unique_violation(err: &sqlx::Error) -> bool {
     err.as_database_error()
         .and_then(|e| e.code())
         .is_some_and(|c| c == "23505")
+}
+
+/// 연결 설정. sqlx의 쿼리 문장 로그(느린 쿼리 WARN 포함)는 끈다: SQL 원문을 운영 로그에 남기지 않는다(D-83).
+pub fn connect_options(url: &DatabaseUrl) -> Result<PgConnectOptions, AppError> {
+    Ok(url
+        .expose()
+        .parse::<PgConnectOptions>()?
+        .disable_statement_logging())
 }

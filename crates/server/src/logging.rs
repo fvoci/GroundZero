@@ -76,11 +76,18 @@ pub fn settings(lookup: impl Fn(&str) -> Option<String>) -> Result<(EnvFilter, F
     Ok((filter, format))
 }
 
+/// 어느 레벨에서도 내보내지 않는 라이브러리. PDF 본문 뽑기(검색 색인)는 경고·오류에 파일 내용(스트림·글자)을 그대로
+/// 찍는다. 실패는 우리 쪽 `search.extract_failed`로 남는다.
+pub const LIBRARY_MUTED: &[&str] = &["pdf_extract", "lopdf"];
+
 fn library_cap() -> Targets {
-    LIBRARY_CAP.iter().fold(
+    let capped = LIBRARY_CAP.iter().fold(
         Targets::new().with_default(LevelFilter::TRACE),
         |t, name| t.with_target(*name, LevelFilter::INFO),
-    )
+    );
+    LIBRARY_MUTED
+        .iter()
+        .fold(capped, |t, name| t.with_target(*name, LevelFilter::OFF))
 }
 
 /// 거르기·상한을 붙인 로그 층. 시험은 쓰는 곳(`writer`)만 바꿔 같은 층을 쓴다.
@@ -92,11 +99,23 @@ where
     LineLayer { writer, format }.with_filter(filter.and(library_cap()))
 }
 
-/// 프로세스 전체의 로그를 시작한다(한 번).
+/// 프로세스 전체의 로그를 시작한다(한 번). 패닉도 한 줄 JSON으로 남긴다(기본 훅은 여러 줄을 stderr에 쓰고, 패닉
+/// 값에 다룬 데이터가 섞일 수 있어 위치만 남긴다).
 pub fn init(filter: EnvFilter, format: Format) {
     tracing_subscriber::registry()
         .with(layer(filter, format, std::io::stdout))
         .init();
+    std::panic::set_hook(Box::new(|info| {
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_default();
+        tracing::error!(
+            event = "panic",
+            location,
+            "a task panicked (payload not logged)"
+        );
+    }));
 }
 
 /// 한 사건을 한 줄로 쓰는 층.
@@ -144,6 +163,12 @@ where
         let mut extra = fields.0;
         // `log` 크레이트에서 넘어온 사건의 위치 필드(log.file 등)는 버린다.
         extra.retain(|k, _| !k.starts_with("log."));
+        // 공통 필드 이름과 겹치는 사건 필드는 공통 필드를 덮지 않게 이름을 바꾼다.
+        for reserved in ["timestamp", "level", "target"] {
+            if let Some(value) = extra.remove(reserved) {
+                extra.insert(format!("field.{reserved}"), value);
+            }
+        }
         if let Some(id) = current_request_id() {
             extra
                 .entry("request_id".into())
@@ -222,6 +247,10 @@ pub struct Job {
     pub id: String,
 }
 
+/// 응답에 붙여 접근 줄이 읽는 오류 코드(응답 본문의 `error`와 같은 값).
+#[derive(Debug, Clone, Copy)]
+pub struct ErrorCode(pub &'static str);
+
 tokio::task_local! {
     /// 지금 처리 중인 요청의 id. 오류 응답과 로그 줄에 같은 값을 넣는다.
     pub static REQUEST_ID: String;
@@ -232,7 +261,11 @@ tokio::task_local! {
 /// 지금 요청의 id(요청 밖이면 없음).
 #[must_use]
 pub fn current_request_id() -> Option<String> {
-    REQUEST_ID.try_with(Clone::clone).ok()
+    // 요청 밖에서 넘겨받은 빈 값(요청 id 없음)은 없음으로 본다.
+    REQUEST_ID
+        .try_with(Clone::clone)
+        .ok()
+        .filter(|id| !id.is_empty())
 }
 
 /// 주기 작업 하나를 새 작업 id로 실행한다(그 안의 로그 줄에 `job`·`job_id`가 붙는다).
@@ -263,6 +296,18 @@ pub fn safe_error(err: &AppError) -> String {
     match err {
         AppError::Database(e) | AppError::Migrate(sqlx::migrate::MigrateError::Execute(e)) => {
             safe_sqlx(e)
+        }
+        AppError::Migrate(sqlx::migrate::MigrateError::ExecuteMigration(e, version)) => {
+            format!("migration {version} failed: {}", safe_sqlx(e))
+        }
+        AppError::Migrate(sqlx::migrate::MigrateError::VersionMissing(version)) => {
+            format!("migration {version} is applied but missing")
+        }
+        AppError::Migrate(sqlx::migrate::MigrateError::VersionMismatch(version)) => {
+            format!("migration {version} was changed after it was applied")
+        }
+        AppError::Migrate(sqlx::migrate::MigrateError::Dirty(version)) => {
+            format!("migration {version} is partially applied")
         }
         AppError::Migrate(_) => "migration failed".into(),
         AppError::Io(e) => format!("io {:?}", e.kind()),
