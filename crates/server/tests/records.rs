@@ -1109,10 +1109,6 @@ async fn kept_expired_bundles_restore_with_existing_permissions() {
     let loose = new_file(&app, &writer, &item, "loose.csv", b"x").await;
 
     let owner = owner_pool().await;
-    for f in [&file, &loose] {
-        trash_file(&app, &writer, f).await;
-        expire_trash(&owner, f).await;
-    }
     let batch_of = |f: String| {
         let owner = owner.clone();
         async move {
@@ -1125,8 +1121,16 @@ async fn kept_expired_bundles_restore_with_existing_permissions() {
             .unwrap()
         }
     };
+    // 묶음 id는 만료시키기 전에 읽는다. 만료된 뒤에는 병렬로 도는 다른 테스트의 정리가 참조 없는 묶음(loose)을
+    // 지울 수 있다(CI에서 RowNotFound).
+    for f in [&file, &loose] {
+        trash_file(&app, &writer, f).await;
+    }
     let kept_batch = batch_of(file.clone()).await;
     let loose_batch = batch_of(loose.clone()).await;
+    for f in [&file, &loose] {
+        expire_trash(&owner, f).await;
+    }
     let restore = |user: &TestUser, batch: uuid::Uuid| {
         let (app, user) = (app.clone(), user.clone());
         async move {
