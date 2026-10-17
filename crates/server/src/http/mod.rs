@@ -119,6 +119,10 @@ async fn api_not_found() -> AppError {
         accounts::auth_info,
         workspaces::list,
         workspaces::create,
+        workspaces::delete,
+        workspaces::deleted,
+        workspaces::restore,
+        workspaces::purge,
         documents::list_wiki,
         documents::create_wiki,
         documents::get,
@@ -246,6 +250,9 @@ async fn api_not_found() -> AppError {
         accounts::LogoutResponse,
         workspaces::Workspace,
         workspaces::CreateWorkspace,
+        workspaces::DeleteWorkspace,
+        workspaces::WorkspaceDeleted,
+        workspaces::DeletedWorkspace,
         documents::DocumentSummary,
         documents::Document,
         documents::CreateDocument,
@@ -392,6 +399,16 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/workspaces",
             get(workspaces::list).post(workspaces::create),
+        )
+        .route("/workspaces/{workspace_id}", delete(workspaces::delete))
+        .route("/me/deleted-workspaces", get(workspaces::deleted))
+        .route(
+            "/me/deleted-workspaces/{workspace_id}",
+            delete(workspaces::purge),
+        )
+        .route(
+            "/me/deleted-workspaces/{workspace_id}/restore",
+            post(workspaces::restore),
         )
         .route(
             "/workspaces/{workspace_id}/wiki/documents",

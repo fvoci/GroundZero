@@ -10,6 +10,7 @@
   import PublicView from '$lib/features/public/PublicView.svelte';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
   import TrashScreen from '$lib/features/trash/TrashScreen.svelte';
+  import DeletedWorkspaces from '$lib/features/trash/DeletedWorkspaces.svelte';
   import MembersScreen from '$lib/features/members/MembersScreen.svelte';
   import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
   import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
@@ -316,7 +317,10 @@
             onchanged={() => void refreshUnread()}
           />
         {:else if route.name === 'my-trash'}
-          <TrashScreen workspace={undefined} />
+          <div class="flex flex-col gap-8">
+            <TrashScreen workspace={undefined} />
+            <DeletedWorkspaces onchanged={() => void reloadWorkspaces()} />
+          </div>
         {:else if route.name === 'time'}
           <TimeScreen workspaces={signedIn.workspaces} />
         {:else if route.name === 'shared'}

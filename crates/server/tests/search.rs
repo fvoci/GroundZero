@@ -85,13 +85,23 @@ async fn settle(state: &AppState, app: &Router, user: &TestUser, q: &str, want: 
     last
 }
 
-/// 색인에 그 대상이 있는지 직접 본다(접근 거르기 없이).
-async fn indexed(state: &AppState, q: &str, id: &str) -> bool {
-    !client(state)
-        .query(q, &format!("id = \"{id}\""), 0, 5)
-        .await
-        .unwrap()
-        .is_empty()
+/// 색인에 그 대상이 있는지 직접 본다(접근 거르기 없이). 다른 테스트가 같은 대기열을 함께 비우므로 기대한 상태가
+/// 될 때까지 기다린 뒤 마지막 상태를 돌려준다.
+async fn indexed_eventually(state: &AppState, q: &str, id: &str, want: bool) -> bool {
+    let mut found = !want;
+    for _ in 0..100 {
+        while drain(&state.db, client(state)).await.unwrap() > 0 {}
+        found = !client(state)
+            .query(q, &format!("id = \"{id}\""), 0, 5)
+            .await
+            .unwrap()
+            .is_empty();
+        if found == want {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    found
 }
 
 async fn private_item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> Value {
@@ -280,7 +290,7 @@ async fn trashed_content_leaves_the_index_and_returns_on_restore() {
     let doc = create_doc(&app, &admin, &ws, &format!("지울 문서 {tok}")).await;
     let id = doc["id"].as_str().unwrap();
     settle(&state, &app, &admin, &tok, &[&format!("지울 문서 {tok}")]).await;
-    assert!(indexed(&state, &tok, id).await);
+    assert!(indexed_eventually(&state, &tok, id, true).await);
 
     let r = send(
         &app,
@@ -298,7 +308,7 @@ async fn trashed_content_leaves_the_index_and_returns_on_restore() {
         Vec::<String>::new()
     );
     settle(&state, &app, &admin, &tok, &[]).await;
-    assert!(!indexed(&state, &tok, id).await);
+    assert!(!indexed_eventually(&state, &tok, id, false).await);
 
     let r = send(
         &app,
@@ -310,7 +320,7 @@ async fn trashed_content_leaves_the_index_and_returns_on_restore() {
     .await;
     assert_eq!(r.status, StatusCode::NO_CONTENT);
     settle(&state, &app, &admin, &tok, &[&format!("지울 문서 {tok}")]).await;
-    assert!(indexed(&state, &tok, id).await);
+    assert!(indexed_eventually(&state, &tok, id, true).await);
 
     // 항목을 지우면 그 안의 문서·업무도 색인에서 빠지고, 되살리면 함께 돌아온다.
     let it = private_item(&app, &admin, &ws, "SRT").await;
@@ -353,8 +363,8 @@ async fn trashed_content_leaves_the_index_and_returns_on_restore() {
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
     let item_batch = r.json["batch_id"].as_str().unwrap().to_owned();
     settle(&state, &app, &admin, &tok, &[&format!("지울 문서 {tok}")]).await;
-    assert!(!indexed(&state, &tok, &inner_id).await);
-    assert!(!indexed(&state, &tok, &task_id).await);
+    assert!(!indexed_eventually(&state, &tok, &inner_id, false).await);
+    assert!(!indexed_eventually(&state, &tok, &task_id, false).await);
     let r = send(
         &app,
         Method::POST,
@@ -365,7 +375,7 @@ async fn trashed_content_leaves_the_index_and_returns_on_restore() {
     .await;
     assert_eq!(r.status, StatusCode::NO_CONTENT);
     settle(&state, &app, &admin, &tok, &all).await;
-    assert!(indexed(&state, &tok, &inner_id).await);
+    assert!(indexed_eventually(&state, &tok, &inner_id, true).await);
 }
 
 #[tokio::test]

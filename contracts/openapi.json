@@ -2660,6 +2660,110 @@
         }
       }
     },
+    "/api/me/deleted-workspaces": {
+      "get": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "내가 소유한 지운 워크스페이스 목록.",
+        "operationId": "deleted_workspaces",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeletedWorkspace"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/deleted-workspaces/{workspace_id}": {
+      "delete": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "지운 워크스페이스 영구 삭제(소유자). 모든 내용이 지워지고 되돌릴 수 없다. 개인 시간 기록은 남는다.",
+        "operationId": "purge_workspace",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/deleted-workspaces/{workspace_id}/restore": {
+      "post": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "지운 워크스페이스 되살리기(소유자, 보존 기간 안). 지났으면 409.",
+        "operationId": "restore_workspace",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/home": {
       "get": {
         "tags": [
@@ -5046,6 +5150,88 @@
         }
       }
     },
+    "/api/workspaces/{workspace_id}": {
+      "delete": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "워크스페이스 지우기(소유자, 이름 확인, D-51). 곧바로 모든 멤버에게 보이지 않고, 보존 기간 안에 소유자가\n되살릴 수 있다. 소유권 인계가 진행 중이면 409.",
+        "operationId": "delete_workspace",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteWorkspace"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDeleted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{workspace_id}/calendar": {
       "get": {
         "tags": [
@@ -6912,6 +7098,50 @@
             "format": "uuid"
           },
           "url": {
+            "type": "string"
+          }
+        }
+      },
+      "DeleteWorkspace": {
+        "type": "object",
+        "description": "워크스페이스 지우기 확인. 이름을 그대로 다시 입력한다.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "DeletedWorkspace": {
+        "type": "object",
+        "description": "내가 소유한 지운 워크스페이스.",
+        "required": [
+          "id",
+          "name",
+          "deleted_at",
+          "expires_at",
+          "expired"
+        ],
+        "properties": {
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expired": {
+            "type": "boolean",
+            "description": "보존 기간이 지나 되살릴 수 없다(곧 영구 삭제)."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
             "type": "string"
           }
         }
@@ -9930,6 +10160,19 @@
           "role": {
             "$ref": "#/components/schemas/Role",
             "description": "현재 사용자의 역할."
+          }
+        }
+      },
+      "WorkspaceDeleted": {
+        "type": "object",
+        "description": "지운 워크스페이스가 영구 삭제되는 때.",
+        "required": [
+          "expires_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

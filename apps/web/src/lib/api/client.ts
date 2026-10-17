@@ -1180,6 +1180,25 @@ function parseTrash(value: Json): TrashView {
   };
 }
 
+export interface DeletedWorkspaceView {
+  id: string;
+  name: string;
+  deleted_at: string;
+  expires_at: string;
+  expired: boolean;
+}
+
+function parseDeletedWorkspace(value: Json): DeletedWorkspaceView {
+  const o = rec(value, 'deleted workspace');
+  return {
+    id: str(o, 'id'),
+    name: str(o, 'name'),
+    deleted_at: str(o, 'deleted_at'),
+    expires_at: str(o, 'expires_at'),
+    expired: bool(o, 'expired'),
+  };
+}
+
 export type SearchKind = 'document' | 'task' | 'item' | 'event';
 
 export interface SearchResultView {
@@ -1325,6 +1344,20 @@ export const api = {
       none,
     ),
   leave: (ws: string) => expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/leave`, none),
+  /** 워크스페이스 지우기(소유자, 이름 확인). 영구 삭제되는 때를 돌려준다. */
+  deleteWorkspace: (ws: string, name: string) =>
+    expectOk(
+      'DELETE',
+      `/api/workspaces/${encodeURIComponent(ws)}`,
+      (v) => str(rec(v, 'workspace deleted'), 'expires_at'),
+      { name },
+    ),
+  deletedWorkspaces: () =>
+    expectOk('GET', '/api/me/deleted-workspaces', (v) => parseList(v, parseDeletedWorkspace)),
+  restoreWorkspace: (ws: string) =>
+    expectOk('POST', `/api/me/deleted-workspaces/${encodeURIComponent(ws)}/restore`, none),
+  purgeWorkspace: (ws: string) =>
+    expectOk('DELETE', `/api/me/deleted-workspaces/${encodeURIComponent(ws)}`, none),
   invitations: (ws: string) =>
     expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/invitations`, (v) =>
       parseList(v, parseInvitation),

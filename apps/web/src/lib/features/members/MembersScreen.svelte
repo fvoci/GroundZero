@@ -30,6 +30,19 @@
   let inviteEmail = $state('');
   let inviteRole = $state<Role>('writer');
   let groupName = $state('');
+  let deleteName = $state('');
+  let deleteError = $state<string | undefined>(undefined);
+
+  async function deleteWorkspace(): Promise<void> {
+    deleteError = undefined;
+    try {
+      await api.deleteWorkspace(workspace.id, deleteName);
+      onchanged();
+      router.navigate('/trash');
+    } catch (e: unknown) {
+      deleteError = e instanceof ApiError ? e.message : '워크스페이스를 지우지 못했습니다.';
+    }
+  }
   let confirm = $state<{ title: string; body: string; run: () => Promise<void> } | undefined>(
     undefined,
   );
@@ -295,6 +308,37 @@
               })}>워크스페이스 탈퇴</Button
           >
         </div>
+      </section>
+    {/if}
+
+    {#if v.i_am_owner}
+      <section class="flex flex-col gap-2" aria-labelledby="delete-heading">
+        <h2 id="delete-heading" class="font-semibold">워크스페이스 삭제</h2>
+        <p class="text-sm text-muted-foreground">
+          지우면 곧바로 모든 멤버와 공유받은 사람이 볼 수 없게 됩니다. 소유자는 보존 기간 동안 '내
+          노트 휴지통'에서 되살리거나 영구 삭제할 수 있습니다. 소유권 인계가 진행 중이면 먼저
+          취소하세요.
+        </p>
+        <form
+          class="flex flex-wrap items-end gap-2"
+          onsubmit={(e: SubmitEvent) => {
+            e.preventDefault();
+            void deleteWorkspace();
+          }}
+        >
+          <div class="flex flex-1 flex-col gap-1">
+            <Label for="delete-name">확인을 위해 이름 “{workspace.name}”을 입력하세요</Label>
+            <Input id="delete-name" bind:value={deleteName} autocomplete="off" />
+          </div>
+          <Button
+            type="submit"
+            variant="destructive"
+            disabled={deleteName.trim() !== workspace.name.trim()}>워크스페이스 삭제</Button
+          >
+        </form>
+        {#if deleteError !== undefined}
+          <p role="alert" class="text-sm text-destructive">{deleteError}</p>
+        {/if}
       </section>
     {/if}
   {/if}

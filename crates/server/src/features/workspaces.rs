@@ -2,9 +2,10 @@
 //! 한 트랜잭션으로 만든다. 같은 `request_id`로 재시도하면 같은 워크스페이스를 돌려준다.
 
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -126,4 +127,124 @@ pub async fn create(
     .await?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(row_to_workspace(row)?)))
+}
+
+/// 워크스페이스 지우기 확인. 이름을 그대로 다시 입력한다.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct DeleteWorkspace {
+    pub name: String,
+}
+
+/// 지운 워크스페이스가 영구 삭제되는 때.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WorkspaceDeleted {
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub expires_at: OffsetDateTime,
+}
+
+/// 내가 소유한 지운 워크스페이스.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DeletedWorkspace {
+    #[schema(value_type = String, format = Uuid)]
+    pub id: Uuid,
+    pub name: String,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub deleted_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub expires_at: OffsetDateTime,
+    /// 보존 기간이 지나 되살릴 수 없다(곧 영구 삭제).
+    pub expired: bool,
+}
+
+/// 워크스페이스 지우기(소유자, 이름 확인, D-51). 곧바로 모든 멤버에게 보이지 않고, 보존 기간 안에 소유자가
+/// 되살릴 수 있다. 소유권 인계가 진행 중이면 409.
+#[utoipa::path(delete, path = "/api/workspaces/{workspace_id}", operation_id = "delete_workspace",
+    params(("workspace_id" = String, Path, format = Uuid)), request_body = DeleteWorkspace,
+    responses((status = 200, body = WorkspaceDeleted), (status = 400, body = ErrorBody),
+              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
+    tag = "workspaces")]
+pub async fn delete(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(ws): Path<WorkspaceId>,
+    Json(input): Json<DeleteWorkspace>,
+) -> Result<Json<WorkspaceDeleted>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let expires_at: OffsetDateTime = sqlx::query_scalar("SELECT app_delete_workspace($1, $2)")
+        .bind(ws)
+        .bind(&input.name)
+        .fetch_one(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(Json(WorkspaceDeleted { expires_at }))
+}
+
+/// 내가 소유한 지운 워크스페이스 목록.
+#[utoipa::path(get, path = "/api/me/deleted-workspaces", operation_id = "deleted_workspaces",
+    responses((status = 200, body = [DeletedWorkspace])), tag = "workspaces")]
+pub async fn deleted(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Vec<DeletedWorkspace>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let rows: Vec<(Uuid, String, OffsetDateTime, OffsetDateTime)> =
+        sqlx::query_as("SELECT id, name, deleted_at, expires_at FROM app_my_deleted_workspaces()")
+            .fetch_all(tx.conn())
+            .await?;
+    tx.commit().await?;
+    let now = OffsetDateTime::now_utc();
+    Ok(Json(
+        rows.into_iter()
+            .map(|(id, name, deleted_at, expires_at)| DeletedWorkspace {
+                id,
+                name,
+                deleted_at,
+                expires_at,
+                expired: expires_at <= now,
+            })
+            .collect(),
+    ))
+}
+
+/// 지운 워크스페이스 되살리기(소유자, 보존 기간 안). 지났으면 409.
+#[utoipa::path(post, path = "/api/me/deleted-workspaces/{workspace_id}/restore", operation_id = "restore_workspace",
+    params(("workspace_id" = String, Path, format = Uuid)),
+    responses((status = 204), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
+    tag = "workspaces")]
+pub async fn restore(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(ws): Path<WorkspaceId>,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_restore_workspace($1)")
+        .bind(ws)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// 지운 워크스페이스 영구 삭제(소유자). 모든 내용이 지워지고 되돌릴 수 없다. 개인 시간 기록은 남는다.
+#[utoipa::path(delete, path = "/api/me/deleted-workspaces/{workspace_id}", operation_id = "purge_workspace",
+    params(("workspace_id" = String, Path, format = Uuid)),
+    responses((status = 204), (status = 404, body = ErrorBody)), tag = "workspaces")]
+pub async fn purge(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(ws): Path<WorkspaceId>,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_purge_workspace($1)")
+        .bind(ws)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
 }
