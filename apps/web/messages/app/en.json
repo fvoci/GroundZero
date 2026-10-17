@@ -25,5 +25,13 @@
   "app_audit": "Audit log",
   "app_back_to_item": "Back to item",
   "app_wiki_of": "{name} wiki",
-  "app_not_found": "Page not found."
+  "app_not_found": "Page not found.",
+  "app_breadcrumb": "Breadcrumb",
+  "app_login_intro": "Manage work, knowledge and learning in one place. Sign in to continue.",
+  "app_login": "Sign in",
+  "app_login_unconfigured": "No sign-in provider is configured. The operator needs to set FVOCI_OIDC_ISSUER and related settings.",
+  "app_health_checking": "Checking server status…",
+  "app_health_ok": "Server OK (database: {database})",
+  "app_health_degraded": "The server responds, but the database connection failed",
+  "app_health_unreachable": "Can't reach the server: {message}"
 }
