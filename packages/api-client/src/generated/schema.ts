@@ -971,6 +971,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 이 항목의 내 저장한 보기(이름순). */
+        get: operations["saved_views"];
+        put?: never;
+        /** 보기 저장(그 항목을 볼 수 있는 사람). 같은 이름이면 덮어쓴다. */
+        post: operations["save_view"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -1821,6 +1839,23 @@ export interface paths {
         put: operations["put_upload_part"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/views/{view_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 내 저장한 보기 지우기. */
+        delete: operations["delete_view"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3442,6 +3477,20 @@ export interface components {
             /** Format: uuid */
             request_id: string;
             title: string;
+        };
+        /** @description 보기 저장. 같은 이름이면 내용을 바꾼다. */
+        SaveView: {
+            config: Record<string, never>;
+            name: string;
+            /** Format: uuid */
+            request_id: string;
+        };
+        /** @description 저장한 보기. */
+        SavedView: {
+            config: Record<string, never>;
+            /** Format: uuid */
+            id: string;
+            name: string;
         };
         /** @description 미리보기 요청: 바꾸려는 날짜. */
         SchedulePreviewInput: {
@@ -7143,6 +7192,76 @@ export interface operations {
             };
         };
     };
+    saved_views: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    save_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveView"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     me: {
         parameters: {
             query?: never;
@@ -9411,6 +9530,33 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -416,6 +416,8 @@ SELECT json_build_object(
       SELECT * FROM episode_progress WHERE user_id = $1) p),
   'unit_progress', (SELECT coalesce(json_agg(p), '[]') FROM (
       SELECT * FROM unit_progress WHERE user_id = $1) p),
+  'saved_views', (SELECT coalesce(json_agg(v), '[]') FROM (
+      SELECT id, item_id, name, config, created_at FROM saved_views WHERE user_id = $1) v),
   'audit_log', (SELECT coalesce(json_agg(a ORDER BY a.created_at), '[]') FROM (
       SELECT * FROM audit_log WHERE owner_user_id = $1 AND workspace_id IS NULL) a)
 ,

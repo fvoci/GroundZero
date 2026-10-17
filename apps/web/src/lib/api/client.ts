@@ -670,6 +670,19 @@ export function parseRecord(value: Json): RecordView {
   };
 }
 
+// --- 저장한 보기 (D-31) ------------------------------------------------------
+
+export interface SavedViewView {
+  id: string;
+  name: string;
+  config: Record<string, unknown>;
+}
+
+export function parseSavedView(value: Json): SavedViewView {
+  const o = rec(value, 'saved view');
+  return { id: str(o, 'id'), name: str(o, 'name'), config: rec(o.config, 'view config') };
+}
+
 // --- 스터디 계획 (D-36) ------------------------------------------------------
 
 export const STUDY_UNIT_KINDS = ['pages', 'problems', 'minutes', 'items'] as const;
@@ -2251,6 +2264,18 @@ export const api = {
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/tasks`, (v) =>
       parseList(v, parseTask),
     ),
+  /** 이 항목의 내 저장한 보기(D-31). config는 화면이 해석한다. */
+  savedViews: (itemId: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/views`, (v) =>
+      parseList(v, parseSavedView),
+    ),
+  saveView: (itemId: string, requestId: string, name: string, config: Record<string, unknown>) =>
+    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/views`, parseSavedView, {
+      request_id: requestId,
+      name,
+      config: { ...config },
+    }),
+  deleteView: (id: string) => expectOk('DELETE', `/api/views/${encodeURIComponent(id)}`, none),
   recordKinds: () => expectOk('GET', '/api/record-kinds', (v) => parseList(v, parseRecordKind)),
   itemRecords: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/records`, (v) =>

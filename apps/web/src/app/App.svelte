@@ -22,6 +22,7 @@
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
   import WorkspaceBadge from '$lib/features/workspaces/WorkspaceBadge.svelte';
   import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
+  import { me as currentUser } from '$lib/me.svelte';
   import {
     calendarPath,
     itemPath,
@@ -54,6 +55,7 @@
         session = { state: 'anonymous', oidcEnabled: info.oidc_enabled };
         return;
       }
+      currentUser.userId = me.id;
       session = { state: 'signed-in', me, workspaces: await api.workspaces() };
     } catch (e: unknown) {
       session = {

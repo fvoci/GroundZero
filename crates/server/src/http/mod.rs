@@ -17,8 +17,8 @@ use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
-    members, modules, public_links, records, recurrence, references, revisions, schedule,
-    search_api, study, tasks, time_tracking, trash, workspaces,
+    members, modules, public_links, records, recurrence, references, revisions, saved_views,
+    schedule, search_api, study, tasks, time_tracking, trash, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -210,6 +210,9 @@ async fn api_not_found() -> AppError {
         export::mine,
         audit::workspace,
         audit::mine,
+        saved_views::list,
+        saved_views::save,
+        saved_views::delete,
         study::get,
         study::add_units,
         study::update_unit,
@@ -403,6 +406,8 @@ async fn api_not_found() -> AppError {
         files::RenameFile,
         files::FileTrashed,
         audit::AuditEntry,
+        saved_views::SavedView,
+        saved_views::SaveView,
         study::MyUnitProgress,
         study::StudyUnit,
         study::StudyPlan,
@@ -534,6 +539,11 @@ pub fn router(state: AppState) -> Router {
         .route("/workspaces/{workspace_id}/audit", get(audit::workspace))
         .route("/me/audit", get(audit::mine))
         .route("/record-kinds", get(records::kinds))
+        .route(
+            "/items/{item_id}/views",
+            get(saved_views::list).post(saved_views::save),
+        )
+        .route("/views/{view_id}", delete(saved_views::delete))
         .route("/items/{item_id}/study", get(study::get))
         .route("/items/{item_id}/study/units", post(study::add_units))
         .route("/items/{item_id}/study/plan", put(study::plan))

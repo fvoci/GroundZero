@@ -1,10 +1,11 @@
 <script lang="ts">
-  // 항목의 업무 (D-31): 목록과 칸반, 업무 만들기, 상세 대화상자.
+  // 항목의 업무 (D-31): 칸반·목록·간트·달력, 검색·필터·정렬과 저장한 보기, 업무 만들기, 상세 대화상자.
   // 칸반 카드는 버튼과 키보드(Alt+화살표)로 열·순서를 옮긴다. 상세는 주소(/t/{업무})로도 열린다.
   import type { Workspace } from '@fvoci/api-client';
 
-  import type { ItemView, TaskView } from '$lib/api/client';
-  import { api, ApiError, TASK_STATUSES } from '$lib/api/client';
+  import type { ItemView, SavedViewView, TaskView } from '$lib/api/client';
+  import { api, ApiError, newRequestId, TASK_STATUSES } from '$lib/api/client';
+  import { me } from '$lib/me.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import TaskCsvImport from './TaskCsvImport.svelte';
   import { itemPath, itemTaskPath, router } from '$lib/router.svelte';
@@ -13,8 +14,19 @@
 
   import type { BoardAction } from './board';
   import { lanes, listOrder, planBoardMove } from './board';
+  import type { TaskFilter, TaskSort, TaskViewMode } from './filters';
+  import {
+    applyFilter,
+    assigneesOf,
+    EMPTY_FILTER,
+    isFiltered,
+    readConfig,
+    sortTasks,
+    VIEWS,
+  } from './filters';
   import { PRIORITY_LABEL, STATUS_LABEL } from './labels';
   import GanttChart from './GanttChart.svelte';
+  import TaskCalendar from './TaskCalendar.svelte';
   import TaskDetail from './TaskDetail.svelte';
 
   interface Props {
@@ -27,9 +39,86 @@
   const { item, workspaces, openTaskId }: Props = $props();
 
   let tasks = $state<TaskView[]>([]);
-  let view = $state<'list' | 'board' | 'gantt'>('board');
+  let view = $state<TaskViewMode>('board');
   let error = $state<string | undefined>(undefined);
   let status = $state('');
+
+  // 검색·필터·정렬과 저장한 보기(D-31).
+  let filter = $state<TaskFilter>({ ...EMPTY_FILTER });
+  let sort = $state<TaskSort>('position');
+  let views = $state<SavedViewView[]>([]);
+  let selectedView = $state('');
+  let viewName = $state('');
+  let viewRequest = newRequestId();
+  const shown = $derived(sortTasks(applyFilter(tasks, filter, me.userId), sort));
+  const people = $derived(assigneesOf(tasks));
+  const ordered = $derived(sort === 'position');
+
+  async function loadViews(itemId: string): Promise<void> {
+    views = await api.savedViews(itemId).catch(() => []);
+  }
+
+  function applyView(id: string): void {
+    selectedView = id;
+    const v = views.find((x) => x.id === id);
+    if (v === undefined) return;
+    const config = readConfig(v.config);
+    view = config.view;
+    filter = config.filter;
+    sort = config.sort;
+    viewName = v.name;
+  }
+
+  async function saveView(): Promise<void> {
+    const name = viewName.trim();
+    if (name === '') {
+      error = '보기 이름을 적어 주세요.';
+      return;
+    }
+    try {
+      const saved = await api.saveView(item.id, viewRequest, name, {
+        view,
+        filter: { ...filter },
+        sort,
+      });
+      viewRequest = newRequestId();
+      await loadViews(item.id);
+      selectedView = saved.id;
+      status = `보기 "${name}"을(를) 저장했습니다.`;
+      error = undefined;
+    } catch (e: unknown) {
+      error = e instanceof ApiError ? e.message : '보기를 저장하지 못했습니다.';
+    }
+  }
+
+  async function deleteView(): Promise<void> {
+    if (selectedView === '') return;
+    try {
+      await api.deleteView(selectedView);
+      selectedView = '';
+      await loadViews(item.id);
+      status = '보기를 지웠습니다.';
+    } catch (e: unknown) {
+      error = e instanceof ApiError ? e.message : '보기를 지우지 못했습니다.';
+    }
+  }
+
+  const VIEW_LABEL: Record<TaskViewMode, string> = {
+    board: '칸반',
+    list: '목록',
+    gantt: '간트',
+    calendar: '달력',
+  };
+  const SORT_LABEL: Record<TaskSort, string> = {
+    position: '기본 순서',
+    due: '마감일',
+    priority: '우선순위',
+    title: '제목',
+    updated: '최근 고침',
+  };
+
+  const fieldBox =
+    'h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 
   async function reload(itemId: string = item.id): Promise<void> {
     try {
@@ -48,11 +137,12 @@
 
   $effect(() => {
     void loadItem(item.id, item.access !== 'read' && !item.archived);
+    void loadViews(item.id);
   });
 
   const canWrite = $derived(item.access !== 'read' && !item.archived);
-  const board = $derived(lanes(tasks));
-  const list = $derived(listOrder(tasks));
+  const board = $derived(lanes(shown));
+  const list = $derived(ordered ? listOrder(shown) : shown);
   const titleOf = (id: string | null): string =>
     id === null ? '' : (tasks.find((t) => t.id === id)?.title ?? '');
 
@@ -78,7 +168,7 @@
   };
 
   async function move(id: string, action: BoardAction): Promise<void> {
-    const plan = planBoardMove(tasks, id, action);
+    const plan = planBoardMove(shown, id, action);
     if (plan === undefined) return;
     try {
       await api.moveTask(id, plan.status, plan.beforeId);
@@ -109,25 +199,115 @@
   <div class="flex flex-wrap items-center gap-2">
     <h2 id="tasks-heading" class="text-lg font-semibold">업무</h2>
     <div class="ml-auto flex gap-1" role="group" aria-label="보기">
-      <Button
-        size="sm"
-        variant={view === 'board' ? 'secondary' : 'ghost'}
-        aria-pressed={view === 'board'}
-        onclick={() => (view = 'board')}>칸반</Button
-      >
-      <Button
-        size="sm"
-        variant={view === 'list' ? 'secondary' : 'ghost'}
-        aria-pressed={view === 'list'}
-        onclick={() => (view = 'list')}>목록</Button
-      >
-      <Button
-        size="sm"
-        variant={view === 'gantt' ? 'secondary' : 'ghost'}
-        aria-pressed={view === 'gantt'}
-        onclick={() => (view = 'gantt')}>간트</Button
-      >
+      {#each VIEWS as v (v)}
+        <Button
+          size="sm"
+          variant={view === v ? 'secondary' : 'ghost'}
+          aria-pressed={view === v}
+          onclick={() => (view = v)}>{VIEW_LABEL[v]}</Button
+        >
+      {/each}
     </div>
+  </div>
+
+  <div class="flex flex-wrap items-end gap-2 text-sm" role="search" aria-label="업무 거르기">
+    <label class="flex flex-col gap-0.5">
+      <span class="text-xs text-muted-foreground">찾기</span>
+      <input
+        class={['w-40', fieldBox]}
+        type="search"
+        bind:value={filter.text}
+        placeholder="제목·번호"
+      />
+    </label>
+    <label class="flex flex-col gap-0.5">
+      <span class="text-xs text-muted-foreground">상태</span>
+      <select class={fieldBox} bind:value={filter.status} aria-label="상태로 거르기">
+        <option value="any">전체</option>
+        {#each TASK_STATUSES as s (s)}<option value={s}>{STATUS_LABEL[s]}</option>{/each}
+      </select>
+    </label>
+    <label class="flex flex-col gap-0.5">
+      <span class="text-xs text-muted-foreground">담당</span>
+      <select class={fieldBox} bind:value={filter.assignee} aria-label="담당으로 거르기">
+        <option value="any">전체</option>
+        <option value="me">내 담당</option>
+        <option value="none">담당 없음</option>
+        {#each people as [id, name] (id)}<option value={id}>{name}</option>{/each}
+      </select>
+    </label>
+    <label class="flex flex-col gap-0.5">
+      <span class="text-xs text-muted-foreground">우선순위</span>
+      <select class={fieldBox} bind:value={filter.priority} aria-label="우선순위로 거르기">
+        <option value="any">전체</option>
+        {#each ['urgent', 'high', 'medium', 'low', 'none'] as const as p (p)}<option value={p}
+            >{PRIORITY_LABEL[p]}</option
+          >{/each}
+      </select>
+    </label>
+    <label class="flex flex-col gap-0.5">
+      <span class="text-xs text-muted-foreground">태그</span>
+      <input class={['w-24', fieldBox]} bind:value={filter.tag} aria-label="태그로 거르기" />
+    </label>
+    <label class="flex flex-col gap-0.5">
+      <span class="text-xs text-muted-foreground">마감부터</span>
+      <input class={fieldBox} type="date" bind:value={filter.dueFrom} aria-label="마감 시작일" />
+    </label>
+    <label class="flex flex-col gap-0.5">
+      <span class="text-xs text-muted-foreground">까지</span>
+      <input class={fieldBox} type="date" bind:value={filter.dueTo} aria-label="마감 끝일" />
+    </label>
+    <label class="flex flex-col gap-0.5">
+      <span class="text-xs text-muted-foreground">정렬</span>
+      <select class={fieldBox} bind:value={sort} aria-label="정렬">
+        {#each Object.entries(SORT_LABEL) as [value, label] (value)}<option {value}>{label}</option
+          >{/each}
+      </select>
+    </label>
+    {#if isFiltered(filter) || sort !== 'position'}
+      <Button
+        size="sm"
+        variant="ghost"
+        onclick={() => {
+          filter = { ...EMPTY_FILTER };
+          sort = 'position';
+        }}>초기화</Button
+      >
+    {/if}
+  </div>
+  <div class="flex flex-wrap items-end gap-2 text-sm">
+    <label class="flex flex-col gap-0.5">
+      <span class="text-xs text-muted-foreground">저장한 보기</span>
+      <select
+        aria-label="저장한 보기"
+        class={fieldBox}
+        value={selectedView}
+        onchange={(e: Event) => {
+          if (e.currentTarget instanceof HTMLSelectElement) applyView(e.currentTarget.value);
+        }}
+      >
+        <option value="">선택</option>
+        {#each views as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
+      </select>
+    </label>
+    <label class="flex flex-col gap-0.5">
+      <span class="text-xs text-muted-foreground">이름</span>
+      <input
+        class={['w-32', fieldBox]}
+        bind:value={viewName}
+        aria-label="보기 이름"
+        maxlength={100}
+      />
+    </label>
+    <Button size="sm" variant="outline" onclick={() => void saveView()}>지금 보기 저장</Button>
+    {#if selectedView !== ''}
+      <Button size="sm" variant="ghost" onclick={() => void deleteView()}>보기 지우기</Button>
+    {/if}
+    {#if isFiltered(filter)}
+      <span class="text-xs text-muted-foreground" aria-live="polite"
+        >{shown.length}/{tasks.length}개 보임</span
+      >
+    {/if}
   </div>
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive">{error}</p>
@@ -186,7 +366,8 @@
                         variant="ghost"
                         tabindex={-1}
                         class="h-6 px-1.5 text-xs"
-                        disabled={planBoardMove(tasks, t.id, action) === undefined}
+                        disabled={planBoardMove(shown, t.id, action) === undefined ||
+                          (!ordered && (action === 'up' || action === 'down'))}
                         onclick={() => void move(t.id, action)}
                         >{action === 'left'
                           ? '←'
@@ -211,7 +392,9 @@
       </p>
     {/if}
   {:else if view === 'gantt'}
-    <GanttChart {tasks} onopen={open} />
+    <GanttChart tasks={shown} onopen={open} />
+  {:else if view === 'calendar'}
+    <TaskCalendar tasks={shown} onopen={open} />
   {:else}
     <table class="w-full text-sm" data-testid="task-list">
       <thead class="text-left text-muted-foreground">

@@ -18,6 +18,7 @@ pub mod records;
 pub mod recurrence;
 pub mod references;
 pub mod revisions;
+pub mod saved_views;
 pub mod schedule;
 pub mod search_api;
 pub mod search_text;
