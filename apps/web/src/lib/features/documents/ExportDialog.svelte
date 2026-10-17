@@ -134,7 +134,7 @@
       {#if latest && unsaved}
         <p role="status" class="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900">
           저장하지 않은 편집이 있습니다. 그 내용까지 내보내려면 먼저 저장하세요. 지금 내보내면
-          저장된 리비전 {doc.revision}이 나갑니다.
+          저장된 리비전 {doc.revision}의 내용이 나갑니다.
         </p>
       {/if}
       {#if latest && doc.realtime}

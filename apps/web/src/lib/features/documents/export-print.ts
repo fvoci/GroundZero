@@ -19,6 +19,7 @@ h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
 table { border-collapse: collapse; width: 100%; margin: 6pt 0; }
 th, td { border: 1px solid #9ca3af; padding: 3pt 6pt; vertical-align: top; }
 th { background: #eef2f7; }
+th > p, td > p { margin: 0; }
 tr, img, pre, blockquote, .katex-display, li[data-type="taskItem"] { break-inside: avoid; page-break-inside: avoid; }
 img { max-width: 100%; height: auto; }
 pre { white-space: pre-wrap; word-break: break-all; background: #f5f7fa; border: 1px solid #e5e7eb;

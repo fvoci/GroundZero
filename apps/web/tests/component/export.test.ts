@@ -170,9 +170,9 @@ describe('document export (D-75)', () => {
   it('bundles only files this person may download, with relative paths', async () => {
     stubServer();
     const prepared = await prepareExport('실험 노트', 4, body(), options('zip'));
-    expect([...prepared.files.keys()]).toEqual([`files/${okFile.slice(0, 8)}-${okFile}`]);
+    expect([...prepared.files.keys()]).toEqual([`files/${okFile.slice(-8)}-v1-${okFile}`]);
     const { markdown } = toMarkdown(prepared);
-    expect(markdown).toContain(`](files/${okFile.slice(0, 8)}-${okFile})`);
+    expect(markdown).toContain(`](files/${okFile.slice(-8)}-v1-${okFile})`);
     expect(markdown).not.toContain(deniedFile);
     expect(markdown).toContain('(비공개 그림: 내려받을 수 없어 넣지 못함)');
     expect(prepared.notes.some((n) => n.includes('내려받을 수 없는 그림·첨부 1개'))).toBe(true);

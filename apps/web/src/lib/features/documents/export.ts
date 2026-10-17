@@ -171,7 +171,9 @@ export async function prepareExport(
           credentials: 'same-origin',
         });
         if (!response.ok) throw new Error(String(response.status));
-        const path = `files/${f.id.slice(0, 8)}-${safeName(name)}`;
+        // uuidv7 앞부분은 시각이라 겹칠 수 있어 뒤(무작위) 부분과 판을 붙인다.
+        const tag = `${f.id.slice(-8)}${f.version === undefined ? '' : `-v${String(f.version)}`}`;
+        const path = `files/${tag}-${safeName(name)}`;
         files.set(path, await response.blob());
         local.set(key, path);
       } catch {
@@ -183,7 +185,7 @@ export async function prepareExport(
         `내려받을 수 없는 그림·첨부 ${String(missing.length)}개는 넣지 않았습니다: ${missing.join(', ')}`,
       );
     }
-  } else if (fileRefs.size > 0) {
+  } else if (fileRefs.size > 0 && options.format === 'markdown') {
     notes.push(
       '그림·첨부는 fvoci 주소로 연결됩니다(열려면 로그인 필요). 파일까지 함께 담으려면 ZIP으로 내보내세요.',
     );
@@ -220,7 +222,10 @@ export async function prepareExport(
       const src = fileUrl(n.attrs?.src);
       if (src === undefined) {
         const alt = typeof n.attrs?.alt === 'string' && n.attrs.alt !== '' ? n.attrs.alt : '그림';
-        return { type: 'paragraph', content: [{ type: 'text', text: `(${alt}: 내려받을 수 없어 넣지 못함)` }] };
+        return {
+          type: 'paragraph',
+          content: [{ type: 'text', text: `(${alt}: 내려받을 수 없어 넣지 못함)` }],
+        };
       }
       return { ...n, attrs: { ...n.attrs, src } };
     }
