@@ -244,7 +244,13 @@ async fn only_the_owner_deletes_and_everyone_loses_access_until_restored() {
         )
         .await
         .status,
-        StatusCode::CONFLICT
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(&app, Method::GET, "/api/invitations", Some(&invitee), None)
+            .await
+            .json,
+        json!([])
     );
     let search = send(
         &app,
@@ -296,19 +302,19 @@ async fn only_the_owner_deletes_and_everyone_loses_access_until_restored() {
         StatusCode::OK
     );
     assert_eq!(deleted(&app, &owner).await, json!([]));
-    // 지울 때 닫은 초대는 닫힌 채로 남는다.
-    assert_eq!(
-        send(
-            &app,
-            Method::POST,
-            &format!("/api/invitations/{inv_id}/accept"),
-            Some(&invitee),
-            None
-        )
-        .await
-        .status,
-        StatusCode::CONFLICT
-    );
+    // 지울 때 닫은 초대는 되살리면 다시 열린다.
+    let invited = send(&app, Method::GET, "/api/invitations", Some(&invitee), None).await;
+    assert_eq!(invited.json[0]["id"], inv_id.as_str(), "{:?}", invited.json);
+    let accepted = send(
+        &app,
+        Method::POST,
+        &format!("/api/invitations/{inv_id}/accept"),
+        Some(&invitee),
+        None,
+    )
+    .await;
+    assert_eq!(accepted.status, StatusCode::OK, "{:?}", accepted.json);
+    assert!(ids(&app, &invitee).await.contains(&ws));
 
     // 소유권 인계가 진행 중이면 먼저 취소해야 한다.
     let offer = send(

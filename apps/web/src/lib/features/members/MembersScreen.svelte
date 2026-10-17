@@ -32,8 +32,11 @@
   let groupName = $state('');
   let deleteName = $state('');
   let deleteError = $state<string | undefined>(undefined);
+  let deleting = $state(false);
 
   async function deleteWorkspace(): Promise<void> {
+    if (deleting) return;
+    deleting = true;
     deleteError = undefined;
     try {
       await api.deleteWorkspace(workspace.id, deleteName);
@@ -41,6 +44,8 @@
       router.navigate('/trash');
     } catch (e: unknown) {
       deleteError = e instanceof ApiError ? e.message : '워크스페이스를 지우지 못했습니다.';
+    } finally {
+      deleting = false;
     }
   }
   let confirm = $state<{ title: string; body: string; run: () => Promise<void> } | undefined>(
@@ -333,7 +338,8 @@
           <Button
             type="submit"
             variant="destructive"
-            disabled={deleteName.trim() !== workspace.name.trim()}>워크스페이스 삭제</Button
+            disabled={deleting || deleteName.trim() !== workspace.name.trim()}
+            >워크스페이스 삭제</Button
           >
         </form>
         {#if deleteError !== undefined}
