@@ -778,6 +778,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 항목 멤버 정하기(항목 소유 권한자). 비공개 항목은 멤버만 워크스페이스 역할 안에서 본다(D-20 공유). */
+        put: operations["set_item_members"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 항목 정보(볼 수 있는 사람). */
+        get: operations["get_item_profile"];
+        /** 항목 정보 바꾸기(쓸 수 있는 사람). 종류에 없는 칸은 400, 리더는 그 항목을 볼 수 있는 사람이어야 한다. */
+        put: operations["set_item_profile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/recurrences/sync": {
         parameters: {
             query?: never;
@@ -1134,6 +1169,23 @@ export interface paths {
         get?: never;
         /** 모듈 보관·해제(관리자). 보관하면 항목과 문서가 읽기 전용이 된다. */
         put: operations["archive_module"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/modules/{module_id}/icon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 모듈 아이콘 바꾸기(관리자). 빈 값이면 지운다. */
+        put: operations["set_module_icon"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2471,6 +2523,12 @@ export interface components {
             members: components["schemas"]["UserId"][];
             name: string;
         };
+        /** @description 그룹. */
+        GroupRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
         /** @description 서비스 상태 응답. */
         Health: {
             /** @description 데이터베이스 왕복 결과. `ok` 또는 `error`. */
@@ -2543,10 +2601,16 @@ export interface components {
             access: components["schemas"]["Access"];
             archived: boolean;
             description: string;
+            /** Format: date */
+            ends_on?: string | null;
             id: components["schemas"]["ItemId"];
             module_id: components["schemas"]["ModuleId"];
             /** @description 예: `DEV-3`. 키를 볼 수 없으면 없다. */
             reference?: string | null;
+            /** Format: date */
+            starts_on?: string | null;
+            /** @description 항목 상태: `planned`·`active`·`on_hold`·`done`·`cancelled`. */
+            status: string;
             title: string;
             /** Format: date-time */
             updated_at: string;
@@ -2555,10 +2619,49 @@ export interface components {
             workspace_id: components["schemas"]["WorkspaceId"];
         };
         /**
+         * @description 모듈 종류별 항목 정보. 종류에 없는 칸을 보내면 400.
+         *     - 연구(D-34): 분야·키워드·연구 질문·가설·모형·방법·표본
+         *     - 스터디(D-36): 수준·목표 분량
+         *     - 취미(D-38): 활동 유형
+         */
+        ItemDetails: {
+            activity_type?: string | null;
+            field?: string | null;
+            hypothesis?: string | null;
+            keywords?: string[];
+            level?: string | null;
+            method?: string | null;
+            model?: string | null;
+            question?: string | null;
+            sample?: string | null;
+            /** @description 목표 분량(예: "교재 3권, 문제 600개"). */
+            target?: string | null;
+        };
+        /**
          * Format: uuid
          * @description 모듈 항목(개별 프로젝트·연구·스터디·강좌·취미 활동) 내부 ID (D-14).
          */
         ItemId: string;
+        /** @description 항목 정보. */
+        ItemProfile: {
+            can_edit: boolean;
+            /** @description 멤버를 정할 수 있는지(항목 소유 권한자). */
+            can_manage_members: boolean;
+            details: components["schemas"]["ItemDetails"];
+            /** Format: date */
+            ends_on?: string | null;
+            goal: string;
+            /** @description 비공개 항목을 함께 쓰는 그룹. */
+            groups: components["schemas"]["GroupRef"][];
+            leader?: null | components["schemas"]["PersonRef"];
+            /** @description 비공개 항목을 함께 쓰는 사람(직접 지정). */
+            members: components["schemas"]["PersonRef"][];
+            scope: string;
+            /** Format: date */
+            starts_on?: string | null;
+            /** @description `planned`·`active`·`on_hold`·`done`·`cancelled`. */
+            status: string;
+        };
         /** @description 로그아웃 결과. 클라이언트는 `redirect_to`로 이동해 제공자 세션도 끝낸다. */
         LogoutResponse: {
             redirect_to: string;
@@ -2619,6 +2722,8 @@ export interface components {
         Module: {
             /** @description 보관됨: 읽기 전용이며 번호·키는 그대로 남는다. */
             archived: boolean;
+            /** @description 아이콘(그림 문자 등, 없으면 빈 문자열). */
+            icon: string;
             id: components["schemas"]["ModuleId"];
             /** @description 현재 키. 예: `DEV`. */
             key: string;
@@ -2794,6 +2899,11 @@ export interface components {
              * @description 계획일이 지났는데 완료하지 않은 회차 수.
              */
             overdue: number;
+            user_id: components["schemas"]["UserId"];
+        };
+        /** @description 사람(표시 이름). */
+        PersonRef: {
+            display_name: string;
             user_id: components["schemas"]["UserId"];
         };
         /** @description 아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다. */
@@ -2998,10 +3108,32 @@ export interface components {
         SetEventRecurrence: {
             rule?: null | components["schemas"]["RecurrenceRule"];
         };
+        /** @description 항목 멤버 정하기(항목 소유 권한자). 목록 전체를 보낸다. */
+        SetItemMembers: {
+            group_ids: string[];
+            user_ids: string[];
+        };
+        /** @description 항목 정보 바꾸기(쓸 수 있는 사람). */
+        SetItemProfile: {
+            details?: components["schemas"]["ItemDetails"];
+            /** Format: date */
+            ends_on?: string | null;
+            goal?: string;
+            /** Format: uuid */
+            leader_id?: string | null;
+            scope?: string;
+            /** Format: date */
+            starts_on?: string | null;
+            status: string;
+        };
         /** @description 고정·즐겨찾기 켜기·끄기. */
         SetMark: {
             mark: components["schemas"]["MarkKind"];
             on: boolean;
+        };
+        /** @description 모듈 아이콘(관리자). */
+        SetModuleIcon: {
+            icon: string;
         };
         /** @description 부모·순서 바꾸기 요청. `parent_id`가 없으면 최상위, `before_id`가 있으면 그 형제 바로 앞, 없으면 맨 끝. */
         SetParent: {
@@ -5946,6 +6078,145 @@ export interface operations {
             };
         };
     };
+    set_item_members: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetItemMembers"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_item_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemProfile"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_item_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetItemProfile"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     sync_item_recurrences: {
         parameters: {
             query?: never;
@@ -6789,6 +7060,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Module"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_module_icon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetModuleIcon"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             403: {

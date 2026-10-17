@@ -22,6 +22,8 @@
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
 
+  import ItemProfilePanel from './ItemProfilePanel.svelte';
+
   interface Props {
     workspace: Workspace;
     itemId: string;
@@ -206,6 +208,19 @@
     {#if saved}<p class="text-sm" role="status">저장했습니다.</p>{/if}
     {#if formError !== undefined}
       <p class="text-sm text-destructive" role="alert">{formError}</p>
+    {/if}
+
+    {#if mod !== undefined}
+      <ItemProfilePanel
+        item={current}
+        kind={mod.kind}
+        onchanged={() => {
+          api
+            .item(current.id)
+            .then(fill)
+            .catch(() => undefined);
+        }}
+      />
     {/if}
 
     {#if mod?.kind === 'course'}

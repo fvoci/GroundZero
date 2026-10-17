@@ -10,6 +10,7 @@ pub mod export;
 pub mod file_text;
 pub mod files;
 pub mod home;
+pub mod item_profile;
 pub mod members;
 pub mod modules;
 pub mod public_links;

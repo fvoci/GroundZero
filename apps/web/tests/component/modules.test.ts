@@ -58,6 +58,7 @@ describe('module validation', () => {
       key: 'DEV',
       previous_keys: ['ENG'],
       archived: false,
+      icon: '',
     };
     expect(parseModule(module).previous_keys).toEqual(['ENG']);
     expect(() => parseModule({ ...module, kind: 'chores' })).toThrow();
@@ -72,9 +73,14 @@ describe('module validation', () => {
       access: 'owner',
       archived: false,
       updated_at: '2026-10-17T00:00:00Z',
+      status: 'active',
+      starts_on: null,
+      ends_on: '2026-12-31',
     });
     expect(parsed.reference).toBe('DEV-1');
+    expect(parsed.ends_on).toBe('2026-12-31');
     expect(() => parseItem({ ...parsed, access: 'admin' })).toThrow();
+    expect(() => parseItem({ ...parsed, status: 'late' })).toThrow();
   });
 
   it('accepts module documents with an item', () => {

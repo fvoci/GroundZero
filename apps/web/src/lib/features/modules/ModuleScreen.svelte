@@ -13,6 +13,7 @@
   import { Label } from '$lib/ui/label';
 
   import { KIND_LABEL, normalizeKey } from './kinds';
+  import { ITEM_STATUS_LABEL } from './profile';
 
   interface Props {
     workspace: Workspace;
@@ -37,6 +38,7 @@
         items = list;
         editName = m.name;
         editKey = m.key;
+        editIcon = m.icon;
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -55,6 +57,7 @@
 
   let editName = $state('');
   let editKey = $state('');
+  let editIcon = $state('');
   let settingsError = $state<string | undefined>(undefined);
   let settingsNote = $state<string | undefined>(undefined);
 
@@ -70,6 +73,7 @@
     settingsNote = undefined;
     try {
       const before = mod.key;
+      if (editIcon.trim() !== mod.icon) await api.setModuleIcon(mod.id, editIcon.trim());
       mod = await api.updateModule(mod.id, editName.trim(), key);
       forgetReferences();
       editKey = mod.key;
@@ -105,7 +109,10 @@
   {@const current = mod}
   <section class="flex flex-col gap-6" aria-labelledby="module-heading">
     <div class="flex flex-wrap items-baseline gap-2">
-      <h1 id="module-heading" class="text-xl font-semibold">{current.name}</h1>
+      <h1 id="module-heading" class="text-xl font-semibold">
+        {#if current.icon !== ''}<span aria-hidden="true">{current.icon}</span>{/if}
+        {current.name}
+      </h1>
       <span class="font-mono text-sm text-muted-foreground">{current.key}</span>
       <Badge variant="outline">{KIND_LABEL[current.kind]}</Badge>
       {#if current.archived}<Badge variant="secondary">보관됨 · 읽기 전용</Badge>{/if}
@@ -130,6 +137,12 @@
             >
               <span class="font-mono text-sm text-muted-foreground">{it.reference}</span>
               <span>{it.title}</span>
+              <Badge variant="outline">{ITEM_STATUS_LABEL[it.status]}</Badge>
+              {#if it.starts_on !== null || it.ends_on !== null}
+                <span class="text-sm text-muted-foreground"
+                  >{it.starts_on ?? ''} ~ {it.ends_on ?? ''}</span
+                >
+              {/if}
               {#if it.visibility === 'private'}<Badge variant="outline">비공개</Badge>{/if}
               {#if it.archived}<Badge variant="secondary">보관됨</Badge>{/if}
             </a>
@@ -175,6 +188,10 @@
             autocomplete="off"
             class="font-mono uppercase"
           />
+        </div>
+        <div class="flex w-24 flex-col gap-1">
+          <Label for="module-edit-icon">아이콘</Label>
+          <Input id="module-edit-icon" bind:value={editIcon} maxlength={16} placeholder="예: 🚀" />
         </div>
         <Button type="submit" variant="outline">저장</Button>
         <Button type="button" variant="outline" onclick={() => void toggleArchive()}

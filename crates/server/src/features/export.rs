@@ -294,6 +294,9 @@ SELECT json_build_object(
   'items', (SELECT coalesce(json_agg(i ORDER BY i.created_at), '[]') FROM (
       SELECT it.*, app_item_reference(it.id) AS reference FROM items it
       WHERE it.workspace_id = $1 AND it.deleted_at IS NULL) i),
+  'item_members', (SELECT coalesce(json_agg(im ORDER BY im.item_id, im.added_at), '[]') FROM (
+      SELECT x.item_id, x.user_id, x.group_id, x.added_at FROM item_members x JOIN items it ON it.id = x.item_id
+      WHERE it.workspace_id = $1 AND it.deleted_at IS NULL) im),
   'documents', (SELECT coalesce(json_agg(d ORDER BY d.created_at), '[]') FROM (
       SELECT doc.id, doc.title, app_document_reference(doc.id) AS reference, doc.item_id, doc.parent_id,
              doc.visibility, doc.schema_version, doc.revision, doc.body, doc.created_at, doc.updated_at

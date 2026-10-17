@@ -12,7 +12,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
+use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -24,6 +24,8 @@ use crate::features::documents::{
     TREE_ORDER, empty_body, load_with_access, max_depth, to_document, to_summaries,
 };
 use crate::features::workspaces::{member_role, validate_title};
+
+time::serde::format_description!(item_day, Date, "[year]-[month]-[day]");
 use crate::http::AppState;
 use crate::ids::{DocumentId, ItemId, ModuleId, WorkspaceId};
 
@@ -52,7 +54,7 @@ impl ModuleKind {
         }
     }
 
-    pub(crate) fn parse(raw: &str) -> Option<Self> {
+    pub fn parse(raw: &str) -> Option<Self> {
         match raw {
             "project" => Some(Self::Project),
             "research" => Some(Self::Research),
@@ -77,6 +79,8 @@ pub struct Module {
     pub previous_keys: Vec<String>,
     /// 보관됨: 읽기 전용이며 번호·키는 그대로 남는다.
     pub archived: bool,
+    /// 아이콘(그림 문자 등, 없으면 빈 문자열).
+    pub icon: String,
 }
 
 /// 모듈 생성 요청(관리자).
@@ -120,6 +124,14 @@ pub struct Item {
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub updated_at: OffsetDateTime,
+    /// 항목 상태: `planned`·`active`·`on_hold`·`done`·`cancelled`.
+    pub status: String,
+    #[serde(with = "item_day::option")]
+    #[schema(value_type = Option<String>, format = Date)]
+    pub starts_on: Option<Date>,
+    #[serde(with = "item_day::option")]
+    #[schema(value_type = Option<String>, format = Date)]
+    pub ends_on: Option<Date>,
 }
 
 /// 항목 생성 요청.
@@ -188,16 +200,18 @@ type ModuleRow = (
     String,
     bool,
     Vec<String>,
+    String,
 );
 
 const MODULE_SELECT: &str =
     "SELECT m.id, m.workspace_id, m.kind, m.name, k.key, m.archived_at IS NOT NULL,
         coalesce((SELECT array_agg(o.key ORDER BY o.created_at) FROM module_keys o
-                  WHERE o.module_id = m.id AND o.retired_at IS NOT NULL), '{}')
+                  WHERE o.module_id = m.id AND o.retired_at IS NOT NULL), '{}'),
+        m.icon
  FROM modules m JOIN module_keys k ON k.module_id = m.id AND k.retired_at IS NULL";
 
 fn to_module(
-    (id, workspace_id, kind, name, key, archived, previous_keys): ModuleRow,
+    (id, workspace_id, kind, name, key, archived, previous_keys, icon): ModuleRow,
 ) -> Result<Module, AppError> {
     let kind = ModuleKind::parse(&kind)
         .ok_or_else(|| AppError::Config(format!("unknown module kind in database: {kind}")))?;
@@ -209,6 +223,7 @@ fn to_module(
         key,
         previous_keys,
         archived,
+        icon,
     })
 }
 
@@ -231,11 +246,15 @@ type ItemRow = (
     String,
     bool,
     OffsetDateTime,
+    String,
+    Option<Date>,
+    Option<Date>,
 );
 
 const ITEM_SELECT: &str =
     "SELECT i.id, i.module_id, i.workspace_id, app_item_reference(i.id), i.title,
-        i.description, i.visibility, app_item_access(i.id), i.archived_at IS NOT NULL, i.updated_at
+        i.description, i.visibility, app_item_access(i.id), i.archived_at IS NOT NULL, i.updated_at,
+        i.status, i.starts_on, i.ends_on
  FROM items i";
 
 fn to_item(
@@ -250,6 +269,9 @@ fn to_item(
         access,
         archived,
         updated_at,
+        status,
+        starts_on,
+        ends_on,
     ): ItemRow,
 ) -> Result<Item, AppError> {
     let access = Access::parse(&access)
@@ -265,6 +287,9 @@ fn to_item(
         access,
         archived,
         updated_at,
+        status,
+        starts_on,
+        ends_on,
     })
 }
 

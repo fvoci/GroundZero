@@ -402,11 +402,22 @@ export function parseModule(value: Json): Module {
     key: str(o, 'key'),
     previous_keys: strings(o.previous_keys),
     archived: bool(o, 'archived'),
+    icon: str(o, 'icon'),
   };
 }
 
-/** 화면에서 쓰는 항목. 공개 범위를 좁힌 것 외에는 계약의 Item과 같다. */
-export type ItemView = Item & { visibility: 'workspace' | 'private' };
+/** 항목 상태(D-33): 계획·진행·보류·완료·취소. */
+export const ITEM_STATUSES = ['planned', 'active', 'on_hold', 'done', 'cancelled'] as const;
+export type ItemStatus = (typeof ITEM_STATUSES)[number];
+
+function itemStatus(value: string): ItemStatus {
+  const found = ITEM_STATUSES.find((s) => s === value);
+  if (found === undefined) throw new TypeError(`unknown item status ${value}`);
+  return found;
+}
+
+/** 화면에서 쓰는 항목. 공개 범위·상태를 좁힌 것 외에는 계약의 Item과 같다. */
+export type ItemView = Item & { visibility: 'workspace' | 'private'; status: ItemStatus };
 
 export function parseItem(value: Json): ItemView {
   const o = rec(value, 'item');
@@ -421,6 +432,86 @@ export function parseItem(value: Json): ItemView {
     access: access(str(o, 'access')),
     archived: bool(o, 'archived'),
     updated_at: str(o, 'updated_at'),
+    status: itemStatus(str(o, 'status')),
+    starts_on: optStr(o, 'starts_on'),
+    ends_on: optStr(o, 'ends_on'),
+  };
+}
+
+/** 모듈 종류별 항목 정보(D-34 연구, D-36 스터디, D-38 취미). 종류에 없는 칸은 보내지 않는다. */
+export interface ItemDetailsView {
+  field?: string;
+  keywords?: string[];
+  question?: string;
+  hypothesis?: string;
+  model?: string;
+  method?: string;
+  sample?: string;
+  level?: string;
+  target?: string;
+  activity_type?: string;
+}
+
+export interface PersonRefView {
+  user_id: string;
+  display_name: string;
+}
+
+export interface ItemProfileView {
+  leader: PersonRefView | null;
+  goal: string;
+  scope: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  status: ItemStatus;
+  details: ItemDetailsView;
+  members: PersonRefView[];
+  groups: { id: string; name: string }[];
+  can_edit: boolean;
+  can_manage_members: boolean;
+}
+
+const DETAIL_TEXT_KEYS = [
+  'field',
+  'question',
+  'hypothesis',
+  'model',
+  'method',
+  'sample',
+  'level',
+  'target',
+  'activity_type',
+] as const;
+
+function parsePerson(value: Json): PersonRefView {
+  const o = rec(value, 'person');
+  return { user_id: str(o, 'user_id'), display_name: str(o, 'display_name') };
+}
+
+export function parseItemProfile(value: Json): ItemProfileView {
+  const o = rec(value, 'item profile');
+  const d = rec(o.details ?? {}, 'item details');
+  const details: ItemDetailsView = {};
+  for (const key of DETAIL_TEXT_KEYS) {
+    const v = optStr(d, key);
+    if (v !== null) details[key] = v;
+  }
+  if (d.keywords !== undefined) details.keywords = strings(d.keywords);
+  return {
+    leader: o.leader === null || o.leader === undefined ? null : parsePerson(o.leader),
+    goal: str(o, 'goal'),
+    scope: str(o, 'scope'),
+    starts_on: optStr(o, 'starts_on'),
+    ends_on: optStr(o, 'ends_on'),
+    status: itemStatus(str(o, 'status')),
+    details,
+    members: parseList(o.members, parsePerson),
+    groups: parseList(o.groups, (g) => {
+      const r = rec(g, 'group');
+      return { id: str(r, 'id'), name: str(r, 'name') };
+    }),
+    can_edit: bool(o, 'can_edit'),
+    can_manage_members: bool(o, 'can_manage_members'),
   };
 }
 
@@ -1876,6 +1967,31 @@ export const api = {
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/tasks`, (v) =>
       parseList(v, parseTask),
     ),
+  itemProfile: (itemId: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/profile`, parseItemProfile),
+  setItemProfile: (
+    itemId: string,
+    profile: {
+      leader_id: string | null;
+      goal: string;
+      scope: string;
+      starts_on: string | null;
+      ends_on: string | null;
+      status: ItemStatus;
+      details: ItemDetailsView;
+    },
+  ) =>
+    expectOk('PUT', `/api/items/${encodeURIComponent(itemId)}/profile`, none, {
+      ...profile,
+      details: { ...profile.details },
+    }),
+  setItemMembers: (itemId: string, userIds: string[], groupIds: string[]) =>
+    expectOk('PUT', `/api/items/${encodeURIComponent(itemId)}/members`, none, {
+      user_ids: userIds,
+      group_ids: groupIds,
+    }),
+  setModuleIcon: (moduleId: string, icon: string) =>
+    expectOk('PUT', `/api/modules/${encodeURIComponent(moduleId)}/icon`, none, { icon }),
   assignable: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/assignable`, (v) =>
       parseList(v, parseAssignee),

@@ -16,9 +16,9 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, audit, comments, courses, documents, events, export, files, home, members, modules,
-    public_links, recurrence, references, revisions, schedule, search_api, tasks, time_tracking,
-    trash, workspaces,
+    accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
+    members, modules, public_links, recurrence, references, revisions, schedule, search_api, tasks,
+    time_tracking, trash, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -210,6 +210,10 @@ async fn api_not_found() -> AppError {
         export::mine,
         audit::workspace,
         audit::mine,
+        item_profile::get,
+        item_profile::set,
+        item_profile::set_members,
+        item_profile::set_module_icon,
         courses::get,
         courses::set_details,
         courses::add_episodes,
@@ -385,6 +389,13 @@ async fn api_not_found() -> AppError {
         files::RenameFile,
         files::FileTrashed,
         audit::AuditEntry,
+        item_profile::ItemDetails,
+        item_profile::ItemProfile,
+        item_profile::PersonRef,
+        item_profile::GroupRef,
+        item_profile::SetItemProfile,
+        item_profile::SetItemMembers,
+        item_profile::SetModuleIcon,
         courses::CourseDetails,
         courses::MyProgress,
         courses::Episode,
@@ -483,6 +494,15 @@ pub fn router(state: AppState) -> Router {
         .route("/me/export", get(export::mine))
         .route("/workspaces/{workspace_id}/audit", get(audit::workspace))
         .route("/me/audit", get(audit::mine))
+        .route(
+            "/items/{item_id}/profile",
+            get(item_profile::get).put(item_profile::set),
+        )
+        .route("/items/{item_id}/members", put(item_profile::set_members))
+        .route(
+            "/modules/{module_id}/icon",
+            put(item_profile::set_module_icon),
+        )
         .route(
             "/items/{item_id}/course",
             get(courses::get).put(courses::set_details),

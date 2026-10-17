@@ -3530,6 +3530,196 @@
         }
       }
     },
+    "/api/items/{item_id}/members": {
+      "put": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "항목 멤버 정하기(항목 소유 권한자). 비공개 항목은 멤버만 워크스페이스 역할 안에서 본다(D-20 공유).",
+        "operationId": "set_item_members",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetItemMembers"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/profile": {
+      "get": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "항목 정보(볼 수 있는 사람).",
+        "operationId": "get_item_profile",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "항목 정보 바꾸기(쓸 수 있는 사람). 종류에 없는 칸은 400, 리더는 그 항목을 볼 수 있는 사람이어야 한다.",
+        "operationId": "set_item_profile",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetItemProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/recurrences/sync": {
       "post": {
         "tags": [
@@ -4724,6 +4914,71 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Module"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/modules/{module_id}/icon": {
+      "put": {
+        "tags": [
+          "modules"
+        ],
+        "summary": "모듈 아이콘 바꾸기(관리자). 빈 값이면 지운다.",
+        "operationId": "set_module_icon",
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetModuleIcon"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -9792,6 +10047,23 @@
           }
         }
       },
+      "GroupRef": {
+        "type": "object",
+        "description": "그룹.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "Health": {
         "type": "object",
         "description": "서비스 상태 응답.",
@@ -10049,7 +10321,8 @@
           "visibility",
           "access",
           "archived",
-          "updated_at"
+          "updated_at",
+          "status"
         ],
         "properties": {
           "access": {
@@ -10060,6 +10333,13 @@
           },
           "description": {
             "type": "string"
+          },
+          "ends_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
           },
           "id": {
             "$ref": "#/components/schemas/ItemId"
@@ -10073,6 +10353,17 @@
               "null"
             ],
             "description": "예: `DEV-3`. 키를 볼 수 없으면 없다."
+          },
+          "starts_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "status": {
+            "type": "string",
+            "description": "항목 상태: `planned`·`active`·`on_hold`·`done`·`cancelled`."
           },
           "title": {
             "type": "string"
@@ -10090,10 +10381,153 @@
           }
         }
       },
+      "ItemDetails": {
+        "type": "object",
+        "description": "모듈 종류별 항목 정보. 종류에 없는 칸을 보내면 400.\n- 연구(D-34): 분야·키워드·연구 질문·가설·모형·방법·표본\n- 스터디(D-36): 수준·목표 분량\n- 취미(D-38): 활동 유형",
+        "properties": {
+          "activity_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "field": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hypothesis": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "level": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sample": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "목표 분량(예: \"교재 3권, 문제 600개\")."
+          }
+        },
+        "additionalProperties": false
+      },
       "ItemId": {
         "type": "string",
         "format": "uuid",
         "description": "모듈 항목(개별 프로젝트·연구·스터디·강좌·취미 활동) 내부 ID (D-14)."
+      },
+      "ItemProfile": {
+        "type": "object",
+        "description": "항목 정보.",
+        "required": [
+          "goal",
+          "scope",
+          "status",
+          "details",
+          "members",
+          "groups",
+          "can_edit",
+          "can_manage_members"
+        ],
+        "properties": {
+          "can_edit": {
+            "type": "boolean"
+          },
+          "can_manage_members": {
+            "type": "boolean",
+            "description": "멤버를 정할 수 있는지(항목 소유 권한자)."
+          },
+          "details": {
+            "$ref": "#/components/schemas/ItemDetails"
+          },
+          "ends_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupRef"
+            },
+            "description": "비공개 항목을 함께 쓰는 그룹."
+          },
+          "leader": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PersonRef",
+                "description": "리더(표시만, 권한을 더 주지 않는다). 워크스페이스를 떠났으면 없다."
+              }
+            ]
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonRef"
+            },
+            "description": "비공개 항목을 함께 쓰는 사람(직접 지정)."
+          },
+          "scope": {
+            "type": "string"
+          },
+          "starts_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "status": {
+            "type": "string",
+            "description": "`planned`·`active`·`on_hold`·`done`·`cancelled`."
+          }
+        }
       },
       "LogoutResponse": {
         "type": "object",
@@ -10293,12 +10727,17 @@
           "name",
           "key",
           "previous_keys",
-          "archived"
+          "archived",
+          "icon"
         ],
         "properties": {
           "archived": {
             "type": "boolean",
             "description": "보관됨: 읽기 전용이며 번호·키는 그대로 남는다."
+          },
+          "icon": {
+            "type": "string",
+            "description": "아이콘(그림 문자 등, 없으면 빈 문자열)."
           },
           "id": {
             "$ref": "#/components/schemas/ModuleId"
@@ -10797,6 +11236,22 @@
             "type": "integer",
             "format": "int32",
             "description": "계획일이 지났는데 완료하지 않은 회차 수."
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "PersonRef": {
+        "type": "object",
+        "description": "사람(표시 이름).",
+        "required": [
+          "user_id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
           },
           "user_id": {
             "$ref": "#/components/schemas/UserId"
@@ -11401,6 +11856,70 @@
           }
         }
       },
+      "SetItemMembers": {
+        "type": "object",
+        "description": "항목 멤버 정하기(항목 소유 권한자). 목록 전체를 보낸다.",
+        "required": [
+          "user_ids",
+          "group_ids"
+        ],
+        "properties": {
+          "group_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "user_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SetItemProfile": {
+        "type": "object",
+        "description": "항목 정보 바꾸기(쓸 수 있는 사람).",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "details": {
+            "$ref": "#/components/schemas/ItemDetails"
+          },
+          "ends_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "leader_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "starts_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
       "SetMark": {
         "type": "object",
         "description": "고정·즐겨찾기 켜기·끄기.",
@@ -11414,6 +11933,18 @@
           },
           "on": {
             "type": "boolean"
+          }
+        }
+      },
+      "SetModuleIcon": {
+        "type": "object",
+        "description": "모듈 아이콘(관리자).",
+        "required": [
+          "icon"
+        ],
+        "properties": {
+          "icon": {
+            "type": "string"
           }
         }
       },
