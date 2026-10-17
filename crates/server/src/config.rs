@@ -37,6 +37,13 @@ pub struct OidcConfig {
     pub client_secret: Secret,
 }
 
+/// 통합 검색(Meilisearch) 연결 (D-39). `FVOCI_SEARCH_URL`·`FVOCI_SEARCH_KEY`. 없으면 제목만 DB에서 찾는다.
+#[derive(Debug, Clone)]
+pub struct SearchConfig {
+    pub url: String,
+    pub key: Secret,
+}
+
 /// 운영 한도 (D-52). 기본값은 `O-26`에서 사용량·테스트 결과로 조정한다.
 #[derive(Debug, Clone, Copy)]
 pub struct Limits {
@@ -71,6 +78,7 @@ pub struct Config {
     pub role: RunRole,
     /// 백그라운드 작업 확인 간격. `FVOCI_WORKER_INTERVAL_SECS`, 기본 60, 5~3600.
     pub worker_interval: Duration,
+    pub search: Option<SearchConfig>,
 }
 
 /// 실행 역할(O-19): API와 백그라운드 작업을 한 바이너리에 두고 실행할 때 고른다.
@@ -188,6 +196,17 @@ impl Config {
                 )));
             }
         };
+        let search = match lookup("FVOCI_SEARCH_URL").filter(|v| !v.trim().is_empty()) {
+            Some(url) => {
+                Url::parse(url.trim())
+                    .map_err(|e| AppError::Config(format!("FVOCI_SEARCH_URL is invalid: {e}")))?;
+                Some(SearchConfig {
+                    url: url.trim().to_owned(),
+                    key: Secret(required(&lookup, "FVOCI_SEARCH_KEY")?),
+                })
+            }
+            None => None,
+        };
         let worker_interval: u64 = parse_or(&lookup, "FVOCI_WORKER_INTERVAL_SECS", 60)?;
         if !(5..=3600).contains(&worker_interval) {
             return Err(AppError::Config(
@@ -205,6 +224,7 @@ impl Config {
             limits,
             role,
             worker_interval: Duration::from_secs(worker_interval),
+            search,
         })
     }
 

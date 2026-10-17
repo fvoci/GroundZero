@@ -10,6 +10,7 @@ use crate::db::Db;
 use crate::error::AppError;
 use crate::features::accounts::OidcProvider;
 use crate::http::{self, AppState};
+use crate::search::SearchClient;
 use crate::worker;
 
 /// 구성으로 공유 상태를 만든다. 테스트도 같은 경로를 쓴다.
@@ -19,10 +20,12 @@ pub fn build_state(config: Config) -> Result<AppState, AppError> {
         Some(oidc) => Some(Arc::new(OidcProvider::new(oidc, &config.public_url)?)),
         None => None,
     };
+    let search = config.search.as_ref().map(SearchClient::new);
     Ok(AppState {
         db,
         config: Arc::new(config),
         oidc,
+        search,
     })
 }
 
@@ -36,7 +39,7 @@ pub async fn run(config: Config) -> Result<(), AppError> {
     let (stop, stopped) = watch::channel(false);
     let worker = role
         .runs_worker()
-        .then(|| worker::spawn(db.clone(), interval, stopped));
+        .then(|| worker::spawn(db.clone(), state.search.clone(), interval, stopped));
     if role.serves_http() {
         let app = http::router(state);
         let listener = TcpListener::bind(bind).await?;

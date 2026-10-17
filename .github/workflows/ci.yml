@@ -57,6 +57,7 @@ jobs:
     env:
       # 관리자(fvoci)는 job 서비스의 POSTGRES_USER. 마이그레이션·앱 역할은 xtask가 `db bootstrap`으로 만든다.
       FVOCI_TEST_PG_HOST_PORT: postgres:5432
+      FVOCI_TEST_SEARCH_URL: http://meilisearch:7700
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
@@ -84,6 +85,7 @@ jobs:
           --env HOME=/work/target/ci-home
           --env CARGO_HOME=/work/target/ci-cargo
           --env FVOCI_TEST_PG_HOST_PORT=postgres:5432
+          --env FVOCI_TEST_SEARCH_URL=http://meilisearch:7700
           --env FVOCI_TEST_OIDC_ISSUER=http://keycloak:8080/realms/fvoci-test
           "$IMAGE" cargo xtask test --external-services --oidc
       - name: compose down

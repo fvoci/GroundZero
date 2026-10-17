@@ -17,7 +17,7 @@ use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
     accounts, documents, events, home, members, modules, public_links, recurrence, references,
-    revisions, schedule, tasks, time_tracking, trash, workspaces,
+    revisions, schedule, search_api, tasks, time_tracking, trash, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -26,6 +26,8 @@ pub struct AppState {
     pub db: Db,
     pub config: Arc<Config>,
     pub oidc: accounts::SharedProvider,
+    /// 통합 검색(없으면 제목만 DB에서).
+    pub search: Option<crate::search::SearchClient>,
 }
 
 /// 서비스 상태 응답.
@@ -180,6 +182,7 @@ async fn api_not_found() -> AppError {
         trash::purge_expired,
         trash::purge_my_expired,
         trash::set_retention,
+        search_api::search,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -329,6 +332,7 @@ async fn api_not_found() -> AppError {
         trash::Trash,
         trash::Purged,
         trash::SetRetention,
+        search_api::SearchResult,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -367,6 +371,7 @@ async fn api_not_found() -> AppError {
         (name = "time", description = "스톱워치·개인 시간 기록·집계"),
         (name = "home", description = "홈·고정·즐겨찾기"),
         (name = "trash", description = "휴지통·복원·영구 삭제"),
+        (name = "search", description = "통합 검색"),
     )
 )]
 pub struct ApiDoc;
@@ -499,6 +504,7 @@ pub fn router(state: AppState) -> Router {
             put(trash::set_retention),
         )
         .route("/me/trash", get(trash::my_trash))
+        .route("/search", get(search_api::search))
         .route("/me/trash/purge-expired", post(trash::purge_my_expired))
         .route("/trash/{batch_id}", delete(trash::purge))
         .route("/trash/{batch_id}/restore", post(trash::restore))

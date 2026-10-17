@@ -11,6 +11,7 @@ pub mod recurrence;
 pub mod references;
 pub mod revisions;
 pub mod schedule;
+pub mod search_api;
 pub mod search_text;
 pub mod tasks;
 pub mod time_tracking;

@@ -1180,6 +1180,34 @@ function parseTrash(value: Json): TrashView {
   };
 }
 
+export type SearchKind = 'document' | 'task' | 'item' | 'event';
+
+export interface SearchResultView {
+  kind: SearchKind;
+  id: string;
+  title: string;
+  reference: string | null;
+  workspace_id: string | null;
+  item_id: string | null;
+  snippet: string | null;
+}
+
+function parseSearchResult(value: Json): SearchResultView {
+  const o = rec(value, 'search result');
+  const kind = str(o, 'kind');
+  if (kind !== 'document' && kind !== 'task' && kind !== 'item' && kind !== 'event')
+    throw new TypeError(`unknown search kind ${kind}`);
+  return {
+    kind,
+    id: str(o, 'id'),
+    title: str(o, 'title'),
+    reference: optStr(o, 'reference'),
+    workspace_id: optStr(o, 'workspace_id'),
+    item_id: optStr(o, 'item_id'),
+    snippet: optStr(o, 'snippet'),
+  };
+}
+
 const parseBatch = (v: Json): string => str(rec(v, 'trashed'), 'batch_id');
 
 /** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
@@ -1671,6 +1699,14 @@ export const api = {
     }
     if (status !== 200) fail(status, json);
     return { kind: 'restored', document: parseDocument(json) };
+  },
+  /** 통합 검색. 볼 수 있는 것만, 최대 20건. */
+  search: (q: string, workspaceId: string | null) => {
+    const params = new URLSearchParams({ q });
+    if (workspaceId !== null) params.set('workspace_id', workspaceId);
+    return expectOk('GET', `/api/search?${params.toString()}`, (v) =>
+      parseList(v, parseSearchResult),
+    );
   },
   referenceCandidates: (q: string, workspaceId: string | null) => {
     const params = new URLSearchParams({ q });

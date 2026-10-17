@@ -13,6 +13,7 @@
   import MembersScreen from '$lib/features/members/MembersScreen.svelte';
   import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
   import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
+  import SearchDialog from '$lib/features/search/SearchDialog.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
   import TimeScreen from '$lib/features/time/TimeScreen.svelte';
   import TimerWidget from '$lib/features/time/TimerWidget.svelte';
@@ -40,6 +41,7 @@
     | { state: 'error'; message: string };
 
   let session = $state<Session>({ state: 'loading' });
+  let searchOpen = $state(false);
 
   async function load(): Promise<void> {
     try {
@@ -115,10 +117,24 @@
   <LoginScreen oidcEnabled={session.oidcEnabled} returnTo={router.path} />
 {:else}
   {@const signedIn = session}
+  <SearchDialog
+    bind:open={searchOpen}
+    memberOf={(ws: string) => signedIn.workspaces.some((w) => w.id === ws)}
+  />
   <Sidebar.Provider>
     <Sidebar.Root>
       <Sidebar.Header>
         <span class="px-2 text-base font-semibold">fvoci</span>
+        <Button
+          variant="outline"
+          class="justify-between text-muted-foreground"
+          onclick={() => {
+            searchOpen = true;
+          }}
+          data-testid="search-open"
+        >
+          검색<kbd class="text-xs">Ctrl/⌘ K</kbd>
+        </Button>
       </Sidebar.Header>
       <Sidebar.Content>
         <Sidebar.Group>

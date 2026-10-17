@@ -7,4 +7,5 @@ pub mod error;
 pub mod features;
 pub mod http;
 pub mod ids;
+pub mod search;
 pub mod worker;

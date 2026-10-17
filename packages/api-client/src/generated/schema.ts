@@ -899,6 +899,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 통합 검색(로그인한 사람). 볼 수 있는 것만, 최대 20건. */
+        get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks/{task_id}": {
         parameters: {
             query?: never;
@@ -2211,6 +2228,21 @@ export interface components {
         SchedulePreviewInput: {
             due_date?: string | null;
             start_date?: string | null;
+        };
+        /** @description 검색 결과 한 건. */
+        SearchResult: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            item_id?: string | null;
+            /** @description `document`·`task`·`item`·`event`. */
+            kind: string;
+            reference?: string | null;
+            /** @description 본문에서 찾은 곳 근처 글자(일반 글자, 강조 표시 없음). */
+            snippet?: string | null;
+            title: string;
+            /** Format: uuid */
+            workspace_id?: string | null;
         };
         /** @description 보관 상태 변경 요청. */
         SetArchived: {
@@ -5268,6 +5300,47 @@ export interface operations {
                 };
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    search: {
+        parameters: {
+            query: {
+                q: string;
+                /** @description 이 워크스페이스 안에서만(멤버). */
+                workspace_id?: string | null;
+                /** @description 쉼표로 구분한 종류(`document,task,item,event`). 없으면 전부. */
+                kinds?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResult"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

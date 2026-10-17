@@ -54,6 +54,7 @@ fvoci/
 │       │   ├── http/         # 라우팅·HTTP 공통 경계
 │       │   ├── db/           # 풀·트랜잭션·RLS 문맥
 │       │   ├── worker.rs     # 백그라운드 작업(O-19, 실행 역할로 켬)
+│       │   ├── search.rs     # 통합 검색 색인·Meilisearch 연결(D-39)
 │       │   ├── storage/      # 로컬·S3 구현
 │       │   ├── search/       # Meilisearch 연결
 │       │   └── features/

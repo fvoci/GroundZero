@@ -41,6 +41,11 @@ pub fn run(root: &Path, oidc: bool) -> Result<()> {
     let _db = sh.push_env("DATABASE_URL", &urls.app);
     let _bind = sh.push_env("FVOCI_BIND", &bind);
     let _public = sh.push_env("FVOCI_PUBLIC_URL", &public);
+    let _search = sh.push_env("FVOCI_SEARCH_URL", format!("http://127.0.0.1:{meili_port}"));
+    let _search_key = sh.push_env("FVOCI_SEARCH_KEY", compose::SEARCH_TEST_KEY);
+    // 개발 중에는 검색 색인·반복 생성이 빨리 보이도록 짧게.
+    let interval = std::env::var("FVOCI_WORKER_INTERVAL_SECS").unwrap_or_else(|_| "5".to_owned());
+    let _interval = sh.push_env("FVOCI_WORKER_INTERVAL_SECS", interval);
     let _oidc = if oidc {
         let kc = compose.host_port(&sh, "keycloak", 8080)?;
         let issuer = format!("http://127.0.0.1:{kc}/realms/{}", compose::OIDC_REALM);

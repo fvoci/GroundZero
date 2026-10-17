@@ -191,3 +191,5 @@ pub fn prepare_database(sh: &Shell, urls: &DbUrls) -> Result<()> {
 pub const OIDC_CLIENT_ID: &str = "fvoci-web";
 pub const OIDC_CLIENT_SECRET: &str = "fvoci-test-client-secret";
 pub const OIDC_REALM: &str = "fvoci-test";
+/// compose.dev·test.yaml과 CI 서비스의 Meilisearch 테스트 마스터 키(명백한 테스트 값).
+pub const SEARCH_TEST_KEY: &str = "fvoci-test-meili-master-key-16chars";

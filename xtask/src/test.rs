@@ -40,6 +40,10 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
         let _env = sh.push_env("DATABASE_URL", &urls.app);
         // 시험 데이터의 시각을 옮기는 일(예: 휴지통 만료)에만 쓰는 테스트 전용 마이그레이션 역할 주소.
         let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
+        let meili = compose.host_port(&sh, "meilisearch", 7700)?;
+        println!("==> meilisearch on 127.0.0.1:{meili}");
+        let _search = sh.push_env("FVOCI_TEST_SEARCH_URL", format!("http://127.0.0.1:{meili}"));
+        let _search_key = sh.push_env("FVOCI_TEST_SEARCH_KEY", compose::SEARCH_TEST_KEY);
         let _env2 = if oidc {
             let kc = compose.host_port(&sh, "keycloak", 8080)?;
             println!("==> keycloak on 127.0.0.1:{kc}");
@@ -81,10 +85,19 @@ fn run_external(root: &Path, oidc: bool) -> Result<()> {
     {
         anyhow::bail!("--oidc with --external-services requires FVOCI_TEST_OIDC_ISSUER");
     }
+    if std::env::var("FVOCI_TEST_SEARCH_URL")
+        .map(|v| v.trim().is_empty())
+        .unwrap_or(true)
+    {
+        anyhow::bail!(
+            "--external-services requires FVOCI_TEST_SEARCH_URL (e.g. http://meilisearch:7700)"
+        );
+    }
     println!("==> using external services at {host_port}");
     let urls = DbUrls::at(&host_port);
     compose::prepare_database(&sh, &urls)?;
     let _env = sh.push_env("DATABASE_URL", &urls.app);
     let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
+    let _search_key = sh.push_env("FVOCI_TEST_SEARCH_KEY", compose::SEARCH_TEST_KEY);
     run_tests(&sh, oidc)
 }
