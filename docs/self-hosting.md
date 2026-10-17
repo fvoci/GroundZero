@@ -102,6 +102,6 @@ git pull && docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d
 
 - 비밀 값은 `.env`에만 있고 이미지·로그에 쓰지 않는다. `.env`는 소유자만 읽게 둔다.
 - Meilisearch는 사용 통계 전송을 끈 운영 모드로 뜬다. 색인이 지워지면 앱이 다시 만든다.
-- 실시간 공동 편집은 아직 없다(사용자 판단 대기). 문서는 저장할 때 리비전으로 남고, 동시에 고치면 충돌을 알리고 내 초안을 지킨다(D-53).
+- 실시간 공동 편집(D-70)은 워크스페이스마다 관리자가 워크스페이스 설정에서 켠다(기본 꺼짐). 켜면 문서 화면이 웹소켓(`/api/documents/{id}/collab`)으로 붙으므로 역방향 프록시가 웹소켓 업그레이드(`Upgrade`·`Connection` 헤더)를 앱으로 넘겨야 한다(Caddy는 기본으로 넘김, nginx는 `proxy_http_version 1.1`과 두 헤더 설정). 앱은 브라우저의 `Origin`이 `FVOCI_PUBLIC_URL`과 같을 때만 연결을 받는다. 편집 방은 앱 프로세스 안에 있으므로 앱은 한 개만 띄운다. 연결된 사람의 권한은 `FVOCI_COLLAB_RECHECK_SECS`(기본 30초)마다 다시 확인한다. 꺼진 워크스페이스는 저장할 때 리비전으로 남고, 동시에 고치면 충돌을 알리고 내 초안을 지킨다(D-53).
 - 앱 한 프로세스가 API와 백그라운드 작업(휴지통 만료, 반복 업무, 검색 색인, 저장소 정리)을 함께 한다(`FVOCI_ROLE=all`).
 - 지우기: `docker compose --env-file .env -f deploy/compose.selfhost.yaml down`은 데이터를 남긴다. `down -v`는 모든 볼륨(데이터)을 지운다.
