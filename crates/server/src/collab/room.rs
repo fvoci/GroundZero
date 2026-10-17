@@ -19,7 +19,7 @@ use yrs::sync::awareness::AwarenessUpdateEntry;
 use yrs::sync::{AwarenessUpdate, Message, MessageReader, SyncMessage};
 use yrs::updates::decoder::{Decode, DecoderV1};
 use yrs::updates::encoder::Encode;
-use yrs::{ClientID, Doc, ReadTxn, StateVector, Transact, Update};
+use yrs::{ClientID, Doc, Map, ReadTxn, StateVector, Transact, Update};
 
 use super::convert::{self, FRAGMENT};
 use crate::config::Limits;
@@ -292,6 +292,9 @@ struct Room {
     /// 방 문서가 이어받은 리비전과 그때의 본문(본문이 다른 길로 바뀌었는지 보려고).
     base_revision: i32,
     base_body: Value,
+    /// 방 문서의 계보 표시. 본문에서 새로 만들 때마다 바뀐다. 예전 계보를 가진 클라이언트가 다시 붙어 옛 내용을
+    /// 섞지 않게 그런 연결은 다시 열게 한다(4409).
+    lineage: String,
     dirty_state: bool,
     dirty_since_snapshot: bool,
     last_change: Instant,
@@ -322,6 +325,7 @@ impl Room {
             pending: Vec::new(),
             base_revision: 0,
             base_body: Value::Null,
+            lineage: String::new(),
             dirty_state: false,
             dirty_since_snapshot: false,
             last_change: Instant::now(),
@@ -435,9 +439,14 @@ impl Room {
             .and_then(|bytes| Update::decode_v1(&bytes).ok())
             .is_some_and(|update| doc.transact_mut().apply_update(update).is_ok());
         if !restored {
-            convert::write_doc(&mut doc.transact_mut(), &fragment, &body);
+            let map = meta(&doc);
+            let mut txn = doc.transact_mut();
+            convert::write_doc(&mut txn, &fragment, &body);
+            map.insert(&mut txn, LINEAGE, Uuid::now_v7().to_string());
+            drop(txn);
             self.dirty_state = true;
         }
+        self.lineage = lineage_of(&doc).unwrap_or_default();
         self.base_revision = revision;
         self.base_body = body;
         Ok(doc)
@@ -552,6 +561,10 @@ impl Room {
             if !self.conns.contains_key(&item.conn) {
                 continue;
             }
+            if self.foreign_lineage(&item.update) {
+                self.close(item.conn, CloseReason::Reload);
+                continue;
+            }
             if !self.passes_checks(&item.update) {
                 tracing::warn!(document = %self.doc_id.0, "rejected a live edit that fails document checks");
                 self.close(item.conn, CloseReason::Invalid);
@@ -574,6 +587,15 @@ impl Room {
             let message = Message::Sync(SyncMessage::Update(item.update)).encode_v1();
             self.broadcast(&message, Some(item.conn));
         }
+    }
+
+    /// 변경에 다른 계보 표시가 들어 있으면(방이 본문에서 새로 만들어진 뒤 옛 상태로 다시 붙은 클라이언트) 참.
+    fn foreign_lineage(&self, update: &[u8]) -> bool {
+        let probe = Doc::new();
+        let applied = Update::decode_v1(update)
+            .ok()
+            .is_some_and(|u| probe.transact_mut().apply_update(u).is_ok());
+        applied && lineage_of(&probe).is_some_and(|l| l != self.lineage)
     }
 
     /// 방 문서를 복사한 임시 문서에 변경을 넣어 본문 검사를 통과하는지 본다.
@@ -796,4 +818,20 @@ pub async fn peer_access(db: &Db, doc: DocumentId, peer: &Peer) -> Option<bool> 
         .ok()?;
     tx.commit().await.ok()?;
     Some(matches!(access.as_str(), "owner" | "write"))
+}
+
+/// 계보 표시를 두는 Yjs 맵. 편집기(조각 `default`)는 이 맵을 보지 않는다.
+const META: &str = "fvoci";
+const LINEAGE: &str = "lineage";
+
+fn meta(doc: &Doc) -> yrs::MapRef {
+    doc.get_or_insert_map(META)
+}
+
+fn lineage_of(doc: &Doc) -> Option<String> {
+    let map = meta(doc);
+    match map.get(&doc.transact(), LINEAGE) {
+        Some(yrs::Out::Any(yrs::Any::String(s))) => Some(s.to_string()),
+        _ => None,
+    }
 }

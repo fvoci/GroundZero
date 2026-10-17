@@ -64,7 +64,7 @@ CREATE FUNCTION app_collab_access(p_doc uuid) RETURNS text
   END
   $$;
 
--- 방을 열 때 읽는 것: 저장된 Yjs 상태(문서 리비전과 같을 때만)와 문서 본문·리비전. 볼 수 있는 사람만.
+-- 방을 열 때 읽는 것: 저장된 Yjs 상태(그 뒤로 본문이 바뀌지 않았을 때만)와 문서 본문·리비전. 볼 수 있는 사람만.
 CREATE FUNCTION app_collab_load(p_doc uuid)
   RETURNS TABLE (doc_revision integer, title text, body jsonb, state bytea)
   LANGUAGE plpgsql STABLE SECURITY DEFINER
@@ -74,12 +74,19 @@ CREATE FUNCTION app_collab_load(p_doc uuid)
     PERFORM app_collab_access(p_doc);
     RETURN QUERY
     SELECT d.revision, d.title, d.body,
-           (SELECT s.state FROM document_collab_states s WHERE s.document_id = d.id AND s.revision = d.revision)
+           -- 상태가 이어받은 리비전 뒤로 본문이 바뀌지 않았으면(제목만 바꾼 저장 등) 그 상태를 그대로 쓴다.
+           (SELECT s.state FROM document_collab_states s
+            WHERE s.document_id = d.id
+              AND NOT EXISTS (
+                SELECT 1 FROM document_revisions r
+                WHERE r.document_id = d.id AND r.revision > s.revision
+                  AND r.body IS DISTINCT FROM (SELECT b.body FROM document_revisions b
+                                               WHERE b.document_id = d.id AND b.revision = s.revision)))
     FROM documents d WHERE d.id = p_doc;
   END
   $$;
 
--- 편집 중 상태 저장(서버 작업만, 사용자 문맥 없음). 리비전이 이미 바뀌었으면 저장하지 않는다(거짓).
+-- 편집 중 상태 저장(서버 작업만, 사용자 문맥 없음). 그 뒤로 본문이 다른 길로 바뀌었으면 저장하지 않는다(거짓).
 CREATE FUNCTION app_system_collab_store(p_doc uuid, p_revision integer, p_state bytea) RETURNS boolean
   LANGUAGE plpgsql VOLATILE SECURITY DEFINER
   SET search_path = fvoci, pg_temp
@@ -88,7 +95,12 @@ CREATE FUNCTION app_system_collab_store(p_doc uuid, p_revision integer, p_state 
     IF app_user_id() IS NOT NULL THEN
       RAISE EXCEPTION 'system function' USING ERRCODE = '42501';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM documents WHERE id = p_doc AND revision = p_revision AND deleted_at IS NULL) THEN
+    -- 그 리비전 뒤로 본문이 바뀌었으면(복원 등) 이 상태는 낡았다. 제목만 바뀐 것은 괜찮다.
+    IF NOT EXISTS (SELECT 1 FROM documents WHERE id = p_doc AND deleted_at IS NULL)
+       OR EXISTS (SELECT 1 FROM document_revisions r
+                  WHERE r.document_id = p_doc AND r.revision > p_revision
+                    AND r.body IS DISTINCT FROM (SELECT b.body FROM document_revisions b
+                                                 WHERE b.document_id = p_doc AND b.revision = p_revision)) THEN
       RETURN false;
     END IF;
     INSERT INTO document_collab_states (document_id, revision, state, updated_at)

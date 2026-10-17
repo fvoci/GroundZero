@@ -49,6 +49,17 @@ async fn connect(
     doc: &str,
     origin: bool,
 ) -> Result<Client, StatusCode> {
+    connect_with(addr, user, doc, origin, Doc::new()).await
+}
+
+/// 이미 가진 Yjs 문서로 다시 연결한다(끊겼다 다시 붙는 클라이언트).
+async fn connect_with(
+    addr: SocketAddr,
+    user: Option<&TestUser>,
+    doc: &str,
+    origin: bool,
+    local: Doc,
+) -> Result<Client, StatusCode> {
     let mut request = format!("ws://{addr}/api/documents/{doc}/collab")
         .into_client_request()
         .unwrap();
@@ -64,10 +75,7 @@ async fn connect(
     }
     match tokio_tungstenite::connect_async(request).await {
         Ok((ws, _)) => {
-            let mut client = Client {
-                ws,
-                doc: Doc::new(),
-            };
+            let mut client = Client { ws, doc: local };
             client.sync().await;
             Ok(client)
         }
@@ -376,6 +384,13 @@ async fn live_editing_end_to_end() {
         "{}",
         d.text()
     );
+    // 복원 전 상태를 들고 다시 붙은 클라이언트는 옛 내용을 섞지 못하고 다시 열라는 닫기를 받는다.
+    let mut stale = connect_with(addr, Some(&writer), &id, true, c.doc)
+        .await
+        .unwrap();
+    assert_eq!(stale.closed().await, Some(4409));
+    let _ = d.next(Duration::from_millis(500)).await;
+    assert!(!d.text().contains("A가 씀"), "{}", d.text());
 
     // 워크스페이스에서 빠지면(권한 끝) 연결이 닫힌다.
     let removed = send(
