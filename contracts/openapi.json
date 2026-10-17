@@ -137,6 +137,240 @@
         }
       }
     },
+    "/api/comments": {
+      "post": {
+        "tags": [
+          "comments"
+        ],
+        "summary": "댓글 달기(대상을 볼 수 있는 사람). 같은 요청 id면 같은 댓글. 대상을 만든 사람·담당자, 답글이면 스레드 참여자에게 알린다.",
+        "operationId": "add_comment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewComment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/comments/{comment_id}": {
+      "put": {
+        "tags": [
+          "comments"
+        ],
+        "summary": "고치기(쓴 사람만).",
+        "operationId": "edit_comment",
+        "parameters": [
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditComment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "comments"
+        ],
+        "summary": "지우기(쓴 사람 또는 대상의 소유 권한).",
+        "operationId": "delete_comment",
+        "parameters": [
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/comments/{comment_id}/resolve": {
+      "post": {
+        "tags": [
+          "comments"
+        ],
+        "summary": "스레드 해결 표시·해제(스레드를 연 사람 또는 대상에 쓸 수 있는 사람).",
+        "operationId": "resolve_comment",
+        "parameters": [
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveComment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/document-shares/{share_id}": {
       "delete": {
         "tags": [
@@ -392,6 +626,51 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/Backlink"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{document_id}/comments": {
+      "get": {
+        "tags": [
+          "comments"
+        ],
+        "summary": "문서의 댓글(스레드 순, 첫 댓글 다음에 답글).",
+        "operationId": "document_comments",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Comment"
                   }
                 }
               }
@@ -3885,7 +4164,7 @@
         "tags": [
           "references"
         ],
-        "summary": "내 알림(최근 순). 문서를 볼 수 없게 되면 나오지 않는다.",
+        "summary": "내 알림(최근 순). 대상을 볼 수 없게 되면 나오지 않는다.",
         "operationId": "notifications",
         "responses": {
           "200": {
@@ -5149,6 +5428,51 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/comments": {
+      "get": {
+        "tags": [
+          "comments"
+        ],
+        "summary": "업무의 댓글.",
+        "operationId": "task_comments",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Comment"
+                  }
                 }
               }
             }
@@ -8212,6 +8536,87 @@
           }
         }
       },
+      "Comment": {
+        "type": "object",
+        "description": "댓글 하나.",
+        "required": [
+          "id",
+          "body",
+          "author_id",
+          "created_at",
+          "edited",
+          "deleted",
+          "resolved",
+          "can_edit",
+          "can_delete",
+          "can_resolve"
+        ],
+        "properties": {
+          "author_id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "author_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "워크스페이스를 함께 쓰지 않으면(공유받은 사람 등) 없을 수 있다."
+          },
+          "body": {
+            "type": "string"
+          },
+          "can_delete": {
+            "type": "boolean"
+          },
+          "can_edit": {
+            "type": "boolean"
+          },
+          "can_resolve": {
+            "type": "boolean",
+            "description": "스레드를 해결·해제할 수 있는지(첫 댓글에서만)."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted": {
+            "type": "boolean",
+            "description": "답글이 남아 있어 \"지운 댓글\"로 보이는 스레드 첫 댓글."
+          },
+          "edited": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "답글이면 스레드의 첫 댓글."
+          },
+          "resolved": {
+            "type": "boolean",
+            "description": "스레드 첫 댓글의 해결 표시."
+          }
+        }
+      },
+      "CommentCreated": {
+        "type": "object",
+        "description": "만든 댓글.",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "ConflictBody": {
         "type": "object",
         "description": "저장 충돌 응답. `current`가 서버 최신본이다.",
@@ -8820,6 +9225,18 @@
           "today",
           "upcoming"
         ]
+      },
+      "EditComment": {
+        "type": "object",
+        "description": "댓글 고치기.",
+        "required": [
+          "body"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
+          }
+        }
       },
       "EntryInput": {
         "type": "object",
@@ -10083,6 +10500,47 @@
           }
         }
       },
+      "NewComment": {
+        "type": "object",
+        "description": "댓글 달기. `document_id`나 `task_id` 하나, 답글이면 `parent_id`.",
+        "required": [
+          "request_id",
+          "body"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "document_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DocumentId"
+              }
+            ]
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "NewEpisode": {
         "type": "object",
         "description": "추가할 회차.",
@@ -10134,7 +10592,6 @@
         "required": [
           "id",
           "kind",
-          "document_id",
           "document_title",
           "created_at",
           "read"
@@ -10145,23 +10602,55 @@
               "string",
               "null"
             ],
-            "description": "언급한 사람. 워크스페이스를 함께 쓰지 않으면(공유받은 개인 노트 등) 없을 수 있다."
+            "description": "한 사람. 워크스페이스를 함께 쓰지 않거나(공유받은 개인 노트 등) 자동 알림(기한)이면 없다."
+          },
+          "comment_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "댓글·답글이면 그 댓글."
           },
           "created_at": {
             "type": "string",
             "format": "date-time"
           },
           "document_id": {
-            "$ref": "#/components/schemas/DocumentId"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DocumentId",
+                "description": "대상 문서(문서 알림)."
+              }
+            ]
           },
           "document_reference": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "대상 번호(문서 또는 업무)."
           },
           "document_title": {
-            "type": "string"
+            "type": "string",
+            "description": "대상 제목(문서 또는 업무)."
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "기한 알림의 기한(YYYY-MM-DD)."
+          },
+          "excerpt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "댓글 첫 부분(최대 140자)."
           },
           "id": {
             "type": "string",
@@ -10179,10 +10668,18 @@
           },
           "kind": {
             "type": "string",
-            "description": "현재는 `mention`."
+            "description": "`mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘)."
           },
           "read": {
             "type": "boolean"
+          },
+          "task_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "대상 업무(업무 알림)."
           },
           "workspace_id": {
             "oneOf": [
@@ -10521,6 +11018,18 @@
         "properties": {
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "ResolveComment": {
+        "type": "object",
+        "description": "스레드 해결 표시.",
+        "required": [
+          "resolved"
+        ],
+        "properties": {
+          "resolved": {
+            "type": "boolean"
           }
         }
       },
@@ -12269,6 +12778,10 @@
     {
       "name": "courses",
       "description": "강의: 강좌·회차·개인별 진도"
+    },
+    {
+      "name": "comments",
+      "description": "댓글"
     }
   ]
 }

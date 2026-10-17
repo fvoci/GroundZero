@@ -16,7 +16,7 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, audit, courses, documents, events, export, files, home, members, modules,
+    accounts, audit, comments, courses, documents, events, export, files, home, members, modules,
     public_links, recurrence, references, revisions, schedule, search_api, tasks, time_tracking,
     trash, workspaces,
 };
@@ -217,6 +217,12 @@ async fn api_not_found() -> AppError {
         courses::delete_episode,
         courses::set_progress,
         courses::participants,
+        comments::document_comments,
+        comments::task_comments,
+        comments::add,
+        comments::edit,
+        comments::delete,
+        comments::resolve,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -389,6 +395,11 @@ async fn api_not_found() -> AppError {
         courses::UpdateEpisode,
         courses::SetProgress,
         courses::Participant,
+        comments::Comment,
+        comments::NewComment,
+        comments::EditComment,
+        comments::ResolveComment,
+        comments::CommentCreated,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -432,6 +443,7 @@ async fn api_not_found() -> AppError {
         (name = "export", description = "데이터 반출"),
         (name = "audit", description = "감사 기록"),
         (name = "courses", description = "강의: 강좌·회차·개인별 진도"),
+        (name = "comments", description = "댓글"),
     )
 )]
 pub struct ApiDoc;
@@ -488,6 +500,17 @@ pub fn router(state: AppState) -> Router {
             "/episodes/{episode_id}/progress",
             put(courses::set_progress),
         )
+        .route(
+            "/documents/{document_id}/comments",
+            get(comments::document_comments),
+        )
+        .route("/tasks/{task_id}/comments", get(comments::task_comments))
+        .route("/comments", post(comments::add))
+        .route(
+            "/comments/{comment_id}",
+            put(comments::edit).delete(comments::delete),
+        )
+        .route("/comments/{comment_id}/resolve", post(comments::resolve))
         .route(
             "/me/deleted-workspaces/{workspace_id}",
             delete(workspaces::purge),

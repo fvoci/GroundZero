@@ -38,6 +38,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 댓글 달기(대상을 볼 수 있는 사람). 같은 요청 id면 같은 댓글. 대상을 만든 사람·담당자, 답글이면 스레드 참여자에게 알린다. */
+        post: operations["add_comment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/comments/{comment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 고치기(쓴 사람만). */
+        put: operations["edit_comment"];
+        post?: never;
+        /** 지우기(쓴 사람 또는 대상의 소유 권한). */
+        delete: operations["delete_comment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/comments/{comment_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 스레드 해결 표시·해제(스레드를 연 사람 또는 대상에 쓸 수 있는 사람). */
+        post: operations["resolve_comment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/document-shares/{share_id}": {
         parameters: {
             query?: never;
@@ -87,6 +139,23 @@ export interface paths {
         };
         /** 이 문서를 가리키는 문서. 대상 문서를 볼 수 없으면 404. */
         get: operations["document_backlinks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 문서의 댓글(스레드 순, 첫 댓글 다음에 답글). */
+        get: operations["document_comments"];
         put?: never;
         post?: never;
         delete?: never;
@@ -906,7 +975,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 내 알림(최근 순). 문서를 볼 수 없게 되면 나오지 않는다. */
+        /** 내 알림(최근 순). 대상을 볼 수 없게 되면 나오지 않는다. */
         get: operations["notifications"];
         put?: never;
         post?: never;
@@ -1222,6 +1291,23 @@ export interface paths {
         put?: never;
         /** 체크리스트 덧붙이기(쓰기 권한). 항목별 `request_id`로 재시도해도 중복되지 않는다. */
         post: operations["add_checklist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 업무의 댓글. */
+        get: operations["task_comments"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1981,6 +2067,36 @@ export interface components {
             id: string;
             text: string;
         };
+        /** @description 댓글 하나. */
+        Comment: {
+            author_id: components["schemas"]["UserId"];
+            /** @description 워크스페이스를 함께 쓰지 않으면(공유받은 사람 등) 없을 수 있다. */
+            author_name?: string | null;
+            body: string;
+            can_delete: boolean;
+            can_edit: boolean;
+            /** @description 스레드를 해결·해제할 수 있는지(첫 댓글에서만). */
+            can_resolve: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** @description 답글이 남아 있어 "지운 댓글"로 보이는 스레드 첫 댓글. */
+            deleted: boolean;
+            edited: boolean;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description 답글이면 스레드의 첫 댓글.
+             */
+            parent_id?: string | null;
+            /** @description 스레드 첫 댓글의 해결 표시. */
+            resolved: boolean;
+        };
+        /** @description 만든 댓글. */
+        CommentCreated: {
+            /** Format: uuid */
+            id: string;
+        };
         /** @description 저장 충돌 응답. `current`가 서버 최신본이다. */
         ConflictBody: {
             current: components["schemas"]["Document"];
@@ -2193,6 +2309,10 @@ export interface components {
          * @enum {string}
          */
         DueBucket: "overdue" | "today" | "upcoming";
+        /** @description 댓글 고치기. */
+        EditComment: {
+            body: string;
+        };
         /** @description 기록 내용(수동 추가·고치기 공통). */
         EntryInput: {
             /** @description RFC 3339. 진행 중인 타이머를 고칠 때만 없다. */
@@ -2594,6 +2714,17 @@ export interface components {
             request_id: string;
             text: string;
         };
+        /** @description 댓글 달기. `document_id`나 `task_id` 하나, 답글이면 `parent_id`. */
+        NewComment: {
+            body: string;
+            document_id?: null | components["schemas"]["DocumentId"];
+            /** Format: uuid */
+            parent_id?: string | null;
+            /** Format: uuid */
+            request_id: string;
+            /** Format: uuid */
+            task_id?: string | null;
+        };
         /** @description 추가할 회차. */
         NewEpisode: {
             chapter?: string;
@@ -2614,19 +2745,35 @@ export interface components {
         };
         /** @description 알림. 지금 볼 수 있는 문서에 대한 것만 나온다. */
         Notification: {
-            /** @description 언급한 사람. 워크스페이스를 함께 쓰지 않으면(공유받은 개인 노트 등) 없을 수 있다. */
+            /** @description 한 사람. 워크스페이스를 함께 쓰지 않거나(공유받은 개인 노트 등) 자동 알림(기한)이면 없다. */
             actor_name?: string | null;
+            /**
+             * Format: uuid
+             * @description 댓글·답글이면 그 댓글.
+             */
+            comment_id?: string | null;
             /** Format: date-time */
             created_at: string;
-            document_id: components["schemas"]["DocumentId"];
+            document_id?: null | components["schemas"]["DocumentId"];
+            /** @description 대상 번호(문서 또는 업무). */
             document_reference?: string | null;
+            /** @description 대상 제목(문서 또는 업무). */
             document_title: string;
+            /** @description 기한 알림의 기한(YYYY-MM-DD). */
+            due_date?: string | null;
+            /** @description 댓글 첫 부분(최대 140자). */
+            excerpt?: string | null;
             /** Format: uuid */
             id: string;
             item_id?: null | components["schemas"]["ItemId"];
-            /** @description 현재는 `mention`. */
+            /** @description `mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘). */
             kind: string;
             read: boolean;
+            /**
+             * Format: uuid
+             * @description 대상 업무(업무 알림).
+             */
+            task_id?: string | null;
             workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
         /** @description 인계 제안 요청. */
@@ -2745,6 +2892,10 @@ export interface components {
         /** @description 이름 바꾸기. */
         RenameFile: {
             name: string;
+        };
+        /** @description 스레드 해결 표시. */
+        ResolveComment: {
+            resolved: boolean;
         };
         /** @description 해석 요청. */
         ResolveReferences: {
@@ -3434,6 +3585,182 @@ export interface operations {
             };
         };
     };
+    add_comment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewComment"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentCreated"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    edit_comment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditComment"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_comment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    resolve_comment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveComment"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     delete_share: {
         parameters: {
             query?: never;
@@ -3617,6 +3944,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Backlink"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    document_comments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"][];
                 };
             };
             404: {
@@ -6902,6 +7258,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    task_comments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"][];
                 };
             };
             404: {

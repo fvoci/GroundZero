@@ -129,14 +129,27 @@ pub struct Backlink {
 pub struct Notification {
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
-    /// 현재는 `mention`.
+    /// `mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘).
     pub kind: String,
-    pub document_id: DocumentId,
+    /// 대상 문서(문서 알림).
+    pub document_id: Option<DocumentId>,
+    /// 대상 업무(업무 알림).
+    #[schema(value_type = Option<String>, format = Uuid)]
+    pub task_id: Option<Uuid>,
+    /// 대상 제목(문서 또는 업무).
     pub document_title: String,
+    /// 대상 번호(문서 또는 업무).
     pub document_reference: Option<String>,
     pub workspace_id: Option<WorkspaceId>,
     pub item_id: Option<ItemId>,
-    /// 언급한 사람. 워크스페이스를 함께 쓰지 않으면(공유받은 개인 노트 등) 없을 수 있다.
+    /// 댓글·답글이면 그 댓글.
+    #[schema(value_type = Option<String>, format = Uuid)]
+    pub comment_id: Option<Uuid>,
+    /// 댓글 첫 부분(최대 140자).
+    pub excerpt: Option<String>,
+    /// 기한 알림의 기한(YYYY-MM-DD).
+    pub due_date: Option<String>,
+    /// 한 사람. 워크스페이스를 함께 쓰지 않거나(공유받은 개인 노트 등) 자동 알림(기한)이면 없다.
     pub actor_name: Option<String>,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
@@ -560,17 +573,20 @@ pub async fn item_backlinks(
 type NotificationRow = (
     Uuid,
     String,
-    DocumentId,
+    Option<DocumentId>,
+    Option<Uuid>,
+    Option<Uuid>,
     Option<String>,
+    serde_json::Value,
     OffsetDateTime,
     Option<OffsetDateTime>,
-    String,
+    Option<String>,
     Option<String>,
     Option<WorkspaceId>,
     Option<ItemId>,
 );
 
-/// 내 알림(최근 순). 문서를 볼 수 없게 되면 나오지 않는다.
+/// 내 알림(최근 순). 대상을 볼 수 없게 되면 나오지 않는다.
 #[utoipa::path(get, path = "/api/me/notifications",
     responses((status = 200, body = [Notification]), (status = 401, body = ErrorBody)), tag = "references")]
 pub async fn notifications(
@@ -579,10 +595,15 @@ pub async fn notifications(
 ) -> Result<Json<Vec<Notification>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     let rows: Vec<NotificationRow> = sqlx::query_as(
-        "SELECT n.id, n.kind, n.document_id, n.actor_name, n.created_at, n.read_at,
-                d.title, app_document_reference(d.id), d.workspace_id,
-                CASE WHEN app_item_access(d.item_id) IS NOT NULL THEN d.item_id END
-         FROM app_my_notifications($1) n JOIN documents d ON d.id = n.document_id
+        "SELECT n.id, n.kind, n.document_id, n.task_id, n.comment_id, n.actor_name, n.detail, n.created_at, n.read_at,
+                coalesce(d.title, t.title),
+                CASE WHEN d.id IS NOT NULL THEN app_document_reference(d.id) ELSE app_task_reference(t.id) END,
+                coalesce(d.workspace_id, t.workspace_id),
+                CASE WHEN app_item_access(coalesce(d.item_id, t.item_id)) IS NOT NULL
+                     THEN coalesce(d.item_id, t.item_id) END
+         FROM app_my_notifications($1) n
+         LEFT JOIN documents d ON d.id = n.document_id
+         LEFT JOIN tasks t ON t.id = n.task_id
          ORDER BY n.created_at DESC, n.id DESC",
     )
     .bind(NOTIFICATION_PAGE)
@@ -596,21 +617,34 @@ pub async fn notifications(
                     id,
                     kind,
                     document_id,
+                    task_id,
+                    comment_id,
                     actor_name,
+                    detail,
                     created_at,
                     read_at,
-                    document_title,
-                    document_reference,
+                    title,
+                    reference,
                     workspace_id,
                     item_id,
                 )| Notification {
                     id,
                     kind,
                     document_id,
-                    document_title,
-                    document_reference,
+                    task_id,
+                    document_title: title.unwrap_or_default(),
+                    document_reference: reference,
                     workspace_id,
                     item_id,
+                    comment_id,
+                    excerpt: detail
+                        .get("excerpt")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned),
+                    due_date: detail
+                        .get("due_date")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned),
                     actor_name,
                     created_at,
                     read: read_at.is_some(),

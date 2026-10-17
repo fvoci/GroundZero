@@ -309,6 +309,10 @@ SELECT json_build_object(
   'task_series', (SELECT coalesce(json_agg(s), '[]') FROM (SELECT * FROM task_series WHERE workspace_id = $1) s),
   'events', (SELECT coalesce(json_agg(e ORDER BY e.created_at), '[]') FROM (
       SELECT * FROM events WHERE workspace_id = $1 AND deleted_at IS NULL) e),
+  'comments', (SELECT coalesce(json_agg(c ORDER BY c.created_at), '[]') FROM (
+      SELECT cm.id, cm.document_id, cm.task_id, cm.parent_id, cm.body, cm.created_by, cm.created_at, cm.edited,
+             cm.deleted_at, cm.resolved_at
+      FROM comments cm WHERE cm.workspace_id = $1) c),
   'course_details', (SELECT coalesce(json_agg(c), '[]') FROM (
       SELECT cd.* FROM course_details cd JOIN items it ON it.id = cd.item_id
       WHERE cd.workspace_id = $1 AND it.deleted_at IS NULL) c),

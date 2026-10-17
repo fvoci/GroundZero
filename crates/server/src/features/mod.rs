@@ -2,6 +2,7 @@
 
 pub mod accounts;
 pub mod audit;
+pub mod comments;
 pub mod courses;
 pub mod documents;
 pub mod events;

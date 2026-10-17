@@ -20,6 +20,7 @@
   import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
   import RecurrenceEditor from '$lib/features/events/RecurrenceEditor.svelte';
   import TaskTimePanel from '$lib/features/time/TaskTimePanel.svelte';
+  import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import { itemPath, router } from '$lib/router.svelte';
@@ -648,6 +649,7 @@
     />
 
     <TaskTimePanel taskId={current.id} />
+    <CommentsPanel target={{ kind: 'task', id: current.id }} />
 
     <Backlinks kind="task" id={current.id} {workspaces} />
   </div>

@@ -26,11 +26,16 @@ pub struct TickReport {
     pub indexed: i32,
     /// 저장소에서 지운 수(영구 삭제한 파일 내용, 그만두거나 기한이 지난 업로드).
     pub cleaned: i32,
+    /// 만든 기한 알림 수.
+    pub notified: i32,
 }
 
 /// 주기 작업 이름과 간격.
 const PURGE: (&str, &str) = ("trash_purge", "1 hour");
 const RECURRENCE: (&str, &str) = ("recurrence_tick", "15 minutes");
+/// 업무 기한 알림(하루 전·당일, 같은 날 같은 업무는 한 번).
+const DUE: (&str, &str) = ("due_notify", "1 hour");
+const DUE_SQL: &str = "SELECT app_system_due_notifications(current_date)";
 
 async fn claim(db: &Db, (name, every): (&str, &str)) -> Result<bool, AppError> {
     let mut tx = db.begin_anonymous().await?;
@@ -57,13 +62,17 @@ pub async fn run_all_now(
     storage: Option<&Storage>,
 ) -> Result<TickReport, AppError> {
     let purged = system_call(db, "SELECT app_system_purge_expired()").await?;
+    let occurrences = system_call(db, "SELECT app_system_recurrence_tick()").await?;
+    // 기한 알림은 반복 회차를 만든 뒤에(오늘 만든 회차도 알린다).
+    let notified = system_call(db, DUE_SQL).await?;
     Ok(TickReport {
         purged,
+        notified,
         cleaned: match storage {
             Some(storage) => clean_storage(db, storage).await?,
             None => 0,
         },
-        occurrences: system_call(db, "SELECT app_system_recurrence_tick()").await?,
+        occurrences,
         indexed: match search {
             Some(client) => {
                 prepare(db, client).await?;
@@ -181,6 +190,7 @@ pub async fn run_once(
             "recurrence",
             when_due(db, RECURRENCE, "SELECT app_system_recurrence_tick()").await,
         ),
+        notified: logged("due_notify", when_due(db, DUE, DUE_SQL).await),
     }
 }
 

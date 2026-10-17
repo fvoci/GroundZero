@@ -4,7 +4,7 @@
 
   import type { NotificationView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
-  import { pathFor, router } from '$lib/router.svelte';
+  import { itemTaskPath, pathFor, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
 
   interface Props {
@@ -37,9 +37,33 @@
       await api.markNotificationsRead(n.id).catch(() => undefined);
       onchanged();
     }
-    router.navigate(
-      pathFor({ id: n.document_id, workspace_id: n.workspace_id, item_id: n.item_id }, memberOf),
-    );
+    if (n.task_id !== null) {
+      if (n.workspace_id !== null && n.item_id !== null)
+        router.navigate(itemTaskPath(n.workspace_id, n.item_id, n.task_id));
+      return;
+    }
+    if (n.document_id !== null)
+      router.navigate(
+        pathFor({ id: n.document_id, workspace_id: n.workspace_id, item_id: n.item_id }, memberOf),
+      );
+  }
+
+  /** 알림 문장(종류별). */
+  function message(n: NotificationView): string {
+    const who = n.actor_name ?? '누군가';
+    const target = `${n.document_reference ?? ''} ${n.document_title}`.trim();
+    switch (n.kind) {
+      case 'mention':
+        return `${who}님이 ${target}에서 나를 언급했습니다`;
+      case 'comment':
+        return `${who}님이 ${target}에 댓글을 달았습니다`;
+      case 'reply':
+        return `${who}님이 ${target}의 댓글에 답했습니다`;
+      case 'due':
+        return `${target}의 기한이 ${n.due_date ?? ''}입니다`;
+      default:
+        return target;
+    }
   }
 
   async function readAll(): Promise<void> {
@@ -77,13 +101,12 @@
                 aria-hidden="true"
                 class="size-2 shrink-0 self-center rounded-full bg-primary"
               ></span>{/if}
-            <span
-              >{n.actor_name ?? '누군가'}님이
-              <span class="font-mono text-sm text-muted-foreground"
-                >{n.document_reference ?? ''}</span
-              >
-              {n.document_title}에서 나를 언급했습니다</span
-            >
+            <span class="flex min-w-0 flex-col">
+              <span>{message(n)}</span>
+              {#if n.excerpt !== null}
+                <span class="truncate text-sm text-muted-foreground">“{n.excerpt}”</span>
+              {/if}
+            </span>
             <span class="ml-auto shrink-0 text-sm text-muted-foreground"
               >{new Date(n.created_at).toLocaleString()}</span
             >

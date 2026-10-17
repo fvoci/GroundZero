@@ -464,13 +464,19 @@ export interface BacklinkView {
 
 export interface NotificationView {
   id: string;
+  /** mention·comment·reply·due */
   kind: string;
-  document_id: string;
+  document_id: string | null;
+  task_id: string | null;
+  /** 대상(문서 또는 업무) 제목. */
   document_title: string;
   document_reference: string | null;
   workspace_id: string | null;
   item_id: string | null;
-  /** 워크스페이스를 함께 쓰지 않으면 없을 수 있다. */
+  comment_id: string | null;
+  excerpt: string | null;
+  due_date: string | null;
+  /** 워크스페이스를 함께 쓰지 않거나 자동 알림이면 없다. */
   actor_name: string | null;
   created_at: string;
   read: boolean;
@@ -517,11 +523,15 @@ export function parseNotification(value: Json): NotificationView {
   return {
     id: str(o, 'id'),
     kind: str(o, 'kind'),
-    document_id: str(o, 'document_id'),
+    document_id: optStr(o, 'document_id'),
+    task_id: optStr(o, 'task_id'),
     document_title: str(o, 'document_title'),
     document_reference: optStr(o, 'document_reference'),
     workspace_id: optStr(o, 'workspace_id'),
     item_id: optStr(o, 'item_id'),
+    comment_id: optStr(o, 'comment_id'),
+    excerpt: optStr(o, 'excerpt'),
+    due_date: optStr(o, 'due_date'),
     actor_name: optStr(o, 'actor_name'),
     created_at: str(o, 'created_at'),
     read: bool(o, 'read'),
@@ -1336,6 +1346,44 @@ function parseAudit(value: Json): AuditEntryView {
   };
 }
 
+export interface CommentView {
+  id: string;
+  parent_id: string | null;
+  body: string;
+  author_id: string;
+  author_name: string | null;
+  created_at: string;
+  edited: boolean;
+  deleted: boolean;
+  resolved: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  can_resolve: boolean;
+}
+
+export interface CommentTarget {
+  kind: 'document' | 'task';
+  id: string;
+}
+
+function parseComment(value: Json): CommentView {
+  const o = rec(value, 'comment');
+  return {
+    id: str(o, 'id'),
+    parent_id: optStr(o, 'parent_id'),
+    body: str(o, 'body'),
+    author_id: str(o, 'author_id'),
+    author_name: optStr(o, 'author_name'),
+    created_at: str(o, 'created_at'),
+    edited: bool(o, 'edited'),
+    deleted: bool(o, 'deleted'),
+    resolved: bool(o, 'resolved'),
+    can_edit: bool(o, 'can_edit'),
+    can_delete: bool(o, 'can_delete'),
+    can_resolve: bool(o, 'can_resolve'),
+  };
+}
+
 export type EpisodeStatus = 'not_started' | 'in_progress' | 'done';
 
 export interface CourseDetailsView {
@@ -1671,6 +1719,26 @@ export const api = {
   completeUpload: (id: string) =>
     expectOk('POST', `/api/uploads/${encodeURIComponent(id)}/complete`, parseUpload),
   abortUpload: (id: string) => expectOk('DELETE', `/api/uploads/${encodeURIComponent(id)}`, none),
+  comments: (target: CommentTarget) =>
+    expectOk(
+      'GET',
+      `/api/${target.kind === 'document' ? 'documents' : 'tasks'}/${encodeURIComponent(target.id)}/comments`,
+      (v) => parseList(v, parseComment),
+    ),
+  addComment: (target: CommentTarget, body: string, parentId: string | null, requestId: string) =>
+    expectOk('POST', '/api/comments', (v) => str(rec(v, 'comment created'), 'id'), {
+      request_id: requestId,
+      document_id: target.kind === 'document' ? target.id : null,
+      task_id: target.kind === 'task' ? target.id : null,
+      parent_id: parentId,
+      body,
+    }),
+  editComment: (id: string, body: string) =>
+    expectOk('PUT', `/api/comments/${encodeURIComponent(id)}`, none, { body }),
+  deleteComment: (id: string) =>
+    expectOk('DELETE', `/api/comments/${encodeURIComponent(id)}`, none),
+  resolveComment: (id: string, resolved: boolean) =>
+    expectOk('POST', `/api/comments/${encodeURIComponent(id)}/resolve`, none, { resolved }),
   course: (item: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(item)}/course`, parseCourse),
   setCourseDetails: (item: string, details: CourseDetailsView) =>
