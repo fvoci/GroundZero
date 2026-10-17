@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { EpisodeView } from '$lib/api/client';
 import { parseDuration, parseEpisodesCsv } from '$lib/features/courses/csv';
 import { courseProgress } from '$lib/features/courses/progress';
+import { setLocale } from '$lib/paraglide/runtime.js';
+
+beforeEach(async () => {
+  await setLocale('ko', { reload: false });
+});
 
 const ep = (
   n: number,

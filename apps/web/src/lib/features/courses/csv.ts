@@ -2,6 +2,7 @@
 // 첫 기록이 머리글(제목/title)이면 건너뛴다. 따옴표로 감싼 칸과 칸 안의 쉼표·따옴표("")·줄바꿈을 지원한다.
 
 import { csvDate, csvRecords, isHeader } from '$lib/csv';
+import { m } from '$lib/paraglide/messages.js';
 
 /** 서버와 같은 한도: 제목 300자, 길이 100시간. */
 const MAX_TITLE = 300;
@@ -39,25 +40,28 @@ export function parseEpisodesCsv(text: string): CsvResult {
     const [title = '', chapter = '', duration = '', planned = ''] = record.cells;
     const lineNo = record.line;
     if (title === '') {
-      errors.push({ line: lineNo, reason: '제목이 없습니다' });
+      errors.push({ line: lineNo, reason: m.courses_csv_title_missing() });
       return;
     }
     if (title.length > MAX_TITLE) {
-      errors.push({ line: lineNo, reason: `제목은 ${String(MAX_TITLE)}자까지입니다` });
+      errors.push({
+        line: lineNo,
+        reason: m.courses_csv_title_too_long({ max: String(MAX_TITLE) }),
+      });
       return;
     }
     const seconds = parseDuration(duration);
     if (seconds === null) {
-      errors.push({ line: lineNo, reason: `길이를 알 수 없습니다: ${duration}` });
+      errors.push({ line: lineNo, reason: m.courses_csv_duration_invalid({ value: duration }) });
       return;
     }
     if (seconds > MAX_SECONDS) {
-      errors.push({ line: lineNo, reason: `길이는 100시간까지입니다: ${duration}` });
+      errors.push({ line: lineNo, reason: m.courses_csv_duration_too_long({ value: duration }) });
       return;
     }
     const plannedOn = csvDate(planned);
     if (plannedOn === undefined) {
-      errors.push({ line: lineNo, reason: `날짜는 YYYY-MM-DD로 적어 주세요: ${planned}` });
+      errors.push({ line: lineNo, reason: m.courses_csv_date_invalid({ value: planned }) });
       return;
     }
     rows.push({
