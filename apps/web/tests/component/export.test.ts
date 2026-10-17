@@ -14,13 +14,28 @@ const hiddenId = '0198f1f2-0000-7000-8000-000000000002';
 const okFile = '0198f1f2-0000-7000-8000-0000000000aa';
 const deniedFile = '0198f1f2-0000-7000-8000-0000000000bb';
 
+function isRef(v: unknown): v is { kind: string; id: string } {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'id' in v &&
+    typeof v.id === 'string' &&
+    'kind' in v &&
+    typeof v.kind === 'string'
+  );
+}
+
 /** 서버 대역: 참조 해석(하나만 볼 수 있음), 파일 정보는 없음(404), 파일 내용은 하나만 내려받기 허용. */
 function stubServer(): void {
   vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (url.endsWith('/api/references/resolve')) {
-      const body: unknown = JSON.parse(String(init?.body));
-      const refs = (body as { refs: { kind: string; id: string }[] }).refs;
+      const raw = init?.body;
+      const body: unknown = typeof raw === 'string' ? JSON.parse(raw) : null;
+      const refs =
+        typeof body === 'object' && body !== null && 'refs' in body && Array.isArray(body.refs)
+          ? body.refs.filter(isRef)
+          : [];
       const out: ResolvedReferenceView[] = refs.map((r) =>
         r.id === visibleId
           ? {
