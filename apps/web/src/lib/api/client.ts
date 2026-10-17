@@ -53,6 +53,8 @@ export interface DocumentView {
   is_template: boolean;
   /** 실시간 공동 편집 중(D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다. */
   realtime: boolean;
+  /** 내보낼 수 있는지(D-75). 첨부 내려받기와 같은 규칙. */
+  can_export: boolean;
 }
 
 export class ApiError extends Error {
@@ -185,6 +187,7 @@ export function parseDocument(value: Json): DocumentView {
     can_delete: bool(o, 'can_delete'),
     is_template: bool(o, 'is_template'),
     realtime: bool(o, 'realtime'),
+    can_export: bool(o, 'can_export'),
   };
 }
 
@@ -2711,6 +2714,14 @@ export const api = {
       'GET',
       `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}`,
       parseRevision,
+    ),
+  /** 저장된 리비전 하나를 내보낸다(D-75). 서버가 내보내기 권한을 확인하고 기록을 남긴 뒤 그 리비전을 준다. */
+  exportRevision: (id: string, revision: number, format: 'markdown' | 'zip' | 'pdf') =>
+    expectOk(
+      'POST',
+      `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/export`,
+      parseRevision,
+      { format },
     ),
   /** 옛 리비전 내용으로 새 리비전을 만든다. 보고 있던 리비전이 지났으면 `{ kind: 'conflict', current }`. */
   async restoreRevision(

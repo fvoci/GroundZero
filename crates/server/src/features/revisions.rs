@@ -132,6 +132,16 @@ pub async fn get(
 ) -> Result<Json<Revision>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
+    let found = fetch_revision(&mut tx, id, revision).await?;
+    tx.commit().await?;
+    Ok(Json(found.ok_or(AppError::NotFound)?))
+}
+
+async fn fetch_revision(
+    tx: &mut crate::db::UserTx,
+    id: DocumentId,
+    revision: i32,
+) -> Result<Option<Revision>, AppError> {
     let row: Option<RevisionRow> = sqlx::query_as(
         "SELECT r.revision, r.title, r.body, r.schema_version, u.display_name, r.created_at, r.restored_from
          FROM document_revisions r LEFT JOIN users u ON u.id = r.author
@@ -141,18 +151,69 @@ pub async fn get(
     .bind(revision)
     .fetch_optional(tx.conn())
     .await?;
+    Ok(row.map(
+        |(revision, title, body, schema_version, author_name, created_at, restored_from)| {
+            Revision {
+                revision,
+                title,
+                body,
+                schema_version,
+                author_name,
+                created_at,
+                restored_from,
+            }
+        },
+    ))
+}
+
+/// 내보내기 형식(D-75). 변환은 브라우저가 편집기의 변환기로 한다. 서버는 권한을 확인하고 기록을 남긴다.
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    Markdown,
+    Zip,
+    Pdf,
+}
+
+/// 내보내기 요청.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ExportRequest {
+    pub format: ExportFormat,
+}
+
+/// 저장된 리비전 하나를 내보낸다(D-75). 첨부 내려받기와 같은 권한(고칠 수 있거나, 볼 수 있고 소유자가 복제·내려받기를
+/// 허용)이 있어야 하고 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
+/// 내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.
+#[utoipa::path(post, path = "/api/documents/{document_id}/revisions/{revision}/export", operation_id = "export_revision",
+    params(("document_id" = String, Path, format = Uuid), ("revision" = i32, Path)),
+    request_body = ExportRequest,
+    responses((status = 200, body = Revision), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody)), tag = "documents")]
+pub async fn export(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((id, revision)): Path<(DocumentId, i32)>,
+    Json(input): Json<ExportRequest>,
+) -> Result<Json<Revision>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
+    let found = fetch_revision(&mut tx, id, revision)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let format = match input.format {
+        ExportFormat::Markdown => "markdown",
+        ExportFormat::Zip => "zip",
+        ExportFormat::Pdf => "pdf",
+    };
+    sqlx::query("SELECT app_audit_document_export($1, $2, $3)")
+        .bind(id)
+        .bind(revision)
+        .bind(format)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
     tx.commit().await?;
-    let (revision, title, body, schema_version, author_name, created_at, restored_from) =
-        row.ok_or(AppError::NotFound)?;
-    Ok(Json(Revision {
-        revision,
-        title,
-        body,
-        schema_version,
-        author_name,
-        created_at,
-        restored_from,
-    }))
+    Ok(Json(found))
 }
 
 /// 옛 리비전의 내용으로 새 리비전을 만든다(쓰기 권한). 기준 리비전이 지났으면 409와 서버 최신본.

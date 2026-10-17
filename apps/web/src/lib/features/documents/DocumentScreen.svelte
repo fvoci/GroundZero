@@ -16,6 +16,7 @@
 
   import DocumentActions from './DocumentActions.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
+  import ExportDialog from './ExportDialog.svelte';
   import LiveDocumentEditor from './LiveDocumentEditor.svelte';
   import RevisionHistory from './RevisionHistory.svelte';
 
@@ -30,6 +31,8 @@
   let error = $state<string | undefined>(undefined);
   // 복원 뒤 편집기를 새 내용으로 다시 만든다(저장하지 않은 편집은 편집기의 초안 보존이 지킨다).
   let epoch = $state(0);
+  // 편집기에 저장하지 않은 편집이 있는지(내보내기 안내).
+  let unsaved = $state(false);
 
   $effect(() => {
     const id = documentId;
@@ -93,6 +96,9 @@
         epoch += 1;
       }}
     />
+    {#if doc.can_export}
+      <ExportDialog {doc} {unsaved} references={referencesFor(doc)} />
+    {/if}
     <div class="ml-auto flex flex-wrap items-center gap-1">
       <MarkButtons kind="document" id={doc.id} />
       {#if doc.can_delete}
@@ -139,6 +145,9 @@
         onsaved={(saved: DocumentView) => {
           // 기록 비교(지금과 비교)와 복원의 기준 리비전이 최신이 되도록 저장 결과를 따라간다.
           doc = saved;
+        }}
+        onunsaved={(value: boolean) => {
+          unsaved = value;
         }}
       />
     {/if}

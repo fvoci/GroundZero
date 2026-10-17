@@ -324,6 +324,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/revisions/{revision}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 저장된 리비전 하나를 내보낸다(D-75). 첨부 내려받기와 같은 권한(고칠 수 있거나, 볼 수 있고 소유자가 복제·내려받기를
+         *     허용)이 있어야 하고 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
+         *     내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.
+         */
+        post: operations["export_revision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}/revisions/{revision}/restore": {
         parameters: {
             query?: never;
@@ -2697,6 +2718,8 @@ export interface components {
             can_delete: boolean;
             /** @description 현재 사용자가 고칠 수 있는지. */
             can_edit: boolean;
+            /** @description 이 사람이 내보낼 수 있는지(D-75). 첨부 내려받기와 같은 규칙: 고칠 수 있거나, 볼 수 있고 복제·내려받기 허용. */
+            can_export: boolean;
             /**
              * @description 공유 철회·공개 링크 철회·비공개 전환처럼 노출을 줄이는 관리를 할 수 있는지.
              *     보관된 항목 아래 문서는 `access`가 `read`여도 소유 권한자는 이 값이 참이다.
@@ -2884,6 +2907,15 @@ export interface components {
         ExcludeOccurrence: {
             /** @description 일정 시간대 기준의 회차 날짜. */
             date: string;
+        };
+        /**
+         * @description 내보내기 형식(D-75). 변환은 브라우저가 편집기의 변환기로 한다. 서버는 권한을 확인하고 기록을 남긴다.
+         * @enum {string}
+         */
+        ExportFormat: "markdown" | "zip" | "pdf";
+        /** @description 내보내기 요청. */
+        ExportRequest: {
+            format: components["schemas"]["ExportFormat"];
         };
         /** @description 칸 정의. */
         FieldDef: {
@@ -5206,6 +5238,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Revision"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    export_revision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                revision: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Revision"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {

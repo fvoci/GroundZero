@@ -1294,6 +1294,87 @@
         }
       }
     },
+    "/api/documents/{document_id}/revisions/{revision}/export": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "저장된 리비전 하나를 내보낸다(D-75). 첨부 내려받기와 같은 권한(고칠 수 있거나, 볼 수 있고 소유자가 복제·내려받기를\n허용)이 있어야 하고 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일\n내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.",
+        "operationId": "export_revision",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Revision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/documents/{document_id}/revisions/{revision}/restore": {
       "post": {
         "tags": [
@@ -10866,7 +10947,8 @@
           "can_manage",
           "can_delete",
           "is_template",
-          "realtime"
+          "realtime",
+          "can_export"
         ],
         "properties": {
           "access": {
@@ -10887,6 +10969,10 @@
           "can_edit": {
             "type": "boolean",
             "description": "현재 사용자가 고칠 수 있는지."
+          },
+          "can_export": {
+            "type": "boolean",
+            "description": "이 사람이 내보낼 수 있는지(D-75). 첨부 내려받기와 같은 규칙: 고칠 수 있거나, 볼 수 있고 복제·내려받기 허용."
           },
           "can_manage": {
             "type": "boolean",
@@ -11472,6 +11558,27 @@
           "date": {
             "type": "string",
             "description": "일정 시간대 기준의 회차 날짜."
+          }
+        }
+      },
+      "ExportFormat": {
+        "type": "string",
+        "description": "내보내기 형식(D-75). 변환은 브라우저가 편집기의 변환기로 한다. 서버는 권한을 확인하고 기록을 남긴다.",
+        "enum": [
+          "markdown",
+          "zip",
+          "pdf"
+        ]
+      },
+      "ExportRequest": {
+        "type": "object",
+        "description": "내보내기 요청.",
+        "required": [
+          "format"
+        ],
+        "properties": {
+          "format": {
+            "$ref": "#/components/schemas/ExportFormat"
           }
         }
       },

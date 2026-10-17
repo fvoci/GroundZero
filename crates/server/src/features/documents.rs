@@ -127,6 +127,8 @@ pub struct Document {
     pub is_template: bool,
     /// 실시간 공동 편집 중인 문서(워크스페이스가 켬, D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다.
     pub realtime: bool,
+    /// 이 사람이 내보낼 수 있는지(D-75). 첨부 내려받기와 같은 규칙: 고칠 수 있거나, 볼 수 있고 복제·내려받기 허용.
+    pub can_export: bool,
 }
 
 /// 문서 생성 요청.
@@ -364,6 +366,7 @@ pub(crate) struct DocRow {
     can_delete: bool,
     is_template: bool,
     pub(crate) realtime: bool,
+    can_export: bool,
 }
 
 /// 참조 문자열은 저장하지 않고 현재 키로 만든다(키가 바뀌어도 번호·id는 그대로, D-18).
@@ -375,7 +378,7 @@ const DOC_COLUMNS: &str = "id, workspace_id, \
     visibility, allow_copy, coalesce(app_document_base_access(id) = 'owner', false) AS can_manage, \
     coalesce(app_document_access(id) = 'owner' \
       OR (app_document_access(id) = 'write' AND created_by = app_user_id()), false) AS can_delete, \
-    is_template, app_document_realtime(id) AS realtime";
+    is_template, app_document_realtime(id) AS realtime, app_document_can_export(id) AS can_export";
 
 pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
     Document {
@@ -398,6 +401,7 @@ pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
         can_delete: row.can_delete,
         is_template: row.is_template,
         realtime: row.realtime,
+        can_export: row.can_export,
     }
 }
 

@@ -646,3 +646,130 @@ async fn settings_need_definer_path_and_personal_audit_is_visible_to_owner() {
     .unwrap();
     assert_eq!(actions, vec!["create", "share"]);
 }
+
+async fn export(
+    app: &Router,
+    user: &TestUser,
+    doc: &Value,
+    revision: i64,
+    format: &str,
+) -> (StatusCode, Value) {
+    let r = send(
+        app,
+        Method::POST,
+        &format!(
+            "/api/documents/{}/revisions/{revision}/export",
+            doc["id"].as_str().unwrap()
+        ),
+        Some(user),
+        Some(json!({ "format": format })),
+    )
+    .await;
+    (r.status, r.json)
+}
+
+/// 문서 한 건 내보내기(D-75): 첨부 내려받기와 같은 권한. 작성자·관리자는 되고, 독자는 소유자가 복제·내려받기를
+/// 허용했을 때만, 볼 수 없는 사람은 404. 고른 저장 리비전의 내용을 주고 내보내기 기록을 남긴다. 개인 노트도 같은
+/// 규칙이며 기록은 노트 소유자의 개인 영역에 남는다.
+#[tokio::test]
+async fn export_follows_download_permission_and_is_audited() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "내보내기").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let outsider = login(&state, "outsider").await;
+    let doc = create_doc(&app, &writer, &ws, "보고서").await;
+    assert_eq!(
+        save(&app, &writer, &doc, 1, "첫 저장").await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        save(&app, &writer, &doc, 2, "둘째 저장").await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        settings(&app, &admin, &doc, "workspace", false).await,
+        StatusCode::OK
+    );
+
+    let (status, rev) = export(&app, &writer, &doc, 2, "markdown").await;
+    assert_eq!(status, StatusCode::OK, "{rev:?}");
+    assert_eq!(rev["revision"], 2);
+    assert!(rev["body"].to_string().contains("첫 저장"), "{rev:?}");
+    assert_eq!(export(&app, &admin, &doc, 3, "pdf").await.0, StatusCode::OK);
+    assert_eq!(get(&app, &reader, &doc).await.1["can_export"], false);
+    assert_eq!(
+        export(&app, &reader, &doc, 3, "zip").await.0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        export(&app, &outsider, &doc, 3, "zip").await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        export(&app, &writer, &doc, 99, "markdown").await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert!(
+        export(&app, &writer, &doc, 3, "docx")
+            .await
+            .0
+            .is_client_error()
+    );
+
+    assert_eq!(
+        settings(&app, &admin, &doc, "workspace", true).await,
+        StatusCode::OK
+    );
+    assert_eq!(get(&app, &reader, &doc).await.1["can_export"], true);
+    assert_eq!(
+        export(&app, &reader, &doc, 3, "zip").await.0,
+        StatusCode::OK
+    );
+
+    // 개인 노트: 공유받은 독자는 소유자가 허용해야 내보낸다. 기록은 소유자 개인 영역.
+    let bob_email = unique_email("bob");
+    let bob = login_with_email(&state, "bob", &bob_email, true).await;
+    let note = create_note(&app, &writer, "개인 노트").await;
+    share(&app, &writer, &note, &bob_email, "read").await;
+    assert_eq!(
+        export(&app, &bob, &note, 1, "markdown").await.0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        settings(&app, &writer, &note, "private", true).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        export(&app, &bob, &note, 1, "markdown").await.0,
+        StatusCode::OK
+    );
+
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let mut owner = sqlx::PgConnection::connect(&owner_url).await.unwrap();
+    let doc_audits: Vec<(Option<uuid::Uuid>, Value)> = sqlx::query_as(
+        "SELECT workspace_id, detail FROM fvoci.audit_log
+         WHERE action = 'export' AND target_type = 'document' AND target_id = $1::uuid ORDER BY created_at",
+    )
+    .bind(doc["id"].as_str().unwrap())
+    .fetch_all(&mut owner)
+    .await
+    .unwrap();
+    assert_eq!(doc_audits.len(), 3, "{doc_audits:?}");
+    assert_eq!(
+        doc_audits[0].1,
+        json!({ "revision": 2, "format": "markdown" })
+    );
+    assert!(doc_audits.iter().all(|(w, _)| w.is_some()));
+    let note_audit: (Option<uuid::Uuid>, uuid::Uuid, uuid::Uuid) = sqlx::query_as(
+        "SELECT workspace_id, owner_user_id, actor FROM fvoci.audit_log
+         WHERE action = 'export' AND target_id = $1::uuid",
+    )
+    .bind(note["id"].as_str().unwrap())
+    .fetch_one(&mut owner)
+    .await
+    .unwrap();
+    assert_eq!(note_audit, (None, writer.id.0, bob.id.0));
+}

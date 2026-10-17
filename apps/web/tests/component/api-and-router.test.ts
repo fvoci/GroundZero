@@ -43,6 +43,7 @@ describe('response validation', () => {
     can_delete: false,
     is_template: false,
     realtime: false,
+    can_export: true,
   };
 
   it('accepts a well-formed document', () => {

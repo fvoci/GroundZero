@@ -24,9 +24,11 @@
     initial: DocumentView;
     onsaved?: (doc: DocumentView) => void;
     references?: ReferenceContext;
+    /** 저장하지 않은 편집이 있는지 알린다(내보내기 안내, D-75). */
+    onunsaved?: (unsaved: boolean) => void;
   }
 
-  const { initial, onsaved, references }: Props = $props();
+  const { initial, onsaved, references, onunsaved }: Props = $props();
 
   const INLINE_IMAGES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
@@ -51,6 +53,9 @@
   let title = $state(start.title);
   let body = $state<DocNode>(start.body);
   let status = $state<Status>('saved');
+  $effect(() => {
+    onunsaved?.(status !== 'saved');
+  });
   let message = $state<string | undefined>(undefined);
   let conflict = $state<DocumentView | undefined>(undefined);
   // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다.

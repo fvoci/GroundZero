@@ -256,6 +256,7 @@ async fn api_not_found() -> AppError {
         references::task_backlinks,
         revisions::list,
         revisions::get,
+        revisions::export,
         revisions::restore,
         modules::list_modules,
         modules::get_module,
@@ -475,6 +476,8 @@ async fn api_not_found() -> AppError {
         comments::CommentCreated,
         revisions::RevisionSummary,
         revisions::Revision,
+        revisions::ExportFormat,
+        revisions::ExportRequest,
         revisions::RestoreRevision,
         modules::ModuleKind,
         modules::Module,
@@ -809,6 +812,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/documents/{document_id}/revisions/{revision}/restore",
             post(revisions::restore),
+        )
+        .route(
+            "/documents/{document_id}/revisions/{revision}/export",
+            post(revisions::export),
         )
         .route("/references/resolve", post(references::resolve))
         .route(
