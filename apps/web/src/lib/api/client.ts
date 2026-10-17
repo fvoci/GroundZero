@@ -1330,7 +1330,7 @@ function parseDeletedWorkspace(value: Json): DeletedWorkspaceView {
   };
 }
 
-export type SearchKind = 'document' | 'task' | 'item' | 'event';
+export type SearchKind = 'document' | 'task' | 'item' | 'event' | 'file';
 
 export interface SearchResultView {
   kind: SearchKind;
@@ -1339,13 +1339,20 @@ export interface SearchResultView {
   reference: string | null;
   workspace_id: string | null;
   item_id: string | null;
+  document_id: string | null;
   snippet: string | null;
 }
 
 function parseSearchResult(value: Json): SearchResultView {
   const o = rec(value, 'search result');
   const kind = str(o, 'kind');
-  if (kind !== 'document' && kind !== 'task' && kind !== 'item' && kind !== 'event')
+  if (
+    kind !== 'document' &&
+    kind !== 'task' &&
+    kind !== 'item' &&
+    kind !== 'event' &&
+    kind !== 'file'
+  )
     throw new TypeError(`unknown search kind ${kind}`);
   return {
     kind,
@@ -1354,6 +1361,7 @@ function parseSearchResult(value: Json): SearchResultView {
     reference: optStr(o, 'reference'),
     workspace_id: optStr(o, 'workspace_id'),
     item_id: optStr(o, 'item_id'),
+    document_id: optStr(o, 'document_id'),
     snippet: optStr(o, 'snippet'),
   };
 }

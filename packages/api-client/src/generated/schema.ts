@@ -2537,11 +2537,16 @@ export interface components {
         };
         /** @description 검색 결과 한 건. */
         SearchResult: {
+            /**
+             * Format: uuid
+             * @description 첨부 파일이 붙은 문서(파일만).
+             */
+            document_id?: string | null;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             item_id?: string | null;
-            /** @description `document`·`task`·`item`·`event`. */
+            /** @description `document`·`task`·`item`·`event`·`file`. */
             kind: string;
             reference?: string | null;
             /** @description 본문에서 찾은 곳 근처 글자(일반 글자, 강조 표시 없음). */
@@ -6008,7 +6013,7 @@ export interface operations {
                 q: string;
                 /** @description 이 워크스페이스 안에서만(멤버). */
                 workspace_id?: string | null;
-                /** @description 쉼표로 구분한 종류(`document,task,item,event`). 없으면 전부. */
+                /** @description 쉼표로 구분한 종류(`document,task,item,event,file`). 없으면 전부. */
                 kinds?: string | null;
             };
             header?: never;

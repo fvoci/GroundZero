@@ -232,7 +232,7 @@ async fn search_returns_only_what_each_person_can_see() {
     let r = send(
         &app,
         Method::GET,
-        &format!("/api/search?q={tok}&kinds=file"),
+        &format!("/api/search?q={tok}&kinds=nope"),
         Some(&writer),
         None,
     )
@@ -399,4 +399,66 @@ async fn an_unreachable_search_service_falls_back_to_titles() {
         fvoci_server::worker::run_once(&state.db, state.search.as_ref(), Some(&state.storage))
             .await;
     assert_eq!(report.indexed, 0);
+}
+
+#[tokio::test]
+async fn file_names_are_searchable_by_people_who_can_see_the_file() {
+    use sha2::{Digest, Sha256};
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "파일 검색").await;
+    let outsider = login(&state, "outsider").await;
+    let doc = create_doc(&app, &admin, &ws, "자료 모음").await;
+    let up = send(
+        &app,
+        Method::POST,
+        "/api/uploads",
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] },
+                     "name": format!("{tok}-결과.csv"), "size": 3, "content_type": "text/csv" })),
+    )
+    .await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+    let id = up.json["id"].as_str().unwrap();
+    let hash = hex::encode(Sha256::digest(b"a,b"));
+    let (status, _, _) = common::send_raw(
+        &app,
+        Method::PUT,
+        &format!("/api/uploads/{id}/parts/1"),
+        Some(&admin),
+        &[("x-content-sha256", hash.as_str())],
+        b"a,b".to_vec(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let done = send(
+        &app,
+        Method::POST,
+        &format!("/api/uploads/{id}/complete"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
+    let file_id = done.json["file_id"].as_str().unwrap().to_owned();
+
+    let found = settle(&state, &app, &admin, &tok, &[&format!("{tok}-결과.csv")]).await;
+    assert_eq!(found[0]["kind"], "file");
+    assert_eq!(found[0]["document_id"], doc["id"]);
+    settle(&state, &app, &outsider, &tok, &[]).await;
+
+    // 파일을 휴지통에 넣으면 빠진다.
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/files/{file_id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    settle(&state, &app, &admin, &tok, &[]).await;
+    assert!(!indexed_eventually(&state, &tok, &file_id, false).await);
 }

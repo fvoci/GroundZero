@@ -29,7 +29,7 @@ const MAX_PAGES: usize = 5;
 /// 검색어 길이 상한.
 const MAX_QUERY_CHARS: usize = 200;
 
-const KINDS: &[&str] = &["document", "task", "item", "event"];
+const KINDS: &[&str] = &["document", "task", "item", "event", "file"];
 
 /// 검색 조건.
 #[derive(Debug, Deserialize, IntoParams)]
@@ -38,14 +38,14 @@ pub struct SearchQuery {
     /// 이 워크스페이스 안에서만(멤버).
     #[param(value_type = Option<String>, format = Uuid)]
     pub workspace_id: Option<WorkspaceId>,
-    /// 쉼표로 구분한 종류(`document,task,item,event`). 없으면 전부.
+    /// 쉼표로 구분한 종류(`document,task,item,event,file`). 없으면 전부.
     pub kinds: Option<String>,
 }
 
 /// 검색 결과 한 건.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct SearchResult {
-    /// `document`·`task`·`item`·`event`.
+    /// `document`·`task`·`item`·`event`·`file`.
     pub kind: String,
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
@@ -55,6 +55,9 @@ pub struct SearchResult {
     pub workspace_id: Option<Uuid>,
     #[schema(value_type = Option<String>, format = Uuid)]
     pub item_id: Option<Uuid>,
+    /// 첨부 파일이 붙은 문서(파일만).
+    #[schema(value_type = Option<String>, format = Uuid)]
+    pub document_id: Option<Uuid>,
     /// 본문에서 찾은 곳 근처 글자(일반 글자, 강조 표시 없음).
     pub snippet: Option<String>,
 }
@@ -131,6 +134,20 @@ async fn visible(
             .fetch_all(tx.conn())
             .await?;
     Ok(rows.into_iter().collect())
+}
+
+/// 파일이 붙은 문서(파일 결과에서 문서로 열 때).
+async fn file_document(tx: &mut UserTx, kind: &str, id: Uuid) -> Result<Option<Uuid>, AppError> {
+    if kind != "file" {
+        return Ok(None);
+    }
+    Ok(
+        sqlx::query_scalar("SELECT document_id FROM files WHERE id = $1")
+            .bind(id)
+            .fetch_optional(tx.conn())
+            .await?
+            .flatten(),
+    )
 }
 
 /// 번호 표시. 호출자 권한으로 읽어 키를 볼 수 없는 사람(멤버가 아닌 공유 대상)에게는 없다.
@@ -234,6 +251,7 @@ async fn indexed(
                 .map(str::to_owned)
                 .filter(|s| !s.is_empty());
             let reference = reference(&mut tx, &h.kind, id).await?;
+            let document_id = file_document(&mut tx, &h.kind, id).await?;
             results.push(SearchResult {
                 kind: h.kind,
                 id,
@@ -242,6 +260,7 @@ async fn indexed(
                 workspace_id: parse_uuid(h.workspace_id.as_deref()),
                 item_id: parse_uuid(h.item_id.as_deref()),
                 snippet,
+                document_id,
             });
         }
         tx.commit().await?;
@@ -282,6 +301,10 @@ async fn fallback(
            UNION ALL
            SELECT 'event', id, title, workspace_id, item_id, updated_at
            FROM events WHERE title ILIKE $1 AND deleted_at IS NULL
+           UNION ALL
+           SELECT 'file', f.id, f.name, f.workspace_id, coalesce(f.item_id, d.item_id), f.updated_at
+           FROM files f LEFT JOIN documents d ON d.id = f.document_id
+           WHERE f.name ILIKE $1 AND f.deleted_at IS NULL
          ) r
          WHERE r.kind = ANY($2) AND ($3::uuid IS NULL OR r.workspace_id = $3)
          ORDER BY r.updated_at DESC LIMIT 60",
@@ -299,6 +322,7 @@ async fn fallback(
             continue;
         }
         let reference = reference(tx, &kind, id).await?;
+        let document_id = file_document(tx, &kind, id).await?;
         results.push(SearchResult {
             kind,
             id,
@@ -307,6 +331,7 @@ async fn fallback(
             workspace_id,
             item_id,
             snippet: None,
+            document_id,
         });
     }
     Ok(results)

@@ -14,6 +14,7 @@ const result = (over: Partial<SearchResultView>): SearchResultView => ({
   reference: null,
   workspace_id: W,
   item_id: null,
+  document_id: null,
   snippet: null,
   ...over,
 });
@@ -29,6 +30,10 @@ describe('search result paths', () => {
     );
     expect(searchResultPath(result({ kind: 'item' }), member)).toBe(`/w/${W}/i/${X}`);
     expect(searchResultPath(result({ kind: 'event', item_id: I }), member)).toBe(`/w/${W}/i/${I}`);
+    expect(searchResultPath(result({ kind: 'file', document_id: X, id: I }), member)).toBe(
+      `/w/${W}/wiki/${X}`,
+    );
+    expect(searchResultPath(result({ kind: 'file', item_id: I }), member)).toBe(`/w/${W}/i/${I}`);
   });
 
   it('opens notes and documents shared from outside as standalone', () => {
