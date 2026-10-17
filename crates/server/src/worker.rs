@@ -95,6 +95,14 @@ async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
     // 하나씩 꺼내 지우고 바로 끝낸다(저장소 호출 동안 트랜잭션을 길게 열지 않는다). 한 주기에 200개까지.
     for _ in 0..200 {
         let mut tx = db.begin_anonymous().await?;
+        // 백업·복구 중이면 쉰다(복사 중인 내용을 지우지 않게).
+        let free: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock_shared($1)")
+            .bind(crate::backup::STORAGE_LOCK)
+            .fetch_one(tx.conn())
+            .await?;
+        if !free {
+            break;
+        }
         let Some((key, upload, attempts)): Option<(String, String, i32)> = sqlx::query_as(
             "SELECT storage_key, storage_upload_id, attempts FROM app_system_storage_claim(1)",
         )

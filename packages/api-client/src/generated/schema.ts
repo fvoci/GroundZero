@@ -725,6 +725,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내 개인 자료 반출: 개인 노트·첨부·내 시간 기록·고정·즐겨찾기. */
+        get: operations["export_mine"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/home": {
         parameters: {
             query?: never;
@@ -1421,6 +1438,23 @@ export interface paths {
         };
         /** 워크스페이스 달력(멤버). 볼 수 있는 업무·예정 회차·일정 회차만 나온다. 기간은 62일까지. 읽기 전용이다. */
         get: operations["workspace_calendar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 워크스페이스 반출(관리자). 지금 볼 수 있는 모든 내용과 파일 버전을 ZIP으로. */
+        get: operations["export_workspace"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5216,6 +5250,25 @@ export interface operations {
             };
         };
     };
+    export_mine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": number[];
+                };
+            };
+        };
+    };
     home: {
         parameters: {
             query: {
@@ -7149,6 +7202,43 @@ export interface operations {
                 };
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    export_workspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": number[];
+                };
+            };
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

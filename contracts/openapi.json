@@ -3149,6 +3149,32 @@
         }
       }
     },
+    "/api/me/export": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "내 개인 자료 반출: 개인 노트·첨부·내 시간 기록·고정·즐겨찾기.",
+        "operationId": "export_mine",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/home": {
       "get": {
         "tags": [
@@ -5958,6 +5984,63 @@
             }
           },
           "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{workspace_id}/export": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "워크스페이스 반출(관리자). 지금 볼 수 있는 모든 내용과 파일 버전을 ZIP으로.",
+        "operationId": "export_workspace",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "403": {
             "description": "",
             "content": {
               "application/json": {
@@ -11227,6 +11310,10 @@
     {
       "name": "files",
       "description": "파일 첨부·버전·업로드"
+    },
+    {
+      "name": "export",
+      "description": "데이터 반출"
     }
   ]
 }

@@ -16,7 +16,7 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, documents, events, files, home, members, modules, public_links, recurrence,
+    accounts, documents, events, export, files, home, members, modules, public_links, recurrence,
     references, revisions, schedule, search_api, tasks, time_tracking, trash, workspaces,
 };
 
@@ -203,6 +203,8 @@ async fn api_not_found() -> AppError {
         files::trash_file,
         files::content,
         files::delete_version,
+        export::workspace,
+        export::mine,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -404,6 +406,7 @@ async fn api_not_found() -> AppError {
         (name = "trash", description = "휴지통·복원·영구 삭제"),
         (name = "search", description = "통합 검색"),
         (name = "files", description = "파일 첨부·버전·업로드"),
+        (name = "export", description = "데이터 반출"),
     )
 )]
 pub struct ApiDoc;
@@ -439,6 +442,8 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/workspaces/{workspace_id}", delete(workspaces::delete))
         .route("/me/deleted-workspaces", get(workspaces::deleted))
+        .route("/workspaces/{workspace_id}/export", get(export::workspace))
+        .route("/me/export", get(export::mine))
         .route(
             "/me/deleted-workspaces/{workspace_id}",
             delete(workspaces::purge),

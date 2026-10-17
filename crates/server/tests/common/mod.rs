@@ -19,6 +19,8 @@ pub const PUBLIC_URL: &str = "http://127.0.0.1:8080";
 
 /// 환경 변수 구성에 테스트 값을 덮어쓴다.
 pub fn config_with(overrides: &[(&str, &str)]) -> Config {
+    // 서버 오류 로그를 테스트 출력에 남긴다(실패한 테스트에서만 보인다).
+    tracing_subscriber::fmt().with_test_writer().try_init().ok();
     let overrides: Vec<(String, String)> = overrides
         .iter()
         .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))

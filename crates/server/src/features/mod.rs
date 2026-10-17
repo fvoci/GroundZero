@@ -3,6 +3,7 @@
 pub mod accounts;
 pub mod documents;
 pub mod events;
+pub mod export;
 pub mod files;
 pub mod home;
 pub mod members;

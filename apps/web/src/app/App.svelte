@@ -225,6 +225,11 @@
               {/snippet}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
+              <DropdownMenu.Item
+                onSelect={() => {
+                  window.location.assign('/api/me/export');
+                }}>내 자료 내려받기 (ZIP)</DropdownMenu.Item
+              >
               <DropdownMenu.Item onSelect={() => void logout()}>로그아웃</DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Root>

@@ -55,6 +55,7 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
         let _env = sh.push_env("DATABASE_URL", &urls.app);
         // 시험 데이터의 시각을 옮기는 일(예: 휴지통 만료)에만 쓰는 테스트 전용 마이그레이션 역할 주소.
         let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
+        let _admin = sh.push_env("FVOCI_TEST_ADMIN_URL", &urls.admin);
         let meili = compose.host_port(&sh, "meilisearch", 7700)?;
         println!("==> meilisearch on 127.0.0.1:{meili}");
         let _search = sh.push_env("FVOCI_TEST_SEARCH_URL", format!("http://127.0.0.1:{meili}"));
@@ -118,6 +119,7 @@ fn run_external(root: &Path, oidc: bool) -> Result<()> {
     compose::prepare_database(&sh, &urls)?;
     let _env = sh.push_env("DATABASE_URL", &urls.app);
     let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
+    let _admin = sh.push_env("FVOCI_TEST_ADMIN_URL", &urls.admin);
     let _search_key = sh.push_env("FVOCI_TEST_SEARCH_KEY", compose::SEARCH_TEST_KEY);
     let _files = sh.push_env("FVOCI_STORAGE_DIR", root.join("target/test-files"));
     let s3 = std::env::var("FVOCI_TEST_S3_ENDPOINT").is_ok_and(|v| !v.trim().is_empty());

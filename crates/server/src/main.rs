@@ -3,10 +3,13 @@
 //! - `fvoci-server` : 서버 실행 (구성은 환경 변수, `docs/development.md`)
 //! - `fvoci-server db bootstrap` : 역할·스키마 준비 (`DATABASE_ADMIN_URL`)
 //! - `fvoci-server db migrate` : 마이그레이션 적용 (`DATABASE_MIGRATION_URL`)
+//! - `fvoci-server backup create <dir>` : DB와 파일 내용 백업 (`DATABASE_MIGRATION_URL`, 서버 구성)
+//! - `fvoci-server backup restore <dir>` : 빈 DB·저장소에 복구 (`DATABASE_ADMIN_URL`, 서버 구성)
 //! - `fvoci-server --print-openapi` : 계약 JSON을 표준 출력에 쓴다
 
 use std::process::ExitCode;
 
+use fvoci_server::backup;
 use fvoci_server::config::{Config, DbCommandConfig};
 use fvoci_server::db::admin;
 use fvoci_server::error::AppError;
@@ -18,6 +21,8 @@ enum Command {
     PrintOpenapi,
     Bootstrap,
     Migrate,
+    BackupCreate(String),
+    BackupRestore(String),
 }
 
 fn parse_args() -> Result<Command, String> {
@@ -32,6 +37,8 @@ fn parse_args() -> Result<Command, String> {
         ["--print-openapi"] => Ok(Command::PrintOpenapi),
         ["db", "bootstrap"] => Ok(Command::Bootstrap),
         ["db", "migrate"] => Ok(Command::Migrate),
+        ["backup", "create", dir] => Ok(Command::BackupCreate((*dir).to_owned())),
+        ["backup", "restore", dir] => Ok(Command::BackupRestore((*dir).to_owned())),
         other => Err(format!("unknown arguments: {other:?}")),
     }
 }
@@ -41,6 +48,35 @@ async fn run(command: Command) -> Result<(), AppError> {
         Command::Serve => fvoci_server::app::run(Config::from_env()?).await,
         Command::Bootstrap => admin::bootstrap(&DbCommandConfig::from_env()).await,
         Command::Migrate => admin::migrate(&DbCommandConfig::from_env()).await,
+        Command::BackupCreate(dir) => {
+            let manifest = backup::create(
+                &Config::from_env()?,
+                &DbCommandConfig::from_env(),
+                dir.as_ref(),
+            )
+            .await?;
+            println!(
+                "backup written to {dir}: {} tables, {} files, migration {}",
+                manifest.tables.len(),
+                manifest.objects.len(),
+                manifest.migration_version
+            );
+            Ok(())
+        }
+        Command::BackupRestore(dir) => {
+            let manifest = backup::restore(
+                &Config::from_env()?,
+                &DbCommandConfig::from_env(),
+                dir.as_ref(),
+            )
+            .await?;
+            println!(
+                "restored from {dir}: {} tables, {} files; everyone signs in again",
+                manifest.tables.len(),
+                manifest.objects.len()
+            );
+            Ok(())
+        }
         Command::PrintOpenapi => Ok(()),
     }
 }
@@ -49,7 +85,9 @@ fn main() -> ExitCode {
     let command = match parse_args() {
         Ok(c) => c,
         Err(msg) => {
-            eprintln!("{msg}\nusage: fvoci-server [--print-openapi | db bootstrap | db migrate]");
+            eprintln!(
+                "{msg}\nusage: fvoci-server [--print-openapi | db bootstrap | db migrate | backup create <dir> | backup restore <dir>]"
+            );
             return ExitCode::FAILURE;
         }
     };

@@ -316,6 +316,23 @@
       </section>
     {/if}
 
+    {#if isAdmin}
+      <section class="flex flex-col gap-2" aria-labelledby="export-heading">
+        <h2 id="export-heading" class="font-semibold">데이터 반출</h2>
+        <p class="text-sm text-muted-foreground">
+          문서·업무·일정·파일 버전·감사 기록을 ZIP으로 내려받습니다. 멤버의 개인 노트는 들어가지
+          않습니다.
+        </p>
+        <div>
+          <Button
+            variant="outline"
+            href={`/api/workspaces/${encodeURIComponent(workspace.id)}/export`}
+            >ZIP으로 내려받기</Button
+          >
+        </div>
+      </section>
+    {/if}
+
     {#if v.i_am_owner}
       <section class="flex flex-col gap-2" aria-labelledby="delete-heading">
         <h2 id="delete-heading" class="font-semibold">워크스페이스 삭제</h2>
