@@ -228,6 +228,31 @@ async fn study_units_are_shared_and_progress_is_personal() {
     .await;
     assert_eq!(participants(admin.clone()).await, json!([]));
 
+    // 스터디 단위를 시간 기록 대상으로(D-32). 볼 수 없는 사람은 404.
+    let timer = send(
+        &app,
+        Method::POST,
+        "/api/me/timer",
+        Some(&admin),
+        Some(json!({
+        "request_id": new_request_id(), "kind": "study", "memo": "",
+        "target": { "kind": "study_unit", "id": units[1]["id"] } })),
+    )
+    .await;
+    assert_eq!(timer.status, StatusCode::CREATED, "{:?}", timer.json);
+    assert_eq!(timer.json["target"]["label"], "STU-1 2. 연습문제");
+    let refused = send(
+        &app,
+        Method::POST,
+        "/api/me/timer",
+        Some(&outsider),
+        Some(json!({
+        "request_id": new_request_id(), "kind": "study", "memo": "",
+        "target": { "kind": "study_unit", "id": units[1]["id"] } })),
+    )
+    .await;
+    assert_eq!(refused.status, StatusCode::NOT_FOUND, "{:?}", refused.json);
+
     // 단위를 지우면 모든 사람의 그 진행도 지워진다.
     let unit_uri = format!("/api/study-units/{}", units[0]["id"].as_str().unwrap());
     assert_eq!(

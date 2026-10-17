@@ -242,6 +242,9 @@ pub fn record_kinds() -> Vec<RecordKindDef> {
                 ),
                 f("tags", "태그", Tags),
                 f("summary", "요약", LongText),
+                f("method_note", "연구 방법", LongText),
+                f("findings", "주요 결과", LongText),
+                f("limitations", "한계", LongText),
                 f("citation", "인용", LongText),
                 f("pages", "페이지", Text),
                 f("zotero_key", "Zotero 키", Text),
@@ -339,6 +342,8 @@ pub fn record_kinds() -> Vec<RecordKindDef> {
                 f("log", "로그·오류", LongText),
                 f("compute_minutes", "컴퓨터 실행 시간(분)", Number),
                 f("results", "결과", LongText),
+                f("compared_with", "비교한 이전 실행", Text),
+                f("comparison", "재실행 결과 비교", LongText),
             ],
             &[
                 c("input", "입력 데이터"),

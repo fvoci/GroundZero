@@ -1212,6 +1212,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 내 설정 바꾸기(D-50 시간대). 모르는 시간대면 400. */
+        put: operations["set_my_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/shared": {
         parameters: {
             query?: never;
@@ -3031,6 +3048,8 @@ export interface components {
             display_name: string;
             email?: string | null;
             id: components["schemas"]["UserId"];
+            /** @description 내 시간대(IANA 이름, D-50). 비었으면 화면이 브라우저 시간대를 쓴다. 본인에게만 보인다. */
+            time_zone: string;
         };
         /** @description 워크스페이스 멤버. */
         Member: {
@@ -3142,6 +3161,11 @@ export interface components {
              * @description 완료로 표시한 횟수(다시 보기 포함). 완료 회차 수는 한 번만 센다.
              */
             watch_count: number;
+        };
+        /** @description 내 설정 바꾸기. */
+        MySettings: {
+            /** @description IANA 시간대 이름(예: `Asia/Seoul`). 빈 문자열이면 지운다. */
+            time_zone: string;
         };
         /** @description 내 진행. */
         MyUnitProgress: {
@@ -3798,7 +3822,7 @@ export interface components {
          * @description 연결 대상 종류.
          * @enum {string}
          */
-        TargetKind: "task" | "document" | "item" | "episode";
+        TargetKind: "task" | "document" | "item" | "episode" | "study_unit";
         /** @description 업무. */
         Task: {
             access: components["schemas"]["Access"];
@@ -7746,6 +7770,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_my_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MySettings"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             401: {
                 headers: {

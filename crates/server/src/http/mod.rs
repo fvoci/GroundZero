@@ -123,6 +123,7 @@ async fn api_not_found() -> AppError {
         accounts::callback,
         accounts::logout,
         accounts::me,
+        accounts::set_settings,
         accounts::auth_info,
         workspaces::list,
         workspaces::create,
@@ -305,6 +306,7 @@ async fn api_not_found() -> AppError {
         Health,
         ErrorBody,
         accounts::Me,
+        accounts::MySettings,
         accounts::AuthInfo,
         accounts::LogoutResponse,
         workspaces::Workspace,
@@ -531,6 +533,7 @@ pub fn router(state: AppState) -> Router {
         .saturating_add(64 * 1024);
     let api = Router::new()
         .route("/me", get(accounts::me))
+        .route("/me/settings", put(accounts::set_settings))
         .route("/auth-info", get(accounts::auth_info))
         .route(
             "/workspaces",

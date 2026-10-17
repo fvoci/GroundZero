@@ -10,6 +10,7 @@
   } from '$lib/api/client';
   import { api, ApiError, newRequestId, STUDY_UNIT_KINDS } from '$lib/api/client';
   import { localTimeZone, wallTime } from '$lib/features/events/time';
+  import { timer } from '$lib/features/time/timer.svelte';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
@@ -253,6 +254,20 @@
               onclick={() => {
                 openMine(u);
               }}>내 분량·날짜·메모</Button
+            >
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`${u.title} 공부 시간 측정`}
+              onclick={() =>
+                void timer
+                  .start('study', { kind: 'study_unit', id: u.id })
+                  .then(() => {
+                    status = `${u.title}: 공부 시간 측정을 시작했습니다.`;
+                  })
+                  .catch(() => {
+                    error = '이미 측정 중인 타이머가 있습니다. 먼저 끝내 주세요.';
+                  })}>측정</Button
             >
             {#if current.can_write}
               <Button

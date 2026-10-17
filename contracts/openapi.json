@@ -5138,6 +5138,50 @@
         }
       }
     },
+    "/api/me/settings": {
+      "put": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "내 설정 바꾸기(D-50 시간대). 모르는 시간대면 400.",
+        "operationId": "set_my_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MySettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/shared": {
       "get": {
         "tags": [
@@ -11921,7 +11965,8 @@
         "description": "현재 사용자 정보.",
         "required": [
           "id",
-          "display_name"
+          "display_name",
+          "time_zone"
         ],
         "properties": {
           "display_name": {
@@ -11935,6 +11980,10 @@
           },
           "id": {
             "$ref": "#/components/schemas/UserId"
+          },
+          "time_zone": {
+            "type": "string",
+            "description": "내 시간대(IANA 이름, D-50). 비었으면 화면이 브라우저 시간대를 쓴다. 본인에게만 보인다."
           }
         }
       },
@@ -12264,6 +12313,19 @@
             "type": "integer",
             "format": "int32",
             "description": "완료로 표시한 횟수(다시 보기 포함). 완료 회차 수는 한 번만 센다."
+          }
+        }
+      },
+      "MySettings": {
+        "type": "object",
+        "description": "내 설정 바꾸기.",
+        "required": [
+          "time_zone"
+        ],
+        "properties": {
+          "time_zone": {
+            "type": "string",
+            "description": "IANA 시간대 이름(예: `Asia/Seoul`). 빈 문자열이면 지운다."
           }
         }
       },
@@ -14196,7 +14258,8 @@
           "task",
           "document",
           "item",
-          "episode"
+          "episode",
+          "study_unit"
         ]
       },
       "Task": {

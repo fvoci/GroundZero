@@ -13,9 +13,9 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{FromRequestParts, Query, State};
-use axum::http::HeaderMap;
 use axum::http::header::COOKIE;
 use axum::http::request::Parts;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use base64::Engine as _;
@@ -453,6 +453,8 @@ pub struct Me {
     pub id: UserId,
     pub display_name: String,
     pub email: Option<String>,
+    /// 내 시간대(IANA 이름, D-50). 비었으면 화면이 브라우저 시간대를 쓴다. 본인에게만 보인다.
+    pub time_zone: String,
 }
 
 /// 현재 로그인한 사용자.
@@ -463,18 +465,46 @@ pub async fn me(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Me>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let (display_name, email): (String, Option<String>) =
-        sqlx::query_as("SELECT display_name, email FROM users WHERE id = $1")
-            .bind(user)
-            .fetch_optional(tx.conn())
-            .await?
-            .ok_or(AppError::Unauthorized)?;
+    let (display_name, email, time_zone): (String, Option<String>, String) = sqlx::query_as(
+        "SELECT u.display_name, u.email, coalesce(s.time_zone, '')
+         FROM users u LEFT JOIN user_settings s ON s.user_id = u.id WHERE u.id = $1",
+    )
+    .bind(user)
+    .fetch_optional(tx.conn())
+    .await?
+    .ok_or(AppError::Unauthorized)?;
     tx.commit().await?;
     Ok(Json(Me {
         id: user,
         display_name,
         email,
+        time_zone,
     }))
+}
+
+/// 내 설정 바꾸기.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct MySettings {
+    /// IANA 시간대 이름(예: `Asia/Seoul`). 빈 문자열이면 지운다.
+    pub time_zone: String,
+}
+
+/// 내 설정 바꾸기(D-50 시간대). 모르는 시간대면 400.
+#[utoipa::path(put, path = "/api/me/settings", operation_id = "set_my_settings", request_body = MySettings,
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody)), tag = "auth")]
+pub async fn set_settings(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(input): Json<MySettings>,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_set_time_zone($1)")
+        .bind(&input.time_zone)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// 로그인 가능 여부. 웹이 로그인 버튼 표시에 쓴다.

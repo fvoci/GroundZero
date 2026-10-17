@@ -126,3 +126,43 @@ async fn saved_views_are_personal_and_follow_item_access() {
         StatusCode::NO_CONTENT
     );
 }
+
+/// 내 시간대(D-50): 본인만 보고, 모르는 이름은 400, 비우면 지운다.
+#[tokio::test]
+async fn time_zone_is_a_personal_setting() {
+    let state = common::state();
+    let app = common::app(&state);
+    let me = login(&state, "tz-me").await;
+    let other = login(&state, "tz-other").await;
+    let set = |zone: &str| {
+        let app = app.clone();
+        let me = me.clone();
+        let body = json!({ "time_zone": zone });
+        async move {
+            send(&app, Method::PUT, "/api/me/settings", Some(&me), Some(body))
+                .await
+                .status
+        }
+    };
+    assert_eq!(set("Asia/Seoul").await, StatusCode::NO_CONTENT);
+    assert_eq!(
+        send(&app, Method::GET, "/api/me", Some(&me), None)
+            .await
+            .json["time_zone"],
+        "Asia/Seoul"
+    );
+    assert_eq!(
+        send(&app, Method::GET, "/api/me", Some(&other), None)
+            .await
+            .json["time_zone"],
+        ""
+    );
+    assert_eq!(set("Mars/Olympus").await, StatusCode::BAD_REQUEST);
+    assert_eq!(set("").await, StatusCode::NO_CONTENT);
+    assert_eq!(
+        send(&app, Method::GET, "/api/me", Some(&me), None)
+            .await
+            .json["time_zone"],
+        ""
+    );
+}

@@ -31,6 +31,8 @@
   let creating = $state(false);
   let editingId = $state<string | undefined>(undefined);
   let confirming = $state<string | undefined>(undefined);
+  // 같은 종류 기록을 표로 나란히 비교(D-34 선행연구 비교 등).
+  let asTable = $state(false);
   let form = $state<RecordForm>(emptyForm());
   let requestId = newRequestId();
   let reloadKey = $state(0);
@@ -177,8 +179,48 @@
       {/if}
       {#if shown.length === 0}
         <p class="text-sm text-muted-foreground">{def.label} 기록이 없습니다.</p>
+      {:else if shown.length > 1}
+        <div>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-pressed={asTable}
+            onclick={() => (asTable = !asTable)}>{asTable ? '카드로 보기' : '표로 비교하기'}</Button
+          >
+        </div>
       {/if}
-      <ul class="flex flex-col gap-2" data-testid="records">
+      {#if asTable && shown.length > 1}
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm" data-testid="records-table">
+            <thead class="text-left text-muted-foreground">
+              <tr>
+                <th class="py-1 pr-2 font-medium">제목</th>
+                {#if def.date_label !== null}<th class="pr-2 font-medium">{def.date_label}</th>{/if}
+                {#each def.fields as f (f.key)}<th class="pr-2 font-medium">{f.label}</th>{/each}
+              </tr>
+            </thead>
+            <tbody>
+              {#each shown as r (r.id)}
+                {@const lines = summary(def, r, names, courseNames)}
+                <tr class="border-t align-top">
+                  <td class="py-1 pr-2 font-medium">{r.title}</td>
+                  {#if def.date_label !== null}<td class="pr-2">{r.occurred_on ?? ''}</td>{/if}
+                  {#each def.fields as f (f.key)}
+                    {@const text = lines.find((l) => l.label === f.label)?.text ?? ''}
+                    <td class="max-w-64 pr-2 whitespace-pre-wrap"
+                      >{text.length > 120 ? `${text.slice(0, 120)}…` : text}</td
+                    >
+                  {/each}
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+      <ul
+        class={['flex flex-col gap-2', asTable && shown.length > 1 ? 'hidden' : '']}
+        data-testid="records"
+      >
         {#each shown as r (r.id)}
           <li class="flex flex-col gap-1 rounded-md border p-2 text-sm">
             {#if editingId === r.id}

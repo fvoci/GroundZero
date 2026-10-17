@@ -1,8 +1,13 @@
 // 시간대 계산 (D-50). 저장은 UTC 시각, 표시는 보는 사람의 시간대, 입력한 벽시계 시각은 일정에 지정한 시간대로 읽는다.
 // 별도 시간대 라이브러리 없이 브라우저의 Intl(IANA 시간대 데이터)을 쓴다.
 
+import { me } from '$lib/me.svelte';
+
+/** 내 시간대: 설정한 것(D-50)이 있으면 그것, 없으면 브라우저 시간대. */
 export function localTimeZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return me.timeZone !== '' && isKnownZone(me.timeZone)
+    ? me.timeZone
+    : Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
 /** 브라우저가 아는 시간대 이름인지(입력 확인용). */

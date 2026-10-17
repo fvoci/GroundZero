@@ -126,6 +126,7 @@ export function parseMe(value: Json): Me {
     id: str(o, 'id'),
     display_name: str(o, 'display_name'),
     email: typeof email === 'string' ? email : null,
+    time_zone: typeof o.time_zone === 'string' ? o.time_zone : '',
   };
 }
 
@@ -1275,7 +1276,7 @@ function parseCalendar(value: Json): CalendarView {
 
 export const TIME_KINDS = ['work', 'study', 'lecture', 'rest', 'other'] as const;
 export type TimeKind = (typeof TIME_KINDS)[number];
-export type TimeTargetKind = 'task' | 'document' | 'item' | 'episode';
+export type TimeTargetKind = 'task' | 'document' | 'item' | 'episode' | 'study_unit';
 
 export interface TimeTargetView {
   kind: TimeTargetKind;
@@ -1335,7 +1336,13 @@ export function parseTimeEntry(value: Json): TimeEntryView {
   if (o.target !== null && o.target !== undefined) {
     const t = rec(o.target, 'time target');
     const kind = str(t, 'kind');
-    if (kind !== 'task' && kind !== 'document' && kind !== 'item' && kind !== 'episode')
+    if (
+      kind !== 'task' &&
+      kind !== 'document' &&
+      kind !== 'item' &&
+      kind !== 'episode' &&
+      kind !== 'study_unit'
+    )
       throw new TypeError(`unknown target kind ${kind}`);
     target = {
       kind,
@@ -1971,6 +1978,9 @@ export const api = {
     if (status !== 200) fail(status, json);
     return parseMe(json);
   },
+  /** 내 시간대(D-50). 빈 문자열이면 지운다(브라우저 시간대를 쓴다). */
+  setTimeZone: (timeZone: string) =>
+    expectOk('PUT', '/api/me/settings', none, { time_zone: timeZone }),
   async logout(): Promise<string> {
     return expectOk('POST', '/auth/logout', (v) => str(rec(v, 'logout'), 'redirect_to'));
   },

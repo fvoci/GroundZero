@@ -71,6 +71,8 @@ pub enum TargetKind {
     Item,
     /// 강의 회차(D-32).
     Episode,
+    /// 스터디 단위(D-32 공부).
+    StudyUnit,
 }
 
 impl TargetKind {
@@ -80,6 +82,7 @@ impl TargetKind {
             Self::Document => "document",
             Self::Item => "item",
             Self::Episode => "episode",
+            Self::StudyUnit => "study_unit",
         }
     }
 
@@ -89,6 +92,7 @@ impl TargetKind {
             "document" => Some(Self::Document),
             "item" => Some(Self::Item),
             "episode" => Some(Self::Episode),
+            "study_unit" => Some(Self::StudyUnit),
             _ => None,
         }
     }
