@@ -99,3 +99,28 @@ describe('server failures (D-83)', () => {
     await expect(api.document('x')).rejects.toThrow('title is empty');
   });
 });
+
+describe('error text by code (D-81)', () => {
+  it('translates the reason by error code and keeps English details only in English', async () => {
+    const { ApiError, NetworkError } = await import('$lib/api/client');
+    const { errorText } = await import('$lib/api/errors');
+    const { setLocale } = await import('$lib/paraglide/runtime.js');
+    await setLocale('ko', { reload: false });
+    expect(errorText(new ApiError(403, 'forbidden', 'forbidden'), '저장하지 못했습니다.')).toBe(
+      '저장하지 못했습니다. 권한이 없습니다.',
+    );
+    expect(
+      errorText(new ApiError(400, 'bad_request', 'title is empty'), '저장하지 못했습니다.'),
+    ).not.toContain('title is empty');
+    expect(errorText(new NetworkError('x'), '저장하지 못했습니다.')).toContain('연결');
+    expect(errorText(new Error('boom'), '저장하지 못했습니다.')).toBe('저장하지 못했습니다.');
+    await setLocale('en', { reload: false });
+    expect(errorText(new ApiError(400, 'bad_request', 'title is empty'), "Couldn't save.")).toBe(
+      "Couldn't save. title is empty",
+    );
+    // 5xx는 client.ts가 만든 안전한 문구(요청 ID 포함) 그대로.
+    expect(errorText(new ApiError(500, 'internal', 'safe text r-1', 'r-1'), "Couldn't save.")).toBe(
+      'safe text r-1',
+    );
+  });
+});

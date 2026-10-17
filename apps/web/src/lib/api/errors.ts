@@ -1,0 +1,35 @@
+// API 오류를 화면 문구로(D-81·D-82·D-83). 서버 오류 코드는 언어와 상관없고 번역은 여기서 한다.
+// 화면은 무엇을 하다 실패했는지(`action`, 예: "저장하지 못했습니다.")를 주고, 이 함수가 코드별 이유를 붙인다.
+// 입력·상태 오류(400·409)의 서버 설명은 영어 진단 문구라 영어 화면에서만 그대로 보인다. 서버 쪽 실패(5xx)는
+// client.ts가 이미 안전한 문구와 요청 ID로 바꿨다.
+import { m } from '$lib/paraglide/messages.js';
+import { getLocale } from '$lib/paraglide/runtime.js';
+
+import { ApiError, NetworkError } from './client';
+
+function reason(error: ApiError): string {
+  switch (error.code) {
+    case 'unauthorized':
+      return m.common_error_unauthorized();
+    case 'forbidden':
+    case 'bad_origin':
+      return m.common_error_forbidden();
+    case 'not_found':
+      return m.common_error_not_found();
+    case 'bad_request':
+      return getLocale() === 'en' ? error.message : m.common_error_bad_request();
+    case 'invalid_state':
+      return getLocale() === 'en' ? error.message : m.common_error_invalid_state();
+    default:
+      return '';
+  }
+}
+
+/** 실패한 행동과 이유를 한 문구로. 알 수 없는 오류는 행동만. */
+export function errorText(error: unknown, action: string): string {
+  if (error instanceof NetworkError) return `${action} ${m.common_error_network()}`;
+  if (!(error instanceof ApiError)) return action;
+  if (error.status >= 500) return error.message;
+  const why = reason(error);
+  return why === '' ? action : `${action} ${why}`;
+}
