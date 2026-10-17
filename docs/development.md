@@ -180,6 +180,23 @@ PDF 본문 검색(38절 후속) 후보: `lopdf` 0.45.0(MIT, 기본 기능 끔)�
 
 OR 결합으로 허용 쪽을 선택해 자동 통과한 것(선택 근거 기록): aho-corasick·byteorder·memchr `Unlicense OR MIT` → MIT. tinyvec `Zlib OR Apache-2.0 OR MIT` → MIT. whoami `Apache-2.0 OR BSL-1.0 OR MIT` → MIT.
 
+### O-30 갱신 (2026-10-17, 리비전 `feat/first-flow` 최신)
+
+다시 뽑은 결과(`cargo deny --format json check licenses`, `pnpm licenses list --json --recursive`, 운영 웹 빌드 확인)는 위 표와 **같다**. 크레이트 20개 = Unicode-3.0 19개(icu_collections·icu_locale_core·icu_normalizer·icu_normalizer_data·icu_properties·icu_properties_data·icu_provider·litemap·potential_utf·tinystr·writeable·yoke·yoke-derive·zerofrom·zerofrom-derive·zerotrie·zerovec·zerovec-derive·unicode-ident) + Zlib 1개(foldhash 0.1.5). npm 9개 = tslib 0BSD, lru-cache·minimatch BlueOak-1.0.0, mdn-data CC0-1.0, @csstools 두 개 MIT-0, lightningcss·lightningcss-darwin-arm64 MPL-2.0, argparse Python-2.0. 운영 웹 번들에는 이 9개도 글꼴 파일도 없다(빌드 결과에서 확인). 서버 바이너리에 들어가는 것은 Unicode-3.0 icu 계열(derive·unicode-ident 제외)과 foldhash다.
+
+**지금 트리에 있는 것과 새로 들일 때만 생기는 것의 구분:**
+
+| 항목                     | 지금 20/9개에 포함?                                                           | 라이선스     | 생기는 조건                                                | 배포 범위     |
+| ------------------------ | ----------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------- | ------------- |
+| foldhash 0.1.5           | 포함(크레이트 20개 중 하나)                                                   | Zlib         | 이미 sqlx 경유로 들어와 있음                               | 서버 바이너리 |
+| zlib-rs                  | **포함 안 됨(새로 도입)**                                                     | Zlib         | PDF 본문 검색에 `lopdf`를 쓰면 flate2 기본 기능으로 들어옴 | 서버 바이너리 |
+| KaTeX 글꼴(KaTeX_* 60개) | **포함 안 됨(새로 도입)**. `katex` 패키지가 MIT라 `pnpm licenses`가 잡지 못함 | OFL-1.1      | 수식 글꼴을 번들에 넣을 때                                 | 브라우저 번들 |
+| pako(jszip 경유)         | **포함 안 됨(새로 도입)**                                                     | MIT AND Zlib | 브라우저 DOCX·PPTX 뷰어를 들일 때(아래 Office 대안)        | 브라우저 번들 |
+
+**승인 범위별 예상(미리 단정하지 않기 위해 저장소 밖 임시 설정으로 시험):** Cargo는 허용 목록에 Unicode-3.0·Zlib을 더한 임시 `deny.toml`로 `cargo deny check licenses`가 `licenses ok`였다. npm 9개는 각각 단일 식이라 0BSD·BlueOak-1.0.0·CC0-1.0·MIT-0·MPL-2.0·Python-2.0을 더하면 판정상 통과한다. 다만 허용 목록 승인만으로 끝나지 않는다: (1) 서버 바이너리·이미지에 들어가는 Unicode-3.0·Zlib 크레이트의 고지를 담은 제3자 고지 파일을 제품 이미지에 넣어야 하고(지금 없음), (2) 의존성이 바뀌면 목록이 다시 달라질 수 있으며, (3) 새로 도입하는 위 세 항목은 각각 따로 승인이 필요하다.
+
+**판정 오류 수정**: `xtask/src/licenses.rs`의 SPDX 판정이 바깥 괄호 한 쌍만 벗기고 " OR "로 먼저 나눠, `(MIT OR GPL-3.0-or-later) AND Zlib` 같은 식을 MIT 하나로 통과시켰다(괄호 뒤의 AND 조건 누락). cargo-deny와 같은 해석기인 `spdx` 크레이트(0.13, Apache-2.0, 기본 기능 없음)로 바꿨다. 괄호·우선순위(AND가 OR보다 먼저)·소문자 연산자를 지키고, 예외 조항(WITH)·이후 판(`+`)·읽을 수 없는 식은 허용하지 않고 보고한다. 회귀 테스트 `compound_expressions_keep_grouping_and_precedence`. 지금 트리의 결과(npm 9개)는 바뀌지 않았다.
+
 ### 보안 권고 예외 (cargo-deny advisories)
 
 | 권고                            | 크레이트@버전 | 유입 경로                 | 판단                                                                                                                                                                                            |
@@ -729,6 +746,40 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 | 원격 CI·CI의 OIDC 테스트                 | NOT RUN           | 원격 push 승인 전                                                                                                                                                                                                                                                                                                                            |
 
 테스트 사용자 비밀번호는 이 설치에만 쓰는 임의 값으로 만들고 설치와 함께 지웠다. 확인 뒤 이 프로젝트 이름(`fvoci-rc2`, `fvoci-rc3`)의 컨테이너·볼륨만 내렸다. `ae4c3a4` 뒤의 `dcc355e`는 감사 기록 화면의 동작 이름(새 감사 동작 12개)만 더한 웹 변경이고, 그 커밋에서 형식·린트·타입·웹 테스트를 다시 통과했다. 백업·복구 확인은 `dcc355e`로 다시 만든 이미지에서 했다.
+
+## 54. 휴지통 만료의 참조 버전 보호(O-34), 라이선스 검사 분리, 실시간·Office 조사 (2026-10-17)
+
+- **휴지통 만료(D-56 일관성 수정, 사용자 지시)**: 작업 프로세스가 만료된 휴지통 묶음을 자동 영구 삭제할 때, 그 묶음과 함께 사라지지 않는 기록(D-35 연결)이나 같은 곳의 문서 리비전(52절 범위)이 참조하는 파일 버전이 있으면 지우지 않고 "만료" 상태로 둔다(마이그레이션 0046). 묶음이 지우는 파일은 파일 묶음, 지워지는 문서의 첨부, 지워지는 항목의 첨부이고, 참조가 같은 묶음 안에서 함께 사라지면(예: 기록과 파일이 같은 항목에 있고 항목째 만료) 그대로 지운다. 참조가 풀리면 다음 실행에서 지운다. 휴지통 화면은 이런 묶음에 "기록이나 문서가 이 파일의 버전을 가리키고 있어 자동으로 지우지 않습니다"를 보인다(`kept_for_references`). 관리자의 직접 영구 삭제는 기존 승인 정책 그대로 두었다(이번 수정에 넣지 않음). 지운 수는 실제로 지운 묶음만 센다.
+- **동시성**: 문서 저장이 리비전의 참조를 적을 때 그 버전 행을 공유 잠금(FOR KEY SHARE)하고, 자동 정리는 지울 버전 행을 먼저 배타 잠금(FOR UPDATE)한 뒤 참조를 다시 본다. 저장이 먼저 잡으면 정리는 저장이 끝나기를 기다렸다가 새 참조를 보고 건너뛴다. 정리가 먼저 지웠으면 저장은 기다렸다가 오류 없이 끝난다(지워진 뒤에 적힌 주소일 뿐, 지울 때는 참조가 없었다). 기록 연결은 원래 휴지통의 파일을 받지 않고 파일·버전 행을 공유 잠금한다.
+- **이전 버전 정리의 경합(테스트 중 발견)**: 정리 후보를 고른 뒤 지우기 전에 새 참조가 생기면 지우기 트리거가 오류를 내 그 실행의 정리 작업 전체가 멈췄다(데이터 손실은 없음). 후보 행을 잠근 뒤 참조를 다시 보고 건너뛰게 했다. 트리거 확인은 마지막 방어선으로 남는다.
+- **검증**: 통합 테스트 2건. (1) 기록이 연결한 파일·다른 위키 문서가 그림으로 가리키는 파일은 만료 뒤에도 남고 참조 없는 파일은 지워짐, 휴지통 목록의 `expired`·`kept_for_references`, 기록 연결을 풀면 다음 실행에서 지워짐, 같은 항목 안의 기록만 참조하던 파일은 항목째 만료되면 지워짐. (2) 경합: 리비전을 넣는 트랜잭션을 열어 둔 채 정리를 돌리면 정리가 기다리고(0.8초 뒤에도 끝나지 않음), 저장을 확정하면 파일이 남음. 정리 트랜잭션을 열어 둔 채 저장하면 저장이 기다렸다가 200으로 끝나고 파일은 지워져 있으며 정리 수는 참조 없는 묶음 1개. 전체 `cargo xtask test` 172건 통과.
+- **라이선스 검사 분리(사용자 지시)**: `cargo xtask check`의 라이선스 단계를 `licenses (cargo deny, pnpm)` 한 단계로 모으고 `cargo deny`는 advisories·bans·sources만 본다. `cargo xtask check --skip-licenses`는 라이선스만 빼고, CI는 `check` job에서 이것을, 따로 `licenses` job에서 `cargo xtask licenses`를 돌린다. 허용 목록 밖이면 `licenses` job이 실패로 그대로 보이고, 다른 job은 그 결과를 기다리지 않는다. 로컬 `cargo xtask check`는 여전히 전부 돈다. SPDX 판정 오류 수정과 O-30 갱신은 9절.
+
+### 실시간 공동 편집: smallstr 권고 조사 (결정 전 사실 정리)
+
+| 항목              | 내용                                                                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 권고              | RUSTSEC-2026-0215 (2026-07-22), `informational = "unmaintained"`. 취약점 권고가 아니라 유지 중단 알림. 모든 판 해당, 수정 판 없음(`patched = []`). 권고는 compact_str·smol_str를 대안으로 든다          |
+| 도입 경로         | fvoci-server → yrs 0.28.0(MIT, Yjs 호환 CRDT) → smallstr 0.3.1(마지막 갱신 2025-08-13). yrs 0.24~0.28 전부 `smallstr ^0.3`을 필수(선택 기능 아님) 의존성으로 둔다                                       |
+| 사용 기능         | yrs `block.rs`의 글 조각 저장(`SplittableString`, `PrelimString`)에 `SmallString<[u8; 8]>`(8바이트까지 힙 없이 저장)로 쓴다. 공동 편집 본문(Text·XmlFragment) 저장의 핵심 경로라 기능 끄기로 뺄 수 없다 |
+| 상위 갱신 가능성  | yrs 최신 0.28.0(2026-09-17)도 smallstr를 쓴다. y-crdt 저장소에 smallstr 교체 이슈·PR이 없다(2026-10-17 검색). 가까운 시일의 상위 수정은 기대하기 어렵다                                                 |
+| `cargo deny` 영향 | advisories 검사가 unmaintained를 실패로 본다. 지금 트리에는 yrs가 없어 PASS(실시간은 41차에 보류)                                                                                                       |
+
+최소 변경안(권장 순): (1) `deny.toml`에 이 ID 하나만 이유·제거 조건(yrs가 smallstr를 떼면 지움)과 함께 무시 — 코드 변경은 yrs 도입뿐이고 운영 구성은 그대로. 취약점이 아닌 유지 중단 알림이라 rsa 예외(9절)와 같은 형식. 검사 예외라 승인 필요. (2) y-crdt에 smallstr → smallvec 기반(이미 의존 중) 교체 PR을 올리고 받아들여지면 판 올림 — 시점을 알 수 없다. (3) 고친 yrs를 `[patch]`로 자체 유지 — 유지 부담. (4) 별도 Node 서비스(Yjs 서버) — 새 서비스·운영 부담, 서버의 본문 검증·권한·리비전과 이어 붙이는 일이 생긴다. 사용자 결정 전까지 실시간 ON은 보류(지금은 실시간 OFF 저장·충돌 처리만, D-53).
+
+### Office·HWP 미리보기: 남은 Office 엔진 대안 (rhwp 사용 결정 유지)
+
+HWP·HWPX는 rhwp(`@rhwp/core` 0.8.7, MIT, npm 의존성 없음, WASM 약 11.8 MB)로 한다. 패키지는 확인했다(`LICENSE`·JS·WASM·타입만). WASM 안에 컴파일된 Rust 크레이트의 라이선스(D-60)는 도입 때 rhwp 저장소의 잠금 파일로 확인한다. Office(DOCX·XLSX·PPTX) 대안과 부담:
+
+| 방식                      | 후보(판, 라이선스)                                                                                                                      | 새로 생기는 라이선스·배포 부담                                                                                 | 재현 수준·자원                                                 |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 브라우저 경량 뷰어 — DOCX | docx-preview 0.4.1 (Apache-2.0) → jszip 3.10.2 `(MIT OR GPL-3.0-or-later)`(MIT 선택) → pako `(MIT AND Zlib)`                            | Zlib(pako)이 브라우저 번들에 들어감 → O-30의 Zlib 승인에 묶임                                                  | 문단·표·그림 양호, 페이지 나눔·수식 근사. 브라우저 메모리만 씀 |
+| 브라우저 경량 뷰어 — XLSX | read-excel-file 9.3.12 (MIT, fflate·saxen·unzipper-esm 모두 MIT)                                                                        | 없음(허용 목록 안)                                                                                             | 셀 값 표만. 서식·차트·수식 결과 표시는 제한                    |
+| 브라우저 경량 뷰어 — PPTX | pptx-preview 1.0.7 (ISC, echarts Apache-2.0·lodash MIT·tslib 0BSD), @aiden0z/pptx-renderer 1.3.0 (Apache-2.0, mtx-decompressor MPL-2.0) | 0BSD(tslib) 또는 MPL-2.0이 번들에 들어감, 둘 다 jszip → pako(Zlib)                                             | 도형·글자 근사, 재현 편차 큼                                   |
+| 서버 측 변환              | Gotenberg(MIT) + LibreOffice 헤드리스(MPL-2.0 등) → PDF                                                                                 | 새 서비스 컨테이너(수백 MB 이미지), 신뢰할 수 없는 문서를 다루는 격리, CPU·메모리. **새 서비스라 사용자 결정** | 재현 높음(PDF), 변환 지연                                      |
+| 제외                      | OnlyOffice Docs(AGPL-3.0, D-60 밖), Collabora Online(새 서비스·무거움)                                                                  | —                                                                                                              | —                                                              |
+
+권장: XLSX는 허용 목록 안인 read-excel-file로 먼저, DOCX·PPTX는 O-30의 Zlib 승인 여부를 보고 브라우저 뷰어(DOCX는 docx-preview) 또는 변환 서비스 중 고른다. 어느 쪽이든 미리보기는 지금처럼 같은 원점의 읽기 전용 화면에서 하고 문서의 스크립트·바깥 주소는 막는다.
 
 ## 참고 자료
 
