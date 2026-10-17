@@ -11,6 +11,7 @@
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
 
+  import { recordDateLabel, recordFieldLabel, recordKindLabel, recordRoleLabel } from './labels';
   import RecordEditor from './RecordEditor.svelte';
   import type { RecordForm } from './records';
   import { emptyForm, formOf, summary, toInput } from './records';
@@ -108,12 +109,12 @@
     try {
       if (creating) {
         await api.createRecord(item.id, requestId, def.kind, built.input);
-        status = m.records_added({ label: def.label });
+        status = m.records_added({ label: recordKindLabel(def) });
       } else if (editingId !== undefined) {
         const r = records.find((x) => x.id === editingId);
         if (r === undefined) return;
         await api.updateRecord(r.id, r.version, built.input);
-        status = m.records_updated({ label: def.label });
+        status = m.records_updated({ label: recordKindLabel(def) });
       }
       creating = false;
       editingId = undefined;
@@ -137,8 +138,10 @@
     }
   }
 
-  const roleLabel = (def: RecordKindView, role: string): string =>
-    def.file_roles.find((r) => r.value === role)?.label ?? role;
+  const roleLabel = (def: RecordKindView, role: string): string => {
+    const r = def.file_roles.find((x) => x.value === role);
+    return r === undefined ? role : recordRoleLabel(def, r);
+  };
 </script>
 
 {#if defs.length > 0}
@@ -154,7 +157,7 @@
             selected = d.kind;
             creating = false;
             editingId = undefined;
-          }}>{d.label} {count(d.kind)}</Button
+          }}>{recordKindLabel(d)} {count(d.kind)}</Button
         >
       {/each}
     </div>
@@ -162,6 +165,8 @@
     <p aria-live="polite" class="text-sm">{status}</p>
     {#if current !== undefined}
       {@const def = current}
+      {@const kindLabel = recordKindLabel(def)}
+      {@const dateLabel = recordDateLabel(def)}
       {#if def.kind === 'reference' && canWrite}
         <ZoteroImport
           itemId={item.id}
@@ -177,7 +182,7 @@
           {people}
           {courses}
           {files}
-          submitLabel={m.records_add_kind({ label: def.label })}
+          submitLabel={m.records_add_kind({ label: kindLabel })}
           onsubmit={() => void save(def)}
           oncancel={() => {
             creating = false;
@@ -187,12 +192,12 @@
       {:else if canWrite}
         <div>
           <Button size="sm" variant="outline" onclick={startNew}
-            >{m.records_new_kind({ label: def.label })}</Button
+            >{m.records_new_kind({ label: kindLabel })}</Button
           >
         </div>
       {/if}
       {#if shown.length === 0}
-        <p class="text-sm text-muted-foreground">{m.records_empty_kind({ label: def.label })}</p>
+        <p class="text-sm text-muted-foreground">{m.records_empty_kind({ label: kindLabel })}</p>
       {:else if shown.length > 1}
         <div>
           <Button
@@ -210,8 +215,10 @@
             <thead class="text-left text-muted-foreground">
               <tr>
                 <th class="py-1 pr-2 font-medium">{m.records_title()}</th>
-                {#if def.date_label !== null}<th class="pr-2 font-medium">{def.date_label}</th>{/if}
-                {#each def.fields as f (f.key)}<th class="pr-2 font-medium">{f.label}</th>{/each}
+                {#if dateLabel !== null}<th class="pr-2 font-medium">{dateLabel}</th>{/if}
+                {#each def.fields as f (f.key)}<th class="pr-2 font-medium"
+                    >{recordFieldLabel(def, f)}</th
+                  >{/each}
               </tr>
             </thead>
             <tbody>
@@ -219,11 +226,11 @@
                 {@const lines = summary(def, r, names, courseNames)}
                 <tr class="border-t align-top">
                   <td class="py-1 pr-2 font-medium">{r.title}</td>
-                  {#if def.date_label !== null}<td class="pr-2"
+                  {#if dateLabel !== null}<td class="pr-2"
                       >{r.occurred_on === null ? '' : formatDay(r.occurred_on)}</td
                     >{/if}
                   {#each def.fields as f (f.key)}
-                    {@const text = lines.find((l) => l.label === f.label)?.text ?? ''}
+                    {@const text = lines.find((l) => l.key === f.key)?.text ?? ''}
                     <td class="max-w-64 pr-2 whitespace-pre-wrap"
                       >{text.length > 120 ? `${text.slice(0, 120)}…` : text}</td
                     >
@@ -257,10 +264,10 @@
             {:else}
               <div class="flex flex-wrap items-baseline gap-2">
                 <span class="font-medium">{r.title}</span>
-                {#if r.occurred_on !== null && def.date_label !== null}
+                {#if r.occurred_on !== null && dateLabel !== null}
                   <span class="text-muted-foreground"
                     >{m.records_dated({
-                      label: def.date_label,
+                      label: dateLabel,
                       date: formatDay(r.occurred_on),
                     })}</span
                   >
@@ -270,7 +277,7 @@
                 >
               </div>
               <dl class="grid grid-cols-[max-content_1fr] gap-x-3">
-                {#each summary(def, r, names, courseNames) as line (line.label)}
+                {#each summary(def, r, names, courseNames) as line (line.key)}
                   <dt class="text-muted-foreground">{line.label}</dt>
                   <dd class="whitespace-pre-wrap">
                     {#if line.href !== undefined}

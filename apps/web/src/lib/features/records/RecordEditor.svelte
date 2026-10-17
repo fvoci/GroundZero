@@ -7,6 +7,7 @@
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
 
+  import { recordChoiceLabel, recordDateLabel, recordFieldLabel, recordRoleLabel } from './labels';
   import type { RecordForm } from './records';
   import { emptyForm } from './records';
 
@@ -63,14 +64,14 @@
   </div>
   {#if def.date_label !== null}
     <div class="flex flex-col gap-1">
-      <Label for={id('date')}>{def.date_label}</Label>
+      <Label for={id('date')}>{recordDateLabel(def)}</Label>
       <Input id={id('date')} type="date" bind:value={form.occurred_on} />
     </div>
   {/if}
   {#each def.fields as f (f.key)}
     {#if f.type === 'long_text'}
       <div class="flex flex-col gap-1 sm:col-span-2">
-        <Label for={id(f.key)}>{f.label}</Label>
+        <Label for={id(f.key)}>{recordFieldLabel(def, f)}</Label>
         <textarea
           id={id(f.key)}
           class={box}
@@ -81,10 +82,10 @@
     {:else if f.type === 'choice' || f.type === 'person' || f.type === 'course'}
       {@const options =
         f.type === 'choice'
-          ? f.choices.map((c) => ({ value: c.value, label: c.label }))
+          ? f.choices.map((c) => ({ value: c.value, label: recordChoiceLabel(def, f, c) }))
           : (f.type === 'person' ? people : courses).map((p) => ({ value: p.id, label: p.name }))}
       <div class="flex flex-col gap-1">
-        <Label for={id(f.key)}>{f.label}</Label>
+        <Label for={id(f.key)}>{recordFieldLabel(def, f)}</Label>
         <select id={id(f.key)} class={['h-9', box]} bind:value={form.values[f.key]}>
           <option value="">{m.records_not_selected()}</option>
           {#each options as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
@@ -92,7 +93,7 @@
       </div>
     {:else if f.type === 'people'}
       <fieldset class="flex flex-col gap-1 rounded-md border p-2 sm:col-span-2">
-        <legend class="px-1 text-sm font-medium">{f.label}</legend>
+        <legend class="px-1 text-sm font-medium">{recordFieldLabel(def, f)}</legend>
         <div class="flex flex-wrap gap-3">
           {#each people as p (p.id)}
             <div class="flex items-center gap-1">
@@ -111,7 +112,9 @@
     {:else}
       <div class="flex flex-col gap-1">
         <Label for={id(f.key)}
-          >{f.type === 'tags' ? m.records_tags_label({ label: f.label }) : f.label}</Label
+          >{f.type === 'tags'
+            ? m.records_tags_label({ label: recordFieldLabel(def, f) })
+            : recordFieldLabel(def, f)}</Label
         >
         <Input
           id={id(f.key)}
@@ -174,7 +177,9 @@
           <div class="flex flex-col gap-1">
             <Label for={id(`role-${String(index)}`)}>{m.records_role()}</Label>
             <select id={id(`role-${String(index)}`)} class={['h-9', box]} bind:value={link.role}>
-              {#each def.file_roles as r (r.value)}<option value={r.value}>{r.label}</option>{/each}
+              {#each def.file_roles as r (r.value)}<option value={r.value}
+                  >{recordRoleLabel(def, r)}</option
+                >{/each}
             </select>
           </div>
           <Button
