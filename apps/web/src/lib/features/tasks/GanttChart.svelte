@@ -3,6 +3,7 @@
   // 말한다(화면 낭독기·키보드). 날짜를 바꾸는 일은 상세에서 하며, 후속 업무 영향은 저장 전에 묻는다.
   import type { TaskView } from '$lib/api/client';
   import { dayIn, localTimeZone } from '$lib/features/events/time';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
   import { dayNumber, fromDayNumber, ganttLayout } from './gantt';
@@ -46,9 +47,9 @@
       .filter((r) => r !== '');
     return [
       `${t.reference ?? ''} ${t.title}`.trim(),
-      t.milestone ? `마일스톤 ${when}` : when,
+      t.milestone ? m.tasks_gantt_milestone({ date: when }) : when,
       STATUS_LABEL[t.status],
-      preds.length > 0 ? `선행 ${preds.join(', ')}` : '',
+      preds.length > 0 ? m.tasks_gantt_predecessors({ refs: preds.join(', ') }) : '',
     ]
       .filter((s) => s !== '')
       .join(', ');
@@ -56,30 +57,28 @@
 </script>
 
 {#if layout.rows.length === 0}
-  <p class="text-sm text-muted-foreground">
-    날짜가 있는 업무가 없습니다. 업무 상세에서 시작일·마감일을 넣으면 여기에 막대로 보입니다.
-  </p>
+  <p class="text-sm text-muted-foreground">{m.tasks_gantt_empty()}</p>
 {:else}
-  <div class="flex flex-wrap gap-1" role="group" aria-label="간트 기간 이동">
+  <div class="flex flex-wrap gap-1" role="group" aria-label={m.tasks_gantt_nav()}>
     <Button
       size="sm"
       variant="outline"
       onclick={() => {
         scrollBy(-14);
-      }}>← 2주 앞</Button
+      }}>{m.tasks_gantt_back()}</Button
     >
     <Button
       size="sm"
       variant="outline"
       onclick={scrollToToday}
-      disabled={todayColumn < 0 || todayColumn >= layout.days}>오늘</Button
+      disabled={todayColumn < 0 || todayColumn >= layout.days}>{m.tasks_today()}</Button
     >
     <Button
       size="sm"
       variant="outline"
       onclick={() => {
         scrollBy(14);
-      }}>2주 뒤 →</Button
+      }}>{m.tasks_gantt_forward()}</Button
     >
   </div>
   <div class="overflow-x-auto rounded-md border" data-testid="task-gantt" bind:this={scroller}>
@@ -87,7 +86,7 @@
       class="grid min-w-max text-xs"
       style:grid-template-columns={`14rem repeat(${String(layout.days)}, 1.75rem)`}
     >
-      <div class="sticky left-0 z-10 border-b bg-background p-1 font-medium">업무</div>
+      <div class="sticky left-0 z-10 border-b bg-background p-1 font-medium">{m.tasks_task()}</div>
       {#each columns as day, i (day)}
         <div
           aria-hidden="true"
@@ -152,11 +151,11 @@
 {/if}
 {#if layout.later.length > 0}
   <p class="text-sm text-muted-foreground">
-    {layout.days}일 뒤에 시작하는 업무 {layout.later.length}개는 목록 보기에서 볼 수 있습니다.
+    {m.tasks_gantt_later({ days: layout.days, count: layout.later.length })}
   </p>
 {/if}
 {#if layout.undated.length > 0}
   <p class="text-sm text-muted-foreground">
-    날짜 없는 업무 {layout.undated.length}개는 목록 보기에서 볼 수 있습니다.
+    {m.tasks_gantt_undated({ count: layout.undated.length })}
   </p>
 {/if}
