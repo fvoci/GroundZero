@@ -286,10 +286,15 @@ async fn file_text(storage: &Storage, row: &PayloadRow) -> Option<String> {
     }
     let content_type = content_type.to_owned();
     let name = name.to_owned();
-    tokio::task::spawn_blocking(move || file_text::extract(&bytes, &content_type, &name))
-        .await
-        .ok()
-        .flatten()
+    // 형식 해석기가 멈추거나 패닉해도 색인 작업은 다음으로 넘어간다(이름으로만 찾음).
+    let job = tokio::task::spawn_blocking(move || file_text::extract(&bytes, &content_type, &name));
+    match tokio::time::timeout(file_text::EXTRACT_TIMEOUT, job).await {
+        Ok(Ok(text)) => text,
+        Ok(Err(_)) | Err(_) => {
+            tracing::warn!(file = key, "attachment text extraction failed or timed out");
+            None
+        }
+    }
 }
 
 /// 색인 준비: 색인이 없으면 만들고 모든 것을 대기열에 올린다.

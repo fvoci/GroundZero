@@ -10,6 +10,8 @@ use crate::features::search_text::MAX_INDEX_CHARS;
 
 /// 이보다 큰 파일은 글자를 뽑지 않는다(색인은 이름으로만).
 pub const MAX_EXTRACT_BYTES: u64 = 20 * 1024 * 1024;
+/// 한 파일의 글자 뽑기 시간 한도. 넘으면 이름으로만 색인한다.
+pub const EXTRACT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 /// ZIP 안 한 항목에서 읽는 최대 크기(압축 폭탄 방지).
 const MAX_ENTRY_BYTES: u64 = 32 * 1024 * 1024;
 
