@@ -85,12 +85,12 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
     let series = r.json["series"]["id"].as_str().unwrap().to_owned();
     fixture_sql("DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date", &series).await;
 
-    let report = worker::run_all_now(&state.db, None).await.unwrap();
+    let report = worker::run_all_now(&state.db, None, None).await.unwrap();
     assert_eq!(report.purged, 1);
     assert_eq!(report.occurrences, 1);
     // 다시 돌려도 더 할 일이 없다.
     assert_eq!(
-        worker::run_all_now(&state.db, None).await.unwrap(),
+        worker::run_all_now(&state.db, None, None).await.unwrap(),
         worker::TickReport::default()
     );
 
@@ -131,12 +131,12 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
 
     // 주기 작업은 간격 안에서 한 번만 돈다(여러 프로세스가 떠 있어도).
     let (a, b) = tokio::join!(
-        worker::run_once(&state.db, None),
-        worker::run_once(&state.db, None)
+        worker::run_once(&state.db, None, None),
+        worker::run_once(&state.db, None, None)
     );
     let _ = (a, b);
     assert_eq!(
-        worker::run_once(&state.db, None).await,
+        worker::run_once(&state.db, None, None).await,
         worker::TickReport::default()
     );
 }

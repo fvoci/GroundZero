@@ -13,6 +13,7 @@ use tokio::sync::watch;
 use crate::db::Db;
 use crate::error::AppError;
 use crate::search::{SearchClient, drain, prepare};
+use crate::storage::Storage;
 
 /// 한 번 돈 결과(로그·테스트용).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +24,8 @@ pub struct TickReport {
     pub occurrences: i32,
     /// 색인에 반영한 수(검색).
     pub indexed: i32,
+    /// 저장소에서 지운 수(영구 삭제한 파일 내용, 그만두거나 기한이 지난 업로드).
+    pub cleaned: i32,
 }
 
 /// 주기 작업 이름과 간격.
@@ -48,9 +51,18 @@ async fn system_call(db: &Db, sql: &str) -> Result<i32, AppError> {
 }
 
 /// 주기 작업을 간격과 상관없이 바로 한 번씩 돌린다(테스트·운영 점검용).
-pub async fn run_all_now(db: &Db, search: Option<&SearchClient>) -> Result<TickReport, AppError> {
+pub async fn run_all_now(
+    db: &Db,
+    search: Option<&SearchClient>,
+    storage: Option<&Storage>,
+) -> Result<TickReport, AppError> {
+    let purged = system_call(db, "SELECT app_system_purge_expired()").await?;
     Ok(TickReport {
-        purged: system_call(db, "SELECT app_system_purge_expired()").await?,
+        purged,
+        cleaned: match storage {
+            Some(storage) => clean_storage(db, storage).await?,
+            None => 0,
+        },
         occurrences: system_call(db, "SELECT app_system_recurrence_tick()").await?,
         indexed: match search {
             Some(client) => {
@@ -75,6 +87,40 @@ async fn drain_all(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
     Ok(total)
 }
 
+/// 기한이 지난 업로드를 닫고, 저장소에서 지울 것(영구 삭제한 버전·그만둔 업로드)을 지운다. 실패한 것은
+/// 다시 넣어 다음 주기에 한다(10번까지).
+async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
+    system_call(db, "SELECT app_system_expire_uploads()").await?;
+    let mut tx = db.begin_anonymous().await?;
+    let rows: Vec<(String, String, i32)> = sqlx::query_as(
+        "SELECT storage_key, storage_upload_id, attempts FROM app_system_storage_claim(200)",
+    )
+    .fetch_all(tx.conn())
+    .await?;
+    let mut done = 0;
+    for (key, upload, attempts) in rows {
+        let result = if upload.is_empty() {
+            storage.delete(&key).await
+        } else {
+            storage.abort(&key, &upload).await
+        };
+        match result {
+            Ok(()) => done += 1,
+            Err(err) => {
+                tracing::warn!(key, error = %err, "storage cleanup failed; will retry");
+                sqlx::query("SELECT app_system_storage_retry($1, $2, $3)")
+                    .bind(&key)
+                    .bind(&upload)
+                    .bind(attempts)
+                    .execute(tx.conn())
+                    .await?;
+            }
+        }
+    }
+    tx.commit().await?;
+    Ok(done)
+}
+
 /// 일 하나의 실패를 기록하고 0으로 본다. 한 일이 실패해도(예: 검색 서비스 중단) 다른 일은 계속한다.
 fn logged(job: &str, result: Result<i32, AppError>) -> i32 {
     result.unwrap_or_else(|err| {
@@ -97,8 +143,16 @@ async fn when_due(db: &Db, schedule: (&str, &str), sql: &str) -> Result<i32, App
 }
 
 /// 때가 된 주기 작업을 한 번 처리한다. 일마다 따로 실패를 기록하고 계속한다.
-pub async fn run_once(db: &Db, search: Option<&SearchClient>) -> TickReport {
+pub async fn run_once(
+    db: &Db,
+    search: Option<&SearchClient>,
+    storage: Option<&Storage>,
+) -> TickReport {
     TickReport {
+        cleaned: match storage {
+            Some(storage) => logged("storage", clean_storage(db, storage).await),
+            None => 0,
+        },
         indexed: match search {
             Some(client) => logged("search", index(db, client).await),
             None => 0,
@@ -118,12 +172,13 @@ pub async fn run_once(db: &Db, search: Option<&SearchClient>) -> TickReport {
 pub fn spawn(
     db: Db,
     search: Option<SearchClient>,
+    storage: Storage,
     interval: Duration,
     mut shutdown: watch::Receiver<bool>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
-            let report = run_once(&db, search.as_ref()).await;
+            let report = run_once(&db, search.as_ref(), Some(&storage)).await;
             if report != TickReport::default() {
                 tracing::info!(
                     purged = report.purged,

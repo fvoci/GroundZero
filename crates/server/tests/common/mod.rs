@@ -228,3 +228,33 @@ pub async fn fixture_sql(sql: &str, id: &str) {
     let mut conn = sqlx::PgConnection::connect(&url).await.unwrap();
     sqlx::query(sql).bind(id).execute(&mut conn).await.unwrap();
 }
+
+/// 날것 본문과 머리글로 보내고 상태·머리글·본문 바이트를 돌려준다(파일 조각·내려받기).
+pub async fn send_raw(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    user: Option<&TestUser>,
+    headers: &[(&str, &str)],
+    body: Vec<u8>,
+) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+    let mut req = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::ORIGIN, PUBLIC_URL);
+    if let Some(u) = user {
+        req = req.header(header::COOKIE, &u.cookie);
+    }
+    for (name, value) in headers {
+        req = req.header(*name, *value);
+    }
+    let res = app
+        .clone()
+        .oneshot(req.body(Body::from(body)).unwrap())
+        .await
+        .unwrap();
+    let status = res.status();
+    let headers = res.headers().clone();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes().to_vec();
+    (status, headers, bytes)
+}

@@ -5,6 +5,7 @@
 
   import type { DocumentView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
+  import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { referenceHref } from '$lib/features/references/context';
@@ -120,6 +121,10 @@
       }}
     />
   {/key}
+  <AttachmentsPanel
+    target={{ kind: 'document', id: doc.id }}
+    canWrite={doc.access === 'owner' || doc.access === 'write'}
+  />
   {#key `${doc.id}:${String(epoch)}`}
     <Backlinks kind="document" id={doc.id} {workspaces} />
   {/key}

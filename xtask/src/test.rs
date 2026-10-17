@@ -58,6 +58,7 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
         let meili = compose.host_port(&sh, "meilisearch", 7700)?;
         println!("==> meilisearch on 127.0.0.1:{meili}");
         let _search = sh.push_env("FVOCI_TEST_SEARCH_URL", format!("http://127.0.0.1:{meili}"));
+        let _files = sh.push_env("FVOCI_STORAGE_DIR", root.join("target/test-files"));
         let _search_key = sh.push_env("FVOCI_TEST_SEARCH_KEY", compose::SEARCH_TEST_KEY);
         let s3 = compose.host_port(&sh, "seaweedfs", 8333)?;
         println!("==> seaweedfs s3 on 127.0.0.1:{s3}");
@@ -118,6 +119,7 @@ fn run_external(root: &Path, oidc: bool) -> Result<()> {
     let _env = sh.push_env("DATABASE_URL", &urls.app);
     let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
     let _search_key = sh.push_env("FVOCI_TEST_SEARCH_KEY", compose::SEARCH_TEST_KEY);
+    let _files = sh.push_env("FVOCI_STORAGE_DIR", root.join("target/test-files"));
     let s3 = std::env::var("FVOCI_TEST_S3_ENDPOINT").is_ok_and(|v| !v.trim().is_empty());
     let _s3_env = push_s3_credentials(&sh);
     run_tests(&sh, oidc, s3)

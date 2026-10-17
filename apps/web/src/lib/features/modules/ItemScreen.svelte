@@ -6,6 +6,7 @@
 
   import type { ItemView, SummaryView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
+  import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
   import { forgetReferences } from '$lib/features/references/resolver';
@@ -205,6 +206,8 @@
     {#if formError !== undefined}
       <p class="text-sm text-destructive" role="alert">{formError}</p>
     {/if}
+
+    <AttachmentsPanel target={{ kind: 'item', id: current.id }} canWrite={canEdit} />
 
     <section class="flex flex-col gap-3" aria-labelledby="item-docs-heading">
       <h2 id="item-docs-heading" class="text-lg font-semibold">문서</h2>

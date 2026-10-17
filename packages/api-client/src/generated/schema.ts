@@ -115,6 +115,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 문서에 붙은 파일(문서를 볼 수 있는 사람). */
+        get: operations["document_files"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}/move": {
         parameters: {
             query?: never;
@@ -326,6 +343,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 파일과 모든 버전. */
+        get: operations["get_file"];
+        /** 이름 바꾸기(쓸 수 있는 사람). */
+        put: operations["rename_file"];
+        post?: never;
+        /** 휴지통으로(쓸 수 있는 사람). 모든 버전이 함께 가고 함께 돌아온다. */
+        delete: operations["trash_file"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/{file_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내려받기(볼 수 있는 사람). 최신 또는 `version`. `inline=true`는 이미지·PDF·텍스트만 브라우저 안에서 연다. */
+        get: operations["file_content"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/groups/{group_id}": {
         parameters: {
             query?: never;
@@ -529,6 +582,23 @@ export interface paths {
         put?: never;
         /** 일정 만들기(항목 쓰기 권한). 같은 `request_id`로 재시도하면 같은 일정을 돌려준다. */
         post: operations["create_event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 항목에 붙은 파일(항목을 볼 수 있는 사람). */
+        get: operations["item_files"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1212,6 +1282,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 업로드 시작(같은 요청 id면 같은 업로드). 쓸 수 있는 문서·항목·파일에만. 크기·저장량 한도를 넘으면 400·409. */
+        post: operations["create_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/uploads/{upload_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 업로드 상태(올린 사람만). 이어 올릴 때 받은 조각을 본다. */
+        get: operations["get_upload"];
+        put?: never;
+        post?: never;
+        /** 업로드 그만두기(올린 사람). 받은 조각은 백그라운드 작업이 지운다. */
+        delete: operations["abort_upload"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/uploads/{upload_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 마치기(같은 요청을 다시 보내도 한 번만). 모든 조각이 있어야 한다. 서버가 내용 전체를 다시 읽어 크기를
+         *     확인하고 SHA-256을 기록한다. 맞지 않으면 업로드를 닫고 409.
+         */
+        post: operations["complete_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/uploads/{upload_id}/parts/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 조각 하나 보내기(1부터). 본문은 날것 그대로, `x-content-sha256`에 본문의 SHA-256. 크기는 조각 크기(마지막만
+         *     나머지)와 같아야 한다. 같은 번호를 다시 보내면 바꾼다.
+         */
+        put: operations["put_upload_part"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces": {
         parameters: {
             query?: never;
@@ -1718,6 +1863,23 @@ export interface components {
             request_id: string;
             title: string;
         };
+        /** @description 업로드 시작. `file_id`가 있으면 그 파일의 새 버전, 없으면 `target`에 새 파일. */
+        CreateUpload: {
+            content_type?: string;
+            file_id?: null | components["schemas"]["FileId"];
+            /** @description 파일 이름(새 버전이면 비워도 된다). */
+            name?: string;
+            /** @description 버전 설명. */
+            note?: string;
+            /** Format: uuid */
+            request_id: string;
+            /**
+             * Format: int64
+             * @description 전체 크기(바이트).
+             */
+            size: number;
+            target?: null | components["schemas"]["UploadTarget"];
+        };
         /** @description 워크스페이스 생성 요청. */
         CreateWorkspace: {
             name: string;
@@ -1897,6 +2059,37 @@ export interface components {
         ExcludeOccurrence: {
             /** @description 일정 시간대 기준의 회차 날짜. */
             date: string;
+        };
+        /** @description 파일과 모든 버전(최신 먼저). */
+        FileDetail: {
+            file: components["schemas"]["FileView"];
+            versions: components["schemas"]["VersionView"][];
+        };
+        /**
+         * Format: uuid
+         * @description 첨부 파일 내부 ID (D-06). 새 버전을 올려도 유지된다(D-35).
+         */
+        FileId: string;
+        /** @description 지운 파일의 휴지통 묶음. */
+        FileTrashed: {
+            /** Format: uuid */
+            batch_id: string;
+        };
+        /** @description 첨부 파일. */
+        FileView: {
+            /** @description 새 버전·이름 바꾸기·지우기를 할 수 있는지. */
+            can_write: boolean;
+            content_type: string;
+            /** Format: int32 */
+            current_version: number;
+            document_id?: null | components["schemas"]["DocumentId"];
+            id: components["schemas"]["FileId"];
+            item_id?: null | components["schemas"]["ItemId"];
+            name: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: date-time */
+            updated_at: string;
         };
         /**
          * @description 반복 주기.
@@ -2243,6 +2436,10 @@ export interface components {
          * @enum {string}
          */
         ReferenceKind: "item" | "document" | "task" | "user";
+        /** @description 이름 바꾸기. */
+        RenameFile: {
+            name: string;
+        };
         /** @description 해석 요청. */
         ResolveReferences: {
             refs: components["schemas"]["ReferenceInput"][];
@@ -2663,7 +2860,7 @@ export interface components {
          * @description 휴지통 묶음의 맨 위 대상 종류.
          * @enum {string}
          */
-        TrashKind: "item" | "document" | "task" | "event";
+        TrashKind: "item" | "document" | "task" | "event" | "file";
         /** @description 지운 결과(되살릴 때 쓰는 휴지통 묶음). */
         Trashed: {
             /** Format: uuid */
@@ -2721,9 +2918,59 @@ export interface components {
         };
         /**
          * Format: uuid
+         * @description 업로드 세션 ID. 끊긴 업로드를 이어 올릴 때 쓴다.
+         */
+        UploadId: string;
+        /** @description 새 파일을 붙일 곳. */
+        UploadTarget: {
+            /** Format: uuid */
+            id: string;
+            /** @description `document` 또는 `item`. */
+            kind: string;
+        };
+        /** @description 업로드 상태. */
+        UploadView: {
+            /**
+             * Format: int64
+             * @description 조각 크기. 마지막 조각만 작다.
+             */
+            chunk_bytes: number;
+            /** Format: date-time */
+            expires_at: string;
+            failure?: string | null;
+            file_id?: null | components["schemas"]["FileId"];
+            id: components["schemas"]["UploadId"];
+            name: string;
+            /** Format: int64 */
+            parts_total: number;
+            /** @description 이미 받은 조각 번호. */
+            received: number[];
+            /** Format: int64 */
+            size: number;
+            /** @description `uploading`·`completing`·`done`·`aborted`·`expired`·`failed`. */
+            state: string;
+            /** Format: int32 */
+            version?: number | null;
+        };
+        /**
+         * Format: uuid
          * @description 사용자 내부 ID.
          */
         UserId: string;
+        /** @description 버전 하나. */
+        VersionView: {
+            content_type: string;
+            /** Format: date-time */
+            created_at: string;
+            note: string;
+            sha256: string;
+            /** Format: int64 */
+            size: number;
+            uploaded_by: components["schemas"]["UserId"];
+            uploaded_by_name?: string | null;
+            /** Format: int32 */
+            version: number;
+        };
         /** @description 워크스페이스 요약. */
         Workspace: {
             id: components["schemas"]["WorkspaceId"];
@@ -3077,6 +3324,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    document_files: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileView"][];
                 };
             };
             404: {
@@ -3809,6 +4085,155 @@ export interface operations {
             };
         };
     };
+    get_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileDetail"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    rename_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameFile"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileView"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    trash_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileTrashed"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    file_content: {
+        parameters: {
+            query?: {
+                /** @description 버전(없으면 최신). */
+                version?: number | null;
+                /** @description 브라우저 안에서 열기(이미지·PDF·텍스트만, 나머지는 무시). */
+                inline?: boolean;
+            };
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": number[];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     delete_group: {
         parameters: {
             query?: never;
@@ -4443,6 +4868,35 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    item_files: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileView"][];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6254,6 +6708,210 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUpload"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadView"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadView"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    abort_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    complete_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadView"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_upload_part: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": number[];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {

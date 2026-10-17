@@ -395,6 +395,8 @@ async fn an_unreachable_search_service_falls_back_to_titles() {
         [format!("제목만 {tok}")]
     );
     // 검색 서비스가 없어도 다른 주기 작업은 계속 돈다.
-    let report = fvoci_server::worker::run_once(&state.db, state.search.as_ref()).await;
+    let report =
+        fvoci_server::worker::run_once(&state.db, state.search.as_ref(), Some(&state.storage))
+            .await;
     assert_eq!(report.indexed, 0);
 }

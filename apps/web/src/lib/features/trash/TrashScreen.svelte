@@ -60,7 +60,13 @@
     }
   }
 
-  const KIND = { item: '항목', document: '문서', task: '업무', event: '일정' } as const;
+  const KIND = {
+    item: '항목',
+    document: '문서',
+    task: '업무',
+    event: '일정',
+    file: '파일',
+  } as const;
   const when = (iso: string): string => wallTime(iso, zone).replace('T', ' ');
   const expiredCount = $derived(trash?.entries.filter((e) => e.expired).length ?? 0);
   const label = (e: TrashEntryView): string =>

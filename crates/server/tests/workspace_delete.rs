@@ -418,7 +418,7 @@ async fn purge_removes_everything_but_personal_time_and_expiry_purges_in_the_wor
         .status,
         StatusCode::CONFLICT
     );
-    let report = fvoci_server::worker::run_all_now(&state.db, None)
+    let report = fvoci_server::worker::run_all_now(&state.db, None, None)
         .await
         .unwrap();
     assert!(report.purged >= 1);

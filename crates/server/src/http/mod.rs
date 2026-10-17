@@ -16,8 +16,8 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
-    accounts, documents, events, home, members, modules, public_links, recurrence, references,
-    revisions, schedule, search_api, tasks, time_tracking, trash, workspaces,
+    accounts, documents, events, files, home, members, modules, public_links, recurrence,
+    references, revisions, schedule, search_api, tasks, time_tracking, trash, workspaces,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -189,6 +189,17 @@ async fn api_not_found() -> AppError {
         trash::purge_my_expired,
         trash::set_retention,
         search_api::search,
+        files::create_upload,
+        files::get_upload,
+        files::put_part,
+        files::complete_upload,
+        files::abort_upload,
+        files::document_files,
+        files::item_files,
+        files::get_file,
+        files::rename_file,
+        files::trash_file,
+        files::content,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -342,6 +353,14 @@ async fn api_not_found() -> AppError {
         trash::Purged,
         trash::SetRetention,
         search_api::SearchResult,
+        files::UploadTarget,
+        files::CreateUpload,
+        files::UploadView,
+        files::VersionView,
+        files::FileView,
+        files::FileDetail,
+        files::RenameFile,
+        files::FileTrashed,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::RestoreRevision,
@@ -381,6 +400,7 @@ async fn api_not_found() -> AppError {
         (name = "home", description = "홈·고정·즐겨찾기"),
         (name = "trash", description = "휴지통·복원·영구 삭제"),
         (name = "search", description = "통합 검색"),
+        (name = "files", description = "파일 첨부·버전·업로드"),
     )
 )]
 pub struct ApiDoc;
@@ -395,6 +415,10 @@ pub fn router(state: AppState) -> Router {
         .saturating_mul(2)
         .saturating_add(64 * 1024);
 
+    // 업로드 조각은 설정한 조각 크기만큼(머리글 여유 포함) 받는다.
+    let part_limit = usize::try_from(state.config.files.chunk_bytes)
+        .unwrap_or(usize::MAX)
+        .saturating_add(64 * 1024);
     let api = Router::new()
         .route("/me", get(accounts::me))
         .route("/auth-info", get(accounts::auth_info))
@@ -524,6 +548,28 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/me/trash", get(trash::my_trash))
         .route("/search", get(search_api::search))
+        .route("/uploads", post(files::create_upload))
+        .route(
+            "/uploads/{upload_id}",
+            get(files::get_upload).delete(files::abort_upload),
+        )
+        .route(
+            "/uploads/{upload_id}/parts/{number}",
+            put(files::put_part).layer(DefaultBodyLimit::max(part_limit)),
+        )
+        .route(
+            "/uploads/{upload_id}/complete",
+            post(files::complete_upload),
+        )
+        .route("/documents/{document_id}/files", get(files::document_files))
+        .route("/items/{item_id}/files", get(files::item_files))
+        .route(
+            "/files/{file_id}",
+            get(files::get_file)
+                .put(files::rename_file)
+                .delete(files::trash_file),
+        )
+        .route("/files/{file_id}/content", get(files::content))
         .route("/me/trash/purge-expired", post(trash::purge_my_expired))
         .route("/trash/{batch_id}", delete(trash::purge))
         .route("/trash/{batch_id}/restore", post(trash::restore))

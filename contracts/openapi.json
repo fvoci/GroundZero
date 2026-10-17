@@ -472,6 +472,51 @@
         }
       }
     },
+    "/api/documents/{document_id}/files": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "문서에 붙은 파일(문서를 볼 수 있는 사람).",
+        "operationId": "document_files",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileView"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/documents/{document_id}/move": {
       "post": {
         "tags": [
@@ -1531,6 +1576,237 @@
         }
       }
     },
+    "/api/files/{file_id}": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "파일과 모든 버전.",
+        "operationId": "get_file",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "files"
+        ],
+        "summary": "이름 바꾸기(쓸 수 있는 사람).",
+        "operationId": "rename_file",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameFile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "files"
+        ],
+        "summary": "휴지통으로(쓸 수 있는 사람). 모든 버전이 함께 가고 함께 돌아온다.",
+        "operationId": "trash_file",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileTrashed"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{file_id}/content": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "내려받기(볼 수 있는 사람). 최신 또는 `version`. `inline=true`는 이미지·PDF·텍스트만 브라우저 안에서 연다.",
+        "operationId": "file_content",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "description": "버전(없으면 최신).",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "inline",
+            "in": "query",
+            "description": "브라우저 안에서 열기(이미지·PDF·텍스트만, 나머지는 무시).",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/groups/{group_id}": {
       "delete": {
         "tags": [
@@ -2430,6 +2706,51 @@
             }
           },
           "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/files": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "항목에 붙은 파일(항목을 볼 수 있는 사람).",
+        "operationId": "item_files",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileView"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -5067,6 +5388,293 @@
         }
       }
     },
+    "/api/uploads": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "업로드 시작(같은 요청 id면 같은 업로드). 쓸 수 있는 문서·항목·파일에만. 크기·저장량 한도를 넘으면 400·409.",
+        "operationId": "create_upload",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/uploads/{upload_id}": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "업로드 상태(올린 사람만). 이어 올릴 때 받은 조각을 본다.",
+        "operationId": "get_upload",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "files"
+        ],
+        "summary": "업로드 그만두기(올린 사람). 받은 조각은 백그라운드 작업이 지운다.",
+        "operationId": "abort_upload",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/uploads/{upload_id}/complete": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "마치기(같은 요청을 다시 보내도 한 번만). 모든 조각이 있어야 한다. 서버가 내용 전체를 다시 읽어 크기를\n확인하고 SHA-256을 기록한다. 맞지 않으면 업로드를 닫고 409.",
+        "operationId": "complete_upload",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/uploads/{upload_id}/parts/{number}": {
+      "put": {
+        "tags": [
+          "files"
+        ],
+        "summary": "조각 하나 보내기(1부터). 본문은 날것 그대로, `x-content-sha256`에 본문의 SHA-256. 크기는 조각 크기(마지막만\n나머지)와 같아야 한다. 같은 번호를 다시 보내면 바꾼다.",
+        "operationId": "put_upload_part",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces": {
       "get": {
         "tags": [
@@ -7060,6 +7668,56 @@
           }
         }
       },
+      "CreateUpload": {
+        "type": "object",
+        "description": "업로드 시작. `file_id`가 있으면 그 파일의 새 버전, 없으면 `target`에 새 파일.",
+        "required": [
+          "request_id",
+          "size"
+        ],
+        "properties": {
+          "content_type": {
+            "type": "string"
+          },
+          "file_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FileId"
+              }
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "파일 이름(새 버전이면 비워도 된다)."
+          },
+          "note": {
+            "type": "string",
+            "description": "버전 설명."
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "전체 크기(바이트)."
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UploadTarget"
+              }
+            ]
+          }
+        }
+      },
       "CreateWorkspace": {
         "type": "object",
         "description": "워크스페이스 생성 요청.",
@@ -7620,6 +8278,103 @@
           "date": {
             "type": "string",
             "description": "일정 시간대 기준의 회차 날짜."
+          }
+        }
+      },
+      "FileDetail": {
+        "type": "object",
+        "description": "파일과 모든 버전(최신 먼저).",
+        "required": [
+          "file",
+          "versions"
+        ],
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/FileView"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VersionView"
+            }
+          }
+        }
+      },
+      "FileId": {
+        "type": "string",
+        "format": "uuid",
+        "description": "첨부 파일 내부 ID (D-06). 새 버전을 올려도 유지된다(D-35)."
+      },
+      "FileTrashed": {
+        "type": "object",
+        "description": "지운 파일의 휴지통 묶음.",
+        "required": [
+          "batch_id"
+        ],
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "FileView": {
+        "type": "object",
+        "description": "첨부 파일.",
+        "required": [
+          "id",
+          "name",
+          "current_version",
+          "size",
+          "content_type",
+          "updated_at",
+          "can_write"
+        ],
+        "properties": {
+          "can_write": {
+            "type": "boolean",
+            "description": "새 버전·이름 바꾸기·지우기를 할 수 있는지."
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "current_version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "document_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DocumentId"
+              }
+            ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/FileId"
+          },
+          "item_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemId"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -8725,6 +9480,18 @@
           "task",
           "user"
         ]
+      },
+      "RenameFile": {
+        "type": "object",
+        "description": "이름 바꾸기.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
       },
       "ResolveReferences": {
         "type": "object",
@@ -9948,7 +10715,8 @@
           "item",
           "document",
           "task",
-          "event"
+          "event",
+          "file"
         ]
       },
       "Trashed": {
@@ -10132,10 +10900,153 @@
           }
         }
       },
+      "UploadId": {
+        "type": "string",
+        "format": "uuid",
+        "description": "업로드 세션 ID. 끊긴 업로드를 이어 올릴 때 쓴다."
+      },
+      "UploadTarget": {
+        "type": "object",
+        "description": "새 파일을 붙일 곳.",
+        "required": [
+          "kind",
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`document` 또는 `item`."
+          }
+        }
+      },
+      "UploadView": {
+        "type": "object",
+        "description": "업로드 상태.",
+        "required": [
+          "id",
+          "state",
+          "name",
+          "size",
+          "chunk_bytes",
+          "parts_total",
+          "received",
+          "expires_at"
+        ],
+        "properties": {
+          "chunk_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "조각 크기. 마지막 조각만 작다."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "file_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FileId",
+                "description": "끝났으면 만든 파일과 버전."
+              }
+            ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/UploadId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parts_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "received": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "이미 받은 조각 번호."
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "state": {
+            "type": "string",
+            "description": "`uploading`·`completing`·`done`·`aborted`·`expired`·`failed`."
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "UserId": {
         "type": "string",
         "format": "uuid",
         "description": "사용자 내부 ID."
+      },
+      "VersionView": {
+        "type": "object",
+        "description": "버전 하나.",
+        "required": [
+          "version",
+          "size",
+          "sha256",
+          "content_type",
+          "note",
+          "uploaded_by",
+          "created_at"
+        ],
+        "properties": {
+          "content_type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "note": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uploaded_by": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "uploaded_by_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
       },
       "Workspace": {
         "type": "object",
@@ -10235,6 +11146,10 @@
     {
       "name": "search",
       "description": "통합 검색"
+    },
+    {
+      "name": "files",
+      "description": "파일 첨부·버전·업로드"
     }
   ]
 }

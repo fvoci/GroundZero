@@ -35,6 +35,8 @@ pub enum TrashKind {
     Document,
     Task,
     Event,
+    /// 첨부 파일(모든 버전).
+    File,
 }
 
 impl TrashKind {
@@ -44,6 +46,7 @@ impl TrashKind {
             "document" => Some(Self::Document),
             "task" => Some(Self::Task),
             "event" => Some(Self::Event),
+            "file" => Some(Self::File),
             _ => None,
         }
     }

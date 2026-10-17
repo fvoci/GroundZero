@@ -39,9 +39,15 @@ pub async fn run(config: Config) -> Result<(), AppError> {
     let state = build_state(config)?;
     let db = state.db.clone();
     let (stop, stopped) = watch::channel(false);
-    let worker = role
-        .runs_worker()
-        .then(|| worker::spawn(db.clone(), state.search.clone(), interval, stopped));
+    let worker = role.runs_worker().then(|| {
+        worker::spawn(
+            db.clone(),
+            state.search.clone(),
+            state.storage.clone(),
+            interval,
+            stopped,
+        )
+    });
     if role.serves_http() {
         let app = http::router(state);
         let listener = TcpListener::bind(bind).await?;

@@ -1137,7 +1137,7 @@ function parseMarkState(value: Json): { pin: boolean; favorite: boolean } {
 
 export interface TrashEntryView {
   id: string;
-  kind: 'item' | 'document' | 'task' | 'event';
+  kind: 'item' | 'document' | 'task' | 'event' | 'file';
   root_id: string;
   title: string;
   member_count: number;
@@ -1161,7 +1161,13 @@ function parseTrash(value: Json): TrashView {
     entries: parseList(o.entries, (v): TrashEntryView => {
       const e = rec(v, 'trash entry');
       const kind = str(e, 'kind');
-      if (kind !== 'item' && kind !== 'document' && kind !== 'task' && kind !== 'event')
+      if (
+        kind !== 'item' &&
+        kind !== 'document' &&
+        kind !== 'task' &&
+        kind !== 'event' &&
+        kind !== 'file'
+      )
         throw new TypeError(`unknown trash kind ${kind}`);
       return {
         id: str(e, 'id'),
@@ -1178,6 +1184,129 @@ function parseTrash(value: Json): TrashView {
       };
     }),
   };
+}
+
+export interface FileView {
+  id: string;
+  name: string;
+  document_id: string | null;
+  item_id: string | null;
+  current_version: number;
+  size: number;
+  content_type: string;
+  updated_at: string;
+  can_write: boolean;
+}
+
+export interface FileVersionView {
+  version: number;
+  size: number;
+  sha256: string;
+  content_type: string;
+  note: string;
+  uploaded_by: string;
+  uploaded_by_name: string | null;
+  created_at: string;
+}
+
+export interface UploadView {
+  id: string;
+  state: string;
+  name: string;
+  size: number;
+  chunk_bytes: number;
+  parts_total: number;
+  received: number[];
+  expires_at: string;
+  file_id: string | null;
+  version: number | null;
+  failure: string | null;
+}
+
+export interface FileTarget {
+  kind: 'document' | 'item';
+  id: string;
+}
+
+function parseFile(value: Json): FileView {
+  const o = rec(value, 'file');
+  return {
+    id: str(o, 'id'),
+    name: str(o, 'name'),
+    document_id: optStr(o, 'document_id'),
+    item_id: optStr(o, 'item_id'),
+    current_version: int(o, 'current_version'),
+    size: int(o, 'size'),
+    content_type: str(o, 'content_type'),
+    updated_at: str(o, 'updated_at'),
+    can_write: bool(o, 'can_write'),
+  };
+}
+
+function parseVersion(value: Json): FileVersionView {
+  const o = rec(value, 'file version');
+  return {
+    version: int(o, 'version'),
+    size: int(o, 'size'),
+    sha256: str(o, 'sha256'),
+    content_type: str(o, 'content_type'),
+    note: str(o, 'note'),
+    uploaded_by: str(o, 'uploaded_by'),
+    uploaded_by_name: optStr(o, 'uploaded_by_name'),
+    created_at: str(o, 'created_at'),
+  };
+}
+
+function parseUpload(value: Json): UploadView {
+  const o = rec(value, 'upload');
+  const received = Array.isArray(o.received) ? o.received : [];
+  return {
+    id: str(o, 'id'),
+    state: str(o, 'state'),
+    name: str(o, 'name'),
+    size: int(o, 'size'),
+    chunk_bytes: int(o, 'chunk_bytes'),
+    parts_total: int(o, 'parts_total'),
+    received: received.filter((n): n is number => typeof n === 'number'),
+    expires_at: str(o, 'expires_at'),
+    file_id: optStr(o, 'file_id'),
+    version: optInt(o, 'version'),
+    failure: optStr(o, 'failure'),
+  };
+}
+
+/** 파일 내용 주소(같은 원점, 쿠키로 권한 확인). */
+export function fileContentUrl(id: string, version?: number, inline = false): string {
+  const params = new URLSearchParams();
+  if (version !== undefined) params.set('version', String(version));
+  if (inline) params.set('inline', 'true');
+  const query = params.toString();
+  return `/api/files/${encodeURIComponent(id)}/content${query === '' ? '' : `?${query}`}`;
+}
+
+/** 업로드 조각 보내기(날것 본문 + SHA-256 머리글). */
+async function putPart(upload: string, number: number, body: Blob, sha256: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/uploads/${encodeURIComponent(upload)}/parts/${String(number)}`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/octet-stream', 'x-content-sha256': sha256 },
+      body,
+    });
+  } catch (error: unknown) {
+    throw new NetworkError(error instanceof Error ? error.message : 'network error');
+  }
+  if (response.status !== 204) {
+    const text = await response.text();
+    let json: Json;
+    try {
+      json = text === '' ? null : JSON.parse(text);
+    } catch {
+      json = null;
+    }
+    fail(response.status, json);
+  }
 }
 
 export interface DeletedWorkspaceView {
@@ -1352,6 +1481,44 @@ export const api = {
       (v) => str(rec(v, 'workspace deleted'), 'expires_at'),
       { name },
     ),
+  documentFiles: (id: string) =>
+    expectOk('GET', `/api/documents/${encodeURIComponent(id)}/files`, (v) =>
+      parseList(v, parseFile),
+    ),
+  itemFiles: (id: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(id)}/files`, (v) => parseList(v, parseFile)),
+  file: (id: string) =>
+    expectOk('GET', `/api/files/${encodeURIComponent(id)}`, (v) => {
+      const o = rec(v, 'file detail');
+      return { file: parseFile(o.file), versions: parseList(o.versions, parseVersion) };
+    }),
+  renameFile: (id: string, name: string) =>
+    expectOk('PUT', `/api/files/${encodeURIComponent(id)}`, parseFile, { name }),
+  trashFile: (id: string) => expectOk('DELETE', `/api/files/${encodeURIComponent(id)}`, parseBatch),
+  /** 업로드 시작. 같은 requestId면 같은 업로드(이어 올리기). */
+  createUpload: (input: {
+    requestId: string;
+    target?: FileTarget;
+    fileId?: string;
+    name: string;
+    note: string;
+    contentType: string;
+    size: number;
+  }) =>
+    expectOk('POST', '/api/uploads', parseUpload, {
+      request_id: input.requestId,
+      target: input.target ?? null,
+      file_id: input.fileId ?? null,
+      name: input.name,
+      note: input.note,
+      content_type: input.contentType,
+      size: input.size,
+    }),
+  upload: (id: string) => expectOk('GET', `/api/uploads/${encodeURIComponent(id)}`, parseUpload),
+  putUploadPart: putPart,
+  completeUpload: (id: string) =>
+    expectOk('POST', `/api/uploads/${encodeURIComponent(id)}/complete`, parseUpload),
+  abortUpload: (id: string) => expectOk('DELETE', `/api/uploads/${encodeURIComponent(id)}`, none),
   deletedWorkspaces: () =>
     expectOk('GET', '/api/me/deleted-workspaces', (v) => parseList(v, parseDeletedWorkspace)),
   restoreWorkspace: (ws: string) =>
