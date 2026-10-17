@@ -4,7 +4,7 @@
 
   import type { NotificationView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
-  import { itemTaskPath, pathFor, router } from '$lib/router.svelte';
+  import { itemPath, itemTaskPath, pathFor, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
 
   interface Props {
@@ -46,6 +46,8 @@
       router.navigate(
         pathFor({ id: n.document_id, workspace_id: n.workspace_id, item_id: n.item_id }, memberOf),
       );
+    else if (n.workspace_id !== null && n.item_id !== null)
+      router.navigate(itemPath(n.workspace_id, n.item_id));
   }
 
   /** 알림 문장(종류별). */
@@ -61,6 +63,12 @@
         return `${who}님이 ${target}의 댓글에 답했습니다`;
       case 'due':
         return `${target}의 기한이 ${n.due_date ?? ''}입니다`;
+      case 'expiry':
+        return `${target}: ${n.due_date ?? ''}에 수강권이 만료되거나 목표 완료일입니다`;
+      case 'review':
+        return `${target}: ${n.subject ?? '복습'}의 복습일이 ${n.due_date ?? ''}입니다`;
+      case 'deadline':
+        return `${target}: ${n.subject ?? ''}의 마감이 ${n.due_date ?? ''}입니다`;
       default:
         return target;
     }

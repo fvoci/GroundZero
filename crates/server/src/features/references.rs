@@ -129,7 +129,8 @@ pub struct Backlink {
 pub struct Notification {
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
-    /// `mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘).
+    /// `mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘)·
+    /// `expiry`(강좌 수강권 만료·목표 완료일)·`review`(복습일)·`deadline`(투고 제출·수정 마감, 산출물 마감).
     pub kind: String,
     /// 대상 문서(문서 알림).
     pub document_id: Option<DocumentId>,
@@ -147,8 +148,10 @@ pub struct Notification {
     pub comment_id: Option<Uuid>,
     /// 댓글 첫 부분(최대 140자).
     pub excerpt: Option<String>,
-    /// 기한 알림의 기한(YYYY-MM-DD).
+    /// 기한·만료·복습·마감 알림의 날짜(YYYY-MM-DD).
     pub due_date: Option<String>,
+    /// 항목 알림의 대상 이름(기록 제목이나 강좌 이름).
+    pub subject: Option<String>,
     /// 한 사람. 워크스페이스를 함께 쓰지 않거나(공유받은 개인 노트 등) 자동 알림(기한)이면 없다.
     pub actor_name: Option<String>,
     #[serde(with = "time::serde::rfc3339")]
@@ -596,14 +599,17 @@ pub async fn notifications(
     let mut tx = state.db.begin_as(user).await?;
     let rows: Vec<NotificationRow> = sqlx::query_as(
         "SELECT n.id, n.kind, n.document_id, n.task_id, n.comment_id, n.actor_name, n.detail, n.created_at, n.read_at,
-                coalesce(d.title, t.title),
-                CASE WHEN d.id IS NOT NULL THEN app_document_reference(d.id) ELSE app_task_reference(t.id) END,
-                coalesce(d.workspace_id, t.workspace_id),
-                CASE WHEN app_item_access(coalesce(d.item_id, t.item_id)) IS NOT NULL
-                     THEN coalesce(d.item_id, t.item_id) END
+                coalesce(d.title, t.title, i.title),
+                CASE WHEN d.id IS NOT NULL THEN app_document_reference(d.id)
+                     WHEN t.id IS NOT NULL THEN app_task_reference(t.id)
+                     ELSE app_item_reference(i.id) END,
+                coalesce(d.workspace_id, t.workspace_id, i.workspace_id),
+                CASE WHEN app_item_access(coalesce(d.item_id, t.item_id, i.id)) IS NOT NULL
+                     THEN coalesce(d.item_id, t.item_id, i.id) END
          FROM app_my_notifications($1) n
          LEFT JOIN documents d ON d.id = n.document_id
          LEFT JOIN tasks t ON t.id = n.task_id
+         LEFT JOIN items i ON i.id = n.item_id
          ORDER BY n.created_at DESC, n.id DESC",
     )
     .bind(NOTIFICATION_PAGE)
@@ -643,6 +649,10 @@ pub async fn notifications(
                         .map(str::to_owned),
                     due_date: detail
                         .get("due_date")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned),
+                    subject: detail
+                        .get("subject")
                         .and_then(serde_json::Value::as_str)
                         .map(str::to_owned),
                     actor_name,

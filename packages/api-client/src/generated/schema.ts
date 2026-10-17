@@ -3155,16 +3155,21 @@ export interface components {
             document_reference?: string | null;
             /** @description 대상 제목(문서 또는 업무). */
             document_title: string;
-            /** @description 기한 알림의 기한(YYYY-MM-DD). */
+            /** @description 기한·만료·복습·마감 알림의 날짜(YYYY-MM-DD). */
             due_date?: string | null;
             /** @description 댓글 첫 부분(최대 140자). */
             excerpt?: string | null;
             /** Format: uuid */
             id: string;
             item_id?: null | components["schemas"]["ItemId"];
-            /** @description `mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘). */
+            /**
+             * @description `mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘)·
+             *     `expiry`(강좌 수강권 만료·목표 완료일)·`review`(복습일)·`deadline`(투고 제출·수정 마감, 산출물 마감).
+             */
             kind: string;
             read: boolean;
+            /** @description 항목 알림의 대상 이름(기록 제목이나 강좌 이름). */
+            subject?: string | null;
             /**
              * Format: uuid
              * @description 대상 업무(업무 알림).

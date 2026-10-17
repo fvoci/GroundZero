@@ -35,7 +35,8 @@ const PURGE: (&str, &str) = ("trash_purge", "1 hour");
 const RECURRENCE: (&str, &str) = ("recurrence_tick", "15 minutes");
 /// 업무 기한 알림(하루 전·당일, 같은 날 같은 업무는 한 번).
 const DUE: (&str, &str) = ("due_notify", "1 hour");
-const DUE_SQL: &str = "SELECT app_system_due_notifications(current_date)";
+const DUE_SQL: &str =
+    "SELECT app_system_due_notifications(current_date) + app_system_item_reminders(current_date)";
 
 async fn claim(db: &Db, (name, every): (&str, &str)) -> Result<bool, AppError> {
     let mut tx = db.begin_anonymous().await?;

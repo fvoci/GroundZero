@@ -779,7 +779,7 @@ export interface BacklinkView {
 
 export interface NotificationView {
   id: string;
-  /** mention·comment·reply·due */
+  /** mention·comment·reply·due·expiry(강좌 만료·목표일)·review(복습일)·deadline(투고·산출물 마감) */
   kind: string;
   document_id: string | null;
   task_id: string | null;
@@ -791,6 +791,8 @@ export interface NotificationView {
   comment_id: string | null;
   excerpt: string | null;
   due_date: string | null;
+  /** 항목 알림의 대상 이름(기록 제목·강좌 이름). */
+  subject: string | null;
   /** 워크스페이스를 함께 쓰지 않거나 자동 알림이면 없다. */
   actor_name: string | null;
   created_at: string;
@@ -847,6 +849,7 @@ export function parseNotification(value: Json): NotificationView {
     comment_id: optStr(o, 'comment_id'),
     excerpt: optStr(o, 'excerpt'),
     due_date: optStr(o, 'due_date'),
+    subject: optStr(o, 'subject'),
     actor_name: optStr(o, 'actor_name'),
     created_at: str(o, 'created_at'),
     read: bool(o, 'read'),

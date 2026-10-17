@@ -12265,7 +12265,7 @@
               "string",
               "null"
             ],
-            "description": "기한 알림의 기한(YYYY-MM-DD)."
+            "description": "기한·만료·복습·마감 알림의 날짜(YYYY-MM-DD)."
           },
           "excerpt": {
             "type": [
@@ -12290,10 +12290,17 @@
           },
           "kind": {
             "type": "string",
-            "description": "`mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘)."
+            "description": "`mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘)·\n`expiry`(강좌 수강권 만료·목표 완료일)·`review`(복습일)·`deadline`(투고 제출·수정 마감, 산출물 마감)."
           },
           "read": {
             "type": "boolean"
+          },
+          "subject": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "항목 알림의 대상 이름(기록 제목이나 강좌 이름)."
           },
           "task_id": {
             "type": [
