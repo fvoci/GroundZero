@@ -197,6 +197,13 @@ OR 결합으로 허용 쪽을 선택해 자동 통과한 것(선택 근거 기�
 
 **판정 오류 수정**: `xtask/src/licenses.rs`의 SPDX 판정이 바깥 괄호 한 쌍만 벗기고 " OR "로 먼저 나눠, `(MIT OR GPL-3.0-or-later) AND Zlib` 같은 식을 MIT 하나로 통과시켰다(괄호 뒤의 AND 조건 누락). cargo-deny와 같은 해석기인 `spdx` 크레이트(0.13, Apache-2.0, 기본 기능 없음)로 바꿨다. 괄호·우선순위(AND가 OR보다 먼저)·소문자 연산자를 지키고, 예외 조항(WITH)·이후 판(`+`)·읽을 수 없는 식은 허용하지 않고 보고한다. 회귀 테스트 `compound_expressions_keep_grouping_and_precedence`. 지금 트리의 결과(npm 9개)는 바뀌지 않았다.
 
+### D-68 이후 상태 (2026-10-17)
+
+- **승인됨**: D-60 기본 6개(MIT·Apache-2.0·BSD-2-Clause·BSD-3-Clause·ISC·PostgreSQL)와 D-68의 **Zlib**. foldhash 0.1.5(서버 바이너리)가 이제 통과한다. zlib-rs는 rhwp WASM(0.6.7)과 PDF 본문 검색 크레이트로 들어오며 같은 승인으로 덮인다.
+- **미승인(검사 FAIL 그대로, 예외 없음)**: Unicode-3.0 크레이트 19개(서버 바이너리에 드는 icu 계열 15개와 빌드 때만 쓰는 derive 3개·unicode-ident), npm 9개(0BSD·BlueOak-1.0.0·CC0-1.0·MIT-0·MPL-2.0·Python-2.0). KaTeX 글꼴(OFL-1.1)은 번들에 넣지 않았다.
+- **npm 9개의 배포 여부(실제 산출물로 확인)**: 운영 웹 빌드를 소스맵과 함께 만들어 소스맵에 든 패키지를 뽑았다(55개, JS 번들). 9개 중 어느 것도 없다. tslib은 bits-ui·@internationalized/date → @swc/helpers → tslib 경로지만 @internationalized/date·@swc/helpers·tslib 모두 번들에 들지 않는다(트리 쉐이킹으로 빠짐). CSS 번들은 `app.css`의 `@import`로 tailwindcss·tw-animate-css(MIT)만 들어온다. 직접·개발 의존성 구분만으로 판단하지 않았다(웹의 모든 패키지는 Vite가 번들하므로 개발 의존성으로 선언되어 있다).
+- **제3자 고지**: `cargo xtask notices`가 서버 바이너리(`cargo tree -e normal,no-proc-macro`, x86_64·aarch64 Linux 같은 집합, 크레이트 213개)와 웹 번들(소스맵 55개 + CSS 2개)의 패키지마다 함께 배포되는 LICENSE·NOTICE 원문을 `THIRD_PARTY_NOTICES.txt`에 싣는다(원문이 없는 1개는 SPDX 원문 부록). 제품 이미지의 `/usr/share/doc/fvoci/`와 웹 `/THIRD_PARTY_NOTICES.txt`에 넣고, `cargo xtask check`가 최신 여부를 확인한다. 미승인 라이선스 패키지도 실제로 배포되는 것은 고지에 싣는다(고지와 승인은 별개). rhwp를 들이면 WASM 안의 크레이트 고지를 더한다.
+
 ### 보안 권고 예외 (cargo-deny advisories)
 
 | 권고                            | 크레이트@버전 | 유입 경로                 | 판단                                                                                                                                                                                            |

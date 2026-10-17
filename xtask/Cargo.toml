@@ -9,7 +9,7 @@ publish.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde_json.workspace = true
-spdx = "0.13"
+spdx = { version = "0.13", features = ["text"] }
 xshell.workspace = true
 
 [lints]

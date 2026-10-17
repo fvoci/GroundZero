@@ -26,7 +26,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
  && mkdir -p /data/files /backups && chown fvoci:fvoci /data/files /backups && chmod 0700 /data/files /backups
 COPY --from=server-build /src/target/release/fvoci-server /usr/local/bin/fvoci-server
 COPY --from=web-build /src/apps/web/dist /srv/fvoci/web
-# 라이선스 고지는 라이선스 검사 통과 후 NOTICE 생성 단계를 추가한다 (D-60).
+# 제3자 고지(D-60, D-68). `cargo xtask notices`가 서버 바이너리와 웹 번들에 든 패키지로 만들고 `cargo xtask check`가
+# 최신 여부를 확인한다. 이미지 안 문서 위치와 웹(/THIRD_PARTY_NOTICES.txt) 두 곳에 둔다.
+COPY THIRD_PARTY_NOTICES.txt /usr/share/doc/fvoci/THIRD_PARTY_NOTICES.txt
+COPY THIRD_PARTY_NOTICES.txt /srv/fvoci/web/THIRD_PARTY_NOTICES.txt
 USER fvoci
 ENV FVOCI_BIND=0.0.0.0:8080 \
     FVOCI_WEB_DIR=/srv/fvoci/web \

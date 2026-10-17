@@ -7,7 +7,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use xshell::{Shell, cmd};
 
-/// D-60 기본 허용 후보. `deny.toml`의 allow와 같아야 한다.
+/// D-60 기본 허용 후보와 사용자가 승인한 것(D-68: Zlib). `deny.toml`의 allow와 같아야 한다.
 const ALLOWED: &[&str] = &[
     "MIT",
     "Apache-2.0",
@@ -15,6 +15,8 @@ const ALLOWED: &[&str] = &[
     "BSD-3-Clause",
     "ISC",
     "PostgreSQL",
+    // 사용자 승인 2026-10-17(D-68). Zlib만 더했다.
+    "Zlib",
 ];
 
 pub fn run(root: &Path) -> Result<()> {
@@ -114,13 +116,17 @@ mod tests {
     /// 예전 판정은 바깥 괄호 한 쌍만 벗기고 " OR "로 먼저 나눠, 괄호 묶음 뒤의 AND 조건을 놓쳤다.
     #[test]
     fn compound_expressions_keep_grouping_and_precedence() {
-        // (MIT OR GPL) AND Zlib: Zlib이 반드시 붙으므로 허용 목록 밖이다.
-        assert!(!is_allowed("(MIT OR GPL-3.0-or-later) AND Zlib"));
-        assert!(!is_allowed("(MIT AND Zlib)"));
-        assert!(!is_allowed("MIT AND (Zlib OR GPL-2.0-only)"));
-        // AND가 OR보다 먼저 묶인다: MIT OR (Apache-2.0 AND Zlib) → MIT를 고를 수 있다.
-        assert!(is_allowed("MIT OR Apache-2.0 AND Zlib"));
-        assert!(!is_allowed("(MIT OR Apache-2.0) AND Zlib"));
+        // (MIT OR GPL) AND MPL-2.0: MPL-2.0(미승인)이 반드시 붙으므로 허용 목록 밖이다.
+        assert!(!is_allowed("(MIT OR GPL-3.0-or-later) AND MPL-2.0"));
+        assert!(!is_allowed("(MIT AND Unicode-3.0)"));
+        assert!(!is_allowed("MIT AND (MPL-2.0 OR GPL-2.0-only)"));
+        // AND가 OR보다 먼저 묶인다: MIT OR (Apache-2.0 AND MPL-2.0) → MIT를 고를 수 있다.
+        assert!(is_allowed("MIT OR Apache-2.0 AND MPL-2.0"));
+        assert!(!is_allowed("(MIT OR Apache-2.0) AND MPL-2.0"));
+        // D-68로 Zlib은 허용. 다른 미승인 라이선스와 AND로 묶이면 여전히 밖이다.
+        assert!(is_allowed("Zlib"));
+        assert!(is_allowed("(MIT AND Zlib)"));
+        assert!(!is_allowed("Zlib AND Unicode-3.0"));
         assert!(is_allowed("(MIT OR GPL-3.0-or-later)"));
         assert!(is_allowed("((MIT))"));
         assert!(is_allowed("(Apache-2.0 OR MIT) AND BSD-3-Clause"));
