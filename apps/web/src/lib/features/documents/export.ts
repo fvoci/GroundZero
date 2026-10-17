@@ -8,14 +8,19 @@ import type { JSONContent } from '@tiptap/core';
 import type { DocNode, ReferenceKind, ResolvedReferenceView } from '$lib/api/client';
 import { api, fileContentUrl } from '$lib/api/client';
 import { referenceLabel } from '$lib/features/references/resolver';
+import { m } from '$lib/paraglide/messages.js';
 
 import { canonicalJson } from './drafts';
 import { schemaExtensions } from './editor-schema';
 
 export type ExportFormat = 'markdown' | 'zip' | 'pdf';
 
+// 내보낸 파일 안의 알림·대체 글자는 내보낸 사람의 화면 언어를 따른다(D-81). 본문(사용자 내용)은 그대로다.
+
 /** 볼 수 없는 @참조에 쓰는 글자(이름·제목을 드러내지 않는다). */
-export const HIDDEN_REFERENCE = '볼 수 없는 대상';
+export function hiddenReferenceLabel(): string {
+  return m.references_hidden();
+}
 
 const FILE_URL = /^\/api\/files\/([0-9a-f-]{36})\/content(?:\?(.*))?$/;
 
@@ -27,11 +32,11 @@ interface FileRef {
 
 function fileRef(url: unknown): FileRef | undefined {
   if (typeof url !== 'string') return undefined;
-  const m = FILE_URL.exec(url);
-  if (m === null) return undefined;
-  const id = m[1];
+  const match = FILE_URL.exec(url);
+  if (match === null) return undefined;
+  const id = match[1];
   if (id === undefined) return undefined;
-  const raw = new URLSearchParams(m[2] ?? '').get('version');
+  const raw = new URLSearchParams(match[2] ?? '').get('version');
   const version = raw === null ? undefined : Number.parseInt(raw, 10);
   return { id, version: version !== undefined && Number.isFinite(version) ? version : undefined };
 }
@@ -102,7 +107,7 @@ function safeName(name: string): string {
     .replace(/^\.+/, '')
     .trim()
     .slice(0, 80);
-  return cleaned === '' ? '문서' : cleaned;
+  return cleaned === '' ? m.documents_export_name_fallback() : cleaned;
 }
 
 /**
@@ -143,7 +148,7 @@ const asKind = (v: unknown): ReferenceKind | undefined => KINDS.find((k) => k ==
 
 /**
  * 서버에서 받은 리비전 본문을 내보낼 모양으로 바꾼다. @참조는 볼 수 있는 대상만 제목(과 링크), 볼 수 없으면
- * {@link HIDDEN_REFERENCE}. 첨부: ZIP은 받을 수 있는 파일만 `files/` 아래 상대 경로로 담고 나머지는 알림, Markdown·PDF는
+ * {@link hiddenReferenceLabel}. 첨부: ZIP은 받을 수 있는 파일만 `files/` 아래 상대 경로로 담고 나머지는 알림, Markdown·PDF는
  * 앱 주소(로그인 필요)로 둔다.
  */
 export async function prepareExport(
@@ -206,18 +211,16 @@ export async function prepareExport(
           local.set(key, `${options.origin}${fileContentUrl(f.id, f.version)}`);
         }
       } catch {
-        missing.push(name === f.id ? '이름을 볼 수 없는 첨부' : name);
+        missing.push(name === f.id ? m.documents_export_unnamed_attachment() : name);
       }
     }
     if (missing.length > 0) {
       notes.push(
-        `내려받을 수 없는 그림·첨부 ${String(missing.length)}개는 넣지 않았습니다: ${missing.join(', ')}`,
+        m.documents_export_missing_files({ count: missing.length, names: missing.join(', ') }),
       );
     }
   } else if (fileRefs.size > 0) {
-    notes.push(
-      '그림·첨부는 fvoci 주소로 연결됩니다(열려면 로그인 필요). 파일까지 함께 담으려면 ZIP으로 내보내세요.',
-    );
+    notes.push(m.documents_export_links_note());
   }
 
   const fileUrl = (raw: unknown): string | undefined => {
@@ -235,7 +238,7 @@ export async function prepareExport(
         kind !== undefined && typeof id === 'string' ? resolved.get(`${kind}:${id}`) : undefined;
       if (!r?.visible) {
         hidden += 1;
-        return { type: 'text', text: HIDDEN_REFERENCE };
+        return { type: 'text', text: hiddenReferenceLabel() };
       }
       const href = options.hrefFor(r);
       const text = referenceLabel(r);
@@ -250,43 +253,61 @@ export async function prepareExport(
     if (n.type === 'image' && fileRef(n.attrs?.src) !== undefined) {
       const src = fileUrl(n.attrs?.src);
       if (src === undefined) {
-        const alt = typeof n.attrs?.alt === 'string' && n.attrs.alt !== '' ? n.attrs.alt : '그림';
+        const alt =
+          typeof n.attrs?.alt === 'string' && n.attrs.alt !== ''
+            ? n.attrs.alt
+            : m.documents_export_image_fallback();
         return {
           type: 'paragraph',
-          content: [{ type: 'text', text: `(${alt}: 내려받을 수 없어 넣지 못함)` }],
+          content: [{ type: 'text', text: m.documents_export_image_missing({ alt }) }],
         };
       }
       return { ...n, attrs: { ...n.attrs, src } };
     }
     if (n.marks !== undefined) {
-      const marks = n.marks.flatMap((m) => {
-        if (m.type !== 'link' || fileRef(m.attrs?.href) === undefined) return [m];
-        const href = fileUrl(m.attrs?.href);
-        return href === undefined ? [] : [{ ...m, attrs: { ...m.attrs, href } }];
+      const marks = n.marks.flatMap((mark) => {
+        if (mark.type !== 'link' || fileRef(mark.attrs?.href) === undefined) return [mark];
+        const href = fileUrl(mark.attrs?.href);
+        return href === undefined ? [] : [{ ...mark, attrs: { ...mark.attrs, href } }];
       });
       return { ...n, marks };
     }
     return n;
   });
   if (hidden > 0) {
-    notes.push(`볼 수 없는 @참조 ${String(hidden)}개는 "${HIDDEN_REFERENCE}"로 바꿨습니다.`);
+    notes.push(m.documents_export_hidden_refs({ count: hidden, label: hiddenReferenceLabel() }));
   }
   return { title, revision, body, files, notes };
 }
 
-const BLOCK_LABEL: Record<string, string> = {
-  paragraph: '문단',
-  heading: '제목',
-  table: '표',
-  codeBlock: '코드',
-  blockMath: '수식',
-  image: '그림',
-  taskList: '체크리스트',
-  bulletList: '목록',
-  orderedList: '번호 목록',
-  blockquote: '인용',
-  horizontalRule: '구분선',
-};
+function blockLabel(type: string | undefined): string {
+  switch (type) {
+    case 'paragraph':
+      return m.documents_block_paragraph();
+    case 'heading':
+      return m.documents_block_heading();
+    case 'table':
+      return m.documents_block_table();
+    case 'codeBlock':
+      return m.documents_block_code();
+    case 'blockMath':
+      return m.documents_block_math();
+    case 'image':
+      return m.documents_block_image();
+    case 'taskList':
+      return m.documents_block_checklist();
+    case 'bulletList':
+      return m.documents_block_bullet_list();
+    case 'orderedList':
+      return m.documents_block_ordered_list();
+    case 'blockquote':
+      return m.documents_block_quote();
+    case 'horizontalRule':
+      return m.documents_block_rule();
+    default:
+      return type ?? m.documents_block_other();
+  }
+}
 
 /** 편집기와 같은 스키마의 화면 없는 편집기(변환에만 쓴다). */
 function converter(): Editor {
@@ -319,20 +340,19 @@ export function toMarkdown(prepared: PreparedExport): MarkdownResult {
         same = false;
       }
       if (!same) {
-        const label = BLOCK_LABEL[block.type ?? ''] ?? block.type ?? '블록';
-        lossy.push(`${String(i + 1)}번째 블록(${label})`);
+        lossy.push(
+          m.documents_export_lossy_block({ position: i + 1, label: blockLabel(block.type) }),
+        );
       }
     });
     const body = manager.serialize(prepared.body);
     const lines = [`# ${prepared.title}`, ''];
     const notes = [...prepared.notes];
     if (lossy.length > 0) {
-      notes.push(
-        `Markdown으로 그대로 옮기지 못한 블록이 있습니다(서식이 바뀌거나 일부가 빠질 수 있음): ${lossy.join(', ')}`,
-      );
+      notes.push(m.documents_export_lossy_note({ blocks: lossy.join(', ') }));
     }
     if (notes.length > 0) {
-      lines.push('<!--', `fvoci 내보내기 알림 (리비전 ${String(prepared.revision)})`);
+      lines.push('<!--', m.documents_export_notes_header({ revision: prepared.revision }));
       for (const note of notes) lines.push(`- ${note.replaceAll('--', '—')}`);
       lines.push('-->', '');
     }

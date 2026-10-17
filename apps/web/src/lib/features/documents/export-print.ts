@@ -6,6 +6,8 @@ import katexCss from '../../../styles/katex-layout.css?inline';
 
 import type { PreparedExport } from './export';
 import { escapeHtml, printBodyHtml } from './export';
+import { m } from '$lib/paraglide/messages.js';
+import { getLocale } from '$lib/paraglide/runtime.js';
 
 const PRINT_CSS = `
 @page { size: A4; margin: 18mm 16mm; }
@@ -40,7 +42,7 @@ export async function printDocumentHtml(
 ): Promise<string> {
   const body = await printBodyHtml(prepared);
   const title = escapeHtml(prepared.title);
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${title}</title><style>${katexCss}${PRINT_CSS}</style></head><body><h1 class="export-title">${title}</h1><p class="export-meta">리비전 ${String(prepared.revision)} · ${escapeHtml(savedAt)}</p>${body}</body></html>`;
+  return `<!doctype html><html lang="${getLocale()}"><head><meta charset="utf-8"><title>${title}</title><style>${katexCss}${PRINT_CSS}</style></head><body><h1 class="export-title">${title}</h1><p class="export-meta">${escapeHtml(m.documents_revision_label())} ${String(prepared.revision)} · ${escapeHtml(savedAt)}</p>${body}</body></html>`;
 }
 
 /** 인쇄 문서를 보이지 않는 iframe에 넣고 그림을 다 불러온 뒤 인쇄 창을 연다. */

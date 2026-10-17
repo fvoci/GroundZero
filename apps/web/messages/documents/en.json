@@ -222,5 +222,45 @@
   "documents_exported": "Exported.",
   "documents_exporting": "Exporting…",
   "documents_export_saved_revision": "Export saved revision {revision}",
-  "documents_revision_label": "Revision"
+  "documents_revision_label": "Revision",
+  "documents_export_name_fallback": "document",
+  "documents_export_unnamed_attachment": "attachment with a hidden name",
+  "documents_export_missing_files": [
+    {
+      "declarations": ["input count", "input names", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Left out {count} image or attachment that could not be downloaded: {names}",
+        "countPlural=other": "Left out {count} images or attachments that could not be downloaded: {names}"
+      }
+    }
+  ],
+  "documents_export_links_note": "Images and attachments link to fvoci (sign-in needed to open them). Export as ZIP to include the files.",
+  "documents_export_image_fallback": "image",
+  "documents_export_image_missing": "({alt}: could not be downloaded)",
+  "documents_export_hidden_refs": [
+    {
+      "declarations": ["input count", "input label", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Replaced {count} hidden @reference with \"{label}\".",
+        "countPlural=other": "Replaced {count} hidden @references with \"{label}\"."
+      }
+    }
+  ],
+  "documents_export_lossy_block": "block {position} ({label})",
+  "documents_export_lossy_note": "Some blocks could not be converted to Markdown exactly (formatting may change or parts may be missing): {blocks}",
+  "documents_export_notes_header": "fvoci export notes (revision {revision})",
+  "documents_block_paragraph": "paragraph",
+  "documents_block_heading": "heading",
+  "documents_block_table": "table",
+  "documents_block_code": "code",
+  "documents_block_math": "math",
+  "documents_block_image": "image",
+  "documents_block_checklist": "checklist",
+  "documents_block_bullet_list": "list",
+  "documents_block_ordered_list": "numbered list",
+  "documents_block_quote": "quote",
+  "documents_block_rule": "divider",
+  "documents_block_other": "block"
 }

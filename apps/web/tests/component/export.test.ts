@@ -1,14 +1,15 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocNode, ResolvedReferenceView } from '$lib/api/client';
 import {
-  HIDDEN_REFERENCE,
+  hiddenReferenceLabel,
   exportFileName,
   prepareExport,
   printBodyHtml,
   toMarkdown,
   zipPath,
 } from '$lib/features/documents/export';
+import { setLocale } from '$lib/paraglide/runtime.js';
 
 const visibleId = '0198f1f2-0000-7000-8000-000000000001';
 const hiddenId = '0198f1f2-0000-7000-8000-000000000002';
@@ -129,6 +130,10 @@ const options = (format: 'markdown' | 'zip' | 'pdf') => ({
   hrefFor: (r: ResolvedReferenceView) => (r.visible ? `/w/ws/items/${r.id}` : null),
 });
 
+beforeEach(async () => {
+  await setLocale('ko', { reload: false });
+});
+
 describe('document export (D-75)', () => {
   it('keeps headings, links, checklists, code and tables, and only names visible references', async () => {
     stubServer();
@@ -137,7 +142,7 @@ describe('document export (D-75)', () => {
     expect(markdown.startsWith('# 실험 노트\n')).toBe(true);
     expect(markdown).toContain('## 결과');
     expect(markdown).toContain('[RES-3 조사 항목](https://fvoci.example.test/w/ws/items/');
-    expect(markdown).toContain(HIDDEN_REFERENCE);
+    expect(markdown).toContain(hiddenReferenceLabel());
     expect(markdown).not.toContain(hiddenId);
     expect(markdown).toContain('[원문](https://example.org/paper)');
     expect(markdown).toMatch(/- \[x\] 수집/);
