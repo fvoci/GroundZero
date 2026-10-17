@@ -16,7 +16,7 @@ use common::{
     new_request_id, send,
 };
 use fvoci_server::http::AppState;
-use fvoci_server::search::{SearchClient, drain};
+use fvoci_server::search::{SearchClient, drain, prepare};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -29,7 +29,9 @@ async fn search_state() -> AppState {
         ("FVOCI_SEARCH_KEY", &key),
     ]))
     .unwrap();
-    state.search.as_ref().unwrap().ensure_index().await.unwrap();
+    prepare(&state.db, state.search.as_ref().unwrap())
+        .await
+        .unwrap();
     state
 }
 
@@ -86,7 +88,7 @@ async fn settle(state: &AppState, app: &Router, user: &TestUser, q: &str, want: 
 /// 색인에 그 대상이 있는지 직접 본다(접근 거르기 없이).
 async fn indexed(state: &AppState, q: &str, id: &str) -> bool {
     !client(state)
-        .query(q, &format!("id = \"{id}\""), 5)
+        .query(q, &format!("id = \"{id}\""), 0, 5)
         .await
         .unwrap()
         .is_empty()
@@ -309,4 +311,80 @@ async fn trashed_content_leaves_the_index_and_returns_on_restore() {
     assert_eq!(r.status, StatusCode::NO_CONTENT);
     settle(&state, &app, &admin, &tok, &[&format!("지울 문서 {tok}")]).await;
     assert!(indexed(&state, &tok, id).await);
+
+    // 항목을 지우면 그 안의 문서·업무도 색인에서 빠지고, 되살리면 함께 돌아온다.
+    let it = private_item(&app, &admin, &ws, "SRT").await;
+    let item_id = it["id"].as_str().unwrap();
+    let inner = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/documents"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": format!("항목 문서 {tok}") })),
+    )
+    .await;
+    assert_eq!(inner.status, StatusCode::CREATED, "{:?}", inner.json);
+    let inner_id = inner.json["id"].as_str().unwrap().to_owned();
+    let task = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/tasks"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": format!("항목 업무 {tok}") })),
+    )
+    .await;
+    assert_eq!(task.status, StatusCode::CREATED, "{:?}", task.json);
+    let task_id = task.json["id"].as_str().unwrap().to_owned();
+    let all = [
+        format!("지울 문서 {tok}"),
+        format!("항목 문서 {tok}"),
+        format!("항목 업무 {tok}"),
+    ];
+    let all: Vec<&str> = all.iter().map(String::as_str).collect();
+    settle(&state, &app, &admin, &tok, &all).await;
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/items/{item_id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let item_batch = r.json["batch_id"].as_str().unwrap().to_owned();
+    settle(&state, &app, &admin, &tok, &[&format!("지울 문서 {tok}")]).await;
+    assert!(!indexed(&state, &tok, &inner_id).await);
+    assert!(!indexed(&state, &tok, &task_id).await);
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/trash/{item_batch}/restore"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    settle(&state, &app, &admin, &tok, &all).await;
+    assert!(indexed(&state, &tok, &inner_id).await);
+}
+
+#[tokio::test]
+async fn an_unreachable_search_service_falls_back_to_titles() {
+    let state = fvoci_server::app::build_state(config_with(&[
+        ("FVOCI_SEARCH_URL", "http://127.0.0.1:9"),
+        ("FVOCI_SEARCH_KEY", "unused-test-key"),
+    ]))
+    .unwrap();
+    let app = common::app(&state);
+    let tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "검색 대신").await;
+    create_doc(&app, &admin, &ws, &format!("제목만 {tok}")).await;
+    assert_eq!(
+        titles(&search(&app, &admin, &tok).await),
+        [format!("제목만 {tok}")]
+    );
+    // 검색 서비스가 없어도 다른 주기 작업은 계속 돈다.
+    let report = fvoci_server::worker::run_once(&state.db, state.search.as_ref()).await;
+    assert_eq!(report.indexed, 0);
 }

@@ -12,7 +12,7 @@ use tokio::sync::watch;
 
 use crate::db::Db;
 use crate::error::AppError;
-use crate::search::{SearchClient, drain};
+use crate::search::{SearchClient, drain, prepare};
 
 /// 한 번 돈 결과(로그·테스트용).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -28,8 +28,6 @@ pub struct TickReport {
 /// 주기 작업 이름과 간격.
 const PURGE: (&str, &str) = ("trash_purge", "1 hour");
 const RECURRENCE: (&str, &str) = ("recurrence_tick", "15 minutes");
-/// 처음 한 번 모든 것을 색인 대기열에 올린다(이름만 남아 다시 돌지 않는다).
-const SEARCH_BOOTSTRAP: (&str, &str) = ("search_bootstrap", "100 years");
 
 async fn claim(db: &Db, (name, every): (&str, &str)) -> Result<bool, AppError> {
     let mut tx = db.begin_anonymous().await?;
@@ -55,7 +53,10 @@ pub async fn run_all_now(db: &Db, search: Option<&SearchClient>) -> Result<TickR
         purged: system_call(db, "SELECT app_system_purge_expired()").await?,
         occurrences: system_call(db, "SELECT app_system_recurrence_tick()").await?,
         indexed: match search {
-            Some(client) => drain_all(db, client).await?,
+            Some(client) => {
+                prepare(db, client).await?;
+                drain_all(db, client).await?
+            }
             None => 0,
         },
     })
@@ -74,23 +75,43 @@ async fn drain_all(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
     Ok(total)
 }
 
-/// 때가 된 주기 작업을 한 번 처리한다.
-pub async fn run_once(db: &Db, search: Option<&SearchClient>) -> Result<TickReport, AppError> {
-    let mut report = TickReport::default();
-    if let Some(client) = search {
-        if claim(db, SEARCH_BOOTSTRAP).await? {
-            client.ensure_index().await?;
-            system_call(db, "SELECT app_system_search_enqueue_all()").await?;
-        }
-        report.indexed = drain_all(db, client).await?;
+/// 일 하나의 실패를 기록하고 0으로 본다. 한 일이 실패해도(예: 검색 서비스 중단) 다른 일은 계속한다.
+fn logged(job: &str, result: Result<i32, AppError>) -> i32 {
+    result.unwrap_or_else(|err| {
+        tracing::warn!(job, error = %err, "background job failed");
+        0
+    })
+}
+
+async fn index(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
+    prepare(db, client).await?;
+    drain_all(db, client).await
+}
+
+async fn when_due(db: &Db, schedule: (&str, &str), sql: &str) -> Result<i32, AppError> {
+    if claim(db, schedule).await? {
+        system_call(db, sql).await
+    } else {
+        Ok(0)
     }
-    if claim(db, PURGE).await? {
-        report.purged = system_call(db, "SELECT app_system_purge_expired()").await?;
+}
+
+/// 때가 된 주기 작업을 한 번 처리한다. 일마다 따로 실패를 기록하고 계속한다.
+pub async fn run_once(db: &Db, search: Option<&SearchClient>) -> TickReport {
+    TickReport {
+        indexed: match search {
+            Some(client) => logged("search", index(db, client).await),
+            None => 0,
+        },
+        purged: logged(
+            "trash_purge",
+            when_due(db, PURGE, "SELECT app_system_purge_expired()").await,
+        ),
+        occurrences: logged(
+            "recurrence",
+            when_due(db, RECURRENCE, "SELECT app_system_recurrence_tick()").await,
+        ),
     }
-    if claim(db, RECURRENCE).await? {
-        report.occurrences = system_call(db, "SELECT app_system_recurrence_tick()").await?;
-    }
-    Ok(report)
 }
 
 /// 간격마다 [`run_once`]를 부르는 작업을 띄운다. `shutdown`이 바뀌면 멈춘다.
@@ -102,17 +123,14 @@ pub fn spawn(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
-            match run_once(&db, search.as_ref()).await {
-                Ok(report) if report != TickReport::default() => {
-                    tracing::info!(
-                        purged = report.purged,
-                        occurrences = report.occurrences,
-                        indexed = report.indexed,
-                        "background tick"
-                    );
-                }
-                Ok(_) => {}
-                Err(err) => tracing::warn!(error = %err, "background tick failed"),
+            let report = run_once(&db, search.as_ref()).await;
+            if report != TickReport::default() {
+                tracing::info!(
+                    purged = report.purged,
+                    occurrences = report.occurrences,
+                    indexed = report.indexed,
+                    "background tick"
+                );
             }
             tokio::select! {
                 () = tokio::time::sleep(interval) => {}

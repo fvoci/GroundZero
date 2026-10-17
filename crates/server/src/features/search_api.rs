@@ -17,12 +17,15 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::member_role;
 use crate::http::AppState;
-use crate::ids::WorkspaceId;
+use crate::ids::{UserId, WorkspaceId};
+use crate::search::SearchClient;
 
 /// 한 번에 돌려주는 결과 수.
 const MAX_RESULTS: usize = 20;
 /// 거르기 전에 Meilisearch에서 가져오는 후보 수.
 const CANDIDATES: usize = 60;
+/// 거르고 나서 모자라면 더 받아 보는 쪽 수(후보 최대 300개).
+const MAX_PAGES: usize = 5;
 /// 검색어 길이 상한.
 const MAX_QUERY_CHARS: usize = 200;
 
@@ -168,48 +171,85 @@ pub async fn search(
         )));
     }
     let kinds = parse_kinds(query.kinds.as_deref())?;
-    let mut tx = state.db.begin_as(user).await?;
-    let results = match &state.search {
-        Some(client) => {
-            let filter = scope_filter(&mut tx, query.workspace_id, &kinds).await?;
-            let hits = client.query(q, &filter, CANDIDATES).await?;
-            let candidates: Vec<(String, Uuid)> = hits
-                .iter()
-                .filter_map(|h| Some((h.kind.clone(), Uuid::parse_str(&h.id).ok()?)))
-                .collect();
-            let allowed = visible(&mut tx, &candidates).await?;
-            let mut results = Vec::new();
-            for h in hits {
-                let Some(id) = Uuid::parse_str(&h.id).ok() else {
-                    continue;
-                };
-                if results.len() == MAX_RESULTS || !allowed.contains(&(h.kind.clone(), id)) {
-                    continue;
-                }
-                let snippet = h
-                    .formatted
-                    .as_ref()
-                    .and_then(|f| f.get("text"))
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_owned)
-                    .filter(|s| !s.is_empty());
-                let reference = reference(&mut tx, &h.kind, id).await?;
-                results.push(SearchResult {
-                    kind: h.kind,
-                    id,
-                    title: h.title,
-                    reference,
-                    workspace_id: parse_uuid(h.workspace_id.as_deref()),
-                    item_id: parse_uuid(h.item_id.as_deref()),
-                    snippet,
-                });
-            }
-            results
-        }
-        None => fallback(&mut tx, q, query.workspace_id, &kinds).await?,
+    let Some(client) = &state.search else {
+        let mut tx = state.db.begin_as(user).await?;
+        let results = fallback(&mut tx, q, query.workspace_id, &kinds).await?;
+        tx.commit().await?;
+        return Ok(Json(results));
     };
+    let mut tx = state.db.begin_as(user).await?;
+    let filter = scope_filter(&mut tx, query.workspace_id, &kinds).await?;
+    tx.commit().await?;
+    if let Some(results) = indexed(&state, client, user, q, &filter).await? {
+        return Ok(Json(results));
+    }
+    // 검색 서비스가 응답하지 않으면 제목 검색으로 대신한다.
+    let mut tx = state.db.begin_as(user).await?;
+    let results = fallback(&mut tx, q, query.workspace_id, &kinds).await?;
     tx.commit().await?;
     Ok(Json(results))
+}
+
+/// Meilisearch 후보를 쪽마다 받아 볼 수 있는 것만 20개까지 모은다. 검색 서비스가 처음부터 응답하지 않으면 `None`.
+/// Meilisearch를 기다리는 동안 DB 트랜잭션을 열어 두지 않는다.
+async fn indexed(
+    state: &AppState,
+    client: &SearchClient,
+    user: UserId,
+    q: &str,
+    filter: &str,
+) -> Result<Option<Vec<SearchResult>>, AppError> {
+    let mut results = Vec::new();
+    for page in 0..MAX_PAGES {
+        let hits = match client.query(q, filter, page * CANDIDATES, CANDIDATES).await {
+            Ok(hits) => hits,
+            Err(err) if page == 0 => {
+                tracing::warn!(error = %err, "search service unavailable; using title search");
+                return Ok(None);
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "search service failed while paging");
+                break;
+            }
+        };
+        let last_page = hits.len() < CANDIDATES;
+        let candidates: Vec<(String, Uuid)> = hits
+            .iter()
+            .filter_map(|h| Some((h.kind.clone(), Uuid::parse_str(&h.id).ok()?)))
+            .collect();
+        let mut tx = state.db.begin_as(user).await?;
+        let allowed = visible(&mut tx, &candidates).await?;
+        for h in hits {
+            let Some(id) = Uuid::parse_str(&h.id).ok() else {
+                continue;
+            };
+            if results.len() == MAX_RESULTS || !allowed.contains(&(h.kind.clone(), id)) {
+                continue;
+            }
+            let snippet = h
+                .formatted
+                .as_ref()
+                .and_then(|f| f.get("text"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .filter(|s| !s.is_empty());
+            let reference = reference(&mut tx, &h.kind, id).await?;
+            results.push(SearchResult {
+                kind: h.kind,
+                id,
+                title: h.title,
+                reference,
+                workspace_id: parse_uuid(h.workspace_id.as_deref()),
+                item_id: parse_uuid(h.item_id.as_deref()),
+                snippet,
+            });
+        }
+        tx.commit().await?;
+        if results.len() == MAX_RESULTS || last_page {
+            break;
+        }
+    }
+    Ok(Some(results))
 }
 
 /// Meilisearch가 없을 때: 제목만 DB에서 찾고 같은 접근 함수로 거른다.

@@ -134,9 +134,9 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
         worker::run_once(&state.db, None),
         worker::run_once(&state.db, None)
     );
-    let _ = (a.unwrap(), b.unwrap());
+    let _ = (a, b);
     assert_eq!(
-        worker::run_once(&state.db, None).await.unwrap(),
+        worker::run_once(&state.db, None).await,
         worker::TickReport::default()
     );
 }

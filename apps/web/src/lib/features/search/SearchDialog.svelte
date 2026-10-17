@@ -49,6 +49,22 @@
     }, 250);
   }
 
+  let list = $state<HTMLUListElement | undefined>();
+
+  /** 위·아래 화살표로 검색어 칸과 결과 사이를 옮겨 다닌다. */
+  function move(e: KeyboardEvent, from: number): void {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const buttons = list === undefined ? [] : Array.from(list.querySelectorAll('button'));
+    if (buttons.length === 0) return;
+    e.preventDefault();
+    const next = from + (e.key === 'ArrowDown' ? 1 : -1);
+    if (next < 0) {
+      document.querySelector<HTMLInputElement>('[data-testid="search-input"]')?.focus();
+      return;
+    }
+    buttons[Math.min(next, buttons.length - 1)]?.focus();
+  }
+
   function choose(r: SearchResultView): void {
     const path = searchResultPath(r, memberOf);
     if (path === undefined) return;
@@ -89,6 +105,9 @@
       oninput={(e: Event) => {
         if (e.currentTarget instanceof HTMLInputElement) changed(e.currentTarget.value);
       }}
+      onkeydown={(e: KeyboardEvent) => {
+        move(e, -1);
+      }}
       data-testid="search-input"
     />
     <div aria-live="polite" class="text-sm text-muted-foreground">
@@ -103,15 +122,17 @@
       {/if}
     </div>
     {#if results.length > 0}
-      <ul class="flex flex-col gap-1" data-testid="search-results">
-        {#each results as r (`${r.kind}:${r.id}`)}
+      <ul bind:this={list} class="flex flex-col gap-1" data-testid="search-results">
+        {#each results as r, index (`${r.kind}:${r.id}`)}
           <li>
             <button
               type="button"
               class="w-full rounded-md px-2 py-1.5 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-              disabled={searchResultPath(r, memberOf) === undefined}
               onclick={() => {
                 choose(r);
+              }}
+              onkeydown={(e: KeyboardEvent) => {
+                move(e, index);
               }}
             >
               <span class="flex items-baseline gap-2">

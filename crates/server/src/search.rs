@@ -6,10 +6,14 @@
 //! 색인 반영은 백그라운드 작업이 대기열(`search_queue`)을 꺼내 한다. Meilisearch가 없으면 검색 API는 제목만
 //! PostgreSQL에서 찾는다.
 
+use std::collections::HashSet;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::config::SearchConfig;
@@ -19,6 +23,10 @@ use crate::features::search_text::plain_text;
 
 /// 색인 이름.
 const INDEX: &str = "fvoci";
+/// 검색 요청은 짧게 기다리고, 넘으면 API가 제목 검색으로 대신한다.
+const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
+/// 한 번에 꺼내는 대기열 수.
+const BATCH: i32 = 200;
 
 /// Meilisearch 연결.
 #[derive(Debug, Clone)]
@@ -26,6 +34,8 @@ pub struct SearchClient {
     base: String,
     key: String,
     http: reqwest::Client,
+    /// 이 프로세스에서 색인 설정을 한 번 맞췄는지.
+    configured: Arc<AtomicBool>,
 }
 
 /// 색인 문서.
@@ -49,7 +59,6 @@ pub struct Hit {
     pub kind: String,
     pub id: String,
     pub title: String,
-    pub reference: Option<String>,
     pub workspace_id: Option<String>,
     pub item_id: Option<String>,
     #[serde(rename = "_formatted", default)]
@@ -74,6 +83,7 @@ impl SearchClient {
                 .timeout(Duration::from_secs(10))
                 .build()
                 .unwrap_or_default(),
+            configured: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -83,7 +93,8 @@ impl SearchClient {
             .bearer_auth(&self.key)
     }
 
-    /// 비동기 작업이 끝날 때까지 기다린다(실패하면 오류).
+    /// 비동기 작업이 끝날 때까지 기다린다. 실패하면 오류, 오래 걸리면 대기열에 들어간 것으로 본다
+    /// (Meilisearch는 작업을 순서대로 처리하고 넣기·지우기는 다시 해도 같다).
     async fn wait(&self, response: reqwest::Response) -> Result<(), AppError> {
         let body: Value = response
             .error_for_status()
@@ -115,30 +126,46 @@ impl SearchClient {
                 _ => tokio::time::sleep(Duration::from_millis(50)).await,
             }
         }
-        Err(AppError::Config(format!("search task {task} timed out")))
+        tracing::warn!(task, "search task still running; treating it as queued");
+        Ok(())
     }
 
-    /// 색인과 설정을 만든다(여러 번 불러도 같다).
-    pub async fn ensure_index(&self) -> Result<(), AppError> {
-        let created = self
-            .request(reqwest::Method::POST, "/indexes")
-            .json(&json!({ "uid": INDEX, "primaryKey": "uid" }))
+    /// 색인이 없으면 만들고(처음 시작, 또는 Meilisearch 데이터가 지워짐) 설정을 맞춘다. 새로 만들었으면 `true`
+    /// (그러면 부르는 쪽이 모든 것을 다시 대기열에 올린다). 프로세스마다 처음 한 번은 설정도 다시 맞춘다.
+    pub async fn ensure_index(&self) -> Result<bool, AppError> {
+        let exists = self
+            .request(reqwest::Method::GET, &format!("/indexes/{INDEX}"))
             .send()
             .await
             .map_err(search_error)?;
-        // 이미 있으면 작업이 실패로 끝나므로(index_already_exists) 결과는 보지 않는다.
-        let _ignored = self.wait(created).await;
-        let settings = self
-            .request(reqwest::Method::PATCH, &format!("/indexes/{INDEX}/settings"))
-            .json(&json!({
-                "searchableAttributes": ["title", "reference", "text"],
-                "filterableAttributes": ["kind", "workspace_id", "owner_user_id", "id"],
-                "displayedAttributes": ["kind", "id", "title", "reference", "workspace_id", "item_id", "text"]
-            }))
-            .send()
-            .await
-            .map_err(search_error)?;
-        self.wait(settings).await
+        let created = if exists.status() == reqwest::StatusCode::NOT_FOUND {
+            let response = self
+                .request(reqwest::Method::POST, "/indexes")
+                .json(&json!({ "uid": INDEX, "primaryKey": "uid" }))
+                .send()
+                .await
+                .map_err(search_error)?;
+            // 다른 프로세스가 먼저 만들었으면 작업이 실패로 끝난다(index_already_exists). 그쪽이 다시 올린다.
+            self.wait(response).await.is_ok()
+        } else {
+            exists.error_for_status().map_err(search_error)?;
+            false
+        };
+        if created || !self.configured.load(Ordering::Relaxed) {
+            let settings = self
+                .request(reqwest::Method::PATCH, &format!("/indexes/{INDEX}/settings"))
+                .json(&json!({
+                    "searchableAttributes": ["title", "reference", "text"],
+                    "filterableAttributes": ["kind", "workspace_id", "owner_user_id", "id"],
+                    "displayedAttributes": ["kind", "id", "title", "reference", "workspace_id", "item_id", "text"]
+                }))
+                .send()
+                .await
+                .map_err(search_error)?;
+            self.wait(settings).await?;
+            self.configured.store(true, Ordering::Relaxed);
+        }
+        Ok(created)
     }
 
     async fn upsert(&self, docs: &[IndexDoc]) -> Result<(), AppError> {
@@ -148,7 +175,7 @@ impl SearchClient {
         let response = self
             .request(
                 reqwest::Method::POST,
-                &format!("/indexes/{INDEX}/documents"),
+                &format!("/indexes/{INDEX}/documents?primaryKey=uid"),
             )
             .json(docs)
             .send()
@@ -174,17 +201,25 @@ impl SearchClient {
     }
 
     /// 거친 범위로 찾는다. 결과는 반드시 접근 함수로 다시 거른다.
-    pub async fn query(&self, q: &str, filter: &str, limit: usize) -> Result<Vec<Hit>, AppError> {
+    pub async fn query(
+        &self,
+        q: &str,
+        filter: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<Hit>, AppError> {
         let body: Value = self
             .request(reqwest::Method::POST, &format!("/indexes/{INDEX}/search"))
+            .timeout(QUERY_TIMEOUT)
             .json(&json!({
                 "q": q,
                 "filter": filter,
+                "offset": offset,
                 "limit": limit,
                 "attributesToCrop": ["text"],
                 "cropLength": 24,
                 "cropMarker": "…",
-                "attributesToRetrieve": ["kind", "id", "title", "reference", "workspace_id", "item_id"]
+                "attributesToRetrieve": ["kind", "id", "title", "workspace_id", "item_id"]
             }))
             .send()
             .await
@@ -211,19 +246,53 @@ type PayloadRow = (
     Option<String>,
 );
 
-/// 대기열을 한 번(최대 200개) 비워 색인에 반영한다. 반영에 실패하면 꺼낸 것을 되돌린다.
+/// 색인 준비: 색인이 없으면 만들고 모든 것을 대기열에 올린다.
+pub async fn prepare(db: &Db, client: &SearchClient) -> Result<(), AppError> {
+    if client.ensure_index().await? {
+        let mut tx = db.begin_anonymous().await?;
+        let queued: i32 = sqlx::query_scalar("SELECT app_system_search_enqueue_all()")
+            .fetch_one(tx.conn())
+            .await?;
+        tx.commit().await?;
+        tracing::info!(
+            queued,
+            "search index created; queued everything for indexing"
+        );
+    }
+    Ok(())
+}
+
+/// 넣기를 한꺼번에 하고, 실패하면 하나씩 해서 되는 것만 돌려준다(문제 있는 한 건이 묶음을 막지 않게).
+async fn upsert_each(client: &SearchClient, docs: &[IndexDoc]) -> Vec<String> {
+    if client.upsert(docs).await.is_ok() {
+        return docs.iter().map(|d| d.uid.clone()).collect();
+    }
+    let mut done = Vec::new();
+    for doc in docs {
+        match client.upsert(std::slice::from_ref(doc)).await {
+            Ok(()) => done.push(doc.uid.clone()),
+            Err(err) => tracing::warn!(uid = %doc.uid, error = %err, "search upsert failed"),
+        }
+    }
+    done
+}
+
+/// 대기열을 한 번(최대 200개) 꺼내 색인에 반영한다. 꺼낸 수를 돌려준다. 반영하지 못한 것은 표시가 풀린 뒤
+/// 다시 시도한다(대기열 행을 잠근 채 Meilisearch를 기다리지 않는다).
 pub async fn drain(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
     let mut tx = db.begin_anonymous().await?;
-    let claimed: Vec<(String, Uuid)> =
-        sqlx::query_as("SELECT kind, target_id FROM app_system_search_claim(200)")
+    let claimed: Vec<(String, Uuid, OffsetDateTime)> =
+        sqlx::query_as("SELECT kind, target_id, queued_at FROM app_system_search_claim($1)")
+            .bind(BATCH)
             .fetch_all(tx.conn())
             .await?;
+    tx.commit().await?;
     if claimed.is_empty() {
-        tx.commit().await?;
         return Ok(0);
     }
-    let kinds: Vec<&str> = claimed.iter().map(|(k, _)| k.as_str()).collect();
-    let ids: Vec<Uuid> = claimed.iter().map(|(_, id)| *id).collect();
+    let kinds: Vec<&str> = claimed.iter().map(|(k, _, _)| k.as_str()).collect();
+    let ids: Vec<Uuid> = claimed.iter().map(|(_, id, _)| *id).collect();
+    let mut tx = db.begin_anonymous().await?;
     let rows: Vec<PayloadRow> = sqlx::query_as(
         "SELECT kind, id, live, workspace_id, owner_user_id, item_id, title, reference, body, description
          FROM app_system_search_payload($1, $2)",
@@ -232,6 +301,7 @@ pub async fn drain(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
     .bind(&ids)
     .fetch_all(tx.conn())
     .await?;
+    tx.commit().await?;
     let mut upserts = Vec::new();
     let mut deletes = Vec::new();
     for (kind, id, live, workspace_id, owner, item_id, title, reference, body, description) in rows
@@ -256,12 +326,35 @@ pub async fn drain(db: &Db, client: &SearchClient) -> Result<i32, AppError> {
             text,
         });
     }
-    client.upsert(&upserts).await?;
-    client.delete(&deletes).await?;
+    let mut done: HashSet<String> = upsert_each(client, &upserts).await.into_iter().collect();
+    match client.delete(&deletes).await {
+        Ok(()) => done.extend(deletes),
+        Err(err) => tracing::warn!(error = %err, "search delete failed"),
+    }
+    let finished: Vec<&(String, Uuid, OffsetDateTime)> = claimed
+        .iter()
+        .filter(|(kind, id, _)| done.contains(&uid(kind, *id)))
+        .collect();
+    let mut tx = db.begin_anonymous().await?;
+    sqlx::query("SELECT app_system_search_done($1, $2, $3)")
+        .bind(
+            finished
+                .iter()
+                .map(|(k, _, _)| k.as_str())
+                .collect::<Vec<_>>(),
+        )
+        .bind(finished.iter().map(|(_, id, _)| *id).collect::<Vec<_>>())
+        .bind(finished.iter().map(|(_, _, at)| *at).collect::<Vec<_>>())
+        .execute(tx.conn())
+        .await?;
     tx.commit().await?;
+    if finished.is_empty() {
+        return Err(AppError::Config(
+            "search indexing made no progress; will retry later".into(),
+        ));
+    }
     i32::try_from(claimed.len()).map_err(|_| AppError::Config("too many search jobs".into()))
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
