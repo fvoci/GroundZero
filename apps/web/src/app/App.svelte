@@ -17,6 +17,8 @@
   import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
   import SearchDialog from '$lib/features/search/SearchDialog.svelte';
   import { displaySettings } from '$lib/display';
+  import { m } from '$lib/paraglide/messages.js';
+  import { setLocale } from '$lib/paraglide/runtime.js';
   import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
   import TimeScreen from '$lib/features/time/TimeScreen.svelte';
@@ -64,13 +66,14 @@
       currentUser.weekStart = me.week_start;
       currentUser.hourCycle = me.hour_cycle;
       currentUser.displayName = me.display_name;
-      // 화면 낭독기·브라우저가 쓰는 문서 언어(D-81).
+      // 저장한 표시 언어로 그린다(D-81). 화면 낭독기·브라우저가 쓰는 문서 언어도 맞춘다.
+      await setLocale(displaySettings().locale, { reload: false });
       document.documentElement.lang = displaySettings().locale;
       session = { state: 'signed-in', me, workspaces: await api.workspaces() };
     } catch (e: unknown) {
       session = {
         state: 'error',
-        message: e instanceof Error ? e.message : '서버에 연결할 수 없습니다.',
+        message: e instanceof Error ? e.message : m.app_server_unreachable(),
       };
     }
   }
@@ -126,7 +129,7 @@
 {#if route.name === 'public'}
   <PublicView token={route.token} />
 {:else if session.state === 'loading'}
-  <p class="p-6" aria-live="polite">불러오는 중…</p>
+  <p class="p-6" aria-live="polite">{m.app_loading()}</p>
 {:else if session.state === 'error'}
   <p class="p-6 text-destructive" role="alert">{session.message}</p>
 {:else if session.state === 'anonymous'}
@@ -150,12 +153,12 @@
           }}
           data-testid="search-open"
         >
-          검색<kbd class="text-xs">Ctrl/⌘ K</kbd>
+          {m.app_search()}<kbd class="text-xs">Ctrl/⌘ K</kbd>
         </Button>
       </Sidebar.Header>
       <Sidebar.Content>
         <Sidebar.Group>
-          <Sidebar.GroupLabel>워크스페이스</Sidebar.GroupLabel>
+          <Sidebar.GroupLabel>{m.app_nav_workspaces()}</Sidebar.GroupLabel>
           <Sidebar.GroupContent>
             <Sidebar.Menu>
               <Sidebar.MenuItem>
@@ -167,7 +170,7 @@
                       onclick={(e: MouseEvent) => {
                         e.preventDefault();
                         router.navigate('/');
-                      }}>모든 워크스페이스</a
+                      }}>{m.app_nav_all_workspaces()}</a
                     >
                   {/snippet}
                 </Sidebar.MenuButton>
@@ -192,10 +195,10 @@
           </Sidebar.GroupContent>
         </Sidebar.Group>
         <Sidebar.Group>
-          <Sidebar.GroupLabel>개인</Sidebar.GroupLabel>
+          <Sidebar.GroupLabel>{m.app_nav_personal()}</Sidebar.GroupLabel>
           <Sidebar.GroupContent>
             <Sidebar.Menu>
-              {#each [{ path: '/notes', label: '내 노트', active: route.name === 'notes' }, { path: '/shared', label: '공유받은 문서', active: route.name === 'shared' }, { path: '/time', label: '내 시간', active: route.name === 'time' }, { path: '/trash', label: '내 노트 휴지통', active: route.name === 'my-trash' }, { path: '/audit', label: '내 활동 기록', active: route.name === 'my-audit' }, { path: '/notifications', label: unreadCount > 0 ? `알림 (${String(unreadCount)})` : '알림', active: route.name === 'notifications' }] as item (item.path)}
+              {#each [{ path: '/notes', label: m.app_nav_notes(), active: route.name === 'notes' }, { path: '/shared', label: m.app_nav_shared(), active: route.name === 'shared' }, { path: '/time', label: m.app_nav_time(), active: route.name === 'time' }, { path: '/trash', label: m.app_nav_my_trash(), active: route.name === 'my-trash' }, { path: '/audit', label: m.app_nav_my_audit(), active: route.name === 'my-audit' }, { path: '/notifications', label: unreadCount > 0 ? m.app_nav_notifications_unread( { count: unreadCount } ) : m.app_nav_notifications(), active: route.name === 'notifications' }] as item (item.path)}
                 <Sidebar.MenuItem>
                   <Sidebar.MenuButton isActive={item.active}>
                     {#snippet child({ props })}
@@ -223,12 +226,12 @@
         <span class="text-base font-semibold"
           >{currentWorkspace?.name ??
             (route.name === 'notes'
-              ? '내 노트'
+              ? m.app_nav_notes()
               : route.name === 'notifications'
-                ? '알림'
+                ? m.app_nav_notifications()
                 : route.name === 'shared'
-                  ? '공유받은 문서'
-                  : '홈')}</span
+                  ? m.app_nav_shared()
+                  : m.app_title_home())}</span
         >
         <div class="ml-auto flex items-center gap-2">
           <TimerWidget />
@@ -244,10 +247,14 @@
               <DropdownMenu.Item
                 onSelect={() => {
                   window.location.assign('/api/me/export');
-                }}>내 자료 내려받기 (ZIP)</DropdownMenu.Item
+                }}>{m.app_menu_export()}</DropdownMenu.Item
               >
-              <DropdownMenu.Item onSelect={() => (displayOpen = true)}>표시 설정</DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={() => void logout()}>로그아웃</DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => (displayOpen = true)}
+                >{m.app_menu_display()}</DropdownMenu.Item
+              >
+              <DropdownMenu.Item onSelect={() => void logout()}
+                >{m.app_menu_logout()}</DropdownMenu.Item
+              >
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         </div>
@@ -269,7 +276,7 @@
           />
         {:else if WORKSPACE_ROUTES.has(route.name)}
           {#if currentWorkspace === undefined}
-            <p role="alert">워크스페이스가 없거나 볼 권한이 없습니다.</p>
+            <p role="alert">{m.app_workspace_missing()}</p>
           {:else if route.name === 'members'}
             <MembersScreen
               workspace={currentWorkspace}
@@ -277,14 +284,14 @@
               onchanged={() => void reloadWorkspaces()}
             />
           {:else if route.name === 'workspace'}
-            <nav aria-label="워크스페이스 메뉴" class="text-sm">
+            <nav aria-label={m.app_workspace_menu()} class="text-sm">
               <a
                 class="underline"
                 href={membersPath(currentWorkspace.id)}
                 onclick={(e: MouseEvent) => {
                   e.preventDefault();
                   router.navigate(membersPath(currentWorkspace.id));
-                }}>멤버</a
+                }}>{m.app_members()}</a
               >
               <a
                 class="ml-3 underline"
@@ -292,7 +299,7 @@
                 onclick={(e: MouseEvent) => {
                   e.preventDefault();
                   router.navigate(calendarPath(currentWorkspace.id));
-                }}>달력</a
+                }}>{m.app_calendar()}</a
               >
               <a
                 class="ml-3 underline"
@@ -300,7 +307,7 @@
                 onclick={(e: MouseEvent) => {
                   e.preventDefault();
                   router.navigate(trashPath(currentWorkspace.id));
-                }}>휴지통</a
+                }}>{m.app_trash()}</a
               >
               {#if currentWorkspace.role === 'admin'}
                 <a
@@ -309,7 +316,7 @@
                   onclick={(e: MouseEvent) => {
                     e.preventDefault();
                     router.navigate(auditPath(currentWorkspace.id));
-                  }}>감사 기록</a
+                  }}>{m.app_audit()}</a
                 >
               {/if}
             </nav>
@@ -335,12 +342,15 @@
               workspaces={signedIn.workspaces}
             />
           {:else if route.name === 'item-document'}
-            <BackLink path={itemPath(currentWorkspace.id, route.itemId)} label="항목으로" />
+            <BackLink
+              path={itemPath(currentWorkspace.id, route.itemId)}
+              label={m.app_back_to_item()}
+            />
             <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
           {:else if route.name === 'document'}
             <BackLink
               path={workspacePath(currentWorkspace.id)}
-              label={`${currentWorkspace.name} 위키`}
+              label={m.app_wiki_of({ name: currentWorkspace.name })}
             />
             <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
           {/if}
@@ -365,7 +375,7 @@
         {:else if route.name === 'standalone-document'}
           <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
         {:else}
-          <p role="alert">페이지를 찾을 수 없습니다.</p>
+          <p role="alert">{m.app_not_found()}</p>
         {/if}
       </main>
     </Sidebar.Inset>

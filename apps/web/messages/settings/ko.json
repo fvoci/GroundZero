@@ -1,0 +1,19 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "settings_title": "표시 설정",
+  "settings_description": "언어·시간대·한 주 시작·시각 표시를 고릅니다. 표시만 바뀌고 저장된 일정의 시각과 날짜는 그대로입니다. 다른 사람에게는 보이지 않습니다.",
+  "settings_unsaved_hint": "아직 저장하지 않은 칸은 이 브라우저의 언어·시간대로 제안한 값입니다.",
+  "settings_language": "언어",
+  "settings_language_ko": "한국어",
+  "settings_language_en": "English",
+  "settings_time_zone": "시간대",
+  "settings_browser_zone": "브라우저 시간대 사용({zone})",
+  "settings_week_start": "한 주 시작",
+  "settings_monday": "월요일",
+  "settings_sunday": "일요일",
+  "settings_clock": "시각 표시",
+  "settings_clock_h12": "12시간(오전·오후)",
+  "settings_clock_h23": "24시간",
+  "settings_example": "예: {sample}",
+  "settings_save_failed": "저장하지 못했습니다."
+}

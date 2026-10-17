@@ -1,0 +1,15 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "common_save": "Save",
+  "common_cancel": "Cancel",
+  "common_items_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} item",
+        "countPlural=other": "{count} items"
+      }
+    }
+  ]
+}

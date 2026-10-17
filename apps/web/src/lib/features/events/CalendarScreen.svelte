@@ -10,6 +10,7 @@
   import type { CalendarView, ItemView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
   import { displaySettings, formatMonth, weekdays } from '$lib/display';
+  import { m } from '$lib/paraglide/messages.js';
   import { itemPath, itemTaskPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
 
@@ -130,7 +131,7 @@
       })
       .catch((e: unknown) => {
         changed = false;
-        if (!cancelled) error = e instanceof ApiError ? e.message : '달력을 불러오지 못했습니다.';
+        if (!cancelled) error = e instanceof ApiError ? e.message : m.events_load_failed();
       });
     return () => {
       cancelled = true;
@@ -181,46 +182,46 @@
 <section class="flex flex-col gap-3" aria-labelledby="calendar-heading">
   <div class="flex flex-wrap items-center gap-2">
     {#if embedded}
-      <h2 id="calendar-heading" class="text-lg font-semibold" tabindex="-1">달력 · {title}</h2>
+      <h2 id="calendar-heading" class="text-lg font-semibold" tabindex="-1">
+        {m.events_calendar_embedded({ title })}
+      </h2>
     {:else}
       <h1 id="calendar-heading" class="text-xl font-semibold" tabindex="-1">{title}</h1>
     {/if}
-    <div class="ml-auto flex gap-1" role="group" aria-label="달 이동">
+    <div class="ml-auto flex gap-1" role="group" aria-label={m.events_month_nav()}>
       <Button size="sm" variant="outline" onclick={() => (month = shiftMonth(month, -1))}
-        >← 이전 달</Button
+        >{m.events_prev_month()}</Button
       >
       <Button size="sm" variant="outline" onclick={() => (month = today.slice(0, 7))}
-        >이번 달</Button
+        >{m.events_this_month()}</Button
       >
       <Button size="sm" variant="outline" onclick={() => (month = shiftMonth(month, 1))}
-        >다음 달 →</Button
+        >{m.events_next_month()}</Button
       >
     </div>
   </div>
   {#if scope === undefined}
-    <div class="flex flex-wrap items-end gap-2" role="group" aria-label="달력 범위">
+    <div class="flex flex-wrap items-end gap-2" role="group" aria-label={m.events_scope()}>
       <label class="flex flex-col gap-1 text-xs text-muted-foreground">
-        모듈
+        {m.events_scope_module()}
         <select class={fieldBox} bind:value={filterModule}>
-          <option value="">전체</option>
-          {#each modules as m (m.id)}<option value={m.id}>{m.name} ({m.key})</option>{/each}
+          <option value="">{m.events_scope_all()}</option>
+          {#each modules as mod (mod.id)}<option value={mod.id}>{mod.name} ({mod.key})</option
+            >{/each}
         </select>
       </label>
       {#if filterModule !== ''}
         <label class="flex flex-col gap-1 text-xs text-muted-foreground">
-          항목
+          {m.events_scope_item()}
           <select class={fieldBox} bind:value={filterItem}>
-            <option value="">모듈 전체</option>
+            <option value="">{m.events_scope_module_all()}</option>
             {#each moduleItems as it (it.id)}<option value={it.id}>{it.title}</option>{/each}
           </select>
         </label>
       {/if}
     </div>
   {/if}
-  <p class="text-sm text-muted-foreground">
-    볼 수 있는 업무의 마감일(◆ 마일스톤)·일정·수강·공부 계획일·제출·마감일을 보입니다. "(내 계획)"은
-    나만 보는 날짜입니다. 시각은 {zone} 기준입니다.
-  </p>
+  <p class="text-sm text-muted-foreground">{m.events_calendar_hint({ zone })}</p>
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive">{error}</p>
   {/if}
@@ -229,7 +230,7 @@
     class="hidden w-full table-fixed border-collapse text-sm md:table"
     data-testid="calendar-grid"
   >
-    <caption class="sr-only">{title} 달력</caption>
+    <caption class="sr-only">{m.events_calendar_caption({ title })}</caption>
     <thead>
       <tr>
         {#each WEEKDAYS as w (w)}
@@ -257,7 +258,7 @@
                 ]}
               >
                 <span aria-hidden="true">{Number(day.slice(8))}</span>
-                <span class="sr-only">{day}{day === today ? ' 오늘' : ''}</span>
+                <span class="sr-only">{day === today ? m.events_day_today({ day }) : day}</span>
               </div>
               <div class="flex flex-col gap-0.5">
                 {#each entries as entry (entryKey(day, entry))}
@@ -281,7 +282,7 @@
   <ol class="flex flex-col gap-2 md:hidden" data-testid="calendar-agenda">
     {#each range.days.filter((d) => d.slice(0, 7) === month && (byDay.get(d)?.length ?? 0) > 0) as day (day)}
       <li class="flex flex-col gap-1">
-        <h2 class="text-sm font-semibold">{day}{day === today ? ' (오늘)' : ''}</h2>
+        <h2 class="text-sm font-semibold">{day === today ? m.events_day_today({ day }) : day}</h2>
         {#each byDay.get(day) ?? [] as entry (entryKey(day, entry))}
           <CalendarEntryButton
             {entry}
@@ -294,7 +295,7 @@
         {/each}
       </li>
     {:else}
-      <li class="text-sm text-muted-foreground">이 달에는 업무 마감이나 일정이 없습니다.</li>
+      <li class="text-sm text-muted-foreground">{m.events_month_empty()}</li>
     {/each}
   </ol>
 </section>

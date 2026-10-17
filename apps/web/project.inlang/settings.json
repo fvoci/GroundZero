@@ -1,0 +1,33 @@
+{
+  "$schema": "https://inlang.com/schema/project-settings",
+  "baseLocale": "ko",
+  "locales": ["ko", "en"],
+  "modules": ["./node_modules/@inlang/plugin-message-format/dist/index.js"],
+  "plugin.inlang.messageFormat": {
+    "pathPattern": [
+      "./messages/app/{locale}.json",
+      "./messages/common/{locale}.json",
+      "./messages/audit/{locale}.json",
+      "./messages/checklists/{locale}.json",
+      "./messages/comments/{locale}.json",
+      "./messages/courses/{locale}.json",
+      "./messages/documents/{locale}.json",
+      "./messages/events/{locale}.json",
+      "./messages/files/{locale}.json",
+      "./messages/home/{locale}.json",
+      "./messages/members/{locale}.json",
+      "./messages/modules/{locale}.json",
+      "./messages/notes/{locale}.json",
+      "./messages/public/{locale}.json",
+      "./messages/records/{locale}.json",
+      "./messages/references/{locale}.json",
+      "./messages/search/{locale}.json",
+      "./messages/settings/{locale}.json",
+      "./messages/study/{locale}.json",
+      "./messages/tasks/{locale}.json",
+      "./messages/time/{locale}.json",
+      "./messages/trash/{locale}.json",
+      "./messages/workspaces/{locale}.json"
+    ]
+  }
+}

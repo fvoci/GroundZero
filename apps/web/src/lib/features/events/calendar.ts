@@ -8,6 +8,8 @@ import type {
   ProjectedTaskView,
 } from '$lib/api/client';
 import type { WeekStart } from '$lib/display';
+import { displaySettings, formatClock } from '$lib/display';
+import { m } from '$lib/paraglide/messages.js';
 import { dayNumber, fromDayNumber } from '$lib/features/tasks/gantt';
 
 import { clock, dayIn } from './time';
@@ -80,24 +82,28 @@ export function entriesByDay(
     const base = { kind: 'event' as const, event, occurrence: occ.occurrence };
     if (occ.start_date !== null && occ.end_date !== null) {
       for (const day of eachDay(occ.start_date, occ.end_date, from, to))
-        push(day, { ...base, label: `종일 ${event.title}`, sortKey: '' });
+        push(day, { ...base, label: m.events_entry_all_day({ title: event.title }), sortKey: '' });
     } else if (occ.starts_at !== null && occ.ends_at !== null) {
       const startDay = dayIn(occ.starts_at, viewerZone);
       // 끝 시각은 포함하지 않는다(자정에 끝나면 다음 날에 걸치지 않음).
       const endMs = Math.max(Date.parse(occ.starts_at), Date.parse(occ.ends_at) - 1);
       const endDay = dayIn(new Date(endMs).toISOString(), viewerZone);
       const time = clock(occ.starts_at, viewerZone);
+      const shown = formatClock(occ.starts_at, { ...displaySettings(), timeZone: viewerZone });
       for (const day of eachDay(startDay, endDay, from, to))
         push(day, {
           ...base,
-          label: day === startDay ? `${time} ${event.title}` : `(계속) ${event.title}`,
+          label:
+            day === startDay
+              ? m.events_entry_timed({ time: shown, title: event.title })
+              : m.events_entry_continued({ title: event.title }),
           sortKey: day === startDay ? time : '',
         });
     } else if (occ.skipped && occ.occurrence >= from && occ.occurrence <= to) {
       // 일정 시간대에 없는 현지 시각이라 만들지 않은 반복 회차(D-81). 날짜는 일정 시간대 기준.
       push(occ.occurrence, {
         ...base,
-        label: `건너뜀(그 시각 없음) ${event.title}`,
+        label: m.events_entry_skipped({ title: event.title }),
         sortKey: '',
       });
     }
@@ -108,21 +114,30 @@ export function entriesByDay(
     push(day, {
       kind: 'projected',
       projected: p,
-      label: `예정 ${p.milestone ? '◆ ' : ''}${p.title}`,
+      label: p.milestone
+        ? m.events_entry_projected_milestone({ title: p.title })
+        : m.events_entry_projected({ title: p.title }),
     });
   }
   for (const task of tasks) {
     const day = task.due_date ?? task.start_date;
     if (day === null || day < from || day > to) continue;
-    const what = task.milestone ? '◆' : task.due_date === null ? '시작' : '마감';
-    push(day, { kind: 'task', task, label: `${what} ${task.reference ?? ''} ${task.title}` });
+    const words = { reference: task.reference ?? '', title: task.title };
+    const label = task.milestone
+      ? m.events_entry_milestone(words)
+      : task.due_date === null
+        ? m.events_entry_task_start(words)
+        : m.events_entry_task_due(words);
+    push(day, { kind: 'task', task, label });
   }
   for (const d of dates) {
     if (d.date < from || d.date > to) continue;
     push(d.date, {
       kind: 'date',
       date: d,
-      label: `${DATE_LABEL[d.kind]}${d.personal ? '(내 계획)' : ''} ${d.title}`,
+      label: d.personal
+        ? m.events_entry_date_personal({ label: dateLabel(d.kind), title: d.title })
+        : m.events_entry_date({ label: dateLabel(d.kind), title: d.title }),
     });
   }
   for (const list of out.values()) {
@@ -144,11 +159,18 @@ export function startOfWeek(day: string, weekStart: WeekStart): string {
   return fromDayNumber(n - lead);
 }
 
-/** 업무·일정 밖 날짜(D-80)의 머리말. */
-export const DATE_LABEL: Record<CalendarDateKind, string> = {
-  episode: '수강',
-  study_unit: '공부',
-  submission: '제출 예정',
-  revision_due: '수정 마감',
-  deliverable: '산출물 마감',
-};
+/** 업무·일정 밖 날짜(D-80)의 머리말(표시 언어, D-81). */
+export function dateLabel(kind: CalendarDateKind): string {
+  switch (kind) {
+    case 'episode':
+      return m.events_date_episode();
+    case 'study_unit':
+      return m.events_date_study_unit();
+    case 'submission':
+      return m.events_date_submission();
+    case 'revision_due':
+      return m.events_date_revision_due();
+    case 'deliverable':
+      return m.events_date_deliverable();
+  }
+}

@@ -14,6 +14,7 @@
     suggestedSettings,
   } from '$lib/display';
   import { me } from '$lib/me.svelte';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
 
@@ -73,7 +74,7 @@
       // 날짜 계산·서식을 새 설정으로 다시 하도록 지금 화면을 새로 읽는다.
       window.location.reload();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '저장하지 못했습니다.';
+      error = e instanceof ApiError ? e.message : m.settings_save_failed();
     }
   }
 
@@ -83,20 +84,15 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-md">
     <Dialog.Header>
-      <Dialog.Title>표시 설정</Dialog.Title>
-      <Dialog.Description
-        >언어·시간대·한 주 시작·시각 표시를 고릅니다. 표시만 바뀌고 저장된 일정의 시각과 날짜는
-        그대로입니다. 다른 사람에게는 보이지 않습니다.</Dialog.Description
-      >
+      <Dialog.Title>{m.settings_title()}</Dialog.Title>
+      <Dialog.Description>{m.settings_description()}</Dialog.Description>
     </Dialog.Header>
     {#if unsaved}
-      <p class="text-sm text-muted-foreground" role="status">
-        아직 저장하지 않은 칸은 이 브라우저의 언어·시간대로 제안한 값입니다.
-      </p>
+      <p class="text-sm text-muted-foreground" role="status">{m.settings_unsaved_hint()}</p>
     {/if}
     <div class="flex flex-col gap-3 text-sm">
       <label class="flex flex-col gap-1">
-        <span class="font-medium">언어</span>
+        <span class="font-medium">{m.settings_language()}</span>
         <select
           class={fieldClass}
           bind:value={
@@ -107,37 +103,37 @@
             }
           }
         >
-          <option value="ko">한국어</option>
-          <option value="en">English</option>
+          <option value="ko">{m.settings_language_ko()}</option>
+          <option value="en">{m.settings_language_en()}</option>
         </select>
       </label>
       <label class="flex flex-col gap-1">
-        <span class="font-medium">시간대</span>
+        <span class="font-medium">{m.settings_time_zone()}</span>
         <select class={fieldClass} bind:value={zone}>
-          <option value="">브라우저 시간대 사용({suggested.timeZone})</option>
+          <option value="">{m.settings_browser_zone({ zone: suggested.timeZone })}</option>
           {#each zones as z (z)}<option value={z}>{z}</option>{/each}
         </select>
       </label>
       <label class="flex flex-col gap-1">
-        <span class="font-medium">한 주 시작</span>
+        <span class="font-medium">{m.settings_week_start()}</span>
         <select class={fieldClass} bind:value={weekStart}>
-          <option value="mon">월요일</option>
-          <option value="sun">일요일</option>
+          <option value="mon">{m.settings_monday()}</option>
+          <option value="sun">{m.settings_sunday()}</option>
         </select>
       </label>
       <label class="flex flex-col gap-1">
-        <span class="font-medium">시각 표시</span>
+        <span class="font-medium">{m.settings_clock()}</span>
         <select class={fieldClass} bind:value={hourCycle}>
-          <option value="h12">12시간(오전·오후)</option>
-          <option value="h23">24시간</option>
+          <option value="h12">{m.settings_clock_h12()}</option>
+          <option value="h23">{m.settings_clock_h23()}</option>
         </select>
-        <span class="text-xs text-muted-foreground">예: {sample}</span>
+        <span class="text-xs text-muted-foreground">{m.settings_example({ sample })}</span>
       </label>
     </div>
     {#if error !== undefined}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
     <div class="flex justify-end gap-2">
-      <Button variant="ghost" onclick={() => (open = false)}>취소</Button>
-      <Button onclick={() => void save()}>저장</Button>
+      <Button variant="ghost" onclick={() => (open = false)}>{m.common_cancel()}</Button>
+      <Button onclick={() => void save()}>{m.common_save()}</Button>
     </div>
   </Dialog.Content>
 </Dialog.Root>
