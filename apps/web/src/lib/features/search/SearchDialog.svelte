@@ -124,7 +124,7 @@
     <Dialog.Header>
       <Dialog.Title>검색</Dialog.Title>
       <Dialog.Description
-        >문서·업무·항목·일정·파일(지원 형식은 본문까지)에서 찾습니다. 볼 수 있는 것만 나옵니다.</Dialog.Description
+        >문서·업무·항목·일정·파일(지원 형식은 본문까지)·기록에서 찾습니다. 볼 수 있는 것만 나옵니다.</Dialog.Description
       >
     </Dialog.Header>
     <Input

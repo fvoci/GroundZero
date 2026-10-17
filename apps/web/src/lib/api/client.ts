@@ -1836,7 +1836,7 @@ function parseDeletedWorkspace(value: Json): DeletedWorkspaceView {
   };
 }
 
-export type SearchKind = 'document' | 'task' | 'item' | 'event' | 'file';
+export type SearchKind = 'document' | 'task' | 'item' | 'event' | 'file' | 'record';
 
 /** 검색 필터(D-39). 상태·담당자를 주면 업무만 나온다. 날짜는 YYYY-MM-DD(끝 포함). */
 export interface SearchFilters {
@@ -1868,7 +1868,8 @@ function parseSearchResult(value: Json): SearchResultView {
     kind !== 'task' &&
     kind !== 'item' &&
     kind !== 'event' &&
-    kind !== 'file'
+    kind !== 'file' &&
+    kind !== 'record'
   )
     throw new TypeError(`unknown search kind ${kind}`);
   return {

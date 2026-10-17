@@ -670,3 +670,64 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
         [format!("{tok} 보고서")]
     );
 }
+
+/// 항목 기록(D-39 자료 검색): 제목·메모·칸의 글자로 찾고, 그 항목을 볼 수 있는 사람에게만 보인다.
+#[tokio::test]
+async fn item_records_are_searchable_by_people_who_see_the_item() {
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let field_tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "기록 검색").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "research", "name": "R", "key": "RSR" })),
+    )
+    .await
+    .json;
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", module["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "비공개 연구" })),
+    )
+    .await
+    .json;
+    let record = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/records", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "reference", "title": format!("{tok} 선행연구"),
+                     "body": "핵심 요약", "fields": { "summary": format!("요약 {field_tok}") } })),
+    )
+    .await;
+    assert_eq!(record.status, StatusCode::CREATED, "{:?}", record.json);
+
+    let found = settle(&state, &app, &admin, &tok, &[&format!("{tok} 선행연구")]).await;
+    assert_eq!(found[0]["kind"], "record");
+    assert_eq!(found[0]["item_id"], item["id"]);
+    settle(
+        &state,
+        &app,
+        &admin,
+        &field_tok,
+        &[&format!("{tok} 선행연구")],
+    )
+    .await;
+    // 비공개 항목이라 멤버에게는 보이지 않는다.
+    settle(&state, &app, &member, &tok, &[]).await;
+    // 검색 서비스가 없을 때의 제목 검색도 기록을 찾는다.
+    let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
+    let plain_app = common::app(&plain);
+    assert_eq!(
+        titles(&search(&plain_app, &admin, &format!("{tok}&kinds=record")).await),
+        [format!("{tok} 선행연구")]
+    );
+}

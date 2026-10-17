@@ -8263,7 +8263,7 @@ export interface operations {
                 q: string;
                 /** @description 이 워크스페이스 안에서만(멤버). */
                 workspace_id?: string | null;
-                /** @description 쉼표로 구분한 종류(`document,task,item,event,file`). 없으면 전부. */
+                /** @description 쉼표로 구분한 종류(`document,task,item,event,file,record`). 없으면 전부. */
                 kinds?: string | null;
                 /** @description 이 모듈 안의 것만. */
                 module_id?: string | null;

@@ -6025,7 +6025,7 @@
           {
             "name": "kinds",
             "in": "query",
-            "description": "쉼표로 구분한 종류(`document,task,item,event,file`). 없으면 전부.",
+            "description": "쉼표로 구분한 종류(`document,task,item,event,file,record`). 없으면 전부.",
             "required": false,
             "schema": {
               "type": [

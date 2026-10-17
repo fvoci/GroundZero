@@ -29,7 +29,7 @@ const MAX_PAGES: usize = 5;
 /// 검색어 길이 상한.
 const MAX_QUERY_CHARS: usize = 200;
 
-const KINDS: &[&str] = &["document", "task", "item", "event", "file"];
+const KINDS: &[&str] = &["document", "task", "item", "event", "file", "record"];
 
 /// 검색 조건.
 #[derive(Debug, Deserialize, IntoParams)]
@@ -38,7 +38,7 @@ pub struct SearchQuery {
     /// 이 워크스페이스 안에서만(멤버).
     #[param(value_type = Option<String>, format = Uuid)]
     pub workspace_id: Option<WorkspaceId>,
-    /// 쉼표로 구분한 종류(`document,task,item,event,file`). 없으면 전부.
+    /// 쉼표로 구분한 종류(`document,task,item,event,file,record`). 없으면 전부.
     pub kinds: Option<String>,
     /// 이 모듈 안의 것만.
     #[param(value_type = Option<String>, format = Uuid)]
@@ -399,6 +399,11 @@ async fn fallback(
                   f.updated_at::date
            FROM files f LEFT JOIN documents d ON d.id = f.document_id
            WHERE f.name ILIKE $1 AND f.deleted_at IS NULL
+           UNION ALL
+           SELECT 'record', rc.id, rc.title, rc.workspace_id, rc.item_id, rc.updated_at,
+                  (SELECT module_id FROM items WHERE id = rc.item_id), NULL, NULL,
+                  coalesce(rc.occurred_on, rc.updated_at::date)
+           FROM item_records rc WHERE rc.title ILIKE $1
          ) r
          WHERE r.kind = ANY($2) AND ($3::uuid IS NULL OR r.workspace_id = $3)
            AND ($4::uuid IS NULL OR r.module_id = $4)
