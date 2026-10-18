@@ -1,8 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CalendarTaskView, EventOccurrenceView, EventView } from '$lib/api/client';
 import { entriesByDay, monthRange, shiftMonth } from '$lib/features/events/calendar';
 import { dayIn, instantOf, wallTime } from '$lib/features/events/time';
+import { me } from '$lib/me.svelte';
+
+// 이 파일의 문구·시각은 한국어·24시간 표시로 본다(D-81 표시 설정).
+beforeEach(() => {
+  Object.assign(me, { locale: 'ko', hourCycle: 'h23' });
+});
+afterEach(() => {
+  Object.assign(me, { locale: '', hourCycle: '' });
+});
 
 const event = (over: Partial<EventView>): EventView => ({
   id: 'e',

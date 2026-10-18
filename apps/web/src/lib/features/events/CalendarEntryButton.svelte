@@ -1,5 +1,7 @@
 <script lang="ts">
   // 달력 칸의 업무·일정·날짜 단추. 화면 낭독기에는 항목 이름과 완료 여부까지 읽힌다.
+  import { m } from '$lib/paraglide/messages.js';
+
   import type { CalendarEntry } from './calendar';
 
   interface Props {
@@ -27,6 +29,8 @@
     done && 'text-muted-foreground line-through',
   ]}
   title={`${entry.label} · ${itemTitle}`}
-  aria-label={`${entry.label}, ${itemTitle}${done ? ', 완료' : ''}`}
+  aria-label={done
+    ? m.events_entry_aria_done({ label: entry.label, item: itemTitle })
+    : m.events_entry_aria({ label: entry.label, item: itemTitle })}
   onclick={onopen}>{entry.label}</button
 >

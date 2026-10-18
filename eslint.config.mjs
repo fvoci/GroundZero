@@ -15,6 +15,7 @@ export default tseslint.config(
       'packages/api-client/src/generated/**',
       'apps/web/public/pptx-frame.js',
       'apps/web/public/rhwp/**',
+      'apps/web/src/lib/paraglide/**',
       '**/*.config.{js,mjs,ts}',
     ],
   },

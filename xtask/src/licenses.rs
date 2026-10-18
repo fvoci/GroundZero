@@ -46,6 +46,48 @@ const NPM_EXCEPTIONS: &[(&str, &str, &str)] = &[
     // 1.8.0은 설치만 되고 번들에는 렌더러 안에 묶인 1.4.2가 들어간다(고지는 렌더러의 THIRD_PARTY_NOTICES.md).
     ("tslib", "2.3.0", "0BSD"),
     ("mtx-decompressor", "1.8.0", "MPL-2.0"),
+    // 화면 문구 번역(D-81, Paraglide JS 2): 메시지를 빌드 때 컴파일하는 inlang SDK가 끌어오는 것. 빌드 때만 쓰고
+    // 브라우저 번들·제품 이미지에는 들지 않는다(사용자 승인, 이 판만). 플랫폼별 jco-node-fs는 같은 판의 개발·CI·이미지용.
+    (
+        "@bytecodealliance/jco-node-fs",
+        "0.3.2",
+        "(Apache-2.0 WITH LLVM-exception)",
+    ),
+    (
+        "@bytecodealliance/jco-node-fs-darwin-arm64",
+        "0.3.2",
+        "(Apache-2.0 WITH LLVM-exception)",
+    ),
+    (
+        "@bytecodealliance/jco-node-fs-linux-x64-gnu",
+        "0.3.2",
+        "(Apache-2.0 WITH LLVM-exception)",
+    ),
+    (
+        "@bytecodealliance/jco-node-fs-linux-arm64-gnu",
+        "0.3.2",
+        "(Apache-2.0 WITH LLVM-exception)",
+    ),
+    (
+        "@bytecodealliance/jco-transpile",
+        "0.13.0",
+        "(Apache-2.0 WITH LLVM-exception)",
+    ),
+    (
+        "@bytecodealliance/preview2-shim",
+        "0.24.1",
+        "(Apache-2.0 WITH LLVM-exception)",
+    ),
+    (
+        "@bytecodealliance/preview2-shim",
+        "0.25.0",
+        "(Apache-2.0 WITH LLVM-exception)",
+    ),
+    (
+        "@bytecodealliance/preview3-shim",
+        "0.6.1",
+        "(Apache-2.0 WITH LLVM-exception)",
+    ),
 ];
 
 pub fn run(root: &Path) -> Result<()> {
@@ -194,7 +236,7 @@ mod tests {
         // npm에 흔한 소문자 연산자.
         assert!(is_allowed("MIT or Apache-2.0"));
         // 예외 조항·이후 판·읽을 수 없는 식은 보고 대상.
-        assert!(!is_allowed("Apache-2.0 WITH LLVM-exception"));
+        assert!(!is_allowed("(Apache-2.0 WITH LLVM-exception)"));
         assert!(!is_allowed("SEE LICENSE IN LICENSE.md"));
         assert!(!is_allowed("(MIT OR Apache-2.0"));
         assert!(!is_allowed(""));

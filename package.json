@@ -9,7 +9,7 @@
   "scripts": {
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint .",
+    "lint": "pnpm --filter @fvoci/web run i18n && eslint .",
     "check": "pnpm --recursive --filter './apps/*' --filter './packages/*' run check",
     "test": "pnpm --recursive --filter './apps/*' --filter './packages/*' run test",
     "generate:api": "pnpm --filter @fvoci/api-client run generate"

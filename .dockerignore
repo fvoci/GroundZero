@@ -8,3 +8,4 @@ dist
 docs
 apps/web/public/rhwp
 apps/web/public/pptx-frame.js
+apps/web/src/lib/paraglide

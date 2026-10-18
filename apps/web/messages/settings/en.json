@@ -1,0 +1,19 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "settings_title": "Display settings",
+  "settings_description": "Choose language, time zone, first day of the week and clock. Only the display changes; saved dates and times stay as they are. Nobody else sees these settings.",
+  "settings_unsaved_hint": "Fields you have not saved yet show values suggested from this browser's language and time zone.",
+  "settings_language": "Language",
+  "settings_language_ko": "한국어",
+  "settings_language_en": "English",
+  "settings_time_zone": "Time zone",
+  "settings_browser_zone": "Use browser time zone ({zone})",
+  "settings_week_start": "Week starts on",
+  "settings_monday": "Monday",
+  "settings_sunday": "Sunday",
+  "settings_clock": "Clock",
+  "settings_clock_h12": "12-hour (AM/PM)",
+  "settings_clock_h23": "24-hour",
+  "settings_example": "e.g. {sample}",
+  "settings_save_failed": "Couldn't save."
+}

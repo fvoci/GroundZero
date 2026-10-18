@@ -3,6 +3,7 @@
 mod check;
 mod compose;
 mod dev;
+mod i18n;
 mod licenses;
 mod notices;
 mod openapi;
