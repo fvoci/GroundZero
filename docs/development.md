@@ -1241,9 +1241,10 @@ GitHub에서 새로 clone한 main `947b874`에 PR #21(`818b543`, 앞당겨 감�
 
 사용자 승인(O-37 → D-86): Noto Sans KR 2.004·Noto Serif KR 2.003·D2Coding 1.4.0의 Regular·Bold 여섯 파일을 받은 그대로 제품에 넣는다.
 
-- 파일·고지: `apps/web/src/assets/fonts`(서체 여섯, `LICENSE-Noto-CJK.txt`, `OFL-D2Coding.txt`). `cargo xtask notices`가 폴더 구성과 SHA-256을 확인하고 서체 고지를 `THIRD_PARTY_NOTICES.txt`에 싣는다. 폴더에 다른 파일을 두거나 서체를 한 바이트 바꾸면 `cargo xtask check`(고지 단계)가 실패한다(확인함).
+- 파일·고지: `apps/web/src/assets/fonts`(서체 여섯, `LICENSE-Noto-CJK.txt`, `OFL-D2Coding.txt`). `cargo xtask notices`가 폴더 구성과 SHA-256을 확인하고 서체 고지를 `THIRD_PARTY_NOTICES.txt`에 싣는다. 폴더에 다른 파일을 두거나(운영체제의 숨김 파일 `.DS_Store` 등은 빼고) 서체를 한 바이트 바꾸면, 또는 실제 웹 번들에 승인하지 않은 서체가 들어가면(예: 다른 패키지 CSS의 KaTeX 서체) `cargo xtask check`(고지 단계)가 실패한다(셋 다 확인함).
 - 불러오기: `@font-face`(swap, 미리 받기 없음). 토큰 `--font-sans`(Noto Sans KR), `--font-serif`(Noto Serif KR), `--font-code`(D2Coding, 코드·원문 입력·리비전 비교), `--font-mono`(시스템 고정폭, 짧은 UI 표시), `--font-doc`(문서 본문, 기본 고딕).
-- 문서 본문 명조: 표시 설정의 "문서 본문 서체"(이 브라우저의 `localStorage`, 계정·API·문서 형식 변경 없음).
+- 문서 본문 명조: 표시 설정의 "문서 본문 서체"(이 브라우저의 `localStorage`, 계정·API·문서 형식 변경 없음). 서체만 바꾸면 계정 설정을 쓰지 않고 바로 적용한다.
+- 굵기: 승인한 파일이 400·700뿐이라 UI의 500(`font-medium`)은 Regular, 600(`font-semibold`·제목)은 Bold로 그린다(합성 굵기 없음). 그래서 첫 화면은 보통 Regular·Bold 두 파일을 받는다. 충돌 화면의 두 본문 비교는 코드가 아니라 문서 글이라 시스템 고정폭 그대로다.
 - 전송: 이미지의 웹 빌드 단계가 `/assets`의 js·css·svg·otf·ttf(1 KB 넘는 것)에 br·gzip 사본을 만들고 서버가 받는 쪽에 맞춰 그대로 보낸다(통합 테스트 `assets_are_served_precompressed_when_available`).
 
 | 검증                                | 결과    | 내용                                                                                                                                                                                             |
@@ -1251,9 +1252,10 @@ GitHub에서 새로 clone한 main `947b874`에 PR #21(`818b543`, 앞당겨 감�
 | 받은 파일                           | PASS    | 태그에서 받은 여섯 파일의 SHA-256이 O-37 기록과 같음                                                                                                                                             |
 | 글자 범위(cmap)                     | PASS    | 한글 11,172자 모두, Noto KR 한자 8,138·히라가나 93·가타카나 96, D2Coding 한자 4,620. 일본어 신자체 일부(辺·変·読·様·黒·対·込)는 없음 → 그 글자만 시스템 일본어 서체                              |
 | 요청(개발 서버, 브라우저)           | PASS    | 코드 없는 문서: Noto Sans KR 400·700만 같은 출처에서 받음(CDN·조각 요청 없음). 인라인 코드를 넣으면 D2Coding 400만 더 받음. 명조를 고르면 Noto Serif KR 400만 더 받음(굵은 글씨가 있을 때만 700) |
-| 문서 본문 서체 설정                 | PASS    | 표시 설정에서 명조 저장 → 새로고침 뒤 문서 본문만 명조, UI는 고딕. 단위 시험(`doc-font.test.ts`)                                                                                                 |
-| 고지·구성 확인                      | PASS    | 다른 파일 추가·서체 변경 시 `cargo xtask notices --check` 실패, 되돌리면 통과                                                                                                                    |
+| 문서 본문 서체 설정                 | PASS    | 표시 설정에서 명조 저장 → 새로고침 뒤 문서 본문만 명조, UI는 고딕. 단위 시험(`doc-font.test.ts`). 서체만 바꾸면 계정 API 호출·새로고침 없음                                                      |
+| 고지·구성 확인                      | PASS    | 다른 파일 추가·서체 변경·번들에 KaTeX 서체 유입 시 `cargo xtask notices --check` 실패, 되돌리면 통과                                                                                             |
 | `cargo xtask check --skip-licenses` | PASS    | 모든 단계(vitest 154건)                                                                                                                                                                          |
+| 압축 사본 통합 시험                 | PASS    | `assets_are_served_precompressed_when_available`(CI integration)                                                                                                                                 |
 | 실제 화면의 글자 모양               | NOT RUN | 브라우저 창이 최소화돼 화면 캡처를 못 함. 요청·적용 서체는 DOM(`document.fonts`, 계산된 font-family)으로만 확인                                                                                  |
 
 ## 참고 자료

@@ -33,6 +33,9 @@
   let hourCycle = $state<HourCycle>('h12');
   // 문서 본문 서체(D-86)는 계정이 아니라 이 브라우저에만 둔다.
   let docFont = $state<DocFont>('sans');
+  /** 대화상자를 열 때의 계정 칸(문서 본문 서체만 바꿨는지 가린다). */
+  let opened = '';
+  const accountFields = (): string => JSON.stringify([locale, zone, weekStart, hourCycle]);
   let error = $state<string | undefined>(undefined);
   const unsaved = $derived(me.locale === '' || me.weekStart === '' || me.hourCycle === '');
 
@@ -43,6 +46,7 @@
       weekStart = asWeekStart(me.weekStart) ?? conventionalWeekStart(locale);
       hourCycle = asHourCycle(me.hourCycle) ?? conventionalHourCycle(locale);
       docFont = storedDocFont();
+      opened = accountFields();
       error = undefined;
     }
   });
@@ -64,6 +68,14 @@
   );
 
   async function save(): Promise<void> {
+    // 문서 본문 서체는 이 브라우저에만 둔다: 계정 저장과 상관없이 바로 적용한다.
+    const fontChanged = docFont !== storedDocFont();
+    setDocFont(docFont);
+    if (fontChanged && accountFields() === opened) {
+      // 서체만 바꿨으면 계정 설정을 쓰지 않고 새로 읽지도 않는다.
+      open = false;
+      return;
+    }
     try {
       await api.setDisplaySettings({
         time_zone: zone,
@@ -75,7 +87,6 @@
       me.locale = locale;
       me.weekStart = weekStart;
       me.hourCycle = hourCycle;
-      setDocFont(docFont);
       open = false;
       // 날짜 계산·서식을 새 설정으로 다시 하도록 지금 화면을 새로 읽는다.
       window.location.reload();
