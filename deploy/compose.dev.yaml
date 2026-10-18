@@ -4,7 +4,7 @@ name: fvoci-dev
 
 services:
   postgres:
-    image: postgres:18.3-alpine
+    image: postgres:18.3-bookworm@sha256:80630f83606d8db77d30b3851b16a9f78be2d0d4dda6f7b82a1fdca5ebe3acba
     environment:
       POSTGRES_USER: fvoci
       POSTGRES_PASSWORD: fvoci-test-password
@@ -20,7 +20,7 @@ services:
       retries: 30
 
   meilisearch:
-    image: getmeili/meilisearch:v1.37.0
+    image: getmeili/meilisearch:v1.37.0@sha256:9cde2774864e6c19cdd09fcd2950bc01ac9a0454b6f343fffafa14faae6eb7ea
     environment:
       MEILI_ENV: development
       MEILI_MASTER_KEY: fvoci-test-meili-master-key-16chars
@@ -37,7 +37,7 @@ services:
 
   # 개발용 로그인 제공자. `cargo xtask dev --oidc`로만 기동한다 (프로필 oidc). realm은 테스트와 같은 가짜 사용자.
   keycloak:
-    image: quay.io/keycloak/keycloak:26.5.4
+    image: quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4
     profiles: ['oidc']
     command: ['start-dev', '--import-realm', '--health-enabled=true']
     environment:

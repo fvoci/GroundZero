@@ -50,7 +50,7 @@ jobs:
     # 컨테이너 job 안에서는 Compose를 띄울 수 없으므로 job 서비스로 격리한다. 자격 증명은 compose.test.yaml과 같은 테스트 값.
     services:
       postgres:
-        image: postgres:18.3-alpine
+        image: postgres:18.3-bookworm@sha256:80630f83606d8db77d30b3851b16a9f78be2d0d4dda6f7b82a1fdca5ebe3acba
         env:
           POSTGRES_USER: fvoci
           POSTGRES_PASSWORD: fvoci-test-password
@@ -61,7 +61,7 @@ jobs:
           --health-timeout 3s
           --health-retries 30
       meilisearch:
-        image: getmeili/meilisearch:v1.37.0
+        image: getmeili/meilisearch:v1.37.0@sha256:9cde2774864e6c19cdd09fcd2950bc01ac9a0454b6f343fffafa14faae6eb7ea
         env:
           MEILI_ENV: development
           MEILI_MASTER_KEY: fvoci-test-meili-master-key-16chars
