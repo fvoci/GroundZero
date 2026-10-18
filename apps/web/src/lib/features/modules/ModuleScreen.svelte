@@ -8,6 +8,7 @@
   import { forgetReferences } from '$lib/features/references/resolver';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
@@ -85,6 +86,7 @@
         await api.setModuleDescription(mod.id, editDescription.trim());
       }
       mod = await api.updateModule(mod.id, editName.trim(), key);
+      workspaceNav.refreshModules();
       forgetReferences();
       editKey = mod.key;
       items = await api.items(mod.id);
@@ -133,6 +135,7 @@
     if (mod === undefined) return;
     try {
       mod = await api.archiveModule(mod.id, !mod.archived);
+      workspaceNav.refreshModules();
     } catch (e: unknown) {
       settingsError = errorText(e, m.modules_change_failed());
     }
@@ -160,6 +163,7 @@
             what={m.modules_delete_module_what()}
             remove={() => api.trashModule(current.id)}
             ondeleted={() => {
+              workspaceNav.refreshModules();
               router.navigate(workspacePath(workspace.id));
             }}
           />

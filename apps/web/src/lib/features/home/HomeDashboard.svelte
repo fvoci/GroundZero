@@ -1,6 +1,8 @@
 <script lang="ts">
   // 홈 (D-19): 오늘 날짜, 빠른 추가(메모·업무·일정), 실행 중인 스톱워치, 이번 주 일정, Up Next, 고정·즐겨찾기,
   // 진행 중인 항목(업무 완료 비율), 최근 문서·작업, 알림. 모든 워크스페이스에서 볼 수 있는 것만 보인다.
+  import FileText from '@lucide/svelte/icons/file-text';
+  import SquareCheck from '@lucide/svelte/icons/square-check';
   import type { Workspace } from '@fvoci/api-client';
 
   import type {
@@ -371,7 +373,12 @@
           class="rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           onclick={() => {
             router.navigate(pathFor(d, memberOf));
-          }}><span aria-hidden="true">📄</span> {d.reference ?? ''} {d.title}</button
+          }}
+          ><span class="flex min-w-0 items-center gap-2"
+            ><FileText class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span
+              class="shrink-0 font-mono text-xs text-muted-foreground">{d.reference ?? ''}</span
+            ><span class="truncate">{d.title}</span></span
+          ></button
         >
       {/each}
       {#each home?.recent_tasks ?? [] as t (t.id)}
@@ -380,7 +387,12 @@
           class="rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           onclick={() => {
             openTask(t);
-          }}><span aria-hidden="true">☑</span> {t.reference ?? ''} {t.title}</button
+          }}
+          ><span class="flex min-w-0 items-center gap-2"
+            ><SquareCheck class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span
+              class="shrink-0 font-mono text-xs text-muted-foreground">{t.reference ?? ''}</span
+            ><span class="truncate">{t.title}</span></span
+          ></button
         >
       {/each}
       {#if home?.recent_documents.length === 0 && home.recent_tasks.length === 0}

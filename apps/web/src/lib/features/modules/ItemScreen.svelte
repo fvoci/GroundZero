@@ -1,8 +1,9 @@
 <script lang="ts">
   // 항목 하나: 제목·설명·공개 범위, 보관, 항목 아래 문서 (D-14, D-20, D-59).
+  import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
-  import type { Module, Workspace } from '@fvoci/api-client';
+  import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
 
   import type { ItemView, SummaryView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
@@ -21,8 +22,9 @@
   import StudyPanel from '$lib/features/study/StudyPanel.svelte';
   import ItemTimePanel from '$lib/features/time/ItemTimePanel.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
+  import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
-  import { itemDocumentPath, modulePath, router } from '$lib/router.svelte';
+  import { itemDocumentPath, modulePath, router, workspacePath } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -67,6 +69,7 @@
     const id = currentItemId;
     let cancelled = false;
     item = undefined;
+    mod = undefined;
     error = undefined;
     api
       .item(id)
@@ -75,6 +78,7 @@
         if (cancelled) return;
         fill(it);
         mod = found;
+        workspaceNav.currentItem = { itemId: it.id, moduleId: it.module_id };
         docs = list;
       })
       .catch((e: unknown) => {
@@ -134,7 +138,60 @@
       formError = errorText(e, m.modules_change_failed());
     }
   }
+
+  // 경로: 워크스페이스는 늘(항목을 못 읽어도 돌아갈 곳), 모듈은 읽은 뒤에.
+  const crumbs = $derived([
+    { path: workspacePath(workspace.id), label: workspace.name },
+    ...(mod === undefined
+      ? []
+      : [{ path: modulePath(workspace.id, mod.id), label: `${mod.name} · ${mod.key}` }]),
+  ]);
+
+  // 항목 화면 절로 바로 가기. 업무가 화면 아래쪽에 있어 자주 쓰는 절에 바로 닿게 한다.
+  function jumpLinks(kind: ModuleKind | undefined): { id: string; label: string }[] {
+    const links = [{ id: 'tasks-heading', label: m.tasks_heading() }];
+    if (kind === 'course') links.push({ id: 'course-info-heading', label: m.courses_info() });
+    if (kind === 'study') links.push({ id: 'study-heading', label: m.study_heading() });
+    if (kind !== undefined) {
+      links.push({ id: 'item-profile-heading', label: m.modules_profile() });
+      links.push({ id: 'records-heading', label: m.records_heading() });
+      links.push({ id: 'item-time-heading', label: m.time_heading() });
+    }
+    links.push({ id: 'attachments-heading', label: m.files_heading() });
+    links.push({ id: 'item-docs-heading', label: m.modules_documents() });
+    links.push({ id: 'events-heading', label: m.events_heading() });
+    return links;
+  }
+
+  function jumpTo(id: string): void {
+    const target = document.getElementById(id);
+    if (target === null) return;
+    target.scrollIntoView({ block: 'start' });
+    // 화면 낭독기·키보드도 그 절에서 이어 가도록 제목에 초점을 둔다.
+    if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+    target.focus({ preventScroll: true });
+  }
 </script>
+
+<nav aria-label={m.modules_breadcrumb()} class="-mb-6 min-w-0 text-sm text-muted-foreground">
+  <ol class="flex min-w-0 items-center gap-1">
+    {#each crumbs as crumb, index (crumb.path)}
+      <li class={`flex min-w-0 items-center gap-1 ${index === 0 ? 'shrink' : 'shrink-0'}`}>
+        {#if index > 0}<ChevronRight class="size-3.5 shrink-0" aria-hidden="true" />{/if}
+        <a
+          class="truncate rounded-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          href={crumb.path}
+          title={crumb.label}
+          onclick={(e: MouseEvent) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            router.navigate(crumb.path);
+          }}>{crumb.label}</a
+        >
+      </li>
+    {/each}
+  </ol>
+</nav>
 
 {#if error !== undefined}
   <p role="alert" class="text-destructive">{error}</p>
@@ -143,19 +200,6 @@
 {:else}
   {@const current = item}
   <section class="flex flex-col gap-6" aria-labelledby="item-heading">
-    {#if mod !== undefined}
-      {@const parent = mod}
-      <nav aria-label={m.modules_breadcrumb()} class="text-sm">
-        <a
-          class="underline"
-          href={modulePath(workspace.id, parent.id)}
-          onclick={(e: MouseEvent) => {
-            e.preventDefault();
-            router.navigate(modulePath(workspace.id, parent.id));
-          }}>{parent.name}</a
-        >
-      </nav>
-    {/if}
     <div class="flex flex-wrap items-baseline gap-2">
       <span class="font-mono text-sm text-muted-foreground">{current.reference}</span>
       <h1 id="item-heading" class="text-xl font-semibold">{current.title}</h1>
@@ -179,6 +223,20 @@
         {/if}
       </div>
     </div>
+
+    <!-- 긴 항목 화면 안에서 바로 가기. 모듈 유형에 있는 절만 보인다. -->
+    <nav aria-label={m.modules_jump_label()} class="-mt-2 flex flex-wrap gap-1 text-sm">
+      {#each jumpLinks(mod?.kind) as link (link.id)}
+        <a
+          class="rounded-md border px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          href={`#${link.id}`}
+          onclick={(e: MouseEvent) => {
+            e.preventDefault();
+            jumpTo(link.id);
+          }}>{link.label}</a
+        >
+      {/each}
+    </nav>
 
     {#if canEdit}
       <form

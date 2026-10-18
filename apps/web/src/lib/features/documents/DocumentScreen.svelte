@@ -11,6 +11,7 @@
   import type { ReferenceContext } from '$lib/features/references/context';
   import { referenceHref } from '$lib/features/references/context';
   import { badgeColor, workspaceLabel } from '$lib/features/workspaces/badge';
+  import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
@@ -108,6 +109,7 @@
           what={m.documents_delete_what()}
           remove={() => api.trashDocument(d.id)}
           ondeleted={() => {
+            workspaceNav.refreshDocs();
             router.navigate(
               d.workspace_id === null
                 ? '/notes'
@@ -126,6 +128,7 @@
         initial={doc}
         references={referencesFor(doc)}
         onsaved={(saved: DocumentView) => {
+          if (saved.title !== doc?.title) workspaceNav.refreshDocs();
           doc = saved;
         }}
         onrealtimeoff={() => {
@@ -145,6 +148,7 @@
         references={referencesFor(doc)}
         onsaved={(saved: DocumentView) => {
           // 기록 비교(지금과 비교)와 복원의 기준 리비전이 최신이 되도록 저장 결과를 따라간다.
+          if (saved.title !== doc?.title) workspaceNav.refreshDocs();
           doc = saved;
         }}
         onunsaved={(value: boolean) => {

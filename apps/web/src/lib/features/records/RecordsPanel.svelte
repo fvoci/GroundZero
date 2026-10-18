@@ -46,6 +46,26 @@
   const names = $derived(new Map(people.map((p) => [p.id, p.name])));
   const courseNames = $derived(new Map(courses.map((c) => [c.id, c.name])));
   const shown = $derived(records.filter((r) => r.kind === selected));
+
+  // 기록에 이을 첨부 파일 목록은 기록을 쓰거나 고칠 때만 받는다(첨부 패널과 같은 목록을 화면을 열 때마다 두 번 받지 않는다).
+  const formOpen = $derived(creating || editingId !== undefined);
+  $effect(() => {
+    if (!formOpen) return;
+    const id = item.id;
+    let cancelled = false;
+    api.itemFiles(id).then(
+      (list) => {
+        if (!cancelled) files = list;
+      },
+      () => {
+        // 못 받으면 파일 잇기만 비워 둔다(기록 쓰기는 그대로 된다).
+        if (!cancelled) files = [];
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  });
   const count = (k: string): number => records.filter((r) => r.kind === k).length;
 
   $effect(() => {
@@ -54,8 +74,8 @@
     const moduleKind = kind;
     if (reloadKey < 0) return;
     let cancelled = false;
-    Promise.all([api.recordKinds(), api.itemRecords(id), api.itemFiles(id), api.members(ws)])
-      .then(async ([all, list, attached, members]) => {
+    Promise.all([api.recordKinds(), api.itemRecords(id), api.members(ws)])
+      .then(async ([all, list, members]) => {
         const mine = all.filter((d) => d.module_kind === moduleKind);
         let courseList: { id: string; name: string }[] = [];
         if (mine.some((d) => d.fields.some((f) => f.type === 'course'))) {
@@ -68,7 +88,6 @@
         if (cancelled) return;
         defs = mine;
         records = list;
-        files = attached;
         people = members.members.map((x) => ({ id: x.user_id, name: x.display_name }));
         courses = courseList;
         if (selected === undefined || !mine.some((d) => d.kind === selected))

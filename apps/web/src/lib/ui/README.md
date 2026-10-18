@@ -17,6 +17,7 @@ pnpm dlx shadcn-svelte@1.7.0 add button input checkbox label dialog dropdown-men
 - 추가(2026-10-17): `pnpm dlx shadcn-svelte@1.7.0 add select badge --yes --no-deps-install`. 이미 있는 `separator`를 덮어쓰겠냐는 질문에 막히므로 잠시 옮겨 두고 추가한 뒤 원본과 같음(포맷 차이만)을 확인했다.
 - 추가(2026-10-17, D-82): `pnpm dlx shadcn-svelte@1.7.0 add sonner --yes --no-deps-install`, 의존성은 `svelte-sonner` 1.2.1만 고정 설치(CLI가 넣으려던 `mode-watcher`와 `@lucide/svelte` 범위 변경은 되돌림). `sonner/sonner.svelte`: 앱에 테마 전환이 없어 `mode-watcher`를 빼고 `theme="light"`로 고정.
 - 손댐(2026-10-18, D-81): 생성기가 넣은 영어 문구를 화면 언어 문구로 바꿈. `dialog/dialog-content.svelte`·`dialog/dialog-footer.svelte`·`sheet/sheet-content.svelte`의 닫기(`m.common_close()`), `sidebar/sidebar-trigger.svelte`·`sidebar/sidebar-rail.svelte`의 사이드바 열고 닫기(`m.app_toggle_sidebar()`). 다시 생성하면 이 다섯 곳을 같은 식으로 고친다.
+- 손댐(2026-10-18): `sidebar/sidebar-menu-button.svelte`·`sidebar/sidebar-menu-sub-button.svelte`가 `data-active={isActive}`로 거짓일 때도 `data-active="false"`를 남겨, Tailwind v4 `data-active:` 변형(속성 존재만 봄)이 모든 메뉴를 활성처럼 칠했다. 거짓이면 속성을 빼도록 바꿈. `sidebar/sidebar.svelte`의 모바일 서랍 화면 낭독기 제목·설명(영어 고정)을 `m.app_nav_label()`·`m.app_nav_description()`으로. 다시 생성하면 이 세 곳을 같은 식으로 고친다.
 - ESLint: 이 디렉터리와 `hooks/`, `utils.ts`에는 `eslint.config.mjs`의 외부 코드 예외가 적용된다(규칙 10개). 자체 코드에는 적용되지 않는다.
 
 규칙

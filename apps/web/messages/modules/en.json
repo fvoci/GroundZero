@@ -128,5 +128,6 @@
   "modules_members_shared_hint": "This item is shared with the workspace, so all members can see it. If you make it private, only the people and groups here can see it.",
   "modules_people": "People",
   "modules_groups": "Groups",
-  "modules_group_badge": "Group · {name}"
+  "modules_group_badge": "Group · {name}",
+  "modules_jump_label": "Jump to a section of this item"
 }

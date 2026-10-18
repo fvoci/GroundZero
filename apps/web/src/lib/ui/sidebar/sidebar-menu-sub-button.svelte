@@ -25,7 +25,8 @@
     'data-slot': 'sidebar-menu-sub-button',
     'data-sidebar': 'menu-sub-button',
     'data-size': size,
-    'data-active': isActive,
+    // fvoci: false일 때 속성을 뺀다(sidebar-menu-button.svelte와 같은 이유).
+    'data-active': isActive ? '' : undefined,
     ...restProps,
   });
 </script>

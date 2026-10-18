@@ -8,6 +8,7 @@
   import { errorText } from '$lib/api/errors';
   import { formatInstant } from '$lib/display';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
@@ -61,6 +62,9 @@
       notifyDone(done);
       confirmPurge = undefined;
       reloadKey += 1;
+      // 되살리거나 지운 것이 사이드바의 모듈·위키 목록에 바로 보이게 한다.
+      workspaceNav.refreshModules();
+      workspaceNav.refreshDocs();
     } catch (e: unknown) {
       error = errorText(e, m.trash_action_failed());
     }

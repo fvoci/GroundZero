@@ -149,6 +149,15 @@
   button {
     font: inherit;
   }
+
+  /* 제목은 한국어 어절 중간에서 줄을 바꾸지 않고(긴 영문·주소는 어디서든 끊는다), 고정 머리글 아래로 숨지 않게 바로 가기 여백을 둔다. */
+  h1,
+  h2,
+  h3 {
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    scroll-margin-top: 4rem;
+  }
 }
 
 /* 문서 본문(Tiptap). 본문 글자·줄 높이 토큰을 따른다. */
@@ -159,6 +168,12 @@
     outline: none;
     word-break: keep-all;
     overflow-wrap: anywhere;
+  }
+
+  /* 빈 문서에서도 보이는 편집 영역 어디를 눌러도 편집기에 들어가게 한다(전에는 첫 줄만 눌렸다). */
+  .fvoci-prose[contenteditable='true'] {
+    min-height: 11rem;
+    cursor: text;
   }
 
   .fvoci-prose:focus-visible {
