@@ -6,6 +6,7 @@ import {
   blockAt,
   blockAtHit,
   blockStartingAt,
+  mapBlockStart,
   runBlockOp,
 } from '$lib/features/documents/block-ops';
 import { schemaExtensions } from '$lib/features/documents/editor-schema';
@@ -192,5 +193,68 @@ describe('leaf blocks (divider, image, block math) are addressed by their start'
     const itemFrom = blockAt(e.state.doc, posOf(e, 'y'))?.from;
     if (itemFrom === undefined) throw new Error('item');
     expect(blockStartingAt(e.state.doc, itemFrom)?.node.textContent).toBe('y');
+  });
+});
+
+describe('image and block math act on themselves like the divider', () => {
+  const leaves: [string, JSONContent][] = [
+    [
+      'image',
+      { type: 'image', attrs: { src: '/api/files/01a14e70-ad23-7648-9f7d-ccb0f85c5b5c/content' } },
+    ],
+    ['blockMath', { type: 'blockMath', attrs: { latex: 'x^2' } }],
+  ];
+
+  it.each(leaves)('%s: the hit, delete, move and duplicate address the leaf only', (name, leaf) => {
+    const e = make({ type: 'doc', content: [p('a'), leaf, p('b')] });
+    const from = e.state.doc.child(0).nodeSize;
+    expect(blockAtHit(e.state.doc, { pos: from, inside: from })?.node.type.name).toBe(name);
+    const at = (): NonNullable<ReturnType<typeof blockStartingAt>> => {
+      const block = blockStartingAt(e.state.doc, from);
+      if (block === undefined) throw new Error('block');
+      return block;
+    };
+    expect(at().node.type.name).toBe(name);
+    runBlockOp(e, 'duplicate', at());
+    expect(e.getJSON().content.map((n) => n.type)).toEqual(['paragraph', name, name, 'paragraph']);
+    runBlockOp(e, 'delete', at());
+    expect(e.getJSON().content.map((n) => n.type)).toEqual(['paragraph', name, 'paragraph']);
+    runBlockOp(e, 'down', at());
+    // 끝 블록이 문단이 아니면 StarterKit이 빈 문단을 하나 붙인다(TrailingNode).
+    expect(
+      e
+        .getJSON()
+        .content.map((n) => n.type)
+        .slice(0, 3),
+    ).toEqual(['paragraph', 'paragraph', name]);
+    expect(texts(e).slice(0, 2)).toEqual(['a', 'b']);
+  });
+});
+
+describe('the pinned block follows edits by others while its menu is open', () => {
+  it('moves past text inserted earlier and is dropped when its block is deleted', () => {
+    const e = make({
+      type: 'doc',
+      content: [p('a'), { type: 'horizontalRule' }, { type: 'blockMath', attrs: { latex: 'y' } }],
+    });
+    const mathFrom = e.state.doc.child(0).nodeSize + e.state.doc.child(1).nodeSize;
+    // 앞 문단에 글자를 넣는다(다른 사람의 편집도 같은 트랜잭션 위치 대응을 거친다).
+    const insert = e.state.tr.insertText('앞에 쓴 글', 1);
+    e.view.dispatch(insert);
+    const moved = mapBlockStart(e.state.doc, insert.mapping, mathFrom);
+    expect(moved).toBe(mathFrom + '앞에 쓴 글'.length);
+    if (moved === undefined) throw new Error('moved');
+    expect(e.state.doc.nodeAt(moved)?.type.name).toBe('blockMath');
+    // 앞 블록(구분선)을 지워도 따라간다.
+    const hrFrom = e.state.doc.child(0).nodeSize;
+    const dropHr = e.state.tr.delete(hrFrom, hrFrom + 1);
+    e.view.dispatch(dropHr);
+    const after = mapBlockStart(e.state.doc, dropHr.mapping, moved);
+    if (after === undefined) throw new Error('after');
+    expect(e.state.doc.nodeAt(after)?.type.name).toBe('blockMath');
+    // 대상 블록이 지워지면 메뉴를 닫는다(엉뚱한 블록으로 옮기지 않는다).
+    const dropMath = e.state.tr.delete(after, after + 1);
+    e.view.dispatch(dropMath);
+    expect(mapBlockStart(e.state.doc, dropMath.mapping, after)).toBeUndefined();
   });
 });

@@ -17,6 +17,7 @@
     blockAtHit,
     blockStartingAt,
     focusBlock,
+    mapBlockStart,
     runBlockOp,
     selectBlock,
   } from './block-ops';
@@ -46,6 +47,15 @@
   let pinnedFrom = $state<number | undefined>(undefined);
   let menuOpen = $state(false);
   let dragging: { slice: unknown; move: boolean } | undefined;
+  /** 손잡이를 마지막으로 누른 것이 마우스인지(마우스면 클릭으로 메뉴를 연다). */
+  let pressedWithMouse = false;
+
+  /** 메뉴 트리거(bits-ui)가 준 이벤트 처리기를 부른다. */
+  function forward(props: unknown, name: 'onpointerdown' | 'onclick', event: Event): void {
+    if (typeof props !== 'object' || props === null) return;
+    const handler: unknown = Reflect.get(props, name);
+    if (typeof handler === 'function') Reflect.apply(handler, undefined, [event]);
+  }
 
   const selectionBlockFrom = (): number | undefined =>
     blockAt(editor.state.doc, editor.state.selection.from)?.from;
@@ -101,13 +111,8 @@
       queueMicrotask(() => {
         hoverFrom = undefined;
         if (pinned === undefined || pinnedFrom !== pinned) return;
-        const mapped = transaction.mapping.mapResult(pinned, 1);
-        if (mapped.deleted || blockStartingAt(editor.state.doc, mapped.pos) === undefined) {
-          menuOpen = false;
-          pinnedFrom = undefined;
-        } else {
-          pinnedFrom = mapped.pos;
-        }
+        pinnedFrom = mapBlockStart(editor.state.doc, transaction.mapping, pinned);
+        if (pinnedFrom === undefined) menuOpen = false;
       });
     };
     container.addEventListener('mousemove', onMove);
@@ -210,6 +215,19 @@
             title={`${m.documents_block_menu()} — ${m.documents_block_keys()}`}
             onpointerdowncapture={() => {
               pinnedFrom = current.block.from;
+            }}
+            onpointerdown={(e: PointerEvent) => {
+              // 마우스로 누르면 끌어 옮기기가 시작될 수 있어 메뉴는 누를 때가 아니라 클릭(놓을 때)에 연다.
+              // 끌기로 끝나면 클릭이 오지 않아 메뉴가 열리지 않는다. 터치·펜은 메뉴 기본 동작을 따른다.
+              pressedWithMouse = e.pointerType === 'mouse';
+              if (!pressedWithMouse) forward(props, 'onpointerdown', e);
+            }}
+            onclick={(e: MouseEvent) => {
+              if (e.detail > 0 && pressedWithMouse) {
+                pinnedFrom = current.block.from;
+                menuOpen = !menuOpen;
+                if (!menuOpen) pinnedFrom = undefined;
+              } else forward(props, 'onclick', e);
             }}
             onpointerupcapture={releaseIfIdle}
             onpointercancel={releaseIfIdle}

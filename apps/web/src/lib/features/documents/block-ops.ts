@@ -157,6 +157,20 @@ export function blockStartingAt(doc: PmNode, from: number): BlockRange | undefin
   return nodeRangeAt(doc, from);
 }
 
+/**
+ * 문서가 바뀐 뒤(다른 사람의 편집 등) 블록 시작 위치를 옮긴다. 그 블록이 지워졌거나 통째로 바뀌었으면
+ * undefined(메뉴를 닫는다). 앞에 끼워 넣은 내용은 위치를 뒤로 민다.
+ */
+export function mapBlockStart(
+  doc: PmNode,
+  mapping: { mapResult: (pos: number, assoc?: number) => { pos: number; deleted: boolean } },
+  from: number,
+): number | undefined {
+  const mapped = mapping.mapResult(from, 1);
+  if (mapped.deleted || blockStartingAt(doc, mapped.pos) === undefined) return undefined;
+  return mapped.pos;
+}
+
 /** 화면 좌표의 `posAtCoords` 결과(`inside`: 그 위치를 품은 노드의 시작)로 블록을 찾는다. */
 export function blockAtHit(
   doc: PmNode,
