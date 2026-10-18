@@ -317,6 +317,7 @@
   "documents_paste_images_removed": "{count} image(s) that cannot be kept (no address, data: or similar) were left out of the paste. Upload image files with File or image.",
   "documents_paste_links_unlinked": "{count} link(s) with a disallowed address were removed and their text kept (only https, http, mailto and in-app paths work).",
   "documents_image_input_linked": "Images from outside addresses cannot be placed in a document, so it was inserted as a link. To show it, download the image and upload it with File or image.",
+  "documents_image_blocked": "Outside image — not loaded because it cannot be saved: {src}",
   "documents_save_blocked_images": "Not saved: the document has {count} image(s) from outside addresses (e.g. {example}). Only images uploaded to this service can be placed. Download and upload them with File or image, turn them into links, or remove them, then save again. Your changes are kept as a draft in this browser.",
   "documents_save_blocked_links": "Not saved: the document has {count} link(s) with a disallowed address (e.g. {example}). Use https, http, mailto or an in-app path, then save again. Your changes are kept as a draft in this browser.",
   "documents_markdown_blocked_images": "{count} image(s) in the source use outside addresses and cannot be saved (e.g. {example}). Use an attachment address (/api/files/…) or write a link [text](address).",

@@ -13,6 +13,8 @@ import type { ReferenceOptions } from '$lib/features/references/reference-extens
 import { Reference } from '$lib/features/references/reference-extension';
 import { m } from '$lib/paraglide/messages.js';
 
+import { isAttachmentUrl } from './paste-guard';
+
 export interface SchemaOptions {
   reference?: Partial<ReferenceOptions>;
   onMathClick?: (kind: 'inline' | 'block', node: PmNode, pos: number) => void;
@@ -40,9 +42,28 @@ export function schemaExtensions(options: SchemaOptions = {}): Extensions {
     Reference.configure(reference),
     TableKit.configure({ table: { resizable: false } }),
     // 기본 `![](주소)` 입력 규칙은 주소를 가리지 않아 끈다(편집할 때 SafeImageInput이 대신한다). 스키마는 같다.
+    // 편집기 화면에서 바깥 주소 이미지(Markdown 원문·초안 복원으로 들어온 것)는 불러오지 않고, 주소와 함께 저장할 수
+    // 없다는 표시로 보인다. 내용은 그대로 남고 저장 전 검사(contentIssues)가 원인과 고칠 방법을 알린다.
     Image.extend({
       addInputRules() {
         return [];
+      },
+      addNodeView() {
+        return ({ node, HTMLAttributes }) => {
+          const src = typeof node.attrs.src === 'string' ? node.attrs.src : '';
+          if (isAttachmentUrl(src)) {
+            const img = document.createElement('img');
+            for (const [key, value] of Object.entries(HTMLAttributes))
+              if (value !== null && value !== undefined) img.setAttribute(key, String(value));
+            return { dom: img };
+          }
+          const blocked = document.createElement('div');
+          blocked.className = 'fvoci-blocked-image';
+          blocked.dataset.blockedImage = '';
+          blocked.setAttribute('role', 'note');
+          blocked.textContent = m.documents_image_blocked({ src });
+          return { dom: blocked };
+        };
       },
     }).configure({ inline: false, allowBase64: false }),
     Mathematics.configure({

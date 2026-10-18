@@ -159,6 +159,36 @@ export function contentIssues(doc: JSONContent): ContentIssues {
   return issues;
 }
 
+/**
+ * 붙인 HTML을 편집기가 읽기 전에 문서 규칙에 맞춘다(편집기의 읽기 규칙이 data: 이미지나 javascript: 링크를
+ * 조용히 버리기 전에 세려고). 바깥 http(s) 이미지는 같은 주소의 링크로, 링크로도 둘 수 없는 이미지는 빼고,
+ * 허용하지 않는 링크는 글자만 남긴다. 바꾼 수를 `stats`에 더한다.
+ */
+export function cleanPastedHtml(html: string, stats: ContentAdjustments): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  for (const img of Array.from(doc.querySelectorAll('img'))) {
+    const src = img.getAttribute('src') ?? '';
+    if (isAttachmentUrl(src)) continue;
+    if (isWebUrl(src)) {
+      const a = doc.createElement('a');
+      a.setAttribute('href', src);
+      const alt = (img.getAttribute('alt') ?? '').trim();
+      a.textContent = alt === '' ? src : alt;
+      img.replaceWith(a);
+      stats.imagesLinked += 1;
+    } else {
+      img.remove();
+      stats.imagesRemoved += 1;
+    }
+  }
+  for (const a of Array.from(doc.querySelectorAll('a[href]'))) {
+    if (isAllowedHref(a.getAttribute('href') ?? '')) continue;
+    a.replaceWith(...Array.from(a.childNodes));
+    stats.linksUnlinked += 1;
+  }
+  return doc.body.innerHTML;
+}
+
 export interface PasteGuardOptions {
   /** 붙여넣기·끌어 놓기에서 바꾼 것이 있으면 부른다(화면이 사용자에게 알린다). */
   onAdjusted: (stats: ContentAdjustments) => void;
@@ -171,12 +201,19 @@ export const PasteGuard = Extension.create<PasteGuardOptions>({
   },
   addProseMirrorPlugins() {
     const { onAdjusted } = this.options;
+    // HTML로 붙이면 읽기 전에 HTML에서 고치고(cleanPastedHtml) 센다. 그 밖(끌어 놓기 등)은 cleanSlice가 맡는다.
+    let fromHtml = noAdjustments();
     return [
       new Plugin({
         key: new PluginKey('pasteGuard'),
         props: {
+          transformPastedHTML: (html) => {
+            fromHtml = noAdjustments();
+            return cleanPastedHtml(html, fromHtml);
+          },
           transformPasted: (slice) => {
-            const stats = noAdjustments();
+            const stats = fromHtml;
+            fromHtml = noAdjustments();
             const cleaned = cleanSlice(slice, stats);
             if (stats.imagesLinked + stats.imagesRemoved + stats.linksUnlinked > 0)
               onAdjusted(stats);

@@ -296,6 +296,7 @@
   "documents_paste_images_removed": "넣을 수 없는 이미지 {count}개(주소가 없거나 data: 등)는 빼고 붙였습니다. 이미지 파일은 ‘파일·이미지’로 올리세요.",
   "documents_paste_links_unlinked": "허용되지 않는 링크 {count}개는 링크를 풀고 글자만 남겼습니다(https·http·mailto 주소와 문서 안 경로만 됩니다).",
   "documents_image_input_linked": "바깥 주소의 이미지는 문서에 넣을 수 없어 링크로 넣었습니다. 보이게 하려면 이미지를 내려받아 ‘파일·이미지’로 올리세요.",
+  "documents_image_blocked": "바깥 주소 이미지 — 저장할 수 없어 불러오지 않았습니다: {src}",
   "documents_save_blocked_images": "저장하지 않았습니다: 바깥 주소의 이미지 {count}개가 있습니다(예: {example}). 이 서비스에 올린 첨부 이미지만 넣을 수 있습니다. 이미지를 내려받아 ‘파일·이미지’로 올리거나, 링크로 바꾸거나, 지운 뒤 다시 저장하세요. 고친 내용은 이 브라우저에 초안으로 남아 있습니다.",
   "documents_save_blocked_links": "저장하지 않았습니다: 허용되지 않는 링크 {count}개가 있습니다(예: {example}). https·http·mailto 주소나 문서 안 경로로 바꾼 뒤 다시 저장하세요. 고친 내용은 이 브라우저에 초안으로 남아 있습니다.",
   "documents_markdown_blocked_images": "원문의 이미지 {count}개는 바깥 주소라 저장할 수 없습니다(예: {example}). 첨부 주소(/api/files/…)로 바꾸거나 [글](주소) 링크로 쓰세요.",

@@ -11,6 +11,7 @@ import {
   isAttachmentUrl,
   noAdjustments,
   SafeImageInput,
+  cleanPastedHtml,
 } from '$lib/features/documents/paste-guard';
 import type { SlashItem } from '$lib/features/documents/slash-command';
 import { filterSlashItems, isComposingKey } from '$lib/features/documents/slash-command';
@@ -78,6 +79,23 @@ describe('paste guard (same rules as the server document check)', () => {
     expect(text).toContain(FILE);
   });
 
+  it('cleans pasted HTML before the editor reads it, counting each change once', () => {
+    const stats = noAdjustments();
+    const html = cleanPastedHtml(
+      '<p>글<img src="https://outside.example/a.png" alt="풍경"><img src="data:image/png;base64,AA"><a href="javascript:alert(1)">나쁜</a><a href="https://ok.example">좋은</a></p><img src="' +
+        FILE +
+        '">',
+      stats,
+    );
+    expect(stats).toEqual({ imagesLinked: 1, imagesRemoved: 1, linksUnlinked: 1 });
+    expect(html).toContain('<a href="https://outside.example/a.png">풍경</a>');
+    expect(html).not.toContain('data:image');
+    expect(html).not.toContain('javascript:');
+    expect(html).toContain('나쁜');
+    expect(html).toContain('href="https://ok.example"');
+    expect(html).toContain(FILE);
+  });
+
   it('finds content the server would reject before saving', () => {
     const issues = contentIssues({
       type: 'doc',
@@ -105,6 +123,28 @@ describe('paste guard (same rules as the server document check)', () => {
       images: [],
       links: [],
     });
+  });
+
+  it('does not load outside images that came in through Markdown or a draft', () => {
+    const editor = new Editor({
+      extensions: schemaExtensions(),
+      content: {
+        type: 'doc',
+        content: [
+          { type: 'image', attrs: { src: 'https://outside.example/md.png' } },
+          { type: 'image', attrs: { src: FILE } },
+        ],
+      },
+    });
+    editors.push(editor);
+    const dom = editor.view.dom;
+    expect(dom.querySelector('img[src^="https://outside"]')).toBeNull();
+    expect(dom.querySelector('[data-blocked-image]')?.textContent).toContain(
+      'https://outside.example/md.png',
+    );
+    expect(dom.querySelector(`img[src="${FILE}"]`)).not.toBeNull();
+    // 내용은 그대로 남는다(저장 전 검사가 알린다).
+    expect(JSON.stringify(editor.getJSON())).toContain('https://outside.example/md.png');
   });
 
   it('typing ![alt](url) inserts attachments as images and outside images as links', () => {
