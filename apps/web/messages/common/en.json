@@ -26,5 +26,6 @@
   "common_error_not_found": "It doesn't exist or you can't see it.",
   "common_error_bad_request": "Check what you entered.",
   "common_error_invalid_state": "This can't be done right now. Reload and try again.",
-  "common_close": "Close"
+  "common_close": "Close",
+  "common_error_unexpected": "Got an unexpected response ({status})."
 }
