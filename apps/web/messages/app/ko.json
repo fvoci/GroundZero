@@ -34,5 +34,21 @@
   "app_health_ok": "서버 정상 (database: {database})",
   "app_health_degraded": "서버 응답은 있으나 데이터베이스 연결 실패",
   "app_health_unreachable": "서버에 연결할 수 없음: {message}",
-  "app_toggle_sidebar": "사이드바 열고 닫기"
+  "app_toggle_sidebar": "사이드바 열고 닫기",
+  "app_nav_label": "탐색 메뉴",
+  "app_nav_description": "개인 영역과 현재 워크스페이스의 화면으로 이동합니다.",
+  "app_nav_home": "홈",
+  "app_nav_workspace_switch": "워크스페이스 바꾸기",
+  "app_nav_workspace_choose": "워크스페이스 고르기",
+  "app_nav_workspace_manage": "워크스페이스 만들기·초대 확인",
+  "app_nav_wiki": "위키",
+  "app_nav_modules": "모듈",
+  "app_nav_modules_empty": "아직 모듈이 없습니다.",
+  "app_nav_docs_empty": "아직 위키 문서가 없습니다.",
+  "app_nav_load_failed": "목록을 불러오지 못했습니다.",
+  "app_nav_expand": "{title} 하위 문서 펼치기",
+  "app_nav_collapse": "{title} 하위 문서 접기",
+  "app_nav_close": "메뉴 닫기",
+  "app_nav_account": "계정 메뉴",
+  "app_nav_unread": "읽지 않은 알림 {count}개"
 }

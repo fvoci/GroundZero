@@ -60,7 +60,8 @@
     'data-slot': 'sidebar-menu-button',
     'data-sidebar': 'menu-button',
     'data-size': size,
-    'data-active': isActive,
+    // fvoci: false일 때 속성을 빼야 Tailwind `data-active:` 변형이 활성 항목에만 맞는다(값 "false"도 맞음).
+    'data-active': isActive ? '' : undefined,
     ...restProps,
   });
 </script>

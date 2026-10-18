@@ -34,5 +34,21 @@
   "app_health_ok": "Server OK (database: {database})",
   "app_health_degraded": "The server responds, but the database connection failed",
   "app_health_unreachable": "Can't reach the server: {message}",
-  "app_toggle_sidebar": "Toggle sidebar"
+  "app_toggle_sidebar": "Toggle sidebar",
+  "app_nav_label": "Navigation",
+  "app_nav_description": "Go to your personal area and the screens of the current workspace.",
+  "app_nav_home": "Home",
+  "app_nav_workspace_switch": "Switch workspace",
+  "app_nav_workspace_choose": "Choose a workspace",
+  "app_nav_workspace_manage": "Create or join a workspace",
+  "app_nav_wiki": "Wiki",
+  "app_nav_modules": "Modules",
+  "app_nav_modules_empty": "No modules yet.",
+  "app_nav_docs_empty": "No wiki documents yet.",
+  "app_nav_load_failed": "Couldn't load the list.",
+  "app_nav_expand": "Expand {title}",
+  "app_nav_collapse": "Collapse {title}",
+  "app_nav_close": "Close menu",
+  "app_nav_account": "Account menu",
+  "app_nav_unread": "{count} unread notifications"
 }
