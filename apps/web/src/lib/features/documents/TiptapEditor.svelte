@@ -35,7 +35,8 @@
   import type { LiveSession } from './live';
   import type { SlashItem } from './slash-command';
   import { SlashCommand } from './slash-command';
-  import { PasteGuard } from './paste-guard';
+  import { describeAdjustments, describeMarkdownIssues } from './content-notices';
+  import { contentIssues, PasteGuard, SafeImageInput } from './paste-guard';
 
   interface Props {
     content: DocNode;
@@ -65,6 +66,9 @@
   let container = $state<HTMLDivElement | undefined>();
   let bubbleEl = $state<HTMLDivElement | undefined>();
   let menuRequest = $state<number | undefined>(undefined);
+  // 붙여넣기·입력에서 문서 규칙에 맞춰 바꾼 것의 안내, Markdown 원문에서 저장할 수 없는 것의 안내.
+  let contentNotice = $state('');
+  let markdownProblem = $state<string | undefined>(undefined);
   // 블록 단축키 안내(화면 낭독기가 편집기 설명으로 읽는다).
   const keysHintId = `editor-keys-${crypto.randomUUID()}`;
 
@@ -287,7 +291,20 @@
     const editing: Extensions = [
       ...base,
       SlashCommand.configure({ items: () => slashItems() }),
-      PasteGuard,
+      PasteGuard.configure({
+        onAdjusted: (stats) => {
+          queueMicrotask(() => {
+            contentNotice = describeAdjustments(stats);
+          });
+        },
+      }),
+      SafeImageInput.configure({
+        onLinked: () => {
+          queueMicrotask(() => {
+            contentNotice = m.documents_image_input_linked();
+          });
+        },
+      }),
       BlockKeys.configure({
         onMenu: (pos: number) => {
           menuRequest = pos;
@@ -434,6 +451,8 @@
     if (e === undefined) return;
     const parsed = parsedMarkdown(e);
     // 자동 저장은 원문에서 만든 내용으로 한다. 편집기는 모드를 바꿀 때 맞춘다.
+    markdownProblem =
+      parsed === undefined ? undefined : describeMarkdownIssues(contentIssues(parsed));
     if (parsed !== undefined) onchange?.(parsed);
   }
 
@@ -595,6 +614,24 @@
     </form>
   {/if}
   {#if fileStatus !== ''}<p class="py-1 text-sm" aria-live="polite">{fileStatus}</p>{/if}
+  <!-- 붙여넣기·입력을 문서 규칙에 맞춰 바꿨을 때의 안내. 사용자가 닫을 때까지 남긴다. -->
+  <div class="text-sm" aria-live="polite">
+    {#if contentNotice !== ''}
+      <p
+        class="mt-1 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+        data-testid="content-notice"
+      >
+        <span class="flex-1">{contentNotice}</span>
+        <button
+          type="button"
+          class="shrink-0 rounded px-1 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          onclick={() => {
+            contentNotice = '';
+          }}>{m.documents_notice_dismiss()}</button
+        >
+      </p>
+    {/if}
+  </div>
 {/if}
 {#if mode === 'markdown'}
   {#if lossy}
@@ -612,6 +649,11 @@
     spellcheck="false"
     class="mt-1 min-h-[16rem] w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
   ></textarea>
+  {#if markdownProblem !== undefined}
+    <p class="mt-1 text-sm text-destructive" role="alert" data-testid="markdown-problem">
+      {markdownProblem}
+    </p>
+  {/if}
 {/if}
 <!-- 고칠 때는 왼쪽 여백에 블록 손잡이(+·메뉴)가 붙는다. 넓은 화면에서는 그 여백을 본문 바깥으로 뺀다. -->
 <div

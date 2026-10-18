@@ -20,7 +20,9 @@
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
 
+  import { describeSaveBlock } from './content-notices';
   import { canonicalJson, clearDraft, loadDraft, plainText, storeDraft } from './drafts';
+  import { contentIssues } from './paste-guard';
   import TiptapEditor from './TiptapEditor.svelte';
 
   interface Props {
@@ -133,6 +135,14 @@
     if (title.trim() === '') {
       status = 'error';
       message = m.documents_title_required();
+      return;
+    }
+    // 서버가 받지 않을 내용(바깥 이미지·허용하지 않는 링크)은 보내지 않고 이유와 고칠 방법을 보인다.
+    // 초안은 edited()가 이미 이 브라우저에 남겼다.
+    const blocked = describeSaveBlock(contentIssues(body));
+    if (blocked !== undefined) {
+      status = 'error';
+      message = blocked;
       return;
     }
     const snap = snapshot();

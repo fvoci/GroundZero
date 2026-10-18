@@ -1,8 +1,14 @@
-// 붙여넣기·끌어 놓기로 들어오는 내용을 서버의 문서 규칙에 맞춘다(crates/server/src/features/documents.rs의
-// check_image_node·check_link_mark와 같은 규칙). 웹 페이지에서 복사한 바깥 이미지(추적 이미지)나 허용하지 않는
-// 링크가 그대로 들어오면 일반 편집은 저장이 거절되고, 실시간 편집은 방이 닫힌다. 그런 것은 들어올 때 뺀다:
-// 바깥 이미지는 빼고, 허용하지 않는 링크는 글자만 남긴다.
-import { Extension } from '@tiptap/core';
+// 문서 내용 규칙(서버 crates/server/src/features/documents.rs의 check_image_node·check_link_mark와 같다).
+// 이미지는 이 서비스의 첨부 주소만, 링크는 https·http·mailto나 문서 안 경로만 저장된다. 바깥 이미지(추적 이미지)나
+// 허용하지 않는 링크가 그대로 들어가면 일반 편집은 저장이 거절되고 실시간 편집은 방이 닫힌다.
+// 들어오는 곳마다 조용히 지우지 않고 알린다:
+// - 붙여넣기·끌어 놓기: 바깥 http(s) 이미지는 같은 주소의 링크 글로 바꾸고, 링크로도 둘 수 없는 이미지(data: 등)는
+//   빼고, 허용하지 않는 링크는 글자만 남긴 뒤 몇 개를 바꿨는지 알린다(`onAdjusted`).
+// - `![설명](주소)` 입력: 첨부 주소면 이미지, 바깥 http(s) 주소면 링크로 넣고 알린다. 그 밖은 적은 글자 그대로 둔다.
+// - Markdown 원문·초안 등 위를 거치지 않은 내용: 저장 전에 `contentIssues`로 찾아 저장하지 않고 원인과 고칠 방법을
+//   보인다(초안은 그대로 남는다).
+import type { JSONContent } from '@tiptap/core';
+import { Extension, InputRule } from '@tiptap/core';
 import { Fragment, Slice } from '@tiptap/pm/model';
 import type { Node as PmNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
@@ -40,7 +46,38 @@ export function isAllowedHref(href: string): boolean {
   return !value.toLowerCase().startsWith('/api/files/') || isAttachmentUrl(href);
 }
 
-function cleanFragment(fragment: Fragment): Fragment {
+/** 바깥 이미지 주소가 링크로 둘 수 있는 http(s) 주소인가. */
+function isWebUrl(src: string): boolean {
+  return /^https?:\/\//i.test(src.trim()) && isAllowedHref(src);
+}
+
+export interface ContentAdjustments {
+  /** 바깥 http(s) 이미지를 링크 글로 바꾼 수. */
+  imagesLinked: number;
+  /** 링크로도 둘 수 없어 뺀 이미지 수(data: 등). */
+  imagesRemoved: number;
+  /** 링크를 풀고 글자만 남긴 수. */
+  linksUnlinked: number;
+}
+
+export const noAdjustments = (): ContentAdjustments => ({
+  imagesLinked: 0,
+  imagesRemoved: 0,
+  linksUnlinked: 0,
+});
+
+/** 바깥 이미지 대신 넣는 문단: 설명(없으면 주소)을 글로, 주소를 링크로. */
+function imageAsLink(node: PmNode, src: string): PmNode | undefined {
+  const { schema } = node.type;
+  const paragraph = schema.nodes.paragraph;
+  const link = schema.marks.link;
+  if (paragraph === undefined || link === undefined) return undefined;
+  const alt: unknown = node.attrs.alt;
+  const label = typeof alt === 'string' && alt.trim() !== '' ? alt.trim() : src;
+  return paragraph.create(null, schema.text(label, [link.create({ href: src })]));
+}
+
+function cleanFragment(fragment: Fragment, stats: ContentAdjustments): Fragment {
   const nodes: PmNode[] = [];
   let changed = false;
   for (let i = 0; i < fragment.childCount; i += 1) {
@@ -49,6 +86,14 @@ function cleanFragment(fragment: Fragment): Fragment {
       const src: unknown = node.attrs.src;
       if (typeof src !== 'string' || !isAttachmentUrl(src)) {
         changed = true;
+        const replacement =
+          typeof src === 'string' && isWebUrl(src) ? imageAsLink(node, src) : undefined;
+        if (replacement === undefined) {
+          stats.imagesRemoved += 1;
+        } else {
+          stats.imagesLinked += 1;
+          nodes.push(replacement);
+        }
         continue;
       }
     }
@@ -61,12 +106,13 @@ function cleanFragment(fragment: Fragment): Fragment {
       });
       if (marks.length !== node.marks.length) {
         next = node.mark(marks);
+        stats.linksUnlinked += 1;
         changed = true;
       }
     } else if (node.content.size > 0) {
-      const content = cleanFragment(node.content);
+      const content = cleanFragment(node.content, stats);
       if (content !== node.content) {
-        // 빼고 남은 내용이 이 노드에 맞지 않으면(이미지만 있던 목록 항목 등) 필요한 빈 칸을 채워 다시 만든다.
+        // 바꾼 내용이 이 노드에 맞지 않으면(이미지만 있던 목록 항목 등) 필요한 빈 칸을 채워 다시 만든다.
         const rebuilt = node.type.validContent(content)
           ? node.copy(content)
           : node.type.createAndFill(node.attrs, content, node.marks);
@@ -80,18 +126,113 @@ function cleanFragment(fragment: Fragment): Fragment {
   return changed ? Fragment.fromArray(nodes) : fragment;
 }
 
-/** 붙여넣기·끌어 놓기 조각에서 서버가 받지 않는 이미지·링크를 뺀다. */
-export function cleanSlice(slice: Slice): Slice {
-  return new Slice(cleanFragment(slice.content), slice.openStart, slice.openEnd);
+/** 붙여넣기·끌어 놓기 조각을 문서 규칙에 맞춘다. 바꾼 수는 `stats`에 더한다. */
+export function cleanSlice(slice: Slice, stats: ContentAdjustments = noAdjustments()): Slice {
+  return new Slice(cleanFragment(slice.content, stats), slice.openStart, slice.openEnd);
 }
 
-export const PasteGuard = Extension.create({
+export interface ContentIssues {
+  /** 저장할 수 없는 이미지 주소. */
+  images: string[];
+  /** 저장할 수 없는 링크 주소. */
+  links: string[];
+}
+
+/** 저장 전 확인: 문서 JSON에서 서버가 받지 않을 이미지·링크를 찾는다. */
+export function contentIssues(doc: JSONContent): ContentIssues {
+  const issues: ContentIssues = { images: [], links: [] };
+  const walk = (node: JSONContent): void => {
+    if (node.type === 'image') {
+      const src: unknown = node.attrs?.src;
+      if (typeof src !== 'string' || !isAttachmentUrl(src))
+        issues.images.push(typeof src === 'string' ? src : '');
+    }
+    for (const mark of node.marks ?? []) {
+      if (mark.type !== 'link') continue;
+      const href: unknown = mark.attrs?.href;
+      if (typeof href !== 'string' || !isAllowedHref(href))
+        issues.links.push(typeof href === 'string' ? href : '');
+    }
+    for (const child of node.content ?? []) walk(child);
+  };
+  walk(doc);
+  return issues;
+}
+
+export interface PasteGuardOptions {
+  /** 붙여넣기·끌어 놓기에서 바꾼 것이 있으면 부른다(화면이 사용자에게 알린다). */
+  onAdjusted: (stats: ContentAdjustments) => void;
+}
+
+export const PasteGuard = Extension.create<PasteGuardOptions>({
   name: 'pasteGuard',
+  addOptions() {
+    return { onAdjusted: () => undefined };
+  },
   addProseMirrorPlugins() {
+    const { onAdjusted } = this.options;
     return [
       new Plugin({
         key: new PluginKey('pasteGuard'),
-        props: { transformPasted: (slice) => cleanSlice(slice) },
+        props: {
+          transformPasted: (slice) => {
+            const stats = noAdjustments();
+            const cleaned = cleanSlice(slice, stats);
+            if (stats.imagesLinked + stats.imagesRemoved + stats.linksUnlinked > 0)
+              onAdjusted(stats);
+            return cleaned;
+          },
+        },
+      }),
+    ];
+  },
+});
+
+/** Tiptap Image의 `![설명](주소 "제목")` 입력 꼴(같은 정규식). */
+const IMAGE_INPUT = /(?:^|\s)(!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
+
+export interface SafeImageInputOptions {
+  /** 바깥 이미지 주소를 링크로 넣었을 때. */
+  onLinked: () => void;
+}
+
+/**
+ * `![설명](주소)` 입력. 첨부 주소는 이미지로, 바깥 http(s) 주소는 링크 글로 넣고 알린다. 그 밖(javascript: 등)은
+ * 적은 글자 그대로 둔다. 기본 Image 입력 규칙은 editor-schema에서 껐다(주소를 가리지 않으므로).
+ */
+export const SafeImageInput = Extension.create<SafeImageInputOptions>({
+  name: 'safeImageInput',
+  addOptions() {
+    return { onLinked: () => undefined };
+  },
+  addInputRules() {
+    const { onLinked } = this.options;
+    return [
+      new InputRule({
+        find: IMAGE_INPUT,
+        handler: ({ state, range, match }) => {
+          const [whole, written, alt, src, title] = match;
+          if (written === undefined || src === undefined) return null;
+          const start = range.from + (whole.length - written.length);
+          const { schema, tr } = state;
+          if (isAttachmentUrl(src)) {
+            const image = schema.nodes.image;
+            if (image === undefined) return null;
+            tr.replaceWith(
+              start,
+              range.to,
+              image.create({ src, alt: alt ?? null, title: title ?? null }),
+            );
+            return undefined;
+          }
+          if (!isWebUrl(src)) return null;
+          const link = schema.marks.link;
+          if (link === undefined) return null;
+          const label = alt !== undefined && alt.trim() !== '' ? alt.trim() : src;
+          tr.replaceWith(start, range.to, schema.text(label, [link.create({ href: src })]));
+          onLinked();
+          return undefined;
+        },
       }),
     ];
   },

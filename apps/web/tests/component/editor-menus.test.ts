@@ -4,7 +4,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { schemaExtensions } from '$lib/features/documents/editor-schema';
 import { normalizeHref } from '$lib/features/documents/link-href';
-import { cleanSlice, isAllowedHref, isAttachmentUrl } from '$lib/features/documents/paste-guard';
+import {
+  cleanSlice,
+  contentIssues,
+  isAllowedHref,
+  isAttachmentUrl,
+  noAdjustments,
+  SafeImageInput,
+} from '$lib/features/documents/paste-guard';
 import type { SlashItem } from '$lib/features/documents/slash-command';
 import { filterSlashItems, isComposingKey } from '$lib/features/documents/slash-command';
 
@@ -37,7 +44,7 @@ describe('paste guard (same rules as the server document check)', () => {
     expect(isAllowedHref(FILE)).toBe(true);
   });
 
-  it('drops outside images and unsafe link marks from a pasted slice, keeping the text', () => {
+  it('turns outside images into links and unlinks unsafe links, reporting what changed', () => {
     const editor = new Editor({ extensions: schemaExtensions() });
     editors.push(editor);
     const { schema } = editor;
@@ -51,18 +58,88 @@ describe('paste guard (same rules as the server document check)', () => {
         schema.text('bad', [link.create({ href: 'javascript:alert(1)' })]),
         schema.text(' good', [link.create({ href: 'https://ok.example' })]),
       ]),
-      image.create({ src: 'https://tracker.example/x.gif' }),
+      image.create({ src: 'https://tracker.example/x.gif', alt: '그림' }),
+      image.create({ src: 'data:image/png;base64,AAAA' }),
       image.create({ src: FILE }),
     ]);
     if (doc === undefined) throw new Error('doc');
-    const cleaned = cleanSlice(new Slice(doc.content, 0, 0));
-    const json: unknown = cleaned.content.toJSON();
-    const text = JSON.stringify(json);
+    const stats = noAdjustments();
+    const cleaned = cleanSlice(new Slice(doc.content, 0, 0), stats);
+    const text = JSON.stringify(cleaned.content.toJSON());
+    expect(stats).toEqual({ imagesLinked: 1, imagesRemoved: 1, linksUnlinked: 1 });
     expect(text).toContain('"text":"bad"');
     expect(text).not.toContain('javascript:');
     expect(text).toContain('https://ok.example');
-    expect(text).not.toContain('tracker.example');
+    // 바깥 이미지는 지우지 않고 같은 주소의 링크 글로 남는다(설명이 글이 된다).
+    expect(text).toContain('"text":"그림"');
+    expect(text).toContain('"href":"https://tracker.example/x.gif"');
+    expect(text).not.toContain('"type":"image","attrs":{"src":"https://tracker.example');
+    expect(text).not.toContain('data:image');
     expect(text).toContain(FILE);
+  });
+
+  it('finds content the server would reject before saving', () => {
+    const issues = contentIssues({
+      type: 'doc',
+      content: [
+        { type: 'image', attrs: { src: 'https://outside.example/a.png' } },
+        { type: 'image', attrs: { src: FILE } },
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'x',
+              marks: [{ type: 'link', attrs: { href: '//evil.example' } }],
+            },
+            { type: 'text', text: 'y', marks: [{ type: 'link', attrs: { href: '/w/a/wiki/b' } }] },
+          ],
+        },
+      ],
+    });
+    expect(issues).toEqual({
+      images: ['https://outside.example/a.png'],
+      links: ['//evil.example'],
+    });
+    expect(contentIssues({ type: 'doc', content: [{ type: 'paragraph' }] })).toEqual({
+      images: [],
+      links: [],
+    });
+  });
+
+  it('typing ![alt](url) inserts attachments as images and outside images as links', () => {
+    let linked = 0;
+    const editor = new Editor({
+      extensions: [
+        ...schemaExtensions(),
+        SafeImageInput.configure({
+          onLinked: () => {
+            linked += 1;
+          },
+        }),
+      ],
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+    });
+    editors.push(editor);
+    const type = (text: string): void => {
+      for (const ch of text) {
+        const { from, to } = editor.state.selection;
+        const handled = editor.view.someProp('handleTextInput', (f) =>
+          f(editor.view, from, to, ch, () => editor.state.tr.insertText(ch, from, to)),
+        );
+        if (handled !== true) editor.view.dispatch(editor.state.tr.insertText(ch, from, to));
+      }
+    };
+    type('![사진](https://outside.example/p.png)');
+    const json = JSON.stringify(editor.getJSON());
+    expect(linked).toBe(1);
+    expect(json).not.toContain('"type":"image"');
+    expect(json).toContain('"href":"https://outside.example/p.png"');
+    expect(json).toContain('"text":"사진"');
+    editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph' }] });
+    type(`![첨부](${FILE})`);
+    expect(JSON.stringify(editor.getJSON())).toContain(`"src":"${FILE}"`);
+    expect(linked).toBe(1);
   });
 });
 

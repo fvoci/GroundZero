@@ -39,7 +39,12 @@ export function schemaExtensions(options: SchemaOptions = {}): Extensions {
     Markdown,
     Reference.configure(reference),
     TableKit.configure({ table: { resizable: false } }),
-    Image.configure({ inline: false, allowBase64: false }),
+    // 기본 `![](주소)` 입력 규칙은 주소를 가리지 않아 끈다(편집할 때 SafeImageInput이 대신한다). 스키마는 같다.
+    Image.extend({
+      addInputRules() {
+        return [];
+      },
+    }).configure({ inline: false, allowBase64: false }),
     Mathematics.configure({
       katexOptions: { throwOnError: false },
       inlineOptions: {
