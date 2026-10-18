@@ -184,15 +184,47 @@
     margin-top: 0.75em;
   }
 
-  .fvoci-prose h2 {
-    font-size: 1.375rem;
+  /* 제목 계층: 위 여백을 넓혀 절이 갈라지게 하고, 크기 차이로 단계를 구분한다(rem, 확대 설정을 따른다). */
+  .fvoci-prose h1,
+  .fvoci-prose h2,
+  .fvoci-prose h3 {
     font-weight: 600;
-    line-height: 1.4;
+    line-height: 1.35;
+    scroll-margin-top: 4rem;
   }
 
+  .fvoci-prose h1 {
+    font-size: 1.75rem;
+  }
+
+  .fvoci-prose h2 {
+    font-size: 1.375rem;
+  }
+
+  .fvoci-prose h3 {
+    font-size: 1.125rem;
+  }
+
+  .fvoci-prose > :is(h1, h2, h3):not(:first-child) {
+    margin-top: 1.5em;
+  }
+
+  .fvoci-prose hr {
+    @apply my-6 border-border;
+  }
+
+  /* 목록: 단계마다 같은 들여쓰기, 안쪽 목록은 기호를 바꾼다. 항목 사이는 본문보다 촘촘히. */
   .fvoci-prose ul {
     list-style: disc;
     padding-left: 1.5rem;
+  }
+
+  .fvoci-prose ul ul {
+    list-style: circle;
+  }
+
+  .fvoci-prose ul ul ul {
+    list-style: square;
   }
 
   .fvoci-prose ol {
@@ -200,10 +232,82 @@
     padding-left: 1.5rem;
   }
 
+  .fvoci-prose ol ol {
+    list-style: lower-alpha;
+  }
+
+  .fvoci-prose li + li,
+  .fvoci-prose li > :is(ul, ol) {
+    margin-top: 0.25em;
+  }
+
+  .fvoci-prose li > p + p {
+    margin-top: 0.5em;
+  }
+
+  /* 체크리스트: 기호 대신 상자, 상자와 글자를 한 줄에 맞추고 완료 항목은 흐리게. */
+  .fvoci-prose ul[data-type='taskList'] {
+    list-style: none;
+    padding-left: 0.25rem;
+  }
+
+  .fvoci-prose ul[data-type='taskList'] li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .fvoci-prose ul[data-type='taskList'] li > label {
+    flex: none;
+    display: flex;
+    align-items: center;
+    height: calc(var(--leading-body) * 1em);
+    user-select: none;
+  }
+
+  .fvoci-prose ul[data-type='taskList'] li > label input {
+    @apply size-4 accent-primary;
+  }
+
+  .fvoci-prose ul[data-type='taskList'] li > div {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .fvoci-prose ul[data-type='taskList'] li[data-checked='true'] > div > p {
+    @apply text-muted-foreground line-through;
+  }
+
+  /* 코드: 고정폭(D2Coding 정책은 --font-mono 토큰으로, O-37 승인 전에는 시스템 고정폭), 긴 줄은 가로로 넘긴다. */
   .fvoci-prose pre {
     @apply rounded-md bg-muted p-3;
     font-family: var(--font-mono);
     font-size: var(--text-ui);
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+    word-break: normal;
+    overflow-wrap: normal;
+    tab-size: 2;
+  }
+
+  .fvoci-prose :not(pre) > code {
+    @apply rounded bg-muted px-1 py-0.5;
+    font-size: 0.875em;
+  }
+
+  /* 빈 문단 안내(Placeholder): 커서가 있는 빈 줄에만, 글자처럼 고를 수 없게. */
+  .fvoci-prose :is(p, h1, h2, h3).is-empty::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    @apply text-muted-foreground/70;
+  }
+
+  /* 블록을 끌려고 고른 상태(손잡이). */
+  .fvoci-prose .ProseMirror-selectednode:not(img) {
+    @apply rounded-sm outline-2 outline-ring/60 outline-offset-2;
   }
 
   .fvoci-prose code {
@@ -214,12 +318,16 @@
     @apply border-l-4 pl-3 text-muted-foreground;
   }
 
-  /* 표·이미지·수식(D-27). */
+  /* 표·이미지·수식(D-27). 칸이 많은 표는 본문 폭을 넘지 않고 표만 가로로 넘긴다. */
   .fvoci-prose table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
     border-collapse: collapse;
-    width: 100%;
-    table-layout: fixed;
-    overflow: hidden;
+  }
+
+  .fvoci-prose table :is(th, td) {
+    min-width: 6rem;
   }
 
   .fvoci-prose th,
@@ -243,6 +351,12 @@
 
   .fvoci-prose img.ProseMirror-selectednode {
     @apply ring-2 ring-ring;
+  }
+
+  /* 저장할 수 없는 바깥 주소 이미지(불러오지 않는다). */
+  .fvoci-prose .fvoci-blocked-image {
+    overflow-wrap: anywhere;
+    @apply my-2 rounded-md border border-dashed border-amber-500/70 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100;
   }
 
   .fvoci-prose a {

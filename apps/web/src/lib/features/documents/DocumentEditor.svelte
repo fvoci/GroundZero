@@ -20,7 +20,9 @@
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
 
+  import { describeSaveBlock } from './content-notices';
   import { canonicalJson, clearDraft, loadDraft, plainText, storeDraft } from './drafts';
+  import { contentIssues } from './paste-guard';
   import TiptapEditor from './TiptapEditor.svelte';
 
   interface Props {
@@ -111,6 +113,7 @@
 
   function edited(): void {
     if (!server.can_edit || status === 'conflict') return;
+    const signedOut = status === 'signed-out';
     status = isDirty() ? 'dirty' : 'saved';
     if (status === 'dirty') {
       storeDraft(server.id, {
@@ -120,19 +123,33 @@
         savedAt: new Date().toISOString(),
       });
       schedule(AUTOSAVE_DELAY_MS);
+    } else {
+      // 서버 내용과 같아졌으면(문제 내용을 지우는 등) 지난 저장 안내는 더 필요 없다(로그아웃 안내는 남긴다).
+      // 복원 제안 중인 초안은 사용자가 고를 때까지 남긴다.
+      if (!signedOut) message = undefined;
+      if (restorable === undefined) clearDraft(server.id);
     }
   }
 
   async function save(): Promise<void> {
     if (!server.can_edit || status === 'saving' || status === 'conflict') return;
     if (!isDirty()) {
+      if (status !== 'signed-out') message = undefined;
       status = 'saved';
-      clearDraft(server.id);
+      if (restorable === undefined) clearDraft(server.id);
       return;
     }
     if (title.trim() === '') {
       status = 'error';
       message = m.documents_title_required();
+      return;
+    }
+    // 서버가 받지 않을 내용(바깥 이미지·허용하지 않는 링크)은 보내지 않고 이유와 고칠 방법을 보인다.
+    // 초안은 edited()가 이미 이 브라우저에 남겼다.
+    const blocked = describeSaveBlock(contentIssues(body));
+    if (blocked !== undefined) {
+      status = 'error';
+      message = blocked;
       return;
     }
     const snap = snapshot();
@@ -202,6 +219,7 @@
     attempt = undefined;
     clearDraft(server.id);
     status = 'saved';
+    message = undefined;
   }
 
   async function overwriteWithMine(): Promise<void> {
@@ -219,6 +237,12 @@
     const copyTitle = m.documents_draft_copy_title({
       title: title.trim() === '' ? server.title : title.trim(),
     });
+    // 사본도 같은 서버 규칙으로 저장되므로, 받지 않을 내용이면 노트를 만들기 전에 이유를 보인다.
+    const blocked = describeSaveBlock(contentIssues(body));
+    if (blocked !== undefined) {
+      message = blocked;
+      return;
+    }
     try {
       // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다.
       const created = await api.createNote(newRequestId(), copyTitle);

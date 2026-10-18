@@ -6,8 +6,11 @@
   // 내용이면 들어갈 때 알려 주고, 원문을 고친 경우에만 원문에서 다시 만든 내용으로 바꾼다(조용한 손실 방지).
   import type { Extensions } from '@tiptap/core';
   import { Editor } from '@tiptap/core';
+  import BubbleMenu from '@tiptap/extension-bubble-menu';
   import Collaboration from '@tiptap/extension-collaboration';
   import CollaborationCaret from '@tiptap/extension-collaboration-caret';
+  import { Placeholder } from '@tiptap/extensions';
+  import { TextSelection } from '@tiptap/pm/state';
   import { onMount, untrack } from 'svelte';
 
   import type { DocNode } from '$lib/api/client';
@@ -17,9 +20,23 @@
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
+  import BlockControls from './BlockControls.svelte';
+  import { BlockKeys } from './block-ops';
+  import {
+    BLOCK_KINDS,
+    blockKindHint,
+    blockKindKeywords,
+    blockKindLabel,
+    setBlockKind,
+  } from './block-types';
+  import BubbleToolbar from './BubbleToolbar.svelte';
   import { canonicalJson } from './drafts';
   import { schemaExtensions } from './editor-schema';
   import type { LiveSession } from './live';
+  import type { SlashItem } from './slash-command';
+  import { SlashCommand } from './slash-command';
+  import { describeAdjustments, describeMarkdownIssues } from './content-notices';
+  import { contentIssues, PasteGuard, SafeImageInput } from './paste-guard';
 
   interface Props {
     content: DocNode;
@@ -42,6 +59,89 @@
 
   let element: HTMLDivElement | undefined = $state();
   let editor: Editor | undefined;
+
+  // 블록 손잡이·선택 도구 막대가 쓰는 편집기 참조와 상태 판(트랜잭션마다 늘어난다).
+  let editorRef = $state.raw<Editor | undefined>(undefined);
+  let version = $state(0);
+  let container = $state<HTMLDivElement | undefined>();
+  let bubbleEl = $state<HTMLDivElement | undefined>();
+  let menuRequest = $state<number | undefined>(undefined);
+  // 붙여넣기·입력에서 문서 규칙에 맞춰 바꾼 것의 안내, Markdown 원문에서 저장할 수 없는 것의 안내.
+  let contentNotice = $state('');
+  let markdownProblem = $state<string | undefined>(undefined);
+  // 블록 단축키 안내(화면 낭독기가 편집기 설명으로 읽는다).
+  const keysHintId = `editor-keys-${crypto.randomUUID()}`;
+
+  /** / 메뉴 항목. 이 편집기에서 지금 할 수 있는 것만(첨부·참조는 기능이 있을 때). */
+  function slashItems(): SlashItem[] {
+    const blocks = BLOCK_KINDS.map((kind): SlashItem => ({
+      id: kind,
+      label: blockKindLabel(kind),
+      hint: blockKindHint(kind),
+      keywords: blockKindKeywords(kind),
+      run: (e, range) => {
+        e.chain().focus().deleteRange(range).run();
+        setBlockKind(e, kind);
+      },
+    }));
+    const extra: SlashItem[] = [
+      {
+        id: 'divider',
+        label: m.documents_kind_divider(),
+        hint: m.documents_hint_divider(),
+        keywords: ['divider', 'hr', 'rule', 'line', '구분선', '---'],
+        run: (e, range) => {
+          e.chain().focus().deleteRange(range).setHorizontalRule().run();
+        },
+      },
+      {
+        id: 'table',
+        label: m.documents_kind_table(),
+        hint: m.documents_hint_table(),
+        keywords: ['table', 'grid', '표', '테이블'],
+        run: (e, range) => {
+          e.chain()
+            .focus()
+            .deleteRange(range)
+            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            .run();
+        },
+      },
+      {
+        id: 'math',
+        label: m.documents_kind_math(),
+        hint: m.documents_hint_math(),
+        keywords: ['math', 'latex', 'equation', 'formula', '수식', '수학'],
+        run: (e, range) => {
+          e.chain().focus().deleteRange(range).run();
+          openMath('block', '', undefined);
+        },
+      },
+    ];
+    if (insertFile !== undefined)
+      extra.push({
+        id: 'file',
+        label: m.documents_kind_file(),
+        hint: m.documents_hint_file(),
+        keywords: ['file', 'image', 'upload', 'attach', '파일', '이미지', '첨부', '사진'],
+        run: (e, range) => {
+          e.chain().focus().deleteRange(range).run();
+          fileInput?.click();
+        },
+      });
+    if (references !== undefined)
+      extra.push({
+        id: 'reference',
+        label: m.documents_kind_reference(),
+        hint: m.documents_hint_reference(),
+        keywords: ['mention', 'reference', 'link', 'page', '참조', '멘션', '언급', '@'],
+        run: (e, range) => {
+          // @ 입력으로 넘겨 기존 참조 찾기(ReferenceSuggestion)를 연다.
+          e.chain().focus().deleteRange(range).insertContent('@').run();
+        },
+      });
+    return [...blocks, ...extra];
+  }
   let marks = $state<Record<Command, boolean>>({
     bold: false,
     italic: false,
@@ -186,9 +286,64 @@
             Collaboration.configure({ document: live.document, field: 'default' }),
             CollaborationCaret.configure({ provider: live.provider, user: live.user }),
           ];
-    if (ctx === undefined || !canEdit) return base;
-    return [
+    if (!canEdit) return base;
+    // 고칠 때만: / 메뉴, 블록 단축키, 빈 줄 안내, 선택 도구 막대. 모두 장식·명령이고 문서 형식(스키마)은 그대로다.
+    const editing: Extensions = [
       ...base,
+      SlashCommand.configure({ items: () => slashItems() }),
+      PasteGuard.configure({
+        onAdjusted: (stats) => {
+          queueMicrotask(() => {
+            contentNotice = describeAdjustments(stats);
+          });
+        },
+      }),
+      SafeImageInput.configure({
+        onLinked: () => {
+          queueMicrotask(() => {
+            contentNotice = m.documents_image_input_linked();
+          });
+        },
+      }),
+      BlockKeys.configure({
+        onMenu: (pos: number) => {
+          menuRequest = pos;
+        },
+      }),
+      Placeholder.configure({
+        placeholder: ({ editor: e, node }) =>
+          node.type.name === 'heading'
+            ? m.documents_placeholder_heading()
+            : e.isEmpty
+              ? m.documents_placeholder_empty()
+              : m.documents_placeholder_block(),
+      }),
+    ];
+    const bubble = bubbleEl;
+    if (bubble !== undefined)
+      editing.push(
+        BubbleMenu.configure({
+          element: bubble,
+          options: {
+            placement: 'top',
+            strategy: 'fixed',
+            offset: 8,
+            flip: true,
+            shift: { padding: 8 },
+          },
+          // 글자를 골랐을 때, 또는 링크 안에 커서가 있을 때. 코드 블록 안은 서식이 없으므로 띄우지 않는다.
+          // 편집기(또는 막대 안 입력란)에 초점이 있을 때만. 다른 사람의 편집으로 문서가 바뀌어도 초점 없는 화면에 뜨지 않게.
+          shouldShow: ({ editor: e, state }) =>
+            e.isEditable &&
+            (e.view.hasFocus() || bubble.contains(document.activeElement)) &&
+            !e.isActive('codeBlock') &&
+            ((!state.selection.empty && state.selection instanceof TextSelection) ||
+              e.isActive('link')),
+        }),
+      );
+    if (ctx === undefined) return editing;
+    return [
+      ...editing,
       ReferenceSuggestion.configure({
         workspaceId: ctx.workspaceId,
         describeWorkspace: ctx.describeWorkspace,
@@ -210,18 +365,25 @@
           role: 'textbox',
           'aria-multiline': 'true',
           'aria-label': untrack(() => label),
+          ...(untrack(() => editable) ? { 'aria-describedby': keysHintId } : {}),
         },
       },
       onUpdate: ({ editor: e }) => {
         onchange?.(parseDocNode(e.getJSON()));
       },
       onTransaction: ({ editor: e }) => {
-        marks = readMarks(e);
-        inTable = e.isActive('table');
+        // 초점이 옮겨 갈 때(메뉴 열기 등) 화면을 그리는 도중에도 트랜잭션이 올 수 있으므로 상태는 다음 틈에 고친다.
+        queueMicrotask(() => {
+          version += 1;
+          marks = readMarks(e);
+          inTable = e.isActive('table');
+        });
       },
     });
     editor = instance;
+    editorRef = instance;
     return () => {
+      editorRef = undefined;
       instance.destroy();
       editor = undefined;
     };
@@ -280,6 +442,9 @@
       const roundTrip = e.markdown?.parse(markdownText);
       lossy = roundTrip === undefined || canonicalJson(roundTrip) !== canonicalJson(e.getJSON());
     }
+    // 원문 아래 안내는 원문을 보는 동안 지금 내용 기준으로만 보인다(나갔다 오면 다시 계산).
+    markdownProblem =
+      next === 'markdown' ? describeMarkdownIssues(contentIssues(e.getJSON())) : undefined;
     e.setEditable(next === 'rich');
     mode = next;
   }
@@ -287,9 +452,11 @@
   function onMarkdownInput(): void {
     const e = editor;
     if (e === undefined) return;
-    const parsed = parsedMarkdown(e);
-    // 자동 저장은 원문에서 만든 내용으로 한다. 편집기는 모드를 바꿀 때 맞춘다.
-    if (parsed !== undefined) onchange?.(parsed);
+    // 자동 저장은 원문에서 만든 내용으로 한다. 편집기는 모드를 바꿀 때 맞춘다. 원문을 들어올 때 그대로 되돌리면
+    // 편집기 내용이 곧 원문이므로 그것으로 알리고 검사한다(중간에 고친 내용이 남지 않게).
+    const current = parsedMarkdown(e) ?? parseDocNode(e.getJSON());
+    markdownProblem = describeMarkdownIssues(contentIssues(current));
+    onchange?.(current);
   }
 
   const MODES = $derived<{ mode: Mode; label: string }[]>([
@@ -450,6 +617,24 @@
     </form>
   {/if}
   {#if fileStatus !== ''}<p class="py-1 text-sm" aria-live="polite">{fileStatus}</p>{/if}
+  <!-- 붙여넣기·입력을 문서 규칙에 맞춰 바꿨을 때의 안내. 사용자가 닫을 때까지 남긴다. -->
+  <div class="text-sm" aria-live="polite">
+    {#if contentNotice !== ''}
+      <p
+        class="mt-1 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+        data-testid="content-notice"
+      >
+        <span class="flex-1">{contentNotice}</span>
+        <button
+          type="button"
+          class="shrink-0 rounded px-1 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          onclick={() => {
+            contentNotice = '';
+          }}>{m.documents_notice_dismiss()}</button
+        >
+      </p>
+    {/if}
+  </div>
 {/if}
 {#if mode === 'markdown'}
   {#if lossy}
@@ -467,9 +652,41 @@
     spellcheck="false"
     class="mt-1 min-h-[16rem] w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
   ></textarea>
+  {#if markdownProblem !== undefined}
+    <p class="mt-1 text-sm text-destructive" role="alert" data-testid="markdown-problem">
+      {markdownProblem}
+    </p>
+  {/if}
 {/if}
+<!-- 고칠 때는 왼쪽 여백에 블록 손잡이(+·메뉴)가 붙는다. 넓은 화면에서는 그 여백을 본문 바깥으로 뺀다. -->
 <div
-  bind:this={element}
-  class={`min-h-[12rem] py-3 ${mode === 'markdown' ? 'hidden' : ''}`}
-  data-testid="editor"
-></div>
+  bind:this={container}
+  class={`relative ${editable && mode === 'rich' ? 'pl-12 lg:-ml-12' : ''} ${mode === 'markdown' ? 'hidden' : ''}`}
+>
+  {#if editable && mode === 'rich' && editorRef !== undefined && container !== undefined}
+    <BlockControls
+      editor={editorRef}
+      {container}
+      {version}
+      {menuRequest}
+      onmenuhandled={() => {
+        menuRequest = undefined;
+      }}
+    />
+  {/if}
+  <div bind:this={element} class="min-h-[12rem] py-3" data-testid="editor"></div>
+  {#if editable}<p id={keysHintId} class="sr-only">{m.documents_block_keys()}</p>{/if}
+</div>
+{#if editable}
+  <!-- 선택 도구 막대: BubbleMenu가 보일 때 편집기 옆에 붙이고 숨길 때 떼어 낸다. -->
+  <div
+    bind:this={bubbleEl}
+    class="z-30 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+    style="visibility: hidden; position: fixed; top: 0; left: 0"
+    role="toolbar"
+    aria-label={m.documents_bubble_label()}
+    data-testid="bubble-toolbar"
+  >
+    <BubbleToolbar editor={editorRef} {version} />
+  </div>
+{/if}
