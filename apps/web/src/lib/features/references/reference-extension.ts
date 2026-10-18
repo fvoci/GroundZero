@@ -9,6 +9,7 @@ import { computePosition, flip, offset, shift } from '@floating-ui/dom';
 
 import type { ReferenceCandidateView, ReferenceKind, ResolvedReferenceView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import { isComposingKey } from '$lib/features/documents/slash-command';
 import { m } from '$lib/paraglide/messages.js';
 
 import { referenceLabel, resolveReference } from './resolver';
@@ -250,8 +251,9 @@ function createPopup(describeWorkspace: DescribeWorkspace): {
       update(props);
     },
     onUpdate: update,
-    onKeyDown({ event }) {
-      if (state === undefined) return false;
+    onKeyDown({ event, view }) {
+      // 한글 등 입력기 조합 중의 Enter·방향키는 조합을 끝내는 데 쓰인다(후보를 고르지 않는다).
+      if (state === undefined || isComposingKey(event, view.composing)) return false;
       const count = state.items.length;
       if (event.key === 'ArrowDown' && count > 0) {
         state.selected = (state.selected + 1) % count;
