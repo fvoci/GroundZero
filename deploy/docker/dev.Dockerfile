@@ -2,7 +2,7 @@
 # 제품 소스·시크릿·실행 중 DB를 넣지 않는다. Docker 자체는 포함하지 않는다: CI 컨테이너 job은 서비스를
 # job services로 받고(`cargo xtask test --external-services`), Compose 기반 통합 테스트는 호스트에서 `cargo xtask test`로 돈다.
 # 제품 실행 이미지는 app.Dockerfile. 둘을 섞지 않는다.
-FROM rust:1.99.0-bookworm
+FROM rust:1.99.0-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6
 
 ARG NODE_MAJOR=24
 ARG PNPM_VERSION=11.24.0
