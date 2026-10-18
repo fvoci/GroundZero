@@ -116,7 +116,9 @@
       return undefined;
     if (route.name === 'module') return route.moduleId;
     if (route.name === 'item' || route.name === 'item-document')
-      return workspaceNav.currentModuleId;
+      return workspaceNav.currentItem?.itemId === route.itemId
+        ? workspaceNav.currentItem.moduleId
+        : undefined;
     return undefined;
   });
   // 위키 트리: 위키 화면에서는 펼치고, 사용자가 접거나 펼친 뒤로는 그 선택을 따른다.

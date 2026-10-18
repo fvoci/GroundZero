@@ -11,6 +11,11 @@
   }
 
   const { item }: Props = $props();
+  const unread = $derived(item.badge ?? 0);
+  // 읽지 않은 수는 링크 이름과 툴팁에 넣는다(접힌 사이드바에서는 숫자 배지가 숨는다).
+  const name = $derived(
+    unread > 0 ? `${item.label} · ${m.app_nav_unread({ count: unread })}` : item.label,
+  );
 
   function go(e: MouseEvent): void {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -20,18 +25,27 @@
 </script>
 
 <Sidebar.MenuItem>
-  <Sidebar.MenuButton isActive={item.active} tooltipContent={item.label}>
+  <Sidebar.MenuButton isActive={item.active} tooltipContent={name} class="relative">
     {#snippet child({ props })}
-      <a href={item.path} {...props} aria-current={item.active ? 'page' : undefined} onclick={go}>
+      <a
+        href={item.path}
+        {...props}
+        aria-label={unread > 0 ? name : undefined}
+        aria-current={item.active ? 'page' : undefined}
+        onclick={go}
+      >
         <item.icon aria-hidden="true" />
+        {#if unread > 0}
+          <span
+            class="absolute top-1 left-5 hidden size-2 rounded-full bg-primary group-data-[collapsible=icon]:block"
+            aria-hidden="true"
+          ></span>
+        {/if}
         <span>{item.label}</span>
       </a>
     {/snippet}
   </Sidebar.MenuButton>
-  {#if item.badge !== undefined && item.badge > 0}
-    <Sidebar.MenuBadge>
-      <span aria-hidden="true">{item.badge > 99 ? '99+' : item.badge}</span>
-      <span class="sr-only">{m.app_nav_unread({ count: item.badge })}</span>
-    </Sidebar.MenuBadge>
+  {#if unread > 0}
+    <Sidebar.MenuBadge aria-hidden="true">{unread > 99 ? '99+' : unread}</Sidebar.MenuBadge>
   {/if}
 </Sidebar.MenuItem>

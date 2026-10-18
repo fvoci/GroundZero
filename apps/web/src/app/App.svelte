@@ -76,14 +76,18 @@
   const UNREAD_FRESH_MS = 30_000;
   let unreadCount = $state(0);
   let unreadAt = 0;
+  let unreadSeq = 0;
   async function refreshUnread(force = false): Promise<void> {
     if (session.state !== 'signed-in') return;
     if (!force && Date.now() - unreadAt < UNREAD_FRESH_MS) return;
     unreadAt = Date.now();
+    // 늦게 도착한 이전 응답(읽음 처리 전 수)이 새 수를 덮지 않게 한다.
+    const mine = ++unreadSeq;
     try {
-      unreadCount = (await api.notifications()).filter((n) => !n.read).length;
+      const count = (await api.notifications()).filter((n) => !n.read).length;
+      if (mine === unreadSeq) unreadCount = count;
     } catch {
-      unreadCount = 0;
+      if (mine === unreadSeq) unreadCount = 0;
     }
   }
   $effect(() => {

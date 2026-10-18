@@ -1,6 +1,7 @@
 // 사이드바와 워크스페이스 화면이 같이 쓰는 현재 워크스페이스의 모듈·위키 문서 목록.
 // 같은 목록을 두 곳에서 따로 받지 않도록 한 번 받아 나눠 쓴다. 서버가 권한으로 거른 목록만 담는다.
 import type { Module } from '@fvoci/api-client';
+import { untrack } from 'svelte';
 
 import type { SummaryView } from '$lib/api/client';
 
@@ -16,19 +17,26 @@ class WorkspaceNav {
   workspaceId = $state<string | undefined>(undefined);
   modules = $state<Load<Module>>({ state: 'loading' });
   docs = $state<Load<SummaryView>>({ state: 'loading' });
-  /** 항목 화면이 알려 주는 현재 모듈(경로에는 항목 id만 있다). */
-  currentModuleId = $state<string | undefined>(undefined);
+  /** 항목 화면이 알려 주는 항목과 그 모듈(경로에는 항목 id만 있다). 경로의 항목과 같을 때만 쓴다. */
+  currentItem = $state<{ itemId: string; moduleId: string } | undefined>(undefined);
   #loadedAt = 0;
   #moduleSeq = 0;
   #docSeq = 0;
 
   /** 워크스페이스가 바뀌었으면 처음부터, 같으면 오래됐을 때만 다시 받는다. */
   show(workspaceId: string): void {
+    // 효과 안에서 불려도 이 저장소의 상태를 의존으로 잡지 않는다(서로 다시 부르는 고리 방지).
+    untrack(() => {
+      this.#show(workspaceId);
+    });
+  }
+
+  #show(workspaceId: string): void {
     if (this.workspaceId !== workspaceId) {
       this.workspaceId = workspaceId;
       this.modules = { state: 'loading' };
       this.docs = { state: 'loading' };
-      this.currentModuleId = undefined;
+      this.currentItem = undefined;
     } else if (Date.now() - this.#loadedAt <= STALE_MS) {
       return;
     }

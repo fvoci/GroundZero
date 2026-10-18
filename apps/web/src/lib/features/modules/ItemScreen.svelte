@@ -69,6 +69,7 @@
     const id = currentItemId;
     let cancelled = false;
     item = undefined;
+    mod = undefined;
     error = undefined;
     api
       .item(id)
@@ -77,7 +78,7 @@
         if (cancelled) return;
         fill(it);
         mod = found;
-        workspaceNav.currentModuleId = it.module_id;
+        workspaceNav.currentItem = { itemId: it.id, moduleId: it.module_id };
         docs = list;
       })
       .catch((e: unknown) => {
@@ -138,6 +139,14 @@
     }
   }
 
+  // 경로: 워크스페이스는 늘(항목을 못 읽어도 돌아갈 곳), 모듈은 읽은 뒤에.
+  const crumbs = $derived([
+    { path: workspacePath(workspace.id), label: workspace.name },
+    ...(mod === undefined
+      ? []
+      : [{ path: modulePath(workspace.id, mod.id), label: `${mod.name} · ${mod.key}` }]),
+  ]);
+
   // 항목 화면 절로 바로 가기. 업무가 화면 아래쪽에 있어 자주 쓰는 절에 바로 닿게 한다.
   function jumpLinks(kind: ModuleKind | undefined): { id: string; label: string }[] {
     const links = [{ id: 'tasks-heading', label: m.tasks_heading() }];
@@ -164,6 +173,26 @@
   }
 </script>
 
+<nav aria-label={m.modules_breadcrumb()} class="-mb-6 min-w-0 text-sm text-muted-foreground">
+  <ol class="flex min-w-0 items-center gap-1">
+    {#each crumbs as crumb, index (crumb.path)}
+      <li class={`flex min-w-0 items-center gap-1 ${index === 0 ? 'shrink' : 'shrink-0'}`}>
+        {#if index > 0}<ChevronRight class="size-3.5 shrink-0" aria-hidden="true" />{/if}
+        <a
+          class="truncate rounded-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          href={crumb.path}
+          title={crumb.label}
+          onclick={(e: MouseEvent) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            router.navigate(crumb.path);
+          }}>{crumb.label}</a
+        >
+      </li>
+    {/each}
+  </ol>
+</nav>
+
 {#if error !== undefined}
   <p role="alert" class="text-destructive">{error}</p>
 {:else if item === undefined}
@@ -171,28 +200,6 @@
 {:else}
   {@const current = item}
   <section class="flex flex-col gap-6" aria-labelledby="item-heading">
-    {#if mod !== undefined}
-      {@const parent = mod}
-      <nav aria-label={m.modules_breadcrumb()} class="-mb-4 min-w-0 text-sm text-muted-foreground">
-        <ol class="flex min-w-0 items-center gap-1">
-          {#each [{ path: workspacePath(workspace.id), label: workspace.name }, { path: modulePath(workspace.id, parent.id), label: `${parent.name} · ${parent.key}` }] as crumb, index (crumb.path)}
-            <li class={`flex min-w-0 items-center gap-1 ${index === 0 ? 'shrink' : 'shrink-0'}`}>
-              {#if index > 0}<ChevronRight class="size-3.5 shrink-0" aria-hidden="true" />{/if}
-              <a
-                class="truncate rounded-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                href={crumb.path}
-                title={crumb.label}
-                onclick={(e: MouseEvent) => {
-                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-                  e.preventDefault();
-                  router.navigate(crumb.path);
-                }}>{crumb.label}</a
-              >
-            </li>
-          {/each}
-        </ol>
-      </nav>
-    {/if}
     <div class="flex flex-wrap items-baseline gap-2">
       <span class="font-mono text-sm text-muted-foreground">{current.reference}</span>
       <h1 id="item-heading" class="text-xl font-semibold">{current.title}</h1>
