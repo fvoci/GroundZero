@@ -1246,6 +1246,8 @@ export interface EventOccurrenceView {
   end_date: string | null;
   starts_at: string | null;
   ends_at: string | null;
+  /** 반복 회차의 현지 시각이 그 시간대에 없어 건너뜀(D-81). */
+  skipped: boolean;
 }
 
 /** 아직 만들지 않은 반복 업무 회차(예정). */
@@ -1343,6 +1345,7 @@ function parseCalendar(value: Json): CalendarView {
         end_date: optStr(e, 'end_date'),
         starts_at: optStr(e, 'starts_at'),
         ends_at: optStr(e, 'ends_at'),
+        skipped: e.skipped === true,
       };
     }),
     items: parseList(o.items, (v) => {

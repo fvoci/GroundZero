@@ -531,6 +531,8 @@ pub struct EventOccurrence {
     #[serde(with = "time::serde::rfc3339::option")]
     #[schema(value_type = Option<String>, format = DateTime)]
     pub ends_at: Option<OffsetDateTime>,
+    /// 반복 회차의 현지 시각이 그 시간대에 없어(여름시간 시작) 건너뛴 회차(D-81). 시각은 없다.
+    pub skipped: bool,
 }
 
 /// 아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다.
@@ -649,6 +651,7 @@ pub async fn calendar(
         Option<Date>,
         Option<OffsetDateTime>,
         Option<OffsetDateTime>,
+        bool,
     );
     let mut occurrence_rows: Vec<OccurrenceRow> =
         sqlx::query_as("SELECT * FROM app_event_occurrences($1, $2, $3, $4, $5)")
@@ -779,7 +782,7 @@ pub async fn calendar(
         occurrences: occurrence_rows
             .into_iter()
             .map(
-                |(event_id, occurrence, start_date, end_date, starts_at, ends_at)| {
+                |(event_id, occurrence, start_date, end_date, starts_at, ends_at, skipped)| {
                     EventOccurrence {
                         event_id,
                         occurrence: format_date(Some(occurrence)).unwrap_or_default(),
@@ -787,6 +790,7 @@ pub async fn calendar(
                         end_date: format_date(end_date),
                         starts_at,
                         ends_at,
+                        skipped,
                     }
                 },
             )
