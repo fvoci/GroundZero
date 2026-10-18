@@ -2068,7 +2068,12 @@ function fail(status: number, json: Json): never {
     }
     throw new ApiError(status, json.error, message, requestId);
   }
-  throw new ApiError(status, 'unexpected', `unexpected response (${String(status)})`);
+  // 앱의 오류 본문이 아닌 응답: 앞단 프록시의 게이트웨이 오류(서버에 닿지 않음)거나 예상하지 못한 응답이다.
+  // 화면에는 번역된 이유를 보인다(D-81·D-82).
+  if (status === 502 || status === 503 || status === 504) {
+    throw new ApiError(status, 'unreachable', m.common_error_network());
+  }
+  throw new ApiError(status, 'unexpected', m.common_error_unexpected({ status: String(status) }));
 }
 
 async function expectOk<T>(

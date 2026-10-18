@@ -124,3 +124,25 @@ describe('error text by code (D-81)', () => {
     );
   });
 });
+
+describe('responses without the app error body (D-82)', () => {
+  it('explain an unreachable server in the UI language instead of a raw status', async () => {
+    const { api, ApiError } = await import('$lib/api/client');
+    const { errorText } = await import('$lib/api/errors');
+    const { setLocale } = await import('$lib/paraglide/runtime.js');
+    await setLocale('ko', { reload: false });
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response('', { status: 502 })));
+    const error: unknown = await api.document('x').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    if (!(error instanceof ApiError)) return;
+    expect(error.code).toBe('unreachable');
+    expect(error.message).not.toContain('502');
+    expect(errorText(error, '저장하지 못했습니다.')).toMatch(
+      /^저장하지 못했습니다\. 서버에 닿지 않았습니다/,
+    );
+    connection.lost = false;
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response('<html>', { status: 418 })));
+    const odd: unknown = await api.document('x').catch((e: unknown) => e);
+    expect(odd instanceof ApiError && odd.message).toBe('예상하지 못한 응답을 받았습니다(418).');
+  });
+});

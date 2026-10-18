@@ -29,6 +29,8 @@ function reason(error: ApiError): string {
 export function errorText(error: unknown, action: string): string {
   if (error instanceof NetworkError) return `${action} ${m.common_error_network()}`;
   if (!(error instanceof ApiError)) return action;
+  // 서버에 닿지 않은 경우는 무엇을 하다 실패했는지와 함께, 그 밖의 서버 쪽 실패는 client.ts가 만든 안전한 문구 그대로.
+  if (error.code === 'unreachable') return `${action} ${error.message}`;
   if (error.status >= 500) return error.message;
   const why = reason(error);
   return why === '' ? action : `${action} ${why}`;
