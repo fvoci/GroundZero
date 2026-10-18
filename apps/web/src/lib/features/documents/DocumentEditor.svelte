@@ -66,6 +66,8 @@
     onunsaved?.(false);
   });
   let message = $state<string | undefined>(undefined);
+  /** 내용(바깥 이미지 등) 때문에 저장을 막았을 때 보인 안내. 내용이 고쳐지면 지운다. */
+  let blockedMessage: string | undefined;
   let conflict = $state<DocumentView | undefined>(undefined);
   // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다.
   function pendingDraft(): ReturnType<typeof loadDraft> {
@@ -122,6 +124,10 @@
         savedAt: new Date().toISOString(),
       });
       schedule(AUTOSAVE_DELAY_MS);
+    } else {
+      // 서버 내용과 같아졌으면(문제 내용을 지우는 등) 내용 때문에 막은 안내와 초안은 더 필요 없다.
+      if (message !== undefined && message === blockedMessage) message = undefined;
+      clearDraft(server.id);
     }
   }
 
@@ -129,7 +135,7 @@
     if (!server.can_edit || status === 'saving' || status === 'conflict') return;
     if (!isDirty()) {
       status = 'saved';
-      message = undefined;
+      if (message !== undefined && message === blockedMessage) message = undefined;
       clearDraft(server.id);
       return;
     }
@@ -144,6 +150,7 @@
     if (blocked !== undefined) {
       status = 'error';
       message = blocked;
+      blockedMessage = blocked;
       return;
     }
     const snap = snapshot();
@@ -213,6 +220,7 @@
     attempt = undefined;
     clearDraft(server.id);
     status = 'saved';
+    message = undefined;
   }
 
   async function overwriteWithMine(): Promise<void> {
@@ -234,6 +242,7 @@
     const blocked = describeSaveBlock(contentIssues(body));
     if (blocked !== undefined) {
       message = blocked;
+      blockedMessage = blocked;
       return;
     }
     try {

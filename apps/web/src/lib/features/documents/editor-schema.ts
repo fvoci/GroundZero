@@ -22,6 +22,14 @@ export interface SchemaOptions {
   collaborative?: boolean;
 }
 
+/**
+ * 링크 주소 허용. 주소가 없는 링크 표시(서버가 빈 주소로 받는다)는 그리면서 null이 오므로 그대로 둔다
+ * (문자열이 아니면 고를 주소가 없다).
+ */
+function allowedLinkUri(url: unknown): boolean {
+  return typeof url !== 'string' || isAllowedHref(url);
+}
+
 export function schemaExtensions(options: SchemaOptions = {}): Extensions {
   const { reference = {}, onMathClick, collaborative = false } = options;
   return [
@@ -29,7 +37,7 @@ export function schemaExtensions(options: SchemaOptions = {}): Extensions {
     // 저장이 거절되거나 실시간 방이 닫힌다. 표시(마크·속성)는 같아 스키마는 그대로다.
     StarterKit.configure({
       ...(collaborative ? { undoRedo: false as const } : {}),
-      link: { isAllowedUri: (url, ctx) => ctx.defaultValidate(url) && isAllowedHref(url) },
+      link: { isAllowedUri: (url, ctx) => ctx.defaultValidate(url) && allowedLinkUri(url) },
     }),
     TaskList,
     TaskItem.configure({

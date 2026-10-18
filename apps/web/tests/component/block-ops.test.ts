@@ -7,6 +7,7 @@ import {
   blockAtHit,
   blockStartingAt,
   mapBlockStart,
+  mapBlockStartThrough,
   runBlockOp,
 } from '$lib/features/documents/block-ops';
 import { schemaExtensions } from '$lib/features/documents/editor-schema';
@@ -282,5 +283,24 @@ describe('remote edits replace whole top-level blocks', () => {
     const moved = mapBlockStart(e.state.doc, tr.mapping, afterFrom);
     if (moved === undefined) throw new Error('moved');
     expect(e.state.doc.nodeAt(moved)?.textContent).toBe('after');
+  });
+});
+
+describe('several transactions in one moment', () => {
+  it('maps the pinned block through each of them in order', () => {
+    const e = make({ type: 'doc', content: [p('a'), { type: 'horizontalRule' }, p('b')] });
+    const hrFrom = e.state.doc.child(0).nodeSize;
+    const first = e.state.tr.insertText('12', 1);
+    e.view.dispatch(first);
+    const second = e.state.tr.insertText('3', 1);
+    e.view.dispatch(second);
+    const moved = mapBlockStartThrough([first, second], hrFrom);
+    expect(moved).toBe(hrFrom + 3);
+    if (moved === undefined) throw new Error('moved');
+    const drop = e.state.tr.delete(moved, moved + 1);
+    e.view.dispatch(drop);
+    const later = e.state.tr.insertText('4', 1);
+    e.view.dispatch(later);
+    expect(mapBlockStartThrough([drop, later], moved)).toBeUndefined();
   });
 });

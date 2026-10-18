@@ -1,6 +1,6 @@
 import { Editor } from '@tiptap/core';
 import { Fragment, Slice } from '@tiptap/pm/model';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import { schemaExtensions } from '$lib/features/documents/editor-schema';
 import { normalizeHref } from '$lib/features/documents/link-href';
@@ -229,11 +229,15 @@ describe('slash menu', () => {
 
 describe('review fixes', () => {
   // jsdom에는 ClipboardEvent가 없다. ProseMirror의 pasteHTML·pasteText는 이벤트를 만들기만 한다.
-  if (!('ClipboardEvent' in globalThis))
+  const hadClipboardEvent = 'ClipboardEvent' in globalThis;
+  if (!hadClipboardEvent)
     Object.defineProperty(globalThis, 'ClipboardEvent', {
       value: class extends Event {},
       configurable: true,
     });
+  afterAll(() => {
+    if (!hadClipboardEvent) Reflect.deleteProperty(globalThis, 'ClipboardEvent');
+  });
 
   const typeInto = (editor: Editor, text: string): void => {
     for (const ch of text) {
@@ -328,5 +332,45 @@ describe('review fixes', () => {
     editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph' }] });
     editor.view.pasteText('ftp://files.example/c');
     expect(JSON.stringify(editor.getJSON())).not.toContain('"href"');
+  });
+});
+
+describe('second review fixes', () => {
+  it('opens a document whose link has no address (the server stores it as empty)', () => {
+    const create = (): Editor =>
+      new Editor({
+        extensions: schemaExtensions(),
+        content: {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'x', marks: [{ type: 'link' }] }],
+            },
+          ],
+        },
+      });
+    let editor: Editor | undefined;
+    expect(() => {
+      editor = create();
+    }).not.toThrow();
+    if (editor !== undefined) editors.push(editor);
+  });
+
+  it('counts a link split over several text pieces once before saving', () => {
+    const link = { type: 'link', attrs: { href: '//evil.example' } };
+    const issues = contentIssues({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'a', marks: [{ type: 'bold' }, link] },
+            { type: 'text', text: 'b', marks: [link] },
+          ],
+        },
+      ],
+    });
+    expect(issues.links).toEqual(['//evil.example']);
   });
 });

@@ -171,6 +171,19 @@ export function mapBlockStart(
   return mapped.pos;
 }
 
+/** 한 순간에 온 트랜잭션들(덧붙인 것 포함)을 차례로 거쳐 블록 시작 위치를 옮긴다. 도중에 지워지면 undefined. */
+export function mapBlockStartThrough(
+  transactions: readonly Transaction[],
+  from: number,
+): number | undefined {
+  let pos: number | undefined = from;
+  for (const tr of transactions) {
+    if (pos === undefined) return undefined;
+    pos = mapBlockStart(tr.doc, tr.mapping, pos);
+  }
+  return pos;
+}
+
 /** 화면 좌표의 `posAtCoords` 결과(`inside`: 그 위치를 품은 노드의 시작)로 블록을 찾는다. */
 export function blockAtHit(
   doc: PmNode,

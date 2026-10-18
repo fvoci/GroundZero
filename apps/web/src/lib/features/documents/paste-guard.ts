@@ -149,21 +149,26 @@ export interface ContentIssues {
 /** 저장 전 확인: 문서 JSON에서 서버가 받지 않을 이미지·링크를 찾는다. */
 export function contentIssues(doc: JSONContent): ContentIssues {
   const issues: ContentIssues = { images: [], links: [] };
-  const walk = (node: JSONContent): void => {
+  /** 이 노드에서 걸린 링크 주소(없으면 undefined). 앞 형제와 같은 주소면 한 링크가 나뉜 것이라 한 번만 센다. */
+  const walk = (node: JSONContent, previousLink: string | undefined): string | undefined => {
     if (node.type === 'image') {
       const src: unknown = node.attrs?.src;
       if (typeof src !== 'string' || !isAttachmentUrl(src))
         issues.images.push(typeof src === 'string' ? src : '');
     }
+    let badLink: string | undefined;
     for (const mark of node.marks ?? []) {
       if (mark.type !== 'link') continue;
       const href: unknown = mark.attrs?.href;
       if (typeof href !== 'string' || !isAllowedHref(href))
-        issues.links.push(typeof href === 'string' ? href : '');
+        badLink = typeof href === 'string' ? href : '';
     }
-    for (const child of node.content ?? []) walk(child);
+    if (badLink !== undefined && badLink !== previousLink) issues.links.push(badLink);
+    let previous: string | undefined;
+    for (const child of node.content ?? []) previous = walk(child, previous);
+    return badLink;
   };
-  walk(doc);
+  walk(doc, undefined);
   return issues;
 }
 

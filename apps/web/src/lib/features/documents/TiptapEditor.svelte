@@ -452,11 +452,11 @@
   function onMarkdownInput(): void {
     const e = editor;
     if (e === undefined) return;
-    const parsed = parsedMarkdown(e);
-    // 자동 저장은 원문에서 만든 내용으로 한다. 편집기는 모드를 바꿀 때 맞춘다.
-    markdownProblem =
-      parsed === undefined ? undefined : describeMarkdownIssues(contentIssues(parsed));
-    if (parsed !== undefined) onchange?.(parsed);
+    // 자동 저장은 원문에서 만든 내용으로 한다. 편집기는 모드를 바꿀 때 맞춘다. 원문을 들어올 때 그대로 되돌리면
+    // 편집기 내용이 곧 원문이므로 그것으로 알리고 검사한다(중간에 고친 내용이 남지 않게).
+    const current = parsedMarkdown(e) ?? parseDocNode(e.getJSON());
+    markdownProblem = describeMarkdownIssues(contentIssues(current));
+    onchange?.(current);
   }
 
   const MODES = $derived<{ mode: Mode; label: string }[]>([
