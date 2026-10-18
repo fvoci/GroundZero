@@ -66,8 +66,6 @@
     onunsaved?.(false);
   });
   let message = $state<string | undefined>(undefined);
-  /** 내용(바깥 이미지 등) 때문에 저장을 막았을 때 보인 안내. 내용이 고쳐지면 지운다. */
-  let blockedMessage: string | undefined;
   let conflict = $state<DocumentView | undefined>(undefined);
   // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다.
   function pendingDraft(): ReturnType<typeof loadDraft> {
@@ -115,6 +113,7 @@
 
   function edited(): void {
     if (!server.can_edit || status === 'conflict') return;
+    const signedOut = status === 'signed-out';
     status = isDirty() ? 'dirty' : 'saved';
     if (status === 'dirty') {
       storeDraft(server.id, {
@@ -125,18 +124,19 @@
       });
       schedule(AUTOSAVE_DELAY_MS);
     } else {
-      // 서버 내용과 같아졌으면(문제 내용을 지우는 등) 내용 때문에 막은 안내와 초안은 더 필요 없다.
-      if (message !== undefined && message === blockedMessage) message = undefined;
-      clearDraft(server.id);
+      // 서버 내용과 같아졌으면(문제 내용을 지우는 등) 지난 저장 안내는 더 필요 없다(로그아웃 안내는 남긴다).
+      // 복원 제안 중인 초안은 사용자가 고를 때까지 남긴다.
+      if (!signedOut) message = undefined;
+      if (restorable === undefined) clearDraft(server.id);
     }
   }
 
   async function save(): Promise<void> {
     if (!server.can_edit || status === 'saving' || status === 'conflict') return;
     if (!isDirty()) {
+      if (status !== 'signed-out') message = undefined;
       status = 'saved';
-      if (message !== undefined && message === blockedMessage) message = undefined;
-      clearDraft(server.id);
+      if (restorable === undefined) clearDraft(server.id);
       return;
     }
     if (title.trim() === '') {
@@ -150,7 +150,6 @@
     if (blocked !== undefined) {
       status = 'error';
       message = blocked;
-      blockedMessage = blocked;
       return;
     }
     const snap = snapshot();
@@ -242,7 +241,6 @@
     const blocked = describeSaveBlock(contentIssues(body));
     if (blocked !== undefined) {
       message = blocked;
-      blockedMessage = blocked;
       return;
     }
     try {

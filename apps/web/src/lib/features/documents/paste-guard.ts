@@ -106,9 +106,10 @@ function cleanFragment(fragment: Fragment, stats: ContentAdjustments): Fragment 
       let removed: string | undefined;
       const marks = node.marks.filter((mark) => {
         if (mark.type.name !== 'link') return true;
-        const href: unknown = mark.attrs.href;
-        if (typeof href === 'string' && isAllowedHref(href)) return true;
-        removed = typeof href === 'string' ? href : '';
+        const raw: unknown = mark.attrs.href;
+        const href = typeof raw === 'string' ? raw : '';
+        if (isAllowedHref(href)) return true;
+        removed = href;
         return false;
       });
       if (removed !== undefined) {
@@ -159,9 +160,10 @@ export function contentIssues(doc: JSONContent): ContentIssues {
     let badLink: string | undefined;
     for (const mark of node.marks ?? []) {
       if (mark.type !== 'link') continue;
-      const href: unknown = mark.attrs?.href;
-      if (typeof href !== 'string' || !isAllowedHref(href))
-        badLink = typeof href === 'string' ? href : '';
+      // 주소가 없는 링크는 서버가 빈 주소("")로 받는다.
+      const raw: unknown = mark.attrs?.href;
+      const href = typeof raw === 'string' ? raw : '';
+      if (!isAllowedHref(href)) badLink = href;
     }
     if (badLink !== undefined && badLink !== previousLink) issues.links.push(badLink);
     let previous: string | undefined;

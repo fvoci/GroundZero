@@ -355,6 +355,8 @@ describe('second review fixes', () => {
       editor = create();
     }).not.toThrow();
     if (editor !== undefined) editors.push(editor);
+    // 저장 전 검사도 서버처럼 빈 주소로 보고 막지 않는다.
+    if (editor !== undefined) expect(contentIssues(editor.getJSON()).links).toEqual([]);
   });
 
   it('counts a link split over several text pieces once before saving', () => {
