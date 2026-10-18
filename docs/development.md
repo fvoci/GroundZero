@@ -1036,6 +1036,24 @@ HWP·HWPX는 rhwp(`@rhwp/core` 0.8.7, MIT, npm 의존성 없음, WASM 약 11.8 M
 
 확인 뒤 두 설치의 컨테이너·볼륨과 클론(비밀 값·백업 사본)을 지웠다.
 
+## 75. Debian 기반·digest 고정 이미지 체크포인트 (2026-10-18, D-85, `chore/pin-images-debian` `49cba68`)
+
+목표와 비교해 빠진 점 세 가지를 고쳤다. 외부 이미지(PostgreSQL·Meilisearch·Keycloak·SeaweedFS)가 태그만으로 지정돼 있었고, PostgreSQL이 Alpine이었으며, `base-image.yml`에 초기 작업 브랜치(`init/repo-scaffold`)용 임시 트리거가 남아 있었다. 사용자 지시("데비안 기반으로 사용해")에 따라 PostgreSQL을 `18.3-bookworm`으로, 빌드·실행 단계를 bookworm으로 바꾸고 모든 이미지를 멀티 아키텍처 인덱스 digest로 고정했다(D-85). 공식 Debian 이미지가 없는 Meilisearch·SeaweedFS(Alpine)와 Keycloak(UBI)은 digest 고정만 한다.
+
+아래는 이 커밋을 새로 clone한 곳(빈 `target/`)에서 돌린 결과다.
+
+| 단계                                                                 | 결과           | 내용                                                                                                                                                                                                     |
+| -------------------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cargo xtask check --skip-licenses`                                  | PASS           | 캐시 없이 처음부터, 모든 단계 PASS                                                                                                                                                                       |
+| `cargo xtask licenses`                                               | PASS           | 예외는 기존 결정 그대로                                                                                                                                                                                  |
+| `cargo xtask test --oidc`                                            | PASS           | 278 통과, 0 실패(SeaweedFS S3 포함)                                                                                                                                                                      |
+| 대표 위반                                                            | FAIL(의도대로) | `unwrap()`·`any`·한국어에만 있는 키·형식 어긋남 → `cargo fmt --check`·`cargo clippy`·`pnpm format:check`·`pnpm lint`·i18n 실패, 종료 코드 1. 되돌린 뒤 작업 트리 깨끗                                    |
+| 제품 이미지 빌드(`--no-cache`)·셀프호스트 실행(`--profile keycloak`) | PASS           | migrate·bootstrap 종료 0, 모든 서비스 healthy, `/healthz` ok, 웹 200, OIDC 발견 문서 200. PostgreSQL 컨테이너는 Debian 12, `postgres` uid 999, 18.3(pgdg), DB 정렬 `en_US.utf8`. `down --volumes`로 정리 |
+| 개발 환경 `cargo xtask dev --oidc` → `cargo xtask down`              | PASS           | 서버 listening, `/healthz` ok. down 뒤 이 clone의 컨테이너·볼륨·네트워크 0                                                                                                                               |
+| R2·실제 Zotero·Cloudflare/CloudFront·실제 휴대 기기                  | NOT RUN        | 승인된 대상·자격 증명·기기 없음                                                                                                                                                                          |
+
+기존 Alpine PostgreSQL 데이터(uid 70, musl 정렬)는 그대로 올리지 않는다. 셀프호스트는 `docs/self-hosting.md` 6절대로 백업 → 새 설치 → 복구, 개발 스택은 `cargo xtask down`으로 볼륨을 지우고 다시 띄운다.
+
 ## 참고 자료
 
 - [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict.html)
