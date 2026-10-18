@@ -1106,6 +1106,19 @@ main `947b874`에 D-85(PR #21)와 이 브랜치를 합친 로컬 후보를 새�
 | 새 clone의 셀프호스트 설치(로컬 `rc/local-2` `89a5506` = main + PR #21 + 이 브랜치 `b18dfa5`) | PASS | 제품 이미지 `--no-cache` 빌드, migrate·bootstrap 종료 0, `/healthz` ok, 웹 200. 내려주는 CSS에 편집 영역 수정(`min-height: 11rem`)이 들어 있고 `/assets`는 `public, max-age=31536000, immutable`(다시 방문 때 자산 요청 없음). 확인 뒤 컨테이너·볼륨·이미지·clone 삭제 |
 | 다른 사용자 멘션 알림(개발 스택, 표준 OIDC)                                                   | PASS | Test User가 test-user-2를 작성자로 초대 → test-user-2가 Keycloak 로그인(별도 쿠키 저장소, curl)으로 초대 수락 → Test User가 브라우저 편집기에서 `@Sec` → "사람 Second User" 제안 선택 → 저장 → test-user-2 알림에 읽지 않은 멘션(행위자 Test User)                     |
 
+### 76.4 최종 head 후보의 백업·복구 (로컬 `rc/local-2` `0a3b755` = main + PR #21 + 이 브랜치 `33100ed`)
+
+이 브랜치 `33100ed`의 필수 CI(check·integration·oidc·licenses·rhwp)는 모두 통과했다. 같은 코드를 합친 후보를 새로 clone해 확인했다.
+
+| 단계                              | 결과 | 내용                                                                                                           |
+| --------------------------------- | ---- | -------------------------------------------------------------------------------------------------------------- |
+| 셀프호스트 설치                   | PASS | 제품 이미지 `--no-cache`, migrate·bootstrap 종료 0, `/healthz` ok, 웹 200                                      |
+| 로그인·저장(브라우저, Keycloak)   | PASS | alice → 워크스페이스·문서 → 편집 영역 빈 곳 클릭으로 편집기에 초점 → 한글·한자·가나 본문 저장(리비전 2)        |
+| 다른 사용자 거부                  | PASS | bob: 문서·위키 목록 404, 워크스페이스 0, alice 본문 검색 0건                                                   |
+| 백업 → 새 설치 복구 → 다시 로그인 | PASS | 표 47개·마이그레이션 56 → 새 비밀 값의 새 설치에 복구 → alice 다시 로그인, 워크스페이스·본문·리비전 2개 그대로 |
+
+curl로 셀프호스트 Keycloak(`auth.localhost`, http)에 로그인하면 Keycloak의 `Secure` 세션 쿠키를 curl이 보내지 않아 400이 난다. 브라우저는 `*.localhost`를 안전한 원점으로 보므로 문제없다(검증 도구의 제약, 제품 동작 아님). 확인 뒤 설치·볼륨·이미지·clone·임시 비밀 값을 지웠다.
+
 ## 참고 자료
 
 - [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict.html)
