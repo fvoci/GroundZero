@@ -2514,6 +2514,8 @@ export interface components {
         };
         /** @description 기간 안의 볼 수 있는 업무·일정. */
         Calendar: {
+            /** @description 강의·스터디 계획일, 투고·산출물 날짜(D-80). */
+            dates: components["schemas"]["CalendarDate"][];
             /** @description 기간 안에 회차가 있는 일정의 정의. */
             events: components["schemas"]["Event"][];
             items: components["schemas"]["CalendarItem"][];
@@ -2521,6 +2523,27 @@ export interface components {
             projected_tasks: components["schemas"]["ProjectedTask"][];
             tasks: components["schemas"]["CalendarTask"][];
         };
+        /** @description 달력의 날짜 하나(D-80). */
+        CalendarDate: {
+            date: string;
+            /** @description 끝난 것(내가 이수·완료, 게재·거절·승인·완료 상태). */
+            done: boolean;
+            /**
+             * Format: uuid
+             * @description 원래 대상(회차·스터디 단위·기록)의 id.
+             */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            kind: components["schemas"]["CalendarDateKind"];
+            /** @description 내 계획일이면 참(본인만 보는 개인 일정), 공통 계획일·기록 날짜면 거짓. */
+            personal: boolean;
+            title: string;
+        };
+        /**
+         * @description 업무·일정 밖의 날짜 출처(D-80). 원래 자리의 날짜를 그대로 읽는다.
+         * @enum {string}
+         */
+        CalendarDateKind: "episode" | "study_unit" | "submission" | "revision_due" | "deliverable";
         /** @description 달력에 나온 항목의 이름(업무·일정이 어디에 속하는지 보이기 위해). */
         CalendarItem: {
             id: components["schemas"]["ItemId"];
@@ -10434,6 +10457,10 @@ export interface operations {
                 from: string;
                 to: string;
                 tz: string;
+                /** @description 이 모듈의 항목만. */
+                module_id?: string | null;
+                /** @description 이 항목만. */
+                item_id?: string | null;
             };
             header?: never;
             path: {

@@ -5,6 +5,7 @@
   import type { ItemView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { forgetReferences } from '$lib/features/references/resolver';
+  import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
@@ -246,6 +247,8 @@
         {/if}
       {/if}
     {/if}
+
+    <CalendarScreen {workspace} scope={{ moduleId: current.id }} embedded />
 
     {#if isAdmin}
       <form
