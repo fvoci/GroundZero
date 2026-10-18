@@ -186,14 +186,28 @@ pub const NODES: &[&str] = &[
 pub const MARKS: &[&str] = &["bold", "italic", "strike", "code", "underline", "link"];
 /// Yjs 문서의 최상위 이름: 본문 조각과 서버의 계보 맵.
 pub const ROOTS: &[&str] = &[FRAGMENT, "fvoci"];
+/// 브라우저의 y-tiptap(3.0.10~)이 목록 항목을 나누는 등의 변경에서 커서 위치를 옮기려 남기는 최상위 Map의 이름 앞부분
+/// (`__tiptap_position_migrations:root:default`, `…:item:<client>:<clock>`). 본문이 아니라 읽지 않고, 값이 모두
+/// 평범한 값(JSON으로 옮겨지는 값)인지만 본다. 크기는 방 상태 한도가 막는다. 이것을 막으면 실시간 편집에서 목록에
+/// Enter를 누르는 순간 연결이 닫힌다.
+pub const POSITION_MIGRATIONS: &str = "__tiptap_position_migrations:";
 
 /// 실시간 변경을 받은 뒤의 Yjs 문서가 편집기 스키마 안인지 본다(D-70 내용 검사 경계). 본문 검사(`validate_body`)는
 /// JSON으로 바꾼 뒤에 하므로, JSON으로 옮겨지지 않는 것(모르는 최상위·노드·표시 이름, 끼운 값, 값이 아닌 속성)은
 /// 여기서 막는다. 브라우저는 표시 이름 끝의 `--xxxxxxxx`를 지우고 읽으므로 이름은 정확히 같아야 한다.
 pub fn check_shape<T: ReadTxn>(txn: &T) -> Result<(), &'static str> {
     for (name, _) in txn.root_refs() {
-        if !ROOTS.contains(&name) {
+        if ROOTS.contains(&name) {
+            continue;
+        }
+        if !name.starts_with(POSITION_MIGRATIONS) || name.len() > 96 {
             return Err("unknown top-level type");
+        }
+        let plain = txn
+            .get_map(name)
+            .is_some_and(|map| map.iter(txn).all(|(_, value)| matches!(value, Out::Any(_))));
+        if !plain {
+            return Err("position metadata is not plain values");
         }
     }
     if let Some(meta) = txn.get_map("fvoci") {
@@ -402,5 +416,47 @@ mod tests {
         let mut again = read_doc(&other.transact(), &other_fragment);
         normalize(&mut again);
         assert_eq!(again, parse(EXPECTED));
+    }
+
+    #[test]
+    fn position_migration_metadata_is_allowed_but_other_roots_are_not() {
+        let doc = Doc::new();
+        let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
+        let store = doc.get_or_insert_map("__tiptap_position_migrations:root:default");
+        {
+            let mut txn = doc.transact_mut();
+            fragment.push_back(&mut txn, XmlElementPrelim::empty("paragraph"));
+            let mut entry = HashMap::new();
+            entry.insert("version".to_owned(), Any::from(1));
+            entry.insert(
+                "seen".to_owned(),
+                Any::from(vec![Any::from(1), Any::from(2)]),
+            );
+            store.insert(&mut txn, "1:2", Any::from(entry));
+        }
+        assert_eq!(check_shape(&doc.transact()), Ok(()));
+        // 서버는 이 이름을 미리 열지 않은 문서에 변경으로 받는다(방의 검사와 같은 경로).
+        let update = doc
+            .transact()
+            .encode_state_as_update_v1(&StateVector::default());
+        let server = Doc::new();
+        let _fragment = server.get_or_insert_xml_fragment(FRAGMENT);
+        let applied = Update::decode_v1(&update)
+            .ok()
+            .is_some_and(|u| server.transact_mut().apply_update(u).is_ok());
+        assert!(applied);
+        assert_eq!(check_shape(&server.transact()), Ok(()));
+
+        // 평범한 값이 아닌 것(안에 든 공유 타입)은 막는다.
+        let nested = Doc::new();
+        let store = nested.get_or_insert_map("__tiptap_position_migrations:root:default");
+        store.insert(&mut nested.transact_mut(), "x", yrs::MapPrelim::default());
+        assert!(check_shape(&nested.transact()).is_err());
+
+        // 모르는 최상위 이름은 여전히 막는다.
+        let junk = Doc::new();
+        let map = junk.get_or_insert_map("junk");
+        map.insert(&mut junk.transact_mut(), "big", "x");
+        assert_eq!(check_shape(&junk.transact()), Err("unknown top-level type"));
     }
 }
