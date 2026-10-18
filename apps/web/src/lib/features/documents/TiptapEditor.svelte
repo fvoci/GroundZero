@@ -35,6 +35,7 @@
   import type { LiveSession } from './live';
   import type { SlashItem } from './slash-command';
   import { SlashCommand } from './slash-command';
+  import { PasteGuard } from './paste-guard';
 
   interface Props {
     content: DocNode;
@@ -284,6 +285,7 @@
     const editing: Extensions = [
       ...base,
       SlashCommand.configure({ items: () => slashItems() }),
+      PasteGuard,
       BlockKeys.configure({
         onMenu: (pos: number) => {
           menuRequest = pos;

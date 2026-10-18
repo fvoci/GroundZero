@@ -26,6 +26,11 @@
 
   const { editor, container, version, menuRequest, onmenuhandled }: Props = $props();
 
+  // 끌어 옮기기는 마우스 같은 정밀한 포인터에서만(휴대 기기 브라우저는 HTML 끌어 놓기를 쓰지 않고, 길게 누르기와
+  // 겹친다). 터치에서는 메뉴의 위·아래로 옮기기를 쓴다.
+  const finePointer =
+    typeof window.matchMedia === 'function' && window.matchMedia('(pointer: fine)').matches;
+
   let hoverPos = $state<number | undefined>(undefined);
   let menuOpen = $state(false);
   let menuPos = $state<number | undefined>(undefined);
@@ -35,9 +40,12 @@
     if (version < 0 || !editor.isEditable) return undefined;
     // 초점은 Tiptap이 초점·흐림 때도 트랜잭션을 내므로(version) 그때마다 편집기에 직접 묻는다.
     const focused = editor.view.hasFocus();
-    const pos = menuOpen
-      ? (menuPos ?? editor.state.selection.from)
-      : (hoverPos ?? (focused ? editor.state.selection.from : undefined));
+    // 손잡이를 누른 순간부터(menuPos) 메뉴가 닫힐 때까지 그 블록에 고정한다. 터치에서는 누르면 편집기 초점이 빠져
+    // 손잡이가 사라지기 때문이다.
+    const pos =
+      menuOpen || menuPos !== undefined
+        ? (menuPos ?? editor.state.selection.from)
+        : (hoverPos ?? (focused ? editor.state.selection.from : undefined));
     if (pos === undefined) return undefined;
     const block = blockAt(editor.state.doc, pos);
     if (block === undefined) return undefined;
@@ -147,12 +155,18 @@
           <button
             {...props}
             type="button"
-            draggable="true"
+            draggable={finePointer}
             class="flex size-6 cursor-grab items-center justify-center rounded hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             aria-label={m.documents_block_menu()}
             title={`${m.documents_block_menu()} — ${m.documents_block_keys()}`}
+            onpointerdowncapture={() => {
+              menuPos = current.block.from + 1;
+            }}
             ondragstart={(e: DragEvent) => {
               onDragStart(e, current.block);
+            }}
+            ondragend={() => {
+              if (!menuOpen) menuPos = undefined;
             }}
           >
             <GripVertical class="size-4" aria-hidden="true" />
