@@ -330,7 +330,16 @@
               data-testid="sidebar-wiki-tree"
             >
               {#if workspaceNav.docs.state === 'error'}
-                <p class="px-2 py-1 text-xs text-destructive">{m.app_nav_load_failed()}</p>
+                <p class="flex items-center gap-2 px-2 py-1 text-xs text-destructive" role="alert">
+                  {m.app_nav_load_failed()}
+                  <button
+                    type="button"
+                    class="rounded-sm underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+                    onclick={() => {
+                      workspaceNav.refreshDocs();
+                    }}>{m.common_retry()}</button
+                  >
+                </p>
               {:else if workspaceNav.docs.state === 'ready'}
                 {#if workspaceNav.docs.list.length === 0}
                   <p class="px-2 py-1 text-xs text-muted-foreground">{m.app_nav_docs_empty()}</p>
@@ -360,7 +369,16 @@
         <Sidebar.GroupLabel>{m.app_nav_modules()}</Sidebar.GroupLabel>
         <Sidebar.GroupContent>
           {#if workspaceNav.modules.state === 'error'}
-            <p class="px-2 py-1 text-xs text-destructive">{m.app_nav_load_failed()}</p>
+            <p class="flex items-center gap-2 px-2 py-1 text-xs text-destructive" role="alert">
+              {m.app_nav_load_failed()}
+              <button
+                type="button"
+                class="rounded-sm underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+                onclick={() => {
+                  workspaceNav.refreshModules();
+                }}>{m.common_retry()}</button
+              >
+            </p>
           {:else if workspaceNav.modules.state === 'ready'}
             {#if workspaceNav.modules.list.filter((mod) => !mod.archived).length === 0}
               <p class="px-2 py-1 text-xs text-muted-foreground">{m.app_nav_modules_empty()}</p>
