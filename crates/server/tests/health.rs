@@ -147,14 +147,16 @@ async fn assets_are_served_precompressed_when_available() {
         }
     };
 
+    // 압축 사본도 원본과 같은 서체 형식으로 보낸다(br 파일의 형식이 아니라).
+    let (_, raw_headers, _) = get("/assets/Font-abc.otf", "").await;
+    let font_type = header(&raw_headers, "content-type").unwrap();
+    assert!(font_type.contains("font"), "font content type: {font_type}");
+
     let (status, headers, body) = get("/assets/Font-abc.otf", "br, gzip").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, b"br-bytes");
     assert_eq!(header(&headers, "content-encoding").as_deref(), Some("br"));
-    assert_eq!(
-        header(&headers, "content-type").as_deref(),
-        Some("font/otf")
-    );
+    assert_eq!(header(&headers, "content-type"), Some(font_type));
     assert_eq!(
         header(&headers, "cache-control").as_deref(),
         Some("public, max-age=31536000, immutable")
