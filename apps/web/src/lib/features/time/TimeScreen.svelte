@@ -7,7 +7,9 @@
 
   import type { TimeEntryView, TimeKind, TimeSummaryRowView } from '$lib/api/client';
   import { api, ApiError, newRequestId, TIME_KINDS } from '$lib/api/client';
-  import { dayIn, instantOf, localTimeZone, wallTime } from '$lib/features/events/time';
+  import { displaySettings, formatClock, weekdays } from '$lib/display';
+  import { startOfWeek } from '$lib/features/events/calendar';
+  import { dayIn, instantOf } from '$lib/features/events/time';
   import { dayNumber, fromDayNumber } from '$lib/features/tasks/gantt';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -25,15 +27,13 @@
 
   const { workspaces }: Props = $props();
 
-  const zone = localTimeZone();
+  // 오늘·주 시작·시각 표시는 사용자 표시 설정(D-81).
+  const settings = displaySettings();
+  const zone = settings.timeZone;
   const today = dayIn(new Date().toISOString(), zone);
-  /** 월요일(ISO 주의 시작). 1970-01-01은 목요일. */
-  function mondayOf(day: string): string {
-    const n = dayNumber(day);
-    return fromDayNumber(n - ((n + 3) % 7));
-  }
+  const thisWeek = startOfWeek(today, settings.weekStart);
 
-  let weekStart = $state(mondayOf(today));
+  let weekStart = $state(thisWeek);
   const weekEnd = $derived(fromDayNumber(dayNumber(weekStart) + 6));
   const days = $derived(
     Array.from({ length: 7 }, (_, i) => fromDayNumber(dayNumber(weekStart) + i)),
@@ -140,9 +140,9 @@
     }
   }
 
-  const WEEKDAY = ['월', '화', '수', '목', '금', '토', '일'];
+  const WEEKDAY = weekdays(settings).map((w) => w.short);
   const timeRange = (e: TimeEntryView): string =>
-    `${wallTime(e.started_at, zone).slice(11)}–${e.ended_at === null ? '진행 중' : wallTime(e.ended_at, zone).slice(11)}`;
+    `${formatClock(e.started_at, settings)}–${e.ended_at === null ? '진행 중' : formatClock(e.ended_at, settings)}`;
 </script>
 
 <section class="flex flex-col gap-4" aria-labelledby="time-heading">
@@ -154,9 +154,7 @@
         variant="outline"
         onclick={() => (weekStart = fromDayNumber(dayNumber(weekStart) - 7))}>← 지난주</Button
       >
-      <Button size="sm" variant="outline" onclick={() => (weekStart = mondayOf(today))}
-        >이번 주</Button
-      >
+      <Button size="sm" variant="outline" onclick={() => (weekStart = thisWeek)}>이번 주</Button>
       <Button
         size="sm"
         variant="outline"

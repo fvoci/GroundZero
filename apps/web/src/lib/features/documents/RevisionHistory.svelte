@@ -1,6 +1,7 @@
 <script lang="ts">
   // 리비전 기록·비교·복원 (D-27). 복원은 옛 내용으로 새 리비전을 만들며 기록을 지우지 않는다.
   // 편집 중 저장하지 않은 내용은 편집기의 초안 보존(D-53)이 지킨다.
+  import { formatInstant } from '$lib/display';
   import type { DocumentView, RevisionSummaryView, RevisionView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { Button } from '$lib/ui/button';
@@ -98,7 +99,7 @@
     }
   }
 
-  const when = (iso: string): string => new Date(iso).toLocaleString();
+  const when = (iso: string): string => formatInstant(iso);
 </script>
 
 <Button size="sm" variant="outline" onclick={openHistory}>기록</Button>

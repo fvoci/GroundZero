@@ -1,6 +1,7 @@
 <script lang="ts">
   // 문서 공유·설정·복제·이동 (D-20, D-23, D-24, D-49, D-59). 권한 판단은 서버가 하고,
   // 화면은 현재 권한(access)에 맞는 동작만 보여준다. 이동은 서버 미리보기로 접근 변화를 보여준 뒤 확인받는다.
+  import { formatInstant } from '$lib/display';
   import type { Workspace } from '@fvoci/api-client';
 
   import type {
@@ -433,12 +434,12 @@
         <ul class="flex flex-col gap-1 text-sm" data-testid="public-link-list">
           {#each links as link (link.id)}
             <li class="flex items-center gap-2">
-              <span>{new Date(link.created_at).toLocaleDateString()} 생성</span>
+              <span>{formatInstant(link.created_at, { dateStyle: 'medium' })} 생성</span>
               <span class="text-muted-foreground">
                 {link.active
                   ? link.expires_at === null
                     ? '만료 없음'
-                    : `~${new Date(link.expires_at).toLocaleDateString()}`
+                    : `~${formatInstant(link.expires_at, { dateStyle: 'medium' })}`
                   : '닫힘'}
               </span>
               {#if link.active}

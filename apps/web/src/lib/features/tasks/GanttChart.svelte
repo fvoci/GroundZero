@@ -2,6 +2,7 @@
   // 간트 보기 (D-31): 업무 막대·마일스톤(◆)·선행 관계. 막대는 보조 표시이고 각 줄의 단추가 같은 내용을 글로
   // 말한다(화면 낭독기·키보드). 날짜를 바꾸는 일은 상세에서 하며, 후속 업무 영향은 저장 전에 묻는다.
   import type { TaskView } from '$lib/api/client';
+  import { dayIn, localTimeZone } from '$lib/features/events/time';
   import { Button } from '$lib/ui/button';
 
   import { dayNumber, fromDayNumber, ganttLayout } from './gantt';
@@ -17,8 +18,8 @@
   const layout = $derived(ganttLayout(tasks));
   const byId = $derived(new Map(tasks.map((t) => [t.id, t])));
   const firstDay = $derived(layout.days === 0 ? 0 : dayNumber(layout.first));
-  const now = new Date();
-  const today = `${String(now.getFullYear())}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  // 오늘은 사용자 시간대(D-81). 브라우저 지역 시간에 기대지 않는다.
+  const today = dayIn(new Date().toISOString(), localTimeZone());
   const todayColumn = $derived(layout.days === 0 ? -1 : dayNumber(today) - firstDay);
   const columns = $derived(
     Array.from({ length: layout.days }, (_, i) => fromDayNumber(firstDay + i)),

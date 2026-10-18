@@ -1,10 +1,11 @@
-// 달력 배치 (D-31, D-50). 달 보기는 일요일부터 6주(42일). 날짜 칸마다 업무(마감·시작)와 일정을 놓는다.
+// 달력 배치 (D-31, D-50, D-81). 달 보기는 사용자의 한 주 시작(월·일)부터 6주(42일). 날짜 칸마다 업무(마감·시작)와 일정을 놓는다.
 import type {
   CalendarTaskView,
   EventOccurrenceView,
   EventView,
   ProjectedTaskView,
 } from '$lib/api/client';
+import type { WeekStart } from '$lib/display';
 import { dayNumber, fromDayNumber } from '$lib/features/tasks/gantt';
 
 import { clock, dayIn } from './time';
@@ -21,12 +22,16 @@ export type CalendarEntry =
       sortKey: string;
     };
 
-/** `YYYY-MM`의 달 보기 첫날과 끝날(끝 포함). */
-export function monthRange(month: string): { from: string; to: string; days: string[] } {
+/** `YYYY-MM`의 달 보기 첫날과 끝날(끝 포함). 첫 줄은 `weekStart`(월·일)로 시작한다. */
+export function monthRange(
+  month: string,
+  weekStart: WeekStart = 'sun',
+): { from: string; to: string; days: string[] } {
   const first = dayNumber(`${month}-01`);
   // 1970-01-01은 목요일이다. 일요일=0.
   const weekday = (((first + 4) % 7) + 7) % 7;
-  const start = first - weekday;
+  const lead = weekStart === 'mon' ? (weekday + 6) % 7 : weekday;
+  const start = first - lead;
   const days = Array.from({ length: 42 }, (_, i) => fromDayNumber(start + i));
   return { from: days[0] ?? '', to: days[41] ?? '', days };
 }
@@ -109,4 +114,13 @@ export function entriesByDay(
     });
   }
   return out;
+}
+
+/** 그 날짜가 든 주의 첫날(`weekStart` 월·일, D-81). */
+export function startOfWeek(day: string, weekStart: WeekStart): string {
+  const n = dayNumber(day);
+  // 1970-01-01은 목요일이다. 일요일=0.
+  const weekday = (((n + 4) % 7) + 7) % 7;
+  const lead = weekStart === 'mon' ? (weekday + 6) % 7 : weekday;
+  return fromDayNumber(n - lead);
 }

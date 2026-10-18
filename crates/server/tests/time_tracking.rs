@@ -305,8 +305,10 @@ async fn entries_are_edited_with_history_and_summed_in_the_viewers_days() {
     assert_eq!(
         rows(&summary("day", "Asia/Seoul").await),
         [
-            ("2026-10-20".to_owned(), "study".to_owned(), 3600),
+            // 서울 23:30~00:30 공부는 자정에서 나눠 센다(D-81). 기록은 하나 그대로다.
+            ("2026-10-20".to_owned(), "study".to_owned(), 1800),
             ("2026-10-21".to_owned(), "lecture".to_owned(), 1800),
+            ("2026-10-21".to_owned(), "study".to_owned(), 1800),
             ("2026-10-26".to_owned(), "rest".to_owned(), 900),
         ]
     );
@@ -318,6 +320,23 @@ async fn entries_are_edited_with_history_and_summed_in_the_viewers_days() {
             ("2026-10-19".to_owned(), "lecture".to_owned(), 1800),
             ("2026-10-19".to_owned(), "study".to_owned(), 3600),
             ("2026-10-26".to_owned(), "rest".to_owned(), 900),
+        ]
+    );
+    // 한 주를 일요일부터 보면 주의 첫날이 바뀐다(표시 설정, 기록은 그대로).
+    let sunday = send(
+        &app,
+        Method::GET,
+        "/api/me/time-summary?from=2026-10-19&to=2026-11-01&tz=Asia/Seoul&group=week&week_start=sun",
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(
+        rows(&sunday.json),
+        [
+            ("2026-10-18".to_owned(), "lecture".to_owned(), 1800),
+            ("2026-10-18".to_owned(), "study".to_owned(), 3600),
+            ("2026-10-25".to_owned(), "rest".to_owned(), 900),
         ]
     );
 
@@ -338,6 +357,15 @@ async fn entries_are_edited_with_history_and_summed_in_the_viewers_days() {
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
     assert_eq!(r.json["seconds"], 90 * 60 - 600);
+    // 일시정지가 있는 기록을 자정에서 나눠도 합은 기록의 초와 같다(경과 비율: 60분·30분 → 3200초·1600초).
+    let split = rows(&summary("day", "Asia/Seoul").await);
+    let study: Vec<i64> = split
+        .iter()
+        .filter(|r| r.1 == "study")
+        .map(|r| r.2)
+        .collect();
+    assert_eq!(study, [3200, 1600]);
+    assert_eq!(study.iter().sum::<i64>(), 90 * 60 - 600);
     let r = send(
         &app,
         Method::PUT,

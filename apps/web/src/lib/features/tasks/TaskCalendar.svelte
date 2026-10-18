@@ -2,7 +2,8 @@
   // 항목 업무의 달력 보기(D-31). 업무는 마감일(없으면 시작일) 한 칸에 놓는다. 날짜가 없는 업무는 아래에 따로.
   import type { TaskView } from '$lib/api/client';
   import { monthRange, shiftMonth } from '$lib/features/events/calendar';
-  import { localTimeZone, wallTime } from '$lib/features/events/time';
+  import { displaySettings, formatMonth, weekdays } from '$lib/display';
+  import { dayIn } from '$lib/features/events/time';
   import { Button } from '$lib/ui/button';
 
   import { tasksByDay } from './filters';
@@ -15,12 +16,13 @@
 
   const { tasks, onopen }: Props = $props();
 
-  const today = wallTime(new Date().toISOString(), localTimeZone()).slice(0, 10);
+  const settings = displaySettings();
+  const today = dayIn(new Date().toISOString(), settings.timeZone);
   let month = $state(today.slice(0, 7));
-  const range = $derived(monthRange(month));
+  const range = $derived(monthRange(month, settings.weekStart));
   const byDay = $derived(tasksByDay(tasks));
   const undated = $derived(tasks.filter((t) => t.due_date === null && t.start_date === null));
-  const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+  const WEEKDAYS = weekdays(settings).map((w) => w.short);
 </script>
 
 <div class="flex flex-col gap-2" data-testid="task-calendar">
@@ -31,7 +33,7 @@
       aria-label="이전 달"
       onclick={() => (month = shiftMonth(month, -1))}>‹</Button
     >
-    <span class="font-medium" aria-live="polite">{month}</span>
+    <span class="font-medium" aria-live="polite">{formatMonth(month, settings)}</span>
     <Button
       size="sm"
       variant="outline"

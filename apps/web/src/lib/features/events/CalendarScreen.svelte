@@ -14,7 +14,8 @@
   import { entriesByDay, monthRange, shiftMonth } from './calendar';
   import CalendarEntryButton from './CalendarEntryButton.svelte';
   import EventDialog from './EventDialog.svelte';
-  import { localTimeZone } from './time';
+  import { dayIn } from './time';
+  import { displaySettings, formatMonth, weekdays } from '$lib/display';
 
   interface Props {
     workspace: Workspace;
@@ -22,9 +23,10 @@
 
   const { workspace }: Props = $props();
 
-  const zone = localTimeZone();
-  const now = new Date();
-  const today = `${String(now.getFullYear())}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  // 오늘·주 시작·달 이름은 사용자 표시 설정을 따른다(D-81). 브라우저 지역 시간에 기대지 않는다.
+  const settings = displaySettings();
+  const zone = settings.timeZone;
+  const today = dayIn(new Date().toISOString(), zone);
   let month = $state(today.slice(0, 7));
   let data = $state<CalendarView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
@@ -34,7 +36,7 @@
   let changed = false;
   let reloadKey = $state(0);
 
-  const range = $derived(monthRange(month));
+  const range = $derived(monthRange(month, settings.weekStart));
   const byDay = $derived(
     data === undefined
       ? new Map<string, CalendarEntry[]>()
@@ -50,7 +52,7 @@
   );
   const itemTitle = $derived(new Map((data?.items ?? []).map((i) => [i.id, i.title])));
   const weeks = $derived(Array.from({ length: 6 }, (_, w) => range.days.slice(w * 7, w * 7 + 7)));
-  const title = $derived(`${month.slice(0, 4)}년 ${String(Number(month.slice(5, 7)))}월`);
+  const title = $derived(formatMonth(month, settings));
 
   // 달·워크스페이스가 바뀌거나 일정이 바뀌면(reloadKey) 다시 불러온다.
   const request = $derived({ from: range.from, to: range.to, ws: workspace.id, key: reloadKey });
@@ -111,7 +113,7 @@
           ? entry.projected.item_id
           : entry.event.item_id,
     ) ?? '';
-  const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+  const WEEKDAYS = weekdays(settings).map((w) => w.short);
 </script>
 
 <section class="flex flex-col gap-3" aria-labelledby="calendar-heading">
