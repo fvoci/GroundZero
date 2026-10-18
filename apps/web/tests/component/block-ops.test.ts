@@ -258,3 +258,29 @@ describe('the pinned block follows edits by others while its menu is open', () =
     expect(mapBlockStart(e.state.doc, dropMath.mapping, after)).toBeUndefined();
   });
 });
+
+describe('remote edits replace whole top-level blocks', () => {
+  it('closes the menu when someone edits inside the same top-level block, keeps it for others', () => {
+    const e = make({
+      type: 'doc',
+      content: [{ type: 'taskList', content: [task('x'), task('y')] }, p('after')],
+    });
+    const yFrom = blockAt(e.state.doc, posOf(e, 'y'))?.from;
+    const afterFrom = e.state.doc.child(0).nodeSize;
+    if (yFrom === undefined) throw new Error('y');
+    // 실시간 편집(y-tiptap)은 바뀐 최상위 블록을 통째로 바꿔 넣는다: 같은 목록의 x 항목을 고친 경우.
+    const list = e.state.doc.child(0);
+    const edited = e.schema.nodeFromJSON({
+      type: 'taskList',
+      content: [task('x 고침'), task('y')],
+    });
+    const tr = e.state.tr.replaceWith(0, list.nodeSize, edited);
+    e.view.dispatch(tr);
+    // 같은 최상위 블록 안이면 고정 위치를 지워진 것으로 보고 메뉴를 닫는다(엉뚱한 항목을 조작하지 않는다).
+    expect(mapBlockStart(e.state.doc, tr.mapping, yFrom)).toBeUndefined();
+    // 다른 최상위 블록은 바뀐 크기만큼 옮겨 그대로 따라간다.
+    const moved = mapBlockStart(e.state.doc, tr.mapping, afterFrom);
+    if (moved === undefined) throw new Error('moved');
+    expect(e.state.doc.nodeAt(moved)?.textContent).toBe('after');
+  });
+});

@@ -442,6 +442,9 @@
       const roundTrip = e.markdown?.parse(markdownText);
       lossy = roundTrip === undefined || canonicalJson(roundTrip) !== canonicalJson(e.getJSON());
     }
+    // 원문 아래 안내는 원문을 보는 동안 지금 내용 기준으로만 보인다(나갔다 오면 다시 계산).
+    markdownProblem =
+      next === 'markdown' ? describeMarkdownIssues(contentIssues(e.getJSON())) : undefined;
     e.setEditable(next === 'rich');
     mode = next;
   }

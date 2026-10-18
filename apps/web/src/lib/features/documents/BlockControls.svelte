@@ -105,13 +105,26 @@
       hoverFrom = undefined;
     };
     // 다른 사람의 편집 등으로 문서가 바뀌면 고정한 블록 위치를 옮긴다. 그 블록이 지워졌으면 메뉴를 닫는다.
+    // 실시간 편집은 바뀐 최상위 블록을 통째로 바꿔 넣으므로, 다른 사람이 같은 최상위 블록(같은 목록·표 등) 안을
+    // 고치면 고정한 위치가 지워진 것으로 보고 메뉴를 닫는다(엉뚱한 블록을 조작하지 않는 쪽). 한 순간에 트랜잭션이
+    // 여럿 오면 위치 대응을 차례로 이어 붙이고 상태는 한 번만 쓴다.
+    let pending: { from: number; pinned: number | undefined } | undefined;
     const onTransaction = ({ transaction }: { transaction: Transaction }): void => {
       if (!transaction.docChanged) return;
-      const pinned = pinnedFrom;
+      const from = pending === undefined ? pinnedFrom : pending.pinned;
+      const pinned =
+        from === undefined ? undefined : mapBlockStart(transaction.doc, transaction.mapping, from);
+      if (pending !== undefined) {
+        pending.pinned = pinned;
+        return;
+      }
+      pending = { from: from ?? -1, pinned };
       queueMicrotask(() => {
+        const result = pending;
+        pending = undefined;
         hoverFrom = undefined;
-        if (pinned === undefined || pinnedFrom !== pinned) return;
-        pinnedFrom = mapBlockStart(editor.state.doc, transaction.mapping, pinned);
+        if (result === undefined || pinnedFrom === undefined || pinnedFrom !== result.from) return;
+        pinnedFrom = result.pinned;
         if (pinnedFrom === undefined) menuOpen = false;
       });
     };

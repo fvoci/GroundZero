@@ -129,6 +129,7 @@
     if (!server.can_edit || status === 'saving' || status === 'conflict') return;
     if (!isDirty()) {
       status = 'saved';
+      message = undefined;
       clearDraft(server.id);
       return;
     }
@@ -229,6 +230,12 @@
     const copyTitle = m.documents_draft_copy_title({
       title: title.trim() === '' ? server.title : title.trim(),
     });
+    // 사본도 같은 서버 규칙으로 저장되므로, 받지 않을 내용이면 노트를 만들기 전에 이유를 보인다.
+    const blocked = describeSaveBlock(contentIssues(body));
+    if (blocked !== undefined) {
+      message = blocked;
+      return;
+    }
     try {
       // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다.
       const created = await api.createNote(newRequestId(), copyTitle);

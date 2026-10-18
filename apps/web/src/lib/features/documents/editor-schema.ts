@@ -13,7 +13,7 @@ import type { ReferenceOptions } from '$lib/features/references/reference-extens
 import { Reference } from '$lib/features/references/reference-extension';
 import { m } from '$lib/paraglide/messages.js';
 
-import { isAttachmentUrl } from './paste-guard';
+import { isAllowedHref, isAttachmentUrl } from './paste-guard';
 
 export interface SchemaOptions {
   reference?: Partial<ReferenceOptions>;
@@ -25,7 +25,12 @@ export interface SchemaOptions {
 export function schemaExtensions(options: SchemaOptions = {}): Extensions {
   const { reference = {}, onMathClick, collaborative = false } = options;
   return [
-    StarterKit.configure(collaborative ? { undoRedo: false } : {}),
+    // 링크는 자동 링크·붙여넣기 규칙도 서버 규칙(isAllowedHref)으로 거른다. 기본은 ftp·tel 등도 링크로 만들어
+    // 저장이 거절되거나 실시간 방이 닫힌다. 표시(마크·속성)는 같아 스키마는 그대로다.
+    StarterKit.configure({
+      ...(collaborative ? { undoRedo: false as const } : {}),
+      link: { isAllowedUri: (url, ctx) => ctx.defaultValidate(url) && isAllowedHref(url) },
+    }),
     TaskList,
     TaskItem.configure({
       nested: true,

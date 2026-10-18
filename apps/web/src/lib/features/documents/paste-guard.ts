@@ -80,8 +80,12 @@ function imageAsLink(node: PmNode, src: string): PmNode | undefined {
 function cleanFragment(fragment: Fragment, stats: ContentAdjustments): Fragment {
   const nodes: PmNode[] = [];
   let changed = false;
+  // 한 링크가 굵게 등으로 글자 조각 여럿에 걸치면 한 번만 센다(바로 앞 조각에서 같은 주소를 뺐으면 같은 링크).
+  let lastUnlinked: string | undefined;
   for (let i = 0; i < fragment.childCount; i += 1) {
     const node = fragment.child(i);
+    const previousUnlinked = lastUnlinked;
+    lastUnlinked = undefined;
     if (node.type.name === 'image') {
       const src: unknown = node.attrs.src;
       if (typeof src !== 'string' || !isAttachmentUrl(src)) {
@@ -99,14 +103,18 @@ function cleanFragment(fragment: Fragment, stats: ContentAdjustments): Fragment 
     }
     let next = node;
     if (node.isText) {
+      let removed: string | undefined;
       const marks = node.marks.filter((mark) => {
         if (mark.type.name !== 'link') return true;
         const href: unknown = mark.attrs.href;
-        return typeof href === 'string' && isAllowedHref(href);
+        if (typeof href === 'string' && isAllowedHref(href)) return true;
+        removed = typeof href === 'string' ? href : '';
+        return false;
       });
-      if (marks.length !== node.marks.length) {
+      if (removed !== undefined) {
         next = node.mark(marks);
-        stats.linksUnlinked += 1;
+        if (removed !== previousUnlinked) stats.linksUnlinked += 1;
+        lastUnlinked = removed;
         changed = true;
       }
     } else if (node.content.size > 0) {
@@ -165,28 +173,36 @@ export function contentIssues(doc: JSONContent): ContentIssues {
  * 허용하지 않는 링크는 글자만 남긴다. 바꾼 수를 `stats`에 더한다.
  */
 export function cleanPastedHtml(html: string, stats: ContentAdjustments): string {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
+  // <template>은 ProseMirror가 붙인 HTML을 읽는 것과 같은 조각 읽기다: 실행·불러오기가 없고, 머리의 <style>(표
+  // 프로그램의 굵게 등)과 <td>만 있는 조각도 그대로 남는다. 고칠 것이 없으면 받은 HTML을 그대로 돌려준다.
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const doc = template.content;
+  let touched = false;
   for (const img of Array.from(doc.querySelectorAll('img'))) {
     const src = img.getAttribute('src') ?? '';
     if (isAttachmentUrl(src)) continue;
     if (isWebUrl(src)) {
-      const a = doc.createElement('a');
+      const a = doc.ownerDocument.createElement('a');
       a.setAttribute('href', src);
       const alt = (img.getAttribute('alt') ?? '').trim();
       a.textContent = alt === '' ? src : alt;
       img.replaceWith(a);
       stats.imagesLinked += 1;
+      touched = true;
     } else {
       img.remove();
       stats.imagesRemoved += 1;
+      touched = true;
     }
   }
   for (const a of Array.from(doc.querySelectorAll('a[href]'))) {
     if (isAllowedHref(a.getAttribute('href') ?? '')) continue;
     a.replaceWith(...Array.from(a.childNodes));
     stats.linksUnlinked += 1;
+    touched = true;
   }
-  return doc.body.innerHTML;
+  return touched ? template.innerHTML : html;
 }
 
 export interface PasteGuardOptions {
@@ -225,8 +241,9 @@ export const PasteGuard = Extension.create<PasteGuardOptions>({
   },
 });
 
-/** Tiptap Image의 `![설명](주소 "제목")` 입력 꼴(같은 정규식). */
-const IMAGE_INPUT = /(?:^|\s)(!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
+/** `![설명](주소 "제목")` 입력 꼴. Tiptap Image와 같되 설명에 `]`를 받지 않아, 앞에 글자로 남은 `![…](…)`를
+ * 설명으로 삼키지 않는다. */
+const IMAGE_INPUT = /(?:^|\s)(!\[([^\]]*)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
 
 export interface SafeImageInputOptions {
   /** 바깥 이미지 주소를 링크로 넣었을 때. */
