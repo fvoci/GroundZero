@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { lanes, listOrder, planBoardMove } from '$lib/features/tasks/board';
+import { ApiError, NetworkError } from '$lib/api/client';
+import {
+  applyMove,
+  dropBefore,
+  lanes,
+  listOrder,
+  moveErrorMessage,
+  planBoardMove,
+  planDrop,
+} from '$lib/features/tasks/board';
 import { dayNumber, fromDayNumber, ganttLayout, MAX_GANTT_DAYS } from '$lib/features/tasks/gantt';
 
 const tasks = [
@@ -78,5 +87,83 @@ describe('gantt range cap', () => {
     expect(layout.rows.map((r) => r.task.id)).toEqual(['a', 'b']);
     expect(layout.rows[1]?.to).toBe(MAX_GANTT_DAYS - 1);
     expect(layout.later.map((t) => t.id)).toEqual(['c']);
+  });
+});
+
+describe('kanban drag and drop (D-79)', () => {
+  const board = [
+    { id: 'a', status: 'todo' as const },
+    { id: 'b', status: 'todo' as const },
+    { id: 'c', status: 'todo' as const },
+    { id: 'd', status: 'done' as const },
+  ];
+  const boxes = [
+    { id: 'a', top: 0, height: 40 },
+    { id: 'b', top: 50, height: 40 },
+    { id: 'c', top: 100, height: 40 },
+  ];
+
+  it('finds the card the pointer drops before, skipping the dragged card', () => {
+    expect(dropBefore(boxes, 'c', 10)).toBe('a');
+    expect(dropBefore(boxes, 'c', 30)).toBe('b');
+    expect(dropBefore(boxes, 'a', 30)).toBe('b');
+    expect(dropBefore(boxes, 'a', 130)).toBeNull();
+    expect(dropBefore([], 'a', 5)).toBeNull();
+  });
+
+  it('turns a drop into a move and ignores drops on the same place', () => {
+    expect(planDrop(board, 'c', { status: 'todo', beforeId: 'a' }, true)).toEqual({
+      status: 'todo',
+      beforeId: 'a',
+    });
+    expect(planDrop(board, 'a', { status: 'todo', beforeId: 'b' }, true)).toBeUndefined();
+    expect(planDrop(board, 'a', { status: 'todo', beforeId: 'a' }, true)).toBeUndefined();
+    expect(planDrop(board, 'c', { status: 'todo', beforeId: null }, true)).toBeUndefined();
+    expect(planDrop(board, 'a', { status: 'done', beforeId: 'd' }, true)).toEqual({
+      status: 'done',
+      beforeId: 'd',
+    });
+    expect(planDrop(board, 'missing', { status: 'done', beforeId: null }, true)).toBeUndefined();
+  });
+
+  it('only changes the column when the board is sorted by something else', () => {
+    expect(planDrop(board, 'c', { status: 'todo', beforeId: 'a' }, false)).toBeUndefined();
+    expect(planDrop(board, 'c', { status: 'done', beforeId: 'd' }, false)).toEqual({
+      status: 'done',
+      beforeId: null,
+    });
+  });
+
+  it('applies a move to the screen the way the server orders the column', () => {
+    const ids = (ts: readonly { id: string; status: string }[]): string[] =>
+      ts.map((t) => `${t.id}:${t.status}`);
+    expect(ids(applyMove(board, 'c', { status: 'todo', beforeId: 'a' }))).toEqual([
+      'c:todo',
+      'a:todo',
+      'b:todo',
+      'd:done',
+    ]);
+    expect(ids(applyMove(board, 'a', { status: 'done', beforeId: null }))).toEqual([
+      'b:todo',
+      'c:todo',
+      'd:done',
+      'a:done',
+    ]);
+    expect(ids(applyMove(board, 'd', { status: 'in_progress', beforeId: null }))).toEqual([
+      'a:todo',
+      'b:todo',
+      'c:todo',
+      'd:in_progress',
+    ]);
+    // 원래 배열은 그대로(실패하면 되돌릴 수 있게).
+    expect(ids(board)).toEqual(['a:todo', 'b:todo', 'c:todo', 'd:done']);
+  });
+
+  it('explains why a move was refused', () => {
+    expect(moveErrorMessage(new ApiError(400, 'bad_request', 'x'))).toContain('다른 곳에서');
+    expect(moveErrorMessage(new ApiError(403, 'forbidden', 'x'))).toContain('권한');
+    expect(moveErrorMessage(new ApiError(404, 'not_found', 'x'))).toContain('지워졌거나');
+    expect(moveErrorMessage(new ApiError(409, 'invalid_state', 'x'))).toContain('보관');
+    expect(moveErrorMessage(new NetworkError('down'))).toContain('되돌렸습니다');
   });
 });

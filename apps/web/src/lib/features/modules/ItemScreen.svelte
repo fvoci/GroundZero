@@ -317,7 +317,20 @@
         />
       {/if}
     </section>
-    <TaskBoard item={current} {workspaces} openTaskId={taskId} />
+    <TaskBoard
+      item={current}
+      {workspaces}
+      openTaskId={taskId}
+      onstale={() => {
+        // 권한·보관이 바뀌었을 수 있다. 입력 중인 제목·설명은 두고 항목 상태만 새로 읽는다.
+        api
+          .item(current.id)
+          .then((next) => {
+            item = next;
+          })
+          .catch(() => undefined);
+      }}
+    />
     <ItemEvents item={current} />
     <CalendarScreen {workspace} scope={{ itemId: current.id }} embedded />
     <Backlinks kind="item" id={current.id} {workspaces} />
