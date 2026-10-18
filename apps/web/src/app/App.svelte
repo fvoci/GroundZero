@@ -20,6 +20,7 @@
   import { m } from '$lib/paraglide/messages.js';
   import { setLocale } from '$lib/paraglide/runtime.js';
   import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
+  import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
   import TimeScreen from '$lib/features/time/TimeScreen.svelte';
   import TimerWidget from '$lib/features/time/TimerWidget.svelte';
@@ -125,6 +126,11 @@
     return session.workspaces.find((w) => w.id === id);
   });
 </script>
+
+{#if session.state !== 'loading'}
+  <!-- 표시 언어(D-81)를 정한 뒤에 그린다(토스트 영역 라벨도 그 언어로). -->
+  <FeedbackHost />
+{/if}
 
 {#if route.name === 'public'}
   <PublicView token={route.token} />

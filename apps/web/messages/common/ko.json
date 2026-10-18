@@ -10,5 +10,11 @@
         "countPlural=other": "{count}개"
       }
     }
-  ]
+  ],
+  "common_connection_lost": "서버에 연결할 수 없습니다. 다시 연결되는지 확인하는 중입니다. 입력한 내용은 지우지 않습니다.",
+  "common_notifications_region": "알림",
+  "common_saved": "저장했습니다.",
+  "common_moved_to_trash": "휴지통으로 옮겼습니다.",
+  "common_restored": "되살렸습니다.",
+  "common_retry": "다시 시도"
 }

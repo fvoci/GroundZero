@@ -16,6 +16,8 @@ import type {
   Workspace,
 } from '@fvoci/api-client';
 
+import { connection, reportConnectionLost } from '$lib/features/feedback/feedback.svelte';
+
 /** Tiptap JSON 노드. 본문 최상위는 `type: "doc"`. */
 export interface DocNode {
   type: string;
@@ -2028,6 +2030,8 @@ async function request(
     if (body !== undefined) init.body = JSON.stringify(body);
     response = await fetch(path, init);
   } catch (error: unknown) {
+    // 연결 배너(D-82). 각 화면은 자기 자리에서 입력을 지키고 다시 시도한다.
+    reportConnectionLost();
     throw new NetworkError(error instanceof Error ? error.message : 'network error');
   }
   const text = await response.text();
@@ -2039,6 +2043,12 @@ async function request(
       json = null;
     }
   }
+  // 앞단 프록시가 대신 답한 게이트웨이 오류(앱의 JSON 오류 형식이 아님)는 서버에 닿지 않은 것으로 본다(D-82 배너).
+  const gateway =
+    (response.status === 502 || response.status === 503 || response.status === 504) &&
+    !(isRecord(json) && typeof json.error === 'string');
+  if (gateway) reportConnectionLost();
+  else if (connection.lost) connection.lost = false;
   return { status: response.status, json, etag: response.headers.get('ETag') };
 }
 
