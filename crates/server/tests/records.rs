@@ -879,7 +879,6 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
     // 1) 저장이 먼저: 리비전을 넣는 트랜잭션을 열어 둔 채(참조 트리거가 버전 행을 공유 잠금) 정리를 돌린다.
     let first = new_file(&app, &writer, &item, "first.png", b"one").await;
     trash_file(&app, &writer, &first).await;
-    expire_trash(&owner, &first).await;
     // 서버의 저장과 같은 두 문장(문서 갱신, 리비전 추가)을 한 트랜잭션에서 하고 끝내지 않는다.
     let mut save = owner.begin().await.unwrap();
     let body = json!({ "type": "doc", "content": [{ "type": "image",
@@ -899,6 +898,8 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
     .execute(&mut *save)
     .await
     .unwrap();
+    // 만료는 저장이 버전 행을 잡은 뒤에 한다(그 전에 만료하면 동시에 도는 다른 시험의 정리가 먼저 지울 수 있다).
+    expire_trash(&owner, &first).await;
     // 정리는 저장이 잡은 행을 기다리지 않고(SKIP LOCKED) 이번 실행에서 이 묶음을 건너뛴다.
     let run = || async {
         fvoci_server::worker::run_all_now(&state.db, None, None)
