@@ -4,7 +4,7 @@ name: fvoci-test
 
 services:
   postgres:
-    image: postgres:18.3-alpine
+    image: postgres:18.3-bookworm@sha256:80630f83606d8db77d30b3851b16a9f78be2d0d4dda6f7b82a1fdca5ebe3acba
     environment:
       POSTGRES_USER: fvoci
       POSTGRES_PASSWORD: fvoci-test-password
@@ -24,7 +24,7 @@ services:
           memory: 512m
 
   meilisearch:
-    image: getmeili/meilisearch:v1.37.0
+    image: getmeili/meilisearch:v1.37.0@sha256:9cde2774864e6c19cdd09fcd2950bc01ac9a0454b6f343fffafa14faae6eb7ea
     environment:
       MEILI_ENV: development
       MEILI_MASTER_KEY: fvoci-test-meili-master-key-16chars
@@ -45,7 +45,7 @@ services:
 
   # 파일 저장소 S3 호환 시험(D-61, O-31). Apache-2.0(태그 4.48의 LICENSE 확인). 사용 통계 전송은 끈다.
   seaweedfs:
-    image: chrislusf/seaweedfs:4.48
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
     command: ['mini', '-dir=/data', '-master.telemetry=false', '-bucket=fvoci-test']
     environment:
       AWS_ACCESS_KEY_ID: fvoci-test-s3-key
@@ -66,7 +66,7 @@ services:
 
   # OIDC 통합 테스트 전용. `cargo xtask test --oidc`로만 기동한다 (프로필 oidc).
   keycloak:
-    image: quay.io/keycloak/keycloak:26.5.4
+    image: quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4
     profiles: ['oidc']
     command: ['start-dev', '--import-realm', '--health-enabled=true']
     environment:

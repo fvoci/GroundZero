@@ -96,6 +96,8 @@ docker compose --env-file .env -f deploy/compose.selfhost.yaml run --rm --no-dep
 git pull && docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d --build --wait
 ```
 
+PostgreSQL 이미지가 Alpine에서 Debian(`postgres:18.3-bookworm`, D-85)으로 바뀐 판으로 올릴 때는 위 명령으로 바로 올리지 않는다. 데이터 파일 소유자와 정렬 라이브러리가 달라 기존 `pgdata`를 그대로 쓸 수 없으므로, 이전 판에서 백업을 만들고(5절) 새 판을 새로 설치한 뒤 복구한다.
+
 새 마이그레이션은 앱이 뜨기 전에 `migrate`가 적용한다. 올리기 전에 백업을 만든다. 되돌릴 때는 이전 릴리스로 새로 설치한 뒤 그 릴리스에서 만든 백업을 복구한다(마이그레이션은 되돌리지 않는다).
 
 ## 7. 캐시와 CDN(D-77)

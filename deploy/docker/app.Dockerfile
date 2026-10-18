@@ -1,7 +1,7 @@
 # 제품 실행 이미지. 서버 바이너리와 정적 웹 자산만 담는다.
 # 로컬 빌드·실행은 검증한다. 레지스트리 push·공개 배포는 별도 승인 대상이다.
 
-FROM rust:1.99.0-bookworm AS server-build
+FROM rust:1.99.0-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6 AS server-build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
@@ -10,7 +10,7 @@ RUN cargo build --release --locked --package fvoci-server
 
 # HWP·HWPX 미리보기 WASM(D-76). 앱 도구 모음(위 server-build)과 따로, 고정한 rhwp 커밋·잠금 파일·기능·도구 판으로 만든다.
 # 입력(deploy/rhwp)이 같으면 이 단계의 캐시를 그대로 쓴다. 판은 deploy/rhwp/inputs.env와 같아야 한다(build.sh가 확인).
-FROM rust:1.93.1-bookworm AS rhwp-build
+FROM rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31 AS rhwp-build
 RUN apt-get update && apt-get install -y --no-install-recommends jq brotli && rm -rf /var/lib/apt/lists/* \
  && rustup target add wasm32-unknown-unknown \
  && cargo install --locked wasm-bindgen-cli --version 0.2.127 \
@@ -22,7 +22,7 @@ RUN sh /rhwp/build.sh
 FROM scratch AS rhwp-out
 COPY --from=rhwp-build /out /
 
-FROM node:24-bookworm-slim AS web-build
+FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS web-build
 ARG PNPM_VERSION=11.24.0
 RUN npm install -g pnpm@${PNPM_VERSION}
 WORKDIR /src
@@ -34,7 +34,7 @@ COPY contracts ./contracts
 COPY --from=rhwp-build /out/web ./apps/web/public/rhwp
 RUN pnpm install --frozen-lockfile && pnpm --filter @fvoci/web run build
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10001 --create-home fvoci \
