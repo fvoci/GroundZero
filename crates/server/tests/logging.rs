@@ -456,3 +456,32 @@ async fn audit_events_stay_when_the_log_level_is_lowered() {
     // 이 요청들은 오류가 없으니 ERROR 거르기에서는 운영 로그가 한 줄도 없다.
     assert!(buf.lines().is_empty(), "{}", buf.text());
 }
+
+#[tokio::test]
+async fn malformed_bodies_get_the_json_error_shape_with_the_request_id() {
+    let _global = global();
+    let state = common::state();
+    let app = common::app(&state);
+    let user = common::login(&state, "rejection").await;
+    let r = raw(
+        &app,
+        Request::builder()
+            .method(Method::POST)
+            .uri("/api/workspaces")
+            .header(header::ORIGIN, common::PUBLIC_URL)
+            .header(header::COOKIE, &user.cookie)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(r#"{"request_id": "#))
+            .unwrap(),
+    )
+    .await;
+    assert!(r.status.is_client_error(), "{}", r.status);
+    assert_eq!(r.json["error"], "bad_request", "{:?}", r.json);
+    assert!(r.json["message"].is_string());
+    assert_eq!(
+        r.json["request_id"].as_str(),
+        r.request_id.as_deref(),
+        "{:?}",
+        r.json
+    );
+}

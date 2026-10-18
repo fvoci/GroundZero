@@ -195,6 +195,41 @@ async fn request_context(request: Request, next: Next) -> Response {
     response
 }
 
+/// axum이 요청을 꺼내다 거절한 응답(깨진 JSON·빠진 필드·큰 본문 등)은 글자 본문이다. API의 오류 형식(오류 코드·
+/// 사람용 설명·요청 id, D-83)으로 바꿔 화면이 같은 방식으로 다루게 한다. 설명은 그 요청을 보낸 사람에게만 가고 로그에는
+/// 쓰지 않는다.
+async fn json_rejections(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    let status = response.status();
+    let plain = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("text/plain"));
+    if !status.is_client_error() || !plain {
+        return response;
+    }
+    let (parts, body) = response.into_parts();
+    let bytes = axum::body::to_bytes(body, 4096).await.unwrap_or_default();
+    let message: String = String::from_utf8_lossy(&bytes).chars().take(300).collect();
+    let error = if parts.status == StatusCode::PAYLOAD_TOO_LARGE {
+        "too_large"
+    } else {
+        "bad_request"
+    };
+    let mut out = (
+        parts.status,
+        Json(ErrorBody {
+            error,
+            message,
+            request_id: crate::logging::current_request_id(),
+        }),
+    )
+        .into_response();
+    out.extensions_mut()
+        .insert(crate::logging::ErrorCode(error));
+    out
+}
 /// 알 수 없는 API 경로는 웹 fallback이 아니라 404 JSON.
 async fn api_not_found() -> AppError {
     AppError::NotFound
@@ -1013,7 +1048,8 @@ pub fn router(state: AppState) -> Router {
             "/groups/{group_id}/members/{user_id}",
             put(members::add_group_member).delete(members::remove_group_member),
         )
-        .fallback(api_not_found);
+        .fallback(api_not_found)
+        .layer(middleware::from_fn(json_rejections));
 
     let auth = Router::new()
         .route("/login", get(accounts::login))
