@@ -59,8 +59,10 @@ describe('module validation', () => {
       previous_keys: ['ENG'],
       archived: false,
       icon: '',
+      description: '제품 개발',
     };
     expect(parseModule(module).previous_keys).toEqual(['ENG']);
+    expect(parseModule(module).description).toBe('제품 개발');
     expect(() => parseModule({ ...module, kind: 'chores' })).toThrow();
     const parsed = parseItem({
       id: item,

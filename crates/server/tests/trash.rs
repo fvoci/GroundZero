@@ -592,3 +592,273 @@ async fn purged_repeating_occurrences_are_not_recreated() {
     .await;
     assert_eq!(sync.json["created"], 0, "a purged occurrence stays gone");
 }
+
+/// 모듈 휴지통(D-78): 관리자만 지우고 되살린다. 모듈과 함께 그 항목·업무가 사라지고, 되살리면 모듈만 돌아온다.
+/// 그 전에 따로 지운 항목은 휴지통에 남고(모듈이 지워진 동안은 되살릴 수 없음), 비공개 항목은 비공개 그대로다.
+/// 영구 삭제는 모듈의 항목을 모두 지우고 따로 지운 항목의 묶음도 끝낸다. 설명은 관리자만 고친다.
+#[tokio::test]
+async fn module_trash_hides_its_items_and_restores_only_the_module() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "모듈 휴지통").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let post = |user: &TestUser, uri: String, body: Value| {
+        let app = app.clone();
+        let user = user.clone();
+        async move { send(&app, Method::POST, &uri, Some(&user), Some(body)).await }
+    };
+    let module = post(
+        &admin,
+        format!("/api/workspaces/{ws}/modules"),
+        json!({ "request_id": new_request_id(), "kind": "project", "name": "개발", "key": "DEV" }),
+    )
+    .await
+    .json;
+    let mid = module["id"].as_str().unwrap().to_owned();
+    let mut items = Vec::new();
+    for (title, visibility) in [
+        ("공개", "workspace"),
+        ("비공개", "private"),
+        ("따로 지움", "workspace"),
+    ] {
+        let i = post(
+            &admin,
+            format!("/api/modules/{mid}/items"),
+            json!({ "request_id": new_request_id(), "title": title }),
+        )
+        .await
+        .json;
+        let id = i["id"].as_str().unwrap().to_owned();
+        let r = send(
+            &app,
+            Method::PUT,
+            &format!("/api/items/{id}"),
+            Some(&admin),
+            Some(json!({ "title": title, "description": "", "visibility": visibility })),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+        items.push(id);
+    }
+    let (open, private, separate) = (items[0].clone(), items[1].clone(), items[2].clone());
+    let task = post(
+        &writer,
+        format!("/api/items/{open}/tasks"),
+        json!({ "request_id": new_request_id(), "title": "할 일" }),
+    )
+    .await
+    .json;
+    let task_id = task["id"].as_str().unwrap().to_owned();
+    let get = |user: &TestUser, uri: String| {
+        let app = app.clone();
+        let user = user.clone();
+        async move {
+            send(&app, Method::GET, &uri, Some(&user), None)
+                .await
+                .status
+        }
+    };
+    assert_eq!(
+        get(&writer, format!("/api/items/{private}")).await,
+        StatusCode::NOT_FOUND
+    );
+
+    // 설명: 관리자만, 길이 제한.
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{mid}/description"),
+        Some(&admin),
+        Some(json!({ "description": " 제품 개발 모듈 " })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    assert_eq!(r.json["description"], "제품 개발 모듈");
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{mid}/description"),
+        Some(&writer),
+        Some(json!({ "description": "작성자" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN);
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{mid}/description"),
+        Some(&admin),
+        Some(json!({ "description": "가".repeat(2001) })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+
+    // 항목 하나를 따로 지운 뒤 모듈을 지운다. 작성자는 모듈을 지울 수 없다.
+    let separate_batch = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/items/{separate}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json["batch_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        send(
+            &app,
+            Method::DELETE,
+            &format!("/api/modules/{mid}"),
+            Some(&writer),
+            None
+        )
+        .await
+        .status,
+        StatusCode::FORBIDDEN
+    );
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/modules/{mid}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let module_batch = r.json["batch_id"].as_str().unwrap().to_owned();
+    for user in [&admin, &writer] {
+        assert_eq!(
+            get(user, format!("/api/modules/{mid}")).await,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            get(user, format!("/api/items/{open}")).await,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            get(user, format!("/api/tasks/{task_id}")).await,
+            StatusCode::NOT_FOUND
+        );
+    }
+    let modules = send(
+        &app,
+        Method::GET,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(modules.json.as_array().unwrap().is_empty());
+    let listed = trash(&app, &admin, &ws).await;
+    let entry = listed["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == module_batch.as_str())
+        .unwrap()
+        .clone();
+    assert_eq!(
+        (entry["kind"].as_str(), entry["member_count"].as_i64()),
+        (Some("module"), Some(2))
+    );
+    // 작성자는 남이 지운 모듈을 휴지통에서 보지 못한다.
+    assert!(
+        trash(&app, &writer, &ws).await["entries"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    // 모듈이 지워진 동안 그 안의 항목은 되살릴 수 없다.
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/trash/{separate_batch}/restore"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
+
+    // 되살리면 모듈과 그때 들어간 항목만 돌아온다. 따로 지운 항목은 휴지통에, 비공개 항목은 비공개로 남는다.
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/trash/{module_batch}/restore"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/trash/{module_batch}/restore"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(r.status.is_success(), "{:?}", r.json);
+    assert_eq!(
+        get(&writer, format!("/api/modules/{mid}")).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        get(&writer, format!("/api/items/{open}")).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        get(&writer, format!("/api/tasks/{task_id}")).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        get(&writer, format!("/api/items/{private}")).await,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        get(&admin, format!("/api/items/{separate}")).await,
+        StatusCode::NOT_FOUND
+    );
+    assert!(
+        trash(&app, &admin, &ws).await["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["id"] == separate_batch.as_str())
+    );
+
+    // 다시 지우고 영구 삭제하면 항목이 모두 사라지고 따로 지운 항목의 묶음도 끝난다.
+    let again = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/modules/{mid}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json["batch_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/trash/{again}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(r.status.is_success(), "{:?}", r.json);
+    assert!(
+        trash(&app, &admin, &ws).await["entries"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        get(&admin, format!("/api/modules/{mid}")).await,
+        StatusCode::NOT_FOUND
+    );
+}

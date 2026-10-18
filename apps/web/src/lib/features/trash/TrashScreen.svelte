@@ -65,6 +65,7 @@
   }
 
   const KIND = {
+    module: '모듈',
     item: '항목',
     document: '문서',
     task: '업무',

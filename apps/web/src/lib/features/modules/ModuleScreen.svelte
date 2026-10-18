@@ -1,12 +1,13 @@
 <script lang="ts">
-  // 모듈 하나: 항목 목록과 항목 만들기, 관리자의 이름·키 변경과 보관 (D-15, D-16, D-18).
+  // 모듈 하나: 설명, 항목 목록과 항목 만들기, 관리자의 이름·키·아이콘·설명 변경과 보관·휴지통 (D-15, D-16, D-18, D-78).
   import type { Module, Workspace } from '@fvoci/api-client';
 
   import type { ItemView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { forgetReferences } from '$lib/features/references/resolver';
+  import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
-  import { itemPath, router } from '$lib/router.svelte';
+  import { itemPath, router, workspacePath } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
@@ -39,6 +40,7 @@
         editName = m.name;
         editKey = m.key;
         editIcon = m.icon;
+        editDescription = m.description;
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -58,6 +60,7 @@
   let editName = $state('');
   let editKey = $state('');
   let editIcon = $state('');
+  let editDescription = $state('');
   let settingsError = $state<string | undefined>(undefined);
   let settingsNote = $state<string | undefined>(undefined);
 
@@ -74,6 +77,9 @@
     try {
       const before = mod.key;
       if (editIcon.trim() !== mod.icon) await api.setModuleIcon(mod.id, editIcon.trim());
+      if (editDescription.trim() !== mod.description) {
+        await api.setModuleDescription(mod.id, editDescription.trim());
+      }
       mod = await api.updateModule(mod.id, editName.trim(), key);
       forgetReferences();
       editKey = mod.key;
@@ -145,7 +151,21 @@
       <span class="font-mono text-sm text-muted-foreground">{current.key}</span>
       <Badge variant="outline">{KIND_LABEL[current.kind]}</Badge>
       {#if current.archived}<Badge variant="secondary">보관됨 · 읽기 전용</Badge>{/if}
+      {#if isAdmin}
+        <div class="ml-auto">
+          <DeleteButton
+            what="모듈"
+            remove={() => api.trashModule(current.id)}
+            ondeleted={() => {
+              router.navigate(workspacePath(workspace.id));
+            }}
+          />
+        </div>
+      {/if}
     </div>
+    {#if current.description !== ''}
+      <p class="whitespace-pre-wrap">{current.description}</p>
+    {/if}
     {#if current.previous_keys.length > 0}
       <p class="text-sm text-muted-foreground">예전 키: {current.previous_keys.join(', ')}</p>
     {/if}
@@ -251,6 +271,16 @@
         <div class="flex w-24 flex-col gap-1">
           <Label for="module-edit-icon">아이콘</Label>
           <Input id="module-edit-icon" bind:value={editIcon} maxlength={16} placeholder="예: 🚀" />
+        </div>
+        <div class="flex w-full flex-col gap-1">
+          <Label for="module-edit-description">설명</Label>
+          <textarea
+            id="module-edit-description"
+            bind:value={editDescription}
+            maxlength={2000}
+            rows={3}
+            class="rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          ></textarea>
         </div>
         <Button type="submit" variant="outline">저장</Button>
         <Button type="button" variant="outline" onclick={() => void toggleArchive()}
