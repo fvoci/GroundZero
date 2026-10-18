@@ -170,6 +170,12 @@
     overflow-wrap: anywhere;
   }
 
+  /* 빈 문서에서도 보이는 편집 영역 어디를 눌러도 편집기에 들어가게 한다(전에는 첫 줄만 눌렸다). */
+  .fvoci-prose[contenteditable='true'] {
+    min-height: 11rem;
+    cursor: text;
+  }
+
   .fvoci-prose:focus-visible {
     @apply rounded-md ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
