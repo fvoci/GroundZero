@@ -24,12 +24,20 @@ export function isAttachmentUrl(url: string): boolean {
   return /^[1-9][0-9]*$/.test(v) && Number(v) <= 2147483647;
 }
 
-/** 링크 주소: 스킴이 있으면 http·https·mailto만, 없으면 다른 호스트로 가는 `//`만 막는다. 서버 규칙과 같다. */
+/**
+ * 링크 주소: 스킴이 있으면 http·https·mailto만, 없으면 다른 호스트로 가는 `//`를 막고 `/api/files/` 아래는 첨부
+ * 표준형만. 제어 문자는 어디에도 두지 않는다. 서버 check_link_mark와 같다.
+ */
 export function isAllowedHref(href: string): boolean {
   const value = href.trim();
+  for (const ch of value) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) return false;
+  }
   const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(value)?.[1]?.toLowerCase();
   if (scheme !== undefined) return scheme === 'http' || scheme === 'https' || scheme === 'mailto';
-  return !value.startsWith('//');
+  if (value.startsWith('//')) return false;
+  return !value.toLowerCase().startsWith('/api/files/') || isAttachmentUrl(href);
 }
 
 function cleanFragment(fragment: Fragment): Fragment {

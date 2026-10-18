@@ -146,13 +146,41 @@ export function selectBlock(state: EditorState, block: BlockRange): Transaction 
   return state.tr.setSelection(NodeSelection.create(state.doc, block.from));
 }
 
+/**
+ * 블록 시작 위치(`from`, 블록 노드 바로 앞)에 있는 블록. 손잡이·메뉴는 이 위치를 들고 다닌다. 구분선·이미지·
+ * 블록 수식처럼 안쪽이 없는 블록도 그 블록을 가리킨다(시작 + 1은 다음 블록이 되므로 쓰지 않는다).
+ */
+export function blockStartingAt(doc: PmNode, from: number): BlockRange | undefined {
+  if (from < 0 || from >= doc.content.size) return undefined;
+  const node = doc.nodeAt(from);
+  if (!node?.isBlock) return undefined;
+  return nodeRangeAt(doc, from);
+}
+
+/** 화면 좌표의 `posAtCoords` 결과(`inside`: 그 위치를 품은 노드의 시작)로 블록을 찾는다. */
+export function blockAtHit(
+  doc: PmNode,
+  hit: { pos: number; inside: number },
+): BlockRange | undefined {
+  if (hit.inside >= 0) {
+    const node = doc.nodeAt(hit.inside);
+    // 안쪽이 없는 블록(구분선·이미지·블록 수식)은 그 자체가 블록이다.
+    if (node?.isBlock === true && node.isLeaf) return blockStartingAt(doc, hit.inside);
+    return blockAt(doc, hit.inside + 1);
+  }
+  return blockAt(doc, hit.pos);
+}
+
 type Op = 'up' | 'down' | 'duplicate' | 'delete' | 'below';
 
-/** 선택이 있는 블록(또는 `pos`의 블록)에 조작을 적용한다. 바꿨으면 true. */
-export function runBlockOp(editor: Editor, op: Op, pos?: number): boolean {
+/**
+ * 블록에 조작을 적용한다. `at`이 없으면 선택이 있는 블록, 숫자면 그 위치를 품은 블록(블록 안 위치),
+ * BlockRange면 그 블록. 바꿨으면 true.
+ */
+export function runBlockOp(editor: Editor, op: Op, at?: number | BlockRange): boolean {
   if (!editor.isEditable) return false;
   const { state, view } = editor;
-  const block = blockAt(state.doc, pos ?? state.selection.from);
+  const block = typeof at === 'object' ? at : blockAt(state.doc, at ?? state.selection.from);
   if (block === undefined) return false;
   let tr: Transaction | undefined;
   switch (op) {

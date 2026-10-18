@@ -32,6 +32,9 @@ describe('paste guard (same rules as the server document check)', () => {
     expect(isAllowedHref('javascript:alert(1)')).toBe(false);
     expect(isAllowedHref('data:text/html,x')).toBe(false);
     expect(isAllowedHref('//evil.example')).toBe(false);
+    expect(isAllowedHref(`https://a.example/${String.fromCharCode(7)}x`)).toBe(false);
+    expect(isAllowedHref('/api/files/not-canonical/content')).toBe(false);
+    expect(isAllowedHref(FILE)).toBe(true);
   });
 
   it('drops outside images and unsafe link marks from a pasted slice, keeping the text', () => {

@@ -2,7 +2,12 @@ import { Editor } from '@tiptap/core';
 import type { JSONContent } from '@tiptap/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { blockAt, runBlockOp } from '$lib/features/documents/block-ops';
+import {
+  blockAt,
+  blockAtHit,
+  blockStartingAt,
+  runBlockOp,
+} from '$lib/features/documents/block-ops';
 import { schemaExtensions } from '$lib/features/documents/editor-schema';
 
 const editors: Editor[] = [];
@@ -148,5 +153,44 @@ describe('block operations (single ProseMirror transactions)', () => {
     e.setEditable(false);
     expect(runBlockOp(e, 'down', posOf(e, 'A'))).toBe(false);
     expect(texts(e)).toEqual(['A', 'B']);
+  });
+});
+
+describe('leaf blocks (divider, image, block math) are addressed by their start', () => {
+  it('finds the divider itself, not the block after it, and deletes only it', () => {
+    const e = make({ type: 'doc', content: [p('a'), { type: 'horizontalRule' }, p('b')] });
+    const hrFrom = e.state.doc.child(0).nodeSize;
+    expect(blockStartingAt(e.state.doc, hrFrom)?.node.type.name).toBe('horizontalRule');
+    // 화면에서 구분선을 가리키면(inside = 구분선 시작) 구분선이다.
+    expect(blockAtHit(e.state.doc, { pos: hrFrom, inside: hrFrom })?.node.type.name).toBe(
+      'horizontalRule',
+    );
+    const block = blockStartingAt(e.state.doc, hrFrom);
+    if (block === undefined) throw new Error('block');
+    expect(runBlockOp(e, 'delete', block)).toBe(true);
+    expect(texts(e)).toEqual(['a', 'b']);
+  });
+
+  it('moves a divider without touching its neighbours', () => {
+    const e = make({ type: 'doc', content: [p('a'), { type: 'horizontalRule' }, p('b')] });
+    const block = blockStartingAt(e.state.doc, e.state.doc.child(0).nodeSize);
+    if (block === undefined) throw new Error('block');
+    runBlockOp(e, 'up', block);
+    expect(e.getJSON().content.map((n) => n.type)).toEqual([
+      'horizontalRule',
+      'paragraph',
+      'paragraph',
+    ]);
+    expect(texts(e)).toEqual(['', 'a', 'b']);
+  });
+
+  it('a block start inside a list resolves to the list item', () => {
+    const e = make({
+      type: 'doc',
+      content: [{ type: 'taskList', content: [task('x'), task('y')] }],
+    });
+    const itemFrom = blockAt(e.state.doc, posOf(e, 'y'))?.from;
+    if (itemFrom === undefined) throw new Error('item');
+    expect(blockStartingAt(e.state.doc, itemFrom)?.node.textContent).toBe('y');
   });
 });

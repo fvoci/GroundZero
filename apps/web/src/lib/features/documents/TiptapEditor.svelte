@@ -65,6 +65,8 @@
   let container = $state<HTMLDivElement | undefined>();
   let bubbleEl = $state<HTMLDivElement | undefined>();
   let menuRequest = $state<number | undefined>(undefined);
+  // 블록 단축키 안내(화면 낭독기가 편집기 설명으로 읽는다).
+  const keysHintId = `editor-keys-${crypto.randomUUID()}`;
 
   /** / 메뉴 항목. 이 편집기에서 지금 할 수 있는 것만(첨부·참조는 기능이 있을 때). */
   function slashItems(): SlashItem[] {
@@ -300,10 +302,11 @@
               : m.documents_placeholder_block(),
       }),
     ];
-    if (bubbleEl !== undefined)
+    const bubble = bubbleEl;
+    if (bubble !== undefined)
       editing.push(
         BubbleMenu.configure({
-          element: bubbleEl,
+          element: bubble,
           options: {
             placement: 'top',
             strategy: 'fixed',
@@ -312,8 +315,10 @@
             shift: { padding: 8 },
           },
           // 글자를 골랐을 때, 또는 링크 안에 커서가 있을 때. 코드 블록 안은 서식이 없으므로 띄우지 않는다.
+          // 편집기(또는 막대 안 입력란)에 초점이 있을 때만. 다른 사람의 편집으로 문서가 바뀌어도 초점 없는 화면에 뜨지 않게.
           shouldShow: ({ editor: e, state }) =>
             e.isEditable &&
+            (e.view.hasFocus() || bubble.contains(document.activeElement)) &&
             !e.isActive('codeBlock') &&
             ((!state.selection.empty && state.selection instanceof TextSelection) ||
               e.isActive('link')),
@@ -343,6 +348,7 @@
           role: 'textbox',
           'aria-multiline': 'true',
           'aria-label': untrack(() => label),
+          ...(untrack(() => editable) ? { 'aria-describedby': keysHintId } : {}),
         },
       },
       onUpdate: ({ editor: e }) => {
@@ -624,13 +630,14 @@
     />
   {/if}
   <div bind:this={element} class="min-h-[12rem] py-3" data-testid="editor"></div>
+  {#if editable}<p id={keysHintId} class="sr-only">{m.documents_block_keys()}</p>{/if}
 </div>
 {#if editable}
   <!-- 선택 도구 막대: BubbleMenu가 보일 때 편집기 옆에 붙이고 숨길 때 떼어 낸다. -->
   <div
     bind:this={bubbleEl}
     class="z-30 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-    style="visibility: hidden"
+    style="visibility: hidden; position: fixed; top: 0; left: 0"
     role="toolbar"
     aria-label={m.documents_bubble_label()}
     data-testid="bubble-toolbar"

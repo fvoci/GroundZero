@@ -2,15 +2,24 @@
   // 블록 왼쪽의 + 단추와 손잡이. 마우스를 올린 블록, 아니면 커서가 있는 블록(키보드·터치)을 따른다.
   // +: 아래에 빈 블록을 넣고 / 메뉴를 연다. 손잡이: 끌어서 옮기기(ProseMirror 기본 끌어 놓기)와 메뉴
   // (위·아래로 옮기기, 복제, 지우기, 유형 바꾸기). 모든 조작은 block-ops의 한 트랜잭션이다.
+  // 위치는 늘 "블록 시작"(블록 노드 바로 앞)으로 들고, 문서가 바뀌면 트랜잭션의 위치 대응으로 옮긴다.
   import type { Editor } from '@tiptap/core';
   import GripVertical from '@lucide/svelte/icons/grip-vertical';
   import Plus from '@lucide/svelte/icons/plus';
+  import type { Transaction } from '@tiptap/pm/state';
 
   import { m } from '$lib/paraglide/messages.js';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
 
   import type { BlockRange } from './block-ops';
-  import { blockAt, focusBlock, runBlockOp, selectBlock } from './block-ops';
+  import {
+    blockAt,
+    blockAtHit,
+    blockStartingAt,
+    focusBlock,
+    runBlockOp,
+    selectBlock,
+  } from './block-ops';
   import { BLOCK_KINDS, blockKindLabel, setBlockKind } from './block-types';
 
   interface Props {
@@ -31,23 +40,27 @@
   const finePointer =
     typeof window.matchMedia === 'function' && window.matchMedia('(pointer: fine)').matches;
 
-  let hoverPos = $state<number | undefined>(undefined);
+  /** 마우스를 올린 블록의 시작. */
+  let hoverFrom = $state<number | undefined>(undefined);
+  /** 손잡이를 누른 순간부터 메뉴가 닫힐 때까지 고정한 블록의 시작(터치에서는 누르면 편집기 초점이 빠진다). */
+  let pinnedFrom = $state<number | undefined>(undefined);
   let menuOpen = $state(false);
-  let menuPos = $state<number | undefined>(undefined);
+  let dragging: { slice: unknown; move: boolean } | undefined;
 
-  /** 지금 손잡이가 붙을 블록. 메뉴가 열려 있으면 연 블록에 고정한다. */
+  const selectionBlockFrom = (): number | undefined =>
+    blockAt(editor.state.doc, editor.state.selection.from)?.from;
+
+  /** 지금 손잡이가 붙을 블록. */
   const target = $derived.by((): { block: BlockRange; top: number } | undefined => {
     if (version < 0 || !editor.isEditable) return undefined;
     // 초점은 Tiptap이 초점·흐림 때도 트랜잭션을 내므로(version) 그때마다 편집기에 직접 묻는다.
     const focused = editor.view.hasFocus();
-    // 손잡이를 누른 순간부터(menuPos) 메뉴가 닫힐 때까지 그 블록에 고정한다. 터치에서는 누르면 편집기 초점이 빠져
-    // 손잡이가 사라지기 때문이다.
-    const pos =
-      menuOpen || menuPos !== undefined
-        ? (menuPos ?? editor.state.selection.from)
-        : (hoverPos ?? (focused ? editor.state.selection.from : undefined));
-    if (pos === undefined) return undefined;
-    const block = blockAt(editor.state.doc, pos);
+    const from =
+      menuOpen || pinnedFrom !== undefined
+        ? (pinnedFrom ?? selectionBlockFrom())
+        : (hoverFrom ?? (focused ? selectionBlockFrom() : undefined));
+    if (from === undefined) return undefined;
+    const block = blockStartingAt(editor.state.doc, from);
     if (block === undefined) return undefined;
     const dom = editor.view.nodeDOM(block.from);
     if (!(dom instanceof HTMLElement)) return undefined;
@@ -57,53 +70,78 @@
 
   const index = $derived(target?.block.index ?? 0);
   const last = $derived(target === undefined ? 0 : target.block.parent.childCount - 1);
+  // 유형 바꾸기는 글을 담는 블록(문단·제목·코드)과 목록 항목에만. 구분선·이미지·표·수식에는 없다.
+  const canTurnInto = $derived(
+    target !== undefined &&
+      (target.block.node.isTextblock ||
+        target.block.node.type.name === 'listItem' ||
+        target.block.node.type.name === 'taskItem' ||
+        target.block.node.type.name === 'blockquote'),
+  );
 
   $effect(() => {
     const view = editor.view;
     const onMove = (event: MouseEvent): void => {
       const rect = view.dom.getBoundingClientRect();
       if (event.clientY < rect.top || event.clientY > rect.bottom) {
-        hoverPos = undefined;
+        hoverFrom = undefined;
         return;
       }
       // 손잡이 쪽(왼쪽 여백)에 있어도 그 줄의 블록을 찾도록 글자 영역 안쪽 x로 묻는다.
       const hit = view.posAtCoords({ left: rect.left + 16, top: event.clientY });
-      hoverPos = hit === null ? undefined : hit.inside >= 0 ? hit.inside + 1 : hit.pos;
+      hoverFrom = hit === null ? undefined : blockAtHit(view.state.doc, hit)?.from;
     };
     const onLeave = (): void => {
-      hoverPos = undefined;
+      hoverFrom = undefined;
+    };
+    // 다른 사람의 편집 등으로 문서가 바뀌면 고정한 블록 위치를 옮긴다. 그 블록이 지워졌으면 메뉴를 닫는다.
+    const onTransaction = ({ transaction }: { transaction: Transaction }): void => {
+      if (!transaction.docChanged) return;
+      const pinned = pinnedFrom;
+      queueMicrotask(() => {
+        hoverFrom = undefined;
+        if (pinned === undefined || pinnedFrom !== pinned) return;
+        const mapped = transaction.mapping.mapResult(pinned, 1);
+        if (mapped.deleted || blockStartingAt(editor.state.doc, mapped.pos) === undefined) {
+          menuOpen = false;
+          pinnedFrom = undefined;
+        } else {
+          pinnedFrom = mapped.pos;
+        }
+      });
     };
     container.addEventListener('mousemove', onMove);
     container.addEventListener('mouseleave', onLeave);
+    editor.on('transaction', onTransaction);
     return () => {
       container.removeEventListener('mousemove', onMove);
       container.removeEventListener('mouseleave', onLeave);
+      editor.off('transaction', onTransaction);
     };
   });
 
   // Ctrl/⌘+/ : 커서가 있는 블록의 메뉴를 연다.
   $effect(() => {
     if (menuRequest === undefined) return;
-    // 메뉴 위치는 늘 "블록 안 첫 자리"(블록 시작 + 1)로 둔다. 커서가 줄 끝이어도 다음 블록으로 넘어가지 않게.
-    const req = blockAt(editor.state.doc, menuRequest);
-    menuPos = (req?.from ?? menuRequest) + 1;
-    menuOpen = true;
+    pinnedFrom = blockAt(editor.state.doc, menuRequest)?.from;
+    menuOpen = pinnedFrom !== undefined;
     onmenuhandled();
   });
 
-  function openMenuFor(blockFrom: number): void {
-    menuPos = blockFrom + 1;
+  /** 누르기가 메뉴를 열지 않고 끝나면(오른쪽 단추, 터치가 스크롤로 바뀜 등) 고정을 푼다. */
+  function releaseIfIdle(): void {
+    setTimeout(() => {
+      if (!menuOpen && dragging === undefined) pinnedFrom = undefined;
+    }, 0);
   }
 
   function act(op: 'up' | 'down' | 'duplicate' | 'delete' | 'below'): void {
-    const pos = menuPos ?? (target === undefined ? undefined : target.block.from + 1);
-    if (pos === undefined) return;
-    runBlockOp(editor, op, pos);
+    if (target !== undefined) runBlockOp(editor, op, target.block);
   }
 
   /** + : 아래에 빈 블록을 넣고 / 를 써서 블록 메뉴를 연다. */
-  function addBelow(pos: number): void {
-    if (runBlockOp(editor, 'below', pos + 1)) editor.chain().focus().insertContent('/').run();
+  function addBelow(block: BlockRange): void {
+    if (runBlockOp(editor, 'below', block)) editor.chain().focus().insertContent('/').run();
   }
 
   function onDragStart(event: DragEvent, block: BlockRange): void {
@@ -118,7 +156,17 @@
     event.dataTransfer.effectAllowed = 'copyMove';
     const dom = view.nodeDOM(block.from);
     if (dom instanceof HTMLElement) event.dataTransfer.setDragImage(dom, 0, 0);
-    view.dragging = { slice, move: true };
+    const handle = { slice, move: true };
+    dragging = handle;
+    view.dragging = handle;
+  }
+
+  /** 끌기가 편집기 밖에서 끝나거나 취소되면(Esc) ProseMirror가 지우지 못한 끌기 상태를 지운다. */
+  function onDragEnd(): void {
+    const view = editor.view;
+    if (dragging !== undefined && view.dragging === dragging) view.dragging = null;
+    dragging = undefined;
+    if (!menuOpen) pinnedFrom = undefined;
   }
 </script>
 
@@ -138,7 +186,7 @@
         e.preventDefault();
       }}
       onclick={() => {
-        addBelow(current.block.from);
+        addBelow(current.block);
       }}
     >
       <Plus class="size-4" aria-hidden="true" />
@@ -146,8 +194,8 @@
     <DropdownMenu.Root
       bind:open={menuOpen}
       onOpenChange={(open: boolean) => {
-        if (open) openMenuFor(current.block.from);
-        else menuPos = undefined;
+        if (open) pinnedFrom = current.block.from;
+        else pinnedFrom = undefined;
       }}
     >
       <DropdownMenu.Trigger>
@@ -158,16 +206,18 @@
             draggable={finePointer}
             class="flex size-6 cursor-grab items-center justify-center rounded hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             aria-label={m.documents_block_menu()}
+            aria-keyshortcuts="Control+/ Meta+/"
             title={`${m.documents_block_menu()} — ${m.documents_block_keys()}`}
             onpointerdowncapture={() => {
-              menuPos = current.block.from + 1;
+              pinnedFrom = current.block.from;
             }}
+            onpointerupcapture={releaseIfIdle}
+            onpointercancel={releaseIfIdle}
+            oncontextmenu={releaseIfIdle}
             ondragstart={(e: DragEvent) => {
               onDragStart(e, current.block);
             }}
-            ondragend={() => {
-              if (!menuOpen) menuPos = undefined;
-            }}
+            ondragend={onDragEnd}
           >
             <GripVertical class="size-4" aria-hidden="true" />
           </button>
@@ -209,12 +259,14 @@
           }}>{m.documents_block_add()}</DropdownMenu.Item
         >
         <DropdownMenu.Sub>
-          <DropdownMenu.SubTrigger>{m.documents_block_turn_into()}</DropdownMenu.SubTrigger>
+          <DropdownMenu.SubTrigger disabled={!canTurnInto}
+            >{m.documents_block_turn_into()}</DropdownMenu.SubTrigger
+          >
           <DropdownMenu.SubContent class="min-w-44">
             {#each BLOCK_KINDS as kind (kind)}
               <DropdownMenu.Item
                 onSelect={() => {
-                  focusBlock(editor, menuPos ?? current.block.from + 1);
+                  focusBlock(editor, current.block.from + 1);
                   setBlockKind(editor, kind);
                 }}>{blockKindLabel(kind)}</DropdownMenu.Item
               >
