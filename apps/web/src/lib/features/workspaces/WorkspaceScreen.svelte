@@ -2,8 +2,6 @@
   // 워크스페이스의 위키 문서 목록과 새 문서 만들기.
   import type { Workspace } from '@fvoci/api-client';
 
-  import type { SummaryView } from '$lib/api/client';
-
   import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
@@ -12,6 +10,7 @@
   import { documentPath, router } from '$lib/router.svelte';
 
   import ModulesSection from '$lib/features/modules/ModulesSection.svelte';
+  import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
 
   import TemplatePicker from '$lib/features/documents/TemplatePicker.svelte';
 
@@ -23,27 +22,21 @@
 
   const { workspace }: Props = $props();
 
-  let docs = $state<SummaryView[] | undefined>(undefined);
-  let templateId = $state('');
-  let error = $state<string | undefined>(undefined);
-
+  // 위키 문서 목록은 사이드바와 같이 쓴다(한 번만 받는다).
   $effect(() => {
-    const wsId = workspace.id;
-    let cancelled = false;
-    docs = undefined;
-    error = undefined;
-    api
-      .wikiDocuments(wsId)
-      .then((list) => {
-        if (!cancelled) docs = list;
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) error = errorText(e, m.workspaces_docs_load_failed());
-      });
-    return () => {
-      cancelled = true;
-    };
+    workspaceNav.show(workspace.id);
   });
+  const docs = $derived(
+    workspaceNav.workspaceId === workspace.id && workspaceNav.docs.state === 'ready'
+      ? workspaceNav.docs.list
+      : undefined,
+  );
+  const error = $derived(
+    workspaceNav.workspaceId === workspace.id && workspaceNav.docs.state === 'error'
+      ? errorText(workspaceNav.docs.error, m.workspaces_docs_load_failed())
+      : undefined,
+  );
+  let templateId = $state('');
 
   const canWrite = $derived(workspace.role !== 'reader');
 
@@ -108,7 +101,7 @@
       {canWrite}
       onmove={async (id: string, move: TreeMove) => {
         await api.setParent(id, move.parentId, move.beforeId);
-        docs = await api.wikiDocuments(workspace.id);
+        workspaceNav.setDocs(workspace.id, await api.wikiDocuments(workspace.id));
       }}
       oncreatechild={async (parentId: string) => {
         const doc = await api.createWikiDocument(
@@ -117,6 +110,7 @@
           m.workspaces_untitled_document(),
           parentId,
         );
+        workspaceNav.refreshDocs();
         router.navigate(documentPath(workspace.id, doc.id));
       }}
     />
@@ -136,6 +130,7 @@
           null,
           templateId === '' ? null : templateId,
         );
+        workspaceNav.refreshDocs();
         router.navigate(documentPath(workspace.id, doc.id));
       }}
     />

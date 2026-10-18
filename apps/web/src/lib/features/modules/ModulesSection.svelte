@@ -5,6 +5,7 @@
   import { api, ApiError, MODULE_KINDS, NetworkError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
+  import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { modulePath, router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
@@ -20,26 +21,20 @@
 
   const { workspace }: Props = $props();
 
-  let modules = $state<Module[] | undefined>(undefined);
-  let loadError = $state<string | undefined>(undefined);
-
+  // 모듈 목록은 사이드바와 같이 쓴다(한 번만 받는다).
   $effect(() => {
-    const wsId = workspace.id;
-    let cancelled = false;
-    modules = undefined;
-    loadError = undefined;
-    api
-      .modules(wsId)
-      .then((list) => {
-        if (!cancelled) modules = list;
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) loadError = errorText(e, m.modules_section_load_failed());
-      });
-    return () => {
-      cancelled = true;
-    };
+    workspaceNav.show(workspace.id);
   });
+  const modules = $derived<Module[] | undefined>(
+    workspaceNav.workspaceId === workspace.id && workspaceNav.modules.state === 'ready'
+      ? workspaceNav.modules.list
+      : undefined,
+  );
+  const loadError = $derived(
+    workspaceNav.workspaceId === workspace.id && workspaceNav.modules.state === 'error'
+      ? errorText(workspaceNav.modules.error, m.modules_section_load_failed())
+      : undefined,
+  );
 
   const isAdmin = $derived(workspace.role === 'admin');
 
@@ -76,6 +71,7 @@
       pending = undefined;
       name = '';
       key = '';
+      workspaceNav.refreshModules();
       router.navigate(modulePath(workspace.id, created.id));
     } catch (e: unknown) {
       if (e instanceof NetworkError) formError = m.modules_create_network();

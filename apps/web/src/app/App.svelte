@@ -25,20 +25,10 @@
   import TimeScreen from '$lib/features/time/TimeScreen.svelte';
   import TimerWidget from '$lib/features/time/TimerWidget.svelte';
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
-  import WorkspaceBadge from '$lib/features/workspaces/WorkspaceBadge.svelte';
   import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
   import { me as currentUser } from '$lib/me.svelte';
-  import {
-    calendarPath,
-    itemPath,
-    membersPath,
-    router,
-    auditPath,
-    trashPath,
-    workspacePath,
-  } from '$lib/router.svelte';
-  import { Button } from '$lib/ui/button';
-  import * as DropdownMenu from '$lib/ui/dropdown-menu';
+  import AppSidebar from '$lib/features/nav/AppSidebar.svelte';
+  import { itemPath, router, workspacePath } from '$lib/router.svelte';
   import * as Sidebar from '$lib/ui/sidebar';
 
   import BackLink from './BackLink.svelte';
@@ -81,11 +71,15 @@
 
   void load();
 
-  /** 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스 목록을 다시 읽는다. */
-  // 읽지 않은 알림 수. 경로가 바뀔 때마다 다시 센다(알림은 접근 권한을 따라 서버가 거른다).
+  // 읽지 않은 알림 수(알림은 접근 권한을 따라 서버가 거른다). 화면을 옮길 때 다시 세되 30초 안에는
+  // 다시 묻지 않는다. 알림 화면에서 읽음 처리하면 곧바로, 창으로 돌아오면 다시 센다.
+  const UNREAD_FRESH_MS = 30_000;
   let unreadCount = $state(0);
-  async function refreshUnread(): Promise<void> {
+  let unreadAt = 0;
+  async function refreshUnread(force = false): Promise<void> {
     if (session.state !== 'signed-in') return;
+    if (!force && Date.now() - unreadAt < UNREAD_FRESH_MS) return;
+    unreadAt = Date.now();
     try {
       unreadCount = (await api.notifications()).filter((n) => !n.read).length;
     } catch {
@@ -95,6 +89,20 @@
   $effect(() => {
     if (session.state === 'signed-in' && router.path !== '') void refreshUnread();
   });
+  $effect(() => {
+    const onFocus = (): void => {
+      void refreshUnread();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+    };
+  });
+
+  // 데스크톱 사이드바를 접었는지(사이드바가 쿠키에 남긴 값). 처음 열 때 그대로 되살린다.
+  const sidebarOpen = !document.cookie.split('; ').includes('sidebar_state=false');
+
+  /** 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스 목록을 다시 읽는다. */
 
   async function reloadWorkspaces(): Promise<void> {
     const workspaces = await api.workspaces();
@@ -118,6 +126,35 @@
     'item',
     'item-document',
   ]);
+  // 글을 읽고 쓰는 화면은 줄 길이를 좁게, 표·칸반·달력이 있는 화면은 넓게 둔다.
+  const READING_ROUTES = new Set([
+    'document',
+    'item-document',
+    'standalone-document',
+    'notes',
+    'shared',
+    'notifications',
+  ]);
+  // 머리글 제목: 워크스페이스 안이면 그 이름, 개인 화면이면 그 화면 이름.
+  const headerTitle = $derived.by(() => {
+    if (currentWorkspace !== undefined) return currentWorkspace.name;
+    switch (route.name) {
+      case 'notes':
+        return m.app_nav_notes();
+      case 'shared':
+        return m.app_nav_shared();
+      case 'notifications':
+        return m.app_nav_notifications();
+      case 'time':
+        return m.app_nav_time();
+      case 'my-trash':
+        return m.app_nav_my_trash();
+      case 'my-audit':
+        return m.app_nav_my_audit();
+      default:
+        return m.app_title_home();
+    }
+  });
   const currentWorkspace = $derived.by(() => {
     if (session.state !== 'signed-in') return undefined;
     if (!WORKSPACE_ROUTES.has(route.name)) return undefined;
@@ -147,126 +184,40 @@
     memberOf={(ws: string) => signedIn.workspaces.some((w) => w.id === ws)}
   />
   <DisplaySettingsDialog bind:open={displayOpen} />
-  <Sidebar.Provider>
-    <Sidebar.Root>
-      <Sidebar.Header>
-        <span class="px-2 text-base font-semibold">fvoci</span>
-        <Button
-          variant="outline"
-          class="justify-between text-muted-foreground"
-          onclick={() => {
-            searchOpen = true;
-          }}
-          data-testid="search-open"
-        >
-          {m.app_search()}<kbd class="text-xs">Ctrl/⌘ K</kbd>
-        </Button>
-      </Sidebar.Header>
-      <Sidebar.Content>
-        <Sidebar.Group>
-          <Sidebar.GroupLabel>{m.app_nav_workspaces()}</Sidebar.GroupLabel>
-          <Sidebar.GroupContent>
-            <Sidebar.Menu>
-              <Sidebar.MenuItem>
-                <Sidebar.MenuButton isActive={route.name === 'home'}>
-                  {#snippet child({ props })}
-                    <a
-                      href="/"
-                      {...props}
-                      onclick={(e: MouseEvent) => {
-                        e.preventDefault();
-                        router.navigate('/');
-                      }}>{m.app_nav_all_workspaces()}</a
-                    >
-                  {/snippet}
-                </Sidebar.MenuButton>
-              </Sidebar.MenuItem>
-              {#each signedIn.workspaces as ws (ws.id)}
-                <Sidebar.MenuItem>
-                  <Sidebar.MenuButton isActive={currentWorkspace?.id === ws.id}>
-                    {#snippet child({ props })}
-                      <a
-                        href={workspacePath(ws.id)}
-                        {...props}
-                        onclick={(e: MouseEvent) => {
-                          e.preventDefault();
-                          router.navigate(workspacePath(ws.id));
-                        }}><WorkspaceBadge workspace={ws} all={signedIn.workspaces} /></a
-                      >
-                    {/snippet}
-                  </Sidebar.MenuButton>
-                </Sidebar.MenuItem>
-              {/each}
-            </Sidebar.Menu>
-          </Sidebar.GroupContent>
-        </Sidebar.Group>
-        <Sidebar.Group>
-          <Sidebar.GroupLabel>{m.app_nav_personal()}</Sidebar.GroupLabel>
-          <Sidebar.GroupContent>
-            <Sidebar.Menu>
-              {#each [{ path: '/notes', label: m.app_nav_notes(), active: route.name === 'notes' }, { path: '/shared', label: m.app_nav_shared(), active: route.name === 'shared' }, { path: '/time', label: m.app_nav_time(), active: route.name === 'time' }, { path: '/trash', label: m.app_nav_my_trash(), active: route.name === 'my-trash' }, { path: '/audit', label: m.app_nav_my_audit(), active: route.name === 'my-audit' }, { path: '/notifications', label: unreadCount > 0 ? m.app_nav_notifications_unread( { count: unreadCount } ) : m.app_nav_notifications(), active: route.name === 'notifications' }] as item (item.path)}
-                <Sidebar.MenuItem>
-                  <Sidebar.MenuButton isActive={item.active}>
-                    {#snippet child({ props })}
-                      <a
-                        href={item.path}
-                        {...props}
-                        onclick={(e: MouseEvent) => {
-                          e.preventDefault();
-                          router.navigate(item.path);
-                        }}>{item.label}</a
-                      >
-                    {/snippet}
-                  </Sidebar.MenuButton>
-                </Sidebar.MenuItem>
-              {/each}
-            </Sidebar.Menu>
-          </Sidebar.GroupContent>
-        </Sidebar.Group>
-      </Sidebar.Content>
-    </Sidebar.Root>
+  <Sidebar.Provider open={sidebarOpen}>
+    <AppSidebar
+      workspaces={signedIn.workspaces}
+      current={currentWorkspace}
+      displayName={signedIn.me.display_name}
+      {unreadCount}
+      onsearch={() => {
+        searchOpen = true;
+      }}
+      ondisplay={() => {
+        displayOpen = true;
+      }}
+      onexport={() => {
+        window.location.assign('/api/me/export');
+      }}
+      onlogout={() => void logout()}
+    />
 
-    <Sidebar.Inset>
-      <header class="flex items-center gap-2 border-b px-4 py-2">
+    <Sidebar.Inset class="min-w-0">
+      <header
+        class="sticky top-0 z-10 flex h-12 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+      >
         <Sidebar.Trigger />
-        <span class="text-base font-semibold"
-          >{currentWorkspace?.name ??
-            (route.name === 'notes'
-              ? m.app_nav_notes()
-              : route.name === 'notifications'
-                ? m.app_nav_notifications()
-                : route.name === 'shared'
-                  ? m.app_nav_shared()
-                  : m.app_title_home())}</span
+        <span class="min-w-0 flex-1 truncate text-base font-semibold" title={headerTitle}
+          >{headerTitle}</span
         >
-        <div class="ml-auto flex items-center gap-2">
+        <div class="flex shrink-0 items-center gap-2">
           <TimerWidget />
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-              {#snippet child({ props })}
-                <Button variant="outline" {...props} data-testid="user-menu"
-                  >{signedIn.me.display_name}</Button
-                >
-              {/snippet}
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end">
-              <DropdownMenu.Item
-                onSelect={() => {
-                  window.location.assign('/api/me/export');
-                }}>{m.app_menu_export()}</DropdownMenu.Item
-              >
-              <DropdownMenu.Item onSelect={() => (displayOpen = true)}
-                >{m.app_menu_display()}</DropdownMenu.Item
-              >
-              <DropdownMenu.Item onSelect={() => void logout()}
-                >{m.app_menu_logout()}</DropdownMenu.Item
-              >
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
         </div>
       </header>
 
-      <main class="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-6">
+      <main
+        class={`mx-auto flex w-full min-w-0 flex-col gap-8 px-4 py-6 sm:px-6 ${READING_ROUTES.has(route.name) ? 'max-w-3xl' : 'max-w-5xl'}`}
+      >
         {#if route.name === 'home'}
           <HomeScreen
             workspaces={signedIn.workspaces}
@@ -290,42 +241,6 @@
               onchanged={() => void reloadWorkspaces()}
             />
           {:else if route.name === 'workspace'}
-            <nav aria-label={m.app_workspace_menu()} class="text-sm">
-              <a
-                class="underline"
-                href={membersPath(currentWorkspace.id)}
-                onclick={(e: MouseEvent) => {
-                  e.preventDefault();
-                  router.navigate(membersPath(currentWorkspace.id));
-                }}>{m.app_members()}</a
-              >
-              <a
-                class="ml-3 underline"
-                href={calendarPath(currentWorkspace.id)}
-                onclick={(e: MouseEvent) => {
-                  e.preventDefault();
-                  router.navigate(calendarPath(currentWorkspace.id));
-                }}>{m.app_calendar()}</a
-              >
-              <a
-                class="ml-3 underline"
-                href={trashPath(currentWorkspace.id)}
-                onclick={(e: MouseEvent) => {
-                  e.preventDefault();
-                  router.navigate(trashPath(currentWorkspace.id));
-                }}>{m.app_trash()}</a
-              >
-              {#if currentWorkspace.role === 'admin'}
-                <a
-                  class="ml-3 underline"
-                  href={auditPath(currentWorkspace.id)}
-                  onclick={(e: MouseEvent) => {
-                    e.preventDefault();
-                    router.navigate(auditPath(currentWorkspace.id));
-                  }}>{m.app_audit()}</a
-                >
-              {/if}
-            </nav>
             <WorkspaceScreen workspace={currentWorkspace} />
           {:else if route.name === 'trash'}
             <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
@@ -340,7 +255,6 @@
             <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
             <ModuleScreen workspace={currentWorkspace} moduleId={route.moduleId} />
           {:else if route.name === 'item'}
-            <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
             <ItemScreen
               workspace={currentWorkspace}
               itemId={route.itemId}
@@ -365,7 +279,7 @@
         {:else if route.name === 'notifications'}
           <NotificationsScreen
             workspaces={signedIn.workspaces}
-            onchanged={() => void refreshUnread()}
+            onchanged={() => void refreshUnread(true)}
           />
         {:else if route.name === 'my-audit'}
           <AuditScreen workspace={undefined} />

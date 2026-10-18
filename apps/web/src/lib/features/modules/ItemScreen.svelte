@@ -1,5 +1,6 @@
 <script lang="ts">
   // 항목 하나: 제목·설명·공개 범위, 보관, 항목 아래 문서 (D-14, D-20, D-59).
+  import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import type { Module, Workspace } from '@fvoci/api-client';
@@ -21,8 +22,9 @@
   import StudyPanel from '$lib/features/study/StudyPanel.svelte';
   import ItemTimePanel from '$lib/features/time/ItemTimePanel.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
+  import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
-  import { itemDocumentPath, modulePath, router } from '$lib/router.svelte';
+  import { itemDocumentPath, modulePath, router, workspacePath } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -75,6 +77,7 @@
         if (cancelled) return;
         fill(it);
         mod = found;
+        workspaceNav.currentModuleId = it.module_id;
         docs = list;
       })
       .catch((e: unknown) => {
@@ -145,15 +148,24 @@
   <section class="flex flex-col gap-6" aria-labelledby="item-heading">
     {#if mod !== undefined}
       {@const parent = mod}
-      <nav aria-label={m.modules_breadcrumb()} class="text-sm">
-        <a
-          class="underline"
-          href={modulePath(workspace.id, parent.id)}
-          onclick={(e: MouseEvent) => {
-            e.preventDefault();
-            router.navigate(modulePath(workspace.id, parent.id));
-          }}>{parent.name}</a
-        >
+      <nav aria-label={m.modules_breadcrumb()} class="-mb-4 min-w-0 text-sm text-muted-foreground">
+        <ol class="flex min-w-0 items-center gap-1">
+          {#each [{ path: workspacePath(workspace.id), label: workspace.name }, { path: modulePath(workspace.id, parent.id), label: `${parent.name} · ${parent.key}` }] as crumb, index (crumb.path)}
+            <li class={`flex min-w-0 items-center gap-1 ${index === 0 ? 'shrink' : 'shrink-0'}`}>
+              {#if index > 0}<ChevronRight class="size-3.5 shrink-0" aria-hidden="true" />{/if}
+              <a
+                class="truncate rounded-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                href={crumb.path}
+                title={crumb.label}
+                onclick={(e: MouseEvent) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                  e.preventDefault();
+                  router.navigate(crumb.path);
+                }}>{crumb.label}</a
+              >
+            </li>
+          {/each}
+        </ol>
       </nav>
     {/if}
     <div class="flex flex-wrap items-baseline gap-2">
