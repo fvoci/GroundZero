@@ -74,6 +74,7 @@ fn render(root: &Path) -> Result<String> {
     );
     out.push_str(body);
     out.push('\n');
+    fonts(root, &mut out)?;
     if !missing.is_empty() {
         out.push_str("==================== Appendix: SPDX license texts ====================\n\n");
         out.push_str("For packages above that do not ship their own license file.\n\n");
@@ -116,6 +117,160 @@ fn section(out: &mut String, title: &str, packages: &[Package], missing: &mut BT
             out.push_str(&format!("[{file}]\n{}\n\n", text));
         }
     }
+}
+
+/// 제품에 든 서체 파일(D-86, OFL-1.1 예외는 이 여섯 파일·판에만). 받은 그대로 두므로 SHA-256이 결정 기록과 같아야
+/// 한다. 폴더에 다른 서체가 생기거나 파일이 바뀌면 실패한다(새 서체는 따로 승인).
+const FONT_DIR: &str = "apps/web/src/assets/fonts";
+
+struct Font {
+    file: &'static str,
+    sha256: &'static str,
+    name: &'static str,
+    source: &'static str,
+    notice: &'static str,
+    license_file: &'static str,
+}
+
+const NOTO_SANS_NOTICE: &str =
+    "\u{a9} 2014-2021 Adobe (http://www.adobe.com/).\nNoto is a trademark of Google Inc.";
+const NOTO_SERIF_NOTICE: &str =
+    "\u{a9} 2017-2024 Adobe (http://www.adobe.com/).\nNoto is a trademark of Google Inc.";
+const D2_REGULAR_NOTICE: &str = "Copyright (c) 2015-2016 NAVER Corporation. All rights reserved. Font designed by FONTRIX Inc.\nD2Coding is a registered trademark of NAVER Corporation.";
+const D2_BOLD_NOTICE: &str = "Copyright (c) 2015-2016 NAVER Corporation. All rights reserved. Font designed by FONTRIX Inc.\nD2Coding Bold is a registered trademark of NAVER Corporation.";
+
+const FONTS: &[Font] = &[
+    Font {
+        file: "NotoSansKR-Regular.otf",
+        sha256: "69975a0ac8472717870aefeab0a4d52739308d90856b9955313b2ad5e0148d68",
+        name: "Noto Sans KR 2.004 Regular",
+        source: "https://github.com/notofonts/noto-cjk/tree/Sans2.004/Sans/SubsetOTF/KR",
+        notice: NOTO_SANS_NOTICE,
+        license_file: "LICENSE-Noto-CJK.txt",
+    },
+    Font {
+        file: "NotoSansKR-Bold.otf",
+        sha256: "5a6ceb287ed2fc6cfc6213144ebea68cbd94b20fc9eb873d8486493bf02d9bda",
+        name: "Noto Sans KR 2.004 Bold",
+        source: "https://github.com/notofonts/noto-cjk/tree/Sans2.004/Sans/SubsetOTF/KR",
+        notice: NOTO_SANS_NOTICE,
+        license_file: "LICENSE-Noto-CJK.txt",
+    },
+    Font {
+        file: "NotoSerifKR-Regular.otf",
+        sha256: "5ea012e15cb7eacc1f680aee1703f3b164791b1443ea3e52b65080cca5d179cf",
+        name: "Noto Serif KR 2.003 Regular",
+        source: "https://github.com/notofonts/noto-cjk/tree/Serif2.003/Serif/SubsetOTF/KR",
+        notice: NOTO_SERIF_NOTICE,
+        license_file: "LICENSE-Noto-CJK.txt",
+    },
+    Font {
+        file: "NotoSerifKR-Bold.otf",
+        sha256: "263408609ef416d597718ea91055379867d3e7086fa32f049996995d4e715e55",
+        name: "Noto Serif KR 2.003 Bold",
+        source: "https://github.com/notofonts/noto-cjk/tree/Serif2.003/Serif/SubsetOTF/KR",
+        notice: NOTO_SERIF_NOTICE,
+        license_file: "LICENSE-Noto-CJK.txt",
+    },
+    Font {
+        file: "D2Coding-Regular.ttf",
+        sha256: "d5f2b6bf5b1826cfbf3734c70582f0cd42ea2e1d6c2636ae681b612bc9c5682f",
+        name: "D2Coding 1.4.0 Regular",
+        source: "https://github.com/naver/d2codingfont/tree/VER1.4.0/fonts/ttf",
+        notice: D2_REGULAR_NOTICE,
+        license_file: "OFL-D2Coding.txt",
+    },
+    Font {
+        file: "D2Coding-Bold.ttf",
+        sha256: "14a0cfa4d96fbd976bc4b1a6ef81e51df353a1689d5273ebcd908c857a4f2752",
+        name: "D2Coding 1.4.0 Bold",
+        source: "https://github.com/naver/d2codingfont/tree/VER1.4.0/fonts/ttf",
+        notice: D2_BOLD_NOTICE,
+        license_file: "OFL-D2Coding.txt",
+    },
+];
+
+/// 서체 파일을 확인하고 고지를 더한다.
+fn fonts(root: &Path, out: &mut String) -> Result<()> {
+    use sha2::{Digest, Sha256};
+    let dir = root.join(FONT_DIR);
+    let licenses: BTreeSet<&str> = FONTS.iter().map(|f| f.license_file).collect();
+    let mut present: BTreeSet<String> = BTreeSet::new();
+    for entry in fs::read_dir(&dir).with_context(|| format!("read {FONT_DIR}"))? {
+        let name = entry?.file_name().to_string_lossy().into_owned();
+        // 운영체제가 만드는 숨김 파일(.DS_Store 등)은 배포물에 들지 않는다.
+        if !name.starts_with('.') {
+            present.insert(name);
+        }
+    }
+    let expected: BTreeSet<String> = FONTS
+        .iter()
+        .map(|f| f.file.to_owned())
+        .chain(licenses.iter().map(|l| (*l).to_owned()))
+        .collect();
+    if present != expected {
+        bail!(
+            "{FONT_DIR} must hold exactly the approved fonts and licenses (D-86): {expected:?}, found {present:?}"
+        );
+    }
+    for font in FONTS {
+        let bytes = fs::read(dir.join(font.file)).with_context(|| format!("read {}", font.file))?;
+        let digest = format!("{:x}", Sha256::digest(&bytes));
+        if digest != font.sha256 {
+            bail!(
+                "{} changed (sha256 {digest}); fonts ship unmodified (D-86)",
+                font.file
+            );
+        }
+    }
+    // 실제로 나가는 번들(위 npm 단계가 만든 `target/notices-web`)의 서체도 확인한다: 다른 패키지의 CSS가 서체를
+    // 끌어오면(예: KaTeX) 고지 없이 나가지 않게, 번들의 서체 파일은 정확히 승인한 여섯이어야 한다.
+    let bundle = root.join("target/notices-web/assets");
+    let approved: BTreeSet<&str> = FONTS.iter().map(|f| f.sha256).collect();
+    let mut shipped: BTreeSet<String> = BTreeSet::new();
+    for entry in fs::read_dir(&bundle).context("web build assets")? {
+        let path = entry?.path();
+        let is_font = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+            matches!(
+                e.to_ascii_lowercase().as_str(),
+                "otf" | "ttf" | "woff" | "woff2" | "eot"
+            )
+        });
+        if !is_font {
+            continue;
+        }
+        let digest = format!("{:x}", Sha256::digest(fs::read(&path)?));
+        if !approved.contains(digest.as_str()) {
+            bail!(
+                "web bundle ships a font that is not approved (D-86): {}",
+                path.display()
+            );
+        }
+        shipped.insert(digest);
+    }
+    if shipped.len() != FONTS.len() {
+        bail!(
+            "web bundle ships {} of the {} approved fonts (D-86)",
+            shipped.len(),
+            FONTS.len()
+        );
+    }
+    out.push_str(&format!(
+        "==================== Fonts (web bundle): {} ====================\n\n",
+        FONTS.len()
+    ));
+    for font in FONTS {
+        out.push_str(&format!(
+            "---- {} ({}) ----\nLicense: OFL-1.1\nSource: {}\nSHA-256: {}\n{}\nLicense text: [{}] below\n\n",
+            font.name, font.file, font.source, font.sha256, font.notice, font.license_file
+        ));
+    }
+    for license in &licenses {
+        let text =
+            fs::read_to_string(dir.join(license)).with_context(|| format!("read {license}"))?;
+        out.push_str(&format!("[{license}]\n{}\n\n", normalize(&text)));
+    }
+    Ok(())
 }
 
 /// crates.io에 올라간 이 판의 소스 묶음.

@@ -1069,12 +1069,18 @@ pub fn router(state: AppState) -> Router {
 
     // 정적 웹: 파일이 없으면 index.html을 돌려 SPA 경로(새로고침)를 지원한다. 해시 파일명 자원(`/assets`)과
     // HWP·HWPX 미리보기 WASM(`/rhwp`, D-76)은 따로 내보내 없는 파일이 SPA 화면(200)이 아니라 404가 되게 한다
-    // (오래 캐시되는 주소에 HTML이 남지 않게). `/rhwp`는 빌드가 만든 br·gzip 사본을 그대로 보낸다.
+    // (오래 캐시되는 주소에 HTML이 남지 않게). 둘 다 이미지 빌드가 만든 br·gzip 사본이 있으면 그대로 보낸다(서체·번들).
+    // 사본이 없으면(개발 빌드) 원본을 보낸다.
     // 캐시 머리글은 맨 바깥 층(`cache::policy`, D-77)이 경로별로 정한다.
     if let Some(dir) = state.config.web_dir.clone() {
         let index = dir.join("index.html");
         app = app
-            .nest_service("/assets", ServeDir::new(dir.join("assets")))
+            .nest_service(
+                "/assets",
+                ServeDir::new(dir.join("assets"))
+                    .precompressed_br()
+                    .precompressed_gzip(),
+            )
             .nest_service(
                 "/rhwp",
                 ServeDir::new(dir.join("rhwp"))

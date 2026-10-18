@@ -15,5 +15,9 @@
   "settings_clock_h12": "12시간(오전·오후)",
   "settings_clock_h23": "24시간",
   "settings_example": "예: {sample}",
+  "settings_doc_font": "문서 본문 서체",
+  "settings_doc_font_sans": "고딕(Noto Sans KR)",
+  "settings_doc_font_serif": "명조(Noto Serif KR)",
+  "settings_doc_font_hint": "이 브라우저에만 적용됩니다. 명조는 고른 뒤 문서를 열 때 서체를 한 번 받습니다.",
   "settings_save_failed": "저장하지 못했습니다."
 }

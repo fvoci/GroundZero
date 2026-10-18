@@ -13,6 +13,8 @@
     formatClock,
     suggestedSettings,
   } from '$lib/display';
+  import type { DocFont } from '$lib/doc-font';
+  import { setDocFont, storedDocFont } from '$lib/doc-font';
   import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -29,6 +31,11 @@
   let zone = $state('');
   let weekStart = $state<WeekStart>('sun');
   let hourCycle = $state<HourCycle>('h12');
+  // 문서 본문 서체(D-86)는 계정이 아니라 이 브라우저에만 둔다.
+  let docFont = $state<DocFont>('sans');
+  /** 대화상자를 열 때의 계정 칸(문서 본문 서체만 바꿨는지 가린다). */
+  let opened = '';
+  const accountFields = (): string => JSON.stringify([locale, zone, weekStart, hourCycle]);
   let error = $state<string | undefined>(undefined);
   const unsaved = $derived(me.locale === '' || me.weekStart === '' || me.hourCycle === '');
 
@@ -38,6 +45,8 @@
       zone = me.timeZone;
       weekStart = asWeekStart(me.weekStart) ?? conventionalWeekStart(locale);
       hourCycle = asHourCycle(me.hourCycle) ?? conventionalHourCycle(locale);
+      docFont = storedDocFont();
+      opened = accountFields();
       error = undefined;
     }
   });
@@ -59,6 +68,14 @@
   );
 
   async function save(): Promise<void> {
+    // 문서 본문 서체는 이 브라우저에만 둔다: 계정 저장과 상관없이 바로 적용한다.
+    const fontChanged = docFont !== storedDocFont();
+    setDocFont(docFont);
+    if (fontChanged && accountFields() === opened) {
+      // 서체만 바꿨으면 계정 설정을 쓰지 않고 새로 읽지도 않는다.
+      open = false;
+      return;
+    }
     try {
       await api.setDisplaySettings({
         time_zone: zone,
@@ -128,6 +145,14 @@
           <option value="h23">{m.settings_clock_h23()}</option>
         </select>
         <span class="text-xs text-muted-foreground">{m.settings_example({ sample })}</span>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-medium">{m.settings_doc_font()}</span>
+        <select class={fieldClass} bind:value={docFont}>
+          <option value="sans">{m.settings_doc_font_sans()}</option>
+          <option value="serif">{m.settings_doc_font_serif()}</option>
+        </select>
+        <span class="text-xs text-muted-foreground">{m.settings_doc_font_hint()}</span>
       </label>
     </div>
     {#if error !== undefined}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}

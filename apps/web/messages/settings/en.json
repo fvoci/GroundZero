@@ -15,5 +15,9 @@
   "settings_clock_h12": "12-hour (AM/PM)",
   "settings_clock_h23": "24-hour",
   "settings_example": "e.g. {sample}",
+  "settings_doc_font": "Document body typeface",
+  "settings_doc_font_sans": "Sans (Noto Sans KR)",
+  "settings_doc_font_serif": "Serif (Noto Serif KR)",
+  "settings_doc_font_hint": "Applies to this browser only. Serif downloads its typeface once when you open a document.",
   "settings_save_failed": "Couldn't save."
 }
