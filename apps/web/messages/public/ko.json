@@ -1,3 +1,8 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "public_link_gone": "링크가 없거나 만료·철회되었습니다.",
+  "public_load_failed": "문서를 불러오지 못했습니다.",
+  "public_loading": "불러오는 중…",
+  "public_read_only_hint": "공개 링크로 보는 읽기 전용 문서입니다.",
+  "public_body_label": "본문"
 }

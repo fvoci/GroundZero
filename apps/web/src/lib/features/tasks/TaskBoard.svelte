@@ -3,9 +3,11 @@
   // 칸반 카드는 버튼과 키보드(Alt+화살표)로 열·순서를 옮긴다. 상세는 주소(/t/{업무})로도 열린다.
   import type { Workspace } from '@fvoci/api-client';
 
-  import type { ItemView, SavedViewView, TaskView } from '$lib/api/client';
+  import type { ItemView, SavedViewView, TaskStatus, TaskView } from '$lib/api/client';
   import { api, ApiError, newRequestId, TASK_STATUSES } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import { me } from '$lib/me.svelte';
+  import { m } from '$lib/paraglide/messages.js';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import TaskCsvImport from './TaskCsvImport.svelte';
   import { itemPath, itemTaskPath, router } from '$lib/router.svelte';
@@ -84,7 +86,7 @@
   async function saveView(): Promise<void> {
     const name = viewName.trim();
     if (name === '') {
-      error = '보기 이름을 적어 주세요.';
+      error = m.tasks_view_name_required();
       return;
     }
     try {
@@ -96,10 +98,10 @@
       viewRequest = newRequestId();
       await loadViews(item.id);
       selectedView = saved.id;
-      status = `보기 "${name}"을(를) 저장했습니다.`;
+      status = m.tasks_view_saved({ name });
       error = undefined;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '보기를 저장하지 못했습니다.';
+      error = errorText(e, m.tasks_view_save_failed());
     }
   }
 
@@ -109,24 +111,43 @@
       await api.deleteView(selectedView);
       selectedView = '';
       await loadViews(item.id);
-      status = '보기를 지웠습니다.';
+      status = m.tasks_view_deleted();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '보기를 지우지 못했습니다.';
+      error = errorText(e, m.tasks_view_delete_failed());
     }
   }
 
+  // 글자는 읽을 때 지금 언어로 만든다.
   const VIEW_LABEL: Record<TaskViewMode, string> = {
-    board: '칸반',
-    list: '목록',
-    gantt: '간트',
-    calendar: '달력',
+    get board() {
+      return m.tasks_view_board();
+    },
+    get list() {
+      return m.tasks_view_list();
+    },
+    get gantt() {
+      return m.tasks_view_gantt();
+    },
+    get calendar() {
+      return m.tasks_view_calendar();
+    },
   };
   const SORT_LABEL: Record<TaskSort, string> = {
-    position: '기본 순서',
-    due: '마감일',
-    priority: '우선순위',
-    title: '제목',
-    updated: '최근 고침',
+    get position() {
+      return m.tasks_sort_position();
+    },
+    get due() {
+      return m.tasks_sort_due();
+    },
+    get priority() {
+      return m.tasks_sort_priority();
+    },
+    get title() {
+      return m.tasks_sort_title();
+    },
+    get updated() {
+      return m.tasks_sort_updated();
+    },
   };
 
   const fieldBox =
@@ -137,7 +158,7 @@
       tasks = await api.tasks(itemId);
       error = undefined;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '업무를 불러오지 못했습니다.';
+      error = errorText(e, m.tasks_load_failed());
     }
   }
 
@@ -172,18 +193,30 @@
     router.navigate(itemPath(item.workspace_id, item.id));
   }
 
-  const ACTION_LABEL: Record<BoardAction, string> = {
-    up: '위로',
-    down: '아래로',
-    left: '왼쪽 열로',
-    right: '오른쪽 열로',
-  };
+  /** 옮긴 뒤 화면 낭독기에 알리는 글. */
+  function movedText(action: BoardAction, title: string, lane: TaskStatus): string {
+    const values = { title, status: STATUS_LABEL[lane] };
+    switch (action) {
+      case 'up':
+        return m.tasks_moved_up(values);
+      case 'down':
+        return m.tasks_moved_down(values);
+      case 'left':
+        return m.tasks_moved_left(values);
+      case 'right':
+        return m.tasks_moved_right(values);
+    }
+  }
 
   /**
    * 옮기기 한 번(단추·키보드·끌어서 놓기 공통). 화면에 먼저 반영하고 기존 이동 API로 저장한 뒤 서버 목록을 다시
    * 읽는다. 실패하면 이전 화면으로 되돌리고 이유를 알린 뒤 최신 상태(동시 변경·권한 철회·보관)를 다시 읽는다.
    */
-  async function commitMove(id: string, plan: BoardMove, how: string): Promise<boolean> {
+  async function commitMove(
+    id: string,
+    plan: BoardMove,
+    how: BoardAction | 'drag',
+  ): Promise<boolean> {
     const before = tasks;
     const title = titleOf(id);
     tasks = applyMove(tasks, id, plan);
@@ -191,7 +224,10 @@
       await api.moveTask(id, plan.status, plan.beforeId);
       await reload();
       moveNotice = undefined;
-      status = `${title}: ${how} 옮겼습니다(${STATUS_LABEL[plan.status]}).`;
+      status =
+        how === 'drag'
+          ? m.tasks_moved_drag({ title, status: STATUS_LABEL[plan.status] })
+          : movedText(how, title, plan.status);
       return true;
     } catch (e: unknown) {
       tasks = before;
@@ -207,7 +243,7 @@
   async function move(id: string, action: BoardAction): Promise<void> {
     const plan = planBoardMove(shown, id, action);
     if (plan === undefined) return;
-    await commitMove(id, plan, ACTION_LABEL[action]);
+    await commitMove(id, plan, action);
     document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(id)}"]`)?.focus();
   }
 
@@ -268,7 +304,7 @@
     if (!d.active) {
       if (Math.hypot(d.x - d.startX, d.y - d.startY) < DRAG_THRESHOLD) return;
       d.active = true;
-      status = `${titleOf(d.id)}을(를) 끄는 중입니다. 놓을 자리에서 놓으세요. Esc로 취소합니다.`;
+      status = m.tasks_drag_started({ title: titleOf(d.id) });
     }
     event.preventDefault();
     window.getSelection()?.removeAllRanges();
@@ -289,16 +325,16 @@
     const slot = slotAt(event.clientX, event.clientY, d.id) ?? d.slot;
     const plan = slot === undefined ? undefined : planDrop(shown, d.id, slot, ordered);
     if (plan === undefined) {
-      status = `${titleOf(d.id)}: 그대로 두었습니다.`;
+      status = m.tasks_drag_unchanged({ title: titleOf(d.id) });
       return;
     }
-    void commitMove(d.id, plan, '끌어서');
+    void commitMove(d.id, plan, 'drag');
   }
 
   function cancelDrag(): void {
     const d = drag;
     drag = undefined;
-    if (d?.active === true) status = `${titleOf(d.id)}: 끌기를 취소했습니다.`;
+    if (d?.active === true) status = m.tasks_drag_cancelled({ title: titleOf(d.id) });
   }
 
   $effect(() => {
@@ -346,8 +382,8 @@
 
 <section class="flex flex-col gap-3" aria-labelledby="tasks-heading">
   <div class="flex flex-wrap items-center gap-2">
-    <h2 id="tasks-heading" class="text-lg font-semibold">업무</h2>
-    <div class="ml-auto flex gap-1" role="group" aria-label="보기">
+    <h2 id="tasks-heading" class="text-lg font-semibold">{m.tasks_heading()}</h2>
+    <div class="ml-auto flex gap-1" role="group" aria-label={m.tasks_view()}>
       {#each VIEWS as v (v)}
         <Button
           size="sm"
@@ -359,56 +395,82 @@
     </div>
   </div>
 
-  <div class="flex flex-wrap items-end gap-2 text-sm" role="search" aria-label="업무 거르기">
+  <div
+    class="flex flex-wrap items-end gap-2 text-sm"
+    role="search"
+    aria-label={m.tasks_filter_region()}
+  >
     <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">찾기</span>
+      <span class="text-xs text-muted-foreground">{m.tasks_filter_find()}</span>
       <input
         class={['w-40', fieldBox]}
         type="search"
         bind:value={filter.text}
-        placeholder="제목·번호"
+        placeholder={m.tasks_filter_find_placeholder()}
       />
     </label>
     <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">상태</span>
-      <select class={fieldBox} bind:value={filter.status} aria-label="상태로 거르기">
-        <option value="any">전체</option>
+      <span class="text-xs text-muted-foreground">{m.tasks_status()}</span>
+      <select class={fieldBox} bind:value={filter.status} aria-label={m.tasks_filter_status_aria()}>
+        <option value="any">{m.tasks_filter_all()}</option>
         {#each TASK_STATUSES as s (s)}<option value={s}>{STATUS_LABEL[s]}</option>{/each}
       </select>
     </label>
     <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">담당</span>
-      <select class={fieldBox} bind:value={filter.assignee} aria-label="담당으로 거르기">
-        <option value="any">전체</option>
-        <option value="me">내 담당</option>
-        <option value="none">담당 없음</option>
+      <span class="text-xs text-muted-foreground">{m.tasks_assignee()}</span>
+      <select
+        class={fieldBox}
+        bind:value={filter.assignee}
+        aria-label={m.tasks_filter_assignee_aria()}
+      >
+        <option value="any">{m.tasks_filter_all()}</option>
+        <option value="me">{m.tasks_filter_mine()}</option>
+        <option value="none">{m.tasks_filter_unassigned()}</option>
         {#each people as [id, name] (id)}<option value={id}>{name}</option>{/each}
       </select>
     </label>
     <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">우선순위</span>
-      <select class={fieldBox} bind:value={filter.priority} aria-label="우선순위로 거르기">
-        <option value="any">전체</option>
+      <span class="text-xs text-muted-foreground">{m.tasks_priority()}</span>
+      <select
+        class={fieldBox}
+        bind:value={filter.priority}
+        aria-label={m.tasks_filter_priority_aria()}
+      >
+        <option value="any">{m.tasks_filter_all()}</option>
         {#each ['urgent', 'high', 'medium', 'low', 'none'] as const as p (p)}<option value={p}
             >{PRIORITY_LABEL[p]}</option
           >{/each}
       </select>
     </label>
     <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">태그</span>
-      <input class={['w-24', fieldBox]} bind:value={filter.tag} aria-label="태그로 거르기" />
+      <span class="text-xs text-muted-foreground">{m.tasks_tag()}</span>
+      <input
+        class={['w-24', fieldBox]}
+        bind:value={filter.tag}
+        aria-label={m.tasks_filter_tag_aria()}
+      />
     </label>
     <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">마감부터</span>
-      <input class={fieldBox} type="date" bind:value={filter.dueFrom} aria-label="마감 시작일" />
+      <span class="text-xs text-muted-foreground">{m.tasks_filter_due_from()}</span>
+      <input
+        class={fieldBox}
+        type="date"
+        bind:value={filter.dueFrom}
+        aria-label={m.tasks_filter_due_from_aria()}
+      />
     </label>
     <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">까지</span>
-      <input class={fieldBox} type="date" bind:value={filter.dueTo} aria-label="마감 끝일" />
+      <span class="text-xs text-muted-foreground">{m.tasks_filter_due_to()}</span>
+      <input
+        class={fieldBox}
+        type="date"
+        bind:value={filter.dueTo}
+        aria-label={m.tasks_filter_due_to_aria()}
+      />
     </label>
     <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">정렬</span>
-      <select class={fieldBox} bind:value={sort} aria-label="정렬">
+      <span class="text-xs text-muted-foreground">{m.tasks_sort()}</span>
+      <select class={fieldBox} bind:value={sort} aria-label={m.tasks_sort()}>
         {#each Object.entries(SORT_LABEL) as [value, label] (value)}<option {value}>{label}</option
           >{/each}
       </select>
@@ -420,41 +482,45 @@
         onclick={() => {
           filter = { ...EMPTY_FILTER };
           sort = 'position';
-        }}>초기화</Button
+        }}>{m.tasks_filter_reset()}</Button
       >
     {/if}
   </div>
   <div class="flex flex-wrap items-end gap-2 text-sm">
     <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">저장한 보기</span>
+      <span class="text-xs text-muted-foreground">{m.tasks_saved_views()}</span>
       <select
-        aria-label="저장한 보기"
+        aria-label={m.tasks_saved_views()}
         class={fieldBox}
         value={selectedView}
         onchange={(e: Event) => {
           if (e.currentTarget instanceof HTMLSelectElement) applyView(e.currentTarget.value);
         }}
       >
-        <option value="">선택</option>
+        <option value="">{m.tasks_saved_view_choose()}</option>
         {#each views as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
       </select>
     </label>
     <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">이름</span>
+      <span class="text-xs text-muted-foreground">{m.tasks_view_name()}</span>
       <input
         class={['w-32', fieldBox]}
         bind:value={viewName}
-        aria-label="보기 이름"
+        aria-label={m.tasks_view_name_aria()}
         maxlength={100}
       />
     </label>
-    <Button size="sm" variant="outline" onclick={() => void saveView()}>지금 보기 저장</Button>
+    <Button size="sm" variant="outline" onclick={() => void saveView()}
+      >{m.tasks_view_save()}</Button
+    >
     {#if selectedView !== ''}
-      <Button size="sm" variant="ghost" onclick={() => void deleteView()}>보기 지우기</Button>
+      <Button size="sm" variant="ghost" onclick={() => void deleteView()}
+        >{m.tasks_view_delete()}</Button
+      >
     {/if}
     {#if isFiltered(filter)}
       <span class="text-xs text-muted-foreground" aria-live="polite"
-        >{shown.length}/{tasks.length}개 보임</span
+        >{m.tasks_filter_shown({ shown: shown.length, total: tasks.length })}</span
       >
     {/if}
   </div>
@@ -474,7 +540,7 @@
             'flex min-w-0 flex-col gap-2 rounded-md border p-2',
             drag?.active === true && drag.slot?.status === lane && 'ring-2 ring-ring',
           ]}
-          aria-label={`${STATUS_LABEL[lane]} 열`}
+          aria-label={m.tasks_lane_aria({ status: STATUS_LABEL[lane] })}
         >
           <h3 class="text-sm font-semibold">
             {STATUS_LABEL[lane]}
@@ -500,7 +566,7 @@
                   {#if canWrite}
                     <span
                       aria-hidden="true"
-                      title="끌어서 옮기기"
+                      title={m.tasks_drag_handle()}
                       class="-ml-1 shrink-0 cursor-grab touch-none px-1 text-muted-foreground select-none"
                       onpointerdown={(e: PointerEvent) => {
                         startDrag(e, t.id, true);
@@ -535,7 +601,8 @@
                 {/if}
                 <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   {#if t.priority !== 'none'}<span>{PRIORITY_LABEL[t.priority]}</span>{/if}
-                  {#if t.due_date !== null}<span>마감 {t.due_date}</span>{/if}
+                  {#if t.due_date !== null}<span>{m.tasks_card_due({ date: t.due_date })}</span
+                    >{/if}
                   {#if t.checklist_total > 0}<span>☑ {t.checklist_done}/{t.checklist_total}</span
                     >{/if}
                   {#if t.assignees.length > 0}<span
@@ -585,10 +652,7 @@
     {/if}
     {#if canWrite}
       <p class="text-xs text-muted-foreground">
-        카드를 끌어 열과 순서를 바꿉니다(터치는 ⠿ 손잡이를 끕니다). 카드에서 Enter로 열고,
-        Alt+왼쪽·오른쪽으로 열을, Alt+위·아래로 순서를 바꿉니다.{ordered
-          ? ''
-          : ' 기본 순서가 아닐 때는 열만 바꿉니다.'}
+        {m.tasks_board_hint()}{ordered ? '' : ` ${m.tasks_board_hint_unordered()}`}
       </p>
     {/if}
   {:else if view === 'gantt'}
@@ -599,10 +663,12 @@
     <table class="w-full text-sm" data-testid="task-list">
       <thead class="text-left text-muted-foreground">
         <tr
-          ><th class="py-1 font-medium">번호</th><th class="font-medium">제목</th><th
-            class="font-medium">상태</th
-          ><th class="font-medium">담당</th><th class="font-medium">마감</th><th class="font-medium"
-            >체크</th
+          ><th class="py-1 font-medium">{m.tasks_col_number()}</th><th class="font-medium"
+            >{m.tasks_title()}</th
+          ><th class="font-medium">{m.tasks_status()}</th><th class="font-medium"
+            >{m.tasks_assignee()}</th
+          ><th class="font-medium">{m.tasks_col_due()}</th><th class="font-medium"
+            >{m.tasks_col_checklist()}</th
           ></tr
         >
       </thead>
@@ -630,7 +696,7 @@
             >
           </tr>
         {:else}
-          <tr><td colspan="6" class="py-2 text-muted-foreground">업무가 없습니다.</td></tr>
+          <tr><td colspan="6" class="py-2 text-muted-foreground">{m.tasks_empty()}</td></tr>
         {/each}
       </tbody>
     </table>
@@ -639,9 +705,9 @@
   {#if canWrite}
     <CreateForm
       id="new-task"
-      label="새 업무 제목"
-      placeholder="예: 로그인 화면"
-      submitLabel="업무 만들기"
+      label={m.tasks_new_title()}
+      placeholder={m.tasks_new_placeholder()}
+      submitLabel={m.tasks_create()}
       create={async (requestId: string, title: string) => {
         await api.createTask(item.id, requestId, title);
         await reload();
@@ -672,8 +738,10 @@
     }}
   >
     <Dialog.Header>
-      <Dialog.Title>{openTaskId === undefined ? '' : titleOf(openTaskId) || '업무'}</Dialog.Title>
-      <Dialog.Description>업무의 상태·담당·일정·체크리스트를 고칩니다.</Dialog.Description>
+      <Dialog.Title
+        >{openTaskId === undefined ? '' : titleOf(openTaskId) || m.tasks_task()}</Dialog.Title
+      >
+      <Dialog.Description>{m.tasks_dialog_description()}</Dialog.Description>
     </Dialog.Header>
     {#if openTaskId !== undefined}
       {#key openTaskId}

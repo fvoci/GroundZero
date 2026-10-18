@@ -2,7 +2,9 @@
   // 업무 CSV 일괄 등록(D-39). 한 줄씩 기존 업무 만들기·고치기 API로 넣는다(같은 검증과 권한). 줄마다 요청 id를
   // 기억해 두어 중간에 실패해도 다시 누르면 이미 만든 업무를 또 만들지 않는다.
   import type { AssigneeView } from '$lib/api/client';
-  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { api, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Label } from '$lib/ui/label';
 
@@ -44,6 +46,8 @@
     busy = true;
     error = undefined;
     let done = 0;
+    // 다른 변경과 겹쳐 멈춘 줄의 제목.
+    let conflicted: string | undefined;
     try {
       for (const [index, row] of result.rows.entries()) {
         const created = await api.createTask(
@@ -63,18 +67,24 @@
           assignee_ids: row.assignee_ids,
           milestone: false,
         });
-        if (updated.kind !== 'updated')
-          throw new Error(`${row.title}: 다른 변경과 겹쳤습니다. 다시 눌러 주세요.`);
+        if (updated.kind !== 'updated') {
+          conflicted = row.title;
+          throw new Error('conflict');
+        }
         done += 1;
-        status = `${String(done)} / ${String(result.rows.length)}개 넣는 중…`;
+        status = m.tasks_csv_progress({ done, total: result.rows.length });
       }
-      status = `업무 ${String(done)}개를 등록했습니다.`;
+      status = m.tasks_csv_imported({ count: done });
       text = '';
       forText = '';
     } catch (e: unknown) {
-      error =
-        (e instanceof ApiError || e instanceof Error ? e.message : '등록하지 못했습니다.') +
-        ` (${String(done)}개 등록됨, 다시 누르면 나머지를 이어서 넣습니다)`;
+      error = m.tasks_csv_import_error({
+        reason:
+          conflicted === undefined
+            ? errorText(e, m.tasks_csv_import_failed())
+            : m.tasks_csv_conflict({ title: conflicted }),
+        count: done,
+      });
     } finally {
       busy = false;
       await onimported();
@@ -83,12 +93,9 @@
 </script>
 
 <details class="text-sm">
-  <summary class="cursor-pointer">CSV로 여러 업무 등록</summary>
+  <summary class="cursor-pointer">{m.tasks_csv_summary()}</summary>
   <div class="flex flex-col gap-2 pt-2">
-    <Label for={`tasks-csv-${itemId}`}
-      >한 줄에 한 업무: 제목, 설명, 상태(할 일·진행 중·완료), 우선순위(없음·낮음·보통·높음·긴급),
-      시작일, 기한(YYYY-MM-DD), 예상(분), 담당자(이름, ;로 여럿), 태그(;로 여럿)</Label
-    >
+    <Label for={`tasks-csv-${itemId}`}>{m.tasks_csv_label()}</Label>
     <textarea
       id={`tasks-csv-${itemId}`}
       class="min-h-32 rounded-md border bg-background p-2 font-mono text-sm"
@@ -97,10 +104,14 @@
       {#if error !== undefined}
         <span class="text-destructive">{error}</span>
       {:else if parsed !== undefined}
-        {parsed.rows.length}개 업무를 읽었습니다.
+        {m.tasks_csv_read({ count: parsed.rows.length })}
         {#if parsed.errors.length > 0}
           <span class="text-destructive">
-            고칠 줄: {parsed.errors.map((er) => `${String(er.line)}번째(${er.reason})`).join(', ')}
+            {m.tasks_csv_fix_lines({
+              lines: parsed.errors
+                .map((er) => m.tasks_csv_line_error({ line: er.line, reason: er.reason }))
+                .join(', '),
+            })}
           </span>
         {/if}
       {:else}
@@ -114,7 +125,7 @@
           parsed === undefined ||
           parsed.rows.length === 0 ||
           parsed.errors.length > 0}
-        onclick={() => void importRows()}>등록</Button
+        onclick={() => void importRows()}>{m.tasks_csv_import()}</Button
       >
     </div>
   </div>

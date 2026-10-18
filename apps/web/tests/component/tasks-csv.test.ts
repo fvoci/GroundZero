@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { parseTasksCsv } from '$lib/features/tasks/csv';
+import { setLocale } from '$lib/paraglide/runtime.js';
 
 const people = [
   { user_id: 'u1', display_name: '김철수' },
@@ -8,6 +9,10 @@ const people = [
 ];
 
 describe('task CSV', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+  });
+
   it('reads fields, maps Korean values and assignees by name', () => {
     const r = parseTasksCsv(
       '제목,설명,상태,우선순위,시작일,기한,예상,담당자,태그\n' +

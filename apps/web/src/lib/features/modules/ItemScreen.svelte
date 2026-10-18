@@ -6,6 +6,7 @@
 
   import type { ItemView, SummaryView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
   import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
@@ -20,6 +21,7 @@
   import StudyPanel from '$lib/features/study/StudyPanel.svelte';
   import ItemTimePanel from '$lib/features/time/ItemTimePanel.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
+  import { m } from '$lib/paraglide/messages.js';
   import { itemDocumentPath, modulePath, router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
@@ -69,18 +71,18 @@
     api
       .item(id)
       .then(async (it) => {
-        const [m, list] = await Promise.all([api.module(it.module_id), api.itemDocuments(id)]);
+        const [found, list] = await Promise.all([api.module(it.module_id), api.itemDocuments(id)]);
         if (cancelled) return;
         fill(it);
-        mod = m;
+        mod = found;
         docs = list;
       })
       .catch((e: unknown) => {
         if (cancelled) return;
         error =
           e instanceof ApiError && e.status === 404
-            ? '항목이 없거나 볼 권한이 없습니다.'
-            : '항목을 불러오지 못했습니다.';
+            ? m.modules_item_not_found()
+            : m.modules_item_load_failed();
       });
     return () => {
       cancelled = true;
@@ -94,7 +96,7 @@
     event.preventDefault();
     if (item === undefined) return;
     if (title.trim() === '') {
-      formError = '제목을 입력하세요.';
+      formError = m.modules_title_required();
       return;
     }
     formError = undefined;
@@ -110,7 +112,7 @@
       forgetReferences();
       saved = true;
     } catch (e: unknown) {
-      formError = e instanceof ApiError ? e.message : '저장하지 못했습니다.';
+      formError = errorText(e, m.modules_save_failed());
     }
   }
 
@@ -120,7 +122,7 @@
       await api.setItemTemplate(item.id, !item.is_template);
       fill(await api.item(item.id));
     } catch (e: unknown) {
-      formError = e instanceof ApiError ? e.message : '바꾸지 못했습니다.';
+      formError = errorText(e, m.modules_change_failed());
     }
   }
 
@@ -129,7 +131,7 @@
     try {
       fill(await api.archiveItem(item.id, !item.archived));
     } catch (e: unknown) {
-      formError = e instanceof ApiError ? e.message : '바꾸지 못했습니다.';
+      formError = errorText(e, m.modules_change_failed());
     }
   }
 </script>
@@ -137,13 +139,13 @@
 {#if error !== undefined}
   <p role="alert" class="text-destructive">{error}</p>
 {:else if item === undefined}
-  <p aria-live="polite">불러오는 중…</p>
+  <p aria-live="polite">{m.modules_loading()}</p>
 {:else}
   {@const current = item}
   <section class="flex flex-col gap-6" aria-labelledby="item-heading">
     {#if mod !== undefined}
       {@const parent = mod}
-      <nav aria-label="경로" class="text-sm">
+      <nav aria-label={m.modules_breadcrumb()} class="text-sm">
         <a
           class="underline"
           href={modulePath(workspace.id, parent.id)}
@@ -158,15 +160,17 @@
       <span class="font-mono text-sm text-muted-foreground">{current.reference}</span>
       <h1 id="item-heading" class="text-xl font-semibold">{current.title}</h1>
       <Badge variant="outline"
-        >{current.visibility === 'private' ? '비공개' : '워크스페이스 공개'}</Badge
+        >{current.visibility === 'private'
+          ? m.modules_private()
+          : m.modules_shared_workspace()}</Badge
       >
-      {#if current.archived}<Badge variant="secondary">보관됨 · 읽기 전용</Badge>{/if}
-      {#if current.is_template}<Badge variant="secondary">템플릿</Badge>{/if}
+      {#if current.archived}<Badge variant="secondary">{m.modules_archived_readonly()}</Badge>{/if}
+      {#if current.is_template}<Badge variant="secondary">{m.modules_template()}</Badge>{/if}
       <div class="ml-auto flex flex-wrap items-center gap-1">
         <MarkButtons kind="item" id={current.id} />
         {#if isOwner}
           <DeleteButton
-            what="항목"
+            what={m.modules_delete_item_what()}
             remove={() => api.trashItem(current.id)}
             ondeleted={() => {
               router.navigate(modulePath(workspace.id, current.module_id));
@@ -181,14 +185,14 @@
         class="flex flex-col gap-3"
         onsubmit={(e) => void save(e)}
         novalidate
-        aria-label="항목 정보"
+        aria-label={m.modules_item_info()}
       >
         <div class="flex flex-col gap-1">
-          <Label for="item-title">제목</Label>
+          <Label for="item-title">{m.modules_title()}</Label>
           <Input id="item-title" bind:value={title} maxlength={200} />
         </div>
         <div class="flex flex-col gap-1">
-          <Label for="item-description">설명</Label>
+          <Label for="item-description">{m.modules_description()}</Label>
           <textarea
             id="item-description"
             bind:value={description}
@@ -200,15 +204,14 @@
         {#if isOwner}
           <div class="flex items-center gap-2">
             <Checkbox id="item-shared" bind:checked={shared} />
-            <Label for="item-shared">워크스페이스 멤버에게 공개(독자는 읽기, 작성자는 고치기)</Label
-            >
+            <Label for="item-shared">{m.modules_share_with_members()}</Label>
           </div>
         {/if}
         <div class="flex gap-2">
-          <Button type="submit">저장</Button>
+          <Button type="submit">{m.common_save()}</Button>
           {#if isOwner}
             <Button type="button" variant="outline" onclick={() => void toggleArchive()}
-              >보관</Button
+              >{m.modules_archive()}</Button
             >
           {/if}
         </div>
@@ -219,11 +222,13 @@
       {/if}
       {#if current.archived && isOwner}
         <div>
-          <Button variant="outline" onclick={() => void toggleArchive()}>보관 해제</Button>
+          <Button variant="outline" onclick={() => void toggleArchive()}
+            >{m.modules_unarchive()}</Button
+          >
         </div>
       {/if}
     {/if}
-    {#if saved}<p class="text-sm" role="status">저장했습니다.</p>{/if}
+    {#if saved}<p class="text-sm" role="status">{m.common_saved()}</p>{/if}
     {#if formError !== undefined}
       <p class="text-sm text-destructive" role="alert">{formError}</p>
     {/if}
@@ -245,7 +250,7 @@
           <ItemCopy item={current} module={mod} />
           {#if canEdit}
             <Button size="sm" variant="outline" onclick={() => void toggleTemplate()}
-              >{current.is_template ? '템플릿 해제' : '템플릿으로 표시'}</Button
+              >{current.is_template ? m.modules_template_unset() : m.modules_template_set()}</Button
             >
           {/if}
         </div>
@@ -266,13 +271,13 @@
     <AttachmentsPanel target={{ kind: 'item', id: current.id }} canWrite={canEdit} />
 
     <section class="flex flex-col gap-3" aria-labelledby="item-docs-heading">
-      <h2 id="item-docs-heading" class="text-lg font-semibold">문서</h2>
+      <h2 id="item-docs-heading" class="text-lg font-semibold">{m.modules_documents()}</h2>
       {#if docs.length === 0}
-        <p class="text-muted-foreground">문서가 없습니다.</p>
+        <p class="text-muted-foreground">{m.modules_documents_empty()}</p>
       {:else}
         <DocumentTree
           {docs}
-          label={`${current.title} 문서`}
+          label={m.modules_documents_tree({ title: current.title })}
           hrefFor={(id: string) => itemDocumentPath(workspace.id, current.id, id)}
           navigate={(path: string) => {
             router.navigate(path);
@@ -286,7 +291,7 @@
             const doc = await api.createItemDocument(
               current.id,
               newRequestId(),
-              '새 문서',
+              m.modules_new_document_default(),
               parentId,
             );
             router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
@@ -301,9 +306,9 @@
         />
         <CreateForm
           id="new-item-document"
-          label="새 문서 제목"
-          placeholder="예: 설계 메모"
-          submitLabel="문서 만들기"
+          label={m.modules_new_document_title()}
+          placeholder={m.modules_new_document_placeholder()}
+          submitLabel={m.modules_create_document()}
           create={async (requestId: string, docTitle: string) => {
             const doc = await api.createItemDocument(
               current.id,

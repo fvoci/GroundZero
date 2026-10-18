@@ -25,5 +25,14 @@
   "app_audit": "감사 기록",
   "app_back_to_item": "항목으로",
   "app_wiki_of": "{name} 위키",
-  "app_not_found": "페이지를 찾을 수 없습니다."
+  "app_not_found": "페이지를 찾을 수 없습니다.",
+  "app_breadcrumb": "경로",
+  "app_login_intro": "작업·지식·학습을 한곳에서 관리합니다. 계속하려면 로그인하세요.",
+  "app_login": "로그인",
+  "app_login_unconfigured": "로그인 제공자가 설정되지 않았습니다. 운영자는 FVOCI_OIDC_ISSUER 등을 설정해야 합니다.",
+  "app_health_checking": "서버 상태 확인 중…",
+  "app_health_ok": "서버 정상 (database: {database})",
+  "app_health_degraded": "서버 응답은 있으나 데이터베이스 연결 실패",
+  "app_health_unreachable": "서버에 연결할 수 없음: {message}",
+  "app_toggle_sidebar": "사이드바 열고 닫기"
 }

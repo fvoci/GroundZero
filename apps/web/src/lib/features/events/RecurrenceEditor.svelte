@@ -3,13 +3,15 @@
   // 없는 날(31일·2월 29일)은 건너뛴다. 저장하면 이미 만든 회차는 바뀌지 않는다.
   import type { Frequency, RecurrenceRule } from '$lib/api/client';
   import { FREQUENCIES } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
-  import { describeRule, WEEKDAY_LABEL } from './labels';
+  import { describeRule, ISO_WEEKDAYS, weekdayLabel } from './labels';
 
   interface Props {
     idPrefix: string;
@@ -23,11 +25,21 @@
   const { idPrefix, rule, canEdit, zoneNote, onsave }: Props = $props();
 
   const FREQ_LABEL: Record<Frequency | 'none', string> = {
-    none: '반복 안 함',
-    daily: '매일',
-    weekly: '매주',
-    monthly: '매달',
-    yearly: '매년',
+    get none() {
+      return m.events_freq_none();
+    },
+    get daily() {
+      return m.events_rule_daily();
+    },
+    get weekly() {
+      return m.events_rule_weekly();
+    },
+    get monthly() {
+      return m.events_rule_monthly();
+    },
+    get yearly() {
+      return m.events_rule_yearly();
+    },
   };
 
   function initial(): {
@@ -58,14 +70,13 @@
     if (f.freq === 'none') return null;
     const interval = Number(f.interval.trim());
     if (!Number.isInteger(interval) || interval < 1 || interval > 99)
-      return '간격은 1~99 사이의 정수여야 합니다.';
+      return m.events_interval_invalid();
     let count: number | null = null;
     if (f.end === 'count') {
       count = Number(f.count.trim());
-      if (!Number.isInteger(count) || count < 1 || count > 1000)
-        return '횟수는 1~1000 사이의 정수여야 합니다.';
+      if (!Number.isInteger(count) || count < 1 || count > 1000) return m.events_count_invalid();
     }
-    if (f.end === 'until' && f.until === '') return '끝 날짜를 고르세요.';
+    if (f.end === 'until' && f.until === '') return m.events_until_required();
     return {
       freq: f.freq,
       interval,
@@ -90,7 +101,7 @@
       await onsave(rule);
       saved = true;
     } catch (e: unknown) {
-      error = e instanceof Error ? e.message : '반복을 저장하지 못했습니다.';
+      error = errorText(e, m.events_recurrence_save_failed());
     } finally {
       busy = false;
     }
@@ -98,14 +109,15 @@
 </script>
 
 <section class="flex flex-col gap-2" aria-labelledby={`${idPrefix}-heading`}>
-  <h3 id={`${idPrefix}-heading`} class="text-sm font-semibold">반복</h3>
+  <h3 id={`${idPrefix}-heading`} class="text-sm font-semibold">{m.events_recurrence()}</h3>
   <p class="text-sm text-muted-foreground">
-    {rule === null ? '반복하지 않습니다.' : describeRule(rule)} ({zoneNote})
+    {rule === null ? m.events_no_recurrence() : describeRule(rule)} ({zoneNote})
   </p>
   {#if canEdit}
     <form class="flex flex-wrap items-end gap-3" onsubmit={(e) => void save(e)}>
       <div class="flex flex-col gap-1">
-        <span class="text-sm font-medium" id={`${idPrefix}-freq-label`}>주기</span>
+        <span class="text-sm font-medium" id={`${idPrefix}-freq-label`}>{m.events_frequency()}</span
+        >
         <Select.Root
           type="single"
           value={f.freq}
@@ -127,7 +139,7 @@
       </div>
       {#if f.freq !== 'none'}
         <div class="flex flex-col gap-1">
-          <Label for={`${idPrefix}-interval`}>간격</Label>
+          <Label for={`${idPrefix}-interval`}>{m.events_interval()}</Label>
           <Input
             id={`${idPrefix}-interval`}
             class="w-20"
@@ -137,60 +149,63 @@
         </div>
         {#if f.freq === 'weekly'}
           <fieldset class="flex flex-col gap-1">
-            <legend class="text-sm font-medium">요일(비우면 기준일 요일)</legend>
+            <legend class="text-sm font-medium">{m.events_weekdays_legend()}</legend>
             <div class="flex flex-wrap gap-2">
-              {#each WEEKDAY_LABEL as label, i (label)}
+              {#each ISO_WEEKDAYS as day (day)}
                 <span class="flex items-center gap-1">
                   <Checkbox
-                    id={`${idPrefix}-wd-${String(i + 1)}`}
-                    checked={f.weekdays.includes(i + 1)}
+                    id={`${idPrefix}-wd-${String(day)}`}
+                    checked={f.weekdays.includes(day)}
                     onCheckedChange={(v) => {
                       f.weekdays =
                         v === true
-                          ? [...new Set([...f.weekdays, i + 1])]
-                          : f.weekdays.filter((d) => d !== i + 1);
+                          ? [...new Set([...f.weekdays, day])]
+                          : f.weekdays.filter((d) => d !== day);
                     }}
                   />
-                  <Label for={`${idPrefix}-wd-${String(i + 1)}`}>{label}</Label>
+                  <Label for={`${idPrefix}-wd-${String(day)}`}>{weekdayLabel(day)}</Label>
                 </span>
               {/each}
             </div>
           </fieldset>
         {/if}
         <fieldset class="flex flex-col gap-1">
-          <legend class="text-sm font-medium">끝</legend>
+          <legend class="text-sm font-medium">{m.events_end()}</legend>
           <div class="flex flex-wrap items-center gap-3 text-sm">
             <label class="flex items-center gap-1"
-              ><input type="radio" bind:group={f.end} value="never" /> 없음</label
+              ><input type="radio" bind:group={f.end} value="never" />
+              {m.events_end_never()}</label
             >
             <label class="flex items-center gap-1"
-              ><input type="radio" bind:group={f.end} value="until" /> 날짜까지</label
+              ><input type="radio" bind:group={f.end} value="until" />
+              {m.events_end_until()}</label
             >
             {#if f.end === 'until'}
               <Input
                 class="w-40"
                 type="date"
                 bind:value={f.until}
-                aria-label="반복 끝 날짜"
+                aria-label={m.events_end_until_aria()}
                 required
               />
             {/if}
             <label class="flex items-center gap-1"
-              ><input type="radio" bind:group={f.end} value="count" /> 횟수</label
+              ><input type="radio" bind:group={f.end} value="count" />
+              {m.events_end_count()}</label
             >
             {#if f.end === 'count'}
               <Input
                 class="w-24"
                 inputmode="numeric"
                 bind:value={f.count}
-                aria-label="반복 횟수(첫 회차 포함)"
+                aria-label={m.events_end_count_aria()}
               />
             {/if}
           </div>
         </fieldset>
       {/if}
-      <Button type="submit" size="sm" disabled={busy}>반복 저장</Button>
-      {#if saved}<span class="text-sm" role="status">저장했습니다.</span>{/if}
+      <Button type="submit" size="sm" disabled={busy}>{m.events_recurrence_save()}</Button>
+      {#if saved}<span class="text-sm" role="status">{m.common_saved()}</span>{/if}
     </form>
     {#if error !== undefined}
       <p role="alert" class="text-sm text-destructive">{error}</p>

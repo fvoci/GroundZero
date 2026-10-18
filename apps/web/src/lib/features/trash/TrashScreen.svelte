@@ -4,9 +4,11 @@
   import type { Workspace } from '@fvoci/api-client';
 
   import type { TrashEntryView, TrashView } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { formatInstant } from '$lib/display';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
-  import { localTimeZone, wallTime } from '$lib/features/events/time';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
@@ -18,7 +20,6 @@
 
   const { workspace }: Props = $props();
 
-  const zone = localTimeZone();
   let trash = $state<TrashView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
   let status = $state('');
@@ -48,8 +49,7 @@
         error = undefined;
       })
       .catch((e: unknown) => {
-        if (mine === seq)
-          error = e instanceof ApiError ? e.message : '휴지통을 불러오지 못했습니다.';
+        if (mine === seq) error = errorText(e, m.trash_load_failed());
       });
   });
 
@@ -62,19 +62,27 @@
       confirmPurge = undefined;
       reloadKey += 1;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '처리하지 못했습니다.';
+      error = errorText(e, m.trash_action_failed());
     }
   }
 
-  const KIND = {
-    module: '모듈',
-    item: '항목',
-    document: '문서',
-    task: '업무',
-    event: '일정',
-    file: '파일',
-  } as const;
-  const when = (iso: string): string => wallTime(iso, zone).replace('T', ' ');
+  function kindLabel(kind: TrashEntryView['kind']): string {
+    switch (kind) {
+      case 'module':
+        return m.trash_kind_module();
+      case 'item':
+        return m.trash_kind_item();
+      case 'document':
+        return m.trash_kind_document();
+      case 'task':
+        return m.trash_kind_task();
+      case 'event':
+        return m.trash_kind_event();
+      case 'file':
+        return m.trash_kind_file();
+    }
+  }
+  const when = (iso: string): string => formatInstant(iso);
   const expiredCount = $derived(trash?.entries.filter((e) => e.expired).length ?? 0);
   // 만료된 것 일괄 삭제 확인(관리자 직접 삭제는 참조 때문에 남긴 묶음도 지운다, O-34의 기존 정책).
   const EXPIRED = 'expired';
@@ -82,17 +90,26 @@
     trash?.entries.filter((e) => e.expired && e.kept_for_references).length ?? 0,
   );
   const label = (e: TrashEntryView): string =>
-    `${KIND[e.kind]} “${e.title}”${e.member_count > 1 ? `(하위 포함 ${String(e.member_count)}개)` : ''}`;
+    e.member_count > 1
+      ? m.trash_entry_with_children({
+          kind: kindLabel(e.kind),
+          title: e.title,
+          count: e.member_count,
+        })
+      : m.trash_entry({ kind: kindLabel(e.kind), title: e.title });
 </script>
 
 <section class="flex flex-col gap-4" aria-labelledby="trash-heading">
   <h1 id="trash-heading" class="text-xl font-semibold">
-    {workspace === undefined ? '내 노트 휴지통' : `${workspace.name} 휴지통`}
+    {workspace === undefined
+      ? m.trash_my_heading()
+      : m.trash_workspace_heading({ workspace: workspace.name })}
   </h1>
   {#if trash !== undefined}
     <p class="text-sm text-muted-foreground">
-      지운 날부터 {trash.retention_days}일 동안 되살릴 수 있습니다. 기간이 지난 것은 되살릴 수 없고
-      {isAdmin ? '영구 삭제할 수 있습니다' : '관리자가 영구 삭제합니다'}.
+      {isAdmin
+        ? m.trash_retention_admin({ days: trash.retention_days })
+        : m.trash_retention_member({ days: trash.retention_days })}
     </p>
   {/if}
   {#if error !== undefined}
@@ -107,17 +124,17 @@
         e.preventDefault();
         const n = Number(days.trim());
         if (!Number.isInteger(n) || n < 1 || n > 3650) {
-          error = '보존 기간은 1~3650일입니다.';
+          error = m.trash_retention_invalid();
           return;
         }
         void run(
           () => api.setTrashRetention(workspace.id, n),
-          `보존 기간을 ${String(n)}일로 바꿨습니다.`,
+          m.trash_retention_changed({ days: n }),
         );
       }}
     >
       <div class="flex flex-col gap-1">
-        <Label for="trash-retention">보존 기간(일)</Label>
+        <Label for="trash-retention">{m.trash_retention_label()}</Label>
         <Input
           id="trash-retention"
           class="w-28"
@@ -126,29 +143,27 @@
           oninput={() => (editingDays = true)}
         />
       </div>
-      <Button type="submit" variant="outline">바꾸기</Button>
+      <Button type="submit" variant="outline">{m.trash_change()}</Button>
     </form>
     <form
       class="flex flex-wrap items-end gap-2"
-      aria-label="이전 파일 버전 보존"
+      aria-label={m.trash_version_retention_region()}
       onsubmit={(e) => {
         e.preventDefault();
         const raw = versionDays.trim();
         const n = raw === '' ? null : Number(raw);
         if (n !== null && (!Number.isInteger(n) || n < 1 || n > 3650)) {
-          error = '이전 버전 보존 기간은 1~3650일이거나 비워 둡니다(영구 보존).';
+          error = m.trash_version_retention_invalid();
           return;
         }
         void run(
           () => api.setVersionRetention(workspace.id, n),
-          n === null
-            ? '이전 파일 버전을 영구 보존합니다.'
-            : `이전 파일 버전을 ${String(n)}일 보존합니다.`,
+          n === null ? m.trash_versions_forever() : m.trash_versions_days({ days: n }),
         );
       }}
     >
       <div class="flex flex-col gap-1">
-        <Label for="version-retention">이전 파일 버전 보존(일, 비우면 영구)</Label>
+        <Label for="version-retention">{m.trash_version_retention_label()}</Label>
         <Input
           id="version-retention"
           class="w-28"
@@ -157,10 +172,9 @@
           oninput={() => (editingVersionDays = true)}
         />
       </div>
-      <Button type="submit" variant="outline">바꾸기</Button>
+      <Button type="submit" variant="outline">{m.trash_change()}</Button>
       <p class="w-full text-sm text-muted-foreground">
-        기간이 지난 이전 버전은 자동으로 지웁니다. 분석 등 기록이 연결했거나 문서가 가리키는 버전과
-        지금 버전은 지우지 않습니다.
+        {m.trash_version_retention_hint()}
       </p>
     </form>
   {/if}
@@ -169,12 +183,11 @@
     <div class="flex flex-wrap items-center gap-2 text-sm">
       {#if confirmPurge === EXPIRED}
         <span role="status">
-          되돌릴 수 없습니다.
+          {m.trash_irreversible()}
           {#if keptCount > 0}
-            그중 {keptCount}개는 기록이나 문서가 가리키는 버전이 있어 지우면 그 그림·파일 연결이
-            끊깁니다.
+            {m.trash_purge_expired_kept({ count: keptCount })}
           {/if}
-          만료된 {expiredCount}개를 영구 삭제할까요?
+          {m.trash_purge_expired_question({ count: expiredCount })}
         </span>
         <Button
           variant="destructive"
@@ -182,13 +195,15 @@
           onclick={() =>
             void run(
               () => api.purgeExpiredTrash(workspace?.id ?? null),
-              `만료된 ${String(expiredCount)}개를 영구 삭제했습니다.`,
-            )}>영구 삭제</Button
+              m.trash_purged_expired({ count: expiredCount }),
+            )}>{m.trash_purge()}</Button
         >
-        <Button size="sm" variant="ghost" onclick={() => (confirmPurge = undefined)}>취소</Button>
+        <Button size="sm" variant="ghost" onclick={() => (confirmPurge = undefined)}
+          >{m.common_cancel()}</Button
+        >
       {:else}
         <Button variant="destructive" size="sm" onclick={() => (confirmPurge = EXPIRED)}
-          >만료된 {expiredCount}개 영구 삭제…</Button
+          >{m.trash_purge_expired_button({ count: expiredCount })}</Button
         >
       {/if}
     </div>
@@ -200,13 +215,12 @@
         <span class="min-w-0 flex-1">
           {label(e)}
           <span class="block text-xs text-muted-foreground">
-            {e.deleted_by_name ?? ''} · {when(e.deleted_at)}에 지움 ·
-            {e.expired ? '만료됨' : `${when(e.expires_at)}까지`}
+            {e.deleted_by_name ?? ''} · {m.trash_deleted_at({ when: when(e.deleted_at) })} ·
+            {e.expired ? m.trash_expired() : m.trash_until({ when: when(e.expires_at) })}
           </span>
           {#if e.kept_for_references}
             <span class="block text-xs text-muted-foreground">
-              기록이나 문서가 이 파일의 버전을 가리키고 있어 자동으로 지우지 않습니다. 기한이
-              지났어도 되살릴 수 있습니다.
+              {m.trash_kept_hint()}
             </span>
           {/if}
         </span>
@@ -214,35 +228,37 @@
           <Button
             size="sm"
             variant="outline"
-            onclick={() => void run(() => api.restoreTrash(e.id), `되살렸습니다: ${label(e)}`)}
-            >되살리기</Button
+            onclick={() =>
+              void run(() => api.restoreTrash(e.id), m.trash_restored({ label: label(e) }))}
+            >{m.trash_restore()}</Button
           >
         {/if}
         {#if e.can_purge}
           {#if confirmPurge === e.id}
             <span role="status"
-              >되돌릴 수 없습니다.{e.kept_for_references
-                ? ' 이 파일의 버전을 가리키는 그림·파일 연결이 끊깁니다.'
-                : ''} 영구 삭제할까요?</span
+              >{e.kept_for_references
+                ? m.trash_purge_question_kept()
+                : m.trash_purge_question()}</span
             >
             <Button
               size="sm"
               variant="destructive"
-              onclick={() => void run(() => api.purgeTrash(e.id), `영구 삭제했습니다: ${label(e)}`)}
-              >영구 삭제</Button
+              onclick={() =>
+                void run(() => api.purgeTrash(e.id), m.trash_purged({ label: label(e) }))}
+              >{m.trash_purge()}</Button
             >
             <Button size="sm" variant="ghost" onclick={() => (confirmPurge = undefined)}
-              >취소</Button
+              >{m.common_cancel()}</Button
             >
           {:else}
             <Button size="sm" variant="ghost" onclick={() => (confirmPurge = e.id)}
-              >영구 삭제…</Button
+              >{m.trash_purge_ellipsis()}</Button
             >
           {/if}
         {/if}
       </li>
     {:else}
-      <li class="text-sm text-muted-foreground">휴지통이 비어 있습니다.</li>
+      <li class="text-sm text-muted-foreground">{m.trash_empty()}</li>
     {/each}
   </ul>
 </section>

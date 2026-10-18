@@ -3,7 +3,9 @@
   // 편집 중 저장하지 않은 내용은 편집기의 초안 보존(D-53)이 지킨다.
   import { formatInstant } from '$lib/display';
   import type { DocumentView, RevisionSummaryView, RevisionView } from '$lib/api/client';
-  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { api, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
 
@@ -37,7 +39,7 @@
       more = page.length === PAGE;
       error = undefined;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '기록을 불러오지 못했습니다.';
+      error = errorText(e, m.documents_history_load_failed());
     }
   }
 
@@ -47,7 +49,7 @@
       previous = revision > 1 ? await api.revision(doc.id, revision - 1) : undefined;
       error = undefined;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '리비전을 불러오지 못했습니다.';
+      error = errorText(e, m.documents_revision_load_failed());
     }
   }
 
@@ -86,14 +88,14 @@
         baseRevision: pending.base,
       });
       if (result.kind === 'conflict') {
-        error = `그사이 리비전 ${String(result.current.revision)}이 저장되었습니다. 저장을 마치거나 새로고침한 뒤 다시 복원하세요.`;
+        error = m.documents_restore_conflict({ revision: result.current.revision });
         return;
       }
       pending = undefined;
       open = false;
       onrestored(result.document);
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '복원하지 못했습니다.';
+      error = errorText(e, m.documents_restore_failed());
     } finally {
       busy = false;
     }
@@ -102,19 +104,22 @@
   const when = (iso: string): string => formatInstant(iso);
 </script>
 
-<Button size="sm" variant="outline" onclick={openHistory}>기록</Button>
+<Button size="sm" variant="outline" onclick={openHistory}>{m.documents_history_button()}</Button>
 
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-4xl">
     <Dialog.Header>
-      <Dialog.Title>리비전 기록</Dialog.Title>
+      <Dialog.Title>{m.documents_history_title()}</Dialog.Title>
       <Dialog.Description>
-        지금은 리비전 {doc.revision}입니다. 복원하면 고른 리비전의 내용으로 새 리비전이 생기고 이전
-        기록은 그대로 남습니다. 연결된 업무·진도 상태는 되돌리지 않습니다.
+        {m.documents_history_description({ revision: doc.revision })}
       </Dialog.Description>
     </Dialog.Header>
     <div class="grid max-h-[65vh] gap-4 overflow-hidden md:grid-cols-[14rem_1fr]">
-      <div class="flex min-h-0 flex-col gap-1 overflow-y-auto" role="listbox" aria-label="리비전">
+      <div
+        class="flex min-h-0 flex-col gap-1 overflow-y-auto"
+        role="listbox"
+        aria-label={m.documents_revisions_label()}
+      >
         {#each list as rev (rev.revision)}
           <button
             type="button"
@@ -124,53 +129,61 @@
             onclick={() => void choose(rev.revision)}
           >
             <span class="font-mono">r{rev.revision}</span>
-            <span class="text-muted-foreground">{rev.author_name ?? '알 수 없음'}</span>
+            <span class="text-muted-foreground"
+              >{rev.author_name ?? m.documents_unknown_author()}</span
+            >
             <span class="block text-xs text-muted-foreground">
               {when(rev.created_at)}{rev.restored_from === null
                 ? ''
-                : ` · r${String(rev.restored_from)}에서 복원`}
+                : ` · ${m.documents_restored_from({ revision: rev.restored_from })}`}
             </span>
           </button>
         {/each}
         {#if more}
           <Button size="sm" variant="ghost" onclick={() => void load(list.at(-1)?.revision ?? null)}
-            >더 보기</Button
+            >{m.documents_load_more()}</Button
           >
         {/if}
       </div>
       <div class="flex min-h-0 flex-col gap-2 overflow-hidden">
         {#if selected === undefined}
-          <p class="text-sm text-muted-foreground">왼쪽에서 리비전을 고르세요.</p>
+          <p class="text-sm text-muted-foreground">{m.documents_history_pick()}</p>
         {:else}
           <div class="flex flex-wrap items-center gap-2 text-sm">
             <span class="font-semibold">r{selected.revision}</span>
             <span class="text-muted-foreground">{selected.title}</span>
-            <div class="ml-auto flex gap-1" role="group" aria-label="비교 대상">
+            <div class="ml-auto flex gap-1" role="group" aria-label={m.documents_compare_label()}>
               <Button
                 size="sm"
                 variant={compareWith === 'current' ? 'secondary' : 'ghost'}
                 aria-pressed={compareWith === 'current'}
-                onclick={() => (compareWith = 'current')}>지금과 비교</Button
+                onclick={() => (compareWith = 'current')}>{m.documents_compare_current()}</Button
               >
               <Button
                 size="sm"
                 variant={compareWith === 'previous' ? 'secondary' : 'ghost'}
                 aria-pressed={compareWith === 'previous'}
-                onclick={() => (compareWith = 'previous')}>직전과 비교</Button
+                onclick={() => (compareWith = 'previous')}>{m.documents_compare_previous()}</Button
               >
             </div>
           </div>
           <p class="text-xs text-muted-foreground">
             {compareWith === 'current'
-              ? `지금(r${String(doc.revision)}) → r${String(selected.revision)}: 복원하면 생기는 변화`
-              : `r${String(selected.revision - 1)} → r${String(selected.revision)}: 이 리비전에서 바뀐 것`}
+              ? m.documents_compare_current_hint({
+                  current: doc.revision,
+                  selected: selected.revision,
+                })
+              : m.documents_compare_previous_hint({
+                  previous: selected.revision - 1,
+                  selected: selected.revision,
+                })}
           </p>
           <div
             class="min-h-0 flex-1 overflow-y-auto rounded border p-2 font-mono text-sm"
             data-testid="revision-diff"
           >
             {#if !changed}
-              <p class="text-muted-foreground">차이가 없습니다.</p>
+              <p class="text-muted-foreground">{m.documents_diff_none()}</p>
             {/if}
             {#each lines as line, index (index)}
               <div
@@ -178,9 +191,9 @@
               >
                 <span class="sr-only"
                   >{line.kind === 'added'
-                    ? '추가: '
+                    ? `${m.documents_diff_added()} `
                     : line.kind === 'removed'
-                      ? '삭제: '
+                      ? `${m.documents_diff_removed()} `
                       : ''}</span
                 ><span aria-hidden="true" class="mr-2 text-muted-foreground"
                   >{line.kind === 'added' ? '+' : line.kind === 'removed' ? '−' : ' '}</span
@@ -195,11 +208,12 @@
       <p role="alert" class="text-sm text-destructive">{error}</p>
     {/if}
     <Dialog.Footer>
-      <Button variant="ghost" onclick={() => (open = false)}>닫기</Button>
+      <Button variant="ghost" onclick={() => (open = false)}>{m.documents_close()}</Button>
       {#if doc.can_edit && selected !== undefined && selected.revision !== doc.revision}
         <Button
           disabled={busy || (compareWith === 'current' && !changed)}
-          onclick={() => void restore()}>r{selected.revision}(으)로 복원</Button
+          onclick={() => void restore()}
+          >{m.documents_restore_to({ revision: selected.revision })}</Button
         >
       {/if}
     </Dialog.Footer>

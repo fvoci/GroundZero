@@ -9,15 +9,23 @@ import { computePosition, flip, offset, shift } from '@floating-ui/dom';
 
 import type { ReferenceCandidateView, ReferenceKind, ResolvedReferenceView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import { m } from '$lib/paraglide/messages.js';
 
 import { referenceLabel, resolveReference } from './resolver';
 
-const KIND_LABEL: Record<ReferenceKind, string> = {
-  item: '항목',
-  document: '문서',
-  task: '업무',
-  user: '사람',
-};
+/** 종류 이름. 언어가 바뀔 수 있어 부를 때 만든다. */
+function kindLabel(kind: ReferenceKind): string {
+  switch (kind) {
+    case 'item':
+      return m.references_kind_item();
+    case 'document':
+      return m.references_kind_document();
+    case 'task':
+      return m.references_kind_task();
+    case 'user':
+      return m.references_kind_user();
+  }
+}
 
 function asKind(value: unknown): ReferenceKind | undefined {
   return value === 'item' || value === 'document' || value === 'task' || value === 'user'
@@ -89,12 +97,14 @@ export const Reference = Node.create<ReferenceOptions>({
       const kind = asKind(node.attrs.kind);
       const rawId: unknown = node.attrs.id;
       if (kind === undefined || typeof rawId !== 'string') {
-        dom.textContent = '볼 수 없는 대상';
+        dom.textContent = m.references_hidden();
         return { dom };
       }
       void resolveReference(kind, rawId).then((target) => {
-        dom.textContent = referenceLabel(target);
-        dom.title = target.visible ? KIND_LABEL[kind] : '';
+        // 볼 수 없는 대상의 문구는 화면 언어로(내보내기 파일은 resolver의 고정 문구를 쓴다).
+        dom.textContent =
+          target.visible && target.title !== null ? referenceLabel(target) : m.references_hidden();
+        dom.title = target.visible ? kindLabel(kind) : '';
         const href = hrefFor(target);
         if (href === null) dom.removeAttribute('href');
         else dom.href = href;
@@ -148,7 +158,7 @@ function createPopup(describeWorkspace: DescribeWorkspace): {
       const empty = document.createElement('div');
       empty.className = 'px-2 py-1.5 text-sm text-muted-foreground';
       empty.textContent =
-        props.query === '' ? '이름·제목·번호를 입력하세요' : '찾는 대상이 없습니다';
+        props.query === '' ? m.references_suggest_prompt() : m.references_suggest_empty();
       el.append(empty);
     }
     items.forEach((item, index) => {
@@ -161,7 +171,7 @@ function createPopup(describeWorkspace: DescribeWorkspace): {
         (index === selected ? 'bg-accent text-accent-foreground' : '');
       const kind = document.createElement('span');
       kind.className = 'shrink-0 text-xs text-muted-foreground';
-      kind.textContent = KIND_LABEL[item.kind];
+      kind.textContent = kindLabel(item.kind);
       const reference = document.createElement('span');
       reference.className = 'shrink-0 font-mono text-xs text-muted-foreground';
       reference.textContent = item.reference ?? '';
@@ -229,7 +239,7 @@ function createPopup(describeWorkspace: DescribeWorkspace): {
       const el = document.createElement('div');
       el.id = listId;
       el.setAttribute('role', 'listbox');
-      el.setAttribute('aria-label', '참조 후보');
+      el.setAttribute('aria-label', m.references_suggest_label());
       el.className =
         'fixed z-50 flex max-h-72 min-w-64 max-w-[min(32rem,calc(100vw-2rem))] flex-col overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md';
       document.body.append(el);

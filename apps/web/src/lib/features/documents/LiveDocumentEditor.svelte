@@ -4,10 +4,12 @@
   import { onDestroy, untrack } from 'svelte';
 
   import type { DocumentView } from '$lib/api/client';
-  import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
+  import { api, fileContentUrl, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { me } from '$lib/me.svelte';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
@@ -39,7 +41,7 @@
 
   function open(): void {
     const next = openLive(start.id, {
-      name: me.displayName === '' ? '이름 없음' : me.displayName,
+      name: me.displayName === '' ? m.documents_live_anonymous() : me.displayName,
       color: colorFor(me.userId),
     });
     next.provider.on('status', (event: { status: LiveStatus }) => {
@@ -77,7 +79,7 @@
   /** 본문 첨부로 올리고 넣을 주소를 돌려준다(일반 편집과 같다). */
   async function insertFile(file: File): Promise<{ href: string; name: string; image: boolean }> {
     const done = await uploadFile(file, { target: { kind: 'document', id: start.id } });
-    if (done.file_id === null) throw new Error(done.failure ?? '업로드를 마치지 못했습니다');
+    if (done.file_id === null) throw new Error(done.failure ?? m.documents_upload_failed());
     const image = INLINE_IMAGES.includes(file.type);
     return {
       href: fileContentUrl(done.file_id, done.version ?? undefined, image),
@@ -90,7 +92,7 @@
   async function saveTitle(): Promise<void> {
     const next = title.trim();
     if (next === '') {
-      titleMessage = '제목을 입력하세요.';
+      titleMessage = m.documents_title_required();
       return;
     }
     if (next === savedTitle) return;
@@ -111,35 +113,47 @@
           return;
         }
       }
-      titleMessage = '다른 곳에서 동시에 저장했습니다. 다시 시도하세요.';
+      titleMessage = m.documents_title_conflict();
     } catch (e: unknown) {
-      titleMessage = e instanceof ApiError ? e.message : '제목을 저장하지 못했습니다.';
+      titleMessage = errorText(e, m.documents_title_save_failed());
     } finally {
       savingTitle = false;
     }
   }
 
-  const STATUS: Record<LiveStatus, string> = {
-    connected: '실시간 연결됨',
-    connecting: '연결 중…',
-    disconnected: '연결이 끊김 · 다시 연결 중',
-  };
-  const STOP: Record<LiveStop, string> = {
-    denied: '이 문서를 볼 권한이 없어져 연결을 닫았습니다.',
-    invalid: '서버가 받지 않는 변경이 있어 연결을 닫았습니다. 새로고침해 주세요.',
-    reload: '문서가 바뀌어 다시 엽니다.',
-    off: '실시간 편집이 꺼졌습니다.',
-  };
+  function statusText(s: LiveStatus): string {
+    switch (s) {
+      case 'connected':
+        return m.documents_live_connected();
+      case 'connecting':
+        return m.documents_live_connecting();
+      case 'disconnected':
+        return m.documents_live_disconnected();
+    }
+  }
+
+  function stopText(s: LiveStop): string {
+    switch (s) {
+      case 'denied':
+        return m.documents_live_denied();
+      case 'invalid':
+        return m.documents_live_invalid();
+      case 'reload':
+        return m.documents_live_reload();
+      case 'off':
+        return m.documents_live_off();
+    }
+  }
 </script>
 
-<section class="flex flex-col gap-3" aria-label="실시간 공동 편집">
+<section class="flex flex-col gap-3" aria-label={m.documents_live_label()}>
   <div class="flex flex-wrap items-center gap-2 text-sm">
     <span class="rounded bg-muted px-2 py-0.5 font-mono">{start.reference ?? ''}</span>
     <span role="status" aria-live="polite" class="text-muted-foreground"
-      >{stopped === undefined ? STATUS[status] : STOP[stopped]}</span
+      >{stopped === undefined ? statusText(status) : stopText(stopped)}</span
     >
     {#if stopped !== undefined}
-      <Button size="sm" variant="outline" onclick={restart}>다시 연결</Button>
+      <Button size="sm" variant="outline" onclick={restart}>{m.documents_live_reconnect()}</Button>
     {/if}
   </div>
   <form
@@ -150,7 +164,7 @@
     }}
   >
     <div class="flex min-w-0 flex-1 flex-col gap-1">
-      <Label for="live-title">제목</Label>
+      <Label for="live-title">{m.documents_title_label()}</Label>
       <Input
         id="live-title"
         bind:value={title}
@@ -163,7 +177,7 @@
         type="submit"
         size="sm"
         variant="outline"
-        disabled={savingTitle || title.trim() === savedTitle}>제목 저장</Button
+        disabled={savingTitle || title.trim() === savedTitle}>{m.documents_title_save()}</Button
       >
     {/if}
   </form>
@@ -175,7 +189,7 @@
       <TiptapEditor
         content={start.body}
         editable={start.can_edit && stopped === undefined}
-        label="본문"
+        label={m.documents_body_label()}
         {references}
         insertFile={start.can_edit ? insertFile : undefined}
         collab={session}
@@ -183,7 +197,6 @@
     {/key}
   {/if}
   <p class="text-xs text-muted-foreground">
-    여럿이 함께 고치는 문서입니다. 내용은 바로 나누고, 잠시 조용해지거나 모두 나가면 리비전으로
-    남습니다.
+    {m.documents_live_hint()}
   </p>
 </section>

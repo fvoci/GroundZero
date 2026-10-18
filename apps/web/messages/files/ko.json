@@ -1,3 +1,69 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "files_load_failed": "첨부 파일을 불러오지 못했습니다.",
+  "files_uploaded": "올렸습니다: {name}",
+  "files_uploaded_version": "올렸습니다: {name} (v{version})",
+  "files_upload_cancelled": "취소했습니다: {name}",
+  "files_upload_failed": "올리지 못했습니다. 같은 파일을 다시 고르면 이어서 올립니다.",
+  "files_named_error": "{name}: {error}",
+  "files_versions_load_failed": "버전 기록을 불러오지 못했습니다.",
+  "files_action_failed": "처리하지 못했습니다.",
+  "files_heading": "첨부 파일",
+  "files_upload": "파일 올리기",
+  "files_uploading": "{name} 올리는 중… {percent}%",
+  "files_empty": "첨부 파일이 없습니다.",
+  "files_renamed": "이름을 바꿨습니다: {name}",
+  "files_new_name": "새 이름",
+  "files_download_blocked": "내려받기가 허용되지 않은 문서의 첨부",
+  "files_preview": "미리보기",
+  "files_preview_aria": "{name} 미리보기",
+  "files_versions": "버전 기록",
+  "files_versions_aria": "{name} 버전 기록",
+  "files_new_version": "새 버전",
+  "files_new_version_aria": "{name} 새 버전 올리기",
+  "files_rename": "이름 바꾸기",
+  "files_rename_aria": "{name} 이름 바꾸기",
+  "files_trash": "휴지통으로",
+  "files_trash_aria": "{name} 휴지통으로",
+  "files_trashed": "휴지통으로 옮겼습니다: {name}",
+  "files_version_list_aria": "{name} 버전",
+  "files_delete": "지우기",
+  "files_delete_version_aria": "{name} v{version} 지우기",
+  "files_version_deleted": "v{version}을 지웠습니다: {name}",
+  "files_hwp_missing": "이 설치에는 HWP 미리보기 구성요소가 없습니다. 내려받아 여세요.",
+  "files_hwp_partial": "앞 {rendered}쪽만 보입니다(전체 {total}쪽). 전체는 내려받아 여세요.",
+  "files_hwp_pages": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "{count}쪽" }
+    }
+  ],
+  "files_hwp_rendering": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "그리는 중… {count}쪽" }
+    }
+  ],
+  "files_preview_timeout": "미리보기가 오래 걸려 멈췄습니다. 내려받아 여세요.",
+  "files_preview_stopped": "미리보기를 멈췄습니다.",
+  "files_preview_corrupt": "미리보기를 만들지 못했습니다(손상되었거나 지원하지 않는 파일). 내려받아 여세요.",
+  "files_preview_failed": "미리보기를 만들지 못했습니다. 내려받아 여세요.",
+  "files_too_large": "파일이 커서 미리볼 수 없습니다. 내려받아 여세요.",
+  "files_close": "닫기",
+  "files_slides_rendering": "슬라이드를 그리는 중…",
+  "files_slides_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "슬라이드 {count}장" }
+    }
+  ],
+  "files_page_alt": "{page}쪽",
+  "files_stop": "멈추기",
+  "files_sheets": "시트",
+  "files_sheet_rows_limit": "앞 {rows}행만 보입니다. 전체는 내려받아 여세요.",
+  "files_sheet_values_only": "셀 값만 보입니다(서식·그림·차트·병합은 보이지 않음).",
+  "files_preview_loading": "미리보기를 만드는 중…"
 }

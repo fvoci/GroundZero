@@ -1,9 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
 import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
 import { parseMarkdownChecklist } from '$lib/features/checklists/checklist-item';
+import { setLocale } from '$lib/paraglide/runtime.js';
 
 function handlers() {
   return {
@@ -14,6 +15,10 @@ function handlers() {
 }
 
 describe('ChecklistForm (D-30, editor-less screens)', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+  });
+
   it('adds an item and reuses the request id when the same text is retried', async () => {
     const h = handlers();
     h.onadd.mockRejectedValueOnce(new Error('network'));

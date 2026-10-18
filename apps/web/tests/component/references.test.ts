@@ -1,14 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { parseResolved } from '$lib/api/client';
 import { plainText } from '$lib/features/documents/drafts';
 import { referenceHref } from '$lib/features/references/context';
 import { hiddenReference, referenceLabel } from '$lib/features/references/resolver';
 import { parseRoute } from '$lib/router.svelte';
+import { setLocale } from '$lib/paraglide/runtime.js';
 
 const ws = '0198f1f2-0000-7000-8000-000000000002';
 const item = '0198f1f2-0000-7000-8000-000000000004';
 const doc = '0198f1f2-0000-7000-8000-000000000005';
+
+beforeEach(async () => {
+  await setLocale('ko', { reload: false });
+});
 
 describe('reference display', () => {
   it('labels visible targets and hides the rest the same way', () => {

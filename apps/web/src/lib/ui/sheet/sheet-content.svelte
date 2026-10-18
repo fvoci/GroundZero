@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { m } from '$lib/paraglide/messages.js';
   export type Side = 'top' | 'right' | 'bottom' | 'left';
 </script>
 
@@ -46,7 +47,7 @@
         {#snippet child({ props })}
           <Button variant="ghost" class="absolute top-3 right-3" size="icon-sm" {...props}>
             <XIcon />
-            <span class="sr-only">Close</span>
+            <span class="sr-only">{m.common_close()}</span>
           </Button>
         {/snippet}
       </SheetPrimitive.Close>

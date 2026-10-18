@@ -1,7 +1,9 @@
 <script lang="ts">
   // 홈에 고정·즐겨찾기(D-19). 본인만 보는 표시이며 볼 수 있는 대상에만 켤 수 있다.
   import type { MarkKind, MarkTarget } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
   interface Props {
@@ -34,25 +36,25 @@
     try {
       marks = await api.setMark(kind, id, mark, !marks[mark]);
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '바꾸지 못했습니다.';
+      error = errorText(e, m.home_mark_failed());
     }
   }
 </script>
 
 {#if marks !== undefined}
-  <div class="flex items-center gap-1" role="group" aria-label="홈에 표시">
+  <div class="flex items-center gap-1" role="group" aria-label={m.home_marks_group()}>
     <Button
       size="sm"
       variant={marks.pin ? 'secondary' : 'ghost'}
       aria-pressed={marks.pin}
-      onclick={() => void toggle('pin')}>홈에 고정</Button
+      onclick={() => void toggle('pin')}>{m.home_pin()}</Button
     >
     <Button
       size="sm"
       variant={marks.favorite ? 'secondary' : 'ghost'}
       aria-pressed={marks.favorite}
       onclick={() => void toggle('favorite')}
-      ><span aria-hidden="true">{marks.favorite ? '★' : '☆'}</span> 즐겨찾기</Button
+      ><span aria-hidden="true">{marks.favorite ? '★' : '☆'}</span> {m.home_favorite()}</Button
     >
     {#if error !== undefined}<span role="alert" class="text-sm text-destructive">{error}</span>{/if}
   </div>

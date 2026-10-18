@@ -5,9 +5,13 @@
 
   import type { FileView, ItemView, RecordKindView, RecordView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { formatDay } from '$lib/display';
+  import { m } from '$lib/paraglide/messages.js';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
 
+  import { recordDateLabel, recordFieldLabel, recordKindLabel, recordRoleLabel } from './labels';
   import RecordEditor from './RecordEditor.svelte';
   import type { RecordForm } from './records';
   import { emptyForm, formOf, summary, toInput } from './records';
@@ -57,7 +61,7 @@
         if (mine.some((d) => d.fields.some((f) => f.type === 'course'))) {
           const modules = await api.modules(ws);
           const lists = await Promise.all(
-            modules.filter((m) => m.kind === 'course').map((m) => api.items(m.id)),
+            modules.filter((mod) => mod.kind === 'course').map((mod) => api.items(mod.id)),
           );
           courseList = lists.flat().map((i) => ({ id: i.id, name: i.title }));
         }
@@ -65,13 +69,13 @@
         defs = mine;
         records = list;
         files = attached;
-        people = members.members.map((m) => ({ id: m.user_id, name: m.display_name }));
+        people = members.members.map((x) => ({ id: x.user_id, name: x.display_name }));
         courses = courseList;
         if (selected === undefined || !mine.some((d) => d.kind === selected))
           selected = mine[0]?.kind;
       })
       .catch((e: unknown) => {
-        if (!cancelled) error = e instanceof ApiError ? e.message : '기록을 불러오지 못했습니다.';
+        if (!cancelled) error = errorText(e, m.records_load_failed());
       });
     return () => {
       cancelled = true;
@@ -93,7 +97,7 @@
 
   async function save(def: RecordKindView): Promise<void> {
     if (form.title.trim() === '') {
-      error = '제목을 적어 주세요.';
+      error = m.records_title_required();
       return;
     }
     const built = toInput(def, form);
@@ -105,12 +109,12 @@
     try {
       if (creating) {
         await api.createRecord(item.id, requestId, def.kind, built.input);
-        status = `${def.label}을(를) 더했습니다.`;
+        status = m.records_added({ label: recordKindLabel(def) });
       } else if (editingId !== undefined) {
         const r = records.find((x) => x.id === editingId);
         if (r === undefined) return;
         await api.updateRecord(r.id, r.version, built.input);
-        status = `${def.label}을(를) 고쳤습니다.`;
+        status = m.records_updated({ label: recordKindLabel(def) });
       }
       creating = false;
       editingId = undefined;
@@ -118,10 +122,8 @@
     } catch (e: unknown) {
       error =
         e instanceof ApiError && e.status === 409
-          ? '그사이 바뀌었습니다. 다시 불러온 뒤 고쳐 주세요.'
-          : e instanceof ApiError
-            ? e.message
-            : '저장하지 못했습니다.';
+          ? m.records_conflict()
+          : errorText(e, m.records_save_failed());
     }
   }
 
@@ -129,21 +131,23 @@
     confirming = undefined;
     try {
       await api.deleteRecord(r.id);
-      status = '기록을 지웠습니다.';
+      status = m.records_deleted();
       reloadKey += 1;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '지우지 못했습니다.';
+      error = errorText(e, m.records_delete_failed());
     }
   }
 
-  const roleLabel = (def: RecordKindView, role: string): string =>
-    def.file_roles.find((r) => r.value === role)?.label ?? role;
+  const roleLabel = (def: RecordKindView, role: string): string => {
+    const r = def.file_roles.find((x) => x.value === role);
+    return r === undefined ? role : recordRoleLabel(def, r);
+  };
 </script>
 
 {#if defs.length > 0}
   <section class="flex flex-col gap-3" aria-labelledby="records-heading">
-    <h2 id="records-heading" class="text-lg font-semibold">기록</h2>
-    <div class="flex flex-wrap gap-1" role="group" aria-label="기록 종류">
+    <h2 id="records-heading" class="text-lg font-semibold">{m.records_heading()}</h2>
+    <div class="flex flex-wrap gap-1" role="group" aria-label={m.records_kinds()}>
       {#each defs as d (d.kind)}
         <Button
           size="sm"
@@ -153,7 +157,7 @@
             selected = d.kind;
             creating = false;
             editingId = undefined;
-          }}>{d.label} {count(d.kind)}</Button
+          }}>{recordKindLabel(d)} {count(d.kind)}</Button
         >
       {/each}
     </div>
@@ -161,6 +165,8 @@
     <p aria-live="polite" class="text-sm">{status}</p>
     {#if current !== undefined}
       {@const def = current}
+      {@const kindLabel = recordKindLabel(def)}
+      {@const dateLabel = recordDateLabel(def)}
       {#if def.kind === 'reference' && canWrite}
         <ZoteroImport
           itemId={item.id}
@@ -176,7 +182,7 @@
           {people}
           {courses}
           {files}
-          submitLabel={`${def.label} 더하기`}
+          submitLabel={m.records_add_kind({ label: kindLabel })}
           onsubmit={() => void save(def)}
           oncancel={() => {
             creating = false;
@@ -184,17 +190,22 @@
           }}
         />
       {:else if canWrite}
-        <div><Button size="sm" variant="outline" onclick={startNew}>새 {def.label}</Button></div>
+        <div>
+          <Button size="sm" variant="outline" onclick={startNew}
+            >{m.records_new_kind({ label: kindLabel })}</Button
+          >
+        </div>
       {/if}
       {#if shown.length === 0}
-        <p class="text-sm text-muted-foreground">{def.label} 기록이 없습니다.</p>
+        <p class="text-sm text-muted-foreground">{m.records_empty_kind({ label: kindLabel })}</p>
       {:else if shown.length > 1}
         <div>
           <Button
             size="sm"
             variant="ghost"
             aria-pressed={asTable}
-            onclick={() => (asTable = !asTable)}>{asTable ? '카드로 보기' : '표로 비교하기'}</Button
+            onclick={() => (asTable = !asTable)}
+            >{asTable ? m.records_view_cards() : m.records_view_table()}</Button
           >
         </div>
       {/if}
@@ -203,9 +214,11 @@
           <table class="w-full text-sm" data-testid="records-table">
             <thead class="text-left text-muted-foreground">
               <tr>
-                <th class="py-1 pr-2 font-medium">제목</th>
-                {#if def.date_label !== null}<th class="pr-2 font-medium">{def.date_label}</th>{/if}
-                {#each def.fields as f (f.key)}<th class="pr-2 font-medium">{f.label}</th>{/each}
+                <th class="py-1 pr-2 font-medium">{m.records_title()}</th>
+                {#if dateLabel !== null}<th class="pr-2 font-medium">{dateLabel}</th>{/if}
+                {#each def.fields as f (f.key)}<th class="pr-2 font-medium"
+                    >{recordFieldLabel(def, f)}</th
+                  >{/each}
               </tr>
             </thead>
             <tbody>
@@ -213,9 +226,11 @@
                 {@const lines = summary(def, r, names, courseNames)}
                 <tr class="border-t align-top">
                   <td class="py-1 pr-2 font-medium">{r.title}</td>
-                  {#if def.date_label !== null}<td class="pr-2">{r.occurred_on ?? ''}</td>{/if}
+                  {#if dateLabel !== null}<td class="pr-2"
+                      >{r.occurred_on === null ? '' : formatDay(r.occurred_on)}</td
+                    >{/if}
                   {#each def.fields as f (f.key)}
-                    {@const text = lines.find((l) => l.label === f.label)?.text ?? ''}
+                    {@const text = lines.find((l) => l.key === f.key)?.text ?? ''}
                     <td class="max-w-64 pr-2 whitespace-pre-wrap"
                       >{text.length > 120 ? `${text.slice(0, 120)}…` : text}</td
                     >
@@ -239,7 +254,7 @@
                 {people}
                 {courses}
                 {files}
-                submitLabel="저장"
+                submitLabel={m.common_save()}
                 onsubmit={() => void save(def)}
                 oncancel={() => {
                   creating = false;
@@ -249,15 +264,20 @@
             {:else}
               <div class="flex flex-wrap items-baseline gap-2">
                 <span class="font-medium">{r.title}</span>
-                {#if r.occurred_on !== null && def.date_label !== null}
-                  <span class="text-muted-foreground">{def.date_label} {r.occurred_on}</span>
+                {#if r.occurred_on !== null && dateLabel !== null}
+                  <span class="text-muted-foreground"
+                    >{m.records_dated({
+                      label: dateLabel,
+                      date: formatDay(r.occurred_on),
+                    })}</span
+                  >
                 {/if}
                 <span class="ml-auto text-xs text-muted-foreground"
-                  >{r.created_by_name ?? '이름을 볼 수 없는 사람'}</span
+                  >{r.created_by_name ?? m.records_unknown_author()}</span
                 >
               </div>
               <dl class="grid grid-cols-[max-content_1fr] gap-x-3">
-                {#each summary(def, r, names, courseNames) as line (line.label)}
+                {#each summary(def, r, names, courseNames) as line (line.key)}
                   <dt class="text-muted-foreground">{line.label}</dt>
                   <dd class="whitespace-pre-wrap">
                     {#if line.href !== undefined}
@@ -273,7 +293,7 @@
               </dl>
               {#if r.body !== ''}<p class="whitespace-pre-wrap">{r.body}</p>{/if}
               {#if r.files.length > 0}
-                <ul class="flex flex-col gap-0.5" aria-label="연결한 파일">
+                <ul class="flex flex-col gap-0.5" aria-label={m.records_linked_files()}>
                   {#each r.files as file, i (i)}
                     <li class="flex flex-wrap items-baseline gap-2">
                       <Badge variant="outline">{roleLabel(def, file.role)}</Badge>
@@ -283,7 +303,7 @@
                         >
                       {:else}
                         <span>{file.file_name}</span>
-                        <span class="text-muted-foreground">(삭제됨)</span>
+                        <span class="text-muted-foreground">{m.records_file_deleted()}</span>
                       {/if}
                       <span class="text-muted-foreground"
                         >v{file.version} · SHA-256 {file.sha256.slice(0, 12)}</span
@@ -299,21 +319,21 @@
                     variant="ghost"
                     onclick={() => {
                       startEdit(def, r);
-                    }}>고치기</Button
+                    }}>{m.records_edit()}</Button
                   >
                 {/if}
                 {#if r.can_delete && confirming !== r.id}
                   <Button size="sm" variant="ghost" onclick={() => (confirming = r.id)}
-                    >지우기</Button
+                    >{m.records_delete()}</Button
                   >
                 {:else if r.can_delete}
                   <span class="flex items-center gap-1">
-                    이 기록을 지울까요?
+                    {m.records_delete_confirm()}
                     <Button size="sm" variant="destructive" onclick={() => void remove(r)}
-                      >지우기</Button
+                      >{m.records_delete()}</Button
                     >
                     <Button size="sm" variant="ghost" onclick={() => (confirming = undefined)}
-                      >취소</Button
+                      >{m.common_cancel()}</Button
                     >
                   </span>
                 {/if}

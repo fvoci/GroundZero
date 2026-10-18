@@ -1,11 +1,13 @@
 <script lang="ts">
   // 기록 입력 칸. 칸 정의(서버)대로 그린다. 파일 연결은 이 항목의 첨부와 그 버전을 고른다(D-35).
   import type { FileView, RecordKindView } from '$lib/api/client';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
 
+  import { recordChoiceLabel, recordDateLabel, recordFieldLabel, recordRoleLabel } from './labels';
   import type { RecordForm } from './records';
   import { emptyForm } from './records';
 
@@ -57,19 +59,19 @@
   }}
 >
   <div class="flex flex-col gap-1 sm:col-span-2">
-    <Label for={id('title')}>제목</Label>
+    <Label for={id('title')}>{m.records_title()}</Label>
     <Input id={id('title')} bind:value={form.title} maxlength={300} />
   </div>
   {#if def.date_label !== null}
     <div class="flex flex-col gap-1">
-      <Label for={id('date')}>{def.date_label}</Label>
+      <Label for={id('date')}>{recordDateLabel(def)}</Label>
       <Input id={id('date')} type="date" bind:value={form.occurred_on} />
     </div>
   {/if}
   {#each def.fields as f (f.key)}
     {#if f.type === 'long_text'}
       <div class="flex flex-col gap-1 sm:col-span-2">
-        <Label for={id(f.key)}>{f.label}</Label>
+        <Label for={id(f.key)}>{recordFieldLabel(def, f)}</Label>
         <textarea
           id={id(f.key)}
           class={box}
@@ -80,18 +82,18 @@
     {:else if f.type === 'choice' || f.type === 'person' || f.type === 'course'}
       {@const options =
         f.type === 'choice'
-          ? f.choices.map((c) => ({ value: c.value, label: c.label }))
+          ? f.choices.map((c) => ({ value: c.value, label: recordChoiceLabel(def, f, c) }))
           : (f.type === 'person' ? people : courses).map((p) => ({ value: p.id, label: p.name }))}
       <div class="flex flex-col gap-1">
-        <Label for={id(f.key)}>{f.label}</Label>
+        <Label for={id(f.key)}>{recordFieldLabel(def, f)}</Label>
         <select id={id(f.key)} class={['h-9', box]} bind:value={form.values[f.key]}>
-          <option value="">선택 안 함</option>
+          <option value="">{m.records_not_selected()}</option>
           {#each options as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
         </select>
       </div>
     {:else if f.type === 'people'}
       <fieldset class="flex flex-col gap-1 rounded-md border p-2 sm:col-span-2">
-        <legend class="px-1 text-sm font-medium">{f.label}</legend>
+        <legend class="px-1 text-sm font-medium">{recordFieldLabel(def, f)}</legend>
         <div class="flex flex-wrap gap-3">
           {#each people as p (p.id)}
             <div class="flex items-center gap-1">
@@ -109,7 +111,11 @@
       </fieldset>
     {:else}
       <div class="flex flex-col gap-1">
-        <Label for={id(f.key)}>{f.label}{f.type === 'tags' ? '(쉼표로 여럿)' : ''}</Label>
+        <Label for={id(f.key)}
+          >{f.type === 'tags'
+            ? m.records_tags_label({ label: recordFieldLabel(def, f) })
+            : recordFieldLabel(def, f)}</Label
+        >
         <Input
           id={id(f.key)}
           type={f.type === 'date'
@@ -128,22 +134,22 @@
     {/if}
   {/each}
   <div class="flex flex-col gap-1 sm:col-span-2">
-    <Label for={id('body')}>메모</Label>
+    <Label for={id('body')}>{m.records_body()}</Label>
     <textarea id={id('body')} class={box} rows={3} maxlength={20000} bind:value={form.body}
     ></textarea>
   </div>
   {#if def.file_roles.length > 0}
     <fieldset class="flex flex-col gap-2 rounded-md border p-2 sm:col-span-2">
-      <legend class="px-1 text-sm font-medium">연결한 파일(이 항목의 첨부, 버전 고정)</legend>
+      <legend class="px-1 text-sm font-medium">{m.records_files_legend()}</legend>
       {#if files.length === 0}
         <p class="text-sm text-muted-foreground">
-          이 항목에 첨부한 파일이 없습니다. 아래 "첨부 파일"에서 먼저 올리세요.
+          {m.records_no_attachments()}
         </p>
       {/if}
       {#each form.files as link, index (index)}
         <div class="flex flex-wrap items-end gap-2">
           <div class="flex flex-col gap-1">
-            <Label for={id(`file-${String(index)}`)}>파일</Label>
+            <Label for={id(`file-${String(index)}`)}>{m.records_file()}</Label>
             <select
               id={id(`file-${String(index)}`)}
               class={['h-9', box]}
@@ -152,26 +158,28 @@
                 link.version = '';
               }}
             >
-              <option value="">선택</option>
+              <option value="">{m.records_select()}</option>
               {#each files as file (file.id)}<option value={file.id}>{file.name}</option>{/each}
             </select>
           </div>
           <div class="flex flex-col gap-1">
-            <Label for={id(`version-${String(index)}`)}>버전</Label>
+            <Label for={id(`version-${String(index)}`)}>{m.records_version()}</Label>
             <select
               id={id(`version-${String(index)}`)}
               class={['h-9', box]}
               bind:value={link.version}
             >
-              <option value="">지금 버전</option>
+              <option value="">{m.records_current_version()}</option>
               {#each versionsOf(link.file_id) as v (v)}<option value={String(v)}>v{v}</option
                 >{/each}
             </select>
           </div>
           <div class="flex flex-col gap-1">
-            <Label for={id(`role-${String(index)}`)}>역할</Label>
+            <Label for={id(`role-${String(index)}`)}>{m.records_role()}</Label>
             <select id={id(`role-${String(index)}`)} class={['h-9', box]} bind:value={link.role}>
-              {#each def.file_roles as r (r.value)}<option value={r.value}>{r.label}</option>{/each}
+              {#each def.file_roles as r (r.value)}<option value={r.value}
+                  >{recordRoleLabel(def, r)}</option
+                >{/each}
             </select>
           </div>
           <Button
@@ -180,7 +188,7 @@
             variant="ghost"
             onclick={() => {
               form.files = form.files.filter((_, i) => i !== index);
-            }}>빼기</Button
+            }}>{m.records_unlink()}</Button
           >
         </div>
       {/each}
@@ -195,7 +203,7 @@
                 ...form.files,
                 { file_id: '', version: '', role: def.file_roles[0]?.value ?? 'other' },
               ];
-            }}>파일 연결</Button
+            }}>{m.records_link_file()}</Button
           >
         </div>
       {/if}
@@ -203,6 +211,6 @@
   {/if}
   <div class="flex gap-2 sm:col-span-2">
     <Button type="submit">{submitLabel}</Button>
-    <Button type="button" variant="ghost" onclick={oncancel}>취소</Button>
+    <Button type="button" variant="ghost" onclick={oncancel}>{m.common_cancel()}</Button>
   </div>
 </form>

@@ -14,6 +14,7 @@
   import { parseDocNode } from '$lib/api/client';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { ReferenceSuggestion } from '$lib/features/references/reference-extension';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
   import { canonicalJson } from './drafts';
@@ -99,7 +100,7 @@
     const file = input.files?.[0];
     input.value = '';
     if (file === undefined) return;
-    fileStatus = `${file.name} 올리는 중…`;
+    fileStatus = m.documents_file_uploading({ name: file.name });
     try {
       const added = await insertFile(file);
       const chain = editor?.chain().focus();
@@ -112,9 +113,12 @@
             marks: [{ type: 'link', attrs: { href: added.href } }],
           })
           .run();
-      fileStatus = `${file.name}을(를) 넣었습니다(문서 첨부에도 있습니다).`;
+      fileStatus = m.documents_file_inserted({ name: file.name });
     } catch (e: unknown) {
-      fileStatus = e instanceof Error ? `넣지 못했습니다: ${e.message}` : '넣지 못했습니다.';
+      fileStatus =
+        e instanceof Error
+          ? m.documents_file_insert_failed_reason({ reason: e.message })
+          : m.documents_file_insert_failed();
     }
   }
 
@@ -248,14 +252,14 @@
     }
   }
 
-  const tools: { command: Command; label: string }[] = [
-    { command: 'bold', label: '굵게' },
-    { command: 'italic', label: '기울임' },
-    { command: 'heading', label: '제목' },
-    { command: 'bulletList', label: '목록' },
-    { command: 'taskList', label: '체크리스트' },
-    { command: 'codeBlock', label: '코드' },
-  ];
+  const tools = $derived<{ command: Command; label: string }[]>([
+    { command: 'bold', label: m.documents_tool_bold() },
+    { command: 'italic', label: m.documents_tool_italic() },
+    { command: 'heading', label: m.documents_tool_heading() },
+    { command: 'bulletList', label: m.documents_tool_bullet_list() },
+    { command: 'taskList', label: m.documents_tool_task_list() },
+    { command: 'codeBlock', label: m.documents_tool_code() },
+  ]);
 
   /** 원문을 고쳤을 때만 원문에서 다시 만든 내용을 쓴다. */
   function parsedMarkdown(e: Editor): DocNode | undefined {
@@ -288,29 +292,33 @@
     if (parsed !== undefined) onchange?.(parsed);
   }
 
-  const MODES: { mode: Mode; label: string }[] = [
-    { mode: 'rich', label: '서식 편집' },
-    { mode: 'markdown', label: 'Markdown' },
-    { mode: 'preview', label: '미리보기' },
-  ];
+  const MODES = $derived<{ mode: Mode; label: string }[]>([
+    { mode: 'rich', label: m.documents_mode_rich() },
+    { mode: 'markdown', label: m.documents_mode_markdown() },
+    { mode: 'preview', label: m.documents_mode_preview() },
+  ]);
 </script>
 
 {#if editable}
   <div class="flex flex-wrap items-center gap-1 border-b pb-2">
-    <div class="flex gap-1" role="group" aria-label="편집 방식">
-      {#each collab === undefined ? MODES : [] as m (m.mode)}
+    <div class="flex gap-1" role="group" aria-label={m.documents_mode_label()}>
+      {#each collab === undefined ? MODES : [] as option (option.mode)}
         <Button
           size="sm"
-          variant={mode === m.mode ? 'secondary' : 'ghost'}
-          aria-pressed={mode === m.mode}
+          variant={mode === option.mode ? 'secondary' : 'ghost'}
+          aria-pressed={mode === option.mode}
           onclick={() => {
-            switchMode(m.mode);
-          }}>{m.label}</Button
+            switchMode(option.mode);
+          }}>{option.label}</Button
         >
       {/each}
     </div>
     {#if mode === 'rich'}
-      <div class="ml-2 flex flex-wrap gap-1 border-l pl-2" role="toolbar" aria-label="서식">
+      <div
+        class="ml-2 flex flex-wrap gap-1 border-l pl-2"
+        role="toolbar"
+        aria-label={m.documents_format_toolbar()}
+      >
         {#each tools as tool (tool.command)}
           <Button
             variant={marks[tool.command] ? 'secondary' : 'ghost'}
@@ -326,14 +334,14 @@
           size="sm"
           onclick={() => {
             table('insert');
-          }}>표</Button
+          }}>{m.documents_table()}</Button
         >
         <Button
           variant="ghost"
           size="sm"
           onclick={() => {
             openMath('inline', '', undefined);
-          }}>수식</Button
+          }}>{m.documents_math()}</Button
         >
         {#if insertFile !== undefined}
           <Button
@@ -341,53 +349,57 @@
             size="sm"
             onclick={() => {
               fileInput?.click();
-            }}>파일·이미지</Button
+            }}>{m.documents_insert_file()}</Button
           >
           <input
             bind:this={fileInput}
             type="file"
             class="hidden"
-            aria-label="넣을 파일"
+            aria-label={m.documents_file_input()}
             onchange={(e: Event) => void onFile(e)}
           />
         {/if}
       </div>
       {#if inTable}
-        <div class="flex flex-wrap gap-1 border-l pl-2" role="toolbar" aria-label="표">
+        <div
+          class="flex flex-wrap gap-1 border-l pl-2"
+          role="toolbar"
+          aria-label={m.documents_table()}
+        >
           <Button
             variant="ghost"
             size="sm"
             onclick={() => {
               table('row');
-            }}>행 추가</Button
+            }}>{m.documents_table_add_row()}</Button
           >
           <Button
             variant="ghost"
             size="sm"
             onclick={() => {
               table('column');
-            }}>열 추가</Button
+            }}>{m.documents_table_add_column()}</Button
           >
           <Button
             variant="ghost"
             size="sm"
             onclick={() => {
               table('deleteRow');
-            }}>행 지우기</Button
+            }}>{m.documents_table_delete_row()}</Button
           >
           <Button
             variant="ghost"
             size="sm"
             onclick={() => {
               table('deleteColumn');
-            }}>열 지우기</Button
+            }}>{m.documents_table_delete_column()}</Button
           >
           <Button
             variant="ghost"
             size="sm"
             onclick={() => {
               table('delete');
-            }}>표 지우기</Button
+            }}>{m.documents_table_delete()}</Button
           >
         </div>
       {/if}
@@ -397,18 +409,18 @@
     {@const current = math}
     <form
       class="flex flex-wrap items-end gap-2 border-b py-2 text-sm"
-      aria-label="수식"
+      aria-label={m.documents_math()}
       onsubmit={(e: SubmitEvent) => {
         e.preventDefault();
         applyMath();
       }}
     >
       <label class="flex flex-1 flex-col gap-1">
-        <span class="font-medium">수식(LaTeX)</span>
+        <span class="font-medium">{m.documents_math_latex()}</span>
         <input
           class="h-8 rounded-md border border-input bg-transparent px-2 font-mono"
           bind:value={current.latex}
-          placeholder="예: E = mc^2"
+          placeholder={m.documents_math_placeholder()}
         />
       </label>
       {#if current.pos === undefined}
@@ -421,15 +433,19 @@
                 current.kind = e.currentTarget.checked ? 'block' : 'inline';
             }}
           />
-          따로 한 줄에
+          {m.documents_math_block()}
         </label>
       {/if}
-      <Button type="submit" size="sm">{current.pos === undefined ? '넣기' : '바꾸기'}</Button>
+      <Button type="submit" size="sm"
+        >{current.pos === undefined
+          ? m.documents_math_insert()
+          : m.documents_math_replace()}</Button
+      >
       <Button type="button" size="sm" variant="ghost" onclick={() => (math = undefined)}
-        >취소</Button
+        >{m.common_cancel()}</Button
       >
       {#if current.pos !== undefined}
-        <span class="w-full text-xs text-muted-foreground">비우고 바꾸면 수식을 지웁니다.</span>
+        <span class="w-full text-xs text-muted-foreground">{m.documents_math_clear_hint()}</span>
       {/if}
     </form>
   {/if}
@@ -438,11 +454,12 @@
 {#if mode === 'markdown'}
   {#if lossy}
     <p class="mt-2 text-sm text-amber-700 dark:text-amber-400" role="note">
-      이 문서에는 Markdown으로 그대로 옮기지 못하는 서식이 있습니다. 원문을 고치지 않고 돌아가면
-      원래 내용이 그대로 남고, 고치면 원문에서 다시 만든 내용으로 저장됩니다.
+      {m.documents_markdown_lossy()}
     </p>
   {/if}
-  <label class="mt-2 block text-sm font-medium" for="markdown-source">Markdown 원문</label>
+  <label class="mt-2 block text-sm font-medium" for="markdown-source"
+    >{m.documents_markdown_source()}</label
+  >
   <textarea
     id="markdown-source"
     bind:value={markdownText}

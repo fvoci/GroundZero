@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ApiError, NetworkError } from '$lib/api/client';
 import {
@@ -11,6 +11,7 @@ import {
   planDrop,
 } from '$lib/features/tasks/board';
 import { dayNumber, fromDayNumber, ganttLayout, MAX_GANTT_DAYS } from '$lib/features/tasks/gantt';
+import { setLocale } from '$lib/paraglide/runtime.js';
 
 const tasks = [
   { id: 'a', status: 'todo' as const, parent_id: null },
@@ -19,6 +20,10 @@ const tasks = [
   { id: 'c', status: 'in_progress' as const, parent_id: null },
   { id: 'x1', status: 'todo' as const, parent_id: 'hidden' },
 ];
+
+beforeEach(async () => {
+  await setLocale('ko', { reload: false });
+});
 
 describe('task board (D-31)', () => {
   it('splits tasks into status lanes keeping server order', () => {

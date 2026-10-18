@@ -2,9 +2,11 @@
   import type { Workspace } from '@fvoci/api-client';
 
   import { api } from '$lib/api/client';
+  import { m } from '$lib/paraglide/messages.js';
   import { router, workspacePath } from '$lib/router.svelte';
 
   import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
+  import { roleLabel } from '$lib/features/members/roles';
 
   import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 
@@ -24,9 +26,9 @@
 
 <section class="flex flex-col gap-6" aria-labelledby="home-heading">
   <ReceivedInvitations onaccepted={onjoined} />
-  <h2 id="home-heading" class="text-xl font-semibold">워크스페이스</h2>
+  <h2 id="home-heading" class="text-xl font-semibold">{m.workspaces_heading()}</h2>
   {#if workspaces.length === 0}
-    <p class="text-muted-foreground">아직 워크스페이스가 없습니다. 첫 워크스페이스를 만드세요.</p>
+    <p class="text-muted-foreground">{m.workspaces_empty()}</p>
   {:else}
     <ul class="flex flex-col gap-1" data-testid="workspace-list">
       {#each workspaces as ws (ws.id)}
@@ -40,7 +42,7 @@
             }}
           >
             <WorkspaceBadge workspace={ws} all={workspaces} />
-            <span class="text-sm text-muted-foreground">({ws.role})</span>
+            <span class="text-sm text-muted-foreground">({roleLabel(ws.role)})</span>
           </a>
         </li>
       {/each}
@@ -48,9 +50,9 @@
   {/if}
   <CreateForm
     id="new-workspace"
-    label="새 워크스페이스 이름"
-    placeholder="예: 연구실"
-    submitLabel="만들기"
+    label={m.workspaces_new_name()}
+    placeholder={m.workspaces_new_placeholder()}
+    submitLabel={m.workspaces_create()}
     create={async (requestId: string, name: string) => {
       const ws = await api.createWorkspace(requestId, name);
       oncreated(ws);

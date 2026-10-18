@@ -1,3 +1,222 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "tasks_status_todo": "To do",
+  "tasks_status_in_progress": "In progress",
+  "tasks_status_done": "Done",
+  "tasks_priority_none": "None",
+  "tasks_priority_low": "Low",
+  "tasks_priority_medium": "Medium",
+  "tasks_priority_high": "High",
+  "tasks_priority_urgent": "Urgent",
+  "tasks_csv_no_title": "Missing title",
+  "tasks_csv_title_too_long": "Title can be at most {max} characters",
+  "tasks_csv_unknown_status": "Unknown status: {value}",
+  "tasks_csv_unknown_priority": "Unknown priority: {value}",
+  "tasks_csv_bad_date": "Write dates as YYYY-MM-DD",
+  "tasks_csv_start_after_due": "Start date is after the due date",
+  "tasks_csv_bad_estimate": "Estimate (minutes) must be a number: {value}",
+  "tasks_csv_unknown_assignee": "Assignee not found: {name}",
+  "tasks_csv_ambiguous_assignee": "More than one person has this name: {name}",
+  "tasks_csv_conflict": "{title}: conflicted with another change. Press again.",
+  "tasks_csv_progress": "Adding {done} of {total}…",
+  "tasks_csv_imported": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Imported {count} task.",
+        "countPlural=other": "Imported {count} tasks."
+      }
+    }
+  ],
+  "tasks_csv_import_failed": "Couldn't import.",
+  "tasks_csv_import_error": "{reason} ({count} imported; press again to add the rest)",
+  "tasks_csv_summary": "Import tasks from CSV",
+  "tasks_csv_label": "One task per line: title, description, status (todo, in_progress, done), priority (none, low, medium, high, urgent), start date, due date (YYYY-MM-DD), estimate (minutes), assignees (names, separated by ;), tags (separated by ;)",
+  "tasks_csv_read": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Read {count} task.",
+        "countPlural=other": "Read {count} tasks."
+      }
+    }
+  ],
+  "tasks_csv_fix_lines": "Lines to fix: {lines}",
+  "tasks_csv_line_error": "line {line} ({reason})",
+  "tasks_csv_import": "Import",
+  "tasks_view_name_required": "Enter a view name.",
+  "tasks_view_saved": "Saved view \"{name}\".",
+  "tasks_view_save_failed": "Couldn't save the view.",
+  "tasks_view_deleted": "View deleted.",
+  "tasks_view_delete_failed": "Couldn't delete the view.",
+  "tasks_view_board": "Board",
+  "tasks_view_list": "List",
+  "tasks_view_gantt": "Gantt",
+  "tasks_view_calendar": "Calendar",
+  "tasks_sort_position": "Default order",
+  "tasks_sort_due": "Due date",
+  "tasks_sort_priority": "Priority",
+  "tasks_sort_title": "Title",
+  "tasks_sort_updated": "Recently updated",
+  "tasks_load_failed": "Couldn't load tasks.",
+  "tasks_moved_up": "{title}: moved up ({status}).",
+  "tasks_moved_down": "{title}: moved down ({status}).",
+  "tasks_moved_left": "{title}: moved to the left column ({status}).",
+  "tasks_moved_right": "{title}: moved to the right column ({status}).",
+  "tasks_heading": "Tasks",
+  "tasks_view": "View",
+  "tasks_filter_region": "Filter tasks",
+  "tasks_filter_find": "Find",
+  "tasks_filter_find_placeholder": "Title or number",
+  "tasks_status": "Status",
+  "tasks_filter_status_aria": "Filter by status",
+  "tasks_filter_all": "All",
+  "tasks_assignee": "Assignee",
+  "tasks_filter_assignee_aria": "Filter by assignee",
+  "tasks_filter_mine": "Assigned to me",
+  "tasks_filter_unassigned": "Unassigned",
+  "tasks_priority": "Priority",
+  "tasks_filter_priority_aria": "Filter by priority",
+  "tasks_tag": "Tag",
+  "tasks_filter_tag_aria": "Filter by tag",
+  "tasks_filter_due_from": "Due from",
+  "tasks_filter_due_from_aria": "Due date from",
+  "tasks_filter_due_to": "To",
+  "tasks_filter_due_to_aria": "Due date to",
+  "tasks_sort": "Sort",
+  "tasks_filter_reset": "Reset",
+  "tasks_saved_views": "Saved views",
+  "tasks_saved_view_choose": "Choose",
+  "tasks_view_name": "Name",
+  "tasks_view_name_aria": "View name",
+  "tasks_view_save": "Save current view",
+  "tasks_view_delete": "Delete view",
+  "tasks_filter_shown": "Showing {shown} of {total}",
+  "tasks_lane_aria": "{status} column",
+  "tasks_card_due": "Due {date}",
+  "tasks_board_hint": "Drag a card to change its column or order (on touch screens, drag the ⠿ handle). On a card, press Enter to open it, Alt+Left/Right to change its column and Alt+Up/Down to reorder it.",
+  "tasks_col_number": "No.",
+  "tasks_col_due": "Due",
+  "tasks_col_checklist": "Checklist",
+  "tasks_empty": "No tasks.",
+  "tasks_new_title": "New task title",
+  "tasks_new_placeholder": "e.g. Login screen",
+  "tasks_create": "Create task",
+  "tasks_task": "Task",
+  "tasks_dialog_description": "Edit the task's status, assignees, dates and checklist.",
+  "tasks_gantt_milestone": "Milestone {date}",
+  "tasks_gantt_predecessors": "After {refs}",
+  "tasks_gantt_empty": "No tasks have dates. Add a start or due date in a task's details to see it here as a bar.",
+  "tasks_gantt_nav": "Move Gantt period",
+  "tasks_gantt_back": "← 2 weeks earlier",
+  "tasks_today": "Today",
+  "tasks_gantt_forward": "2 weeks later →",
+  "tasks_gantt_later": [
+    {
+      "declarations": ["input days", "input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} task starting after the first {days} days is in the list view.",
+        "countPlural=other": "{count} tasks starting after the first {days} days are in the list view."
+      }
+    }
+  ],
+  "tasks_gantt_undated": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} task without dates is in the list view.",
+        "countPlural=other": "{count} tasks without dates are in the list view."
+      }
+    }
+  ],
+  "tasks_prev_month": "Previous month",
+  "tasks_next_month": "Next month",
+  "tasks_calendar_aria": "Task calendar for {month}",
+  "tasks_calendar_day_aria": [
+    {
+      "declarations": ["input day", "input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{day}, {count} task",
+        "countPlural=other": "{day}, {count} tasks"
+      }
+    }
+  ],
+  "tasks_calendar_undated": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} task without dates is in the list and board views.",
+        "countPlural=other": "{count} tasks without dates are in the list and board views."
+      }
+    }
+  ],
+  "tasks_not_found": "This task doesn't exist or you can't see it.",
+  "tasks_task_load_failed": "Couldn't load the task.",
+  "tasks_save_failed": "Couldn't save.",
+  "tasks_predecessor_failed": "Couldn't change predecessors.",
+  "tasks_no_dates": "No dates",
+  "tasks_read_only": "Read-only",
+  "tasks_conflict": "Someone else changed this task in the meantime (now titled “{title}”, status: {status}). Your input is kept.",
+  "tasks_load_server": "Load their version",
+  "tasks_save_mine": "Save mine again",
+  "tasks_title": "Title",
+  "tasks_description": "Description",
+  "tasks_start_date": "Start date",
+  "tasks_due_date": "Due date",
+  "tasks_estimate": "Estimate (minutes)",
+  "tasks_tags": "Tags (comma-separated)",
+  "tasks_milestone": "Milestone (due date only)",
+  "tasks_assignees": "Assignees (share one completion status)",
+  "tasks_no_assignable": "No one can be assigned.",
+  "tasks_shift_heading": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Dates overlap with {count} following task",
+        "countPlural=other": "Dates overlap with {count} following tasks"
+      }
+    }
+  ],
+  "tasks_shift_retried": "The following tasks changed in the meantime, so this was recalculated.",
+  "tasks_shift_hint": "We suggest moving them to start the day after their predecessor ends. Each task keeps its duration.",
+  "tasks_shift_save_all": "Move following tasks and save",
+  "tasks_shift_save_this": "Save this task only",
+  "tasks_subtasks": "Subtasks",
+  "tasks_none": "None.",
+  "tasks_subtask_title": "Subtask title",
+  "tasks_subtask_placeholder": "e.g. Input validation",
+  "tasks_subtask_add": "Add subtask",
+  "tasks_predecessors": "Predecessors (must finish first)",
+  "tasks_hidden_task": "Hidden task",
+  "tasks_predecessor_remove_aria": "Remove predecessor {task}",
+  "tasks_remove": "Remove",
+  "tasks_successors": "Tasks after this one: {tasks}",
+  "tasks_predecessor_add": "Add predecessor",
+  "tasks_predecessor_choose": "Choose a task",
+  "tasks_add": "Add",
+  "tasks_recurrence": "Repeat",
+  "tasks_occurrence_note": "This is the {date} occurrence of a repeating task. Change the rule on the first occurrence.",
+  "tasks_open_first": "Open first occurrence",
+  "tasks_recurrence_zone": "\"Today\" is in {zone}",
+  "tasks_recurrence_needs_date": "Save a date first to set up repetition.",
+  "tasks_noun_task": "task",
+  "tasks_board_hint_unordered": "Unless sorted by default order, only the column changes.",
+  "tasks_moved_drag": "{title}: moved by dragging ({status}).",
+  "tasks_drag_started": "Dragging {title}. Drop it where it should go, or press Esc to cancel.",
+  "tasks_drag_unchanged": "{title}: left where it was.",
+  "tasks_drag_cancelled": "{title}: drag cancelled.",
+  "tasks_drag_handle": "Drag to move",
+  "tasks_move_error_network": "Couldn't reach the server, so the task wasn't moved. It's back where it was.",
+  "tasks_move_error_stale": "The task changed elsewhere in the meantime, so it wasn't moved. Showing the latest state.",
+  "tasks_move_error_forbidden": "You don't have permission to change tasks in this item, so it wasn't moved.",
+  "tasks_move_error_gone": "The task was deleted or you can no longer see it, so it wasn't moved.",
+  "tasks_move_error_archived": "The item was archived or changed at the same time, so the task wasn't moved. Try again shortly.",
+  "tasks_move_error_other": "Couldn't move the task. It's back where it was."
 }

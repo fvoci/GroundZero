@@ -3,6 +3,7 @@
   import { untrack } from 'svelte';
 
   import { fileContentUrl } from '$lib/api/client';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
   import type { HwpRun } from './hwp';
@@ -59,7 +60,7 @@
     const base = await rhwpBase();
     if (mine !== seq) return;
     if (base === undefined) {
-      error = '이 설치에는 HWP 미리보기 구성요소가 없습니다. 내려받아 여세요.';
+      error = m.files_hwp_missing();
       return;
     }
     hwpStatus = 'loading';
@@ -78,15 +79,15 @@
       hwpStatus = 'done';
       hwpNote =
         outcome.total > outcome.rendered
-          ? `앞 ${String(outcome.rendered)}쪽만 보입니다(전체 ${String(outcome.total)}쪽). 전체는 내려받아 여세요.`
-          : `${String(outcome.total)}쪽`;
+          ? m.files_hwp_partial({ rendered: outcome.rendered, total: outcome.total })
+          : m.files_hwp_pages({ count: outcome.total });
     } else if (outcome.kind === 'timeout') {
-      error = '미리보기가 오래 걸려 멈췄습니다. 내려받아 여세요.';
+      error = m.files_preview_timeout();
     } else if (outcome.kind === 'cancelled') {
       hwpStatus = 'done';
-      hwpNote = '미리보기를 멈췄습니다.';
+      hwpNote = m.files_preview_stopped();
     } else {
-      error = '미리보기를 만들지 못했습니다(손상되었거나 지원하지 않는 파일). 내려받아 여세요.';
+      error = m.files_preview_corrupt();
     }
   }
 
@@ -109,7 +110,7 @@
       if (data.type === 'ready') sendPptx();
       else if (data.type === 'rendered' && 'slides' in data && typeof data.slides === 'number')
         pptxSlides = data.slides;
-      else if (data.type === 'failed') error = '미리보기를 만들지 못했습니다. 내려받아 여세요.';
+      else if (data.type === 'failed') error = m.files_preview_failed();
     };
     window.addEventListener('message', listener);
     return () => {
@@ -129,7 +130,7 @@
     clearHwp();
     error = undefined;
     if (size > (kind === 'hwp' ? HWP_PREVIEW_MAX_BYTES : OFFICE_PREVIEW_MAX_BYTES)) {
-      error = '파일이 커서 미리볼 수 없습니다. 내려받아 여세요.';
+      error = m.files_too_large();
       return;
     }
     void (async () => {
@@ -153,7 +154,7 @@
           if (mine === seq) sheets = result;
         }
       } catch {
-        if (mine === seq) error = '미리보기를 만들지 못했습니다. 내려받아 여세요.';
+        if (mine === seq) error = m.files_preview_failed();
       }
     })();
     return () => {
@@ -163,17 +164,20 @@
   });
 </script>
 
-<section class="flex flex-col gap-2 rounded-md border p-2" aria-label={`${name} 미리보기`}>
+<section
+  class="flex flex-col gap-2 rounded-md border p-2"
+  aria-label={m.files_preview_aria({ name })}
+>
   <div class="flex items-center gap-2">
     <h3 class="min-w-0 flex-1 truncate text-sm font-semibold">{name}</h3>
-    <Button size="sm" variant="ghost" onclick={onclose}>닫기</Button>
+    <Button size="sm" variant="ghost" onclick={onclose}>{m.files_close()}</Button>
   </div>
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive">{error}</p>
   {:else if srcdoc !== undefined}
     <!-- 문서 내용은 스크립트를 돌릴 수 없는 iframe 안에서만 보인다. -->
     <iframe
-      title={`${name} 미리보기`}
+      title={m.files_preview_aria({ name })}
       sandbox=""
       {srcdoc}
       class="h-[70vh] w-full rounded border bg-muted"
@@ -182,13 +186,15 @@
     <!-- 같은 출처가 아닌 격리 문서에서 그린다. 창 열기·이동·같은 출처 접근은 허용하지 않는다. -->
     <iframe
       bind:this={frame}
-      title={`${name} 미리보기`}
+      title={m.files_preview_aria({ name })}
       sandbox="allow-scripts"
       srcdoc={pptxDoc}
       class="h-[70vh] w-full rounded border bg-muted"
     ></iframe>
     <p aria-live="polite" class="text-xs text-muted-foreground">
-      {pptxSlides === undefined ? '슬라이드를 그리는 중…' : `슬라이드 ${String(pptxSlides)}장`}
+      {pptxSlides === undefined
+        ? m.files_slides_rendering()
+        : m.files_slides_count({ count: pptxSlides })}
     </p>
   {:else if hwpStatus !== undefined}
     <!-- 쪽마다 SVG를 그림으로만 보인다(SVG 안 스크립트·바깥 요청이 돌지 않음). -->
@@ -196,22 +202,26 @@
       class="flex max-h-[70vh] flex-col items-center gap-3 overflow-auto rounded border bg-muted p-3"
     >
       {#each hwpPages as url, i (url)}
-        <img src={url} alt={`${String(i + 1)}쪽`} class="w-full max-w-3xl bg-white shadow" />
+        <img
+          src={url}
+          alt={m.files_page_alt({ page: i + 1 })}
+          class="w-full max-w-3xl bg-white shadow"
+        />
       {/each}
     </div>
     <div class="flex items-center gap-2 text-xs text-muted-foreground">
       <span aria-live="polite"
         >{hwpStatus === 'loading'
-          ? `그리는 중… ${String(hwpPages.length)}쪽`
+          ? m.files_hwp_rendering({ count: hwpPages.length })
           : (hwpNote ?? '')}</span
       >
       {#if hwpStatus === 'loading'}
-        <Button size="sm" variant="ghost" onclick={() => hwpRun?.cancel()}>멈추기</Button>
+        <Button size="sm" variant="ghost" onclick={() => hwpRun?.cancel()}>{m.files_stop()}</Button>
       {/if}
     </div>
   {:else if sheets !== undefined}
     {#if sheets.length > 1}
-      <div class="flex flex-wrap gap-1" role="tablist" aria-label="시트">
+      <div class="flex flex-wrap gap-1" role="tablist" aria-label={m.files_sheets()}>
         {#each sheets as sheet, i (sheet.name)}
           <Button
             size="sm"
@@ -242,14 +252,14 @@
       </div>
       {#if sheet.rows.length >= MAX_SHEET_ROWS}
         <p class="text-xs text-muted-foreground">
-          앞 {MAX_SHEET_ROWS}행만 보입니다. 전체는 내려받아 여세요.
+          {m.files_sheet_rows_limit({ rows: MAX_SHEET_ROWS })}
         </p>
       {/if}
       <p class="text-xs text-muted-foreground">
-        셀 값만 보입니다(서식·그림·차트·병합은 보이지 않음).
+        {m.files_sheet_values_only()}
       </p>
     {/if}
   {:else}
-    <p aria-live="polite" class="text-sm">미리보기를 만드는 중…</p>
+    <p aria-live="polite" class="text-sm">{m.files_preview_loading()}</p>
   {/if}
 </section>

@@ -1,30 +1,46 @@
 // 시간 기록 표시 (D-32).
 import type { TimeEntryView, TimeKind } from '$lib/api/client';
+import { m } from '$lib/paraglide/messages.js';
 
+// 값은 읽을 때 지금 언어로 만든다(언어는 실행 중에 바뀔 수 있다).
 export const TIME_KIND_LABEL: Record<TimeKind, string> = {
-  work: '작업',
-  study: '순공부',
-  lecture: '강의 시청',
-  hobby: '취미',
-  rest: '휴식',
-  other: '기타',
+  get work() {
+    return m.time_kind_work();
+  },
+  get study() {
+    return m.time_kind_study();
+  },
+  get lecture() {
+    return m.time_kind_lecture();
+  },
+  get hobby() {
+    return m.time_kind_hobby();
+  },
+  get rest() {
+    return m.time_kind_rest();
+  },
+  get other() {
+    return m.time_kind_other();
+  },
 };
 
 /** 타이머 표시 `H:MM:SS`. */
 export function clockText(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return `${String(h)}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  const min = Math.floor((s % 3600) / 60);
+  return `${String(h)}:${String(min).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
 /** 합계 표시 `3시간 5분`(1분 미만은 `0분`). */
 export function durationText(seconds: number): string {
   const minutes = Math.floor(Math.max(0, seconds) / 60);
   const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h === 0) return `${String(m)}분`;
-  return m === 0 ? `${String(h)}시간` : `${String(h)}시간 ${String(m)}분`;
+  const rest = minutes % 60;
+  if (h === 0) return m.time_duration_minutes({ minutes: rest });
+  return rest === 0
+    ? m.time_duration_hours({ hours: h })
+    : m.time_duration_hours_minutes({ hours: h, minutes: rest });
 }
 
 /**

@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { RecordKindView, RecordView } from '$lib/api/client';
 import { emptyForm, formOf, summary, toInput } from '$lib/features/records/records';
+import { setLocale } from '$lib/paraglide/runtime.js';
+
+beforeEach(async () => {
+  await setLocale('ko', { reload: false });
+});
 
 const def: RecordKindView = {
   kind: 'analysis',

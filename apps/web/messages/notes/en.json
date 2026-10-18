@@ -1,3 +1,17 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "notes_shared_load_failed": "Couldn't load the list.",
+  "notes_shared_heading": "Shared with me",
+  "notes_loading": "Loading…",
+  "notes_shared_empty": "Nothing has been shared with you.",
+  "notes_shared_by_read": "Shared by {name} · Read",
+  "notes_shared_by_write": "Shared by {name} · Edit",
+  "notes_load_failed": "Couldn't load notes.",
+  "notes_heading": "My notes",
+  "notes_hint": "Only you can see these notes, not even workspace admins. You can share one with specific people if needed.",
+  "notes_empty": "No notes yet.",
+  "notes_new_note_title": "New note",
+  "notes_new_title_label": "New note title",
+  "notes_new_title_placeholder": "e.g. Ideas",
+  "notes_create": "Create note"
 }

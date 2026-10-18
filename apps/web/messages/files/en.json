@@ -1,3 +1,72 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "files_load_failed": "Couldn't load attachments.",
+  "files_uploaded": "Uploaded: {name}",
+  "files_uploaded_version": "Uploaded: {name} (v{version})",
+  "files_upload_cancelled": "Cancelled: {name}",
+  "files_upload_failed": "Couldn't upload. Choose the same file again to resume.",
+  "files_named_error": "{name}: {error}",
+  "files_versions_load_failed": "Couldn't load the version history.",
+  "files_action_failed": "Couldn't complete that.",
+  "files_heading": "Attachments",
+  "files_upload": "Upload files",
+  "files_uploading": "Uploading {name}… {percent}%",
+  "files_empty": "No attachments.",
+  "files_renamed": "Renamed: {name}",
+  "files_new_name": "New name",
+  "files_download_blocked": "Attachment of a document that doesn't allow downloads",
+  "files_preview": "Preview",
+  "files_preview_aria": "Preview {name}",
+  "files_versions": "Version history",
+  "files_versions_aria": "Version history of {name}",
+  "files_new_version": "New version",
+  "files_new_version_aria": "Upload a new version of {name}",
+  "files_rename": "Rename",
+  "files_rename_aria": "Rename {name}",
+  "files_trash": "Move to trash",
+  "files_trash_aria": "Move {name} to trash",
+  "files_trashed": "Moved to trash: {name}",
+  "files_version_list_aria": "Versions of {name}",
+  "files_delete": "Delete",
+  "files_delete_version_aria": "Delete v{version} of {name}",
+  "files_version_deleted": "Deleted v{version}: {name}",
+  "files_hwp_missing": "This installation doesn't include the HWP preview component. Download the file to open it.",
+  "files_hwp_partial": "Showing only the first {rendered} of {total} pages. Download the file to see all of it.",
+  "files_hwp_pages": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{count} page", "countPlural=other": "{count} pages" }
+    }
+  ],
+  "files_hwp_rendering": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Rendering… {count} page",
+        "countPlural=other": "Rendering… {count} pages"
+      }
+    }
+  ],
+  "files_preview_timeout": "The preview took too long and was stopped. Download the file to open it.",
+  "files_preview_stopped": "Preview stopped.",
+  "files_preview_corrupt": "Couldn't create a preview (the file is damaged or not supported). Download the file to open it.",
+  "files_preview_failed": "Couldn't create a preview. Download the file to open it.",
+  "files_too_large": "The file is too large to preview. Download it to open it.",
+  "files_close": "Close",
+  "files_slides_rendering": "Rendering slides…",
+  "files_slides_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{count} slide", "countPlural=other": "{count} slides" }
+    }
+  ],
+  "files_page_alt": "Page {page}",
+  "files_stop": "Stop",
+  "files_sheets": "Sheets",
+  "files_sheet_rows_limit": "Showing only the first {rows} rows. Download the file to see all of it.",
+  "files_sheet_values_only": "Only cell values are shown (no formatting, images, charts or merged cells).",
+  "files_preview_loading": "Creating preview…"
 }

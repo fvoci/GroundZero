@@ -1,6 +1,9 @@
 // 항목 기록의 입력 칸 ↔ 보낼 값, 표시용 요약. 칸 정의는 서버(`GET /api/record-kinds`)에서 받는다.
 import type { RecordFieldValue, RecordInput, RecordKindView, RecordView } from '$lib/api/client';
+import { m } from '$lib/paraglide/messages.js';
 import { isWebUrl } from '$lib/url';
+
+import { recordChoiceLabel, recordFieldLabel } from './labels';
 
 export interface FileLinkForm {
   file_id: string;
@@ -64,7 +67,7 @@ export function toInput(
     if (f.type === 'number') {
       const n = Number(raw);
       if (!Number.isFinite(n) || n < 0)
-        return { error: `${f.label}에는 0 이상의 수를 적어 주세요.` };
+        return { error: m.records_number_invalid({ label: recordFieldLabel(def, f) }) };
       fields[f.key] = n;
     } else if (f.type === 'tags') {
       const tags = [
@@ -98,6 +101,8 @@ export function toInput(
 }
 
 export interface SummaryLine {
+  /** 칸 키. 표시 이름은 언어마다 달라지므로 칸과 줄을 맞출 때는 이것을 쓴다. */
+  key: string;
   label: string;
   text: string;
   /** 주소 칸이면 링크로 보인다. */
@@ -112,18 +117,20 @@ export function summary(
   courses: ReadonlyMap<string, string>,
 ): SummaryLine[] {
   const lines: SummaryLine[] = [];
-  const person = (id: string): string => names.get(id) ?? '알 수 없는 사람';
+  const person = (id: string): string => names.get(id) ?? m.records_unknown_person();
   for (const f of def.fields) {
     const v = r.fields[f.key];
     if (v === undefined) continue;
     let text: string;
-    if (f.type === 'choice') text = f.choices.find((c) => c.value === v)?.label ?? String(v);
-    else if (f.type === 'person' && typeof v === 'string') text = person(v);
+    if (f.type === 'choice') {
+      const c = f.choices.find((x) => x.value === v);
+      text = c === undefined ? String(v) : recordChoiceLabel(def, f, c);
+    } else if (f.type === 'person' && typeof v === 'string') text = person(v);
     else if (f.type === 'people' && Array.isArray(v)) text = v.map(person).join(', ');
     else if (f.type === 'course' && typeof v === 'string')
-      text = courses.get(v) ?? '볼 수 없는 강좌';
+      text = courses.get(v) ?? m.records_hidden_course();
     else text = Array.isArray(v) ? v.join(', ') : String(v);
-    const line: SummaryLine = { label: f.label, text };
+    const line: SummaryLine = { key: f.key, label: recordFieldLabel(def, f), text };
     if (f.type === 'url' && typeof v === 'string' && isWebUrl(v)) line.href = v;
     lines.push(line);
   }

@@ -1,3 +1,119 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "trash_load_failed": "휴지통을 불러오지 못했습니다.",
+  "trash_action_failed": "처리하지 못했습니다.",
+  "trash_kind_module": "모듈",
+  "trash_kind_item": "항목",
+  "trash_kind_document": "문서",
+  "trash_kind_task": "업무",
+  "trash_kind_event": "일정",
+  "trash_kind_file": "파일",
+  "trash_entry": "{kind} “{title}”",
+  "trash_entry_with_children": "{kind} “{title}”(하위 포함 {count}개)",
+  "trash_my_heading": "내 노트 휴지통",
+  "trash_workspace_heading": "{workspace} 휴지통",
+  "trash_retention_admin": [
+    {
+      "declarations": ["input days", "local daysPlural = days: plural"],
+      "selectors": ["daysPlural"],
+      "match": {
+        "daysPlural=other": "지운 날부터 {days}일 동안 되살릴 수 있습니다. 기간이 지난 것은 되살릴 수 없고 영구 삭제할 수 있습니다."
+      }
+    }
+  ],
+  "trash_retention_member": [
+    {
+      "declarations": ["input days", "local daysPlural = days: plural"],
+      "selectors": ["daysPlural"],
+      "match": {
+        "daysPlural=other": "지운 날부터 {days}일 동안 되살릴 수 있습니다. 기간이 지난 것은 되살릴 수 없고 관리자가 영구 삭제합니다."
+      }
+    }
+  ],
+  "trash_retention_invalid": "보존 기간은 1~3650일입니다.",
+  "trash_retention_changed": [
+    {
+      "declarations": ["input days", "local daysPlural = days: plural"],
+      "selectors": ["daysPlural"],
+      "match": {
+        "daysPlural=other": "보존 기간을 {days}일로 바꿨습니다."
+      }
+    }
+  ],
+  "trash_retention_label": "보존 기간(일)",
+  "trash_change": "바꾸기",
+  "trash_version_retention_region": "이전 파일 버전 보존",
+  "trash_version_retention_invalid": "이전 버전 보존 기간은 1~3650일이거나 비워 둡니다(영구 보존).",
+  "trash_versions_forever": "이전 파일 버전을 영구 보존합니다.",
+  "trash_versions_days": [
+    {
+      "declarations": ["input days", "local daysPlural = days: plural"],
+      "selectors": ["daysPlural"],
+      "match": {
+        "daysPlural=other": "이전 파일 버전을 {days}일 보존합니다."
+      }
+    }
+  ],
+  "trash_version_retention_label": "이전 파일 버전 보존(일, 비우면 영구)",
+  "trash_version_retention_hint": "기간이 지난 이전 버전은 자동으로 지웁니다. 분석 등 기록이 연결했거나 문서가 가리키는 버전과 지금 버전은 지우지 않습니다.",
+  "trash_irreversible": "되돌릴 수 없습니다.",
+  "trash_purge_expired_kept": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "그중 {count}개는 기록이나 문서가 가리키는 버전이 있어 지우면 그 그림·파일 연결이 끊깁니다."
+      }
+    }
+  ],
+  "trash_purge_expired_question": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "만료된 {count}개를 영구 삭제할까요?"
+      }
+    }
+  ],
+  "trash_purged_expired": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "만료된 {count}개를 영구 삭제했습니다."
+      }
+    }
+  ],
+  "trash_purge_expired_button": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "만료된 {count}개 영구 삭제…"
+      }
+    }
+  ],
+  "trash_purge": "영구 삭제",
+  "trash_purge_ellipsis": "영구 삭제…",
+  "trash_purge_question": "되돌릴 수 없습니다. 영구 삭제할까요?",
+  "trash_purge_question_kept": "되돌릴 수 없습니다. 이 파일의 버전을 가리키는 그림·파일 연결이 끊깁니다. 영구 삭제할까요?",
+  "trash_purged": "영구 삭제했습니다: {label}",
+  "trash_deleted_at": "{when}에 지움",
+  "trash_expired": "만료됨",
+  "trash_until": "{when}까지",
+  "trash_kept_hint": "기록이나 문서가 이 파일의 버전을 가리키고 있어 자동으로 지우지 않습니다. 기한이 지났어도 되살릴 수 있습니다.",
+  "trash_restore": "되살리기",
+  "trash_restored": "되살렸습니다: {label}",
+  "trash_empty": "휴지통이 비어 있습니다.",
+  "trash_delete_failed": "지우지 못했습니다.",
+  "trash_move_question": "{what}: 휴지통으로 옮길까요?",
+  "trash_move": "휴지통으로",
+  "trash_delete_what": "{what} 지우기",
+  "trash_workspaces_load_failed": "지운 워크스페이스를 불러오지 못했습니다.",
+  "trash_workspaces_heading": "지운 워크스페이스",
+  "trash_workspaces_hint": "내가 소유한 워크스페이스입니다. 보존 기간 안에는 모든 내용과 멤버가 그대로 돌아옵니다. 영구 삭제하면 모든 내용이 지워지며 되돌릴 수 없습니다(각자의 개인 시간 기록은 남습니다).",
+  "trash_restore_named": "{name} 되살리기",
+  "trash_workspace_purge_question": "모든 내용이 지워집니다. 영구 삭제할까요?",
+  "trash_purge_named": "{name} 영구 삭제",
+  "trash_purge_named_ellipsis": "{name} 영구 삭제…"
 }

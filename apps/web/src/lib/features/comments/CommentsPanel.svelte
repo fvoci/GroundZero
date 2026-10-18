@@ -1,7 +1,9 @@
 <script lang="ts">
   // 댓글(D-27, D-20). 대상을 볼 수 있으면 댓글을 단다. 한 단계 답글, 해결된 스레드는 접어 둔다.
   import type { CommentTarget, CommentView } from '$lib/api/client';
-  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { api, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
   import CommentItem from './CommentItem.svelte';
@@ -44,7 +46,7 @@
         if (mine === seq) comments = list;
       })
       .catch((e: unknown) => {
-        if (mine === seq) error = e instanceof ApiError ? e.message : '댓글을 불러오지 못했습니다.';
+        if (mine === seq) error = errorText(e, m.comments_load_failed());
       });
   });
 
@@ -58,7 +60,7 @@
       reloadKey += 1;
       return true;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '처리하지 못했습니다.';
+      error = errorText(e, m.comments_action_failed());
       return false;
     } finally {
       busy = false;
@@ -68,7 +70,7 @@
   async function post(): Promise<void> {
     const body = draft.trim();
     if (body === '') return;
-    if (await run(() => api.addComment(target, body, null, draftId), '댓글을 달았습니다.')) {
+    if (await run(() => api.addComment(target, body, null, draftId), m.comments_posted())) {
       draft = '';
       draftId = newRequestId();
     }
@@ -77,7 +79,7 @@
   async function reply(root: string): Promise<void> {
     const body = replyDraft.trim();
     if (body === '') return;
-    if (await run(() => api.addComment(target, body, root, replyId), '답글을 달았습니다.')) {
+    if (await run(() => api.addComment(target, body, root, replyId), m.comments_replied())) {
       replyDraft = '';
       replyId = newRequestId();
       replyTo = undefined;
@@ -88,7 +90,7 @@
 
   /** 지운 댓글이 사라져도 키보드 초점을 잃지 않게 댓글 제목으로 옮긴다. */
   async function remove(id: string): Promise<void> {
-    if (await run(() => api.deleteComment(id), '댓글을 지웠습니다.')) heading?.focus();
+    if (await run(() => api.deleteComment(id), m.comments_deleted())) heading?.focus();
   }
 
   /** 답글 칸이 열리면 바로 쓸 수 있게 초점을 옮긴다(키보드 사용). */
@@ -111,7 +113,7 @@
     tabindex="-1"
     bind:this={heading}
   >
-    댓글
+    {m.comments_heading()}
   </h2>
   <p aria-live="polite" class="text-sm">
     {#if error !== undefined}<span class="text-destructive">{error}</span>{:else}{status}{/if}
@@ -121,11 +123,14 @@
       <li class="flex flex-col gap-2 rounded-md border p-2">
         {#if t.root.resolved && !showResolved.has(t.root.id)}
           <div class="flex items-center gap-2 text-sm text-muted-foreground">
-            <span class="min-w-0 flex-1 truncate">해결됨 · {t.root.body}</span>
+            <span class="min-w-0 flex-1 truncate"
+              >{m.comments_resolved_summary({ body: t.root.body })}</span
+            >
             <Button
               size="sm"
               variant="ghost"
-              onclick={() => (showResolved = new Set([...showResolved, t.root.id]))}>펼치기</Button
+              onclick={() => (showResolved = new Set([...showResolved, t.root.id]))}
+              >{m.comments_expand()}</Button
             >
           </div>
         {:else}
@@ -133,7 +138,7 @@
             comment={t.root}
             {busy}
             onedit={(body: string) =>
-              run(() => api.editComment(t.root.id, body), '댓글을 고쳤습니다.')}
+              run(() => api.editComment(t.root.id, body), m.comments_edited())}
             ondelete={() => void remove(t.root.id)}
           />
           {#each t.replies as r (r.id)}
@@ -142,7 +147,7 @@
                 comment={r}
                 {busy}
                 onedit={(body: string) =>
-                  run(() => api.editComment(r.id, body), '댓글을 고쳤습니다.')}
+                  run(() => api.editComment(r.id, body), m.comments_edited())}
                 ondelete={() => void remove(r.id)}
               />
             </div>
@@ -156,7 +161,7 @@
                   replyTo = t.root.id;
                   replyDraft = '';
                   replyId = newRequestId();
-                }}>답글</Button
+                }}>{m.comments_reply()}</Button
               >
             {/if}
             {#if t.root.can_resolve}
@@ -166,8 +171,8 @@
                 onclick={() =>
                   void run(
                     () => api.resolveComment(t.root.id, !t.root.resolved),
-                    t.root.resolved ? '해결을 풀었습니다.' : '해결로 표시했습니다.',
-                  )}>{t.root.resolved ? '해결 풀기' : '해결'}</Button
+                    t.root.resolved ? m.comments_unresolved() : m.comments_resolved(),
+                  )}>{t.root.resolved ? m.comments_unresolve() : m.comments_resolve()}</Button
               >
             {/if}
           </div>
@@ -181,7 +186,7 @@
             >
               <textarea
                 use:focusOnMount
-                aria-label="답글"
+                aria-label={m.comments_reply()}
                 class="min-h-16 rounded-md border bg-background p-2 text-sm"
                 bind:value={replyDraft}
                 maxlength={10000}
@@ -190,9 +195,10 @@
                 }}></textarea>
               <div class="flex gap-2">
                 <Button type="submit" size="sm" disabled={busy || replyDraft.trim() === ''}
-                  >답글 달기</Button
+                  >{m.comments_reply_submit()}</Button
                 >
-                <Button size="sm" variant="ghost" onclick={() => (replyTo = undefined)}>취소</Button
+                <Button size="sm" variant="ghost" onclick={() => (replyTo = undefined)}
+                  >{m.common_cancel()}</Button
                 >
               </div>
             </form>
@@ -200,7 +206,7 @@
         {/if}
       </li>
     {:else}
-      <li class="text-sm text-muted-foreground">댓글이 없습니다.</li>
+      <li class="text-sm text-muted-foreground">{m.comments_empty()}</li>
     {/each}
   </ul>
   <form
@@ -211,14 +217,16 @@
     }}
   >
     <textarea
-      aria-label="새 댓글(Ctrl·⌘+Enter로 달기)"
+      aria-label={m.comments_new_label()}
       class="min-h-20 rounded-md border bg-background p-2 text-sm"
       bind:value={draft}
       maxlength={10000}
-      placeholder="댓글"
+      placeholder={m.comments_new_placeholder()}
       onkeydown={(e: KeyboardEvent) => {
         submitOnCtrlEnter(e, () => void post());
       }}></textarea>
-    <div><Button type="submit" disabled={busy || draft.trim() === ''}>댓글 달기</Button></div>
+    <div>
+      <Button type="submit" disabled={busy || draft.trim() === ''}>{m.comments_post()}</Button>
+    </div>
   </form>
 </section>

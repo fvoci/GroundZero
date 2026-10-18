@@ -4,6 +4,7 @@
 
   import type { BacklinkView } from '$lib/api/client';
   import { api } from '$lib/api/client';
+  import { m } from '$lib/paraglide/messages.js';
   import { pathFor, router } from '$lib/router.svelte';
 
   interface Props {
@@ -44,11 +45,13 @@
 </script>
 
 <section class="flex flex-col gap-2 border-t pt-4" aria-labelledby="backlinks-heading">
-  <h2 id="backlinks-heading" class="text-sm font-semibold">이곳을 가리키는 문서</h2>
+  <h2 id="backlinks-heading" class="text-sm font-semibold">
+    {m.references_backlinks_heading()}
+  </h2>
   {#if failed}
-    <p class="text-sm text-muted-foreground">불러오지 못했습니다.</p>
+    <p class="text-sm text-muted-foreground">{m.references_backlinks_failed()}</p>
   {:else if links.length === 0}
-    <p class="text-sm text-muted-foreground">없습니다.</p>
+    <p class="text-sm text-muted-foreground">{m.references_backlinks_empty()}</p>
   {:else}
     <ul class="flex flex-col gap-1" data-testid="backlinks">
       {#each links as link (link.id)}

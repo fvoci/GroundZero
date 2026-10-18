@@ -16,6 +16,7 @@
     TaskView,
   } from '$lib/api/client';
   import { api, ApiError, TASK_PRIORITIES, TASK_STATUSES } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
   import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
   import RecurrenceEditor from '$lib/features/events/RecurrenceEditor.svelte';
@@ -27,6 +28,7 @@
   import { localTimeZone } from '$lib/features/events/time';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
@@ -113,8 +115,8 @@
         if (!cancelled)
           error =
             e instanceof ApiError && e.status === 404
-              ? '업무가 없거나 볼 권한이 없습니다.'
-              : '업무를 불러오지 못했습니다.';
+              ? m.tasks_not_found()
+              : errorText(e, m.tasks_task_load_failed());
       });
     return () => {
       cancelled = true;
@@ -156,7 +158,7 @@
       }
       await save(input, base.version, []);
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '저장하지 못했습니다.';
+      error = errorText(e, m.tasks_save_failed());
     } finally {
       busy = false;
     }
@@ -171,7 +173,7 @@
     try {
       await save(p.input, p.baseVersion, withShifts ? p.proposals : []);
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '저장하지 못했습니다.';
+      error = errorText(e, m.tasks_save_failed());
     } finally {
       busy = false;
     }
@@ -256,14 +258,14 @@
       else fill(fresh);
       onchanged();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '선행 업무를 바꾸지 못했습니다.';
+      error = errorText(e, m.tasks_predecessor_failed());
     }
   }
 
   const range = (start: string | null, due: string | null): string =>
     start !== null && due !== null && start !== due
       ? `${start}~${due}`
-      : (due ?? start ?? '날짜 없음');
+      : (due ?? start ?? m.tasks_no_dates());
 
   let shiftHeading = $state<HTMLElement | undefined>(undefined);
   $effect(() => {
@@ -287,13 +289,14 @@
   <div class="flex flex-col gap-4">
     <div class="flex flex-wrap items-baseline gap-2">
       <span class="font-mono text-sm text-muted-foreground">{current.reference ?? ''}</span>
-      {#if current.access === 'read'}<span class="text-sm text-muted-foreground">읽기 전용</span
+      {#if current.access === 'read'}<span class="text-sm text-muted-foreground"
+          >{m.tasks_read_only()}</span
         >{/if}
       <div class="ml-auto flex flex-wrap items-center gap-1">
         <MarkButtons kind="task" id={current.id} />
         {#if canEdit}
           <DeleteButton
-            what="업무"
+            what={m.tasks_noun_task()}
             remove={() => api.trashTask(current.id)}
             ondeleted={() => {
               onchanged();
@@ -308,9 +311,7 @@
       {@const latest = conflict}
       <div class="rounded-md border border-amber-500/50 p-3 text-sm" role="alert">
         <p>
-          그사이 다른 사람이 이 업무를 바꿨습니다(지금 제목: “{latest.title}”, 상태: {STATUS_LABEL[
-            latest.status
-          ]}). 내 입력은 그대로 있습니다.
+          {m.tasks_conflict({ title: latest.title, status: STATUS_LABEL[latest.status] })}
         </p>
         <div class="mt-2 flex gap-2">
           <Button
@@ -319,10 +320,10 @@
             onclick={() => {
               fill(latest);
               conflict = undefined;
-            }}>서버 내용 불러오기</Button
+            }}>{m.tasks_load_server()}</Button
           >
           <Button size="sm" disabled={busy} onclick={() => void submit(latest)}
-            >내 입력으로 다시 저장</Button
+            >{m.tasks_save_mine()}</Button
           >
         </div>
       </div>
@@ -337,11 +338,11 @@
       }}
     >
       <div class="flex flex-col gap-1 md:col-span-2">
-        <Label for="task-title">제목</Label>
+        <Label for="task-title">{m.tasks_title()}</Label>
         <Input id="task-title" bind:value={f.title} disabled={!canEdit} maxlength={200} />
       </div>
       <div class="flex flex-col gap-1 md:col-span-2">
-        <Label for="task-description">설명</Label>
+        <Label for="task-description">{m.tasks_description()}</Label>
         <textarea
           id="task-description"
           bind:value={f.description}
@@ -351,7 +352,7 @@
         ></textarea>
       </div>
       <div class="flex flex-col gap-1">
-        <span class="text-sm font-medium" id="task-status-label">상태</span>
+        <span class="text-sm font-medium" id="task-status-label">{m.tasks_status()}</span>
         <Select.Root
           type="single"
           value={f.status}
@@ -372,7 +373,7 @@
         </Select.Root>
       </div>
       <div class="flex flex-col gap-1">
-        <span class="text-sm font-medium" id="task-priority-label">우선순위</span>
+        <span class="text-sm font-medium" id="task-priority-label">{m.tasks_priority()}</span>
         <Select.Root
           type="single"
           value={f.priority}
@@ -393,7 +394,7 @@
         </Select.Root>
       </div>
       <div class="flex flex-col gap-1">
-        <Label for="task-start">시작일</Label>
+        <Label for="task-start">{m.tasks_start_date()}</Label>
         <Input
           id="task-start"
           type="date"
@@ -402,11 +403,11 @@
         />
       </div>
       <div class="flex flex-col gap-1">
-        <Label for="task-due">마감일</Label>
+        <Label for="task-due">{m.tasks_due_date()}</Label>
         <Input id="task-due" type="date" bind:value={f.due_date} disabled={!canEdit} />
       </div>
       <div class="flex flex-col gap-1">
-        <Label for="task-estimate">예상 시간(분)</Label>
+        <Label for="task-estimate">{m.tasks_estimate()}</Label>
         <Input
           id="task-estimate"
           inputmode="numeric"
@@ -415,7 +416,7 @@
         />
       </div>
       <div class="flex flex-col gap-1">
-        <Label for="task-tags">태그(쉼표로 구분)</Label>
+        <Label for="task-tags">{m.tasks_tags()}</Label>
         <Input id="task-tags" bind:value={tagsText} disabled={!canEdit} />
       </div>
       <div class="flex items-center gap-2 md:col-span-2">
@@ -428,10 +429,10 @@
             if (f.milestone) f.start_date = null;
           }}
         />
-        <Label for="task-milestone">마일스톤 (마감일 하나만)</Label>
+        <Label for="task-milestone">{m.tasks_milestone()}</Label>
       </div>
       <fieldset class="flex flex-col gap-2 md:col-span-2">
-        <legend class="text-sm font-medium">담당자 (같은 완료 상태를 공유)</legend>
+        <legend class="text-sm font-medium">{m.tasks_assignees()}</legend>
         <div class="flex flex-wrap gap-3">
           {#each people as person (person.user_id)}
             <span class="flex items-center gap-1.5">
@@ -446,14 +447,14 @@
               <Label for={`assignee-${person.user_id}`}>{person.display_name}</Label>
             </span>
           {:else}
-            <span class="text-sm text-muted-foreground">지정할 수 있는 사람이 없습니다.</span>
+            <span class="text-sm text-muted-foreground">{m.tasks_no_assignable()}</span>
           {/each}
         </div>
       </fieldset>
       {#if canEdit}
         <div class="flex items-center gap-2 md:col-span-2">
-          <Button id="task-save" type="submit" disabled={busy}>저장</Button>
-          {#if saved}<span class="text-sm" role="status">저장했습니다.</span>{/if}
+          <Button id="task-save" type="submit" disabled={busy}>{m.common_save()}</Button>
+          {#if saved}<span class="text-sm" role="status">{m.common_saved()}</span>{/if}
         </div>
       {/if}
     </form>
@@ -465,14 +466,12 @@
         aria-labelledby="shift-heading"
       >
         <h3 id="shift-heading" class="font-semibold" tabindex="-1" bind:this={shiftHeading}>
-          후속 업무 {shifts.length}개와 날짜가 겹칩니다
+          {m.tasks_shift_heading({ count: shifts.length })}
         </h3>
         {#if pending.retried}
-          <p role="alert">후속 업무가 그사이 바뀌어 다시 계산했습니다.</p>
+          <p role="alert">{m.tasks_shift_retried()}</p>
         {/if}
-        <p class="text-muted-foreground">
-          선행 업무가 끝난 다음 날 시작하도록 옮기자고 제안합니다. 각 업무의 기간은 그대로입니다.
-        </p>
+        <p class="text-muted-foreground">{m.tasks_shift_hint()}</p>
         <ul class="flex flex-col gap-1">
           {#each shifts as s (s.task_id)}
             <li>
@@ -486,10 +485,10 @@
         </ul>
         <div class="flex flex-wrap gap-2">
           <Button size="sm" disabled={busy} onclick={() => void decide(true)}
-            >후속 업무도 옮겨 저장</Button
+            >{m.tasks_shift_save_all()}</Button
           >
           <Button size="sm" variant="outline" disabled={busy} onclick={() => void decide(false)}
-            >이 업무만 저장</Button
+            >{m.tasks_shift_save_this()}</Button
           >
           <Button
             size="sm"
@@ -497,7 +496,7 @@
             onclick={() => {
               pending = undefined;
               void focusSave();
-            }}>취소</Button
+            }}>{m.common_cancel()}</Button
           >
         </div>
       </section>
@@ -505,7 +504,7 @@
 
     {#if current.parent_id === null}
       <section class="flex flex-col gap-2" aria-labelledby="subtasks-heading">
-        <h3 id="subtasks-heading" class="text-sm font-semibold">하위 업무</h3>
+        <h3 id="subtasks-heading" class="text-sm font-semibold">{m.tasks_subtasks()}</h3>
         {#each subtasks as sub (sub.id)}
           <button
             type="button"
@@ -519,14 +518,14 @@
             <span class="ml-auto text-xs text-muted-foreground">{STATUS_LABEL[sub.status]}</span>
           </button>
         {:else}
-          <p class="text-sm text-muted-foreground">없습니다.</p>
+          <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
         {/each}
         {#if canEdit}
           <CreateForm
             id="new-subtask"
-            label="하위 업무 제목"
-            placeholder="예: 입력 검증"
-            submitLabel="하위 업무 추가"
+            label={m.tasks_subtask_title()}
+            placeholder={m.tasks_subtask_placeholder()}
+            submitLabel={m.tasks_subtask_add()}
             create={async (requestId: string, title: string) => {
               await api.createTask(current.item_id, requestId, title, current.id);
               onchanged();
@@ -537,7 +536,7 @@
     {/if}
 
     <section class="flex flex-col gap-2" aria-labelledby="predecessors-heading">
-      <h3 id="predecessors-heading" class="text-sm font-semibold">선행 업무 (끝나야 시작)</h3>
+      <h3 id="predecessors-heading" class="text-sm font-semibold">{m.tasks_predecessors()}</h3>
       {#each current.predecessor_ids as pid (pid)}
         <div class="flex items-center gap-2 text-sm">
           <button
@@ -545,30 +544,31 @@
             class="rounded px-2 py-1 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             onclick={() => {
               onopen(pid);
-            }}>{label(byId.get(pid)) || '볼 수 없는 업무'}</button
+            }}>{label(byId.get(pid)) || m.tasks_hidden_task()}</button
           >
           {#if canEdit}
             <Button
               size="sm"
               variant="ghost"
               class="ml-auto"
-              aria-label={`${label(byId.get(pid))} 선행 관계 지우기`}
+              aria-label={m.tasks_predecessor_remove_aria({ task: label(byId.get(pid)) })}
               onclick={() => void changePredecessor(api.removePredecessor(current.id, pid))}
-              >지우기</Button
+              >{m.tasks_remove()}</Button
             >
           {/if}
         </div>
       {:else}
-        <p class="text-sm text-muted-foreground">없습니다.</p>
+        <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
       {/each}
       {#if successors.length > 0}
         <p class="text-sm text-muted-foreground">
-          이 업무 뒤에 오는 업무: {successors.map((t) => label(t)).join(', ')}
+          {m.tasks_successors({ tasks: successors.map((t) => label(t)).join(', ') })}
         </p>
       {/if}
       {#if canEdit && candidates.length > 0}
         <div class="flex flex-wrap items-center gap-2">
-          <span id="predecessor-label" class="text-sm font-medium">선행 업무 추가</span>
+          <span id="predecessor-label" class="text-sm font-medium">{m.tasks_predecessor_add()}</span
+          >
           <Select.Root
             type="single"
             value={predecessorChoice}
@@ -576,7 +576,7 @@
           >
             <Select.Trigger aria-labelledby="predecessor-label"
               >{predecessorChoice === ''
-                ? '업무 고르기'
+                ? m.tasks_predecessor_choose()
                 : label(byId.get(predecessorChoice))}</Select.Trigger
             >
             <Select.Content>
@@ -592,7 +592,7 @@
               const chosen = predecessorChoice;
               predecessorChoice = '';
               void changePredecessor(api.addPredecessor(current.id, chosen));
-            }}>추가</Button
+            }}>{m.tasks_add()}</Button
           >
         </div>
       {/if}
@@ -602,9 +602,11 @@
       {#if current.series !== null && current.series.root_task_id !== current.id}
         {@const rootId = current.series.root_task_id}
         <section class="flex flex-col gap-2" aria-labelledby="task-recurrence-heading">
-          <h3 id="task-recurrence-heading" class="text-sm font-semibold">반복</h3>
+          <h3 id="task-recurrence-heading" class="text-sm font-semibold">
+            {m.tasks_recurrence()}
+          </h3>
           <p class="text-sm text-muted-foreground">
-            반복 업무의 {current.occurrence_date} 회차입니다. 규칙은 첫 회차에서 바꿉니다.
+            {m.tasks_occurrence_note({ date: current.occurrence_date ?? '' })}
           </p>
           <div>
             <Button
@@ -612,7 +614,7 @@
               variant="outline"
               onclick={() => {
                 onopen(rootId);
-              }}>첫 회차 열기</Button
+              }}>{m.tasks_open_first()}</Button
             >
           </div>
         </section>
@@ -621,11 +623,13 @@
           idPrefix="task-recurrence"
           rule={current.series?.rule ?? null}
           canEdit={canEdit && (current.due_date !== null || current.start_date !== null)}
-          zoneNote={`"오늘"은 ${current.series?.timezone ?? localTimeZone()} 기준`}
+          zoneNote={m.tasks_recurrence_zone({
+            zone: current.series?.timezone ?? localTimeZone(),
+          })}
           onsave={saveRule}
         />
         {#if canEdit && current.due_date === null && current.start_date === null}
-          <p class="text-sm text-muted-foreground">날짜를 넣고 저장하면 반복을 정할 수 있습니다.</p>
+          <p class="text-sm text-muted-foreground">{m.tasks_recurrence_needs_date()}</p>
         {/if}
       {/if}
     {/if}

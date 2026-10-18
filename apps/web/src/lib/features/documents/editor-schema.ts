@@ -11,6 +11,7 @@ import StarterKit from '@tiptap/starter-kit';
 
 import type { ReferenceOptions } from '$lib/features/references/reference-extension';
 import { Reference } from '$lib/features/references/reference-extension';
+import { m } from '$lib/paraglide/messages.js';
 
 export interface SchemaOptions {
   reference?: Partial<ReferenceOptions>;
@@ -27,8 +28,12 @@ export function schemaExtensions(options: SchemaOptions = {}): Extensions {
     TaskItem.configure({
       nested: true,
       a11y: {
-        checkboxLabel: (node, checked) =>
-          `${checked ? '완료' : '미완료'} 항목: ${node.textContent || '빈 항목'}`,
+        checkboxLabel: (node, checked) => {
+          const text = node.textContent || m.documents_task_empty();
+          return checked
+            ? m.documents_task_checkbox_done({ text })
+            : m.documents_task_checkbox_open({ text });
+        },
       },
     }),
     Markdown,

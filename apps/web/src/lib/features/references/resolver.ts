@@ -2,6 +2,7 @@
 // 같은 틱에 요청된 참조를 한 번에 묻고, 페이지가 살아 있는 동안 결과를 기억한다.
 import type { ReferenceKind, ResolvedReferenceView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import { m } from '$lib/paraglide/messages.js';
 
 interface Pending {
   kind: ReferenceKind;
@@ -67,9 +68,11 @@ export function forgetReferences(): void {
   cache.clear();
 }
 
-/** 화면에 보일 글자. 볼 수 없는 대상은 제목 없이 같은 문구로 보인다. */
+/**
+ * 화면·내보내기 파일에 보일 글자. 볼 수 없는 대상은 제목 없이 같은 문구(화면 언어, D-81)로 보인다.
+ */
 export function referenceLabel(r: ResolvedReferenceView): string {
-  if (!r.visible || r.title === null) return '볼 수 없는 대상';
+  if (!r.visible || r.title === null) return m.references_hidden();
   if (r.kind === 'user') return `@${r.title}`;
   return r.reference === null ? r.title : `${r.reference} ${r.title}`;
 }

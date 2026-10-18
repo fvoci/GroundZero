@@ -3,8 +3,10 @@
   import { tick } from 'svelte';
 
   import type { DeletedWorkspaceView } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
-  import { localTimeZone, wallTime } from '$lib/features/events/time';
+  import { api } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { formatInstant } from '$lib/display';
+  import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
   interface Props {
@@ -14,7 +16,6 @@
 
   const { onchanged }: Props = $props();
 
-  const zone = localTimeZone();
   let list = $state<DeletedWorkspaceView[]>([]);
   let error = $state<string | undefined>(undefined);
   let status = $state('');
@@ -32,8 +33,7 @@
         if (mine === seq) list = found;
       })
       .catch((e: unknown) => {
-        if (mine === seq)
-          error = e instanceof ApiError ? e.message : '지운 워크스페이스를 불러오지 못했습니다.';
+        if (mine === seq) error = errorText(e, m.trash_workspaces_load_failed());
       });
   });
 
@@ -49,7 +49,7 @@
       await tick();
       document.getElementById('deleted-workspaces-heading')?.focus();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '처리하지 못했습니다.';
+      error = errorText(e, m.trash_action_failed());
     }
   }
 
@@ -59,15 +59,16 @@
     document.getElementById(`purge-cancel-${id}`)?.focus();
   }
 
-  const when = (iso: string): string => wallTime(iso, zone).replace('T', ' ');
+  const when = (iso: string): string => formatInstant(iso);
 </script>
 
 {#if list.length > 0 || error !== undefined || status !== ''}
   <section class="flex flex-col gap-3" aria-labelledby="deleted-workspaces-heading">
-    <h2 id="deleted-workspaces-heading" class="font-semibold" tabindex="-1">지운 워크스페이스</h2>
+    <h2 id="deleted-workspaces-heading" class="font-semibold" tabindex="-1">
+      {m.trash_workspaces_heading()}
+    </h2>
     <p class="text-sm text-muted-foreground">
-      내가 소유한 워크스페이스입니다. 보존 기간 안에는 모든 내용과 멤버가 그대로 돌아옵니다. 영구
-      삭제하면 모든 내용이 지워지며 되돌릴 수 없습니다(각자의 개인 시간 기록은 남습니다).
+      {m.trash_workspaces_hint()}
     </p>
     <p aria-live="polite" class="text-sm">
       {#if error !== undefined}<span class="text-destructive">{error}</span>{:else}{status}{/if}
@@ -78,40 +79,42 @@
           <span class="min-w-0 flex-1">
             {w.name}
             <span class="block text-xs text-muted-foreground">
-              {when(w.deleted_at)}에 지움 · {w.expired ? '만료됨' : `${when(w.expires_at)}까지`}
+              {m.trash_deleted_at({ when: when(w.deleted_at) })} ·
+              {w.expired ? m.trash_expired() : m.trash_until({ when: when(w.expires_at) })}
             </span>
           </span>
           {#if !w.expired}
             <Button
               size="sm"
               variant="outline"
-              aria-label={`${w.name} 되살리기`}
-              onclick={() => void run(() => api.restoreWorkspace(w.id), `되살렸습니다: ${w.name}`)}
-              >되살리기</Button
+              aria-label={m.trash_restore_named({ name: w.name })}
+              onclick={() =>
+                void run(() => api.restoreWorkspace(w.id), m.trash_restored({ label: w.name }))}
+              >{m.trash_restore()}</Button
             >
           {/if}
           {#if confirmPurge === w.id}
-            <span>모든 내용이 지워집니다. 영구 삭제할까요?</span>
+            <span>{m.trash_workspace_purge_question()}</span>
             <Button
               size="sm"
               variant="destructive"
-              aria-label={`${w.name} 영구 삭제`}
+              aria-label={m.trash_purge_named({ name: w.name })}
               onclick={() =>
-                void run(() => api.purgeWorkspace(w.id), `영구 삭제했습니다: ${w.name}`)}
-              >영구 삭제</Button
+                void run(() => api.purgeWorkspace(w.id), m.trash_purged({ label: w.name }))}
+              >{m.trash_purge()}</Button
             >
             <Button
               id={`purge-cancel-${w.id}`}
               size="sm"
               variant="ghost"
-              onclick={() => (confirmPurge = undefined)}>취소</Button
+              onclick={() => (confirmPurge = undefined)}>{m.common_cancel()}</Button
             >
           {:else}
             <Button
               size="sm"
               variant="ghost"
-              aria-label={`${w.name} 영구 삭제…`}
-              onclick={() => void askPurge(w.id)}>영구 삭제…</Button
+              aria-label={m.trash_purge_named_ellipsis({ name: w.name })}
+              onclick={() => void askPurge(w.id)}>{m.trash_purge_ellipsis()}</Button
             >
           {/if}
         </li>

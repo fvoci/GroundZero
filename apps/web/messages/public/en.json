@@ -1,3 +1,8 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "public_link_gone": "This link doesn't exist, has expired, or was revoked.",
+  "public_load_failed": "Couldn't load the document.",
+  "public_loading": "Loading…",
+  "public_read_only_hint": "You're viewing a read-only document through a public link.",
+  "public_body_label": "Body"
 }

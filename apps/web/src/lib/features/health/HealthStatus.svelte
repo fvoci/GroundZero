@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
 
   import type { HealthResult } from '$lib/api/client';
+  import { m } from '$lib/paraglide/messages.js';
 
   interface Props {
     load: () => Promise<HealthResult>;
@@ -32,12 +33,12 @@
 
 <section aria-live="polite">
   {#if result === undefined}
-    <p>서버 상태 확인 중…</p>
+    <p>{m.app_health_checking()}</p>
   {:else if result.kind === 'ok'}
-    <p data-testid="health">서버 정상 (database: {result.health.database})</p>
+    <p data-testid="health">{m.app_health_ok({ database: result.health.database })}</p>
   {:else if result.kind === 'degraded'}
-    <p data-testid="health">서버 응답은 있으나 데이터베이스 연결 실패</p>
+    <p data-testid="health">{m.app_health_degraded()}</p>
   {:else}
-    <p data-testid="health">서버에 연결할 수 없음: {result.message}</p>
+    <p data-testid="health">{m.app_health_unreachable({ message: result.message })}</p>
   {/if}
 </section>

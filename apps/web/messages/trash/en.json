@@ -1,3 +1,127 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "trash_load_failed": "Couldn't load the trash.",
+  "trash_action_failed": "Couldn't complete the action.",
+  "trash_kind_module": "Module",
+  "trash_kind_item": "Item",
+  "trash_kind_document": "Document",
+  "trash_kind_task": "Task",
+  "trash_kind_event": "Event",
+  "trash_kind_file": "File",
+  "trash_entry": "{kind} “{title}”",
+  "trash_entry_with_children": "{kind} “{title}” (with {count} items inside)",
+  "trash_my_heading": "My notes trash",
+  "trash_workspace_heading": "{workspace} trash",
+  "trash_retention_admin": [
+    {
+      "declarations": ["input days", "local daysPlural = days: plural"],
+      "selectors": ["daysPlural"],
+      "match": {
+        "daysPlural=one": "Deleted items can be restored for {days} day. After that they can't be restored, and you can delete them permanently.",
+        "daysPlural=other": "Deleted items can be restored for {days} days. After that they can't be restored, and you can delete them permanently."
+      }
+    }
+  ],
+  "trash_retention_member": [
+    {
+      "declarations": ["input days", "local daysPlural = days: plural"],
+      "selectors": ["daysPlural"],
+      "match": {
+        "daysPlural=one": "Deleted items can be restored for {days} day. After that they can't be restored, and an admin deletes them permanently.",
+        "daysPlural=other": "Deleted items can be restored for {days} days. After that they can't be restored, and an admin deletes them permanently."
+      }
+    }
+  ],
+  "trash_retention_invalid": "Retention must be 1 to 3650 days.",
+  "trash_retention_changed": [
+    {
+      "declarations": ["input days", "local daysPlural = days: plural"],
+      "selectors": ["daysPlural"],
+      "match": {
+        "daysPlural=one": "Retention set to {days} day.",
+        "daysPlural=other": "Retention set to {days} days."
+      }
+    }
+  ],
+  "trash_retention_label": "Retention (days)",
+  "trash_change": "Change",
+  "trash_version_retention_region": "Previous file version retention",
+  "trash_version_retention_invalid": "Version retention must be 1 to 3650 days, or empty to keep them forever.",
+  "trash_versions_forever": "Previous file versions are kept forever.",
+  "trash_versions_days": [
+    {
+      "declarations": ["input days", "local daysPlural = days: plural"],
+      "selectors": ["daysPlural"],
+      "match": {
+        "daysPlural=one": "Previous file versions are kept for {days} day.",
+        "daysPlural=other": "Previous file versions are kept for {days} days."
+      }
+    }
+  ],
+  "trash_version_retention_label": "Keep previous file versions (days, empty = forever)",
+  "trash_version_retention_hint": "Expired previous versions are deleted automatically. The current version and versions linked from records such as analyses or referenced by documents are kept.",
+  "trash_irreversible": "This can't be undone.",
+  "trash_purge_expired_kept": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} of them has versions referenced by records or documents; deleting it breaks those image and file links.",
+        "countPlural=other": "{count} of them have versions referenced by records or documents; deleting them breaks those image and file links."
+      }
+    }
+  ],
+  "trash_purge_expired_question": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Permanently delete {count} expired item?",
+        "countPlural=other": "Permanently delete {count} expired items?"
+      }
+    }
+  ],
+  "trash_purged_expired": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Permanently deleted {count} expired item.",
+        "countPlural=other": "Permanently deleted {count} expired items."
+      }
+    }
+  ],
+  "trash_purge_expired_button": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Delete {count} expired item permanently…",
+        "countPlural=other": "Delete {count} expired items permanently…"
+      }
+    }
+  ],
+  "trash_purge": "Delete permanently",
+  "trash_purge_ellipsis": "Delete permanently…",
+  "trash_purge_question": "This can't be undone. Delete permanently?",
+  "trash_purge_question_kept": "This can't be undone. Image and file links to this file's versions will break. Delete permanently?",
+  "trash_purged": "Permanently deleted: {label}",
+  "trash_deleted_at": "Deleted {when}",
+  "trash_expired": "Expired",
+  "trash_until": "Until {when}",
+  "trash_kept_hint": "Records or documents reference versions of this file, so it isn't deleted automatically. It can be restored even after it expires.",
+  "trash_restore": "Restore",
+  "trash_restored": "Restored: {label}",
+  "trash_empty": "Trash is empty.",
+  "trash_delete_failed": "Couldn't delete.",
+  "trash_move_question": "Move this {what} to the trash?",
+  "trash_move": "Move to trash",
+  "trash_delete_what": "Delete {what}",
+  "trash_workspaces_load_failed": "Couldn't load deleted workspaces.",
+  "trash_workspaces_heading": "Deleted workspaces",
+  "trash_workspaces_hint": "Workspaces you own. Within the retention period, all content and members come back. Deleting permanently erases all content and can't be undone (each person's personal time records remain).",
+  "trash_restore_named": "Restore {name}",
+  "trash_workspace_purge_question": "All content will be erased. Delete permanently?",
+  "trash_purge_named": "Delete {name} permanently",
+  "trash_purge_named_ellipsis": "Delete {name} permanently…"
 }

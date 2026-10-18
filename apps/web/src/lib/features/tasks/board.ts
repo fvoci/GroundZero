@@ -1,6 +1,7 @@
 // 칸반 계산 (D-31). 열은 상태, 열 안의 순서는 서버 목록 순서(위치)를 따른다.
 import type { TaskStatus } from '$lib/api/client';
 import { ApiError, NetworkError, TASK_STATUSES } from '$lib/api/client';
+import { m } from '$lib/paraglide/messages.js';
 
 export interface BoardTask {
   id: string;
@@ -142,21 +143,21 @@ export function applyMove<T extends BoardTask>(
 
 /** 옮기기 실패 안내. 화면은 이미 되돌렸고 최신 목록을 다시 읽는다. */
 export function moveErrorMessage(error: unknown): string {
-  if (error instanceof NetworkError)
-    return '서버에 닿지 않아 옮기지 못했습니다. 원래 자리로 되돌렸습니다.';
+  if (error instanceof NetworkError) return m.tasks_move_error_network();
   if (error instanceof ApiError) {
     switch (error.status) {
       case 400:
-        return '그사이 다른 곳에서 업무가 바뀌어 옮기지 못했습니다. 최신 상태로 다시 보여 줍니다.';
+        return m.tasks_move_error_stale();
       case 403:
-        return '이 항목의 업무를 고칠 권한이 없어 옮기지 못했습니다.';
+        return m.tasks_move_error_forbidden();
       case 404:
-        return '업무가 지워졌거나 볼 수 없게 되어 옮기지 못했습니다.';
+        return m.tasks_move_error_gone();
       case 409:
-        return '항목이 보관되었거나 동시에 바뀌어 옮기지 못했습니다. 잠시 뒤 다시 시도하세요.';
+        return m.tasks_move_error_archived();
       default:
-        return '옮기지 못했습니다. 원래 자리로 되돌렸습니다.';
+        // 서버 쪽 실패(5xx)는 client.ts가 만든 안전한 문구(요청 ID 포함)를 그대로 보인다.
+        return error.status >= 500 ? error.message : m.tasks_move_error_other();
     }
   }
-  return '옮기지 못했습니다. 원래 자리로 되돌렸습니다.';
+  return m.tasks_move_error_other();
 }

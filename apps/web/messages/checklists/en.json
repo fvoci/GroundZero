@@ -1,3 +1,31 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "checklists_action_failed": "Couldn't complete that.",
+  "checklists_heading": "Checklist",
+  "checklists_item_done_aria": "Done item: {text}",
+  "checklists_item_open_aria": "Open item: {text}",
+  "checklists_delete": "Delete",
+  "checklists_delete_aria": "Delete {text}",
+  "checklists_empty": "No items.",
+  "checklists_new_item": "New item",
+  "checklists_new_item_placeholder": "Enter a to-do",
+  "checklists_add": "Add",
+  "checklists_paste_markdown": "Paste Markdown",
+  "checklists_paste_label": "Checklist to paste (`- [x] done`, `- [ ] open`)",
+  "checklists_expand": "Expand into items",
+  "checklists_preview_hint": "Review and fix, then append. Existing items stay as they are.",
+  "checklists_preview_list": "Items to append",
+  "checklists_preview_done_aria": "{text} done",
+  "checklists_preview_text_aria": "Item {index} text",
+  "checklists_append_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Append {count} item",
+        "countPlural=other": "Append {count} items"
+      }
+    }
+  ],
+  "checklists_expand_hint": "Press Expand to preview the items."
 }

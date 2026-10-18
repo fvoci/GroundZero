@@ -1,3 +1,30 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "checklists_action_failed": "처리하지 못했습니다.",
+  "checklists_heading": "체크리스트",
+  "checklists_item_done_aria": "완료 항목: {text}",
+  "checklists_item_open_aria": "미완료 항목: {text}",
+  "checklists_delete": "삭제",
+  "checklists_delete_aria": "{text} 삭제",
+  "checklists_empty": "항목이 없습니다.",
+  "checklists_new_item": "새 항목",
+  "checklists_new_item_placeholder": "할 일을 입력",
+  "checklists_add": "추가",
+  "checklists_paste_markdown": "Markdown 붙여넣기",
+  "checklists_paste_label": "붙여넣을 체크리스트 (`- [x] 완료`, `- [ ] 미완료`)",
+  "checklists_expand": "항목으로 펼치기",
+  "checklists_preview_hint": "확인하고 고친 뒤 덧붙이세요. 기존 항목은 그대로 둡니다.",
+  "checklists_preview_list": "덧붙일 항목",
+  "checklists_preview_done_aria": "{text} 완료 여부",
+  "checklists_preview_text_aria": "항목 {index} 내용",
+  "checklists_append_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{count}개 덧붙이기"
+      }
+    }
+  ],
+  "checklists_expand_hint": "펼치기를 누르면 항목을 미리 봅니다."
 }

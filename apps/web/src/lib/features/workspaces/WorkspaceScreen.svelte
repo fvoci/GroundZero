@@ -4,9 +4,11 @@
 
   import type { SummaryView } from '$lib/api/client';
 
-  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { api, newRequestId } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
+  import { m } from '$lib/paraglide/messages.js';
   import { documentPath, router } from '$lib/router.svelte';
 
   import ModulesSection from '$lib/features/modules/ModulesSection.svelte';
@@ -36,7 +38,7 @@
         if (!cancelled) docs = list;
       })
       .catch((e: unknown) => {
-        if (!cancelled) error = e instanceof ApiError ? e.message : '목록을 불러오지 못했습니다.';
+        if (!cancelled) error = errorText(e, m.workspaces_docs_load_failed());
       });
     return () => {
       cancelled = true;
@@ -56,20 +58,19 @@
     try {
       await api.setWorkspaceRealtime(workspace.id, on);
       realtime = on;
-      realtimeMessage = on
-        ? '실시간 공동 편집을 켰습니다. 문서를 다시 열면 함께 고칠 수 있습니다.'
-        : '실시간 공동 편집을 껐습니다.';
+      realtimeMessage = on ? m.workspaces_realtime_on() : m.workspaces_realtime_off();
     } catch (e: unknown) {
-      realtimeMessage = e instanceof ApiError ? e.message : '바꾸지 못했습니다.';
+      realtimeMessage = errorText(e, m.workspaces_realtime_failed());
     }
   }
 </script>
 
 <section class="flex flex-col gap-6" aria-labelledby="ws-heading">
-  <h1 id="ws-heading" class="text-xl font-semibold">{workspace.name} · 위키</h1>
+  <h1 id="ws-heading" class="text-xl font-semibold">
+    {m.workspaces_wiki_heading({ workspace: workspace.name })}
+  </h1>
   <p class="text-sm text-muted-foreground">
-    이 워크스페이스의 관리자는 비공개 문서를 포함해 이 공간의 모든 문서를 볼 수 있습니다. 각자의
-    개인 노트와 개인 시간 기록은 관리자에게도 보이지 않습니다.
+    {m.workspaces_admin_notice()}
   </p>
   {#if workspace.role === 'admin'}
     <div class="flex flex-col gap-1 text-sm">
@@ -82,11 +83,10 @@
               void setRealtime(e.currentTarget.checked);
           }}
         />
-        실시간 공동 편집(문서를 여럿이 동시에 고침)
+        {m.workspaces_realtime_label()}
       </label>
       <p class="text-muted-foreground">
-        켜면 이 워크스페이스 문서의 본문을 바로 함께 고치고, 조용해지거나 모두 나가면 리비전으로
-        남깁니다. 개인 노트는 해당하지 않습니다.
+        {m.workspaces_realtime_hint()}
       </p>
       <p aria-live="polite">{realtimeMessage}</p>
     </div>
@@ -94,13 +94,13 @@
   {#if error !== undefined}
     <p role="alert" class="text-destructive">{error}</p>
   {:else if docs === undefined}
-    <p aria-live="polite">불러오는 중…</p>
+    <p aria-live="polite">{m.app_loading()}</p>
   {:else if docs.length === 0}
-    <p class="text-muted-foreground">위키 문서가 없습니다.</p>
+    <p class="text-muted-foreground">{m.workspaces_wiki_empty()}</p>
   {:else}
     <DocumentTree
       {docs}
-      label={`${workspace.name} 위키 문서`}
+      label={m.workspaces_wiki_tree({ workspace: workspace.name })}
       hrefFor={(id: string) => documentPath(workspace.id, id)}
       navigate={(path: string) => {
         router.navigate(path);
@@ -111,7 +111,12 @@
         docs = await api.wikiDocuments(workspace.id);
       }}
       oncreatechild={async (parentId: string) => {
-        const doc = await api.createWikiDocument(workspace.id, newRequestId(), '새 문서', parentId);
+        const doc = await api.createWikiDocument(
+          workspace.id,
+          newRequestId(),
+          m.workspaces_untitled_document(),
+          parentId,
+        );
         router.navigate(documentPath(workspace.id, doc.id));
       }}
     />
@@ -120,9 +125,9 @@
     <TemplatePicker workspaceId={workspace.id} id="new-document-template" bind:value={templateId} />
     <CreateForm
       id="new-document"
-      label="새 문서 제목"
-      placeholder="예: 회의록"
-      submitLabel="문서 만들기"
+      label={m.workspaces_new_doc_title()}
+      placeholder={m.workspaces_new_doc_placeholder()}
+      submitLabel={m.workspaces_create_doc()}
       create={async (requestId: string, title: string) => {
         const doc = await api.createWikiDocument(
           workspace.id,

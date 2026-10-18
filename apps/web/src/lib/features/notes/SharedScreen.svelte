@@ -1,7 +1,9 @@
 <script lang="ts">
   // 나에게 공유된 문서 (D-23). 제공자가 확인한 이메일 기준이다.
   import type { SharedView } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { router, standalonePath } from '$lib/router.svelte';
 
   let docs = $state<SharedView[] | undefined>(undefined);
@@ -13,18 +15,18 @@
       docs = list;
     })
     .catch((e: unknown) => {
-      error = e instanceof ApiError ? e.message : '목록을 불러오지 못했습니다.';
+      error = errorText(e, m.notes_shared_load_failed());
     });
 </script>
 
 <section class="flex flex-col gap-6" aria-labelledby="shared-heading">
-  <h1 id="shared-heading" class="text-xl font-semibold">공유받은 문서</h1>
+  <h1 id="shared-heading" class="text-xl font-semibold">{m.notes_shared_heading()}</h1>
   {#if error !== undefined}
     <p role="alert" class="text-destructive">{error}</p>
   {:else if docs === undefined}
-    <p aria-live="polite">불러오는 중…</p>
+    <p aria-live="polite">{m.notes_loading()}</p>
   {:else if docs.length === 0}
-    <p class="text-muted-foreground">공유받은 문서가 없습니다.</p>
+    <p class="text-muted-foreground">{m.notes_shared_empty()}</p>
   {:else}
     <ul class="flex flex-col gap-1" data-testid="shared-list">
       {#each docs as doc (doc.id)}
@@ -39,7 +41,9 @@
           >
             <span>{doc.title}</span>
             <span class="text-sm text-muted-foreground"
-              >{doc.shared_by}님이 공유 · {doc.permission === 'write' ? '고치기' : '읽기'}</span
+              >{doc.permission === 'write'
+                ? m.notes_shared_by_write({ name: doc.shared_by })
+                : m.notes_shared_by_read({ name: doc.shared_by })}</span
             >
           </a>
         </li>

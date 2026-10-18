@@ -4,7 +4,9 @@
   import type { Workspace } from '@fvoci/api-client';
 
   import type { NotificationView } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
+  import { m } from '$lib/paraglide/messages.js';
   import { itemPath, itemTaskPath, pathFor, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
 
@@ -24,7 +26,7 @@
       items = await api.notifications();
       error = undefined;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '알림을 불러오지 못했습니다.';
+      error = errorText(e, m.references_notifications_load_failed());
     }
   }
 
@@ -53,23 +55,28 @@
 
   /** 알림 문장(종류별). */
   function message(n: NotificationView): string {
-    const who = n.actor_name ?? '누군가';
+    const who = n.actor_name ?? m.references_notification_someone();
     const target = `${n.document_reference ?? ''} ${n.document_title}`.trim();
+    const date = n.due_date ?? '';
     switch (n.kind) {
       case 'mention':
-        return `${who}님이 ${target}에서 나를 언급했습니다`;
+        return m.references_notification_mention({ who, target });
       case 'comment':
-        return `${who}님이 ${target}에 댓글을 달았습니다`;
+        return m.references_notification_comment({ who, target });
       case 'reply':
-        return `${who}님이 ${target}의 댓글에 답했습니다`;
+        return m.references_notification_reply({ who, target });
       case 'due':
-        return `${target}의 기한이 ${n.due_date ?? ''}입니다`;
+        return m.references_notification_due({ target, date });
       case 'expiry':
-        return `${target}: ${n.due_date ?? ''}에 수강권이 만료되거나 목표 완료일입니다`;
+        return m.references_notification_expiry({ target, date });
       case 'review':
-        return `${target}: ${n.subject ?? '복습'}의 복습일이 ${n.due_date ?? ''}입니다`;
+        return m.references_notification_review({
+          target,
+          subject: n.subject ?? m.references_notification_review_subject(),
+          date,
+        });
       case 'deadline':
-        return `${target}: ${n.subject ?? ''}의 마감이 ${n.due_date ?? ''}입니다`;
+        return m.references_notification_deadline({ target, subject: n.subject ?? '', date });
       default:
         return target;
     }
@@ -84,19 +91,21 @@
 
 <section class="flex flex-col gap-4" aria-labelledby="notifications-heading">
   <div class="flex items-center gap-2">
-    <h1 id="notifications-heading" class="text-xl font-semibold">알림</h1>
+    <h1 id="notifications-heading" class="text-xl font-semibold">
+      {m.references_notifications_heading()}
+    </h1>
     {#if unread > 0}
       <Button size="sm" variant="outline" class="ml-auto" onclick={() => void readAll()}
-        >모두 읽음</Button
+        >{m.references_notifications_read_all()}</Button
       >
     {/if}
   </div>
   {#if error !== undefined}
     <p role="alert" class="text-destructive">{error}</p>
   {:else if items === undefined}
-    <p aria-live="polite">불러오는 중…</p>
+    <p aria-live="polite">{m.references_notifications_loading()}</p>
   {:else if items.length === 0}
-    <p class="text-muted-foreground">알림이 없습니다.</p>
+    <p class="text-muted-foreground">{m.references_notifications_empty()}</p>
   {:else}
     <ul class="flex flex-col gap-1" data-testid="notifications">
       {#each items as n (n.id)}
@@ -106,7 +115,7 @@
             class="flex w-full items-baseline gap-2 rounded px-2 py-1.5 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             onclick={() => void open(n)}
           >
-            {#if !n.read}<span class="sr-only">읽지 않음</span><span
+            {#if !n.read}<span class="sr-only">{m.references_notifications_unread()}</span><span
                 aria-hidden="true"
                 class="size-2 shrink-0 self-center rounded-full bg-primary"
               ></span>{/if}
