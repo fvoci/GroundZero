@@ -794,15 +794,21 @@ impl Room {
                 check_update(&state, &candidate, &lineage, &limits, max_state)
             })
             .await
-            .unwrap_or(Verdict::Invalid);
+            .unwrap_or(Verdict::Invalid("check task failed".into()));
             match verdict {
                 Verdict::Ok => {}
                 Verdict::Reload => {
                     self.close(conn, CloseReason::Reload);
                     continue;
                 }
-                Verdict::Invalid => {
-                    tracing::warn!(event = "collab.edit_rejected", document = %self.doc_id.0, "rejected a live edit that fails document checks");
+                Verdict::Invalid(reason) => {
+                    // 이유는 우리가 붙인 고정 분류다(문서 내용은 담지 않는다, D-83).
+                    tracing::warn!(
+                        event = "collab.edit_rejected",
+                        document = %self.doc_id.0,
+                        reason,
+                        "rejected a live edit that fails document checks"
+                    );
                     self.close(conn, CloseReason::Invalid);
                     continue;
                 }
@@ -1060,7 +1066,8 @@ impl Room {
 
 enum Verdict {
     Ok,
-    Invalid,
+    /// 거절 이유(로그용 고정 분류).
+    Invalid(String),
     Reload,
 }
 
@@ -1075,10 +1082,10 @@ fn check_update(
     // 변경 혼자에 다른 계보 표시가 있으면 옛 상태로 다시 붙은 클라이언트다.
     let probe = Doc::new();
     let Ok(alone) = Update::decode_v1(update) else {
-        return Verdict::Invalid;
+        return Verdict::Invalid("update does not decode".into());
     };
     if probe.transact_mut().apply_update(alone).is_err() {
-        return Verdict::Invalid;
+        return Verdict::Invalid("update does not apply".into());
     }
     if lineage_of(&probe).is_some_and(|l| l != lineage) {
         return Verdict::Reload;
@@ -1091,7 +1098,7 @@ fn check_update(
             .is_some_and(|u| scratch.transact_mut().apply_update(u).is_ok())
     });
     if !applied {
-        return Verdict::Invalid;
+        return Verdict::Invalid("update does not apply to the room state".into());
     }
     let txn = scratch.transact();
     // 앞선 변경이 빠져 적용하지 못하고 남은 것이 있으면 이 클라이언트 상태는 서버와 어긋났다. 새로 열게 한다.
@@ -1099,16 +1106,17 @@ fn check_update(
         return Verdict::Reload;
     }
     if txn.encode_state_as_update_v1(&StateVector::default()).len() > max_state {
-        return Verdict::Invalid;
+        return Verdict::Invalid("state too large".into());
     }
-    if convert::check_shape(&txn).is_err() {
-        return Verdict::Invalid;
+    if let Err(reason) = convert::check_shape(&txn) {
+        return Verdict::Invalid(reason.into());
     }
     let body = convert::read_doc(&txn, &fragment);
-    if documents::validate_body(&body, limits).is_ok() {
-        Verdict::Ok
-    } else {
-        Verdict::Invalid
+    match documents::validate_body(&body, limits) {
+        Ok(()) => Verdict::Ok,
+        // 본문 검사의 설명은 우리가 쓴 고정 문구와 개수뿐이다.
+        Err(AppError::BadRequest(reason)) => Verdict::Invalid(reason),
+        Err(other) => Verdict::Invalid(other.code().into()),
     }
 }
 
