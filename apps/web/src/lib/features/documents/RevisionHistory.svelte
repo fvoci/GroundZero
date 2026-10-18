@@ -179,7 +179,7 @@
                 })}
           </p>
           <div
-            class="min-h-0 flex-1 overflow-y-auto rounded border p-2 font-mono text-sm"
+            class="min-h-0 flex-1 overflow-y-auto rounded border p-2 font-code text-sm"
             data-testid="revision-diff"
           >
             {#if !changed}

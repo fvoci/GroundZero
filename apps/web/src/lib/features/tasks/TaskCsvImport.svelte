@@ -98,7 +98,7 @@
     <Label for={`tasks-csv-${itemId}`}>{m.tasks_csv_label()}</Label>
     <textarea
       id={`tasks-csv-${itemId}`}
-      class="min-h-32 rounded-md border bg-background p-2 font-mono text-sm"
+      class="min-h-32 rounded-md border bg-background p-2 font-code text-sm"
       bind:value={text}></textarea>
     <p aria-live="polite">
       {#if error !== undefined}

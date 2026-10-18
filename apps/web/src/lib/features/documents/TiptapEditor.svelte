@@ -585,7 +585,7 @@
       <label class="flex flex-1 flex-col gap-1">
         <span class="font-medium">{m.documents_math_latex()}</span>
         <input
-          class="h-8 rounded-md border border-input bg-transparent px-2 font-mono"
+          class="h-8 rounded-md border border-input bg-transparent px-2 font-code"
           bind:value={current.latex}
           placeholder={m.documents_math_placeholder()}
         />
@@ -650,7 +650,7 @@
     bind:value={markdownText}
     oninput={onMarkdownInput}
     spellcheck="false"
-    class="mt-1 min-h-[16rem] w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    class="mt-1 min-h-[16rem] w-full rounded-md border border-input bg-transparent px-3 py-2 font-code text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
   ></textarea>
   {#if markdownProblem !== undefined}
     <p class="mt-1 text-sm text-destructive" role="alert" data-testid="markdown-problem">

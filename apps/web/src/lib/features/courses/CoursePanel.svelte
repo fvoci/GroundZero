@@ -515,7 +515,7 @@
           <Label for="episodes-csv">{m.courses_csv_help()}</Label>
           <textarea
             id="episodes-csv"
-            class="min-h-32 rounded-md border bg-background p-2 font-mono text-sm"
+            class="min-h-32 rounded-md border bg-background p-2 font-code text-sm"
             bind:value={csvText}></textarea>
           {#if csv !== undefined}
             <p aria-live="polite">

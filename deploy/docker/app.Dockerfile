@@ -25,6 +25,8 @@ COPY --from=rhwp-build /out /
 FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS web-build
 ARG PNPM_VERSION=11.24.0
 RUN npm install -g pnpm@${PNPM_VERSION}
+# 해시 자원의 br 사본을 만드는 도구(아래 빌드 끝).
+RUN apt-get update && apt-get install -y --no-install-recommends brotli && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json ./
 COPY apps ./apps
@@ -32,7 +34,10 @@ COPY packages ./packages
 COPY contracts ./contracts
 # HWP·HWPX 미리보기 WASM은 public/rhwp/<입력 해시>/로 들어가 웹 빌드와 함께 나간다(미리보기를 열 때만 불러옴).
 COPY --from=rhwp-build /out/web ./apps/web/public/rhwp
-RUN pnpm install --frozen-lockfile && pnpm --filter @fvoci/web run build
+# 해시 자원(서체·번들)에 br·gzip 사본을 더한다(D-86, `/rhwp`와 같은 방식). 원본은 그대로다.
+RUN pnpm install --frozen-lockfile && pnpm --filter @fvoci/web run build \
+ && find apps/web/dist/assets -type f -size +1k \( -name '*.js' -o -name '*.css' -o -name '*.svg' -o -name '*.otf' -o -name '*.ttf' \) \
+      -exec gzip -9 -k -n {} + -exec brotli -q 11 -k {} +
 
 FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 \

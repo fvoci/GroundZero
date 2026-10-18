@@ -111,3 +111,70 @@ async fn rhwp_wasm_is_served_compressed_and_cached() {
     assert!(!String::from_utf8_lossy(&body).contains("<title>fvoci</title>"));
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// 해시 자원(`/assets`, D-86 서체 포함): 빌드가 만든 br·gzip 사본을 그대로 보내고, 사본이 없거나 받는 쪽이 압축을
+/// 받지 않으면 원본. 서체 형식과 오래 캐시 머리글은 그대로다.
+#[tokio::test]
+async fn assets_are_served_precompressed_when_available() {
+    let dir = std::env::temp_dir().join(format!("fvoci-web-{}", uuid::Uuid::now_v7()));
+    std::fs::create_dir_all(dir.join("assets")).unwrap();
+    std::fs::write(
+        dir.join("index.html"),
+        "<!doctype html><title>fvoci</title>",
+    )
+    .unwrap();
+    std::fs::write(dir.join("assets/Font-abc.otf"), b"OTTO-raw").unwrap();
+    std::fs::write(dir.join("assets/Font-abc.otf.br"), b"br-bytes").unwrap();
+    std::fs::write(dir.join("assets/Font-abc.otf.gz"), b"gz-bytes").unwrap();
+    std::fs::write(dir.join("assets/plain-abc.js"), b"js-raw").unwrap();
+    let state = build_state(common::config_with(&[(
+        "FVOCI_WEB_DIR",
+        dir.to_str().unwrap(),
+    )]))
+    .unwrap();
+    let app = common::app(&state);
+    let header =
+        |h: &axum::http::HeaderMap, name: &str| h.get(name).map(|v| v.to_str().unwrap().to_owned());
+    let get = |path: &'static str, encoding: &'static str| {
+        let app = app.clone();
+        async move {
+            let headers: Vec<(&str, &str)> = if encoding.is_empty() {
+                Vec::new()
+            } else {
+                vec![("accept-encoding", encoding)]
+            };
+            common::send_raw(&app, Method::GET, path, None, &headers, Vec::new()).await
+        }
+    };
+
+    let (status, headers, body) = get("/assets/Font-abc.otf", "br, gzip").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, b"br-bytes");
+    assert_eq!(header(&headers, "content-encoding").as_deref(), Some("br"));
+    assert_eq!(
+        header(&headers, "content-type").as_deref(),
+        Some("font/otf")
+    );
+    assert_eq!(
+        header(&headers, "cache-control").as_deref(),
+        Some("public, max-age=31536000, immutable")
+    );
+
+    let (_, headers, body) = get("/assets/Font-abc.otf", "gzip").await;
+    assert_eq!(body, b"gz-bytes");
+    assert_eq!(
+        header(&headers, "content-encoding").as_deref(),
+        Some("gzip")
+    );
+
+    let (_, headers, body) = get("/assets/Font-abc.otf", "").await;
+    assert_eq!(body, b"OTTO-raw");
+    assert_eq!(header(&headers, "content-encoding"), None);
+
+    // 사본이 없는 파일은 압축을 받더라도 원본.
+    let (status, headers, body) = get("/assets/plain-abc.js", "br").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, b"js-raw");
+    assert_eq!(header(&headers, "content-encoding"), None);
+    std::fs::remove_dir_all(dir).unwrap();
+}

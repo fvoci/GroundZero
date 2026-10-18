@@ -142,7 +142,7 @@
           id={`${idPrefix}-paste`}
           bind:value={pasted}
           rows={4}
-          class="rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          class="rounded-md border border-input bg-transparent px-3 py-2 font-code text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         ></textarea>
         <div>
           <Button size="sm" variant="outline" onclick={expand} disabled={pasted.trim() === ''}

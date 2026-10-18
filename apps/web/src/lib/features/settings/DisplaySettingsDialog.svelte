@@ -13,6 +13,8 @@
     formatClock,
     suggestedSettings,
   } from '$lib/display';
+  import type { DocFont } from '$lib/doc-font';
+  import { setDocFont, storedDocFont } from '$lib/doc-font';
   import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -29,6 +31,8 @@
   let zone = $state('');
   let weekStart = $state<WeekStart>('sun');
   let hourCycle = $state<HourCycle>('h12');
+  // 문서 본문 서체(D-86)는 계정이 아니라 이 브라우저에만 둔다.
+  let docFont = $state<DocFont>('sans');
   let error = $state<string | undefined>(undefined);
   const unsaved = $derived(me.locale === '' || me.weekStart === '' || me.hourCycle === '');
 
@@ -38,6 +42,7 @@
       zone = me.timeZone;
       weekStart = asWeekStart(me.weekStart) ?? conventionalWeekStart(locale);
       hourCycle = asHourCycle(me.hourCycle) ?? conventionalHourCycle(locale);
+      docFont = storedDocFont();
       error = undefined;
     }
   });
@@ -70,6 +75,7 @@
       me.locale = locale;
       me.weekStart = weekStart;
       me.hourCycle = hourCycle;
+      setDocFont(docFont);
       open = false;
       // 날짜 계산·서식을 새 설정으로 다시 하도록 지금 화면을 새로 읽는다.
       window.location.reload();
@@ -128,6 +134,14 @@
           <option value="h23">{m.settings_clock_h23()}</option>
         </select>
         <span class="text-xs text-muted-foreground">{m.settings_example({ sample })}</span>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-medium">{m.settings_doc_font()}</span>
+        <select class={fieldClass} bind:value={docFont}>
+          <option value="sans">{m.settings_doc_font_sans()}</option>
+          <option value="serif">{m.settings_doc_font_serif()}</option>
+        </select>
+        <span class="text-xs text-muted-foreground">{m.settings_doc_font_hint()}</span>
       </label>
     </div>
     {#if error !== undefined}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
