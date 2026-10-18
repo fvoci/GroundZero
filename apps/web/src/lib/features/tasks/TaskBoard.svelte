@@ -12,8 +12,16 @@
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
 
-  import type { BoardAction } from './board';
-  import { lanes, listOrder, planBoardMove } from './board';
+  import type { BoardAction, BoardMove, CardBox, DropSlot } from './board';
+  import {
+    applyMove,
+    dropBefore,
+    lanes,
+    listOrder,
+    moveErrorMessage,
+    planBoardMove,
+    planDrop,
+  } from './board';
   import type { TaskFilter, TaskSort, TaskViewMode } from './filters';
   import {
     applyFilter,
@@ -34,14 +42,18 @@
     workspaces: Workspace[];
     /** 주소에서 연 업무. */
     openTaskId: string | undefined;
+    /** 옮기기가 권한·보관 때문에 거절되면 항목을 다시 읽게 한다(쓰기 단추를 끄기 위해). */
+    onstale?: () => void;
   }
 
-  const { item, workspaces, openTaskId }: Props = $props();
+  const { item, workspaces, openTaskId, onstale }: Props = $props();
 
   let tasks = $state<TaskView[]>([]);
   let view = $state<TaskViewMode>('board');
   let error = $state<string | undefined>(undefined);
   let status = $state('');
+  // 옮기기 실패 안내. 항목을 다시 읽어 목록을 새로 받아도(error를 지움) 남는다. 다음 옮기기가 성공하면 지운다.
+  let moveNotice = $state<string | undefined>(undefined);
 
   // 검색·필터·정렬과 저장한 보기(D-31).
   let filter = $state<TaskFilter>({ ...EMPTY_FILTER });
@@ -167,17 +179,154 @@
     right: '오른쪽 열로',
   };
 
-  async function move(id: string, action: BoardAction): Promise<void> {
-    const plan = planBoardMove(shown, id, action);
-    if (plan === undefined) return;
+  /**
+   * 옮기기 한 번(단추·키보드·끌어서 놓기 공통). 화면에 먼저 반영하고 기존 이동 API로 저장한 뒤 서버 목록을 다시
+   * 읽는다. 실패하면 이전 화면으로 되돌리고 이유를 알린 뒤 최신 상태(동시 변경·권한 철회·보관)를 다시 읽는다.
+   */
+  async function commitMove(id: string, plan: BoardMove, how: string): Promise<boolean> {
+    const before = tasks;
+    const title = titleOf(id);
+    tasks = applyMove(tasks, id, plan);
     try {
       await api.moveTask(id, plan.status, plan.beforeId);
       await reload();
-      status = `${titleOf(id)}: ${ACTION_LABEL[action]} 옮겼습니다(${STATUS_LABEL[plan.status]}).`;
-      document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(id)}"]`)?.focus();
+      moveNotice = undefined;
+      status = `${title}: ${how} 옮겼습니다(${STATUS_LABEL[plan.status]}).`;
+      return true;
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : '옮기지 못했습니다.';
+      tasks = before;
+      const message = moveErrorMessage(e);
+      await reload();
+      moveNotice = message;
+      status = message;
+      if (e instanceof ApiError && (e.status === 403 || e.status === 409)) onstale?.();
+      return false;
     }
+  }
+
+  async function move(id: string, action: BoardAction): Promise<void> {
+    const plan = planBoardMove(shown, id, action);
+    if (plan === undefined) return;
+    await commitMove(id, plan, ACTION_LABEL[action]);
+    document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(id)}"]`)?.focus();
+  }
+
+  // 끌어서 옮기기(마우스·터치·펜, Pointer Events). 마우스는 카드 어디서나 끌고, 터치·펜은 손잡이(⠿)에서만 끈다
+  // (카드 위를 손가락으로 쓸면 화면이 그대로 스크롤된다). 조금(6px) 움직이기 전에는 끌기가 아니어서 카드를 누르면
+  // 그대로 열린다. Esc나 취소(pointercancel)는 아무것도 바꾸지 않는다.
+  interface Drag {
+    id: string;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    x: number;
+    y: number;
+    active: boolean;
+    slot: DropSlot | undefined;
+  }
+  const DRAG_THRESHOLD = 6;
+  const SCROLL_EDGE = 48;
+  let drag = $state<Drag | undefined>(undefined);
+  // 끌기를 마친 직후 같은 손짓의 click이 카드를 열지 않게 한다.
+  let justDragged = false;
+  const dragging = $derived(drag !== undefined);
+
+  function startDrag(event: PointerEvent, id: string, handle: boolean): void {
+    if (!canWrite || drag !== undefined || !event.isPrimary || event.button !== 0) return;
+    if (!handle && event.pointerType !== 'mouse') return;
+    drag = {
+      id,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: event.clientX,
+      y: event.clientY,
+      active: false,
+      slot: undefined,
+    };
+  }
+
+  /** 포인터 아래의 열과 그 안의 자리. 열 밖이면 undefined. */
+  function slotAt(x: number, y: number, id: string): DropSlot | undefined {
+    const laneEl = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-lane]');
+    const lane = TASK_STATUSES.find((s) => s === laneEl?.dataset.lane);
+    if (laneEl === null || laneEl === undefined || lane === undefined) return undefined;
+    if (!ordered) return { status: lane, beforeId: null };
+    const cards: CardBox[] = [];
+    for (const card of laneEl.querySelectorAll<HTMLElement>('[data-board-card]')) {
+      const box = card.getBoundingClientRect();
+      cards.push({ id: card.dataset.boardCard ?? '', top: box.top, height: box.height });
+    }
+    return { status: lane, beforeId: dropBefore(cards, id, y) };
+  }
+
+  function onDragMove(event: PointerEvent): void {
+    const d = drag;
+    if (d?.pointerId !== event.pointerId) return;
+    d.x = event.clientX;
+    d.y = event.clientY;
+    if (!d.active) {
+      if (Math.hypot(d.x - d.startX, d.y - d.startY) < DRAG_THRESHOLD) return;
+      d.active = true;
+      status = `${titleOf(d.id)}을(를) 끄는 중입니다. 놓을 자리에서 놓으세요. Esc로 취소합니다.`;
+    }
+    event.preventDefault();
+    window.getSelection()?.removeAllRanges();
+    d.slot = slotAt(d.x, d.y, d.id);
+    if (d.y < SCROLL_EDGE) window.scrollBy(0, -16);
+    else if (d.y > window.innerHeight - SCROLL_EDGE) window.scrollBy(0, 16);
+  }
+
+  function onDragEnd(event: PointerEvent): void {
+    const d = drag;
+    if (d?.pointerId !== event.pointerId) return;
+    drag = undefined;
+    if (!d.active) return;
+    justDragged = true;
+    setTimeout(() => {
+      justDragged = false;
+    }, 0);
+    const slot = slotAt(event.clientX, event.clientY, d.id) ?? d.slot;
+    const plan = slot === undefined ? undefined : planDrop(shown, d.id, slot, ordered);
+    if (plan === undefined) {
+      status = `${titleOf(d.id)}: 그대로 두었습니다.`;
+      return;
+    }
+    void commitMove(d.id, plan, '끌어서');
+  }
+
+  function cancelDrag(): void {
+    const d = drag;
+    drag = undefined;
+    if (d?.active === true) status = `${titleOf(d.id)}: 끌기를 취소했습니다.`;
+  }
+
+  $effect(() => {
+    if (!dragging) return;
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelDrag();
+      }
+    };
+    window.addEventListener('pointermove', onDragMove, { passive: false });
+    window.addEventListener('pointerup', onDragEnd);
+    window.addEventListener('pointercancel', cancelDrag);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointermove', onDragMove);
+      window.removeEventListener('pointerup', onDragEnd);
+      window.removeEventListener('pointercancel', cancelDrag);
+      window.removeEventListener('keydown', onKey);
+    };
+  });
+
+  /** 놓을 자리 표시: 이 열의 이 카드 앞(null이면 열 끝)에 놓이면 참. 제자리면 표시하지 않는다. */
+  function dropMark(lane: string, beforeId: string | null): boolean {
+    const d = drag;
+    if (d?.active !== true || d.slot === undefined) return false;
+    if (d.slot.status !== lane || d.slot.beforeId !== beforeId) return false;
+    return planDrop(shown, d.id, d.slot, ordered) !== undefined;
   }
 
   function onCardKey(event: KeyboardEvent, id: string): void {
@@ -309,6 +458,9 @@
       >
     {/if}
   </div>
+  {#if moveNotice !== undefined}
+    <p role="alert" class="text-sm text-destructive">{moveNotice}</p>
+  {/if}
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive">{error}</p>
   {/if}
@@ -317,35 +469,67 @@
     <div class="grid gap-3 md:grid-cols-3" data-testid="task-board">
       {#each TASK_STATUSES as lane (lane)}
         <section
-          class="flex min-w-0 flex-col gap-2 rounded-md border p-2"
+          data-lane={lane}
+          class={[
+            'flex min-w-0 flex-col gap-2 rounded-md border p-2',
+            drag?.active === true && drag.slot?.status === lane && 'ring-2 ring-ring',
+          ]}
           aria-label={`${STATUS_LABEL[lane]} 열`}
         >
           <h3 class="text-sm font-semibold">
             {STATUS_LABEL[lane]}
             <span class="font-normal text-muted-foreground">{board[lane].length}</span>
           </h3>
-          <ul class="flex flex-col gap-2">
+          <ul class="flex min-h-12 flex-col gap-2">
             {#each board[lane] as t (t.id)}
-              <li class="flex flex-col gap-1 rounded-md border bg-card p-2">
-                <button
-                  type="button"
-                  data-task-card={t.id}
-                  aria-keyshortcuts={canWrite
-                    ? 'Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight'
-                    : undefined}
-                  onkeydown={(e) => {
-                    onCardKey(e, t.id);
-                  }}
-                  class="flex items-baseline gap-2 rounded text-left text-sm hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  onclick={() => {
-                    open(t.id);
-                  }}
-                >
-                  <span class="shrink-0 font-mono text-xs text-muted-foreground"
-                    >{t.reference ?? ''}</span
+              {#if dropMark(lane, t.id)}
+                <li aria-hidden="true" class="h-1 rounded bg-primary"></li>
+              {/if}
+              <li
+                data-board-card={t.id}
+                class={[
+                  'flex flex-col gap-1 rounded-md border bg-card p-2',
+                  canWrite && 'cursor-grab',
+                  drag?.active === true && drag.id === t.id && 'opacity-40',
+                ]}
+                onpointerdown={(e: PointerEvent) => {
+                  startDrag(e, t.id, false);
+                }}
+              >
+                <div class="flex items-start gap-1">
+                  {#if canWrite}
+                    <span
+                      aria-hidden="true"
+                      title="끌어서 옮기기"
+                      class="-ml-1 shrink-0 cursor-grab touch-none px-1 text-muted-foreground select-none"
+                      onpointerdown={(e: PointerEvent) => {
+                        startDrag(e, t.id, true);
+                      }}
+                      oncontextmenu={(e: MouseEvent) => {
+                        e.preventDefault();
+                      }}>⠿</span
+                    >
+                  {/if}
+                  <button
+                    type="button"
+                    data-task-card={t.id}
+                    aria-keyshortcuts={canWrite
+                      ? 'Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight'
+                      : undefined}
+                    onkeydown={(e) => {
+                      onCardKey(e, t.id);
+                    }}
+                    class="flex items-baseline gap-2 rounded text-left text-sm hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    onclick={() => {
+                      if (!justDragged) open(t.id);
+                    }}
                   >
-                  <span class="min-w-0 break-words">{t.title}</span>
-                </button>
+                    <span class="shrink-0 font-mono text-xs text-muted-foreground"
+                      >{t.reference ?? ''}</span
+                    >
+                    <span class="min-w-0 break-words">{t.title}</span>
+                  </button>
+                </div>
                 {#if t.parent_id !== null}
                   <span class="text-xs text-muted-foreground">↳ {titleOf(t.parent_id)}</span>
                 {/if}
@@ -382,13 +566,29 @@
                 {/if}
               </li>
             {/each}
+            {#if dropMark(lane, null)}
+              <li aria-hidden="true" class="h-1 rounded bg-primary"></li>
+            {/if}
           </ul>
         </section>
       {/each}
     </div>
+    {#if drag?.active === true}
+      <div
+        aria-hidden="true"
+        class="pointer-events-none fixed z-50 max-w-60 truncate rounded-md border bg-card px-2 py-1 text-sm shadow-md"
+        style:left={`${String(drag.x + 12)}px`}
+        style:top={`${String(drag.y + 12)}px`}
+      >
+        {titleOf(drag.id)}
+      </div>
+    {/if}
     {#if canWrite}
       <p class="text-xs text-muted-foreground">
-        카드에서 Enter로 열고, Alt+왼쪽·오른쪽으로 열을, Alt+위·아래로 순서를 바꿉니다.
+        카드를 끌어 열과 순서를 바꿉니다(터치는 ⠿ 손잡이를 끕니다). 카드에서 Enter로 열고,
+        Alt+왼쪽·오른쪽으로 열을, Alt+위·아래로 순서를 바꿉니다.{ordered
+          ? ''
+          : ' 기본 순서가 아닐 때는 열만 바꿉니다.'}
       </p>
     {/if}
   {:else if view === 'gantt'}
