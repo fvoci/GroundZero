@@ -186,6 +186,7 @@ async fn api_not_found() -> AppError {
         time_tracking::set_sharing,
         time_tracking::get_sharing,
         time_tracking::task_time,
+        time_tracking::item_time,
         home::home,
         home::set_mark,
         home::get_mark,
@@ -394,6 +395,8 @@ async fn api_not_found() -> AppError {
         time_tracking::SetSharing,
         time_tracking::Sharing,
         time_tracking::TaskTime,
+        time_tracking::ItemTime,
+        time_tracking::ItemTimeKind,
         home::DueBucket,
         home::HomeTask,
         home::HomeDocument,
@@ -739,6 +742,7 @@ pub fn router(state: AppState) -> Router {
             get(time_tracking::get_sharing).put(time_tracking::set_sharing),
         )
         .route("/tasks/{task_id}/time", get(time_tracking::task_time))
+        .route("/items/{item_id}/time", get(time_tracking::item_time))
         .route("/me/home", get(home::home))
         .route(
             "/workspaces/{workspace_id}/trash",

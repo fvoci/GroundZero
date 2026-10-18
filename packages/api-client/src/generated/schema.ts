@@ -1031,6 +1031,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 항목의 예상·실제 시간(항목을 볼 수 있는 사람). 기록 하나하나는 돌려주지 않는다. */
+        get: operations["item_time"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/views": {
         parameters: {
             query?: never;
@@ -3126,6 +3143,32 @@ export interface components {
             /** @description `planned`·`active`·`on_hold`·`done`·`cancelled`. */
             status: string;
         };
+        /** @description 항목의 시간 합계(D-78): 항목 자체와 그 아래 업무·문서·강의 회차·스터디 단위의 기록을 종류별로 모은다. */
+        ItemTime: {
+            /**
+             * Format: int64
+             * @description 항목의 휴지통에 없는 업무 예상 시간 합(분).
+             */
+            estimate_minutes: number;
+            /** @description 기록이 있는 종류만, 종류 이름 순. */
+            kinds: components["schemas"]["ItemTimeKind"][];
+        };
+        /** @description 항목의 시간 합계 한 종류. */
+        ItemTimeKind: {
+            kind: components["schemas"]["TimeKind"];
+            /**
+             * Format: int64
+             * @description 내 끝난 기록의 합계(초).
+             */
+            mine_seconds: number;
+            /** Format: int32 */
+            shared_people: number;
+            /**
+             * Format: int64
+             * @description 이 워크스페이스에 공유를 켠 멤버들의 합계(초, 나도 켰으면 포함).
+             */
+            shared_seconds: number;
+        };
         /** @description 로그아웃 결과. 클라이언트는 `redirect_to`로 이동해 제공자 세션도 끝낸다. */
         LogoutResponse: {
             redirect_to: string;
@@ -4094,10 +4137,10 @@ export interface components {
             started_at: string;
         };
         /**
-         * @description 시간 기록 종류. `study`는 순공부(강의 시청 제외), `lecture`는 강의 시청, `rest`는 휴식.
+         * @description 시간 기록 종류. `study`는 순공부(강의 시청 제외), `lecture`는 강의 시청, `hobby`는 취미 활동, `rest`는 휴식.
          * @enum {string}
          */
-        TimeKind: "work" | "study" | "lecture" | "rest" | "other";
+        TimeKind: "work" | "study" | "lecture" | "hobby" | "rest" | "other";
         /** @description 기간·종류별 합계. */
         TimeSummaryRow: {
             kind: components["schemas"]["TimeKind"];
@@ -7574,6 +7617,35 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    item_time: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemTime"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
