@@ -117,7 +117,36 @@ git pull && docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d
 - **세 가지 ETag·체크섬을 섞지 않는다**: 객체 저장소(R2·S3)의 객체·조각 ETag는 저장소가 조각을 맞추는 데만 쓰고(앱 밖으로 내보내지 않음), 파일 무결성은 조각마다 `x-content-sha256`과 완성 파일의 SHA-256으로 확인하며, API의 ETag는 JSON 표현의 검증자다. 비공개 첨부는 앱이 권한을 확인하고 내려주며(`no-store`) 영구 공개 URL로 바꾸지 않는다. 업로드 완료 단계는 파일을 다시 보내지 않는다.
 - **확인**: `curl -sI https://<주소>/assets/<파일>`은 `immutable`, `curl -sI https://<주소>/api/me`는 `no-store`와 CDN의 캐시 상태가 우회(Cloudflare `cf-cache-status: BYPASS`/`DYNAMIC`, CloudFront `x-cache: Miss from cloudfront`)여야 한다. 실제 CDN 계정 설정·유료 서비스 생성은 운영자가 따로 정한다.
 
-## 8. 알아 둘 것
+## 8. 운영 로그(D-83)
+
+앱은 stdout에 한 줄에 JSON 객체 하나(JSON Lines)를 쓴다. Docker가 이것을 `json-file`로 남기고 서비스마다 `FVOCI_LOG_MAX_SIZE`(기본 `10m`) × `FVOCI_LOG_MAX_FILE`(기본 `5`)까지만 두고 돌린다. 앱이 따로 로그 파일을 쓰지 않으며 로그 서버·외부 전송은 없다.
+
+- **필드**: 모든 줄에 `timestamp`(UTC RFC 3339), `level`, `target`(모듈), `event`(기계용 코드, 예: `http.request`·`http.error`·`job.failed`), `message`. 요청 중이면 `request_id`, 주기 작업 중이면 `job`·`job_id`. 요청마다 접근 줄 하나(`http.request`: `method`, `route`(경로 틀, 쿼리 없음), `status_code`, `duration_ms`, 거절이면 `error_code`). 서버 쪽 실패는 한 번 `error_code`·`detail`(분류만)과 함께 남는다. 입력 오류·권한 거부(4xx)는 오류 줄을 남기지 않는다. `/healthz`와 정적 파일은 DEBUG(5xx면 WARN). 패닉은 위치만 담은 `event: "panic"` 한 줄로 남는다.
+- **남기지 않는 것**: 비밀번호·토큰·쿠키·`Authorization`·OIDC 코드·서명 URL·문서 본문·첨부 내용, 요청·응답 본문, 머리글, 쿼리, 설정 값, DB 바인딩 값, 바깥 서비스 오류 원문. SQL 문장(느린 쿼리 포함)도 남기지 않는다. 레벨을 올려도 같다(HTTP·TLS·DB 라이브러리는 `info`까지만, 첨부 내용을 찍는 PDF 라이브러리는 아예 나오지 않는다).
+- **사용자 화면과 잇기**: 서버 오류 화면에는 요청 ID가 나온다(응답 머리글 `x-request-id`와 같다). 앞단 프록시가 안전한 모양(영문·숫자·`-_.` 8~64자)의 `x-request-id`를 주면 그 값을 쓴다(추적용일 뿐 권한과 상관없다).
+- **감사 기록은 따로**: 생성·삭제·이름 변경·권한 변경 같은 감사 이벤트는 DB(`audit_log`)에 남고 로그 레벨과 상관없다.
+
+```bash
+docker compose --env-file .env -f deploy/compose.selfhost.yaml logs --since 1h app
+```
+
+```bash
+docker compose --env-file .env -f deploy/compose.selfhost.yaml logs --no-log-prefix app | jq -c 'select(.level == "ERROR" or .level == "WARN")'
+```
+
+```bash
+docker compose --env-file .env -f deploy/compose.selfhost.yaml logs --no-log-prefix app | jq -c 'select(.request_id == "<화면의 요청 ID>")'
+```
+
+**잠깐 자세히 보기와 원복**: 레벨·모듈 거르기는 시작할 때 한 번 읽으므로 바꾸면 앱 컨테이너를 다시 만든다(다른 서비스와 데이터는 그대로).
+
+1. `.env`에 `FVOCI_LOG=info,fvoci_server=debug`(특정 모듈만이면 `info,fvoci_server::collab=debug`)를 넣는다. 잘못 쓰면 앱이 시작하지 않고 이유를 출력한다.
+2. `docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d app`
+3. 확인이 끝나면 그 줄을 지우고(기본 `info`) 2를 다시 한다.
+
+로컬 개발에서는 `FVOCI_LOG_FORMAT=pretty`로 같은 사건·필드를 한 줄 글로 본다. 운영은 기본 `json`을 쓴다.
+
+## 9. 알아 둘 것
 
 - 비밀 값은 `.env`에만 있고 이미지·로그에 쓰지 않는다. `.env`는 소유자만 읽게 둔다.
 - Meilisearch는 사용 통계 전송을 끈 운영 모드로 뜬다. 색인이 지워지면 앱이 다시 만든다.

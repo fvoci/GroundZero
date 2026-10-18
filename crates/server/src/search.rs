@@ -81,7 +81,10 @@ fn uid(kind: &str, id: Uuid) -> String {
 }
 
 fn search_error(err: reqwest::Error) -> AppError {
-    AppError::Config(format!("search service: {err}"))
+    AppError::Config(format!(
+        "search service {}",
+        crate::logging::safe_reqwest(&err)
+    ))
 }
 
 impl SearchClient {
@@ -137,7 +140,11 @@ impl SearchClient {
                 _ => tokio::time::sleep(Duration::from_millis(50)).await,
             }
         }
-        tracing::warn!(task, "search task still running; treating it as queued");
+        tracing::warn!(
+            event = "search.task_pending",
+            task,
+            "search task still running; treating it as queued"
+        );
         Ok(())
     }
 
@@ -291,7 +298,11 @@ async fn file_text(storage: &Storage, row: &PayloadRow) -> Option<String> {
     match tokio::time::timeout(file_text::EXTRACT_TIMEOUT, job).await {
         Ok(Ok(text)) => text,
         Ok(Err(_)) | Err(_) => {
-            tracing::warn!(file = key, "attachment text extraction failed or timed out");
+            tracing::warn!(
+                event = "search.extract_failed",
+                file = key,
+                "attachment text extraction failed or timed out"
+            );
             None
         }
     }
@@ -306,6 +317,7 @@ pub async fn prepare(db: &Db, client: &SearchClient) -> Result<(), AppError> {
             .await?;
         tx.commit().await?;
         tracing::info!(
+            event = "search.index_created",
             queued,
             "search index created; queued everything for indexing"
         );
@@ -322,7 +334,9 @@ async fn upsert_each(client: &SearchClient, docs: &[IndexDoc]) -> Vec<String> {
     for doc in docs {
         match client.upsert(std::slice::from_ref(doc)).await {
             Ok(()) => done.push(doc.uid.clone()),
-            Err(err) => tracing::warn!(uid = %doc.uid, error = %err, "search upsert failed"),
+            Err(err) => {
+                tracing::warn!(event = "search.upsert_failed", uid = %doc.uid, error_code = err.code(), detail = crate::logging::safe_error(&err), "search upsert failed")
+            }
         }
     }
     done
@@ -397,7 +411,12 @@ pub async fn drain(
     let mut done: HashSet<String> = upsert_each(client, &upserts).await.into_iter().collect();
     match client.delete(&deletes).await {
         Ok(()) => done.extend(deletes),
-        Err(err) => tracing::warn!(error = %err, "search delete failed"),
+        Err(err) => tracing::warn!(
+            event = "search.delete_failed",
+            error_code = err.code(),
+            detail = crate::logging::safe_error(&err),
+            "search delete failed"
+        ),
     }
     let finished: Vec<&(String, Uuid, OffsetDateTime)> = claimed
         .iter()

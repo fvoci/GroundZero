@@ -16,6 +16,10 @@ pub struct ErrorBody {
     pub error: &'static str,
     /// 사람이 읽는 설명. 내부 세부는 담지 않는다.
     pub message: String,
+    /// 이 요청의 id(응답 머리글 `x-request-id`와 같다). 운영 로그에서 같은 요청의 줄을 찾을 때 쓴다(D-83).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub request_id: Option<String>,
 }
 
 /// 서버 시작·요청 처리에서 발생하는 오류.
@@ -80,6 +84,12 @@ impl AppError {
         }
     }
 
+    /// 응답·로그에 쓰는 안정된 오류 코드(UI 언어와 상관없다).
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        self.status_and_code().1
+    }
+
     fn status_and_code(&self) -> (StatusCode, &'static str) {
         match self {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
@@ -100,16 +110,41 @@ impl AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error) = self.status_and_code();
+        // 서버 쪽 실패는 여기서 한 번만 남긴다(D-83). 입력 오류·권한 거부·충돌(4xx)은 정상 흐름이라 로그로 남기지
+        // 않고 접근 줄의 status_code로 본다. 바깥 서비스 실패(502)는 복구 가능한 이상이라 WARN.
+        if status.is_server_error() {
+            let detail = crate::logging::safe_error(&self);
+            if status == StatusCode::INTERNAL_SERVER_ERROR {
+                tracing::error!(
+                    event = "http.error",
+                    error_code = error,
+                    status_code = status.as_u16(),
+                    detail,
+                    "request failed"
+                );
+            } else {
+                tracing::warn!(
+                    event = "http.upstream_error",
+                    error_code = error,
+                    status_code = status.as_u16(),
+                    detail,
+                    "an outside service failed"
+                );
+            }
+        }
         let message = match &self {
             Self::BadRequest(msg) | Self::Conflict(msg) | Self::Upstream(msg) => msg.clone(),
-            other => {
-                if status.is_server_error() {
-                    // 내부 오류 세부는 로그에만 남긴다.
-                    tracing::error!(error = %other, "request failed");
-                }
-                status.canonical_reason().unwrap_or("error").to_owned()
-            }
+            _ => status.canonical_reason().unwrap_or("error").to_owned(),
         };
-        (status, Json(ErrorBody { error, message })).into_response()
+        let body = ErrorBody {
+            error,
+            message,
+            request_id: crate::logging::current_request_id(),
+        };
+        let mut response = (status, Json(body)).into_response();
+        response
+            .extensions_mut()
+            .insert(crate::logging::ErrorCode(error));
+        response
     }
 }

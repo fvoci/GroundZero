@@ -67,3 +67,35 @@ describe('connection detection (D-82)', () => {
     expect(connection.lost).toBe(false);
   });
 });
+
+describe('server failures (D-83)', () => {
+  it('shows a safe message with the request id, not server details', async () => {
+    const { api, ApiError } = await import('$lib/api/client');
+    const { setLocale } = await import('$lib/paraglide/runtime.js');
+    await setLocale('en', { reload: false });
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(
+          '{"error":"internal","message":"Internal Server Error","request_id":"0199-test-id"}',
+          { status: 500 },
+        ),
+      ),
+    );
+    const error: unknown = await api.document('x').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    if (!(error instanceof ApiError)) return;
+    expect(error.requestId).toBe('0199-test-id');
+    expect(error.code).toBe('internal');
+    expect(error.message).toContain('0199-test-id');
+    expect(error.message).not.toContain('Internal Server Error');
+    // 입력 오류(4xx)는 서버가 준 설명 그대로.
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response('{"error":"bad_request","message":"title is empty","request_id":"r-0001"}', {
+          status: 400,
+        }),
+      ),
+    );
+    await expect(api.document('x')).rejects.toThrow('title is empty');
+  });
+});

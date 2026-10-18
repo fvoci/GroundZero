@@ -9,6 +9,7 @@ pub mod error;
 pub mod features;
 pub mod http;
 pub mod ids;
+pub mod logging;
 pub mod search;
 pub mod storage;
 pub mod worker;

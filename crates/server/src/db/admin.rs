@@ -52,7 +52,7 @@ pub async fn bootstrap(cfg: &DbCommandConfig) -> Result<(), AppError> {
     let migrator_pw = need(cfg.migrator_password.as_ref(), "FVOCI_DB_MIGRATOR_PASSWORD")?;
     let app_pw = need(cfg.app_password.as_ref(), "FVOCI_DB_APP_PASSWORD")?;
 
-    let mut conn = PgConnection::connect(admin.expose()).await?;
+    let mut conn = PgConnection::connect_with(&super::connect_options(admin)?).await?;
     ensure_role(
         &mut conn,
         MIGRATOR_ROLE,
@@ -97,7 +97,7 @@ pub async fn migrate(cfg: &DbCommandConfig) -> Result<(), AppError> {
     let url = need(cfg.migration_url.as_ref(), "DATABASE_MIGRATION_URL")?;
     let pool = PgPoolOptions::new()
         .max_connections(1)
-        .connect(url.expose())
+        .connect_with(super::connect_options(url)?)
         .await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
     pool.close().await;

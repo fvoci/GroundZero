@@ -377,9 +377,13 @@ pub async fn complete_upload(
     if row.state != "done" {
         // 연결이 끊겨도(프록시 시간 제한 등) 합치기·확인·기록은 끝까지 한다. 다시 요청하면 결과를 본다.
         let worker = state.clone();
-        tokio::spawn(async move { finish(&worker, user, id, row, parts).await })
-            .await
-            .map_err(|e| AppError::Config(format!("upload completion task: {e}")))??;
+        // 따로 도는 작업에도 요청 id를 붙인다(실패 줄을 사용자가 본 요청 id로 찾게, D-83).
+        let request_id = crate::logging::current_request_id().unwrap_or_default();
+        tokio::spawn(crate::logging::REQUEST_ID.scope(request_id, async move {
+            finish(&worker, user, id, row, parts).await
+        }))
+        .await
+        .map_err(|e| AppError::Config(format!("upload completion task: {e}")))??;
     }
     let mut tx = state.db.begin_as(user).await?;
     let row = my_upload(&mut tx, id).await?;
@@ -414,7 +418,7 @@ async fn finish(
     {
         Ok(()) | Err(AppError::NotFound) => {}
         Err(err) => {
-            tracing::warn!(upload = %id.0, error = %err, "storage could not assemble the upload");
+            tracing::warn!(event = "upload.assemble_failed", upload = %id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "storage could not assemble the upload");
             let mut tx = state.db.begin_as(user).await?;
             sqlx::query("SELECT app_reset_upload($1)")
                 .bind(id)

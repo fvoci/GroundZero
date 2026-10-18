@@ -10,7 +10,7 @@ publish = false
 
 [workspace.dependencies]
 anyhow = "1"
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "query", "ws"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "query", "ws", "matched-path"] }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

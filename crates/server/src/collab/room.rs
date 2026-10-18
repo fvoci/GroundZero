@@ -341,7 +341,7 @@ impl Rooms {
         match room.load(admin).await {
             Ok(loaded) => room.doc = Some(loaded),
             Err(err) => {
-                tracing::warn!(document = %doc.0, error = %err, "could not load a pending live state");
+                tracing::warn!(event = "collab.load_failed", document = %doc.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not load a pending live state");
                 return false;
             }
         }
@@ -697,7 +697,7 @@ impl Room {
                     }
                     if !can_write {
                         // 읽기 연결의 변경은 받지 않는다(편집기가 스스로 맞춘 것일 수 있어 닫지는 않는다).
-                        tracing::debug!(document = %self.doc_id.0, "ignored a change from a read-only connection");
+                        tracing::debug!(event = "collab.read_only_change", document = %self.doc_id.0, "ignored a change from a read-only connection");
                         continue;
                     }
                     self.pending.push(Pending { conn, user, update });
@@ -794,15 +794,21 @@ impl Room {
                 check_update(&state, &candidate, &lineage, &limits, max_state)
             })
             .await
-            .unwrap_or(Verdict::Invalid);
+            .unwrap_or(Verdict::Invalid("check task failed".into()));
             match verdict {
                 Verdict::Ok => {}
                 Verdict::Reload => {
                     self.close(conn, CloseReason::Reload);
                     continue;
                 }
-                Verdict::Invalid => {
-                    tracing::warn!(document = %self.doc_id.0, "rejected a live edit that fails document checks");
+                Verdict::Invalid(reason) => {
+                    // 이유는 우리가 붙인 고정 분류다(문서 내용은 담지 않는다, D-83).
+                    tracing::warn!(
+                        event = "collab.edit_rejected",
+                        document = %self.doc_id.0,
+                        reason,
+                        "rejected a live edit that fails document checks"
+                    );
                     self.close(conn, CloseReason::Invalid);
                     continue;
                 }
@@ -925,7 +931,7 @@ impl Room {
         match result {
             Ok(_) => self.dirty_state = false,
             Err(err) => {
-                tracing::warn!(document = %self.doc_id.0, error = %err, "could not store live editing state");
+                tracing::warn!(event = "collab.store_failed", document = %self.doc_id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not store live editing state");
             }
         }
     }
@@ -947,7 +953,7 @@ impl Room {
         let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
         let body = convert::read_doc(&doc.transact(), &fragment);
         if documents::validate_body(&body, &self.limits).is_err() {
-            tracing::warn!(document = %self.doc_id.0, "live document failed checks; not saved as a revision");
+            tracing::warn!(event = "collab.invalid_document", document = %self.doc_id.0, "live document failed checks; not saved as a revision");
             return false;
         }
         let mut authors = self.editors.clone();
@@ -972,7 +978,7 @@ impl Room {
                 }
                 Ok(None) => {
                     // 본문이 다른 길로 바뀌었다(복원). 덮어쓰지 않고 다시 열게 한다.
-                    tracing::warn!(document = %self.doc_id.0, "document changed outside live editing; reopening");
+                    tracing::warn!(event = "collab.changed_outside", document = %self.doc_id.0, "document changed outside live editing; reopening");
                     for (_, c) in self.conns.drain() {
                         let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
                     }
@@ -982,12 +988,12 @@ impl Room {
                 }
                 Err(AppError::Forbidden | AppError::NotFound) => {}
                 Err(err) => {
-                    tracing::warn!(document = %self.doc_id.0, error = %err, "could not save the live document as a revision");
+                    tracing::warn!(event = "collab.save_failed", document = %self.doc_id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not save the live document as a revision");
                     return false;
                 }
             }
         }
-        tracing::warn!(document = %self.doc_id.0, "no editor can save the live document; keeping the live state");
+        tracing::warn!(event = "collab.no_editor", document = %self.doc_id.0, "no editor can save the live document; keeping the live state");
         false
     }
 
@@ -1060,7 +1066,8 @@ impl Room {
 
 enum Verdict {
     Ok,
-    Invalid,
+    /// 거절 이유(로그용 고정 분류).
+    Invalid(String),
     Reload,
 }
 
@@ -1075,10 +1082,10 @@ fn check_update(
     // 변경 혼자에 다른 계보 표시가 있으면 옛 상태로 다시 붙은 클라이언트다.
     let probe = Doc::new();
     let Ok(alone) = Update::decode_v1(update) else {
-        return Verdict::Invalid;
+        return Verdict::Invalid("update does not decode".into());
     };
     if probe.transact_mut().apply_update(alone).is_err() {
-        return Verdict::Invalid;
+        return Verdict::Invalid("update does not apply".into());
     }
     if lineage_of(&probe).is_some_and(|l| l != lineage) {
         return Verdict::Reload;
@@ -1091,7 +1098,7 @@ fn check_update(
             .is_some_and(|u| scratch.transact_mut().apply_update(u).is_ok())
     });
     if !applied {
-        return Verdict::Invalid;
+        return Verdict::Invalid("update does not apply to the room state".into());
     }
     let txn = scratch.transact();
     // 앞선 변경이 빠져 적용하지 못하고 남은 것이 있으면 이 클라이언트 상태는 서버와 어긋났다. 새로 열게 한다.
@@ -1099,16 +1106,17 @@ fn check_update(
         return Verdict::Reload;
     }
     if txn.encode_state_as_update_v1(&StateVector::default()).len() > max_state {
-        return Verdict::Invalid;
+        return Verdict::Invalid("state too large".into());
     }
-    if convert::check_shape(&txn).is_err() {
-        return Verdict::Invalid;
+    if let Err(reason) = convert::check_shape(&txn) {
+        return Verdict::Invalid(reason.into());
     }
     let body = convert::read_doc(&txn, &fragment);
-    if documents::validate_body(&body, limits).is_ok() {
-        Verdict::Ok
-    } else {
-        Verdict::Invalid
+    match documents::validate_body(&body, limits) {
+        Ok(()) => Verdict::Ok,
+        // 본문 검사의 설명은 우리가 쓴 고정 문구와 개수뿐이다.
+        Err(AppError::BadRequest(reason)) => Verdict::Invalid(reason),
+        Err(other) => Verdict::Invalid(other.code().into()),
     }
 }
 

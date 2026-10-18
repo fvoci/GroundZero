@@ -17,6 +17,7 @@ import type {
 } from '@fvoci/api-client';
 
 import { connection, reportConnectionLost } from '$lib/features/feedback/feedback.svelte';
+import { m } from '$lib/paraglide/messages.js';
 
 /** Tiptap JSON 노드. 본문 최상위는 `type: "doc"`. */
 export interface DocNode {
@@ -87,6 +88,8 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** 서버가 붙인 요청 id(D-83). 운영 로그에서 같은 요청을 찾을 때 쓴다. */
+    readonly requestId?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -2054,8 +2057,16 @@ async function request(
 
 function fail(status: number, json: Json): never {
   if (isRecord(json) && typeof json.error === 'string') {
-    const message = typeof json.message === 'string' ? json.message : json.error;
-    throw new ApiError(status, json.error, message);
+    let message = typeof json.message === 'string' ? json.message : json.error;
+    const requestId = typeof json.request_id === 'string' ? json.request_id : undefined;
+    // 서버 쪽 실패(5xx)는 안전한 문구와 요청 id만 보인다(D-83). 바깥 서비스 오류의 설명은 서버가 사람용으로 준 것이다.
+    if (status >= 500 && requestId !== undefined) {
+      message =
+        json.error === 'upstream_error'
+          ? `${message} (${m.common_request_id({ requestId })})`
+          : m.common_server_error({ requestId });
+    }
+    throw new ApiError(status, json.error, message, requestId);
   }
   throw new ApiError(status, 'unexpected', `unexpected response (${String(status)})`);
 }

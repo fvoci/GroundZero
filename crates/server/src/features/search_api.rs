@@ -305,11 +305,21 @@ async fn indexed(
         let hits = match client.query(q, filter, page * CANDIDATES, CANDIDATES).await {
             Ok(hits) => hits,
             Err(err) if page == 0 => {
-                tracing::warn!(error = %err, "search service unavailable; using title search");
+                tracing::warn!(
+                    event = "search.unavailable",
+                    error_code = err.code(),
+                    detail = crate::logging::safe_error(&err),
+                    "search service unavailable; using title search"
+                );
                 return Ok(None);
             }
             Err(err) => {
-                tracing::warn!(error = %err, "search service failed while paging");
+                tracing::warn!(
+                    event = "search.paging_failed",
+                    error_code = err.code(),
+                    detail = crate::logging::safe_error(&err),
+                    "search service failed while paging"
+                );
                 break;
             }
         };
