@@ -149,6 +149,15 @@
   button {
     font: inherit;
   }
+
+  /* 제목은 한국어 어절 중간에서 줄을 바꾸지 않고(긴 영문·주소는 어디서든 끊는다), 고정 머리글 아래로 숨지 않게 바로 가기 여백을 둔다. */
+  h1,
+  h2,
+  h3 {
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    scroll-margin-top: 4rem;
+  }
 }
 
 /* 문서 본문(Tiptap). 본문 글자·줄 높이 토큰을 따른다. */

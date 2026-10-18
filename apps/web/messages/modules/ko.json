@@ -127,5 +127,6 @@
   "modules_members_shared_hint": "워크스페이스에 공개된 항목이라 멤버 모두가 봅니다. 비공개로 바꾸면 여기의 사람·그룹만 봅니다.",
   "modules_people": "사람",
   "modules_groups": "그룹",
-  "modules_group_badge": "그룹 · {name}"
+  "modules_group_badge": "그룹 · {name}",
+  "modules_jump_label": "이 항목에서 바로 가기"
 }
