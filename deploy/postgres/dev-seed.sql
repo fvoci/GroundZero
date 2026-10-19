@@ -4,7 +4,7 @@
 -- 'dev_seed' 표시가 있으면 아무것도 바꾸지 않으므로 다시 실행해도 중복되거나 사용자 데이터가 초기화되지 않는다.
 -- 입력: psql 변수 issuer(개발 Keycloak 발급자. 사용자 식별은 발급자 + subject).
 SET search_path = fvoci, pg_temp;
-SELECT set_config('fvoci.dev_issuer', :'issuer', false);
+SET fvoci.dev_issuer = :'issuer';
 
 DO $seed$
 DECLARE
