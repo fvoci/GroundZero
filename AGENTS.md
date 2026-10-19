@@ -13,7 +13,7 @@
 - `pnpm install --frozen-lockfile`
 - `cargo xtask check` — 포맷·lint·타입·단위 테스트·라이선스·계약 (`--skip-licenses`는 라이선스만 빼며 CI는 `cargo xtask licenses`를 따로 돌린다)
 - `cargo xtask test` — 격리된 Compose로 통합 테스트 (`--oidc`로 Keycloak 포함)
-- `cargo xtask dev [--oidc]`, `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`, `cargo xtask down`
+- `cargo xtask dev --oidc` — 개발 서비스·서버·웹을 한 번에 띄우고 테스트 계정으로 바로 로그인(`docs/development.md` 12.1). `--no-web`이면 웹은 `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`로 따로. 정리는 `cargo xtask down`(이 체크아웃의 개발 데이터도 지움)
 - `cargo xtask openapi` 후 `pnpm run generate:api`
 - `cargo xtask rhwp` — HWP·HWPX 미리보기 WASM(D-76)을 제품 이미지와 같은 단계로 만들어 개발 서버 자리에 두고 고지를 갱신한다(입력이 같으면 다시 쓴다)
 

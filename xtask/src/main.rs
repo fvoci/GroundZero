@@ -45,9 +45,12 @@ enum Command {
     },
     /// 개발용 Compose를 띄우고 서버를 실행한다. 종료는 Ctrl-C.
     Dev {
-        /// 개발용 Keycloak을 띄우고 OIDC 로그인을 켠다.
+        /// 개발용 Keycloak을 띄우고 OIDC 로그인을 켠다(테스트 계정·공동 작업 공간 준비 포함).
         #[arg(long)]
         oidc: bool,
+        /// 웹 개발 서버(Vite)를 띄우지 않는다(API만).
+        #[arg(long)]
+        no_web: bool,
     },
     /// 이 체크아웃이 만든 Compose 자원(dev·test)을 정리한다. 다른 체크아웃은 건드리지 않는다.
     Down,
@@ -94,7 +97,7 @@ fn main() -> Result<()> {
             oidc,
             external_services,
         } => test::run(&root, keep, oidc, external_services),
-        Command::Dev { oidc } => dev::run(&root, oidc),
+        Command::Dev { oidc, no_web } => dev::run(&root, oidc, !no_web),
         Command::Down => compose::down_all(&root),
         Command::Openapi { check } => openapi::run(&root, check),
         Command::Licenses => licenses::run(&root),
