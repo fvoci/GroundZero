@@ -2,6 +2,7 @@
   // 항목의 업무 (D-31): 칸반·목록·간트·달력, 검색·필터·정렬과 저장한 보기, 업무 만들기, 상세 대화상자.
   // 칸반 카드는 버튼과 키보드(Alt+화살표)로 열·순서를 옮긴다. 상세는 주소(/t/{업무})로도 열린다.
   import type { Workspace } from '@fvoci/api-client';
+  import { untrack } from 'svelte';
 
   import type { ItemView, SavedViewView, TaskStatus, TaskView } from '$lib/api/client';
   import { api, ApiError, TASK_STATUSES } from '$lib/api/client';
@@ -31,6 +32,7 @@
     assigneesOf,
     EMPTY_FILTER,
     isFiltered,
+    isRecord,
     readConfig,
     sortTasks,
     VIEWS,
@@ -66,6 +68,41 @@
   let viewName = $state('');
   // 같은 이름·설정의 재시도는 같은 요청 id, 고치면 새 id.
   const viewKey = new RetryKey();
+  // 보기·필터·정렬은 이 탭에서 항목마다 기억한다. 다른 화면에 갔다 돌아와도 그대로다(이 브라우저 탭에만 남는 개인
+  // 편의라 저장한 보기와 다르다). 저장소를 쓸 수 없으면 기억하지 않는다.
+  const contextKey = (itemId: string): string => `fvoci:board:${itemId}`;
+  function restoreContext(itemId: string): void {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(window.sessionStorage.getItem(contextKey(itemId)) ?? 'null');
+    } catch {
+      return;
+    }
+    if (!isRecord(raw)) return;
+    const config = readConfig(raw);
+    view = config.view;
+    filter = config.filter;
+    sort = config.sort;
+  }
+  let contextFor = untrack(() => item.id);
+  restoreContext(contextFor);
+  $effect(() => {
+    const id = item.id;
+    const snapshot = JSON.stringify({ view, filter, sort });
+    if (contextFor !== id) {
+      // 다른 항목으로 바뀌었다: 그 항목의 맥락을 불러온다(지금 것을 그 항목 이름으로 남기지 않는다).
+      contextFor = id;
+      untrack(() => {
+        restoreContext(id);
+      });
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(contextKey(id), snapshot);
+    } catch {
+      // 저장소를 쓸 수 없으면 기억하지 않는다.
+    }
+  });
   const shown = $derived(sortTasks(applyFilter(tasks, filter, me.userId), sort));
   const people = $derived(assigneesOf(tasks));
   const ordered = $derived(sort === 'position');

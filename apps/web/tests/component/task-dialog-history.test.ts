@@ -88,3 +88,24 @@ describe('task dialog and browser history', () => {
     expect(push).toHaveBeenCalledTimes(1);
   });
 });
+
+// 칸반 맥락(목표 3): 다른 화면에 갔다가 돌아와도(보드가 새로 그려짐) 보기·필터·정렬이 그대로다.
+describe('board context across navigation', () => {
+  it('restores the view and filter when the board is shown again', async () => {
+    await setLocale('ko', { reload: false });
+    window.sessionStorage.clear();
+    vi.spyOn(api, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
+    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    const first = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    const status = await screen.findByLabelText('상태');
+    await fireEvent.change(status, { target: { value: 'in_progress' } });
+    await fireEvent.click(screen.getByRole('button', { name: '목록' }));
+    first.unmount();
+
+    render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    const again = await screen.findByLabelText('상태');
+    expect(again instanceof HTMLSelectElement ? again.value : '').toBe('in_progress');
+    expect(screen.getByRole('button', { name: '목록' }).getAttribute('aria-pressed')).toBe('true');
+  });
+});
