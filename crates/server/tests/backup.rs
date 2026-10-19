@@ -198,6 +198,24 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
         .await
         .unwrap_err();
     assert!(err.to_string().contains("damaged"), "{err}");
+    // 감사 10번: 목록에서 표가 빠진 백업도 거부한다(빠진 표의 내용 없이 복구를 끝내면 안 된다).
+    let partial = temp_dir("partial");
+    copy_dir(&out, &partial);
+    let mut listed: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(partial.join("manifest.json")).unwrap()).unwrap();
+    listed["tables"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|t| t["name"] != "comments");
+    std::fs::write(
+        partial.join("manifest.json"),
+        serde_json::to_vec(&listed).unwrap(),
+    )
+    .unwrap();
+    let err = backup::restore(&restored.config, restored_db, &partial)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("comments"), "{err}");
     backup::restore(&restored.config, restored_db, &out)
         .await
         .unwrap();

@@ -986,7 +986,11 @@ async fn trashing_a_parent_while_its_subtask_is_being_trashed_keeps_the_subtask_
             .fetch_one(&owner)
             .await
             .unwrap();
-    assert_eq!(batch, Some(first), "the subtask moved to the parent's batch");
+    assert_eq!(
+        batch,
+        Some(first),
+        "the subtask moved to the parent's batch"
+    );
     let count: i32 = sqlx::query_scalar(
         "SELECT member_count FROM fvoci.trash_batches WHERE root_id = $1::uuid AND root_kind = 'task'",
     )
