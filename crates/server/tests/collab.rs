@@ -916,3 +916,102 @@ async fn reconnecting_without_changes_is_not_an_edit() {
     assert_eq!(after["revision"], saved["revision"]);
     owner.close().await;
 }
+
+/// 작은 파일을 한 번에 올린다(새 파일 또는 `file_id`의 새 버전). 돌려준 완료 응답.
+async fn upload_small(
+    app: &Router,
+    user: &TestUser,
+    mut body: serde_json::Value,
+    data: &[u8],
+) -> serde_json::Value {
+    use sha2::Digest;
+    body["request_id"] = json!(new_request_id());
+    body["size"] = json!(data.len());
+    body["content_type"] = json!("text/plain");
+    let started = send(app, Method::POST, "/api/uploads", Some(user), Some(body)).await;
+    assert_eq!(started.status, StatusCode::CREATED, "{:?}", started.json);
+    let id = started.json["id"].as_str().unwrap().to_owned();
+    let hash = hex::encode(sha2::Sha256::digest(data));
+    let (status, _, _) = common::send_raw(
+        app,
+        Method::PUT,
+        &format!("/api/uploads/{id}/parts/1"),
+        Some(user),
+        &[
+            ("x-content-sha256", &hash),
+            ("content-type", "application/octet-stream"),
+        ],
+        data.to_vec(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let done = send(
+        app,
+        Method::POST,
+        &format!("/api/uploads/{id}/complete"),
+        Some(user),
+        None,
+    )
+    .await;
+    assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
+    done.json
+}
+
+/// 제품 로직 점검(80절): 아직 리비전이 되지 않은 실시간 본문이 가리키는 파일 버전은 지울 수 없다. 전에는 리비전·기록의
+/// 참조만 보아 지울 수 있었고, 그 본문이 리비전이 되면 그 버전 주소가 404였다.
+#[tokio::test]
+async fn live_body_pins_the_file_versions_it_points_to() {
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "실시간 첨부").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let doc = common::create_doc(&app, &writer, &ws, "그림 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let target = json!({ "target": { "kind": "document", "id": id }, "name": "그림.txt" });
+    let first = upload_small(&app, &writer, target, b"v1").await;
+    let file_id = first["file_id"].as_str().unwrap().to_owned();
+    upload_small(&app, &writer, json!({ "file_id": file_id }), b"v2").await;
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+
+    // 실시간 본문에만 1판 주소를 넣고(리비전은 아직 없음), 상태 저장(3초)을 기다린다.
+    let mut a = connect(addr, Some(&writer), &id, true).await.unwrap();
+    let url = format!("/api/files/{file_id}/content?version=1&inline=true");
+    a.edit(|txn, fragment| {
+        let p = fragment.push_back(txn, XmlElementPrelim::empty("paragraph"));
+        p.push_back(txn, XmlTextPrelim::new(url.as_str()));
+    })
+    .await;
+    tokio::time::sleep(Duration::from_secs(4)).await;
+    let revisions = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&writer),
+        None,
+    )
+    .await
+    .json["revision"]
+        .clone();
+    assert_eq!(revisions, 1, "no revision yet");
+
+    let delete = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/files/{file_id}/versions/1"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert_eq!(delete.status, StatusCode::CONFLICT, "{:?}", delete.json);
+    a.close().await;
+}

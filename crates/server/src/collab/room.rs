@@ -927,16 +927,23 @@ impl Room {
         let state = doc
             .transact()
             .encode_state_as_update_v1(&StateVector::default());
+        // 리비전이 되지 않은 편집이 있으면 본문도 넘겨, 그 본문이 가리키는 파일 버전을 붙잡게 한다(마이그레이션 0059).
+        let body = self.dirty_since_snapshot.then(|| {
+            let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
+            convert::read_doc(&doc.transact(), &fragment)
+        });
         let result = async {
             let mut tx = self.db.begin_anonymous().await?;
             // 리비전으로 아직 남지 않은 편집이 있는지도 적는다(실시간을 끄기 전에 남긴다, 마이그레이션 0050).
-            let stored: bool = sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3, $4)")
-                .bind(self.doc_id)
-                .bind(self.base_revision)
-                .bind(state)
-                .bind(self.dirty_since_snapshot)
-                .fetch_one(tx.conn())
-                .await?;
+            let stored: bool =
+                sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3, $4, $5)")
+                    .bind(self.doc_id)
+                    .bind(self.base_revision)
+                    .bind(state)
+                    .bind(self.dirty_since_snapshot)
+                    .bind(body)
+                    .fetch_one(tx.conn())
+                    .await?;
             tx.commit().await?;
             Ok::<bool, AppError>(stored)
         }
