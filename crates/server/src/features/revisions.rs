@@ -228,15 +228,25 @@ pub async fn restore(
     Path((id, revision)): Path<(DocumentId, i32)>,
     Json(input): Json<RestoreRevision>,
 ) -> Result<Response, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
     // 실시간으로 편집 중이면 아직 리비전으로 남지 않은 편집을 먼저 리비전으로 남긴다. 복원이 그 편집을 이력 없이
-    // 지우지 않게 한다(D-27). 그 사이 기준이 지났으면 아래 복원이 충돌로 알린다. 고칠 수 있는 사람의 요청만.
-    if access(&mut tx, id).await?.is_some_and(|a| a.can_write()) {
-        state
-            .collab
-            .snapshot_documents(&std::collections::HashSet::from([id]))
-            .await;
+    // 지우지 않게 한다(D-27). 고칠 수 있는 사람의 요청만. 방을 기다리는 동안 DB 연결을 쥐지 않는다.
+    let mut tx = state.db.begin_as(user).await?;
+    let can_write = access(&mut tx, id).await?.is_some_and(|a| a.can_write());
+    let current: Option<i32> = sqlx::query_scalar("SELECT revision FROM documents WHERE id = $1")
+        .bind(id)
+        .fetch_optional(tx.conn())
+        .await?;
+    tx.commit().await?;
+    let mut base = input.base_revision;
+    if can_write {
+        // 화면이 보던 리비전 바로 다음이 방금 그 화면의 실시간 내용으로 남긴 리비전뿐이면 그것을 기준으로 삼는다(화면은
+        // 그 리비전 번호를 모른다). 그 밖에 기준이 지났으면 아래 복원이 충돌로 알린다.
+        let written = state.collab.snapshot_document(id).await;
+        if current == Some(base) && written == Some(base + 1) {
+            base += 1;
+        }
     }
+    let mut tx = state.db.begin_as(user).await?;
     // 복원할 내용도 지금의 한도(제목 길이·본문 크기·참조 수)를 지켜야 한다. 한도를 낮춘 뒤 옛 리비전으로
     // 한도를 넘는 문서가 다시 생기지 않게 한다. 볼 수 없거나 없는 리비전은 아래 함수와 같이 404.
     let source: Option<(String, Value)> = sqlx::query_as(
@@ -255,7 +265,7 @@ pub async fn restore(
             .bind(id)
             .bind(revision)
             .bind(input.request_id)
-            .bind(input.base_revision)
+            .bind(base)
             .bind(SCHEMA_VERSION)
             .fetch_one(tx.conn())
             .await

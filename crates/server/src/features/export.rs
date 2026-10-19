@@ -392,10 +392,16 @@ pub async fn workspace(
     .bind(ws)
     .fetch_all(tx.conn())
     .await?;
+    // 방을 기다리는 동안 DB 연결을 쥐지 않는다(방이 리비전을 남길 때 연결이 필요하다). 다시 열고 권한도 다시 본다.
+    tx.commit().await?;
     state
         .collab
         .snapshot_documents(&docs.into_iter().map(DocumentId).collect())
         .await;
+    let mut tx = state.db.begin_as(user).await?;
+    if member_role(&mut tx, ws).await? != Role::Admin {
+        return Err(AppError::Forbidden);
+    }
     let data: Value = sqlx::query_scalar(WORKSPACE_JSON)
         .bind(ws)
         .fetch_one(tx.conn())

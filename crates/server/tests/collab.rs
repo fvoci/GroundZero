@@ -1050,8 +1050,8 @@ async fn live_body_pins_the_file_versions_it_points_to() {
     let delete = delete_v1().await;
     assert_eq!(delete.status, StatusCode::CONFLICT, "{:?}", delete.json);
 
-    // 리비전 1로 되돌리기 전에 방의 실시간 본문이 리비전으로 남는다(검토 6번). 그래서 기준 2는 지났고(충돌), 그
-    // 리비전이 1판을 가리키므로 되돌린 뒤에도 1판은 이력이 붙잡는다(리비전 참조 규칙, 0046).
+    // 리비전 1로 되돌리기 전에 방의 실시간 본문이 리비전 3으로 남는다(검토 6번). 기준 2 바로 다음이 그것뿐이라 복원은
+    // 되고, 리비전 3이 1판을 가리키므로 되돌린 뒤에도 1판은 이력이 붙잡는다(리비전 참조 규칙, 0046).
     let restore = |base: i64| {
         let app = app.clone();
         let writer = writer.clone();
@@ -1067,9 +1067,7 @@ async fn live_body_pins_the_file_versions_it_points_to() {
             .await
         }
     };
-    let stale = restore(2).await;
-    assert_eq!(stale.status, StatusCode::CONFLICT, "{:?}", stale.json);
-    let restored = restore(stale.json["current"]["revision"].as_i64().unwrap()).await;
+    let restored = restore(2).await;
     assert!(restored.status.is_success(), "{:?}", restored.json);
     let _ = a.closed().await;
     let delete = delete_v1().await;
@@ -1440,10 +1438,8 @@ async fn restoring_during_live_editing_keeps_the_live_edits_in_history() {
             .await
         }
     };
-    let mut r = restore(current["revision"].clone()).await;
-    if r.status == StatusCode::CONFLICT {
-        r = restore(r.json["current"]["revision"].clone()).await;
-    }
+    // 화면은 방이 방금 남긴 리비전 번호를 모르므로 보던 리비전을 기준으로 보낸다(검토 2차 1번: 그래도 복원된다).
+    let r = restore(current["revision"].clone()).await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
 
     let list = send(
@@ -1721,9 +1717,30 @@ async fn file_refs_lock_versions_before_they_are_written() {
     owner.close().await;
 }
 
-/// 쓰는 쪽이 참조를 넣고 멈춘 사이 자동 정리를 돌리고, 쓰는 쪽이 끝나기를 기다린다.
+/// 쓰는 쪽이 참조를 넣고 멈춘 사이 자동 정리를 돌리고, 쓰는 쪽이 끝나기를 기다린다. 정해 둔 시간 대신 쓰는 쪽이
+/// 실제로 멈춤 트리거 안에 있을 때까지 기다린다(느린 컴퓨터에서 정리가 먼저 돌아 잘못 실패하지 않게).
 async fn drop_writer_race(writer: tokio::task::JoinHandle<()>, owner: &sqlx::PgPool) {
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    // 다른 역할(앱)의 대기 상태는 관리자만 본다.
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let watcher = sqlx::PgPool::connect(&admin_url).await.unwrap();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let paused: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event = 'PgSleep')",
+        )
+        .fetch_one(&watcher)
+        .await
+        .unwrap();
+        if paused {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the writer never reached the paused ref insert"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    watcher.close().await;
     let _purged: i32 = sqlx::query_scalar("SELECT fvoci.app_system_purge_old_versions()")
         .fetch_one(owner)
         .await

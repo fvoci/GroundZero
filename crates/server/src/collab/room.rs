@@ -128,9 +128,10 @@ enum Command {
     Persist {
         done: oneshot::Sender<()>,
     },
-    /// 모아 둔 변경을 넣고 아직 리비전으로 남지 않은 편집을 지금 리비전으로 남긴다. 반출 직전에 쓴다.
+    /// 모아 둔 변경을 넣고 아직 리비전으로 남지 않은 편집을 지금 리비전으로 남긴다(반출·복원 직전). 답은 이번에
+    /// 새로 남긴 리비전 번호(남길 것이 없었거나 못 남겼으면 없음).
     Snapshot {
-        done: oneshot::Sender<()>,
+        done: oneshot::Sender<Option<i32>>,
     },
     Shutdown {
         reason: CloseReason,
@@ -363,6 +364,19 @@ impl Rooms {
         .await;
     }
 
+    /// 이 문서의 열린 방이 아직 리비전으로 남지 않은 편집을 지금 리비전으로 남기게 하고 최대 5초 기다린다. 이번에
+    /// 새로 남긴 리비전 번호(방이 없거나, 남길 것이 없었거나, 못 남겼으면 없음). 복원 직전에 쓴다.
+    pub async fn snapshot_document(&self, doc: DocumentId) -> Option<i32> {
+        let handle = self.lock().get(&doc).cloned()?;
+        let (done, answer) = oneshot::channel();
+        handle.tx.try_send(Command::Snapshot { done }).ok()?;
+        tokio::time::timeout(Duration::from_secs(5), answer)
+            .await
+            .ok()?
+            .ok()
+            .flatten()
+    }
+
     /// 워크스페이스가 실시간을 끈다(또는 껐다). 그 워크스페이스의 방은 리비전을 남기고 닫는다. 끝날 때까지 기다린다.
     /// 모든 방의 편집이 리비전으로 남았으면 참(`begin_closing`과 함께 써서 그동안 새 방이 열리지 않게 한다).
     pub async fn close_workspace(&self, workspace: Uuid, admin: UserId) -> bool {
@@ -419,10 +433,10 @@ impl Rooms {
 }
 
 /// 방마다 명령을 보내고 답을 모두 합쳐 `wait`까지 기다린다. 대기열이 찬(바쁜) 방은 건너뛴다.
-async fn ask_all(
+async fn ask_all<T: Send + 'static>(
     handles: Vec<Handle>,
     wait: Duration,
-    command: impl Fn(oneshot::Sender<()>) -> Command,
+    command: impl Fn(oneshot::Sender<T>) -> Command,
 ) {
     let waits = handles.into_iter().map(|handle| {
         let (done, answer) = oneshot::channel();
@@ -641,8 +655,10 @@ impl Room {
             Command::Snapshot { done } => {
                 self.flush().await;
                 // 리비전을 남기면 상태도 저장한다. 남기지 못하면(편집할 수 있는 사람이 없음 등) 방에 그대로 둔다.
+                let before = self.base_revision;
                 let _kept = self.snapshot().await;
-                let _ignored = done.send(());
+                let _ignored =
+                    done.send((self.base_revision != before).then_some(self.base_revision));
                 true
             }
             Command::Shutdown {
