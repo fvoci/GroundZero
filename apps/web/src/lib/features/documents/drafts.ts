@@ -81,9 +81,11 @@ function offerEntries(documentId: string): { key: string; draft: Draft }[] {
   if (old !== undefined) {
     const list: unknown[] = Array.isArray(old) ? old : [old];
     const drafts = list.map(parseDraft).filter((d): d is Draft => d !== undefined);
-    // 옮긴 것은 바로 옛 목록에서 뺀다(중간에 실패해도 다음에 같은 것을 다시 옮기지 않게). 옛 것이 먼저 오도록 0부터.
+    // 옮긴 것은 바로 옛 목록에서 뺀다(중간에 실패해도 다음에 같은 것을 다시 옮기지 않게). 순서는 그 초안을 남긴 시각으로
+    // 매긴다: 옛 것이 그 뒤에 더한 것보다 앞이고, 새로고침 사이에 나눠 옮겨도 원래 순서다.
     for (const [index, d] of drafts.entries()) {
-      if (!pushOffer(documentId, d, index)) break;
+      const at = Date.parse(d.savedAt);
+      if (!pushOffer(documentId, d, Number.isFinite(at) ? at : index)) break;
       const rest = drafts.slice(index + 1);
       write(legacy, rest.length === 0 ? undefined : rest);
     }

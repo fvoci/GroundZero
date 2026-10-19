@@ -287,3 +287,51 @@ describe('partial move of an old queue', () => {
     expect(loadOffers('doc-11').map((d) => d.title)).toEqual(['옛 둘째', '새 초안']);
   });
 });
+
+// 검토(3차) 3번: 옛 목록을 일부만 옮긴 뒤 새로고침하면(같은 밀리초 순번이 처음부터) 나머지가 앞의 것보다 앞에 오면 안
+// 된다. 순서가 무작위 id에 달리지 않게 여러 문서로 본다.
+describe('old queue moved across a reload', () => {
+  it('keeps the old order when the move finishes after a reload', async () => {
+    window.sessionStorage.setItem('fvoci:tab', 'tab-1');
+    const docs = Array.from({ length: 8 }, (_, i) => `doc-r${String(i)}`);
+    const old = [
+      { ...draft, title: '옛 첫째', savedAt: '2026-10-19T00:00:01Z' },
+      { ...draft, title: '옛 둘째', savedAt: '2026-10-19T00:00:02Z' },
+    ];
+    for (const doc of docs) {
+      window.localStorage.setItem(`fvoci:draft:user-a:${doc}:offers`, JSON.stringify(old));
+    }
+    // 첫 페이지: 옮기다 둘째 쓰기에서 저장소가 가득 찬다.
+    let fresh = await import('$lib/features/documents/drafts');
+    let who = await import('$lib/me.svelte');
+    who.me.userId = 'user-a';
+    const original = Storage.prototype.setItem.bind(window.localStorage);
+    let full = false;
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation((k: string, v: string) => {
+        if (full && k.includes(':offer:')) throw new DOMException('full', 'QuotaExceededError');
+        original(k, v);
+      });
+    for (const doc of docs) {
+      full = false;
+      // 첫 초안을 옮긴 뒤부터 가득 찬다.
+      setItem.mockImplementation((k: string, v: string) => {
+        if (full && k.includes(':offer:')) throw new DOMException('full', 'QuotaExceededError');
+        original(k, v);
+        if (k.includes(':offer:')) full = true;
+      });
+      fresh.loadOffers(doc);
+    }
+    setItem.mockRestore();
+    // 새로고침: 모듈을 새로 읽는다.
+    vi.resetModules();
+    fresh = await import('$lib/features/documents/drafts');
+    who = await import('$lib/me.svelte');
+    who.me.userId = 'user-a';
+    for (const doc of docs) {
+      expect(fresh.loadOffers(doc).map((d) => d.title)).toEqual(['옛 첫째', '옛 둘째']);
+    }
+    who.me.userId = '';
+  });
+});
