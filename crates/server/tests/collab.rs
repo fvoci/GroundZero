@@ -1529,3 +1529,75 @@ async fn a_reader_cannot_make_rooms_persist_through_version_delete() {
     a.close().await;
     owner.close().await;
 }
+
+/// 검토 8번: 열린 방의 문서를 다른 워크스페이스로 옮기면 방도 새 워크스페이스에 속한다. 새 워크스페이스에서 실시간을
+/// 끄면 그 방도 리비전을 남기고 닫혀야 한다(전에는 옛 워크스페이스로 남아 권한 재확인 때까지 열려 있었다).
+#[tokio::test]
+async fn a_moved_room_follows_its_document_to_the_new_workspace() {
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let from = create_workspace(&app, &admin, "옮기기 전").await;
+    let to = create_workspace(&app, &admin, "옮긴 뒤").await;
+    for ws in [&from, &to] {
+        let on = send(
+            &app,
+            Method::PUT,
+            &format!("/api/workspaces/{ws}/realtime"),
+            Some(&admin),
+            Some(json!({ "enabled": true })),
+        )
+        .await;
+        assert_eq!(on.status, StatusCode::NO_CONTENT);
+    }
+    let doc = common::create_doc(&app, &admin, &from, "옮길 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let mut a = connect(addr, Some(&admin), &id, true).await.unwrap();
+    a.paragraph("옮기기 전 실시간 문단").await;
+
+    let target = json!({ "target_workspace_id": to, "target_item_id": null });
+    let preview = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{id}/move/preview"),
+        Some(&admin),
+        Some(target),
+    )
+    .await;
+    assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
+    let moved = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{id}/move"),
+        Some(&admin),
+        Some(json!({ "target_workspace_id": to, "target_item_id": null,
+                     "acknowledged": { "gains": preview.json["gains"], "loses": preview.json["loses"] } })),
+    )
+    .await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+
+    let off = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{to}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": false })),
+    )
+    .await;
+    assert_eq!(off.status, StatusCode::NO_CONTENT, "{:?}", off.json);
+    assert_eq!(a.closed().await, Some(4410));
+    let saved = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    assert!(
+        saved["body"].to_string().contains("옮기기 전 실시간 문단"),
+        "{saved}"
+    );
+}

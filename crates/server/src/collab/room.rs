@@ -319,6 +319,14 @@ impl Rooms {
         }
     }
 
+    /// 문서가 다른 워크스페이스로 옮겨졌다. 열린 방도 그 워크스페이스에 속하게 한다(실시간 끄기·파일 버전 지우기가
+    /// 워크스페이스로 방을 찾는다). 연결은 그대로 둔다.
+    pub fn moved(&self, doc: DocumentId, workspace: Uuid) {
+        if let Some(handle) = self.lock().get_mut(&doc) {
+            handle.workspace = Some(workspace);
+        }
+    }
+
     /// 열린 방마다 모아 둔 변경을 넣고 상태를 지금 저장하게 한 뒤 기다린다(방마다 최대 2초). 파일 버전을 지우기 전에
     /// 불러, 방금 실시간 본문에 넣은 이미지의 참조가 주기적 저장(3초)을 기다리지 않고 DB에 남게 한다.
     pub async fn persist_all(&self) {
