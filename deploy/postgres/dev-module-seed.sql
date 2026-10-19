@@ -1,4 +1,4 @@
--- 개발 전용 opt-in: cargo xtask dev --oidc --module-examples.
+-- 개발 전용: cargo xtask dev --oidc가 dev-seed.sql 다음에 실행한다(운영·셀프호스트는 실행하지 않는다).
 -- dev-seed.sql 다음에만 실행한다. 기존 테스트 사용자만 조회하며 계정·자격 증명을 만들거나 바꾸지 않는다.
 -- 제품 데이터는 기존 app_* 정의자 함수로만 생성한다. JSON 칸·선택값은 features/item_profile.rs와
 -- features/records.rs의 정의에 맞춘다. 파일 메타데이터 예제는 기록이며 실제 업로드나 외부 접속은 하지 않는다.

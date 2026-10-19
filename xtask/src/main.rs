@@ -51,9 +51,6 @@ enum Command {
         /// 웹 개발 서버(Vite)를 띄우지 않는다(API만).
         #[arg(long)]
         no_web: bool,
-        /// 별도 합성 워크스페이스에 모듈별 개발 예제를 한 번만 만든다(--oidc 필요).
-        #[arg(long, requires = "oidc")]
-        module_examples: bool,
     },
     /// 이 체크아웃이 만든 Compose 자원(dev·test)을 정리한다. 다른 체크아웃은 건드리지 않는다.
     Down,
@@ -100,11 +97,7 @@ fn main() -> Result<()> {
             oidc,
             external_services,
         } => test::run(&root, keep, oidc, external_services),
-        Command::Dev {
-            oidc,
-            no_web,
-            module_examples,
-        } => dev::run(&root, oidc, !no_web, module_examples),
+        Command::Dev { oidc, no_web } => dev::run(&root, oidc, !no_web),
         Command::Down => compose::down_all(&root),
         Command::Openapi { check } => openapi::run(&root, check),
         Command::Licenses => licenses::run(&root),
