@@ -315,14 +315,29 @@ impl Rooms {
     /// 열린 방마다 모아 둔 변경을 넣고 상태를 지금 저장하게 한 뒤 기다린다(방마다 최대 2초). 파일 버전을 지우기 전에
     /// 불러, 방금 실시간 본문에 넣은 이미지의 참조가 주기적 저장(3초)을 기다리지 않고 DB에 남게 한다.
     pub async fn persist_all(&self) {
-        let handles: Vec<Handle> = self.lock().values().cloned().collect();
-        for handle in handles {
+        self.persist_where(|_| true).await;
+    }
+
+    /// 한 워크스페이스의 열린 방만(그 워크스페이스 파일을 가리킬 수 있는 문서들). 파일 버전을 지울 때 쓴다.
+    pub async fn persist_workspace(&self, workspace: Uuid) {
+        self.persist_where(|h| h.workspace == Some(workspace)).await;
+    }
+
+    /// 방들에 동시에 저장을 시키고 모두 합쳐 최대 2초 기다린다. 대기열이 찬(바쁜) 방은 건너뛴다(곧 하는 주기적
+    /// 저장이 대신한다). 방이 이미 닫히는 중이면 답이 바로 돌아온다.
+    async fn persist_where(&self, keep: impl Fn(&Handle) -> bool) {
+        let handles: Vec<Handle> = self.lock().values().filter(|h| keep(h)).cloned().collect();
+        let waits = handles.into_iter().map(|handle| async move {
             let (done, answer) = oneshot::channel();
-            if handle.tx.send(Command::Persist { done }).await.is_ok() {
-                // 방이 이미 닫히는 중이면 답이 없을 수 있다. 그때는 그 방의 마지막 저장이 대신한다.
-                let _ignored = tokio::time::timeout(Duration::from_secs(2), answer).await;
+            if handle.tx.try_send(Command::Persist { done }).is_ok() {
+                let _ignored = answer.await;
             }
-        }
+        });
+        let _ignored = tokio::time::timeout(
+            Duration::from_secs(2),
+            futures_util::future::join_all(waits),
+        )
+        .await;
     }
 
     /// 워크스페이스가 실시간을 끈다(또는 껐다). 그 워크스페이스의 방은 리비전을 남기고 닫는다. 끝날 때까지 기다린다.
