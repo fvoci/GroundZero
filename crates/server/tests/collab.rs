@@ -598,7 +598,19 @@ async fn live_editing_guards() {
     )
     .await;
     assert!(demoted.status.is_success(), "{:?}", demoted.json);
-    a.close().await;
+    // 쓰기 권한을 잃은 연결은 다음 확인에서 닫힌다(열어 두면 그 사람의 입력이 조용히 버려진다, 감사 반영).
+    assert_eq!(a.closed().await, Some(4403));
+    // 끊긴 사이 독자가 된 사람이 편집기로 다시 붙으면(write=1) 붙지 않고 4403(화면이 지금 권한으로 다시 열림).
+    // 읽기로 붙는 것은 된다.
+    assert_eq!(
+        refused_code_with(addr, &w1, &id, "?write=1").await,
+        Some(4403)
+    );
+    connect(addr, Some(&w1), &id, true)
+        .await
+        .unwrap()
+        .close()
+        .await;
     watcher.close().await;
     let mut body = String::new();
     for _ in 0..40 {
@@ -636,7 +648,17 @@ async fn live_editing_guards() {
 
 /// 연결이 곧바로 닫히는지 보고 닫기 코드를 돌려준다(방에 들어가지 못한 경우).
 async fn refused_code(addr: SocketAddr, user: &TestUser, doc: &str) -> Option<u16> {
-    let mut request = format!("ws://{addr}/api/documents/{doc}/collab")
+    refused_code_with(addr, user, doc, "").await
+}
+
+/// 질의 문자열(`?write=1` 등)을 붙여 연결한다.
+async fn refused_code_with(
+    addr: SocketAddr,
+    user: &TestUser,
+    doc: &str,
+    query: &str,
+) -> Option<u16> {
+    let mut request = format!("ws://{addr}/api/documents/{doc}/collab{query}")
         .into_client_request()
         .unwrap();
     request
@@ -667,6 +689,7 @@ async fn turning_realtime_off_keeps_live_edits() {
     let ws = create_workspace(&app, &admin, "끄기 보존").await;
     let ws_id = uuid::Uuid::parse_str(&ws).unwrap();
     let (w1, _) = add_member(&app, &state, &admin, &ws, "w1", "writer").await;
+    let (r1, _) = add_member(&app, &state, &admin, &ws, "r1", "reader").await;
     let set = |enabled: bool| {
         let app = app.clone();
         let admin = admin.clone();
@@ -731,12 +754,13 @@ async fn turning_realtime_off_keeps_live_edits() {
     // 문서 B: w1이 고친 뒤 독자가 되어 나가면 방은 리비전을 남기지 못하고(쓸 수 있는 사람이 없음) 실시간 상태만 남는다.
     let mut b = connect(addr, Some(&w1), &b_id, true).await.unwrap();
     b.paragraph("닫힌 방에 남은 글").await;
-    // 문서 A: w1이 고친 채로 연결이 열려 있다.
+    // 문서 A: w1이 고친 뒤 독자가 되면 그 연결은 닫히고(4403), 독자 연결이 방을 열어 둔다(쓸 수 있는 사람이 없는 열린 방).
+    let mut watcher = connect(addr, Some(&r1), &a_id, true).await.unwrap();
     a.paragraph("열린 방의 글").await;
-    tokio::time::sleep(Duration::from_millis(400)).await;
+    assert!(watcher.until(|c| c.text().contains("열린 방의 글")).await);
     role("reader").await;
-    tokio::time::sleep(Duration::from_millis(1500)).await;
-    b.close().await;
+    assert_eq!(a.closed().await, Some(4403));
+    assert_eq!(b.closed().await, Some(4403));
     tokio::time::sleep(Duration::from_millis(800)).await;
     let b_before = send(
         &app,
@@ -756,7 +780,7 @@ async fn turning_realtime_off_keeps_live_edits() {
     let (first, second) = tokio::join!(set(false), set(false));
     assert_eq!(first, StatusCode::NO_CONTENT);
     assert_eq!(second, StatusCode::NO_CONTENT);
-    assert_eq!(a.closed().await, Some(4410));
+    assert_eq!(watcher.closed().await, Some(4410));
     for (id, text) in [(&a_id, "열린 방의 글"), (&b_id, "닫힌 방에 남은 글")] {
         let doc = send(
             &app,
@@ -811,5 +835,84 @@ async fn turning_realtime_off_keeps_live_edits() {
     )
     .await;
     assert_eq!(fresh.status, StatusCode::OK, "{:?}", fresh.json);
+    owner.close().await;
+}
+
+/// 감사 반영: 다시 붙은 연결의 동기화 답(이미 반영된 지움 기록)은 편집이 아니다. 편집으로 치면 다시 붙을 때마다
+/// 조용한 시간이 처음부터 시작돼 리비전이 남지 않는다. 혼자 있는 연결도 자기 참여자 표시를 돌려받아(연결 유지)
+/// 30초마다 다시 붙지 않는다.
+#[tokio::test]
+async fn reconnecting_without_changes_is_not_an_edit() {
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "다시 붙기").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let doc = common::create_doc(&app, &writer, &ws, "지운 흔적").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let doc_uri = format!("/api/documents/{id}");
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+
+    // 쓰고 지운 뒤 나가면 리비전이 남는다(지움 기록이 생긴다).
+    let mut a = connect(addr, Some(&writer), &id, true).await.unwrap();
+    a.paragraph("남길 글").await;
+    a.paragraph("지울 글").await;
+    a.edit(|txn, fragment| {
+        let last = fragment.len(txn) - 1;
+        fragment.remove_range(txn, last, 1);
+    })
+    .await;
+    let local = a.doc.clone();
+    a.close().await;
+    let mut saved = None;
+    for _ in 0..40 {
+        let d = send(&app, Method::GET, &doc_uri, Some(&writer), None)
+            .await
+            .json;
+        if d["body"].to_string().contains("남길 글") {
+            saved = Some(d);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    let saved = saved.expect("live document saved as a revision");
+    assert!(!saved["body"].to_string().contains("지울 글"), "{saved:?}");
+
+    // 같은 내용으로 다시 붙어 아무것도 고치지 않는다. 저장 주기(3초)가 두 번 지나도 남길 편집이 없다.
+    let mut again = connect_with(addr, Some(&writer), &id, true, local)
+        .await
+        .unwrap();
+    again
+        .announce(4242, 1, r#"{"user":{"name":"writer"}}"#)
+        .await;
+    assert!(
+        again.until(|c| c.presence.contains_key(&4242)).await,
+        "the sender gets its own presence back"
+    );
+    tokio::time::sleep(Duration::from_secs(7)).await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let pending: Option<bool> = sqlx::query_scalar(
+        "SELECT pending FROM fvoci.document_collab_states WHERE document_id = $1::uuid",
+    )
+    .bind(&id)
+    .fetch_optional(&owner)
+    .await
+    .unwrap();
+    assert_ne!(pending, Some(true), "a reconnect counted as an edit");
+    again.close().await;
+    let after = send(&app, Method::GET, &doc_uri, Some(&writer), None)
+        .await
+        .json;
+    assert_eq!(after["revision"], saved["revision"]);
     owner.close().await;
 }

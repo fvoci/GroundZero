@@ -490,6 +490,7 @@ impl Room {
                 }
                 _ = flush.tick() => self.flush().await,
                 _ = persist.tick() => {
+                    self.flush().await;
                     self.prune();
                     self.persist().await;
                     if self.dirty_since_snapshot && self.last_change.elapsed() >= SNAPSHOT_IDLE {
@@ -547,6 +548,8 @@ impl Room {
                 true
             }
             Command::Leave { conn } => {
+                // 나가기 직전에 보낸 변경(아직 모아 두기만 한 것)을 먼저 넣는다. 나간 연결의 변경은 버리기 때문이다.
+                self.flush().await;
                 self.leave(conn);
                 true
             }
@@ -748,7 +751,9 @@ impl Room {
             return;
         }
         let encoded = Message::Awareness(AwarenessUpdate { clients: fresh }).encode_v1();
-        self.broadcast(&encoded, Some(conn));
+        // 보낸 연결에도 돌려준다. y-websocket은 30초 동안 아무것도 받지 못하면 끊고 다시 붙으므로, 혼자 편집할 때는
+        // 15초마다 오는 자기 표시 갱신이 연결을 살려 둔다(참조 서버와 같다).
+        self.broadcast(&encoded, None);
     }
 
     /// 모인 변경을 연결마다 합쳐 검사(블로킹 작업)한 뒤 방 문서에 넣고 다른 연결에 보낸다.
@@ -816,11 +821,19 @@ impl Room {
             let Some(doc) = &self.doc else {
                 return;
             };
-            let applied = Update::decode_v1(&merged)
-                .ok()
-                .is_some_and(|u| doc.transact_mut().apply_update(u).is_ok());
-            if !applied {
+            // 다시 붙은 연결의 동기화 답에는 이미 반영된 지움 기록이 늘 함께 오므로(Yjs), 실제로 바뀐 것만 편집으로
+            // 친다. 그렇지 않으면 다시 붙을 때마다 조용한 시간이 처음부터 시작돼 리비전이 남지 않는다.
+            let before = doc.transact().state_vector();
+            let applied = Update::decode_v1(&merged).ok().and_then(|u| {
+                let mut txn = doc.transact_mut();
+                txn.apply_update(u).ok()?;
+                Some(!txn.delete_set().is_empty())
+            });
+            let Some(deleted) = applied else {
                 self.close(conn, CloseReason::Invalid);
+                continue;
+            };
+            if !deleted && doc.transact().state_vector() == before {
                 continue;
             }
             self.dirty_state = true;
@@ -1028,8 +1041,8 @@ impl Room {
         Ok(Some(row.revision))
     }
 
-    /// 연결마다 세션과 권한을 다시 본다. 끝났으면 닫고, 실시간이 꺼졌으면 리비전을 남기고 닫으며, 쓰기 권한이
-    /// 바뀌었으면 따른다. 일시적인 DB 오류로는 닫지 않는다.
+    /// 연결마다 세션과 권한을 다시 본다. 끝났거나 쓰기 권한을 잃었으면 닫고(4403, 다시 붙으면 지금 권한으로),
+    /// 실시간이 꺼졌으면 리비전을 남기고 닫으며, 읽기에서 쓰기로 바뀌었으면 따른다. 일시적인 DB 오류로는 닫지 않는다.
     async fn recheck(&mut self) {
         self.last_recheck = Instant::now();
         let peers: Vec<(u64, Peer)> = self
@@ -1041,7 +1054,10 @@ impl Room {
         for (conn, peer) in peers {
             match peer_access(&self.db, self.doc_id, &peer).await {
                 PeerAccess::Allowed { can_write } => {
-                    if let Some(c) = self.conns.get_mut(&conn) {
+                    // 쓰기 권한을 잃은 연결은 닫는다. 열어 두면 화면은 "연결됨"인 채로 그 사람의 입력을 조용히 버린다.
+                    if !can_write && peer.can_write {
+                        self.close(conn, CloseReason::AccessLost);
+                    } else if let Some(c) = self.conns.get_mut(&conn) {
                         c.peer.can_write = can_write;
                     }
                 }

@@ -694,6 +694,39 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
 
+    // 모듈 안 문서를 밖의 사람에게 공유하고 공개 링크를 만든다(모듈을 지우면 둘 다 막혀야 한다, 감사 반영).
+    let shared_doc = post(
+        &admin,
+        format!("/api/items/{open}/documents"),
+        json!({ "request_id": new_request_id(), "title": "모듈 문서" }),
+    )
+    .await
+    .json;
+    let shared_uri = format!("/api/documents/{}", shared_doc["id"].as_str().unwrap());
+    let carol_email = unique_email("carol");
+    let carol = login_with_email(&state, "carol", &carol_email, true).await;
+    let r = post(
+        &admin,
+        format!("{shared_uri}/shares"),
+        json!({ "email": carol_email, "permission": "write" }),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    let link = post(&admin, format!("{shared_uri}/public-links"), json!({}))
+        .await
+        .json;
+    let token_path = format!(
+        "/api/public/{}",
+        link["url"].as_str().unwrap().rsplit('/').next().unwrap()
+    );
+    assert_eq!(get(&carol, shared_uri.clone()).await, StatusCode::OK);
+    assert_eq!(
+        send(&app, Method::GET, &token_path, None, None)
+            .await
+            .status,
+        StatusCode::OK
+    );
+
     // 항목 하나를 따로 지운 뒤 모듈을 지운다. 작성자는 모듈을 지울 수 없다.
     let separate_batch = send(
         &app,
@@ -743,6 +776,32 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
             StatusCode::NOT_FOUND
         );
     }
+    // 공유받은 사람·공개 링크도 막힌다(읽기·고치기·공유 목록).
+    assert_eq!(get(&carol, shared_uri.clone()).await, StatusCode::NOT_FOUND);
+    let r = send(
+        &app,
+        Method::PUT,
+        &shared_uri,
+        Some(&carol),
+        Some(
+            json!({ "request_id": new_request_id(), "base_revision": 1, "title": "모듈 문서",
+                     "body": common::doc_body("휴지통 안에서 고침") }),
+        ),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND, "{:?}", r.json);
+    assert_eq!(
+        send(&app, Method::GET, "/api/me/shared", Some(&carol), None)
+            .await
+            .json,
+        json!([])
+    );
+    assert_eq!(
+        send(&app, Method::GET, &token_path, None, None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
     let modules = send(
         &app,
         Method::GET,
@@ -811,6 +870,13 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     );
     assert_eq!(
         get(&writer, format!("/api/tasks/{task_id}")).await,
+        StatusCode::OK
+    );
+    assert_eq!(get(&carol, shared_uri.clone()).await, StatusCode::OK);
+    assert_eq!(
+        send(&app, Method::GET, &token_path, None, None)
+            .await
+            .status,
         StatusCode::OK
     );
     assert_eq!(

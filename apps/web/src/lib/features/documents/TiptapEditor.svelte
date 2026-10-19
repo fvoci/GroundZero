@@ -389,6 +389,13 @@
     };
   });
 
+  // 편집 가능 여부가 뒤에 바뀌면 따른다(실시간 연결이 권한·내용 문제로 멈추면 더 고칠 수 없게 한다).
+  // 나머지 설정(확장·도움말)은 처음 값으로 둔다.
+  $effect(() => {
+    const instance = editorRef;
+    if (instance !== undefined && instance.isEditable !== editable) instance.setEditable(editable);
+  });
+
   function run(command: Command): void {
     const chain = editor?.chain().focus();
     if (chain === undefined) return;

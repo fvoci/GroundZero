@@ -3,10 +3,11 @@
 //! 않으므로 여기서 본다).
 
 use axum::extract::ws::{CloseFrame, Message as WsMessage, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, header};
 use axum::response::Response;
 use futures_util::{SinkExt, StreamExt};
+use serde::Deserialize;
 use tokio::sync::mpsc;
 
 use super::room::{CloseReason, Outbound, Peer};
@@ -18,10 +19,19 @@ use crate::ids::DocumentId;
 /// 연결로 보낼 것이 이만큼 쌓이면 느린 연결로 보고 닫는다.
 const OUTBOX: usize = 512;
 
+/// 연결 조건. `write=1`: 편집기로 연다(쓸 수 없게 됐으면 붙지 않고 4403으로 닫아, 그동안의 입력이 조용히 버려지지
+/// 않고 화면이 지금 권한으로 다시 열리게 한다).
+#[derive(Debug, Default, Deserialize)]
+pub struct ConnectQuery {
+    #[serde(default)]
+    write: Option<String>,
+}
+
 pub async fn connect(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
+    Query(query): Query<ConnectQuery>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Result<Response, AppError> {
@@ -44,6 +54,7 @@ pub async fn connect(
             .await?;
     tx.commit().await?;
     let can_write = matches!(access.as_str(), "owner" | "write");
+    let lost_write = query.write.as_deref() == Some("1") && !can_write;
     let max = state
         .config
         .limits
@@ -64,7 +75,10 @@ pub async fn connect(
                 out,
             };
             crate::logging::REQUEST_ID
-                .scope(request_id, run(socket, state, id, workspace, peer, outbox))
+                .scope(
+                    request_id,
+                    run(socket, state, id, workspace, peer, outbox, lost_write),
+                )
                 .await;
         }))
 }
@@ -76,8 +90,13 @@ async fn run(
     workspace: Option<uuid::Uuid>,
     peer: Peer,
     mut outbox: mpsc::Receiver<Outbound>,
+    lost_write: bool,
 ) {
     let (mut sink, mut stream) = socket.split();
+    if lost_write {
+        let _ignored = sink.send(close(CloseReason::AccessLost)).await;
+        return;
+    }
     let membership = match state
         .collab
         .join(

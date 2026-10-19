@@ -4,7 +4,7 @@
   import { onDestroy, untrack } from 'svelte';
 
   import type { DocumentView } from '$lib/api/client';
-  import { api, fileContentUrl, newRequestId } from '$lib/api/client';
+  import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
@@ -24,9 +24,11 @@
     onsaved?: (doc: DocumentView) => void;
     /** 실시간이 꺼졌다. 부모가 문서를 다시 읽어 일반 편집으로 돌아간다. */
     onrealtimeoff?: () => void;
+    /** 권한이 바뀌어 닫혔다가 다시 연결한다. 부모가 지금 권한으로 문서를 다시 연다(읽기면 읽기 전용). */
+    onreload?: () => void;
   }
 
-  const { initial, references, onsaved, onrealtimeoff }: Props = $props();
+  const { initial, references, onsaved, onrealtimeoff, onreload }: Props = $props();
   const start = untrack(() => initial);
   const INLINE_IMAGES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
@@ -40,16 +42,23 @@
   let savingTitle = $state(false);
 
   function open(): void {
-    const next = openLive(start.id, {
-      name: me.displayName === '' ? m.documents_live_anonymous() : me.displayName,
-      color: colorFor(me.userId),
-    });
+    const next = openLive(
+      start.id,
+      {
+        name: me.displayName === '' ? m.documents_live_anonymous() : me.displayName,
+        color: colorFor(me.userId),
+      },
+      start.can_edit,
+    );
     next.provider.on('status', (event: { status: LiveStatus }) => {
       status = event.status;
     });
     next.provider.on('connection-close', (event: CloseEvent | null) => {
       const stop = event === null ? undefined : stopFor(event.code);
-      if (stop === undefined) return;
+      if (stop === undefined) {
+        if (event?.code === 1006) void checkRefusal(next);
+        return;
+      }
       next.provider.disconnect();
       if (stop === 'reload') {
         // 문서가 다른 길(복원 등)로 바뀌었다. 옛 내용을 섞지 않도록 새 문서로 다시 연다.
@@ -63,7 +72,34 @@
     session = next;
   }
 
+  // 다시 붙기를 서버가 연결 전에 거절하면(권한·세션이 끝남, 실시간이 꺼짐) 브라우저는 이유 없이 1006만 받고
+  // y-websocket은 끝없이 다시 붙는다(그동안 고친 내용은 어디에도 남지 않는다). 그때 문서를 다시 읽어 이유를 찾는다.
+  // 네트워크 오류면 그대로 다시 붙기를 기다린다. 같은 연결인지는 provider로 본다(`session`은 $state라 프록시다).
+  let checking = false;
+  async function checkRefusal(current: LiveSession): Promise<void> {
+    if (checking) return;
+    checking = true;
+    try {
+      const doc = await api.document(start.id);
+      if (session?.provider !== current.provider || doc.realtime) return;
+      current.provider.disconnect();
+      onrealtimeoff?.();
+    } catch (e: unknown) {
+      if (session?.provider !== current.provider || !(e instanceof ApiError)) return;
+      if (e.status === 401 || e.status === 403 || e.status === 404) {
+        current.provider.disconnect();
+        stopped = 'denied';
+      }
+    } finally {
+      checking = false;
+    }
+  }
+
   function restart(): void {
+    if (stopped === 'denied' && onreload !== undefined) {
+      onreload();
+      return;
+    }
     if (session !== undefined) closeLive(session);
     session = undefined;
     stopped = undefined;
