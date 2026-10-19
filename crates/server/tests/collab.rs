@@ -1046,19 +1046,30 @@ async fn live_body_pins_the_file_versions_it_points_to() {
     let delete = delete_v1().await;
     assert_eq!(delete.status, StatusCode::CONFLICT, "{:?}", delete.json);
 
-    // 리비전 1로 되돌리면 그 실시간 상태는 낡아 다시 쓰이지 않는다. 그 참조로 버전을 붙잡지 않는다(0060).
-    let restored = send(
-        &app,
-        Method::POST,
-        &format!("/api/documents/{id}/revisions/1/restore"),
-        Some(&writer),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 2 })),
-    )
-    .await;
+    // 리비전 1로 되돌리기 전에 방의 실시간 본문이 리비전으로 남는다(검토 6번). 그래서 기준 2는 지났고(충돌), 그
+    // 리비전이 1판을 가리키므로 되돌린 뒤에도 1판은 이력이 붙잡는다(리비전 참조 규칙, 0046).
+    let restore = |base: i64| {
+        let app = app.clone();
+        let writer = writer.clone();
+        let uri = format!("/api/documents/{id}/revisions/1/restore");
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &uri,
+                Some(&writer),
+                Some(json!({ "request_id": new_request_id(), "base_revision": base })),
+            )
+            .await
+        }
+    };
+    let stale = restore(2).await;
+    assert_eq!(stale.status, StatusCode::CONFLICT, "{:?}", stale.json);
+    let restored = restore(stale.json["current"]["revision"].as_i64().unwrap()).await;
     assert!(restored.status.is_success(), "{:?}", restored.json);
     let _ = a.closed().await;
     let delete = delete_v1().await;
-    assert_eq!(delete.status, StatusCode::NO_CONTENT, "{:?}", delete.json);
+    assert_eq!(delete.status, StatusCode::CONFLICT, "{:?}", delete.json);
 }
 
 /// 제품 로직 점검(80절, 0061): 휴지통에 넣은 문서의 아직 리비전이 되지 않은 실시간 본문도 파일 버전을 붙잡는다.
@@ -1374,4 +1385,85 @@ async fn workspace_export_includes_live_edits() {
         .to_string();
     assert!(body.contains("방금 쓴 실시간 문단"), "{body}");
     a.close().await;
+}
+
+/// 검토 6번: 실시간 편집 중 옛 리비전으로 복원해도 아직 리비전으로 남지 않은 실시간 편집이 이력에서 사라지면 안 된다
+/// (D-27 내용 손실 방지). 복원 전에 열린 방을 리비전으로 남긴다. 그 사이 기준이 지났으면 복원은 충돌로 알린다.
+#[tokio::test]
+async fn restoring_during_live_editing_keeps_the_live_edits_in_history() {
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "실시간 복원").await;
+    let doc = common::create_doc(&app, &admin, &ws, "복원 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+
+    let mut a = connect(addr, Some(&admin), &id, true).await.unwrap();
+    a.paragraph("복원 전에 쓴 실시간 문단").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let current = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    let restore = |base: serde_json::Value| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let uri = format!("/api/documents/{id}/revisions/1/restore");
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &uri,
+                Some(&admin),
+                Some(json!({ "request_id": new_request_id(), "base_revision": base })),
+            )
+            .await
+        }
+    };
+    let mut r = restore(current["revision"].clone()).await;
+    if r.status == StatusCode::CONFLICT {
+        r = restore(r.json["current"]["revision"].clone()).await;
+    }
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+
+    let list = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}/revisions"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    let mut kept = false;
+    for rev in list.as_array().unwrap() {
+        let n = rev["revision"].as_i64().unwrap();
+        let one = send(
+            &app,
+            Method::GET,
+            &format!("/api/documents/{id}/revisions/{n}"),
+            Some(&admin),
+            None,
+        )
+        .await
+        .json;
+        kept |= one["body"].to_string().contains("복원 전에 쓴 실시간 문단");
+    }
+    assert!(kept, "the live edit vanished from the history: {list}");
+    let _ = a.closed().await;
 }
