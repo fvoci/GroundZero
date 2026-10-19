@@ -69,6 +69,7 @@
   });
   let checkedEarlier = false;
   let found = $state<Draft | undefined>(undefined);
+  let foundIsReserved = false;
   let foundMessage = $state<string | undefined>(undefined);
   let keepingFound = $state(false);
   let foundRequest: { note: string; save: string } | undefined;
@@ -110,6 +111,8 @@
     // 제목과 본문이 모두 지금과 같아야 이미 반영된 것이다(제목만 다른 초안도 고르게 한다).
     const rest = latest === undefined ? all : withoutApplied(all, { title, body: latest });
     if (rest.length !== all.length) storeOffers(start.id, rest);
+    // `found`는 $state라 넣은 객체의 프록시가 된다. 어느 것을 고르게 하는지는 따로 적는다(객체 비교 대신).
+    foundIsReserved = rest[0] === undefined && reserved !== undefined;
     found = rest[0] ?? reserved;
   }
 
@@ -117,7 +120,8 @@
   function resolveFound(): void {
     const done = found;
     if (done === undefined) return;
-    if (done === reserved) {
+    if (foundIsReserved) {
+      foundIsReserved = false;
       clearDraft(start.id);
       reserved = undefined;
     } else {
