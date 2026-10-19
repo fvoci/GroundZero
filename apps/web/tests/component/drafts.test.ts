@@ -147,12 +147,14 @@ describe('queue move failure', () => {
     me.userId = 'user-a';
     window.sessionStorage.setItem('fvoci:tab', 'tab-1');
     storeDraft('doc-9', { ...draft, title: '못 옮긴 초안' });
-    const local = window.localStorage;
-    const original = local.setItem.bind(local);
-    const setItem = vi.spyOn(local, 'setItem').mockImplementation((k: string, v: string) => {
-      if (k.endsWith(':offers')) throw new DOMException('full', 'QuotaExceededError');
-      original(k, v);
-    });
+    // 이 동작 중의 쓰기는 모두 localStorage다(탭 id는 이미 있다).
+    const original = Storage.prototype.setItem.bind(window.localStorage);
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation((k: string, v: string) => {
+        if (k.endsWith(':offers')) throw new DOMException('full', 'QuotaExceededError');
+        original(k, v);
+      });
     const taken = takeOrReserve('doc-9');
     setItem.mockRestore();
     expect(taken.reserved?.title).toBe('못 옮긴 초안');
