@@ -512,8 +512,16 @@ type FileRow = (
     bool,
 );
 
+// 보관된 항목(또는 그 모듈)에 바로 붙은 파일은 쓰기 함수가 거부하므로 읽기로 보인다(can_write). 문서에 붙은 파일은
+// 문서 접근이 이미 보관을 읽기로 낮춘다.
 const FILE_SELECT: &str = "SELECT f.id, f.name, f.document_id, f.item_id, f.current_version, v.size, v.content_type,
-                                  f.updated_at, app_file_access(f.id), app_file_can_download(f.id)
+                                  f.updated_at,
+                                  CASE WHEN EXISTS (SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id
+                                                    WHERE i.id = f.item_id
+                                                      AND (i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL))
+                                            AND app_file_access(f.id) IS NOT NULL
+                                       THEN 'read' ELSE app_file_access(f.id) END,
+                                  app_file_can_download(f.id)
                            FROM files f
                            LEFT JOIN file_versions v ON v.file_id = f.id AND v.version = f.current_version";
 
