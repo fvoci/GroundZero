@@ -30,6 +30,8 @@
   let conflict = $state<{ current: EventView; input: EventInput } | undefined>(undefined);
   let confirmDelete = $state(false);
   let epoch = $state(0);
+  // 일정 입력이 바탕으로 삼은 버전. 반복 규칙 저장은 입력을 다시 그리지 않으므로 `event.version`과 따로 둔다.
+  let formVersion = 0;
   const zone = localTimeZone();
 
   $effect(() => {
@@ -43,7 +45,9 @@
     api
       .event(id)
       .then((e) => {
-        if (!cancelled) event = e;
+        if (cancelled) return;
+        event = e;
+        formVersion = e.version;
       })
       .catch((e: unknown) => {
         if (!cancelled)
@@ -68,14 +72,20 @@
     }
     conflict = undefined;
     event = result.event;
+    formVersion = result.event.version;
     epoch += 1;
     onchanged();
   }
 
   async function saveRule(rule: RecurrenceRule | null): Promise<void> {
     if (event === undefined) return;
+    const before = event.version;
     // 편집 중인 일정 입력과 반복 편집기의 상태(저장 알림·초점)를 지우지 않게 다시 그리지 않는다.
-    event = await api.setEventRecurrence(event.id, rule);
+    const saved = await api.setEventRecurrence(event.id, rule);
+    // 이 저장 하나만큼 버전이 올랐으면 입력의 기준도 따라간다. 그 사이 다른 사람이 일정을 고쳤으면 기준을 두어
+    // 입력 저장이 충돌로 드러나게 한다(새 버전을 기준으로 보내면 그 사람의 변경을 모르고 덮어쓴다).
+    if (formVersion === before && saved.version === before + 1) formVersion = saved.version;
+    event = saved;
     onchanged();
   }
 
@@ -141,6 +151,7 @@
               variant="outline"
               onclick={() => {
                 event = c.current;
+                formVersion = c.current.version;
                 conflict = undefined;
                 epoch += 1;
               }}>{m.events_load_server()}</Button
@@ -157,7 +168,7 @@
             idPrefix="event-edit"
             initial={current}
             submitLabel={m.common_save()}
-            onsubmit={(input: EventInput) => save(input, current.version)}
+            onsubmit={(input: EventInput) => save(input, formVersion)}
           />
         {/key}
         <RecurrenceEditor
