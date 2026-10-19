@@ -1,6 +1,6 @@
 // 진행 중인 타이머(사용자당 하나, D-32). 화면 어디서나 같은 상태를 보도록 하나만 둔다.
 import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
-import { api, newRequestId } from '$lib/api/client';
+import { api, ApiError, newRequestId } from '$lib/api/client';
 import { errorText } from '$lib/api/errors';
 import { m } from '$lib/paraglide/messages.js';
 
@@ -60,9 +60,15 @@ class TimerStore {
     }
   }
 
+  /** 서버 상태가 이 화면과 달라 생긴 실패(이미 진행 중·이미 바뀜). 네트워크·입력 오류는 다시 읽지 않는다. */
+  static #stale(e: unknown): boolean {
+    return e instanceof ApiError && (e.status === 404 || e.status === 409);
+  }
+
   /**
-   * 쓰기 하나가 끝났다. 실패했거나 뒤에 시작한 쓰기 때문에 결과를 버렸으면, 진행 중인 쓰기가 다 끝난 뒤 서버 상태로
-   * 맞춘다(먼저 보낸 시작이 성공하고 뒤의 시작이 409로 실패하면, 앞의 성공을 버린 채 화면이 비어 있었다).
+   * 쓰기 하나가 끝났다. 서버 상태와 달라 실패했거나(`applied` 거짓) 뒤에 시작한 쓰기 때문에 결과를 버렸으면, 진행 중인
+   * 쓰기가 다 끝난 뒤 서버 상태로 맞춘다(먼저 보낸 시작이 성공하고 뒤의 시작이 409로 실패하면, 앞의 성공을 버린 채 화면이
+   * 비어 있었다).
    */
   async #finishWrite(applied: boolean): Promise<void> {
     this.#writing -= 1;
@@ -80,7 +86,7 @@ class TimerStore {
     try {
       entry = await api.startTimer(newRequestId(), kind, memo, target);
     } catch (e: unknown) {
-      await this.#finishWrite(false);
+      await this.#finishWrite(!TimerStore.#stale(e));
       throw e;
     }
     const latest = mine === this.#writeSeq;
@@ -95,8 +101,8 @@ class TimerStore {
     try {
       next = await api.timerAction(this.entry.id, action);
     } catch (e: unknown) {
-      // 다른 탭·기기에서 이미 바뀌었을 수 있다. 서버 상태로 맞춘 뒤 알린다.
-      await this.#finishWrite(false);
+      // 다른 탭·기기에서 이미 바뀌었다(404·409). 서버 상태로 맞춘 뒤 알린다.
+      await this.#finishWrite(!TimerStore.#stale(e));
       throw e;
     }
     const latest = mine === this.#writeSeq;

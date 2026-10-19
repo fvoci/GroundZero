@@ -296,16 +296,18 @@
     try {
       // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다. 응답을 잃고 다시 눌러도
       // 같은 내용이면 같은 노트가 된다.
-      const created = await api.createNote(copyNoteKey.for({ copyTitle }), copyTitle);
+      const noteRequest = copyNoteKey.for({ copyTitle });
+      const created = await api.createNote(noteRequest, copyTitle);
+      const saveRequest = copySaveKey.for({ note: created.id, copyTitle, body });
       const saved = await api.saveDocument(created.id, {
-        requestId: copySaveKey.for({ note: created.id, copyTitle, body }),
+        requestId: saveRequest,
         baseRevision: created.revision,
         title: copyTitle,
         body,
       });
       if (saved.kind === 'conflict') throw new Error('copy conflicted');
-      copyNoteKey.done();
-      copySaveKey.done();
+      copyNoteKey.done(noteRequest);
+      copySaveKey.done(saveRequest);
       clearDraft(server.id);
       router.guard = undefined;
       router.navigate(standalonePath(created.id));
