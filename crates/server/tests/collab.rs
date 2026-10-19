@@ -813,3 +813,82 @@ async fn turning_realtime_off_keeps_live_edits() {
     assert_eq!(fresh.status, StatusCode::OK, "{:?}", fresh.json);
     owner.close().await;
 }
+
+/// 감사 반영: 다시 붙은 연결의 동기화 답(이미 반영된 지움 기록)은 편집이 아니다. 편집으로 치면 다시 붙을 때마다
+/// 조용한 시간이 처음부터 시작돼 리비전이 남지 않는다. 혼자 있는 연결도 자기 참여자 표시를 돌려받아(연결 유지)
+/// 30초마다 다시 붙지 않는다.
+#[tokio::test]
+async fn reconnecting_without_changes_is_not_an_edit() {
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "다시 붙기").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let doc = common::create_doc(&app, &writer, &ws, "지운 흔적").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let doc_uri = format!("/api/documents/{id}");
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+
+    // 쓰고 지운 뒤 나가면 리비전이 남는다(지움 기록이 생긴다).
+    let mut a = connect(addr, Some(&writer), &id, true).await.unwrap();
+    a.paragraph("남길 글").await;
+    a.paragraph("지울 글").await;
+    a.edit(|txn, fragment| {
+        let last = fragment.len(txn) - 1;
+        fragment.remove_range(txn, last, 1);
+    })
+    .await;
+    let local = a.doc.clone();
+    a.close().await;
+    let mut saved = None;
+    for _ in 0..40 {
+        let d = send(&app, Method::GET, &doc_uri, Some(&writer), None)
+            .await
+            .json;
+        if d["body"].to_string().contains("남길 글") {
+            saved = Some(d);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    let saved = saved.expect("live document saved as a revision");
+    assert!(!saved["body"].to_string().contains("지울 글"), "{saved:?}");
+
+    // 같은 내용으로 다시 붙어 아무것도 고치지 않는다. 저장 주기(3초)가 두 번 지나도 남길 편집이 없다.
+    let mut again = connect_with(addr, Some(&writer), &id, true, local)
+        .await
+        .unwrap();
+    again
+        .announce(4242, 1, r#"{"user":{"name":"writer"}}"#)
+        .await;
+    assert!(
+        again.until(|c| c.presence.contains_key(&4242)).await,
+        "the sender gets its own presence back"
+    );
+    tokio::time::sleep(Duration::from_secs(7)).await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let pending: Option<bool> = sqlx::query_scalar(
+        "SELECT pending FROM fvoci.document_collab_states WHERE document_id = $1::uuid",
+    )
+    .bind(&id)
+    .fetch_optional(&owner)
+    .await
+    .unwrap();
+    assert_ne!(pending, Some(true), "a reconnect counted as an edit");
+    again.close().await;
+    let after = send(&app, Method::GET, &doc_uri, Some(&writer), None)
+        .await
+        .json;
+    assert_eq!(after["revision"], saved["revision"]);
+    owner.close().await;
+}
