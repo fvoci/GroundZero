@@ -58,8 +58,9 @@ pub fn run(root: &Path, oidc: bool, web: bool) -> Result<()> {
         let issuer = format!("http://127.0.0.1:{kc}/realms/{}", compose::OIDC_REALM);
         seed(root, &compose, &sh, &issuer)?;
         println!("keycloak     {issuer}");
+        // 비밀번호는 로그·코드에 두지 않는다. 값은 deploy/keycloak/realm-test.json의 테스트 계정에 있다.
         println!(
-            "login        test-user / fvoci-test-user-password (admin), test-user-2 / fvoci-test-user-2-password"
+            "login        test-user (admin), test-user-2 — passwords in deploy/keycloak/realm-test.json"
         );
         let admin = std::env::var("FVOCI_INITIAL_ADMIN_SUBJECT")
             .unwrap_or_else(|_| compose::DEV_ADMIN_SUBJECT.to_owned());
