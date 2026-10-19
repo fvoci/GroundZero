@@ -96,7 +96,16 @@
     };
   });
 
-  const canEdit = $derived(item !== undefined && !item.archived && item.access !== 'read');
+  // 항목이나 그 모듈이 보관되면 읽기 전용이다(서버의 쓰기 검사와 같다). 항목의 archived는 항목 자신의 보관이므로,
+  // 모듈이 보관되면 하위 칸(정보·업무·일정)에는 읽기 접근으로 넘긴다(서버의 문서 접근도 보관되면 읽기로 낮춘다).
+  const moduleArchived = $derived(mod?.archived === true);
+  const readAccess: ItemView['access'] = 'read';
+  const shownItem = $derived(
+    item !== undefined && moduleArchived ? { ...item, access: readAccess } : item,
+  );
+  const canEdit = $derived(
+    item !== undefined && !item.archived && !moduleArchived && item.access !== 'read',
+  );
   const isOwner = $derived(item?.access === 'owner');
 
   async function save(event: SubmitEvent): Promise<void> {
@@ -202,6 +211,7 @@
   <p aria-live="polite">{m.modules_loading()}</p>
 {:else}
   {@const current = item}
+  {@const view = shownItem ?? current}
   <section class="flex flex-col gap-6" aria-labelledby="item-heading">
     <div class="flex flex-wrap items-baseline gap-2">
       <span class="font-mono text-sm text-muted-foreground">{current.reference}</span>
@@ -211,7 +221,9 @@
           ? m.modules_private()
           : m.modules_shared_workspace()}</Badge
       >
-      {#if current.archived}<Badge variant="secondary">{m.modules_archived_readonly()}</Badge>{/if}
+      {#if current.archived || moduleArchived}<Badge variant="secondary"
+          >{m.modules_archived_readonly()}</Badge
+        >{/if}
       {#if current.is_template}<Badge variant="secondary">{m.modules_template()}</Badge>{/if}
       <div class="ml-auto flex flex-wrap items-center gap-1">
         <MarkButtons kind="item" id={current.id} />
@@ -296,7 +308,7 @@
 
     {#if mod !== undefined}
       <ItemProfilePanel
-        item={current}
+        item={view}
         kind={mod.kind}
         onchanged={() => {
           api
@@ -388,7 +400,7 @@
       {/if}
     </section>
     <TaskBoard
-      item={current}
+      item={view}
       {workspaces}
       openTaskId={taskId}
       onstale={() => {
@@ -403,7 +415,7 @@
     />
     <!-- 일정 목록과 달력은 같은 일정을 따로 읽는다. 한쪽에서 바꾸면 다른 쪽이 다시 읽게 알린다. -->
     <ItemEvents
-      item={current}
+      item={view}
       version={listVersion}
       onchanged={() => {
         calendarVersion += 1;
