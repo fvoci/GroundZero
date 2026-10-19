@@ -1467,3 +1467,65 @@ async fn restoring_during_live_editing_keeps_the_live_edits_in_history() {
     assert!(kept, "the live edit vanished from the history: {list}");
     let _ = a.closed().await;
 }
+
+/// 검토 7번: 파일 버전을 지울 수 없는 사람(읽기)의 요청은 워크스페이스의 열린 방을 저장시키지 않는다. 저장은 지울 수
+/// 있는 사람의 요청에서만 미리 한다. 주기적 저장(3초) 전에 확인한다.
+#[tokio::test]
+async fn a_reader_cannot_make_rooms_persist_through_version_delete() {
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "읽기 저장 유도").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let doc = common::create_doc(&app, &admin, &ws, "열린 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let target = json!({ "target": { "kind": "document", "id": id }, "name": "첨부.txt" });
+    let first = upload_small(&app, &admin, target, b"v1").await;
+    let file_id = first["file_id"].as_str().unwrap().to_owned();
+    upload_small(&app, &admin, json!({ "file_id": file_id }), b"v2").await;
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let stored = || {
+        let owner = owner.clone();
+        let id = id.clone();
+        async move {
+            sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM fvoci.document_collab_states WHERE document_id = $1::uuid AND pending)",
+            )
+            .bind(id)
+            .fetch_one(&owner)
+            .await
+            .unwrap()
+        }
+    };
+
+    let mut a = connect(addr, Some(&admin), &id, true).await.unwrap();
+    a.paragraph("아직 저장하지 않은 편집").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        !stored().await,
+        "the periodic save already ran; the check below would mean nothing"
+    );
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/files/{file_id}/versions/1"),
+        Some(&reader),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.json);
+    assert!(!stored().await, "a reader's request made the room save");
+    a.close().await;
+    owner.close().await;
+}

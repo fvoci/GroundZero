@@ -722,13 +722,14 @@ pub async fn delete_version(
 ) -> Result<StatusCode, AppError> {
     // 그 파일의 워크스페이스에서 열린 실시간 방의 상태(본문의 파일 참조 포함)를 먼저 저장해, 방금 실시간 본문에
     // 넣은 이미지의 버전도 참조 확인(0059)이 보게 한다. 주기적 저장(3초)을 기다리면 그 사이에 지울 수 있었다.
-    // 볼 수 없는 파일이면(행 보안으로 안 보임) 아무 방도 건드리지 않고 아래 함수가 404를 낸다.
+    // 볼 수 없거나 고칠 수 없는 파일이면 아무 방도 건드리지 않고 아래 함수가 404·403을 낸다.
     let mut tx = state.db.begin_as(user).await?;
-    let workspace: Option<Option<Uuid>> =
-        sqlx::query_scalar("SELECT workspace_id FROM files WHERE id = $1")
-            .bind(id)
-            .fetch_optional(tx.conn())
-            .await?;
+    let workspace: Option<Option<Uuid>> = sqlx::query_scalar(
+        "SELECT workspace_id FROM files WHERE id = $1 AND app_file_access(id) IN ('owner', 'write')",
+    )
+    .bind(id)
+    .fetch_optional(tx.conn())
+    .await?;
     tx.commit().await?;
     if let Some(Some(workspace)) = workspace {
         state.collab.persist_workspace(workspace).await;
