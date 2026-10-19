@@ -262,6 +262,9 @@ async fn analysis_records_pin_file_versions_and_follow_item_access() {
     )
     .await;
     let batch = trashed.json["batch_id"].as_str().unwrap().to_owned();
+    // 휴지통에 있는(되살릴 수 있는) 파일을 연결한 기록도 고칠 수 있다(감사 반영: 예전에는 400).
+    let edited = send(&app, Method::PUT, &edit_uri, Some(&other), Some(edit(2))).await;
+    assert_eq!(edited.status, StatusCode::OK, "{:?}", edited.json);
     assert_eq!(
         send(
             &app,
@@ -278,6 +281,24 @@ async fn analysis_records_pin_file_versions_and_follow_item_access() {
     assert_eq!(list[0]["files"][0]["file_name"], "data.csv");
     assert_eq!(list[0]["files"][0]["version"], 2);
     assert_eq!(list[0]["files"][0]["available"], false);
+    assert!(list[0]["files"][0]["file_id"].is_null());
+    // 그 뒤 기록을 고쳐도(화면은 사라진 파일을 다시 보내지 못한다) 당시 버전의 연결은 남는다(D-35).
+    let edited = send(
+        &app,
+        Method::PUT,
+        &edit_uri,
+        Some(&other),
+        Some(
+            json!({ "version": 3, "title": "회귀 분석 3", "occurred_on": null,
+                     "fields": { "status": "failed", "log": "수렴 실패" }, "files": [] }),
+        ),
+    )
+    .await;
+    assert_eq!(edited.status, StatusCode::OK, "{:?}", edited.json);
+    let (_, list) = records(&app, &writer, &item).await;
+    assert_eq!(list[0]["title"], "회귀 분석 3");
+    assert_eq!(list[0]["files"][0]["file_name"], "data.csv");
+    assert_eq!(list[0]["files"][0]["version"], 2);
     assert!(list[0]["files"][0]["file_id"].is_null());
 
     assert_eq!(
