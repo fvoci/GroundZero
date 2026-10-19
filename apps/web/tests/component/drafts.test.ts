@@ -8,7 +8,6 @@ import {
   queueDraft,
   removeOffer,
   storeDraft,
-  storeOffers,
   takeOrReserve,
   withoutApplied,
 } from '$lib/features/documents/drafts';
@@ -58,7 +57,8 @@ describe('draft queue', () => {
     // 고르는 동안 새 편집이 또 남았다가 다음에 줄 뒤에 붙는다.
     storeDraft('doc-4', { ...draft, title: '둘째 초안' });
     expect(queueDraft('doc-4').map((d) => d.title)).toEqual(['첫 초안', '둘째 초안']);
-    storeOffers('doc-4', loadOffers('doc-4').slice(1));
+    const [first] = loadOffers('doc-4');
+    if (first !== undefined) removeOffer('doc-4', first);
     expect(loadOffers('doc-4').map((d) => d.title)).toEqual(['둘째 초안']);
     me.userId = 'user-b';
     expect(loadOffers('doc-4')).toEqual([]);
@@ -81,7 +81,10 @@ describe('draft queue under a full store', () => {
     me.userId = 'user-a';
     const a = { ...draft, title: '가', savedAt: '2026-10-19T00:00:01Z' };
     const b = { ...draft, title: '나', savedAt: '2026-10-19T00:00:02Z' };
-    storeOffers('doc-6', [a, b]);
+    storeDraft('doc-6', a);
+    queueDraft('doc-6');
+    storeDraft('doc-6', b);
+    queueDraft('doc-6');
     removeOffer('doc-6', a);
     expect(loadOffers('doc-6').map((d) => d.title)).toEqual(['나']);
   });
@@ -152,12 +155,67 @@ describe('queue move failure', () => {
     const setItem = vi
       .spyOn(Storage.prototype, 'setItem')
       .mockImplementation((k: string, v: string) => {
-        if (k.endsWith(':offers')) throw new DOMException('full', 'QuotaExceededError');
+        if (k.includes(':offer:')) throw new DOMException('full', 'QuotaExceededError');
         original(k, v);
       });
     const taken = takeOrReserve('doc-9');
     setItem.mockRestore();
     expect(taken.reserved?.title).toBe('못 옮긴 초안');
     expect(loadDraft('doc-9')?.title).toBe('못 옮긴 초안');
+  });
+});
+
+// 검토 3번: 두 탭이 거의 동시에 초안을 줄로 옮기면(세션 복원 등) 한쪽이 읽은 뒤 쓰기 전에 다른 쪽이 쓸 수 있다.
+// 브라우저의 localStorage는 탭 사이에 원자적이지 않다. 어느 탭의 초안도 사라지면 안 된다.
+describe('two tabs queueing at once', () => {
+  it('keeps both drafts when another tab queues between this tab’s read and write', () => {
+    me.userId = 'user-a';
+    window.sessionStorage.setItem('fvoci:tab', 'tab-b');
+    storeDraft('doc-7', { ...draft, title: 'B 탭 초안', savedAt: '2026-10-19T00:00:02Z' });
+    window.sessionStorage.setItem('fvoci:tab', 'tab-a');
+    storeDraft('doc-7', { ...draft, title: 'A 탭 초안', savedAt: '2026-10-19T00:00:01Z' });
+
+    // A 탭이 처음 초안 키를 읽은 직후, 쓰기 전에 B 탭이 자기 초안을 줄로 옮긴다.
+    // 탭 id(sessionStorage)도 같은 프로토타입을 쓰므로 저장소마다 원래 함수로 읽는다.
+    const fromLocal = Storage.prototype.getItem.bind(window.localStorage);
+    const fromSession = Storage.prototype.getItem.bind(window.sessionStorage);
+    let armed = true;
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (
+      this: Storage,
+      k: string,
+    ) {
+      if (this === window.sessionStorage) return fromSession(k);
+      const value = fromLocal(k);
+      if (armed && k.startsWith('fvoci:draft:user-a:doc-7')) {
+        armed = false;
+        window.sessionStorage.setItem('fvoci:tab', 'tab-b');
+        queueDraft('doc-7');
+        window.sessionStorage.setItem('fvoci:tab', 'tab-a');
+      }
+      return value;
+    });
+    queueDraft('doc-7');
+    getItem.mockRestore();
+
+    expect(
+      loadOffers('doc-7')
+        .map((d) => d.title)
+        .sort(),
+    ).toEqual(['A 탭 초안', 'B 탭 초안']);
+  });
+});
+
+describe('queue stored by an older version', () => {
+  it('reads the old single-key list and moves it to per-draft keys', () => {
+    me.userId = 'user-a';
+    const old = [
+      { ...draft, title: '옛 첫째', savedAt: '2026-10-19T00:00:01Z' },
+      { ...draft, title: '옛 둘째', savedAt: '2026-10-19T00:00:02Z' },
+    ];
+    window.localStorage.setItem('fvoci:draft:user-a:doc-8:offers', JSON.stringify(old));
+    expect(loadOffers('doc-8').map((d) => d.title)).toEqual(['옛 첫째', '옛 둘째']);
+    expect(window.localStorage.getItem('fvoci:draft:user-a:doc-8:offers')).toBeNull();
+    removeOffer('doc-8', old[0] ?? draft);
+    expect(loadOffers('doc-8').map((d) => d.title)).toEqual(['옛 둘째']);
   });
 });

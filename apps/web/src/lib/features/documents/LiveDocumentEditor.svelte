@@ -27,7 +27,6 @@
     removeOffer,
     withoutApplied,
     storeDraft,
-    storeOffers,
   } from './drafts';
   import type { LiveSession, LiveStatus, LiveStop, UnsyncedWatch } from './live';
   import { closeLive, colorFor, openLive, stopFor, watchUnsynced } from './live';
@@ -110,7 +109,7 @@
     const all = loadOffers(start.id);
     // 제목과 본문이 모두 지금과 같아야 이미 반영된 것이다(제목만 다른 초안도 고르게 한다).
     const rest = latest === undefined ? all : withoutApplied(all, { title, body: latest });
-    if (rest.length !== all.length) storeOffers(start.id, rest);
+    for (const applied of all.filter((d) => !rest.includes(d))) removeOffer(start.id, applied);
     // `found`는 $state라 넣은 객체의 프록시가 된다. 어느 것을 고르게 하는지는 따로 적는다(객체 비교 대신).
     foundIsReserved = rest[0] === undefined && reserved !== undefined;
     found = rest[0] ?? reserved;

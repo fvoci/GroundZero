@@ -41,12 +41,58 @@ function key(documentId: string): string | undefined {
 }
 
 /**
- * 고르게 할 지난 초안들의 키(사용자·문서마다 하나, 순서대로 쌓는다). 다시 열 때 찾은 초안을 사용자가 고르는 동안
- * 새 편집은 탭의 키에 따로 남고, 그것도 다음에 이 줄 뒤에 붙는다. 어느 것도 덮거나 버리지 않는다.
+ * 고르게 할 지난 초안들. 초안마다 키 하나(`<앞부분>:offer:<순서>.<id>`)에 두고 더한 순서로 고르게 한다. 다시 열 때 찾은
+ * 초안을 사용자가 고르는 동안 새 편집은 탭의 키에 따로 남고, 그것도 다음에 이 줄에 붙는다. 어느 것도 덮거나 버리지
+ * 않는다. 한 키에 목록을 두면 두 탭이 거의 동시에 읽고 고쳐 쓸 때 한쪽 것이 사라진다(localStorage는 탭 사이에
+ * 원자적이지 않다).
  */
-function offersKey(documentId: string): string | undefined {
+function offerPrefix(documentId: string): string | undefined {
+  const b = base(documentId);
+  return b === undefined ? undefined : `${b}:offer:`;
+}
+
+/** 목록 하나로 두던 옛 키. 읽을 때 초안마다의 키로 옮긴다. */
+function legacyOffersKey(documentId: string): string | undefined {
   const b = base(documentId);
   return b === undefined ? undefined : `${b}:offers`;
+}
+
+/** 같은 밀리초에 더한 것끼리의 순서. */
+let pushed = 0;
+
+/** 초안 하나를 줄 끝에 더한다(키가 더한 순서대로 정렬된다). 쓰기에 성공했는지. */
+function pushOffer(documentId: string, draft: Draft): boolean {
+  const prefix = offerPrefix(documentId);
+  if (prefix === undefined) return false;
+  pushed += 1;
+  const order = `${String(Date.now()).padStart(15, '0')}.${String(pushed).padStart(9, '0')}`;
+  return write(`${prefix}${order}.${crypto.randomUUID()}`, draft);
+}
+
+/** 줄의 초안과 그 키(더한 순). */
+function offerEntries(documentId: string): { key: string; draft: Draft }[] {
+  const prefix = offerPrefix(documentId);
+  if (prefix === undefined) return [];
+  const legacy = legacyOffersKey(documentId);
+  const old = read(legacy);
+  if (old !== undefined) {
+    const list: unknown[] = Array.isArray(old) ? old : [old];
+    const drafts = list.map(parseDraft).filter((d): d is Draft => d !== undefined);
+    if (drafts.every((d) => pushOffer(documentId, d))) write(legacy, undefined);
+  }
+  const keys: string[] = [];
+  try {
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const k = window.localStorage.key(i);
+      if (k?.startsWith(prefix) === true) keys.push(k);
+    }
+  } catch {
+    return [];
+  }
+  return keys
+    .map((k) => ({ key: k, draft: parseDraft(read(k)) }))
+    .filter((e): e is { key: string; draft: Draft } => e.draft !== undefined)
+    .sort((a, b) => a.key.localeCompare(b.key));
 }
 
 /** 이 탭이 살아 있다는 표시(Web Locks). 다른 탭은 이 잠금이 없을 때만 이 탭의 초안을 넘겨받는다. */
@@ -98,7 +144,7 @@ export async function adoptOrphans(documentId: string): Promise<number> {
   let adopted = 0;
   for (const k of candidates) {
     const d = parseDraft(read(k));
-    if (d !== undefined && !storeOffers(documentId, [...loadOffers(documentId), d])) continue;
+    if (d !== undefined && !pushOffer(documentId, d)) continue;
     write(k, undefined);
     if (d !== undefined) adopted += 1;
   }
@@ -178,21 +224,14 @@ export function clearDraft(documentId: string): void {
 
 /** 고르게 할 지난 초안들(먼저 남은 것부터). */
 export function loadOffers(documentId: string): Draft[] {
-  const value = read(offersKey(documentId));
-  const list: unknown[] = Array.isArray(value) ? value : value === undefined ? [] : [value];
-  return list.map(parseDraft).filter((d): d is Draft => d !== undefined);
+  return offerEntries(documentId).map((e) => e.draft);
 }
 
-export function storeOffers(documentId: string, drafts: readonly Draft[]): boolean {
-  return write(offersKey(documentId), drafts.length === 0 ? undefined : drafts);
-}
-
-/** 고르게 할 줄에서 이 초안 하나를 뺀다(보존했거나 버렸다). */
+/** 고르게 할 줄에서 이 초안을 뺀다(보존했거나 버렸거나 이미 반영됐다). 다른 초안의 키는 건드리지 않는다. */
 export function removeOffer(documentId: string, done: Draft): void {
-  storeOffers(
-    documentId,
-    loadOffers(documentId).filter((d) => d.savedAt !== done.savedAt || !sameContent(d, done)),
-  );
+  for (const { key: k, draft: d } of offerEntries(documentId)) {
+    if (d.savedAt === done.savedAt && sameContent(d, done)) write(k, undefined);
+  }
 }
 
 /** 두 초안(또는 초안과 지금 내용)이 같은지: 제목과 본문 모두. */
@@ -219,13 +258,9 @@ export function withoutApplied(
  * 않고 그대로 둔다. 옮긴 뒤의 줄을 돌려준다.
  */
 export function queueDraft(documentId: string): Draft[] {
-  const offers = loadOffers(documentId);
   const main = loadDraft(documentId);
-  if (main === undefined) return offers;
-  const next = [...offers, main];
-  if (!storeOffers(documentId, next)) return offers;
-  clearDraft(documentId);
-  return next;
+  if (main !== undefined && pushOffer(documentId, main)) clearDraft(documentId);
+  return loadOffers(documentId);
 }
 
 /**
