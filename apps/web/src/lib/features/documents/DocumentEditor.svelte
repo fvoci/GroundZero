@@ -22,14 +22,15 @@
   import { Label } from '$lib/ui/label';
 
   import { describeSaveBlock } from './content-notices';
+  import type { Draft } from './drafts';
   import {
     canonicalJson,
     clearDraft,
     loadDraft,
     loadOffers,
     plainText,
+    removeOffer,
     storeDraft,
-    storeOffers,
   } from './drafts';
   import { contentIssues } from './paste-guard';
   import TiptapEditor from './TiptapEditor.svelte';
@@ -78,27 +79,29 @@
   let conflict = $state<DocumentView | undefined>(undefined);
   // 저장하는 사이 실시간 공동 편집이 켜져 본문을 여기서 저장할 수 없다.
   let realtimeOn = $state(false);
-  // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다.
+  // 고르게 할 초안이 실시간 편집기가 남긴 줄의 것인지. 그렇다면 고르기 전까지 줄에 그대로 두고(이 편집기의 입력이
+  // 덮지 않게), 되살리거나 버릴 때만 줄에서 뺀다.
+  let restorableQueued = false;
+  // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다. 이 편집기의 초안이 없으면 실시간 편집기가
+  // 남긴 줄의 첫 초안을 고르게 한다.
   function pendingDraft(): ReturnType<typeof loadDraft> {
-    // 실시간 편집기가 고르게 하던 줄의 초안도 여기서 하나씩 이어 고르게 한다(지금 초안이 없을 때 맨 앞 것을 꺼낸다.
-    // 나머지는 줄에 남아 다음에 고르게 한다).
-    if (loadDraft(start.id) === undefined) {
-      const [first, ...rest] = loadOffers(start.id);
-      if (first !== undefined) {
-        storeDraft(start.id, first);
-        storeOffers(start.id, rest);
-      }
-    }
-    const draft = loadDraft(start.id);
-    if (draft === undefined) return undefined;
-    const same =
-      canonicalJson({ title: draft.title.trim(), body: draft.body }) ===
+    const isServer = (d: Draft): boolean =>
+      canonicalJson({ title: d.title.trim(), body: d.body }) ===
       canonicalJson({ title: start.title, body: start.body });
-    if (same) {
+    const draft = loadDraft(start.id);
+    if (draft !== undefined) {
+      if (!isServer(draft)) return draft;
       clearDraft(start.id);
-      return undefined;
     }
-    return draft;
+    for (const queued of loadOffers(start.id)) {
+      if (isServer(queued)) {
+        removeOffer(start.id, queued);
+        continue;
+      }
+      restorableQueued = true;
+      return queued;
+    }
+    return undefined;
   }
   let restorable = $state(pendingDraft());
   let confirmOverwrite = $state(false);
@@ -308,6 +311,11 @@
 
   function restoreDraft(): void {
     if (restorable === undefined) return;
+    // 줄의 초안이면 이 편집기의 초안으로 먼저 옮겨 둔 뒤에 줄에서 뺀다(옮기지 못하면 줄에 남긴다).
+    if (restorableQueued && storeDraft(server.id, restorable)) {
+      removeOffer(server.id, restorable);
+      restorableQueued = false;
+    }
     title = restorable.title;
     body = restorable.body;
     editorVersion += 1;
@@ -318,7 +326,9 @@
   }
 
   function discardDraft(): void {
-    clearDraft(server.id);
+    if (restorable !== undefined && restorableQueued) removeOffer(server.id, restorable);
+    else clearDraft(server.id);
+    restorableQueued = false;
     restorable = undefined;
   }
 

@@ -66,13 +66,16 @@ function read(k: string | undefined): unknown {
   }
 }
 
-function write(k: string | undefined, value: unknown): void {
-  if (k === undefined) return;
+/** 쓰기에 성공했는지. 저장소가 가득 찼거나 쓸 수 없으면 거짓(옮기는 쪽은 그때 원본을 지우지 않는다). */
+function write(k: string | undefined, value: unknown): boolean {
+  if (k === undefined) return false;
   try {
     if (value === undefined) window.localStorage.removeItem(k);
     else window.localStorage.setItem(k, JSON.stringify(value));
+    return true;
   } catch {
     // 저장소를 쓸 수 없으면 초안 보관만 생략한다. 서버 저장 흐름은 영향받지 않는다.
+    return false;
   }
 }
 
@@ -85,8 +88,8 @@ export function loadDraft(documentId: string): Draft | undefined {
   return parseDraft(read(key(documentId)));
 }
 
-export function storeDraft(documentId: string, draft: Draft): void {
-  write(key(documentId), draft);
+export function storeDraft(documentId: string, draft: Draft): boolean {
+  return write(key(documentId), draft);
 }
 
 export function clearDraft(documentId: string): void {
@@ -100,17 +103,30 @@ export function loadOffers(documentId: string): Draft[] {
   return list.map(parseDraft).filter((d): d is Draft => d !== undefined);
 }
 
-export function storeOffers(documentId: string, drafts: readonly Draft[]): void {
-  write(offersKey(documentId), drafts.length === 0 ? undefined : drafts);
+export function storeOffers(documentId: string, drafts: readonly Draft[]): boolean {
+  return write(offersKey(documentId), drafts.length === 0 ? undefined : drafts);
 }
 
-/** 지금 편집의 초안을 고르게 할 줄 뒤로 옮긴다(덮이지 않게). 옮긴 뒤의 줄을 돌려준다. */
+/** 고르게 할 줄에서 이 초안 하나를 뺀다(보존했거나 버렸다). */
+export function removeOffer(documentId: string, done: Draft): void {
+  const same = (d: Draft): boolean =>
+    d.savedAt === done.savedAt && canonicalJson(d.body) === canonicalJson(done.body);
+  storeOffers(
+    documentId,
+    loadOffers(documentId).filter((d) => !same(d)),
+  );
+}
+
+/**
+ * 지금 편집의 초안을 고르게 할 줄 뒤로 옮긴다(덮이지 않게). 줄에 쓰지 못했으면(저장소 가득 참) 지금 초안을 지우지
+ * 않고 그대로 둔다. 옮긴 뒤의 줄을 돌려준다.
+ */
 export function queueDraft(documentId: string): Draft[] {
   const offers = loadOffers(documentId);
   const main = loadDraft(documentId);
   if (main === undefined) return offers;
   const next = [...offers, main];
-  storeOffers(documentId, next);
+  if (!storeOffers(documentId, next)) return offers;
   clearDraft(documentId);
   return next;
 }

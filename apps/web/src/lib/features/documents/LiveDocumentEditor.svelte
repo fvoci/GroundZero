@@ -24,6 +24,7 @@
     clearDraft,
     loadOffers,
     queueDraft,
+    removeOffer,
     storeDraft,
     storeOffers,
   } from './drafts';
@@ -109,12 +110,7 @@
   function resolveFound(): void {
     const done = found;
     if (done === undefined) return;
-    storeOffers(
-      start.id,
-      loadOffers(start.id).filter(
-        (d) => d.savedAt !== done.savedAt || canonicalJson(d.body) !== canonicalJson(done.body),
-      ),
-    );
+    removeOffer(start.id, done);
     found = undefined;
     foundRequest = undefined;
     showNextOffer();

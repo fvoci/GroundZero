@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   clearDraft,
   loadDraft,
   loadOffers,
   queueDraft,
+  removeOffer,
   storeDraft,
   storeOffers,
 } from '$lib/features/documents/drafts';
@@ -58,5 +59,27 @@ describe('draft queue', () => {
     expect(loadOffers('doc-4').map((d) => d.title)).toEqual(['둘째 초안']);
     me.userId = 'user-b';
     expect(loadOffers('doc-4')).toEqual([]);
+  });
+});
+
+describe('draft queue under a full store', () => {
+  it('keeps the current draft when the queue cannot be written', () => {
+    me.userId = 'user-a';
+    storeDraft('doc-5', { ...draft, title: '지금 초안' });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+    expect(queueDraft('doc-5')).toEqual([]);
+    setItem.mockRestore();
+    expect(loadDraft('doc-5')?.title).toBe('지금 초안');
+  });
+
+  it('removes only the resolved entry', () => {
+    me.userId = 'user-a';
+    const a = { ...draft, title: '가', savedAt: '2026-10-19T00:00:01Z' };
+    const b = { ...draft, title: '나', savedAt: '2026-10-19T00:00:02Z' };
+    storeOffers('doc-6', [a, b]);
+    removeOffer('doc-6', a);
+    expect(loadOffers('doc-6').map((d) => d.title)).toEqual(['나']);
   });
 });
