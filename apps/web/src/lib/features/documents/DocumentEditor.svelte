@@ -67,6 +67,8 @@
   });
   let message = $state<string | undefined>(undefined);
   let conflict = $state<DocumentView | undefined>(undefined);
+  // 저장하는 사이 실시간 공동 편집이 켜져 본문을 여기서 저장할 수 없다.
+  let realtimeOn = $state(false);
   // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다.
   function pendingDraft(): ReturnType<typeof loadDraft> {
     const draft = loadDraft(start.id);
@@ -132,7 +134,7 @@
   }
 
   async function save(): Promise<void> {
-    if (!server.can_edit || status === 'saving' || status === 'conflict') return;
+    if (!server.can_edit || status === 'saving' || status === 'conflict' || realtimeOn) return;
     if (!isDirty()) {
       if (status !== 'signed-out') message = undefined;
       status = 'saved';
@@ -202,10 +204,28 @@
       } else if (error instanceof ApiError && error.status === 401) {
         status = 'signed-out';
         message = m.documents_signed_out();
+      } else if (
+        error instanceof ApiError &&
+        error.code === 'invalid_state' &&
+        (await realtimeTurnedOn())
+      ) {
+        // 실시간이 켜진 뒤에는 본문을 실시간 연결로만 고친다. 고친 내용(초안)은 사본으로 남길 수 있게 한다.
+        status = 'error';
+        realtimeOn = true;
+        message = m.documents_save_realtime_on();
       } else {
         status = 'error';
         message = errorText(error, m.documents_save_failed());
       }
+    }
+  }
+
+  /** 저장이 409(상태)로 거절됐을 때 그사이 실시간이 켜졌는지. 확인하지 못하면 아니라고 본다. */
+  async function realtimeTurnedOn(): Promise<boolean> {
+    try {
+      return (await api.document(server.id)).realtime;
+    } catch {
+      return false;
     }
   }
 
@@ -342,6 +362,11 @@
       {#if status === 'signed-out'}
         <a class="underline" href={`/auth/login?return_to=${encodeURIComponent(router.path)}`}
           >{m.documents_sign_in_again()}</a
+        >
+      {/if}
+      {#if realtimeOn}
+        <Button size="sm" onclick={() => void keepMineAsCopy()}
+          >{m.documents_conflict_keep_copy()}</Button
         >
       {/if}
     </p>

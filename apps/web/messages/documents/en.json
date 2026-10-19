@@ -62,6 +62,7 @@
   "documents_save_retrying": "Can't reach the server, trying again. Your edits are kept in this browser.",
   "documents_signed_out": "Your sign-in expired. Your edits are kept in this browser. Please sign in again.",
   "documents_save_failed": "Couldn't save.",
+  "documents_save_realtime_on": "Live editing was turned on for this document, so the body can't be saved here. Keep your changes as a note, then reopen the document.",
   "documents_draft_copy_title": "{title} (my draft)",
   "documents_copy_failed": "Couldn't create a copy.",
   "documents_status_saved": "Saved",
