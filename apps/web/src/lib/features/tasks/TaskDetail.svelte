@@ -112,9 +112,14 @@
     const freshForm = formOf(fresh);
     const merged = mergeForm(baseline, mine, freshForm);
     const tagsTouched = canonicalJson(mine.tags) !== canonicalJson(baseline.tags);
-    const estimateTouched = mine.estimate_minutes !== baseline.estimate_minutes;
+    // 예상 시간은 입력한 글자로 본다(숫자로 바꾸면 "abc" 같은 미완성 입력이 비어 있는 것과 같아져 지워졌다).
+    const shownEstimate =
+      baseline.estimate_minutes === null ? '' : String(baseline.estimate_minutes);
+    const estimateTouched = estimateText.trim() !== shownEstimate;
     baseline = merged.baseline;
-    clashed = clashed || merged.clash;
+    // 충돌은 지금의 병합으로 다시 본다. 기준은 사용자가 바꾼 칸을 옛 값으로 지키므로, 서버가 그 칸을 다르게 두는 한 계속
+    // 충돌이고, 사용자가 서버 값으로 맞추면 풀려 최신 판으로 저장한다.
+    clashed = merged.clash;
     if (!clashed) baseVersion = fresh.version;
     task = clashed ? { ...fresh, version: baseVersion } : fresh;
     form = merged.form;

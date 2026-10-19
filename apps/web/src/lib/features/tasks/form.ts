@@ -36,8 +36,10 @@ export function mergeForm(
     if (!same(fresh[key], before[key])) clash = true;
     return mine[key];
   };
+  // 사용자 값이 서버의 새 값과 같아진 칸도 기준을 새 값으로 옮긴다(그 뒤 사용자가 다시 고쳐도 옛 기준과 비교해 충돌로
+  // 보지 않게).
   const keep = <K extends keyof TaskInput>(key: K): TaskInput[K] =>
-    untouched(key) ? fresh[key] : before[key];
+    untouched(key) || same(mine[key], fresh[key]) ? fresh[key] : before[key];
   const baseline: TaskInput = {
     title: keep('title'),
     description: keep('description'),

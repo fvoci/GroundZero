@@ -54,4 +54,30 @@ describe('mergeForm baseline', () => {
     expect(second.form.title).toBe('내 제목');
     expect(second.form.due_date).toBe('2026-11-01');
   });
+
+  // 기준 A, 내 입력과 서버가 모두 B → 기준도 B. 그 뒤 내가 D로 고치고 서버는 그대로 B면 충돌이 아니다.
+  it('moves the baseline when my value already matches the server', () => {
+    const first = mergeForm(base, { ...base, title: 'B' }, { ...base, title: 'B' });
+    expect(first.baseline.title).toBe('B');
+    const second = mergeForm(
+      first.baseline,
+      { ...first.form, title: 'D' },
+      { ...base, title: 'B' },
+    );
+    expect(second.clash).toBe(false);
+    expect(second.form.title).toBe('D');
+  });
+
+  // 기준 A, 내 B, 서버 C로 충돌한 뒤 내가 C로 맞추면 다음 다시 채우기에서는 충돌이 아니다(업무 상세는 이 결과로 충돌을
+  // 다시 판단해 최신 판으로 저장한다).
+  it('releases a clash once my value matches the server', () => {
+    const first = mergeForm(base, { ...base, title: 'B' }, { ...base, title: 'C' });
+    expect(first.clash).toBe(true);
+    const second = mergeForm(
+      first.baseline,
+      { ...first.form, title: 'C' },
+      { ...base, title: 'C' },
+    );
+    expect(second.clash).toBe(false);
+  });
 });
