@@ -17,6 +17,7 @@
   import type { CalendarEntry } from '$lib/features/events/calendar';
   import { entriesByDay, startOfWeek } from '$lib/features/events/calendar';
   import { displaySettings, formatDay, weekdays } from '$lib/display';
+  import { notificationText } from '$lib/features/references/notification-text';
   import { dayNumber, fromDayNumber } from '$lib/features/tasks/gantt';
   import { clockText } from '$lib/features/time/format';
   import { timer } from '$lib/features/time/timer.svelte';
@@ -403,13 +404,7 @@
     <section class="flex flex-col gap-2" aria-labelledby="notes-heading">
       <h2 id="notes-heading" class="text-lg font-semibold">{m.home_notifications()}</h2>
       {#each notifications as n (n.id)}
-        <p class="text-sm">
-          {m.home_mentioned({
-            actor: n.actor_name ?? m.home_someone(),
-            reference: n.document_reference ?? '',
-            title: n.document_title,
-          })}
-        </p>
+        <p class="text-sm">{notificationText(n)}</p>
       {:else}
         <p class="text-sm text-muted-foreground">{m.home_notifications_empty()}</p>
       {/each}

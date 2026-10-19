@@ -35,8 +35,6 @@
   "home_recent": "Recent work",
   "home_recent_empty": "No recently edited documents or tasks.",
   "home_notifications": "Notifications",
-  "home_someone": "Someone",
-  "home_mentioned": "{actor} mentioned you in {reference} “{title}”.",
   "home_notifications_empty": "No unread notifications.",
   "home_all_notifications": "See all notifications",
   "home_mark_failed": "Couldn't update.",

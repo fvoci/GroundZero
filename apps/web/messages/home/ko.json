@@ -35,8 +35,6 @@
   "home_recent": "최근 작업",
   "home_recent_empty": "최근에 고친 문서·업무가 없습니다.",
   "home_notifications": "알림",
-  "home_someone": "누군가",
-  "home_mentioned": "{actor}님이 {reference} “{title}”에서 나를 언급했습니다.",
   "home_notifications_empty": "읽지 않은 알림이 없습니다.",
   "home_all_notifications": "알림 모두 보기",
   "home_mark_failed": "바꾸지 못했습니다.",

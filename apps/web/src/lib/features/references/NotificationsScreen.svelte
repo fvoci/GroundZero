@@ -6,6 +6,7 @@
   import type { NotificationView } from '$lib/api/client';
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { notificationText } from '$lib/features/references/notification-text';
   import { m } from '$lib/paraglide/messages.js';
   import { itemPath, itemTaskPath, pathFor, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
@@ -53,35 +54,6 @@
       router.navigate(itemPath(n.workspace_id, n.item_id));
   }
 
-  /** 알림 문장(종류별). */
-  function message(n: NotificationView): string {
-    const who = n.actor_name ?? m.references_notification_someone();
-    const target = `${n.document_reference ?? ''} ${n.document_title}`.trim();
-    const date = n.due_date ?? '';
-    switch (n.kind) {
-      case 'mention':
-        return m.references_notification_mention({ who, target });
-      case 'comment':
-        return m.references_notification_comment({ who, target });
-      case 'reply':
-        return m.references_notification_reply({ who, target });
-      case 'due':
-        return m.references_notification_due({ target, date });
-      case 'expiry':
-        return m.references_notification_expiry({ target, date });
-      case 'review':
-        return m.references_notification_review({
-          target,
-          subject: n.subject ?? m.references_notification_review_subject(),
-          date,
-        });
-      case 'deadline':
-        return m.references_notification_deadline({ target, subject: n.subject ?? '', date });
-      default:
-        return target;
-    }
-  }
-
   async function readAll(): Promise<void> {
     await api.markNotificationsRead(null);
     await load();
@@ -120,7 +92,7 @@
                 class="size-2 shrink-0 self-center rounded-full bg-primary"
               ></span>{/if}
             <span class="flex min-w-0 flex-col">
-              <span>{message(n)}</span>
+              <span>{notificationText(n)}</span>
               {#if n.excerpt !== null}
                 <span class="truncate text-sm text-muted-foreground">“{n.excerpt}”</span>
               {/if}
