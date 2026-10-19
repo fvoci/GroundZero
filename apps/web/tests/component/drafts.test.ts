@@ -256,3 +256,34 @@ describe('duplicated tab', () => {
     }
   });
 });
+
+// 검토(2차) 4번: 옛 목록을 옮기다 저장소가 가득 차 일부만 옮겼으면, 옮긴 것은 옛 목록에서 빠져야 한다(남으면 다음에
+// 읽을 때 다시 옮겨, 버린 초안이 되살아난다). 옮긴 옛 초안은 그 뒤에 더한 것보다 앞에 둔다.
+describe('partial move of an old queue', () => {
+  it('does not bring back a dismissed draft and keeps old drafts first', () => {
+    me.userId = 'user-a';
+    window.sessionStorage.setItem('fvoci:tab', 'tab-1');
+    const old = [
+      { ...draft, title: '옛 첫째', savedAt: '2026-10-19T00:00:01Z' },
+      { ...draft, title: '옛 둘째', savedAt: '2026-10-19T00:00:02Z' },
+    ];
+    window.localStorage.setItem('fvoci:draft:user-a:doc-11:offers', JSON.stringify(old));
+    storeDraft('doc-11', { ...draft, title: '새 초안', savedAt: '2026-10-19T00:00:03Z' });
+    queueDraft('doc-11');
+    // 옛 목록을 옮길 때 둘째 쓰기만 실패한다.
+    const original = Storage.prototype.setItem.bind(window.localStorage);
+    let offerWrites = 0;
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation((k: string, v: string) => {
+        if (k.includes(':offer:') && ++offerWrites === 2) {
+          throw new DOMException('full', 'QuotaExceededError');
+        }
+        original(k, v);
+      });
+    loadOffers('doc-11');
+    setItem.mockRestore();
+    removeOffer('doc-11', old[0] ?? draft);
+    expect(loadOffers('doc-11').map((d) => d.title)).toEqual(['옛 둘째', '새 초안']);
+  });
+});

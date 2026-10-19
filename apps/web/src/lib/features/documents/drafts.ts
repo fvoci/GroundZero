@@ -60,12 +60,15 @@ function legacyOffersKey(documentId: string): string | undefined {
 /** 같은 밀리초에 더한 것끼리의 순서. */
 let pushed = 0;
 
-/** 초안 하나를 줄 끝에 더한다(키가 더한 순서대로 정렬된다). 쓰기에 성공했는지. */
-function pushOffer(documentId: string, draft: Draft): boolean {
+/**
+ * 초안 하나를 줄 끝에 더한다(키가 더한 순서대로 정렬된다). 쓰기에 성공했는지. `at`을 주면 그 시각(밀리초)을
+ * 순서로 쓴다(옛 목록에서 옮긴 것을 앞에 두기).
+ */
+function pushOffer(documentId: string, draft: Draft, at = Date.now()): boolean {
   const prefix = offerPrefix(documentId);
   if (prefix === undefined) return false;
   pushed += 1;
-  const order = `${String(Date.now()).padStart(15, '0')}.${String(pushed).padStart(9, '0')}`;
+  const order = `${String(at).padStart(15, '0')}.${String(pushed).padStart(9, '0')}`;
   return write(`${prefix}${order}.${crypto.randomUUID()}`, draft);
 }
 
@@ -78,7 +81,12 @@ function offerEntries(documentId: string): { key: string; draft: Draft }[] {
   if (old !== undefined) {
     const list: unknown[] = Array.isArray(old) ? old : [old];
     const drafts = list.map(parseDraft).filter((d): d is Draft => d !== undefined);
-    if (drafts.every((d) => pushOffer(documentId, d))) write(legacy, undefined);
+    // 옮긴 것은 바로 옛 목록에서 뺀다(중간에 실패해도 다음에 같은 것을 다시 옮기지 않게). 옛 것이 먼저 오도록 0부터.
+    for (const [index, d] of drafts.entries()) {
+      if (!pushOffer(documentId, d, index)) break;
+      const rest = drafts.slice(index + 1);
+      write(legacy, rest.length === 0 ? undefined : rest);
+    }
   }
   const keys: string[] = [];
   try {
@@ -92,7 +100,7 @@ function offerEntries(documentId: string): { key: string; draft: Draft }[] {
   return keys
     .map((k) => ({ key: k, draft: parseDraft(read(k)) }))
     .filter((e): e is { key: string; draft: Draft } => e.draft !== undefined)
-    .sort((a, b) => a.key.localeCompare(b.key));
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
 
 /** 이 탭이 살아 있다는 표시(Web Locks). 다른 탭은 이 잠금이 없을 때만 이 탭의 초안을 넘겨받는다. */
