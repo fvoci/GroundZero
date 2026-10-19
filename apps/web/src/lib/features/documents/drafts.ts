@@ -1,7 +1,9 @@
-// 미저장 초안 보호 (D-27). 브라우저 로컬 저장소에 문서별로 마지막 편집 내용을 둔다.
+// 미저장 초안 보호 (D-27). 브라우저 로컬 저장소에 사용자·문서별로 마지막 편집 내용을 둔다(같은 브라우저를 쓰는 다른
+// 사용자에게 보이지 않게 키에 사용자 id를 넣는다. 로그인 전이면 두지 않는다).
 // 개인 편의용이며 서버 저장을 대신하지 않는다. 저장소를 쓸 수 없는 환경(사생활 보호 모드 등)에서는 조용히 생략한다.
 import type { DocNode } from '$lib/api/client';
 import { parseDocNode } from '$lib/api/client';
+import { me } from '$lib/me.svelte';
 
 export interface Draft {
   baseRevision: number;
@@ -10,11 +12,20 @@ export interface Draft {
   savedAt: string;
 }
 
-const key = (documentId: string): string => `fvoci:draft:${documentId}`;
+/** 이 사용자의 초안 키. 로그인 전이면 없다. */
+function key(documentId: string): string | undefined {
+  return me.userId === '' ? undefined : `fvoci:draft:${me.userId}:${documentId}`;
+}
+
+/** 사용자 id가 없던 옛 키. 누구의 것인지 알 수 없어 제안하지 않고 지운다. */
+const legacyKey = (documentId: string): string => `fvoci:draft:${documentId}`;
 
 export function loadDraft(documentId: string): Draft | undefined {
+  const k = key(documentId);
   try {
-    const raw = window.localStorage.getItem(key(documentId));
+    window.localStorage.removeItem(legacyKey(documentId));
+    if (k === undefined) return undefined;
+    const raw = window.localStorage.getItem(k);
     if (raw === null) return undefined;
     const value: unknown = JSON.parse(raw);
     if (typeof value !== 'object' || value === null) return undefined;
@@ -41,16 +52,20 @@ export function loadDraft(documentId: string): Draft | undefined {
 }
 
 export function storeDraft(documentId: string, draft: Draft): void {
+  const k = key(documentId);
+  if (k === undefined) return;
   try {
-    window.localStorage.setItem(key(documentId), JSON.stringify(draft));
+    window.localStorage.setItem(k, JSON.stringify(draft));
   } catch {
     // 저장소를 쓸 수 없으면 초안 보관만 생략한다. 서버 저장 흐름은 영향받지 않는다.
   }
 }
 
 export function clearDraft(documentId: string): void {
+  const k = key(documentId);
+  if (k === undefined) return;
   try {
-    window.localStorage.removeItem(key(documentId));
+    window.localStorage.removeItem(k);
   } catch {
     // 위와 같다.
   }
