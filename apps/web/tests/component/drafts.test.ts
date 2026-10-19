@@ -219,3 +219,40 @@ describe('queue stored by an older version', () => {
     expect(loadOffers('doc-8').map((d) => d.title)).toEqual(['옛 둘째']);
   });
 });
+
+// 검토 4번: 탭 복제는 sessionStorage(탭 id)까지 복사한다. 원래 탭이 살아 있으면 복제한 탭은 새 탭 id를 써야 한다
+// (같은 id면 두 탭이 같은 초안 키를 서로 덮어쓴다).
+describe('duplicated tab', () => {
+  it('takes a new tab id when a live tab already holds this one', async () => {
+    window.sessionStorage.setItem('fvoci:tab', 'tab-1');
+    const prefix = 'fvoci:draft:user-a:doc-10';
+    window.localStorage.setItem(
+      `${prefix}:tab:tab-1`,
+      JSON.stringify({ ...draft, title: '원래 탭' }),
+    );
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: {
+        // 원래 탭이 tab-1의 잠금을 쥐고 있다.
+        request: (name: string, options: unknown, callback?: (lock: unknown) => unknown) => {
+          const run = typeof options === 'function' ? options : callback;
+          return Promise.resolve(run?.(name === 'fvoci:tab:tab-1' ? null : { name }));
+        },
+        query: () => Promise.resolve({ held: [{ name: 'fvoci:tab:tab-1' }], pending: [] }),
+      },
+    });
+    try {
+      vi.resetModules();
+      const fresh = await import('$lib/features/documents/drafts');
+      const { me: freshMe } = await import('$lib/me.svelte');
+      await new Promise((r) => setTimeout(r, 0));
+      freshMe.userId = 'user-a';
+      fresh.storeDraft('doc-10', { ...draft, title: '복제한 탭' });
+      freshMe.userId = '';
+      expect(window.localStorage.getItem(`${prefix}:tab:tab-1`)).toContain('원래 탭');
+      expect(window.sessionStorage.getItem('fvoci:tab')).not.toBe('tab-1');
+    } finally {
+      Reflect.deleteProperty(navigator, 'locks');
+    }
+  });
+});

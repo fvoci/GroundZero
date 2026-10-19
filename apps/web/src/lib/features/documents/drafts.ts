@@ -113,6 +113,35 @@ function holdTabLock(): void {
 }
 
 /**
+ * 페이지를 열 때 이 탭 id의 잠금을 바로 잡는다. 탭 복제는 sessionStorage까지 복사하므로, 이미 살아 있는 탭이 이
+ * id를 쥐고 있으면 이 탭은 새 id를 쓴다(같은 id면 두 탭이 같은 초안 키를 덮어쓴다). 초안 키는 로그인 정보를 받은
+ * 뒤에야 생기므로 그 전에 끝난다.
+ */
+function claimTab(): void {
+  const locks = tabLocks();
+  if (locks === undefined || typeof window === 'undefined') return;
+  holdingLock = true;
+  void locks
+    .request(`fvoci:tab:${tabId()}`, { ifAvailable: true }, (lock) => {
+      if (lock !== null) return new Promise<never>(() => undefined);
+      const fresh = crypto.randomUUID();
+      try {
+        window.sessionStorage.setItem('fvoci:tab', fresh);
+      } catch {
+        memoryTab = fresh;
+      }
+      void locks
+        .request(`fvoci:tab:${fresh}`, () => new Promise<never>(() => undefined))
+        .catch(() => undefined);
+      return undefined;
+    })
+    .catch(() => {
+      holdingLock = false;
+    });
+}
+claimTab();
+
+/**
  * 닫힌 탭이 남긴 이 문서의 초안(과 탭 구분이 없던 키의 것)을 고르게 할 줄로 넘겨받는다. 살아 있는 탭의 것은 건드리지
  * 않는다. 탭이 살아 있는지 알 수 없는 브라우저(Web Locks 없음)에서는 아무것도 넘겨받지 않는다. 넘겨받은 수.
  */
