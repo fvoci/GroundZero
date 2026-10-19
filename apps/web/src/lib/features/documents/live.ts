@@ -73,3 +73,51 @@ export function closeLive(session: LiveSession): void {
   session.provider.destroy();
   session.document.destroy();
 }
+
+/** 맞춰짐 알림을 주는 쪽(y-websocket의 provider). */
+export interface SyncSource {
+  readonly synced: boolean;
+  on(event: 'sync', listener: (synced: boolean) => void): void;
+  off(event: 'sync', listener: (synced: boolean) => void): void;
+}
+
+/** 서버와 맞춰지지 않은 채 이 브라우저에서 고친 것이 있는지 따라간다. */
+export interface UnsyncedWatch {
+  /** 서버에 아직 닿지 않았을 수 있는 내 편집이 있다. */
+  readonly dirty: boolean;
+  stop(): void;
+}
+
+/**
+ * 연결이 끊겼거나 아직 맞춰지지 않은 동안 내가 고치면 `onDirty`, 다시 맞춰지면(서버가 받음) `onSynced`를 부른다.
+ * 그 사이의 입력을 초안으로 남겨, 실시간이 꺼지거나 권한이 바뀌거나 새로고침해도 사라지지 않게 하는 데 쓴다.
+ * 남이 보낸 변경(origin이 provider)은 세지 않는다.
+ */
+export function watchUnsynced(
+  document: Y.Doc,
+  provider: SyncSource,
+  handlers: { onDirty: () => void; onSynced: () => void },
+): UnsyncedWatch {
+  let dirty = false;
+  const onUpdate = (_update: Uint8Array, origin: unknown): void => {
+    if (origin === provider || provider.synced) return;
+    dirty = true;
+    handlers.onDirty();
+  };
+  const onSync = (synced: boolean): void => {
+    if (!synced || !dirty) return;
+    dirty = false;
+    handlers.onSynced();
+  };
+  document.on('update', onUpdate);
+  provider.on('sync', onSync);
+  return {
+    get dirty() {
+      return dirty;
+    },
+    stop() {
+      document.off('update', onUpdate);
+      provider.off('sync', onSync);
+    },
+  };
+}

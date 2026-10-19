@@ -1,21 +1,27 @@
 <script lang="ts">
-  // 실시간 공동 편집 화면(D-27 워크스페이스별 ON, D-70). 본문은 Yjs로 바로 함께 고치고(저장 단추·초안 없음),
+  // 실시간 공동 편집 화면(D-27 워크스페이스별 ON, D-70). 본문은 Yjs로 바로 함께 고치고(저장 단추 없음),
   // 서버가 조용할 때·마지막 사람이 나갈 때 리비전을 남긴다. 제목은 저장 API로 따로 바꾼다.
+  // 서버와 맞춰지지 않은 동안(끊김) 고친 본문은 이 사용자의 초안으로 남겨, 실시간이 꺼지거나 권한이 바뀌거나
+  // 새로고침해도 사라지지 않게 한다. 다시 열 때 서버 내용과 다르면 내 노트로 보존할지 묻는다(실시간 문서에 섞지 않음).
+  import { formatInstant } from '$lib/display';
   import { onDestroy, untrack } from 'svelte';
 
-  import type { DocumentView } from '$lib/api/client';
+  import type { DocNode, DocumentView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
+  import { router, standalonePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
 
-  import type { LiveSession, LiveStatus, LiveStop } from './live';
-  import { closeLive, colorFor, openLive, stopFor } from './live';
+  import type { Draft } from './drafts';
+  import { canonicalJson, clearDraft, loadDraft, storeDraft } from './drafts';
+  import type { LiveSession, LiveStatus, LiveStop, UnsyncedWatch } from './live';
+  import { closeLive, colorFor, openLive, stopFor, watchUnsynced } from './live';
   import TiptapEditor from './TiptapEditor.svelte';
 
   interface Props {
@@ -41,6 +47,45 @@
   let titleMessage = $state<string | undefined>(undefined);
   let savingTitle = $state(false);
 
+  // 끊긴 동안의 편집을 초안으로 남긴다. 다시 열 때 찾은 초안은 사용자가 고를 때까지 지키고 덮지 않는다.
+  let latest: DocNode | undefined;
+  let watch: UnsyncedWatch | undefined;
+  const earlier = untrack(() => loadDraft(start.id));
+  let blocked = earlier !== undefined;
+  let checkedEarlier = false;
+  let found = $state<Draft | undefined>(undefined);
+  let foundMessage = $state<string | undefined>(undefined);
+  let keepingFound = $state(false);
+  let foundRequest: { note: string; save: string } | undefined;
+
+  function keepDraft(): void {
+    if (latest === undefined || blocked) return;
+    storeDraft(start.id, {
+      baseRevision: start.revision,
+      title,
+      body: latest,
+      savedAt: new Date().toISOString(),
+    });
+  }
+
+  /** 멈추거나 닫기 전에, 서버와 맞춰지지 않은 편집이 있으면 남긴다. */
+  function keepIfDirty(): void {
+    if (watch?.dirty === true) keepDraft();
+  }
+
+  /** 처음 맞춰진 뒤 지난번 초안이 지금 내용과 같으면 지우고, 다르면 고르게 한다. */
+  function compareEarlier(): void {
+    if (checkedEarlier) return;
+    checkedEarlier = true;
+    if (earlier === undefined) return;
+    if (latest !== undefined && canonicalJson(earlier.body) === canonicalJson(latest)) {
+      clearDraft(start.id);
+      blocked = false;
+    } else {
+      found = earlier;
+    }
+  }
+
   function open(): void {
     const next = openLive(
       start.id,
@@ -50,6 +95,19 @@
       },
       start.can_edit,
     );
+    watch?.stop();
+    watch = watchUnsynced(next.document, next.provider, {
+      // 편집기가 본문을 넘긴 뒤에 남긴다.
+      onDirty: () => {
+        queueMicrotask(keepDraft);
+      },
+      onSynced: () => {
+        if (!blocked) clearDraft(start.id);
+      },
+    });
+    next.provider.on('sync', (synced: boolean) => {
+      if (synced) setTimeout(compareEarlier, 0);
+    });
     next.provider.on('status', (event: { status: LiveStatus }) => {
       status = event.status;
     });
@@ -59,6 +117,7 @@
         if (event?.code === 1006) void checkRefusal(next);
         return;
       }
+      keepIfDirty();
       next.provider.disconnect();
       if (stop === 'reload') {
         // 문서가 다른 길(복원 등)로 바뀌었다. 옛 내용을 섞지 않도록 새 문서로 다시 연다.
@@ -82,11 +141,13 @@
     try {
       const doc = await api.document(start.id);
       if (session?.provider !== current.provider || doc.realtime) return;
+      keepIfDirty();
       current.provider.disconnect();
       onrealtimeoff?.();
     } catch (e: unknown) {
       if (session?.provider !== current.provider || !(e instanceof ApiError)) return;
       if (e.status === 401 || e.status === 403 || e.status === 404) {
+        keepIfDirty();
         current.provider.disconnect();
         stopped = 'denied';
       }
@@ -96,6 +157,7 @@
   }
 
   function restart(): void {
+    keepIfDirty();
     if (stopped === 'denied' && onreload !== undefined) {
       onreload();
       return;
@@ -109,8 +171,46 @@
 
   open();
   onDestroy(() => {
+    keepIfDirty();
+    watch?.stop();
     if (session !== undefined) closeLive(session);
   });
+
+  /** 지난번 초안을 내 노트로 보존한다(실시간 문서에는 섞지 않는다). 다시 눌러도 같은 노트가 된다. */
+  async function keepFoundAsNote(): Promise<void> {
+    const draft = found;
+    if (draft === undefined) return;
+    keepingFound = true;
+    foundMessage = undefined;
+    foundRequest ??= { note: newRequestId(), save: newRequestId() };
+    const copyTitle = m.documents_draft_copy_title({
+      title: draft.title.trim() === '' ? start.title : draft.title.trim(),
+    });
+    try {
+      const created = await api.createNote(foundRequest.note, copyTitle);
+      const saved = await api.saveDocument(created.id, {
+        requestId: foundRequest.save,
+        baseRevision: created.revision,
+        title: copyTitle,
+        body: draft.body,
+      });
+      if (saved.kind === 'conflict') throw new Error('copy conflicted');
+      clearDraft(start.id);
+      found = undefined;
+      blocked = false;
+      router.navigate(standalonePath(created.id));
+    } catch (e: unknown) {
+      foundMessage = errorText(e, m.documents_copy_failed());
+    } finally {
+      keepingFound = false;
+    }
+  }
+
+  function discardFound(): void {
+    clearDraft(start.id);
+    found = undefined;
+    blocked = false;
+  }
 
   /** 본문 첨부로 올리고 넣을 주소를 돌려준다(일반 편집과 같다). */
   async function insertFile(file: File): Promise<{ href: string; name: string; image: boolean }> {
@@ -217,6 +317,24 @@
       >
     {/if}
   </form>
+  {#if found !== undefined}
+    <div
+      class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
+      role="region"
+      aria-label={m.documents_draft_region()}
+    >
+      <span>{m.documents_live_offline_found({ time: formatInstant(found.savedAt) })}</span>
+      <Button size="sm" disabled={keepingFound} onclick={() => void keepFoundAsNote()}
+        >{m.documents_conflict_keep_copy()}</Button
+      >
+      <Button size="sm" variant="ghost" disabled={keepingFound} onclick={discardFound}
+        >{m.documents_draft_discard()}</Button
+      >
+    </div>
+    {#if foundMessage !== undefined}<p role="alert" class="text-sm text-destructive">
+        {foundMessage}
+      </p>{/if}
+  {/if}
   {#if titleMessage !== undefined}<p role="alert" class="text-sm text-destructive">
       {titleMessage}
     </p>{/if}
@@ -229,6 +347,9 @@
         {references}
         insertFile={start.can_edit ? insertFile : undefined}
         collab={session}
+        onchange={(body: DocNode) => {
+          latest = body;
+        }}
       />
     {/key}
   {/if}
