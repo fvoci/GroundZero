@@ -990,7 +990,23 @@ async fn pending_index_tasks_are_tracked_until_they_succeed() {
     );
     let before = posts();
     set_all("failed");
-    fake.lock().unwrap().new_status = "succeeded".into();
+    // Meilisearch가 느리다(새 작업이 대기에 머문다). 하나씩 보낼 때 건마다 기다리면 묶음 크기만큼 길어져 꺼낸 행의 표시
+    // 시간(2분)을 넘길 수 있다. 하나씩 보낸 것은 기다리지 않고 작업 번호를 남겨 다음에 확인한다.
+    fake.lock().unwrap().new_status = "enqueued".into();
+    let resend = std::time::Instant::now();
+    drain(&state.db, search, None).await.unwrap();
+    assert!(
+        resend.elapsed() < Duration::from_secs(4),
+        "one-by-one resends waited on each task: {:?}",
+        resend.elapsed()
+    );
+    assert!(task(other_id.clone()).await.is_some());
+    assert_ne!(
+        task(other_id.clone()).await,
+        task(third_id.clone()).await,
+        "each resent row has its own task"
+    );
+    set_all("succeeded");
     drain(&state.db, search, None).await.unwrap();
     let resent: Vec<usize> = fake.lock().unwrap().submitted[before..]
         .iter()

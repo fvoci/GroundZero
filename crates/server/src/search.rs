@@ -30,6 +30,8 @@ const INDEX: &str = "fvoci";
 const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 /// 한 번에 꺼내는 대기열 수.
 const BATCH: i32 = 200;
+/// 보낸 작업을 그 자리에서 확인하는 횟수(50ms 간격, 최대 5초).
+const WAIT_POLLS: u32 = 100;
 
 /// 색인 작업의 결과.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -143,9 +145,9 @@ impl SearchClient {
         })
     }
 
-    /// 비동기 작업을 잠깐(최대 5초) 기다린다. 그 안에 끝나지 않으면 `Pending`(작업 번호)으로 돌려주고, 부르는 쪽이
-    /// 그 번호를 남겨 다음에 확인한다(성공을 확인하기 전에는 끝난 것으로 보지 않는다).
-    async fn wait(&self, response: reqwest::Response) -> Result<TaskOutcome, AppError> {
+    /// 비동기 작업을 `polls`번(50ms 간격) 확인하며 기다린다. 그 안에 끝나지 않으면 `Pending`(작업 번호)으로 돌려주고,
+    /// 부르는 쪽이 그 번호를 남겨 다음에 확인한다(성공을 확인하기 전에는 끝난 것으로 보지 않는다).
+    async fn wait(&self, response: reqwest::Response, polls: u32) -> Result<TaskOutcome, AppError> {
         let body: Value = response
             .error_for_status()
             .map_err(search_error)?
@@ -155,7 +157,7 @@ impl SearchClient {
         let Some(task) = body.get("taskUid").and_then(Value::as_u64) else {
             return Ok(TaskOutcome::Succeeded);
         };
-        for _ in 0..100 {
+        for _ in 0..polls {
             match self.task_outcome(task).await? {
                 TaskOutcome::Pending(_) => tokio::time::sleep(Duration::from_millis(50)).await,
                 done => return Ok(done),
@@ -166,7 +168,7 @@ impl SearchClient {
 
     /// 설정·색인 만들기처럼 이어지는 작업이 순서대로 처리되기만 하면 되는 것: 실패만 오류로.
     async fn wait_queued(&self, response: reqwest::Response) -> Result<(), AppError> {
-        match self.wait(response).await? {
+        match self.wait(response, WAIT_POLLS).await? {
             TaskOutcome::Failed(why) => Err(AppError::Config(why)),
             TaskOutcome::Succeeded | TaskOutcome::Pending(_) => Ok(()),
         }
@@ -210,7 +212,7 @@ impl SearchClient {
         Ok(created)
     }
 
-    async fn upsert(&self, docs: &[IndexDoc]) -> Result<TaskOutcome, AppError> {
+    async fn upsert(&self, docs: &[IndexDoc], polls: u32) -> Result<TaskOutcome, AppError> {
         if docs.is_empty() {
             return Ok(TaskOutcome::Succeeded);
         }
@@ -223,7 +225,7 @@ impl SearchClient {
             .send()
             .await
             .map_err(search_error)?;
-        self.wait(response).await
+        self.wait(response, polls).await
     }
 
     async fn delete(&self, uids: &[String]) -> Result<TaskOutcome, AppError> {
@@ -239,7 +241,7 @@ impl SearchClient {
             .send()
             .await
             .map_err(search_error)?;
-        self.wait(response).await
+        self.wait(response, WAIT_POLLS).await
     }
 
     /// 거친 범위로 찾는다. 결과는 반드시 접근 함수로 다시 거른다.
@@ -361,7 +363,7 @@ struct Submitted {
 async fn upsert_each(client: &SearchClient, docs: &[IndexDoc], together: bool) -> Submitted {
     let uids = || docs.iter().map(|d| d.uid.clone()).collect::<Vec<_>>();
     let batch = if together {
-        client.upsert(docs).await
+        client.upsert(docs, WAIT_POLLS).await
     } else {
         Ok(TaskOutcome::Failed("sent one by one".into()))
     };
@@ -382,7 +384,8 @@ async fn upsert_each(client: &SearchClient, docs: &[IndexDoc], together: bool) -
     }
     let mut out = Submitted::default();
     for doc in docs {
-        match client.upsert(std::slice::from_ref(doc)).await {
+        // 하나씩 보낸 것은 기다리지 않는다(묶음 크기만큼 길어지면 꺼낸 행의 표시 시간을 넘긴다). 작업 번호를 남겨 다음에 확인한다.
+        match client.upsert(std::slice::from_ref(doc), 0).await {
             Ok(TaskOutcome::Succeeded) => out.done.push(doc.uid.clone()),
             Ok(TaskOutcome::Pending(task)) => out.pending.push((task, vec![doc.uid.clone()])),
             Ok(TaskOutcome::Failed(_)) => {
