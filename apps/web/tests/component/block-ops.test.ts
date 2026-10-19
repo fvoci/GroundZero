@@ -6,6 +6,8 @@ import {
   blockAt,
   blockAtHit,
   blockStartingAt,
+  handleOffset,
+  HANDLE_ROW,
   mapBlockStart,
   mapBlockStartThrough,
   runBlockOp,
@@ -302,5 +304,16 @@ describe('several transactions in one moment', () => {
     const later = e.state.tr.insertText('4', 1);
     e.view.dispatch(later);
     expect(mapBlockStartThrough([drop, later], moved)).toBeUndefined();
+  });
+});
+
+describe('handle placement', () => {
+  it('centres the handle on blocks shorter than it and keeps it at the top of taller ones', () => {
+    // 1px 구분선: 손잡이 가운데가 선 가운데에 온다(손잡이로 가는 길이 선의 아래 여백을 지나지 않게).
+    const top = 100;
+    const offset = handleOffset(1);
+    expect(top + offset + HANDLE_ROW / 2).toBe(top + 0.5);
+    expect(handleOffset(HANDLE_ROW)).toBe(0);
+    expect(handleOffset(120)).toBe(0);
   });
 });

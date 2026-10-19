@@ -17,6 +17,7 @@
     blockAtHit,
     blockStartingAt,
     focusBlock,
+    handleOffset,
     mapBlockStartThrough,
     runBlockOp,
     selectBlock,
@@ -46,6 +47,8 @@
   /** 손잡이를 누른 순간부터 메뉴가 닫힐 때까지 고정한 블록의 시작(터치에서는 누르면 편집기 초점이 빠진다). */
   let pinnedFrom = $state<number | undefined>(undefined);
   let menuOpen = $state(false);
+  /** 지금 보이는 손잡이 줄. */
+  let controls = $state<HTMLDivElement | undefined>(undefined);
   let dragging: { slice: unknown; move: boolean } | undefined;
   /** 손잡이를 마지막으로 누른 것이 마우스인지(마우스면 클릭으로 메뉴를 연다). */
   let pressedWithMouse = false;
@@ -74,7 +77,8 @@
     if (block === undefined) return undefined;
     const dom = editor.view.nodeDOM(block.from);
     if (!(dom instanceof HTMLElement)) return undefined;
-    const top = dom.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    const box = dom.getBoundingClientRect();
+    const top = box.top - container.getBoundingClientRect().top + handleOffset(box.height);
     return { block, top };
   });
 
@@ -92,6 +96,12 @@
   $effect(() => {
     const view = editor.view;
     const onMove = (event: MouseEvent): void => {
+      // 보이는 손잡이 줄 높이 안에서는 그 블록을 놓지 않는다. 짧은 블록(구분선)에서 손잡이로 가는 길은 블록
+      // 밖 여백을 지나므로, 다시 찾으면 다음 블록으로 바뀌어 손잡이가 달아난다(누를 때 고정하면 이미 늦다).
+      if (hoverFrom !== undefined && controls !== undefined) {
+        const band = controls.getBoundingClientRect();
+        if (event.clientY >= band.top && event.clientY <= band.bottom) return;
+      }
       const rect = view.dom.getBoundingClientRect();
       if (event.clientY < rect.top || event.clientY > rect.bottom) {
         hoverFrom = undefined;
@@ -197,6 +207,7 @@
 {#if target !== undefined}
   {@const current = target}
   <div
+    bind:this={controls}
     class="absolute left-0 z-10 flex h-7 -translate-x-1 items-center gap-0.5 text-muted-foreground"
     style:top={`${String(current.top)}px`}
     data-testid="block-controls"

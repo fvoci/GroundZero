@@ -198,6 +198,17 @@ export function blockAtHit(
   return blockAt(doc, hit.pos);
 }
 
+/** 블록 손잡이 줄의 높이(px, BlockControls의 h-7). */
+export const HANDLE_ROW = 28;
+
+/**
+ * 손잡이 줄을 블록 위쪽에서 얼마나 옮길지(px). 손잡이보다 낮은 블록(1px 구분선 등)은 손잡이 가운데를 블록
+ * 가운데에 맞춘다. 위쪽에 맞추면 손잡이가 블록 아래 여백에 걸려, 손잡이로 가는 길에 다음 블록을 가리키게 된다.
+ */
+export function handleOffset(blockHeight: number): number {
+  return blockHeight < HANDLE_ROW ? (blockHeight - HANDLE_ROW) / 2 : 0;
+}
+
 type Op = 'up' | 'down' | 'duplicate' | 'delete' | 'below';
 
 /**
