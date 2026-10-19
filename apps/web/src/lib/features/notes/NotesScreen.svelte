@@ -47,8 +47,12 @@
       }}
       canWrite={true}
       onmove={async (id: string, move: TreeMove) => {
-        await api.setParent(id, move.parentId, move.beforeId);
-        notes = await api.myNotes();
+        // 실패해도(권한 철회·동시 변경) 최신 목록을 다시 읽는다.
+        try {
+          await api.setParent(id, move.parentId, move.beforeId);
+        } finally {
+          notes = await api.myNotes();
+        }
       }}
       oncreatechild={async (parentId: string) => {
         const note = await api.createNote(newRequestId(), m.notes_new_note_title(), parentId);

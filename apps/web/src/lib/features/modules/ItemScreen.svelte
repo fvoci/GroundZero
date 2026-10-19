@@ -342,8 +342,12 @@
           }}
           canWrite={canEdit}
           onmove={async (id: string, move: TreeMove) => {
-            await api.setParent(id, move.parentId, move.beforeId);
-            docs = await api.itemDocuments(current.id);
+            // 실패해도(권한 철회·동시 변경) 최신 목록을 다시 읽는다.
+            try {
+              await api.setParent(id, move.parentId, move.beforeId);
+            } finally {
+              docs = await api.itemDocuments(current.id);
+            }
           }}
           oncreatechild={async (parentId: string) => {
             const doc = await api.createItemDocument(

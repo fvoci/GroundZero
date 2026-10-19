@@ -6,6 +6,7 @@
   import { SvelteSet } from 'svelte/reactivity';
 
   import type { SummaryView } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
@@ -31,6 +32,7 @@
   let root: HTMLUListElement | undefined = $state();
   let busy = $state(false);
   let status = $state('');
+  let failure = $state<string | undefined>(undefined);
 
   const rows = $derived(visibleRows(docs, collapsed));
   const current = $derived(rows.find((r) => r.doc.id === focusId) ?? rows[0]);
@@ -67,9 +69,13 @@
     busy = true;
     try {
       if (action === 'indent' && move.parentId !== null) toggle(move.parentId, true);
+      failure = undefined;
       await onmove(id, move);
       status = actionLabel(action);
       await focusRow(id);
+    } catch (e: unknown) {
+      // 트리는 서버가 받은 뒤에만 바뀌므로 그대로다. 부르는 쪽이 최신 목록을 다시 읽는다(권한 철회·동시 변경).
+      failure = errorText(e, m.documents_tree_move_failed());
     } finally {
       busy = false;
     }
@@ -80,7 +86,10 @@
     busy = true;
     try {
       toggle(id, true);
+      failure = undefined;
       await oncreatechild(id);
+    } catch (e: unknown) {
+      failure = errorText(e, m.documents_tree_create_failed());
     } finally {
       busy = false;
     }
@@ -258,6 +267,9 @@
     <p class="text-xs text-muted-foreground">
       {m.documents_tree_keyboard_hint()}
     </p>
+  {/if}
+  {#if failure !== undefined}
+    <p role="alert" class="text-sm text-destructive">{failure}</p>
   {/if}
   <p class="sr-only" aria-live="polite">{status}</p>
 {/if}
