@@ -1747,3 +1747,104 @@ async fn drop_writer_race(writer: tokio::task::JoinHandle<()>, owner: &sqlx::PgP
         .unwrap();
     writer.await.unwrap();
 }
+
+/// 검토(3차) 2번: 복원 기준을 방이 방금 남긴 리비전으로 옮기는 것은 그 실시간 내용을 보던 사람(방에 쓰기 연결이
+/// 있는 사람)의 복원뿐이다. 방에 없는 사람(다른 사람의 실시간 편집을 못 본 사람)의 복원은 기존처럼 충돌로 알린다.
+#[tokio::test]
+async fn a_restore_from_outside_the_room_still_conflicts_with_live_edits() {
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "방 밖 복원").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let doc = common::create_doc(&app, &admin, &ws, "방 밖 복원 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+    let mut b = connect(addr, Some(&writer), &id, true).await.unwrap();
+    b.paragraph("다른 사람의 실시간 문단").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    // 관리자는 방에 없다(그 문단을 보지 못했다). 보던 리비전 1을 기준으로 되돌린다.
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{id}/revisions/1/restore"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "base_revision": doc["revision"] })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
+    assert!(
+        r.json["current"]["body"]
+            .to_string()
+            .contains("다른 사람의 실시간 문단")
+    );
+    b.close().await;
+}
+
+/// 검토(3차) 1번: 방은 이번에 실제로 남긴 리비전만 알린다. 실시간 본문이 DB 본문과 같아 쓰지 않았으면(그 사이 제목만
+/// 바뀐 리비전이 있어도) 리비전을 알리지 않는다(알리면 복원이 그 제목 변경을 충돌 없이 덮는다).
+#[tokio::test]
+async fn a_room_reports_only_a_revision_it_wrote() {
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "쓰지 않은 리비전").await;
+    let doc = common::create_doc(&app, &admin, &ws, "쓰지 않은 리비전 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+    let mut a = connect(addr, Some(&admin), &id, true).await.unwrap();
+    // 고쳤다가 되돌려 방은 바뀐 것으로 알지만 본문은 DB와 같다.
+    a.paragraph("곧 지울 문단").await;
+    a.edit(|txn, fragment| {
+        let last = fragment.len(txn) - 1;
+        fragment.remove_range(txn, last, 1);
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    // 그 사이 제목만 바뀐 리비전 2가 생긴다(실시간 중 저장은 제목만).
+    let current = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    let saved = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "base_revision": current["revision"],
+                     "title": "바뀐 제목", "body": current["body"] }),
+        ),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+    assert_eq!(saved.json["revision"], 2);
+
+    let doc_id = fvoci_server::ids::DocumentId(id.parse().unwrap());
+    assert_eq!(state.collab.snapshot_document(doc_id, admin.id).await, None);
+    a.close().await;
+}

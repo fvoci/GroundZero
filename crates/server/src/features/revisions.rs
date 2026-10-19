@@ -241,7 +241,7 @@ pub async fn restore(
     if can_write {
         // 화면이 보던 리비전 바로 다음이 방금 그 화면의 실시간 내용으로 남긴 리비전뿐이면 그것을 기준으로 삼는다(화면은
         // 그 리비전 번호를 모른다). 그 밖에 기준이 지났으면 아래 복원이 충돌로 알린다.
-        let written = state.collab.snapshot_document(id).await;
+        let written = state.collab.snapshot_document(id, user).await;
         if current == Some(base) && written == Some(base + 1) {
             base += 1;
         }
