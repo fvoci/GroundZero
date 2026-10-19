@@ -27,5 +27,10 @@
       }
     }
   ],
-  "checklists_expand_hint": "Press Expand to preview the items."
+  "checklists_expand_hint": "Press Expand to preview the items.",
+  "checklists_edit": "Edit",
+  "checklists_edit_aria": "Edit {text}",
+  "checklists_edit_label": "New text for {text}",
+  "checklists_save": "Save",
+  "checklists_cancel": "Cancel"
 }

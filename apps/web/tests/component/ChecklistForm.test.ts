@@ -10,6 +10,7 @@ function handlers() {
   return {
     onadd: vi.fn<(items: NewChecklistEntry[]) => Promise<void>>(() => Promise.resolve()),
     ontoggle: vi.fn<(id: string, done: boolean) => Promise<void>>(() => Promise.resolve()),
+    onrename: vi.fn<(id: string, text: string) => Promise<void>>(() => Promise.resolve()),
     onremove: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   };
 }
@@ -70,6 +71,35 @@ describe('ChecklistForm (D-30, editor-less screens)', () => {
     expect(ids[2]?.[1]).toBe(ids[0]?.[1]);
   });
 
+  // 저장된 항목의 문구 고치기(기존 PUT, 완료 여부는 부모가 그대로 보낸다). 실패하면 입력을 남기고 알린다. Esc는 취소.
+  it('renames an item, keeps the input when saving fails, and cancels with Escape', async () => {
+    const h = handlers();
+    h.onrename.mockRejectedValueOnce(new Error('network'));
+    render(ChecklistForm, {
+      idPrefix: 't',
+      items: [{ id: 'a', text: '초안 작성', done: true }],
+      canEdit: true,
+      ...h,
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '초안 작성 고치기' }));
+    const input = screen.getByLabelText('초안 작성의 새 문구');
+    await fireEvent.input(input, { target: { value: '  초안 다시 작성 ' } });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    expect(h.onrename).toHaveBeenCalledWith('a', '초안 다시 작성');
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByLabelText('초안 작성의 새 문구')).toHaveValue('  초안 다시 작성 ');
+
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    expect(h.onrename).toHaveBeenCalledTimes(2);
+    await screen.findByRole('button', { name: '초안 작성 고치기' });
+    expect(screen.queryByLabelText('초안 작성의 새 문구')).toBeNull();
+
+    await fireEvent.click(screen.getByRole('button', { name: '초안 작성 고치기' }));
+    await fireEvent.keyDown(screen.getByLabelText('초안 작성의 새 문구'), { key: 'Escape' });
+    expect(screen.queryByLabelText('초안 작성의 새 문구')).toBeNull();
+    expect(h.onrename).toHaveBeenCalledTimes(2);
+  });
+
   it('is read-only without write access', () => {
     const h = handlers();
     render(ChecklistForm, {
@@ -80,6 +110,7 @@ describe('ChecklistForm (D-30, editor-less screens)', () => {
     });
     expect(screen.getByRole('checkbox', { name: '미완료 항목: 초안 작성' })).toBeDisabled();
     expect(screen.queryByLabelText('새 항목')).toBeNull();
+    expect(screen.queryByRole('button', { name: '초안 작성 고치기' })).toBeNull();
   });
 });
 

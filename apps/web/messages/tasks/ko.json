@@ -218,5 +218,12 @@
   "tasks_move_to_done": "완료로",
   "tasks_moved_menu": "{title}: 옮겼습니다({status}).",
   "tasks_quick_add": "업무 추가",
-  "tasks_quick_add_label": "{status}에 업무 추가"
+  "tasks_quick_add_label": "{status}에 업무 추가",
+  "tasks_parent": "상위 업무",
+  "tasks_parent_top": "없음(최상위 업무)",
+  "tasks_parent_choose": "상위 업무 고르기",
+  "tasks_parent_change": "바꾸기",
+  "tasks_parent_changed": "상위 업무를 바꿨습니다.",
+  "tasks_parent_failed": "상위 업무를 바꾸지 못했습니다.",
+  "tasks_parent_has_subtasks": "하위 업무가 있는 업무는 다른 업무 아래로 옮길 수 없습니다."
 }

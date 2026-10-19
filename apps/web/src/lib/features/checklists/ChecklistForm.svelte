@@ -21,10 +21,30 @@
     canEdit: boolean;
     onadd: (items: NewChecklistEntry[]) => Promise<void>;
     ontoggle: (id: string, done: boolean) => Promise<void>;
+    /** 항목 문구 바꾸기(완료 여부는 그대로). */
+    onrename: (id: string, text: string) => Promise<void>;
     onremove: (id: string) => Promise<void>;
   }
 
-  const { idPrefix, items, canEdit, onadd, ontoggle, onremove }: Props = $props();
+  const { idPrefix, items, canEdit, onadd, ontoggle, onrename, onremove }: Props = $props();
+
+  /** 문구를 고치는 항목과 입력. */
+  let renaming = $state<{ id: string; text: string } | undefined>(undefined);
+
+  function saveRename(): void {
+    const current = renaming;
+    if (current === undefined) return;
+    const text = current.text.trim();
+    const before = items.find((i) => i.id === current.id)?.text;
+    if (text === '' || text === before) {
+      renaming = undefined;
+      return;
+    }
+    void guard(async () => {
+      await onrename(current.id, text);
+      renaming = undefined;
+    });
+  }
 
   let draft = $state('');
   let pasteOpen = $state(false);
@@ -105,15 +125,56 @@
             ? m.checklists_item_done_aria({ text: item.text })
             : m.checklists_item_open_aria({ text: item.text })}
         />
-        <Label
-          for={`${idPrefix}-check-${item.id}`}
-          class={item.done ? 'text-muted-foreground line-through' : ''}>{item.text}</Label
-        >
-        {#if canEdit}
+        {#if renaming?.id === item.id}
+          {@const editing = renaming}
+          <form
+            class="flex flex-1 items-center gap-2"
+            onsubmit={(event) => {
+              event.preventDefault();
+              saveRename();
+            }}
+          >
+            <Input
+              bind:value={editing.text}
+              aria-label={m.checklists_edit_label({ text: item.text })}
+              autocomplete="off"
+              autofocus
+              onkeydown={(e: KeyboardEvent) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  renaming = undefined;
+                }
+              }}
+            />
+            <Button type="submit" size="sm" disabled={busy}>{m.checklists_save()}</Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onclick={() => {
+                renaming = undefined;
+              }}>{m.checklists_cancel()}</Button
+            >
+          </form>
+        {:else}
+          <Label
+            for={`${idPrefix}-check-${item.id}`}
+            class={item.done ? 'text-muted-foreground line-through' : ''}>{item.text}</Label
+          >
+        {/if}
+        {#if canEdit && renaming?.id !== item.id}
           <Button
             variant="ghost"
             size="sm"
             class="ml-auto"
+            aria-label={m.checklists_edit_aria({ text: item.text })}
+            disabled={busy}
+            onclick={() => {
+              renaming = { id: item.id, text: item.text };
+            }}>{m.checklists_edit()}</Button
+          >
+          <Button
+            variant="ghost"
+            size="sm"
             aria-label={m.checklists_delete_aria({ text: item.text })}
             disabled={busy}
             onclick={() => void guard(() => onremove(item.id))}>{m.checklists_delete()}</Button

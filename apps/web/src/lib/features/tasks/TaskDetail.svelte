@@ -75,6 +75,13 @@
   let pending = $state<Pending | undefined>(undefined);
   let busy = $state(false);
   let predecessorChoice = $state('');
+  // 상위 업무 고르기. 'top'은 최상위로 빼기. 서버 규칙(한 단계, 하위 업무가 있으면 옮길 수 없음)에 맞는 후보만 보인다.
+  const TOP = 'top';
+  let parentChoice = $state('');
+  let parentStatus = $state('');
+  const parentCandidates = $derived(
+    tasks.filter((t) => t.id !== taskId && t.parent_id === null && t.id !== task?.parent_id),
+  );
   const candidates = $derived(
     task === undefined
       ? []
@@ -286,6 +293,20 @@
       onchanged();
     } catch (e: unknown) {
       error = errorText(e, m.tasks_predecessor_failed());
+    }
+  }
+
+  async function changeParent(id: string, parentId: string | null): Promise<void> {
+    error = undefined;
+    parentStatus = '';
+    try {
+      const fresh = await api.setTaskParent(id, parentId);
+      if (task?.version === fresh.version) task = fresh;
+      else refresh(fresh);
+      parentStatus = m.tasks_parent_changed();
+      onchanged();
+    } catch (e: unknown) {
+      error = errorText(e, m.tasks_parent_failed());
     }
   }
 
@@ -529,6 +550,62 @@
       </section>
     {/if}
 
+    <section class="flex flex-col gap-2" aria-labelledby="parent-heading">
+      <h3 id="parent-heading" class="text-sm font-semibold">{m.tasks_parent()}</h3>
+      {#if current.parent_id !== null}
+        {@const parentId = current.parent_id}
+        <button
+          type="button"
+          class="self-start rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          onclick={() => {
+            onopen(parentId);
+          }}>{label(byId.get(parentId)) || m.tasks_hidden_task()}</button
+        >
+      {:else}
+        <p class="text-sm text-muted-foreground">{m.tasks_parent_top()}</p>
+      {/if}
+      {#if canEdit && subtasks.length > 0}
+        <p class="text-sm text-muted-foreground">{m.tasks_parent_has_subtasks()}</p>
+      {:else if canEdit && (parentCandidates.length > 0 || current.parent_id !== null)}
+        <div class="flex flex-wrap items-center gap-2">
+          <span id="parent-choose-label" class="sr-only">{m.tasks_parent_choose()}</span>
+          <Select.Root
+            type="single"
+            value={parentChoice}
+            onValueChange={(v: string) => (parentChoice = v)}
+          >
+            <Select.Trigger aria-labelledby="parent-choose-label"
+              >{parentChoice === ''
+                ? m.tasks_parent_choose()
+                : parentChoice === TOP
+                  ? m.tasks_parent_top()
+                  : label(byId.get(parentChoice))}</Select.Trigger
+            >
+            <Select.Content>
+              {#if current.parent_id !== null}
+                <Select.Item value={TOP} label={m.tasks_parent_top()}
+                  >{m.tasks_parent_top()}</Select.Item
+                >
+              {/if}
+              {#each parentCandidates as c (c.id)}
+                <Select.Item value={c.id} label={label(c)}>{label(c)}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+          <Button
+            size="sm"
+            disabled={parentChoice === ''}
+            onclick={() => {
+              const chosen = parentChoice;
+              parentChoice = '';
+              void changeParent(current.id, chosen === TOP ? null : chosen);
+            }}>{m.tasks_parent_change()}</Button
+          >
+        </div>
+      {/if}
+      <p aria-live="polite" class="text-sm">{parentStatus}</p>
+    </section>
+
     {#if current.parent_id === null}
       <section class="flex flex-col gap-2" aria-labelledby="subtasks-heading">
         <h3 id="subtasks-heading" class="text-sm font-semibold">{m.tasks_subtasks()}</h3>
@@ -675,6 +752,10 @@
       ontoggle={(id: string, done: boolean) => {
         const entry = current.checklist.find((c) => c.id === id);
         return reloadChecklist(api.updateChecklistItem(id, entry?.text ?? '', done));
+      }}
+      onrename={(id: string, text: string) => {
+        const entry = current.checklist.find((c) => c.id === id);
+        return reloadChecklist(api.updateChecklistItem(id, text, entry?.checked ?? false));
       }}
       onremove={(id: string) => reloadChecklist(api.deleteChecklistItem(id))}
     />

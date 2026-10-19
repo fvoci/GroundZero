@@ -225,5 +225,12 @@
   "tasks_move_to_done": "Done",
   "tasks_moved_menu": "{title}: moved ({status}).",
   "tasks_quick_add": "Add task",
-  "tasks_quick_add_label": "Add a task to {status}"
+  "tasks_quick_add_label": "Add a task to {status}",
+  "tasks_parent": "Parent task",
+  "tasks_parent_top": "None (top-level task)",
+  "tasks_parent_choose": "Choose a parent task",
+  "tasks_parent_change": "Change",
+  "tasks_parent_changed": "Changed the parent task.",
+  "tasks_parent_failed": "Couldn't change the parent task.",
+  "tasks_parent_has_subtasks": "A task with subtasks can't go under another task."
 }
