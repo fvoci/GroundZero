@@ -21,7 +21,7 @@ git clone https://github.com/fvoci/GroundZero.git fvoci
 cd fvoci && cp deploy/selfhost.env.example .env && chmod 600 .env
 ```
 
-`.env`의 `change-me`를 모두 서로 다른 긴 임의 값으로 바꾼다(예: `openssl rand -base64 32`). `MEILI_MASTER_KEY`는 16자 이상이어야 한다. `FVOCI_PUBLIC_URL`은 사람들이 여는 주소, `FVOCI_OIDC_*`는 로그인 제공자에 등록한 클라이언트 값이다. 로그인 제공자에는 되돌아올 주소로 `<FVOCI_PUBLIC_URL>/auth/callback`, 로그아웃 뒤 주소로 `<FVOCI_PUBLIC_URL>/*`를 등록한다.
+`.env`의 `change-me`를 모두 서로 다른 긴 임의 값으로 바꾼다(예: `openssl rand -hex 32`. DB 비밀번호는 접속 URL에 그대로 들어가므로 `/`·`+`·`=`가 섞이는 base64 값은 쓰지 않는다). `MEILI_MASTER_KEY`는 16자 이상이어야 한다. `FVOCI_PUBLIC_URL`은 사람들이 여는 주소, `FVOCI_OIDC_*`는 로그인 제공자에 등록한 클라이언트 값이다. 로그인 제공자에는 되돌아올 주소로 `<FVOCI_PUBLIC_URL>/auth/callback`, 로그아웃 뒤 주소로 `<FVOCI_PUBLIC_URL>/*`를 등록한다.
 
 ```bash
 docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d --build --wait
