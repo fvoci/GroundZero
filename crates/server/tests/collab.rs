@@ -1813,7 +1813,10 @@ async fn live_restore_setup(
     String,
     String,
 ) {
-    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    // 권한 재확인(기본 30초)이 시험 중에 돌아 방을 닫지 않게 한다.
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "3600")]))
+            .unwrap();
     let app = common::app(&state);
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
@@ -1920,9 +1923,63 @@ async fn a_failed_checkpoint_stops_the_restore() {
         after["revision"], before["revision"],
         "the restore went ahead"
     );
-    // 방은 닫히지 않았고 편집은 그대로다.
-    assert!(b.text().contains("남겨야 할 실시간 문단"));
+    // 편집은 사라지지 않았다: 새로 붙은 연결이 방에서 그 편집을 받는다.
+    let c = connect(addr, Some(&admin), &id, true).await.unwrap();
+    assert!(c.text().contains("남겨야 할 실시간 문단"), "{}", c.text());
+    c.close().await;
     b.close().await;
+}
+
+/// 검토(남은 항목 ①): 체크포인트에서 DB 본문이 방이 아는 것과 다르면(다른 길로 바뀜) 방은 편집을 리비전으로 남기지 않고
+/// 닫는다. 그때는 보존이 확인되지 않았으므로 복원하지 않는다(전에는 성공으로 보고 복원했다).
+#[tokio::test]
+async fn a_checkpoint_that_finds_the_body_changed_stops_the_restore() {
+    let (_state, app, addr, admin, _writer, _ws, id) =
+        live_restore_setup("다른 길로 바뀐 본문").await;
+    let mut a = connect(addr, Some(&admin), &id, true).await.unwrap();
+    a.paragraph("방에만 있는 문단").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    // 실패 주입: 방을 거치지 않고 새 리비전으로 본문을 바꾼다(방이 모르는 변경).
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    sqlx::query(
+        "WITH d AS (UPDATE fvoci.documents SET body = $2, revision = revision + 1 WHERE id = $1::uuid
+                    RETURNING id, revision, title, schema_version, body)
+         INSERT INTO fvoci.document_revisions (document_id, revision, title, schema_version, body, author, request_id)
+         SELECT id, revision, title, schema_version, body, $3, gen_random_uuid() FROM d",
+    )
+    .bind(&id)
+    .bind(common::doc_body("밖에서 바뀐 본문"))
+    .bind(admin.id.0)
+    .execute(&owner)
+    .await
+    .unwrap();
+    // 방 밖에서 그 리비전을 본 사람이 복원한다(기준은 맞다).
+    let before = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    let r = restore_rev1(&app, &admin, &id, &before["revision"]).await;
+    assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
+    assert!(r.json.get("current").is_none(), "{:?}", r.json);
+    let restored_from: Option<i32> = sqlx::query_scalar(
+        "SELECT restored_from FROM fvoci.document_revisions WHERE document_id = $1::uuid ORDER BY revision DESC LIMIT 1",
+    )
+    .bind(&id)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert_eq!(
+        restored_from, None,
+        "the restore went ahead without the live edits saved"
+    );
+    owner.close().await;
+    a.close().await;
 }
 
 /// 남은 항목 ①(시간 초과): 체크포인트가 정해진 시간 안에 끝나지 않으면 복원하지 않는다. 문서 행을 다른 트랜잭션이 잠가

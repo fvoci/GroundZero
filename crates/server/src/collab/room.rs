@@ -542,6 +542,8 @@ struct Room {
     lineage: String,
     dirty_state: bool,
     dirty_since_snapshot: bool,
+    /// 마지막 리비전 남기기에서 DB 본문이 방이 아는 것과 달라(다른 길로 바뀜) 남기지 않고 닫았는지.
+    changed_outside: bool,
     last_change: Instant,
     /// 마지막으로 DB에 저장한(또는 저장된 것을 불러온) 상태의 스냅숏(v1). 들어오는 연결에 처음 메시지와 함께 보낸다.
     persisted: Option<Vec<u8>>,
@@ -577,6 +579,7 @@ impl Room {
             lineage: String::new(),
             dirty_state: false,
             dirty_since_snapshot: false,
+            changed_outside: false,
             last_change: Instant::now(),
             persisted: None,
             editors: Vec::new(),
@@ -690,8 +693,16 @@ impl Room {
                 // 리비전으로 남기지 않은 편집을 먼저 남긴다. 남겼는지 확인되지 않으면 복원하지 않는다(그 편집은 방에 남는다).
                 // 남겼으면 그 리비전 때문에 화면의 기준이 지나 아래 복원이 충돌로 알린다(사람이 지금 내용을 보고 다시 한다).
                 if self.dirty_since_snapshot {
+                    self.changed_outside = false;
                     match tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot()).await {
-                        Ok(true) => {}
+                        // 남겼다. 본문이 다른 길로 바뀌어 남기지 않고 닫았으면 보존이 확인되지 않은 것이다.
+                        Ok(true) if !self.changed_outside => {}
+                        Ok(true) => {
+                            let _ignored = done.send(Err(AppError::Conflict(
+                                "the document changed outside live editing before its live edits were saved; nothing was restored".into(),
+                            )));
+                            return true;
+                        }
                         Ok(false) => {
                             let _ignored = done.send(Err(AppError::Conflict(
                                 "live edits could not be saved as a revision first; nothing was restored".into(),
@@ -1186,6 +1197,7 @@ impl Room {
                 }
                 Ok(None) => {
                     // 본문이 다른 길로 바뀌었다(복원). 덮어쓰지 않고 다시 열게 한다.
+                    self.changed_outside = true;
                     tracing::warn!(event = "collab.changed_outside", document = %self.doc_id.0, "document changed outside live editing; reopening");
                     for (_, c) in self.conns.drain() {
                         let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
