@@ -600,6 +600,17 @@ async fn live_editing_guards() {
     assert!(demoted.status.is_success(), "{:?}", demoted.json);
     // 쓰기 권한을 잃은 연결은 다음 확인에서 닫힌다(열어 두면 그 사람의 입력이 조용히 버려진다, 감사 반영).
     assert_eq!(a.closed().await, Some(4403));
+    // 끊긴 사이 독자가 된 사람이 편집기로 다시 붙으면(write=1) 붙지 않고 4403(화면이 지금 권한으로 다시 열림).
+    // 읽기로 붙는 것은 된다.
+    assert_eq!(
+        refused_code_with(addr, &w1, &id, "?write=1").await,
+        Some(4403)
+    );
+    connect(addr, Some(&w1), &id, true)
+        .await
+        .unwrap()
+        .close()
+        .await;
     watcher.close().await;
     let mut body = String::new();
     for _ in 0..40 {
@@ -637,7 +648,17 @@ async fn live_editing_guards() {
 
 /// 연결이 곧바로 닫히는지 보고 닫기 코드를 돌려준다(방에 들어가지 못한 경우).
 async fn refused_code(addr: SocketAddr, user: &TestUser, doc: &str) -> Option<u16> {
-    let mut request = format!("ws://{addr}/api/documents/{doc}/collab")
+    refused_code_with(addr, user, doc, "").await
+}
+
+/// 질의 문자열(`?write=1` 등)을 붙여 연결한다.
+async fn refused_code_with(
+    addr: SocketAddr,
+    user: &TestUser,
+    doc: &str,
+    query: &str,
+) -> Option<u16> {
+    let mut request = format!("ws://{addr}/api/documents/{doc}/collab{query}")
         .into_client_request()
         .unwrap();
     request

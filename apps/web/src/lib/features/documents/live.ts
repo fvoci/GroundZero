@@ -54,14 +54,16 @@ export function colorFor(id: string): string {
   return COLORS[hash % COLORS.length] ?? COLORS[0];
 }
 
-export function openLive(documentId: string, user: LiveUser): LiveSession {
+export function openLive(documentId: string, user: LiveUser, write: boolean): LiveSession {
   const document = new Y.Doc();
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const base = `${scheme}://${window.location.host}/api/documents/${encodeURIComponent(documentId)}`;
+  // 편집기로 열면 `write=1`: 그사이 쓸 수 없게 됐으면 서버가 4403으로 닫아 지금 권한으로 다시 열게 한다.
   // 같은 브라우저의 다른 탭끼리 서버를 거치지 않고 주고받지 않게 한다(모든 변경이 서버 검사를 거친다).
   const provider = new WebsocketProvider(base, 'collab', document, {
     maxBackoffTime: 10_000,
     disableBc: true,
+    params: write ? { write: '1' } : {},
   });
   provider.awareness.setLocalStateField('user', user);
   return { document, provider, user };

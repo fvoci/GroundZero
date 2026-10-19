@@ -128,7 +128,8 @@
     } else {
       // 서버 내용과 같아졌으면(문제 내용을 지우는 등) 지난 저장 안내는 더 필요 없다(로그아웃 안내는 남긴다).
       // 복원 제안 중인 초안은 사용자가 고를 때까지 남긴다.
-      if (!signedOut) message = undefined;
+      // 실시간이 켜져 여기서 저장할 수 없다는 안내(사본 단추)는 남긴다.
+      if (!signedOut && !realtimeOn) message = undefined;
       if (restorable === undefined) clearDraft(server.id);
     }
   }

@@ -42,10 +42,14 @@
   let savingTitle = $state(false);
 
   function open(): void {
-    const next = openLive(start.id, {
-      name: me.displayName === '' ? m.documents_live_anonymous() : me.displayName,
-      color: colorFor(me.userId),
-    });
+    const next = openLive(
+      start.id,
+      {
+        name: me.displayName === '' ? m.documents_live_anonymous() : me.displayName,
+        color: colorFor(me.userId),
+      },
+      start.can_edit,
+    );
     next.provider.on('status', (event: { status: LiveStatus }) => {
       status = event.status;
     });
