@@ -48,7 +48,7 @@ services:
       KC_HEALTH_ENABLED: 'true'
     volumes:
       - ./keycloak/realm-test.json:/opt/keycloak/data/import/realm-test.json:ro
-      - kcdata:/opt/keycloak/data/h2
+      - kcdata:/opt/keycloak/data
     ports:
       - '127.0.0.1:${FVOCI_DEV_KEYCLOAK_PORT:-8180}:8080'
     healthcheck:
