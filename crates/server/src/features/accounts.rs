@@ -389,14 +389,15 @@ pub async fn callback(
     let nonce = Nonce::new(nonce);
     let claims = match id_token.claims(&client.id_token_verifier(), &nonce) {
         Ok(claims) => claims,
-        // 토큰은 제공자의 토큰 엔드포인트에서 바로 받았다. 검증에 실패하면 키 회전일 수 있으니 키 목록을 한 번만
-        // 다시 받아 같은 토큰을 다시 검증한다(그래도 실패하면 거부).
-        Err(_) => {
+        // 토큰은 제공자의 토큰 엔드포인트에서 바로 받았다. 서명 검증에 실패하면 키 회전일 수 있으니 키 목록을 한 번만
+        // 다시 받아 같은 토큰을 다시 검증한다(그래도 실패하면 거부). 그 밖의 실패(nonce·기한·대상)는 바로 거부.
+        Err(openidconnect::ClaimsVerificationError::SignatureVerification(_)) => {
             let fresh = client_for(provider, provider.refresh_metadata().await?)();
             id_token
                 .claims(&fresh.id_token_verifier(), &nonce)
                 .map_err(|e| AppError::Oidc(format!("id_token rejected: {e}")))?
         }
+        Err(e) => return Err(AppError::Oidc(format!("id_token rejected: {e}"))),
     };
 
     let subject = claims.subject().as_str().to_owned();
