@@ -92,5 +92,34 @@ describe('restore conflict', () => {
     });
     expect(restore).toHaveBeenCalledTimes(2);
     expect(restore.mock.calls[1]?.[2].baseRevision).toBe(4);
+    expect(restore.mock.calls[1]?.[2].requestId).not.toBe(restore.mock.calls[0]?.[2].requestId);
+  });
+});
+
+// 검토(남은 항목 ①): 충돌 뒤 화면의 문서가 더 새 리비전으로 바뀌면(저장 등) 옛 충돌 응답 대신 그 문서를 기준으로 한다.
+describe('restore conflict, then the page moves on', () => {
+  it('uses the newer page document rather than the older conflict result', async () => {
+    await setLocale('ko', { reload: false });
+    vi.spyOn(api, 'revisions').mockResolvedValue([revisionAt(1, '옛 내용')]);
+    vi.spyOn(api, 'revision').mockResolvedValue(revisionAt(1, '옛 내용'));
+    const restore = vi
+      .spyOn(api, 'restoreRevision')
+      .mockResolvedValueOnce({ kind: 'conflict', current: documentAt(4, '충돌 때 내용') })
+      .mockResolvedValueOnce({ kind: 'restored', document: documentAt(6, '옛 내용') });
+    const view = render(RevisionHistory, {
+      props: { doc: documentAt(3, '지금 화면'), onrestored: () => undefined },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '기록' }));
+    await fireEvent.click(await screen.findByRole('option', { name: /r1/ }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'r1(으)로 복원' }));
+    await waitFor(() => {
+      expect(restore).toHaveBeenCalledTimes(1);
+    });
+    await view.rerender({ doc: documentAt(5, '더 새 화면'), onrestored: () => undefined });
+    await fireEvent.click(await screen.findByRole('button', { name: 'r1(으)로 복원' }));
+    await waitFor(() => {
+      expect(restore).toHaveBeenCalledTimes(2);
+    });
+    expect(restore.mock.calls[1]?.[2].baseRevision).toBe(5);
   });
 });

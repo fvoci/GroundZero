@@ -30,7 +30,8 @@
   // 복원이 충돌하면 서버가 준 지금 문서(그사이 남은 리비전 포함). 비교와 다시 복원의 기준을 이것으로 바꾼다(저절로 다시
   // 보내지 않고, 사람이 그 내용을 보고 다시 누를 때만 이 리비전을 기준으로 보낸다).
   let latest = $state<DocumentView | undefined>(undefined);
-  const current = $derived(latest ?? doc);
+  // 화면의 문서가 그 뒤 더 새 리비전이 되면(저장 등) 그것을 쓴다.
+  const current = $derived(latest !== undefined && latest.revision > doc.revision ? latest : doc);
   // 같은 대상의 재시도는 같은 request_id(중복 리비전 방지).
   let pending: { revision: number; base: number; requestId: string } | undefined;
 
