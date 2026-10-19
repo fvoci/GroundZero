@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  adoptOrphans,
   clearDraft,
   loadDraft,
   loadOffers,
@@ -93,5 +94,49 @@ describe('draft identity', () => {
     expect(withoutApplied([sameBodyOtherTitle, same], current).map((d) => d.title)).toEqual([
       '회의록(고친 제목)',
     ]);
+  });
+});
+
+describe('drafts per tab', () => {
+  it('does not let another tab of the same user overwrite or clear a draft', () => {
+    me.userId = 'user-a';
+    window.sessionStorage.setItem('fvoci:tab', 'tab-1');
+    storeDraft('doc-7', { ...draft, title: '첫 탭' });
+    window.sessionStorage.setItem('fvoci:tab', 'tab-2');
+    storeDraft('doc-7', { ...draft, title: '둘째 탭' });
+    clearDraft('doc-7');
+    window.sessionStorage.setItem('fvoci:tab', 'tab-1');
+    expect(loadDraft('doc-7')?.title).toBe('첫 탭');
+  });
+});
+
+describe('orphaned tab drafts', () => {
+  it('adopts only drafts of tabs that are no longer alive', async () => {
+    me.userId = 'user-a';
+    const prefix = 'fvoci:draft:user-a:doc-8';
+    window.localStorage.setItem(
+      `${prefix}:tab:tab-live`,
+      JSON.stringify({ ...draft, title: '살아 있는 탭' }),
+    );
+    window.localStorage.setItem(
+      `${prefix}:tab:tab-closed`,
+      JSON.stringify({ ...draft, title: '닫힌 탭' }),
+    );
+    window.sessionStorage.setItem('fvoci:tab', 'tab-me');
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: {
+        request: () => new Promise(() => undefined),
+        query: () => Promise.resolve({ held: [{ name: 'fvoci:tab:tab-live' }], pending: [] }),
+      },
+    });
+    try {
+      expect(await adoptOrphans('doc-8')).toBe(1);
+      expect(loadOffers('doc-8').map((d) => d.title)).toEqual(['닫힌 탭']);
+      expect(window.localStorage.getItem(`${prefix}:tab:tab-live`)).not.toBeNull();
+      expect(window.localStorage.getItem(`${prefix}:tab:tab-closed`)).toBeNull();
+    } finally {
+      Reflect.deleteProperty(navigator, 'locks');
+    }
   });
 });

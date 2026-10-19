@@ -20,6 +20,7 @@
 
   import type { Draft } from './drafts';
   import {
+    adoptOrphans,
     clearDraft,
     loadOffers,
     queueDraft,
@@ -60,6 +61,10 @@
   let latest: DocNode | undefined;
   let watch: UnsyncedWatch | undefined;
   untrack(() => queueDraft(start.id));
+  // 닫힌 탭이 남긴 이 문서의 초안을 줄로 넘겨받는다(살아 있는 탭의 것은 두고). 이미 맞춰졌으면 바로 고르게 한다.
+  void adoptOrphans(untrack(() => start.id)).then((adopted) => {
+    if (adopted > 0 && checkedEarlier && found === undefined) showNextOffer();
+  });
   let checkedEarlier = false;
   let found = $state<Draft | undefined>(undefined);
   let foundMessage = $state<string | undefined>(undefined);

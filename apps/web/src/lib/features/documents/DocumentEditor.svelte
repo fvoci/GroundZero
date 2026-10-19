@@ -25,6 +25,7 @@
   import type { Draft } from './drafts';
   import {
     canonicalJson,
+    adoptOrphans,
     clearDraft,
     loadDraft,
     loadOffers,
@@ -104,6 +105,10 @@
     return undefined;
   }
   let restorable = $state(pendingDraft());
+  // 닫힌 탭이 남긴 이 문서의 초안을 줄로 넘겨받는다(살아 있는 탭의 것은 두고). 고를 것이 없으면 그것을 고르게 한다.
+  void adoptOrphans(start.id).then((adopted) => {
+    if (adopted > 0 && restorable === undefined) restorable = pendingDraft();
+  });
   let confirmOverwrite = $state(false);
   let editorVersion = $state(0);
 
