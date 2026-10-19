@@ -1048,3 +1048,107 @@ async fn no_items_in_a_trashed_module() {
     .await;
     assert_eq!(r.status, StatusCode::NOT_FOUND, "{:?}", r.json);
 }
+
+/// 남은 항목 ③(D-18): 모듈을 영구 삭제해도 그 모듈의 지금 키와 과거 키는 예약으로 남아, 다른 모듈이 만들거나 이름을
+/// 바꿀 때 쓰지 못한다(남은 글자 참조 `KEY-12`가 다른 모듈을 가리키지 않게). 워크스페이스 영구 삭제는 그대로 된다.
+#[tokio::test]
+async fn purged_module_keys_stay_reserved() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "키 예약").await;
+    let create = |key: &'static str| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let ws = ws.clone();
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &format!("/api/workspaces/{ws}/modules"),
+                Some(&admin),
+                Some(json!({ "request_id": new_request_id(), "kind": "project", "name": key, "key": key })),
+            )
+            .await
+        }
+    };
+    let gone = create("OLDK").await;
+    assert_eq!(gone.status, StatusCode::CREATED, "{:?}", gone.json);
+    let gone_id = gone.json["id"].as_str().unwrap().to_owned();
+    // 키를 바꿔 과거 키(OLDK)와 지금 키(NEWK)를 둘 다 갖게 한다.
+    let renamed = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{gone_id}"),
+        Some(&admin),
+        Some(json!({ "name": "OLDK", "key": "NEWK" })),
+    )
+    .await;
+    assert_eq!(renamed.status, StatusCode::OK, "{:?}", renamed.json);
+    let trashed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/modules/{gone_id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(trashed.status, StatusCode::OK, "{:?}", trashed.json);
+    let purged = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/trash/{}", trashed.json["batch_id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(purged.status.is_success(), "{:?}", purged.json);
+
+    for key in ["OLDK", "NEWK"] {
+        let again = create(key).await;
+        assert_eq!(
+            again.status,
+            StatusCode::CONFLICT,
+            "create with {key}: {:?}",
+            again.json
+        );
+    }
+    let other = create("OTHR").await;
+    assert_eq!(other.status, StatusCode::CREATED, "{:?}", other.json);
+    for key in ["OLDK", "NEWK"] {
+        let r = send(
+            &app,
+            Method::PUT,
+            &format!("/api/modules/{}", other.json["id"].as_str().unwrap()),
+            Some(&admin),
+            Some(json!({ "name": "OTHR", "key": key })),
+        )
+        .await;
+        assert_eq!(
+            r.status,
+            StatusCode::CONFLICT,
+            "rename to {key}: {:?}",
+            r.json
+        );
+    }
+
+    // 워크스페이스 전체 영구 삭제는 예약까지 지운다.
+    let deleted = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{ws}"),
+        Some(&admin),
+        Some(json!({ "name": "키 예약" })),
+    )
+    .await;
+    assert_eq!(deleted.status, StatusCode::OK, "{:?}", deleted.json);
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/me/deleted-workspaces/{ws}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
+}
