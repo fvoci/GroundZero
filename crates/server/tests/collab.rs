@@ -1244,3 +1244,81 @@ async fn rooms_acknowledge_persisted_state_with_a_snapshot() {
     b.close().await;
     a.close().await;
 }
+
+/// 마무리 ③: 실시간 상태의 파일 참조 저장도 리비전 저장처럼 그 버전 행을 공유 잠금한다. 저장 트랜잭션이 열려 있는
+/// 동안 자동 정리(이전 버전 정리)는 그 버전을 건너뛰고, 저장이 끝난 뒤에는 참조를 보고 남긴다. 두 트랜잭션으로 재현.
+#[tokio::test]
+async fn live_ref_store_and_old_version_cleanup_do_not_race() {
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "정리 경합").await;
+    let doc = common::create_doc(&app, &admin, &ws, "정리 경합 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let target = json!({ "target": { "kind": "document", "id": id }, "name": "그림.txt" });
+    let first = upload_small(&app, &admin, target, b"v1").await;
+    let file_id = first["file_id"].as_str().unwrap().to_owned();
+    upload_small(&app, &admin, json!({ "file_id": file_id }), b"v2").await;
+
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    // 1판을 정리 대상으로 만든다: 보존 1일, 다음 판이 이틀 전에 올라온 것으로.
+    sqlx::query("UPDATE fvoci.workspaces SET version_retention_days = 1 WHERE id = $1::uuid")
+        .bind(&ws)
+        .execute(&owner)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE fvoci.file_versions SET created_at = now() - interval '2 days' WHERE file_id = $1::uuid AND version = 2",
+    )
+    .bind(&file_id)
+    .execute(&owner)
+    .await
+    .unwrap();
+    let v1_exists = || {
+        let owner = owner.clone();
+        let file_id = file_id.clone();
+        async move {
+            sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM fvoci.file_versions WHERE file_id = $1::uuid AND version = 1)",
+            )
+            .bind(file_id)
+            .fetch_one(&owner)
+            .await
+            .unwrap()
+        }
+    };
+
+    // T1: 실시간 상태를 저장하며 1판을 가리킨다(아직 끝나지 않음).
+    let body = json!({ "type": "doc", "content": [{ "type": "paragraph", "content": [{ "type": "text",
+        "text": format!("/api/files/{file_id}/content?version=1&inline=true") }] }] });
+    let mut t1 = owner.begin().await.unwrap();
+    let stored: bool = sqlx::query_scalar(
+        "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2)",
+    )
+    .bind(&id)
+    .bind(&body)
+    .fetch_one(&mut *t1)
+    .await
+    .unwrap();
+    assert!(stored);
+    // T2: 그동안 자동 정리가 돈다.
+    let purged: i32 = sqlx::query_scalar("SELECT fvoci.app_system_purge_old_versions()")
+        .fetch_one(&owner)
+        .await
+        .unwrap();
+    t1.commit().await.unwrap();
+    assert_eq!(
+        purged, 0,
+        "cleanup removed a version a live state was pinning"
+    );
+    assert!(v1_exists().await);
+    // 저장이 끝난 뒤의 정리는 참조를 보고 남긴다.
+    let purged: i32 = sqlx::query_scalar("SELECT fvoci.app_system_purge_old_versions()")
+        .fetch_one(&owner)
+        .await
+        .unwrap();
+    assert_eq!(purged, 0);
+    assert!(v1_exists().await);
+    owner.close().await;
+}
