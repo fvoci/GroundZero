@@ -122,10 +122,10 @@ fn check_realm_users(root: &Path, compose: &Compose, sh: &Shell) -> Result<()> {
             .find(|u| u["username"] == name)
             .and_then(|u| u["id"].as_str());
         if found != Some(want) {
+            let found = found.map_or_else(|| "missing".to_owned(), |id| format!("id {id}"));
             bail!(
-                "the dev Keycloak keeps an older test realm: {name} is {} instead of {want}. \
-                 Reset with `cargo xtask down` (removes this checkout's dev containers and volumes) and start again",
-                found.unwrap_or("missing")
+                "the dev Keycloak keeps an older test realm: {name} should be id {want} but is {found}. \
+                 Reset with `cargo xtask down` (removes this checkout's dev and test containers and volumes) and start again"
             );
         }
     }
