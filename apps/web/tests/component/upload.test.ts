@@ -71,6 +71,28 @@ describe('resuming an upload', () => {
     ]);
   });
 
+  // 검토(2차) 6번: 그만둔 업로드의 조각 해시가 저장소에 계속 쌓이지 않는다(기한이 지난 업로드는 이어 올릴 수 없다).
+  it('drops part hashes of uploads past their expiry', async () => {
+    window.localStorage.setItem(
+      'fvoci.upload-parts',
+      JSON.stringify({
+        'abandoned-1': { expires: '2026-01-01T00:00:00Z', hashes: { '1': 'aa' } },
+        'abandoned-2': { '1': 'bb' },
+      }),
+    );
+    vi.spyOn(api, 'putUploadPart').mockResolvedValue(undefined);
+    vi.spyOn(api, 'createUpload').mockResolvedValue(view([]));
+    // 마치기 직전(이 업로드의 해시는 아직 있을 때)의 저장 내용을 본다.
+    let kept = '';
+    vi.spyOn(api, 'completeUpload').mockImplementation(() => {
+      kept = window.localStorage.getItem('fvoci.upload-parts') ?? '';
+      return Promise.resolve({ ...view([1, 2]), state: 'done' });
+    });
+    await uploadFile(new File(['AAAABBBB'], 'a.bin', { lastModified: 1 }), { fileId: 'f2' });
+    expect(kept).toContain('up-1');
+    expect(kept).not.toContain('abandoned');
+  });
+
   it('skips a received part that still matches', async () => {
     const sent: number[] = [];
     const stop = oneShot();

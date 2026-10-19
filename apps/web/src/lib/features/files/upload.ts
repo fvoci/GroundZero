@@ -78,21 +78,30 @@ function forget(key: string): void {
   }
 }
 
-// 업로드마다 서버에 보낸 조각의 SHA-256(조각 번호 → 해시). 이어 올릴 때 서버가 받은 조각이 지금 파일의 그 부분과
-// 같은지 확인한다. 이름·크기·수정 시각이 같아도 내용이 다를 수 있다.
+// 업로드마다 서버에 보낸 조각의 SHA-256(조각 번호 → 해시)과 그 업로드의 기한. 이어 올릴 때 서버가 받은 조각이 지금
+// 파일의 그 부분과 같은지 확인한다. 이름·크기·수정 시각이 같아도 내용이 다를 수 있다. 기한이 지난 업로드는 이어 올릴
+// 수 없으므로 그 해시는 다음에 적을 때 버린다(그만둔 업로드가 저장소에 쌓이지 않게).
 const PARTS = 'fvoci.upload-parts';
 
-function readParts(): Record<string, Record<string, string>> {
+interface SentParts {
+  expires: string;
+  hashes: Record<string, string>;
+}
+
+function readParts(): Record<string, SentParts> {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(PARTS) ?? '{}');
     if (typeof raw !== 'object' || raw === null) return {};
-    const out: Record<string, Record<string, string>> = {};
+    const out: Record<string, SentParts> = {};
     const entries = (o: object): [string, unknown][] => Object.entries(o);
-    for (const [id, parts] of entries(raw)) {
-      if (typeof parts !== 'object' || parts === null) continue;
+    for (const [id, entry] of entries(raw)) {
+      if (typeof entry !== 'object' || entry === null) continue;
+      if (!('expires' in entry) || typeof entry.expires !== 'string') continue;
+      if (!('hashes' in entry) || typeof entry.hashes !== 'object' || entry.hashes === null)
+        continue;
       const hashes: Record<string, string> = {};
-      for (const [n, h] of entries(parts)) if (typeof h === 'string') hashes[n] = h;
-      out[id] = hashes;
+      for (const [n, h] of entries(entry.hashes)) if (typeof h === 'string') hashes[n] = h;
+      out[id] = { expires: entry.expires, hashes };
     }
     return out;
   } catch {
@@ -100,7 +109,7 @@ function readParts(): Record<string, Record<string, string>> {
   }
 }
 
-function writeParts(next: Record<string, Record<string, string>>): void {
+function writeParts(next: Record<string, SentParts>): void {
   try {
     localStorage.setItem(PARTS, JSON.stringify(next));
   } catch {
@@ -108,9 +117,14 @@ function writeParts(next: Record<string, Record<string, string>>): void {
   }
 }
 
-function recordPart(uploadId: string, n: number, hash: string): void {
-  const all = readParts();
-  writeParts({ ...all, [uploadId]: { ...all[uploadId], [String(n)]: hash } });
+function recordPart(up: UploadView, n: number, hash: string): void {
+  const now = Date.now();
+  const live = Object.entries(readParts()).filter(([, e]) => Date.parse(e.expires) > now);
+  const all = Object.fromEntries(live);
+  writeParts({
+    ...all,
+    [up.id]: { expires: up.expires_at, hashes: { ...all[up.id]?.hashes, [String(n)]: hash } },
+  });
 }
 
 function forgetParts(uploadId: string): void {
@@ -213,7 +227,7 @@ async function sendParts(
 ): Promise<void> {
   // 서버가 받은 조각은 이 브라우저가 보낸 해시와 지금 파일의 그 부분이 같을 때만 건너뛴다. 나머지는 다시 보낸다
   // (같은 번호를 다시 보내면 서버가 바꾼다).
-  const known = readParts()[up.id] ?? {};
+  const known = readParts()[up.id]?.hashes ?? {};
   const trusted: number[] = [];
   for (const n of up.received) {
     opts.signal?.throwIfAborted();
@@ -232,7 +246,7 @@ async function sendParts(
     const piece = file.slice(from, to);
     const hash = await sha256Hex(piece);
     await withRetry(() => api.putUploadPart(up.id, n, piece, hash), opts.signal);
-    recordPart(up.id, n, hash);
+    recordPart(up, n, hash);
     opts.onProgress?.({ sent: Math.min(file.size, to), total: file.size });
   }
 }
