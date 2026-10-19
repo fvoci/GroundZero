@@ -596,7 +596,10 @@ impl Room {
                     }
                 }
                 let start = self.start_messages();
-                if peer.out.try_send(Outbound::Binary(start)).is_ok() {
+                if start
+                    .into_iter()
+                    .all(|frame| peer.out.try_send(Outbound::Binary(frame)).is_ok())
+                {
                     self.conns.insert(
                         conn,
                         Connection {
@@ -703,18 +706,19 @@ impl Room {
         Ok(doc)
     }
 
-    fn start_messages(&self) -> Vec<u8> {
+    /// 들어온 연결에 처음 보낼 메시지들. 메시지마다 프레임 하나다(y-websocket은 한 프레임에서 첫 메시지만 읽는다).
+    fn start_messages(&self) -> Vec<Vec<u8>> {
         let Some(doc) = &self.doc else {
             return Vec::new();
         };
         let sv = doc.transact().state_vector();
-        let mut out = Message::Sync(SyncMessage::SyncStep1(sv)).encode_v1();
+        let mut out = vec![Message::Sync(SyncMessage::SyncStep1(sv)).encode_v1()];
         if let Some(update) = self.presence_update() {
-            out.extend(Message::Awareness(update).encode_v1());
+            out.push(Message::Awareness(update).encode_v1());
         }
         // 이미 저장된 상태도 알린다: 다시 붙은 클라이언트의 편집이 그 안에 있으면 새 저장 없이 확인된다.
         if let Some(snapshot) = &self.persisted {
-            out.extend(Message::Custom(MSG_PERSISTED, snapshot.clone()).encode_v1());
+            out.push(Message::Custom(MSG_PERSISTED, snapshot.clone()).encode_v1());
         }
         out
     }

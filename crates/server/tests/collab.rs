@@ -134,6 +134,8 @@ impl Client {
                 let messages: Vec<Message> = MessageReader::new(&mut decoder)
                     .collect::<Result<_, _>>()
                     .unwrap();
+                // 브라우저(y-websocket)는 한 프레임에서 첫 메시지만 읽는다. 서버는 메시지마다 프레임을 따로 보내야 한다.
+                assert_eq!(messages.len(), 1, "one y-sync message per frame");
                 for message in messages {
                     match message {
                         Message::Sync(SyncMessage::SyncStep1(sv)) => {
