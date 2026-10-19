@@ -38,7 +38,7 @@ pub fn run(root: &Path, oidc: bool, web: bool) -> Result<()> {
     println!("server       {bind}");
     println!("open         {public}");
     println!(
-        "stop         Ctrl-C (data stays; `cargo xtask down` removes this checkout's containers and data)"
+        "stop         Ctrl-C (data stays; `cargo xtask down` removes this checkout's containers and volumes; attachments in target/dev-files stay)"
     );
 
     let _db = sh.push_env("DATABASE_URL", &urls.app);
