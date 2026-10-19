@@ -1,6 +1,6 @@
 // 진행 중인 타이머(사용자당 하나, D-32). 화면 어디서나 같은 상태를 보도록 하나만 둔다.
 import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
-import { api, ApiError, newRequestId } from '$lib/api/client';
+import { api, newRequestId } from '$lib/api/client';
 import { errorText } from '$lib/api/errors';
 import { m } from '$lib/paraglide/messages.js';
 
@@ -54,8 +54,19 @@ class TimerStore {
       this.#set(entry);
       this.error = undefined;
     } catch (e: unknown) {
+      // 옛 읽기의 실패는 지금 상태와 맞지 않으므로 알리지 않는다(성공과 같은 순서 검사).
+      if (duringWrite || mine !== this.#seq) return;
       this.error = errorText(e, m.time_timer_load_failed());
     }
+  }
+
+  /**
+   * 쓰기 하나가 끝났다. 실패했거나 뒤에 시작한 쓰기 때문에 결과를 버렸으면, 진행 중인 쓰기가 다 끝난 뒤 서버 상태로
+   * 맞춘다(먼저 보낸 시작이 성공하고 뒤의 시작이 409로 실패하면, 앞의 성공을 버린 채 화면이 비어 있었다).
+   */
+  async #finishWrite(applied: boolean): Promise<void> {
+    this.#writing -= 1;
+    if (!applied && this.#writing === 0) await this.load();
   }
 
   /** 시작. 이미 진행 중이면 409이므로 먼저 끝내야 한다(호출하는 쪽이 사용자에게 묻는다). */
@@ -69,12 +80,12 @@ class TimerStore {
     try {
       entry = await api.startTimer(newRequestId(), kind, memo, target);
     } catch (e: unknown) {
-      this.#writing -= 1;
-      if (e instanceof ApiError && e.status === 409) await this.load();
+      await this.#finishWrite(false);
       throw e;
     }
-    this.#writing -= 1;
-    if (mine === this.#writeSeq) this.#set(entry);
+    const latest = mine === this.#writeSeq;
+    if (latest) this.#set(entry);
+    await this.#finishWrite(latest);
   }
 
   async act(action: 'pause' | 'resume' | 'stop'): Promise<TimeEntryView | undefined> {
@@ -84,13 +95,13 @@ class TimerStore {
     try {
       next = await api.timerAction(this.entry.id, action);
     } catch (e: unknown) {
-      this.#writing -= 1;
-      // 다른 탭·기기에서 이미 바뀌었다. 서버 상태로 맞춘 뒤 알린다.
-      if (e instanceof ApiError && (e.status === 404 || e.status === 409)) await this.load();
+      // 다른 탭·기기에서 이미 바뀌었을 수 있다. 서버 상태로 맞춘 뒤 알린다.
+      await this.#finishWrite(false);
       throw e;
     }
-    this.#writing -= 1;
-    if (mine === this.#writeSeq) this.#set(action === 'stop' ? null : next);
+    const latest = mine === this.#writeSeq;
+    if (latest) this.#set(action === 'stop' ? null : next);
+    await this.#finishWrite(latest);
     return next;
   }
 
