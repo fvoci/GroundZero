@@ -116,20 +116,27 @@
             ? m.records_tags_label({ label: recordFieldLabel(def, f) })
             : recordFieldLabel(def, f)}</Label
         >
-        <Input
-          id={id(f.key)}
-          type={f.type === 'date'
-            ? 'date'
-            : f.type === 'number'
-              ? 'number'
-              : f.type === 'url'
-                ? 'url'
-                : 'text'}
-          min={f.type === 'number' ? 0 : undefined}
-          step={f.type === 'number' ? 'any' : undefined}
-          maxlength={f.type === 'url' ? 2000 : 300}
-          bind:value={form.values[f.key]}
-        />
+        {#if f.type === 'number'}
+          <!-- 숫자 칸을 bind:value로 묶으면 숫자(비우면 null)가 들어와 글자로 든 폼과 섞인다. 입력 글자를 그대로 든다. -->
+          <Input
+            id={id(f.key)}
+            type="number"
+            min={0}
+            step="any"
+            value={form.values[f.key] ?? ''}
+            oninput={(e: Event) => {
+              const target = e.currentTarget;
+              if (target instanceof HTMLInputElement) form.values[f.key] = target.value;
+            }}
+          />
+        {:else}
+          <Input
+            id={id(f.key)}
+            type={f.type === 'date' ? 'date' : f.type === 'url' ? 'url' : 'text'}
+            maxlength={f.type === 'url' ? 2000 : 300}
+            bind:value={form.values[f.key]}
+          />
+        {/if}
       </div>
     {/if}
   {/each}

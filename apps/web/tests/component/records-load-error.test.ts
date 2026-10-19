@@ -60,6 +60,55 @@ describe('records panel loading', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  // 숫자 칸(활동 시간 등)을 고쳐 저장하면 숫자로 보낸다. 숫자 입력이 폼의 글자 상태와 섞이면 저장 전에 멈췄다.
+  it('saves an edited number field', async () => {
+    await setLocale('ko', { reload: false });
+    vi.spyOn(api, 'recordKinds').mockResolvedValue([
+      {
+        kind: 'activity',
+        label: '활동',
+        module_kind: 'hobby',
+        date_label: null,
+        fields: [{ key: 'minutes', label: '시간(분)', type: 'number', choices: [] }],
+        file_roles: [],
+      },
+    ]);
+    vi.spyOn(api, 'itemRecords').mockResolvedValue([
+      {
+        id: 'r1',
+        kind: 'activity',
+        title: '잎사귀 연습',
+        occurred_on: null,
+        body: '',
+        fields: { minutes: 30 },
+        files: [],
+        created_by: 'u1',
+        created_by_name: null,
+        updated_at: '2026-10-19T00:00:00Z',
+        version: 3,
+        can_edit: true,
+        can_delete: true,
+      },
+    ]);
+    vi.spyOn(api, 'members').mockResolvedValue({
+      members: [],
+      my_role: 'writer',
+      i_am_owner: false,
+      pending_owner: null,
+    });
+    vi.spyOn(api, 'itemFiles').mockResolvedValue([]);
+    const update = vi.spyOn(api, 'updateRecord').mockResolvedValue(4);
+    render(RecordsPanel, { props: { item, kind: 'hobby', canWrite: true } });
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    const minutes = screen.getByLabelText('시간(분)');
+    await fireEvent.input(minutes, { target: { value: '45' } });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await vi.waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(1);
+    });
+    expect(update.mock.calls[0]?.[2].fields).toEqual({ minutes: 45 });
+  });
+
   it('draws nothing when the module has no record kinds', async () => {
     await setLocale('ko', { reload: false });
     const kinds = vi.spyOn(api, 'recordKinds').mockResolvedValue([]);
