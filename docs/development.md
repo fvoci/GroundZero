@@ -277,11 +277,13 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 - **환경 변수**: `.env.example`. 개발·테스트 값은 xtask가 넣는다.
 - **개발 로그인**: `pnpm install --frozen-lockfile` 뒤 `cargo xtask dev --oidc` 하나로 개발 서비스(PostgreSQL·Meilisearch·Keycloak)·서버·웹(Vite)이 뜬다. 접속은 `http://127.0.0.1:5173`(localhost 아님) → **로그인** → 아래 계정. Keycloak 관리 콘솔 조작은 필요 없다. 계정은 `deploy/keycloak/realm-test.json`의 가짜 사용자이고 이 저장소에 적힌 개발·테스트 전용 값이다. 운영·셀프호스트 구성(`realm-selfhost.json`은 사용자 없음, `compose.selfhost.yaml`은 모든 비밀 값을 운영자 `.env`에서 읽음)에는 들어가지 않는다.
 
-  | 계정                     | 비밀번호                     | 역할                                                                                        |
-  | ------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------- |
-  | `test-user`              | `fvoci-test-user-password`   | 초기 관리자(D-51, `FVOCI_INITIAL_ADMIN_SUBJECT`를 xtask가 넣음). '개발' 워크스페이스 소유자 |
-  | `test-user-2`            | `fvoci-test-user-2-password` | 일반 사용자. '개발' 워크스페이스 작성자                                                     |
-  | `admin`(Keycloak 콘솔만) | `fvoci-test-admin-password`  | `http://127.0.0.1:8180/admin`의 Keycloak 관리자(필요할 때만)                                |
+  비밀번호는 저장소 규칙대로 `deploy/` 안에만 둔다: 두 사용자는 `deploy/keycloak/realm-test.json`의 `credentials`, Keycloak 관리자는 `deploy/compose.dev.yaml`의 `KC_BOOTSTRAP_ADMIN_PASSWORD`.
+
+  | 계정                     | 역할                                                                                        |
+  | ------------------------ | ------------------------------------------------------------------------------------------- |
+  | `test-user`              | 초기 관리자(D-51, `FVOCI_INITIAL_ADMIN_SUBJECT`를 xtask가 넣음). '개발' 워크스페이스 소유자 |
+  | `test-user-2`            | 일반 사용자. '개발' 워크스페이스 작성자                                                     |
+  | `admin`(Keycloak 콘솔만) | `http://127.0.0.1:8180/admin`의 Keycloak 관리자(필요할 때만)                                |
   - 공동 편집: '개발' 워크스페이스는 실시간 공동 편집이 켜져 있고 위키에 **공동 편집 연습** 문서가 있다. 두 계정을 서로 다른 브라우저(또는 일반 창과 시크릿 창)로 열어 같은 문서를 고친다. 한 브라우저의 두 탭은 쿠키를 함께 써서 같은 사람이 된다.
   - 준비는 `deploy/postgres/dev-seed.sql`이 한다: 로그인 때와 같은 함수로 두 사용자를 만들고, 초기 관리자 함수로 워크스페이스를, 초대·수락 함수로 멤버를, 위키 함수로 문서를 만든다(번호·감사·권한 검사 그대로). `instance_state`의 `dev_seed` 표시가 있으면 아무것도 하지 않으므로 다시 실행해도 중복되지 않고 바꾼 비밀번호·데이터를 덮지 않는다.
   - **모듈 예제**: 같은 준비 단계에서 이어서 기존 테스트 사용자 둘이 함께 쓰는 별도 **모듈 예제 (합성 데이터)** 워크스페이스를 만든다(`deploy/postgres/dev-module-seed.sql`). 프로젝트·연구·스터디·강의·취미, 전용 기록 18종, 공통 업무·문서·체크리스트·일정·종료된 시간 기록, 서로 다른 개인 학습 진도가 들어간다. 실행 중인 타이머나 외부 파일·계정은 만들지 않는다. 날짜는 처음 실행한 날 기준이며, `dev_module_seed_v1` 표시와 트랜잭션 잠금으로 반복·동시 실행 때 중복이나 사용자 편집 덮어쓰기를 막는다. 예제를 지워도 다시 채우지 않는다. `--oidc` 없는 개발 실행·운영·셀프호스트는 이 파일을 실행하지 않는다.
