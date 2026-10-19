@@ -103,16 +103,24 @@
     }
   }
 
+  /** 서버의 지금 내 진도. 다른 탭·기기에서 바꾼 메모·분량·상태를 옛 화면 값으로 덮지 않게 바꾸기 직전에 읽는다. */
+  async function freshMine(u: StudyUnitView): Promise<StudyUnitView['mine']> {
+    const now = await api.studyPlan(itemId);
+    return now.units.find((x) => x.id === u.id)?.mine ?? u.mine;
+  }
+
   function setStatus(u: StudyUnitView, next: EpisodeStatus): void {
     void run(
-      () =>
-        api.setUnitProgress(u.id, {
+      async () => {
+        const fresh = await freshMine(u);
+        await api.setUnitProgress(u.id, {
           status: next,
-          done_amount: next === 'done' ? u.amount : u.mine.done_amount,
-          planned_on: u.mine.planned_on,
-          note: u.mine.note,
+          done_amount: next === 'done' ? u.amount : fresh.done_amount,
+          planned_on: fresh.planned_on,
+          note: fresh.note,
           today,
-        }),
+        });
+      },
       m.study_unit_status({ number: u.number, title: u.title, status: statusLabel(next) }),
     );
   }
@@ -316,9 +324,9 @@
                   return;
                 }
                 void run(
-                  () =>
+                  async () =>
                     api.setUnitProgress(u.id, {
-                      status: u.mine.status,
+                      status: (await freshMine(u)).status,
                       done_amount: doneAmount,
                       planned_on: mine.planned_on === '' ? null : mine.planned_on,
                       note: mine.note,

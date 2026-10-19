@@ -115,16 +115,24 @@
 
   const orNull = (v: string): string | null => (v === '' ? null : v);
 
+  /** 서버의 지금 내 진도. 다른 탭·기기에서 바꾼 메모·위치·상태를 옛 화면 값으로 덮지 않게 바꾸기 직전에 읽는다. */
+  async function freshMine(e: EpisodeView): Promise<EpisodeView['mine']> {
+    const now = await api.course(itemId);
+    return now.episodes.find((x) => x.id === e.id)?.mine ?? e.mine;
+  }
+
   function setStatus(e: EpisodeView, next: EpisodeStatus): void {
     void run(
-      () =>
-        api.setEpisodeProgress(e.id, {
+      async () => {
+        const fresh = await freshMine(e);
+        await api.setEpisodeProgress(e.id, {
           status: next,
-          planned_on: e.mine.planned_on,
-          last_position_seconds: e.mine.last_position_seconds,
-          note: e.mine.note,
+          planned_on: fresh.planned_on,
+          last_position_seconds: fresh.last_position_seconds,
+          note: fresh.note,
           today,
-        }),
+        });
+      },
       m.courses_episode_status({ number: e.number, status: statusLabel(next) }),
     );
   }
@@ -432,9 +440,9 @@
                 ev.preventDefault();
                 const position = parseDuration(mine.position.includes(':') ? mine.position : '');
                 void run(
-                  () =>
+                  async () =>
                     api.setEpisodeProgress(e.id, {
-                      status: e.mine.status,
+                      status: (await freshMine(e)).status,
                       planned_on: orNull(mine.planned_on),
                       last_position_seconds: mine.position === '' ? null : position,
                       note: mine.note,
