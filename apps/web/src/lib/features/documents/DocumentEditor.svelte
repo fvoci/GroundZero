@@ -11,6 +11,7 @@
   import type { DocNode, DocumentView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, NetworkError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { RetryKey } from '$lib/api/retry-key';
   import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { m } from '$lib/paraglide/messages.js';
@@ -260,6 +261,9 @@
     await save();
   }
 
+  const copyNoteKey = new RetryKey();
+  const copySaveKey = new RetryKey();
+
   async function keepMineAsCopy(): Promise<void> {
     const copyTitle = m.documents_draft_copy_title({
       title: title.trim() === '' ? server.title : title.trim(),
@@ -271,15 +275,18 @@
       return;
     }
     try {
-      // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다.
-      const created = await api.createNote(newRequestId(), copyTitle);
+      // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다. 응답을 잃고 다시 눌러도
+      // 같은 내용이면 같은 노트가 된다.
+      const created = await api.createNote(copyNoteKey.for({ copyTitle, body }), copyTitle);
       const saved = await api.saveDocument(created.id, {
-        requestId: newRequestId(),
+        requestId: copySaveKey.for({ note: created.id, copyTitle, body }),
         baseRevision: created.revision,
         title: copyTitle,
         body,
       });
       if (saved.kind === 'conflict') throw new Error('copy conflicted');
+      copyNoteKey.done();
+      copySaveKey.done();
       clearDraft(server.id);
       router.guard = undefined;
       router.navigate(standalonePath(created.id));
