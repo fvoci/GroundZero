@@ -1049,3 +1049,72 @@ async fn live_body_pins_the_file_versions_it_points_to() {
     let delete = delete_v1().await;
     assert_eq!(delete.status, StatusCode::NO_CONTENT, "{:?}", delete.json);
 }
+
+/// 제품 로직 점검(80절, 0061): 휴지통에 넣은 문서의 아직 리비전이 되지 않은 실시간 본문도 파일 버전을 붙잡는다.
+/// 휴지통에 넣은 직후 방이 닫히며 하는 마지막 저장이 거절될 때 그 참조를 지우지 않는다(되살리면 이미지가 보여야 한다).
+#[tokio::test]
+async fn trashed_document_keeps_live_file_pins() {
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "휴지통 실시간 첨부").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let doc = common::create_doc(&app, &writer, &ws, "버릴 그림 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let target = json!({ "target": { "kind": "document", "id": id }, "name": "그림.txt" });
+    let first = upload_small(&app, &writer, target, b"v1").await;
+    let file_id = first["file_id"].as_str().unwrap().to_owned();
+    upload_small(&app, &writer, json!({ "file_id": file_id }), b"v2").await;
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+
+    let mut a = connect(addr, Some(&writer), &id, true).await.unwrap();
+    let url = format!("/api/files/{file_id}/content?version=1&inline=true");
+    a.edit(|txn, fragment| {
+        let p = fragment.push_back(txn, XmlElementPrelim::empty("paragraph"));
+        p.push_back(txn, XmlTextPrelim::new(url.as_str()));
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(3500)).await;
+    // 한 번 더 고친 직후 휴지통에 넣는다. 방은 다음 확인에서 닫히며 마지막 상태를 저장하려다 거절된다.
+    a.paragraph("버리기 직전").await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let trashed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/documents/{id}"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert!(trashed.status.is_success(), "{:?}", trashed.json);
+    let _ = a.closed().await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // 휴지통 문서의 첨부는 API로 지울 수 없다(404). 남는 길은 주기 작업(이전 버전 정리·휴지통 비우기)이며, 둘 다 이
+    // 참조 판단을 쓴다.
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let pinned: bool = sqlx::query_scalar(
+        "SELECT fvoci.app_version_referenced(v.file_id, v.version, v.id)
+         FROM fvoci.file_versions v WHERE v.file_id = $1::uuid AND v.version = 1",
+    )
+    .bind(&file_id)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert!(
+        pinned,
+        "the trashed document's live body still points at version 1"
+    );
+    owner.close().await;
+}
