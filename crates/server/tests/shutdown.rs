@@ -27,6 +27,8 @@ fn server_shuts_down_cleanly_on_sigterm() {
         .env("FVOCI_BIND", format!("127.0.0.1:{port}"))
         .env("FVOCI_PUBLIC_URL", common::PUBLIC_URL)
         .env("FVOCI_LOG_FORMAT", "json")
+        // 잠깐 사는 동안 공유 테스트 DB에서 주기 작업(휴지통 비우기 등)을 잡지 않게 한다.
+        .env("FVOCI_WORKER_INTERVAL_SECS", "3600")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     for (key, _) in std::env::vars() {
