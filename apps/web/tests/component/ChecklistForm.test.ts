@@ -70,6 +70,25 @@ describe('ChecklistForm (D-30, editor-less screens)', () => {
     expect(ids[2]?.[1]).toBe(ids[0]?.[1]);
   });
 
+  // 덧붙이기의 응답을 잃은 뒤 다시 펼쳐 보내도 같은 줄은 같은 요청 id다(서버가 이미 받았으면 중복되지 않는다).
+  it('keeps paste request ids when the preview is expanded again after a failure', async () => {
+    const h = handlers();
+    h.onadd.mockRejectedValueOnce(new Error('network'));
+    render(ChecklistForm, { idPrefix: 't', items: [], canEdit: true, ...h });
+    await fireEvent.click(screen.getByRole('button', { name: 'Markdown 붙여넣기' }));
+    await fireEvent.input(screen.getByLabelText(/붙여넣을 체크리스트/), {
+      target: { value: '- [ ] 자료 수집\n- [x] 초안 작성' },
+    });
+    const expand = (): HTMLElement => screen.getByRole('button', { name: '항목으로 펼치기' });
+    await fireEvent.click(expand());
+    await fireEvent.click(screen.getByRole('button', { name: /덧붙이기/ }));
+    await fireEvent.click(expand());
+    await fireEvent.click(screen.getByRole('button', { name: /덧붙이기/ }));
+    const ids = h.onadd.mock.calls.map((c) => c[0].map((e) => e.requestId));
+    expect(ids).toHaveLength(2);
+    expect(ids[1]).toEqual(ids[0]);
+  });
+
   it('is read-only without write access', () => {
     const h = handlers();
     render(ChecklistForm, {

@@ -63,7 +63,9 @@
 
   function expand(): void {
     preview = parseMarkdownChecklist(pasted);
-    previewKeys = preview.map(() => new RetryKey());
+    // 실패한 뒤 다시 펼쳐도 줄마다의 키를 지킨다(같은 내용이면 같은 id라 응답을 잃은 덧붙이기가 중복되지 않는다).
+    // 덧붙이기가 성공했을 때만 키를 비운다.
+    previewKeys = preview.map((_, index) => previewKeys[index] ?? new RetryKey());
   }
 
   function confirmPaste(): void {
@@ -80,6 +82,7 @@
       await onadd(confirmed);
       pasted = '';
       preview = [];
+      previewKeys = [];
       pasteOpen = false;
     });
   }
