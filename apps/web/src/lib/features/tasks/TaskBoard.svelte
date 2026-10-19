@@ -73,13 +73,19 @@
   // 편의라 저장한 보기와 다르다). 저장소를 쓸 수 없으면 기억하지 않는다.
   const contextKey = (itemId: string): string => `fvoci:board:${itemId}`;
   function restoreContext(itemId: string): void {
-    let raw: unknown;
+    let raw: unknown = null;
     try {
       raw = JSON.parse(window.sessionStorage.getItem(contextKey(itemId)) ?? 'null');
     } catch {
+      // 저장소를 쓸 수 없거나 값이 깨졌으면 기본값으로.
+    }
+    if (!isRecord(raw)) {
+      // 기억한 것이 없는 항목은 기본값으로 연다(앞 항목의 보기·필터가 남아 이 항목 이름으로 저장되지 않게).
+      view = 'board';
+      filter = { ...EMPTY_FILTER };
+      sort = 'position';
       return;
     }
-    if (!isRecord(raw)) return;
     const config = readConfig(raw);
     view = config.view;
     filter = config.filter;
@@ -239,8 +245,8 @@
 
   function close(): void {
     if (openedHere) {
-      openedHere = false;
-      router.back();
+      // 저장하지 않은 편집 확인에서 머물기로 하면 돌아가지 않았으므로 다음 닫기도 뒤로 간다.
+      openedHere = !router.back();
     } else {
       router.navigate(itemPath(item.workspace_id, item.id));
     }

@@ -108,6 +108,31 @@ describe('board context across navigation', () => {
     expect(again instanceof HTMLSelectElement ? again.value : '').toBe('in_progress');
     expect(screen.getByRole('button', { name: '목록' }).getAttribute('aria-pressed')).toBe('true');
   });
+
+  // 같은 보드가 다른 항목으로 바뀌면 그 항목의 맥락을 쓴다. 기억한 것이 없으면 기본값이고, 앞 항목의 필터가 남아
+  // 새 항목 이름으로 저장되지 않는다.
+  it('opens another item without its own context at the defaults', async () => {
+    await setLocale('ko', { reload: false });
+    window.sessionStorage.clear();
+    vi.spyOn(api, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
+    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    await fireEvent.change(await screen.findByLabelText('상태'), {
+      target: { value: 'in_progress' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '목록' }));
+
+    const other = { ...item, id: 'i2', reference: 'KED-9' };
+    await view.rerender({ item: other, workspaces: [], openTaskId: undefined });
+    await waitFor(() => {
+      const status = screen.getByLabelText('상태');
+      expect(status instanceof HTMLSelectElement ? status.value : 'x').toBe('any');
+    });
+    expect(screen.getByRole('button', { name: '칸반' }).getAttribute('aria-pressed')).toBe('true');
+    const saved: unknown = JSON.parse(window.sessionStorage.getItem('fvoci:board:i2') ?? 'null');
+    expect(JSON.stringify(saved)).not.toContain('in_progress');
+  });
 });
 
 // 칸반(목표 3): 끌기·키보드 말고도 카드 메뉴로 다른 열로 옮길 수 있다(같은 이동 저장 경로).
