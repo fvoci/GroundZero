@@ -16,6 +16,13 @@ DECLARE
   v_doc uuid;
 BEGIN
   IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_seed') THEN
+    -- 처음 준비한 발급자와 다르면(개발 Keycloak 포트를 바꿈) 테스트 사용자가 새 계정으로 들어와 준비한 워크스페이스에
+    -- 들어가지 못한다. 조용히 넘기지 않고 알린다(자동으로 지우거나 바꾸지 않는다).
+    IF NOT EXISTS (SELECT 1 FROM users
+                   WHERE issuer = v_issuer AND subject = '00000000-0000-4000-8000-00000000000a') THEN
+      RAISE EXCEPTION 'the dev seed was made for another OIDC issuer than %; start with the first FVOCI_DEV_KEYCLOAK_PORT again, or reset with cargo xtask down',
+        v_issuer;
+    END IF;
     RETURN;
   END IF;
   -- 로그인 때와 같은 함수로 사용자를 만든다(발급자 + 고정 subject). 로그인하면 같은 행을 쓴다.
