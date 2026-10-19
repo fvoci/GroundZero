@@ -720,6 +720,9 @@ pub async fn delete_version(
     CurrentUser(user): CurrentUser,
     Path((id, version)): Path<(FileId, i32)>,
 ) -> Result<StatusCode, AppError> {
+    // 열린 실시간 방의 상태(본문의 파일 참조 포함)를 먼저 저장해, 방금 실시간 본문에 넣은 이미지의 버전도
+    // 참조 확인(0059)이 보게 한다. 주기적 저장(3초)을 기다리면 그 사이에 지울 수 있었다.
+    state.collab.persist_all().await;
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_delete_file_version($1, $2)")
         .bind(id)

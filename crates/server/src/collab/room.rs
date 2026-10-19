@@ -121,6 +121,10 @@ enum Command {
     Leave {
         conn: u64,
     },
+    /// 모아 둔 변경을 넣고 상태(파일 참조 포함)를 지금 저장한다. 파일 버전을 지우기 직전에 쓴다.
+    Persist {
+        done: oneshot::Sender<()>,
+    },
     Shutdown {
         reason: CloseReason,
         snapshot: bool,
@@ -305,6 +309,19 @@ impl Rooms {
                     fallback: None,
                 })
                 .await;
+        }
+    }
+
+    /// 열린 방마다 모아 둔 변경을 넣고 상태를 지금 저장하게 한 뒤 기다린다(방마다 최대 2초). 파일 버전을 지우기 전에
+    /// 불러, 방금 실시간 본문에 넣은 이미지의 참조가 주기적 저장(3초)을 기다리지 않고 DB에 남게 한다.
+    pub async fn persist_all(&self) {
+        let handles: Vec<Handle> = self.lock().values().cloned().collect();
+        for handle in handles {
+            let (done, answer) = oneshot::channel();
+            if handle.tx.send(Command::Persist { done }).await.is_ok() {
+                // 방이 이미 닫히는 중이면 답이 없을 수 있다. 그때는 그 방의 마지막 저장이 대신한다.
+                let _ignored = tokio::time::timeout(Duration::from_secs(2), answer).await;
+            }
         }
     }
 
@@ -551,6 +568,12 @@ impl Room {
                 // 나가기 직전에 보낸 변경(아직 모아 두기만 한 것)을 먼저 넣는다. 나간 연결의 변경은 버리기 때문이다.
                 self.flush().await;
                 self.leave(conn);
+                true
+            }
+            Command::Persist { done } => {
+                self.flush().await;
+                self.persist().await;
+                let _ignored = done.send(());
                 true
             }
             Command::Shutdown {

@@ -49,6 +49,7 @@ pub async fn run(config: Config) -> Result<(), AppError> {
             db.clone(),
             state.search.clone(),
             state.storage.clone(),
+            state.collab.clone(),
             interval,
             stopped,
         )

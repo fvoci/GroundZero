@@ -1118,3 +1118,50 @@ async fn trashed_document_keeps_live_file_pins() {
     );
     owner.close().await;
 }
+
+/// 사용자 지시(80절 마무리): 실시간 본문에 이미지 주소를 넣은 직후, 주기적 상태 저장(3초) 전에 그 버전을 지우는
+/// 경합. 4초를 기다린 뒤 지우는 시험만으로는 이 구간을 보지 못한다.
+#[tokio::test]
+async fn deleting_a_version_right_after_a_live_reference_is_refused() {
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "실시간 첨부 경합").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let doc = common::create_doc(&app, &writer, &ws, "경합 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let target = json!({ "target": { "kind": "document", "id": id }, "name": "그림.txt" });
+    let first = upload_small(&app, &writer, target, b"v1").await;
+    let file_id = first["file_id"].as_str().unwrap().to_owned();
+    upload_small(&app, &writer, json!({ "file_id": file_id }), b"v2").await;
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+
+    let mut a = connect(addr, Some(&writer), &id, true).await.unwrap();
+    let url = format!("/api/files/{file_id}/content?version=1&inline=true");
+    a.edit(|txn, fragment| {
+        let p = fragment.push_back(txn, XmlElementPrelim::empty("paragraph"));
+        p.push_back(txn, XmlTextPrelim::new(url.as_str()));
+    })
+    .await;
+    // 방이 변경을 받을 만큼만(모아 넣기 0.1초) 기다린다. 상태 저장(3초)은 아직이다.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let delete = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/files/{file_id}/versions/1"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert_eq!(delete.status, StatusCode::CONFLICT, "{:?}", delete.json);
+    a.close().await;
+}
