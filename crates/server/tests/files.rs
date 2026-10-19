@@ -7,6 +7,8 @@
 
 mod common;
 
+use std::sync::LazyLock;
+
 use axum::Router;
 use axum::http::{Method, StatusCode};
 use common::{
@@ -40,6 +42,11 @@ fn s3_overrides() -> Vec<(&'static str, String)> {
 fn sha(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
+
+/// 저장소 정리(`run_all_now`에 저장소를 넘김)는 같은 DB의 삭제 대기열 전체를 꺼낸다. 그 정리를 돌리는 시험끼리 동시에 돌면
+/// 한 시험이 다른 시험의 삭제를 가져가(S3 시험은 없는 키도 지운 것으로 센다) 지운 수가 어긋나므로, 이 잠금을 잡고 차례로 돈다.
+static STORAGE_CLEANUP: LazyLock<tokio::sync::Mutex<()>> =
+    LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 /// 결정적인 내용(5 MiB 조각 둘: 앞은 꽉, 뒤는 작게).
 fn content(len: usize, seed: u8) -> Vec<u8> {
@@ -109,6 +116,7 @@ async fn download(
 
 #[tokio::test]
 async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
+    let _cleanup = STORAGE_CLEANUP.lock().await;
     let state = state_with(&[]);
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -498,6 +506,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
 
 #[tokio::test]
 async fn limits_abort_expiry_and_private_notes() {
+    let _cleanup = STORAGE_CLEANUP.lock().await;
     let state = state_with(&[
         ("FVOCI_MAX_FILE_BYTES", "6000000"),
         ("FVOCI_MAX_WORKSPACE_STORAGE_BYTES", "7000000"),
@@ -598,6 +607,7 @@ async fn limits_abort_expiry_and_private_notes() {
 
 #[tokio::test]
 async fn concurrent_starts_and_old_version_cleanup() {
+    let _cleanup = STORAGE_CLEANUP.lock().await;
     let state = state_with(&[]);
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -672,6 +682,7 @@ async fn concurrent_starts_and_old_version_cleanup() {
 
 #[tokio::test]
 async fn s3_files_round_trip_and_purge_with_the_document() {
+    let _cleanup = STORAGE_CLEANUP.lock().await;
     let overrides = s3_overrides();
     let pairs: Vec<(&str, &str)> = overrides.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let state = state_with(&pairs);
