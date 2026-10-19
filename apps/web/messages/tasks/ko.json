@@ -211,5 +211,12 @@
   "tasks_move_error_forbidden": "이 항목의 업무를 고칠 권한이 없어 옮기지 못했습니다.",
   "tasks_move_error_gone": "업무가 지워졌거나 볼 수 없게 되어 옮기지 못했습니다.",
   "tasks_move_error_archived": "항목이 보관되었거나 동시에 바뀌어 옮기지 못했습니다. 잠시 뒤 다시 시도하세요.",
-  "tasks_move_error_other": "옮기지 못했습니다. 원래 자리로 되돌렸습니다."
+  "tasks_move_error_other": "옮기지 못했습니다. 원래 자리로 되돌렸습니다.",
+  "tasks_move_menu": "{title} 옮기기",
+  "tasks_move_to_todo": "할 일로",
+  "tasks_move_to_in_progress": "진행 중으로",
+  "tasks_move_to_done": "완료로",
+  "tasks_moved_menu": "{title}: 옮겼습니다({status}).",
+  "tasks_quick_add": "업무 추가",
+  "tasks_quick_add_label": "{status}에 업무 추가"
 }

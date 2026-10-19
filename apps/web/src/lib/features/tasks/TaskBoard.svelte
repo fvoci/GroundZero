@@ -14,6 +14,7 @@
   import TaskCsvImport from './TaskCsvImport.svelte';
   import { itemPath, itemTaskPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
+  import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Dialog from '$lib/ui/dialog';
 
   import type { BoardAction, BoardMove, CardBox, DropSlot } from './board';
@@ -264,10 +265,29 @@
    * 옮기기 한 번(단추·키보드·끌어서 놓기 공통). 화면에 먼저 반영하고 기존 이동 API로 저장한 뒤 서버 목록을 다시
    * 읽는다. 실패하면 이전 화면으로 되돌리고 이유를 알린 뒤 최신 상태(동시 변경·권한 철회·보관)를 다시 읽는다.
    */
+  /** 메뉴로 옮길 수 있는 열의 이름(조사가 열마다 다르다). */
+  const MOVE_TO: Record<TaskStatus, () => string> = {
+    todo: () => m.tasks_move_to_todo(),
+    in_progress: () => m.tasks_move_to_in_progress(),
+    done: () => m.tasks_move_to_done(),
+  };
+
+  // 열마다 빠르게 더하기(Kaneo처럼 열 아래). 만들기는 "할 일"로 만들어지므로, 다른 열이면 같은 이동 저장 경로로 그
+  // 열 끝에 옮긴다. 옮기기가 실패하면 업무는 "할 일"에 남고 실패를 알린다(만든 것은 사라지지 않는다).
+  let adding = $state<TaskStatus | undefined>(undefined);
+  async function quickAdd(lane: TaskStatus, requestId: string, title: string): Promise<void> {
+    const created = await api.createTask(item.id, requestId, title);
+    if (created.status === lane) {
+      await reload();
+      return;
+    }
+    await commitMove(created.id, { status: lane, beforeId: null }, 'menu');
+  }
+
   async function commitMove(
     id: string,
     plan: BoardMove,
-    how: BoardAction | 'drag',
+    how: BoardAction | 'drag' | 'menu',
   ): Promise<boolean> {
     const before = tasks;
     const title = titleOf(id);
@@ -279,7 +299,9 @@
       status =
         how === 'drag'
           ? m.tasks_moved_drag({ title, status: STATUS_LABEL[plan.status] })
-          : movedText(how, title, plan.status);
+          : how === 'menu'
+            ? m.tasks_moved_menu({ title, status: STATUS_LABEL[plan.status] })
+            : movedText(how, title, plan.status);
       return true;
     } catch (e: unknown) {
       tasks = before;
@@ -682,6 +704,28 @@
                       >
                     {/each}
                   </div>
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                      {#snippet child({ props })}
+                        <Button
+                          {...props}
+                          size="sm"
+                          variant="ghost"
+                          class="h-6 self-start px-1.5 text-xs"
+                          aria-label={m.tasks_move_menu({ title: t.title })}>⋯</Button
+                        >
+                      {/snippet}
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content align="start">
+                      {#each TASK_STATUSES.filter((s) => s !== t.status) as target (target)}
+                        <DropdownMenu.Item
+                          onSelect={() =>
+                            void commitMove(t.id, { status: target, beforeId: null }, 'menu')}
+                          >{MOVE_TO[target]()}</DropdownMenu.Item
+                        >
+                      {/each}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
                 {/if}
               </li>
             {/each}
@@ -689,6 +733,21 @@
               <li aria-hidden="true" class="h-1 rounded bg-primary"></li>
             {/if}
           </ul>
+          {#if canWrite}
+            {#if adding === lane}
+              <CreateForm
+                id={`new-task-${lane}`}
+                label={m.tasks_quick_add_label({ status: STATUS_LABEL[lane] })}
+                placeholder={m.tasks_new_placeholder()}
+                submitLabel={m.tasks_create()}
+                create={(requestId: string, title: string) => quickAdd(lane, requestId, title)}
+              />
+            {:else}
+              <Button size="sm" variant="ghost" class="self-start" onclick={() => (adding = lane)}
+                >{m.tasks_quick_add()}</Button
+              >
+            {/if}
+          {/if}
         </section>
       {/each}
     </div>
