@@ -18,6 +18,7 @@
 
   import DocumentActions from './DocumentActions.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
+  import DocumentOutline from './DocumentOutline.svelte';
   import ExportDialog from './ExportDialog.svelte';
   import LiveDocumentEditor from './LiveDocumentEditor.svelte';
   import RevisionHistory from './RevisionHistory.svelte';
@@ -35,6 +36,8 @@
   let epoch = $state(0);
   // 편집기에 저장하지 않은 편집이 있는지(내보내기 안내).
   let unsaved = $state(false);
+  // 목차가 읽는 본문 영역.
+  let bodyArea = $state<HTMLDivElement | undefined>(undefined);
 
   $effect(() => {
     const id = documentId;
@@ -140,33 +143,43 @@
       {/if}
     </div>
   </div>
-  {#key `${doc.id}:${String(epoch)}:${String(doc.realtime)}`}
-    {#if doc.realtime}
-      <LiveDocumentEditor
-        initial={doc}
-        references={referencesFor(doc)}
-        onsaved={(saved: DocumentView) => {
-          if (saved.title !== doc?.title) workspaceNav.refreshDocs();
-          doc = saved;
-        }}
-        onrealtimeoff={reopen}
-        onreload={reopen}
-      />
-    {:else}
-      <DocumentEditor
-        initial={doc}
-        references={referencesFor(doc)}
-        onsaved={(saved: DocumentView) => {
-          // 기록 비교(지금과 비교)와 복원의 기준 리비전이 최신이 되도록 저장 결과를 따라간다.
-          if (saved.title !== doc?.title) workspaceNav.refreshDocs();
-          doc = saved;
-        }}
-        onunsaved={(value: boolean) => {
-          unsaved = value;
-        }}
-      />
-    {/if}
-  {/key}
+  <!-- 넓은 화면에서는 본문 옆에 목차(Outline처럼 읽기 위치를 잡기 쉽게). 좁은 화면에서는 본문만. -->
+  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-6">
+    <div bind:this={bodyArea} class="min-w-0">
+      {#key `${doc.id}:${String(epoch)}:${String(doc.realtime)}`}
+        {#if doc.realtime}
+          <LiveDocumentEditor
+            initial={doc}
+            references={referencesFor(doc)}
+            onsaved={(saved: DocumentView) => {
+              if (saved.title !== doc?.title) workspaceNav.refreshDocs();
+              doc = saved;
+            }}
+            onrealtimeoff={reopen}
+            onreload={reopen}
+          />
+        {:else}
+          <DocumentEditor
+            initial={doc}
+            references={referencesFor(doc)}
+            onsaved={(saved: DocumentView) => {
+              // 기록 비교(지금과 비교)와 복원의 기준 리비전이 최신이 되도록 저장 결과를 따라간다.
+              if (saved.title !== doc?.title) workspaceNav.refreshDocs();
+              doc = saved;
+            }}
+            onunsaved={(value: boolean) => {
+              unsaved = value;
+            }}
+          />
+        {/if}
+      {/key}
+    </div>
+    <aside class="hidden lg:block">
+      <div class="sticky top-4">
+        <DocumentOutline root={bodyArea} />
+      </div>
+    </aside>
+  </div>
   <AttachmentsPanel
     target={{ kind: 'document', id: doc.id }}
     canWrite={doc.access === 'owner' || doc.access === 'write'}
