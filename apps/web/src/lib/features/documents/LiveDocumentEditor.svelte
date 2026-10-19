@@ -51,7 +51,8 @@
   // 사용자가 고를 때까지 지키고, 그동안의 새 편집은 기본 칸에 따로 남는다.
   let latest: DocNode | undefined;
   let watch: UnsyncedWatch | undefined;
-  const earlier = untrack(() => {
+  /** 고르게 할 지난 초안: `offer` 칸에 있으면 그것, 없으면 기본 칸의 것을 `offer`로 옮긴다. */
+  function takeEarlier(): Draft | undefined {
     const offered = loadDraft(start.id, 'offer');
     if (offered !== undefined) return offered;
     const main = loadDraft(start.id);
@@ -60,7 +61,8 @@
       clearDraft(start.id);
     }
     return main;
-  });
+  }
+  let earlier = untrack(takeEarlier);
   let checkedEarlier = false;
   let found = $state<Draft | undefined>(undefined);
   let foundMessage = $state<string | undefined>(undefined);
@@ -182,6 +184,11 @@
     if (session !== undefined) closeLive(session);
     session = undefined;
     stopped = undefined;
+    // 새 문서로 다시 연다(4409 등). 방금 남긴 초안(서버가 받지 않은 편집)을 다시 맞춰진 뒤 고르게 한다.
+    if (found === undefined) {
+      earlier = takeEarlier();
+      checkedEarlier = false;
+    }
     epoch += 1;
     open();
   }
