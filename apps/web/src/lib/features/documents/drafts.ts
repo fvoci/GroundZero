@@ -228,6 +228,15 @@ export function queueDraft(documentId: string): Draft[] {
   return next;
 }
 
+/**
+ * 편집을 시작할 때: 지금 편집의 초안을 줄로 옮긴다. 옮기지 못했으면(저장소 가득 참) 그 초안을 `reserved`로 돌려준다.
+ * 부르는 쪽은 그것을 사용자에게 고르게 하고, 고를 때까지 그 키에 새 편집을 쓰거나 지우지 않는다.
+ */
+export function takeOrReserve(documentId: string): { reserved: Draft | undefined } {
+  queueDraft(documentId);
+  return { reserved: loadDraft(documentId) };
+}
+
 /** 본문에서 사람이 읽는 텍스트를 뽑는다. 충돌 화면의 비교용. */
 export function plainText(node: unknown): string {
   if (typeof node !== 'object' || node === null) return '';

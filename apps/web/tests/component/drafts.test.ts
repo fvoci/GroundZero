@@ -9,6 +9,7 @@ import {
   removeOffer,
   storeDraft,
   storeOffers,
+  takeOrReserve,
   withoutApplied,
 } from '$lib/features/documents/drafts';
 import { me } from '$lib/me.svelte';
@@ -138,5 +139,23 @@ describe('orphaned tab drafts', () => {
     } finally {
       Reflect.deleteProperty(navigator, 'locks');
     }
+  });
+});
+
+describe('queue move failure', () => {
+  it('hands the draft back to be offered when it cannot be queued', () => {
+    me.userId = 'user-a';
+    window.sessionStorage.setItem('fvoci:tab', 'tab-1');
+    storeDraft('doc-9', { ...draft, title: '못 옮긴 초안' });
+    const local = window.localStorage;
+    const original = local.setItem.bind(local);
+    const setItem = vi.spyOn(local, 'setItem').mockImplementation((k: string, v: string) => {
+      if (k.endsWith(':offers')) throw new DOMException('full', 'QuotaExceededError');
+      original(k, v);
+    });
+    const taken = takeOrReserve('doc-9');
+    setItem.mockRestore();
+    expect(taken.reserved?.title).toBe('못 옮긴 초안');
+    expect(loadDraft('doc-9')?.title).toBe('못 옮긴 초안');
   });
 });

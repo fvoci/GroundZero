@@ -23,7 +23,7 @@
     adoptOrphans,
     clearDraft,
     loadOffers,
-    queueDraft,
+    takeOrReserve,
     removeOffer,
     withoutApplied,
     storeDraft,
@@ -60,7 +60,9 @@
   // 고르게 할 줄로 옮겨 하나씩 고르게 하고, 그동안의 새 편집은 지금 편집의 초안으로 따로 남는다(덮지 않음).
   let latest: DocNode | undefined;
   let watch: UnsyncedWatch | undefined;
-  untrack(() => queueDraft(start.id));
+  // 저장소가 가득 차 줄로 옮기지 못한 지난 초안. 그 자리에 둔 채 고르게 하고, 고를 때까지 이 탭의 새 편집은 그 키에
+  // 쓰거나 지우지 않는다(덮어 사라지지 않게).
+  let reserved: Draft | undefined = untrack(() => takeOrReserve(start.id).reserved);
   // 닫힌 탭이 남긴 이 문서의 초안을 줄로 넘겨받는다(살아 있는 탭의 것은 두고). 이미 맞춰졌으면 바로 고르게 한다.
   void adoptOrphans(untrack(() => start.id)).then((adopted) => {
     if (adopted > 0 && checkedEarlier && found === undefined) showNextOffer();
@@ -75,7 +77,7 @@
   function keepDraft(): void {
     if (keepTimer !== undefined) clearTimeout(keepTimer);
     keepTimer = undefined;
-    if (latest === undefined) return;
+    if (latest === undefined || reserved !== undefined) return;
     storeDraft(start.id, {
       baseRevision: start.revision,
       title,
@@ -108,14 +110,19 @@
     // 제목과 본문이 모두 지금과 같아야 이미 반영된 것이다(제목만 다른 초안도 고르게 한다).
     const rest = latest === undefined ? all : withoutApplied(all, { title, body: latest });
     if (rest.length !== all.length) storeOffers(start.id, rest);
-    found = rest[0];
+    found = rest[0] ?? reserved;
   }
 
   /** 지금 고르게 한 초안을 줄에서 뺀다(보존했거나 버렸다). 다음 것이 있으면 이어 고르게 한다. */
   function resolveFound(): void {
     const done = found;
     if (done === undefined) return;
-    removeOffer(start.id, done);
+    if (done === reserved) {
+      clearDraft(start.id);
+      reserved = undefined;
+    } else {
+      removeOffer(start.id, done);
+    }
     found = undefined;
     foundRequest = undefined;
     showNextOffer();
@@ -137,7 +144,7 @@
       onSynced: () => {
         if (keepTimer !== undefined) clearTimeout(keepTimer);
         keepTimer = undefined;
-        clearDraft(start.id);
+        if (reserved === undefined) clearDraft(start.id);
       },
     });
     next.provider.on('sync', (synced: boolean) => {
@@ -201,7 +208,7 @@
     session = undefined;
     stopped = undefined;
     // 새 문서로 다시 연다(4409 등). 방금 남긴 초안(서버가 받지 않은 편집)을 줄 뒤에 붙여 다시 맞춰진 뒤 고르게 한다.
-    queueDraft(start.id);
+    reserved ??= takeOrReserve(start.id).reserved;
     if (found === undefined) checkedEarlier = false;
     epoch += 1;
     open();
