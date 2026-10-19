@@ -3,6 +3,7 @@
   // 수강하는 사람의 진도 집계. 완료는 직접 표시한다. 회차마다 강의 시간 측정을 시작할 수 있다(D-32).
   import type { CourseView, EpisodeStatus, EpisodeView, ParticipantView } from '$lib/api/client';
   import { api, newRequestId } from '$lib/api/client';
+  import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import { localTimeZone, wallTime } from '$lib/features/events/time';
@@ -145,7 +146,8 @@
   const csv = $derived(csvText.trim() === '' ? undefined : parseEpisodesCsv(csvText));
 
   // 요청 id는 입력을 시작할 때 정하고 성공할 때까지 지킨다. 응답을 잃고 다시 눌러도 서버가 같은 회차로 본다.
-  let draftId = newRequestId();
+  // 한 회차 추가: 같은 입력의 재시도는 같은 요청 id, 고친 입력은 새 id.
+  const draftKey = new RetryKey();
   const csvIds = $derived(csv === undefined ? [] : csv.rows.map(() => newRequestId()));
 
   /** 회차를 더한다. 성공하면 true. */
@@ -484,10 +486,10 @@
             duration_seconds: seconds,
             planned_on: orNull(newEpisode.planned_on),
           };
-          void addEpisodes([row], [draftId]).then((ok) => {
+          void addEpisodes([row], [draftKey.for({ itemId, row })]).then((ok) => {
             if (!ok) return;
             newEpisode = { title: '', chapter: '', duration: '', planned_on: '' };
-            draftId = newRequestId();
+            draftKey.done();
           });
         }}
       >

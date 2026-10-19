@@ -1,8 +1,9 @@
 <script lang="ts">
   // 댓글(D-27, D-20). 대상을 볼 수 있으면 댓글을 단다. 한 단계 답글, 해결된 스레드는 접어 둔다.
   import type { CommentTarget, CommentView } from '$lib/api/client';
-  import { api, newRequestId } from '$lib/api/client';
+  import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { RetryKey } from '$lib/api/retry-key';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
@@ -21,9 +22,9 @@
   let draft = $state('');
   let replyTo = $state<string | undefined>(undefined);
   let replyDraft = $state('');
-  // 요청 id는 성공할 때까지 지킨다. 응답을 잃고 다시 눌러도 같은 댓글이 된다.
-  let draftId = newRequestId();
-  let replyId = newRequestId();
+  // 같은 내용의 재시도는 같은 요청 id(응답을 잃고 다시 눌러도 같은 댓글), 고쳐서 보내면 새 id.
+  const draftKey = new RetryKey();
+  const replyKey = new RetryKey();
   let lastTarget = '';
   let showResolved = $state<Set<string>>(new Set());
   let busy = $state(false);
@@ -36,8 +37,8 @@
     // 대상이 바뀌면 남은 요청 id를 새로 정한다(다른 대상에 옛 id가 쓰이지 않게).
     if (t.id !== lastTarget) {
       lastTarget = t.id;
-      draftId = newRequestId();
-      replyId = newRequestId();
+      draftKey.done();
+      replyKey.done();
     }
     const mine = ++seq;
     api
@@ -70,18 +71,28 @@
   async function post(): Promise<void> {
     const body = draft.trim();
     if (body === '') return;
-    if (await run(() => api.addComment(target, body, null, draftId), m.comments_posted())) {
+    if (
+      await run(
+        () => api.addComment(target, body, null, draftKey.for({ target: target.id, body })),
+        m.comments_posted(),
+      )
+    ) {
       draft = '';
-      draftId = newRequestId();
+      draftKey.done();
     }
   }
 
   async function reply(root: string): Promise<void> {
     const body = replyDraft.trim();
     if (body === '') return;
-    if (await run(() => api.addComment(target, body, root, replyId), m.comments_replied())) {
+    if (
+      await run(
+        () => api.addComment(target, body, root, replyKey.for({ target: target.id, root, body })),
+        m.comments_replied(),
+      )
+    ) {
       replyDraft = '';
-      replyId = newRequestId();
+      replyKey.done();
       replyTo = undefined;
     }
   }
@@ -160,7 +171,7 @@
                 onclick={() => {
                   replyTo = t.root.id;
                   replyDraft = '';
-                  replyId = newRequestId();
+                  replyKey.done();
                 }}>{m.comments_reply()}</Button
               >
             {/if}

@@ -3,7 +3,8 @@
   import type { Module, Workspace } from '@fvoci/api-client';
 
   import type { ItemView } from '$lib/api/client';
-  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { api, ApiError } from '$lib/api/client';
+  import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { forgetReferences } from '$lib/features/references/resolver';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
@@ -107,7 +108,8 @@
   let templateId = $state('');
   let templateTitle = $state('');
   let templateError = $state<string | undefined>(undefined);
-  let templateRequest = newRequestId();
+  // 같은 템플릿·제목의 재시도는 같은 요청 id, 고치면 새 id.
+  const templateKey = new RetryKey();
 
   async function fromTemplate(moduleId: string): Promise<void> {
     const source = templateId === '' ? templates[0]?.id : templateId;
@@ -117,14 +119,15 @@
     }
     templateError = undefined;
     try {
+      const title = templateTitle.trim();
       const copied = await api.copyItem(
         source,
-        templateRequest,
+        templateKey.for({ source, moduleId, title }),
         moduleId,
-        templateTitle.trim(),
+        title,
         true,
       );
-      templateRequest = newRequestId();
+      templateKey.done();
       router.navigate(itemPath(workspace.id, copied.item_id));
     } catch (e: unknown) {
       templateError = errorText(e, m.modules_create_failed());

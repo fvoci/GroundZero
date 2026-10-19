@@ -3,7 +3,8 @@
   import { tick } from 'svelte';
 
   import type { EventInput, EventView, ItemView } from '$lib/api/client';
-  import { api, newRequestId } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -23,8 +24,8 @@
   let error = $state<string | undefined>(undefined);
   let adding = $state(false);
   let openId = $state<string | undefined>(undefined);
-  // 같은 입력의 재시도는 같은 요청 id로(중복 생성 방지). 폼이 새로 열리면 새 id.
-  let requestId = newRequestId();
+  // 같은 입력의 재시도는 같은 요청 id로(중복 생성 방지), 고친 입력이나 새로 연 폼은 새 id.
+  const createKey = new RetryKey();
   const zone = localTimeZone();
   const canWrite = $derived(item.access !== 'read' && !item.archived);
 
@@ -47,8 +48,8 @@
   });
 
   async function create(input: EventInput): Promise<void> {
-    await api.createEvent(item.id, requestId, input);
-    requestId = newRequestId();
+    await api.createEvent(item.id, createKey.for({ item: item.id, input }), input);
+    createKey.done();
     adding = false;
     await reload();
   }
@@ -66,7 +67,7 @@
         variant="outline"
         class="ml-auto"
         onclick={() => {
-          requestId = newRequestId();
+          createKey.done();
           adding = true;
         }}>{m.events_add()}</Button
       >
