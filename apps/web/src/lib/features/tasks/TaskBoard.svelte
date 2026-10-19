@@ -183,18 +183,29 @@
   const titleOf = (id: string | null): string =>
     id === null ? '' : (tasks.find((t) => t.id === id)?.title ?? '');
 
+  // 이 보드가 기록을 쌓아 연 대화상자인지. 그렇다면 닫을 때 그 기록으로 돌아가, 뒤로 가기가 방금 닫은 카드를 다시
+  // 열지 않고 보드를 떠나게 한다. 주소로 바로 들어온 업무는 항목 주소로 옮긴다.
+  let openedHere = false;
+
   function open(id: string): void {
     router.navigate(itemTaskPath(item.workspace_id, item.id, id));
+    openedHere = true;
   }
 
   // 주소로 연 대화상자는 여는 단추를 모르므로, 닫으면 마지막으로 연 업무의 카드로 초점을 돌린다.
   let returnTo: string | undefined;
   $effect(() => {
     if (openTaskId !== undefined) returnTo = openTaskId;
+    else openedHere = false;
   });
 
   function close(): void {
-    router.navigate(itemPath(item.workspace_id, item.id));
+    if (openedHere) {
+      openedHere = false;
+      router.back();
+    } else {
+      router.navigate(itemPath(item.workspace_id, item.id));
+    }
   }
 
   /** 옮긴 뒤 화면 낭독기에 알리는 글. */

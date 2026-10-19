@@ -165,6 +165,12 @@ class Router {
     window.history.pushState(null, '', path);
     this.path = path;
   }
+
+  /** 바로 앞 기록으로 돌아간다(이 화면이 기록을 쌓아 연 대화상자를 닫을 때). 주소는 popstate가 맞춘다. */
+  back(): void {
+    if (this.guard !== undefined && !this.guard()) return;
+    window.history.back();
+  }
 }
 
 export const router = new Router();
