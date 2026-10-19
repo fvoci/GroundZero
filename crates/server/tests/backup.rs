@@ -9,10 +9,10 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use common::{
-    TestUser, config_with, create_doc, create_workspace, doc_body, new_request_id, send, send_raw,
+    TestUser, config_with, create_doc, create_workspace, doc_body, fresh_database, new_request_id,
+    send, send_raw,
 };
 use fvoci_server::backup;
-use fvoci_server::config::{DbCommandConfig, Secret};
 use fvoci_server::features::accounts::{SESSION_COOKIE, VerifiedIdentity, start_session};
 use fvoci_server::http::AppState;
 use serde_json::json;
@@ -37,58 +37,8 @@ async fn session(state: &AppState, subject: &str) -> TestUser {
     }
 }
 
-fn with_database(url: &str, database: &str) -> String {
-    let mut parsed = url::Url::parse(url).unwrap();
-    parsed.set_path(&format!("/{database}"));
-    parsed.to_string()
-}
-
 fn temp_dir(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("fvoci-{label}-{}", uuid::Uuid::now_v7().simple()))
-}
-
-/// 같은 클러스터의 빈 데이터베이스를 지금 마이그레이션까지 만든다. 백업은 DB의 모든 파일 버전 내용을 저장소에서
-/// 읽으므로, 원본도 복구 대상처럼 DB와 저장소를 함께 격리한다(공유 테스트 DB에는 다른 시험이 다른 저장소에 쓴
-/// 버전이 있다).
-struct FreshDb {
-    name: String,
-    db: DbCommandConfig,
-    app_url: String,
-}
-
-async fn fresh_database(admin: &mut PgConnection, label: &str) -> FreshDb {
-    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
-    let migration_url =
-        std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
-    let app_url = std::env::var("DATABASE_URL").expect("run via `cargo xtask test`");
-    let name = format!("fvoci_{label}_{}", uuid::Uuid::now_v7().simple());
-    sqlx::raw_sql(&format!("CREATE DATABASE {name}"))
-        .execute(&mut *admin)
-        .await
-        .unwrap();
-    let mut db_admin = PgConnection::connect(&with_database(&admin_url, &name))
-        .await
-        .unwrap();
-    sqlx::raw_sql(&format!(
-        "GRANT CONNECT ON DATABASE {name} TO fvoci_migrator, fvoci_app;
-         CREATE SCHEMA fvoci AUTHORIZATION fvoci_migrator;"
-    ))
-    .execute(&mut db_admin)
-    .await
-    .unwrap();
-    db_admin.close().await.unwrap();
-    let db = DbCommandConfig {
-        admin_url: Some(Secret::new(with_database(&admin_url, &name))),
-        migration_url: Some(Secret::new(with_database(&migration_url, &name))),
-        migrator_password: None,
-        app_password: None,
-    };
-    fvoci_server::db::admin::migrate(&db).await.unwrap();
-    FreshDb {
-        app_url: with_database(&app_url, &name),
-        name,
-        db,
-    }
 }
 
 #[tokio::test]
