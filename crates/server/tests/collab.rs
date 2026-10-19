@@ -1322,3 +1322,54 @@ async fn live_ref_store_and_old_version_cleanup_do_not_race() {
     assert!(v1_exists().await);
     owner.close().await;
 }
+
+/// 감사 2번: 계속 편집하는 문서는 쉬는 시간(60초)이 없어 리비전이 남지 않는다. 워크스페이스 반출은 그동안의 실시간
+/// 편집을 담아야 한다(반출 직전에 열린 방을 리비전으로 남긴다).
+#[tokio::test]
+async fn workspace_export_includes_live_edits() {
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "실시간 반출").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let doc = common::create_doc(&app, &writer, &ws, "반출 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+
+    let mut a = connect(addr, Some(&writer), &id, true).await.unwrap();
+    a.paragraph("방금 쓴 실시간 문단").await;
+    // 방이 변경을 받을 만큼만(모아 넣기 0.1초) 기다린다. 쉬는 시간 리비전(60초)은 아직이다.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let (status, _, bytes) = common::send_raw(
+        &app,
+        Method::GET,
+        &format!("/api/workspaces/{ws}/export"),
+        Some(&admin),
+        &[],
+        vec![],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut json = String::new();
+    std::io::Read::read_to_string(&mut archive.by_name("export.json").unwrap(), &mut json).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let body = json["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["id"] == id.as_str())
+        .unwrap()["body"]
+        .to_string();
+    assert!(body.contains("방금 쓴 실시간 문단"), "{body}");
+    a.close().await;
+}

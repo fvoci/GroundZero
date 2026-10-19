@@ -128,6 +128,10 @@ enum Command {
     Persist {
         done: oneshot::Sender<()>,
     },
+    /// 모아 둔 변경을 넣고 아직 리비전으로 남지 않은 편집을 지금 리비전으로 남긴다. 반출 직전에 쓴다.
+    Snapshot {
+        done: oneshot::Sender<()>,
+    },
     Shutdown {
         reason: CloseReason,
         snapshot: bool,
@@ -330,16 +334,24 @@ impl Rooms {
     /// 저장이 대신한다). 방이 이미 닫히는 중이면 답이 바로 돌아온다.
     async fn persist_where(&self, keep: impl Fn(&Handle) -> bool) {
         let handles: Vec<Handle> = self.lock().values().filter(|h| keep(h)).cloned().collect();
-        let waits = handles.into_iter().map(|handle| async move {
-            let (done, answer) = oneshot::channel();
-            if handle.tx.try_send(Command::Persist { done }).is_ok() {
-                let _ignored = answer.await;
-            }
-        });
-        let _ignored = tokio::time::timeout(
-            Duration::from_secs(2),
-            futures_util::future::join_all(waits),
-        )
+        ask_all(handles, Duration::from_secs(2), |done| Command::Persist {
+            done,
+        })
+        .await;
+    }
+
+    /// 이 문서들의 열린 방이 아직 리비전으로 남지 않은 편집을 지금 리비전으로 남기게 하고 모두 합쳐 최대 5초
+    /// 기다린다. 반출이 문서 본문(마지막 리비전)을 읽기 전에 쓴다. 계속 편집하는 방은 쉬는 시간 리비전이 없어서다.
+    pub async fn snapshot_documents(&self, docs: &HashSet<DocumentId>) {
+        let handles: Vec<Handle> = self
+            .lock()
+            .iter()
+            .filter(|(doc, _)| docs.contains(doc))
+            .map(|(_, h)| h.clone())
+            .collect();
+        ask_all(handles, Duration::from_secs(5), |done| Command::Snapshot {
+            done,
+        })
         .await;
     }
 
@@ -396,6 +408,24 @@ impl Rooms {
             rooms.remove(&doc);
         }
     }
+}
+
+/// 방마다 명령을 보내고 답을 모두 합쳐 `wait`까지 기다린다. 대기열이 찬(바쁜) 방은 건너뛴다.
+async fn ask_all(
+    handles: Vec<Handle>,
+    wait: Duration,
+    command: impl Fn(oneshot::Sender<()>) -> Command,
+) {
+    let waits = handles.into_iter().map(|handle| {
+        let (done, answer) = oneshot::channel();
+        let sent = handle.tx.try_send(command(done)).is_ok();
+        async move {
+            if sent {
+                let _ignored = answer.await;
+            }
+        }
+    });
+    let _ignored = tokio::time::timeout(wait, futures_util::future::join_all(waits)).await;
 }
 
 /// 방마다 리비전을 남기고 닫게 한 뒤 답을 기다린다. 모두 남겼으면 참. 이미 닫힌 방은 남길 것이 없다.
@@ -594,6 +624,13 @@ impl Room {
             Command::Persist { done } => {
                 self.flush().await;
                 self.persist().await;
+                let _ignored = done.send(());
+                true
+            }
+            Command::Snapshot { done } => {
+                self.flush().await;
+                // 리비전을 남기면 상태도 저장한다. 남기지 못하면(편집할 수 있는 사람이 없음 등) 방에 그대로 둔다.
+                let _kept = self.snapshot().await;
                 let _ignored = done.send(());
                 true
             }
