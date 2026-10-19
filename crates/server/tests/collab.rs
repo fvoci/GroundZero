@@ -973,6 +973,19 @@ async fn live_body_pins_the_file_versions_it_points_to() {
     let first = upload_small(&app, &writer, target, b"v1").await;
     let file_id = first["file_id"].as_str().unwrap().to_owned();
     upload_small(&app, &writer, json!({ "file_id": file_id }), b"v2").await;
+    // 나중에 1판으로 되돌릴 수 있게 리비전 2를 만든다.
+    let saved = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{id}"),
+        Some(&writer),
+        Some(
+            json!({ "request_id": new_request_id(), "base_revision": 1, "title": "그림 문서",
+                     "body": common::doc_body("둘째 판") }),
+        ),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
     let on = send(
         &app,
         Method::PUT,
@@ -1002,16 +1015,37 @@ async fn live_body_pins_the_file_versions_it_points_to() {
     .await
     .json["revision"]
         .clone();
-    assert_eq!(revisions, 1, "no revision yet");
+    assert_eq!(revisions, 2, "no live revision yet");
 
-    let delete = send(
+    let delete_v1 = || {
+        let app = app.clone();
+        let writer = writer.clone();
+        let file_id = file_id.clone();
+        async move {
+            send(
+                &app,
+                Method::DELETE,
+                &format!("/api/files/{file_id}/versions/1"),
+                Some(&writer),
+                None,
+            )
+            .await
+        }
+    };
+    let delete = delete_v1().await;
+    assert_eq!(delete.status, StatusCode::CONFLICT, "{:?}", delete.json);
+
+    // 리비전 1로 되돌리면 그 실시간 상태는 낡아 다시 쓰이지 않는다. 그 참조로 버전을 붙잡지 않는다(0060).
+    let restored = send(
         &app,
-        Method::DELETE,
-        &format!("/api/files/{file_id}/versions/1"),
+        Method::POST,
+        &format!("/api/documents/{id}/revisions/1/restore"),
         Some(&writer),
-        None,
+        Some(json!({ "request_id": new_request_id(), "base_revision": 2 })),
     )
     .await;
-    assert_eq!(delete.status, StatusCode::CONFLICT, "{:?}", delete.json);
-    a.close().await;
+    assert!(restored.status.is_success(), "{:?}", restored.json);
+    let _ = a.closed().await;
+    let delete = delete_v1().await;
+    assert_eq!(delete.status, StatusCode::NO_CONTENT, "{:?}", delete.json);
 }
