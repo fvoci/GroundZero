@@ -12,70 +12,107 @@ export interface Draft {
   savedAt: string;
 }
 
-/**
- * 초안 칸. `offer`: 다시 열 때 찾아 사용자에게 고르게 하는 중인 지난 초안(그동안 새 편집은 기본 칸에 남는다).
- */
-export type DraftSlot = 'main' | 'offer';
+/** 이 사용자의 초안 키(지금 편집의 초안). 로그인 전이면 없다. */
+function key(documentId: string): string | undefined {
+  return me.userId === '' ? undefined : `fvoci:draft:${me.userId}:${documentId}`;
+}
 
-/** 이 사용자의 초안 키. 로그인 전이면 없다. */
-function key(documentId: string, slot: DraftSlot = 'main'): string | undefined {
-  if (me.userId === '') return undefined;
-  const base = `fvoci:draft:${me.userId}:${documentId}`;
-  return slot === 'main' ? base : `${base}:${slot}`;
+/**
+ * 고르게 할 지난 초안들의 키(순서대로 쌓는다). 다시 열 때 찾은 초안을 사용자가 고르는 동안 새 편집은 위의 키에
+ * 따로 남고, 그것도 다음에 이 줄 뒤에 붙는다. 어느 것도 덮거나 버리지 않는다.
+ */
+function offersKey(documentId: string): string | undefined {
+  const k = key(documentId);
+  return k === undefined ? undefined : `${k}:offers`;
 }
 
 /** 사용자 id가 없던 옛 키. 누구의 것인지 알 수 없어 제안하지 않고 지운다. */
 const legacyKey = (documentId: string): string => `fvoci:draft:${documentId}`;
 
-export function loadDraft(documentId: string, slot: DraftSlot = 'main'): Draft | undefined {
-  const k = key(documentId, slot);
+function parseDraft(value: unknown): Draft | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  if (
+    !('baseRevision' in value) ||
+    !('title' in value) ||
+    !('body' in value) ||
+    !('savedAt' in value)
+  ) {
+    return undefined;
+  }
+  const { baseRevision, title, body, savedAt } = value;
+  if (
+    typeof baseRevision !== 'number' ||
+    typeof title !== 'string' ||
+    typeof savedAt !== 'string'
+  ) {
+    return undefined;
+  }
   try {
-    window.localStorage.removeItem(legacyKey(documentId));
-    if (k === undefined) return undefined;
-    const raw = window.localStorage.getItem(k);
-    if (raw === null) return undefined;
-    const value: unknown = JSON.parse(raw);
-    if (typeof value !== 'object' || value === null) return undefined;
-    if (
-      !('baseRevision' in value) ||
-      !('title' in value) ||
-      !('body' in value) ||
-      !('savedAt' in value)
-    ) {
-      return undefined;
-    }
-    const { baseRevision, title, body, savedAt } = value;
-    if (
-      typeof baseRevision !== 'number' ||
-      typeof title !== 'string' ||
-      typeof savedAt !== 'string'
-    ) {
-      return undefined;
-    }
     return { baseRevision, title, body: parseDocNode(body), savedAt };
   } catch {
     return undefined;
   }
 }
 
-export function storeDraft(documentId: string, draft: Draft, slot: DraftSlot = 'main'): void {
-  const k = key(documentId, slot);
+function read(k: string | undefined): unknown {
+  if (k === undefined) return undefined;
+  try {
+    const raw = window.localStorage.getItem(k);
+    if (raw === null) return undefined;
+    const value: unknown = JSON.parse(raw);
+    return value;
+  } catch {
+    return undefined;
+  }
+}
+
+function write(k: string | undefined, value: unknown): void {
   if (k === undefined) return;
   try {
-    window.localStorage.setItem(k, JSON.stringify(draft));
+    if (value === undefined) window.localStorage.removeItem(k);
+    else window.localStorage.setItem(k, JSON.stringify(value));
   } catch {
     // 저장소를 쓸 수 없으면 초안 보관만 생략한다. 서버 저장 흐름은 영향받지 않는다.
   }
 }
 
-export function clearDraft(documentId: string, slot: DraftSlot = 'main'): void {
-  const k = key(documentId, slot);
-  if (k === undefined) return;
+export function loadDraft(documentId: string): Draft | undefined {
   try {
-    window.localStorage.removeItem(k);
+    window.localStorage.removeItem(legacyKey(documentId));
   } catch {
     // 위와 같다.
   }
+  return parseDraft(read(key(documentId)));
+}
+
+export function storeDraft(documentId: string, draft: Draft): void {
+  write(key(documentId), draft);
+}
+
+export function clearDraft(documentId: string): void {
+  write(key(documentId), undefined);
+}
+
+/** 고르게 할 지난 초안들(먼저 남은 것부터). */
+export function loadOffers(documentId: string): Draft[] {
+  const value = read(offersKey(documentId));
+  const list: unknown[] = Array.isArray(value) ? value : value === undefined ? [] : [value];
+  return list.map(parseDraft).filter((d): d is Draft => d !== undefined);
+}
+
+export function storeOffers(documentId: string, drafts: readonly Draft[]): void {
+  write(offersKey(documentId), drafts.length === 0 ? undefined : drafts);
+}
+
+/** 지금 편집의 초안을 고르게 할 줄 뒤로 옮긴다(덮이지 않게). 옮긴 뒤의 줄을 돌려준다. */
+export function queueDraft(documentId: string): Draft[] {
+  const offers = loadOffers(documentId);
+  const main = loadDraft(documentId);
+  if (main === undefined) return offers;
+  const next = [...offers, main];
+  storeOffers(documentId, next);
+  clearDraft(documentId);
+  return next;
 }
 
 /** 본문에서 사람이 읽는 텍스트를 뽑는다. 충돌 화면의 비교용. */

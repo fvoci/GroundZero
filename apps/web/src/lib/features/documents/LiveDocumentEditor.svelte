@@ -19,7 +19,14 @@
   import { Label } from '$lib/ui/label';
 
   import type { Draft } from './drafts';
-  import { canonicalJson, clearDraft, loadDraft, storeDraft } from './drafts';
+  import {
+    canonicalJson,
+    clearDraft,
+    loadOffers,
+    queueDraft,
+    storeDraft,
+    storeOffers,
+  } from './drafts';
   import type { LiveSession, LiveStatus, LiveStop, UnsyncedWatch } from './live';
   import { closeLive, colorFor, openLive, stopFor, watchUnsynced } from './live';
   import TiptapEditor from './TiptapEditor.svelte';
@@ -47,22 +54,11 @@
   let titleMessage = $state<string | undefined>(undefined);
   let savingTitle = $state(false);
 
-  // 서버가 받았다고 확인되지 않은 편집을 초안(기본 칸)으로 남긴다. 다시 열 때 찾은 지난 초안은 `offer` 칸으로 옮겨
-  // 사용자가 고를 때까지 지키고, 그동안의 새 편집은 기본 칸에 따로 남는다.
+  // 서버가 받았다고 확인되지 않은 편집을 초안으로 남긴다. 다시 열 때(또는 방을 새로 열 때) 남아 있던 초안은
+  // 고르게 할 줄로 옮겨 하나씩 고르게 하고, 그동안의 새 편집은 지금 편집의 초안으로 따로 남는다(덮지 않음).
   let latest: DocNode | undefined;
   let watch: UnsyncedWatch | undefined;
-  /** 고르게 할 지난 초안: `offer` 칸에 있으면 그것, 없으면 기본 칸의 것을 `offer`로 옮긴다. */
-  function takeEarlier(): Draft | undefined {
-    const offered = loadDraft(start.id, 'offer');
-    if (offered !== undefined) return offered;
-    const main = loadDraft(start.id);
-    if (main !== undefined) {
-      storeDraft(start.id, main, 'offer');
-      clearDraft(start.id);
-    }
-    return main;
-  }
-  let earlier = untrack(takeEarlier);
+  untrack(() => queueDraft(start.id));
   let checkedEarlier = false;
   let found = $state<Draft | undefined>(undefined);
   let foundMessage = $state<string | undefined>(undefined);
@@ -93,16 +89,35 @@
     if (watch?.dirty === true) keepDraft();
   }
 
-  /** 처음 맞춰진 뒤 지난번 초안이 지금 내용과 같으면 지우고, 다르면 고르게 한다. */
+  /** 처음 맞춰진 뒤 지난 초안을 고르게 한다. */
   function compareEarlier(): void {
     if (checkedEarlier) return;
     checkedEarlier = true;
-    if (earlier === undefined) return;
-    if (latest !== undefined && canonicalJson(earlier.body) === canonicalJson(latest)) {
-      clearDraft(start.id, 'offer');
-    } else {
-      found = earlier;
-    }
+    showNextOffer();
+  }
+
+  /** 지금 내용과 같은 지난 초안은 지우고(이미 반영됨), 남은 것 중 첫째를 고르게 한다. */
+  function showNextOffer(): void {
+    const all = loadOffers(start.id);
+    const now = latest === undefined ? undefined : canonicalJson(latest);
+    const rest = all.filter((d) => canonicalJson(d.body) !== now);
+    if (rest.length !== all.length) storeOffers(start.id, rest);
+    found = rest[0];
+  }
+
+  /** 지금 고르게 한 초안을 줄에서 뺀다(보존했거나 버렸다). 다음 것이 있으면 이어 고르게 한다. */
+  function resolveFound(): void {
+    const done = found;
+    if (done === undefined) return;
+    storeOffers(
+      start.id,
+      loadOffers(start.id).filter(
+        (d) => d.savedAt !== done.savedAt || canonicalJson(d.body) !== canonicalJson(done.body),
+      ),
+    );
+    found = undefined;
+    foundRequest = undefined;
+    showNextOffer();
   }
 
   function open(): void {
@@ -184,11 +199,9 @@
     if (session !== undefined) closeLive(session);
     session = undefined;
     stopped = undefined;
-    // 새 문서로 다시 연다(4409 등). 방금 남긴 초안(서버가 받지 않은 편집)을 다시 맞춰진 뒤 고르게 한다.
-    if (found === undefined) {
-      earlier = takeEarlier();
-      checkedEarlier = false;
-    }
+    // 새 문서로 다시 연다(4409 등). 방금 남긴 초안(서버가 받지 않은 편집)을 줄 뒤에 붙여 다시 맞춰진 뒤 고르게 한다.
+    queueDraft(start.id);
+    if (found === undefined) checkedEarlier = false;
     epoch += 1;
     open();
   }
@@ -219,8 +232,7 @@
         body: draft.body,
       });
       if (saved.kind === 'conflict') throw new Error('copy conflicted');
-      clearDraft(start.id, 'offer');
-      found = undefined;
+      resolveFound();
       router.navigate(standalonePath(created.id));
     } catch (e: unknown) {
       foundMessage = errorText(e, m.documents_copy_failed());
@@ -230,8 +242,7 @@
   }
 
   function discardFound(): void {
-    clearDraft(start.id, 'offer');
-    found = undefined;
+    resolveFound();
   }
 
   /** 본문 첨부로 올리고 넣을 주소를 돌려준다(일반 편집과 같다). */

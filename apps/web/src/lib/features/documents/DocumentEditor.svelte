@@ -22,7 +22,15 @@
   import { Label } from '$lib/ui/label';
 
   import { describeSaveBlock } from './content-notices';
-  import { canonicalJson, clearDraft, loadDraft, plainText, storeDraft } from './drafts';
+  import {
+    canonicalJson,
+    clearDraft,
+    loadDraft,
+    loadOffers,
+    plainText,
+    storeDraft,
+    storeOffers,
+  } from './drafts';
   import { contentIssues } from './paste-guard';
   import TiptapEditor from './TiptapEditor.svelte';
 
@@ -72,11 +80,14 @@
   let realtimeOn = $state(false);
   // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다.
   function pendingDraft(): ReturnType<typeof loadDraft> {
-    // 실시간 편집기가 고르게 하던 중이던 초안(`offer`)도 여기서 이어 고르게 한다.
-    const offered = loadDraft(start.id, 'offer');
-    if (offered !== undefined) {
-      if (loadDraft(start.id) === undefined) storeDraft(start.id, offered);
-      clearDraft(start.id, 'offer');
+    // 실시간 편집기가 고르게 하던 줄의 초안도 여기서 하나씩 이어 고르게 한다(지금 초안이 없을 때 맨 앞 것을 꺼낸다.
+    // 나머지는 줄에 남아 다음에 고르게 한다).
+    if (loadDraft(start.id) === undefined) {
+      const [first, ...rest] = loadOffers(start.id);
+      if (first !== undefined) {
+        storeDraft(start.id, first);
+        storeOffers(start.id, rest);
+      }
     }
     const draft = loadDraft(start.id);
     if (draft === undefined) return undefined;
@@ -277,7 +288,7 @@
     try {
       // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다. 응답을 잃고 다시 눌러도
       // 같은 내용이면 같은 노트가 된다.
-      const created = await api.createNote(copyNoteKey.for({ copyTitle, body }), copyTitle);
+      const created = await api.createNote(copyNoteKey.for({ copyTitle }), copyTitle);
       const saved = await api.saveDocument(created.id, {
         requestId: copySaveKey.for({ note: created.id, copyTitle, body }),
         baseRevision: created.revision,

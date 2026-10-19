@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { clearDraft, loadDraft, storeDraft } from '$lib/features/documents/drafts';
+import {
+  clearDraft,
+  loadDraft,
+  loadOffers,
+  queueDraft,
+  storeDraft,
+  storeOffers,
+} from '$lib/features/documents/drafts';
 import { me } from '$lib/me.svelte';
 
 const body = { type: 'doc', content: [{ type: 'paragraph' }] };
@@ -38,17 +45,18 @@ describe('drafts are per user', () => {
   });
 });
 
-describe('draft slots', () => {
-  it('keeps the offered draft and new edits apart, per user', () => {
+describe('draft queue', () => {
+  it('queues drafts without overwriting or dropping any, per user', () => {
     me.userId = 'user-a';
-    storeDraft('doc-4', { ...draft, title: '고를 초안' }, 'offer');
-    storeDraft('doc-4', { ...draft, title: '새 편집' });
-    expect(loadDraft('doc-4', 'offer')?.title).toBe('고를 초안');
-    expect(loadDraft('doc-4')?.title).toBe('새 편집');
-    clearDraft('doc-4', 'offer');
-    expect(loadDraft('doc-4', 'offer')).toBeUndefined();
-    expect(loadDraft('doc-4')?.title).toBe('새 편집');
-    me.userId = 'user-b';
+    storeDraft('doc-4', { ...draft, title: '첫 초안' });
+    expect(queueDraft('doc-4').map((d) => d.title)).toEqual(['첫 초안']);
     expect(loadDraft('doc-4')).toBeUndefined();
+    // 고르는 동안 새 편집이 또 남았다가 다음에 줄 뒤에 붙는다.
+    storeDraft('doc-4', { ...draft, title: '둘째 초안' });
+    expect(queueDraft('doc-4').map((d) => d.title)).toEqual(['첫 초안', '둘째 초안']);
+    storeOffers('doc-4', loadOffers('doc-4').slice(1));
+    expect(loadOffers('doc-4').map((d) => d.title)).toEqual(['둘째 초안']);
+    me.userId = 'user-b';
+    expect(loadOffers('doc-4')).toEqual([]);
   });
 });
