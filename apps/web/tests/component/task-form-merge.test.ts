@@ -36,3 +36,22 @@ describe('mergeForm', () => {
     );
   });
 });
+
+describe('mergeForm baseline', () => {
+  it('keeps a clash visible across a second refresh and catches tag clashes', () => {
+    const mine = { ...base, title: '내 제목', tags: ['내 태그'] };
+    const first = mergeForm(base, mine, { ...base, title: '남의 제목', tags: ['남의 태그'] });
+    expect(first.clash).toBe(true);
+    // 사용자가 바꾼 칸은 기준이 옛 값 그대로라, 다음 새로고침에서도 서버의 바뀐 값과 다르다고 본다.
+    expect(first.baseline.title).toBe(base.title);
+    const second = mergeForm(first.baseline, first.form, {
+      ...base,
+      title: '남의 제목',
+      tags: ['남의 태그'],
+      due_date: '2026-11-01',
+    });
+    expect(second.clash).toBe(true);
+    expect(second.form.title).toBe('내 제목');
+    expect(second.form.due_date).toBe('2026-11-01');
+  });
+});

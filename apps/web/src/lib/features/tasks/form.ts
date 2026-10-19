@@ -19,20 +19,36 @@ export function formOf(task: TaskDetailView): TaskInput {
 }
 
 /**
- * 서버의 새 값(`fresh`)으로 다시 채우되, 처음 값(`before`)에서 사용자가 바꾼 칸(`mine`)은 그대로 둔다.
- * 사용자가 바꾼 칸을 서버에서도 누가 바꿨으면 `clash`: 그때는 옛 판 번호로 저장해 충돌 화면(409)이 고르게 한다.
+ * 서버의 새 값(`fresh`)으로 다시 채우되, 기준 값(`before`, 마지막으로 불러온 판)에서 사용자가 바꾼 칸(`mine`)은
+ * 그대로 둔다. 사용자가 바꾼 칸을 서버에서도 누가 바꿨으면 `clash`: 그때는 옛 판 번호로 저장해 충돌 화면(409)이
+ * 고르게 한다. `baseline`은 다음 비교의 기준: 사용자가 바꾸지 않은 칸만 새 값으로 옮긴다.
  */
 export function mergeForm(
   before: TaskInput,
   mine: TaskInput,
   fresh: TaskInput,
-): { form: TaskInput; clash: boolean } {
+): { form: TaskInput; baseline: TaskInput; clash: boolean } {
   let clash = false;
   const same = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
+  const untouched = (key: keyof TaskInput): boolean => same(mine[key], before[key]);
   const pick = <K extends keyof TaskInput>(key: K): TaskInput[K] => {
-    if (same(mine[key], before[key]) || same(mine[key], fresh[key])) return fresh[key];
+    if (untouched(key) || same(mine[key], fresh[key])) return fresh[key];
     if (!same(fresh[key], before[key])) clash = true;
     return mine[key];
+  };
+  const keep = <K extends keyof TaskInput>(key: K): TaskInput[K] =>
+    untouched(key) ? fresh[key] : before[key];
+  const baseline: TaskInput = {
+    title: keep('title'),
+    description: keep('description'),
+    status: keep('status'),
+    priority: keep('priority'),
+    start_date: keep('start_date'),
+    due_date: keep('due_date'),
+    estimate_minutes: keep('estimate_minutes'),
+    tags: keep('tags'),
+    assignee_ids: keep('assignee_ids'),
+    milestone: keep('milestone'),
   };
   const form: TaskInput = {
     title: pick('title'),
@@ -46,5 +62,5 @@ export function mergeForm(
     assignee_ids: pick('assignee_ids'),
     milestone: pick('milestone'),
   };
-  return { form, clash };
+  return { form, baseline, clash };
 }
