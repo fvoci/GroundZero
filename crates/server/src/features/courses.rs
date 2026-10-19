@@ -209,11 +209,14 @@ pub async fn get(
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-    let archived: bool =
-        sqlx::query_scalar("SELECT archived_at IS NOT NULL FROM items WHERE id = $1")
-            .bind(item)
-            .fetch_one(tx.conn())
-            .await?;
+    // 쓰기 검사(app_require_course_write)와 같이 항목이나 그 모듈이 보관되면 읽기 전용이다.
+    let archived: bool = sqlx::query_scalar(
+        "SELECT i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL
+         FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1",
+    )
+    .bind(item)
+    .fetch_one(tx.conn())
+    .await?;
     type DetailsRow = (
         String,
         String,

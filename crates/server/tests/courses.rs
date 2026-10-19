@@ -465,3 +465,72 @@ async fn completion_dates_links_and_participant_visibility() {
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
     assert!(names(participants(admin.clone()).await).is_empty());
 }
+
+/// 강의 모듈만 보관해도 강좌는 읽기 전용이다. 조회의 편집 가능 표시가 쓰기 거부와 같아야 화면이 고치기 칸을 열지
+/// 않는다(보관 해제하면 다시 고칠 수 있다).
+#[tokio::test]
+async fn archiving_the_course_module_makes_the_course_read_only() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "강의 보관").await;
+    let m = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "course", "name": "강의", "key": "ARC" })),
+    )
+    .await;
+    assert_eq!(m.status, StatusCode::CREATED, "{:?}", m.json);
+    let module = m.json["id"].as_str().unwrap().to_owned();
+    let i = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{module}/items"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "선형대수" })),
+    )
+    .await;
+    let item = i.json["id"].as_str().unwrap().to_owned();
+    assert_eq!(get(&app, &admin, &item).await["can_write"], true);
+
+    let archive = |archived: bool| {
+        let (app, admin, module) = (app.clone(), admin.clone(), module.clone());
+        async move {
+            send(
+                &app,
+                Method::PUT,
+                &format!("/api/modules/{module}/archived"),
+                Some(&admin),
+                Some(json!({ "archived": archived })),
+            )
+            .await
+            .status
+        }
+    };
+    assert_eq!(archive(true).await, StatusCode::OK);
+    assert_eq!(get(&app, &admin, &item).await["can_write"], false);
+    let details = json!({ "subject": "수학" });
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{item}/course"),
+        Some(&admin),
+        Some(details.clone()),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
+
+    assert_eq!(archive(false).await, StatusCode::OK);
+    assert_eq!(get(&app, &admin, &item).await["can_write"], true);
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{item}/course"),
+        Some(&admin),
+        Some(details),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
+}
