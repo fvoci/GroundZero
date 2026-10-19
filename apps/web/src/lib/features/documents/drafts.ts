@@ -12,16 +12,23 @@ export interface Draft {
   savedAt: string;
 }
 
+/**
+ * 초안 칸. `offer`: 다시 열 때 찾아 사용자에게 고르게 하는 중인 지난 초안(그동안 새 편집은 기본 칸에 남는다).
+ */
+export type DraftSlot = 'main' | 'offer';
+
 /** 이 사용자의 초안 키. 로그인 전이면 없다. */
-function key(documentId: string): string | undefined {
-  return me.userId === '' ? undefined : `fvoci:draft:${me.userId}:${documentId}`;
+function key(documentId: string, slot: DraftSlot = 'main'): string | undefined {
+  if (me.userId === '') return undefined;
+  const base = `fvoci:draft:${me.userId}:${documentId}`;
+  return slot === 'main' ? base : `${base}:${slot}`;
 }
 
 /** 사용자 id가 없던 옛 키. 누구의 것인지 알 수 없어 제안하지 않고 지운다. */
 const legacyKey = (documentId: string): string => `fvoci:draft:${documentId}`;
 
-export function loadDraft(documentId: string): Draft | undefined {
-  const k = key(documentId);
+export function loadDraft(documentId: string, slot: DraftSlot = 'main'): Draft | undefined {
+  const k = key(documentId, slot);
   try {
     window.localStorage.removeItem(legacyKey(documentId));
     if (k === undefined) return undefined;
@@ -51,8 +58,8 @@ export function loadDraft(documentId: string): Draft | undefined {
   }
 }
 
-export function storeDraft(documentId: string, draft: Draft): void {
-  const k = key(documentId);
+export function storeDraft(documentId: string, draft: Draft, slot: DraftSlot = 'main'): void {
+  const k = key(documentId, slot);
   if (k === undefined) return;
   try {
     window.localStorage.setItem(k, JSON.stringify(draft));
@@ -61,8 +68,8 @@ export function storeDraft(documentId: string, draft: Draft): void {
   }
 }
 
-export function clearDraft(documentId: string): void {
-  const k = key(documentId);
+export function clearDraft(documentId: string, slot: DraftSlot = 'main'): void {
+  const k = key(documentId, slot);
   if (k === undefined) return;
   try {
     window.localStorage.removeItem(k);

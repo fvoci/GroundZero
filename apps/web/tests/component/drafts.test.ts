@@ -37,3 +37,18 @@ describe('drafts are per user', () => {
     expect(window.localStorage.length).toBe(0);
   });
 });
+
+describe('draft slots', () => {
+  it('keeps the offered draft and new edits apart, per user', () => {
+    me.userId = 'user-a';
+    storeDraft('doc-4', { ...draft, title: '고를 초안' }, 'offer');
+    storeDraft('doc-4', { ...draft, title: '새 편집' });
+    expect(loadDraft('doc-4', 'offer')?.title).toBe('고를 초안');
+    expect(loadDraft('doc-4')?.title).toBe('새 편집');
+    clearDraft('doc-4', 'offer');
+    expect(loadDraft('doc-4', 'offer')).toBeUndefined();
+    expect(loadDraft('doc-4')?.title).toBe('새 편집');
+    me.userId = 'user-b';
+    expect(loadDraft('doc-4')).toBeUndefined();
+  });
+});

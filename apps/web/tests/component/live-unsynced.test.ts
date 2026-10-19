@@ -1,13 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
-import { watchUnsynced } from '$lib/features/documents/live';
+import { CONFIRM_MS, watchUnsynced } from '$lib/features/documents/live';
 
-/** y-websocket의 provider 흉내: synced 값과 'sync' 알림만. */
+/** y-websocket의 provider 흉내: synced·wsconnected 값과 'sync' 알림만. */
 function fakeProvider() {
   const listeners = new Set<(synced: boolean) => void>();
   return {
     synced: true,
+    wsconnected: true,
     on(_event: 'sync', listener: (synced: boolean) => void) {
       listeners.add(listener);
     },
@@ -21,40 +22,68 @@ function fakeProvider() {
   };
 }
 
-// 끊긴 동안의 실시간 입력을 초안으로 남기는 근거(제품 로직 점검 1번 불변식).
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+// 서버가 받았다고 확인될 때까지 내 실시간 입력을 초안으로 남긴다(제품 로직 점검 1번 불변식).
 describe('watchUnsynced', () => {
-  it('marks edits made while not synced and clears once synced again', () => {
+  it('confirms an edit only after the connection stays synced for a while', () => {
     const doc = new Y.Doc();
     const provider = fakeProvider();
     const events: string[] = [];
     const watch = watchUnsynced(doc, provider, {
       onDirty: () => events.push('dirty'),
-      onSynced: () => events.push('synced'),
+      onSynced: () => events.push('confirmed'),
     });
 
     doc.getText('t').insert(0, '연결됨');
-    expect(watch.dirty).toBe(false);
-
-    provider.setSynced(false);
-    doc.getText('t').insert(0, '끊긴 동안');
     expect(watch.dirty).toBe(true);
+    vi.advanceTimersByTime(CONFIRM_MS);
+    expect(watch.dirty).toBe(false);
+    expect(events).toEqual(['dirty', 'confirmed']);
+    watch.stop();
+  });
 
-    // 남이 보낸 변경은 내 편집이 아니다.
-    const remote = new Y.Doc();
-    remote.getText('t').insert(0, '남');
-    const other = fakeProvider();
-    const watchOther = watchUnsynced(remote, other, {
-      onDirty: () => events.push('other-dirty'),
+  it('keeps an offline edit when the reconnect is rejected right after syncing', () => {
+    const doc = new Y.Doc();
+    const provider = fakeProvider();
+    const watch = watchUnsynced(doc, provider, {
+      onDirty: () => undefined,
       onSynced: () => undefined,
     });
-    other.synced = false;
-    Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc), other);
-    expect(watchOther.dirty).toBe(false);
 
+    provider.wsconnected = false;
+    provider.setSynced(false);
+    doc.getText('t').insert(0, '끊긴 동안');
+    vi.advanceTimersByTime(CONFIRM_MS * 2);
+    expect(watch.dirty).toBe(true);
+
+    // 다시 붙어 서버 상태가 도착했다(synced). 서버는 곧 내 편집을 거절하고 닫는다(4409·4400).
+    provider.wsconnected = true;
     provider.setSynced(true);
-    expect(watch.dirty).toBe(false);
-    expect(events).toEqual(['dirty', 'synced']);
+    vi.advanceTimersByTime(100);
+    provider.wsconnected = false;
+    provider.setSynced(false);
+    vi.advanceTimersByTime(CONFIRM_MS * 2);
+    expect(watch.dirty).toBe(true);
     watch.stop();
-    watchOther.stop();
+  });
+
+  it('does not count changes sent by others', () => {
+    const doc = new Y.Doc();
+    doc.getText('t').insert(0, '남');
+    const remote = new Y.Doc();
+    const provider = fakeProvider();
+    const watch = watchUnsynced(remote, provider, {
+      onDirty: () => undefined,
+      onSynced: () => undefined,
+    });
+    Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc), provider);
+    expect(watch.dirty).toBe(false);
+    watch.stop();
   });
 });

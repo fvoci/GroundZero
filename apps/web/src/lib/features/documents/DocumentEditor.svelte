@@ -71,6 +71,12 @@
   let realtimeOn = $state(false);
   // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다.
   function pendingDraft(): ReturnType<typeof loadDraft> {
+    // 실시간 편집기가 고르게 하던 중이던 초안(`offer`)도 여기서 이어 고르게 한다.
+    const offered = loadDraft(start.id, 'offer');
+    if (offered !== undefined) {
+      if (loadDraft(start.id) === undefined) storeDraft(start.id, offered);
+      clearDraft(start.id, 'offer');
+    }
     const draft = loadDraft(start.id);
     if (draft === undefined) return undefined;
     const same =

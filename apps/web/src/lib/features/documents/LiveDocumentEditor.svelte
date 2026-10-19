@@ -47,19 +47,31 @@
   let titleMessage = $state<string | undefined>(undefined);
   let savingTitle = $state(false);
 
-  // 끊긴 동안의 편집을 초안으로 남긴다. 다시 열 때 찾은 초안은 사용자가 고를 때까지 지키고 덮지 않는다.
+  // 서버가 받았다고 확인되지 않은 편집을 초안(기본 칸)으로 남긴다. 다시 열 때 찾은 지난 초안은 `offer` 칸으로 옮겨
+  // 사용자가 고를 때까지 지키고, 그동안의 새 편집은 기본 칸에 따로 남는다.
   let latest: DocNode | undefined;
   let watch: UnsyncedWatch | undefined;
-  const earlier = untrack(() => loadDraft(start.id));
-  let blocked = earlier !== undefined;
+  const earlier = untrack(() => {
+    const offered = loadDraft(start.id, 'offer');
+    if (offered !== undefined) return offered;
+    const main = loadDraft(start.id);
+    if (main !== undefined) {
+      storeDraft(start.id, main, 'offer');
+      clearDraft(start.id);
+    }
+    return main;
+  });
   let checkedEarlier = false;
   let found = $state<Draft | undefined>(undefined);
   let foundMessage = $state<string | undefined>(undefined);
   let keepingFound = $state(false);
   let foundRequest: { note: string; save: string } | undefined;
+  let keepTimer: ReturnType<typeof setTimeout> | undefined;
 
   function keepDraft(): void {
-    if (latest === undefined || blocked) return;
+    if (keepTimer !== undefined) clearTimeout(keepTimer);
+    keepTimer = undefined;
+    if (latest === undefined) return;
     storeDraft(start.id, {
       baseRevision: start.revision,
       title,
@@ -68,7 +80,13 @@
     });
   }
 
-  /** 멈추거나 닫기 전에, 서버와 맞춰지지 않은 편집이 있으면 남긴다. */
+  /** 타자마다 쓰지 않도록 조금 모아 남긴다(멈추거나 닫을 때는 바로 남긴다). */
+  function keepDraftSoon(): void {
+    if (keepTimer !== undefined) clearTimeout(keepTimer);
+    keepTimer = setTimeout(keepDraft, 300);
+  }
+
+  /** 멈추거나 닫기 전에, 서버가 받았다고 확인되지 않은 편집이 있으면 바로 남긴다. */
   function keepIfDirty(): void {
     if (watch?.dirty === true) keepDraft();
   }
@@ -79,8 +97,7 @@
     checkedEarlier = true;
     if (earlier === undefined) return;
     if (latest !== undefined && canonicalJson(earlier.body) === canonicalJson(latest)) {
-      clearDraft(start.id);
-      blocked = false;
+      clearDraft(start.id, 'offer');
     } else {
       found = earlier;
     }
@@ -98,11 +115,11 @@
     watch?.stop();
     watch = watchUnsynced(next.document, next.provider, {
       // 편집기가 본문을 넘긴 뒤에 남긴다.
-      onDirty: () => {
-        queueMicrotask(keepDraft);
-      },
+      onDirty: keepDraftSoon,
       onSynced: () => {
-        if (!blocked) clearDraft(start.id);
+        if (keepTimer !== undefined) clearTimeout(keepTimer);
+        keepTimer = undefined;
+        clearDraft(start.id);
       },
     });
     next.provider.on('sync', (synced: boolean) => {
@@ -195,9 +212,8 @@
         body: draft.body,
       });
       if (saved.kind === 'conflict') throw new Error('copy conflicted');
-      clearDraft(start.id);
+      clearDraft(start.id, 'offer');
       found = undefined;
-      blocked = false;
       router.navigate(standalonePath(created.id));
     } catch (e: unknown) {
       foundMessage = errorText(e, m.documents_copy_failed());
@@ -207,9 +223,8 @@
   }
 
   function discardFound(): void {
-    clearDraft(start.id);
+    clearDraft(start.id, 'offer');
     found = undefined;
-    blocked = false;
   }
 
   /** 본문 첨부로 올리고 넣을 주소를 돌려준다(일반 편집과 같다). */
