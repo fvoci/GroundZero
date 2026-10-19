@@ -30,6 +30,10 @@ use yrs::updates::decoder::{Decode, DecoderV1};
 use yrs::updates::encoder::Encode;
 use yrs::{Doc, ReadTxn, Transact, Update};
 
+/// 자동 정리(`app_system_purge_old_versions`)는 DB 전체를 본다. 그것을 부르는 시험끼리는 차례로 돌아 서로의 정리 대상을
+/// 지우거나 세지 않게 한다.
+static GLOBAL_PURGE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 async fn serve(app: Router) -> SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -1262,6 +1266,7 @@ async fn rooms_acknowledge_persisted_state_with_a_snapshot() {
 /// 동안 자동 정리(이전 버전 정리)는 그 버전을 건너뛰고, 저장이 끝난 뒤에는 참조를 보고 남긴다. 두 트랜잭션으로 재현.
 #[tokio::test]
 async fn live_ref_store_and_old_version_cleanup_do_not_race() {
+    let _serial = GLOBAL_PURGE.lock().await;
     let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -1600,4 +1605,128 @@ async fn a_moved_room_follows_its_document_to_the_new_workspace() {
         saved["body"].to_string().contains("옮기기 전 실시간 문단"),
         "{saved}"
     );
+}
+
+/// 이 문서의 파일 참조 행을 넣은 직후 1초 멈추는 시험용 트리거(그 문서만). 참조를 넣은 뒤 잠그기 전의 틈을 넓힌다.
+async fn slow_ref_inserts(owner: &sqlx::PgPool, table: &str, doc: &str) -> String {
+    let name = format!("test_slow_{}", uuid::Uuid::now_v7().simple());
+    sqlx::query(&format!(
+        "CREATE FUNCTION fvoci.{name}() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN IF NEW.document_id = '{doc}'::uuid THEN PERFORM pg_sleep(1); END IF; RETURN NULL; END $$"
+    ))
+    .execute(owner)
+    .await
+    .unwrap();
+    sqlx::query(&format!(
+        "CREATE TRIGGER {name} AFTER INSERT ON fvoci.{table} FOR EACH ROW EXECUTE FUNCTION fvoci.{name}()"
+    ))
+    .execute(owner)
+    .await
+    .unwrap();
+    format!("DROP TRIGGER {name} ON fvoci.{table}; DROP FUNCTION fvoci.{name}()")
+}
+
+/// 검토 9번: 참조를 적는 쪽(실시간 상태 저장·리비전 저장)은 가리키는 버전을 참조를 넣기 전에 잠가야 한다. 넣은 뒤에
+/// 잠그면 그 사이 자동 정리가 먼저 잠그고(아직 보이지 않는 참조) 그 버전을 지울 수 있다.
+#[tokio::test]
+async fn file_refs_lock_versions_before_they_are_written() {
+    let _serial = GLOBAL_PURGE.lock().await;
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+
+    for path in ["live", "revision"] {
+        let ws = create_workspace(&app, &admin, &format!("잠금 순서 {path}")).await;
+        let doc = common::create_doc(&app, &admin, &ws, "잠금 순서 문서").await;
+        let id = doc["id"].as_str().unwrap().to_owned();
+        let target = json!({ "target": { "kind": "document", "id": id }, "name": "그림.txt" });
+        let first = upload_small(&app, &admin, target, b"v1").await;
+        let file_id = first["file_id"].as_str().unwrap().to_owned();
+        upload_small(&app, &admin, json!({ "file_id": file_id }), b"v2").await;
+        // 1판을 정리 대상으로 만든다: 보존 1일, 다음 판이 이틀 전에 올라온 것으로.
+        sqlx::query("UPDATE fvoci.workspaces SET version_retention_days = 1 WHERE id = $1::uuid")
+            .bind(&ws)
+            .execute(&owner)
+            .await
+            .unwrap();
+        sqlx::query(
+            "UPDATE fvoci.file_versions SET created_at = now() - interval '2 days' WHERE file_id = $1::uuid AND version = 2",
+        )
+        .bind(&file_id)
+        .execute(&owner)
+        .await
+        .unwrap();
+        let body = json!({ "type": "doc", "content": [{ "type": "paragraph", "content": [{ "type": "text",
+            "text": format!("/api/files/{file_id}/content?version=1&inline=true") }] }] });
+
+        // 쓰는 쪽을 띄우기 전에 그 참조 표에 멈춤 트리거를 단다.
+        let table = if path == "live" {
+            "document_collab_file_refs"
+        } else {
+            "document_file_refs"
+        };
+        let drop = slow_ref_inserts(&owner, table, &id).await;
+        let writer = if path == "live" {
+            let owner = owner.clone();
+            let id = id.clone();
+            let body = body.clone();
+            tokio::spawn(async move {
+                let stored: bool = sqlx::query_scalar(
+                    "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2)",
+                )
+                .bind(&id)
+                .bind(&body)
+                .fetch_one(&owner)
+                .await
+                .unwrap();
+                assert!(stored);
+            })
+        } else {
+            let app = app.clone();
+            let admin = admin.clone();
+            let id = id.clone();
+            let base = doc["revision"].clone();
+            let body = body.clone();
+            tokio::spawn(async move {
+                let saved = send(
+                    &app,
+                    Method::PUT,
+                    &format!("/api/documents/{id}"),
+                    Some(&admin),
+                    Some(
+                        json!({ "request_id": new_request_id(), "base_revision": base,
+                                 "title": "잠금 순서 문서", "body": body }),
+                    ),
+                )
+                .await;
+                assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+            })
+        };
+        drop_writer_race(writer, &owner).await;
+        sqlx::raw_sql(&drop).execute(&owner).await.unwrap();
+        let v1: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM fvoci.file_versions WHERE file_id = $1::uuid AND version = 1)",
+        )
+        .bind(&file_id)
+        .fetch_one(&owner)
+        .await
+        .unwrap();
+        assert!(
+            v1,
+            "{path}: cleanup removed a version a reference was being written for"
+        );
+    }
+    owner.close().await;
+}
+
+/// 쓰는 쪽이 참조를 넣고 멈춘 사이 자동 정리를 돌리고, 쓰는 쪽이 끝나기를 기다린다.
+async fn drop_writer_race(writer: tokio::task::JoinHandle<()>, owner: &sqlx::PgPool) {
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let _purged: i32 = sqlx::query_scalar("SELECT fvoci.app_system_purge_old_versions()")
+        .fetch_one(owner)
+        .await
+        .unwrap();
+    writer.await.unwrap();
 }
