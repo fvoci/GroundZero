@@ -105,6 +105,16 @@ impl Compose {
         Ok(())
     }
 
+    /// 실행 중인 서비스 안에서 명령을 실행한다. `stdin`을 표준 입력으로 넘긴다.
+    pub fn exec(&self, sh: &Shell, service: &str, command: &[String], stdin: &str) -> Result<()> {
+        let args = self.base_args();
+        cmd!(sh, "docker {args...} exec -T {service} {command...}")
+            .stdin(stdin)
+            .run()
+            .with_context(|| format!("{service}: {} failed", command.join(" ")))?;
+        Ok(())
+    }
+
     /// 서비스의 컨테이너 포트에 매핑된 호스트 포트를 돌려준다.
     pub fn host_port(&self, sh: &Shell, service: &str, container_port: u16) -> Result<u16> {
         let args = self.base_args();
@@ -191,6 +201,8 @@ pub fn prepare_database(sh: &Shell, urls: &DbUrls) -> Result<()> {
 pub const OIDC_CLIENT_ID: &str = "fvoci-web";
 pub const OIDC_CLIENT_SECRET: &str = "fvoci-test-client-secret";
 pub const OIDC_REALM: &str = "fvoci-test";
+/// 그 realm의 가짜 사용자 `test-user`의 고정 id(OIDC subject). 개발 환경의 초기 관리자(D-51)로 쓴다.
+pub const DEV_ADMIN_SUBJECT: &str = "00000000-0000-4000-8000-00000000000a";
 /// compose.dev·test.yaml과 CI 서비스의 Meilisearch 테스트 마스터 키(명백한 테스트 값).
 pub const SEARCH_TEST_KEY: &str = "fvoci-test-meili-master-key-16chars";
 /// compose.test.yaml의 SeaweedFS 버킷·자격 증명(명백한 테스트 값).
