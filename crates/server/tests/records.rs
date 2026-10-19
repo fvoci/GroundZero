@@ -1239,3 +1239,74 @@ async fn kept_expired_bundles_restore_with_existing_permissions() {
     );
     owner.close().await;
 }
+
+/// 보관된 항목이나 그 모듈에 바로 붙은 파일은 읽기만 된다. 목록의 can_write가 쓰기 거부와 같아야 화면이 새 버전·이름
+/// 바꾸기·지우기 단추를 보이지 않는다(보관을 풀면 다시 쓸 수 있다). 저장소 정리를 돌리는 파일 묶음과 섞이지 않게 여기에 둔다.
+#[tokio::test]
+async fn item_files_are_read_only_while_the_item_or_its_module_is_archived() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "파일 보관").await;
+    let module = module(&app, &admin, &ws, "project", "FAR").await;
+    let item = open_item(&app, &admin, &module, "항목").await;
+    let file_id = new_file(&app, &admin, &item, "plan.csv", b"a,b\n1,2\n").await;
+
+    let can_write = || {
+        let (app, admin, item) = (app.clone(), admin.clone(), item.clone());
+        async move {
+            let r = send(
+                &app,
+                Method::GET,
+                &format!("/api/items/{item}/files"),
+                Some(&admin),
+                None,
+            )
+            .await;
+            assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+            r.json[0]["can_write"].as_bool().unwrap()
+        }
+    };
+    let archive = |path: String, archived: bool| {
+        let (app, admin) = (app.clone(), admin.clone());
+        async move {
+            send(
+                &app,
+                Method::PUT,
+                &path,
+                Some(&admin),
+                Some(json!({ "archived": archived })),
+            )
+            .await
+            .status
+        }
+    };
+    let rename = || {
+        let (app, admin, file_id) = (app.clone(), admin.clone(), file_id.clone());
+        async move {
+            send(
+                &app,
+                Method::PUT,
+                &format!("/api/files/{file_id}"),
+                Some(&admin),
+                Some(json!({ "name": "plan-2.csv" })),
+            )
+            .await
+            .status
+        }
+    };
+    assert!(can_write().await);
+
+    let module_path = format!("/api/modules/{module}/archived");
+    assert_eq!(archive(module_path.clone(), true).await, StatusCode::OK);
+    assert!(!can_write().await);
+    assert_eq!(rename().await, StatusCode::CONFLICT);
+    assert_eq!(archive(module_path, false).await, StatusCode::OK);
+
+    let item_path = format!("/api/items/{item}/archived");
+    assert_eq!(archive(item_path.clone(), true).await, StatusCode::OK);
+    assert!(!can_write().await);
+    assert_eq!(archive(item_path, false).await, StatusCode::OK);
+    assert!(can_write().await);
+    assert_eq!(rename().await, StatusCode::OK);
+}
