@@ -70,18 +70,18 @@
 
   // 다시 붙기를 서버가 연결 전에 거절하면(권한·세션이 끝남, 실시간이 꺼짐) 브라우저는 이유 없이 1006만 받고
   // y-websocket은 끝없이 다시 붙는다(그동안 고친 내용은 어디에도 남지 않는다). 그때 문서를 다시 읽어 이유를 찾는다.
-  // 네트워크 오류면 그대로 다시 붙기를 기다린다.
+  // 네트워크 오류면 그대로 다시 붙기를 기다린다. 같은 연결인지는 provider로 본다(`session`은 $state라 프록시다).
   let checking = false;
   async function checkRefusal(current: LiveSession): Promise<void> {
     if (checking) return;
     checking = true;
     try {
       const doc = await api.document(start.id);
-      if (session !== current || doc.realtime) return;
+      if (session?.provider !== current.provider || doc.realtime) return;
       current.provider.disconnect();
       onrealtimeoff?.();
     } catch (e: unknown) {
-      if (session !== current || !(e instanceof ApiError)) return;
+      if (session?.provider !== current.provider || !(e instanceof ApiError)) return;
       if (e.status === 401 || e.status === 403 || e.status === 404) {
         current.provider.disconnect();
         stopped = 'denied';
