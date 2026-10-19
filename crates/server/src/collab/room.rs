@@ -38,6 +38,9 @@ const FLUSH_EVERY: Duration = Duration::from_millis(100);
 const PERSIST_EVERY: Duration = Duration::from_secs(3);
 /// 이만큼 조용하면 리비전을 만든다.
 const SNAPSHOT_IDLE: Duration = Duration::from_secs(60);
+/// 방이 상태를 DB에 저장한 뒤 보내는 확인(y-sync 사용자 정의 메시지). 저장한 상태의 스냅숏(지움 기록 + 상태 벡터,
+/// v1)을 담는다. 클라이언트는 자기 편집이 그 안에 들었을 때만 복구용 초안을 지운다(연결 상태를 저장 확인으로 보지 않음).
+pub const MSG_PERSISTED: u8 = 100;
 /// 한 프레임에 담을 수 있는 메시지 수(y-websocket은 보통 하나).
 const MAX_MESSAGES_PER_FRAME: usize = 16;
 /// 연결마다 1초에 받을 수 있는 메시지 수와 바이트(넘치면 닫고 다시 붙게 한다).
@@ -462,6 +465,8 @@ struct Room {
     dirty_state: bool,
     dirty_since_snapshot: bool,
     last_change: Instant,
+    /// 마지막으로 DB에 저장한(또는 저장된 것을 불러온) 상태의 스냅숏(v1). 들어오는 연결에 처음 메시지와 함께 보낸다.
+    persisted: Option<Vec<u8>>,
     /// 고친 사람(마지막이 앞). 리비전 작성자를 고를 때 쓴다.
     editors: Vec<UserId>,
     last_recheck: Instant,
@@ -495,6 +500,7 @@ impl Room {
             dirty_state: false,
             dirty_since_snapshot: false,
             last_change: Instant::now(),
+            persisted: None,
             editors: Vec::new(),
             last_recheck: Instant::now(),
             recheck_every,
@@ -655,6 +661,8 @@ impl Room {
         self.lineage = lineage_of(&doc).unwrap_or_default();
         self.base_revision = revision;
         self.base_body = body;
+        // 저장된 상태에서 불러왔으니 이 상태는 이미 DB에 있다.
+        self.persisted = Some(doc.transact().snapshot().encode_v1());
         Ok(doc)
     }
 
@@ -666,6 +674,10 @@ impl Room {
         let mut out = Message::Sync(SyncMessage::SyncStep1(sv)).encode_v1();
         if let Some(update) = self.presence_update() {
             out.extend(Message::Awareness(update).encode_v1());
+        }
+        // 이미 저장된 상태도 알린다: 다시 붙은 클라이언트의 편집이 그 안에 있으면 새 저장 없이 확인된다.
+        if let Some(snapshot) = &self.persisted {
+            out.extend(Message::Custom(MSG_PERSISTED, snapshot.clone()).encode_v1());
         }
         out
     }
@@ -962,9 +974,14 @@ impl Room {
         let Some(doc) = &self.doc else {
             return;
         };
-        let state = doc
-            .transact()
-            .encode_state_as_update_v1(&StateVector::default());
+        // 저장하는 상태와 그 스냅숏(저장 확인에 담는다)을 같은 순간에서 만든다.
+        let (state, snapshot) = {
+            let txn = doc.transact();
+            (
+                txn.encode_state_as_update_v1(&StateVector::default()),
+                txn.snapshot().encode_v1(),
+            )
+        };
         // 리비전이 되지 않은 편집이 있으면 본문도 넘겨, 그 본문이 가리키는 파일 버전을 붙잡게 한다(마이그레이션 0059).
         let body = self.dirty_since_snapshot.then(|| {
             let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
@@ -987,7 +1004,15 @@ impl Room {
         }
         .await;
         match result {
-            Ok(_) => self.dirty_state = false,
+            Ok(stored) => {
+                self.dirty_state = false;
+                // DB에 들어간 것만 확인으로 알린다(낡은 상태라 거절됐으면 알리지 않는다).
+                if stored {
+                    let message = Message::Custom(MSG_PERSISTED, snapshot.clone()).encode_v1();
+                    self.persisted = Some(snapshot);
+                    self.broadcast(&message, None);
+                }
+            }
             Err(err) => {
                 tracing::warn!(event = "collab.store_failed", document = %self.doc_id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not store live editing state");
             }

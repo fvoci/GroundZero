@@ -13,6 +13,47 @@ export interface LiveSession {
   document: Y.Doc;
   provider: WebsocketProvider;
   user: LiveUser;
+  /** 서버가 상태를 DB에 저장했다는 확인(저장한 상태의 스냅숏). */
+  persisted: PersistedSource;
+}
+
+/** 서버의 저장 확인(y-sync 사용자 정의 메시지 100, 서버 `MSG_PERSISTED`). */
+export const MSG_PERSISTED = 100;
+
+/** 저장 확인을 받는 쪽. */
+export interface PersistedSource {
+  on(listener: (snapshot: Y.Snapshot) => void): void;
+  off(listener: (snapshot: Y.Snapshot) => void): void;
+}
+
+/** lib0 디코더의 공개 필드(이 앱은 lib0에 직접 기대지 않는다). */
+interface ByteDecoder {
+  arr: Uint8Array;
+  pos: number;
+}
+
+function readVarUint(decoder: ByteDecoder): number {
+  let value = 0;
+  let shift = 0;
+  for (;;) {
+    const byte = decoder.arr[decoder.pos];
+    if (byte === undefined) throw new Error('truncated message');
+    decoder.pos += 1;
+    value += (byte & 0x7f) * 2 ** shift;
+    if (byte < 0x80) return value;
+    shift += 7;
+    if (shift > 49) throw new Error('varint too long');
+  }
+}
+
+/** 길이가 앞에 붙은 바이트열(서버의 `write_buf`). */
+export function readBuffer(decoder: ByteDecoder): Uint8Array {
+  const length = readVarUint(decoder);
+  const end = decoder.pos + length;
+  if (end > decoder.arr.length) throw new Error('truncated message');
+  const bytes = decoder.arr.slice(decoder.pos, end);
+  decoder.pos = end;
+  return bytes;
 }
 
 export type LiveStatus = 'connecting' | 'connected' | 'disconnected';
@@ -66,7 +107,20 @@ export function openLive(documentId: string, user: LiveUser, write: boolean): Li
     params: write ? { write: '1' } : {},
   });
   provider.awareness.setLocalStateField('user', user);
-  return { document, provider, user };
+  const listeners = new Set<(snapshot: Y.Snapshot) => void>();
+  provider.messageHandlers[MSG_PERSISTED] = (_encoder, decoder: ByteDecoder) => {
+    const snapshot = Y.decodeSnapshot(readBuffer(decoder));
+    for (const listener of listeners) listener(snapshot);
+  };
+  const persisted: PersistedSource = {
+    on: (listener) => {
+      listeners.add(listener);
+    },
+    off: (listener) => {
+      listeners.delete(listener);
+    },
+  };
+  return { document, provider, user, persisted };
 }
 
 export function closeLive(session: LiveSession): void {
@@ -74,74 +128,44 @@ export function closeLive(session: LiveSession): void {
   session.document.destroy();
 }
 
-/** 맞춰짐 알림을 주는 쪽(y-websocket의 provider). */
-export interface SyncSource {
-  readonly synced: boolean;
-  readonly wsconnected: boolean;
-  on(event: 'sync', listener: (synced: boolean) => void): void;
-  off(event: 'sync', listener: (synced: boolean) => void): void;
-}
-
-/** 서버가 받았다고 확인되지 않은 내 편집이 있는지 따라간다. */
+/** 서버가 저장했다고 확인되지 않은 내 편집이 있는지 따라간다. */
 export interface UnsyncedWatch {
-  /** 서버가 받았다고 아직 확인하지 못한 내 편집이 있다. */
+  /** 서버가 DB에 저장했다고 아직 확인하지 않은 내 편집이 있다. */
   readonly dirty: boolean;
   stop(): void;
 }
 
 /**
- * 서버가 받았다고 볼 때까지 기다리는 시간. `synced`는 서버의 상태가 도착했다는 뜻일 뿐이고, 서버는 내 편집을
- * 그 뒤(최대 0.1초) 검사해 거절(4400)하거나 다시 열게(4409) 할 수 있다. 그동안 연결이 이어지고 맞춰져 있으면 받은
- * 것으로 본다.
- */
-export const CONFIRM_MS = 2000;
-
-/**
- * 내가 고칠 때마다 `onDirty`, 그 뒤 `CONFIRM_MS` 동안 연결이 이어지고 맞춰져 있으면 `onSynced`를 부른다(끊기면
- * 다시 맞춰진 뒤부터 센다). 그 사이의 입력을 초안으로 남겨, 끊김·거절·실시간 꺼짐·권한 변경·새로고침에도 사라지지
- * 않게 하는 데 쓴다. 남이 보낸 변경(origin이 provider)은 세지 않는다.
+ * 내가 고친 변경(origin이 provider가 아닌 것)을 모아 두고, 서버의 저장 확인(저장한 상태의 스냅숏)이 그 변경을 담고
+ * 있을 때만 확인된 것으로 본다. 연결이 이어지거나 맞춰진 것만으로는 확인으로 보지 않는다(서버가 그 뒤 거절하거나
+ * 저장 전에 멈출 수 있다). 내가 고칠 때마다 `onDirty`, 모아 둔 변경이 모두 확인되면 `onSynced`.
  */
 export function watchUnsynced(
   document: Y.Doc,
-  provider: SyncSource,
+  origin: unknown,
+  persisted: PersistedSource,
   handlers: { onDirty: () => void; onSynced: () => void },
 ): UnsyncedWatch {
-  let dirty = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const cancel = (): void => {
-    if (timer !== undefined) clearTimeout(timer);
-    timer = undefined;
-  };
-  const schedule = (): void => {
-    cancel();
-    if (!dirty || !provider.synced) return;
-    timer = setTimeout(() => {
-      timer = undefined;
-      if (!dirty || !provider.synced || !provider.wsconnected) return;
-      dirty = false;
-      handlers.onSynced();
-    }, CONFIRM_MS);
-  };
-  const onUpdate = (_update: Uint8Array, origin: unknown): void => {
-    if (origin === provider) return;
-    dirty = true;
+  let pending: Uint8Array[] = [];
+  const onUpdate = (update: Uint8Array, from: unknown): void => {
+    if (from === origin) return;
+    pending.push(update);
     handlers.onDirty();
-    schedule();
   };
-  const onSync = (synced: boolean): void => {
-    if (synced) schedule();
-    else cancel();
+  const onPersisted = (snapshot: Y.Snapshot): void => {
+    if (pending.length === 0) return;
+    pending = pending.filter((update) => !Y.snapshotContainsUpdate(snapshot, update));
+    if (pending.length === 0) handlers.onSynced();
   };
   document.on('update', onUpdate);
-  provider.on('sync', onSync);
+  persisted.on(onPersisted);
   return {
     get dirty() {
-      return dirty;
+      return pending.length > 0;
     },
     stop() {
-      cancel();
       document.off('update', onUpdate);
-      provider.off('sync', onSync);
+      persisted.off(onPersisted);
     },
   };
 }

@@ -42,6 +42,8 @@ struct Client {
     doc: Doc,
     /// 받은 참여자 표시(client id → JSON 글).
     presence: std::collections::HashMap<u64, String>,
+    /// 받은 저장 확인(서버가 DB에 저장한 상태의 스냅숏, v1).
+    persisted: Vec<Vec<u8>>,
 }
 
 /// 연결. 실패하면 HTTP 상태.
@@ -81,6 +83,7 @@ async fn connect_with(
                 ws,
                 doc: local,
                 presence: std::collections::HashMap::new(),
+                persisted: Vec::new(),
             };
             client.sync().await;
             Ok(client)
@@ -140,6 +143,11 @@ impl Client {
                         Message::Sync(SyncMessage::SyncStep2(u) | SyncMessage::Update(u)) => {
                             let update = Update::decode_v1(&u).unwrap();
                             self.doc.transact_mut().apply_update(update).unwrap();
+                        }
+                        Message::Custom(tag, data)
+                            if tag == fvoci_server::collab::room::MSG_PERSISTED =>
+                        {
+                            self.persisted.push(data);
                         }
                         Message::Awareness(update) => {
                             for (id, entry) in update.clients {
@@ -672,6 +680,7 @@ async fn refused_code_with(
         ws,
         doc: Doc::new(),
         presence: std::collections::HashMap::new(),
+        persisted: Vec::new(),
     };
     client.closed().await
 }
@@ -1163,5 +1172,75 @@ async fn deleting_a_version_right_after_a_live_reference_is_refused() {
     )
     .await;
     assert_eq!(delete.status, StatusCode::CONFLICT, "{:?}", delete.json);
+    a.close().await;
+}
+
+/// 마무리 ①: 방은 상태를 DB에 저장한 뒤에만 저장 확인(스냅숏)을 보내고, 그 스냅숏은 저장된 편집을 담는다. 이미 저장된
+/// 방에 새로 붙으면 처음 메시지에 지난 저장 확인이 온다. 클라이언트는 이것으로만 복구용 초안을 지운다.
+#[tokio::test]
+async fn rooms_acknowledge_persisted_state_with_a_snapshot() {
+    use yrs::Snapshot;
+    use yrs::updates::decoder::Decode as _;
+
+    let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "저장 확인").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let doc = common::create_doc(&app, &writer, &ws, "확인 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+
+    let mut a = connect(addr, Some(&writer), &id, true).await.unwrap();
+    let before = a.persisted.len();
+    a.paragraph("저장될 편집").await;
+    let mine = a.doc.client_id();
+    let covered = |c: &Client| {
+        c.persisted[before..].iter().any(|bytes| {
+            let snapshot = Snapshot::decode_v1(bytes).unwrap();
+            snapshot.state_map.get(&mine) >= c.doc.transact().state_vector().get(&mine)
+        })
+    };
+    // 상태 저장(3초)이 지나면 내 편집을 담은 저장 확인이 온다. 그 전에는 오지 않는다.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let _ = a.next(Duration::from_millis(100)).await;
+    assert!(!covered(&a), "acknowledged before the state was stored");
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(6);
+    while !covered(&a) && tokio::time::Instant::now() < deadline {
+        let _ = a.next(Duration::from_millis(200)).await;
+    }
+    assert!(covered(&a), "no acknowledgement covering the stored edit");
+    let stored: bool = {
+        let owner_url =
+            std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+        let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+        let exists = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM fvoci.document_collab_states WHERE document_id = $1::uuid)",
+        )
+        .bind(&id)
+        .fetch_one(&owner)
+        .await
+        .unwrap();
+        owner.close().await;
+        exists
+    };
+    assert!(stored, "acknowledged state must be in the database");
+
+    // 같은 방에 새로 붙으면 처음 메시지에 지난 저장 확인이 온다.
+    let b = connect(addr, Some(&writer), &id, true).await.unwrap();
+    assert!(
+        !b.persisted.is_empty(),
+        "joining a stored room carries its acknowledgement"
+    );
+    b.close().await;
     a.close().await;
 }

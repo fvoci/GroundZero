@@ -138,7 +138,7 @@
       start.can_edit,
     );
     watch?.stop();
-    watch = watchUnsynced(next.document, next.provider, {
+    watch = watchUnsynced(next.document, next.provider, next.persisted, {
       // 편집기가 본문을 넘긴 뒤에 남긴다.
       onDirty: keepDraftSoon,
       onSynced: () => {
