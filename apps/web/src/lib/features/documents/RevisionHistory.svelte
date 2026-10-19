@@ -27,6 +27,10 @@
   let compareWith = $state<'current' | 'previous'>('current');
   let error = $state<string | undefined>(undefined);
   let busy = $state(false);
+  // 복원이 충돌하면 서버가 준 지금 문서(그사이 남은 리비전 포함). 비교와 다시 복원의 기준을 이것으로 바꾼다(저절로 다시
+  // 보내지 않고, 사람이 그 내용을 보고 다시 누를 때만 이 리비전을 기준으로 보낸다).
+  let latest = $state<DocumentView | undefined>(undefined);
+  const current = $derived(latest ?? doc);
   // 같은 대상의 재시도는 같은 request_id(중복 리비전 방지).
   let pending: { revision: number; base: number; requestId: string } | undefined;
 
@@ -57,6 +61,7 @@
     open = true;
     selected = undefined;
     previous = undefined;
+    latest = undefined;
     compareWith = 'current';
     void load(null);
   }
@@ -69,7 +74,7 @@
         : diffRevisions(previous, selected);
     }
     // 선택한 리비전 → 지금 문서: 복원하면 무엇이 바뀌는지는 반대 방향이므로 지금 → 선택으로 보여 준다.
-    return diffRevisions(doc, selected);
+    return diffRevisions(current, selected);
   });
 
   const changed = $derived(lines.some((l) => l.kind !== 'same'));
@@ -77,8 +82,8 @@
   async function restore(): Promise<void> {
     if (selected === undefined) return;
     const target = selected.revision;
-    if (pending?.revision !== target || pending.base !== doc.revision) {
-      pending = { revision: target, base: doc.revision, requestId: newRequestId() };
+    if (pending?.revision !== target || pending.base !== current.revision) {
+      pending = { revision: target, base: current.revision, requestId: newRequestId() };
     }
     busy = true;
     error = undefined;
@@ -88,10 +93,12 @@
         baseRevision: pending.base,
       });
       if (result.kind === 'conflict') {
+        latest = result.current;
         error = m.documents_restore_conflict({ revision: result.current.revision });
         return;
       }
       pending = undefined;
+      latest = undefined;
       open = false;
       onrestored(result.document);
     } catch (e: unknown) {
@@ -170,7 +177,7 @@
           <p class="text-xs text-muted-foreground">
             {compareWith === 'current'
               ? m.documents_compare_current_hint({
-                  current: doc.revision,
+                  current: current.revision,
                   selected: selected.revision,
                 })
               : m.documents_compare_previous_hint({
@@ -209,7 +216,7 @@
     {/if}
     <Dialog.Footer>
       <Button variant="ghost" onclick={() => (open = false)}>{m.documents_close()}</Button>
-      {#if doc.can_edit && selected !== undefined && selected.revision !== doc.revision}
+      {#if doc.can_edit && selected !== undefined && selected.revision !== current.revision}
         <Button
           disabled={busy || (compareWith === 'current' && !changed)}
           onclick={() => void restore()}
