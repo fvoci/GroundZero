@@ -36,6 +36,18 @@ use crate::ids::{DocumentId, UserId};
 const FLUSH_EVERY: Duration = Duration::from_millis(100);
 /// Yjs 상태를 저장하는 간격.
 const PERSIST_EVERY: Duration = Duration::from_secs(3);
+/// 복원 전 체크포인트(리비전으로 남기지 않은 편집 남기기)를 기다리는 최대 시간. 넘으면 복원하지 않는다.
+const CHECKPOINT_LIMIT: Duration = Duration::from_secs(5);
+
+/// 옛 리비전 복원 요청. 열린 방이 있으면 방이, 없으면 요청 처리기가 `restore_in_db`로 한다.
+#[derive(Debug)]
+pub struct RestoreRequest {
+    pub doc: DocumentId,
+    pub user: UserId,
+    pub revision: i32,
+    pub request_id: Uuid,
+    pub base_revision: i32,
+}
 /// 이만큼 조용하면 리비전을 만든다.
 const SNAPSHOT_IDLE: Duration = Duration::from_secs(60);
 /// 방이 상태를 DB에 저장한 뒤 보내는 확인(y-sync 사용자 정의 메시지). 저장한 상태의 스냅숏(지움 기록 + 상태 벡터,
@@ -128,11 +140,15 @@ enum Command {
     Persist {
         done: oneshot::Sender<()>,
     },
-    /// 모아 둔 변경을 넣고 아직 리비전으로 남지 않은 편집을 지금 리비전으로 남긴다(반출·복원 직전). 답은 이번에
-    /// 새로 쓴 리비전 번호(남길 것이 없었거나 못 남겼거나, `requester`가 이 방에서 고치고 있지 않으면 없음).
+    /// 모아 둔 변경을 넣고 아직 리비전으로 남지 않은 편집을 지금 리비전으로 남긴다. 반출 직전에 쓴다.
     Snapshot {
-        requester: Option<UserId>,
-        done: oneshot::Sender<Option<i32>>,
+        done: oneshot::Sender<()>,
+    },
+    /// 옛 리비전으로 복원한다. 체크포인트(리비전으로 남기지 않은 편집 남기기) → 복원 → 방 초기화를 이 명령 하나 안에서
+    /// 해 그 사이 편집·참여가 끼어들지 않게 한다. 체크포인트가 실패하거나 시간 안에 끝나지 않으면 복원하지 않는다.
+    Restore {
+        request: RestoreRequest,
+        done: oneshot::Sender<Result<String, AppError>>,
     },
     Shutdown {
         reason: CloseReason,
@@ -360,30 +376,31 @@ impl Rooms {
             .map(|(_, h)| h.clone())
             .collect();
         ask_all(handles, Duration::from_secs(5), |done| Command::Snapshot {
-            requester: None,
             done,
         })
         .await;
     }
 
-    /// 이 문서의 열린 방이 아직 리비전으로 남지 않은 편집을 지금 리비전으로 남기게 하고 최대 5초 기다린다. 이번에
-    /// 새로 쓴 리비전 번호. 방이 없거나, 남길 것이 없었거나, 못 남겼거나, `requester`가 이 방에서 고치고 있지 않으면
-    /// 없음. 복원 직전에 쓴다.
-    pub async fn snapshot_document(&self, doc: DocumentId, requester: UserId) -> Option<i32> {
-        let handle = self.lock().get(&doc).cloned()?;
+    /// 열린 방이 있으면 그 방이 복원한다(체크포인트 → 복원 → 방 초기화를 한 명령으로). 방이 없으면 `None`(부르는 쪽이
+    /// 바로 복원한다). 방의 답은 시간 제한 없이 기다린다: 여기서 그만두면 방이 복원을 마쳤는데 실패로 답할 수 있다.
+    pub async fn restore(&self, request: RestoreRequest) -> Option<Result<String, AppError>> {
+        let handle = self.lock().get(&request.doc).cloned()?;
         let (done, answer) = oneshot::channel();
-        handle
+        if handle
             .tx
-            .try_send(Command::Snapshot {
-                requester: Some(requester),
-                done,
-            })
-            .ok()?;
-        tokio::time::timeout(Duration::from_secs(5), answer)
-            .await
-            .ok()?
-            .ok()
-            .flatten()
+            .try_send(Command::Restore { request, done })
+            .is_err()
+        {
+            return Some(Err(AppError::Conflict(
+                "the live editing room is busy; nothing was restored, try again".into(),
+            )));
+        }
+        // 답 없이 끝났으면 방이 이 명령을 처리하기 전에 닫혔다(복원하지 않음).
+        Some(answer.await.unwrap_or_else(|_| {
+            Err(AppError::Conflict(
+                "the live editing room closed; nothing was restored, try again".into(),
+            ))
+        }))
     }
 
     /// 워크스페이스가 실시간을 끈다(또는 껐다). 그 워크스페이스의 방은 리비전을 남기고 닫는다. 끝날 때까지 기다린다.
@@ -525,8 +542,6 @@ struct Room {
     lineage: String,
     dirty_state: bool,
     dirty_since_snapshot: bool,
-    /// 마지막 리비전 남기기가 실제로 새로 쓴 리비전(본문이 이미 같아 쓰지 않았으면 없음).
-    last_written: Option<i32>,
     last_change: Instant,
     /// 마지막으로 DB에 저장한(또는 저장된 것을 불러온) 상태의 스냅숏(v1). 들어오는 연결에 처음 메시지와 함께 보낸다.
     persisted: Option<Vec<u8>>,
@@ -562,7 +577,6 @@ impl Room {
             lineage: String::new(),
             dirty_state: false,
             dirty_since_snapshot: false,
-            last_written: None,
             last_change: Instant::now(),
             persisted: None,
             editors: Vec::new(),
@@ -664,20 +678,48 @@ impl Room {
                 let _ignored = done.send(());
                 true
             }
-            Command::Snapshot { requester, done } => {
+            Command::Snapshot { done } => {
                 self.flush().await;
                 // 리비전을 남기면 상태도 저장한다. 남기지 못하면(편집할 수 있는 사람이 없음 등) 방에 그대로 둔다.
-                self.last_written = None;
                 let _kept = self.snapshot().await;
-                // 이번에 실제로 쓴 리비전만 알린다. 요청한 사람이 있으면 그 사람이 이 방에서 고치고 있을 때만(그 실시간
-                // 내용을 보고 있었을 때만) 알린다.
-                let watching = requester.is_none_or(|user| {
-                    self.conns
-                        .values()
-                        .any(|c| c.peer.user == user && c.peer.can_write)
-                });
-                let _ignored = done.send(self.last_written.filter(|_| watching));
+                let _ignored = done.send(());
                 true
+            }
+            Command::Restore { request, done } => {
+                self.flush().await;
+                // 리비전으로 남기지 않은 편집을 먼저 남긴다. 남겼는지 확인되지 않으면 복원하지 않는다(그 편집은 방에 남는다).
+                // 남겼으면 그 리비전 때문에 화면의 기준이 지나 아래 복원이 충돌로 알린다(사람이 지금 내용을 보고 다시 한다).
+                if self.dirty_since_snapshot {
+                    match tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot()).await {
+                        Ok(true) => {}
+                        Ok(false) => {
+                            let _ignored = done.send(Err(AppError::Conflict(
+                                "live edits could not be saved as a revision first; nothing was restored".into(),
+                            )));
+                            return true;
+                        }
+                        Err(_) => {
+                            let _ignored = done.send(Err(AppError::Conflict(
+                                "saving live edits as a revision took too long; nothing was restored, try again"
+                                    .into(),
+                            )));
+                            return true;
+                        }
+                    }
+                }
+                let outcome =
+                    crate::features::revisions::restore_in_db(&self.db, &self.limits, &request)
+                        .await;
+                // 본문이 바뀌었으면 방을 닫아 복원된 본문으로 다시 열게 한다. 이 명령 뒤에 들어와 있던 편집은 방과 함께
+                // 버려진다(받았다고 확인하지 않았으므로 클라이언트가 초안으로 남긴다).
+                let restored = matches!(outcome.as_deref(), Ok("restored"));
+                if restored {
+                    for (_, c) in self.conns.drain() {
+                        let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
+                    }
+                }
+                let _ignored = done.send(outcome);
+                !restored
             }
             Command::Shutdown {
                 reason,
@@ -1133,10 +1175,7 @@ impl Room {
         }
         for author in authors {
             match self.write_snapshot(author, &body).await {
-                Ok(Some((revision, written))) => {
-                    if written {
-                        self.last_written = Some(revision);
-                    }
+                Ok(Some(revision)) => {
                     self.base_revision = revision;
                     self.base_body = body;
                     self.dirty_since_snapshot = false;
@@ -1166,13 +1205,8 @@ impl Room {
         false
     }
 
-    /// (리비전 번호, 이번에 새로 썼는지), 또는 본문이 다른 길로 바뀌었으면 `None`. 본문이 이미 같으면 지금 리비전을
-    /// 돌려주고 쓰지 않는다.
-    async fn write_snapshot(
-        &self,
-        editor: UserId,
-        body: &Value,
-    ) -> Result<Option<(i32, bool)>, AppError> {
+    /// 새 리비전 번호, 또는 본문이 다른 길로 바뀌었으면 `None`.
+    async fn write_snapshot(&self, editor: UserId, body: &Value) -> Result<Option<i32>, AppError> {
         let mut tx = self.db.begin_as(editor).await?;
         sqlx::query("SELECT app_lock_item((SELECT item_id FROM documents WHERE id = $1))")
             .bind(self.doc_id)
@@ -1193,13 +1227,13 @@ impl Room {
         }
         if current.body == *body {
             tx.commit().await?;
-            return Ok(Some((current.revision, false)));
+            return Ok(Some(current.revision));
         }
         let title = current.title.clone();
         let row =
             documents::write_revision(&mut tx, self.doc_id, &title, body, Uuid::now_v7()).await?;
         tx.commit().await?;
-        Ok(Some((row.revision, true)))
+        Ok(Some(row.revision))
     }
 
     /// 연결마다 세션과 권한을 다시 본다. 끝났거나 쓰기 권한을 잃었으면 닫고(4403, 다시 붙으면 지금 권한으로),

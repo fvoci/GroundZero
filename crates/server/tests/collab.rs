@@ -1050,8 +1050,8 @@ async fn live_body_pins_the_file_versions_it_points_to() {
     let delete = delete_v1().await;
     assert_eq!(delete.status, StatusCode::CONFLICT, "{:?}", delete.json);
 
-    // 리비전 1로 되돌리기 전에 방의 실시간 본문이 리비전 3으로 남는다(검토 6번). 기준 2 바로 다음이 그것뿐이라 복원은
-    // 되고, 리비전 3이 1판을 가리키므로 되돌린 뒤에도 1판은 이력이 붙잡는다(리비전 참조 규칙, 0046).
+    // 리비전 1로 되돌리기 전에 방의 실시간 본문이 리비전 3으로 남는다(검토 6번). 그래서 기준 2는 지났고(충돌), 그
+    // 리비전이 1판을 가리키므로 되돌린 뒤에도 1판은 이력이 붙잡는다(리비전 참조 규칙, 0046).
     let restore = |base: i64| {
         let app = app.clone();
         let writer = writer.clone();
@@ -1067,7 +1067,9 @@ async fn live_body_pins_the_file_versions_it_points_to() {
             .await
         }
     };
-    let restored = restore(2).await;
+    let stale = restore(2).await;
+    assert_eq!(stale.status, StatusCode::CONFLICT, "{:?}", stale.json);
+    let restored = restore(stale.json["current"]["revision"].as_i64().unwrap()).await;
     assert!(restored.status.is_success(), "{:?}", restored.json);
     let _ = a.closed().await;
     let delete = delete_v1().await;
@@ -1438,8 +1440,16 @@ async fn restoring_during_live_editing_keeps_the_live_edits_in_history() {
             .await
         }
     };
-    // 화면은 방이 방금 남긴 리비전 번호를 모르므로 보던 리비전을 기준으로 보낸다(검토 2차 1번: 그래도 복원된다).
-    let r = restore(current["revision"].clone()).await;
+    // 남은 항목 ①: 방이 그 편집을 리비전으로 남기면 화면이 보던 기준은 지난 것이다. 서버는 기준을 올리지 않고 충돌로
+    // 알리며 지금 내용(그 편집 포함)을 돌려준다. 사람이 그것을 보고 명시적으로 다시 복원한다.
+    let first = restore(current["revision"].clone()).await;
+    assert_eq!(first.status, StatusCode::CONFLICT, "{:?}", first.json);
+    assert!(
+        first.json["current"]["body"]
+            .to_string()
+            .contains("복원 전에 쓴 실시간 문단")
+    );
+    let r = restore(first.json["current"]["revision"].clone()).await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
 
     let list = send(
@@ -1791,17 +1801,25 @@ async fn a_restore_from_outside_the_room_still_conflicts_with_live_edits() {
     b.close().await;
 }
 
-/// 검토(3차) 1번: 방은 이번에 실제로 남긴 리비전만 알린다. 실시간 본문이 DB 본문과 같아 쓰지 않았으면(그 사이 제목만
-/// 바뀐 리비전이 있어도) 리비전을 알리지 않는다(알리면 복원이 그 제목 변경을 충돌 없이 덮는다).
-#[tokio::test]
-async fn a_room_reports_only_a_revision_it_wrote() {
+/// 실시간 복원 시험 준비: 관리자와 작가가 있는 실시간 워크스페이스의 문서. (상태, 앱, 주소, 관리자, 작가, 워크스페이스, 문서 id).
+async fn live_restore_setup(
+    label: &str,
+) -> (
+    fvoci_server::http::AppState,
+    Router,
+    SocketAddr,
+    TestUser,
+    TestUser,
+    String,
+    String,
+) {
     let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
     let app = common::app(&state);
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin, "쓰지 않은 리비전").await;
-    let doc = common::create_doc(&app, &admin, &ws, "쓰지 않은 리비전 문서").await;
-    let id = doc["id"].as_str().unwrap().to_owned();
+    let ws = create_workspace(&app, &admin, label).await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let doc = common::create_doc(&app, &admin, &ws, label).await;
     let on = send(
         &app,
         Method::PUT,
@@ -1811,16 +1829,236 @@ async fn a_room_reports_only_a_revision_it_wrote() {
     )
     .await;
     assert_eq!(on.status, StatusCode::NO_CONTENT);
-    let mut a = connect(addr, Some(&admin), &id, true).await.unwrap();
-    // 고쳤다가 되돌려 방은 바뀐 것으로 알지만 본문은 DB와 같다.
-    a.paragraph("곧 지울 문단").await;
-    a.edit(|txn, fragment| {
-        let last = fragment.len(txn) - 1;
-        fragment.remove_range(txn, last, 1);
-    })
-    .await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    (state, app, addr, admin, writer, ws, id)
+}
+
+async fn restore_rev1(
+    app: &Router,
+    user: &TestUser,
+    id: &str,
+    base: &serde_json::Value,
+) -> common::Reply {
+    send(
+        app,
+        Method::POST,
+        &format!("/api/documents/{id}/revisions/1/restore"),
+        Some(user),
+        Some(json!({ "request_id": new_request_id(), "base_revision": base })),
+    )
+    .await
+}
+
+/// 관리자 연결로 `pg_stat_activity`를 보아, `holder`(이 시험이 잠근 연결)를 기다리는 `query_part` 질의가 있을 때까지
+/// 기다린다(시간을 정해 두지 않음, 다른 시험의 잠금 대기와 섞이지 않음).
+async fn until_waiting_on_lock(query_part: &str, holder: i32) {
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let watcher = sqlx::PgPool::connect(&admin_url).await.unwrap();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let waiting: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE '%' || $1 || '%'
+                                AND $2 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(query_part)
+        .bind(holder)
+        .fetch_one(&watcher)
+        .await
+        .unwrap();
+        if waiting {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "nothing waited on the lock for {query_part}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    watcher.close().await;
+}
+
+/// 남은 항목 ①(실패 주입): 복원 전 체크포인트가 실패하면(리비전으로 남길 수 있는 편집자가 없음) 복원하지 않는다. 전에는
+/// 체크포인트 결과와 상관없이 복원하고 방을 닫아, 리비전이 되지 않은 실시간 편집이 사라졌다.
+#[tokio::test]
+async fn a_failed_checkpoint_stops_the_restore() {
+    let (_state, app, addr, admin, writer, ws, id) = live_restore_setup("체크포인트 실패").await;
+    let mut b = connect(addr, Some(&writer), &id, true).await.unwrap();
+    b.paragraph("남겨야 할 실시간 문단").await;
     tokio::time::sleep(Duration::from_millis(300)).await;
-    // 그 사이 제목만 바뀐 리비전 2가 생긴다(실시간 중 저장은 제목만).
+    // 그 편집자를 읽기로 내린다(연결은 다음 권한 확인까지 남는다): 방은 그 편집을 리비전으로 남길 수 없다.
+    let demoted = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/members/{}", writer.id.0),
+        Some(&admin),
+        Some(json!({ "role": "reader" })),
+    )
+    .await;
+    assert!(demoted.status.is_success(), "{:?}", demoted.json);
+    let before = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    let r = restore_rev1(&app, &admin, &id, &before["revision"]).await;
+    assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
+    assert!(r.json.get("current").is_none(), "{:?}", r.json);
+    let after = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    assert_eq!(
+        after["revision"], before["revision"],
+        "the restore went ahead"
+    );
+    // 방은 닫히지 않았고 편집은 그대로다.
+    assert!(b.text().contains("남겨야 할 실시간 문단"));
+    b.close().await;
+}
+
+/// 남은 항목 ①(시간 초과): 체크포인트가 정해진 시간 안에 끝나지 않으면 복원하지 않는다. 문서 행을 다른 트랜잭션이 잠가
+/// 체크포인트를 붙잡는다. 전에는 체크포인트를 기다리다 그만두고 그대로 복원했다.
+#[tokio::test]
+async fn a_checkpoint_that_times_out_stops_the_restore() {
+    let (_state, app, addr, admin, _writer, _ws, id) =
+        live_restore_setup("체크포인트 시간 초과").await;
+    let mut a = connect(addr, Some(&admin), &id, true).await.unwrap();
+    a.paragraph("시간 초과 때 남길 문단").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let before = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let mut hold = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *hold)
+        .await
+        .unwrap();
+    sqlx::query("SELECT 1 FROM fvoci.documents WHERE id = $1::uuid FOR UPDATE")
+        .bind(&id)
+        .execute(&mut *hold)
+        .await
+        .unwrap();
+    let request = tokio::spawn({
+        let (app, admin, id, base) = (
+            app.clone(),
+            admin.clone(),
+            id.clone(),
+            before["revision"].clone(),
+        );
+        async move { restore_rev1(&app, &admin, &id, &base).await }
+    });
+    // 답이 오거나(체크포인트 시간 초과) 복원 함수가 잠금을 기다리기 시작하면(고치기 전: 체크포인트를 버리고 복원) 잠금을 푼다.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let watcher = sqlx::PgPool::connect(&admin_url).await.unwrap();
+    while !request.is_finished() {
+        let restoring: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock'
+                                AND query LIKE '%app_restore_document_revision%' AND $1 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(holder)
+        .fetch_one(&watcher)
+        .await
+        .unwrap();
+        if restoring {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the restore neither answered nor proceeded"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    hold.rollback().await.unwrap();
+    let r = request.await.unwrap();
+    assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
+    assert!(r.json.get("current").is_none(), "{:?}", r.json);
+    let restored_from: Option<i32> = sqlx::query_scalar(
+        "SELECT restored_from FROM fvoci.document_revisions WHERE document_id = $1::uuid ORDER BY revision DESC LIMIT 1",
+    )
+    .bind(&id)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert_eq!(
+        restored_from, None,
+        "the restore went ahead after the checkpoint timed out"
+    );
+    watcher.close().await;
+    owner.close().await;
+    a.close().await;
+}
+
+/// 남은 항목 ①(직렬화): 체크포인트 → 복원 확정 → 방 초기화 사이에 들어온 편집은 방이 받아 저장 확인을 보내지 않는다(그러면
+/// 클라이언트가 초안을 지운 뒤 방 초기화로 사라진다). 복원이 끝나면 연결은 4409로 닫혀 클라이언트가 그 편집을 초안으로 남긴다.
+/// 문서 행을 잠가 복원 SQL을 붙잡고, 그동안 편집을 보내고 저장을 시킨다.
+#[tokio::test]
+async fn edits_during_a_restore_are_not_acknowledged_then_dropped() {
+    let (state, app, addr, admin, _writer, ws, _wiki) = live_restore_setup("복원 중 편집").await;
+    // 항목 문서: 복원은 항목 행을 공유 잠금하고(app_lock_item), 실시간 상태 저장은 항목을 건드리지 않는다. 그래서 항목
+    // 행을 잡아 복원만 붙잡을 수 있다.
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "project", "name": "복원", "key": "RSTR" })),
+    )
+    .await
+    .json;
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", module["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "복원 항목" })),
+    )
+    .await
+    .json;
+    let item_id = item["id"].as_str().unwrap().to_owned();
+    let created = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/documents"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "복원 중 편집 문서" })),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{:?}", created.json);
+    let id = created.json["id"].as_str().unwrap().to_owned();
+    // 되돌릴 거리: 제목만 바꾼 리비전 2(실시간 중 저장은 제목만).
+    let retitled = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "base_revision": created.json["revision"],
+                     "title": "바뀐 제목", "body": created.json["body"] }),
+        ),
+    )
+    .await;
+    assert_eq!(retitled.status, StatusCode::OK, "{:?}", retitled.json);
+    let mut a = connect(addr, Some(&admin), &id, true).await.unwrap();
+    // 편집을 받아 들였는지 볼 다른 연결(복원 전에 붙어 둔다).
+    let mut b = connect(addr, Some(&admin), &id, true).await.unwrap();
     let current = send(
         &app,
         Method::GET,
@@ -1830,21 +2068,49 @@ async fn a_room_reports_only_a_revision_it_wrote() {
     )
     .await
     .json;
-    let saved = send(
-        &app,
-        Method::PUT,
-        &format!("/api/documents/{id}"),
-        Some(&admin),
-        Some(
-            json!({ "request_id": new_request_id(), "base_revision": current["revision"],
-                     "title": "바뀐 제목", "body": current["body"] }),
-        ),
-    )
-    .await;
-    assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
-    assert_eq!(saved.json["revision"], 2);
-
-    let doc_id = fvoci_server::ids::DocumentId(id.parse().unwrap());
-    assert_eq!(state.collab.snapshot_document(doc_id, admin.id).await, None);
-    a.close().await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let mut hold = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *hold)
+        .await
+        .unwrap();
+    sqlx::query("SELECT 1 FROM fvoci.items WHERE id = $1::uuid FOR UPDATE")
+        .bind(&item_id)
+        .execute(&mut *hold)
+        .await
+        .unwrap();
+    let request = tokio::spawn({
+        let (app, admin, id, base) = (
+            app.clone(),
+            admin.clone(),
+            id.clone(),
+            current["revision"].clone(),
+        );
+        async move { restore_rev1(&app, &admin, &id, &base).await }
+    });
+    until_waiting_on_lock("app_restore_document_revision", holder).await;
+    // 복원이 잠금을 기다리는 동안 편집을 보내고 저장을 시킨다.
+    let acks_before = a.persisted.len();
+    a.paragraph("복원 중에 보낸 문단").await;
+    // 방이 그 편집을 받아 들였으면 다른 연결에 보인다. 그것을 확인한 뒤 저장을 시킨다(고치기 전: 받아 저장하고 확인을
+    // 보낸다). 고친 뒤에는 방이 복원 중이라 받아 들이지 않으므로, 기다림은 상한(5초)에서 끝난다.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while !b.text().contains("복원 중에 보낸 문단") && tokio::time::Instant::now() < deadline
+    {
+        let _ = b.next(Duration::from_millis(200)).await;
+    }
+    let ws_id: uuid::Uuid = ws.parse().unwrap();
+    state.collab.persist_workspace(ws_id).await;
+    hold.rollback().await.unwrap();
+    let r = request.await.unwrap();
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    assert!(!r.json["body"].to_string().contains("복원 중에 보낸 문단"));
+    assert_eq!(a.closed().await, Some(4409));
+    assert_eq!(
+        a.persisted.len(),
+        acks_before,
+        "the edit sent during the restore was acknowledged and then reset away"
+    );
+    owner.close().await;
 }

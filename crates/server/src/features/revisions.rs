@@ -14,6 +14,9 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
+use crate::collab::room::RestoreRequest;
+use crate::config::Limits;
+use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
@@ -228,55 +231,83 @@ pub async fn restore(
     Path((id, revision)): Path<(DocumentId, i32)>,
     Json(input): Json<RestoreRevision>,
 ) -> Result<Response, AppError> {
-    // 실시간으로 편집 중이면 아직 리비전으로 남지 않은 편집을 먼저 리비전으로 남긴다. 복원이 그 편집을 이력 없이
-    // 지우지 않게 한다(D-27). 고칠 수 있는 사람의 요청만. 방을 기다리는 동안 DB 연결을 쥐지 않는다.
+    let request = RestoreRequest {
+        doc: id,
+        user,
+        revision,
+        request_id: input.request_id,
+        base_revision: input.base_revision,
+    };
+    // 실시간 방이 열려 있으면 그 방이 체크포인트(리비전으로 남기지 않은 편집 남기기) → 복원 → 방 초기화를 한 명령으로
+    // 한다. 그 사이 편집이 끼어들지 않고, 남겼는지 확인되지 않으면 복원하지 않는다(D-27). 기준은 화면이 보낸 그대로다:
+    // 체크포인트가 리비전을 남겼으면 충돌로 알려 사람이 지금 내용을 보고 다시 하게 한다. 고칠 수 없는 사람의 요청은
+    // 방을 건드리지 않고 아래에서 거절된다.
     let mut tx = state.db.begin_as(user).await?;
     let can_write = access(&mut tx, id).await?.is_some_and(|a| a.can_write());
-    let current: Option<i32> = sqlx::query_scalar("SELECT revision FROM documents WHERE id = $1")
-        .bind(id)
-        .fetch_optional(tx.conn())
-        .await?;
     tx.commit().await?;
-    let mut base = input.base_revision;
-    if can_write {
-        // 화면이 보던 리비전 바로 다음이 방금 그 화면의 실시간 내용으로 남긴 리비전뿐이면 그것을 기준으로 삼는다(화면은
-        // 그 리비전 번호를 모른다). 그 밖에 기준이 지났으면 아래 복원이 충돌로 알린다.
-        let written = state.collab.snapshot_document(id, user).await;
-        if current == Some(base) && written == Some(base + 1) {
-            base += 1;
+    let in_room = if can_write {
+        state.collab.restore(request).await
+    } else {
+        None
+    };
+    let outcome = match in_room {
+        Some(outcome) => outcome?,
+        None => {
+            let request = RestoreRequest {
+                doc: id,
+                user,
+                revision,
+                request_id: input.request_id,
+                base_revision: input.base_revision,
+            };
+            let outcome = restore_in_db(&state.db, &state.config.limits, &request).await?;
+            // 그 사이 새로 열린 방이 있으면 저장 없이 닫고 복원된 본문으로 다시 열게 한다(D-70).
+            if outcome == "restored" {
+                state.collab.reset(id).await;
+            }
+            outcome
         }
-    }
+    };
     let mut tx = state.db.begin_as(user).await?;
-    // 복원할 내용도 지금의 한도(제목 길이·본문 크기·참조 수)를 지켜야 한다. 한도를 낮춘 뒤 옛 리비전으로
-    // 한도를 넘는 문서가 다시 생기지 않게 한다. 볼 수 없거나 없는 리비전은 아래 함수와 같이 404.
-    let source: Option<(String, Value)> = sqlx::query_as(
-        "SELECT title, body FROM document_revisions WHERE document_id = $1 AND revision = $2",
-    )
-    .bind(id)
-    .bind(revision)
-    .fetch_optional(tx.conn())
-    .await?;
-    if let Some((title, body)) = &source {
-        validate_title(title, state.config.limits.max_title_chars, "title")?;
-        validate_body(body, &state.config.limits)?;
-    }
-    let outcome: String =
-        sqlx::query_scalar("SELECT app_restore_document_revision($1, $2, $3, $4, $5)")
-            .bind(id)
-            .bind(revision)
-            .bind(input.request_id)
-            .bind(base)
-            .bind(SCHEMA_VERSION)
-            .fetch_one(tx.conn())
-            .await
-            .map_err(AppError::from_db_function)?;
     let (row, access) = load_with_access(&mut tx, id).await?;
     tx.commit().await?;
     let doc = to_document(row, access);
     if outcome == "conflict" {
         return conflict(user, doc);
     }
-    // 실시간 편집 방이 열려 있으면 저장 없이 닫고 복원된 본문으로 다시 열게 한다(D-70).
-    state.collab.reset(id).await;
     document_reply(user, &doc)
+}
+
+/// 복원 SQL: 한도 확인 뒤 `app_restore_document_revision`(권한·기준 확인 포함). `restored`·`unchanged`·`conflict`.
+pub(crate) async fn restore_in_db(
+    db: &Db,
+    limits: &Limits,
+    request: &RestoreRequest,
+) -> Result<String, AppError> {
+    let mut tx = db.begin_as(request.user).await?;
+    // 복원할 내용도 지금의 한도(제목 길이·본문 크기·참조 수)를 지켜야 한다. 한도를 낮춘 뒤 옛 리비전으로
+    // 한도를 넘는 문서가 다시 생기지 않게 한다. 볼 수 없거나 없는 리비전은 아래 함수와 같이 404.
+    let source: Option<(String, Value)> = sqlx::query_as(
+        "SELECT title, body FROM document_revisions WHERE document_id = $1 AND revision = $2",
+    )
+    .bind(request.doc)
+    .bind(request.revision)
+    .fetch_optional(tx.conn())
+    .await?;
+    if let Some((title, body)) = &source {
+        validate_title(title, limits.max_title_chars, "title")?;
+        validate_body(body, limits)?;
+    }
+    let outcome: String =
+        sqlx::query_scalar("SELECT app_restore_document_revision($1, $2, $3, $4, $5)")
+            .bind(request.doc)
+            .bind(request.revision)
+            .bind(request.request_id)
+            .bind(request.base_revision)
+            .bind(SCHEMA_VERSION)
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(outcome)
 }
