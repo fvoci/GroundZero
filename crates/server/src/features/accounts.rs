@@ -97,6 +97,12 @@ impl OidcProvider {
         if let Some(meta) = self.metadata.read().await.as_ref() {
             return Ok(meta.clone());
         }
+        self.refresh_metadata().await
+    }
+
+    /// 디스커버리와 서명 키 목록을 다시 받아 캐시를 바꾼다. 제공자가 서명 키를 바꾸면(키 회전) 캐시한 목록으로는
+    /// 새 id_token을 검증하지 못한다.
+    async fn refresh_metadata(&self) -> Result<ProviderMetadataWithLogout, AppError> {
         let issuer = IssuerUrl::from_url(self.config.issuer.clone());
         let meta = ProviderMetadataWithLogout::discover_async(issuer, &self.http)
             .await
@@ -380,9 +386,18 @@ pub async fn callback(
     let id_token = token
         .id_token()
         .ok_or_else(|| AppError::Oidc("no id_token".into()))?;
-    let claims = id_token
-        .claims(&client.id_token_verifier(), &Nonce::new(nonce))
-        .map_err(|e| AppError::Oidc(format!("id_token rejected: {e}")))?;
+    let nonce = Nonce::new(nonce);
+    let claims = match id_token.claims(&client.id_token_verifier(), &nonce) {
+        Ok(claims) => claims,
+        // 토큰은 제공자의 토큰 엔드포인트에서 바로 받았다. 검증에 실패하면 키 회전일 수 있으니 키 목록을 한 번만
+        // 다시 받아 같은 토큰을 다시 검증한다(그래도 실패하면 거부).
+        Err(_) => {
+            let fresh = client_for(provider, provider.refresh_metadata().await?)();
+            id_token
+                .claims(&fresh.id_token_verifier(), &nonce)
+                .map_err(|e| AppError::Oidc(format!("id_token rejected: {e}")))?
+        }
+    };
 
     let subject = claims.subject().as_str().to_owned();
     let email = claims.email().map(|e| e.as_str().to_owned());
