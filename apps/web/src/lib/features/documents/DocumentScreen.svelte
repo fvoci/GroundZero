@@ -57,6 +57,24 @@
       cancelled = true;
     };
   });
+  /** 실시간이 꺼졌거나 권한이 바뀌었다. 문서를 다시 읽어 지금 상태(일반 편집·읽기 전용)로 다시 연다. */
+  function reopen(): void {
+    const id = documentId;
+    api
+      .document(id)
+      .then((d) => {
+        if (id !== documentId) return;
+        doc = d;
+        epoch += 1;
+      })
+      .catch((e: unknown) => {
+        if (id !== documentId) return;
+        error =
+          e instanceof ApiError && e.status === 404
+            ? m.documents_not_found()
+            : m.documents_load_failed();
+      });
+  }
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
 
   function referencesFor(d: DocumentView): ReferenceContext {
@@ -131,16 +149,8 @@
           if (saved.title !== doc?.title) workspaceNav.refreshDocs();
           doc = saved;
         }}
-        onrealtimeoff={() => {
-          // 실시간이 꺼지면 남은 리비전을 다시 읽어 일반 편집으로 돌아간다.
-          const id = documentId;
-          void api.document(id).then((d) => {
-            if (id === documentId) {
-              doc = d;
-              epoch += 1;
-            }
-          });
-        }}
+        onrealtimeoff={reopen}
+        onreload={reopen}
       />
     {:else}
       <DocumentEditor

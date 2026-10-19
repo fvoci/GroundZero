@@ -1041,8 +1041,8 @@ impl Room {
         Ok(Some(row.revision))
     }
 
-    /// 연결마다 세션과 권한을 다시 본다. 끝났으면 닫고, 실시간이 꺼졌으면 리비전을 남기고 닫으며, 쓰기 권한이
-    /// 바뀌었으면 따른다. 일시적인 DB 오류로는 닫지 않는다.
+    /// 연결마다 세션과 권한을 다시 본다. 끝났거나 쓰기 권한을 잃었으면 닫고(4403, 다시 붙으면 지금 권한으로),
+    /// 실시간이 꺼졌으면 리비전을 남기고 닫으며, 읽기에서 쓰기로 바뀌었으면 따른다. 일시적인 DB 오류로는 닫지 않는다.
     async fn recheck(&mut self) {
         self.last_recheck = Instant::now();
         let peers: Vec<(u64, Peer)> = self
@@ -1054,7 +1054,10 @@ impl Room {
         for (conn, peer) in peers {
             match peer_access(&self.db, self.doc_id, &peer).await {
                 PeerAccess::Allowed { can_write } => {
-                    if let Some(c) = self.conns.get_mut(&conn) {
+                    // 쓰기 권한을 잃은 연결은 닫는다. 열어 두면 화면은 "연결됨"인 채로 그 사람의 입력을 조용히 버린다.
+                    if !can_write && peer.can_write {
+                        self.close(conn, CloseReason::AccessLost);
+                    } else if let Some(c) = self.conns.get_mut(&conn) {
                         c.peer.can_write = can_write;
                     }
                 }

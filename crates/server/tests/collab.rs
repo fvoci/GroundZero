@@ -598,7 +598,8 @@ async fn live_editing_guards() {
     )
     .await;
     assert!(demoted.status.is_success(), "{:?}", demoted.json);
-    a.close().await;
+    // 쓰기 권한을 잃은 연결은 다음 확인에서 닫힌다(열어 두면 그 사람의 입력이 조용히 버려진다, 감사 반영).
+    assert_eq!(a.closed().await, Some(4403));
     watcher.close().await;
     let mut body = String::new();
     for _ in 0..40 {
@@ -667,6 +668,7 @@ async fn turning_realtime_off_keeps_live_edits() {
     let ws = create_workspace(&app, &admin, "끄기 보존").await;
     let ws_id = uuid::Uuid::parse_str(&ws).unwrap();
     let (w1, _) = add_member(&app, &state, &admin, &ws, "w1", "writer").await;
+    let (r1, _) = add_member(&app, &state, &admin, &ws, "r1", "reader").await;
     let set = |enabled: bool| {
         let app = app.clone();
         let admin = admin.clone();
@@ -731,12 +733,13 @@ async fn turning_realtime_off_keeps_live_edits() {
     // 문서 B: w1이 고친 뒤 독자가 되어 나가면 방은 리비전을 남기지 못하고(쓸 수 있는 사람이 없음) 실시간 상태만 남는다.
     let mut b = connect(addr, Some(&w1), &b_id, true).await.unwrap();
     b.paragraph("닫힌 방에 남은 글").await;
-    // 문서 A: w1이 고친 채로 연결이 열려 있다.
+    // 문서 A: w1이 고친 뒤 독자가 되면 그 연결은 닫히고(4403), 독자 연결이 방을 열어 둔다(쓸 수 있는 사람이 없는 열린 방).
+    let mut watcher = connect(addr, Some(&r1), &a_id, true).await.unwrap();
     a.paragraph("열린 방의 글").await;
-    tokio::time::sleep(Duration::from_millis(400)).await;
+    assert!(watcher.until(|c| c.text().contains("열린 방의 글")).await);
     role("reader").await;
-    tokio::time::sleep(Duration::from_millis(1500)).await;
-    b.close().await;
+    assert_eq!(a.closed().await, Some(4403));
+    assert_eq!(b.closed().await, Some(4403));
     tokio::time::sleep(Duration::from_millis(800)).await;
     let b_before = send(
         &app,
@@ -756,7 +759,7 @@ async fn turning_realtime_off_keeps_live_edits() {
     let (first, second) = tokio::join!(set(false), set(false));
     assert_eq!(first, StatusCode::NO_CONTENT);
     assert_eq!(second, StatusCode::NO_CONTENT);
-    assert_eq!(a.closed().await, Some(4410));
+    assert_eq!(watcher.closed().await, Some(4410));
     for (id, text) in [(&a_id, "열린 방의 글"), (&b_id, "닫힌 방에 남은 글")] {
         let doc = send(
             &app,

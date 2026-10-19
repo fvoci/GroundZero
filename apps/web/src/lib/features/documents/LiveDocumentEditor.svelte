@@ -24,9 +24,11 @@
     onsaved?: (doc: DocumentView) => void;
     /** 실시간이 꺼졌다. 부모가 문서를 다시 읽어 일반 편집으로 돌아간다. */
     onrealtimeoff?: () => void;
+    /** 권한이 바뀌어 닫혔다가 다시 연결한다. 부모가 지금 권한으로 문서를 다시 연다(읽기면 읽기 전용). */
+    onreload?: () => void;
   }
 
-  const { initial, references, onsaved, onrealtimeoff }: Props = $props();
+  const { initial, references, onsaved, onrealtimeoff, onreload }: Props = $props();
   const start = untrack(() => initial);
   const INLINE_IMAGES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
@@ -90,6 +92,10 @@
   }
 
   function restart(): void {
+    if (stopped === 'denied' && onreload !== undefined) {
+      onreload();
+      return;
+    }
     if (session !== undefined) closeLive(session);
     session = undefined;
     stopped = undefined;

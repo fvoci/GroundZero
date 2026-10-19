@@ -49,7 +49,7 @@
   "documents_live_connected": "실시간 연결됨",
   "documents_live_connecting": "연결 중…",
   "documents_live_disconnected": "연결이 끊김 · 다시 연결 중",
-  "documents_live_denied": "이 문서를 볼 권한이 없어져 연결을 닫았습니다.",
+  "documents_live_denied": "이 문서의 권한이 바뀌어 연결을 닫았습니다. 다시 연결하면 지금 권한으로 엽니다.",
   "documents_live_invalid": "서버가 받지 않는 변경이 있어 연결을 닫았습니다. 새로고침해 주세요.",
   "documents_live_reload": "문서가 바뀌어 다시 엽니다.",
   "documents_live_off": "실시간 편집이 꺼졌습니다.",
