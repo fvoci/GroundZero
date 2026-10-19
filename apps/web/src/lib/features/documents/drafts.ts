@@ -109,12 +109,29 @@ export function storeOffers(documentId: string, drafts: readonly Draft[]): boole
 
 /** 고르게 할 줄에서 이 초안 하나를 뺀다(보존했거나 버렸다). */
 export function removeOffer(documentId: string, done: Draft): void {
-  const same = (d: Draft): boolean =>
-    d.savedAt === done.savedAt && canonicalJson(d.body) === canonicalJson(done.body);
   storeOffers(
     documentId,
-    loadOffers(documentId).filter((d) => !same(d)),
+    loadOffers(documentId).filter((d) => d.savedAt !== done.savedAt || !sameContent(d, done)),
   );
+}
+
+/** 두 초안(또는 초안과 지금 내용)이 같은지: 제목과 본문 모두. */
+export function sameContent(
+  a: { title: string; body: unknown },
+  b: { title: string; body: unknown },
+): boolean {
+  return (
+    canonicalJson({ title: a.title.trim(), body: a.body }) ===
+    canonicalJson({ title: b.title.trim(), body: b.body })
+  );
+}
+
+/** 지금 내용(제목·본문)과 같아 이미 반영된 초안을 뺀 줄. */
+export function withoutApplied(
+  drafts: readonly Draft[],
+  current: { title: string; body: unknown },
+): Draft[] {
+  return drafts.filter((d) => !sameContent(d, current));
 }
 
 /**

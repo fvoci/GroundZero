@@ -8,6 +8,7 @@ import {
   removeOffer,
   storeDraft,
   storeOffers,
+  withoutApplied,
 } from '$lib/features/documents/drafts';
 import { me } from '$lib/me.svelte';
 
@@ -81,5 +82,16 @@ describe('draft queue under a full store', () => {
     storeOffers('doc-6', [a, b]);
     removeOffer('doc-6', a);
     expect(loadOffers('doc-6').map((d) => d.title)).toEqual(['나']);
+  });
+});
+
+describe('draft identity', () => {
+  it('treats a draft as applied only when both title and body match', () => {
+    const current = { title: '회의록', body };
+    const sameBodyOtherTitle = { ...draft, title: '회의록(고친 제목)' };
+    const same = { ...draft, title: ' 회의록 ' };
+    expect(withoutApplied([sameBodyOtherTitle, same], current).map((d) => d.title)).toEqual([
+      '회의록(고친 제목)',
+    ]);
   });
 });

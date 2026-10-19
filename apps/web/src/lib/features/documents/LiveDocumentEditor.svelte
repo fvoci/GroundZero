@@ -20,11 +20,11 @@
 
   import type { Draft } from './drafts';
   import {
-    canonicalJson,
     clearDraft,
     loadOffers,
     queueDraft,
     removeOffer,
+    withoutApplied,
     storeDraft,
     storeOffers,
   } from './drafts';
@@ -100,8 +100,8 @@
   /** 지금 내용과 같은 지난 초안은 지우고(이미 반영됨), 남은 것 중 첫째를 고르게 한다. */
   function showNextOffer(): void {
     const all = loadOffers(start.id);
-    const now = latest === undefined ? undefined : canonicalJson(latest);
-    const rest = all.filter((d) => canonicalJson(d.body) !== now);
+    // 제목과 본문이 모두 지금과 같아야 이미 반영된 것이다(제목만 다른 초안도 고르게 한다).
+    const rest = latest === undefined ? all : withoutApplied(all, { title, body: latest });
     if (rest.length !== all.length) storeOffers(start.id, rest);
     found = rest[0];
   }
