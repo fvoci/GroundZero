@@ -937,7 +937,7 @@ async fn pending_index_tasks_are_tracked_until_they_succeed() {
     let id = doc["id"].as_str().unwrap().to_owned();
 
     // 1. 보낸 작업이 끝나지 않았다: 행은 남고 작업 번호를 기억한다.
-    let _ignored = drain(&state.db, search, None).await;
+    drain(&state.db, search, None).await.unwrap();
     let attempts = row(id.clone())
         .await
         .expect("the document left the queue while its task was pending");
@@ -947,7 +947,7 @@ async fn pending_index_tasks_are_tracked_until_they_succeed() {
     );
     let sent = posts();
     // 2. 기다리는 동안 다시 꺼내도 다시 보내지 않고 실패 횟수도 그대로다.
-    let _ignored = drain(&state.db, search, None).await;
+    drain(&state.db, search, None).await.unwrap();
     assert_eq!(posts(), sent, "a pending task was submitted again");
     assert_eq!(row(id.clone()).await.unwrap(), attempts);
     // 3. 그 사이 제목을 바꾼다(더 새 세대).
@@ -965,7 +965,7 @@ async fn pending_index_tasks_are_tracked_until_they_succeed() {
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
     // 4. 앞 작업이 성공해도 더 새 변경은 남아 다시 보내고, 그 성공 뒤에 지운다.
     set_all("succeeded");
-    let _ignored = drain(&state.db, search, None).await;
+    drain(&state.db, search, None).await.unwrap();
     assert!(posts() > sent, "the newer change was not submitted");
     assert!(last_title().contains("바뀐 제목"), "{}", last_title());
     assert!(
@@ -973,18 +973,43 @@ async fn pending_index_tasks_are_tracked_until_they_succeed() {
         "the row stayed after its newest task succeeded"
     );
 
-    // 5. 실패한 작업은 다시 보낸다.
+    // 5. 실패한 작업은 다시 보낸다. 여럿을 한 번에 보낸 작업이 기다림 뒤에 실패했으면 다시 보낼 때는 하나씩 보낸다(문제
+    //    있는 한 건이 묶음 전체를 계속 막지 않게).
     set_all("enqueued");
     let other = common::create_doc(&app, &admin_user, &ws, "실패할 문서").await;
+    let third = common::create_doc(&app, &admin_user, &ws, "같이 실패할 문서").await;
     let other_id = other["id"].as_str().unwrap().to_owned();
-    let _ignored = drain(&state.db, search, None).await;
+    let third_id = third["id"].as_str().unwrap().to_owned();
+    drain(&state.db, search, None).await.unwrap();
     assert!(row(other_id.clone()).await.is_some());
     assert!(task(other_id.clone()).await.is_some());
+    assert_eq!(
+        task(other_id.clone()).await,
+        task(third_id.clone()).await,
+        "sent together"
+    );
     let before = posts();
     set_all("failed");
     fake.lock().unwrap().new_status = "succeeded".into();
-    let _ignored = drain(&state.db, search, None).await;
-    assert!(posts() > before, "the failed task was not submitted again");
+    drain(&state.db, search, None).await.unwrap();
+    let resent: Vec<usize> = fake.lock().unwrap().submitted[before..]
+        .iter()
+        .map(|(_, body)| body.as_array().map_or(0, Vec::len))
+        .collect();
+    assert!(
+        !resent.is_empty(),
+        "the failed task was not submitted again"
+    );
+    assert!(
+        resent.iter().all(|n| *n == 1),
+        "the failed batch was sent together again: {resent:?}"
+    );
     assert!(row(other_id).await.is_none());
+    assert!(row(third_id).await.is_none());
     owner.close().await;
+    state.db.close().await;
+    sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fresh.name))
+        .execute(&mut admin)
+        .await
+        .unwrap();
 }

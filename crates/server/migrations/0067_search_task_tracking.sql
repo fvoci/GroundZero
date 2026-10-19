@@ -11,9 +11,13 @@ ALTER TABLE search_queue
   ADD CONSTRAINT search_queue_task_pair CHECK ((task_uid IS NULL) = (task_queued_at IS NULL));
 CREATE INDEX search_queue_task ON search_queue (task_uid) WHERE task_uid IS NOT NULL;
 
--- 꺼내기: 보낸 작업을 기다리는 행은 꺼내지 않는다. 함수 본문은 0024와 같고 "바뀐 곳"만 다르다.
-CREATE OR REPLACE FUNCTION app_system_search_claim(p_limit integer)
-  RETURNS TABLE (kind text, target_id uuid, queued_at timestamptz)
+-- 꺼내기: 보낸 작업을 기다리는 행은 꺼내지 않는다. 몇 번째 꺼냄인지(`attempts`)도 돌려줘, 앞서 실패한 행은 하나씩
+-- 보내게 한다(여럿을 한 번에 보낸 작업이 기다림 뒤에 실패하면 같은 묶음으로 다시 꺼내져 문제 있는 한 건이 모두를 계속 막았다).
+-- 돌려주는 열이 바뀌어 다시 만든다. 함수 본문은 0024와 같고 "바뀐 곳"만 다르다.
+DROP FUNCTION app_system_search_claim(integer);
+CREATE FUNCTION app_system_search_claim(p_limit integer)
+  -- 바뀐 곳: attempts를 함께 돌려준다.
+  RETURNS TABLE (kind text, target_id uuid, queued_at timestamptz, attempts integer)
   LANGUAGE sql VOLATILE SECURITY DEFINER
   SET search_path = fvoci, pg_temp
   AS $$
@@ -27,7 +31,7 @@ CREATE OR REPLACE FUNCTION app_system_search_claim(p_limit integer)
         AND s.task_uid IS NULL
       ORDER BY s.queued_at
       LIMIT greatest(1, least(p_limit, 500)) FOR UPDATE SKIP LOCKED)
-    RETURNING q.kind, q.target_id, q.queued_at
+    RETURNING q.kind, q.target_id, q.queued_at, q.attempts
   $$;
 
 -- 보냈지만 아직 끝나지 않은 작업: 행마다 작업 번호와 보낸 세대를 남기고 표시를 푼다.
@@ -91,10 +95,12 @@ CREATE FUNCTION app_system_search_settled(p_task bigint, p_outcome text) RETURNS
   END
   $$;
 
+REVOKE ALL ON FUNCTION app_system_search_claim(integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_system_search_submitted(text[], uuid[], timestamptz[], bigint) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_system_search_pending(integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_system_search_settled(bigint, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION
+  app_system_search_claim(integer),
   app_system_search_submitted(text[], uuid[], timestamptz[], bigint),
   app_system_search_pending(integer),
   app_system_search_settled(bigint, text)

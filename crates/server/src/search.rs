@@ -356,11 +356,16 @@ struct Submitted {
     pending: Vec<(u64, Vec<String>)>,
 }
 
-/// 넣기를 한꺼번에 하고, 실패하면 하나씩 해서 결과를 모은다(문제 있는 한 건이 묶음을 막지 않게). 아직 끝나지 않은
-/// 작업은 다시 보내지 않고 번호를 남긴다.
-async fn upsert_each(client: &SearchClient, docs: &[IndexDoc]) -> Submitted {
+/// 넣기를 한꺼번에 하고(`together`), 실패하면 하나씩 해서 결과를 모은다(문제 있는 한 건이 묶음을 막지 않게). 아직
+/// 끝나지 않은 작업은 다시 보내지 않고 번호를 남긴다. `together`가 거짓이면 처음부터 하나씩 보낸다.
+async fn upsert_each(client: &SearchClient, docs: &[IndexDoc], together: bool) -> Submitted {
     let uids = || docs.iter().map(|d| d.uid.clone()).collect::<Vec<_>>();
-    match client.upsert(docs).await {
+    let batch = if together {
+        client.upsert(docs).await
+    } else {
+        Ok(TaskOutcome::Failed("sent one by one".into()))
+    };
+    match batch {
         Ok(TaskOutcome::Succeeded) => {
             return Submitted {
                 done: uids(),
@@ -435,15 +440,27 @@ pub async fn drain(
     // 먼저 기다리던 작업의 결과를 반영한다(성공한 것만 지우고, 실패한 것은 아래에서 다시 꺼내 보낸다).
     let settled = settle_pending(db, client).await?;
     let mut tx = db.begin_anonymous().await?;
-    let claimed: Vec<(String, Uuid, OffsetDateTime)> =
-        sqlx::query_as("SELECT kind, target_id, queued_at FROM app_system_search_claim($1)")
-            .bind(BATCH)
-            .fetch_all(tx.conn())
-            .await?;
+    let rows: Vec<(String, Uuid, OffsetDateTime, i32)> = sqlx::query_as(
+        "SELECT kind, target_id, queued_at, attempts FROM app_system_search_claim($1)",
+    )
+    .bind(BATCH)
+    .fetch_all(tx.conn())
+    .await?;
     tx.commit().await?;
-    if claimed.is_empty() {
+    if rows.is_empty() {
         return Ok(settled);
     }
+    // 앞서 꺼냈는데 끝나지 않은 행(실패했거나 표시가 풀린 것)은 하나씩 보낸다. 묶음으로 보낸 작업이 기다림 뒤에 실패하면
+    // 같은 묶음으로 다시 꺼내지므로, 그대로 묶어 보내면 문제 있는 한 건이 모두를 계속 막는다.
+    let retried: HashSet<String> = rows
+        .iter()
+        .filter(|(_, _, _, attempts)| *attempts > 1)
+        .map(|(kind, id, _, _)| uid(kind, *id))
+        .collect();
+    let claimed: Vec<(String, Uuid, OffsetDateTime)> = rows
+        .into_iter()
+        .map(|(kind, id, queued_at, _)| (kind, id, queued_at))
+        .collect();
     let kinds: Vec<&str> = claimed.iter().map(|(k, _, _)| k.as_str()).collect();
     let ids: Vec<Uuid> = claimed.iter().map(|(_, id, _)| *id).collect();
     let mut tx = db.begin_anonymous().await?;
@@ -493,7 +510,13 @@ pub async fn drain(
             kind: row.kind,
         });
     }
-    let Submitted { done, mut pending } = upsert_each(client, &upserts).await;
+    let (again, fresh): (Vec<IndexDoc>, Vec<IndexDoc>) =
+        upserts.into_iter().partition(|d| retried.contains(&d.uid));
+    let mut submitted = upsert_each(client, &fresh, true).await;
+    let alone = upsert_each(client, &again, false).await;
+    submitted.done.extend(alone.done);
+    submitted.pending.extend(alone.pending);
+    let Submitted { done, mut pending } = submitted;
     let mut done: HashSet<String> = done.into_iter().collect();
     match client.delete(&deletes).await {
         Ok(TaskOutcome::Succeeded) => done.extend(deletes),
