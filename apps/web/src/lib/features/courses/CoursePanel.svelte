@@ -62,6 +62,26 @@
   let mine = $state({ planned_on: '', position: '', note: '' });
   let newEpisode = $state({ title: '', chapter: '', duration: '', planned_on: '' });
   let csvText = $state('');
+  /** 공통 정보(번호·제목·링크·자료 등)를 고치는 회차와, 고치기를 열 때(또는 마지막으로 확인할 때) 읽은 그 회차. */
+  let editingEpisode = $state<EpisodeView | undefined>(undefined);
+  // 번호 칸(type="number")은 숫자를 주고, 비우면 null을 준다.
+  let shared = $state<{
+    number: number | null;
+    title: string;
+    chapter: string;
+    duration: string;
+    url: string;
+    materials: string;
+    planned_on: string;
+  }>({
+    number: null,
+    title: '',
+    chapter: '',
+    duration: '',
+    url: '',
+    materials: '',
+    planned_on: '',
+  });
   let reloadKey = $state(0);
   let seq = 0;
 
@@ -149,6 +169,86 @@
         e.mine.last_position_seconds === null ? '' : clockText(e.mine.last_position_seconds),
       note: e.mine.note,
     };
+  }
+
+  function editEpisode(e: EpisodeView): void {
+    if (editingEpisode?.id === e.id) {
+      editingEpisode = undefined;
+      return;
+    }
+    editingEpisode = e;
+    shared = {
+      number: e.number,
+      title: e.title,
+      chapter: e.chapter,
+      duration: e.duration_seconds > 0 ? clockText(e.duration_seconds) : '',
+      url: e.url,
+      materials: e.materials,
+      planned_on: e.planned_on ?? '',
+    };
+  }
+
+  const sharedOf = (e: EpisodeView): string =>
+    JSON.stringify([
+      e.number,
+      e.title,
+      e.chapter,
+      e.duration_seconds,
+      e.url,
+      e.materials,
+      e.planned_on,
+    ]);
+
+  /** 회차 공통 정보 저장. 서버는 통째로 바꾸므로, 고치기를 연 뒤 다른 사람이 먼저 고쳤으면 덮지 않고 알린다. */
+  async function saveEpisode(base: EpisodeView): Promise<void> {
+    const number = shared.number;
+    const seconds = parseDuration(shared.duration);
+    const url = shared.url.trim();
+    if (
+      number === null ||
+      !Number.isInteger(number) ||
+      number < 1 ||
+      shared.title.trim() === '' ||
+      seconds === null
+    ) {
+      error = m.courses_episode_invalid();
+      return;
+    }
+    if (url !== '' && !isWebUrl(url)) {
+      error = m.courses_url_invalid();
+      return;
+    }
+    error = undefined;
+    try {
+      const now = await api.course(itemId);
+      course = now;
+      const latest = now.episodes.find((x) => x.id === base.id);
+      if (latest === undefined) {
+        editingEpisode = undefined;
+        error = m.common_error_not_found();
+        return;
+      }
+      if (sharedOf(latest) !== sharedOf(base)) {
+        // 입력은 그대로 두고 기준만 최신으로 바꾼다. 다시 저장하면(명시적으로) 지금 내용을 바꾼다.
+        editingEpisode = latest;
+        error = m.courses_episode_changed();
+        return;
+      }
+      await api.updateEpisode(base.id, {
+        number,
+        title: shared.title.trim(),
+        chapter: shared.chapter.trim(),
+        duration_seconds: seconds,
+        url,
+        materials: shared.materials,
+        planned_on: orNull(shared.planned_on),
+      });
+      editingEpisode = undefined;
+      status = m.courses_episode_saved({ number });
+      reloadKey += 1;
+    } catch (e: unknown) {
+      error = errorText(e, m.courses_action_failed());
+    }
   }
 
   const csv = $derived(csvText.trim() === '' ? undefined : parseEpisodesCsv(csvText));
@@ -426,6 +526,15 @@
               <Button
                 size="sm"
                 variant="ghost"
+                aria-expanded={editingEpisode?.id === e.id}
+                aria-label={m.courses_edit_episode_aria({ number: e.number })}
+                onclick={() => {
+                  editEpisode(e);
+                }}>{m.courses_edit()}</Button
+              >
+              <Button
+                size="sm"
+                variant="ghost"
                 aria-label={m.courses_delete_aria({ number: e.number })}
                 onclick={() =>
                   void run(() => api.deleteEpisode(e.id), m.courses_deleted({ number: e.number }))}
@@ -433,6 +542,69 @@
               >
             {/if}
           </div>
+          {#if e.materials !== ''}
+            <p class="text-xs whitespace-pre-wrap text-muted-foreground">
+              <span class="font-medium">{m.courses_materials()}</span>
+              {e.materials}
+            </p>
+          {/if}
+          {#if editingEpisode?.id === e.id}
+            {@const base = editingEpisode}
+            <form
+              class="grid gap-2 border-t pt-2 sm:grid-cols-4"
+              aria-label={m.courses_episode_form({ number: e.number })}
+              onsubmit={(ev: SubmitEvent) => {
+                ev.preventDefault();
+                void saveEpisode(base);
+              }}
+            >
+              <div class="flex flex-col gap-1">
+                <Label for={`ep-number-${e.id}`}>{m.courses_number()}</Label>
+                <Input id={`ep-number-${e.id}`} type="number" min={1} bind:value={shared.number} />
+              </div>
+              <div class="flex flex-col gap-1 sm:col-span-3">
+                <Label for={`ep-title-${e.id}`}>{m.courses_new_title()}</Label>
+                <Input id={`ep-title-${e.id}`} bind:value={shared.title} maxlength={300} />
+              </div>
+              <div class="flex flex-col gap-1">
+                <Label for={`ep-chapter-${e.id}`}>{m.courses_chapter()}</Label>
+                <Input id={`ep-chapter-${e.id}`} bind:value={shared.chapter} />
+              </div>
+              <div class="flex flex-col gap-1">
+                <Label for={`ep-duration-${e.id}`}>{m.courses_duration()}</Label>
+                <Input
+                  id={`ep-duration-${e.id}`}
+                  bind:value={shared.duration}
+                  placeholder="12:30"
+                />
+              </div>
+              <div class="flex flex-col gap-1 sm:col-span-2">
+                <Label for={`ep-planned-${e.id}`}>{m.courses_planned()}</Label>
+                <Input id={`ep-planned-${e.id}`} type="date" bind:value={shared.planned_on} />
+              </div>
+              <div class="flex flex-col gap-1 sm:col-span-4">
+                <Label for={`ep-url-${e.id}`}>{m.courses_episode_url()}</Label>
+                <Input id={`ep-url-${e.id}`} type="url" bind:value={shared.url} maxlength={2000} />
+              </div>
+              <div class="flex flex-col gap-1 sm:col-span-4">
+                <Label for={`ep-materials-${e.id}`}>{m.courses_materials()}</Label>
+                <textarea
+                  id={`ep-materials-${e.id}`}
+                  class="min-h-20 rounded-md border bg-background p-2 text-sm"
+                  bind:value={shared.materials}></textarea>
+              </div>
+              <div class="flex gap-2 sm:col-span-4">
+                <Button type="submit" size="sm">{m.common_save()}</Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => {
+                    editingEpisode = undefined;
+                  }}>{m.common_cancel()}</Button
+                >
+              </div>
+            </form>
+          {/if}
           {#if openEpisode === e.id}
             <form
               class="grid gap-2 border-t pt-2 sm:grid-cols-3"

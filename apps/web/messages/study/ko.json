@@ -97,5 +97,12 @@
   "study_planned": "계획일",
   "study_add_unit": "단위 추가",
   "study_participants": "함께 하는 사람",
-  "study_participant": "{name}: 완료 {done} · 진행 중 {inProgress} · 밀림 {overdue}"
+  "study_participant": "{name}: 완료 {done} · 진행 중 {inProgress} · 밀림 {overdue}",
+  "study_edit": "고치기",
+  "study_edit_aria": "{title} 공통 정보 고치기",
+  "study_unit_form": "{title} 공통 정보",
+  "study_unit_saved": "{title}을(를) 고쳤습니다.",
+  "study_unit_changed": "다른 사람이 이 단위를 먼저 고쳤습니다. 지금 저장된 내용이 목록에 보입니다. 입력한 내용으로 바꾸려면 다시 저장하세요.",
+  "study_unit_edit_invalid": "번호(1 이상의 정수), 제목, 분량(0 이상의 정수)을 확인해 주세요.",
+  "study_number": "번호"
 }

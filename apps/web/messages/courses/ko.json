@@ -111,5 +111,13 @@
   "courses_participants": "함께 수강",
   "courses_participants_hint": "완료·수강 중·밀린 회차 수만 함께 봅니다. 개인 메모와 시간 기록은 보이지 않습니다.",
   "courses_participant": "{name}: 완료 {done} / {total} · 수강 중 {inProgress}",
-  "courses_participant_overdue": "밀림 {count}"
+  "courses_participant_overdue": "밀림 {count}",
+  "courses_edit_episode_aria": "{number}회 공통 정보 고치기",
+  "courses_episode_form": "{number}회 공통 정보",
+  "courses_episode_saved": "{number}회를 고쳤습니다.",
+  "courses_episode_changed": "다른 사람이 이 회차를 먼저 고쳤습니다. 지금 저장된 내용이 목록에 보입니다. 입력한 내용으로 바꾸려면 다시 저장하세요.",
+  "courses_episode_invalid": "번호(1 이상의 정수), 제목, 길이(분 또는 분:초)를 확인해 주세요.",
+  "courses_number": "번호",
+  "courses_episode_url": "회차 링크",
+  "courses_materials": "자료"
 }

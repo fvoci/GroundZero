@@ -99,5 +99,12 @@
   "study_planned": "Plan date",
   "study_add_unit": "Add unit",
   "study_participants": "Studying together",
-  "study_participant": "{name}: done {done} · in progress {inProgress} · overdue {overdue}"
+  "study_participant": "{name}: done {done} · in progress {inProgress} · overdue {overdue}",
+  "study_edit": "Edit",
+  "study_edit_aria": "Edit details of {title}",
+  "study_unit_form": "{title} details",
+  "study_unit_saved": "Updated {title}.",
+  "study_unit_changed": "Someone else changed this unit first. The list shows what is saved now. Save again to replace it with your input.",
+  "study_unit_edit_invalid": "Check the number (a whole number from 1), the title and the amount (a whole number, 0 or more).",
+  "study_number": "Number"
 }

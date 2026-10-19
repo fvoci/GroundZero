@@ -48,11 +48,12 @@
   let error = $state<string | undefined>(undefined);
   let status = $state('');
   let reloadKey = $state(0);
+  // 숫자 칸(type="number")은 숫자를 주고, 비우면 null을 준다. 상태도 그 모양으로 든다.
   interface UnitDraft {
     title: string;
     chapter: string;
     unit: StudyUnitKind;
-    amount: string;
+    amount: number | null;
     planned_on: string;
   }
 
@@ -60,15 +61,35 @@
     title: '',
     chapter: '',
     unit: 'pages',
-    amount: '',
+    amount: null,
     planned_on: '',
   });
   // 같은 입력의 재시도는 같은 요청 id, 고친 입력은 새 id.
   const draftKey = new RetryKey();
   let replanStart = $state(today);
-  let replanPerDay = $state('1');
+  let replanPerDay = $state<number | null>(1);
   let openUnit = $state<string | undefined>(undefined);
-  let mine = $state({ done_amount: '', planned_on: '', note: '' });
+  let mine = $state<{ done_amount: number | null; planned_on: string; note: string }>({
+    done_amount: null,
+    planned_on: '',
+    note: '',
+  });
+  /** 공통 정보를 고치는 단위와, 고치기를 열 때(또는 마지막으로 확인할 때) 읽은 그 단위. */
+  let editingUnit = $state<StudyUnitView | undefined>(undefined);
+  let shared = $state<UnitDraft & { number: number | null }>({
+    number: null,
+    title: '',
+    chapter: '',
+    unit: 'pages',
+    amount: null,
+    planned_on: '',
+  });
+
+  /** 빈 칸은 0. 0 이상의 정수가 아니면 undefined. */
+  function wholeAmount(value: number | null): number | undefined {
+    const amount = value ?? 0;
+    return Number.isInteger(amount) && amount >= 0 ? amount : undefined;
+  }
 
   const progress = $derived(plan === undefined ? undefined : studyProgress(plan.units, today));
 
@@ -132,16 +153,81 @@
     }
     openUnit = u.id;
     mine = {
-      done_amount: String(u.mine.done_amount),
+      done_amount: u.mine.done_amount,
       planned_on: u.mine.planned_on ?? '',
       note: u.mine.note,
     };
   }
 
+  function editUnit(u: StudyUnitView): void {
+    if (editingUnit?.id === u.id) {
+      editingUnit = undefined;
+      return;
+    }
+    editingUnit = u;
+    shared = {
+      number: u.number,
+      title: u.title,
+      chapter: u.chapter,
+      unit: u.unit,
+      amount: u.amount,
+      planned_on: u.planned_on ?? '',
+    };
+  }
+
+  const sharedOf = (u: StudyUnitView): string =>
+    JSON.stringify([u.number, u.title, u.chapter, u.unit, u.amount, u.planned_on]);
+
+  /** 단위 공통 정보 저장. 서버는 통째로 바꾸므로, 고치기를 연 뒤 다른 사람이 먼저 고쳤으면 덮지 않고 알린다. */
+  async function saveUnit(base: StudyUnitView): Promise<void> {
+    const amount = wholeAmount(shared.amount);
+    const number = shared.number;
+    if (
+      number === null ||
+      !Number.isInteger(number) ||
+      number < 1 ||
+      shared.title.trim() === '' ||
+      amount === undefined
+    ) {
+      error = m.study_unit_edit_invalid();
+      return;
+    }
+    error = undefined;
+    try {
+      const now = await api.studyPlan(itemId);
+      plan = now;
+      const latest = now.units.find((x) => x.id === base.id);
+      if (latest === undefined) {
+        editingUnit = undefined;
+        error = m.common_error_not_found();
+        return;
+      }
+      if (sharedOf(latest) !== sharedOf(base)) {
+        // 입력은 그대로 두고 기준만 최신으로 바꾼다. 다시 저장하면(명시적으로) 지금 내용을 바꾼다.
+        editingUnit = latest;
+        error = m.study_unit_changed();
+        return;
+      }
+      await api.updateStudyUnit(base.id, {
+        number,
+        title: shared.title.trim(),
+        chapter: shared.chapter.trim(),
+        unit: shared.unit,
+        amount,
+        planned_on: shared.planned_on === '' ? null : shared.planned_on,
+      });
+      editingUnit = undefined;
+      status = m.study_unit_saved({ title: shared.title.trim() });
+      reloadKey += 1;
+    } catch (e: unknown) {
+      error = errorText(e, m.study_action_failed());
+    }
+  }
+
   async function addUnit(e: SubmitEvent): Promise<void> {
     e.preventDefault();
-    const amount = draft.amount.trim() === '' ? 0 : Number(draft.amount);
-    if (draft.title.trim() === '' || !Number.isInteger(amount) || amount < 0) {
+    const amount = wholeAmount(draft.amount);
+    if (draft.title.trim() === '' || amount === undefined) {
       error = m.study_unit_invalid();
       return;
     }
@@ -158,7 +244,7 @@
       m.study_unit_added(),
     );
     if (ok) {
-      draft = { title: '', chapter: '', unit: draft.unit, amount: '', planned_on: '' };
+      draft = { title: '', chapter: '', unit: draft.unit, amount: null, planned_on: '' };
       draftKey.done();
     }
   }
@@ -214,7 +300,7 @@
         aria-label={m.study_replan_form()}
         onsubmit={(e: SubmitEvent) => {
           e.preventDefault();
-          const per = Number(replanPerDay);
+          const per = replanPerDay ?? 0;
           if (!Number.isInteger(per) || per < 1) {
             error = m.study_per_day_invalid();
             return;
@@ -307,19 +393,91 @@
               <Button
                 size="sm"
                 variant="ghost"
+                aria-expanded={editingUnit?.id === u.id}
+                aria-label={m.study_edit_aria({ title: u.title })}
+                onclick={() => {
+                  editUnit(u);
+                }}>{m.study_edit()}</Button
+              >
+              <Button
+                size="sm"
+                variant="ghost"
                 onclick={() =>
                   void run(() => api.deleteStudyUnit(u.id), m.study_deleted({ title: u.title }))}
                 >{m.study_delete()}</Button
               >
             {/if}
           </div>
+          {#if editingUnit?.id === u.id}
+            {@const base = editingUnit}
+            <form
+              class="grid gap-2 border-t pt-2 sm:grid-cols-4"
+              aria-label={m.study_unit_form({ title: u.title })}
+              novalidate
+              onsubmit={(e: SubmitEvent) => {
+                e.preventDefault();
+                void saveUnit(base);
+              }}
+            >
+              <div class="flex flex-col gap-1">
+                <Label for={`unit-number-${u.id}`}>{m.study_number()}</Label>
+                <Input
+                  id={`unit-number-${u.id}`}
+                  type="number"
+                  min={1}
+                  bind:value={shared.number}
+                />
+              </div>
+              <div class="flex flex-col gap-1 sm:col-span-3">
+                <Label for={`unit-title-${u.id}`}>{m.study_new_title()}</Label>
+                <Input id={`unit-title-${u.id}`} bind:value={shared.title} maxlength={300} />
+              </div>
+              <div class="flex flex-col gap-1">
+                <Label for={`unit-chapter-${u.id}`}>{m.study_chapter()}</Label>
+                <Input id={`unit-chapter-${u.id}`} bind:value={shared.chapter} maxlength={300} />
+              </div>
+              <div class="flex flex-col gap-1">
+                <Label for={`unit-amount-${u.id}`}>{m.study_amount()}</Label>
+                <Input
+                  id={`unit-amount-${u.id}`}
+                  type="number"
+                  min={0}
+                  bind:value={shared.amount}
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <Label for={`unit-kind-${u.id}`}>{m.study_unit()}</Label>
+                <select id={`unit-kind-${u.id}`} class={box} bind:value={shared.unit}>
+                  {#each STUDY_UNIT_KINDS as k (k)}<option value={k}>{unitLabel(k)}</option>{/each}
+                </select>
+              </div>
+              <div class="flex flex-col gap-1">
+                <Label for={`unit-shared-planned-${u.id}`}>{m.study_planned()}</Label>
+                <Input
+                  id={`unit-shared-planned-${u.id}`}
+                  type="date"
+                  bind:value={shared.planned_on}
+                />
+              </div>
+              <div class="flex gap-2 sm:col-span-4">
+                <Button type="submit" size="sm">{m.common_save()}</Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => {
+                    editingUnit = undefined;
+                  }}>{m.common_cancel()}</Button
+                >
+              </div>
+            </form>
+          {/if}
           {#if openUnit === u.id}
             <form
               class="grid gap-2 border-t pt-2 sm:grid-cols-3"
               onsubmit={(e: SubmitEvent) => {
                 e.preventDefault();
-                const doneAmount = mine.done_amount.trim() === '' ? 0 : Number(mine.done_amount);
-                if (!Number.isInteger(doneAmount) || doneAmount < 0) {
+                const doneAmount = wholeAmount(mine.done_amount);
+                if (doneAmount === undefined) {
                   error = m.study_done_amount_invalid();
                   return;
                 }

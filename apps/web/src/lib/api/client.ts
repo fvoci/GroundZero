@@ -2280,6 +2280,17 @@ export const api = {
       (v) => int(rec(v, 'units added'), 'added'),
       { units: units.map((u) => ({ ...u })) },
     ),
+  updateStudyUnit: (
+    id: string,
+    unit: {
+      number: number;
+      title: string;
+      chapter: string;
+      unit: StudyUnitKind;
+      amount: number;
+      planned_on: string | null;
+    },
+  ) => expectOk('PUT', `/api/study-units/${encodeURIComponent(id)}`, none, { ...unit }),
   deleteStudyUnit: (id: string) =>
     expectOk('DELETE', `/api/study-units/${encodeURIComponent(id)}`, none),
   setUnitProgress: (
