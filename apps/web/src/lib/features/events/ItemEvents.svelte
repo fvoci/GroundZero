@@ -16,9 +16,13 @@
 
   interface Props {
     item: ItemView;
+    /** 같은 화면의 다른 곳(달력)에서 일정이 바뀔 때마다 늘어난다(다시 읽기). */
+    version?: number;
+    /** 여기서 일정을 만들거나 고치거나 지웠다(같은 화면의 달력이 다시 읽게). */
+    onchanged?: () => void;
   }
 
-  const { item }: Props = $props();
+  const { item, version = 0, onchanged }: Props = $props();
 
   let events = $state<EventView[]>([]);
   let error = $state<string | undefined>(undefined);
@@ -44,6 +48,7 @@
   }
 
   $effect(() => {
+    if (version < 0) return;
     void reload(item.id);
   });
 
@@ -51,6 +56,7 @@
     await api.createEvent(item.id, createKey.for({ item: item.id, input }), input);
     createKey.done();
     adding = false;
+    onchanged?.();
     await reload();
   }
 
@@ -119,6 +125,7 @@
       : document.querySelector<HTMLElement>(`[data-event-id="${CSS.escape(returnTo)}"]`)}
   onchanged={() => {
     changed = true;
+    onchanged?.();
     void reload();
   }}
 />

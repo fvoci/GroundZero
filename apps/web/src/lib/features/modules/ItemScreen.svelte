@@ -49,6 +49,9 @@
   let item = $state<ItemView | undefined>(undefined);
   let mod = $state<Module | undefined>(undefined);
   let docs = $state<SummaryView[]>([]);
+  // 항목 일정 목록에서 바꾸면 달력을, 달력에서 바꾸면 목록을 다시 읽게 하는 값.
+  let calendarVersion = $state(0);
+  let listVersion = $state(0);
   let error = $state<string | undefined>(undefined);
 
   let title = $state('');
@@ -398,8 +401,23 @@
           .catch(() => undefined);
       }}
     />
-    <ItemEvents item={current} />
-    <CalendarScreen {workspace} scope={{ itemId: current.id }} embedded />
+    <!-- 일정 목록과 달력은 같은 일정을 따로 읽는다. 한쪽에서 바꾸면 다른 쪽이 다시 읽게 알린다. -->
+    <ItemEvents
+      item={current}
+      version={listVersion}
+      onchanged={() => {
+        calendarVersion += 1;
+      }}
+    />
+    <CalendarScreen
+      {workspace}
+      scope={{ itemId: current.id }}
+      embedded
+      version={calendarVersion}
+      onchanged={() => {
+        listVersion += 1;
+      }}
+    />
     <Backlinks kind="item" id={current.id} {workspaces} />
   </section>
 {/if}
