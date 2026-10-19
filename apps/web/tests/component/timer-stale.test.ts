@@ -46,4 +46,21 @@ describe('timer', () => {
     await reading;
     expect(timer.entry).toBeNull();
   });
+
+  it('does not let a read started during a start hide the started timer', async () => {
+    let resolveStart: (entry: TimeEntryView) => void = () => undefined;
+    vi.spyOn(api, 'startTimer').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = resolve;
+        }),
+    );
+    // 시작 응답 전에 탭을 다시 봐서 읽었고, 서버는 그 읽기에 먼저 "없음"으로 답했다.
+    vi.spyOn(api, 'currentTimer').mockResolvedValueOnce(null);
+    const starting = timer.start('work');
+    await timer.load();
+    resolveStart({ ...running, id: 't2' });
+    await starting;
+    expect(timer.entry?.id).toBe('t2');
+  });
 });
