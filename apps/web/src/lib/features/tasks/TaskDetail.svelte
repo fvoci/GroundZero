@@ -35,6 +35,7 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
+  import { formOf, mergeForm } from './form';
   import { PRIORITY_LABEL, STATUS_LABEL } from './labels';
 
   interface Props {
@@ -81,21 +82,34 @@
 
   function fill(next: TaskDetailView): void {
     task = next;
-    form = {
-      title: next.title,
-      description: next.description,
-      status: next.status,
-      priority: next.priority,
-      start_date: next.start_date,
-      due_date: next.due_date,
-      estimate_minutes: next.estimate_minutes,
-      tags: next.tags,
-      assignee_ids: next.assignees.map((a) => a.user_id),
-      milestone: next.milestone,
-    };
+    form = formOf(next);
     pending = undefined;
     tagsText = next.tags.join(', ');
     estimateText = next.estimate_minutes === null ? '' : String(next.estimate_minutes);
+  }
+
+  /**
+   * 체크리스트·반복·선행 업무를 바꾼 뒤 서버의 새 판으로 다시 채운다. 고쳤지만 저장하지 않은 칸은 지키고, 그 칸을
+   * 서버에서도 누가 바꿨으면 옛 판 번호를 남겨 저장할 때 충돌 화면이 고르게 한다.
+   */
+  function refresh(fresh: TaskDetailView): void {
+    const current = task;
+    const mine = form;
+    if (current === undefined || mine === undefined) {
+      fill(fresh);
+      return;
+    }
+    const before = formOf(current);
+    const beforeTags = before.tags.join(', ');
+    const beforeEstimate = before.estimate_minutes === null ? '' : String(before.estimate_minutes);
+    const keptTags = tagsText;
+    const keptEstimate = estimateText;
+    const merged = mergeForm(before, mine, formOf(fresh));
+    fill(fresh);
+    form = merged.form;
+    if (keptTags !== beforeTags) tagsText = keptTags;
+    if (keptEstimate !== beforeEstimate) estimateText = keptEstimate;
+    if (merged.clash) task = { ...fresh, version: current.version };
   }
 
   $effect(() => {
@@ -233,7 +247,7 @@
     if (task.version === fresh.version) {
       task = fresh;
     } else {
-      fill(fresh);
+      refresh(fresh);
     }
     onchanged();
   }
@@ -246,7 +260,7 @@
       task.series?.timezone ?? localTimeZone(),
     );
     if (task.version === fresh.version) task = fresh;
-    else fill(fresh);
+    else refresh(fresh);
     onchanged();
   }
 
@@ -255,7 +269,7 @@
     try {
       const fresh = await action;
       if (task?.version === fresh.version) task = fresh;
-      else fill(fresh);
+      else refresh(fresh);
       onchanged();
     } catch (e: unknown) {
       error = errorText(e, m.tasks_predecessor_failed());
