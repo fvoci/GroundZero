@@ -118,3 +118,35 @@ async fn s3_rejects_a_wrong_secret() {
     let err = storage.begin("test/denied").await.unwrap_err();
     assert!(matches!(err, AppError::Storage(_)), "{err:?}");
 }
+
+/// 감사 15번: 로컬 저장소가 마치기 도중 실패하면(디스크 부족, 사라진 조각 등) 합치던 임시 파일을 남기지 않는다.
+/// 남기면 파일 크기만큼의 찌꺼기가 쌓여 디스크 부족을 더 키운다.
+#[tokio::test]
+async fn local_complete_failure_leaves_no_temp_file() {
+    let dir = std::env::temp_dir().join(format!("fvoci-storage-{}", uuid::Uuid::now_v7().simple()));
+    let storage = Storage::new(&StorageConfig::Local { dir: dir.clone() });
+    let key = format!("test/{}", uuid::Uuid::now_v7().simple());
+    let upload = storage.begin(&key).await.unwrap();
+    let etag = storage
+        .put_part(&key, &upload, 1, Bytes::from(vec![1u8; 1024]))
+        .await
+        .unwrap();
+    let parts = [
+        Part {
+            number: 1,
+            etag: etag.clone(),
+            size: 1024,
+        },
+        Part {
+            number: 2,
+            etag,
+            size: 1024,
+        },
+    ];
+    assert!(storage.complete(&key, &upload, &parts).await.is_err());
+    let left: Vec<_> = std::fs::read_dir(dir.join("tmp"))
+        .map(|d| d.filter_map(Result::ok).map(|e| e.file_name()).collect())
+        .unwrap_or_default();
+    assert!(left.is_empty(), "temp files left: {left:?}");
+    let _ignored = std::fs::remove_dir_all(&dir);
+}
