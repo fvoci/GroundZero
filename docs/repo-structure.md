@@ -151,7 +151,8 @@ fvoci/
 │   ├── development.md
 │   ├── testing.md
 │   ├── security.md
-│   └── self-hosting.md
+│   ├── self-hosting.md
+│   └── try-it.md               # 이 Mac에서 직접 써 보기(로컬 체험)
 │
 ├── .agents/
 │   └── skills/              # 실제로 필요한 역할별 스킬
