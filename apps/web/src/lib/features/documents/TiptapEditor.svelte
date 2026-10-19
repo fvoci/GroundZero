@@ -393,7 +393,8 @@
   // 나머지 설정(확장·도움말)은 처음 값으로 둔다.
   $effect(() => {
     const instance = editorRef;
-    if (instance !== undefined && instance.isEditable !== editable) instance.setEditable(editable);
+    if (instance !== undefined && instance.isEditable !== editable)
+      instance.setEditable(editable, false);
   });
 
   function run(command: Command): void {

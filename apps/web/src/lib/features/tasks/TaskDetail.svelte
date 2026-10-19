@@ -18,6 +18,7 @@
   import { api, ApiError, TASK_PRIORITIES, TASK_STATUSES } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
+  import { canonicalJson } from '$lib/features/documents/drafts';
   import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
   import RecurrenceEditor from '$lib/features/events/RecurrenceEditor.svelte';
   import TaskTimePanel from '$lib/features/time/TaskTimePanel.svelte';
@@ -35,6 +36,7 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
+  import { formOf, mergeForm } from './form';
   import { PRIORITY_LABEL, STATUS_LABEL } from './labels';
 
   interface Props {
@@ -79,23 +81,48 @@
       : tasks.filter((t) => t.id !== taskId && !(task?.predecessor_ids.includes(t.id) ?? false)),
   );
 
+  // 다시 채울 때 비교할 기준(마지막으로 다 불러온 판의 값, 사용자가 바꾸지 않은 칸만 새 값으로 옮긴다)과, 같은 칸을
+  // 양쪽에서 바꿔 충돌이 있었는지(다음 저장·불러오기까지 지킨다), 그때 남겨 둘 옛 판 번호.
+  let baseline: TaskInput | undefined;
+  let baseVersion = 0;
+  let clashed = false;
+
   function fill(next: TaskDetailView): void {
     task = next;
-    form = {
-      title: next.title,
-      description: next.description,
-      status: next.status,
-      priority: next.priority,
-      start_date: next.start_date,
-      due_date: next.due_date,
-      estimate_minutes: next.estimate_minutes,
-      tags: next.tags,
-      assignee_ids: next.assignees.map((a) => a.user_id),
-      milestone: next.milestone,
-    };
+    form = formOf(next);
+    baseline = formOf(next);
+    baseVersion = next.version;
+    clashed = false;
     pending = undefined;
     tagsText = next.tags.join(', ');
     estimateText = next.estimate_minutes === null ? '' : String(next.estimate_minutes);
+  }
+
+  /**
+   * 체크리스트·반복·선행 업무를 바꾼 뒤 서버의 새 판으로 다시 채운다. 고쳤지만 저장하지 않은 칸(태그·예상 시간은
+   * 저장할 때 보내는 값으로 비교)은 지키고, 그 칸을 서버에서도 누가 바꿨으면 옛 판 번호를 남겨 저장할 때 충돌
+   * 화면이 고르게 한다.
+   */
+  function refresh(fresh: TaskDetailView): void {
+    const mine = currentInput();
+    if (task === undefined || mine === undefined || baseline === undefined) {
+      fill(fresh);
+      return;
+    }
+    const freshForm = formOf(fresh);
+    const merged = mergeForm(baseline, mine, freshForm);
+    const tagsTouched = canonicalJson(mine.tags) !== canonicalJson(baseline.tags);
+    const estimateTouched = mine.estimate_minutes !== baseline.estimate_minutes;
+    baseline = merged.baseline;
+    clashed = clashed || merged.clash;
+    if (!clashed) baseVersion = fresh.version;
+    task = clashed ? { ...fresh, version: baseVersion } : fresh;
+    form = merged.form;
+    pending = undefined;
+    if (!tagsTouched) tagsText = freshForm.tags.join(', ');
+    if (!estimateTouched) {
+      estimateText = freshForm.estimate_minutes === null ? '' : String(freshForm.estimate_minutes);
+    }
   }
 
   $effect(() => {
@@ -233,7 +260,7 @@
     if (task.version === fresh.version) {
       task = fresh;
     } else {
-      fill(fresh);
+      refresh(fresh);
     }
     onchanged();
   }
@@ -246,7 +273,7 @@
       task.series?.timezone ?? localTimeZone(),
     );
     if (task.version === fresh.version) task = fresh;
-    else fill(fresh);
+    else refresh(fresh);
     onchanged();
   }
 
@@ -255,7 +282,7 @@
     try {
       const fresh = await action;
       if (task?.version === fresh.version) task = fresh;
-      else fill(fresh);
+      else refresh(fresh);
       onchanged();
     } catch (e: unknown) {
       error = errorText(e, m.tasks_predecessor_failed());

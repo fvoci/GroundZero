@@ -4,7 +4,8 @@
   import type { Workspace } from '@fvoci/api-client';
 
   import type { ItemView, SavedViewView, TaskStatus, TaskView } from '$lib/api/client';
-  import { api, ApiError, newRequestId, TASK_STATUSES } from '$lib/api/client';
+  import { api, ApiError, TASK_STATUSES } from '$lib/api/client';
+  import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -63,7 +64,8 @@
   let views = $state<SavedViewView[]>([]);
   let selectedView = $state('');
   let viewName = $state('');
-  let viewRequest = newRequestId();
+  // 같은 이름·설정의 재시도는 같은 요청 id, 고치면 새 id.
+  const viewKey = new RetryKey();
   const shown = $derived(sortTasks(applyFilter(tasks, filter, me.userId), sort));
   const people = $derived(assigneesOf(tasks));
   const ordered = $derived(sort === 'position');
@@ -90,12 +92,14 @@
       return;
     }
     try {
-      const saved = await api.saveView(item.id, viewRequest, name, {
-        view,
-        filter: { ...filter },
-        sort,
-      });
-      viewRequest = newRequestId();
+      const config = { view, filter: { ...filter }, sort };
+      const saved = await api.saveView(
+        item.id,
+        viewKey.for({ item: item.id, name, config }),
+        name,
+        config,
+      );
+      viewKey.done();
       await loadViews(item.id);
       selectedView = saved.id;
       status = m.tasks_view_saved({ name });

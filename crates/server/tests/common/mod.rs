@@ -260,3 +260,59 @@ pub async fn send_raw(
     let bytes = res.into_body().collect().await.unwrap().to_bytes().to_vec();
     (status, headers, bytes)
 }
+
+/// 같은 클러스터의 다른 데이터베이스 주소.
+pub fn with_database(url: &str, database: &str) -> String {
+    let mut parsed = url::Url::parse(url).unwrap();
+    parsed.set_path(&format!("/{database}"));
+    parsed.to_string()
+}
+
+/// 같은 클러스터의 빈 데이터베이스를 지금 마이그레이션까지 만든다. DB 전체를 보는 작업(백업, 검색 대기열)을 다른 시험과
+/// 섞이지 않게 시험할 때 쓴다(공유 테스트 DB에는 다른 시험의 행이 있다).
+pub struct FreshDb {
+    pub name: String,
+    pub db: fvoci_server::config::DbCommandConfig,
+    pub app_url: String,
+}
+
+pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> FreshDb {
+    use sqlx::Connection as _;
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let migration_url =
+        std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let app_url = std::env::var("DATABASE_URL").expect("run via `cargo xtask test`");
+    let name = format!("fvoci_{label}_{}", uuid::Uuid::now_v7().simple());
+    sqlx::raw_sql(&format!("CREATE DATABASE {name}"))
+        .execute(&mut *admin)
+        .await
+        .unwrap();
+    let mut db_admin = sqlx::PgConnection::connect(&with_database(&admin_url, &name))
+        .await
+        .unwrap();
+    sqlx::raw_sql(&format!(
+        "GRANT CONNECT ON DATABASE {name} TO fvoci_migrator, fvoci_app;
+         CREATE SCHEMA fvoci AUTHORIZATION fvoci_migrator;"
+    ))
+    .execute(&mut db_admin)
+    .await
+    .unwrap();
+    db_admin.close().await.unwrap();
+    let db = fvoci_server::config::DbCommandConfig {
+        admin_url: Some(fvoci_server::config::Secret::new(with_database(
+            &admin_url, &name,
+        ))),
+        migration_url: Some(fvoci_server::config::Secret::new(with_database(
+            &migration_url,
+            &name,
+        ))),
+        migrator_password: None,
+        app_password: None,
+    };
+    fvoci_server::db::admin::migrate(&db).await.unwrap();
+    FreshDb {
+        app_url: with_database(&app_url, &name),
+        name,
+        db,
+    }
+}

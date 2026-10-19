@@ -49,6 +49,7 @@ pub async fn run(config: Config) -> Result<(), AppError> {
             db.clone(),
             state.search.clone(),
             state.storage.clone(),
+            state.collab.clone(),
             interval,
             stopped,
         )
@@ -92,10 +93,33 @@ pub async fn run(config: Config) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Ctrl-C(SIGINT)와 SIGTERM. 컨테이너를 멈추면(`docker compose stop`) SIGTERM이 오므로, 이것을 받아야 실시간 방이
+/// 리비전을 남기고 작업이 끝난 뒤 내려간다(받지 못하면 10초 뒤 강제 종료된다).
 async fn shutdown_signal() {
-    // ctrl_c 등록 실패는 신호 없이 계속 실행하는 것으로 처리한다. 로그로만 남긴다.
-    if let Err(err) = tokio::signal::ctrl_c().await {
-        tracing::error!(event = "server.signal_failed", detail = ?err.kind(), "failed to listen for shutdown signal");
-        std::future::pending::<()>().await;
+    // 신호 등록 실패는 그 신호 없이 계속 실행하는 것으로 처리한다. 로그로만 남긴다.
+    let interrupt = async {
+        if let Err(err) = tokio::signal::ctrl_c().await {
+            tracing::error!(event = "server.signal_failed", detail = ?err.kind(), "failed to listen for shutdown signal");
+            std::future::pending::<()>().await;
+        }
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+            }
+            Err(err) => {
+                tracing::error!(event = "server.signal_failed", detail = ?err.kind(), "failed to listen for SIGTERM");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        () = interrupt => {}
+        () = terminate => {}
     }
+    tracing::info!(event = "server.stopping", "shutdown signal received");
 }

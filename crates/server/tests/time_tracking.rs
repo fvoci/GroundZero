@@ -642,14 +642,11 @@ async fn item_totals_group_entries_under_the_item_by_kind() {
             ("work".to_owned(), 3600, 1800, 1),
         ]
     );
+    // 감사 13번: 공유하지 않은 사람의 기록은 종류도 드러나지 않는다(값이 0인 줄도 없다, D-32).
     let seen_by_reader = send(&app, Method::GET, &uri, Some(&reader), None).await;
     assert_eq!(
         kinds(&seen_by_reader.json),
-        vec![
-            ("hobby".to_owned(), 0, 0, 0),
-            ("study".to_owned(), 0, 0, 0),
-            ("work".to_owned(), 0, 1800, 1),
-        ]
+        vec![("work".to_owned(), 0, 1800, 1)]
     );
     assert_eq!(
         send(&app, Method::GET, &uri, Some(&outsider), None)

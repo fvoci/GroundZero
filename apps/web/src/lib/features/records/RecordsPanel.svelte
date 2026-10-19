@@ -4,7 +4,8 @@
   import type { ModuleKind } from '@fvoci/api-client';
 
   import type { FileView, ItemView, RecordKindView, RecordView } from '$lib/api/client';
-  import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
+  import { api, ApiError, fileContentUrl } from '$lib/api/client';
+  import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import { m } from '$lib/paraglide/messages.js';
@@ -39,7 +40,8 @@
   // 같은 종류 기록을 표로 나란히 비교(D-34 선행연구 비교 등).
   let asTable = $state(false);
   let form = $state<RecordForm>(emptyForm());
-  let requestId = newRequestId();
+  // 같은 입력의 재시도는 같은 요청 id, 고친 입력은 새 id(처음 것이 돌아와 고친 내용이 사라지지 않게).
+  const createKey = new RetryKey();
   let reloadKey = $state(0);
 
   const current = $derived(defs.find((d) => d.kind === selected));
@@ -103,7 +105,7 @@
 
   function startNew(): void {
     form = emptyForm();
-    requestId = newRequestId();
+    createKey.done();
     editingId = undefined;
     creating = true;
   }
@@ -127,7 +129,13 @@
     error = undefined;
     try {
       if (creating) {
-        await api.createRecord(item.id, requestId, def.kind, built.input);
+        await api.createRecord(
+          item.id,
+          createKey.for({ item: item.id, kind: def.kind, input: built.input }),
+          def.kind,
+          built.input,
+        );
+        createKey.done();
         status = m.records_added({ label: recordKindLabel(def) });
       } else if (editingId !== undefined) {
         const r = records.find((x) => x.id === editingId);

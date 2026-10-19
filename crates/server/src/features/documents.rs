@@ -1305,6 +1305,7 @@ pub async fn move_document(
         None => None,
     };
     tx.commit().await?;
+    state.collab.moved(id, workspace_id.0);
     Ok(Json(MoveOutcome {
         workspace_id,
         reference,

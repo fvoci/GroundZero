@@ -1,5 +1,6 @@
 // 조각 업로드(D-06). 파일을 서버가 정한 조각 크기로 나눠 보내고, 끊기면 같은 요청 id로 다시 시작해 받은 조각을
-// 건너뛴다(새로 고침 뒤에도 같은 파일을 다시 고르면 이어진다). 조각마다 SHA-256을 함께 보내 서버가 확인한다.
+// 건너뛴다(새로 고침 뒤에도 같은 파일을 다시 고르면 이어진다). 받은 조각은 이 브라우저가 보낸 해시와 지금 내용이
+// 같을 때만 건너뛴다. 조각마다 SHA-256을 함께 보내 서버가 확인한다.
 import type { FileTarget, UploadView } from '$lib/api/client';
 import { api, ApiError, NetworkError } from '$lib/api/client';
 
@@ -77,6 +78,62 @@ function forget(key: string): void {
   }
 }
 
+// 업로드마다 서버에 보낸 조각의 SHA-256(조각 번호 → 해시)과 그 업로드의 기한. 이어 올릴 때 서버가 받은 조각이 지금
+// 파일의 그 부분과 같은지 확인한다. 이름·크기·수정 시각이 같아도 내용이 다를 수 있다. 기한이 지난 업로드는 이어 올릴
+// 수 없으므로 그 해시는 다음에 적을 때 버린다(그만둔 업로드가 저장소에 쌓이지 않게).
+const PARTS = 'fvoci.upload-parts';
+
+interface SentParts {
+  expires: string;
+  hashes: Record<string, string>;
+}
+
+function readParts(): Record<string, SentParts> {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(PARTS) ?? '{}');
+    if (typeof raw !== 'object' || raw === null) return {};
+    const out: Record<string, SentParts> = {};
+    const entries = (o: object): [string, unknown][] => Object.entries(o);
+    for (const [id, entry] of entries(raw)) {
+      if (typeof entry !== 'object' || entry === null) continue;
+      if (!('expires' in entry) || typeof entry.expires !== 'string') continue;
+      if (!('hashes' in entry) || typeof entry.hashes !== 'object' || entry.hashes === null)
+        continue;
+      const hashes: Record<string, string> = {};
+      for (const [n, h] of entries(entry.hashes)) if (typeof h === 'string') hashes[n] = h;
+      out[id] = { expires: entry.expires, hashes };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeParts(next: Record<string, SentParts>): void {
+  try {
+    localStorage.setItem(PARTS, JSON.stringify(next));
+  } catch {
+    // 적지 못한 조각은 이어 올릴 때 다시 보낸다.
+  }
+}
+
+function recordPart(up: UploadView, n: number, hash: string): void {
+  const now = Date.now();
+  const live = Object.entries(readParts()).filter(([, e]) => Date.parse(e.expires) > now);
+  const all = Object.fromEntries(live);
+  writeParts({
+    ...all,
+    [up.id]: { expires: up.expires_at, hashes: { ...all[up.id]?.hashes, [String(n)]: hash } },
+  });
+}
+
+function forgetParts(uploadId: string): void {
+  const all = readParts();
+  if (uploadId in all) {
+    writeParts(Object.fromEntries(Object.entries(all).filter(([k]) => k !== uploadId)));
+  }
+}
+
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** 끊긴 연결·서버 일시 오류는 몇 번 다시 보낸다. */
@@ -121,17 +178,20 @@ export async function uploadFile(
   let up = await start();
   if (up.state === 'done') {
     forget(key);
+    forgetParts(up.id);
     return up;
   }
   if (up.state === 'completing') {
     // 앞선 마치기가 끊겼다: 다시 올리지 않고 결과를 기다린다.
     const done = await finish(up.id);
     forget(key);
+    forgetParts(up.id);
     return done;
   }
   if (up.state !== 'uploading' || Date.parse(up.expires_at) <= Date.now()) {
     // 기한이 지났거나 그만둔 업로드면 새로 시작한다.
     forget(key);
+    forgetParts(up.id);
     up = await start();
   }
   const id = up.id;
@@ -142,6 +202,7 @@ export async function uploadFile(
       try {
         const done = await finish(id);
         forget(key);
+        forgetParts(id);
         return done;
       } catch (e: unknown) {
         if (!(e instanceof ApiError) || e.status !== 409 || round >= 1) throw e;
@@ -152,6 +213,7 @@ export async function uploadFile(
   } catch (e: unknown) {
     if (opts.signal?.aborted === true) {
       forget(key);
+      forgetParts(id);
       await api.abortUpload(id).catch(() => undefined);
     }
     throw e;
@@ -163,16 +225,28 @@ async function sendParts(
   up: UploadView,
   opts: { onProgress?: (p: UploadProgress) => void; signal?: AbortSignal },
 ): Promise<void> {
+  // 서버가 받은 조각은 이 브라우저가 보낸 해시와 지금 파일의 그 부분이 같을 때만 건너뛴다. 나머지는 다시 보낸다
+  // (같은 번호를 다시 보내면 서버가 바꾼다).
+  const known = readParts()[up.id]?.hashes ?? {};
+  const trusted: number[] = [];
+  for (const n of up.received) {
+    opts.signal?.throwIfAborted();
+    const want = known[String(n)];
+    if (want === undefined) continue;
+    const [from, to] = partRange(n, up.chunk_bytes, file.size);
+    if ((await sha256Hex(file.slice(from, to))) === want) trusted.push(n);
+  }
   opts.onProgress?.({
-    sent: Math.min(file.size, up.received.length * up.chunk_bytes),
+    sent: Math.min(file.size, trusted.length * up.chunk_bytes),
     total: file.size,
   });
-  for (const n of missingParts(up.parts_total, up.received)) {
+  for (const n of missingParts(up.parts_total, trusted)) {
     opts.signal?.throwIfAborted();
     const [from, to] = partRange(n, up.chunk_bytes, file.size);
     const piece = file.slice(from, to);
     const hash = await sha256Hex(piece);
     await withRetry(() => api.putUploadPart(up.id, n, piece, hash), opts.signal);
+    recordPart(up, n, hash);
     opts.onProgress?.({ sent: Math.min(file.size, to), total: file.size });
   }
 }

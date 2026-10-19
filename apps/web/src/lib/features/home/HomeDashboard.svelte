@@ -12,7 +12,8 @@
     MarkedTargetView,
     NotificationView,
   } from '$lib/api/client';
-  import { api, newRequestId } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import type { CalendarEntry } from '$lib/features/events/calendar';
   import { entriesByDay, startOfWeek } from '$lib/features/events/calendar';
@@ -125,7 +126,8 @@
     item: '',
     date: '',
   });
-  let quickRequest = newRequestId();
+  // 같은 입력의 재시도는 같은 요청 id, 종류·대상·제목을 고치면 새 id.
+  const quickKey = new RetryKey();
   let quickStatus = $state('');
   let quickError = $state<string | undefined>(undefined);
   const writableItems = $derived((home?.active_items ?? []).filter((i) => i.can_write));
@@ -136,18 +138,24 @@
     const title = quick.title.trim();
     if (title === '') return;
     try {
+      const requestId = quickKey.for({
+        what: quick.what,
+        item: quick.item,
+        title,
+        date: quick.date,
+      });
       if (quick.what === 'memo') {
-        const note = await api.createNote(quickRequest, title);
+        const note = await api.createNote(requestId, title);
         quickStatus = m.home_memo_created({ title: note.title });
       } else if (quick.item === '') {
         quickError = m.home_pick_item_required();
         return;
       } else if (quick.what === 'task') {
-        await api.createTask(quick.item, quickRequest, title);
+        await api.createTask(quick.item, requestId, title);
         quickStatus = m.home_task_created({ title });
       } else {
         const date = quick.date === '' ? (home?.today ?? '') : quick.date;
-        await api.createEvent(quick.item, quickRequest, {
+        await api.createEvent(quick.item, requestId, {
           kind: 'event',
           title,
           description: '',
@@ -160,7 +168,7 @@
         });
         quickStatus = m.home_event_created({ title, date: date === '' ? '' : formatDay(date) });
       }
-      quickRequest = newRequestId();
+      quickKey.done();
       quick.title = '';
       reloadKey += 1;
     } catch (e: unknown) {

@@ -35,13 +35,14 @@ async fn spawn_server(extra: &[(&str, &str)]) -> String {
     let addr: SocketAddr = listener.local_addr().unwrap();
     let base = format!("http://{addr}");
     let issuer = issuer();
-    let mut overrides = vec![
+    // 앞의 것이 이긴다: 테스트가 넘긴 값이 기본값보다 먼저.
+    let mut overrides = extra.to_vec();
+    overrides.extend_from_slice(&[
         ("FVOCI_PUBLIC_URL", base.as_str()),
         ("FVOCI_OIDC_ISSUER", issuer.as_str()),
         ("FVOCI_OIDC_CLIENT_ID", CLIENT_ID),
         ("FVOCI_OIDC_CLIENT_SECRET", CLIENT_SECRET),
-    ];
-    overrides.extend_from_slice(extra);
+    ]);
     let cfg = fvoci_server::config::Config::from_lookup(|k| {
         overrides
             .iter()
@@ -249,4 +250,102 @@ async fn oidc_callback_rejects_forged_state() {
         .await
         .unwrap();
     assert_eq!(res.status().as_u16(), 400);
+}
+
+/// Keycloak 관리 API 토큰(테스트 Keycloak의 부트스트랩 관리자, `deploy/compose.test.yaml`의 테스트 값).
+async fn keycloak_admin(base: &str) -> String {
+    let res: Value = reqwest::Client::new()
+        .post(format!(
+            "{base}/realms/master/protocol/openid-connect/token"
+        ))
+        .form(&[
+            ("grant_type", "password"),
+            ("client_id", "admin-cli"),
+            ("username", "admin"),
+            ("password", "fvoci-test-admin-password"),
+        ])
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    res["access_token"].as_str().unwrap().to_owned()
+}
+
+/// 감사 12번: 제공자가 서명 키를 바꾸면(키 회전) 서버가 처음 받아 둔 키 목록으로는 새 id_token을 검증하지 못한다.
+/// 검증에 실패하면 한 번 다시 받아 같은 토큰을 다시 검증해야 한다(전에는 서버를 다시 시작할 때까지 로그인 불가).
+/// 다른 테스트에 영향이 없게 이 테스트만의 realm을 만들어 그 realm의 키를 바꾼다.
+#[tokio::test]
+async fn oidc_login_survives_a_signing_key_rotation() {
+    let issuer = issuer();
+    let base = issuer[..issuer.find("/realms/").unwrap()].to_owned();
+    let admin = keycloak_admin(&base).await;
+    let http = reqwest::Client::new();
+    let realm = format!("fvoci-rotate-{}", uuid::Uuid::now_v7().simple());
+    let mut definition: Value = serde_json::from_str(
+        &std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/keycloak/realm-test.json"
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    definition["realm"] = json!(realm);
+    // 사용자 id는 Keycloak 전체에서 하나여야 하므로 새 realm에서는 Keycloak이 새로 정하게 한다.
+    for user in definition["users"].as_array_mut().unwrap() {
+        user.as_object_mut().unwrap().remove("id");
+    }
+    let created = http
+        .post(format!("{base}/admin/realms"))
+        .bearer_auth(&admin)
+        .json(&definition)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status().as_u16(), 201);
+    let realm_issuer = format!("{base}/realms/{realm}");
+    let server = spawn_server(&[("FVOCI_OIDC_ISSUER", realm_issuer.as_str())]).await;
+
+    // 첫 로그인으로 서버가 디스커버리와 키 목록을 받아 둔다.
+    let (status, me) = login(&browser(), &server, USER1).await;
+    assert_eq!(status, 200, "{me}");
+    assert!(me["id"].is_string(), "{me}");
+
+    // 우선순위가 더 높은 새 서명 키를 넣는다(이후 id_token은 새 키로 서명된다).
+    let realm_id: Value = http
+        .get(format!("{base}/admin/realms/{realm}"))
+        .bearer_auth(&admin)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let added = http
+        .post(format!("{base}/admin/realms/{realm}/components"))
+        .bearer_auth(&admin)
+        .json(&json!({
+            "name": "rotated",
+            "providerId": "rsa-generated",
+            "providerType": "org.keycloak.keys.KeyProvider",
+            "parentId": realm_id["id"],
+            "config": { "priority": ["1000"], "algorithm": ["RS256"] }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(added.status().as_u16(), 201);
+
+    let (status, me) = login(&browser(), &server, USER2).await;
+    let _deleted = http
+        .delete(format!("{base}/admin/realms/{realm}"))
+        .bearer_auth(&admin)
+        .send()
+        .await;
+    assert_eq!(status, 200, "login after the key rotation failed: {me}");
+    assert!(
+        me["id"].is_string(),
+        "login after the key rotation failed: {me}"
+    );
 }

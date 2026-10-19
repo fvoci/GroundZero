@@ -8,7 +8,8 @@
     StudyUnitKind,
     StudyUnitView,
   } from '$lib/api/client';
-  import { api, newRequestId, STUDY_UNIT_KINDS } from '$lib/api/client';
+  import { api, STUDY_UNIT_KINDS } from '$lib/api/client';
+  import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import { localTimeZone, wallTime } from '$lib/features/events/time';
@@ -62,7 +63,8 @@
     amount: '',
     planned_on: '',
   });
-  let draftId = newRequestId();
+  // 같은 입력의 재시도는 같은 요청 id, 고친 입력은 새 id.
+  const draftKey = new RetryKey();
   let replanStart = $state(today);
   let replanPerDay = $state('1');
   let openUnit = $state<string | undefined>(undefined);
@@ -101,16 +103,24 @@
     }
   }
 
+  /** 서버의 지금 내 진도. 다른 탭·기기에서 바꾼 메모·분량·상태를 옛 화면 값으로 덮지 않게 바꾸기 직전에 읽는다. */
+  async function freshMine(u: StudyUnitView): Promise<StudyUnitView['mine']> {
+    const now = await api.studyPlan(itemId);
+    return now.units.find((x) => x.id === u.id)?.mine ?? u.mine;
+  }
+
   function setStatus(u: StudyUnitView, next: EpisodeStatus): void {
     void run(
-      () =>
-        api.setUnitProgress(u.id, {
+      async () => {
+        const fresh = await freshMine(u);
+        await api.setUnitProgress(u.id, {
           status: next,
-          done_amount: next === 'done' ? u.amount : u.mine.done_amount,
-          planned_on: u.mine.planned_on,
-          note: u.mine.note,
+          done_amount: next === 'done' ? u.amount : fresh.done_amount,
+          planned_on: fresh.planned_on,
+          note: fresh.note,
           today,
-        }),
+        });
+      },
       m.study_unit_status({ number: u.number, title: u.title, status: statusLabel(next) }),
     );
   }
@@ -135,23 +145,21 @@
       error = m.study_unit_invalid();
       return;
     }
+    const unit = {
+      title: draft.title.trim(),
+      chapter: draft.chapter.trim(),
+      unit: draft.unit,
+      amount,
+      planned_on: draft.planned_on === '' ? null : draft.planned_on,
+    };
+    const requestId = draftKey.for({ itemId, unit });
     const ok = await run(
-      () =>
-        api.addStudyUnits(itemId, [
-          {
-            request_id: draftId,
-            title: draft.title.trim(),
-            chapter: draft.chapter.trim(),
-            unit: draft.unit,
-            amount,
-            planned_on: draft.planned_on === '' ? null : draft.planned_on,
-          },
-        ]),
+      () => api.addStudyUnits(itemId, [{ request_id: requestId, ...unit }]),
       m.study_unit_added(),
     );
     if (ok) {
       draft = { title: '', chapter: '', unit: draft.unit, amount: '', planned_on: '' };
-      draftId = newRequestId();
+      draftKey.done();
     }
   }
 </script>
@@ -316,9 +324,9 @@
                   return;
                 }
                 void run(
-                  () =>
+                  async () =>
                     api.setUnitProgress(u.id, {
-                      status: u.mine.status,
+                      status: (await freshMine(u)).status,
                       done_amount: doneAmount,
                       planned_on: mine.planned_on === '' ? null : mine.planned_on,
                       note: mine.note,

@@ -424,3 +424,44 @@ async fn purge_removes_everything_but_personal_time_and_expiry_purges_in_the_wor
     assert!(report.purged >= 1);
     assert_eq!(deleted(&app, &owner).await, json!([]));
 }
+
+/// 감사 5번: 휴지통에 든 모듈은 휴지통 묶음을 가리킨다. 워크스페이스를 영구 삭제하면 그 묶음을 지우기 전에 모듈의
+/// 참조가 풀려야 한다(전에는 외래 키 위반으로 영구 삭제가 실패했다).
+#[tokio::test]
+async fn purge_succeeds_with_a_trashed_module() {
+    let state = common::state();
+    let app = common::app(&state);
+    let owner = login(&state, "owner").await;
+    let ws = create_workspace(&app, &owner, "모듈 휴지통 영구 삭제").await;
+    let m = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&owner),
+        Some(json!({ "request_id": new_request_id(), "kind": "project", "name": "버림", "key": "TRM" })),
+    )
+    .await;
+    assert_eq!(m.status, StatusCode::CREATED, "{:?}", m.json);
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/modules/{}", m.json["id"].as_str().unwrap()),
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    assert_eq!(
+        delete(&app, &owner, &ws, "모듈 휴지통 영구 삭제").await.0,
+        StatusCode::OK
+    );
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/me/deleted-workspaces/{ws}"),
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
+}

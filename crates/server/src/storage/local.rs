@@ -20,6 +20,14 @@ fn io(err: std::io::Error) -> AppError {
     AppError::Storage(format!("local: {err}"))
 }
 
+/// 임시 파일에 쓰다 실패하면 그 파일을 지운다(반쯤 쓴 파일이 `tmp/`에 쌓이지 않게).
+async fn discard_on_error(temp: &PathBuf, result: std::io::Result<()>) -> Result<(), AppError> {
+    if result.is_err() {
+        let _ignored = tokio::fs::remove_file(temp).await;
+    }
+    result.map_err(io)
+}
+
 /// 업로드 id는 이 저장소가 만든 UUID(하이픈 없는 32자)만 받는다.
 fn check_upload(upload_id: &str) -> Result<(), AppError> {
     if upload_id.len() == 32 && upload_id.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -54,10 +62,14 @@ impl LocalStore {
         tokio::fs::create_dir_all(self.dir.join("tmp"))
             .await
             .map_err(io)?;
-        let mut file = tokio::fs::File::create(&temp).await.map_err(io)?;
-        file.write_all(body).await.map_err(io)?;
-        file.sync_all().await.map_err(io)?;
-        tokio::fs::rename(&temp, path).await.map_err(io)
+        let written = async {
+            let mut file = tokio::fs::File::create(&temp).await?;
+            file.write_all(body).await?;
+            file.sync_all().await?;
+            tokio::fs::rename(&temp, path).await
+        }
+        .await;
+        discard_on_error(&temp, written).await
     }
 
     pub(super) async fn begin(&self, _key: &str) -> Result<String, AppError> {
@@ -124,18 +136,22 @@ impl LocalStore {
         tokio::fs::create_dir_all(self.dir.join("tmp"))
             .await
             .map_err(io)?;
-        let mut out = tokio::fs::File::create(&temp).await.map_err(io)?;
-        for part in parts {
-            let path = dir.join(format!("{:05}", part.number));
-            let mut input = tokio::fs::File::open(&path).await.map_err(io)?;
-            tokio::io::copy(&mut input, &mut out).await.map_err(io)?;
-        }
-        out.sync_all().await.map_err(io)?;
         let target = self.object(key);
-        if let Some(parent) = target.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(io)?;
+        let joined = async {
+            let mut out = tokio::fs::File::create(&temp).await?;
+            for part in parts {
+                let path = dir.join(format!("{:05}", part.number));
+                let mut input = tokio::fs::File::open(&path).await?;
+                tokio::io::copy(&mut input, &mut out).await?;
+            }
+            out.sync_all().await?;
+            if let Some(parent) = target.parent() {
+                tokio::fs::create_dir_all(parent).await?;
+            }
+            tokio::fs::rename(&temp, &target).await
         }
-        tokio::fs::rename(&temp, &target).await.map_err(io)?;
+        .await;
+        discard_on_error(&temp, joined).await?;
         tokio::fs::remove_dir_all(&dir).await.map_err(io)
     }
 

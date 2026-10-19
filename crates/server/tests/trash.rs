@@ -928,3 +928,227 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
         StatusCode::NOT_FOUND
     );
 }
+
+/// 감사 6번: 하위 업무를 지우는 동안 상위 업무를 지우면, 상위 업무는 이미 다른 묶음에 든 하위 업무를 자기 묶음으로
+/// 옮기면 안 된다(먼저 지운 묶음을 되살려도 하위 업무가 돌아오지 않고, 묶음의 개수가 틀려진다).
+#[tokio::test]
+async fn trashing_a_parent_while_its_subtask_is_being_trashed_keeps_the_subtask_batch() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "업무 휴지통 경합").await;
+    let it = item(&app, &admin, &ws, "TRC").await;
+    let item_id = it["id"].as_str().unwrap();
+    let parent = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/tasks"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "상위" })),
+    )
+    .await
+    .json;
+    let sub = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/tasks"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "하위", "parent_id": parent["id"] })),
+    )
+    .await
+    .json;
+    let sub_id: uuid::Uuid = sub["id"].as_str().unwrap().parse().unwrap();
+
+    // T1: 하위 업무를 지운다(아직 끝나지 않음).
+    let mut t1 = state.db.begin_as(admin.id).await.unwrap();
+    let first: uuid::Uuid = sqlx::query_scalar("SELECT app_trash_task($1)")
+        .bind(sub_id)
+        .fetch_one(t1.conn())
+        .await
+        .unwrap();
+    // T2: 그동안 상위 업무를 지운다(하위 업무 행을 기다린다).
+    let parent_uri = format!("/api/tasks/{}", parent["id"].as_str().unwrap());
+    let second = tokio::spawn({
+        let app = app.clone();
+        let admin = admin.clone();
+        async move { send(&app, Method::DELETE, &parent_uri, Some(&admin), None).await }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    t1.commit().await.unwrap();
+    let second = second.await.unwrap();
+    assert_eq!(second.status, StatusCode::OK, "{:?}", second.json);
+
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let batch: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT trash_batch_id FROM fvoci.tasks WHERE id = $1")
+            .bind(sub_id)
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+    assert_eq!(
+        batch,
+        Some(first),
+        "the subtask moved to the parent's batch"
+    );
+    let count: i32 = sqlx::query_scalar(
+        "SELECT member_count FROM fvoci.trash_batches WHERE root_id = $1::uuid AND root_kind = 'task'",
+    )
+    .bind(parent["id"].as_str().unwrap())
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
+    owner.close().await;
+}
+
+/// 감사 7번: 휴지통에 든 모듈에는 항목을 만들 수 없다(템플릿 복제도 같은 길).
+#[tokio::test]
+async fn no_items_in_a_trashed_module() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "휴지통 모듈").await;
+    let m = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "project", "name": "버림", "key": "TMI" })),
+    )
+    .await;
+    let module = m.json["id"].as_str().unwrap();
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/modules/{module}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{module}/items"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "들어가면 안 됨" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND, "{:?}", r.json);
+    // 복제는 만든 항목을 다시 읽지 않고 끝나므로 함수의 검사에만 기댄다.
+    let source = item(&app, &admin, &ws, "SRC").await;
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/copy", source["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "module_id": module, "title": "복제", "reset": false })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND, "{:?}", r.json);
+}
+
+/// 남은 항목 ③(D-18): 모듈을 영구 삭제해도 그 모듈의 지금 키와 과거 키는 예약으로 남아, 다른 모듈이 만들거나 이름을
+/// 바꿀 때 쓰지 못한다(남은 글자 참조 `KEY-12`가 다른 모듈을 가리키지 않게). 워크스페이스 영구 삭제는 그대로 된다.
+#[tokio::test]
+async fn purged_module_keys_stay_reserved() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "키 예약").await;
+    let create = |key: &'static str| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let ws = ws.clone();
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &format!("/api/workspaces/{ws}/modules"),
+                Some(&admin),
+                Some(json!({ "request_id": new_request_id(), "kind": "project", "name": key, "key": key })),
+            )
+            .await
+        }
+    };
+    let gone = create("OLDK").await;
+    assert_eq!(gone.status, StatusCode::CREATED, "{:?}", gone.json);
+    let gone_id = gone.json["id"].as_str().unwrap().to_owned();
+    // 키를 바꿔 과거 키(OLDK)와 지금 키(NEWK)를 둘 다 갖게 한다.
+    let renamed = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{gone_id}"),
+        Some(&admin),
+        Some(json!({ "name": "OLDK", "key": "NEWK" })),
+    )
+    .await;
+    assert_eq!(renamed.status, StatusCode::OK, "{:?}", renamed.json);
+    let trashed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/modules/{gone_id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(trashed.status, StatusCode::OK, "{:?}", trashed.json);
+    let purged = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/trash/{}", trashed.json["batch_id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(purged.status.is_success(), "{:?}", purged.json);
+
+    for key in ["OLDK", "NEWK"] {
+        let again = create(key).await;
+        assert_eq!(
+            again.status,
+            StatusCode::CONFLICT,
+            "create with {key}: {:?}",
+            again.json
+        );
+    }
+    let other = create("OTHR").await;
+    assert_eq!(other.status, StatusCode::CREATED, "{:?}", other.json);
+    for key in ["OLDK", "NEWK"] {
+        let r = send(
+            &app,
+            Method::PUT,
+            &format!("/api/modules/{}", other.json["id"].as_str().unwrap()),
+            Some(&admin),
+            Some(json!({ "name": "OTHR", "key": key })),
+        )
+        .await;
+        assert_eq!(
+            r.status,
+            StatusCode::CONFLICT,
+            "rename to {key}: {:?}",
+            r.json
+        );
+    }
+
+    // 워크스페이스 전체 영구 삭제는 예약까지 지운다.
+    let deleted = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{ws}"),
+        Some(&admin),
+        Some(json!({ "name": "키 예약" })),
+    )
+    .await;
+    assert_eq!(deleted.status, StatusCode::OK, "{:?}", deleted.json);
+    let r = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/me/deleted-workspaces/{ws}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
+}

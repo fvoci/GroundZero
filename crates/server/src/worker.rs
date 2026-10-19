@@ -226,15 +226,19 @@ pub async fn run_once(
 }
 
 /// 간격마다 [`run_once`]를 부르는 작업을 띄운다. `shutdown`이 바뀌면 멈춘다.
+/// 같은 프로세스의 열린 실시간 방은 매번 먼저 상태를 저장하게 해, 방금 실시간 본문에 넣은 이미지의 파일 참조가
+/// 이전 버전 정리·휴지통 비우기의 참조 확인에 보이게 한다(작업만 따로 도는 프로세스에는 방이 없다).
 pub fn spawn(
     db: Db,
     search: Option<SearchClient>,
     storage: Storage,
+    rooms: crate::collab::Rooms,
     interval: Duration,
     mut shutdown: watch::Receiver<bool>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
+            rooms.persist_all().await;
             let report = run_once(&db, search.as_ref(), Some(&storage)).await;
             if report != TickReport::default() {
                 tracing::info!(

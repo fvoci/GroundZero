@@ -8,9 +8,10 @@
 
   import { newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { RetryKey } from '$lib/api/retry-key';
   import { m } from '$lib/paraglide/messages.js';
 
-  import type { ChecklistItem, NewChecklistEntry } from './checklist-item';
+  import type { ChecklistItem, NewChecklistEntry, ParsedChecklistItem } from './checklist-item';
   import { parseMarkdownChecklist } from './checklist-item';
 
   interface Props {
@@ -28,7 +29,10 @@
   let draft = $state('');
   let pasteOpen = $state(false);
   let pasted = $state('');
-  let preview = $state<NewChecklistEntry[]>([]);
+  let preview = $state<ParsedChecklistItem[]>([]);
+  // 미리보기 줄마다의 재시도 키. 고치지 않고 다시 보내면 같은 id, 고친 줄은 새 id(같은 id면 서버가 처음 것을 남기고
+  // 고친 내용을 버린다).
+  let previewKeys: RetryKey[] = [];
   // 한 줄 추가의 재시도용 요청 id. 입력이 바뀌면 새로 만든다.
   let draftRequest: { text: string; requestId: string } | undefined;
   let busy = $state(false);
@@ -58,14 +62,22 @@
   }
 
   function expand(): void {
-    preview = parseMarkdownChecklist(pasted).map((p) => ({ ...p, requestId: newRequestId() }));
+    preview = parseMarkdownChecklist(pasted);
+    previewKeys = preview.map(() => new RetryKey());
   }
 
   function confirmPaste(): void {
-    const confirmed = preview.filter((p) => p.text.trim() !== '');
+    const confirmed: NewChecklistEntry[] = [];
+    preview.forEach((p, index) => {
+      const entry = { text: p.text.trim(), done: p.done };
+      if (entry.text === '') return;
+      const key = previewKeys[index] ?? new RetryKey();
+      previewKeys[index] = key;
+      confirmed.push({ ...entry, requestId: key.for(entry) });
+    });
     if (confirmed.length === 0) return;
     void guard(async () => {
-      await onadd(confirmed.map((p) => ({ ...p, text: p.text.trim() })));
+      await onadd(confirmed);
       pasted = '';
       preview = [];
       pasteOpen = false;

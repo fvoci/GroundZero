@@ -11,6 +11,7 @@
   import type { DocNode, DocumentView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, NetworkError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { RetryKey } from '$lib/api/retry-key';
   import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { m } from '$lib/paraglide/messages.js';
@@ -21,7 +22,17 @@
   import { Label } from '$lib/ui/label';
 
   import { describeSaveBlock } from './content-notices';
-  import { canonicalJson, clearDraft, loadDraft, plainText, storeDraft } from './drafts';
+  import type { Draft } from './drafts';
+  import {
+    canonicalJson,
+    adoptOrphans,
+    clearDraft,
+    loadDraft,
+    loadOffers,
+    plainText,
+    removeOffer,
+    storeDraft,
+  } from './drafts';
   import { contentIssues } from './paste-guard';
   import TiptapEditor from './TiptapEditor.svelte';
 
@@ -69,20 +80,35 @@
   let conflict = $state<DocumentView | undefined>(undefined);
   // 저장하는 사이 실시간 공동 편집이 켜져 본문을 여기서 저장할 수 없다.
   let realtimeOn = $state(false);
-  // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다.
+  // 고르게 할 초안이 실시간 편집기가 남긴 줄의 것인지. 그렇다면 고르기 전까지 줄에 그대로 두고(이 편집기의 입력이
+  // 덮지 않게), 되살리거나 버릴 때만 줄에서 뺀다.
+  let restorableQueued = false;
+  // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다. 이 편집기의 초안이 없으면 실시간 편집기가
+  // 남긴 줄의 첫 초안을 고르게 한다.
   function pendingDraft(): ReturnType<typeof loadDraft> {
-    const draft = loadDraft(start.id);
-    if (draft === undefined) return undefined;
-    const same =
-      canonicalJson({ title: draft.title.trim(), body: draft.body }) ===
+    const isServer = (d: Draft): boolean =>
+      canonicalJson({ title: d.title.trim(), body: d.body }) ===
       canonicalJson({ title: start.title, body: start.body });
-    if (same) {
+    const draft = loadDraft(start.id);
+    if (draft !== undefined) {
+      if (!isServer(draft)) return draft;
       clearDraft(start.id);
-      return undefined;
     }
-    return draft;
+    for (const queued of loadOffers(start.id)) {
+      if (isServer(queued)) {
+        removeOffer(start.id, queued);
+        continue;
+      }
+      restorableQueued = true;
+      return queued;
+    }
+    return undefined;
   }
   let restorable = $state(pendingDraft());
+  // 닫힌 탭이 남긴 이 문서의 초안을 줄로 넘겨받는다(살아 있는 탭의 것은 두고). 고를 것이 없으면 그것을 고르게 한다.
+  void adoptOrphans(start.id).then((adopted) => {
+    if (adopted > 0 && restorable === undefined) restorable = pendingDraft();
+  });
   let confirmOverwrite = $state(false);
   let editorVersion = $state(0);
 
@@ -254,6 +280,9 @@
     await save();
   }
 
+  const copyNoteKey = new RetryKey();
+  const copySaveKey = new RetryKey();
+
   async function keepMineAsCopy(): Promise<void> {
     const copyTitle = m.documents_draft_copy_title({
       title: title.trim() === '' ? server.title : title.trim(),
@@ -265,15 +294,18 @@
       return;
     }
     try {
-      // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다.
-      const created = await api.createNote(newRequestId(), copyTitle);
+      // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다. 응답을 잃고 다시 눌러도
+      // 같은 내용이면 같은 노트가 된다.
+      const created = await api.createNote(copyNoteKey.for({ copyTitle }), copyTitle);
       const saved = await api.saveDocument(created.id, {
-        requestId: newRequestId(),
+        requestId: copySaveKey.for({ note: created.id, copyTitle, body }),
         baseRevision: created.revision,
         title: copyTitle,
         body,
       });
       if (saved.kind === 'conflict') throw new Error('copy conflicted');
+      copyNoteKey.done();
+      copySaveKey.done();
       clearDraft(server.id);
       router.guard = undefined;
       router.navigate(standalonePath(created.id));
@@ -284,6 +316,11 @@
 
   function restoreDraft(): void {
     if (restorable === undefined) return;
+    // 줄의 초안이면 이 편집기의 초안으로 먼저 옮겨 둔 뒤에 줄에서 뺀다(옮기지 못하면 줄에 남긴다).
+    if (restorableQueued && storeDraft(server.id, restorable)) {
+      removeOffer(server.id, restorable);
+      restorableQueued = false;
+    }
     title = restorable.title;
     body = restorable.body;
     editorVersion += 1;
@@ -294,7 +331,9 @@
   }
 
   function discardDraft(): void {
-    clearDraft(server.id);
+    if (restorable !== undefined && restorableQueued) removeOffer(server.id, restorable);
+    else clearDraft(server.id);
+    restorableQueued = false;
     restorable = undefined;
   }
 

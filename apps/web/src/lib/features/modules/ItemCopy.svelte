@@ -4,7 +4,8 @@
   import type { Module } from '@fvoci/api-client';
 
   import type { ItemView } from '$lib/api/client';
-  import { api, newRequestId } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { itemPath, router } from '$lib/router.svelte';
@@ -27,7 +28,8 @@
   let reset = $state(true);
   let error = $state<string | undefined>(undefined);
   let result = $state<{ id: string; skipped: number } | undefined>(undefined);
-  let requestId = newRequestId();
+  // 같은 입력의 재시도는 같은 요청 id, 대상·제목·초기화를 고치면 새 id.
+  const copyKey = new RetryKey();
 
   async function start(): Promise<void> {
     error = undefined;
@@ -37,7 +39,7 @@
       targets = all.filter((mod) => mod.kind === module.kind && !mod.archived);
       target = module.archived ? (targets[0]?.id ?? '') : module.id;
       title = m.modules_copy_title_default({ title: item.title });
-      requestId = newRequestId();
+      copyKey.done();
       open = true;
     } catch (e: unknown) {
       error = errorText(e, m.modules_list_load_failed());
@@ -52,8 +54,15 @@
     }
     error = undefined;
     try {
-      const copied = await api.copyItem(item.id, requestId, target, title.trim(), reset);
-      requestId = newRequestId();
+      const name = title.trim();
+      const copied = await api.copyItem(
+        item.id,
+        copyKey.for({ item: item.id, target, name, reset }),
+        target,
+        name,
+        reset,
+      );
+      copyKey.done();
       result = { id: copied.item_id, skipped: copied.skipped_documents };
       open = false;
     } catch (err: unknown) {

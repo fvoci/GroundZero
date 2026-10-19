@@ -24,7 +24,7 @@ use crate::features::accounts::CurrentUser;
 use crate::features::search_text::plain_text;
 use crate::features::workspaces::member_role;
 use crate::http::AppState;
-use crate::ids::{Role, WorkspaceId};
+use crate::ids::{DocumentId, Role, WorkspaceId};
 use crate::storage::Storage;
 
 /// 응답으로 보내는 조각 크기.
@@ -385,6 +385,23 @@ pub async fn workspace(
         return Err(AppError::Forbidden);
     }
     let permit = export_permit(&state)?;
+    // 실시간으로 편집 중인 문서는 본문(마지막 리비전)이 뒤처져 있을 수 있다. 읽기 전에 열린 방을 리비전으로 남긴다.
+    let docs: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM documents WHERE workspace_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(ws)
+    .fetch_all(tx.conn())
+    .await?;
+    // 방을 기다리는 동안 DB 연결을 쥐지 않는다(방이 리비전을 남길 때 연결이 필요하다). 다시 열고 권한도 다시 본다.
+    tx.commit().await?;
+    state
+        .collab
+        .snapshot_documents(&docs.into_iter().map(DocumentId).collect())
+        .await;
+    let mut tx = state.db.begin_as(user).await?;
+    if member_role(&mut tx, ws).await? != Role::Admin {
+        return Err(AppError::Forbidden);
+    }
     let data: Value = sqlx::query_scalar(WORKSPACE_JSON)
         .bind(ws)
         .fetch_one(tx.conn())

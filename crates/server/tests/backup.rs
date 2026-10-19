@@ -9,10 +9,10 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use common::{
-    TestUser, config_with, create_doc, create_workspace, doc_body, new_request_id, send, send_raw,
+    TestUser, config_with, create_doc, create_workspace, doc_body, fresh_database, new_request_id,
+    send, send_raw,
 };
 use fvoci_server::backup;
-use fvoci_server::config::{DbCommandConfig, Secret};
 use fvoci_server::features::accounts::{SESSION_COOKIE, VerifiedIdentity, start_session};
 use fvoci_server::http::AppState;
 use serde_json::json;
@@ -37,12 +37,6 @@ async fn session(state: &AppState, subject: &str) -> TestUser {
     }
 }
 
-fn with_database(url: &str, database: &str) -> String {
-    let mut parsed = url::Url::parse(url).unwrap();
-    parsed.set_path(&format!("/{database}"));
-    parsed.to_string()
-}
-
 fn temp_dir(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("fvoci-{label}-{}", uuid::Uuid::now_v7().simple()))
 }
@@ -50,13 +44,16 @@ fn temp_dir(label: &str) -> std::path::PathBuf {
 #[tokio::test]
 async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
-    let migration_url =
-        std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
-    let app_url = std::env::var("DATABASE_URL").expect("run via `cargo xtask test`");
+    let mut admin = PgConnection::connect(&admin_url).await.unwrap();
+    // 원본 설치: 자기 DB와 자기 저장소(다른 시험의 행·파일이 섞이지 않게).
+    let source = fresh_database(&mut admin, "backup_src").await;
     let source_files = temp_dir("source-files");
     let source_dir = source_files.to_string_lossy().into_owned();
-    let state =
-        fvoci_server::app::build_state(config_with(&[("FVOCI_STORAGE_DIR", &source_dir)])).unwrap();
+    let state = fvoci_server::app::build_state(config_with(&[
+        ("FVOCI_STORAGE_DIR", &source_dir),
+        ("DATABASE_URL", &source.app_url),
+    ]))
+    .unwrap();
     let app = common::app(&state);
     let subject = format!("backup-{}", uuid::Uuid::now_v7());
     let owner = session(&state, &subject).await;
@@ -113,53 +110,24 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
 
     // 백업.
     let out = temp_dir("backup");
-    let db = DbCommandConfig {
-        admin_url: Some(Secret::new(admin_url.clone())),
-        migration_url: Some(Secret::new(migration_url.clone())),
-        migrator_password: None,
-        app_password: None,
-    };
-    let manifest = backup::create(&state.config, &db, &out).await.unwrap();
+    let db = &source.db;
+    let manifest = backup::create(&state.config, db, &out).await.unwrap();
     assert!(manifest.objects.iter().any(|o| o.sha256 == hash));
     assert!(
         manifest.tables.iter().all(|t| t.name != "sessions"),
         "sessions are not backed up"
     );
     // 같은 곳에 다시 쓰지 않는다.
-    assert!(backup::create(&state.config, &db, &out).await.is_err());
+    assert!(backup::create(&state.config, db, &out).await.is_err());
 
     // 새 DB(같은 클러스터의 다른 데이터베이스)를 같은 마이그레이션까지 만든다.
-    let target = format!("fvoci_restore_{}", uuid::Uuid::now_v7().simple());
-    let mut admin = PgConnection::connect(&admin_url).await.unwrap();
-    sqlx::raw_sql(&format!("CREATE DATABASE {target}"))
-        .execute(&mut admin)
-        .await
-        .unwrap();
-    let mut target_admin = PgConnection::connect(&with_database(&admin_url, &target))
-        .await
-        .unwrap();
-    sqlx::raw_sql(&format!(
-        "GRANT CONNECT ON DATABASE {target} TO fvoci_migrator, fvoci_app;
-         CREATE SCHEMA fvoci AUTHORIZATION fvoci_migrator;"
-    ))
-    .execute(&mut target_admin)
-    .await
-    .unwrap();
-    let restored_db = DbCommandConfig {
-        admin_url: Some(Secret::new(with_database(&admin_url, &target))),
-        migration_url: Some(Secret::new(with_database(&migration_url, &target))),
-        migrator_password: None,
-        app_password: None,
-    };
-    fvoci_server::db::admin::migrate(&restored_db)
-        .await
-        .unwrap();
+    let target = fresh_database(&mut admin, "restore").await;
+    let restored_db = &target.db;
     let target_files = temp_dir("target-files");
     let target_dir = target_files.to_string_lossy().into_owned();
-    let target_app_url = with_database(&app_url, &target);
     let restored = fvoci_server::app::build_state(config_with(&[
         ("FVOCI_STORAGE_DIR", &target_dir),
-        ("DATABASE_URL", &target_app_url),
+        ("DATABASE_URL", &target.app_url),
     ]))
     .unwrap();
     // 백업 파일은 소유자만 읽는다.
@@ -176,16 +144,34 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     let damaged = temp_dir("damaged");
     copy_dir(&out, &damaged);
     std::fs::write(damaged.join("db").join("documents.copy"), b"broken\n").unwrap();
-    let err = backup::restore(&restored.config, &restored_db, &damaged)
+    let err = backup::restore(&restored.config, restored_db, &damaged)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("damaged"), "{err}");
-    backup::restore(&restored.config, &restored_db, &out)
+    // 감사 10번: 목록에서 표가 빠진 백업도 거부한다(빠진 표의 내용 없이 복구를 끝내면 안 된다).
+    let partial = temp_dir("partial");
+    copy_dir(&out, &partial);
+    let mut listed: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(partial.join("manifest.json")).unwrap()).unwrap();
+    listed["tables"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|t| t["name"] != "comments");
+    std::fs::write(
+        partial.join("manifest.json"),
+        serde_json::to_vec(&listed).unwrap(),
+    )
+    .unwrap();
+    let err = backup::restore(&restored.config, restored_db, &partial)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("comments"), "{err}");
+    backup::restore(&restored.config, restored_db, &out)
         .await
         .unwrap();
     // 빈 DB에만 복구한다.
     assert!(
-        backup::restore(&restored.config, &restored_db, &out)
+        backup::restore(&restored.config, restored_db, &out)
             .await
             .is_err()
     );
@@ -228,11 +214,13 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     );
 
     restored.db.close().await;
-    drop(target_admin);
-    sqlx::raw_sql(&format!("DROP DATABASE {target} WITH (FORCE)"))
-        .execute(&mut admin)
-        .await
-        .unwrap();
+    state.db.close().await;
+    for name in [&target.name, &source.name] {
+        sqlx::raw_sql(&format!("DROP DATABASE {name} WITH (FORCE)"))
+            .execute(&mut admin)
+            .await
+            .unwrap();
+    }
 }
 
 fn copy_dir(from: &std::path::Path, to: &std::path::Path) {

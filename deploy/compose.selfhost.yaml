@@ -83,6 +83,8 @@ services:
   app:
     <<: *app
     restart: unless-stopped
+    # 멈출 때(SIGTERM) 실시간 방의 리비전 남기기(방마다 최대 10초)·작업 정리를 마칠 시간. 기본 10초면 그 전에 강제 종료된다.
+    stop_grace_period: 30s
     depends_on:
       migrate:
         condition: service_completed_successfully

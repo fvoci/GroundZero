@@ -11,7 +11,8 @@
     PublicLinkView,
     ShareView,
   } from '$lib/api/client';
-  import { api, newRequestId } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { workspaceLabel } from '$lib/features/workspaces/badge';
   import { m } from '$lib/paraglide/messages.js';
@@ -57,7 +58,7 @@
     if (next === 'copy') {
       copyTitle = m.documents_copy_default_title({ title: doc.title });
       copyTarget = 'personal';
-      copyRequest = newRequestId();
+      copyKey.done();
     }
     if (next === 'move') void openMove();
   }
@@ -157,13 +158,20 @@
   // --- 복제 ---------------------------------------------------------------
   let copyTitle = $state('');
   let copyTarget = $state('personal');
-  let copyRequest = newRequestId();
+  // 같은 대상·제목의 재시도는 같은 요청 id, 고치면 새 id.
+  const copyKey = new RetryKey();
 
   async function submitCopy(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     try {
       const target = copyTarget === 'personal' ? null : copyTarget;
-      const copied = await api.copyDocument(doc.id, copyRequest, target, copyTitle);
+      const copied = await api.copyDocument(
+        doc.id,
+        copyKey.for({ doc: doc.id, target, title: copyTitle }),
+        target,
+        copyTitle,
+      );
+      copyKey.done();
       panel = undefined;
       router.navigate(pathFor(copied, memberOf));
     } catch (e: unknown) {
@@ -512,7 +520,7 @@
             value={copyTarget}
             onValueChange={(v: string) => {
               copyTarget = v;
-              copyRequest = newRequestId();
+              copyKey.done();
             }}
           >
             <Select.Trigger aria-labelledby="copy-target-label"

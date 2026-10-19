@@ -6,7 +6,8 @@
   import type { Workspace } from '@fvoci/api-client';
 
   import type { TimeEntryView, TimeKind, TimeSummaryRowView } from '$lib/api/client';
-  import { api, newRequestId, TIME_KINDS } from '$lib/api/client';
+  import { api, TIME_KINDS } from '$lib/api/client';
+  import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { displaySettings, formatClock, weekdays } from '$lib/display';
   import { startOfWeek } from '$lib/features/events/calendar';
@@ -109,7 +110,8 @@
     kind: 'work',
     memo: '',
   });
-  let manualRequest = newRequestId();
+  // 같은 입력의 재시도는 같은 요청 id, 고친 입력은 새 id.
+  const manualKey = new RetryKey();
   let manualError = $state<string | undefined>(undefined);
   let manualStatus = $state('');
 
@@ -122,15 +124,16 @@
       // 끝이 시작보다 이르면 다음 날로 넘어간 기록으로 본다.
       if (ended <= started)
         ended = instantOf(`${fromDayNumber(dayNumber(manual.day) + 1)}T${manual.end}`, zone);
-      await api.addTimeEntry(manualRequest, {
+      const entry = {
         started_at: started,
         ended_at: ended,
         paused_seconds: 0,
         kind: manual.kind,
         memo: manual.memo,
         target: null,
-      });
-      manualRequest = newRequestId();
+      };
+      await api.addTimeEntry(manualKey.for(entry), entry);
+      manualKey.done();
       manual.memo = '';
       manualStatus = m.time_manual_added();
       reloadKey += 1;

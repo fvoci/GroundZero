@@ -40,6 +40,13 @@ const SKIP: &[&str] = &[
 /// 복구할 때 파일을 다시 올리는 조각 크기(S3 최소 조각보다 크게).
 const RESTORE_CHUNK: usize = 8 * 1024 * 1024;
 
+/// 이 파일을 올릴 조각 크기. 큰 파일은 조각이 10000개(S3 한도)를 넘지 않게 키운다(설정은 업로드 조각 크기 ×
+/// 10000까지 허락하므로 8 MiB 조각으로는 다시 올리지 못하는 파일이 있을 수 있다).
+fn restore_chunk(size: i64) -> usize {
+    let size = usize::try_from(size).unwrap_or(0);
+    RESTORE_CHUNK.max(size.div_ceil(10_000))
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Manifest {
     pub format: u32,
@@ -257,6 +264,15 @@ pub async fn restore(
         )));
     }
     let present = tables(&mut conn).await?;
+    // 같은 마이그레이션이면 백업할 표도 같다. 목록에서 빠진 표가 있으면 그 내용 없이 끝나므로 거부한다.
+    if let Some(name) = present
+        .iter()
+        .find(|name| !manifest.tables.iter().any(|t| &t.name == *name))
+    {
+        return Err(AppError::Config(format!(
+            "the backup has no dump of table {name}"
+        )));
+    }
     for table in &manifest.tables {
         check_table(&table.name)?;
         if !present.contains(&table.name) {
@@ -341,12 +357,13 @@ async fn restore_object(
     let path = object_path(from, &object.key)?;
     let mut file = tokio::fs::File::open(&path).await.map_err(io)?;
     let upload = storage.begin(&object.key).await?;
+    let chunk = restore_chunk(object.size);
     let sent = async {
         let mut parts = Vec::new();
         let mut hasher = Sha256::new();
         let mut number = 1u32;
         loop {
-            let mut buf = vec![0u8; RESTORE_CHUNK];
+            let mut buf = vec![0u8; chunk];
             let mut filled = 0;
             while filled < buf.len() {
                 let n = file.read(&mut buf[filled..]).await.map_err(io)?;
@@ -366,7 +383,7 @@ async fn restore_object(
                 .await?;
             parts.push(Part { number, etag, size });
             number += 1;
-            if filled < RESTORE_CHUNK {
+            if filled < chunk {
                 break;
             }
         }
@@ -485,4 +502,22 @@ async fn private_file(path: &Path) -> Result<tokio::fs::File, AppError> {
     #[cfg(unix)]
     options.mode(0o600);
     options.open(path).await.map_err(io)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 감사 11번: 설정이 허락하는 가장 큰 파일(조각 10000개)도 복구할 때 조각 10000개를 넘지 않는다.
+    #[test]
+    fn restore_parts_stay_within_the_storage_limit() {
+        for size in [0u64, 1, 8 << 20, 80 << 30, 100 << 30, 640 << 30] {
+            let chunk = restore_chunk(i64::try_from(size).unwrap()) as u64;
+            assert!(chunk >= RESTORE_CHUNK as u64);
+            assert!(
+                size.div_ceil(chunk) <= 10_000,
+                "{size} bytes in {chunk}-byte parts"
+            );
+        }
+    }
 }

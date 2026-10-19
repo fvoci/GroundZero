@@ -46,6 +46,30 @@ describe('ChecklistForm (D-30, editor-less screens)', () => {
     expect(h.ontoggle).toHaveBeenCalledWith('a', true);
   });
 
+  // 감사 9번: 붙여넣기 확인의 응답을 잃은 뒤 줄을 고쳐 다시 보내면 새 요청 id여야 한다(같은 id면 서버가 처음 것을
+  // 남기고 고친 내용을 조용히 버린다). 고치지 않고 다시 보내면 같은 id다.
+  it('gives an edited paste line a new request id on retry', async () => {
+    const h = handlers();
+    h.onadd.mockRejectedValue(new Error('network'));
+    render(ChecklistForm, { idPrefix: 't', items: [], canEdit: true, ...h });
+    await fireEvent.click(screen.getByRole('button', { name: 'Markdown 붙여넣기' }));
+    await fireEvent.input(screen.getByLabelText(/붙여넣을 체크리스트/), {
+      target: { value: '- [ ] 자료 수집\n- [ ] 초안 작성' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '항목으로 펼치기' }));
+    const append = (): HTMLElement => screen.getByRole('button', { name: /덧붙이기/ });
+    await fireEvent.click(append());
+    await fireEvent.click(append());
+    await fireEvent.input(screen.getByLabelText('항목 1 내용'), {
+      target: { value: '자료 다시 수집' },
+    });
+    await fireEvent.click(append());
+    const ids = h.onadd.mock.calls.map((c) => c[0].map((e) => e.requestId));
+    expect(ids[1]).toEqual(ids[0]);
+    expect(ids[2]?.[0]).not.toBe(ids[0]?.[0]);
+    expect(ids[2]?.[1]).toBe(ids[0]?.[1]);
+  });
+
   it('is read-only without write access', () => {
     const h = handlers();
     render(ChecklistForm, {

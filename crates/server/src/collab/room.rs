@@ -36,8 +36,23 @@ use crate::ids::{DocumentId, UserId};
 const FLUSH_EVERY: Duration = Duration::from_millis(100);
 /// Yjs 상태를 저장하는 간격.
 const PERSIST_EVERY: Duration = Duration::from_secs(3);
+/// 복원 전 체크포인트(리비전으로 남기지 않은 편집 남기기)를 기다리는 최대 시간. 넘으면 복원하지 않는다.
+const CHECKPOINT_LIMIT: Duration = Duration::from_secs(5);
+
+/// 옛 리비전 복원 요청. 열린 방이 있으면 방이, 없으면 요청 처리기가 `restore_in_db`로 한다.
+#[derive(Debug)]
+pub struct RestoreRequest {
+    pub doc: DocumentId,
+    pub user: UserId,
+    pub revision: i32,
+    pub request_id: Uuid,
+    pub base_revision: i32,
+}
 /// 이만큼 조용하면 리비전을 만든다.
 const SNAPSHOT_IDLE: Duration = Duration::from_secs(60);
+/// 방이 상태를 DB에 저장한 뒤 보내는 확인(y-sync 사용자 정의 메시지). 저장한 상태의 스냅숏(지움 기록 + 상태 벡터,
+/// v1)을 담는다. 클라이언트는 자기 편집이 그 안에 들었을 때만 복구용 초안을 지운다(연결 상태를 저장 확인으로 보지 않음).
+pub const MSG_PERSISTED: u8 = 100;
 /// 한 프레임에 담을 수 있는 메시지 수(y-websocket은 보통 하나).
 const MAX_MESSAGES_PER_FRAME: usize = 16;
 /// 연결마다 1초에 받을 수 있는 메시지 수와 바이트(넘치면 닫고 다시 붙게 한다).
@@ -120,6 +135,20 @@ enum Command {
     },
     Leave {
         conn: u64,
+    },
+    /// 모아 둔 변경을 넣고 상태(파일 참조 포함)를 지금 저장한다. 파일 버전을 지우기 직전에 쓴다.
+    Persist {
+        done: oneshot::Sender<()>,
+    },
+    /// 모아 둔 변경을 넣고 아직 리비전으로 남지 않은 편집을 지금 리비전으로 남긴다. 반출 직전에 쓴다.
+    Snapshot {
+        done: oneshot::Sender<()>,
+    },
+    /// 옛 리비전으로 복원한다. 체크포인트(리비전으로 남기지 않은 편집 남기기) → 복원 → 방 초기화를 이 명령 하나 안에서
+    /// 해 그 사이 편집·참여가 끼어들지 않게 한다. 체크포인트가 실패하거나 시간 안에 끝나지 않으면 복원하지 않는다.
+    Restore {
+        request: RestoreRequest,
+        done: oneshot::Sender<Result<String, AppError>>,
     },
     Shutdown {
         reason: CloseReason,
@@ -308,6 +337,72 @@ impl Rooms {
         }
     }
 
+    /// 문서가 다른 워크스페이스로 옮겨졌다. 열린 방도 그 워크스페이스에 속하게 한다(실시간 끄기·파일 버전 지우기가
+    /// 워크스페이스로 방을 찾는다). 연결은 그대로 둔다.
+    pub fn moved(&self, doc: DocumentId, workspace: Uuid) {
+        if let Some(handle) = self.lock().get_mut(&doc) {
+            handle.workspace = Some(workspace);
+        }
+    }
+
+    /// 열린 방마다 모아 둔 변경을 넣고 상태를 지금 저장하게 한 뒤 기다린다(방마다 최대 2초). 파일 버전을 지우기 전에
+    /// 불러, 방금 실시간 본문에 넣은 이미지의 참조가 주기적 저장(3초)을 기다리지 않고 DB에 남게 한다.
+    pub async fn persist_all(&self) {
+        self.persist_where(|_| true).await;
+    }
+
+    /// 한 워크스페이스의 열린 방만(그 워크스페이스 파일을 가리킬 수 있는 문서들). 파일 버전을 지울 때 쓴다.
+    pub async fn persist_workspace(&self, workspace: Uuid) {
+        self.persist_where(|h| h.workspace == Some(workspace)).await;
+    }
+
+    /// 방들에 동시에 저장을 시키고 모두 합쳐 최대 2초 기다린다. 대기열이 찬(바쁜) 방은 건너뛴다(곧 하는 주기적
+    /// 저장이 대신한다). 방이 이미 닫히는 중이면 답이 바로 돌아온다.
+    async fn persist_where(&self, keep: impl Fn(&Handle) -> bool) {
+        let handles: Vec<Handle> = self.lock().values().filter(|h| keep(h)).cloned().collect();
+        ask_all(handles, Duration::from_secs(2), |done| Command::Persist {
+            done,
+        })
+        .await;
+    }
+
+    /// 이 문서들의 열린 방이 아직 리비전으로 남지 않은 편집을 지금 리비전으로 남기게 하고 모두 합쳐 최대 5초
+    /// 기다린다. 반출이 문서 본문(마지막 리비전)을 읽기 전에 쓴다. 계속 편집하는 방은 쉬는 시간 리비전이 없어서다.
+    pub async fn snapshot_documents(&self, docs: &HashSet<DocumentId>) {
+        let handles: Vec<Handle> = self
+            .lock()
+            .iter()
+            .filter(|(doc, _)| docs.contains(doc))
+            .map(|(_, h)| h.clone())
+            .collect();
+        ask_all(handles, Duration::from_secs(5), |done| Command::Snapshot {
+            done,
+        })
+        .await;
+    }
+
+    /// 열린 방이 있으면 그 방이 복원한다(체크포인트 → 복원 → 방 초기화를 한 명령으로). 방이 없으면 `None`(부르는 쪽이
+    /// 바로 복원한다). 방의 답은 시간 제한 없이 기다린다: 여기서 그만두면 방이 복원을 마쳤는데 실패로 답할 수 있다.
+    pub async fn restore(&self, request: RestoreRequest) -> Option<Result<String, AppError>> {
+        let handle = self.lock().get(&request.doc).cloned()?;
+        let (done, answer) = oneshot::channel();
+        if handle
+            .tx
+            .try_send(Command::Restore { request, done })
+            .is_err()
+        {
+            return Some(Err(AppError::Conflict(
+                "the live editing room is busy; nothing was restored, try again".into(),
+            )));
+        }
+        // 답 없이 끝났으면 방이 이 명령을 처리하기 전에 닫혔다(복원하지 않음).
+        Some(answer.await.unwrap_or_else(|_| {
+            Err(AppError::Conflict(
+                "the live editing room closed; nothing was restored, try again".into(),
+            ))
+        }))
+    }
+
     /// 워크스페이스가 실시간을 끈다(또는 껐다). 그 워크스페이스의 방은 리비전을 남기고 닫는다. 끝날 때까지 기다린다.
     /// 모든 방의 편집이 리비전으로 남았으면 참(`begin_closing`과 함께 써서 그동안 새 방이 열리지 않게 한다).
     pub async fn close_workspace(&self, workspace: Uuid, admin: UserId) -> bool {
@@ -361,6 +456,24 @@ impl Rooms {
             rooms.remove(&doc);
         }
     }
+}
+
+/// 방마다 명령을 보내고 답을 모두 합쳐 `wait`까지 기다린다. 대기열이 찬(바쁜) 방은 건너뛴다.
+async fn ask_all<T: Send + 'static>(
+    handles: Vec<Handle>,
+    wait: Duration,
+    command: impl Fn(oneshot::Sender<T>) -> Command,
+) {
+    let waits = handles.into_iter().map(|handle| {
+        let (done, answer) = oneshot::channel();
+        let sent = handle.tx.try_send(command(done)).is_ok();
+        async move {
+            if sent {
+                let _ignored = answer.await;
+            }
+        }
+    });
+    let _ignored = tokio::time::timeout(wait, futures_util::future::join_all(waits)).await;
 }
 
 /// 방마다 리비전을 남기고 닫게 한 뒤 답을 기다린다. 모두 남겼으면 참. 이미 닫힌 방은 남길 것이 없다.
@@ -429,7 +542,11 @@ struct Room {
     lineage: String,
     dirty_state: bool,
     dirty_since_snapshot: bool,
+    /// 마지막 리비전 남기기에서 DB 본문이 방이 아는 것과 달라(다른 길로 바뀜) 남기지 않고 닫았는지.
+    changed_outside: bool,
     last_change: Instant,
+    /// 마지막으로 DB에 저장한(또는 저장된 것을 불러온) 상태의 스냅숏(v1). 들어오는 연결에 처음 메시지와 함께 보낸다.
+    persisted: Option<Vec<u8>>,
     /// 고친 사람(마지막이 앞). 리비전 작성자를 고를 때 쓴다.
     editors: Vec<UserId>,
     last_recheck: Instant,
@@ -462,7 +579,9 @@ impl Room {
             lineage: String::new(),
             dirty_state: false,
             dirty_since_snapshot: false,
+            changed_outside: false,
             last_change: Instant::now(),
+            persisted: None,
             editors: Vec::new(),
             last_recheck: Instant::now(),
             recheck_every,
@@ -528,7 +647,10 @@ impl Room {
                     }
                 }
                 let start = self.start_messages();
-                if peer.out.try_send(Outbound::Binary(start)).is_ok() {
+                if start
+                    .into_iter()
+                    .all(|frame| peer.out.try_send(Outbound::Binary(frame)).is_ok())
+                {
                     self.conns.insert(
                         conn,
                         Connection {
@@ -552,6 +674,63 @@ impl Room {
                 self.flush().await;
                 self.leave(conn);
                 true
+            }
+            Command::Persist { done } => {
+                self.flush().await;
+                self.persist().await;
+                let _ignored = done.send(());
+                true
+            }
+            Command::Snapshot { done } => {
+                self.flush().await;
+                // 리비전을 남기면 상태도 저장한다. 남기지 못하면(편집할 수 있는 사람이 없음 등) 방에 그대로 둔다.
+                let _kept = self.snapshot().await;
+                let _ignored = done.send(());
+                true
+            }
+            Command::Restore { request, done } => {
+                self.flush().await;
+                // 리비전으로 남기지 않은 편집을 먼저 남긴다. 남겼는지 확인되지 않으면 복원하지 않는다(그 편집은 방에 남는다).
+                // 남겼으면 그 리비전 때문에 화면의 기준이 지나 아래 복원이 충돌로 알린다(사람이 지금 내용을 보고 다시 한다).
+                if self.dirty_since_snapshot {
+                    self.changed_outside = false;
+                    match tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot()).await {
+                        // 남겼다. 본문이 다른 길로 바뀌어 남기지 않고 닫았으면 보존이 확인되지 않은 것이다.
+                        Ok(true) if !self.changed_outside => {}
+                        Ok(true) => {
+                            let _ignored = done.send(Err(AppError::Conflict(
+                                "the document changed outside live editing before its live edits were saved; nothing was restored".into(),
+                            )));
+                            return true;
+                        }
+                        Ok(false) => {
+                            let _ignored = done.send(Err(AppError::Conflict(
+                                "live edits could not be saved as a revision first; nothing was restored".into(),
+                            )));
+                            return true;
+                        }
+                        Err(_) => {
+                            let _ignored = done.send(Err(AppError::Conflict(
+                                "saving live edits as a revision took too long; nothing was restored, try again"
+                                    .into(),
+                            )));
+                            return true;
+                        }
+                    }
+                }
+                let outcome =
+                    crate::features::revisions::restore_in_db(&self.db, &self.limits, &request)
+                        .await;
+                // 본문이 바뀌었으면 방을 닫아 복원된 본문으로 다시 열게 한다. 이 명령 뒤에 들어와 있던 편집은 방과 함께
+                // 버려진다(받았다고 확인하지 않았으므로 클라이언트가 초안으로 남긴다).
+                let restored = matches!(outcome.as_deref(), Ok("restored"));
+                if restored {
+                    for (_, c) in self.conns.drain() {
+                        let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
+                    }
+                }
+                let _ignored = done.send(outcome);
+                !restored
             }
             Command::Shutdown {
                 reason,
@@ -617,17 +796,24 @@ impl Room {
         self.lineage = lineage_of(&doc).unwrap_or_default();
         self.base_revision = revision;
         self.base_body = body;
+        // 저장된 상태에서 불러왔으니 이 상태는 이미 DB에 있다.
+        self.persisted = Some(doc.transact().snapshot().encode_v1());
         Ok(doc)
     }
 
-    fn start_messages(&self) -> Vec<u8> {
+    /// 들어온 연결에 처음 보낼 메시지들. 메시지마다 프레임 하나다(y-websocket은 한 프레임에서 첫 메시지만 읽는다).
+    fn start_messages(&self) -> Vec<Vec<u8>> {
         let Some(doc) = &self.doc else {
             return Vec::new();
         };
         let sv = doc.transact().state_vector();
-        let mut out = Message::Sync(SyncMessage::SyncStep1(sv)).encode_v1();
+        let mut out = vec![Message::Sync(SyncMessage::SyncStep1(sv)).encode_v1()];
         if let Some(update) = self.presence_update() {
-            out.extend(Message::Awareness(update).encode_v1());
+            out.push(Message::Awareness(update).encode_v1());
+        }
+        // 이미 저장된 상태도 알린다: 다시 붙은 클라이언트의 편집이 그 안에 있으면 새 저장 없이 확인된다.
+        if let Some(snapshot) = &self.persisted {
+            out.push(Message::Custom(MSG_PERSISTED, snapshot.clone()).encode_v1());
         }
         out
     }
@@ -924,25 +1110,45 @@ impl Room {
         let Some(doc) = &self.doc else {
             return;
         };
-        let state = doc
-            .transact()
-            .encode_state_as_update_v1(&StateVector::default());
+        // 저장하는 상태와 그 스냅숏(저장 확인에 담는다)을 같은 순간에서 만든다.
+        let (state, snapshot) = {
+            let txn = doc.transact();
+            (
+                txn.encode_state_as_update_v1(&StateVector::default()),
+                txn.snapshot().encode_v1(),
+            )
+        };
+        // 리비전이 되지 않은 편집이 있으면 본문도 넘겨, 그 본문이 가리키는 파일 버전을 붙잡게 한다(마이그레이션 0059).
+        let body = self.dirty_since_snapshot.then(|| {
+            let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
+            convert::read_doc(&doc.transact(), &fragment)
+        });
         let result = async {
             let mut tx = self.db.begin_anonymous().await?;
             // 리비전으로 아직 남지 않은 편집이 있는지도 적는다(실시간을 끄기 전에 남긴다, 마이그레이션 0050).
-            let stored: bool = sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3, $4)")
-                .bind(self.doc_id)
-                .bind(self.base_revision)
-                .bind(state)
-                .bind(self.dirty_since_snapshot)
-                .fetch_one(tx.conn())
-                .await?;
+            let stored: bool =
+                sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3, $4, $5)")
+                    .bind(self.doc_id)
+                    .bind(self.base_revision)
+                    .bind(state)
+                    .bind(self.dirty_since_snapshot)
+                    .bind(body)
+                    .fetch_one(tx.conn())
+                    .await?;
             tx.commit().await?;
             Ok::<bool, AppError>(stored)
         }
         .await;
         match result {
-            Ok(_) => self.dirty_state = false,
+            Ok(stored) => {
+                self.dirty_state = false;
+                // DB에 들어간 것만 확인으로 알린다(낡은 상태라 거절됐으면 알리지 않는다).
+                if stored {
+                    let message = Message::Custom(MSG_PERSISTED, snapshot.clone()).encode_v1();
+                    self.persisted = Some(snapshot);
+                    self.broadcast(&message, None);
+                }
+            }
             Err(err) => {
                 tracing::warn!(event = "collab.store_failed", document = %self.doc_id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not store live editing state");
             }
@@ -991,6 +1197,7 @@ impl Room {
                 }
                 Ok(None) => {
                     // 본문이 다른 길로 바뀌었다(복원). 덮어쓰지 않고 다시 열게 한다.
+                    self.changed_outside = true;
                     tracing::warn!(event = "collab.changed_outside", document = %self.doc_id.0, "document changed outside live editing; reopening");
                     for (_, c) in self.conns.drain() {
                         let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));

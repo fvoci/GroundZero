@@ -3,7 +3,8 @@
   import type { Module, Workspace } from '@fvoci/api-client';
 
   import type { ItemView } from '$lib/api/client';
-  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { api, ApiError } from '$lib/api/client';
+  import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { forgetReferences } from '$lib/features/references/resolver';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
@@ -79,22 +80,36 @@
     }
     settingsError = undefined;
     settingsNote = undefined;
+    // 저장을 시작한 모듈과 입력값을 붙잡아 둔다. 기다리는 사이 다른 모듈로 옮겨 가도 그 모듈에 보내거나 그 화면에
+    // 결과를 넣지 않는다(이 화면은 모듈이 바뀌어도 다시 만들어지지 않는다).
+    const target = mod;
+    const edits = {
+      name: editName.trim(),
+      icon: editIcon.trim(),
+      description: editDescription.trim(),
+    };
+    const stillHere = (): boolean => moduleId === target.id;
     try {
-      const before = mod.key;
-      if (editIcon.trim() !== mod.icon) await api.setModuleIcon(mod.id, editIcon.trim());
-      if (editDescription.trim() !== mod.description) {
-        await api.setModuleDescription(mod.id, editDescription.trim());
+      const before = target.key;
+      if (edits.icon !== target.icon) await api.setModuleIcon(target.id, edits.icon);
+      if (edits.description !== target.description) {
+        await api.setModuleDescription(target.id, edits.description);
       }
-      mod = await api.updateModule(mod.id, editName.trim(), key);
+      const saved = await api.updateModule(target.id, edits.name, key);
       workspaceNav.refreshModules();
       forgetReferences();
-      editKey = mod.key;
-      items = await api.items(mod.id);
+      if (!stillHere()) return;
+      mod = saved;
+      editKey = saved.key;
+      const list = await api.items(saved.id);
+      if (!stillHere()) return;
+      items = list;
       notifyDone(m.common_saved());
-      if (before !== mod.key) {
-        settingsNote = m.modules_key_changed({ before, after: mod.key });
+      if (before !== saved.key) {
+        settingsNote = m.modules_key_changed({ before, after: saved.key });
       }
     } catch (e: unknown) {
+      if (!stillHere()) return;
       settingsError =
         e instanceof ApiError && e.status === 409
           ? m.modules_key_taken()
@@ -107,7 +122,8 @@
   let templateId = $state('');
   let templateTitle = $state('');
   let templateError = $state<string | undefined>(undefined);
-  let templateRequest = newRequestId();
+  // 같은 템플릿·제목의 재시도는 같은 요청 id, 고치면 새 id.
+  const templateKey = new RetryKey();
 
   async function fromTemplate(moduleId: string): Promise<void> {
     const source = templateId === '' ? templates[0]?.id : templateId;
@@ -117,14 +133,15 @@
     }
     templateError = undefined;
     try {
+      const title = templateTitle.trim();
       const copied = await api.copyItem(
         source,
-        templateRequest,
+        templateKey.for({ source, moduleId, title }),
         moduleId,
-        templateTitle.trim(),
+        title,
         true,
       );
-      templateRequest = newRequestId();
+      templateKey.done();
       router.navigate(itemPath(workspace.id, copied.item_id));
     } catch (e: unknown) {
       templateError = errorText(e, m.modules_create_failed());
