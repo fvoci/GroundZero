@@ -951,8 +951,9 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
             .unwrap();
     let mut purging = owner.begin().await.unwrap();
     // 작업 프로세스의 묶음 정리와 같은 경로를 이 묶음에만 쓴다(열어 둔 트랜잭션이 다른 테스트의 묶음까지 잡지 않게).
-    sqlx::query("SELECT fvoci.app_purge_batch_as($1, true)")
+    sqlx::query("SELECT fvoci.app_purge_batch_as($1, true, $2)")
         .bind(batch)
+        .bind(vec![uuid::Uuid::now_v7()])
         .execute(&mut *purging)
         .await
         .unwrap();

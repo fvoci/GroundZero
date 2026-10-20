@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use tokio::sync::watch;
 
-use crate::db::Db;
+use crate::db::{Db, needed_ids};
 use crate::error::AppError;
 use crate::search::{SearchClient, drain, prepare};
 use crate::storage::Storage;
@@ -30,15 +30,45 @@ pub struct TickReport {
     pub notified: i32,
 }
 
+/// 작업 함수 하나. 행을 만드는 함수는 앱이 만든 id 목록을 `$1`로 받고(D-88), 필요한 개수의 상한은 같은
+/// 트랜잭션에서 먼저 `ids`로 묻는다. 행을 만들지 않는 함수는 `ids`가 없다.
+#[derive(Debug, Clone, Copy)]
+struct Job {
+    ids: Option<&'static str>,
+    call: &'static str,
+}
+
 /// 주기 작업 이름과 간격.
 const PURGE: (&str, &str) = ("trash_purge", "1 hour");
 /// 휴지통 만료와 보존 기간이 지난 이전 파일 버전 정리(D-41, D-56).
-const PURGE_SQL: &str = "SELECT app_system_purge_expired() + app_system_purge_old_versions()";
+const PURGE_JOBS: &[Job] = &[
+    Job {
+        ids: Some("SELECT app_system_purge_expired_ids()"),
+        call: "SELECT app_system_purge_expired($1)",
+    },
+    Job {
+        ids: None,
+        call: "SELECT app_system_purge_old_versions()",
+    },
+];
 const RECURRENCE: (&str, &str) = ("recurrence_tick", "15 minutes");
-/// 업무 기한 알림(하루 전·당일, 같은 날 같은 업무는 한 번).
+const RECURRENCE_JOBS: &[Job] = &[Job {
+    ids: Some("SELECT app_system_recurrence_tick_ids()"),
+    call: "SELECT app_system_recurrence_tick($1)",
+}];
+/// 업무 기한 알림(하루 전·당일, 같은 날 같은 업무는 한 번). `current_date`는 트랜잭션 시작 시각 기준이라 개수와
+/// 실제 호출이 같은 날을 본다.
 const DUE: (&str, &str) = ("due_notify", "1 hour");
-const DUE_SQL: &str =
-    "SELECT app_system_due_notifications(current_date) + app_system_item_reminders(current_date)";
+const DUE_JOBS: &[Job] = &[
+    Job {
+        ids: Some("SELECT app_system_due_notifications_ids(current_date)"),
+        call: "SELECT app_system_due_notifications(current_date, $1)",
+    },
+    Job {
+        ids: Some("SELECT app_system_item_reminders_ids(current_date)"),
+        call: "SELECT app_system_item_reminders(current_date, $1)",
+    },
+];
 
 async fn claim(db: &Db, (name, every): (&str, &str)) -> Result<bool, AppError> {
     let mut tx = db.begin_anonymous().await?;
@@ -51,11 +81,25 @@ async fn claim(db: &Db, (name, every): (&str, &str)) -> Result<bool, AppError> {
     Ok(due)
 }
 
-async fn system_call(db: &Db, sql: &str) -> Result<i32, AppError> {
+/// 작업 함수들을 한 트랜잭션에서 차례로 부르고 결과를 더한다.
+async fn system_call(db: &Db, jobs: &[Job]) -> Result<i32, AppError> {
     let mut tx = db.begin_anonymous().await?;
-    let n: i32 = sqlx::query_scalar(sql).fetch_one(tx.conn()).await?;
+    let mut total = 0;
+    for job in jobs {
+        let n: i32 = match job.ids {
+            Some(bound) => {
+                let ids = needed_ids(tx.conn(), sqlx::query_scalar(bound)).await?;
+                sqlx::query_scalar(job.call)
+                    .bind(ids)
+                    .fetch_one(tx.conn())
+                    .await?
+            }
+            None => sqlx::query_scalar(job.call).fetch_one(tx.conn()).await?,
+        };
+        total += n;
+    }
     tx.commit().await?;
-    Ok(n)
+    Ok(total)
 }
 
 /// 주기 작업을 간격과 상관없이 바로 한 번씩 돌린다(테스트·운영 점검용).
@@ -64,10 +108,10 @@ pub async fn run_all_now(
     search: Option<&SearchClient>,
     storage: Option<&Storage>,
 ) -> Result<TickReport, AppError> {
-    let purged = system_call(db, PURGE_SQL).await?;
-    let occurrences = system_call(db, "SELECT app_system_recurrence_tick()").await?;
+    let purged = system_call(db, PURGE_JOBS).await?;
+    let occurrences = system_call(db, RECURRENCE_JOBS).await?;
     // 기한 알림은 반복 회차를 만든 뒤에(오늘 만든 회차도 알린다).
-    let notified = system_call(db, DUE_SQL).await?;
+    let notified = system_call(db, DUE_JOBS).await?;
     Ok(TickReport {
         purged,
         notified,
@@ -106,7 +150,14 @@ async fn drain_all(
 /// 기한이 지난 업로드를 닫고, 저장소에서 지울 것(영구 삭제한 버전·그만둔 업로드)을 지운다. 실패한 것은
 /// 다시 넣어 다음 주기에 한다(10번까지).
 async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
-    system_call(db, "SELECT app_system_expire_uploads()").await?;
+    system_call(
+        db,
+        &[Job {
+            ids: None,
+            call: "SELECT app_system_expire_uploads()",
+        }],
+    )
+    .await?;
     let mut done = 0;
     // 하나씩 꺼내 지우고 바로 끝낸다(저장소 호출 동안 트랜잭션을 길게 열지 않는다). 한 주기에 200개까지.
     for _ in 0..200 {
@@ -192,9 +243,9 @@ async fn index(db: &Db, client: &SearchClient, storage: Option<&Storage>) -> Res
     drain_all(db, client, storage).await
 }
 
-async fn when_due(db: &Db, schedule: (&str, &str), sql: &str) -> Result<i32, AppError> {
+async fn when_due(db: &Db, schedule: (&str, &str), jobs: &[Job]) -> Result<i32, AppError> {
     if claim(db, schedule).await? {
-        system_call(db, sql).await
+        system_call(db, jobs).await
     } else {
         Ok(0)
     }
@@ -215,13 +266,9 @@ pub async fn run_once(
             Some(client) => logged("search", index(db, client, storage)).await,
             None => 0,
         },
-        purged: logged("trash_purge", when_due(db, PURGE, PURGE_SQL)).await,
-        occurrences: logged(
-            "recurrence",
-            when_due(db, RECURRENCE, "SELECT app_system_recurrence_tick()"),
-        )
-        .await,
-        notified: logged("due_notify", when_due(db, DUE, DUE_SQL)).await,
+        purged: logged("trash_purge", when_due(db, PURGE, PURGE_JOBS)).await,
+        occurrences: logged("recurrence", when_due(db, RECURRENCE, RECURRENCE_JOBS)).await,
+        notified: logged("due_notify", when_due(db, DUE, DUE_JOBS)).await,
     }
 }
 

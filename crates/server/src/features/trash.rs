@@ -13,7 +13,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{UserTx, new_ids};
+use crate::db::{UserTx, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::member_role;
@@ -279,8 +279,9 @@ pub async fn restore(
     Path(batch): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_restore_batch($1)")
+    sqlx::query("SELECT app_restore_batch($1, $2)")
         .bind(batch)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -298,8 +299,9 @@ pub async fn purge(
     Path(batch): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_purge_batch($1)")
+    sqlx::query("SELECT app_purge_batch($1, $2)")
         .bind(batch)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -325,8 +327,14 @@ pub async fn purge_expired(
 ) -> Result<Json<Purged>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     member_role(&mut tx, ws).await?;
-    let purged: i32 = sqlx::query_scalar("SELECT app_purge_expired($1)")
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_purge_expired_ids($1)").bind(ws),
+    )
+    .await?;
+    let purged: i32 = sqlx::query_scalar("SELECT app_purge_expired($1, $2)")
         .bind(ws)
+        .bind(ids)
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -342,7 +350,13 @@ pub async fn purge_my_expired(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Purged>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let purged: i32 = sqlx::query_scalar("SELECT app_purge_expired(NULL)")
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_purge_expired_ids(NULL)"),
+    )
+    .await?;
+    let purged: i32 = sqlx::query_scalar("SELECT app_purge_expired(NULL, $1)")
+        .bind(ids)
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
