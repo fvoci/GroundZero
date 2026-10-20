@@ -166,6 +166,21 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
         .await
         .unwrap_err();
     assert!(err.to_string().contains("comments"), "{err}");
+    // 목록의 파일 크기가 손상되면(터무니없이 큼) 버퍼를 잡기 전에 거부한다.
+    let oversized = temp_dir("oversized");
+    copy_dir(&out, &oversized);
+    let mut listed: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(oversized.join("manifest.json")).unwrap()).unwrap();
+    listed["objects"][0]["size"] = serde_json::json!(i64::MAX);
+    std::fs::write(
+        oversized.join("manifest.json"),
+        serde_json::to_vec(&listed).unwrap(),
+    )
+    .unwrap();
+    let err = backup::restore(&restored.config, restored_db, &oversized)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("size differs"), "{err}");
     backup::restore(&restored.config, restored_db, &out)
         .await
         .unwrap();

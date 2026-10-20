@@ -14,8 +14,12 @@ export class RetryKey {
     return this.#pending.id;
   }
 
-  /** 성공했거나 대상이 바뀌었다. 다음 요청은 새 id다. */
-  done(): void {
+  /**
+   * 요청이 끝났다(`id`: 그 요청의 id) 또는 대상이 바뀌었다(`id` 없음). 다음 요청은 새 id다. 두 제출이 겹쳐 그 사이 다른
+   * 내용으로 새 id를 받았으면 먼저 끝난 요청이 그 id를 지우지 않는다(응답을 잃은 뒤 다시 보내도 같은 id).
+   */
+  done(id?: string): void {
+    if (id !== undefined && this.#pending?.id !== id) return;
     this.#pending = undefined;
   }
 }

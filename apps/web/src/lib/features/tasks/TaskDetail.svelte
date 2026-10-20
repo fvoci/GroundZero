@@ -36,7 +36,7 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
-  import { formOf, mergeForm } from './form';
+  import { estimateOf, formOf, mergeEstimate, mergeForm } from './form';
   import { PRIORITY_LABEL, STATUS_LABEL } from './labels';
 
   interface Props {
@@ -110,17 +110,29 @@
       return;
     }
     const freshForm = formOf(fresh);
-    const merged = mergeForm(baseline, mine, freshForm);
-    const tagsTouched = canonicalJson(mine.tags) !== canonicalJson(baseline.tags);
-    const estimateTouched = mine.estimate_minutes !== baseline.estimate_minutes;
-    baseline = merged.baseline;
-    clashed = clashed || merged.clash;
+    const before = baseline;
+    // 예상 시간은 입력한 글자의 값으로 따로 맞춘다(병합에는 고치지 않은 칸으로 넘긴다).
+    const estimate = mergeEstimate(
+      before.estimate_minutes,
+      estimateText,
+      freshForm.estimate_minutes,
+    );
+    const merged = mergeForm(
+      before,
+      { ...mine, estimate_minutes: before.estimate_minutes },
+      freshForm,
+    );
+    const tagsTouched = canonicalJson(mine.tags) !== canonicalJson(before.tags);
+    baseline = { ...merged.baseline, estimate_minutes: estimate.baseline };
+    // 충돌은 지금의 병합으로 다시 본다. 기준은 사용자가 바꾼 칸을 옛 값으로 지키므로, 서버가 그 칸을 다르게 두는 한 계속
+    // 충돌이고, 사용자가 서버 값으로 맞추면 풀려 최신 판으로 저장한다.
+    clashed = merged.clash || estimate.clash;
     if (!clashed) baseVersion = fresh.version;
     task = clashed ? { ...fresh, version: baseVersion } : fresh;
     form = merged.form;
     pending = undefined;
     if (!tagsTouched) tagsText = freshForm.tags.join(', ');
-    if (!estimateTouched) {
+    if (!estimate.keepText) {
       estimateText = freshForm.estimate_minutes === null ? '' : String(freshForm.estimate_minutes);
     }
   }
@@ -154,12 +166,13 @@
 
   function currentInput(): TaskInput | undefined {
     if (form === undefined) return undefined;
-    const estimate = estimateText.trim() === '' ? null : Number.parseInt(estimateText, 10);
+    const estimate = estimateOf(estimateText);
     return {
       ...form,
       start_date: form.milestone || form.start_date === '' ? null : form.start_date,
       due_date: form.due_date === '' ? null : form.due_date,
-      estimate_minutes: estimate !== null && Number.isFinite(estimate) ? estimate : null,
+      // 잘못된 입력은 저장 전에 막는다(submit). 여기서는 비교용으로만 쓴다.
+      estimate_minutes: estimate === 'invalid' ? null : estimate,
       tags: tagsText
         .split(',')
         .map((t) => t.trim())
@@ -171,6 +184,11 @@
   async function submit(base: TaskDetailView): Promise<void> {
     const input = currentInput();
     if (task === undefined || input === undefined || busy) return;
+    // 잘못된 예상 시간을 빈 값으로 보내면 저장된 값이 지워진다. 입력을 그대로 두고 알린다.
+    if (estimateOf(estimateText) === 'invalid') {
+      error = m.tasks_estimate_invalid();
+      return;
+    }
     busy = true;
     error = undefined;
     saved = false;

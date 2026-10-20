@@ -494,10 +494,11 @@
             duration_seconds: seconds,
             planned_on: orNull(newEpisode.planned_on),
           };
-          void addEpisodes([row], [draftKey.for({ itemId, row })]).then((ok) => {
+          const requestId = draftKey.for({ itemId, row });
+          void addEpisodes([row], [requestId]).then((ok) => {
             if (!ok) return;
             newEpisode = { title: '', chapter: '', duration: '', planned_on: '' };
-            draftKey.done();
+            draftKey.done(requestId);
           });
         }}
       >

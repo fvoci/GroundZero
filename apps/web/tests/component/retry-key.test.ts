@@ -15,4 +15,16 @@ describe('RetryKey', () => {
     key.done();
     expect(key.for({ body: '고친 댓글', target: 'doc-1' })).not.toBe(edited);
   });
+
+  // 두 제출이 겹치면(A를 보낸 뒤 B) 먼저 끝난 A가 B의 id를 지우지 않는다. B가 서버에 저장됐는데 응답을 잃었으면 다시 보낼
+  // 때 같은 id여야 중복이 생기지 않는다.
+  it('lets a finished request clear only its own id', () => {
+    const key = new RetryKey();
+    const a = key.for({ title: 'A' });
+    const b = key.for({ title: 'B' });
+    key.done(a);
+    expect(key.for({ title: 'B' })).toBe(b);
+    key.done(b);
+    expect(key.for({ title: 'B' })).not.toBe(b);
+  });
 });

@@ -10,7 +10,7 @@
 use std::path::Path;
 use std::process::{Child, Command};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use xshell::{Shell, cmd};
 
 use crate::compose::{self, Compose, DbUrls, Env};
@@ -38,7 +38,7 @@ pub fn run(root: &Path, oidc: bool, web: bool) -> Result<()> {
     println!("server       {bind}");
     println!("open         {public}");
     println!(
-        "stop         Ctrl-C (data stays; `cargo xtask down` removes this checkout's containers and data)"
+        "stop         Ctrl-C (data stays; `cargo xtask down` removes this checkout's containers and volumes; attachments in target/dev-files stay)"
     );
 
     let _db = sh.push_env("DATABASE_URL", &urls.app);
@@ -56,6 +56,7 @@ pub fn run(root: &Path, oidc: bool, web: bool) -> Result<()> {
     let _oidc = if oidc {
         let kc = compose.host_port(&sh, "keycloak", 8080)?;
         let issuer = format!("http://127.0.0.1:{kc}/realms/{}", compose::OIDC_REALM);
+        check_realm_users(root, &compose, &sh)?;
         seed(root, &compose, &sh, &issuer)?;
         println!("keycloak     {issuer}");
         // 비밀번호는 로그·코드에 두지 않는다. 값은 deploy/keycloak/realm-test.json의 테스트 계정에 있다.
@@ -82,6 +83,52 @@ pub fn run(root: &Path, oidc: bool, web: bool) -> Result<()> {
         None
     };
     cmd!(sh, "cargo run --package fvoci-server --locked").run()?;
+    Ok(())
+}
+
+/// 개발 Keycloak 볼륨에 예전 테스트 realm이 남아(Keycloak은 realm이 이미 있으면 파일을 다시 들이지 않는다) 테스트
+/// 사용자 id가 realm 파일의 고정 id와 다르면, 로그인한 사람이 준비한 계정과 다른 사용자가 되어 준비한 워크스페이스에
+/// 들어가지 못한다. 그때는 알리고 멈춘다(볼륨을 저절로 지우지 않는다). 확인 자체를 못 하면 알리고 계속한다.
+fn check_realm_users(root: &Path, compose: &Compose, sh: &Shell) -> Result<()> {
+    let path = root.join("deploy/keycloak/realm-test.json");
+    let realm: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?,
+    )?;
+    // 관리자 비밀번호는 컨테이너의 환경 변수로만 쓴다(코드·로그에 두지 않는다).
+    let script = format!(
+        "/opt/keycloak/bin/kcadm.sh config credentials --config /tmp/fvoci-kcadm.config \
+         --server http://localhost:8080 --realm master --user \"$KC_BOOTSTRAP_ADMIN_USERNAME\" \
+         --password \"$KC_BOOTSTRAP_ADMIN_PASSWORD\" >/dev/null 2>&1 && \
+         /opt/keycloak/bin/kcadm.sh get users --config /tmp/fvoci-kcadm.config -r {} --fields id,username",
+        compose::OIDC_REALM
+    );
+    let command = ["sh".to_owned(), "-c".to_owned(), script];
+    let users: Vec<serde_json::Value> = match compose
+        .exec_read(sh, "keycloak", &command)
+        .and_then(|out| serde_json::from_str(&out).context("read the Keycloak user list"))
+    {
+        Ok(users) => users,
+        Err(err) => {
+            println!("warning: could not check the dev Keycloak test users ({err:#}); continuing");
+            return Ok(());
+        }
+    };
+    for user in realm["users"].as_array().into_iter().flatten() {
+        let (Some(name), Some(want)) = (user["username"].as_str(), user["id"].as_str()) else {
+            continue;
+        };
+        let found = users
+            .iter()
+            .find(|u| u["username"] == name)
+            .and_then(|u| u["id"].as_str());
+        if found != Some(want) {
+            let found = found.map_or_else(|| "missing".to_owned(), |id| format!("id {id}"));
+            bail!(
+                "the dev Keycloak keeps an older test realm: {name} should be id {want} but is {found}. \
+                 Reset with `cargo xtask down` (removes this checkout's dev and test containers and volumes) and start again"
+            );
+        }
+    }
     Ok(())
 }
 

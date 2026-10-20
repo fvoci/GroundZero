@@ -93,13 +93,9 @@
     }
     try {
       const config = { view, filter: { ...filter }, sort };
-      const saved = await api.saveView(
-        item.id,
-        viewKey.for({ item: item.id, name, config }),
-        name,
-        config,
-      );
-      viewKey.done();
+      const requestId = viewKey.for({ item: item.id, name, config });
+      const saved = await api.saveView(item.id, requestId, name, config);
+      viewKey.done(requestId);
       await loadViews(item.id);
       selectedView = saved.id;
       status = m.tasks_view_saved({ name });

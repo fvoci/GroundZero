@@ -236,10 +236,13 @@ async function sendParts(
     const [from, to] = partRange(n, up.chunk_bytes, file.size);
     if ((await sha256Hex(file.slice(from, to))) === want) trusted.push(n);
   }
-  opts.onProgress?.({
-    sent: Math.min(file.size, trusted.length * up.chunk_bytes),
-    total: file.size,
-  });
+  // 진행률은 받은 바이트의 합이다(다시 보낸 조각의 끝 위치로 보면 앞 조각만 바뀐 이어 올리기가 끝나도 중간에 머문다).
+  const length = (n: number): number => {
+    const [from, to] = partRange(n, up.chunk_bytes, file.size);
+    return to - from;
+  };
+  let sent = trusted.reduce((sum, n) => sum + length(n), 0);
+  opts.onProgress?.({ sent, total: file.size });
   for (const n of missingParts(up.parts_total, trusted)) {
     opts.signal?.throwIfAborted();
     const [from, to] = partRange(n, up.chunk_bytes, file.size);
@@ -247,7 +250,8 @@ async function sendParts(
     const hash = await sha256Hex(piece);
     await withRetry(() => api.putUploadPart(up.id, n, piece, hash), opts.signal);
     recordPart(up, n, hash);
-    opts.onProgress?.({ sent: Math.min(file.size, to), total: file.size });
+    sent += to - from;
+    opts.onProgress?.({ sent: Math.min(file.size, sent), total: file.size });
   }
 }
 

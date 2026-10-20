@@ -21,9 +21,45 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 
 const CLIENT_ID: &str = "fvoci-web";
-const CLIENT_SECRET: &str = "fvoci-test-client-secret";
-const USER1: (&str, &str) = ("test-user", "fvoci-test-user-password");
-const USER2: (&str, &str) = ("test-user-2", "fvoci-test-user-2-password");
+const USER1: &str = "test-user";
+const USER2: &str = "test-user-2";
+
+/// 테스트 realm(`deploy/keycloak/realm-test.json`)의 값. 비밀번호·클라이언트 비밀은 deploy/ 밖에 두지 않는다.
+fn realm() -> Value {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../deploy/keycloak/realm-test.json"
+    );
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+fn client_secret() -> String {
+    let realm = realm();
+    let client = realm["clients"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["clientId"] == CLIENT_ID)
+        .unwrap();
+    client["secret"].as_str().unwrap().to_owned()
+}
+
+fn password(user: &str) -> String {
+    let realm = realm();
+    let account = realm["users"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| u["username"] == user)
+        .unwrap();
+    let credential = account["credentials"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["type"] == "password")
+        .unwrap();
+    credential["value"].as_str().unwrap().to_owned()
+}
 
 fn issuer() -> String {
     std::env::var("FVOCI_TEST_OIDC_ISSUER").unwrap() // set by `cargo xtask test --oidc`
@@ -35,13 +71,14 @@ async fn spawn_server(extra: &[(&str, &str)]) -> String {
     let addr: SocketAddr = listener.local_addr().unwrap();
     let base = format!("http://{addr}");
     let issuer = issuer();
+    let secret = client_secret();
     // 앞의 것이 이긴다: 테스트가 넘긴 값이 기본값보다 먼저.
     let mut overrides = extra.to_vec();
     overrides.extend_from_slice(&[
         ("FVOCI_PUBLIC_URL", base.as_str()),
         ("FVOCI_OIDC_ISSUER", issuer.as_str()),
         ("FVOCI_OIDC_CLIENT_ID", CLIENT_ID),
-        ("FVOCI_OIDC_CLIENT_SECRET", CLIENT_SECRET),
+        ("FVOCI_OIDC_CLIENT_SECRET", &secret),
     ]);
     let cfg = fvoci_server::config::Config::from_lookup(|k| {
         overrides
@@ -74,11 +111,8 @@ fn form_action(html: &str) -> Option<String> {
 }
 
 /// 로그인 시작 → Keycloak 폼 → 제출. 끝나면 `return_to`(여기서는 `/api/me`)의 응답을 돌려준다.
-async fn login(
-    client: &reqwest::Client,
-    base: &str,
-    (user, password): (&str, &str),
-) -> (u16, Value) {
+async fn login(client: &reqwest::Client, base: &str, user: &str) -> (u16, Value) {
+    let password = password(user);
     let page = client
         .get(format!("{base}/auth/login?return_to=/api/me"))
         .send()
@@ -90,7 +124,7 @@ async fn login(
         .post(action)
         .form(&[
             ("username", user),
-            ("password", password),
+            ("password", password.as_str()),
             ("credentialId", ""),
         ])
         .send()
@@ -252,6 +286,21 @@ async fn oidc_callback_rejects_forged_state() {
     assert_eq!(res.status().as_u16(), 400);
 }
 
+/// 테스트 Keycloak 부트스트랩 관리자 비밀번호(`deploy/compose.test.yaml`).
+fn keycloak_admin_password() -> String {
+    let compose = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../deploy/compose.test.yaml"
+    ))
+    .unwrap();
+    compose
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("KC_BOOTSTRAP_ADMIN_PASSWORD:"))
+        .unwrap()
+        .trim()
+        .to_owned()
+}
+
 /// Keycloak 관리 API 토큰(테스트 Keycloak의 부트스트랩 관리자, `deploy/compose.test.yaml`의 테스트 값).
 async fn keycloak_admin(base: &str) -> String {
     let res: Value = reqwest::Client::new()
@@ -262,7 +311,7 @@ async fn keycloak_admin(base: &str) -> String {
             ("grant_type", "password"),
             ("client_id", "admin-cli"),
             ("username", "admin"),
-            ("password", "fvoci-test-admin-password"),
+            ("password", keycloak_admin_password().as_str()),
         ])
         .send()
         .await

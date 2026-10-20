@@ -165,13 +165,9 @@
     event.preventDefault();
     try {
       const target = copyTarget === 'personal' ? null : copyTarget;
-      const copied = await api.copyDocument(
-        doc.id,
-        copyKey.for({ doc: doc.id, target, title: copyTitle }),
-        target,
-        copyTitle,
-      );
-      copyKey.done();
+      const requestId = copyKey.for({ doc: doc.id, target, title: copyTitle });
+      const copied = await api.copyDocument(doc.id, requestId, target, copyTitle);
+      copyKey.done(requestId);
       panel = undefined;
       router.navigate(pathFor(copied, memberOf));
     } catch (e: unknown) {
@@ -519,8 +515,8 @@
             type="single"
             value={copyTarget}
             onValueChange={(v: string) => {
+              // 대상만 바꾼 것으로는 키를 비우지 않는다(보낼 때 내용이 다르면 for가 새 id를 준다. 되돌린 뒤 다시 보내면 같은 id).
               copyTarget = v;
-              copyKey.done();
             }}
           >
             <Select.Trigger aria-labelledby="copy-target-label"
