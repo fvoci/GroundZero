@@ -97,8 +97,9 @@
     const view = editor.view;
     const onMove = (event: MouseEvent): void => {
       // 보이는 손잡이 줄 높이 안에서는 그 블록을 놓지 않는다. 짧은 블록(구분선)에서 손잡이로 가는 길은 블록
-      // 밖 여백을 지나므로, 다시 찾으면 다음 블록으로 바뀌어 손잡이가 달아난다(누를 때 고정하면 이미 늦다).
-      if (hoverFrom !== undefined && controls !== undefined) {
+      // 밖 여백을 지나므로, 다시 찾으면 다음 블록으로 바뀌어 손잡이가 달아난다(누를 때 고정하면 이미 늦다). 손잡이가
+      // 마우스가 아니라 선택 블록으로 떠 있을 때(편집기 밖에서 처음 들어올 때)도 같다.
+      if (controls !== undefined) {
         const band = controls.getBoundingClientRect();
         if (event.clientY >= band.top && event.clientY <= band.bottom) return;
       }
