@@ -254,11 +254,13 @@ pub struct AddChecklist {
     pub items: Vec<NewChecklistItem>,
 }
 
-/// 체크리스트 항목 고치기.
+/// 체크리스트 항목 고치기. 보낸 칸만 바꾼다(빠진 칸은 그대로). 둘 다 없으면 400.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateChecklistItem {
-    pub text: String,
-    pub checked: bool,
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub checked: Option<bool>,
 }
 
 /// 409 응답: 서버 최신본.
@@ -779,7 +781,8 @@ pub async fn add_checklist(
     Ok(Json(detail))
 }
 
-/// 체크리스트 항목 고치기(쓰기 권한). 버전 없이 바로 반영한다.
+/// 체크리스트 항목 고치기(쓰기 권한). 버전 없이 바로 반영하되 보낸 칸만 바꾼다: 문구만 고치면 그 사이 다른 사람이 바꾼
+/// 완료 상태를, 완료만 바꾸면 고친 문구를 되돌리지 않는다.
 #[utoipa::path(put, path = "/api/checklist-items/{item_id}",
     params(("item_id" = String, Path, format = Uuid)), request_body = UpdateChecklistItem,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
@@ -790,7 +793,14 @@ pub async fn update_checklist_item(
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateChecklistItem>,
 ) -> Result<StatusCode, AppError> {
-    let text = validate_title(&input.text, state.config.limits.max_title_chars, "text")?;
+    if input.text.is_none() && input.checked.is_none() {
+        return Err(AppError::BadRequest("text or checked is required".into()));
+    }
+    let text = input
+        .text
+        .as_deref()
+        .map(|t| validate_title(t, state.config.limits.max_title_chars, "text"))
+        .transpose()?;
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_update_checklist_item($1, $2, $3)")
         .bind(id)

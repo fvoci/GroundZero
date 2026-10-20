@@ -27,9 +27,13 @@
     scope?: { moduleId?: string | undefined; itemId?: string | undefined } | undefined;
     /** 다른 화면 안에 넣을 때(제목 단계를 낮춘다). */
     embedded?: boolean;
+    /** 같은 화면의 다른 곳(항목 일정 목록)에서 일정이 바뀔 때마다 늘어난다(다시 읽기). */
+    version?: number;
+    /** 달력에서 일정을 고치거나 지웠다(같은 화면의 일정 목록이 다시 읽게). */
+    onchanged?: () => void;
   }
 
-  const { workspace, scope, embedded = false }: Props = $props();
+  const { workspace, scope, embedded = false, version = 0, onchanged }: Props = $props();
 
   // 워크스페이스 달력의 거르기: 모듈 → 그 모듈의 항목.
   let modules = $state<Module[]>([]);
@@ -111,7 +115,7 @@
     to: range.to,
     ws: workspace.id,
     scope: effectiveScope,
-    key: reloadKey,
+    key: reloadKey + version,
   });
 
   $effect(() => {
@@ -308,6 +312,7 @@
   onchanged={() => {
     changed = true;
     reloadKey += 1;
+    onchanged?.();
   }}
   returnFocus={() =>
     returnTo === undefined

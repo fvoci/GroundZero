@@ -219,5 +219,19 @@
   "tasks_move_error_forbidden": "You don't have permission to change tasks in this item, so it wasn't moved.",
   "tasks_move_error_gone": "The task was deleted or you can no longer see it, so it wasn't moved.",
   "tasks_move_error_archived": "The item was archived or changed at the same time, so the task wasn't moved. Try again shortly.",
-  "tasks_move_error_other": "Couldn't move the task. It's back where it was."
+  "tasks_move_error_other": "Couldn't move the task. It's back where it was.",
+  "tasks_move_menu": "Move {title}",
+  "tasks_move_to_todo": "To do",
+  "tasks_move_to_in_progress": "In progress",
+  "tasks_move_to_done": "Done",
+  "tasks_moved_menu": "{title}: moved ({status}).",
+  "tasks_quick_add": "Add task",
+  "tasks_quick_add_label": "Add a task to {status}",
+  "tasks_parent": "Parent task",
+  "tasks_parent_top": "None (top-level task)",
+  "tasks_parent_choose": "Choose a parent task",
+  "tasks_parent_change": "Change",
+  "tasks_parent_changed": "Changed the parent task.",
+  "tasks_parent_failed": "Couldn't change the parent task.",
+  "tasks_parent_has_subtasks": "A task with subtasks can't go under another task."
 }

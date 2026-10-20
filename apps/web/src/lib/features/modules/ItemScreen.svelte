@@ -12,6 +12,7 @@
   import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
+  import { moveThenReload } from '$lib/features/documents/tree';
   import { forgetReferences } from '$lib/features/references/resolver';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
@@ -49,6 +50,9 @@
   let item = $state<ItemView | undefined>(undefined);
   let mod = $state<Module | undefined>(undefined);
   let docs = $state<SummaryView[]>([]);
+  // 항목 일정 목록에서 바꾸면 달력을, 달력에서 바꾸면 목록을 다시 읽게 하는 값.
+  let calendarVersion = $state(0);
+  let listVersion = $state(0);
   let error = $state<string | undefined>(undefined);
 
   let title = $state('');
@@ -93,7 +97,16 @@
     };
   });
 
-  const canEdit = $derived(item !== undefined && !item.archived && item.access !== 'read');
+  // 항목이나 그 모듈이 보관되면 읽기 전용이다(서버의 쓰기 검사와 같다). 항목의 archived는 항목 자신의 보관이므로,
+  // 모듈이 보관되면 하위 칸(정보·업무·일정)에는 읽기 접근으로 넘긴다(서버의 문서 접근도 보관되면 읽기로 낮춘다).
+  const moduleArchived = $derived(mod?.archived === true);
+  const readAccess: ItemView['access'] = 'read';
+  const shownItem = $derived(
+    item !== undefined && moduleArchived ? { ...item, access: readAccess } : item,
+  );
+  const canEdit = $derived(
+    item !== undefined && !item.archived && !moduleArchived && item.access !== 'read',
+  );
   const isOwner = $derived(item?.access === 'owner');
 
   async function save(event: SubmitEvent): Promise<void> {
@@ -199,6 +212,7 @@
   <p aria-live="polite">{m.modules_loading()}</p>
 {:else}
   {@const current = item}
+  {@const view = shownItem ?? current}
   <section class="flex flex-col gap-6" aria-labelledby="item-heading">
     <div class="flex flex-wrap items-baseline gap-2">
       <span class="font-mono text-sm text-muted-foreground">{current.reference}</span>
@@ -208,7 +222,9 @@
           ? m.modules_private()
           : m.modules_shared_workspace()}</Badge
       >
-      {#if current.archived}<Badge variant="secondary">{m.modules_archived_readonly()}</Badge>{/if}
+      {#if current.archived || moduleArchived}<Badge variant="secondary"
+          >{m.modules_archived_readonly()}</Badge
+        >{/if}
       {#if current.is_template}<Badge variant="secondary">{m.modules_template()}</Badge>{/if}
       <div class="ml-auto flex flex-wrap items-center gap-1">
         <MarkButtons kind="item" id={current.id} />
@@ -293,7 +309,7 @@
 
     {#if mod !== undefined}
       <ItemProfilePanel
-        item={current}
+        item={view}
         kind={mod.kind}
         onchanged={() => {
           api
@@ -330,32 +346,36 @@
 
     <section class="flex flex-col gap-3" aria-labelledby="item-docs-heading">
       <h2 id="item-docs-heading" class="text-lg font-semibold">{m.modules_documents()}</h2>
-      {#if docs.length === 0}
-        <p class="text-muted-foreground">{m.modules_documents_empty()}</p>
-      {:else}
-        <DocumentTree
-          {docs}
-          label={m.modules_documents_tree({ title: current.title })}
-          hrefFor={(id: string) => itemDocumentPath(workspace.id, current.id, id)}
-          navigate={(path: string) => {
-            router.navigate(path);
-          }}
-          canWrite={canEdit}
-          onmove={async (id: string, move: TreeMove) => {
-            await api.setParent(id, move.parentId, move.beforeId);
-            docs = await api.itemDocuments(current.id);
-          }}
-          oncreatechild={async (parentId: string) => {
-            const doc = await api.createItemDocument(
-              current.id,
-              newRequestId(),
-              m.modules_new_document_default(),
-              parentId,
-            );
-            router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
-          }}
-        />
-      {/if}
+      <DocumentTree
+        {docs}
+        label={m.modules_documents_tree({ title: current.title })}
+        empty={m.modules_documents_empty()}
+        hrefFor={(id: string) => itemDocumentPath(workspace.id, current.id, id)}
+        navigate={(path: string) => {
+          router.navigate(path);
+        }}
+        canWrite={canEdit}
+        onmove={(id: string, move: TreeMove) =>
+          // 실패해도(권한 철회·동시 변경) 최신 목록을 다시 읽는다.
+          moveThenReload(
+            () => api.setParent(id, move.parentId, move.beforeId),
+            async () => {
+              // 다시 읽는 사이 다른 항목으로 옮겼으면 이 항목의 목록을 그 화면에 넣지 않는다.
+              const requested = current.id;
+              const list = await api.itemDocuments(requested);
+              if (currentItemId === requested) docs = list;
+            },
+          )}
+        oncreatechild={async (parentId: string) => {
+          const doc = await api.createItemDocument(
+            current.id,
+            newRequestId(),
+            m.modules_new_document_default(),
+            parentId,
+          );
+          router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
+        }}
+      />
       {#if canEdit}
         <TemplatePicker
           workspaceId={workspace.id}
@@ -381,7 +401,7 @@
       {/if}
     </section>
     <TaskBoard
-      item={current}
+      item={view}
       {workspaces}
       openTaskId={taskId}
       onstale={() => {
@@ -394,8 +414,23 @@
           .catch(() => undefined);
       }}
     />
-    <ItemEvents item={current} />
-    <CalendarScreen {workspace} scope={{ itemId: current.id }} embedded />
+    <!-- 일정 목록과 달력은 같은 일정을 따로 읽는다. 한쪽에서 바꾸면 다른 쪽이 다시 읽게 알린다. -->
+    <ItemEvents
+      item={view}
+      version={listVersion}
+      onchanged={() => {
+        calendarVersion += 1;
+      }}
+    />
+    <CalendarScreen
+      {workspace}
+      scope={{ itemId: current.id }}
+      embedded
+      version={calendarVersion}
+      onchanged={() => {
+        listVersion += 1;
+      }}
+    />
     <Backlinks kind="item" id={current.id} {workspaces} />
   </section>
 {/if}

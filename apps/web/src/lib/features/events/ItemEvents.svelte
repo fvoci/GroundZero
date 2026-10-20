@@ -16,9 +16,13 @@
 
   interface Props {
     item: ItemView;
+    /** 같은 화면의 다른 곳(달력)에서 일정이 바뀔 때마다 늘어난다(다시 읽기). */
+    version?: number;
+    /** 여기서 일정을 만들거나 고치거나 지웠다(같은 화면의 달력이 다시 읽게). */
+    onchanged?: () => void;
   }
 
-  const { item }: Props = $props();
+  const { item, version = 0, onchanged }: Props = $props();
 
   let events = $state<EventView[]>([]);
   let error = $state<string | undefined>(undefined);
@@ -29,9 +33,15 @@
   const zone = localTimeZone();
   const canWrite = $derived(item.access !== 'read' && !item.archived);
 
+  // 읽기가 겹치면(달력 변경·여기서의 저장) 마지막으로 보낸 읽기의 결과만 남긴다(늦게 온 옛 결과가 새 목록을 덮지 않게).
+  let readSeq = 0;
+
   async function reload(itemId: string = item.id): Promise<void> {
+    const mine = ++readSeq;
     try {
-      events = await api.itemEvents(itemId);
+      const next = await api.itemEvents(itemId);
+      if (mine !== readSeq) return;
+      events = next;
       error = undefined;
       // 지운 일정의 단추처럼 초점이 있던 요소가 사라졌으면 이 영역 제목으로 돌린다.
       await tick();
@@ -39,11 +49,13 @@
         document.getElementById('events-heading')?.focus();
       changed = false;
     } catch (e: unknown) {
+      if (mine !== readSeq) return;
       error = errorText(e, m.events_list_load_failed());
     }
   }
 
   $effect(() => {
+    if (version < 0) return;
     void reload(item.id);
   });
 
@@ -52,6 +64,7 @@
     await api.createEvent(item.id, requestId, input);
     createKey.done(requestId);
     adding = false;
+    onchanged?.();
     await reload();
   }
 
@@ -120,6 +133,7 @@
       : document.querySelector<HTMLElement>(`[data-event-id="${CSS.escape(returnTo)}"]`)}
   onchanged={() => {
     changed = true;
+    onchanged?.();
     void reload();
   }}
 />

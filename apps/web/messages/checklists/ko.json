@@ -26,5 +26,10 @@
       }
     }
   ],
-  "checklists_expand_hint": "펼치기를 누르면 항목을 미리 봅니다."
+  "checklists_expand_hint": "펼치기를 누르면 항목을 미리 봅니다.",
+  "checklists_edit": "고치기",
+  "checklists_edit_aria": "{text} 고치기",
+  "checklists_edit_label": "{text}의 새 문구",
+  "checklists_save": "저장",
+  "checklists_cancel": "취소"
 }

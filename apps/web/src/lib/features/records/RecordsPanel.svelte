@@ -33,6 +33,8 @@
   let courses = $state<{ id: string; name: string }[]>([]);
   let selected = $state<string | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
+  /** 기록 종류·기록 목록을 읽지 못했다(저장 오류와 따로). 처음부터 못 읽으면 종류가 없어도 이 안내는 보인다. */
+  let loadError = $state<string | undefined>(undefined);
   let status = $state('');
   let creating = $state(false);
   let editingId = $state<string | undefined>(undefined);
@@ -88,6 +90,7 @@
           courseList = lists.flat().map((i) => ({ id: i.id, name: i.title }));
         }
         if (cancelled) return;
+        loadError = undefined;
         defs = mine;
         records = list;
         people = members.members.map((x) => ({ id: x.user_id, name: x.display_name }));
@@ -96,7 +99,7 @@
           selected = mine[0]?.kind;
       })
       .catch((e: unknown) => {
-        if (!cancelled) error = errorText(e, m.records_load_failed());
+        if (!cancelled) loadError = errorText(e, m.records_load_failed());
       });
     return () => {
       cancelled = true;
@@ -167,7 +170,8 @@
   };
 </script>
 
-{#if defs.length > 0}
+<!-- 종류를 처음부터 못 읽었으면(종류가 없는 정상 빈 상태와 달리) 제목과 함께 실패를 알리고 다시 읽을 수 있게 한다. -->
+{#if defs.length > 0 || loadError !== undefined}
   <section class="flex flex-col gap-3" aria-labelledby="records-heading">
     <h2 id="records-heading" class="text-lg font-semibold">{m.records_heading()}</h2>
     <div class="flex flex-wrap gap-1" role="group" aria-label={m.records_kinds()}>
@@ -184,6 +188,18 @@
         >
       {/each}
     </div>
+    {#if loadError !== undefined}
+      <div class="flex flex-wrap items-center gap-2">
+        <p role="alert" class="text-sm text-destructive">{loadError}</p>
+        <Button
+          size="sm"
+          variant="outline"
+          onclick={() => {
+            reloadKey += 1;
+          }}>{m.common_retry()}</Button
+        >
+      </div>
+    {/if}
     {#if error !== undefined}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
     <p aria-live="polite" class="text-sm">{status}</p>
     {#if current !== undefined}

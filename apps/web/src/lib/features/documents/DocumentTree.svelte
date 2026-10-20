@@ -6,12 +6,13 @@
   import { SvelteSet } from 'svelte/reactivity';
 
   import type { SummaryView } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
 
   import type { TreeAction, TreeMove } from './tree';
-  import { planMove, visibleRows } from './tree';
+  import { planMove, TreeMoveError, visibleRows } from './tree';
 
   interface Props {
     docs: SummaryView[];
@@ -19,11 +20,15 @@
     hrefFor: (id: string) => string;
     navigate: (path: string) => void;
     canWrite: boolean;
+    /** 문서가 없을 때 보이는 글. 트리가 비어도 이 구성요소가 남아 옮기기 실패 알림을 지킨다. */
+    empty: string;
+    /** 옮긴 뒤 목록을 다시 읽는다. 실패하면 `moveThenReload`처럼 `TreeMoveError`로 어느 쪽이 실패했는지 알린다. */
     onmove: (id: string, move: TreeMove) => Promise<void>;
     oncreatechild: (parentId: string) => Promise<void>;
   }
 
-  const { docs, label, hrefFor, navigate, canWrite, onmove, oncreatechild }: Props = $props();
+  const { docs, label, hrefFor, navigate, canWrite, empty, onmove, oncreatechild }: Props =
+    $props();
 
   // 접은 항목. 기본은 모두 펼침.
   const collapsed = new SvelteSet<string>();
@@ -31,6 +36,7 @@
   let root: HTMLUListElement | undefined = $state();
   let busy = $state(false);
   let status = $state('');
+  let failure = $state<string | undefined>(undefined);
 
   const rows = $derived(visibleRows(docs, collapsed));
   const current = $derived(rows.find((r) => r.doc.id === focusId) ?? rows[0]);
@@ -61,15 +67,32 @@
     }
   }
 
+  function moveFailureText(e: unknown): string {
+    if (!(e instanceof TreeMoveError)) return errorText(e, m.documents_tree_move_failed_plain());
+    const action = e.moved
+      ? m.documents_tree_moved_reload_failed()
+      : e.reloaded
+        ? m.documents_tree_move_failed()
+        : m.documents_tree_move_failed_reload_failed();
+    // 5xx는 서버 문구만 돌려주므로(errorText) 무엇이 실패했는지 앞에 붙인다.
+    const text = errorText(e.reason, action);
+    return text.startsWith(action) ? text : `${action} ${text}`;
+  }
+
   async function act(id: string, action: TreeAction): Promise<void> {
     const move = planMove(docs, id, action);
     if (move === undefined || busy) return;
     busy = true;
     try {
       if (action === 'indent' && move.parentId !== null) toggle(move.parentId, true);
+      failure = undefined;
       await onmove(id, move);
       status = actionLabel(action);
       await focusRow(id);
+    } catch (e: unknown) {
+      // 트리는 서버가 받은 뒤에만 바뀌므로 그대로다. 부르는 쪽이 최신 목록을 다시 읽는다(권한 철회·동시 변경). 알림은
+      // 실제로 일어난 일에 맞춘다: 옮기기 실패와 다시 읽기 실패를 섞지 않는다.
+      failure = moveFailureText(e);
     } finally {
       busy = false;
     }
@@ -80,7 +103,10 @@
     busy = true;
     try {
       toggle(id, true);
+      failure = undefined;
       await oncreatechild(id);
+    } catch (e: unknown) {
+      failure = errorText(e, m.documents_tree_create_failed());
     } finally {
       busy = false;
     }
@@ -259,5 +285,11 @@
       {m.documents_tree_keyboard_hint()}
     </p>
   {/if}
-  <p class="sr-only" aria-live="polite">{status}</p>
+{:else}
+  <p class="text-muted-foreground">{empty}</p>
 {/if}
+<!-- 옮기기 실패 뒤 다시 읽은 목록이 비어도 알림은 남는다(트리와 함께 사라지지 않게). -->
+{#if failure !== undefined}
+  <p role="alert" class="text-sm text-destructive">{failure}</p>
+{/if}
+<p class="sr-only" aria-live="polite">{status}</p>

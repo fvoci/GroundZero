@@ -303,5 +303,11 @@
   "documents_save_blocked_links": "저장하지 않았습니다: 허용되지 않는 링크 {count}개가 있습니다(예: {example}). https·http·mailto 주소나 문서 안 경로로 바꾼 뒤 다시 저장하세요. 고친 내용은 이 브라우저에 초안으로 남아 있습니다.",
   "documents_markdown_blocked_images": "원문의 이미지 {count}개는 바깥 주소라 저장할 수 없습니다(예: {example}). 첨부 주소(/api/files/…)로 바꾸거나 [글](주소) 링크로 쓰세요.",
   "documents_markdown_blocked_links": "원문의 링크 {count}개는 허용되지 않는 주소라 저장할 수 없습니다(예: {example}). https·http·mailto 주소나 문서 안 경로를 쓰세요.",
-  "documents_notice_dismiss": "알림 닫기"
+  "documents_notice_dismiss": "알림 닫기",
+  "documents_tree_move_failed": "문서를 옮기지 못했습니다. 최신 목록을 다시 불러왔습니다.",
+  "documents_tree_move_failed_plain": "문서를 옮기지 못했습니다.",
+  "documents_tree_move_failed_reload_failed": "문서를 옮기지 못했고 최신 목록도 불러오지 못했습니다. 새로고침해 주세요.",
+  "documents_tree_moved_reload_failed": "문서를 옮겼지만 목록을 다시 불러오지 못했습니다. 새로고침해 주세요.",
+  "documents_tree_create_failed": "하위 문서를 만들지 못했습니다.",
+  "documents_outline": "목차"
 }

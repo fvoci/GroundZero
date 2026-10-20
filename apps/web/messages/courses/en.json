@@ -115,5 +115,13 @@
   "courses_participants": "Learning together",
   "courses_participants_hint": "Only the numbers of done, in-progress and overdue episodes are shared. Personal notes and time records are not shown.",
   "courses_participant": "{name}: done {done} / {total} · watching {inProgress}",
-  "courses_participant_overdue": "overdue {count}"
+  "courses_participant_overdue": "overdue {count}",
+  "courses_edit_episode_aria": "Edit details of episode {number}",
+  "courses_episode_form": "Episode {number} details",
+  "courses_episode_saved": "Updated episode {number}.",
+  "courses_episode_changed": "Someone else changed this episode first. The list shows what is saved now. Save again to replace it with your input.",
+  "courses_episode_invalid": "Check the number (a whole number from 1), the title and the length (minutes or min:sec).",
+  "courses_number": "Number",
+  "courses_episode_url": "Episode link",
+  "courses_materials": "Materials"
 }

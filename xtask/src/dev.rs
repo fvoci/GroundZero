@@ -2,7 +2,8 @@
 //!
 //! - `--oidc`: 개발용 Keycloak을 함께 띄우고 서버에 `FVOCI_OIDC_*`를 넣는다. 테스트 realm의 가짜 사용자로 바로
 //!   로그인할 수 있다: `test-user`는 초기 관리자(D-51)로 '개발' 워크스페이스의 소유자, `test-user-2`는 그 워크스페이스의
-//!   작성자. 둘이 함께 쓰는 실시간 공동 편집 문서도 한 번만 만든다(`deploy/postgres/dev-seed.sql`).
+//!   작성자. 둘이 함께 쓰는 실시간 공동 편집 문서도 한 번만 만든다(`deploy/postgres/dev-seed.sql`). 이어서 둘이
+//!   함께 쓰는 별도 합성 워크스페이스에 다섯 모듈의 예제를 한 번만 만든다(`deploy/postgres/dev-module-seed.sql`).
 //! - `--no-web`: 웹 개발 서버를 띄우지 않는다(API만). 기본은 `pnpm --filter @fvoci/web dev`를 함께 띄운다.
 //! - 공개 URL 기본값은 Vite 원점 `http://127.0.0.1:5173`이며 `FVOCI_PUBLIC_URL`로 바꾼다. 쿠키·리다이렉트가 이
 //!   원점에 맞춰진다.
@@ -134,8 +135,16 @@ fn check_realm_users(root: &Path, compose: &Compose, sh: &Shell) -> Result<()> {
 
 /// 개발 전용 사용자·공동 작업 공간·공동 편집 문서를 한 번만 만든다(이미 있으면 아무것도 바꾸지 않음).
 fn seed(root: &Path, compose: &Compose, sh: &Shell, issuer: &str) -> Result<()> {
-    let sql = std::fs::read_to_string(root.join("deploy/postgres/dev-seed.sql"))
-        .context("read deploy/postgres/dev-seed.sql")?;
+    println!("==> dev seed (shared workspace and document, once)");
+    seed_file(root, compose, sh, issuer, "dev-seed.sql")?;
+    // 모듈 예제는 자기 표시(dev_module_seed_v1)로 따로 한 번만 만든다. 이미 dev_seed가 있는 개발 DB에도 더해진다.
+    println!("==> dev module examples (separate synthetic workspace, once)");
+    seed_file(root, compose, sh, issuer, "dev-module-seed.sql")
+}
+
+fn seed_file(root: &Path, compose: &Compose, sh: &Shell, issuer: &str, name: &str) -> Result<()> {
+    let path = root.join("deploy/postgres").join(name);
+    let sql = std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let command: Vec<String> = [
         "psql",
         "--quiet",
@@ -154,7 +163,6 @@ fn seed(root: &Path, compose: &Compose, sh: &Shell, issuer: &str) -> Result<()> 
     .iter()
     .map(|s| (*s).to_owned())
     .collect();
-    println!("==> dev seed (shared workspace and document, once)");
     compose.exec(sh, "postgres", &command, &sql)
 }
 

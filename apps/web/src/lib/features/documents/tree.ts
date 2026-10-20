@@ -91,3 +91,41 @@ export function planMove(
     }
   }
 }
+
+/** 옮기기 또는 그 뒤의 목록 다시 읽기가 실패했다. `moved`: 서버가 옮기기를 받았는지, `reloaded`: 목록을 다시 읽었는지. */
+export class TreeMoveError extends Error {
+  constructor(
+    readonly reason: unknown,
+    readonly moved: boolean,
+    readonly reloaded: boolean,
+  ) {
+    super('document tree move');
+  }
+}
+
+/**
+ * 옮기기를 보낸 뒤 결과와 상관없이 목록을 다시 읽는다(권한 철회·동시 변경 뒤 최신 목록). 둘 중 하나라도 실패하면
+ * 어느 쪽이 실패했는지 담아 던진다: 다시 읽기의 실패가 옮기기의 실패를 가리거나, 옮기기가 됐는데 실패처럼 보이지 않게.
+ */
+export async function moveThenReload(
+  move: () => Promise<unknown>,
+  reload: () => Promise<void>,
+): Promise<void> {
+  let failure: unknown;
+  let moved = true;
+  try {
+    await move();
+  } catch (e: unknown) {
+    moved = false;
+    failure = e;
+  }
+  let reloaded = true;
+  try {
+    await reload();
+  } catch (e: unknown) {
+    reloaded = false;
+    if (moved) failure = e;
+  }
+  if (moved && reloaded) return;
+  throw new TreeMoveError(failure, moved, reloaded);
+}

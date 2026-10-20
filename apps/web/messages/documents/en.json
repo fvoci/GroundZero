@@ -324,5 +324,11 @@
   "documents_save_blocked_links": "Not saved: the document has {count} link(s) with a disallowed address (e.g. {example}). Use https, http, mailto or an in-app path, then save again. Your changes are kept as a draft in this browser.",
   "documents_markdown_blocked_images": "{count} image(s) in the source use outside addresses and cannot be saved (e.g. {example}). Use an attachment address (/api/files/…) or write a link [text](address).",
   "documents_markdown_blocked_links": "{count} link(s) in the source use a disallowed address and cannot be saved (e.g. {example}). Use https, http, mailto or an in-app path.",
-  "documents_notice_dismiss": "Dismiss notice"
+  "documents_notice_dismiss": "Dismiss notice",
+  "documents_tree_move_failed": "Couldn't move the document. The latest list was reloaded.",
+  "documents_tree_move_failed_plain": "Couldn't move the document.",
+  "documents_tree_move_failed_reload_failed": "Couldn't move the document, and the latest list couldn't be loaded either. Reload the page.",
+  "documents_tree_moved_reload_failed": "The document was moved, but the list couldn't be reloaded. Reload the page.",
+  "documents_tree_create_failed": "Couldn't create the subdocument.",
+  "documents_outline": "Contents"
 }

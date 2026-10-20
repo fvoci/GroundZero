@@ -6,6 +6,7 @@
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import TemplatePicker from '$lib/features/documents/TemplatePicker.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
+  import { moveThenReload } from '$lib/features/documents/tree';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { router, standalonePath } from '$lib/router.svelte';
@@ -35,21 +36,24 @@
     <p role="alert" class="text-destructive">{error}</p>
   {:else if notes === undefined}
     <p aria-live="polite">{m.notes_loading()}</p>
-  {:else if notes.length === 0}
-    <p class="text-muted-foreground">{m.notes_empty()}</p>
   {:else}
     <DocumentTree
       docs={notes}
       label={m.notes_heading()}
+      empty={m.notes_empty()}
       hrefFor={(id: string) => standalonePath(id)}
       navigate={(path: string) => {
         router.navigate(path);
       }}
       canWrite={true}
-      onmove={async (id: string, move: TreeMove) => {
-        await api.setParent(id, move.parentId, move.beforeId);
-        notes = await api.myNotes();
-      }}
+      onmove={(id: string, move: TreeMove) =>
+        // 실패해도(권한 철회·동시 변경) 최신 목록을 다시 읽는다.
+        moveThenReload(
+          () => api.setParent(id, move.parentId, move.beforeId),
+          async () => {
+            notes = await api.myNotes();
+          },
+        )}
       oncreatechild={async (parentId: string) => {
         const note = await api.createNote(newRequestId(), m.notes_new_note_title(), parentId);
         router.navigate(standalonePath(note.id));

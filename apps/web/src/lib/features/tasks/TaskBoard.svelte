@@ -2,6 +2,7 @@
   // 항목의 업무 (D-31): 칸반·목록·간트·달력, 검색·필터·정렬과 저장한 보기, 업무 만들기, 상세 대화상자.
   // 칸반 카드는 버튼과 키보드(Alt+화살표)로 열·순서를 옮긴다. 상세는 주소(/t/{업무})로도 열린다.
   import type { Workspace } from '@fvoci/api-client';
+  import { untrack } from 'svelte';
 
   import type { ItemView, SavedViewView, TaskStatus, TaskView } from '$lib/api/client';
   import { api, ApiError, TASK_STATUSES } from '$lib/api/client';
@@ -13,6 +14,7 @@
   import TaskCsvImport from './TaskCsvImport.svelte';
   import { itemPath, itemTaskPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
+  import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Dialog from '$lib/ui/dialog';
 
   import type { BoardAction, BoardMove, CardBox, DropSlot } from './board';
@@ -31,6 +33,7 @@
     assigneesOf,
     EMPTY_FILTER,
     isFiltered,
+    isRecord,
     readConfig,
     sortTasks,
     VIEWS,
@@ -66,6 +69,47 @@
   let viewName = $state('');
   // 같은 이름·설정의 재시도는 같은 요청 id, 고치면 새 id.
   const viewKey = new RetryKey();
+  // 보기·필터·정렬은 이 탭에서 항목마다 기억한다. 다른 화면에 갔다 돌아와도 그대로다(이 브라우저 탭에만 남는 개인
+  // 편의라 저장한 보기와 다르다). 저장소를 쓸 수 없으면 기억하지 않는다.
+  const contextKey = (itemId: string): string => `fvoci:board:${itemId}`;
+  function restoreContext(itemId: string): void {
+    let raw: unknown = null;
+    try {
+      raw = JSON.parse(window.sessionStorage.getItem(contextKey(itemId)) ?? 'null');
+    } catch {
+      // 저장소를 쓸 수 없거나 값이 깨졌으면 기본값으로.
+    }
+    if (!isRecord(raw)) {
+      // 기억한 것이 없는 항목은 기본값으로 연다(앞 항목의 보기·필터가 남아 이 항목 이름으로 저장되지 않게).
+      view = 'board';
+      filter = { ...EMPTY_FILTER };
+      sort = 'position';
+      return;
+    }
+    const config = readConfig(raw);
+    view = config.view;
+    filter = config.filter;
+    sort = config.sort;
+  }
+  let contextFor = untrack(() => item.id);
+  restoreContext(contextFor);
+  $effect(() => {
+    const id = item.id;
+    const snapshot = JSON.stringify({ view, filter, sort });
+    if (contextFor !== id) {
+      // 다른 항목으로 바뀌었다: 그 항목의 맥락을 불러온다(지금 것을 그 항목 이름으로 남기지 않는다).
+      contextFor = id;
+      untrack(() => {
+        restoreContext(id);
+      });
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(contextKey(id), snapshot);
+    } catch {
+      // 저장소를 쓸 수 없으면 기억하지 않는다.
+    }
+  });
   const shown = $derived(sortTasks(applyFilter(tasks, filter, me.userId), sort));
   const people = $derived(assigneesOf(tasks));
   const ordered = $derived(sort === 'position');
@@ -179,18 +223,29 @@
   const titleOf = (id: string | null): string =>
     id === null ? '' : (tasks.find((t) => t.id === id)?.title ?? '');
 
+  // 이 보드가 기록을 쌓아 연 대화상자인지. 그렇다면 닫을 때 그 기록으로 돌아가, 뒤로 가기가 방금 닫은 카드를 다시
+  // 열지 않고 보드를 떠나게 한다. 주소로 바로 들어온 업무는 항목 주소로 옮긴다.
+  let openedHere = false;
+
   function open(id: string): void {
     router.navigate(itemTaskPath(item.workspace_id, item.id, id));
+    openedHere = true;
   }
 
   // 주소로 연 대화상자는 여는 단추를 모르므로, 닫으면 마지막으로 연 업무의 카드로 초점을 돌린다.
   let returnTo: string | undefined;
   $effect(() => {
     if (openTaskId !== undefined) returnTo = openTaskId;
+    else openedHere = false;
   });
 
   function close(): void {
-    router.navigate(itemPath(item.workspace_id, item.id));
+    if (openedHere) {
+      // 저장하지 않은 편집 확인에서 머물기로 하면 돌아가지 않았으므로 다음 닫기도 뒤로 간다.
+      openedHere = !router.back();
+    } else {
+      router.navigate(itemPath(item.workspace_id, item.id));
+    }
   }
 
   /** 옮긴 뒤 화면 낭독기에 알리는 글. */
@@ -212,10 +267,29 @@
    * 옮기기 한 번(단추·키보드·끌어서 놓기 공통). 화면에 먼저 반영하고 기존 이동 API로 저장한 뒤 서버 목록을 다시
    * 읽는다. 실패하면 이전 화면으로 되돌리고 이유를 알린 뒤 최신 상태(동시 변경·권한 철회·보관)를 다시 읽는다.
    */
+  /** 메뉴로 옮길 수 있는 열의 이름(조사가 열마다 다르다). */
+  const MOVE_TO: Record<TaskStatus, () => string> = {
+    todo: () => m.tasks_move_to_todo(),
+    in_progress: () => m.tasks_move_to_in_progress(),
+    done: () => m.tasks_move_to_done(),
+  };
+
+  // 열마다 빠르게 더하기(Kaneo처럼 열 아래). 만들기는 "할 일"로 만들어지므로, 다른 열이면 같은 이동 저장 경로로 그
+  // 열 끝에 옮긴다. 옮기기가 실패하면 업무는 "할 일"에 남고 실패를 알린다(만든 것은 사라지지 않는다).
+  let adding = $state<TaskStatus | undefined>(undefined);
+  async function quickAdd(lane: TaskStatus, requestId: string, title: string): Promise<void> {
+    const created = await api.createTask(item.id, requestId, title);
+    if (created.status === lane) {
+      await reload();
+      return;
+    }
+    await commitMove(created.id, { status: lane, beforeId: null }, 'menu');
+  }
+
   async function commitMove(
     id: string,
     plan: BoardMove,
-    how: BoardAction | 'drag',
+    how: BoardAction | 'drag' | 'menu',
   ): Promise<boolean> {
     const before = tasks;
     const title = titleOf(id);
@@ -227,7 +301,9 @@
       status =
         how === 'drag'
           ? m.tasks_moved_drag({ title, status: STATUS_LABEL[plan.status] })
-          : movedText(how, title, plan.status);
+          : how === 'menu'
+            ? m.tasks_moved_menu({ title, status: STATUS_LABEL[plan.status] })
+            : movedText(how, title, plan.status);
       return true;
     } catch (e: unknown) {
       tasks = before;
@@ -630,6 +706,28 @@
                       >
                     {/each}
                   </div>
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                      {#snippet child({ props })}
+                        <Button
+                          {...props}
+                          size="sm"
+                          variant="ghost"
+                          class="h-6 self-start px-1.5 text-xs"
+                          aria-label={m.tasks_move_menu({ title: t.title })}>⋯</Button
+                        >
+                      {/snippet}
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content align="start">
+                      {#each TASK_STATUSES.filter((s) => s !== t.status) as target (target)}
+                        <DropdownMenu.Item
+                          onSelect={() =>
+                            void commitMove(t.id, { status: target, beforeId: null }, 'menu')}
+                          >{MOVE_TO[target]()}</DropdownMenu.Item
+                        >
+                      {/each}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
                 {/if}
               </li>
             {/each}
@@ -637,6 +735,21 @@
               <li aria-hidden="true" class="h-1 rounded bg-primary"></li>
             {/if}
           </ul>
+          {#if canWrite}
+            {#if adding === lane}
+              <CreateForm
+                id={`new-task-${lane}`}
+                label={m.tasks_quick_add_label({ status: STATUS_LABEL[lane] })}
+                placeholder={m.tasks_new_placeholder()}
+                submitLabel={m.tasks_create()}
+                create={(requestId: string, title: string) => quickAdd(lane, requestId, title)}
+              />
+            {:else}
+              <Button size="sm" variant="ghost" class="self-start" onclick={() => (adding = lane)}
+                >{m.tasks_quick_add()}</Button
+              >
+            {/if}
+          {/if}
         </section>
       {/each}
     </div>

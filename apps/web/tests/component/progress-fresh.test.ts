@@ -28,6 +28,7 @@ function course(note: string, position: number | null): CourseView {
       last_position_seconds: position,
       note,
     },
+    version: 1,
   };
   return {
     details: {
