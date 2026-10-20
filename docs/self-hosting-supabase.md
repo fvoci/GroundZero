@@ -27,7 +27,8 @@ GroundZero는 Supabase를 **PostgreSQL로만** 쓴다. 로그인은 그대로 OI
   - `fvoci_migrator`: 스키마 `fvoci`의 소유자, 마이그레이션·백업용
   - `fvoci_app`: 서버 런타임, `NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS`
 - 다시 실행해도 같다. 이미 있는 역할은 비밀번호만 맞추고 속성은 확인만 한다. 권한 속성이 붙어 있으면 멈춘다. 스키마 소유자를 정하는
-  동안만 `postgres`가 `fvoci_migrator`의 상속 없는 SET 멤버십을 받고, 끝나면 거둔다.
+  동안만 `postgres`가 `fvoci_migrator`의 상속 없는 SET 멤버십을 받고, 끝나면 원래대로 돌린다(`postgres`에게 이미 있던 멤버십
+  레코드는 옵션만 되돌리고 지우지 않는다).
 - 런타임은 `fvoci_app`만 쓴다. 스키마 소유자·superuser·`BYPASSRLS` 역할로 서버를 돌리지 않는다. Supabase의 `postgres`도
   `BYPASSRLS`이므로 서버 연결에 쓰지 않는다.
 - RLS는 GroundZero의 트랜잭션 설정 `app.user_id`를 본다. Supabase `auth.uid()` 정책을 쓰지 않는다.
