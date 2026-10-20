@@ -74,13 +74,15 @@
   const sidebar = useSidebar();
   const route = $derived(router.route);
 
-  // 계정 메뉴를 처음 열 때 실행 중인 빌드를 서버에 묻는다(화면은 버전 문자열을 따로 들지 않는다, D-87).
+  // 계정 메뉴를 열 때 실행 중인 빌드를 서버에 묻는다(화면은 버전 문자열을 따로 들지 않는다, D-87). 받으면 다시 묻지
+  // 않고, 서버에 닿지 못했으면 다음에 메뉴를 열 때 다시 묻는다.
   let build = $state<Health['build'] | undefined>(undefined);
-  let buildAsked = false;
+  let buildAsking = false;
   function askBuild(open: boolean): void {
-    if (!open || buildAsked) return;
-    buildAsked = true;
+    if (!open || build !== undefined || buildAsking) return;
+    buildAsking = true;
     void fetchHealth().then((r) => {
+      buildAsking = false;
       if (r.kind !== 'unreachable') build = r.health.build;
     });
   }
