@@ -171,11 +171,14 @@ fvoci는 자체 비밀번호 로그인이 없다. 사람은 Keycloak(같이 띄�
 
 | 증상                          | 확인                                                                                                                                                                                                                                 |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 접속이 안 됨                  | `~/fvoci-try/fv ps`(app·postgres·meilisearch는 healthy, bootstrap·migrate는 `Exited (0)`), `curl -s http://127.0.0.1:18080/healthz`, `~/fvoci-try/fv logs --since 10m app migrate`                                                   |
+| 접속이 안 됨                  | `~/fvoci-try/fv ps --all`(app·postgres·meilisearch는 healthy, bootstrap·migrate는 `Exited (0)`), `curl -s http://127.0.0.1:18080/healthz`, `~/fvoci-try/fv logs --since 10m bootstrap migrate app`                                   |
 | 로그인 화면이 반복되거나 오류 | 주소를 `http://localhost:18080`으로 열었는지(127.0.0.1이 아니라), `.env`의 `FVOCI_PUBLIC_URL`·`KEYCLOAK_URL`·`FVOCI_OIDC_ISSUER`, `~/fvoci-try/fv logs --since 10m app keycloak`, 덮어쓰기 파일(`local.override.yaml`)을 함께 썼는지 |
 | 저장 실패                     | 화면의 상태 문구(저장 실패·재시도 대기·충돌)와 요청 ID, `~/fvoci-try/fv logs --no-log-prefix app \| jq -c 'select(.level == "ERROR" or .level == "WARN")'`                                                                           |
 
 로그는 컨테이너 표준 출력에만 있고 Docker가 서비스마다 10 MB × 5개까지 돌린다([셀프호스트 8절](self-hosting.md)). 요청 ID로 찾기: `~/fvoci-try/fv logs --no-log-prefix app | jq -c 'select(.request_id == "<화면의 요청 ID>")'`.
+
+`bootstrap`·`migrate`에서 멈추면 [공통 DB 준비·마이그레이션 안내](self-hosting.md#db-setup)를 따른다.
+이 안내의 Compose 명령은 같은 설정을 쓰는 `~/fvoci-try/fv`로 실행한다. 기존 DB의 checksum 불일치를 볼륨 삭제로 해결하지 않는다.
 
 문제를 알릴 때는 다음만 전달한다: 쓰는 커밋(`git -C ~/fvoci-try/app log --oneline -1`), 화면 캡처, 일어난 시각, 화면에 나온 요청 ID. `.env`, 비밀번호, 쿠키, 백업 파일은 보내지 않는다.
 

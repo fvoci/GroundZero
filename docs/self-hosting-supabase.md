@@ -55,21 +55,23 @@ GroundZero는 Supabase를 **PostgreSQL로만** 쓴다. 로그인은 그대로 OI
 
 ## 4. 설치·올리기
 
-1. Supabase가 돌고 있는 상태에서 GroundZero 이미지(또는 바이너리)로 차례로 실행한다.
-
-   ```bash
-   fvoci-server db bootstrap
-   ```
-
-   ```bash
-   fvoci-server db migrate
-   ```
-
-2. 서버를 `DATABASE_URL`(앱 역할)로 띄운다. 나머지 설정은 [셀프호스트 문서](self-hosting.md)와 같다.
-3. 올릴 때는 백업(5절)을 만든 뒤 새 릴리스로 `db migrate`를 실행하고 서버를 바꾼다. 마이그레이션은 되돌리지 않는다.
-
-이 문서의 Compose 예시(`deploy/compose.selfhost.yaml`)는 자체 PostgreSQL용이다. Supabase와 함께 쓰는 Compose 구성은 아직
+기본 Compose(`deploy/compose.selfhost.yaml`)는 자체 PostgreSQL용이다. Supabase와 함께 쓰는 Compose 구성은 아직
 제공하지 않는다(앱 컨테이너를 Supabase 네트워크에 붙이는 방법은 운영 환경마다 다르다).
+
+1. Supabase가 돌고 있는 상태에서 3절의 연결 값을 GroundZero 이미지(또는 바이너리)의 **프로세스 환경 변수**로 전달한다.
+   배포 도구의 환경 변수·환경 파일 설정을 사용한다. 바이너리는 저장한 `.env`를 자동으로 읽지 않는다.
+   `bootstrap`에는 `DATABASE_ADMIN_URL`·`FVOCI_DB_MIGRATOR_PASSWORD`·`FVOCI_DB_APP_PASSWORD`,
+   `migrate`에는 `DATABASE_MIGRATION_URL`이 필요하다. 준비가 성공했을 때만 마이그레이션으로 진행한다.
+
+   ```bash
+   fvoci-server db bootstrap && fvoci-server db migrate
+   ```
+
+2. 두 명령이 성공하면 서버를 `DATABASE_URL`(앱 역할)로 띄운다. DB 준비는 위 명령들이 처리하므로 별도 SQL이나 RLS 설정을
+   실행할 필요가 없다. 나머지 설정은 [셀프호스트 문서](self-hosting.md)와 같다.
+3. 올릴 때는 백업(5절)을 만든 뒤 새 릴리스로 `db migrate`를 실행하고, 성공하면 서버를 바꾼다. 마이그레이션은 되돌리지 않는다.
+
+실패하면 [공통 DB 준비·마이그레이션 안내](self-hosting.md#db-setup)에서 멈춘 단계와 설정 이름을 확인한다.
 
 ## 5. 백업과 복구
 
@@ -114,6 +116,5 @@ Cloud는 이번에 시험하지 않았다. 옮기기 전에 따로 확인해야 
 
 ## 8. 이전 설치에서 올릴 때
 
-D-88에서 id 생성을 DB에서 앱으로 옮기며 이미 적용된 마이그레이션 일부를 고쳤다. 실제 배포 전 결정이다. 그 전에 만든 DB에서는
-`db migrate`가 checksum 불일치로 멈추므로 새로 설치해야 한다. 같은 마이그레이션 버전으로만 복구되므로, 이전 판의 백업을 새 판에
-복구할 수도 없다.
+D-88 이전 개발 DB의 checksum 불일치와 기존 데이터 보존은 자체 PostgreSQL에도 같은 주의사항이 적용된다.
+[공통 DB 준비 안내의 D-88 주의사항](self-hosting.md#db-setup)을 확인한 뒤 진행한다.

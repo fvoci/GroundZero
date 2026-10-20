@@ -1699,6 +1699,7 @@ Meilisearch 데이터를 지워 작업 번호가 처음부터 다시 매겨지�
 
 ### 85.1 id는 앱이 만든다
 
+- 호출부를 추가·정리할 때의 인자 계약과 오류 처리 구분은 [Rust→SQL UUID 인자 계약](sql-id-contract.md)을 따른다.
 - **규칙**: 새 행의 id(UUIDv7)는 서버가 `fvoci_server::db::new_ids(n)`로 만들어, 행을 만드는 정의자 함수의 마지막 인자
   `p_ids uuid[]`로 넘긴다. `new_ids`는 `Uuid::now_v7()`을 쓰고, 한 프로세스에서 만든 값은 만든 순서대로 커진다.
   - 함수는 `app_id(p_ids, k)`로 차례로 꺼내 쓴다. 실패는 두 가지로 나눈다.
