@@ -161,3 +161,21 @@ export function moveErrorMessage(error: unknown): string {
   }
   return m.tasks_move_error_other();
 }
+
+/** 열의 예상 시간 합계(D-31 예상 시간, 분). 예상이 없는 카드는 더하지 않고 따로 센다. */
+export interface LaneEstimate {
+  minutes: number;
+  /** 예상 시간이 없는 카드 수. */
+  missing: number;
+  count: number;
+}
+
+export function laneEstimate(tasks: readonly { estimate_minutes: number | null }[]): LaneEstimate {
+  let minutes = 0;
+  let missing = 0;
+  for (const t of tasks) {
+    if (t.estimate_minutes === null) missing += 1;
+    else minutes += t.estimate_minutes;
+  }
+  return { minutes, missing, count: tasks.length };
+}

@@ -16,11 +16,13 @@
   import { Button } from '$lib/ui/button';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Dialog from '$lib/ui/dialog';
+  import { durationText } from '$lib/features/time/format';
 
   import type { BoardAction, BoardMove, CardBox, DropSlot } from './board';
   import {
     applyMove,
     dropBefore,
+    laneEstimate,
     lanes,
     listOrder,
     moveErrorMessage,
@@ -335,6 +337,27 @@
 
   const canWrite = $derived(item.access !== 'read' && !item.archived);
   const board = $derived(lanes(shown));
+  // 열 머리의 예상 합계(D-31 예상 시간). 거르기 중이면 보이는 카드 기준과 열 전체를 함께 보인다(실제 시간은 목록에 없어 넣지 않음).
+  const allLanes = $derived(lanes(tasks));
+  function laneEstimateText(lane: TaskStatus): string {
+    const shownSum = laneEstimate(board[lane]);
+    if (shownSum.count === 0) return '';
+    const duration = durationText(shownSum.minutes * 60);
+    const parts = [
+      shownSum.missing === shownSum.count
+        ? m.tasks_lane_estimate_none()
+        : isFiltered(filter)
+          ? m.tasks_lane_estimate_shown({ duration })
+          : m.tasks_lane_estimate({ duration }),
+    ];
+    if (shownSum.missing > 0 && shownSum.missing < shownSum.count)
+      parts.push(m.tasks_lane_estimate_missing({ count: shownSum.missing }));
+    if (isFiltered(filter)) {
+      const all = laneEstimate(allLanes[lane]);
+      parts.push(m.tasks_lane_estimate_all({ duration: durationText(all.minutes * 60) }));
+    }
+    return parts.join(' · ');
+  }
   const list = $derived(ordered ? listOrder(shown) : shown);
   const titleOf = (id: string | null): string =>
     id === null ? '' : (tasks.find((t) => t.id === id)?.title ?? '');
@@ -921,6 +944,7 @@
   {#if loading}
     <p class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</p>
   {:else if view === 'board'}
+    <p class="text-xs text-muted-foreground">{m.tasks_lane_estimate_hint()}</p>
     <div class="grid gap-3 md:grid-cols-3" data-testid="task-board">
       {#each TASK_STATUSES as lane (lane)}
         <section
@@ -935,6 +959,11 @@
             {STATUS_LABEL[lane]}
             <span class="font-normal text-muted-foreground">{board[lane].length}</span>
           </h3>
+          {#if laneEstimateText(lane) !== ''}
+            <p class="text-xs text-muted-foreground" data-lane-estimate={lane}>
+              {laneEstimateText(lane)}
+            </p>
+          {/if}
           <ul class="flex min-h-12 flex-col gap-2">
             {#each board[lane] as t (t.id)}
               {#if dropMark(lane, t.id)}
