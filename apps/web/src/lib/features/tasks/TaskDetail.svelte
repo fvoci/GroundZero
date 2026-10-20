@@ -38,6 +38,7 @@
 
   import { estimateOf, formOf, mergeEstimate, mergeForm } from './form';
   import { PRIORITY_LABEL, STATUS_LABEL } from './labels';
+  import ShiftProposals from './ShiftProposals.svelte';
 
   interface Props {
     taskId: string;
@@ -341,16 +342,6 @@
     }
   }
 
-  const range = (start: string | null, due: string | null): string =>
-    start !== null && due !== null && start !== due
-      ? `${start}~${due}`
-      : (due ?? start ?? m.tasks_no_dates());
-
-  let shiftHeading = $state<HTMLElement | undefined>(undefined);
-  $effect(() => {
-    if (pending !== undefined) shiftHeading?.focus();
-  });
-
   function toggleAssignee(id: string, on: boolean): void {
     if (form === undefined) return;
     form.assignee_ids = on
@@ -545,46 +536,16 @@
     </form>
 
     {#if pending !== undefined}
-      {@const shifts = pending.proposals}
-      <section
-        class="flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 text-sm"
-        aria-labelledby="shift-heading"
-      >
-        <h3 id="shift-heading" class="font-semibold" tabindex="-1" bind:this={shiftHeading}>
-          {m.tasks_shift_heading({ count: shifts.length })}
-        </h3>
-        {#if pending.retried}
-          <p role="alert">{m.tasks_shift_retried()}</p>
-        {/if}
-        <p class="text-muted-foreground">{m.tasks_shift_hint()}</p>
-        <ul class="flex flex-col gap-1">
-          {#each shifts as s (s.task_id)}
-            <li>
-              <span class="font-mono text-xs text-muted-foreground">{s.reference ?? ''}</span>
-              {s.title}: {range(s.from_start_date, s.from_due_date)} → {range(
-                s.start_date,
-                s.due_date,
-              )}
-            </li>
-          {/each}
-        </ul>
-        <div class="flex flex-wrap gap-2">
-          <Button size="sm" disabled={busy} onclick={() => void decide(true)}
-            >{m.tasks_shift_save_all()}</Button
-          >
-          <Button size="sm" variant="outline" disabled={busy} onclick={() => void decide(false)}
-            >{m.tasks_shift_save_this()}</Button
-          >
-          <Button
-            size="sm"
-            variant="ghost"
-            onclick={() => {
-              pending = undefined;
-              void focusSave();
-            }}>{m.common_cancel()}</Button
-          >
-        </div>
-      </section>
+      <ShiftProposals
+        proposals={pending.proposals}
+        retried={pending.retried}
+        {busy}
+        ondecide={(withShifts: boolean) => void decide(withShifts)}
+        oncancel={() => {
+          pending = undefined;
+          void focusSave();
+        }}
+      />
     {/if}
 
     <section class="flex flex-col gap-2" aria-labelledby="parent-heading">

@@ -1,20 +1,139 @@
 <script lang="ts">
   // 간트 보기 (D-31): 업무 막대·마일스톤(◆)·선행 관계. 막대는 보조 표시이고 각 줄의 단추가 같은 내용을 글로
-  // 말한다(화면 낭독기·키보드). 날짜를 바꾸는 일은 상세에서 하며, 후속 업무 영향은 저장 전에 묻는다.
+  // 말한다(화면 낭독기·키보드). 쓸 수 있으면 막대를 끌어 일정을 옮기고 양 끝을 끌어 시작·마감을 바꾼다. 키보드는 줄
+  // 단추에서 Alt+←·→(하루 옮기기), Alt+Shift+←·→(마감 하루). 놓으면 부르는 쪽이 최신 업무로 후속 업무 영향을
+  // 미리 보고 승인을 받은 뒤 저장한다(상세의 날짜 편집과 같은 흐름). 끝날 때까지 막대는 바꾼 자리를 미리 보인다.
   import type { TaskView } from '$lib/api/client';
   import { dayIn, localTimeZone } from '$lib/features/events/time';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
-  import { dayNumber, fromDayNumber, ganttLayout } from './gantt';
+  import type { GanttEdit } from './gantt';
+  import { dayNumber, editDates, fromDayNumber, ganttLayout } from './gantt';
   import { STATUS_LABEL } from './labels';
 
   interface Props {
     tasks: TaskView[];
     onopen: (taskId: string) => void;
+    /** 일정 바꾸기(끝나면 돌아온다). 없으면 보기만 한다. */
+    reschedule?:
+      | ((
+          task: TaskView,
+          dates: { start_date: string | null; due_date: string | null },
+        ) => Promise<void>)
+      | undefined;
   }
 
-  const { tasks, onopen }: Props = $props();
+  const { tasks, onopen, reschedule }: Props = $props();
+
+  const editable = (t: TaskView): boolean => reschedule !== undefined && t.access !== 'read';
+  // 끄는 중이거나 저장을 기다리는 막대의 미리 보기(열 번호).
+  let draft = $state<{ id: string; from: number; to: number } | undefined>(undefined);
+  let busy = $state(false);
+  let drag:
+    | {
+        id: string;
+        edit: GanttEdit;
+        pointer: number;
+        x: number;
+        from: number;
+        to: number;
+        days: number;
+      }
+    | undefined;
+
+  function preview(
+    from: number,
+    to: number,
+    edit: GanttEdit,
+    days: number,
+  ): { from: number; to: number } {
+    if (edit === 'move') return { from: from + days, to: to + days };
+    if (edit === 'start') return { from: Math.min(from + days, to), to };
+    return { from, to: Math.max(to + days, from) };
+  }
+
+  async function commit(task: TaskView, edit: GanttEdit, days: number): Promise<void> {
+    const dates = editDates(task, edit, days);
+    if (dates === undefined || reschedule === undefined) {
+      draft = undefined;
+      return;
+    }
+    busy = true;
+    try {
+      await reschedule(task, dates);
+    } finally {
+      busy = false;
+      draft = undefined;
+    }
+  }
+
+  function start(
+    event: PointerEvent,
+    row: { task: TaskView; from: number; to: number },
+    edit: GanttEdit,
+  ): void {
+    if (!editable(row.task) || busy || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.currentTarget instanceof Element)
+      event.currentTarget.setPointerCapture(event.pointerId);
+    drag = {
+      id: row.task.id,
+      edit,
+      pointer: event.pointerId,
+      x: event.clientX,
+      from: row.from,
+      to: row.to,
+      days: 0,
+    };
+    draft = { id: row.task.id, from: row.from, to: row.to };
+  }
+  function move(event: PointerEvent): void {
+    const d = drag;
+    if (d?.pointer !== event.pointerId) return;
+    if (event.buttons === 0) {
+      cancel();
+      return;
+    }
+    d.days = Math.round((event.clientX - d.x) / columnPx());
+    draft = { id: d.id, ...preview(d.from, d.to, d.edit, d.days) };
+  }
+  function end(event: PointerEvent): void {
+    const d = drag;
+    if (d?.pointer !== event.pointerId) return;
+    drag = undefined;
+    const task = tasks.find((t) => t.id === d.id);
+    if (task === undefined || d.days === 0) {
+      draft = undefined;
+      return;
+    }
+    void commit(task, d.edit, d.days);
+  }
+  function cancel(): void {
+    if (drag === undefined) return;
+    drag = undefined;
+    draft = undefined;
+  }
+  $effect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') cancel();
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('blur', cancel);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('blur', cancel);
+    };
+  });
+
+  function onRowKey(event: KeyboardEvent, task: TaskView): void {
+    if (!event.altKey || !editable(task) || busy) return;
+    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    if (step === 0) return;
+    event.preventDefault();
+    void commit(task, event.shiftKey ? 'end' : 'move', step);
+  }
 
   const layout = $derived(ganttLayout(tasks));
   const byId = $derived(new Map(tasks.map((t) => [t.id, t])));
@@ -103,14 +222,21 @@
       {/each}
 
       {#each layout.rows as row (row.task.id)}
+        {@const span = draft?.id === row.task.id ? draft : row}
         <div class="sticky left-0 z-10 border-b bg-background p-1">
           <button
             type="button"
             data-task-card={row.task.id}
             class="w-full truncate rounded px-1 text-left hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             aria-label={describe(row.task)}
+            aria-keyshortcuts={editable(row.task)
+              ? 'Alt+ArrowLeft Alt+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight'
+              : undefined}
             onclick={() => {
               onopen(row.task.id);
+            }}
+            onkeydown={(e: KeyboardEvent) => {
+              onRowKey(e, row.task);
             }}
           >
             {#if row.task.parent_id !== null}↳{/if}
@@ -131,23 +257,72 @@
           {/if}
           {#if row.task.milestone}
             <div
-              class="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-primary"
-              style:left={`calc(${String(row.from)} * 1.75rem + 0.875rem)`}
+              class={[
+                'absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-primary',
+                editable(row.task) && 'cursor-grab touch-none',
+              ]}
+              style:left={`calc(${String(span.from)} * 1.75rem + 0.875rem)`}
+              data-gantt-bar={row.task.id}
+              role="presentation"
+              onpointerdown={(e: PointerEvent) => {
+                start(e, row, 'move');
+              }}
+              onpointermove={move}
+              onpointerup={end}
+              onpointercancel={cancel}
             ></div>
           {:else}
             <div
               class={[
                 'absolute inset-y-1 rounded-sm',
                 row.task.status === 'done' ? 'bg-muted-foreground/40' : 'bg-primary/70',
+                editable(row.task) && 'cursor-grab touch-none',
+                draft?.id === row.task.id && 'ring-2 ring-ring',
               ]}
-              style:left={`calc(${String(row.from)} * 1.75rem + 0.125rem)`}
-              style:width={`calc(${String(row.to - row.from + 1)} * 1.75rem - 0.25rem)`}
-            ></div>
+              style:left={`calc(${String(span.from)} * 1.75rem + 0.125rem)`}
+              style:width={`calc(${String(span.to - span.from + 1)} * 1.75rem - 0.25rem)`}
+              data-gantt-bar={row.task.id}
+              role="presentation"
+              onpointerdown={(e: PointerEvent) => {
+                start(e, row, 'move');
+              }}
+              onpointermove={move}
+              onpointerup={end}
+              onpointercancel={cancel}
+            >
+              {#if editable(row.task)}
+                <div
+                  class="absolute inset-y-0 left-0 w-2 cursor-ew-resize touch-none"
+                  data-gantt-edge="start"
+                  role="presentation"
+                  onpointerdown={(e: PointerEvent) => {
+                    start(e, row, 'start');
+                  }}
+                  onpointermove={move}
+                  onpointerup={end}
+                  onpointercancel={cancel}
+                ></div>
+                <div
+                  class="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none"
+                  data-gantt-edge="end"
+                  role="presentation"
+                  onpointerdown={(e: PointerEvent) => {
+                    start(e, row, 'end');
+                  }}
+                  onpointermove={move}
+                  onpointerup={end}
+                  onpointercancel={cancel}
+                ></div>
+              {/if}
+            </div>
           {/if}
         </div>
       {/each}
     </div>
   </div>
+{/if}
+{#if reschedule !== undefined && layout.rows.length > 0}
+  <p class="text-xs text-muted-foreground">{m.tasks_gantt_edit_hint()}</p>
 {/if}
 {#if layout.later.length > 0}
   <p class="text-sm text-muted-foreground">

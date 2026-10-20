@@ -7,7 +7,9 @@
   import type {
     ItemView,
     SavedViewView,
+    ShiftProposalView,
     TaskDetailView,
+    TaskInput,
     TaskStatus,
     TaskView,
   } from '$lib/api/client';
@@ -60,6 +62,8 @@
   } from './filters';
   import { PRIORITY_LABEL, STATUS_LABEL } from './labels';
   import GanttChart from './GanttChart.svelte';
+  import { formOf } from './form';
+  import ShiftProposals from './ShiftProposals.svelte';
   import TaskCalendar from './TaskCalendar.svelte';
   import TaskDetail from './TaskDetail.svelte';
 
@@ -499,6 +503,151 @@
   let adding = $state<TaskStatus | undefined>(undefined);
   // 달력 보기의 날짜 칸에서 이 항목에 업무 만들기(그 날짜가 마감일).
   let createDay = $state<string | undefined>(undefined);
+
+  // 간트에서 일정 바꾸기(D-31). 최신 업무를 읽어 그 판으로 후속 업무 영향을 미리 보고, 있으면 묻고(승인·이 업무만·취소),
+  // 없으면 바로 저장한다. 그사이 그 업무의 날짜가 바뀌었으면(다른 사람) 저장하지 않는다. 끝나면 목록을 다시 읽어
+  // 막대를 서버 상태로 되돌리거나 맞춘다(취소·거절·실패·충돌 모두).
+  interface GanttAsk {
+    task: TaskView;
+    input: TaskInput;
+    baseVersion: number;
+    proposals: ShiftProposalView[];
+    retried: boolean;
+    done: () => void;
+  }
+  let ganttAsk = $state<GanttAsk | undefined>(undefined);
+  let ganttBusy = $state(false);
+  let ganttNotice = $state<string | undefined>(undefined);
+  const datesText = (start: string | null, due: string | null): string =>
+    start !== null && due !== null && start !== due ? `${start}~${due}` : (due ?? start ?? '');
+
+  async function reschedule(
+    t: TaskView,
+    dates: { start_date: string | null; due_date: string | null },
+  ): Promise<void> {
+    ganttNotice = undefined;
+    try {
+      const fresh = await api.task(t.id);
+      if (fresh.start_date !== t.start_date || fresh.due_date !== t.due_date) {
+        ganttNotice = m.tasks_gantt_changed({ title: t.title });
+        status = ganttNotice;
+        await reload();
+        return;
+      }
+      const input = { ...formOf(fresh), ...dates };
+      const found = await api.previewSchedule(t.id, dates.start_date, dates.due_date);
+      if (found.length === 0) {
+        // 저장하다 후속 업무가 바뀌어 다시 묻게 되면 그 물음이 끝날 때까지 기다린다.
+        let finish: () => void = () => undefined;
+        const finished = new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        const outcome = await saveSchedule(t, input, fresh.version, [], () => {
+          finish();
+        });
+        if (outcome === 'asked') await finished;
+        return;
+      }
+      await new Promise<void>((done) => {
+        ganttAsk = {
+          task: t,
+          input,
+          baseVersion: fresh.version,
+          proposals: found,
+          retried: false,
+          done,
+        };
+      });
+    } catch (e: unknown) {
+      ganttNotice = errorText(e, m.tasks_gantt_failed({ title: t.title }));
+      status = ganttNotice;
+      await reload();
+    }
+  }
+
+  /** 저장. 후속 업무가 그사이 바뀌어(shift_conflict) 다시 물어야 하면 `asked`. */
+  async function saveSchedule(
+    t: TaskView,
+    input: TaskInput,
+    baseVersion: number,
+    shifts: ShiftProposalView[],
+    /** 다시 물을 때 그 물음이 끝나면 부를 것(간트가 미리 보기를 거두는 때). */
+    done: () => void = () => undefined,
+  ): Promise<'saved' | 'asked' | 'stopped'> {
+    const result = await api.updateTask(
+      t.id,
+      baseVersion,
+      input,
+      shifts.map((s) => ({
+        task_id: s.task_id,
+        base_version: s.base_version,
+        start_date: s.start_date,
+        due_date: s.due_date,
+      })),
+    );
+    if (result.kind === 'conflict') {
+      ganttNotice = m.tasks_gantt_conflict({ title: t.title });
+      status = ganttNotice;
+      await reload();
+      return 'stopped';
+    }
+    if (result.kind === 'shift_conflict') {
+      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
+      const found = await api.previewSchedule(t.id, input.start_date, input.due_date);
+      if (found.length === 0) return saveSchedule(t, input, baseVersion, [], done);
+      ganttAsk = { task: t, input, baseVersion, proposals: found, retried: true, done };
+      return 'asked';
+    }
+    notifyDone(
+      shifts.length > 0
+        ? m.tasks_gantt_saved_shifts({ title: t.title, count: shifts.length })
+        : m.tasks_gantt_saved({
+            title: t.title,
+            dates: datesText(input.start_date, input.due_date),
+          }),
+    );
+    status = m.tasks_gantt_saved({
+      title: t.title,
+      dates: datesText(input.start_date, input.due_date),
+    });
+    await reload();
+    return 'saved';
+  }
+
+  async function decideGantt(withShifts: boolean): Promise<void> {
+    const a = ganttAsk;
+    if (a === undefined || ganttBusy) return;
+    ganttBusy = true;
+    let outcome: 'saved' | 'asked' | 'stopped' = 'stopped';
+    try {
+      outcome = await saveSchedule(
+        a.task,
+        a.input,
+        a.baseVersion,
+        withShifts ? a.proposals : [],
+        a.done,
+      );
+    } catch (e: unknown) {
+      ganttNotice = errorText(e, m.tasks_gantt_failed({ title: a.task.title }));
+      status = ganttNotice;
+      await reload();
+    } finally {
+      ganttBusy = false;
+      if (outcome !== 'asked') {
+        ganttAsk = undefined;
+        a.done();
+      }
+    }
+  }
+
+  function cancelGantt(): void {
+    const a = ganttAsk;
+    if (a === undefined) return;
+    ganttAsk = undefined;
+    status = m.tasks_gantt_cancelled({ title: a.task.title });
+    a.done();
+    void reload();
+  }
   async function quickAdd(lane: TaskStatus, requestId: string, title: string): Promise<void> {
     const itemId = item.id;
     const created = await api.createTask(itemId, requestId, title);
@@ -1278,7 +1427,10 @@
       </p>
     {/if}
   {:else if view === 'gantt'}
-    <GanttChart tasks={shown} onopen={open} />
+    {#if ganttNotice !== undefined}
+      <p role="alert" class="text-sm text-destructive">{ganttNotice}</p>
+    {/if}
+    <GanttChart tasks={shown} onopen={open} reschedule={canWrite ? reschedule : undefined} />
   {:else if view === 'calendar'}
     <TaskCalendar
       tasks={shown}
@@ -1410,3 +1562,38 @@
     void reload();
   }}
 />
+
+<Dialog.Root
+  open={ganttAsk !== undefined}
+  onOpenChange={(o: boolean) => {
+    if (!o) cancelGantt();
+  }}
+>
+  <Dialog.Content
+    class="sm:max-w-lg"
+    onCloseAutoFocus={(e: Event) => {
+      e.preventDefault();
+    }}
+  >
+    {#if ganttAsk !== undefined}
+      {@const ask = ganttAsk}
+      <Dialog.Header>
+        <Dialog.Title>{m.tasks_gantt_dialog_title({ title: ask.task.title })}</Dialog.Title>
+        <Dialog.Description>
+          {m.tasks_gantt_dialog_description({
+            from: datesText(ask.task.start_date, ask.task.due_date),
+            to: datesText(ask.input.start_date, ask.input.due_date),
+          })}
+        </Dialog.Description>
+      </Dialog.Header>
+      <ShiftProposals
+        proposals={ask.proposals}
+        retried={ask.retried}
+        busy={ganttBusy}
+        headingId="gantt-shift-heading"
+        ondecide={(withShifts: boolean) => void decideGantt(withShifts)}
+        oncancel={cancelGantt}
+      />
+    {/if}
+  </Dialog.Content>
+</Dialog.Root>
