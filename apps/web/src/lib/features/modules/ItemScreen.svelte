@@ -12,6 +12,7 @@
   import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
+  import { moveThenReload } from '$lib/features/documents/tree';
   import { forgetReferences } from '$lib/features/references/resolver';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
@@ -345,36 +346,33 @@
 
     <section class="flex flex-col gap-3" aria-labelledby="item-docs-heading">
       <h2 id="item-docs-heading" class="text-lg font-semibold">{m.modules_documents()}</h2>
-      {#if docs.length === 0}
-        <p class="text-muted-foreground">{m.modules_documents_empty()}</p>
-      {:else}
-        <DocumentTree
-          {docs}
-          label={m.modules_documents_tree({ title: current.title })}
-          hrefFor={(id: string) => itemDocumentPath(workspace.id, current.id, id)}
-          navigate={(path: string) => {
-            router.navigate(path);
-          }}
-          canWrite={canEdit}
-          onmove={async (id: string, move: TreeMove) => {
-            // 실패해도(권한 철회·동시 변경) 최신 목록을 다시 읽는다.
-            try {
-              await api.setParent(id, move.parentId, move.beforeId);
-            } finally {
+      <DocumentTree
+        {docs}
+        label={m.modules_documents_tree({ title: current.title })}
+        empty={m.modules_documents_empty()}
+        hrefFor={(id: string) => itemDocumentPath(workspace.id, current.id, id)}
+        navigate={(path: string) => {
+          router.navigate(path);
+        }}
+        canWrite={canEdit}
+        onmove={(id: string, move: TreeMove) =>
+          // 실패해도(권한 철회·동시 변경) 최신 목록을 다시 읽는다.
+          moveThenReload(
+            () => api.setParent(id, move.parentId, move.beforeId),
+            async () => {
               docs = await api.itemDocuments(current.id);
-            }
-          }}
-          oncreatechild={async (parentId: string) => {
-            const doc = await api.createItemDocument(
-              current.id,
-              newRequestId(),
-              m.modules_new_document_default(),
-              parentId,
-            );
-            router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
-          }}
-        />
-      {/if}
+            },
+          )}
+        oncreatechild={async (parentId: string) => {
+          const doc = await api.createItemDocument(
+            current.id,
+            newRequestId(),
+            m.modules_new_document_default(),
+            parentId,
+          );
+          router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
+        }}
+      />
       {#if canEdit}
         <TemplatePicker
           workspaceId={workspace.id}

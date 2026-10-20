@@ -6,6 +6,7 @@
   import { errorText } from '$lib/api/errors';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
+  import { moveThenReload } from '$lib/features/documents/tree';
   import { m } from '$lib/paraglide/messages.js';
   import { documentPath, router } from '$lib/router.svelte';
 
@@ -88,25 +89,24 @@
     <p role="alert" class="text-destructive">{error}</p>
   {:else if docs === undefined}
     <p aria-live="polite">{m.app_loading()}</p>
-  {:else if docs.length === 0}
-    <p class="text-muted-foreground">{m.workspaces_wiki_empty()}</p>
   {:else}
     <DocumentTree
       {docs}
       label={m.workspaces_wiki_tree({ workspace: workspace.name })}
+      empty={m.workspaces_wiki_empty()}
       hrefFor={(id: string) => documentPath(workspace.id, id)}
       navigate={(path: string) => {
         router.navigate(path);
       }}
       {canWrite}
-      onmove={async (id: string, move: TreeMove) => {
+      onmove={(id: string, move: TreeMove) =>
         // 실패해도(권한 철회·동시 변경) 최신 목록을 다시 읽는다.
-        try {
-          await api.setParent(id, move.parentId, move.beforeId);
-        } finally {
-          workspaceNav.setDocs(workspace.id, await api.wikiDocuments(workspace.id));
-        }
-      }}
+        moveThenReload(
+          () => api.setParent(id, move.parentId, move.beforeId),
+          async () => {
+            workspaceNav.setDocs(workspace.id, await api.wikiDocuments(workspace.id));
+          },
+        )}
       oncreatechild={async (parentId: string) => {
         const doc = await api.createWikiDocument(
           workspace.id,
