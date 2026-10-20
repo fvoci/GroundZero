@@ -71,7 +71,7 @@ describe('ChecklistForm (D-30, editor-less screens)', () => {
     expect(ids[2]?.[1]).toBe(ids[0]?.[1]);
   });
 
-  // 저장된 항목의 문구 고치기(기존 PUT, 완료 여부는 부모가 그대로 보낸다). 실패하면 입력을 남기고 알린다. Esc는 취소.
+  // 저장된 항목의 문구 고치기(부모가 문구만 보내 완료 상태는 서버 값 그대로). 실패하면 입력을 남기고 알린다. Esc는 취소.
   it('renames an item, keeps the input when saving fails, and cancels with Escape', async () => {
     const h = handlers();
     h.onrename.mockRejectedValueOnce(new Error('network'));

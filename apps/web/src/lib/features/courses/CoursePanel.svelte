@@ -2,7 +2,7 @@
   // 강의 모듈의 강좌 화면(D-37): 강좌 정보, 진도 요약, 회차 목록과 내 진도, 회차 추가·CSV 일괄 등록, 함께
   // 수강하는 사람의 진도 집계. 완료는 직접 표시한다. 회차마다 강의 시간 측정을 시작할 수 있다(D-32).
   import type { CourseView, EpisodeStatus, EpisodeView, ParticipantView } from '$lib/api/client';
-  import { api, newRequestId } from '$lib/api/client';
+  import { api, ApiError, newRequestId } from '$lib/api/client';
   import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
@@ -188,18 +188,10 @@
     };
   }
 
-  const sharedOf = (e: EpisodeView): string =>
-    JSON.stringify([
-      e.number,
-      e.title,
-      e.chapter,
-      e.duration_seconds,
-      e.url,
-      e.materials,
-      e.planned_on,
-    ]);
-
-  /** 회차 공통 정보 저장. 서버는 통째로 바꾸므로, 고치기를 연 뒤 다른 사람이 먼저 고쳤으면 덮지 않고 알린다. */
+  /**
+   * 회차 공통 정보 저장. 읽은 판을 함께 보내 서버가 그 판일 때만 바꾼다(확인과 바꾸기가 한 문장). 고치기를 연 뒤 다른
+   * 사람이 먼저 고쳤으면 409: 입력은 그대로 두고 기준만 지금 판으로 바꿔 알린다. 다시 저장하면(명시적으로) 바꾼다.
+   */
   async function saveEpisode(base: EpisodeView): Promise<void> {
     const number = shared.number;
     const seconds = parseDuration(shared.duration);
@@ -220,21 +212,7 @@
     }
     error = undefined;
     try {
-      const now = await api.course(itemId);
-      course = now;
-      const latest = now.episodes.find((x) => x.id === base.id);
-      if (latest === undefined) {
-        editingEpisode = undefined;
-        error = m.common_error_not_found();
-        return;
-      }
-      if (sharedOf(latest) !== sharedOf(base)) {
-        // 입력은 그대로 두고 기준만 최신으로 바꾼다. 다시 저장하면(명시적으로) 지금 내용을 바꾼다.
-        editingEpisode = latest;
-        error = m.courses_episode_changed();
-        return;
-      }
-      await api.updateEpisode(base.id, {
+      await api.updateEpisode(base.id, base.version, {
         number,
         title: shared.title.trim(),
         chapter: shared.chapter.trim(),
@@ -247,8 +225,33 @@
       status = m.courses_episode_saved({ number });
       reloadKey += 1;
     } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 409 && (await episodeMovedOn(base))) return;
       error = errorText(e, m.courses_action_failed());
     }
+  }
+
+  /**
+   * 409를 받은 뒤 지금 회차를 다시 읽는다. 다른 사람이 먼저 고쳐 판이 바뀌었으면(보관으로 막힌 409와 구분) 기준을 지금
+   * 판으로 바꾸고 알린다(입력은 그대로). 회차가 지워졌으면 고치기를 닫고 알린다. 처리했으면 true.
+   */
+  async function episodeMovedOn(base: EpisodeView): Promise<boolean> {
+    let now: CourseView;
+    try {
+      now = await api.course(itemId);
+    } catch {
+      return false;
+    }
+    course = now;
+    const latest = now.episodes.find((x) => x.id === base.id);
+    if (latest === undefined) {
+      editingEpisode = undefined;
+      error = m.common_error_not_found();
+      return true;
+    }
+    if (latest.version === base.version) return false;
+    editingEpisode = latest;
+    error = m.courses_episode_changed();
+    return true;
   }
 
   const csv = $derived(csvText.trim() === '' ? undefined : parseEpisodesCsv(csvText));

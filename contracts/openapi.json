@@ -34,7 +34,7 @@
         "tags": [
           "tasks"
         ],
-        "summary": "체크리스트 항목 고치기(쓰기 권한). 버전 없이 바로 반영한다.",
+        "summary": "체크리스트 항목 고치기(쓰기 권한). 버전 없이 바로 반영하되 보낸 칸만 바꾼다: 문구만 고치면 그 사이 다른 사람이 바꾼\n완료 상태를, 완료만 바꾸면 고친 문구를 되돌리지 않는다.",
         "operationId": "update_checklist_item",
         "parameters": [
           {
@@ -11586,7 +11586,8 @@
           "duration_seconds",
           "url",
           "materials",
-          "mine"
+          "mine",
+          "version"
         ],
         "properties": {
           "chapter": {
@@ -11623,6 +11624,11 @@
           },
           "url": {
             "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409)."
           }
         }
       },
@@ -14965,7 +14971,8 @@
           "chapter",
           "unit",
           "amount",
-          "mine"
+          "mine",
+          "version"
         ],
         "properties": {
           "amount": {
@@ -15001,6 +15008,11 @@
           "unit": {
             "type": "string",
             "description": "`pages`·`problems`·`minutes`·`items`."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409)."
           }
         }
       },
@@ -15720,17 +15732,19 @@
       },
       "UpdateChecklistItem": {
         "type": "object",
-        "description": "체크리스트 항목 고치기.",
-        "required": [
-          "text",
-          "checked"
-        ],
+        "description": "체크리스트 항목 고치기. 보낸 칸만 바꾼다(빠진 칸은 그대로). 둘 다 없으면 400.",
         "properties": {
           "checked": {
-            "type": "boolean"
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "text": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -15756,8 +15770,9 @@
       },
       "UpdateEpisode": {
         "type": "object",
-        "description": "회차 고치기.",
+        "description": "회차 고치기. `version`은 읽은 판.",
         "required": [
+          "version",
           "number",
           "title"
         ],
@@ -15788,6 +15803,10 @@
           },
           "url": {
             "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -15850,8 +15869,9 @@
       },
       "UpdateStudyUnit": {
         "type": "object",
-        "description": "단위 고치기.",
+        "description": "단위 고치기. `version`은 읽은 판.",
         "required": [
+          "version",
           "number",
           "title",
           "unit"
@@ -15880,6 +15900,10 @@
           },
           "unit": {
             "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

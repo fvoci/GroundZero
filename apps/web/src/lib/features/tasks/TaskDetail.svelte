@@ -767,14 +767,10 @@
             entries.map((e) => ({ request_id: e.requestId, text: e.text, checked: e.done })),
           ),
         )}
-      ontoggle={(id: string, done: boolean) => {
-        const entry = current.checklist.find((c) => c.id === id);
-        return reloadChecklist(api.updateChecklistItem(id, entry?.text ?? '', done));
-      }}
-      onrename={(id: string, text: string) => {
-        const entry = current.checklist.find((c) => c.id === id);
-        return reloadChecklist(api.updateChecklistItem(id, text, entry?.checked ?? false));
-      }}
+      ontoggle={(id: string, done: boolean) =>
+        reloadChecklist(api.updateChecklistItem(id, { checked: done }))}
+      onrename={(id: string, text: string) =>
+        reloadChecklist(api.updateChecklistItem(id, { text }))}
       onremove={(id: string) => reloadChecklist(api.deleteChecklistItem(id))}
     />
 

@@ -52,6 +52,8 @@ pub struct StudyUnit {
     #[schema(value_type = Option<String>, format = Date)]
     pub planned_on: Option<Date>,
     pub mine: MyUnitProgress,
+    /// 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409).
+    pub version: i32,
 }
 
 /// 스터디 계획.
@@ -96,9 +98,10 @@ pub struct UnitsAdded {
     pub added: i32,
 }
 
-/// 단위 고치기.
+/// 단위 고치기. `version`은 읽은 판.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateStudyUnit {
+    pub version: i32,
     pub number: i32,
     pub title: String,
     #[serde(default)]
@@ -174,6 +177,7 @@ type UnitRow = (
     Option<Date>,
     Option<Date>,
     Option<String>,
+    i32,
 );
 
 /// 스터디 계획(볼 수 있는 사람). 스터디 모듈의 항목이 아니면 404.
@@ -200,7 +204,7 @@ pub async fn get(
     .await?;
     let rows: Vec<UnitRow> = sqlx::query_as(
         "SELECT s.id, s.number, s.title, s.chapter, s.unit, s.amount, s.planned_on,
-                p.status, p.done_amount, p.planned_on, p.completed_on, p.note
+                p.status, p.done_amount, p.planned_on, p.completed_on, p.note, s.version
          FROM study_units s
          LEFT JOIN unit_progress p ON p.unit_id = s.id AND p.user_id = app_user_id()
          WHERE s.item_id = $1 ORDER BY s.number, s.created_at, s.id",
@@ -226,6 +230,7 @@ pub async fn get(
                 completed_on: r.10,
                 note: r.11.unwrap_or_default(),
             },
+            version: r.12,
         })
         .collect();
     Ok(Json(StudyPlan {
@@ -270,8 +275,9 @@ pub async fn update_unit(
     Json(input): Json<UpdateStudyUnit>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_update_study_unit($1, $2, $3, $4, $5, $6, $7)")
+    sqlx::query("SELECT app_update_study_unit($1, $2, $3, $4, $5, $6, $7, $8)")
         .bind(unit)
+        .bind(input.version)
         .bind(input.number)
         .bind(&input.title)
         .bind(&input.chapter)

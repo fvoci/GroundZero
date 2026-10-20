@@ -754,6 +754,8 @@ export interface StudyUnitView {
     completed_on: string | null;
     note: string;
   };
+  /** 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409). */
+  version: number;
 }
 
 export interface StudyPlanView {
@@ -798,6 +800,7 @@ export function parseStudyPlan(value: Json): StudyPlanView {
           completed_on: optStr(m, 'completed_on'),
           note: str(m, 'note'),
         },
+        version: int(r, 'version'),
       };
     }),
   };
@@ -1855,6 +1858,8 @@ export interface EpisodeView {
     last_position_seconds: number | null;
     note: string;
   };
+  /** 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409). */
+  version: number;
 }
 
 export interface CourseView {
@@ -1922,6 +1927,7 @@ function parseCourse(value: Json): CourseView {
           last_position_seconds: optInt(m, 'last_position_seconds'),
           note: str(m, 'note'),
         },
+        version: int(e, 'version'),
       };
     }),
     can_write: bool(o, 'can_write'),
@@ -2240,8 +2246,12 @@ export const api = {
       (v) => int(rec(v, 'episodes added'), 'added'),
       { episodes: episodes.map((e) => ({ ...e })) },
     ),
-  updateEpisode: (id: string, episode: Omit<NewEpisodeInput, 'request_id'> & { number: number }) =>
-    expectOk('PUT', `/api/episodes/${encodeURIComponent(id)}`, none, { ...episode }),
+  /** 회차 공통 정보 고치기. `version`은 읽은 판이며, 그 사이 다른 사람이 고쳤으면 409(아무것도 바뀌지 않음). */
+  updateEpisode: (
+    id: string,
+    version: number,
+    episode: Omit<NewEpisodeInput, 'request_id'> & { number: number },
+  ) => expectOk('PUT', `/api/episodes/${encodeURIComponent(id)}`, none, { version, ...episode }),
   deleteEpisode: (id: string) =>
     expectOk('DELETE', `/api/episodes/${encodeURIComponent(id)}`, none),
   setEpisodeProgress: (
@@ -2280,8 +2290,10 @@ export const api = {
       (v) => int(rec(v, 'units added'), 'added'),
       { units: units.map((u) => ({ ...u })) },
     ),
+  /** 공통 단위 고치기. `version`은 읽은 판이며, 그 사이 다른 사람이 고쳤으면 409(아무것도 바뀌지 않음). */
   updateStudyUnit: (
     id: string,
+    version: number,
     unit: {
       number: number;
       title: string;
@@ -2290,7 +2302,7 @@ export const api = {
       amount: number;
       planned_on: string | null;
     },
-  ) => expectOk('PUT', `/api/study-units/${encodeURIComponent(id)}`, none, { ...unit }),
+  ) => expectOk('PUT', `/api/study-units/${encodeURIComponent(id)}`, none, { version, ...unit }),
   deleteStudyUnit: (id: string) =>
     expectOk('DELETE', `/api/study-units/${encodeURIComponent(id)}`, none),
   setUnitProgress: (
@@ -2629,8 +2641,9 @@ export const api = {
     expectOk('POST', `/api/tasks/${encodeURIComponent(taskId)}/checklist`, parseTaskDetail, {
       items,
     }),
-  updateChecklistItem: (id: string, text: string, checked: boolean) =>
-    expectOk('PUT', `/api/checklist-items/${encodeURIComponent(id)}`, none, { text, checked }),
+  /** 체크리스트 항목 고치기. 바꾸려는 칸만 보낸다(빠진 칸은 서버가 그대로 둔다). */
+  updateChecklistItem: (id: string, change: { text: string } | { checked: boolean }) =>
+    expectOk('PUT', `/api/checklist-items/${encodeURIComponent(id)}`, none, { ...change }),
   deleteChecklistItem: (id: string) =>
     expectOk('DELETE', `/api/checklist-items/${encodeURIComponent(id)}`, none),
   taskBacklinks: (id: string) =>

@@ -23,6 +23,7 @@ const unit = (
     note: '',
     ...mine,
   },
+  version: 1,
   ...base,
 });
 

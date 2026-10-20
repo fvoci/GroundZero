@@ -269,3 +269,86 @@ async fn study_units_are_shared_and_progress_is_personal() {
         2
     );
 }
+
+// 두 사람이 같은 판의 공통 단위를 보고 고치면 먼저 저장한 내용이 남고 뒤의 저장은 409로 아무것도 바꾸지 않는다. 동시에
+// 보내도 하나만 바뀐다. 다시 읽은 판으로 보내면 바뀐다.
+#[tokio::test]
+async fn two_writers_on_the_same_unit_version_do_not_overwrite() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "스터디 동시 수정").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let study = module(&app, &admin, &ws, "study", "STV").await;
+    let item = open_item(&app, &admin, &study, "통계 스터디").await;
+    let added = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item}/study/units"),
+        Some(&admin),
+        Some(json!({ "units": [
+            { "request_id": new_request_id(), "title": "1장", "unit": "pages", "amount": 30 },
+            { "request_id": new_request_id(), "title": "2장", "unit": "pages", "amount": 20 }
+        ]})),
+    )
+    .await;
+    assert_eq!(added.json["added"], 2, "{:?}", added.json);
+    let units = plan(&app, &admin, &item).await["units"].clone();
+    let (seen, other) = (units[0].clone(), units[1].clone());
+    let uri = format!("/api/study-units/{}", seen["id"].as_str().unwrap());
+    let base = seen["version"].clone();
+
+    let first = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&admin),
+        Some(json!({ "version": base, "number": 1, "title": "1장 기술통계", "unit": "pages", "amount": 40 })),
+    )
+    .await;
+    assert_eq!(first.status, StatusCode::NO_CONTENT, "{:?}", first.json);
+    let second = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&writer),
+        Some(json!({ "version": base, "number": 1, "title": "1장", "unit": "problems", "amount": 10 })),
+    )
+    .await;
+    assert_eq!(second.status, StatusCode::CONFLICT, "{:?}", second.json);
+    let now = plan(&app, &writer, &item).await["units"][0].clone();
+    assert_eq!(now["title"], "1장 기술통계");
+    assert_eq!(now["unit"], "pages");
+    assert_eq!(now["amount"], 40);
+    assert_ne!(now["version"], base);
+
+    let retry = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&writer),
+        Some(json!({ "version": now["version"], "number": 1, "title": "1장", "unit": "problems", "amount": 10 })),
+    )
+    .await;
+    assert_eq!(retry.status, StatusCode::NO_CONTENT, "{:?}", retry.json);
+    assert_eq!(plan(&app, &admin, &item).await["units"][0]["amount"], 10);
+
+    let other_uri = format!("/api/study-units/{}", other["id"].as_str().unwrap());
+    let body = |amount: i32| json!({ "version": other["version"], "number": 2, "title": "2장", "unit": "pages", "amount": amount });
+    let (a, b) = tokio::join!(
+        send(&app, Method::PUT, &other_uri, Some(&admin), Some(body(21))),
+        send(&app, Method::PUT, &other_uri, Some(&writer), Some(body(22)))
+    );
+    let mut statuses = [a.status, b.status];
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::NO_CONTENT, StatusCode::CONFLICT]);
+    let winner = if a.status == StatusCode::NO_CONTENT {
+        21
+    } else {
+        22
+    };
+    assert_eq!(
+        plan(&app, &admin, &item).await["units"][1]["amount"],
+        winner
+    );
+}

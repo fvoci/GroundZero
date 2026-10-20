@@ -8,7 +8,7 @@
     StudyUnitKind,
     StudyUnitView,
   } from '$lib/api/client';
-  import { api, STUDY_UNIT_KINDS } from '$lib/api/client';
+  import { api, ApiError, STUDY_UNIT_KINDS } from '$lib/api/client';
   import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
@@ -175,10 +175,10 @@
     };
   }
 
-  const sharedOf = (u: StudyUnitView): string =>
-    JSON.stringify([u.number, u.title, u.chapter, u.unit, u.amount, u.planned_on]);
-
-  /** 단위 공통 정보 저장. 서버는 통째로 바꾸므로, 고치기를 연 뒤 다른 사람이 먼저 고쳤으면 덮지 않고 알린다. */
+  /**
+   * 단위 공통 정보 저장. 읽은 판을 함께 보내 서버가 그 판일 때만 바꾼다(확인과 바꾸기가 한 문장). 고치기를 연 뒤 다른
+   * 사람이 먼저 고쳤으면 409: 입력은 그대로 두고 기준만 지금 판으로 바꿔 알린다. 다시 저장하면(명시적으로) 바꾼다.
+   */
   async function saveUnit(base: StudyUnitView): Promise<void> {
     const amount = wholeAmount(shared.amount);
     const number = shared.number;
@@ -194,21 +194,7 @@
     }
     error = undefined;
     try {
-      const now = await api.studyPlan(itemId);
-      plan = now;
-      const latest = now.units.find((x) => x.id === base.id);
-      if (latest === undefined) {
-        editingUnit = undefined;
-        error = m.common_error_not_found();
-        return;
-      }
-      if (sharedOf(latest) !== sharedOf(base)) {
-        // 입력은 그대로 두고 기준만 최신으로 바꾼다. 다시 저장하면(명시적으로) 지금 내용을 바꾼다.
-        editingUnit = latest;
-        error = m.study_unit_changed();
-        return;
-      }
-      await api.updateStudyUnit(base.id, {
+      await api.updateStudyUnit(base.id, base.version, {
         number,
         title: shared.title.trim(),
         chapter: shared.chapter.trim(),
@@ -220,8 +206,33 @@
       status = m.study_unit_saved({ title: shared.title.trim() });
       reloadKey += 1;
     } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 409 && (await unitMovedOn(base))) return;
       error = errorText(e, m.study_action_failed());
     }
+  }
+
+  /**
+   * 409를 받은 뒤 지금 계획을 다시 읽는다. 다른 사람이 먼저 고쳐 판이 바뀌었으면(보관으로 막힌 409와 구분) 기준을 지금
+   * 판으로 바꾸고 알린다(입력은 그대로). 단위가 지워졌으면 고치기를 닫고 알린다. 처리했으면 true.
+   */
+  async function unitMovedOn(base: StudyUnitView): Promise<boolean> {
+    let now: StudyPlanView;
+    try {
+      now = await api.studyPlan(itemId);
+    } catch {
+      return false;
+    }
+    plan = now;
+    const latest = now.units.find((x) => x.id === base.id);
+    if (latest === undefined) {
+      editingUnit = undefined;
+      error = m.common_error_not_found();
+      return true;
+    }
+    if (latest.version === base.version) return false;
+    editingUnit = latest;
+    error = m.study_unit_changed();
+    return true;
   }
 
   async function addUnit(e: SubmitEvent): Promise<void> {

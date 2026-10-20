@@ -288,7 +288,9 @@ async fn course_episodes_and_personal_progress() {
             Method::PUT,
             &ep(&eps[2]),
             Some(&writer),
-            Some(json!({ "number": 3, "title": "행렬식과 역행렬", "duration_seconds": 900 }))
+            Some(
+                json!({ "version": eps[2]["version"], "number": 3, "title": "행렬식과 역행렬", "duration_seconds": 900 })
+            )
         )
         .await
         .status,
@@ -533,4 +535,105 @@ async fn archiving_the_course_module_makes_the_course_read_only() {
     )
     .await;
     assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
+}
+
+// 두 사람이 같은 판의 회차를 보고 고치면 먼저 저장한 내용이 남고 뒤의 저장은 409로 아무것도 바꾸지 않는다(전에는 id만으로
+// 통째로 바꿔 뒤의 저장이 앞의 것을 조용히 덮었다). 동시에 보내도 하나만 바뀐다. 다시 읽은 판으로 보내면 바뀐다.
+#[tokio::test]
+async fn two_writers_on_the_same_episode_version_do_not_overwrite() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "강의 동시 수정").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let item = course(&app, &admin, &ws).await;
+    let added = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item}/episodes"),
+        Some(&admin),
+        Some(json!({ "episodes": [
+            { "request_id": new_request_id(), "title": "벡터", "duration_seconds": 600 },
+            { "request_id": new_request_id(), "title": "행렬", "duration_seconds": 600 }
+        ]})),
+    )
+    .await;
+    assert_eq!(added.json["added"], 2, "{:?}", added.json);
+    let episodes = get(&app, &admin, &item).await["episodes"].clone();
+    let (seen, other) = (episodes[0].clone(), episodes[1].clone());
+    let uri = format!("/api/episodes/{}", seen["id"].as_str().unwrap());
+    let base = seen["version"].clone();
+
+    let first = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&admin),
+        Some(
+            json!({ "version": base, "number": 1, "title": "벡터 공간", "duration_seconds": 600,
+                     "url": "https://example.test/a" }),
+        ),
+    )
+    .await;
+    assert_eq!(first.status, StatusCode::NO_CONTENT, "{:?}", first.json);
+    let second = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&writer),
+        Some(
+            json!({ "version": base, "number": 1, "title": "벡터 기초", "duration_seconds": 900 }),
+        ),
+    )
+    .await;
+    assert_eq!(second.status, StatusCode::CONFLICT, "{:?}", second.json);
+    let now = get(&app, &writer, &item).await["episodes"][0].clone();
+    assert_eq!(now["title"], "벡터 공간");
+    assert_eq!(now["url"], "https://example.test/a");
+    assert_eq!(now["duration_seconds"], 600);
+    assert_ne!(now["version"], base);
+
+    let retry = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&writer),
+        Some(json!({ "version": now["version"], "number": 1, "title": "벡터 기초", "duration_seconds": 900 })),
+    )
+    .await;
+    assert_eq!(retry.status, StatusCode::NO_CONTENT, "{:?}", retry.json);
+    assert_eq!(
+        get(&app, &admin, &item).await["episodes"][0]["title"],
+        "벡터 기초"
+    );
+
+    // 같은 판으로 동시에: 하나만 바뀌고 다른 하나는 409.
+    let other_uri = format!("/api/episodes/{}", other["id"].as_str().unwrap());
+    let body = |title: &str| json!({ "version": other["version"], "number": 2, "title": title, "duration_seconds": 600 });
+    let (a, b) = tokio::join!(
+        send(
+            &app,
+            Method::PUT,
+            &other_uri,
+            Some(&admin),
+            Some(body("행렬 A"))
+        ),
+        send(
+            &app,
+            Method::PUT,
+            &other_uri,
+            Some(&writer),
+            Some(body("행렬 B"))
+        )
+    );
+    let mut statuses = [a.status, b.status];
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::NO_CONTENT, StatusCode::CONFLICT]);
+    let kept = &get(&app, &admin, &item).await["episodes"][1];
+    let winner = if a.status == StatusCode::NO_CONTENT {
+        "행렬 A"
+    } else {
+        "행렬 B"
+    };
+    assert_eq!(kept["title"], winner);
 }

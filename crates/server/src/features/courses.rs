@@ -78,6 +78,8 @@ pub struct Episode {
     #[schema(value_type = Option<String>, format = Date)]
     pub planned_on: Option<Date>,
     pub mine: MyProgress,
+    /// 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409).
+    pub version: i32,
 }
 
 /// 강좌: 정보·회차(번호순)·내 진도.
@@ -122,9 +124,10 @@ pub struct EpisodesAdded {
     pub added: i32,
 }
 
-/// 회차 고치기.
+/// 회차 고치기. `version`은 읽은 판.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateEpisode {
+    pub version: i32,
     pub number: i32,
     pub title: String,
     #[serde(default)]
@@ -192,6 +195,7 @@ type EpisodeRow = (
     Option<i32>,
     Option<i32>,
     Option<String>,
+    i32,
 );
 
 /// 강좌(볼 수 있는 사람). 강의 모듈의 항목이 아니면 404.
@@ -236,7 +240,8 @@ pub async fn get(
     .await?;
     let rows: Vec<EpisodeRow> = sqlx::query_as(
         "SELECT e.id, e.number, e.title, e.chapter, e.duration_seconds, e.url, e.materials, e.planned_on,
-                p.status, p.planned_on, p.completed_on, p.watch_count, p.last_position_seconds, p.note
+                p.status, p.planned_on, p.completed_on, p.watch_count, p.last_position_seconds, p.note,
+                e.version
          FROM course_episodes e
          LEFT JOIN episode_progress p ON p.episode_id = e.id AND p.user_id = app_user_id()
          WHERE e.item_id = $1 ORDER BY e.number, e.created_at, e.id",
@@ -274,6 +279,7 @@ pub async fn get(
                 last_position_seconds: r.12,
                 note: r.13.unwrap_or_default(),
             },
+            version: r.14,
         })
         .collect();
     Ok(Json(Course {
@@ -348,8 +354,9 @@ pub async fn update_episode(
     Json(input): Json<UpdateEpisode>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_update_episode($1, $2, $3, $4, $5, $6, $7, $8)")
+    sqlx::query("SELECT app_update_episode($1, $2, $3, $4, $5, $6, $7, $8, $9)")
         .bind(episode)
+        .bind(input.version)
         .bind(input.number)
         .bind(&input.title)
         .bind(&input.chapter)

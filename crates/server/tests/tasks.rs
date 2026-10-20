@@ -580,3 +580,83 @@ async fn demotion_drops_assignments_on_items_the_member_can_no_longer_see() {
     .unwrap();
     assert_eq!(reasons, vec!["role_change".to_owned()]);
 }
+
+// 문구 고치기와 완료 바꾸기를 서로 다른 사람이 각자 옛 화면에서 해도 두 변경이 모두 남는다(보낸 칸만 바꾼다). 전에는
+// 문구를 고치면 화면에 남은 옛 완료 상태를, 완료를 바꾸면 옛 문구를 함께 보내 다른 사람의 변경을 되돌렸다.
+#[tokio::test]
+async fn checklist_rename_and_toggle_by_two_people_both_stay() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "체크리스트 동시").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let item = module_item(&app, &admin, &ws, "CHK").await;
+    make_public(&app, &admin, &item).await;
+    let t = task(&app, &admin, &item, "보고서").await;
+    let task_uri = format!("/api/tasks/{}", t["id"].as_str().unwrap());
+    let added = send(
+        &app,
+        Method::POST,
+        &format!("{task_uri}/checklist"),
+        Some(&admin),
+        Some(json!({ "items": [{ "request_id": new_request_id(), "text": "초안 작성", "checked": false }] })),
+    )
+    .await;
+    assert_eq!(added.status, StatusCode::OK, "{:?}", added.json);
+    let entry = format!(
+        "/api/checklist-items/{}",
+        added.json["checklist"][0]["id"].as_str().unwrap()
+    );
+
+    // 둘 다 "초안 작성 · 미완료"를 본 화면에서: 관리자는 문구만, 작성자는 완료만.
+    let renamed = send(
+        &app,
+        Method::PUT,
+        &entry,
+        Some(&admin),
+        Some(json!({ "text": "초안 다시 작성" })),
+    )
+    .await;
+    assert_eq!(renamed.status, StatusCode::NO_CONTENT, "{:?}", renamed.json);
+    let checked = send(
+        &app,
+        Method::PUT,
+        &entry,
+        Some(&writer),
+        Some(json!({ "checked": true })),
+    )
+    .await;
+    assert_eq!(checked.status, StatusCode::NO_CONTENT, "{:?}", checked.json);
+    let (_, detail) = get(&app, &writer, &task_uri).await;
+    assert_eq!(detail["checklist"][0]["text"], "초안 다시 작성");
+    assert_eq!(detail["checklist"][0]["checked"], true);
+
+    // 반대 순서: 완료를 먼저 풀고 문구를 고쳐도 둘 다 남는다.
+    let unchecked = send(
+        &app,
+        Method::PUT,
+        &entry,
+        Some(&writer),
+        Some(json!({ "checked": false })),
+    )
+    .await;
+    assert_eq!(unchecked.status, StatusCode::NO_CONTENT);
+    let renamed = send(
+        &app,
+        Method::PUT,
+        &entry,
+        Some(&admin),
+        Some(json!({ "text": "초안 쓰기" })),
+    )
+    .await;
+    assert_eq!(renamed.status, StatusCode::NO_CONTENT);
+    let (_, detail) = get(&app, &admin, &task_uri).await;
+    assert_eq!(detail["checklist"][0]["text"], "초안 쓰기");
+    assert_eq!(detail["checklist"][0]["checked"], false);
+
+    // 아무 칸도 없거나 빈 문구는 거부.
+    for body in [json!({}), json!({ "text": "  " })] {
+        let r = send(&app, Method::PUT, &entry, Some(&admin), Some(body)).await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+    }
+}

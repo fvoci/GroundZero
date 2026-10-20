@@ -28,7 +28,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 체크리스트 항목 고치기(쓰기 권한). 버전 없이 바로 반영한다. */
+        /**
+         * 체크리스트 항목 고치기(쓰기 권한). 버전 없이 바로 반영하되 보낸 칸만 바꾼다: 문구만 고치면 그 사이 다른 사람이 바꾼
+         *     완료 상태를, 완료만 바꾸면 고친 문구를 되돌리지 않는다.
+         */
         put: operations["update_checklist_item"];
         post?: never;
         /** 체크리스트 항목 지우기(쓰기 권한). */
@@ -2903,6 +2906,11 @@ export interface components {
             planned_on?: string | null;
             title: string;
             url: string;
+            /**
+             * Format: int32
+             * @description 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409).
+             */
+            version: number;
         };
         /** @description 추가한 수(같은 요청 id로 이미 있던 것은 빠짐). */
         EpisodesAdded: {
@@ -4025,6 +4033,11 @@ export interface components {
             title: string;
             /** @description `pages`·`problems`·`minutes`·`items`. */
             unit: string;
+            /**
+             * Format: int32
+             * @description 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409).
+             */
+            version: number;
         };
         /** @description 승인한 후속 업무 재배치 한 건. 날짜가 있던 칸만 옮긴다. */
         SuccessorShift: {
@@ -4288,17 +4301,17 @@ export interface components {
             /** Format: int32 */
             planned: number;
         };
-        /** @description 체크리스트 항목 고치기. */
+        /** @description 체크리스트 항목 고치기. 보낸 칸만 바꾼다(빠진 칸은 그대로). 둘 다 없으면 400. */
         UpdateChecklistItem: {
-            checked: boolean;
-            text: string;
+            checked?: boolean | null;
+            text?: string | null;
         };
         /** @description 기록 고치기. `base_version`이 지났으면 409와 서버 최신본. */
         UpdateEntry: components["schemas"]["EntryInput"] & {
             /** Format: int32 */
             base_version: number;
         };
-        /** @description 회차 고치기. */
+        /** @description 회차 고치기. `version`은 읽은 판. */
         UpdateEpisode: {
             chapter?: string;
             /** Format: int32 */
@@ -4310,6 +4323,8 @@ export interface components {
             planned_on?: string | null;
             title: string;
             url?: string;
+            /** Format: int32 */
+            version: number;
         };
         /** @description 일정 고치기. `base_version`이 지났으면 409와 서버 최신본. */
         UpdateEvent: components["schemas"]["EventInput"] & {
@@ -4328,7 +4343,7 @@ export interface components {
             key: string;
             name: string;
         };
-        /** @description 단위 고치기. */
+        /** @description 단위 고치기. `version`은 읽은 판. */
         UpdateStudyUnit: {
             /** Format: int32 */
             amount?: number;
@@ -4339,6 +4354,8 @@ export interface components {
             planned_on?: string | null;
             title: string;
             unit: string;
+            /** Format: int32 */
+            version: number;
         };
         /** @description 업무 고치기. `base_version`이 지났으면 409와 서버 최신본. */
         UpdateTask: {
