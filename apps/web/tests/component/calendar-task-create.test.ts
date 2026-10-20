@@ -217,6 +217,57 @@ describe('creating a task from a calendar day', () => {
     });
   });
 
+  it('does not create in the previous module item while the new module items are loading', async () => {
+    const other: Module = { ...module, id: 'm2', name: '연구', key: 'RES' };
+    vi.spyOn(api, 'modules').mockResolvedValue([module, other]);
+    vi.spyOn(api, 'items').mockImplementation((id: string) =>
+      id === 'm1'
+        ? Promise.resolve([itemView('i1', '앞 모듈 항목')])
+        : new Promise<ItemView[]>(() => undefined),
+    );
+    const create = vi.spyOn(api, 'createTask').mockResolvedValue(created());
+    render(CalendarTaskDialog, {
+      props: {
+        workspaceId: 'ws-1',
+        day: '2026-10-23',
+        onclose: () => undefined,
+        oncreated: () => undefined,
+      },
+    });
+    const dialog = await screen.findByRole('dialog');
+    await waitFor(() => {
+      expect(within(dialog).getByRole('option', { name: '연구 (RES)' })).toBeTruthy();
+    });
+    await fireEvent.change(within(dialog).getByLabelText('모듈'), { target: { value: 'm1' } });
+    await within(dialog).findByRole('option', { name: '앞 모듈 항목' });
+    await fireEvent.change(within(dialog).getByLabelText('모듈'), { target: { value: 'm2' } });
+    await fill('자료 준비');
+    expect((await within(dialog).findByRole('alert')).textContent).toContain(
+      '업무를 만들 항목을 고르세요',
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('cannot be closed while the task is being created', async () => {
+    vi.spyOn(api, 'createTask').mockReturnValue(new Promise(() => undefined));
+    const onclose = vi.fn<(made: boolean) => void>();
+    render(CalendarTaskDialog, {
+      props: {
+        workspaceId: 'ws-1',
+        day: '2026-10-23',
+        item: { id: 'i1', title: '대표 항목' },
+        onclose,
+        oncreated: () => undefined,
+      },
+    });
+    await fill('자료 준비');
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: '취소' })).toHaveProperty('disabled', true);
+    await fireEvent.keyDown(document.activeElement ?? dialog, { key: 'Escape' });
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(onclose).not.toHaveBeenCalled();
+  });
+
   it('offers day buttons only when the item can take tasks', async () => {
     vi.spyOn(api, 'calendar').mockResolvedValue(empty);
     const first = render(CalendarScreen, {

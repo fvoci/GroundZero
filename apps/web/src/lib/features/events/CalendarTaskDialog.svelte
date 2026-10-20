@@ -4,6 +4,7 @@
   // 저장은 기존 흐름 그대로다: 업무 만들기(`createTask`, 같은 입력의 재시도는 같은 요청 id) 뒤 그 업무에 마감일을 넣는다
   // (`updateTask`). 날짜를 넣지 못하면 업무는 이미 있으므로 다시 만들지 않고 날짜만 다시 넣게 한다.
   import type { Module } from '@fvoci/api-client';
+  import { untrack } from 'svelte';
 
   import type { ItemView, TaskDetailView } from '$lib/api/client';
   import { api } from '$lib/api/client';
@@ -80,6 +81,10 @@
     if (day === undefined || item !== undefined) return;
     items = undefined;
     loadError = undefined;
+    // 다른 모듈을 고르면 앞 모듈의 항목 선택은 버린다(새 목록을 읽는 사이 앞 항목에 만들지 않게).
+    untrack(() => {
+      pickedItem = '';
+    });
     if (mod === '') return;
     let cancelled = false;
     api
@@ -97,16 +102,21 @@
     };
   });
 
-  const targetId = $derived(item?.id ?? pickedItem);
+  // 만들 항목: 고정 항목이거나, 지금 읽은 목록에 있는 고른 항목일 때만(목록을 읽는 중이거나 없으면 비어 있다).
+  const targetId = $derived(
+    item?.id ?? ((items ?? []).some((i) => i.id === pickedItem) ? pickedItem : ''),
+  );
+  /** 닫기. 보내는 중에는 닫지 않는다(늦게 온 결과가 다시 연 창의 날짜로 저장되지 않게). */
   function close(): void {
+    if (busy) return;
     onclose(made !== undefined);
   }
 
-  async function putDate(task: TaskDetailView): Promise<void> {
+  async function putDate(task: TaskDetailView, due: string): Promise<void> {
     const result = await api.updateTask(
       task.id,
       task.version,
-      { ...formOf(task), due_date: date },
+      { ...formOf(task), due_date: due },
       [],
     );
     if (result.kind !== 'updated') {
@@ -132,11 +142,13 @@
       error = m.events_task_date_required();
       return;
     }
+    // 보낼 때의 날짜로 저장한다(보내는 사이 입력이 바뀌어도).
+    const due = date;
     busy = true;
     try {
       if (made !== undefined) {
         // 업무는 이미 있다. 날짜만 다시 넣는다(최신 판으로).
-        await putDate(await api.task(made.id));
+        await putDate(await api.task(made.id), due);
         return;
       }
       const requestId = key.for({ item: targetId, title: name });
@@ -144,7 +156,7 @@
       key.done(requestId);
       made = created;
       try {
-        await putDate(created);
+        await putDate(created, due);
       } catch (e: unknown) {
         error = `${m.events_task_date_failed()} ${errorText(e, '')}`.trim();
       }
@@ -170,6 +182,9 @@
 >
   <Dialog.Content
     class="sm:max-w-md"
+    escapeKeydownBehavior={busy ? 'ignore' : 'close'}
+    interactOutsideBehavior={busy ? 'ignore' : 'close'}
+    showCloseButton={!busy}
     onCloseAutoFocus={(e: Event) => {
       // 닫히면 부르는 쪽이 그 날짜의 만들기 단추로 초점을 돌린다.
       e.preventDefault();
@@ -247,7 +262,9 @@
         </div>
       {/if}
       <Dialog.Footer>
-        <Button type="button" variant="outline" onclick={close}>{m.events_task_cancel()}</Button>
+        <Button type="button" variant="outline" disabled={busy} onclick={close}
+          >{m.events_task_cancel()}</Button
+        >
         <Button type="submit" disabled={busy}>
           {made === undefined ? m.events_task_create() : m.events_task_retry_date()}
         </Button>
