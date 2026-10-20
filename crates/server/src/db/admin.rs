@@ -4,7 +4,12 @@
 //!   비밀번호를 갱신하고, 스키마 `fvoci`와 기본 `search_path`를 설정한다. 여러 번 실행해도 같다.
 //!   관리자는 superuser가 아니어도 된다(`CREATEROLE`과 DB의 `CREATE` 권한이면 된다. 셀프호스트 Supabase의
 //!   `postgres`, D-88). 그래서 이미 있는 역할의 속성은 바꾸지 않고(superuser만 `SUPERUSER` 속성을 다시 쓸 수
-//!   있다) 확인만 해, 권한 속성이 붙어 있으면 실패한다.
+//!   있다) 확인만 해, 권한 속성이 붙어 있으면 실패한다. 전체가 한 트랜잭션이라 멈추면 아무것도 바뀌지 않는다.
+//!   - 새로 설치하거나 같은 관리자가 다시 실행: 관리자가 만든 역할이라 ADMIN OPTION이 있다(PG16부터 CREATEROLE은
+//!     자기가 만든 역할에 ADMIN을 받는다). 스키마 소유자 지정에 필요한 SET은 그 ADMIN으로 잠시 받고 거둔다.
+//!   - 다른 관리자가 만든 역할을 넘겨받음: ADMIN OPTION이 없으면 아무것도 바꾸지 않고 멈춘다. 만든 역할이
+//!     `GRANT <역할> TO <관리자> WITH ADMIN OPTION`을 해 주거나 그 역할로 bootstrap을 돌린다(스스로 권한을 얻지
+//!     않는다).
 //! - migrate: 마이그레이션 역할 연결로 `migrations/`를 적용한다.
 
 use sqlx::postgres::PgPoolOptions;
@@ -39,7 +44,8 @@ async fn execute_formatted(
     Ok(())
 }
 
-/// 역할을 만들거나(속성 포함) 비밀번호만 갱신한 뒤, 권한 속성이 없는지 확인한다.
+/// 역할을 만들거나(속성 포함) 비밀번호만 갱신한다. 이미 있는 역할은 바꾸기 전에 권한 속성이 없는지, 관리자가 그
+/// 역할을 다룰 수 있는지(ADMIN OPTION) 먼저 확인한다: 멈출 때는 아무것도 바꾸지 않는다.
 async fn ensure_role(
     conn: &mut PgConnection,
     role: &str,
@@ -47,12 +53,9 @@ async fn ensure_role(
     attributes: &str,
     may_create_db: bool,
 ) -> Result<(), AppError> {
-    let exists: bool =
-        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)")
-            .bind(role)
-            .fetch_one(&mut *conn)
-            .await?;
-    if exists {
+    if role_exists(conn, role).await? {
+        check_attributes(conn, role, may_create_db).await?;
+        check_manageable(conn, role).await?;
         execute_formatted(
             conn,
             "SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', $1, $2)",
@@ -66,7 +69,38 @@ async fn ensure_role(
             &[role, password.expose(), attributes],
         )
         .await?;
+        check_attributes(conn, role, may_create_db).await?;
     }
+    Ok(())
+}
+
+/// 다른 관리자가 만든 역할이면 superuser가 아닌 관리자는 ADMIN OPTION이 없어 비밀번호를 바꾸거나 SET 멤버십을 줄
+/// 수 없다(PG16부터 CREATEROLE은 자기가 만든 역할에만 ADMIN을 받는다). 일반 DB 오류 대신 해야 할 일을 알린다.
+async fn check_manageable(conn: &mut PgConnection, role: &str) -> Result<(), AppError> {
+    let manageable: bool = sqlx::query_scalar(
+        "SELECT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user)
+             OR EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid
+                        WHERE r.rolname = $1 AND m.admin_option
+                          AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user))",
+    )
+    .bind(role)
+    .fetch_one(&mut *conn)
+    .await?;
+    if !manageable {
+        return Err(AppError::Config(format!(
+            "the admin role has no ADMIN OPTION on {role}, which another role created; grant it \
+             (GRANT {role} TO <admin> WITH ADMIN OPTION) as that role, or run db bootstrap as that role"
+        )));
+    }
+    Ok(())
+}
+
+/// 역할에 권한 속성이 없는지 확인한다(앱 역할은 CREATEDB도 안 된다).
+async fn check_attributes(
+    conn: &mut PgConnection,
+    role: &str,
+    may_create_db: bool,
+) -> Result<(), AppError> {
     let (superuser, create_role, create_db, bypass_rls): (bool, bool, bool, bool) = sqlx::query_as(
         "SELECT rolsuper, rolcreaterole, rolcreatedb, rolbypassrls FROM pg_roles WHERE rolname = $1",
     )
@@ -168,8 +202,17 @@ pub async fn bootstrap(cfg: &DbCommandConfig) -> Result<(), AppError> {
     let app_pw = need(cfg.app_password.as_ref(), "FVOCI_DB_APP_PASSWORD")?;
 
     let mut conn = PgConnection::connect_with(&super::connect_options(admin)?).await?;
+    // 역할·멤버십·스키마 DDL은 모두 트랜잭션 안에서 된다. 한 트랜잭션으로 묶어, 어느 단계에서 멈추든 한 역할만
+    // 바뀐 채 남지 않게 한다. 이미 있는 두 역할은 무엇이든 바꾸기 전에 먼저 확인한다.
+    let mut tx = conn.begin().await?;
+    for (role, may_create_db) in [(MIGRATOR_ROLE, true), (APP_ROLE, false)] {
+        if role_exists(&mut tx, role).await? {
+            check_attributes(&mut tx, role, may_create_db).await?;
+            check_manageable(&mut tx, role).await?;
+        }
+    }
     ensure_role(
-        &mut conn,
+        &mut tx,
         MIGRATOR_ROLE,
         migrator_pw,
         "NOSUPERUSER NOCREATEROLE NOBYPASSRLS",
@@ -177,16 +220,26 @@ pub async fn bootstrap(cfg: &DbCommandConfig) -> Result<(), AppError> {
     )
     .await?;
     ensure_role(
-        &mut conn,
+        &mut tx,
         APP_ROLE,
         app_pw,
         "NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS",
         false,
     )
     .await?;
-    prepare_database(&mut conn).await?;
+    prepare_database(&mut tx).await?;
+    tx.commit().await?;
     conn.close().await?;
     Ok(())
+}
+
+async fn role_exists(conn: &mut PgConnection, role: &str) -> Result<bool, AppError> {
+    Ok(
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)")
+            .bind(role)
+            .fetch_one(&mut *conn)
+            .await?,
+    )
 }
 
 /// 마이그레이션을 적용한다.
