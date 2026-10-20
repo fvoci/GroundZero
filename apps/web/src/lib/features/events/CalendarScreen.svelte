@@ -7,10 +7,11 @@
 
   import type { Module, Workspace } from '@fvoci/api-client';
 
-  import type { CalendarView, ItemView } from '$lib/api/client';
+  import type { CalendarView, ItemView, TaskDetailView } from '$lib/api/client';
   import { api } from '$lib/api/client';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { errorText } from '$lib/api/errors';
-  import { displaySettings, formatMonth, weekdays } from '$lib/display';
+  import { displaySettings, formatDay, formatMonth, weekdays } from '$lib/display';
   import { m } from '$lib/paraglide/messages.js';
   import { itemPath, itemTaskPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
@@ -18,6 +19,7 @@
   import type { CalendarEntry } from './calendar';
   import { entriesByDay, monthRange, shiftMonth } from './calendar';
   import CalendarEntryButton from './CalendarEntryButton.svelte';
+  import CalendarTaskDialog from './CalendarTaskDialog.svelte';
   import EventDialog from './EventDialog.svelte';
   import { dayIn } from './time';
 
@@ -31,9 +33,19 @@
     version?: number;
     /** 달력에서 일정을 고치거나 지웠다(같은 화면의 일정 목록이 다시 읽게). */
     onchanged?: () => void;
+    /** 항목 범위에서 날짜 칸으로 업무를 만들 항목. 쓸 수 없으면 만들기 단추를 보이지 않는다. */
+    item?: ItemView | undefined;
   }
 
-  const { workspace, scope, embedded = false, version = 0, onchanged }: Props = $props();
+  const { workspace, scope, embedded = false, version = 0, onchanged, item }: Props = $props();
+
+  // 날짜 칸에서 업무 만들기(D-31·D-80). 항목 범위면 그 항목(쓸 수 있을 때만), 모듈·워크스페이스 범위면 창에서 고른다.
+  const canCreate = $derived(
+    scope?.itemId === undefined
+      ? true
+      : item !== undefined && item.access !== 'read' && !item.archived && !item.is_template,
+  );
+  let createDay = $state<string | undefined>(undefined);
 
   // 워크스페이스 달력의 거르기: 모듈 → 그 모듈의 항목.
   let modules = $state<Module[]>([]);
@@ -193,6 +205,11 @@
     {:else}
       <h1 id="calendar-heading" class="text-xl font-semibold" tabindex="-1">{title}</h1>
     {/if}
+    {#if canCreate}
+      <Button size="sm" variant="outline" onclick={() => (createDay = today)}
+        >{m.events_task_create()}</Button
+      >
+    {/if}
     <div class="ml-auto flex gap-1" role="group" aria-label={m.events_month_nav()}>
       <Button size="sm" variant="outline" onclick={() => (month = shiftMonth(month, -1))}
         >{m.events_prev_month()}</Button
@@ -265,6 +282,16 @@
                 <span aria-hidden="true">{Number(day.slice(8))}</span>
                 <span class="sr-only">{day === today ? m.events_day_today({ day }) : day}</span>
               </div>
+              {#if canCreate}
+                <button
+                  type="button"
+                  class="float-right -mt-5 rounded px-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  aria-label={m.events_task_create_on({ day })}
+                  title={m.events_task_create_on({ day })}
+                  data-create-day={day}
+                  onclick={() => (createDay = day)}>+</button
+                >
+              {/if}
               <div class="flex flex-col gap-0.5">
                 {#each entries as entry (entryKey(day, entry))}
                   <CalendarEntryButton
@@ -304,6 +331,34 @@
     {/each}
   </ol>
 </section>
+
+<CalendarTaskDialog
+  workspaceId={workspace.id}
+  day={createDay}
+  item={scope?.itemId === undefined || item === undefined
+    ? undefined
+    : { id: item.id, title: item.title }}
+  moduleId={scope?.itemId === undefined ? scope?.moduleId : undefined}
+  onclose={() => {
+    const day = createDay;
+    createDay = undefined;
+    if (day !== undefined)
+      void tick().then(() =>
+        document.querySelector<HTMLElement>(`[data-create-day="${day}"]`)?.focus(),
+      );
+  }}
+  oncreated={(task: TaskDetailView) => {
+    createDay = undefined;
+    notifyDone(
+      m.events_task_created({
+        title: task.title,
+        day: task.due_date === null ? '' : formatDay(task.due_date),
+      }),
+    );
+    reloadKey += 1;
+    onchanged?.();
+  }}
+/>
 
 <EventDialog
   eventId={openEvent}

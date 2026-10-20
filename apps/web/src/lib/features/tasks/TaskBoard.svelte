@@ -4,7 +4,13 @@
   import type { Workspace } from '@fvoci/api-client';
   import { tick, untrack } from 'svelte';
 
-  import type { ItemView, SavedViewView, TaskStatus, TaskView } from '$lib/api/client';
+  import type {
+    ItemView,
+    SavedViewView,
+    TaskDetailView,
+    TaskStatus,
+    TaskView,
+  } from '$lib/api/client';
   import { api, ApiError, TASK_STATUSES } from '$lib/api/client';
   import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
@@ -17,6 +23,9 @@
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Dialog from '$lib/ui/dialog';
   import { durationText } from '$lib/features/time/format';
+  import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { formatDay } from '$lib/display';
 
   import type { BoardAction, BoardMove, CardBox, DropSlot } from './board';
   import {
@@ -488,6 +497,8 @@
   // 열마다 빠르게 더하기(Kaneo처럼 열 아래). 만들기는 "할 일"로 만들어지므로, 다른 열이면 같은 이동 저장 경로로 그
   // 열 끝에 옮긴다. 옮기기가 실패하면 업무는 "할 일"에 남고 실패를 알린다(만든 것은 사라지지 않는다).
   let adding = $state<TaskStatus | undefined>(undefined);
+  // 달력 보기의 날짜 칸에서 이 항목에 업무 만들기(그 날짜가 마감일).
+  let createDay = $state<string | undefined>(undefined);
   async function quickAdd(lane: TaskStatus, requestId: string, title: string): Promise<void> {
     const itemId = item.id;
     const created = await api.createTask(itemId, requestId, title);
@@ -1269,7 +1280,15 @@
   {:else if view === 'gantt'}
     <GanttChart tasks={shown} onopen={open} />
   {:else if view === 'calendar'}
-    <TaskCalendar tasks={shown} onopen={open} />
+    <TaskCalendar
+      tasks={shown}
+      onopen={open}
+      oncreate={canWrite
+        ? (day: string) => {
+            createDay = day;
+          }
+        : undefined}
+    />
   {:else}
     <table class="w-full text-sm" data-testid="task-list">
       <thead class="text-left text-muted-foreground">
@@ -1367,3 +1386,27 @@
     {/if}
   </Dialog.Content>
 </Dialog.Root>
+
+<CalendarTaskDialog
+  workspaceId={item.workspace_id}
+  day={createDay}
+  item={{ id: item.id, title: item.title }}
+  onclose={() => {
+    const day = createDay;
+    createDay = undefined;
+    if (day !== undefined)
+      void tick().then(() =>
+        document.querySelector<HTMLElement>(`[data-create-day="${day}"]`)?.focus(),
+      );
+  }}
+  oncreated={(task: TaskDetailView) => {
+    createDay = undefined;
+    notifyDone(
+      m.events_task_created({
+        title: task.title,
+        day: task.due_date === null ? '' : formatDay(task.due_date),
+      }),
+    );
+    void reload();
+  }}
+/>

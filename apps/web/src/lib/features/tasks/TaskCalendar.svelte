@@ -13,9 +13,11 @@
   interface Props {
     tasks: TaskView[];
     onopen: (id: string) => void;
+    /** 날짜 칸에서 그 날짜를 마감일로 하는 업무 만들기(쓸 수 있을 때만). */
+    oncreate?: ((day: string) => void) | undefined;
   }
 
-  const { tasks, onopen }: Props = $props();
+  const { tasks, onopen, oncreate }: Props = $props();
 
   const settings = displaySettings();
   const today = dayIn(new Date().toISOString(), settings.timeZone);
@@ -64,7 +66,22 @@
         role="gridcell"
         aria-label={m.tasks_calendar_day_aria({ day, count: list.length })}
       >
-        <span>{Number(day.slice(8))}</span>
+        <span class="flex items-center justify-between">
+          <span>{Number(day.slice(8))}</span>
+          {#if oncreate !== undefined}
+            {@const create = oncreate}
+            <button
+              type="button"
+              class="rounded px-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              aria-label={m.events_task_create_on({ day })}
+              title={m.events_task_create_on({ day })}
+              data-create-day={day}
+              onclick={() => {
+                create(day);
+              }}>+</button
+            >
+          {/if}
+        </span>
         {#each list as t (t.id)}
           <button
             type="button"
