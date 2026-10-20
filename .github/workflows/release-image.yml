@@ -33,6 +33,30 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/fvoci/groundzero
+  # 이미지 태그가 있는지: `absent` 또는 `present`를 쓰고, 판단할 수 없으면(권한·네트워크) 실패한다. 아직 한 번도 게시하지
+  # 않은 패키지는 레지스트리가 404가 아니라 거부로 답하므로 먼저 GitHub 패키지 API의 404로 가린다. 인자: 이미지 태그.
+  # 필요한 환경: ACTOR, GH_TOKEN(GITHUB_TOKEN, packages: read 이상).
+  TAG_STATE: |
+    set -euo pipefail
+    repo="${IMAGE#ghcr.io/}"; ref="$1"
+    code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" \
+      -H 'Accept: application/vnd.github+json' "https://api.github.com/orgs/${repo%%/*}/packages/container/${repo#*/}")
+    case "$code" in
+      404) echo absent; exit 0 ;;
+      200) ;;
+      *) echo "::error::package lookup returned HTTP $code" >&2; exit 1 ;;
+    esac
+    resp=$(curl -sS -w '\n%{http_code}' -u "$ACTOR:$GH_TOKEN" "https://ghcr.io/token?service=ghcr.io&scope=repository:$repo:pull")
+    [ "$(tail -n1 <<<"$resp")" = 200 ] || { echo "::error::registry token returned HTTP $(tail -n1 <<<"$resp")" >&2; exit 1; }
+    token=$(sed '$d' <<<"$resp" | jq -r .token)
+    code=$(curl -sS -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token" \
+      -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+      "https://ghcr.io/v2/$repo/manifests/$ref")
+    case "$code" in
+      404) echo absent ;;
+      200) echo present ;;
+      *) echo "::error::manifest lookup returned HTTP $code" >&2; exit 1 ;;
+    esac
   # 이미지 smoke 검사(외부 서비스 없이): 플랫폼, 실행 사용자, OCI 라벨(소스 SHA·버전), 웹 자산·HWP 미리보기 WASM·
   # 제3자 고지 포함. 소스가 버전 주입을 지원하면(inject=true) 빌드 인자와 같은 값이 컴파일 결과(`fvoci-server version`),
   # 시작 로그(server.starting의 version·source), 버전 응답(/healthz의 build)에 모두 나와야 한다. 서버는 닿지 않는 DB 주소로
@@ -144,18 +168,13 @@ jobs:
           VERSION: ${{ steps.tag.outputs.version }}
           SHA: ${{ steps.tag.outputs.sha }}
           ACTOR: ${{ github.actor }}
-          TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # 레지스트리에 그 이미지 태그가 있는지 정확히 본다: 404(없음)만 없음으로, 그 밖의 실패는 멈춘다.
-          token=$(curl -fsS -u "$ACTOR:$TOKEN" \
-            "https://ghcr.io/token?service=ghcr.io&scope=repository:${IMAGE#ghcr.io/}:pull" | jq -r .token)
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token" \
-            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${VERSION}")
-          case "$code" in
-            404) echo "exists=false" >> "$GITHUB_OUTPUT"; echo "$IMAGE:$VERSION is not published yet" ;;
-            200)
+          state=$(bash -c "$TAG_STATE" tag-state "$VERSION")
+          case "$state" in
+            absent) echo "exists=false" >> "$GITHUB_OUTPUT"; echo "$IMAGE:$VERSION is not published yet" ;;
+            present)
               revisions=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Image}}' \
                 | jq -r 'if has("config") then .config.Labels["org.opencontainers.image.revision"] else [.[] | .config.Labels["org.opencontainers.image.revision"]? // empty] | unique | join(",") end')
               digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)
@@ -168,7 +187,6 @@ jobs:
                 echo "### $IMAGE:$VERSION already published"
                 echo "- source: \`$SHA\` (same as the tag), digest: \`$digest\`. Nothing rebuilt or changed."
               } >> "$GITHUB_STEP_SUMMARY" ;;
-            *) echo "::error::registry check returned HTTP $code"; exit 1 ;;
           esac
 
   # 플랫폼마다 한 번 빌드해 digest로만 올리고(태그 없음), 받아 smoke 검사한다.
@@ -272,12 +290,14 @@ jobs:
           TAG: ${{ needs.resolve.outputs.tag }}
           VERSION: ${{ needs.resolve.outputs.version }}
           SHA: ${{ needs.resolve.outputs.sha }}
+          ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           [ "$(ls digests | wc -l)" -eq 2 ] || { echo "::error::expected two platform digests"; ls digests; exit 1; }
-          if docker buildx imagetools inspect "$IMAGE:$VERSION" >/dev/null 2>&1; then
-            echo "::error::$IMAGE:$VERSION appeared during the run. Not overwriting."; exit 1
-          fi
+          # 붙이기 직전에 다시: 확실히 없을 때만 붙인다(조회 실패는 멈춤, 덮어쓰지 않는다).
+          state=$(bash -c "$TAG_STATE" tag-state "$VERSION")
+          [ "$state" = absent ] || { echo "::error::$IMAGE:$VERSION appeared during the run. Not overwriting."; exit 1; }
           docker buildx imagetools create -t "$IMAGE:$VERSION" \
             --annotation "index:org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
             --annotation "index:org.opencontainers.image.revision=$SHA" \
