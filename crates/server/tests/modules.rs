@@ -388,10 +388,11 @@ async fn private_items_hide_their_documents_and_numbers() {
     // 번호 대장과 카운터에 직접 쓸 수 없다(할당은 정의자 함수만).
     let err = sqlx::query(
         "INSERT INTO numbered_targets (workspace_id, scope_id, number, target_kind, target_id)
-         VALUES ($1::uuid, $2::uuid, 999, 'item', gen_random_uuid())",
+         VALUES ($1::uuid, $2::uuid, 999, 'item', $3)",
     )
     .bind(&ws)
     .bind(dev["id"].as_str().unwrap())
+    .bind(uuid::Uuid::now_v7())
     .execute(tx.conn())
     .await
     .unwrap_err();

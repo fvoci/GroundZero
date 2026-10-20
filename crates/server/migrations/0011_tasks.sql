@@ -9,7 +9,7 @@
 -- 상태는 todo·in_progress·done 고정이며(프로젝트별 상태 설정은 이후), 완료 시각은 서버가 기록한다.
 
 CREATE TABLE tasks (
-  id               uuid PRIMARY KEY DEFAULT uuidv7(),
+  id               uuid PRIMARY KEY,
   workspace_id     uuid NOT NULL REFERENCES workspaces (id),
   item_id          uuid NOT NULL,
   parent_id        uuid REFERENCES tasks (id),
@@ -48,7 +48,7 @@ CREATE TABLE task_assignees (
 CREATE INDEX task_assignees_user ON task_assignees (user_id);
 
 CREATE TABLE checklist_items (
-  id         uuid PRIMARY KEY DEFAULT uuidv7(),
+  id         uuid PRIMARY KEY,
   task_id    uuid NOT NULL REFERENCES tasks (id),
   text       text NOT NULL CHECK (length(btrim(text)) > 0),
   checked    boolean NOT NULL DEFAULT false,

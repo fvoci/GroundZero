@@ -134,7 +134,7 @@ CREATE FUNCTION app_audit(p_workspace uuid, p_action text, p_target_type text, p
 ------------------------------------------------------------------------------
 
 CREATE TABLE invitations (
-  id           uuid PRIMARY KEY DEFAULT uuidv7(),
+  id           uuid PRIMARY KEY,
   workspace_id uuid NOT NULL REFERENCES workspaces (id),
   email        text NOT NULL CHECK (email = lower(btrim(email)) AND position('@' in email) > 1),
   role         text NOT NULL CHECK (role IN ('admin', 'writer', 'reader')),
@@ -395,7 +395,7 @@ CREATE FUNCTION app_accept_ownership(p_workspace uuid) RETURNS void
 ------------------------------------------------------------------------------
 
 CREATE TABLE groups (
-  id           uuid PRIMARY KEY DEFAULT uuidv7(),
+  id           uuid PRIMARY KEY,
   workspace_id uuid NOT NULL REFERENCES workspaces (id),
   name         text NOT NULL CHECK (length(btrim(name)) > 0),
   created_at   timestamptz NOT NULL DEFAULT now(),

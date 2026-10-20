@@ -25,7 +25,7 @@ CREATE TABLE document_mentions (
 );
 
 CREATE TABLE notifications (
-  id          uuid PRIMARY KEY DEFAULT uuidv7(),
+  id          uuid PRIMARY KEY,
   user_id     uuid NOT NULL REFERENCES users (id),
   kind        text NOT NULL CHECK (kind IN ('mention')),
   document_id uuid NOT NULL REFERENCES documents (id),

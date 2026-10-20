@@ -9,7 +9,7 @@
 -- (D-56의 "참조 중인 버전 보호"는 분석 기록 조각에서 더한다).
 
 CREATE TABLE files (
-  id              uuid PRIMARY KEY DEFAULT uuidv7(),
+  id              uuid PRIMARY KEY,
   workspace_id    uuid REFERENCES workspaces (id),
   owner_user_id   uuid REFERENCES users (id),
   document_id     uuid REFERENCES documents (id),
@@ -32,7 +32,7 @@ CREATE INDEX files_owner ON files (owner_user_id) WHERE owner_user_id IS NOT NUL
 CREATE INDEX files_trash ON files (trash_batch_id) WHERE trash_batch_id IS NOT NULL;
 
 CREATE TABLE file_versions (
-  id           uuid PRIMARY KEY DEFAULT uuidv7(),
+  id           uuid PRIMARY KEY,
   file_id      uuid NOT NULL REFERENCES files (id),
   version      integer NOT NULL CHECK (version > 0),
   size         bigint NOT NULL CHECK (size >= 0),
@@ -47,7 +47,7 @@ CREATE TABLE file_versions (
 
 -- 업로드 세션. 대상(새 파일이면 문서·항목, 새 버전이면 파일)은 외래 키 없이 기록하고 마칠 때 다시 확인한다.
 CREATE TABLE uploads (
-  id                uuid PRIMARY KEY DEFAULT uuidv7(),
+  id                uuid PRIMARY KEY,
   user_id           uuid NOT NULL REFERENCES users (id),
   request_id        uuid NOT NULL,
   file_id           uuid,

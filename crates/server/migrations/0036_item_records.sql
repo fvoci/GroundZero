@@ -7,7 +7,7 @@
 -- 따로 지울 수 없고(409), 파일 자체가 영구 삭제되면 연결은 이름·버전·SHA-256만 남는다.
 
 CREATE TABLE item_records (
-  id          uuid PRIMARY KEY DEFAULT uuidv7(),
+  id          uuid PRIMARY KEY,
   item_id     uuid NOT NULL REFERENCES items (id) ON DELETE CASCADE,
   workspace_id uuid NOT NULL REFERENCES workspaces (id),
   kind        text NOT NULL CHECK (kind ~ '^[a-z_]{2,32}$'),

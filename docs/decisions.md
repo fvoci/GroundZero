@@ -183,6 +183,8 @@ fvoci는 빈 저장소에서 새로 만드는 통합 작업·지식·학습 관�
   - amd64·arm64는 무료 GitHub-hosted 네이티브 러너(`ubuntu-24.04`, `ubuntu-24.04-arm`, 공개 저장소)에서 한 번씩 빌드하고 둘 다 확인을 통과해야 태그를 붙인다. 같은 태그가 이미 있으면 소스 SHA가 같을 때만 그대로 두고 다르면 실패한다. 게시 권한은 게시 job에만, 기존 `GITHUB_TOKEN`만 쓰고 PR에서는 게시하지 않는다. 사용법은 `docs/development.md` 10절.
 - **D-88 셀프호스트 Supabase를 추가 DB 배포 대상으로.** 사용자 지시(2026-10-20): 기존 자체 PostgreSQL 지원과 기본 설정을 유지하면서, 셀프호스트 Supabase의 PostgreSQL을 DB로만 쓸 수 있게 한다. Rust 백엔드·Keycloak/OIDC·S3/R2/local 저장소·Meilisearch·작업 대기열은 그대로이고, Supabase Auth·Storage·Realtime·Data API 연동과 화면의 직접 DB 접근은 들이지 않는다. Supabase Cloud와 서비스 전체 이전은 범위 밖이다.
   - 관리자 연결은 superuser가 아니어도 된다(셀프호스트 Supabase의 `postgres`는 `CREATEROLE`·`CREATEDB`·`BYPASSRLS`만 있다). `db bootstrap`은 이미 있는 역할의 속성을 다시 쓰지 않고 비밀번호만 갱신한 뒤 권한 속성(`SUPERUSER`·`CREATEROLE`·`BYPASSRLS`, 앱 역할은 `CREATEDB`까지)이 없는지 확인해 있으면 멈춘다. 스키마 소유자 지정과 복구처럼 표 소유자로 해야 하는 일은 그동안만 상속 없는 SET 멤버십을 받아 하고 거둔다. 복구에서 관리자 권한은 트리거를 잠시 끄는 설정(`session_replication_role`)에만 쓴다.
+  - 새 행의 UUIDv7은 앱(Rust `Uuid::now_v7()`)이 만들어 넘긴다(사용자 지시 2026-10-20). DB는 id를 만들지 않는다: 표에 id 기본값이 없고, 행을 만드는 정의자 함수는 마지막 인자 `p_ids uuid[]`에서 차례로 꺼내 쓰며(`app_id`), 모자라거나 UUIDv7이 아니면 멈춘다(SQLSTATE `FV001`, 다른 값으로 채우지 않음). 만드는 행 수가 미리 정해지지 않는 함수는 `<함수>_ids`가 같은 트랜잭션에서 상한을 알려 준다(권한이 없으면 0). 표는 `uuid_extract_version(id) = 7`을 확인한다. 셀프호스트 Supabase의 PostgreSQL 17에는 내장 `uuidv7()`이 없고, 같은 함수를 DB에 따로 두지 않는다. 문서 제목 변경 감사는 트리거 대신 제목을 바꾸는 두 길이 `app_audit_document_rename`으로 남긴다(이전·새 제목은 리비전에서 읽음, 리비전마다 한 번). 개발 준비 SQL도 `cargo xtask dev`가 넘긴 id 목록을 쓴다.
+  - 이 변경으로 이미 적용된 마이그레이션(표의 `DEFAULT uuidv7()`)을 고쳤다. 실제 배포 전이라 checksum 보존을 요구하지 않는다는 사용자 지시(2026-10-20)에 따른 것이며, 그 전에 만든 개발 DB는 `db migrate`가 checksum 불일치로 멈추므로 다시 만들어야 한다(지우기는 사용자 확인 뒤).
   - 역할 분리(`fvoci_migrator` 소유, 앱은 `fvoci_app` `NOBYPASSRLS`)와 `app.user_id` 트랜잭션 설정 기반 RLS는 그대로다. Supabase `auth.uid()` 정책으로 바꾸지 않고, `fvoci` 스키마를 Data API 노출 스키마에 넣지 않으며 `anon`·`authenticated` 등에 권한을 주지 않는다.
 - **D-44 보류 항목의 취급.** 운영자 대상 암호화(H-01)와 외부 플랫폼 자동 시청 추적(H-02)은 현재 필수 범위의 차단 항목이 아니다. 새 승인이 없는 상태에서 구현 범위를 확대하지 않는다. 근거: 사용자 "현재 필수 범위의 차단 항목에서 분리한다. 새 승인이 없는 상태에서 구현 범위를 확대하지 않는다".
 
@@ -294,7 +296,7 @@ fvoci는 빈 저장소에서 새로 만드는 통합 작업·지식·학습 관�
 
 2026-10-17 초기화에서 결정한 기술 설계(D-47에 따라 검토자 판단, 이유는 `docs/development.md` 8절):
 
-- **O-14** `[해소]` PostgreSQL 18(compose 이미지 `postgres:18.3-alpine`, D-85에서 `postgres:18.3-bookworm`으로 바꿈). 내장 uuidv7() 사용 가능.
+- **O-14** `[해소]` PostgreSQL 18(compose 이미지 `postgres:18.3-alpine`, D-85에서 `postgres:18.3-bookworm`으로 바꿈). 내장 uuidv7() 사용 가능. D-88부터 id는 앱이 만들고 DB의 `uuidv7()`은 쓰지 않는다(셀프호스트 Supabase의 PostgreSQL 17 지원).
 - **O-22** `[해소]` Rust 타입에서 utoipa로 `contracts/openapi.json` 생성, openapi-typescript로 TS 타입 생성. UUID·시각·날짜는 문자열, 64비트 정수는 number로 보내지 않는다. 런타임 검증은 클라이언트에서 `unknown`으로 받아 확인.
 - **O-23** `[해소]` 선택한 lint 목록은 `Cargo.toml` `[workspace.lints]`와 `eslint.config.mjs`. feature 조합은 현재 기본 feature만 검사.
 - **O-28** `[해소]` cargo-deny(`deny.toml`) + `pnpm licenses list --json`을 xtask가 허용 목록과 비교. 결과는 O-30으로 보고.
@@ -515,3 +517,4 @@ fvoci는 빈 저장소에서 새로 만드는 통합 작업·지식·학습 관�
 - 2026-10-18 80차 수정(사용자 승인·구현). O-37을 D-86으로 확정: 여섯 서체 파일 한정 OFL-1.1 예외, 필요한 화면에서만 받기(D2Coding은 코드·원문, Noto Serif는 이 브라우저의 명조 선택), 해시 자원 br·gzip 사본, 고지·SHA-256 확인. PR #21·#22·#23은 main에 병합.
 - 2026-10-20 81차 수정(사용자 지시·구현). D-87 제품 이미지 릴리스 워크플로(`release-image.yml`)와 빌드 버전 표시(태그 기준 제품 버전·소스 SHA를 서버·화면·시작 로그·OCI 라벨에 같은 값으로).
 - 2026-10-20 82차 수정(사용자 지시·구현). D-88 셀프호스트 Supabase DB 지원 1단계: superuser가 아닌 관리자로 `db bootstrap`(재실행 포함)과 백업 복구가 되게 했다.
+- 2026-10-20 83차 수정(사용자 지시·구현). D-88 2단계: 새 행 UUIDv7을 앱이 만들어 넘기고 DB의 id 생성(`DEFAULT uuidv7()`·함수 안 `uuidv7()`·제목 변경 감사 트리거)을 없앴다. 기존 마이그레이션의 기본값도 지웠다(개발 DB는 다시 만들어야 함).

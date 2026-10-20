@@ -3883,6 +3883,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "spdx",
+ "uuid",
  "xshell",
 ]
 

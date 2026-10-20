@@ -142,9 +142,25 @@ fn seed(root: &Path, compose: &Compose, sh: &Shell, issuer: &str) -> Result<()> 
     seed_file(root, compose, sh, issuer, "dev-module-seed.sql")
 }
 
+/// 준비 SQL 하나가 쓸 수 있는 새 행 id 수(넉넉히). 모자라면 준비 SQL이 멈춘다.
+const SEED_IDS: usize = 1000;
+
 fn seed_file(root: &Path, compose: &Compose, sh: &Shell, issuer: &str, name: &str) -> Result<()> {
-    let path = root.join("deploy/postgres").join(name);
-    let sql = std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    let dir = root.join("deploy/postgres");
+    let read = |file: &str| {
+        let path = dir.join(file);
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))
+    };
+    // 새 행 id는 DB가 아니라 여기서 만든다(D-88): UUIDv7 목록을 세션 설정으로 넘기고, dev-ids.sql이 꺼내 쓰게 한다.
+    let ids = (0..SEED_IDS)
+        .map(|_| uuid::Uuid::now_v7().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT set_config('fvoci.dev_ids', '{{{ids}}}', false);\n{}\n{}",
+        read("dev-ids.sql")?,
+        read(name)?
+    );
     let command: Vec<String> = [
         "psql",
         "--quiet",

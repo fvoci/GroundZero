@@ -3,7 +3,7 @@
 -- 화면이 해석하는 JSON이고 서버는 크기와 형식만 확인한다.
 
 CREATE TABLE saved_views (
-  id         uuid PRIMARY KEY DEFAULT uuidv7(),
+  id         uuid PRIMARY KEY,
   user_id    uuid NOT NULL REFERENCES users (id),
   item_id    uuid NOT NULL REFERENCES items (id) ON DELETE CASCADE,
   name       text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 100),
