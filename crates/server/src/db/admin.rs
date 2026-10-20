@@ -78,10 +78,9 @@ async fn ensure_role(
 /// 수 없다(PG16부터 CREATEROLE은 자기가 만든 역할에만 ADMIN을 받는다). 일반 DB 오류 대신 해야 할 일을 알린다.
 async fn check_manageable(conn: &mut PgConnection, role: &str) -> Result<(), AppError> {
     let manageable: bool = sqlx::query_scalar(
+        // 유효 권한(다른 역할을 거친 ADMIN OPTION 포함)으로 본다.
         "SELECT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user)
-             OR EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid
-                        WHERE r.rolname = $1 AND m.admin_option
-                          AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user))",
+             OR pg_has_role(current_user, $1, 'MEMBER WITH ADMIN OPTION')",
     )
     .bind(role)
     .fetch_one(&mut *conn)
