@@ -1722,6 +1722,35 @@ Meilisearch 데이터를 지워 작업 번호가 처음부터 다시 매겨지�
 | 서버·테스트의 함수 호출 238개 인자 수                         | DB 서명과 모두 맞음                                                                                                                                                                   |
 | 새 개발 준비 SQL(빈 PG18 DB, 격리 컨테이너)                   | PASS(항목 5·업무 7·기록 18, 감사 79건 모두 UUIDv7). 이 체크아웃·다른 체크아웃의 개발 DB에는 실행하지 않음                                                                             |
 
+### 85.3 셀프호스트 Supabase 시험 구성 (PR-C)
+
+- `cargo xtask test --supabase [--session-pooler] [--oidc]`
+  - 공식 셀프호스트 구성(`supabase/supabase@bc27d26`의 `docker/`)을 `target/supabase/<rev>/`에 얕게 받는다. 저장소에는 넣지 않는다.
+  - `deploy/supabase/compose.test.yaml`을 겹쳐 db·rest·supavisor만 띄운다. 이미지는 digest로 고정하고, 고정 컨테이너 이름을 지우고,
+    `127.0.0.1` 빈 포트와 tmpfs 데이터를 쓴다. Compose 프로젝트는 `fvoci-<체크아웃>-<해시>-supabase`다.
+  - 검색·S3(·Keycloak)은 시험 Compose에서 PostgreSQL만 빼고 띄운다. 값은 `deploy/supabase/test.env`의 시험 값이다.
+  - 관리자는 Supabase의 `postgres`(superuser 아님)다. `cargo xtask down`이 이 프로젝트도 지운다.
+- 빼는 서비스와 이유는 `docs/self-hosting-supabase.md` 6절에 있다. 운영자 안내도 그 문서에 있다.
+- CI `supabase` job이 같은 명령(`--session-pooler --oidc`)을 러너에서 돌린다. Supabase 서비스를 호스트 포트로 열므로 base 이미지
+  컨테이너 안에서 돌리지 않는다.
+- Supabase에서만 도는 시험(`supabase_*`, 다른 구성에서는 NOT RUN)
+  - 관리자가 PG17의 비-superuser `postgres`인지
+  - Supabase 역할이 fvoci 스키마·표·함수에 권한이 없는지, GroundZero 역할이 그 멤버가 아닌지
+  - RLS가 `auth.*`를 쓰지 않는지
+  - PostgREST가 `fvoci` 프로필을 거부하는지
+- 두 구성 공통 시험
+  - `db_context`: 연결 재사용 뒤 사용자 문맥이 남지 않는지
+  - `backup`: 저장소 잠금이 같은 세션에서 풀리는지, 복구 뒤 RLS가 그대로인지
+
+### 85.4 검증 (PR-C, 2026-10-20, macOS·Docker)
+
+| 검사                                                                                               | 결과                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cargo xtask test --supabase --session-pooler --oidc` 직접 연결                                    | PASS 253, FAIL 0(OIDC 로그인, 백업·빈 DB 복구, 작업 대기열 실행·완료·재시도, 권한·공동 작업 포함)                                                                                                                                                                  |
+| 같은 명령, 앱 역할을 Supavisor session 모드로                                                      | PASS 253, FAIL 0. 첫 시도는 2건 FAIL(`XX000`): 시험 env의 풀 크기 20이 테스트가 동시에 여는 연결보다 작음. 64로 늘린 뒤 통과. 새 DB를 만드는 시험은 직접 연결로 돈다(session 테넌트는 DB 하나)                                                                     |
+| 브라우저(내장 브라우저, 서버·웹을 Supabase DB와 시험 Keycloak으로, 별도 프로젝트·포트 18080/15173) | OIDC 로그인 → 초기 관리자 워크스페이스 → 위키 문서 만들기·본문·제목 고치기(리비전 2) → 모듈·항목·업무 만들기, 항목 설명 고치기 → 로그아웃·서버 재시작·다시 로그인 뒤 모두 그대로. DB: PostgreSQL 17.6, 만든 행 id 13개 모두 UUIDv7, 제목 변경 감사에 `revision: 2` |
+| Supabase Cloud, transaction 모드(6543), Supabase와 함께 쓰는 앱 Compose 구성                       | NOT RUN(범위 밖·제공하지 않음)                                                                                                                                                                                                                                     |
+
 ## 참고 자료
 
 - [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict.html)
