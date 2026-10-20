@@ -183,6 +183,32 @@ describe('gantt reschedule', () => {
     });
   });
 
+  it('cannot be cancelled once the change is being saved', async () => {
+    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    vi.spyOn(api, 'task').mockResolvedValue(detail(design));
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue([shift]);
+    let finish: (v: Awaited<ReturnType<typeof api.updateTask>>) => void = () => undefined;
+    const update = vi.spyOn(api, 'updateTask').mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const gantt = await mount();
+    await fireEvent.keyDown(rowButton(gantt, 'a'), { key: 'ArrowRight', altKey: true });
+    const dialog = await screen.findByRole('dialog');
+    await fireEvent.click(within(dialog).getByRole('button', { name: '후속 업무도 옮겨 저장' }));
+    expect(update).toHaveBeenCalled();
+    // 저장을 보낸 뒤에는 취소 단추가 꺼지고 Esc로도 닫히지 않는다(닫으면 "바꾸지 않았다"는 안내가 사실과 달라진다).
+    expect(within(dialog).getByRole('button', { name: '취소' })).toHaveProperty('disabled', true);
+    await fireEvent.keyDown(document.activeElement ?? dialog, { key: 'Escape' });
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.queryByText(/일정을 바꾸지 않았습니다/)).toBeNull();
+    finish({ kind: 'updated', task: detail(task('a', '설계', '2026-10-21', '2026-10-23', 2)) });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+  });
+
   it('saves nothing when cancelled and reads the list again', async () => {
     const read = vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));

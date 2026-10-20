@@ -32,6 +32,9 @@ describe('reference hash', () => {
   });
 });
 
+// 알림 영역은 늘 있고 보일 때만 글이 들어간다.
+const statusText = (): string => screen.getByRole('status').textContent.trim();
+
 const scroll = vi.fn<(arg?: boolean | ScrollIntoViewOptions) => void>();
 
 describe('reference focus', () => {
@@ -47,13 +50,14 @@ describe('reference focus', () => {
   it('scrolls to the reference and steps through several', async () => {
     const root = body(ITEM, OTHER, ITEM);
     render(ReferenceFocus, { props: { root, target: { kind: 'item', id: ITEM } } });
-    const status = await screen.findByRole('status');
-    expect(status.textContent).toContain('2곳 가운데 1번째');
+    await waitFor(() => {
+      expect(statusText()).toContain('2곳 가운데 1번째');
+    });
     const refs = [...root.querySelectorAll<HTMLElement>(`[data-id="${ITEM}"]`)];
     expect(refs[0]?.classList.contains('ring-2')).toBe(true);
     expect(scroll).toHaveBeenCalled();
     await fireEvent.click(screen.getByRole('button', { name: '다음 참조' }));
-    expect(screen.getByRole('status').textContent).toContain('2곳 가운데 2번째');
+    expect(statusText()).toContain('2곳 가운데 2번째');
     expect(refs[1]?.classList.contains('ring-2')).toBe(true);
     expect(refs[0]?.classList.contains('ring-2')).toBe(false);
   });
@@ -62,16 +66,20 @@ describe('reference focus', () => {
     const root = body();
     render(ReferenceFocus, { props: { root, target: { kind: 'item', id: ITEM } } });
     root.append(body(ITEM));
-    expect((await screen.findByRole('status')).textContent).toContain('1곳 가운데 1번째');
+    await waitFor(() => {
+      expect(statusText()).toContain('1곳 가운데 1번째');
+    });
     expect(screen.queryByRole('button', { name: '다음 참조' })).toBeNull();
   });
 
   it('says it could not find the reference when it is gone, and does nothing without a target', async () => {
     const root = body(OTHER);
     render(ReferenceFocus, { props: { root, target: { kind: 'item', id: ITEM }, wait: 20 } });
-    expect((await screen.findByRole('status')).textContent).toContain('찾지 못했습니다');
+    await waitFor(() => {
+      expect(statusText()).toContain('찾지 못했습니다');
+    });
     await fireEvent.click(screen.getByRole('button', { name: '닫기' }));
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(statusText()).toBe('');
   });
 });
 
@@ -127,7 +135,7 @@ describe('reference focus before the body exists', () => {
     const view = render(ReferenceFocus, {
       props: { root: null, target: { kind: 'item', id: ITEM } },
     });
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(statusText()).toBe('');
     view.unmount();
   });
 });

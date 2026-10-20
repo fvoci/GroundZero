@@ -343,6 +343,6 @@
   "documents_reparent_current": "current parent",
   "documents_reparent_cancel": "Cancel",
   "documents_reparent_confirm": "Move",
-  "documents_children_heading": "{count} subdocuments",
+  "documents_children_heading": "Subdocuments ({count})",
   "documents_children_failed": "Couldn't load the subdocuments."
 }

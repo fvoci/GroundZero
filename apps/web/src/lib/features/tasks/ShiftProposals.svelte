@@ -70,6 +70,7 @@
         ondecide(false);
       }}>{m.tasks_shift_save_this()}</Button
     >
-    <Button size="sm" variant="ghost" onclick={oncancel}>{m.common_cancel()}</Button>
+    <Button size="sm" variant="ghost" disabled={busy} onclick={oncancel}>{m.common_cancel()}</Button
+    >
   </div>
 </section>

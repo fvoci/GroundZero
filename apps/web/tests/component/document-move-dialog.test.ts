@@ -124,11 +124,52 @@ describe('move under another document (search)', () => {
     await fireEvent.keyDown(row('점검 기록'), { key: 'm', altKey: true });
     const dialog = await screen.findByRole('dialog');
     const input = within(dialog).getByRole('combobox');
+    input.focus();
     await fireEvent.input(input, { target: { value: '백업' } });
     await fireEvent.keyDown(input, { key: 'Enter' });
     const alert = await within(dialog).findByRole('alert');
     expect(alert.textContent).toContain('문서를 옮기지 못했습니다');
     expect(screen.getByRole('dialog')).toBeTruthy();
+    // 거절된 뒤에도 검색 입력에 초점이 남아 다른 곳을 고를 수 있다.
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('keeps the search input usable (read-only, not disabled) while a move is being sent', async () => {
+    let finish: () => void = () => undefined;
+    const onmove = vi.fn<(id: string, move: TreeMove) => Promise<void>>(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    mount(onmove);
+    await fireEvent.keyDown(row('점검 기록'), { key: 'm', altKey: true });
+    const dialog = await screen.findByRole('dialog');
+    const input = within(dialog).getByRole('combobox');
+    input.focus();
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    // 비활성화하면 브라우저가 초점을 빼므로 읽기 전용과 aria-busy로 둔다.
+    expect(input).toHaveProperty('disabled', false);
+    expect(input).toHaveProperty('readOnly', true);
+    expect(input.getAttribute('aria-busy')).toBe('true');
+    finish();
+  });
+
+  it('does not close as if moved when another move is still running', async () => {
+    const onmove = vi.fn<(id: string, move: TreeMove) => Promise<void>>(
+      () => new Promise<void>(() => undefined),
+    );
+    mount(onmove);
+    // 트리의 다른 옮기기(Alt+아래)가 아직 끝나지 않았다.
+    await fireEvent.keyDown(row('운영 안내'), { key: 'ArrowDown', altKey: true });
+    await fireEvent.keyDown(row('점검 기록'), { key: 'm', altKey: true });
+    const dialog = await screen.findByRole('dialog');
+    await fireEvent.keyDown(within(dialog).getByRole('combobox'), { key: 'Enter' });
+    expect((await within(dialog).findByRole('alert')).textContent).toContain(
+      '문서를 옮기지 못했습니다',
+    );
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(onmove).toHaveBeenCalledTimes(1);
   });
 
   it('says when nothing matches', async () => {

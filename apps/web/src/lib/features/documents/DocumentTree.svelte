@@ -102,7 +102,8 @@
   // 검색으로 상위 문서를 골라 옮기기(창). 맨 끝 자식으로 들어간다.
   let moving = $state<string | undefined>(undefined);
   async function moveUnder(id: string, parentId: string | null): Promise<string | undefined> {
-    if (busy) return undefined;
+    // 다른 옮기기가 진행 중이면 이번 것은 보내지 않았다(성공으로 알리면 창이 닫히므로 실패로 돌려준다).
+    if (busy) return m.documents_tree_move_failed_plain();
     busy = true;
     try {
       failure = undefined;

@@ -511,6 +511,12 @@
   let adding = $state<TaskStatus | undefined>(undefined);
   // 달력 보기의 날짜 칸에서 이 항목에 업무 만들기(그 날짜가 마감일).
   let createDay = $state<string | undefined>(undefined);
+  let boardCalendar = $state<HTMLElement | undefined>(undefined);
+  /** 만들기 창이 닫히면 이 보드 달력의 그 날짜 단추로(같은 화면의 다른 달력 단추가 아니라). */
+  async function focusCreate(day: string): Promise<void> {
+    await tick();
+    boardCalendar?.querySelector<HTMLElement>(`[data-create-day="${day}"]`)?.focus();
+  }
 
   // 간트에서 일정 바꾸기(D-31). 최신 업무를 읽어 그 판으로 후속 업무 영향을 미리 보고, 있으면 묻고(승인·이 업무만·취소),
   // 없으면 바로 저장한다. 그사이 그 업무의 날짜가 바뀌었으면(다른 사람) 저장하지 않는다. 끝나면 목록을 다시 읽어
@@ -649,7 +655,8 @@
 
   function cancelGantt(): void {
     const a = ganttAsk;
-    if (a === undefined) return;
+    // 저장을 보낸 뒤에는 취소할 수 없다(결과를 기다린다).
+    if (a === undefined || ganttBusy) return;
     ganttAsk = undefined;
     status = m.tasks_gantt_cancelled({ title: a.task.title });
     a.done();
@@ -1439,15 +1446,17 @@
     {/if}
     <GanttChart tasks={shown} onopen={open} reschedule={canWrite ? reschedule : undefined} />
   {:else if view === 'calendar'}
-    <TaskCalendar
-      tasks={shown}
-      onopen={open}
-      oncreate={canWrite
-        ? (day: string) => {
-            createDay = day;
-          }
-        : undefined}
-    />
+    <div bind:this={boardCalendar}>
+      <TaskCalendar
+        tasks={shown}
+        onopen={open}
+        oncreate={canWrite
+          ? (day: string) => {
+              createDay = day;
+            }
+          : undefined}
+      />
+    </div>
   {:else}
     <table class="w-full text-sm" data-testid="task-list">
       <thead class="text-left text-muted-foreground">
@@ -1553,19 +1562,13 @@
   onclose={() => {
     const day = createDay;
     createDay = undefined;
-    if (day !== undefined)
-      void tick().then(() =>
-        document.querySelector<HTMLElement>(`[data-create-day="${day}"]`)?.focus(),
-      );
+    if (day !== undefined) void focusCreate(day);
   }}
   oncreated={(task: TaskDetailView) => {
     const day = createDay;
     createDay = undefined;
     // 만든 뒤에도 그 날짜의 만들기 단추로 초점을 돌린다(달력을 다시 읽어도 단추는 그대로 있다).
-    if (day !== undefined)
-      void tick().then(() =>
-        document.querySelector<HTMLElement>(`[data-create-day="${day}"]`)?.focus(),
-      );
+    if (day !== undefined) void focusCreate(day);
     notifyDone(
       m.events_task_created({
         title: task.title,
@@ -1584,6 +1587,9 @@
 >
   <Dialog.Content
     class="sm:max-w-lg"
+    escapeKeydownBehavior={ganttBusy ? 'ignore' : 'close'}
+    interactOutsideBehavior={ganttBusy ? 'ignore' : 'close'}
+    showCloseButton={!ganttBusy}
     onCloseAutoFocus={(e: Event) => {
       e.preventDefault();
     }}

@@ -67,3 +67,68 @@ describe('search author and title only', () => {
     expect(search.mock.calls.at(-1)?.[2]).not.toHaveProperty('author');
   });
 });
+
+describe('search author that is no longer in the member list', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+    // jsdom에 없는 포인터 잡기·스크롤(고르기 목록이 쓴다).
+    Element.prototype.hasPointerCapture = (): boolean => false;
+    Element.prototype.setPointerCapture = (): void => undefined;
+    Element.prototype.releasePointerCapture = (): void => undefined;
+    Element.prototype.scrollIntoView = (): void => undefined;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('drops the chosen person when the next workspace does not have them', async () => {
+    const members = vi
+      .spyOn(api, 'members')
+      .mockResolvedValueOnce({
+        members: [
+          {
+            user_id: 'u-2',
+            display_name: '가상 멤버',
+            email: null,
+            role: 'writer',
+            is_owner: false,
+          },
+        ],
+        my_role: 'admin',
+        i_am_owner: true,
+      })
+      .mockResolvedValue({ members: [], my_role: 'admin', i_am_owner: true });
+    const search = vi.spyOn(api, 'search').mockResolvedValue([]);
+    const view = render(SearchDialog, {
+      props: { open: true, memberOf: () => true, workspace: { id: 'ws-1', name: '공간' } },
+    });
+    await waitFor(() => {
+      expect(members).toHaveBeenCalledWith('ws-1');
+    });
+    const trigger = document.querySelector<HTMLElement>('[aria-labelledby="search-author-label"]');
+    if (trigger === null) throw new Error('author trigger');
+    await fireEvent.pointerDown(trigger, { button: 0, pointerType: 'mouse' });
+    await fireEvent.click(trigger);
+    const option = await screen.findByRole('option', { name: '가상 멤버' });
+    await fireEvent.pointerUp(option, { button: 0, pointerType: 'mouse' });
+    await fireEvent.click(option);
+    await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의' } });
+    await waitFor(() => {
+      const last: SearchFilters | undefined = search.mock.calls.at(-1)?.[2];
+      expect(last?.author).toBe('u-2');
+    });
+    await view.rerender({
+      open: true,
+      memberOf: () => true,
+      workspace: { id: 'ws-2', name: '다른 공간' },
+    });
+    await waitFor(() => {
+      expect(members).toHaveBeenCalledWith('ws-2');
+    });
+    await waitFor(() => {
+      const last: SearchFilters | undefined = search.mock.calls.at(-1)?.[2];
+      expect(last?.author).toBeUndefined();
+    });
+    expect(trigger.textContent.trim()).toBe('누구나');
+  });
+});

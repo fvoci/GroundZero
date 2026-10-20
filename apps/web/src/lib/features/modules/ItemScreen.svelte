@@ -428,7 +428,7 @@
     <CalendarScreen
       {workspace}
       scope={{ itemId: current.id }}
-      item={current}
+      item={view}
       embedded
       version={calendarVersion}
       onchanged={() => {

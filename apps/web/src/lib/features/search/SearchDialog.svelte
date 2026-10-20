@@ -1,6 +1,6 @@
 <script lang="ts">
   // 통합 검색 창(D-39). 사이드바 단추나 Ctrl/⌘+K로 연다. 볼 수 있는 것만 서버가 돌려준다.
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
 
   import type { SearchFilters, SearchKind, SearchResultView, TaskStatus } from '$lib/api/client';
   import { api } from '$lib/api/client';
@@ -44,17 +44,34 @@
   let author = $state<string>('any');
   let titleOnly = $state(false);
   let people = $state<{ user_id: string; display_name: string }[]>([]);
+  // 고른 사람이 지금 멤버 목록에 없으면(다른 워크스페이스로 옮김·목록을 못 읽음) 그 선택을 거둔다(표시는 "누구나"인데
+  // 거르기는 남아 있는 일이 없게). "나"·"누구나"는 그대로.
+  function dropMissingAuthor(list: readonly { user_id: string }[]): void {
+    untrack(() => {
+      if (author === 'any' || author === 'me' || list.some((p) => p.user_id === author)) return;
+      author = 'any';
+      refilter();
+    });
+  }
   $effect(() => {
     const ws = workspace?.id;
     people = [];
-    if (!open || ws === undefined) return;
+    if (!open) return;
+    if (ws === undefined) {
+      dropMissingAuthor([]);
+      return;
+    }
     let cancelled = false;
     api
       .members(ws)
       .then((v) => {
-        if (!cancelled) people = v.members;
+        if (cancelled) return;
+        people = v.members;
+        dropMissingAuthor(v.members);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) dropMissingAuthor([]);
+      });
     return () => {
       cancelled = true;
     };

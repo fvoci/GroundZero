@@ -128,7 +128,8 @@
         aria-activedescendant={options.length > 0 ? optionId(active) : undefined}
         bind:value={query}
         {onkeydown}
-        disabled={busy}
+        readonly={busy}
+        aria-busy={busy}
       />
     </label>
     {#if options.length === 0}

@@ -146,7 +146,8 @@
       {/if}
     </div>
   </div>
-  {#key doc.id}
+  <!-- 본문 편집기와 같은 키: 복원·다시 열기로 본문을 새로 그리면 참조 자리도 다시 찾는다. -->
+  {#key `${doc.id}:${String(epoch)}:${String(doc.realtime)}`}
     <ReferenceFocus root={bodyArea} target={parseReferenceHash(router.hash)} />
   {/key}
   <!-- 넓은 화면에서는 본문 옆에 목차(Outline처럼 읽기 위치를 잡기 쉽게). 좁은 화면에서는 본문만. -->

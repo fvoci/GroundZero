@@ -76,12 +76,20 @@
   });
 </script>
 
+<!-- 알림 영역은 늘 두고(나중에 생긴 영역은 화면 낭독기가 놓칠 수 있다) 보일 때만 글을 넣는다. -->
+<p role="status" class="sr-only" data-reference-focus-status>
+  {#if !closed && phase === 'found'}
+    {m.references_focus_found({ count: found.length, current: index + 1 })}
+  {:else if !closed && phase === 'missing'}
+    {m.references_focus_missing()}
+  {/if}
+</p>
 {#if !closed && (phase === 'found' || phase === 'missing')}
   <div
     class="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm"
     data-reference-focus={phase}
   >
-    <p role="status" class="flex-1">
+    <p class="flex-1" aria-hidden="true">
       {phase === 'found'
         ? m.references_focus_found({ count: found.length, current: index + 1 })
         : m.references_focus_missing()}

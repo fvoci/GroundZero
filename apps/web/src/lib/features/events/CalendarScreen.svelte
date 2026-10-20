@@ -56,6 +56,14 @@
       : item !== undefined && item.access !== 'read' && !item.archived && !item.is_template,
   );
   let createDay = $state<string | undefined>(undefined);
+  let root = $state<HTMLElement | undefined>(undefined);
+  /** 만들기 창이 닫히면 이 달력의 그 날짜 단추로, 그 단추가 보이지 않으면(좁은 화면의 날짜 목록) 위의 만들기 단추로. */
+  async function focusCreate(day: string): Promise<void> {
+    await tick();
+    const cell = root?.querySelector<HTMLElement>(`[data-create-day="${day}"]`);
+    if (cell !== null && cell !== undefined && cell.offsetParent !== null) cell.focus();
+    else root?.querySelector<HTMLElement>('[data-create-top]')?.focus();
+  }
 
   // 워크스페이스 달력의 거르기: 모듈 → 그 모듈의 항목.
   let modules = $state<Module[]>([]);
@@ -206,7 +214,7 @@
   const WEEKDAYS = weekdays(settings).map((w) => w.short);
 </script>
 
-<section class="flex flex-col gap-3" aria-labelledby="calendar-heading">
+<section class="flex flex-col gap-3" aria-labelledby="calendar-heading" bind:this={root}>
   <div class="flex flex-wrap items-center gap-2">
     {#if embedded}
       <h2 id="calendar-heading" class="text-lg font-semibold" tabindex="-1">
@@ -216,7 +224,7 @@
       <h1 id="calendar-heading" class="text-xl font-semibold" tabindex="-1">{title}</h1>
     {/if}
     {#if canCreate}
-      <Button size="sm" variant="outline" onclick={() => (createDay = today)}
+      <Button size="sm" variant="outline" data-create-top onclick={() => (createDay = today)}
         >{m.events_task_create()}</Button
       >
     {/if}
@@ -352,19 +360,13 @@
   onclose={() => {
     const day = createDay;
     createDay = undefined;
-    if (day !== undefined)
-      void tick().then(() =>
-        document.querySelector<HTMLElement>(`[data-create-day="${day}"]`)?.focus(),
-      );
+    if (day !== undefined) void focusCreate(day);
   }}
   oncreated={(task: TaskDetailView) => {
     const day = createDay;
     createDay = undefined;
     // 만든 뒤에도 그 날짜의 만들기 단추로 초점을 돌린다(달력을 다시 읽어도 단추는 그대로 있다).
-    if (day !== undefined)
-      void tick().then(() =>
-        document.querySelector<HTMLElement>(`[data-create-day="${day}"]`)?.focus(),
-      );
+    if (day !== undefined) void focusCreate(day);
     notifyDone(
       m.events_task_created({
         title: task.title,
