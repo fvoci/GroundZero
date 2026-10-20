@@ -256,17 +256,53 @@ pub async fn restore(
     }
     let url = need(db.admin_url.as_ref(), "DATABASE_ADMIN_URL")?;
     let mut conn = PgConnection::connect_with(&crate::db::connect_options(url)?).await?;
+    // 무엇이든 올리기 전에, 복구 끝에 필요한 관리자 권한(트리거를 잠시 끄는 설정)이 있는지 본다.
+    check_replication_role(&mut conn).await?;
     // 표는 마이그레이션 역할(표 소유자)로 읽고 채운다. superuser가 아닌 관리자(셀프호스트 Supabase의 `postgres`)는
     // fvoci 표에 권한이 없다. 관리자 권한은 트리거를 잠시 끄는 설정에만 쓴다(`load_tables`, D-88).
     let granted = crate::db::admin::borrow_migrator(&mut conn).await?;
     let result = restore_as_owner(config, &mut conn, from, &manifest).await;
     let released = crate::db::admin::release_migrator(&mut conn, granted).await;
-    // 연결 닫기 실패가 복구 실패·멤버십 회수 실패를 덮지 않게 마지막에 본다.
-    let closed = conn.close().await;
+    let closed = conn.close().await.map_err(AppError::from);
+    // 원래 실패(복구)를 먼저 돌려준다. 뒤따른 정리 실패(멤버십 회수·연결 닫기)도 버리지 않고 로그에 남긴다:
+    // 회수 실패는 관리자에게 임시 SET 멤버십이 남았다는 뜻이다.
+    for (step, outcome) in [("release_migrator", &released), ("close", &closed)] {
+        if let (Err(_), Err(err)) = (&result, outcome) {
+            tracing::error!(
+                event = "backup.restore_cleanup_failed",
+                step,
+                error_code = err.code(),
+                detail = crate::logging::safe_error(err),
+                "cleanup after a failed restore also failed"
+            );
+        }
+    }
     result?;
     released?;
     closed?;
     Ok(manifest)
+}
+
+/// 복구는 표를 채우는 동안 `session_replication_role = replica`로 트리거(외래 키 포함)를 끈다. 그 설정은 superuser,
+/// 그 매개변수의 SET 권한이 있는 역할, 셀프호스트 Supabase의 `postgres`(supautils가 허락)만 바꿀 수 있다. 실제로
+/// 바꿔 보고 되돌려, 권한이 없으면 파일을 올리기 전에 멈춘다(권한을 스스로 얻지 않는다).
+async fn check_replication_role(conn: &mut PgConnection) -> Result<(), AppError> {
+    let mut tx = conn.begin().await?;
+    let allowed = sqlx::query("SET LOCAL session_replication_role = replica")
+        .execute(&mut *tx)
+        .await;
+    tx.rollback().await?;
+    match allowed {
+        Ok(_) => Ok(()),
+        Err(err) if err.as_database_error().and_then(|e| e.code()).as_deref() == Some("42501") => {
+            Err(AppError::Config(
+                "the admin role cannot set session_replication_role, which restore needs; use a superuser, \
+                 or have a superuser run GRANT SET ON PARAMETER session_replication_role TO <admin>"
+                    .into(),
+            ))
+        }
+        Err(err) => Err(err.into()),
+    }
 }
 
 async fn restore_as_owner(
