@@ -463,6 +463,8 @@
       return true;
     } catch (e: unknown) {
       if (!current(id, seq)) return false;
+      // 요청이 끝났으므로 "지연" 타이머가 대조 결과(확인 못 함 등)를 덮지 않게 멈춘다.
+      clearTimers(id);
       patch(id, seq, { inFlight: false });
       if (classifyMoveError(e) === 'uncertain') return (await reconcile(id, seq)) === 'applied';
       finish(id);

@@ -235,7 +235,7 @@
   "tasks_parent_failed": "Couldn't change the parent task.",
   "tasks_parent_has_subtasks": "A task with subtasks can't go under another task.",
   "tasks_move_saving": "{title}: saving.",
-  "tasks_move_slow": "{title}: the server is slow to respond. Checking whether it was saved.",
+  "tasks_move_slow": "{title}: the server is slow to respond. The result isn't known yet.",
   "tasks_move_checking": "{title}: checking with the server whether it was saved.",
   "tasks_move_confirmed": "{title}: saved ({status}).",
   "tasks_move_unknown": "{title}: couldn't confirm whether it was saved. Check your connection, then check again.",
@@ -246,7 +246,7 @@
   "tasks_move_retry": "Try again",
   "tasks_move_keep": "Leave it",
   "tasks_card_saving": "Saving…",
-  "tasks_card_slow": "Slow response · checking",
+  "tasks_card_slow": "Slow response",
   "tasks_card_checking": "Checking…",
   "tasks_card_unknown": "Save not confirmed",
   "tasks_card_not_saved": "Not saved"

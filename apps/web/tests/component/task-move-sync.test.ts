@@ -268,6 +268,31 @@ describe('kanban save states', () => {
     expect(laneOf('a')).toBe('in_progress');
   });
 
+  it('lost response and the list cannot be read: stays "not confirmed" until checked again', async () => {
+    let call = 0;
+    vi.spyOn(api, 'tasks').mockImplementation(() => {
+      call += 1;
+      if (call === 1) return Promise.resolve(start);
+      if (call === 2) return Promise.reject(new NetworkError('offline'));
+      return Promise.resolve(moved);
+    });
+    vi.spyOn(api, 'moveTask').mockRejectedValue(new NetworkError('reset'));
+    await mount();
+    await moveRight('a');
+    await flush();
+    expect(saveState('a')).toBe('unknown');
+    // 요청은 이미 끝났으므로 3초 뒤에도 "지연"으로 바뀌지 않는다.
+    await flush(3000);
+    expect(saveState('a')).toBe('unknown');
+    const box = card('a').closest<HTMLElement>('[data-board-card]');
+    if (box === null) throw new Error('box');
+    await fireEvent.click(within(box).getByRole('button', { name: '다시 확인' }));
+    await flush();
+    expect(saveState('a')).toBeNull();
+    expect(laneOf('a')).toBe('in_progress');
+    expect(liveText()).toContain('저장을 확인했습니다');
+  });
+
   it('retry does not overwrite a change made elsewhere in the meantime', async () => {
     const elsewhere = [task('b', '문서 검토'), task('a', 'API 연결', 'done', 2)];
     lists(start, start, elsewhere);
