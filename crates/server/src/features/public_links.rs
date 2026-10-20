@@ -10,6 +10,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::db::new_ids;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::{CurrentUser, random_token, token_hash};
 use crate::features::documents::{Access, manager_access};
@@ -113,10 +114,11 @@ pub async fn create(
 ) -> Result<(StatusCode, Json<CreatedPublicLink>), AppError> {
     let token = random_token();
     let mut tx = state.db.begin_as(user).await?;
-    let link: Uuid = sqlx::query_scalar("SELECT app_create_public_link($1, $2, $3)")
+    let link: Uuid = sqlx::query_scalar("SELECT app_create_public_link($1, $2, $3, $4)")
         .bind(id)
         .bind(token_hash(&token))
         .bind(input.expires_at)
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -147,8 +149,9 @@ pub async fn revoke(
     Path(link): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_revoke_public_link($1)")
+    sqlx::query("SELECT app_revoke_public_link($1, $2)")
         .bind(link)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

@@ -208,10 +208,11 @@ pub async fn export(
         ExportFormat::Zip => "zip",
         ExportFormat::Pdf => "pdf",
     };
-    sqlx::query("SELECT app_audit_document_export($1, $2, $3)")
+    sqlx::query("SELECT app_audit_document_export($1, $2, $3, $4)")
         .bind(id)
         .bind(revision)
         .bind(format)
+        .bind(crate::db::new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -299,12 +300,13 @@ pub(crate) async fn restore_in_db(
         validate_body(body, limits)?;
     }
     let outcome: String =
-        sqlx::query_scalar("SELECT app_restore_document_revision($1, $2, $3, $4, $5)")
+        sqlx::query_scalar("SELECT app_restore_document_revision($1, $2, $3, $4, $5, $6)")
             .bind(request.doc)
             .bind(request.revision)
             .bind(request.request_id)
             .bind(request.base_revision)
             .bind(SCHEMA_VERSION)
+            .bind(crate::db::new_ids(2))
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;

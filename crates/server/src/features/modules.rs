@@ -16,7 +16,7 @@ use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{UserTx, is_unique_violation};
+use crate::db::{UserTx, is_unique_violation, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
@@ -646,7 +646,7 @@ pub async fn create_item_document(
         let mut tx = state.db.begin_as(user).await?;
         let body = initial_body(&mut tx, input.template_id).await?;
         let id: DocumentId =
-            sqlx::query_scalar("SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7)")
+            sqlx::query_scalar("SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7, $8)")
                 .bind(item)
                 .bind(input.request_id)
                 .bind(&title)
@@ -654,6 +654,7 @@ pub async fn create_item_document(
                 .bind(body)
                 .bind(input.parent_id)
                 .bind(max_depth(&state.config.limits))
+                .bind(new_ids(3))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;
