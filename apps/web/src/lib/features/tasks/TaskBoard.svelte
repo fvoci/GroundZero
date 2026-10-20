@@ -28,7 +28,14 @@
     planDrop,
   } from './board';
   import type { MoveOrigin } from './move-sync';
-  import { classifyMoveError, originOf, overlayPending, reconcileMove, replan } from './move-sync';
+  import {
+    classifyMoveError,
+    originOf,
+    overlapped,
+    overlayPending,
+    reconcileMove,
+    replan,
+  } from './move-sync';
   import type { TaskFilter, TaskSort, TaskViewMode } from './filters';
   import {
     applyFilter,
@@ -454,10 +461,17 @@
       }, CHECK_MS),
     ];
     try {
-      await api.moveTask(id, plan.status, plan.beforeId);
+      const saved = await api.moveTask(id, plan.status, plan.beforeId);
       if (!current(id, seq)) return true;
       finish(id);
       await reload();
+      // 다시 시도는 보내기 직전에 읽은 서버 자리를 기준으로 보낸다. 이동 API에는 판 조건이 없어 그 사이 다른 변경이
+      // 끼면 이 이동이 덮는다. 응답의 판이 이 이동만으로 될 판보다 크면 그런 변경이 있었던 것이므로 알린다.
+      if (replacing !== undefined && overlapped(origin, plan, saved.version)) {
+        moveNotice = m.tasks_move_overlapped({ title });
+        status = moveNotice;
+        return true;
+      }
       clearMoveNotice();
       status = movedMessage(how, title, plan.status);
       return true;
@@ -532,7 +546,8 @@
   }
 
   /**
-   * 저장되지 않은 이동을 다시 보낸다. 보내기 직전 서버를 한 번 더 읽어 그사이 다른 곳에서 바뀌었으면 덮지 않고 알린다.
+   * 저장되지 않은 이동을 다시 보낸다. 보내기 직전 서버를 한 번 더 읽어 그때까지 다른 곳에서 바뀌었으면 보내지 않고 알린다.
+   * 읽은 뒤 보내기 전 사이의 변경은 이동 API에 판 조건이 없어 막지 못하므로, 응답의 판으로 알아차려 알린다(`overlapped`).
    */
   async function retryMove(id: string): Promise<void> {
     const p = pending[id];

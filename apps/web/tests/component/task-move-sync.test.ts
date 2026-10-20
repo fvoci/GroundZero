@@ -8,6 +8,7 @@ import { api, ApiError, NetworkError } from '$lib/api/client';
 import {
   classifyMoveError,
   originOf,
+  overlapped,
   overlayPending,
   reconcileMove,
   replan,
@@ -99,6 +100,18 @@ describe('move result helpers', () => {
     expect(classifyMoveError(new ApiError(418, 'unexpected', 'x'))).toBe('uncertain');
     expect(classifyMoveError(new NetworkError('offline'))).toBe('uncertain');
     expect(classifyMoveError(new TypeError('bad body'))).toBe('uncertain');
+  });
+
+  it('notices a change that slipped in before a resend only when it raised the version', () => {
+    // 이 이동만이면 열이 바뀌어 판 1 → 2.
+    expect(overlapped(origin, plan, 2)).toBe(false);
+    // 그사이 다른 사람의 열 이동이나 편집이 판을 올렸다.
+    expect(overlapped(origin, plan, 3)).toBe(true);
+    // 같은 열 안 순서 바꾸기는 판이 오르지 않는다: 이 이동만이면 그대로, 편집이 끼면 오른다.
+    const sameLane = { status: 'todo' as const, beforeId: null };
+    expect(overlapped(origin, sameLane, 1)).toBe(false);
+    expect(overlapped(origin, sameLane, 2)).toBe(true);
+    // 한계: 다른 사람이 같은 열 안에서만 순서를 바꿨다면 판이 같아 알 수 없다(위 첫 경우와 구별되지 않음).
   });
 
   it('keeps other pending moves on top of a fresh list and replans a vanished target', () => {
@@ -266,6 +279,9 @@ describe('kanban save states', () => {
     expect(move).toHaveBeenLastCalledWith('a', 'in_progress', null);
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('in_progress');
+    // 응답의 판이 이 이동만으로 될 판(1 → 2)이므로 겹친 변경으로 알리지 않는다.
+    expect(liveText()).toContain('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
+    expect(screen.queryByRole('alert')?.textContent ?? '').not.toContain('덮었을 수 있습니다');
   });
 
   it('lost response and the list cannot be read: stays "not confirmed" until checked again', async () => {
@@ -293,7 +309,7 @@ describe('kanban save states', () => {
     expect(liveText()).toContain('저장을 확인했습니다');
   });
 
-  it('retry does not overwrite a change made elsewhere in the meantime', async () => {
+  it('retry is not sent when the list read just before it shows a change made elsewhere', async () => {
     const elsewhere = [task('b', '문서 검토'), task('a', 'API 연결', 'done', 2)];
     lists(start, start, elsewhere);
     const move = vi.spyOn(api, 'moveTask').mockRejectedValue(new NetworkError('reset'));
@@ -307,6 +323,39 @@ describe('kanban save states', () => {
     expect(move).toHaveBeenCalledTimes(1);
     expect(laneOf('a')).toBe('done');
     expect(screen.getByRole('alert').textContent).toContain('그사이 다른 곳에서 바뀌어');
+  });
+
+  it('a change made elsewhere right after the reread is reported, not confirmed', async () => {
+    // 다시 시도 직전 목록은 이동 전 그대로(판 1)였는데, 보내기 전에 다른 사람이 완료로 옮겼다(판 2). 이동 API에는 판
+    // 조건이 없어 이번 이동이 그 위에 반영되고(판 3) 그 변경을 덮는다. 막을 수는 없으므로 확정이라고 하지 않고 알린다.
+    const overlappedA = task('a', 'API 연결', 'in_progress', 3);
+    const read = lists(start, start, start, [task('b', '문서 검토'), overlappedA]);
+    const move = vi
+      .spyOn(api, 'moveTask')
+      .mockRejectedValueOnce(new NetworkError('reset'))
+      .mockResolvedValueOnce({ ...overlappedA, checklist: [] });
+    await mount();
+    await moveRight('a');
+    await flush();
+    expect(saveState('a')).toBe('not_saved');
+    const box = card('a').closest<HTMLElement>('[data-board-card]');
+    if (box === null) throw new Error('box');
+    await fireEvent.click(within(box).getByRole('button', { name: '다시 시도' }));
+    await flush();
+    expect(move).toHaveBeenCalledTimes(2);
+    // 보낸 뒤 서버 목록을 다시 읽어 최신 상태를 보인다.
+    expect(read).toHaveBeenCalledTimes(4);
+    expect(saveState('a')).toBeNull();
+    expect(laneOf('a')).toBe('in_progress');
+    expect(screen.getByRole('alert').textContent).toContain(
+      'API 연결: 다시 보내는 사이 다른 곳에서 이 업무가 바뀌어, 이번 이동이 그 변경을 덮었을 수 있습니다.',
+    );
+    expect(liveText()).not.toContain('옮겼습니다');
+    expect(liveText()).not.toContain('저장을 확인했습니다');
+    // 안내는 다음 동작 전까지 남는다(자동으로 지우지 않는다).
+    await flush(20000);
+    expect(screen.getByRole('alert').textContent).toContain('덮었을 수 있습니다');
+    expect(move).toHaveBeenCalledTimes(2);
   });
 
   it('a request still running is confirmed early when the list already shows it saved', async () => {

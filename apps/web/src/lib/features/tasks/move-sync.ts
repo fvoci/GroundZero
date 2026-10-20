@@ -74,6 +74,14 @@ export function reconcileMove(
   return 'changed';
 }
 
+/**
+ * 이동 응답의 판이 이 이동만으로 될 판(열이 바뀌면 +1)보다 큰지. 크면 기준으로 삼은 서버 자리를 읽은 뒤 다른 변경(다른
+ * 사람의 열 이동·편집)이 끼었고 이 이동이 그 위에 덮였다. 판을 올리지 않는 같은 열 안 순서 바꾸기는 알 수 없다.
+ */
+export function overlapped(origin: MoveOrigin, plan: BoardMove, savedVersion: number): boolean {
+  return savedVersion > origin.version + (plan.status === origin.status ? 0 : 1);
+}
+
 /** 서버 목록 위에 아직 저장을 기다리는 다른 카드들의 이동을 다시 얹는다(다시 읽기가 그 카드들을 되돌리지 않게). */
 export function overlayPending<T extends BoardTask>(
   server: readonly T[],
