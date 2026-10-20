@@ -342,5 +342,7 @@
   "documents_reparent_to_root": "Top level (no parent)",
   "documents_reparent_current": "current parent",
   "documents_reparent_cancel": "Cancel",
-  "documents_reparent_confirm": "Move"
+  "documents_reparent_confirm": "Move",
+  "documents_children_heading": "{count} subdocuments",
+  "documents_children_failed": "Couldn't load the subdocuments."
 }

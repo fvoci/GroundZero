@@ -8,6 +8,7 @@
   import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
   import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
+  import ChildDocuments from './ChildDocuments.svelte';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { referenceHref } from '$lib/features/references/context';
   import { badgeColor, workspaceLabel } from '$lib/features/workspaces/badge';
@@ -180,6 +181,9 @@
       </div>
     </aside>
   </div>
+  {#key doc.id}
+    <ChildDocuments {doc} {workspaces} />
+  {/key}
   <AttachmentsPanel
     target={{ kind: 'document', id: doc.id }}
     canWrite={doc.access === 'owner' || doc.access === 'write'}
