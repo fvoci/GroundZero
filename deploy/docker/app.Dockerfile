@@ -1,11 +1,15 @@
 # 제품 실행 이미지. 서버 바이너리와 정적 웹 자산만 담는다.
-# 로컬 빌드·실행은 검증한다. 레지스트리 push·공개 배포는 별도 승인 대상이다.
+# 릴리스 태그의 이미지는 .github/workflows/release-image.yml이 빌드해 GHCR에 게시한다(D-87). 그 밖의 게시·배포는 하지 않는다.
 
 FROM rust:1.99.0-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6 AS server-build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
 COPY xtask ./xtask
+# 제품 버전·소스 SHA(D-87). 릴리스 워크플로가 검증한 태그에서 정해 넘긴다(`0.0.1`, 전체 커밋 SHA). 둘 다 비우면 개발 빌드
+# (`dev`)다. 하나만 넣거나 형식이 틀리면 컴파일이 멈춘다(crates/server/src/build_info.rs).
+ARG FVOCI_RELEASE_VERSION=
+ARG FVOCI_SOURCE_SHA=
 RUN cargo build --release --locked --package fvoci-server
 
 # HWP·HWPX 미리보기 WASM(D-76). 앱 도구 모음(위 server-build)과 따로, 고정한 rhwp 커밋·잠금 파일·기능·도구 판으로 만든다.

@@ -23,6 +23,9 @@
   import Users from '@lucide/svelte/icons/users';
   import X from '@lucide/svelte/icons/x';
 
+  import type { Health } from '@fvoci/api-client';
+  import { fetchHealth } from '$lib/api/client';
+  import { buildLabel } from '$lib/features/health/build';
   import { kindLabel } from '$lib/features/modules/kinds';
   import WorkspaceBadge from '$lib/features/workspaces/WorkspaceBadge.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -70,6 +73,17 @@
 
   const sidebar = useSidebar();
   const route = $derived(router.route);
+
+  // 계정 메뉴를 처음 열 때 실행 중인 빌드를 서버에 묻는다(화면은 버전 문자열을 따로 들지 않는다, D-87).
+  let build = $state<Health['build'] | undefined>(undefined);
+  let buildAsked = false;
+  function askBuild(open: boolean): void {
+    if (!open || buildAsked) return;
+    buildAsked = true;
+    void fetchHealth().then((r) => {
+      if (r.kind !== 'unreachable') build = r.health.build;
+    });
+  }
 
   // 마지막으로 연 워크스페이스(이 브라우저에만 두는 편의 기억). 지금 목록에 있을 때만 쓴다.
   const LAST_KEY = 'fvoci.lastWorkspace';
@@ -421,7 +435,7 @@
   <Sidebar.Footer>
     <Sidebar.Menu>
       <Sidebar.MenuItem>
-        <DropdownMenu.Root>
+        <DropdownMenu.Root onOpenChange={askBuild}>
           <DropdownMenu.Trigger>
             {#snippet child({ props })}
               <Sidebar.MenuButton
@@ -447,6 +461,12 @@
             <DropdownMenu.Item onSelect={onlogout}>
               <LogOut aria-hidden="true" />{m.app_menu_logout()}
             </DropdownMenu.Item>
+            <DropdownMenu.Separator />
+            <DropdownMenu.Label
+              class="text-xs font-normal text-muted-foreground"
+              title={build?.source}
+              data-testid="build-version">{buildLabel(build)}</DropdownMenu.Label
+            >
           </DropdownMenu.Content>
         </DropdownMenu.Root>
       </Sidebar.MenuItem>

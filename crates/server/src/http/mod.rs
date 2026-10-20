@@ -15,6 +15,7 @@ use serde::Serialize;
 use tower_http::services::{ServeDir, ServeFile};
 use utoipa::{OpenApi, ToSchema};
 
+use crate::build_info::{self, BuildInfo};
 use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
@@ -49,9 +50,11 @@ pub struct Health {
     pub status: &'static str,
     /// 데이터베이스 왕복 결과. `ok` 또는 `error`.
     pub database: &'static str,
+    /// 실행 중인 빌드(제품 버전·소스 SHA만, D-87). 화면의 버전 표시도 이 값을 쓴다.
+    pub build: BuildInfo,
 }
 
-/// 서비스와 데이터베이스 연결 상태를 돌려준다.
+/// 서비스와 데이터베이스 연결 상태, 실행 중인 빌드를 돌려준다.
 #[utoipa::path(
     get,
     path = "/healthz",
@@ -68,6 +71,7 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
             Json(Health {
                 status: "ok",
                 database: "ok",
+                build: build_info::CURRENT,
             }),
         ),
         Err(err) => {
@@ -82,6 +86,7 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
                 Json(Health {
                     status: "degraded",
                     database: "error",
+                    build: build_info::CURRENT,
                 }),
             )
         }
@@ -434,6 +439,7 @@ async fn api_not_found() -> AppError {
         members::Group,
         members::CreateGroup,
         Health,
+        BuildInfo,
         ErrorBody,
         accounts::Me,
         accounts::MySettings,

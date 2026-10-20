@@ -10226,7 +10226,7 @@
         "tags": [
           "system"
         ],
-        "summary": "서비스와 데이터베이스 연결 상태를 돌려준다.",
+        "summary": "서비스와 데이터베이스 연결 상태, 실행 중인 빌드를 돌려준다.",
         "operationId": "healthz",
         "responses": {
           "200": {
@@ -10482,6 +10482,24 @@
                 "$ref": "#/components/schemas/WorkspaceId"
               }
             ]
+          }
+        }
+      },
+      "BuildInfo": {
+        "type": "object",
+        "description": "실행 중인 빌드. 제품 버전과 소스 SHA만 담는다.",
+        "required": [
+          "version",
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "소스 커밋 전체 SHA 또는 개발 빌드면 `dev`."
+          },
+          "version": {
+            "type": "string",
+            "description": "제품 버전(`0.0.1`) 또는 개발 빌드면 `dev`."
           }
         }
       },
@@ -12126,9 +12144,14 @@
         "description": "서비스 상태 응답.",
         "required": [
           "status",
-          "database"
+          "database",
+          "build"
         ],
         "properties": {
+          "build": {
+            "$ref": "#/components/schemas/BuildInfo",
+            "description": "실행 중인 빌드(제품 버전·소스 SHA만, D-87). 화면의 버전 표시도 이 값을 쓴다."
+          },
           "database": {
             "type": "string",
             "description": "데이터베이스 왕복 결과. `ok` 또는 `error`."

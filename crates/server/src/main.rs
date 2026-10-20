@@ -6,6 +6,7 @@
 //! - `fvoci-server backup create <dir>` : DB와 파일 내용 백업 (`DATABASE_MIGRATION_URL`, 서버 구성)
 //! - `fvoci-server backup restore <dir>` : 빈 DB·저장소에 복구 (`DATABASE_ADMIN_URL`, 서버 구성)
 //! - `fvoci-server --print-openapi` : 계약 JSON을 표준 출력에 쓴다
+//! - `fvoci-server version` : 이 바이너리의 제품 버전·소스 SHA를 JSON으로 쓴다(릴리스 이미지 확인용, D-87)
 //! - `fvoci-server healthcheck` : 같은 컨테이너의 서버 `/healthz`가 정상인지(컨테이너 상태 확인용, 이미지에 curl 없음)
 
 use std::process::ExitCode;
@@ -20,6 +21,7 @@ use utoipa::OpenApi;
 enum Command {
     Serve,
     PrintOpenapi,
+    Version,
     Bootstrap,
     Migrate,
     BackupCreate(String),
@@ -37,6 +39,7 @@ fn parse_args() -> Result<Command, String> {
     {
         [] => Ok(Command::Serve),
         ["--print-openapi"] => Ok(Command::PrintOpenapi),
+        ["version"] => Ok(Command::Version),
         ["healthcheck"] => Ok(Command::Healthcheck),
         ["db", "bootstrap"] => Ok(Command::Bootstrap),
         ["db", "migrate"] => Ok(Command::Migrate),
@@ -80,7 +83,7 @@ async fn run(command: Command) -> Result<(), AppError> {
             );
             Ok(())
         }
-        Command::PrintOpenapi => Ok(()),
+        Command::PrintOpenapi | Command::Version => Ok(()),
         Command::Healthcheck => healthcheck().await,
     }
 }
@@ -90,11 +93,24 @@ fn main() -> ExitCode {
         Ok(c) => c,
         Err(msg) => {
             eprintln!(
-                "{msg}\nusage: fvoci-server [--print-openapi | healthcheck | db bootstrap | db migrate | backup create <dir> | backup restore <dir>]"
+                "{msg}\nusage: fvoci-server [--print-openapi | version | healthcheck | db bootstrap | db migrate | backup create <dir> | backup restore <dir>]"
             );
             return ExitCode::FAILURE;
         }
     };
+
+    if matches!(command, Command::Version) {
+        return match serde_json::to_string(&fvoci_server::build_info::CURRENT) {
+            Ok(json) => {
+                println!("{json}");
+                ExitCode::SUCCESS
+            }
+            Err(err) => {
+                eprintln!("failed to serialize build info: {err}");
+                ExitCode::FAILURE
+            }
+        };
+    }
 
     if matches!(command, Command::PrintOpenapi) {
         return match ApiDoc::openapi().to_pretty_json() {

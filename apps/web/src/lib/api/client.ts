@@ -148,7 +148,12 @@ export function parseDocNode(value: unknown): DocNode {
 
 export function parseHealth(value: Json): Health {
   const o = rec(value, 'health');
-  return { status: str(o, 'status'), database: str(o, 'database') };
+  const build = rec(o.build, 'build');
+  return {
+    status: str(o, 'status'),
+    database: str(o, 'database'),
+    build: { version: str(build, 'version'), source: str(build, 'source') },
+  };
 }
 
 export function parseMe(value: Json): Me {

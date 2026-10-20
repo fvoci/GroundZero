@@ -17,6 +17,15 @@ async fn healthz_reports_ok_with_database() {
     assert_eq!(r.status, StatusCode::OK);
     assert_eq!(r.json["status"], "ok");
     assert_eq!(r.json["database"], "ok");
+    // 실행 중인 빌드는 제품 버전과 소스 SHA 둘만(D-87). 릴리스 값을 넣지 않은 빌드는 `dev`.
+    let build = r.json["build"].as_object().unwrap();
+    assert_eq!(build.len(), 2, "{build:?}");
+    assert_eq!(build["version"], fvoci_server::build_info::VERSION);
+    assert_eq!(build["source"], fvoci_server::build_info::SOURCE);
+    if option_env!("FVOCI_RELEASE_VERSION").is_none_or(str::is_empty) {
+        assert_eq!(build["version"], "dev");
+        assert_eq!(build["source"], "dev");
+    }
 }
 
 #[tokio::test]
@@ -25,6 +34,11 @@ async fn healthz_reports_degraded_without_database() {
     let state = build_state(cfg).unwrap();
     let r = common::send(&common::app(&state), Method::GET, "/healthz", None, None).await;
     assert_eq!(r.status, StatusCode::SERVICE_UNAVAILABLE);
+    // DB가 없어도 실행 중인 빌드는 알린다(이미지 확인을 DB 없이 할 수 있게).
+    assert_eq!(
+        r.json["build"]["version"],
+        fvoci_server::build_info::VERSION
+    );
 }
 
 /// HWP·HWPX 미리보기 WASM(D-76): 압축본(br)을 그대로 보내고 해시 폴더의 파일은 오래 캐시, manifest는 매번 확인.

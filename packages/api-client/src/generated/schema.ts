@@ -2437,7 +2437,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 서비스와 데이터베이스 연결 상태를 돌려준다. */
+        /** 서비스와 데이터베이스 연결 상태, 실행 중인 빌드를 돌려준다. */
         get: operations["healthz"];
         put?: never;
         post?: never;
@@ -2514,6 +2514,13 @@ export interface components {
             reference?: string | null;
             title: string;
             workspace_id?: null | components["schemas"]["WorkspaceId"];
+        };
+        /** @description 실행 중인 빌드. 제품 버전과 소스 SHA만 담는다. */
+        BuildInfo: {
+            /** @description 소스 커밋 전체 SHA 또는 개발 빌드면 `dev`. */
+            source: string;
+            /** @description 제품 버전(`0.0.1`) 또는 개발 빌드면 `dev`. */
+            version: string;
         };
         /** @description 기간 안의 볼 수 있는 업무·일정. */
         Calendar: {
@@ -3072,6 +3079,8 @@ export interface components {
         };
         /** @description 서비스 상태 응답. */
         Health: {
+            /** @description 실행 중인 빌드(제품 버전·소스 SHA만, D-87). 화면의 버전 표시도 이 값을 쓴다. */
+            build: components["schemas"]["BuildInfo"];
             /** @description 데이터베이스 왕복 결과. `ok` 또는 `error`. */
             database: string;
             /** @description 전체 상태. `ok` 또는 `degraded`. */

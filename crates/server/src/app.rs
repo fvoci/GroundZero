@@ -41,6 +41,14 @@ pub async fn run(config: Config) -> Result<(), AppError> {
     let bind = config.bind;
     let role = config.role;
     let interval = config.worker_interval;
+    // 실제로 도는 빌드를 로그로 확인할 수 있게(D-87). 개발 빌드는 둘 다 `dev`.
+    tracing::info!(
+        event = "server.starting",
+        version = crate::build_info::VERSION,
+        source = crate::build_info::SOURCE,
+        ?role,
+        "starting"
+    );
     let state = build_state(config)?;
     let db = state.db.clone();
     let (stop, stopped) = watch::channel(false);
