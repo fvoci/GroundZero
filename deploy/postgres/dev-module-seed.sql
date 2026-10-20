@@ -279,9 +279,14 @@ BEGIN
       ]}'::jsonb, NULL, 10, pg_temp.take(3));
     v_install := app_create_wiki_document(v_ws, pg_temp.take1(), '설치', 1, jsonb_build_object(
       'type', 'doc', 'content', jsonb_build_array(
-        jsonb_build_object('type', 'paragraph', 'content', jsonb_build_array(
-          jsonb_build_object('type', 'text', 'text', '설치 전에 확인할 항목: '),
-          jsonb_build_object('type', 'reference', 'attrs', jsonb_build_object('kind', 'item', 'id', v_v1->'items'->>'project')))))),
+        jsonb_build_object('type', 'paragraph', 'content',
+          -- 예제 프로젝트 항목을 지웠으면 가리킬 대상이 없으므로 참조 없이 글만 둔다.
+          CASE WHEN EXISTS (SELECT 1 FROM items WHERE id = (v_v1->'items'->>'project')::uuid AND deleted_at IS NULL)
+            THEN jsonb_build_array(
+              jsonb_build_object('type', 'text', 'text', '설치 전에 확인할 항목: '),
+              jsonb_build_object('type', 'reference', 'attrs', jsonb_build_object('kind', 'item', 'id', v_v1->'items'->>'project')))
+            ELSE jsonb_build_array(jsonb_build_object('type', 'text', 'text', '설치 전에 예제 프로젝트 항목을 확인합니다.'))
+          END))),
       v_guide, 10, pg_temp.take(3));
     v_backup := app_create_wiki_document(v_ws, pg_temp.take1(), '백업', 1,
       '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"합성 백업 절차. 실제 서버 정보가 아닙니다."}]}]}'::jsonb,

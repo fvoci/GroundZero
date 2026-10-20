@@ -351,6 +351,22 @@ describe('divider from the / menu', () => {
     expect(texts(old)).not.toContain('[x]체크 항목');
   });
 
+  it('does it in one change (a single update notice)', () => {
+    const e = make({
+      type: 'doc',
+      content: [p('위 문단'), p('/구분'), { type: 'taskList', content: [task('체크 항목', true)] }],
+    });
+    const range = slashRange(e, '/구분');
+    let updates = 0;
+    e.on('update', () => {
+      updates += 1;
+    });
+    insertDivider(e, range);
+    // 전에는 구분선과 빈 문단을 따로 반영해 변경 알림이 두 번(첫 번째는 빈 문단이 없는 중간 문서) 나갔다.
+    expect(updates).toBe(1);
+    expect(texts(e)).toEqual(['위 문단', '', '', '[x]체크 항목', '']);
+  });
+
   it('moves into the following paragraph as before when the next block is text', () => {
     const e = make({ type: 'doc', content: [p('/구분'), p('아래 문단')] });
     insertDivider(e, slashRange(e, '/구분'));
