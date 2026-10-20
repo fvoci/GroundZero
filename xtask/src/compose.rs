@@ -11,6 +11,8 @@ use xshell::{Shell, cmd};
 pub enum Env {
     Dev,
     Test,
+    /// 셀프호스트 Supabase 시험 구성(D-88). 공식 구성과 겹쳐 쓰므로 [`crate::supabase`]가 다룬다.
+    Supabase,
 }
 
 impl Env {
@@ -18,6 +20,7 @@ impl Env {
         match self {
             Self::Dev => "deploy/compose.dev.yaml",
             Self::Test => "deploy/compose.test.yaml",
+            Self::Supabase => "deploy/supabase/compose.test.yaml",
         }
     }
 
@@ -25,6 +28,7 @@ impl Env {
         match self {
             Self::Dev => "dev",
             Self::Test => "test",
+            Self::Supabase => "supabase",
         }
     }
 }
@@ -98,6 +102,18 @@ impl Compose {
         Ok(())
     }
 
+    /// 고른 서비스만 healthy 될 때까지 기다리며 띄운다(Supabase 시험에서 PostgreSQL 대신).
+    pub fn up_services(&self, sh: &Shell, services: &[&str]) -> Result<()> {
+        let args = self.base_args();
+        cmd!(
+            sh,
+            "docker {args...} up --detach --wait --remove-orphans {services...}"
+        )
+        .run()
+        .with_context(|| format!("docker compose up failed (project {})", self.project))?;
+        Ok(())
+    }
+
     /// 이 프로젝트의 컨테이너·네트워크·볼륨만 제거한다.
     pub fn down(&self, sh: &Shell) -> Result<()> {
         let args = self.base_args();
@@ -155,7 +171,7 @@ pub fn down_all(root: &Path) -> Result<()> {
         println!("==> down {}", compose.project());
         compose.down(&sh)?;
     }
-    Ok(())
+    crate::supabase::down(root)
 }
 
 /// 개발·테스트용 DB 접속 정보. 모두 테스트 전용 값이며 운영에 쓰지 않는다.
@@ -183,6 +199,25 @@ impl DbUrls {
             ),
             app: format!("postgres://fvoci_app:{TEST_APP_PASSWORD}@{host_port}/fvoci"),
         }
+    }
+
+    /// 셀프호스트 Supabase 시험 구성(D-88): 관리자는 superuser가 아닌 `postgres`, DB는 `postgres`.
+    pub fn supabase(port: u16) -> Self {
+        let host_port = format!("127.0.0.1:{port}");
+        let password = crate::supabase::POSTGRES_PASSWORD;
+        Self {
+            admin: format!("postgres://postgres:{password}@{host_port}/postgres"),
+            migration: format!(
+                "postgres://fvoci_migrator:{TEST_MIGRATOR_PASSWORD}@{host_port}/postgres"
+            ),
+            app: format!("postgres://fvoci_app:{TEST_APP_PASSWORD}@{host_port}/postgres"),
+        }
+    }
+
+    /// 앱 역할로 Supavisor의 session 모드(공식 구성의 5432)를 거치는 주소. 사용자 이름에 테넌트를 붙인다.
+    pub fn supabase_session_pooler(port: u16) -> String {
+        let tenant = crate::supabase::POOLER_TENANT;
+        format!("postgres://fvoci_app.{tenant}:{TEST_APP_PASSWORD}@127.0.0.1:{port}/postgres")
     }
 }
 

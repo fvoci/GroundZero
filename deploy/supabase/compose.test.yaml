@@ -1,0 +1,26 @@
+# 셀프호스트 Supabase 시험 구성(D-88). `cargo xtask test --supabase`가 공식 구성(supabase/supabase의 docker/,
+# 고정 revision, xtask/src/supabase.rs)에 이 파일을 겹쳐 db·rest·supavisor만 띄운다. 공식 구성은 저장소에 넣지 않고
+# target/에 받는다.
+#
+# - 이미지는 공식 구성과 같은 태그를 digest로 고정한다(부동 태그·latest 없음).
+# - 고정 컨테이너 이름을 지우고 호스트 포트는 127.0.0.1의 빈 포트로만 연다(외부 공개 없음, 체크아웃마다 다른 프로젝트).
+# - DB 데이터는 tmpfs(정리할 때 남지 않음). 공식 초기화 SQL(역할·realtime·pooler 등)은 공식 구성 그대로 쓴다.
+# - 빼는 서비스와 이유: studio·kong/envoy(관리 화면·API 관문), auth(GoTrue: 로그인은 Keycloak/OIDC), storage·imgproxy
+#   (파일은 S3/R2/로컬), realtime(공동 편집은 서버 자체), meta·functions·analytics·vector(쓰지 않음). rest(PostgREST)는
+#   fvoci 스키마가 Data API에 드러나지 않는지 확인하려고, supavisor는 session 모드 연결을 확인하려고 띄운다.
+services:
+  db:
+    image: supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00
+    container_name: !reset null
+    ports: ['127.0.0.1::5432']
+    volumes:
+      - type: tmpfs
+        target: /var/lib/postgresql/data
+  rest:
+    image: postgrest/postgrest:v14.18@sha256:c7cd7e265a85b05248abf53f4473fcec7e327c282d0bd0cf60f1551996d09fcf
+    container_name: !reset null
+    ports: ['127.0.0.1::3000']
+  supavisor:
+    image: supabase/supavisor:2.9.13@sha256:07f1a6098ffc04b80263bca4eb5c3e7bd2e03dfd1fc465aa108d7329000a1a4e
+    container_name: !reset null
+    ports: !override ['127.0.0.1::5432', '127.0.0.1::6543']

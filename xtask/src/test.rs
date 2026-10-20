@@ -10,14 +10,18 @@ use anyhow::{Context, Result};
 use xshell::{Shell, cmd};
 
 use crate::compose::{self, Compose, DbUrls, Env};
+use crate::supabase::Supabase;
 
-fn run_tests(sh: &Shell, oidc: bool, s3: bool) -> Result<()> {
+fn run_tests(sh: &Shell, oidc: bool, s3: bool, supabase: bool) -> Result<()> {
     let mut skip: Vec<&str> = Vec::new();
     if !oidc {
         skip.extend(["--skip", "oidc_"]);
     }
     if !s3 {
         skip.extend(["--skip", "s3_"]);
+    }
+    if !supabase {
+        skip.extend(["--skip", "supabase_"]);
     }
     if skip.is_empty() {
         cmd!(sh, "cargo test --workspace --locked").run()?;
@@ -30,6 +34,11 @@ fn run_tests(sh: &Shell, oidc: bool, s3: bool) -> Result<()> {
     if !s3 {
         println!(
             "NOT RUN: S3 storage tests (s3_*). Set FVOCI_TEST_S3_ENDPOINT for external services."
+        );
+    }
+    if !supabase {
+        println!(
+            "NOT RUN: self-hosted Supabase tests (supabase_*). Use `cargo xtask test --supabase`."
         );
     }
     Ok(())
@@ -75,7 +84,7 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
         } else {
             None
         };
-        run_tests(&sh, oidc, true)
+        run_tests(&sh, oidc, true, false)
     })();
 
     if keep {
@@ -86,6 +95,87 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
     } else {
         println!("==> compose down");
         compose.down(&sh)?;
+    }
+    result
+}
+
+/// 셀프호스트 Supabase(공식 구성의 db·rest·supavisor, D-88)를 DB로 두고 같은 통합 테스트를 돌린다. 검색·S3(·Keycloak)은
+/// 시험 Compose에서 PostgreSQL만 빼고 띄운다. 관리자는 superuser가 아닌 `postgres`다. `session_pooler`면 앱 역할
+/// 연결을 Supavisor의 session 모드로 바꿔 한 번 더 돌린다(마이그레이션·관리·고정 자료 연결은 직접).
+pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -> Result<()> {
+    let supabase = Supabase::new(root)?;
+    let mut services = Compose::new(root, Env::Test);
+    if oidc {
+        services = services.with_profile("oidc");
+    }
+    let sh = services.shell()?;
+    let mut wanted = vec!["meilisearch", "seaweedfs"];
+    if oidc {
+        wanted.push("keycloak");
+    }
+    println!(
+        "==> compose up ({} without postgres, {})",
+        services.project(),
+        supabase.project()
+    );
+    let result = services
+        .up_services(&sh, &wanted)
+        .and_then(|()| supabase.up(&sh))
+        .and_then(|()| {
+            let db = supabase.host_port(&sh, "db", 5432)?;
+            let rest = supabase.host_port(&sh, "rest", 3000)?;
+            println!("==> supabase db on 127.0.0.1:{db}, rest on 127.0.0.1:{rest}");
+            let urls = DbUrls::supabase(db);
+            compose::prepare_database(&sh, &urls)?;
+            let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
+            let _admin = sh.push_env("FVOCI_TEST_ADMIN_URL", &urls.admin);
+            let _rest = sh.push_env(
+                "FVOCI_TEST_SUPABASE_REST_URL",
+                format!("http://127.0.0.1:{rest}"),
+            );
+            let meili = services.host_port(&sh, "meilisearch", 7700)?;
+            let _search = sh.push_env("FVOCI_TEST_SEARCH_URL", format!("http://127.0.0.1:{meili}"));
+            let _search_key = sh.push_env("FVOCI_TEST_SEARCH_KEY", compose::SEARCH_TEST_KEY);
+            let _files = sh.push_env("FVOCI_STORAGE_DIR", root.join("target/test-files"));
+            let s3 = services.host_port(&sh, "seaweedfs", 8333)?;
+            let _s3 = sh.push_env("FVOCI_TEST_S3_ENDPOINT", format!("http://127.0.0.1:{s3}"));
+            let _s3_env = push_s3_credentials(&sh);
+            let _oidc = if oidc {
+                let kc = services.host_port(&sh, "keycloak", 8080)?;
+                Some(sh.push_env(
+                    "FVOCI_TEST_OIDC_ISSUER",
+                    format!("http://127.0.0.1:{kc}/realms/{}", compose::OIDC_REALM),
+                ))
+            } else {
+                None
+            };
+            {
+                println!("==> integration tests, direct connection");
+                let _app = sh.push_env("DATABASE_URL", &urls.app);
+                run_tests(&sh, oidc, true, true)?;
+            }
+            if session_pooler {
+                let pooler = supabase.host_port(&sh, "supavisor", 5432)?;
+                println!("==> integration tests, app role through the Supavisor session pooler on 127.0.0.1:{pooler}");
+                let _app = sh.push_env("DATABASE_URL", DbUrls::supabase_session_pooler(pooler));
+                // 테넌트는 `postgres` DB 하나만 받는다. 새 DB를 만드는 테스트(백업·검색 대기열 등)는 직접 연결로.
+                let _direct = sh.push_env("FVOCI_TEST_DIRECT_APP_URL", &urls.app);
+                run_tests(&sh, oidc, true, true)?;
+            } else {
+                println!("NOT RUN: tests through the Supavisor session pooler. Add --session-pooler.");
+            }
+            Ok(())
+        });
+    if keep {
+        println!(
+            "==> containers kept (projects {}, {}); run `cargo xtask down` later",
+            services.project(),
+            supabase.project()
+        );
+    } else {
+        println!("==> compose down");
+        supabase.down(&sh)?;
+        services.down(&sh)?;
     }
     result
 }
@@ -124,7 +214,7 @@ fn run_external(root: &Path, oidc: bool) -> Result<()> {
     let _files = sh.push_env("FVOCI_STORAGE_DIR", root.join("target/test-files"));
     let s3 = std::env::var("FVOCI_TEST_S3_ENDPOINT").is_ok_and(|v| !v.trim().is_empty());
     let _s3_env = push_s3_credentials(&sh);
-    run_tests(&sh, oidc, s3)
+    run_tests(&sh, oidc, s3, false)
 }
 
 /// 시험용 SeaweedFS의 버킷과 자격 증명(compose.test.yaml과 같은 명백한 테스트 값).

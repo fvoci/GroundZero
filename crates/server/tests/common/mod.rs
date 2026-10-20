@@ -281,7 +281,10 @@ pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> Fres
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
     let migration_url =
         std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
-    let app_url = std::env::var("DATABASE_URL").expect("run via `cargo xtask test`");
+    // Supavisor session 모드로 돌릴 때(`--session-pooler`)는 테넌트가 한 데이터베이스만 받으므로 새 DB는 직접 연결로 쓴다.
+    let app_url = std::env::var("FVOCI_TEST_DIRECT_APP_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .expect("run via `cargo xtask test`");
     let name = format!("fvoci_{label}_{}", uuid::Uuid::now_v7().simple());
     sqlx::raw_sql(&format!("CREATE DATABASE {name}"))
         .execute(&mut *admin)

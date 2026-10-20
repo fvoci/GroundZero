@@ -37,6 +37,33 @@ async fn session(state: &AppState, subject: &str) -> TestUser {
     }
 }
 
+/// 백업·복구의 저장소 잠금이 남지 않았는지: 잡힌 advisory lock이 없고, 다른 세션이 바로 잡았다 놓을 수 있다.
+async fn assert_storage_lock_free(url: &str) {
+    let mut conn = PgConnection::connect(url).await.unwrap();
+    let held: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+           AND ((classid::bigint << 32) | objid::bigint) = $1",
+    )
+    .bind(backup::STORAGE_LOCK)
+    .fetch_one(&mut conn)
+    .await
+    .unwrap();
+    assert_eq!(held, 0, "the storage lock is still held");
+    let got: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
+        .bind(backup::STORAGE_LOCK)
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+    assert!(got);
+    let released: bool = sqlx::query_scalar("SELECT pg_advisory_unlock($1)")
+        .bind(backup::STORAGE_LOCK)
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+    assert!(released);
+    conn.close().await.unwrap();
+}
+
 fn temp_dir(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("fvoci-{label}-{}", uuid::Uuid::now_v7().simple()))
 }
@@ -119,6 +146,8 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     );
     // 같은 곳에 다시 쓰지 않는다.
     assert!(backup::create(&state.config, db, &out).await.is_err());
+    // 저장소 정리를 멈추는 잠금은 백업이 잡은 세션에서 풀려 남지 않는다(다른 세션이 바로 잡을 수 있다).
+    assert_storage_lock_free(&source.app_url).await;
 
     // 새 DB(같은 클러스터의 다른 데이터베이스)를 같은 마이그레이션까지 만든다.
     let target = fresh_database(&mut admin, "restore").await;
@@ -190,6 +219,7 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
             .await
             .is_err()
     );
+    assert_storage_lock_free(&target.app_url).await;
 
     // 같은 사람(발급자·subject)이 다시 로그인하면 그대로 본다.
     let restored_app = common::app(&restored);
@@ -227,6 +257,31 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
             .status,
         StatusCode::UNAUTHORIZED
     );
+    // 복구한 DB에서도 RLS가 그대로다: 멤버가 아닌 사람은 문서를 못 보고, 사용자 문맥 없는 앱 연결은 행을 못 본다.
+    let stranger = session(
+        &restored,
+        &format!("backup-stranger-{}", uuid::Uuid::now_v7()),
+    )
+    .await;
+    assert_eq!(
+        send(
+            &restored_app,
+            Method::GET,
+            &format!("/api/documents/{doc_id}"),
+            Some(&stranger),
+            None
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+    let mut app_conn = PgConnection::connect(&target.app_url).await.unwrap();
+    let visible: i64 = sqlx::query_scalar("SELECT count(*) FROM fvoci.documents")
+        .fetch_one(&mut app_conn)
+        .await
+        .unwrap();
+    assert_eq!(visible, 0, "rows are hidden without a user context");
+    app_conn.close().await.unwrap();
 
     restored.db.close().await;
     state.db.close().await;
