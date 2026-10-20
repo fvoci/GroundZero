@@ -233,6 +233,8 @@
   let alive = true;
   // 카드별 타이머(화면 상태가 아니므로 반응형으로 두지 않는다).
   const timers: Record<string, ReturnType<typeof setTimeout>[] | undefined> = {};
+  /** 카드별 대조 차례(겹친 대조 가운데 마지막 것만 따른다). */
+  const checks: Record<string, number | undefined> = {};
 
   function clearTimers(id: string): void {
     for (const t of timers[id] ?? []) clearTimeout(t);
@@ -483,11 +485,12 @@
       if (classifyMoveError(e) === 'uncertain') return (await reconcile(id, seq)) === 'applied';
       finish(id);
       tasks = applyMove(tasks, id, { status: origin.status, beforeId: origin.nextId });
+      // 안내는 다시 읽기 전에 정한다: 다시 읽는 동안 카드는 풀려 있어 그사이 성공한 다음 이동의 안내를 늦게 덮지 않게.
       const message = moveErrorMessage(e);
-      await reload();
       moveNotice = message;
       status = message;
       if (e instanceof ApiError && (e.status === 403 || e.status === 409)) onstale?.();
+      await reload();
       return false;
     }
   }
@@ -505,18 +508,22 @@
     patch(id, seq, { phase: 'checking' });
     status = m.tasks_move_checking({ title: p.title });
     const mine = ++reloadSeq;
+    // 같은 카드의 대조가 겹치면(요청 중에 시작한 대조가 끝나기 전에 요청이 응답 없이 끝나 다시 대조) 마지막 것만 따른다.
+    // 판정에는 목록을 읽기 시작할 때 요청이 아직 진행 중이었는지를 쓴다: 그때 읽은 목록은 요청이 반영되기 전일 수 있다.
+    const check = (checks[id] = (checks[id] ?? 0) + 1);
+    const stillInFlight = p.inFlight;
+    const latest = (): boolean => current(id, seq) && checks[id] === check;
     let server: TaskView[];
     try {
       server = await api.tasks(item.id);
     } catch {
-      if (!current(id, seq)) return undefined;
+      if (!latest()) return undefined;
       patch(id, seq, { phase: pending[id]?.inFlight === true ? 'slow' : 'unknown' });
       status = m.tasks_move_unknown({ title: p.title });
       return undefined;
     }
-    if (!current(id, seq)) return undefined;
+    if (!latest()) return undefined;
     const verdict = reconcileMove(server, id, p.origin, p.plan);
-    const stillInFlight = pending[id]?.inFlight === true;
     if (verdict === 'applied') {
       finish(id);
       clearMoveNotice();

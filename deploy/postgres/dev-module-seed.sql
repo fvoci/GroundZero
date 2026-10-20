@@ -235,7 +235,8 @@ BEGIN
   BEGIN
     PERFORM set_config('app.user_id', v_admin::text, true);
 
-    -- 칸반: 모듈마다 카드를 더해 열마다 두 장 이상이 되게 한다(우선순위·마감 섞음).
+    -- 칸반: 모듈마다 카드를 더한다(우선순위·마감 섞음). v1과 합쳐 프로젝트는 열마다 두 장 이상(같은 열 안 순서 바꾸기),
+    -- 나머지 모듈은 열마다 한 장(열 사이 이동).
     FOR v_kind IN SELECT jsonb_object_keys(v_v1->'items') LOOP
       v_item := (v_v1->'items'->>v_kind)::uuid;
       CONTINUE WHEN NOT EXISTS (

@@ -3,7 +3,7 @@ import type { MockInstance } from 'vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import { api, NetworkError } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -343,5 +343,31 @@ describe('task detail assignees while loading', () => {
     expect(within(group).queryByText('지정할 수 있는 사람이 없습니다.')).toBeNull();
     resolve([{ user_id: 'u1', display_name: '가상 사용자' }]);
     expect(await within(group).findByText('가상 사용자')).toBeTruthy();
+  });
+
+  it('ends loading and says so when the people cannot be loaded, without calling the task missing', async () => {
+    await setLocale('ko', { reload: false });
+    vi.spyOn(api, 'task').mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
+    vi.spyOn(api, 'assignable').mockRejectedValue(new NetworkError('offline'));
+    vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
+    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    render(TaskDetail, {
+      props: {
+        taskId: '2',
+        tasks: [task('2', 'API 연결')],
+        workspaces: [],
+        onchanged: () => undefined,
+        onopen: () => undefined,
+      },
+    });
+    const group = await screen.findByRole('group', { name: /담당자/ });
+    expect((await within(group).findByRole('alert')).textContent).toContain(
+      '담당자로 지정할 수 있는 사람 목록을 불러오지 못했습니다',
+    );
+    expect(within(group).queryByText('불러오는 중…')).toBeNull();
+    expect(within(group).queryByText('지정할 수 있는 사람이 없습니다.')).toBeNull();
+    // 업무 자체는 받았으므로 업무를 불러오지 못했다고 하지 않는다.
+    expect(screen.getByDisplayValue('API 연결')).toBeTruthy();
+    expect(screen.queryByText('업무를 불러오지 못했습니다.')).toBeNull();
   });
 });

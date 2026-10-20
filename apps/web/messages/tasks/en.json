@@ -250,5 +250,6 @@
   "tasks_card_checking": "Checking…",
   "tasks_card_unknown": "Save not confirmed",
   "tasks_card_not_saved": "Not saved",
-  "tasks_move_overlapped": "{title}: it changed elsewhere while the move was being sent again, so this move may have replaced that change. Showing the latest server state; check it and move the card again if needed."
+  "tasks_move_overlapped": "{title}: it changed elsewhere while the move was being sent again, so this move may have replaced that change. Showing the latest server state; check it and move the card again if needed.",
+  "tasks_assignable_load_failed": "Couldn't load the people who can be assigned. The current assignees are kept when you save."
 }

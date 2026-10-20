@@ -243,5 +243,6 @@
   "tasks_card_checking": "확인 중…",
   "tasks_card_unknown": "저장 여부 확인 못 함",
   "tasks_card_not_saved": "저장되지 않음",
-  "tasks_move_overlapped": "{title}: 다시 보내는 사이 다른 곳에서 이 업무가 바뀌어, 이번 이동이 그 변경을 덮었을 수 있습니다. 서버의 최신 상태를 보여 줍니다. 확인한 뒤 필요하면 다시 옮기세요."
+  "tasks_move_overlapped": "{title}: 다시 보내는 사이 다른 곳에서 이 업무가 바뀌어, 이번 이동이 그 변경을 덮었을 수 있습니다. 서버의 최신 상태를 보여 줍니다. 확인한 뒤 필요하면 다시 옮기세요.",
+  "tasks_assignable_load_failed": "담당자로 지정할 수 있는 사람 목록을 불러오지 못했습니다. 지금 담당자는 그대로 저장됩니다."
 }

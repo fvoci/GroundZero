@@ -384,6 +384,39 @@ describe('kanban save states', () => {
     expect(laneOf('a')).toBe('in_progress');
   });
 
+  it('a list read started while the request was running cannot declare it unsaved after the request ends', async () => {
+    // 10초 대조가 목록을 읽는 동안 요청이 커밋된 뒤 응답 없이 끝나고, 다시 대조가 시작된다. 먼저 시작한 읽기는 커밋 전
+    // 목록을 늦게 돌려준다. 그 목록으로 "저장되지 않음"을 정하면 안 된다(나중 대조만 따른다).
+    const early = deferred<TaskView[]>();
+    const later = deferred<TaskView[]>();
+    let call = 0;
+    vi.spyOn(api, 'tasks').mockImplementation(() => {
+      call += 1;
+      if (call === 1) return Promise.resolve(start);
+      if (call === 2) return early.promise;
+      if (call === 3) return later.promise;
+      return Promise.resolve(moved);
+    });
+    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
+    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    await mount();
+    await moveRight('a');
+    await flush(10000);
+    expect(saveState('a')).toBe('checking');
+    save.reject(new NetworkError('reset'));
+    await flush();
+    early.resolve(start);
+    await flush();
+    expect(saveState('a')).not.toBe('not_saved');
+    expect(screen.queryByRole('alert')).toBeNull();
+    later.resolve(moved);
+    await flush();
+    expect(saveState('a')).toBeNull();
+    expect(laneOf('a')).toBe('in_progress');
+    expect(liveText()).toContain('API 연결: 저장을 확인했습니다(진행 중).');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('blocks a second move of the same card but not of another card', async () => {
     lists(start);
     const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
@@ -436,5 +469,8 @@ describe('kanban save states', () => {
     first.resolve(start);
     await flush();
     expect(laneOf('a')).toBe('in_progress');
+    // 늦게 끝난 실패 쪽 흐름이 방금 성공한 이동의 안내를 실패 경고로 덮지 않는다.
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(liveText()).toContain('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
   });
 });
