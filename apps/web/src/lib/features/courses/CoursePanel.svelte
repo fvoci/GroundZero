@@ -192,6 +192,8 @@
    * 회차 공통 정보 저장. 읽은 판을 함께 보내 서버가 그 판일 때만 바꾼다(확인과 바꾸기가 한 문장). 고치기를 연 뒤 다른
    * 사람이 먼저 고쳤으면 409: 입력은 그대로 두고 기준만 지금 판으로 바꿔 알린다. 다시 저장하면(명시적으로) 바꾼다.
    */
+  let savingEpisode = $state(false);
+
   async function saveEpisode(base: EpisodeView): Promise<void> {
     const number = shared.number;
     const seconds = parseDuration(shared.duration);
@@ -210,6 +212,10 @@
       error = m.courses_url_invalid();
       return;
     }
+    // 저장 중에 다시 누르면(Enter 두 번 등) 같은 판으로 두 번 보내, 내 첫 저장 때문에 두 번째가 409를 받고 "다른 사람이
+    // 먼저 고쳤다"고 잘못 알린다. 끝날 때까지 다시 보내지 않는다.
+    if (savingEpisode) return;
+    savingEpisode = true;
     error = undefined;
     try {
       await api.updateEpisode(base.id, base.version, {
@@ -227,6 +233,8 @@
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 409 && (await episodeMovedOn(base))) return;
       error = errorText(e, m.courses_action_failed());
+    } finally {
+      savingEpisode = false;
     }
   }
 
@@ -597,7 +605,7 @@
                   bind:value={shared.materials}></textarea>
               </div>
               <div class="flex gap-2 sm:col-span-4">
-                <Button type="submit" size="sm">{m.common_save()}</Button>
+                <Button type="submit" size="sm" disabled={savingEpisode}>{m.common_save()}</Button>
                 <Button
                   size="sm"
                   variant="ghost"

@@ -121,6 +121,33 @@ describe('editing a course episode', () => {
     expect(alert).not.toHaveTextContent('먼저 고쳤습니다');
   });
 
+  // 저장 중에 다시 제출해도(Enter 두 번) 한 번만 보낸다. 두 번 보내면 내 첫 저장 때문에 두 번째가 409를 받고 "먼저
+  // 고쳤다"고 잘못 알렸다.
+  it('sends one save when submitted twice while saving', async () => {
+    await setLocale('ko', { reload: false });
+    mockCourse(course(episode()));
+    let finish: () => void = () => undefined;
+    const update = vi.spyOn(api, 'updateEpisode').mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          finish = () => {
+            resolve(undefined);
+          };
+        }),
+    );
+    render(CoursePanel, { props: { itemId: 'i1' } });
+    await fireEvent.click(await screen.findByRole('button', { name: '1회 공통 정보 고치기' }));
+    const form = screen.getByRole('form', { name: '1회 공통 정보' });
+    await fireEvent.submit(form);
+    await fireEvent.submit(form);
+    expect(update).toHaveBeenCalledTimes(1);
+    finish();
+    await waitFor(() => {
+      expect(screen.queryByRole('form', { name: '1회 공통 정보' })).toBeNull();
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('offers no edit when the course is read-only', async () => {
     await setLocale('ko', { reload: false });
     mockCourse(course(episode(), false));

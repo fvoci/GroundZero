@@ -135,4 +135,30 @@ describe('editing a shared study unit', () => {
       { number: 1, title: '첫 장', chapter: '기초', unit: 'pages', amount: 0, planned_on: null },
     ]);
   });
+
+  // 저장 중에 다시 제출해도 한 번만 보낸다(두 번째가 내 첫 저장 때문에 409를 받아 잘못 알리지 않게).
+  it('sends one save when submitted twice while saving', async () => {
+    await setLocale('ko', { reload: false });
+    mockPlan(plan(unit()));
+    let finish: () => void = () => undefined;
+    const update = vi.spyOn(api, 'updateStudyUnit').mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          finish = () => {
+            resolve(undefined);
+          };
+        }),
+    );
+    render(StudyPanel, { props: { itemId: 'i1' } });
+    await fireEvent.click(await screen.findByRole('button', { name: '1장 공통 정보 고치기' }));
+    const form = screen.getByRole('form', { name: '1장 공통 정보' });
+    await fireEvent.submit(form);
+    await fireEvent.submit(form);
+    expect(update).toHaveBeenCalledTimes(1);
+    finish();
+    await waitFor(() => {
+      expect(screen.queryByRole('form', { name: '1장 공통 정보' })).toBeNull();
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
 });

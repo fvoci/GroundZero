@@ -360,7 +360,10 @@
           moveThenReload(
             () => api.setParent(id, move.parentId, move.beforeId),
             async () => {
-              docs = await api.itemDocuments(current.id);
+              // 다시 읽는 사이 다른 항목으로 옮겼으면 이 항목의 목록을 그 화면에 넣지 않는다.
+              const requested = current.id;
+              const list = await api.itemDocuments(requested);
+              if (currentItemId === requested) docs = list;
             },
           )}
         oncreatechild={async (parentId: string) => {

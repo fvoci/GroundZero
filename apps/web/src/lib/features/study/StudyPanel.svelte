@@ -179,6 +179,8 @@
    * 단위 공통 정보 저장. 읽은 판을 함께 보내 서버가 그 판일 때만 바꾼다(확인과 바꾸기가 한 문장). 고치기를 연 뒤 다른
    * 사람이 먼저 고쳤으면 409: 입력은 그대로 두고 기준만 지금 판으로 바꿔 알린다. 다시 저장하면(명시적으로) 바꾼다.
    */
+  let savingUnit = $state(false);
+
   async function saveUnit(base: StudyUnitView): Promise<void> {
     const amount = wholeAmount(shared.amount);
     const number = shared.number;
@@ -192,6 +194,9 @@
       error = m.study_unit_edit_invalid();
       return;
     }
+    // 저장 중에 다시 누르면 같은 판으로 두 번 보내 두 번째가 내 첫 저장 때문에 409를 받는다(잘못된 "먼저 고쳤다" 안내).
+    if (savingUnit) return;
+    savingUnit = true;
     error = undefined;
     try {
       await api.updateStudyUnit(base.id, base.version, {
@@ -208,6 +213,8 @@
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 409 && (await unitMovedOn(base))) return;
       error = errorText(e, m.study_action_failed());
+    } finally {
+      savingUnit = false;
     }
   }
 
@@ -471,7 +478,7 @@
                 />
               </div>
               <div class="flex gap-2 sm:col-span-4">
-                <Button type="submit" size="sm">{m.common_save()}</Button>
+                <Button type="submit" size="sm" disabled={savingUnit}>{m.common_save()}</Button>
                 <Button
                   size="sm"
                   variant="ghost"
