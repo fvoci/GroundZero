@@ -16,7 +16,7 @@
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Connection, PgConnection};
 
-use crate::config::{DbCommandConfig, Secret};
+use crate::config::{DatabaseUrl, DbCommandConfig, Secret};
 use crate::error::AppError;
 
 /// 마이그레이션 역할 이름. 마이그레이션 SQL이 이 이름을 참조한다.
@@ -117,7 +117,7 @@ async fn check_attributes(
 }
 
 /// [`borrow_migrator`]가 관리자의 직접 멤버십에 한 일. [`release_migrator`]가 이것만 되돌린다.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MigratorBorrow {
     /// 이미 `SET ROLE`할 수 있어 아무것도 바꾸지 않았다.
     Kept,
@@ -210,6 +210,31 @@ pub async fn release_migrator(
         }
     }
     Ok(())
+}
+
+/// [`release_migrator`]를 하고, 실패하면 같은 관리자 주소의 새 연결로 한 번 더 한다. 트랜잭션 밖에서 빌린
+/// 멤버십(복구)은 연결이 끊겨도 남기 때문이다. 새 연결에서도 실패하면 그 오류를 돌려준다(멤버십이 남았다는 뜻).
+pub async fn release_migrator_or_reconnect(
+    conn: &mut PgConnection,
+    admin: &DatabaseUrl,
+    borrow: MigratorBorrow,
+) -> Result<(), AppError> {
+    let Err(first) = release_migrator(conn, borrow.clone()).await else {
+        return Ok(());
+    };
+    if matches!(borrow, MigratorBorrow::Kept) {
+        return Err(first);
+    }
+    tracing::warn!(
+        event = "db.release_migrator_retry",
+        error_code = first.code(),
+        detail = crate::logging::safe_error(&first),
+        "returning the borrowed migrator membership failed; retrying on a new admin connection"
+    );
+    let mut fresh = PgConnection::connect_with(&super::connect_options(admin)?).await?;
+    let released = release_migrator(&mut fresh, borrow).await;
+    let closed = fresh.close().await.map_err(AppError::from);
+    released.and(closed)
 }
 
 /// 이 DB에 두 역할의 접속 권한, 마이그레이션 역할 소유의 스키마 `fvoci`, 두 역할의 `search_path`를 둔다.
