@@ -129,12 +129,10 @@ describe('gantt reschedule', () => {
     vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
     const preview = vi.spyOn(api, 'previewSchedule').mockResolvedValue([]);
-    const update = vi
-      .spyOn(api, 'updateTask')
-      .mockResolvedValue({
-        kind: 'updated',
-        task: detail(task('a', '설계', '2026-10-21', '2026-10-23', 2)),
-      });
+    const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
+      kind: 'updated',
+      task: detail(task('a', '설계', '2026-10-21', '2026-10-23', 2)),
+    });
     const gantt = await mount();
     await fireEvent.keyDown(rowButton(gantt, 'a'), { key: 'ArrowRight', altKey: true });
     await waitFor(() => {
@@ -153,12 +151,10 @@ describe('gantt reschedule', () => {
     vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
     vi.spyOn(api, 'previewSchedule').mockResolvedValue([shift]);
-    const update = vi
-      .spyOn(api, 'updateTask')
-      .mockResolvedValue({
-        kind: 'updated',
-        task: detail(task('a', '설계', '2026-10-20', '2026-10-23', 2)),
-      });
+    const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
+      kind: 'updated',
+      task: detail(task('a', '설계', '2026-10-20', '2026-10-23', 2)),
+    });
     const gantt = await mount();
     await fireEvent.keyDown(rowButton(gantt, 'a'), {
       key: 'ArrowRight',
@@ -206,12 +202,10 @@ describe('gantt reschedule', () => {
       .mockResolvedValueOnce(detail(task('a', '설계', '2026-10-21', '2026-10-24', 2)))
       .mockResolvedValue(detail(design));
     vi.spyOn(api, 'previewSchedule').mockResolvedValue([]);
-    const update = vi
-      .spyOn(api, 'updateTask')
-      .mockResolvedValue({
-        kind: 'conflict',
-        current: detail(task('a', '설계', '2026-10-20', '2026-10-22', 3)),
-      });
+    const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
+      kind: 'conflict',
+      current: detail(task('a', '설계', '2026-10-20', '2026-10-22', 3)),
+    });
     const gantt = await mount();
     await fireEvent.keyDown(rowButton(gantt, 'a'), { key: 'ArrowRight', altKey: true });
     expect((await screen.findByRole('alert')).textContent).toContain(
@@ -231,12 +225,10 @@ describe('gantt reschedule', () => {
     vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
     vi.spyOn(api, 'previewSchedule').mockResolvedValue([]);
-    const update = vi
-      .spyOn(api, 'updateTask')
-      .mockResolvedValue({
-        kind: 'updated',
-        task: detail(task('a', '설계', '2026-10-22', '2026-10-24', 2)),
-      });
+    const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
+      kind: 'updated',
+      task: detail(task('a', '설계', '2026-10-22', '2026-10-24', 2)),
+    });
     const gantt = await mount();
     const bar = gantt.querySelector<HTMLElement>('[data-gantt-bar="a"]');
     if (bar === null) throw new Error('bar');

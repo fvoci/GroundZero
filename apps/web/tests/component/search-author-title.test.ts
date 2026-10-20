@@ -48,6 +48,7 @@ describe('search author and title only', () => {
         { user_id: 'u-1', display_name: '가상 관리자', email: null, role: 'admin', is_owner: true },
       ],
       my_role: 'admin',
+      i_am_owner: true,
     });
     const search = vi.spyOn(api, 'search').mockResolvedValue([]);
     render(SearchDialog, {
