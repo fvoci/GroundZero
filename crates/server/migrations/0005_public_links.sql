@@ -2,7 +2,7 @@
 -- 링크 토큰 원문은 링크에만 있고 DB에는 SHA-256 해시만 있다. 공개 보기는 읽기 전용이다.
 
 CREATE TABLE public_links (
-  id          uuid PRIMARY KEY DEFAULT uuidv7(),
+  id          uuid PRIMARY KEY,
   document_id uuid NOT NULL REFERENCES documents (id),
   token_hash  bytea NOT NULL UNIQUE,
   created_by  uuid NOT NULL REFERENCES users (id),

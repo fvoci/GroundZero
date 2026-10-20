@@ -259,9 +259,10 @@ pub async fn add_predecessor(
     Path((id, predecessor)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<TaskDetail>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_add_task_dependency($1, $2)")
+    sqlx::query("SELECT app_add_task_dependency($1, $2, $3)")
         .bind(predecessor)
         .bind(id)
+        .bind(crate::db::new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -281,9 +282,10 @@ pub async fn remove_predecessor(
     Path((id, predecessor)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<TaskDetail>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_remove_task_dependency($1, $2)")
+    sqlx::query("SELECT app_remove_task_dependency($1, $2, $3)")
         .bind(predecessor)
         .bind(id)
+        .bind(crate::db::new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

@@ -410,8 +410,9 @@ pub async fn workspace(
         .as_str()
         .unwrap_or("workspace")
         .to_owned();
-    sqlx::query("SELECT app_audit_workspace_export($1)")
+    sqlx::query("SELECT app_audit_workspace_export($1, $2)")
         .bind(ws)
+        .bind(crate::db::new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -475,7 +476,8 @@ pub async fn mine(
         .bind(user)
         .fetch_one(tx.conn())
         .await?;
-    sqlx::query("SELECT app_audit_personal_export()")
+    sqlx::query("SELECT app_audit_personal_export($1)")
+        .bind(crate::db::new_ids(1))
         .execute(tx.conn())
         .await?;
     tx.commit().await?;

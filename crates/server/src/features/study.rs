@@ -9,6 +9,7 @@ use time::Date;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::db::new_ids;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::courses::TodayQuery;
@@ -253,9 +254,12 @@ pub async fn add_units(
     let rows = serde_json::to_value(&input.units)
         .map_err(|e| AppError::BadRequest(format!("units: {e}")))?;
     let mut tx = state.db.begin_as(user).await?;
-    let added: i32 = sqlx::query_scalar("SELECT app_add_study_units($1, $2)")
+    // 단위마다 하나, 그 뒤 감사 기록 하나.
+    let ids = new_ids(input.units.len() + 1);
+    let added: i32 = sqlx::query_scalar("SELECT app_add_study_units($1, $2, $3)")
         .bind(item)
         .bind(rows)
+        .bind(ids)
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -301,8 +305,9 @@ pub async fn delete_unit(
     Path(unit): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_delete_study_unit($1)")
+    sqlx::query("SELECT app_delete_study_unit($1, $2)")
         .bind(unit)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

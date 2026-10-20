@@ -32,7 +32,7 @@ use tokio::sync::RwLock;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::config::{Config, OidcConfig};
-use crate::db::Db;
+use crate::db::{Db, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::http::AppState;
 use crate::ids::UserId;
@@ -286,21 +286,23 @@ pub async fn start_session(
     let ttl_secs =
         i64::try_from(ttl.as_secs()).map_err(|_| AppError::Config("session ttl".into()))?;
     let mut tx = db.begin_anonymous().await?;
-    let user: UserId = sqlx::query_scalar("SELECT app_upsert_user($1, $2, $3, $4, $5)")
+    let user: UserId = sqlx::query_scalar("SELECT app_upsert_user($1, $2, $3, $4, $5, $6)")
         .bind(&identity.issuer)
         .bind(&identity.subject)
         .bind(&identity.email)
         .bind(identity.email_verified)
         .bind(&identity.display_name)
+        .bind(new_ids(1))
         .fetch_one(tx.conn())
         .await?;
     let token = random_token();
-    sqlx::query("SELECT app_create_session($1, $2, $3, $4, $5)")
+    sqlx::query("SELECT app_create_session($1, $2, $3, $4, $5, $6)")
         .bind(token_hash(&token))
         .bind(user)
         .bind(&identity.id_token)
         .bind(ttl_secs)
         .bind(replaces.map(token_hash))
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await?;
     tx.commit().await?;
@@ -328,9 +330,10 @@ pub async fn claim_initial_admin(
     }
     let mut tx = db.begin_anonymous().await?;
     let workspace: Option<Uuid> =
-        sqlx::query_scalar("SELECT app_system_claim_initial_workspace($1, $2)")
+        sqlx::query_scalar("SELECT app_system_claim_initial_workspace($1, $2, $3)")
             .bind(user)
             .bind(&config.initial_workspace)
+            .bind(new_ids(3))
             .fetch_one(tx.conn())
             .await?;
     tx.commit().await?;

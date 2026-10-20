@@ -8,7 +8,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::UserTx;
+use crate::db::{UserTx, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
@@ -186,12 +186,21 @@ pub async fn add(
     Json(input): Json<NewComment>,
 ) -> Result<(StatusCode, Json<CommentCreated>), AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let id: Uuid = sqlx::query_scalar("SELECT app_add_comment($1, $2, $3, $4, $5)")
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_add_comment_ids($1, $2, $3)")
+            .bind(input.document_id)
+            .bind(input.task_id)
+            .bind(input.parent_id),
+    )
+    .await?;
+    let id: Uuid = sqlx::query_scalar("SELECT app_add_comment($1, $2, $3, $4, $5, $6)")
         .bind(input.request_id)
         .bind(input.document_id)
         .bind(input.task_id)
         .bind(input.parent_id)
         .bind(&input.body)
+        .bind(ids)
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -231,8 +240,9 @@ pub async fn delete(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_delete_comment($1)")
+    sqlx::query("SELECT app_delete_comment($1, $2)")
         .bind(id)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

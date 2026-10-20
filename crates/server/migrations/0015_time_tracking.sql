@@ -12,7 +12,7 @@
 -- (기록·메모·시각은 공유하지 않는다, D-32 "선택한 집계만 공유").
 
 CREATE TABLE time_entries (
-  id             uuid PRIMARY KEY DEFAULT uuidv7(),
+  id             uuid PRIMARY KEY,
   user_id        uuid NOT NULL REFERENCES users (id),
   started_at     timestamptz NOT NULL,
   ended_at       timestamptz,
@@ -40,7 +40,7 @@ CREATE INDEX time_entries_target ON time_entries (target_kind, target_id) WHERE 
 
 -- 본인만 보는 수정 이력(고치기 전 값).
 CREATE TABLE time_entry_revisions (
-  id             uuid PRIMARY KEY DEFAULT uuidv7(),
+  id             uuid PRIMARY KEY,
   entry_id       uuid NOT NULL REFERENCES time_entries (id),
   user_id        uuid NOT NULL REFERENCES users (id),
   started_at     timestamptz NOT NULL,

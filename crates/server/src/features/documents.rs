@@ -21,7 +21,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::config::Limits;
-use crate::db::{UserTx, is_unique_violation};
+use crate::db::{UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::{member_role, validate_title};
@@ -522,7 +522,7 @@ pub async fn create_wiki(
         }
         let body = initial_body(&mut tx, input.template_id).await?;
         let id: DocumentId =
-            sqlx::query_scalar("SELECT app_create_wiki_document($1, $2, $3, $4, $5, $6, $7)")
+            sqlx::query_scalar("SELECT app_create_wiki_document($1, $2, $3, $4, $5, $6, $7, $8)")
                 .bind(ws)
                 .bind(input.request_id)
                 .bind(&title)
@@ -530,6 +530,7 @@ pub async fn create_wiki(
                 .bind(body)
                 .bind(input.parent_id)
                 .bind(max_depth(&state.config.limits))
+                .bind(new_ids(3))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;
@@ -583,13 +584,14 @@ pub async fn create_note(
         let mut tx = state.db.begin_as(user).await?;
         let body = initial_body(&mut tx, input.template_id).await?;
         let id: DocumentId =
-            sqlx::query_scalar("SELECT app_create_personal_note($1, $2, $3, $4, $5, $6)")
+            sqlx::query_scalar("SELECT app_create_personal_note($1, $2, $3, $4, $5, $6, $7)")
                 .bind(input.request_id)
                 .bind(&title)
                 .bind(SCHEMA_VERSION)
                 .bind(body)
                 .bind(input.parent_id)
                 .bind(max_depth(&state.config.limits))
+                .bind(new_ids(3))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;
@@ -852,7 +854,6 @@ pub(crate) async fn write_revision(
     body: &Value,
     request_id: Uuid,
 ) -> Result<DocRow, AppError> {
-    // 제목 변경 감사 기록은 트리거가 남긴다(본문은 남기지 않는다).
     let row: DocRow = sqlx::query_as(&format!(
         "UPDATE documents
          SET title = $2, body = $3, schema_version = $4, revision = revision + 1,
@@ -880,9 +881,23 @@ pub(crate) async fn write_revision(
     .bind(request_id)
     .execute(tx.conn())
     .await?;
-    // 링크·언급은 방금 저장한 본문에서 뽑아 같은 트랜잭션에 기록한다.
-    sqlx::query("SELECT app_record_document_references($1, true)")
+    // 제목이 바뀌었으면 감사 기록을 남긴다(이전·새 제목은 함수가 두 리비전에서 읽는다, 본문은 남기지 않는다).
+    sqlx::query("SELECT app_audit_document_rename($1, $2, $3)")
+        .bind(Uuid::now_v7())
         .bind(id)
+        .bind(row.revision)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    // 링크·언급은 방금 저장한 본문에서 뽑아 같은 트랜잭션에 기록한다.
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_record_document_references_ids($1, true)").bind(id),
+    )
+    .await?;
+    sqlx::query("SELECT app_record_document_references($1, true, $2)")
+        .bind(id)
+        .bind(ids)
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -912,11 +927,12 @@ async fn set_parent_in(
     parent: Option<DocumentId>,
     before: Option<DocumentId>,
 ) -> Result<(), AppError> {
-    sqlx::query("SELECT app_set_document_parent($1, $2, $3, $4)")
+    sqlx::query("SELECT app_set_document_parent($1, $2, $3, $4, $5)")
         .bind(id)
         .bind(parent)
         .bind(before)
         .bind(max_depth(limits))
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -973,10 +989,11 @@ pub async fn set_settings(
     Json(input): Json<DocumentSettings>,
 ) -> Result<Json<Document>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_document_settings($1, $2, $3)")
+    sqlx::query("SELECT app_set_document_settings($1, $2, $3, $4)")
         .bind(id)
         .bind(&input.visibility)
         .bind(input.allow_copy)
+        .bind(new_ids(2))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -1051,10 +1068,11 @@ pub async fn create_share(
 ) -> Result<(StatusCode, Json<Share>), AppError> {
     let email = crate::features::members::validate_email(&input.email)?;
     let mut tx = state.db.begin_as(user).await?;
-    let share_id: Uuid = sqlx::query_scalar("SELECT app_share_document($1, $2, $3)")
+    let share_id: Uuid = sqlx::query_scalar("SELECT app_share_document($1, $2, $3, $4)")
         .bind(id)
         .bind(&email)
         .bind(&input.permission)
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -1079,8 +1097,9 @@ pub async fn delete_share(
     Path(share): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_unshare_document($1)")
+    sqlx::query("SELECT app_unshare_document($1, $2)")
         .bind(share)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -1115,16 +1134,17 @@ pub async fn copy(
 ) -> Result<(StatusCode, Json<Document>), AppError> {
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let mut tx = state.db.begin_as(user).await?;
-    let new_id: DocumentId = sqlx::query_scalar("SELECT app_copy_document($1, $2, $3, $4)")
+    let new_id: DocumentId = sqlx::query_scalar("SELECT app_copy_document($1, $2, $3, $4, $5)")
         .bind(id)
         .bind(input.request_id)
         .bind(input.target_workspace_id)
         .bind(&title)
+        .bind(new_ids(3))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-    // 사본의 링크도 기록한다. 언급 알림은 원작성자가 한 것이 아니므로 만들지 않는다.
-    sqlx::query("SELECT app_record_document_references($1, false)")
+    // 사본의 링크도 기록한다. 언급 알림은 원작성자가 한 것이 아니므로 만들지 않는다(새 행 없음).
+    sqlx::query("SELECT app_record_document_references($1, false, '{}')")
         .bind(new_id)
         .execute(tx.conn())
         .await
@@ -1292,11 +1312,17 @@ pub async fn move_document(
         tx.commit().await?;
         return Ok((StatusCode::CONFLICT, Json(current)).into_response());
     }
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_move_document_ids($1)").bind(id),
+    )
+    .await?;
     let (workspace_id, reference): (WorkspaceId, String) =
-        sqlx::query_as("SELECT workspace_id, reference FROM app_move_document($1, $2, $3)")
+        sqlx::query_as("SELECT workspace_id, reference FROM app_move_document($1, $2, $3, $4)")
             .bind(id)
             .bind(input.target_workspace_id)
             .bind(input.target_item_id)
+            .bind(ids)
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;
@@ -1388,9 +1414,10 @@ pub async fn set_template(
     Json(input): Json<SetDocumentTemplate>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_document_template($1, $2)")
+    sqlx::query("SELECT app_set_document_template($1, $2, $3)")
         .bind(id)
         .bind(input.template)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

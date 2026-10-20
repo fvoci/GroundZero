@@ -89,7 +89,7 @@ CREATE FUNCTION app_recurrence_dates(p_rule jsonb, p_anchor date, p_from date, p
 ------------------------------------------------------------------------------
 
 CREATE TABLE task_series (
-  id           uuid PRIMARY KEY DEFAULT uuidv7(),
+  id           uuid PRIMARY KEY,
   workspace_id uuid NOT NULL REFERENCES workspaces (id),
   item_id      uuid NOT NULL REFERENCES items (id),
   root_task_id uuid NOT NULL UNIQUE REFERENCES tasks (id),

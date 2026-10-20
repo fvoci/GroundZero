@@ -4,6 +4,7 @@
 -- features/records.rs의 정의에 맞춘다. 파일 메타데이터 예제는 기록이며 실제 업로드나 외부 접속은 하지 않는다.
 -- 하나의 DO 트랜잭션으로 예제와 완료 표시를 함께 저장한다. 잠금 후 표시를 확인하므로 동시 실행도 안전하다.
 -- 완료 표시가 있으면 예제의 편집·삭제·보관 상태를 그대로 둔다. 재실행으로 복원하거나 덮어쓰지 않는다.
+-- 새 행 id는 앞에 붙는 dev-ids.sql의 `pg_temp.take`로 받는다(D-88). 개수가 정해지지 않는 함수는 그 `_ids`로 묻는다.
 SET search_path = fvoci, pg_temp;
 SET fvoci.dev_issuer = :'issuer';
 
@@ -46,10 +47,10 @@ BEGIN
   END IF;
 
   PERFORM set_config('app.user_id', v_admin::text, true);
-  v_ws := app_create_workspace(uuidv7(), '모듈 예제 (합성 데이터)');
-  v_inv := app_invite(v_ws, 'test-user-2@example.test', 'writer', 7 * 24 * 3600);
+  v_ws := app_create_workspace(pg_temp.take1(), '모듈 예제 (합성 데이터)', pg_temp.take(2));
+  v_inv := app_invite(v_ws, 'test-user-2@example.test', 'writer', 7 * 24 * 3600, pg_temp.take(2));
   PERFORM set_config('app.user_id', v_user::text, true);
-  PERFORM app_respond_invitation(v_inv, true);
+  PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));
   PERFORM set_config('app.user_id', v_admin::text, true);
 
   -- 각 모듈에는 독립된 전용 정보와 동일한 공통 기능을 둔다. 공통 기능 재사용과 데이터 혼선을 구별한다.
@@ -61,57 +62,63 @@ BEGIN
     {"kind":"hobby","name":"취미 예제","key":"DEVH","title":"주말 수채화","goal":"준비부터 결과물까지 활동을 기록한다","details":{"activity_type":"수채화"}}
   ]'::jsonb) LOOP
     v_kind := v_row->>'kind';
-    v_module := app_create_module(v_ws, uuidv7(), v_kind, v_row->>'name', v_row->>'key');
+    v_module := app_create_module(v_ws, pg_temp.take1(), v_kind, v_row->>'name', v_row->>'key', pg_temp.take(2));
     PERFORM app_set_module_description(v_module, '개발 전용 합성 예제. 실제 고객·연구 자료가 아닙니다.');
-    v_item := app_create_item(v_module, uuidv7(), v_row->>'title', '수정·저장·새로고침 후 재조회하는 개발 예제');
+    v_item := app_create_item(v_module, pg_temp.take1(), v_row->>'title', '수정·저장·새로고침 후 재조회하는 개발 예제',
+                              pg_temp.take(2));
     -- 새 항목의 기본 공개 범위는 private다. 두 번째 테스트 사용자를 명시적 항목 멤버로 추가한다.
-    PERFORM app_set_item_members(v_item, ARRAY[v_user], ARRAY[]::uuid[]);
+    PERFORM app_set_item_members(v_item, ARRAY[v_user], ARRAY[]::uuid[],
+                                 pg_temp.take(app_set_item_members_ids(v_item)));
     PERFORM app_set_item_profile(v_item, v_admin, v_row->>'goal', '모듈 연결과 저장 동작 확인',
-      v_today - 7, v_today + 14, 'active', v_row->'details');
+      v_today - 7, v_today + 14, 'active', v_row->'details', pg_temp.take(2));
     v_items := v_items || jsonb_build_object(v_kind, v_item);
 
-    v_task := app_create_task(v_item, uuidv7(), '대표 업무: 준비 사항 확인', NULL);
+    v_task := app_create_task(v_item, pg_temp.take1(), '대표 업무: 준비 사항 확인', NULL, pg_temp.take(2));
     PERFORM app_update_task(v_task, 1, '대표 업무: 준비 사항 확인', '모든 담당자가 같은 업무 상태를 공유합니다.',
-      'in_progress', 'medium', v_today, v_today + 2, 45, ARRAY['개발예제'], ARRAY[v_admin, v_user], false, '[]');
+      'in_progress', 'medium', v_today, v_today + 2, 45, ARRAY['개발예제'], ARRAY[v_admin, v_user], false, '[]',
+      pg_temp.take(app_update_task_ids(v_task, ARRAY[v_admin, v_user], '[]')));
     PERFORM app_add_checklist_items(v_task, jsonb_build_array(
-      jsonb_build_object('request_id', uuidv7(), 'text', '준비 자료 확인', 'checked', true),
-      jsonb_build_object('request_id', uuidv7(), 'text', '저장 후 다시 열기', 'checked', false)));
-    v_doc := app_create_module_document(v_item, uuidv7(), '공동 작업 노트', 1,
+      jsonb_build_object('request_id', pg_temp.take1(), 'text', '준비 자료 확인', 'checked', true),
+      jsonb_build_object('request_id', pg_temp.take1(), 'text', '저장 후 다시 열기', 'checked', false)),
+      pg_temp.take(2));
+    v_doc := app_create_module_document(v_item, pg_temp.take1(), '공동 작업 노트', 1,
       '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"개발용 합성 문서입니다. 업무 완료와 개인 학습 진도는 별도로 저장됩니다."}]},{"type":"taskList","content":[{"type":"taskItem","attrs":{"checked":false},"content":[{"type":"paragraph","content":[{"type":"text","text":"문서 체크리스트: 내용을 검토한다"}]}]}]}]}',
-      NULL, 10);
+      NULL, 10, pg_temp.take(3));
     v_documents := v_documents || jsonb_build_object(v_kind, v_doc);
-    PERFORM app_create_event(v_item, uuidv7(), 'meeting', '예제 점검 모임', '공통 일정의 모듈별 표시 확인',
-      true, v_today + 1, v_today + 1, NULL, NULL, 'UTC');
+    PERFORM app_create_event(v_item, pg_temp.take1(), 'meeting', '예제 점검 모임', '공통 일정의 모듈별 표시 확인',
+      true, v_today + 1, v_today + 1, NULL, NULL, 'UTC', pg_temp.take(2));
     v_time_kind := CASE v_kind WHEN 'study' THEN 'study' WHEN 'course' THEN 'lecture'
       WHEN 'hobby' THEN 'hobby' ELSE 'work' END;
-    PERFORM app_add_time_entry(uuidv7(), now() - interval '90 minutes', now() - interval '60 minutes',
-      0, v_time_kind, '개발 예제: 종료된 개인 시간 기록', 'task', v_task);
+    PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '90 minutes', now() - interval '60 minutes',
+      0, v_time_kind, '개발 예제: 종료된 개인 시간 기록', 'task', v_task, pg_temp.take(1));
     IF v_kind = 'project' THEN
-      v_child := app_create_task(v_item, uuidv7(), '하위 업무: 검토 목록 작성', v_task);
+      v_child := app_create_task(v_item, pg_temp.take1(), '하위 업무: 검토 목록 작성', v_task, pg_temp.take(2));
       PERFORM app_update_task(v_child, 1, '하위 업무: 검토 목록 작성', '', 'done', 'low',
-        v_today, v_today, 15, ARRAY['개발예제'], ARRAY[v_admin], false, '[]');
-      v_milestone := app_create_task(v_item, uuidv7(), '마일스톤: 검토 완료', NULL);
+        v_today, v_today, 15, ARRAY['개발예제'], ARRAY[v_admin], false, '[]',
+        pg_temp.take(app_update_task_ids(v_child, ARRAY[v_admin], '[]')));
+      v_milestone := app_create_task(v_item, pg_temp.take1(), '마일스톤: 검토 완료', NULL, pg_temp.take(2));
       PERFORM app_update_task(v_milestone, 1, '마일스톤: 검토 완료', '', 'todo', 'high',
-        NULL, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], true, '[]');
-      PERFORM app_add_task_dependency(v_task, v_milestone);
+        NULL, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], true, '[]',
+        pg_temp.take(app_update_task_ids(v_milestone, ARRAY[v_admin], '[]')));
+      PERFORM app_add_task_dependency(v_task, v_milestone, pg_temp.take(1));
     END IF;
   END LOOP;
 
   -- 강좌 세부 정보와 세 회차. 날짜는 처음 실행한 날을 기준으로 늦음·오늘·예정을 함께 보여 준다.
   v_course := (v_items->>'course')::uuid;
   PERFORM app_set_course_details(v_course, '데이터 기초', '가상 강사', '개발 예제',
-    'https://example.test/course', '가상 교재 1장', v_today - 7, v_today + 30, v_today + 7);
+    'https://example.test/course', '가상 교재 1장', v_today - 7, v_today + 30, v_today + 7, pg_temp.take(1));
   PERFORM app_add_episodes(v_course, jsonb_build_array(
-    jsonb_build_object('request_id', uuidv7(), 'number', 1, 'title', '데이터와 표', 'chapter', '기초',
+    jsonb_build_object('request_id', pg_temp.take1(), 'number', 1, 'title', '데이터와 표', 'chapter', '기초',
       'duration_seconds', 600, 'materials', '가상 교재 1–5쪽', 'planned_on', v_today - 1),
-    jsonb_build_object('request_id', uuidv7(), 'number', 2, 'title', '질문 만들기', 'chapter', '기초',
+    jsonb_build_object('request_id', pg_temp.take1(), 'number', 2, 'title', '질문 만들기', 'chapter', '기초',
       'duration_seconds', 900, 'materials', '가상 교재 6–10쪽', 'planned_on', v_today),
-    jsonb_build_object('request_id', uuidv7(), 'number', 3, 'title', '결과 읽기', 'chapter', '적용',
-      'duration_seconds', 1200, 'materials', '가상 교재 11–15쪽', 'planned_on', v_today + 1)));
+    jsonb_build_object('request_id', pg_temp.take1(), 'number', 3, 'title', '결과 읽기', 'chapter', '적용',
+      'duration_seconds', 1200, 'materials', '가상 교재 11–15쪽', 'planned_on', v_today + 1)), pg_temp.take(4));
   SELECT id INTO STRICT v_episode FROM course_episodes WHERE item_id = v_course AND number = 1;
   PERFORM app_set_episode_progress(v_episode, 'done', NULL, 600, '내 비공개 메모: 첫 회차 완료', v_today);
-  PERFORM app_add_time_entry(uuidv7(), now() - interval '50 minutes', now() - interval '40 minutes',
-    0, 'lecture', '첫 회차 시청', 'episode', v_episode);
+  PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '50 minutes', now() - interval '40 minutes',
+    0, 'lecture', '첫 회차 시청', 'episode', v_episode, pg_temp.take(1));
   PERFORM set_config('app.user_id', v_user::text, true);
   PERFORM app_set_episode_progress(v_episode, 'in_progress', v_today + 1, 240,
     '두 번째 사용자의 비공개 메모', v_today);
@@ -121,16 +128,16 @@ BEGIN
 
   v_study := (v_items->>'study')::uuid;
   PERFORM app_add_study_units(v_study, jsonb_build_array(
-    jsonb_build_object('request_id', uuidv7(), 'number', 1, 'title', '1장 읽기', 'chapter', '입문',
+    jsonb_build_object('request_id', pg_temp.take1(), 'number', 1, 'title', '1장 읽기', 'chapter', '입문',
       'unit', 'pages', 'amount', 20, 'planned_on', v_today - 1),
-    jsonb_build_object('request_id', uuidv7(), 'number', 2, 'title', '연습 문제', 'chapter', '입문',
+    jsonb_build_object('request_id', pg_temp.take1(), 'number', 2, 'title', '연습 문제', 'chapter', '입문',
       'unit', 'problems', 'amount', 8, 'planned_on', v_today),
-    jsonb_build_object('request_id', uuidv7(), 'number', 3, 'title', '개념 복습', 'chapter', '복습',
-      'unit', 'minutes', 'amount', 25, 'planned_on', v_today + 1)));
+    jsonb_build_object('request_id', pg_temp.take1(), 'number', 3, 'title', '개념 복습', 'chapter', '복습',
+      'unit', 'minutes', 'amount', 25, 'planned_on', v_today + 1)), pg_temp.take(4));
   SELECT id INTO STRICT v_unit FROM study_units WHERE item_id = v_study AND number = 1;
   PERFORM app_set_unit_progress(v_unit, 'done', 20, NULL, '내 비공개 독서 메모', v_today);
-  PERFORM app_add_time_entry(uuidv7(), now() - interval '35 minutes', now() - interval '10 minutes',
-    0, 'study', '강의 시청과 구분되는 능동 학습', 'study_unit', v_unit);
+  PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '35 minutes', now() - interval '10 minutes',
+    0, 'study', '강의 시청과 구분되는 능동 학습', 'study_unit', v_unit, pg_temp.take(1));
   PERFORM set_config('app.user_id', v_user::text, true);
   PERFORM app_set_unit_progress(v_unit, 'in_progress', 8, v_today + 1, '두 번째 사용자의 독서 메모', v_today);
   PERFORM set_config('app.user_id', v_admin::text, true);
@@ -172,9 +179,9 @@ BEGIN
     ELSIF v_row->>'kind' = 'exam' THEN
       v_row := jsonb_set(v_row, '{fields,taker}', to_jsonb(v_admin));
     END IF;
-    PERFORM app_create_record(uuidv7(), (v_items->>(v_row->>'module'))::uuid, v_row->>'kind', v_row->>'title',
+    PERFORM app_create_record(pg_temp.take1(), (v_items->>(v_row->>'module'))::uuid, v_row->>'kind', v_row->>'title',
       CASE WHEN v_row ? 'day' THEN v_today + (v_row->>'day')::integer END,
-      '개발용 합성 기록. 실제 자료가 아닙니다.', v_row->'fields', '[]');
+      '개발용 합성 기록. 실제 자료가 아닙니다.', v_row->'fields', '[]', pg_temp.take(2));
   END LOOP;
   PERFORM set_config('app.user_id', '', true);
   INSERT INTO instance_state (key, value) VALUES ('dev_module_seed_v1', jsonb_build_object(

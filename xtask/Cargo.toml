@@ -12,6 +12,7 @@ serde_json.workspace = true
 sha2 = "0.10"
 spdx = { version = "0.13", features = ["text"] }
 xshell.workspace = true
+uuid = { version = "1", features = ["v7"] }
 
 [lints]
 workspace = true

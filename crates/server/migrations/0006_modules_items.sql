@@ -49,7 +49,7 @@ CREATE FUNCTION app_allocate_number(p_workspace uuid, p_scope uuid, p_kind text,
 ------------------------------------------------------------------------------
 
 CREATE TABLE modules (
-  id           uuid PRIMARY KEY DEFAULT uuidv7(),
+  id           uuid PRIMARY KEY,
   workspace_id uuid NOT NULL REFERENCES workspaces (id),
   -- 기능 유형은 만든 뒤 바꾸지 않는다 (D-16).
   kind         text NOT NULL CHECK (kind IN ('project', 'research', 'study', 'course', 'hobby')),
@@ -93,7 +93,7 @@ CREATE FUNCTION app_normalize_key(p_key text) RETURNS text
 ------------------------------------------------------------------------------
 
 CREATE TABLE items (
-  id           uuid PRIMARY KEY DEFAULT uuidv7(),
+  id           uuid PRIMARY KEY,
   workspace_id uuid NOT NULL REFERENCES workspaces (id),
   module_id    uuid NOT NULL REFERENCES modules (id),
   title        text NOT NULL CHECK (length(btrim(title)) > 0),

@@ -15,6 +15,7 @@ use sqlx::{PgConnection, PgPool, Postgres, Transaction};
 use crate::config::DatabaseUrl;
 use crate::error::AppError;
 use crate::ids::UserId;
+use uuid::Uuid;
 
 /// 앱 역할 연결 풀.
 #[derive(Debug, Clone)]
@@ -97,6 +98,26 @@ impl Db {
     pub async fn close(&self) {
         self.pool.close().await;
     }
+}
+
+/// 새 행의 id(UUIDv7) `n`개. DB는 id를 만들지 않는다: 행을 만드는 정의자 함수는 마지막 인자(`p_ids uuid[]`)로
+/// 이 목록을 받아 차례로 쓰고, 모자라면 멈춘다(D-88). 한 프로세스에서 만든 값은 만든 순서대로 커진다.
+pub fn new_ids(n: usize) -> Vec<Uuid> {
+    (0..n).map(|_| Uuid::now_v7()).collect()
+}
+
+/// 만드는 행 수가 미리 정해지지 않는 함수의 id 목록. 그 함수의 `<함수>_ids`(같은 인자, 필요한 개수의 상한)를
+/// 같은 트랜잭션에서 본 함수 바로 앞에 부른다. 대상이 없어 NULL이면 0개(본 함수가 404 등을 낸다).
+pub async fn needed_ids(
+    conn: &mut PgConnection,
+    bound: sqlx::query::QueryScalar<'_, Postgres, Option<i32>, sqlx::postgres::PgArguments>,
+) -> Result<Vec<Uuid>, AppError> {
+    let n = bound
+        .fetch_one(conn)
+        .await
+        .map_err(AppError::from_db_function)?
+        .unwrap_or(0);
+    Ok(new_ids(usize::try_from(n).unwrap_or(0)))
 }
 
 /// 유일 제약 위반(23505)인지.

@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::UserTx;
+use crate::db::{UserTx, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::{member_role, validate_title};
@@ -147,8 +147,15 @@ pub async fn set_role(
     Json(input): Json<SetRole>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    call(&mut tx, "SELECT app_set_member_role($1, $2, $3)", |q| {
-        q.bind(ws).bind(member).bind(role_str(input.role))
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_set_member_role_ids($1, $2)")
+            .bind(ws)
+            .bind(member),
+    )
+    .await?;
+    call(&mut tx, "SELECT app_set_member_role($1, $2, $3, $4)", |q| {
+        q.bind(ws).bind(member).bind(role_str(input.role)).bind(ids)
     })
     .await?;
     tx.commit().await?;
@@ -166,8 +173,15 @@ pub async fn remove_member(
     Path((ws, member)): Path<(WorkspaceId, UserId)>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    call(&mut tx, "SELECT app_remove_member($1, $2)", |q| {
-        q.bind(ws).bind(member)
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_remove_member_ids($1, $2)")
+            .bind(ws)
+            .bind(member),
+    )
+    .await?;
+    call(&mut tx, "SELECT app_remove_member($1, $2, $3)", |q| {
+        q.bind(ws).bind(member).bind(ids)
     })
     .await?;
     tx.commit().await?;
@@ -184,7 +198,15 @@ pub async fn leave(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    call(&mut tx, "SELECT app_leave_workspace($1)", |q| q.bind(ws)).await?;
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_leave_workspace_ids($1)").bind(ws),
+    )
+    .await?;
+    call(&mut tx, "SELECT app_leave_workspace($1, $2)", |q| {
+        q.bind(ws).bind(ids)
+    })
+    .await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -240,11 +262,12 @@ pub async fn invite(
 ) -> Result<(StatusCode, Json<Invitation>), AppError> {
     let email = validate_email(&input.email)?;
     let mut tx = state.db.begin_as(user).await?;
-    let id: Uuid = sqlx::query_scalar("SELECT app_invite($1, $2, $3, $4)")
+    let id: Uuid = sqlx::query_scalar("SELECT app_invite($1, $2, $3, $4, $5)")
         .bind(ws)
         .bind(&email)
         .bind(role_str(input.role))
         .bind(INVITATION_TTL_SECS)
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -310,7 +333,10 @@ pub async fn revoke_invitation(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    call(&mut tx, "SELECT app_revoke_invitation($1)", |q| q.bind(id)).await?;
+    call(&mut tx, "SELECT app_revoke_invitation($1, $2)", |q| {
+        q.bind(id).bind(new_ids(1))
+    })
+    .await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -367,9 +393,10 @@ async fn respond(
     accept: bool,
 ) -> Result<WorkspaceId, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let ws: WorkspaceId = sqlx::query_scalar("SELECT app_respond_invitation($1, $2)")
+    let ws: WorkspaceId = sqlx::query_scalar("SELECT app_respond_invitation($1, $2, $3)")
         .bind(id)
         .bind(accept)
+        .bind(new_ids(1))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -432,8 +459,8 @@ pub async fn offer_ownership(
     Json(input): Json<OfferOwnership>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    call(&mut tx, "SELECT app_offer_ownership($1, $2)", |q| {
-        q.bind(ws).bind(input.to_user)
+    call(&mut tx, "SELECT app_offer_ownership($1, $2, $3)", |q| {
+        q.bind(ws).bind(input.to_user).bind(new_ids(1))
     })
     .await?;
     tx.commit().await?;
@@ -450,8 +477,8 @@ pub async fn cancel_ownership_offer(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    call(&mut tx, "SELECT app_cancel_ownership_offer($1)", |q| {
-        q.bind(ws)
+    call(&mut tx, "SELECT app_cancel_ownership_offer($1, $2)", |q| {
+        q.bind(ws).bind(new_ids(1))
     })
     .await?;
     tx.commit().await?;
@@ -468,7 +495,10 @@ pub async fn accept_ownership(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    call(&mut tx, "SELECT app_accept_ownership($1)", |q| q.bind(ws)).await?;
+    call(&mut tx, "SELECT app_accept_ownership($1, $2)", |q| {
+        q.bind(ws).bind(new_ids(1))
+    })
+    .await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -537,9 +567,10 @@ pub async fn create_group(
 ) -> Result<(StatusCode, Json<Group>), AppError> {
     let name = validate_title(&input.name, state.config.limits.max_title_chars, "name")?;
     let mut tx = state.db.begin_as(user).await?;
-    let id: Uuid = sqlx::query_scalar("SELECT app_create_group($1, $2)")
+    let id: Uuid = sqlx::query_scalar("SELECT app_create_group($1, $2, $3)")
         .bind(ws)
         .bind(&name)
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -564,7 +595,15 @@ pub async fn delete_group(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    call(&mut tx, "SELECT app_delete_group($1)", |q| q.bind(id)).await?;
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_delete_group_ids($1)").bind(id),
+    )
+    .await?;
+    call(&mut tx, "SELECT app_delete_group($1, $2)", |q| {
+        q.bind(id).bind(ids)
+    })
+    .await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -580,9 +619,11 @@ pub async fn add_group_member(
     Path((group, member)): Path<(Uuid, UserId)>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    call(&mut tx, "SELECT app_set_group_member($1, $2, true)", |q| {
-        q.bind(group).bind(member)
-    })
+    call(
+        &mut tx,
+        "SELECT app_set_group_member($1, $2, true, $3)",
+        |q| q.bind(group).bind(member).bind(new_ids(1)),
+    )
     .await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
@@ -598,9 +639,18 @@ pub async fn remove_group_member(
     Path((group, member)): Path<(Uuid, UserId)>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    call(&mut tx, "SELECT app_set_group_member($1, $2, false)", |q| {
-        q.bind(group).bind(member)
-    })
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_set_group_member_ids($1, $2, false)")
+            .bind(group)
+            .bind(member),
+    )
+    .await?;
+    call(
+        &mut tx,
+        "SELECT app_set_group_member($1, $2, false, $3)",
+        |q| q.bind(group).bind(member).bind(ids),
+    )
     .await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)

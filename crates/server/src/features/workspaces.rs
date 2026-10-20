@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::UserTx;
+use crate::db::{UserTx, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
@@ -115,9 +115,10 @@ pub async fn create(
 ) -> Result<(StatusCode, Json<Workspace>), AppError> {
     let name = validate_title(&input.name, state.config.limits.max_title_chars, "name")?;
     let mut tx = state.db.begin_as(user).await?;
-    let id: WorkspaceId = sqlx::query_scalar("SELECT app_create_workspace($1, $2)")
+    let id: WorkspaceId = sqlx::query_scalar("SELECT app_create_workspace($1, $2, $3)")
         .bind(input.request_id)
         .bind(&name)
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await?;
     let row: (WorkspaceId, String, String, bool, bool) = sqlx::query_as(
@@ -176,9 +177,10 @@ pub async fn delete(
     Json(input): Json<DeleteWorkspace>,
 ) -> Result<Json<WorkspaceDeleted>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let expires_at: OffsetDateTime = sqlx::query_scalar("SELECT app_delete_workspace($1, $2)")
+    let expires_at: OffsetDateTime = sqlx::query_scalar("SELECT app_delete_workspace($1, $2, $3)")
         .bind(ws)
         .bind(&input.name)
+        .bind(new_ids(1))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -224,8 +226,9 @@ pub async fn restore(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_restore_workspace($1)")
+    sqlx::query("SELECT app_restore_workspace($1, $2)")
         .bind(ws)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -243,8 +246,9 @@ pub async fn purge(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_purge_workspace($1)")
+    sqlx::query("SELECT app_purge_workspace($1, $2)")
         .bind(ws)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -314,9 +318,10 @@ pub async fn set_realtime(
         }
     };
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_workspace_realtime($1, $2)")
+    sqlx::query("SELECT app_set_workspace_realtime($1, $2, $3)")
         .bind(ws)
         .bind(input.enabled)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

@@ -13,7 +13,7 @@ use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::UserTx;
+use crate::db::{UserTx, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::modules::ModuleKind;
@@ -948,18 +948,20 @@ pub async fn create(
         &input.files,
     )
     .await?;
-    let id: Uuid = sqlx::query_scalar("SELECT app_create_record($1, $2, $3, $4, $5, $6, $7, $8)")
-        .bind(input.request_id)
-        .bind(item)
-        .bind(&input.kind)
-        .bind(input.title.trim())
-        .bind(input.occurred_on)
-        .bind(&input.body)
-        .bind(fields)
-        .bind(files)
-        .fetch_one(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
+    let id: Uuid =
+        sqlx::query_scalar("SELECT app_create_record($1, $2, $3, $4, $5, $6, $7, $8, $9)")
+            .bind(input.request_id)
+            .bind(item)
+            .bind(&input.kind)
+            .bind(input.title.trim())
+            .bind(input.occurred_on)
+            .bind(&input.body)
+            .bind(fields)
+            .bind(files)
+            .bind(new_ids(2))
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": id }))))
 }
@@ -1017,8 +1019,9 @@ pub async fn delete(
     Path(record): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_delete_record($1)")
+    sqlx::query("SELECT app_delete_record($1, $2)")
         .bind(record)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

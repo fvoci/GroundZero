@@ -7,7 +7,7 @@
 -- 함께 하는 사람의 진행은 지금 그 스터디를 볼 수 있는 사람의 집계만 보인다.
 
 CREATE TABLE study_units (
-  id           uuid PRIMARY KEY DEFAULT uuidv7(),
+  id           uuid PRIMARY KEY,
   item_id      uuid NOT NULL REFERENCES items (id) ON DELETE CASCADE,
   workspace_id uuid NOT NULL REFERENCES workspaces (id),
   number       integer NOT NULL CHECK (number > 0),

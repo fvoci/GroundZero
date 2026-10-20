@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::db::{needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::events::Event;
@@ -114,10 +115,11 @@ pub async fn set_task(
         .map(RecurrenceRule::validated)
         .transpose()?;
     let mut tx = state.db.begin_as(user).await?;
-    let series: Option<Uuid> = sqlx::query_scalar("SELECT app_set_task_recurrence($1, $2, $3)")
+    let series: Option<Uuid> = sqlx::query_scalar("SELECT app_set_task_recurrence($1, $2, $3, $4)")
         .bind(id)
         .bind(rule.as_ref())
         .bind(input.timezone.trim())
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -141,8 +143,14 @@ pub(crate) async fn sync_series(
     series: Uuid,
 ) -> Result<i32, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let made: i32 = sqlx::query_scalar("SELECT app_sync_task_series($1)")
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_sync_task_series_ids($1)").bind(series),
+    )
+    .await?;
+    let made: i32 = sqlx::query_scalar("SELECT app_sync_task_series($1, $2)")
         .bind(series)
+        .bind(ids)
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -168,8 +176,14 @@ pub async fn sync_item(
     Path(item): Path<ItemId>,
 ) -> Result<Json<SyncResult>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let created: i32 = sqlx::query_scalar("SELECT app_sync_item_series($1)")
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_sync_item_series_ids($1)").bind(item),
+    )
+    .await?;
+    let created: i32 = sqlx::query_scalar("SELECT app_sync_item_series($1, $2)")
         .bind(item)
+        .bind(ids)
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -200,9 +214,10 @@ pub async fn set_event(
         .map(RecurrenceRule::validated)
         .transpose()?;
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_event_recurrence($1, $2)")
+    sqlx::query("SELECT app_set_event_recurrence($1, $2, $3)")
         .bind(id)
         .bind(rule.as_ref())
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -232,9 +247,10 @@ pub async fn exclude_event(
     let date = parse_date(Some(&input.date), "date")?
         .ok_or_else(|| AppError::BadRequest("date is required".into()))?;
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_exclude_event_occurrence($1, $2)")
+    sqlx::query("SELECT app_exclude_event_occurrence($1, $2, $3)")
         .bind(id)
         .bind(date)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

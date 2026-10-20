@@ -14,7 +14,7 @@ use time::{Date, Duration, OffsetDateTime};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::db::{UserTx, is_unique_violation};
+use crate::db::{UserTx, is_unique_violation, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::Access;
@@ -338,7 +338,7 @@ pub async fn create(
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
         let id: Uuid = sqlx::query_scalar(
-            "SELECT app_create_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+            "SELECT app_create_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
         )
         .bind(item)
         .bind(input.request_id)
@@ -351,6 +351,7 @@ pub async fn create(
         .bind(valid.when.starts_at)
         .bind(valid.when.ends_at)
         .bind(&valid.timezone)
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -380,22 +381,24 @@ pub async fn update(
 ) -> Result<Response, AppError> {
     let valid = validate(&state, &input.event)?;
     let mut tx = state.db.begin_as(user).await?;
-    let outcome: String =
-        sqlx::query_scalar("SELECT app_update_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
-            .bind(id)
-            .bind(input.base_version)
-            .bind(input.event.kind.as_str())
-            .bind(&valid.title)
-            .bind(&valid.description)
-            .bind(input.event.all_day)
-            .bind(valid.when.start_date)
-            .bind(valid.when.end_date)
-            .bind(valid.when.starts_at)
-            .bind(valid.when.ends_at)
-            .bind(&valid.timezone)
-            .fetch_one(tx.conn())
-            .await
-            .map_err(AppError::from_db_function)?;
+    let outcome: String = sqlx::query_scalar(
+        "SELECT app_update_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+    )
+    .bind(id)
+    .bind(input.base_version)
+    .bind(input.event.kind.as_str())
+    .bind(&valid.title)
+    .bind(&valid.description)
+    .bind(input.event.all_day)
+    .bind(valid.when.start_date)
+    .bind(valid.when.end_date)
+    .bind(valid.when.starts_at)
+    .bind(valid.when.ends_at)
+    .bind(&valid.timezone)
+    .bind(new_ids(2))
+    .fetch_one(tx.conn())
+    .await
+    .map_err(AppError::from_db_function)?;
     let event = load(&mut tx, id).await?;
     tx.commit().await?;
     Ok(if outcome == "conflict" {
@@ -423,8 +426,9 @@ pub async fn delete(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_delete_event($1)")
+    sqlx::query("SELECT app_delete_event($1, $2)")
         .bind(id)
+        .bind(new_ids(2))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

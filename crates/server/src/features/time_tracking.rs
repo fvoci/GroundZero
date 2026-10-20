@@ -16,7 +16,7 @@ use time::{Date, OffsetDateTime};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::db::{UserTx, is_unique_violation};
+use crate::db::{UserTx, is_unique_violation, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::tasks::{format_date, parse_date, validate_text};
@@ -254,12 +254,13 @@ pub async fn start(
     let (target_kind, target_id) = split_target(input.target);
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let id: Uuid = sqlx::query_scalar("SELECT app_start_timer($1, $2, $3, $4, $5)")
+        let id: Uuid = sqlx::query_scalar("SELECT app_start_timer($1, $2, $3, $4, $5, $6)")
             .bind(input.request_id)
             .bind(input.kind.as_str())
             .bind(&memo)
             .bind(target_kind)
             .bind(target_id)
+            .bind(new_ids(1))
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;
@@ -459,7 +460,7 @@ pub async fn add(
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
         let id: Uuid =
-            sqlx::query_scalar("SELECT app_add_time_entry($1, $2, $3, $4, $5, $6, $7, $8)")
+            sqlx::query_scalar("SELECT app_add_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9)")
                 .bind(input.request_id)
                 .bind(valid.started)
                 .bind(ended)
@@ -468,6 +469,7 @@ pub async fn add(
                 .bind(&valid.memo)
                 .bind(target_kind)
                 .bind(target_id)
+                .bind(new_ids(1))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;
@@ -499,7 +501,7 @@ pub async fn update(
     let (target_kind, target_id) = split_target(input.entry.target);
     let mut tx = state.db.begin_as(user).await?;
     let outcome: String =
-        sqlx::query_scalar("SELECT app_update_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9)")
+        sqlx::query_scalar("SELECT app_update_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)")
             .bind(id)
             .bind(input.base_version)
             .bind(valid.started)
@@ -509,6 +511,7 @@ pub async fn update(
             .bind(&valid.memo)
             .bind(target_kind)
             .bind(target_id)
+            .bind(new_ids(1))
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;

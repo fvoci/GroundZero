@@ -961,8 +961,9 @@ async fn trashing_a_parent_while_its_subtask_is_being_trashed_keeps_the_subtask_
 
     // T1: 하위 업무를 지운다(아직 끝나지 않음).
     let mut t1 = state.db.begin_as(admin.id).await.unwrap();
-    let first: uuid::Uuid = sqlx::query_scalar("SELECT app_trash_task($1)")
+    let first: uuid::Uuid = sqlx::query_scalar("SELECT app_trash_task($1, $2)")
         .bind(sub_id)
+        .bind(fvoci_server::db::new_ids(2))
         .fetch_one(t1.conn())
         .await
         .unwrap();

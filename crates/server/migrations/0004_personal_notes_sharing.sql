@@ -31,7 +31,7 @@ CREATE UNIQUE INDEX documents_personal_request ON documents (owner_user_id, requ
 ------------------------------------------------------------------------------
 
 CREATE TABLE document_shares (
-  id            uuid PRIMARY KEY DEFAULT uuidv7(),
+  id            uuid PRIMARY KEY,
   document_id   uuid NOT NULL REFERENCES documents (id),
   grantee_email text NOT NULL CHECK (grantee_email = lower(btrim(grantee_email))),
   permission    text NOT NULL CHECK (permission IN ('read', 'write')),
