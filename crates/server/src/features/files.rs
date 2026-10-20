@@ -15,7 +15,7 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::db::UserTx;
+use crate::db::{UserTx, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
@@ -220,7 +220,7 @@ pub async fn create_upload(
     };
     let mut tx = state.db.begin_as(user).await?;
     let id: Uuid = sqlx::query_scalar(
-        "SELECT app_create_upload($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+        "SELECT app_create_upload($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
     )
     .bind(input.request_id)
     .bind(input.file_id)
@@ -234,6 +234,7 @@ pub async fn create_upload(
     .bind(i32::try_from(limits.upload_ttl.as_secs()).unwrap_or(i32::MAX))
     .bind(i64::try_from(limits.max_file_bytes).unwrap_or(i64::MAX))
     .bind(i64::try_from(limits.max_storage_bytes).unwrap_or(i64::MAX))
+    .bind(new_ids(1))
     .fetch_one(tx.conn())
     .await
     .map_err(AppError::from_db_function)?;
@@ -444,10 +445,11 @@ async fn finish(
     }
     let (sha256, _) = checked?;
     let mut tx = state.db.begin_as(user).await?;
-    let finished = sqlx::query("SELECT app_finish_upload($1, $2, $3)")
+    let finished = sqlx::query("SELECT app_finish_upload($1, $2, $3, $4)")
         .bind(id)
         .bind(&sha256)
         .bind(i64::try_from(state.config.files.max_storage_bytes).unwrap_or(i64::MAX))
+        .bind(new_ids(3))
         .execute(tx.conn())
         .await;
     match finished {
@@ -687,9 +689,10 @@ pub async fn rename_file(
     Json(input): Json<RenameFile>,
 ) -> Result<Json<FileView>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_rename_file($1, $2)")
+    sqlx::query("SELECT app_rename_file($1, $2, $3)")
         .bind(id)
         .bind(&input.name)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -709,8 +712,9 @@ pub async fn trash_file(
     Path(id): Path<FileId>,
 ) -> Result<Json<FileTrashed>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let batch_id: Uuid = sqlx::query_scalar("SELECT app_trash_file($1)")
+    let batch_id: Uuid = sqlx::query_scalar("SELECT app_trash_file($1, $2)")
         .bind(id)
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -743,9 +747,10 @@ pub async fn delete_version(
         state.collab.persist_workspace(workspace).await;
     }
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_delete_file_version($1, $2)")
+    sqlx::query("SELECT app_delete_file_version($1, $2, $3)")
         .bind(id)
         .bind(version)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

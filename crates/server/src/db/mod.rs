@@ -15,6 +15,7 @@ use sqlx::{PgConnection, PgPool, Postgres, Transaction};
 use crate::config::DatabaseUrl;
 use crate::error::AppError;
 use crate::ids::UserId;
+use uuid::Uuid;
 
 /// 앱 역할 연결 풀.
 #[derive(Debug, Clone)]
@@ -97,6 +98,32 @@ impl Db {
     pub async fn close(&self) {
         self.pool.close().await;
     }
+}
+
+/// 새 행의 id(UUIDv7) `n`개. `p_ids uuid[]`를 받는 SQL 함수는 마지막 인자로 이 목록을 받아 차례로 쓴다(D-88).
+/// 개수는 고정된 상한 또는 입력 행 수로 정하고, DB 상태에 따라 달라지면 [`needed_ids`]를 쓴다.
+/// DB는 모자란 id를 만들지 않는다(`FV001`). 남는 id는 버리며, 이 목록은 재시도용 `request_id`와 별개다.
+/// 한 프로세스에서 만든 값은 만든 순서대로 커진다.
+pub fn new_ids(n: usize) -> Vec<Uuid> {
+    (0..n).map(|_| Uuid::now_v7()).collect()
+}
+
+/// 만드는 행 수가 DB 상태에 따라 달라지는 함수의 id 목록.
+///
+/// `bound`는 `<함수>_ids`에 개수 산정에 필요한 인자를 바인딩한 쿼리다(본 함수의 모든 인자와 같지는 않다).
+/// 본 함수와 같은 트랜잭션에서 바로 앞에 실행하고, 돌려받은 목록을 본 함수의 마지막 `p_ids`에 바인딩한다.
+/// NULL·음수 상한은 빈 목록으로 처리하되 본 함수 호출은 생략하지 않는다(기존 404 등의 오류는 본 함수가 낸다).
+/// 상한 조회의 DB 오류는 `AppError::from_db_function`으로 전달한다. 재시도·커밋은 이 함수가 맡지 않는다.
+pub async fn needed_ids(
+    conn: &mut PgConnection,
+    bound: sqlx::query::QueryScalar<'_, Postgres, Option<i32>, sqlx::postgres::PgArguments>,
+) -> Result<Vec<Uuid>, AppError> {
+    let n = bound
+        .fetch_one(conn)
+        .await
+        .map_err(AppError::from_db_function)?
+        .unwrap_or(0);
+    Ok(new_ids(usize::try_from(n).unwrap_or(0)))
 }
 
 /// 유일 제약 위반(23505)인지.

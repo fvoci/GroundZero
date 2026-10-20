@@ -16,7 +16,7 @@ use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{UserTx, is_unique_violation};
+use crate::db::{UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
@@ -369,12 +369,13 @@ pub async fn create_module(
     let key = normalize_key(&input.key)?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let id: ModuleId = sqlx::query_scalar("SELECT app_create_module($1, $2, $3, $4, $5)")
+        let id: ModuleId = sqlx::query_scalar("SELECT app_create_module($1, $2, $3, $4, $5, $6)")
             .bind(ws)
             .bind(input.request_id)
             .bind(input.kind.as_str())
             .bind(&name)
             .bind(&key)
+            .bind(new_ids(2))
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;
@@ -406,10 +407,11 @@ pub async fn update_module(
     let name = validate_title(&input.name, state.config.limits.max_title_chars, "name")?;
     let key = normalize_key(&input.key)?;
     let mut tx = state.db.begin_as(user).await?;
-    let result = sqlx::query("SELECT app_update_module($1, $2, $3)")
+    let result = sqlx::query("SELECT app_update_module($1, $2, $3, $4)")
         .bind(id)
         .bind(&name)
         .bind(&key)
+        .bind(new_ids(2))
         .execute(tx.conn())
         .await;
     match result {
@@ -438,9 +440,10 @@ pub async fn archive_module(
     Json(input): Json<SetArchived>,
 ) -> Result<Json<Module>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_archive_module($1, $2)")
+    sqlx::query("SELECT app_archive_module($1, $2, $3)")
         .bind(id)
         .bind(input.archived)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -523,11 +526,12 @@ pub async fn create_item(
     let description = validate_description(&input.description)?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let id: ItemId = sqlx::query_scalar("SELECT app_create_item($1, $2, $3, $4)")
+        let id: ItemId = sqlx::query_scalar("SELECT app_create_item($1, $2, $3, $4, $5)")
             .bind(module)
             .bind(input.request_id)
             .bind(&title)
             .bind(&description)
+            .bind(new_ids(2))
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;
@@ -573,11 +577,17 @@ pub async fn update_item(
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let description = validate_description(&input.description)?;
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_update_item($1, $2, $3, $4)")
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_update_item_ids($1)").bind(id),
+    )
+    .await?;
+    sqlx::query("SELECT app_update_item($1, $2, $3, $4, $5)")
         .bind(id)
         .bind(&title)
         .bind(&description)
         .bind(&input.visibility)
+        .bind(ids)
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -598,9 +608,10 @@ pub async fn archive_item(
     Json(input): Json<SetArchived>,
 ) -> Result<Json<Item>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_archive_item($1, $2)")
+    sqlx::query("SELECT app_archive_item($1, $2, $3)")
         .bind(id)
         .bind(input.archived)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -646,7 +657,7 @@ pub async fn create_item_document(
         let mut tx = state.db.begin_as(user).await?;
         let body = initial_body(&mut tx, input.template_id).await?;
         let id: DocumentId =
-            sqlx::query_scalar("SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7)")
+            sqlx::query_scalar("SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7, $8)")
                 .bind(item)
                 .bind(input.request_id)
                 .bind(&title)
@@ -654,6 +665,7 @@ pub async fn create_item_document(
                 .bind(body)
                 .bind(input.parent_id)
                 .bind(max_depth(&state.config.limits))
+                .bind(new_ids(3))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;

@@ -23,7 +23,7 @@ CREATE TABLE course_details (
 );
 
 CREATE TABLE course_episodes (
-  id               uuid PRIMARY KEY DEFAULT uuidv7(),
+  id               uuid PRIMARY KEY,
   item_id          uuid NOT NULL,
   workspace_id     uuid NOT NULL,
   number           integer NOT NULL CHECK (number > 0),

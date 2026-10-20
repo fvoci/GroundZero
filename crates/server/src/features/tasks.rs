@@ -3,7 +3,8 @@
 //! 업무는 모듈 항목 아래에 있고 모듈 번호열을 함께 쓴다. 권한은 항목을 따르며 DB 함수 `app_task_access`
 //! 하나로 판정한다(보관 아래 읽기 전용). 필드 고치기는 `base_version`으로 충돌을 막고, 칸반 이동과 체크리스트
 //! 체크는 버전 없이 따로 한다(같은 보드를 여럿이 써도 충돌하지 않게). 날짜는 시각이 없는 날짜로 저장한다(D-50).
-//! 처리는 `migrations/0011_tasks.sql`의 정의자 함수가 한다.
+//! 초기 정의는 `migrations/0011_tasks.sql`, 앱 생성 id를 받는 D-88 전환은
+//! `migrations/0073_app_ids_tasks.sql`에 있다.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -15,7 +16,7 @@ use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{UserTx, is_unique_violation};
+use crate::db::{UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::Access;
@@ -597,11 +598,12 @@ pub async fn create(
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let id: Uuid = sqlx::query_scalar("SELECT app_create_task($1, $2, $3, $4)")
+        let id: Uuid = sqlx::query_scalar("SELECT app_create_task($1, $2, $3, $4, $5)")
             .bind(item)
             .bind(input.request_id)
             .bind(&title)
             .bind(input.parent_id)
+            .bind(new_ids(2))
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;
@@ -654,9 +656,18 @@ pub async fn update(
             "due_date": format_date(parse_date(shift.due_date.as_deref(), "due_date")?),
         }));
     }
+    let shifts = serde_json::Value::Array(shifts);
     let mut tx = state.db.begin_as(user).await?;
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_update_task_ids($1, $2, $3)")
+            .bind(id)
+            .bind(&input.assignee_ids)
+            .bind(&shifts),
+    )
+    .await?;
     let outcome: String = sqlx::query_scalar(
-        "SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+        "SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
     )
     .bind(id)
     .bind(input.base_version)
@@ -670,7 +681,8 @@ pub async fn update(
     .bind(&tags)
     .bind(&input.assignee_ids)
     .bind(input.milestone)
-    .bind(serde_json::Value::Array(shifts))
+    .bind(&shifts)
+    .bind(ids)
     .fetch_one(tx.conn())
     .await
     .map_err(AppError::from_db_function)?;
@@ -735,9 +747,10 @@ pub async fn set_parent(
     Json(input): Json<SetTaskParent>,
 ) -> Result<Json<TaskDetail>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_task_parent($1, $2)")
+    sqlx::query("SELECT app_set_task_parent($1, $2, $3)")
         .bind(id)
         .bind(input.parent_id)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -769,10 +782,13 @@ pub async fn add_checklist(
     }
     let payload = serde_json::to_value(&items)
         .map_err(|e| AppError::BadRequest(format!("invalid items: {e}")))?;
+    // 줄마다 하나.
+    let ids = new_ids(items.len());
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_add_checklist_items($1, $2)")
+    sqlx::query("SELECT app_add_checklist_items($1, $2, $3)")
         .bind(id)
         .bind(payload)
+        .bind(ids)
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

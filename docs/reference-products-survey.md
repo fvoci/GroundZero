@@ -1,9 +1,9 @@
 # 참고 제품 세부 기능 조사 (Focalboard·Kaneo·Outline)
 
-작성: 2026-10-21, `feat/ui-module-flows`. 요약과 GroundZero에 반영한 것·제안·범위 밖 판단은 `docs/development.md` 85절(특히 85.3·85.7).
+작성: 2026-10-21, `feat/ui-module-flows`. 요약과 GroundZero에 반영한 것·제안·범위 밖 판단은 `docs/development.md` 86절(특히 86.3·86.7).
 
 - 방법: 공식 이미지·공식 설치 문서로 각 제품을 로컬에 격리 실행(127.0.0.1만, GroundZero와 Compose 프로젝트·볼륨 분리)하고 같은 합성 예제(프로젝트 "작은 출시 준비", 카드 넷, 위키 "운영 안내 › 설치 › 백업")로 화면을 직접 조작했다. 설치 문서·라이선스·설정 파일과 화면만 보았고 제품 소스·번들은 분석하지 않았다.
-- 실행 판: Focalboard 7.8.9(`mattermost/focalboard@sha256:337346b1…`), Kaneo 2.28.3(`ghcr.io/usekaneo/kaneo@sha256:414d153e…`), Outline 1.11.0(`docker.getoutline.com/outlinewiki/outline@sha256:08ee9ffd…`). 전체 digest·라이선스는 85.2절.
+- 실행 판: Focalboard 7.8.9(`mattermost/focalboard@sha256:337346b1…`), Kaneo 2.28.3(`ghcr.io/usekaneo/kaneo@sha256:414d153e…`), Outline 1.11.0(`docker.getoutline.com/outlinewiki/outline@sha256:08ee9ffd…`). 전체 digest·라이선스는 86.2절.
 - 스크린샷·설정·계정·데이터는 내부 비교 근거로만 저장소 밖에 두었고 이 저장소에 넣지 않는다. 로고·아이콘·문구·화면 구성을 가져오지 않는다.
 - "미확인"으로 적은 것은 자동 조작으로 해당 메뉴가 열리지 않아 직접 보지 못한 것이다.
 

@@ -13,7 +13,7 @@ CREATE FUNCTION app_user_id() RETURNS uuid
 ------------------------------------------------------------------------------
 
 CREATE TABLE users (
-  id            uuid PRIMARY KEY DEFAULT uuidv7(),
+  id            uuid PRIMARY KEY,
   issuer        text NOT NULL,
   subject       text NOT NULL,
   email         text,
@@ -35,7 +35,7 @@ CREATE TABLE oidc_login_states (
 
 -- 서버 측 세션. 토큰 원문은 저장하지 않고 SHA-256 해시만 저장한다.
 CREATE TABLE sessions (
-  id         uuid PRIMARY KEY DEFAULT uuidv7(),
+  id         uuid PRIMARY KEY,
   token_hash bytea NOT NULL UNIQUE,
   user_id    uuid NOT NULL REFERENCES users (id),
   id_token   text NOT NULL,
@@ -49,7 +49,7 @@ CREATE INDEX sessions_user ON sessions (user_id);
 ------------------------------------------------------------------------------
 
 CREATE TABLE workspaces (
-  id         uuid PRIMARY KEY DEFAULT uuidv7(),
+  id         uuid PRIMARY KEY,
   name       text NOT NULL CHECK (length(btrim(name)) > 0),
   created_by uuid NOT NULL REFERENCES users (id),
   request_id uuid NOT NULL,
@@ -104,7 +104,7 @@ CREATE TABLE reference_counters (
 -- 문서. 첫 흐름은 Tiptap JSON 본문을 리비전으로 저장한다 (D-62).
 -- CRDT 도입 시 상태 열을 body 옆에 추가하며 id·number·revision은 그대로 이어진다.
 CREATE TABLE documents (
-  id             uuid PRIMARY KEY DEFAULT uuidv7(),
+  id             uuid PRIMARY KEY,
   workspace_id   uuid NOT NULL REFERENCES workspaces (id),
   placement      text NOT NULL CHECK (placement IN ('wiki')),
   scope          text NOT NULL,
@@ -141,7 +141,7 @@ CREATE TABLE document_revisions (
 ------------------------------------------------------------------------------
 
 CREATE TABLE audit_log (
-  id           uuid PRIMARY KEY DEFAULT uuidv7(),
+  id           uuid PRIMARY KEY,
   workspace_id uuid REFERENCES workspaces (id),
   actor        uuid NOT NULL REFERENCES users (id),
   action       text NOT NULL,

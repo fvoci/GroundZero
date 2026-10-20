@@ -87,11 +87,12 @@ pub async fn save(
         return Err(AppError::BadRequest("the view is too large".into()));
     }
     let mut tx = state.db.begin_as(user).await?;
-    let id: Uuid = sqlx::query_scalar("SELECT app_save_view($1, $2, $3, $4)")
+    let id: Uuid = sqlx::query_scalar("SELECT app_save_view($1, $2, $3, $4, $5)")
         .bind(input.request_id)
         .bind(item)
         .bind(&name)
         .bind(&config)
+        .bind(crate::db::new_ids(1))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

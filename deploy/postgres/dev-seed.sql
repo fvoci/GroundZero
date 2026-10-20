@@ -2,7 +2,8 @@
 -- 테스트 realm(deploy/keycloak/realm-test.json)의 가짜 사용자 둘이 함께 쓰는 워크스페이스(실시간 공동 편집 켬)와
 -- 공동 편집 문서 하나를 한 번만 만든다. 모두 앱과 같은 정의자 함수(번호·감사·권한 검사)를 거친다. instance_state의
 -- 'dev_seed' 표시가 있으면 아무것도 바꾸지 않으므로 다시 실행해도 중복되거나 사용자 데이터가 초기화되지 않는다.
--- 입력: psql 변수 issuer(개발 Keycloak 발급자. 사용자 식별은 발급자 + subject).
+-- 입력: psql 변수 issuer(개발 Keycloak 발급자. 사용자 식별은 발급자 + subject). 새 행 id는 앞에 붙는
+-- dev-ids.sql의 `pg_temp.take`로 받는다(D-88).
 SET search_path = fvoci, pg_temp;
 SET fvoci.dev_issuer = :'issuer';
 
@@ -31,19 +32,19 @@ BEGIN
   END IF;
   -- 로그인 때와 같은 함수로 사용자를 만든다(발급자 + 고정 subject). 로그인하면 같은 행을 쓴다.
   v_admin := app_upsert_user(v_issuer, '00000000-0000-4000-8000-00000000000a',
-                             'test-user@example.test', true, 'Test User');
+                             'test-user@example.test', true, 'Test User', pg_temp.take(1));
   v_user := app_upsert_user(v_issuer, '00000000-0000-4000-8000-00000000000b',
-                            'test-user-2@example.test', true, 'Second User');
+                            'test-user-2@example.test', true, 'Second User', pg_temp.take(1));
   -- 초기 관리자(D-51) 경로 그대로: test-user가 첫 워크스페이스의 소유자. 이미 정해져 있으면 그 사람으로 새로 만든다.
   PERFORM set_config('app.user_id', '', true);
-  v_ws := app_system_claim_initial_workspace(v_admin, '개발');
+  v_ws := app_system_claim_initial_workspace(v_admin, '개발', pg_temp.take(3));
   PERFORM set_config('app.user_id', v_admin::text, true);
   IF v_ws IS NULL THEN
-    v_ws := app_create_workspace(uuidv7(), '개발');
+    v_ws := app_create_workspace(pg_temp.take1(), '개발', pg_temp.take(2));
   END IF;
-  PERFORM app_set_workspace_realtime(v_ws, true);
-  v_inv := app_invite(v_ws, 'test-user-2@example.test', 'writer', 7 * 24 * 3600);
-  v_doc := app_create_wiki_document(v_ws, uuidv7(), '공동 편집 연습', 1, jsonb_build_object(
+  PERFORM app_set_workspace_realtime(v_ws, true, pg_temp.take(1));
+  v_inv := app_invite(v_ws, 'test-user-2@example.test', 'writer', 7 * 24 * 3600, pg_temp.take(2));
+  v_doc := app_create_wiki_document(v_ws, pg_temp.take1(), '공동 편집 연습', 1, jsonb_build_object(
     'type', 'doc',
     'content', jsonb_build_array(
       jsonb_build_object('type', 'paragraph', 'content', jsonb_build_array(
@@ -52,9 +53,9 @@ BEGIN
         jsonb_build_object('type', 'taskItem', 'attrs', jsonb_build_object('checked', false),
           'content', jsonb_build_array(jsonb_build_object('type', 'paragraph', 'content',
             jsonb_build_array(jsonb_build_object('type', 'text', 'text', '첫 할 일')))))))
-    )), NULL, 10);
+    )), NULL, 10, pg_temp.take(3));
   PERFORM set_config('app.user_id', v_user::text, true);
-  PERFORM app_respond_invitation(v_inv, true);
+  PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));
   PERFORM set_config('app.user_id', '', true);
   INSERT INTO instance_state (key, value)
   VALUES ('dev_seed', jsonb_build_object('workspace', v_ws, 'document', v_doc));

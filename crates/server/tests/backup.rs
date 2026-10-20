@@ -37,6 +37,33 @@ async fn session(state: &AppState, subject: &str) -> TestUser {
     }
 }
 
+/// 백업·복구의 저장소 잠금이 남지 않았는지: 잡힌 advisory lock이 없고, 다른 세션이 바로 잡았다 놓을 수 있다.
+async fn assert_storage_lock_free(url: &str) {
+    let mut conn = PgConnection::connect(url).await.unwrap();
+    let held: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+           AND ((classid::bigint << 32) | objid::bigint) = $1",
+    )
+    .bind(backup::STORAGE_LOCK)
+    .fetch_one(&mut conn)
+    .await
+    .unwrap();
+    assert_eq!(held, 0, "the storage lock is still held");
+    let got: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
+        .bind(backup::STORAGE_LOCK)
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+    assert!(got);
+    let released: bool = sqlx::query_scalar("SELECT pg_advisory_unlock($1)")
+        .bind(backup::STORAGE_LOCK)
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+    assert!(released);
+    conn.close().await.unwrap();
+}
+
 fn temp_dir(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("fvoci-{label}-{}", uuid::Uuid::now_v7().simple()))
 }
@@ -119,6 +146,8 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     );
     // 같은 곳에 다시 쓰지 않는다.
     assert!(backup::create(&state.config, db, &out).await.is_err());
+    // 저장소 정리를 멈추는 잠금은 백업이 잡은 세션에서 풀려 남지 않는다(다른 세션이 바로 잡을 수 있다).
+    assert_storage_lock_free(&source.app_url).await;
 
     // 새 DB(같은 클러스터의 다른 데이터베이스)를 같은 마이그레이션까지 만든다.
     let target = fresh_database(&mut admin, "restore").await;
@@ -190,6 +219,7 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
             .await
             .is_err()
     );
+    assert_storage_lock_free(&target.app_url).await;
 
     // 같은 사람(발급자·subject)이 다시 로그인하면 그대로 본다.
     let restored_app = common::app(&restored);
@@ -227,6 +257,31 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
             .status,
         StatusCode::UNAUTHORIZED
     );
+    // 복구한 DB에서도 RLS가 그대로다: 멤버가 아닌 사람은 문서를 못 보고, 사용자 문맥 없는 앱 연결은 행을 못 본다.
+    let stranger = session(
+        &restored,
+        &format!("backup-stranger-{}", uuid::Uuid::now_v7()),
+    )
+    .await;
+    assert_eq!(
+        send(
+            &restored_app,
+            Method::GET,
+            &format!("/api/documents/{doc_id}"),
+            Some(&stranger),
+            None
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+    let mut app_conn = PgConnection::connect(&target.app_url).await.unwrap();
+    let visible: i64 = sqlx::query_scalar("SELECT count(*) FROM fvoci.documents")
+        .fetch_one(&mut app_conn)
+        .await
+        .unwrap();
+    assert_eq!(visible, 0, "rows are hidden without a user context");
+    app_conn.close().await.unwrap();
 
     restored.db.close().await;
     state.db.close().await;
@@ -249,4 +304,128 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
             std::fs::copy(entry.path(), target).unwrap();
         }
     }
+}
+
+/// 관리자의 `fvoci_migrator` 직접 멤버십 레코드(grantor, ADMIN, INHERIT, SET).
+async fn migrator_memberships(
+    conn: &mut PgConnection,
+    member: &str,
+) -> Vec<(String, bool, bool, bool)> {
+    sqlx::query_as(
+        "SELECT g.rolname::text, m.admin_option, m.inherit_option, m.set_option
+           FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.grantor
+          WHERE m.roleid = 'fvoci_migrator'::regrole
+            AND m.member = (SELECT oid FROM pg_roles WHERE rolname = $1)
+          ORDER BY 1",
+    )
+    .bind(member)
+    .fetch_all(conn)
+    .await
+    .unwrap()
+}
+
+/// 표 소유자 역할을 잠시 빌렸다 돌려주면(bootstrap·복구, D-88) 관리자의 멤버십은 빌리기 전과 같다: 새로 만든
+/// 레코드만 지우고, 관리자에게 이미 있던 레코드는 지우지 않고 옵션을 되돌린다. superuser가 아닌 관리자를 시험
+/// 역할로 만들어 본다(시험 관리자는 superuser일 수 있다).
+#[tokio::test]
+async fn borrowing_the_migrator_leaves_the_admins_memberships_as_they_were() {
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let mut admin = PgConnection::connect(&admin_url).await.unwrap();
+    let role = format!("fvoci_borrow_{}", uuid::Uuid::now_v7().simple());
+    let password = uuid::Uuid::now_v7().to_string();
+    sqlx::raw_sql(&format!(
+        "CREATE ROLE {role} LOGIN PASSWORD '{password}';
+         GRANT fvoci_migrator TO {role} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE"
+    ))
+    .execute(&mut admin)
+    .await
+    .unwrap();
+    let options = admin_url
+        .parse::<sqlx::postgres::PgConnectOptions>()
+        .unwrap()
+        .username(&role)
+        .password(&password);
+    let mut conn = PgConnection::connect_with(&options).await.unwrap();
+
+    // 관리자 자신이 준 레코드가 없다: 새 레코드를 만들고 그것만 지운다.
+    let before = migrator_memberships(&mut admin, &role).await;
+    let borrow = fvoci_server::db::admin::borrow_migrator(&mut conn)
+        .await
+        .unwrap();
+    assert!(
+        matches!(
+            borrow,
+            fvoci_server::db::admin::MigratorBorrow::Added { .. }
+        ),
+        "{borrow:?}"
+    );
+    sqlx::query("SET ROLE fvoci_migrator")
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    fvoci_server::db::admin::release_migrator(&mut conn, borrow)
+        .await
+        .unwrap();
+    assert_eq!(migrator_memberships(&mut admin, &role).await, before);
+
+    // 관리자가 스스로 준 SET 없는 레코드(INHERIT 켬)가 있다: 그 레코드를 쓰고 원래 옵션으로 되돌린다.
+    sqlx::raw_sql(&format!(
+        "GRANT fvoci_migrator TO {role} WITH INHERIT TRUE, SET FALSE"
+    ))
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    let before = migrator_memberships(&mut admin, &role).await;
+    assert_eq!(before.len(), 2, "{before:?}");
+    let borrow = fvoci_server::db::admin::borrow_migrator(&mut conn)
+        .await
+        .unwrap();
+    assert!(
+        matches!(
+            &borrow,
+            fvoci_server::db::admin::MigratorBorrow::Changed { grantor, inherit: true } if *grantor == role
+        ),
+        "{borrow:?}"
+    );
+    sqlx::query("SET ROLE fvoci_migrator")
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    fvoci_server::db::admin::release_migrator(&mut conn, borrow)
+        .await
+        .unwrap();
+    assert_eq!(migrator_memberships(&mut admin, &role).await, before);
+
+    // 빌린 뒤 연결이 끊겼다(복구 중 장애): 같은 관리자 주소의 새 연결로 되돌린다.
+    let borrow = fvoci_server::db::admin::borrow_migrator(&mut conn)
+        .await
+        .unwrap();
+    let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+    let mut other = PgConnection::connect_with(&options).await.unwrap();
+    let ended: bool = sqlx::query_scalar("SELECT pg_terminate_backend($1)")
+        .bind(pid)
+        .fetch_one(&mut other)
+        .await
+        .unwrap();
+    assert!(ended);
+    other.close().await.unwrap();
+    let role_url = fvoci_server::config::Secret::new(format!(
+        "postgres://{role}:{password}@{}:{}/{}",
+        options.get_host(),
+        options.get_port(),
+        options.get_database().unwrap_or("postgres"),
+    ));
+    fvoci_server::db::admin::release_migrator_or_reconnect(&mut conn, &role_url, borrow)
+        .await
+        .unwrap();
+    assert_eq!(migrator_memberships(&mut admin, &role).await, before);
+
+    drop(conn);
+    sqlx::raw_sql(&format!("DROP ROLE {role}"))
+        .execute(&mut admin)
+        .await
+        .unwrap();
 }

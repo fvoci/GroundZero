@@ -13,7 +13,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::UserTx;
+use crate::db::{UserTx, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::member_role;
@@ -158,8 +158,10 @@ async fn entries(
 
 async fn trash_call(state: &AppState, user: UserId, sql: &str, id: Uuid) -> Result<Uuid, AppError> {
     let mut tx = state.db.begin_as(user).await?;
+    // 휴지통 묶음과 감사 기록의 id 2개.
     let batch: Uuid = sqlx::query_scalar(sql)
         .bind(id)
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -177,7 +179,7 @@ pub async fn trash_document(
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Trashed>, AppError> {
-    let batch_id = trash_call(&state, user, "SELECT app_trash_document($1)", id.0).await?;
+    let batch_id = trash_call(&state, user, "SELECT app_trash_document($1, $2)", id.0).await?;
     Ok(Json(Trashed { batch_id }))
 }
 
@@ -191,7 +193,7 @@ pub async fn trash_task(
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Trashed>, AppError> {
-    let batch_id = trash_call(&state, user, "SELECT app_trash_task($1)", id).await?;
+    let batch_id = trash_call(&state, user, "SELECT app_trash_task($1, $2)", id).await?;
     Ok(Json(Trashed { batch_id }))
 }
 
@@ -205,7 +207,7 @@ pub async fn trash_item(
     CurrentUser(user): CurrentUser,
     Path(id): Path<ItemId>,
 ) -> Result<Json<Trashed>, AppError> {
-    let batch_id = trash_call(&state, user, "SELECT app_trash_item($1)", id.0).await?;
+    let batch_id = trash_call(&state, user, "SELECT app_trash_item($1, $2)", id.0).await?;
     Ok(Json(Trashed { batch_id }))
 }
 
@@ -220,7 +222,7 @@ pub async fn trash_module(
     CurrentUser(user): CurrentUser,
     Path(id): Path<ModuleId>,
 ) -> Result<Json<Trashed>, AppError> {
-    let batch_id = trash_call(&state, user, "SELECT app_trash_module($1)", id.0).await?;
+    let batch_id = trash_call(&state, user, "SELECT app_trash_module($1, $2)", id.0).await?;
     Ok(Json(Trashed { batch_id }))
 }
 
@@ -277,8 +279,9 @@ pub async fn restore(
     Path(batch): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_restore_batch($1)")
+    sqlx::query("SELECT app_restore_batch($1, $2)")
         .bind(batch)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -296,8 +299,9 @@ pub async fn purge(
     Path(batch): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_purge_batch($1)")
+    sqlx::query("SELECT app_purge_batch($1, $2)")
         .bind(batch)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -323,8 +327,14 @@ pub async fn purge_expired(
 ) -> Result<Json<Purged>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     member_role(&mut tx, ws).await?;
-    let purged: i32 = sqlx::query_scalar("SELECT app_purge_expired($1)")
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_purge_expired_ids($1)").bind(ws),
+    )
+    .await?;
+    let purged: i32 = sqlx::query_scalar("SELECT app_purge_expired($1, $2)")
         .bind(ws)
+        .bind(ids)
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -340,7 +350,13 @@ pub async fn purge_my_expired(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Purged>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let purged: i32 = sqlx::query_scalar("SELECT app_purge_expired(NULL)")
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_purge_expired_ids(NULL)"),
+    )
+    .await?;
+    let purged: i32 = sqlx::query_scalar("SELECT app_purge_expired(NULL, $1)")
+        .bind(ids)
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -367,9 +383,10 @@ pub async fn set_retention(
     Json(input): Json<SetRetention>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_trash_retention($1, $2)")
+    sqlx::query("SELECT app_set_trash_retention($1, $2, $3)")
         .bind(ws)
         .bind(input.days)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -397,9 +414,10 @@ pub async fn set_version_retention(
     Json(input): Json<SetVersionRetention>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_version_retention($1, $2)")
+    sqlx::query("SELECT app_set_version_retention($1, $2, $3)")
         .bind(ws)
         .bind(input.days)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

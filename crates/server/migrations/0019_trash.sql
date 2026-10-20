@@ -14,7 +14,7 @@ ALTER TABLE workspaces ADD COLUMN trash_retention_days integer NOT NULL DEFAULT 
   CHECK (trash_retention_days BETWEEN 1 AND 3650);
 
 CREATE TABLE trash_batches (
-  id            uuid PRIMARY KEY DEFAULT uuidv7(),
+  id            uuid PRIMARY KEY,
   workspace_id  uuid REFERENCES workspaces (id),
   owner_user_id uuid REFERENCES users (id),
   root_kind     text NOT NULL CHECK (root_kind IN ('item', 'document', 'task', 'event')),

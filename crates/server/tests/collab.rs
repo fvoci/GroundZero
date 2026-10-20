@@ -1946,11 +1946,12 @@ async fn a_checkpoint_that_finds_the_body_changed_stops_the_restore() {
         "WITH d AS (UPDATE fvoci.documents SET body = $2, revision = revision + 1 WHERE id = $1::uuid
                     RETURNING id, revision, title, schema_version, body)
          INSERT INTO fvoci.document_revisions (document_id, revision, title, schema_version, body, author, request_id)
-         SELECT id, revision, title, schema_version, body, $3, gen_random_uuid() FROM d",
+         SELECT id, revision, title, schema_version, body, $3, $4 FROM d",
     )
     .bind(&id)
     .bind(common::doc_body("밖에서 바뀐 본문"))
     .bind(admin.id.0)
+    .bind(uuid::Uuid::now_v7())
     .execute(&owner)
     .await
     .unwrap();

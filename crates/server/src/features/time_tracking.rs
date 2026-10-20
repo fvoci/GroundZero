@@ -4,7 +4,8 @@
 //! 사용자당 하나이고 서버 시각으로 재므로 앱을 닫아도 이어진다. 기록은 측정 뒤에 종류·대상을 정할 수 있고,
 //! 고치면 본인만 보는 수정 이력에 이전 값이 남는다. 집계는 보는 사람의 시간대 날짜로 하며 기록은 시작한 날에
 //! 센다. 공유는 사용자가 워크스페이스마다 고르며, 그 워크스페이스 업무에 연결된 시간의 합계만 보인다.
-//! 처리는 `migrations/0015_time_tracking.sql`.
+//! 초기 정의는 `migrations/0015_time_tracking.sql`, 앱 생성 id를 받는 D-88 전환은
+//! `migrations/0073_app_ids_tasks.sql`에 있다.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -16,7 +17,7 @@ use time::{Date, OffsetDateTime};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::db::{UserTx, is_unique_violation};
+use crate::db::{UserTx, is_unique_violation, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::tasks::{format_date, parse_date, validate_text};
@@ -254,12 +255,13 @@ pub async fn start(
     let (target_kind, target_id) = split_target(input.target);
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let id: Uuid = sqlx::query_scalar("SELECT app_start_timer($1, $2, $3, $4, $5)")
+        let id: Uuid = sqlx::query_scalar("SELECT app_start_timer($1, $2, $3, $4, $5, $6)")
             .bind(input.request_id)
             .bind(input.kind.as_str())
             .bind(&memo)
             .bind(target_kind)
             .bind(target_id)
+            .bind(new_ids(1))
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;
@@ -459,7 +461,7 @@ pub async fn add(
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
         let id: Uuid =
-            sqlx::query_scalar("SELECT app_add_time_entry($1, $2, $3, $4, $5, $6, $7, $8)")
+            sqlx::query_scalar("SELECT app_add_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9)")
                 .bind(input.request_id)
                 .bind(valid.started)
                 .bind(ended)
@@ -468,6 +470,7 @@ pub async fn add(
                 .bind(&valid.memo)
                 .bind(target_kind)
                 .bind(target_id)
+                .bind(new_ids(1))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;
@@ -499,7 +502,7 @@ pub async fn update(
     let (target_kind, target_id) = split_target(input.entry.target);
     let mut tx = state.db.begin_as(user).await?;
     let outcome: String =
-        sqlx::query_scalar("SELECT app_update_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9)")
+        sqlx::query_scalar("SELECT app_update_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)")
             .bind(id)
             .bind(input.base_version)
             .bind(valid.started)
@@ -509,6 +512,7 @@ pub async fn update(
             .bind(&valid.memo)
             .bind(target_kind)
             .bind(target_id)
+            .bind(new_ids(1))
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;

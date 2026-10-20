@@ -500,13 +500,14 @@ pub async fn import(
                 let (fields, files) =
                     validate(&mut tx, item, "reference", &title, fields, &[]).await?;
                 sqlx::query_scalar::<_, Uuid>(
-                    "SELECT app_create_record($1, $2, 'reference', $3, NULL, '', $4, $5)",
+                    "SELECT app_create_record($1, $2, 'reference', $3, NULL, '', $4, $5, $6)",
                 )
                 .bind(Uuid::now_v7())
                 .bind(item)
                 .bind(&title)
                 .bind(fields)
                 .bind(files)
+                .bind(crate::db::new_ids(2))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;

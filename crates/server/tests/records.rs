@@ -607,10 +607,14 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     .await;
     let doc_id = uuid::Uuid::parse_str(doc.json["id"].as_str().unwrap()).unwrap();
     // 버전과 참조를 한 문장으로 넣는다(동시에 도는 다른 테스트의 정리 작업이 참조 없는 순간을 보지 않게).
+    // 버전 id는 앱처럼 여기서 만든다(DB에는 id 기본값이 없다, D-88).
+    let version_ids = fvoci_server::db::new_ids(502);
     sqlx::query(
         "WITH v AS (
-           INSERT INTO fvoci.file_versions (file_id, version, size, sha256, content_type, storage_key, uploaded_by, created_at)
-           SELECT $1, n, 0, repeat('0', 64), 'text/csv', 'test-pinned/' || $1 || '/' || n, $2, now() - interval '20 days'
+           INSERT INTO fvoci.file_versions (id, file_id, version, size, sha256, content_type, storage_key, uploaded_by,
+                                            created_at)
+           SELECT $4[n - 999], $1, n, 0, repeat('0', 64), 'text/csv', 'test-pinned/' || $1 || '/' || n, $2,
+                  now() - interval '20 days'
            FROM generate_series(1000, 1501) n
            RETURNING version)
          INSERT INTO fvoci.document_file_refs (document_id, revision, file_id, version)
@@ -619,6 +623,7 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     .bind(pinned)
     .bind(writer.id.0)
     .bind(doc_id)
+    .bind(&version_ids)
     .execute(&owner)
     .await
     .unwrap();
@@ -912,10 +917,11 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
         .unwrap();
     sqlx::query(
         "INSERT INTO fvoci.document_revisions (document_id, revision, title, schema_version, body, author, request_id)
-         SELECT d.id, d.revision, d.title, d.schema_version, d.body, d.created_by, gen_random_uuid()
+         SELECT d.id, d.revision, d.title, d.schema_version, d.body, d.created_by, $2
          FROM fvoci.documents d WHERE d.id = $1",
     )
     .bind(wiki_id)
+    .bind(uuid::Uuid::now_v7())
     .execute(&mut *save)
     .await
     .unwrap();
@@ -951,8 +957,9 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
             .unwrap();
     let mut purging = owner.begin().await.unwrap();
     // 작업 프로세스의 묶음 정리와 같은 경로를 이 묶음에만 쓴다(열어 둔 트랜잭션이 다른 테스트의 묶음까지 잡지 않게).
-    sqlx::query("SELECT fvoci.app_purge_batch_as($1, true)")
+    sqlx::query("SELECT fvoci.app_purge_batch_as($1, true, $2)")
         .bind(batch)
+        .bind(vec![uuid::Uuid::now_v7()])
         .execute(&mut *purging)
         .await
         .unwrap();

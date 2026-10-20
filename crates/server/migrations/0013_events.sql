@@ -6,7 +6,7 @@
 -- 지우기는 표시만 하고 행은 남긴다(휴지통·복원·영구 삭제는 D-39 조각에서). 반복은 다음 조각.
 
 CREATE TABLE events (
-  id           uuid PRIMARY KEY DEFAULT uuidv7(),
+  id           uuid PRIMARY KEY,
   workspace_id uuid NOT NULL REFERENCES workspaces (id),
   item_id      uuid NOT NULL,
   kind         text NOT NULL CHECK (kind IN ('meeting', 'presentation', 'event')),

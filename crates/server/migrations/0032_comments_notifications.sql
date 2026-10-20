@@ -8,7 +8,7 @@
 -- 만들고, 읽을 때도 다시 확인한다(권한이 철회되면 사라진다).
 
 CREATE TABLE comments (
-  id           uuid PRIMARY KEY DEFAULT uuidv7(),
+  id           uuid PRIMARY KEY,
   workspace_id uuid REFERENCES workspaces (id),
   document_id  uuid REFERENCES documents (id) ON DELETE CASCADE,
   task_id      uuid REFERENCES tasks (id) ON DELETE CASCADE,

@@ -552,7 +552,7 @@ async fn app_role_cannot_touch_internal_tables_or_rewind_revisions() {
         perm
     );
     assert_eq!(
-        denied("INSERT INTO documents (workspace_id, placement, scope, number, title, schema_version, body, revision, created_by, updated_by, request_id) VALUES ($1, 'wiki', 'WIKI', 99, 't', 1, '{}', 1, app_user_id(), app_user_id(), gen_random_uuid())", Some(ws_id)).await,
+        denied("INSERT INTO documents (workspace_id, placement, scope, number, title, schema_version, body, revision, created_by, updated_by, request_id) VALUES ($1, 'wiki', 'WIKI', 99, 't', 1, '{}', 1, app_user_id(), app_user_id(), $1)", Some(ws_id)).await,
         perm
     );
     // 리비전은 1씩만 오른다(되감기·건너뛰기 거부).
