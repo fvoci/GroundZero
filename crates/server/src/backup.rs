@@ -256,14 +256,72 @@ pub async fn restore(
     }
     let url = need(db.admin_url.as_ref(), "DATABASE_ADMIN_URL")?;
     let mut conn = PgConnection::connect_with(&crate::db::connect_options(url)?).await?;
-    let version = migration_version(&mut conn).await?;
+    // 무엇이든 올리기 전에, 복구 끝에 필요한 관리자 권한(트리거를 잠시 끄는 설정)이 있는지 본다.
+    check_replication_role(&mut conn).await?;
+    // 표는 마이그레이션 역할(표 소유자)로 읽고 채운다. superuser가 아닌 관리자(셀프호스트 Supabase의 `postgres`)는
+    // fvoci 표에 권한이 없다. 관리자 권한은 트리거를 잠시 끄는 설정에만 쓴다(`load_tables`, D-88).
+    let borrow = crate::db::admin::borrow_migrator(&mut conn).await?;
+    let result = restore_as_owner(config, &mut conn, from, &manifest).await;
+    let released = crate::db::admin::release_migrator_or_reconnect(&mut conn, url, borrow).await;
+    let closed = conn.close().await.map_err(AppError::from);
+    // 원래 실패(복구)를 먼저 돌려준다. 뒤따른 정리 실패(멤버십 회수·연결 닫기)도 버리지 않고 로그에 남긴다:
+    // 회수 실패(새 관리자 연결로 한 번 더 해 본 뒤)는 관리자에게 임시 SET 멤버십이 남았다는 뜻이다.
+    for (step, outcome) in [("release_migrator", &released), ("close", &closed)] {
+        if let (Err(_), Err(err)) = (&result, outcome) {
+            tracing::error!(
+                event = "backup.restore_cleanup_failed",
+                step,
+                error_code = err.code(),
+                detail = crate::logging::safe_error(err),
+                "cleanup after a failed restore also failed"
+            );
+        }
+    }
+    result?;
+    released?;
+    closed?;
+    Ok(manifest)
+}
+
+/// 복구는 표를 채우는 동안 `session_replication_role = replica`로 트리거(외래 키 포함)를 끈다. 그 설정은 superuser,
+/// 그 매개변수의 SET 권한이 있는 역할, 셀프호스트 Supabase의 `postgres`(supautils가 허락)만 바꿀 수 있다. 실제로
+/// 바꿔 보고 되돌려, 권한이 없으면 파일을 올리기 전에 멈춘다(권한을 스스로 얻지 않는다).
+async fn check_replication_role(conn: &mut PgConnection) -> Result<(), AppError> {
+    let mut tx = conn.begin().await?;
+    let allowed = sqlx::query("SET LOCAL session_replication_role = replica")
+        .execute(&mut *tx)
+        .await;
+    tx.rollback().await?;
+    match allowed {
+        Ok(_) => Ok(()),
+        Err(err) if err.as_database_error().and_then(|e| e.code()).as_deref() == Some("42501") => {
+            Err(AppError::Config(
+                "the admin role cannot set session_replication_role, which restore needs; use a superuser, \
+                 or have a superuser run GRANT SET ON PARAMETER session_replication_role TO <admin>"
+                    .into(),
+            ))
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
+async fn restore_as_owner(
+    config: &Config,
+    conn: &mut PgConnection,
+    from: &Path,
+    manifest: &Manifest,
+) -> Result<(), AppError> {
+    sqlx::query("SET ROLE fvoci_migrator")
+        .execute(&mut *conn)
+        .await?;
+    let version = migration_version(conn).await?;
     if version != manifest.migration_version {
         return Err(AppError::Config(format!(
             "the database is at migration {version} but the backup is at {}; run `db migrate` with the same release",
             manifest.migration_version
         )));
     }
-    let present = tables(&mut conn).await?;
+    let present = tables(conn).await?;
     // 같은 마이그레이션이면 백업할 표도 같다. 목록에서 빠진 표가 있으면 그 내용 없이 끝나므로 거부한다.
     if let Some(name) = present
         .iter()
@@ -282,7 +340,7 @@ pub async fn restore(
             "SELECT EXISTS (SELECT 1 FROM fvoci.{})",
             table.name
         ))
-        .fetch_one(&mut conn)
+        .fetch_one(&mut *conn)
         .await?;
         if used {
             return Err(AppError::Config(format!(
@@ -293,16 +351,15 @@ pub async fn restore(
     }
     sqlx::query("SELECT pg_advisory_lock($1)")
         .bind(STORAGE_LOCK)
-        .execute(&mut conn)
+        .execute(&mut *conn)
         .await?;
     let storage = Storage::new(&config.storage);
-    let result = restore_locked(&mut conn, &storage, from, &manifest).await;
+    let result = restore_locked(conn, &storage, from, manifest).await;
     sqlx::query("SELECT pg_advisory_unlock($1)")
         .bind(STORAGE_LOCK)
-        .execute(&mut conn)
+        .execute(&mut *conn)
         .await?;
-    conn.close().await?;
-    result.map(|()| manifest)
+    result
 }
 
 async fn restore_locked(
@@ -424,9 +481,15 @@ async fn load_tables(
     from: &Path,
     manifest: &Manifest,
 ) -> Result<(), AppError> {
-    sqlx::query("SET LOCAL session_replication_role = replica")
-        .execute(&mut *conn)
-        .await?;
+    // 트리거(외래 키 포함)를 끄는 설정은 관리자 권한이 필요하다. 이 트랜잭션 안에서만 관리자로 돌아가 켜고 다시
+    // 표 소유자로 채운다(커밋·롤백하면 둘 다 원래대로).
+    sqlx::raw_sql(
+        "SET LOCAL ROLE NONE;
+         SET LOCAL session_replication_role = replica;
+         SET LOCAL ROLE fvoci_migrator;",
+    )
+    .execute(&mut *conn)
+    .await?;
     // 복구하는 동안 다른 쓰기가 끼어들지 않게 표를 잠그고 비어 있는지 다시 본다(서버는 멈춰 두는 것을 권한다).
     for table in &manifest.tables {
         sqlx::query(&format!(
