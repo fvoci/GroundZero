@@ -9,6 +9,7 @@ use time::Date;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::db::{needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::modules::ModuleKind;
@@ -299,7 +300,7 @@ pub async fn set(
     let details = input.details.normalize(kind)?;
     let details = serde_json::to_value(&details)
         .map_err(|e| AppError::Config(format!("item details: {e}")))?;
-    sqlx::query("SELECT app_set_item_profile($1, $2, $3, $4, $5, $6, $7, $8)")
+    sqlx::query("SELECT app_set_item_profile($1, $2, $3, $4, $5, $6, $7, $8, $9)")
         .bind(item)
         .bind(input.leader_id)
         .bind(input.goal.trim())
@@ -308,6 +309,7 @@ pub async fn set(
         .bind(input.ends_on)
         .bind(&input.status)
         .bind(details)
+        .bind(new_ids(2))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -328,10 +330,16 @@ pub async fn set_members(
 ) -> Result<StatusCode, AppError> {
     let users: Vec<Uuid> = input.user_ids.iter().map(|u| u.0).collect();
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_item_members($1, $2, $3)")
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_set_item_members_ids($1)").bind(item),
+    )
+    .await?;
+    sqlx::query("SELECT app_set_item_members($1, $2, $3, $4)")
         .bind(item)
         .bind(&users)
         .bind(&input.group_ids)
+        .bind(ids)
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -436,16 +444,23 @@ pub async fn copy(
         return Err(AppError::BadRequest("the title is too long".into()));
     }
     let mut tx = state.db.begin_as(user).await?;
-    let (item_id, skipped_documents): (ItemId, i32) =
-        sqlx::query_as("SELECT copied_item, skipped_count FROM app_copy_item($1, $2, $3, $4, $5)")
-            .bind(item)
-            .bind(input.module_id)
-            .bind(input.request_id)
-            .bind(input.title.trim())
-            .bind(input.reset)
-            .fetch_one(tx.conn())
-            .await
-            .map_err(AppError::from_db_function)?;
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_copy_item_ids($1)").bind(item),
+    )
+    .await?;
+    let (item_id, skipped_documents): (ItemId, i32) = sqlx::query_as(
+        "SELECT copied_item, skipped_count FROM app_copy_item($1, $2, $3, $4, $5, $6)",
+    )
+    .bind(item)
+    .bind(input.module_id)
+    .bind(input.request_id)
+    .bind(input.title.trim())
+    .bind(input.reset)
+    .bind(ids)
+    .fetch_one(tx.conn())
+    .await
+    .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     Ok((
         StatusCode::CREATED,
@@ -468,9 +483,10 @@ pub async fn set_template(
     Json(input): Json<SetTemplate>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_item_template($1, $2)")
+    sqlx::query("SELECT app_set_item_template($1, $2, $3)")
         .bind(item)
         .bind(input.template)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

@@ -9,6 +9,7 @@ use time::Date;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
+use crate::db::new_ids;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
@@ -301,7 +302,7 @@ pub async fn set_details(
     Json(input): Json<CourseDetails>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_course_details($1, $2, $3, $4, $5, $6, $7, $8, $9)")
+    sqlx::query("SELECT app_set_course_details($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)")
         .bind(item)
         .bind(&input.subject)
         .bind(&input.instructor)
@@ -311,6 +312,7 @@ pub async fn set_details(
         .bind(input.starts_on)
         .bind(input.expires_on)
         .bind(input.target_on)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -332,9 +334,12 @@ pub async fn add_episodes(
     let rows = serde_json::to_value(&input.episodes)
         .map_err(|e| AppError::BadRequest(format!("episodes: {e}")))?;
     let mut tx = state.db.begin_as(user).await?;
-    let added: i32 = sqlx::query_scalar("SELECT app_add_episodes($1, $2)")
+    // 회차마다 하나, 그 뒤 감사 기록 하나.
+    let ids = new_ids(input.episodes.len() + 1);
+    let added: i32 = sqlx::query_scalar("SELECT app_add_episodes($1, $2, $3)")
         .bind(item)
         .bind(rows)
+        .bind(ids)
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -381,8 +386,9 @@ pub async fn delete_episode(
     Path(episode): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_delete_episode($1)")
+    sqlx::query("SELECT app_delete_episode($1, $2)")
         .bind(episode)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
