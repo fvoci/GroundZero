@@ -39,7 +39,8 @@ async fn execute_formatted(
     Ok(())
 }
 
-/// 역할을 만들거나(속성 포함) 비밀번호만 갱신한 뒤, 권한 속성이 없는지 확인한다.
+/// 역할을 만들거나(속성 포함) 비밀번호만 갱신한다. 이미 있는 역할은 바꾸기 전에 권한 속성이 없는지, 관리자가 그
+/// 역할을 다룰 수 있는지(ADMIN OPTION) 먼저 확인한다: 멈출 때는 아무것도 바꾸지 않는다.
 async fn ensure_role(
     conn: &mut PgConnection,
     role: &str,
@@ -53,6 +54,8 @@ async fn ensure_role(
             .fetch_one(&mut *conn)
             .await?;
     if exists {
+        check_attributes(conn, role, may_create_db).await?;
+        check_manageable(conn, role).await?;
         execute_formatted(
             conn,
             "SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', $1, $2)",
@@ -66,7 +69,38 @@ async fn ensure_role(
             &[role, password.expose(), attributes],
         )
         .await?;
+        check_attributes(conn, role, may_create_db).await?;
     }
+    Ok(())
+}
+
+/// 다른 관리자가 만든 역할이면 superuser가 아닌 관리자는 ADMIN OPTION이 없어 비밀번호를 바꾸거나 SET 멤버십을 줄
+/// 수 없다(PG16부터 CREATEROLE은 자기가 만든 역할에만 ADMIN을 받는다). 일반 DB 오류 대신 해야 할 일을 알린다.
+async fn check_manageable(conn: &mut PgConnection, role: &str) -> Result<(), AppError> {
+    let manageable: bool = sqlx::query_scalar(
+        "SELECT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user)
+             OR EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid
+                        WHERE r.rolname = $1 AND m.admin_option
+                          AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user))",
+    )
+    .bind(role)
+    .fetch_one(&mut *conn)
+    .await?;
+    if !manageable {
+        return Err(AppError::Config(format!(
+            "the admin role has no ADMIN OPTION on {role}, which another role created; grant it \
+             (GRANT {role} TO <admin> WITH ADMIN OPTION) as that role, or run db bootstrap as that role"
+        )));
+    }
+    Ok(())
+}
+
+/// 역할에 권한 속성이 없는지 확인한다(앱 역할은 CREATEDB도 안 된다).
+async fn check_attributes(
+    conn: &mut PgConnection,
+    role: &str,
+    may_create_db: bool,
+) -> Result<(), AppError> {
     let (superuser, create_role, create_db, bypass_rls): (bool, bool, bool, bool) = sqlx::query_as(
         "SELECT rolsuper, rolcreaterole, rolcreatedb, rolbypassrls FROM pg_roles WHERE rolname = $1",
     )
