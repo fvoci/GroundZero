@@ -2,7 +2,7 @@
   // 항목의 업무 (D-31): 칸반·목록·간트·달력, 검색·필터·정렬과 저장한 보기, 업무 만들기, 상세 대화상자.
   // 칸반 카드는 버튼과 키보드(Alt+화살표)로 열·순서를 옮긴다. 상세는 주소(/t/{업무})로도 열린다.
   import type { Workspace } from '@fvoci/api-client';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
 
   import type { ItemView, SavedViewView, TaskStatus, TaskView } from '$lib/api/client';
   import { api, ApiError, TASK_STATUSES } from '$lib/api/client';
@@ -197,12 +197,19 @@
   const fieldBox =
     'h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 
+  // 이 항목의 목록을 한 번이라도 받았는지(실패도 받은 것으로 본다: 오류를 보인다). 받기 전에는 빈 열·"업무가 없습니다"
+  // 대신 불러오는 중이라고 보인다. 같은 항목을 다시 읽을 때(옮긴 뒤 등)는 지금 목록을 그대로 둔다.
+  let loadedFor = $state<string | undefined>(undefined);
+  const loading = $derived(loadedFor !== item.id);
+
   async function reload(itemId: string = item.id): Promise<void> {
     try {
       tasks = await api.tasks(itemId);
       error = undefined;
     } catch (e: unknown) {
       error = errorText(e, m.tasks_load_failed());
+    } finally {
+      if (itemId === item.id) loadedFor = itemId;
     }
   }
 
@@ -283,16 +290,25 @@
       await reload();
       return;
     }
-    await commitMove(created.id, { status: lane, beforeId: null }, 'menu');
+    // 방금 만든 업무는 아직 목록에 없으므로 알림의 제목을 넘긴다(전에는 ": 옮겼습니다"처럼 비었다).
+    await commitMove(created.id, { status: lane, beforeId: null }, 'menu', created.title);
+  }
+
+  /** 빠른 추가를 닫고(Esc) 그 열의 "업무 추가" 단추로 초점을 돌린다. */
+  async function closeQuickAdd(lane: TaskStatus): Promise<void> {
+    adding = undefined;
+    await tick();
+    document.querySelector<HTMLElement>(`[data-quick-add="${lane}"]`)?.focus();
   }
 
   async function commitMove(
     id: string,
     plan: BoardMove,
     how: BoardAction | 'drag' | 'menu',
+    knownTitle?: string,
   ): Promise<boolean> {
     const before = tasks;
-    const title = titleOf(id);
+    const title = knownTitle ?? titleOf(id);
     tasks = applyMove(tasks, id, plan);
     try {
       await api.moveTask(id, plan.status, plan.beforeId);
@@ -375,6 +391,12 @@
   function onDragMove(event: PointerEvent): void {
     const d = drag;
     if (d?.pointerId !== event.pointerId) return;
+    // 창 밖이나 다른 창에서 단추를 놓아 pointerup을 받지 못했으면(마우스 단추가 눌려 있지 않음) 놓을 자리를 정하지
+    // 않고 취소한다. 그러지 않으면 끌기가 남아 다음 클릭이 카드를 엉뚱한 자리에 놓았다.
+    if (event.pointerType === 'mouse' && event.buttons === 0) {
+      cancelDrag();
+      return;
+    }
     d.x = event.clientX;
     d.y = event.clientY;
     if (!d.active) {
@@ -425,11 +447,14 @@
     window.addEventListener('pointerup', onDragEnd);
     window.addEventListener('pointercancel', cancelDrag);
     window.addEventListener('keydown', onKey);
+    // 끄는 중 다른 창·탭으로 가면 놓는 순간을 볼 수 없으므로 취소한다.
+    window.addEventListener('blur', cancelDrag);
     return () => {
       window.removeEventListener('pointermove', onDragMove);
       window.removeEventListener('pointerup', onDragEnd);
       window.removeEventListener('pointercancel', cancelDrag);
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('blur', cancelDrag);
     };
   });
 
@@ -607,7 +632,9 @@
     <p role="alert" class="text-sm text-destructive">{error}</p>
   {/if}
 
-  {#if view === 'board'}
+  {#if loading}
+    <p class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</p>
+  {:else if view === 'board'}
     <div class="grid gap-3 md:grid-cols-3" data-testid="task-board">
       {#each TASK_STATUSES as lane (lane)}
         <section
@@ -743,10 +770,16 @@
                 placeholder={m.tasks_new_placeholder()}
                 submitLabel={m.tasks_create()}
                 create={(requestId: string, title: string) => quickAdd(lane, requestId, title)}
+                autofocus
+                oncancel={() => void closeQuickAdd(lane)}
               />
             {:else}
-              <Button size="sm" variant="ghost" class="self-start" onclick={() => (adding = lane)}
-                >{m.tasks_quick_add()}</Button
+              <Button
+                size="sm"
+                variant="ghost"
+                class="self-start"
+                data-quick-add={lane}
+                onclick={() => (adding = lane)}>{m.tasks_quick_add()}</Button
               >
             {/if}
           {/if}

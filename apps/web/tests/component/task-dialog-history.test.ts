@@ -1,9 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import type { MockInstance } from 'vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
+import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 afterEach(() => {
@@ -179,5 +181,167 @@ describe('quick add in a column', () => {
       expect(move).toHaveBeenCalledWith('9', 'in_progress', null);
     });
     expect(create.mock.calls[0]?.[2]).toBe('새 업무');
+  });
+});
+
+function boardMocks(list: TaskView[] | Promise<TaskView[]>): void {
+  window.sessionStorage.clear();
+  vi.spyOn(api, 'tasks').mockReturnValue(Promise.resolve(list));
+  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+}
+
+// 빠른 추가(Kaneo·Focalboard 비교): 누른 단추가 입력란으로 바뀌므로 초점이 그 입력란으로 가야 키보드로 이어 쓸 수 있고,
+// Esc로 닫으면 같은 열의 "업무 추가" 단추로 돌아와야 한다. 다른 열에 만든 업무의 알림에는 그 제목이 들어간다.
+describe('quick add focus, cancel and notice', () => {
+  it('focuses the input, closes on Escape back to the button, and names the task it moved', async () => {
+    await setLocale('ko', { reload: false });
+    boardMocks([]);
+    vi.spyOn(api, 'createTask').mockResolvedValue({ ...task('9', '새 업무'), checklist: [] });
+    vi.spyOn(api, 'moveTask').mockResolvedValue({ ...task('9', '새 업무'), checklist: [] });
+    render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    const lane = await screen.findByRole('region', { name: /진행 중/ });
+    await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
+    const input = within(lane).getByRole('textbox');
+    await waitFor(() => {
+      expect(document.activeElement).toBe(input);
+    });
+    await fireEvent.keyDown(input, { key: 'Escape' });
+    await waitFor(() => {
+      expect(within(lane).queryByRole('textbox')).toBeNull();
+      expect(document.activeElement).toBe(within(lane).getByRole('button', { name: '업무 추가' }));
+    });
+
+    await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
+    const again = within(lane).getByRole('textbox');
+    await fireEvent.input(again, { target: { value: '새 업무' } });
+    await fireEvent.submit(again.closest('form') ?? again);
+    // 전에는 만든 업무가 아직 목록에 없어 ": 옮겼습니다(진행 중)."처럼 제목이 비었다.
+    expect(await screen.findByText('새 업무: 옮겼습니다(진행 중).')).toBeTruthy();
+  });
+});
+
+// 첫 목록을 받기 전에는 빈 열·"업무가 없습니다"가 아니라 불러오는 중이라고 보인다.
+describe('board loading state', () => {
+  it('says it is loading until the first list arrives', async () => {
+    await setLocale('ko', { reload: false });
+    let resolve: (list: TaskView[]) => void = () => undefined;
+    boardMocks(new Promise<TaskView[]>((r) => (resolve = r)));
+    render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    expect(await screen.findByText('불러오는 중…')).toBeTruthy();
+    expect(screen.queryByTestId('task-board')).toBeNull();
+    resolve([task('2', 'API 연결')]);
+    expect(await screen.findByTestId('task-board')).toBeTruthy();
+    expect(screen.queryByText('불러오는 중…')).toBeNull();
+  });
+});
+
+// 끌기 중 창을 떠나거나(blur) 다른 곳에서 단추를 놓아 pointerup을 받지 못하면 끌기를 취소한다. 그러지 않으면 남은
+// 끌기가 다음 클릭에서 카드를 놓아 버린다.
+describe('drag cancel when the release is not seen', () => {
+  async function startDragOver(
+    laneName: RegExp,
+  ): Promise<{ move: MockInstance<typeof api.moveTask> }> {
+    await setLocale('ko', { reload: false });
+    boardMocks([task('2', 'API 연결')]);
+    const move = vi
+      .spyOn(api, 'moveTask')
+      .mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
+    render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    await screen.findByText('API 연결');
+    const target = await screen.findByRole('region', { name: laneName });
+    // jsdom에는 배치가 없으므로 포인터 아래 요소를 그 열로 정한다.
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => target,
+    });
+    const card = document.querySelector('[data-board-card="2"]');
+    if (card === null) throw new Error('card');
+    await fireEvent.pointerDown(card, {
+      pointerId: 1,
+      isPrimary: true,
+      button: 0,
+      pointerType: 'mouse',
+      clientX: 10,
+      clientY: 10,
+    });
+    await fireEvent.pointerMove(window, {
+      pointerId: 1,
+      buttons: 1,
+      pointerType: 'mouse',
+      clientX: 60,
+      clientY: 10,
+    });
+    return { move };
+  }
+
+  it('drops normally while the button is held (contrast)', async () => {
+    const { move } = await startDragOver(/완료/);
+    await fireEvent.pointerUp(window, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      clientX: 60,
+      clientY: 10,
+    });
+    await waitFor(() => {
+      expect(move).toHaveBeenCalledWith('2', 'done', null);
+    });
+  });
+
+  it('cancels when the window loses focus mid-drag', async () => {
+    const { move } = await startDragOver(/완료/);
+    await fireEvent.blur(window);
+    await fireEvent.pointerUp(window, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      clientX: 60,
+      clientY: 10,
+    });
+    expect(await screen.findByText('API 연결: 끌기를 취소했습니다.')).toBeTruthy();
+    expect(move).not.toHaveBeenCalled();
+  });
+
+  it('cancels when a move arrives with no button pressed', async () => {
+    const { move } = await startDragOver(/완료/);
+    await fireEvent.pointerMove(window, {
+      pointerId: 1,
+      buttons: 0,
+      pointerType: 'mouse',
+      clientX: 70,
+      clientY: 10,
+    });
+    await fireEvent.pointerUp(window, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      clientX: 70,
+      clientY: 10,
+    });
+    expect(move).not.toHaveBeenCalled();
+  });
+});
+
+// 업무 상세: 지정할 수 있는 사람을 받기 전에는 "없습니다"를 보이지 않는다.
+describe('task detail assignees while loading', () => {
+  it('shows loading instead of the empty message until the people arrive', async () => {
+    await setLocale('ko', { reload: false });
+    vi.spyOn(api, 'task').mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
+    let resolve: (p: { user_id: string; display_name: string }[]) => void = () => undefined;
+    vi.spyOn(api, 'assignable').mockReturnValue(new Promise((r) => (resolve = r)));
+    vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
+    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    render(TaskDetail, {
+      props: {
+        taskId: '2',
+        tasks: [task('2', 'API 연결')],
+        workspaces: [],
+        onchanged: () => undefined,
+        onopen: () => undefined,
+      },
+    });
+    const group = await screen.findByRole('group', { name: /담당자/ });
+    expect(within(group).getByText('불러오는 중…')).toBeTruthy();
+    expect(within(group).queryByText('지정할 수 있는 사람이 없습니다.')).toBeNull();
+    resolve([{ user_id: 'u1', display_name: '가상 사용자' }]);
+    expect(await within(group).findByText('가상 사용자')).toBeTruthy();
   });
 });

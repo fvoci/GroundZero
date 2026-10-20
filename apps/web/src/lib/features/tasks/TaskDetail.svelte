@@ -60,7 +60,8 @@
   let form = $state<TaskInput | undefined>(undefined);
   let tagsText = $state('');
   let estimateText = $state('');
-  let people = $state<AssigneeView[]>([]);
+  // 지정할 수 있는 사람. 받기 전(undefined)에는 "없습니다"를 보이지 않는다.
+  let people = $state<AssigneeView[] | undefined>(undefined);
   let conflict = $state<TaskDetailView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
   let saved = $state(false);
@@ -500,21 +501,25 @@
       <fieldset class="flex flex-col gap-2 md:col-span-2">
         <legend class="text-sm font-medium">{m.tasks_assignees()}</legend>
         <div class="flex flex-wrap gap-3">
-          {#each people as person (person.user_id)}
-            <span class="flex items-center gap-1.5">
-              <Checkbox
-                id={`assignee-${person.user_id}`}
-                checked={f.assignee_ids.includes(person.user_id)}
-                disabled={!canEdit}
-                onCheckedChange={(v) => {
-                  toggleAssignee(person.user_id, v === true);
-                }}
-              />
-              <Label for={`assignee-${person.user_id}`}>{person.display_name}</Label>
-            </span>
+          {#if people === undefined}
+            <span class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</span>
           {:else}
-            <span class="text-sm text-muted-foreground">{m.tasks_no_assignable()}</span>
-          {/each}
+            {#each people as person (person.user_id)}
+              <span class="flex items-center gap-1.5">
+                <Checkbox
+                  id={`assignee-${person.user_id}`}
+                  checked={f.assignee_ids.includes(person.user_id)}
+                  disabled={!canEdit}
+                  onCheckedChange={(v) => {
+                    toggleAssignee(person.user_id, v === true);
+                  }}
+                />
+                <Label for={`assignee-${person.user_id}`}>{person.display_name}</Label>
+              </span>
+            {:else}
+              <span class="text-sm text-muted-foreground">{m.tasks_no_assignable()}</span>
+            {/each}
+          {/if}
         </div>
       </fieldset>
       {#if canEdit}

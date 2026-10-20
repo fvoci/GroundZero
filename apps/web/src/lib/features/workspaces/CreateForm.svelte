@@ -13,9 +13,26 @@
     placeholder: string;
     submitLabel: string;
     create: (requestId: string, name: string) => Promise<void>;
+    /** 열자마자 입력란에 초점(누른 단추가 이 폼으로 바뀌는 곳). */
+    autofocus?: boolean;
+    /** 있으면 Esc로 닫는다(초점을 돌려줄 곳은 부르는 쪽이 정한다). */
+    oncancel?: () => void;
   }
 
-  const { id, label, placeholder, submitLabel, create }: Props = $props();
+  const {
+    id,
+    label,
+    placeholder,
+    submitLabel,
+    create,
+    autofocus = false,
+    oncancel,
+  }: Props = $props();
+
+  let input = $state<HTMLInputElement | null>(null);
+  $effect(() => {
+    if (autofocus) input?.focus();
+  });
 
   let name = $state('');
   let busy = $state(false);
@@ -48,12 +65,19 @@
   }
 </script>
 
-<form class="flex items-end gap-2" onsubmit={(e) => void submit(e)} novalidate>
-  <div class="flex flex-1 flex-col gap-1">
+<form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void submit(e)} novalidate>
+  <div class="flex min-w-40 flex-1 flex-col gap-1">
     <Label for={id}>{label}</Label>
     <Input
+      bind:ref={input}
       {id}
       bind:value={name}
+      onkeydown={(e: KeyboardEvent) => {
+        if (e.key === 'Escape' && oncancel !== undefined && !busy) {
+          e.preventDefault();
+          oncancel();
+        }
+      }}
       {placeholder}
       maxlength={200}
       autocomplete="off"
