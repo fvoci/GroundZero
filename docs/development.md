@@ -1772,6 +1772,9 @@ Meilisearch 데이터를 지워 작업 번호가 처음부터 다시 매겨지�
 
 ### 85.6 최종 검사
 
+- 칸반 저장 상태(85.9)를 더한 뒤 `226f087`에서 다시 돌림: `cargo xtask check` PASS(건너뛴 단계 없음, Rust 단위 67건, svelte-check
+  2952개 파일 오류·경고 0, 웹 시험 56개 파일 259건, 라이선스 포함), `cargo xtask test --oidc` PASS(새 테스트 DB, 42개 묶음 247건, 실패·무시 0,
+  NOT RUN 줄 없음). 그 뒤 바뀐 것은 이 문단뿐이다. 아래 두 줄은 그 전 결과다.
 - `cargo xtask check`(`8039756`, 이 절을 채우기 직전): PASS. fmt·clippy(`-D warnings`)·Rust 단위 67건·cargo deny·OpenAPI 최신·format:check·lint·svelte-check(2934개 파일, 오류·경고 0)·i18n·rhwp 고지·제3자 고지·웹 시험 55개 파일 243건·라이선스. 건너뛴 단계 없음.
 - `cargo xtask test --oidc`(`5f9fe5e`, 새 테스트 DB): PASS, 42개 묶음 247건, 실패·무시 0, NOT RUN 줄 없음. 그 뒤 바뀐 것은 이 문서뿐이다. 첫 실행은 디스크가 가득 차(여유 315 MB) 테스트 바이너리 링크에서 멈췄고, 사용자 지시로 Docker 빌드 캐시(24.5 GB)를 지운 뒤 다시 돌렸다.
 
