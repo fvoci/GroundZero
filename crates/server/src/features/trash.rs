@@ -13,7 +13,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::UserTx;
+use crate::db::{UserTx, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::member_role;
@@ -367,9 +367,10 @@ pub async fn set_retention(
     Json(input): Json<SetRetention>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_trash_retention($1, $2)")
+    sqlx::query("SELECT app_set_trash_retention($1, $2, $3)")
         .bind(ws)
         .bind(input.days)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -397,9 +398,10 @@ pub async fn set_version_retention(
     Json(input): Json<SetVersionRetention>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_version_retention($1, $2)")
+    sqlx::query("SELECT app_set_version_retention($1, $2, $3)")
         .bind(ws)
         .bind(input.days)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
