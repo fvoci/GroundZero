@@ -30,5 +30,10 @@
         "countPlural=other": "{count} results"
       }
     }
-  ]
+  ],
+  "search_author": "Author",
+  "search_author_any": "Anyone",
+  "search_author_me": "Me",
+  "search_title_only": "Titles only",
+  "search_author_hint": "The author is the person who created the document, task and so on. Choosing one shows only what they created that you can see. The member list is for the workspace you are in."
 }

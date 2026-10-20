@@ -15,8 +15,16 @@
 
   import { SEARCH_KINDS, searchKindLabel, searchResultPath } from './search';
 
-  let { open = $bindable(false), memberOf }: { open?: boolean; memberOf: (ws: string) => boolean } =
-    $props();
+  let {
+    open = $bindable(false),
+    memberOf,
+    workspace,
+  }: {
+    open?: boolean;
+    memberOf: (ws: string) => boolean;
+    /** 지금 보는 워크스페이스. 있으면 작성자로 그 멤버를 고를 수 있다. */
+    workspace?: { id: string; name: string } | undefined;
+  } = $props();
 
   const TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'done'];
 
@@ -32,6 +40,32 @@
   let mine = $state(false);
   let from = $state('');
   let to = $state('');
+  // 작성자(만든 사람)와 제목만. 작성자 거르기는 좁히기만 한다(볼 수 없는 것은 그대로 안 나온다).
+  let author = $state<string>('any');
+  let titleOnly = $state(false);
+  let people = $state<{ user_id: string; display_name: string }[]>([]);
+  $effect(() => {
+    const ws = workspace?.id;
+    people = [];
+    if (!open || ws === undefined) return;
+    let cancelled = false;
+    api
+      .members(ws)
+      .then((v) => {
+        if (!cancelled) people = v.members;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  });
+  const authorLabel = $derived(
+    author === 'any'
+      ? m.search_author_any()
+      : author === 'me'
+        ? m.search_author_me()
+        : (people.find((p) => p.user_id === author)?.display_name ?? m.search_author_any()),
+  );
   const taskOnly = $derived(taskStatus !== 'any' || mine);
   const reversed = $derived(from !== '' && to !== '' && from > to);
 
@@ -43,6 +77,8 @@
     if (mine) f.assignee = 'me';
     if (from !== '') f.from = from;
     if (to !== '') f.to = to;
+    if (author !== 'any') f.author = author;
+    if (titleOnly) f.titleOnly = true;
     return f;
   }
 
@@ -189,6 +225,41 @@
           </Select.Content>
         </Select.Root>
       </div>
+      <div class="flex flex-col gap-1">
+        <span id="search-author-label" class="font-medium">{m.search_author()}</span>
+        <Select.Root
+          type="single"
+          value={author}
+          onValueChange={(v: string) => {
+            author = v === '' ? 'any' : v;
+            refilter();
+          }}
+        >
+          <Select.Trigger class="w-36" aria-labelledby="search-author-label"
+            >{authorLabel}</Select.Trigger
+          >
+          <Select.Content>
+            <Select.Item value="any" label={m.search_author_any()}
+              >{m.search_author_any()}</Select.Item
+            >
+            <Select.Item value="me" label={m.search_author_me()}>{m.search_author_me()}</Select.Item
+            >
+            {#each people as p (p.user_id)}
+              <Select.Item value={p.user_id} label={p.display_name}>{p.display_name}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="flex items-center gap-2 pb-2">
+        <Checkbox
+          id="search-title-only"
+          bind:checked={titleOnly}
+          onCheckedChange={() => {
+            refilter();
+          }}
+        />
+        <Label for="search-title-only">{m.search_title_only()}</Label>
+      </div>
       <div class="flex items-center gap-2 pb-2">
         <Checkbox
           id="search-mine"
@@ -229,6 +300,7 @@
     <p class="text-xs text-muted-foreground">
       {m.search_date_hint()}
     </p>
+    <p class="text-xs text-muted-foreground">{m.search_author_hint()}</p>
     <div aria-live="polite" class="text-sm text-muted-foreground">
       {#if reversed}
         <span class="text-destructive">{m.search_reversed()}</span>

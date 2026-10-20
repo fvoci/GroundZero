@@ -100,7 +100,7 @@ async fn indexed_eventually(state: &AppState, q: &str, id: &str, want: bool) -> 
             > 0
         {}
         found = !client(state)
-            .query(q, &format!("id = \"{id}\""), 0, 5)
+            .query(q, &format!("id = \"{id}\""), 0, 5, false)
             .await
             .unwrap()
             .is_empty();
@@ -722,6 +722,114 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     assert_eq!(
         titles(&search(&plain_app, &admin, &format!("{tok}&assignee=me&kinds=task")).await),
         [format!("{tok} 보고서")]
+    );
+}
+
+/// 작성자·제목만 거르기: 좁히기만 한다. 다른 사람이 만든 것 가운데 볼 수 없는 것(개인 노트)은 작성자로 골라도 나오지 않고,
+/// 제목만이면 본문 낱말로는 찾지 않는다. 검색 서비스가 없을 때의 제목 검색도 작성자 조건을 따른다.
+#[tokio::test]
+async fn author_and_title_only_narrow_results_without_widening_access() {
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let body_tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "작성자 검색").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let mine = create_doc(&app, &admin, &ws, &format!("{tok} 관리자 문서")).await;
+    let saved = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{}", mine["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "base_revision": 1,
+                     "title": format!("{tok} 관리자 문서"),
+                     "body": doc_body(&format!("본문에만 있는 {body_tok}")) })),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+    create_doc(&app, &writer, &ws, &format!("{tok} 멤버 문서")).await;
+    let note = send(
+        &app,
+        Method::POST,
+        "/api/me/notes",
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": format!("{tok} 관리자 노트") })),
+    )
+    .await;
+    assert_eq!(note.status, StatusCode::CREATED, "{:?}", note.json);
+    settle(
+        &state,
+        &app,
+        &admin,
+        &tok,
+        &[
+            &format!("{tok} 관리자 노트"),
+            &format!("{tok} 관리자 문서"),
+            &format!("{tok} 멤버 문서"),
+        ],
+    )
+    .await;
+    settle(
+        &state,
+        &app,
+        &admin,
+        &body_tok,
+        &[&format!("{tok} 관리자 문서")],
+    )
+    .await;
+
+    let found = |user: TestUser, query: String| {
+        let app = app.clone();
+        async move { titles(&search(&app, &user, &query).await) }
+    };
+    assert_eq!(
+        found(admin.clone(), format!("{tok}&author=me")).await,
+        [format!("{tok} 관리자 노트"), format!("{tok} 관리자 문서")]
+    );
+    assert_eq!(
+        found(admin.clone(), format!("{tok}&author={}", writer.id.0)).await,
+        [format!("{tok} 멤버 문서")]
+    );
+    // 멤버가 관리자를 작성자로 골라도 관리자의 개인 노트는 보이지 않는다(거르기는 좁히기만).
+    assert_eq!(
+        found(writer.clone(), format!("{tok}&author={}", admin.id.0)).await,
+        [format!("{tok} 관리자 문서")]
+    );
+    // 제목만: 본문 낱말로는 찾지 않고, 제목 낱말로는 그대로 찾는다.
+    assert!(
+        found(admin.clone(), format!("{body_tok}&title_only=true"))
+            .await
+            .is_empty()
+    );
+    assert_eq!(
+        found(
+            admin.clone(),
+            format!("{tok}&title_only=true&author=me&kinds=document")
+        )
+        .await,
+        [format!("{tok} 관리자 노트"), format!("{tok} 관리자 문서")]
+    );
+    let r = send(
+        &app,
+        Method::GET,
+        &format!("/api/search?q={tok}&author=someone"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+
+    // 검색 서비스가 없을 때(제목 검색)도 같은 작성자 조건.
+    let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
+    let plain_app = common::app(&plain);
+    assert_eq!(
+        titles(&search(&plain_app, &admin, &format!("{tok}&author={}", writer.id.0)).await),
+        [format!("{tok} 멤버 문서")]
+    );
+    assert_eq!(
+        titles(&search(&plain_app, &writer, &format!("{tok}&author={}", admin.id.0)).await),
+        [format!("{tok} 관리자 문서")]
     );
 }
 
