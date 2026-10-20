@@ -74,9 +74,17 @@
     openTaskId: string | undefined;
     /** 옮기기가 권한·보관 때문에 거절되면 항목을 다시 읽게 한다(쓰기 단추를 끄기 위해). */
     onstale?: () => void;
+    /** 같은 화면의 다른 곳(항목 달력)에서 업무를 만들 때마다 늘어난다(목록을 다시 읽는다). */
+    tasksVersion?: number;
   }
 
-  const { item, workspaces, openTaskId, onstale }: Props = $props();
+  const { item, workspaces, openTaskId, onstale, tasksVersion = 0 }: Props = $props();
+  $effect(() => {
+    if (tasksVersion === 0) return;
+    untrack(() => {
+      void reload();
+    });
+  });
 
   let tasks = $state<TaskView[]>([]);
   let view = $state<TaskViewMode>('board');
@@ -1551,7 +1559,13 @@
       );
   }}
   oncreated={(task: TaskDetailView) => {
+    const day = createDay;
     createDay = undefined;
+    // 만든 뒤에도 그 날짜의 만들기 단추로 초점을 돌린다(달력을 다시 읽어도 단추는 그대로 있다).
+    if (day !== undefined)
+      void tick().then(() =>
+        document.querySelector<HTMLElement>(`[data-create-day="${day}"]`)?.focus(),
+      );
     notifyDone(
       m.events_task_created({
         title: task.title,

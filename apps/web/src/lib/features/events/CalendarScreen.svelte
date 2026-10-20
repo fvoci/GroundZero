@@ -35,9 +35,19 @@
     onchanged?: () => void;
     /** 항목 범위에서 날짜 칸으로 업무를 만들 항목. 쓸 수 없으면 만들기 단추를 보이지 않는다. */
     item?: ItemView | undefined;
+    /** 날짜 칸에서 업무를 만들었다(같은 화면의 업무 목록이 다시 읽게). */
+    ontaskcreated?: () => void;
   }
 
-  const { workspace, scope, embedded = false, version = 0, onchanged, item }: Props = $props();
+  const {
+    workspace,
+    scope,
+    embedded = false,
+    version = 0,
+    onchanged,
+    item,
+    ontaskcreated,
+  }: Props = $props();
 
   // 날짜 칸에서 업무 만들기(D-31·D-80). 항목 범위면 그 항목(쓸 수 있을 때만), 모듈·워크스페이스 범위면 창에서 고른다.
   const canCreate = $derived(
@@ -348,7 +358,13 @@
       );
   }}
   oncreated={(task: TaskDetailView) => {
+    const day = createDay;
     createDay = undefined;
+    // 만든 뒤에도 그 날짜의 만들기 단추로 초점을 돌린다(달력을 다시 읽어도 단추는 그대로 있다).
+    if (day !== undefined)
+      void tick().then(() =>
+        document.querySelector<HTMLElement>(`[data-create-day="${day}"]`)?.focus(),
+      );
     notifyDone(
       m.events_task_created({
         title: task.title,
@@ -356,7 +372,7 @@
       }),
     );
     reloadKey += 1;
-    onchanged?.();
+    ontaskcreated?.();
   }}
 />
 

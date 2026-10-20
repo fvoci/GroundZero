@@ -164,7 +164,13 @@
     if (!o) onclose();
   }}
 >
-  <Dialog.Content class="sm:max-w-md">
+  <Dialog.Content
+    class="sm:max-w-md"
+    onCloseAutoFocus={(e: Event) => {
+      // 닫히면 부르는 쪽이 그 날짜의 만들기 단추로 초점을 돌린다.
+      e.preventDefault();
+    }}
+  >
     <Dialog.Header>
       <Dialog.Title>{m.events_task_create_title()}</Dialog.Title>
       <Dialog.Description>{m.events_task_create_description()}</Dialog.Description>
