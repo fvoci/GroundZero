@@ -21,10 +21,23 @@ export interface RecordForm {
   /** 사람 여럿 칸. */
   people: Record<string, string[]>;
   files: FileLinkForm[];
+  /**
+   * 수 칸 가운데 브라우저가 수로 읽지 못한 글자가 든 칸("1e" 등). 그런 칸의 값은 빈 글자로 오므로, 일부러 비운 칸과
+   * 구분하려고 따로 든다.
+   */
+  unreadable: Record<string, boolean>;
 }
 
 export function emptyForm(): RecordForm {
-  return { title: '', occurred_on: '', body: '', values: {}, people: {}, files: [] };
+  return {
+    title: '',
+    occurred_on: '',
+    body: '',
+    values: {},
+    people: {},
+    files: [],
+    unreadable: {},
+  };
 }
 
 /** 기록 → 입력 칸. */
@@ -47,10 +60,14 @@ export function formOf(def: RecordKindView, r: RecordView): RecordForm {
     files: r.files
       .filter((f) => f.file_id !== null)
       .map((f) => ({ file_id: f.file_id ?? '', version: String(f.version), role: f.role })),
+    unreadable: {},
   };
 }
 
-/** 입력 칸 → 보낼 값. 빈 칸은 뺀다. 수가 아니면 그 칸 이름을 오류로 돌려준다. */
+/**
+ * 입력 칸 → 보낼 값. 빈 칸은 뺀다. 수가 아니면 그 칸 이름을 오류로 돌려준다. 수로 읽지 못한 칸은 빈 칸으로 보내지 않고
+ * 저장을 막는다(서버는 칸을 통째로 바꾸므로, 빼고 보내면 저장된 값이 지워진다).
+ */
 export function toInput(
   def: RecordKindView,
   form: RecordForm,
@@ -62,6 +79,8 @@ export function toInput(
       if (list.length > 0) fields[f.key] = list;
       continue;
     }
+    if (f.type === 'number' && form.unreadable[f.key] === true)
+      return { error: m.records_number_invalid({ label: recordFieldLabel(def, f) }) };
     const raw = (form.values[f.key] ?? '').trim();
     if (raw === '') continue;
     if (f.type === 'number') {

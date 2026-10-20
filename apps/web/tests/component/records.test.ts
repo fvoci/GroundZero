@@ -55,6 +55,19 @@ describe('record forms', () => {
     expect(toInput(def, form)).toEqual({ error: '시간에는 0 이상의 수를 적어 주세요.' });
   });
 
+  // 수 칸에 브라우저가 읽지 못한 글자("1e")를 넣으면 값이 빈 글자로 온다. 일부러 비운 칸처럼 빼고 보내면 서버가 칸을
+  // 통째로 바꿔 저장된 값이 지워지므로, 그 칸은 저장을 막고 비운 칸만 뺀다.
+  it('blocks a number field the browser could not read instead of dropping it', () => {
+    const form = emptyForm();
+    form.title = '실험';
+    form.values = { minutes: '' };
+    form.unreadable = { minutes: true };
+    expect(toInput(def, form)).toEqual({ error: '시간에는 0 이상의 수를 적어 주세요.' });
+    form.unreadable = { minutes: false };
+    const built = toInput(def, form);
+    expect('input' in built && built.input.fields).toEqual({});
+  });
+
   it('round-trips a record and summarizes choices, people and links', () => {
     const r: RecordView = {
       id: 'r1',
