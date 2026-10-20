@@ -174,8 +174,21 @@ pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -
         );
     } else {
         println!("==> compose down");
-        supabase.down(&sh)?;
-        services.down(&sh)?;
+        // 두 프로젝트를 모두 정리하고, 원래 기동·테스트 오류를 먼저 돌려준다. 정리 실패도 버리지 않고 알린다.
+        let cleanup = [
+            (supabase.project().to_owned(), supabase.down(&sh)),
+            (services.project().to_owned(), services.down(&sh)),
+        ];
+        for (project, outcome) in &cleanup {
+            if let Err(err) = outcome {
+                eprintln!("cleanup of {project} failed: {err:#}");
+            }
+        }
+        result?;
+        for (_, outcome) in cleanup {
+            outcome?;
+        }
+        return Ok(());
     }
     result
 }

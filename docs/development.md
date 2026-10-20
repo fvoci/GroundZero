@@ -248,6 +248,14 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 - **제품 검사**: `.github/workflows/ci.yml`. `check`와 `integration` 두 job이 같은 `ghcr.io/fvoci/groundzero-ci-base@<digest>` 컨테이너에서 돈다. digest는 저장소 변수 `CI_BASE_IMAGE_DIGEST`이며 base-image 워크플로가 게시한 값을 옮겨 적는다. 변수가 비면 job이 시작 단계에서 실패하며 성공으로 간주하지 않는다. 호출하는 명령은 `pnpm install --frozen-lockfile`, `cargo xtask check`, `cargo xtask test --external-services`뿐이다.
 - **서비스 격리**: GitHub의 컨테이너 job 안에서는 Compose를 띄울 수 없어 PostgreSQL·Meilisearch를 job `services`로 둔다. 자격 증명은 `compose.test.yaml`과 같은 테스트 값이며, `cargo xtask test --external-services`가 `DATABASE_URL`이 없으면 실패한다. 로컬은 `cargo xtask test`(Compose)로 같은 테스트를 돌린다.
 - **OIDC 로그인 테스트(`oidc` job)**: 컨테이너 job에서는 Compose를 띄울 수 없으므로 GitHub 호스트 러너(`ubuntu-24.04`)에서 `compose.test.yaml`의 `oidc` 프로필(PostgreSQL·Meilisearch·Keycloak)을 띄운다. 테스트는 다른 job과 같은 베이스 이미지 digest 안에서 같은 진입점 `cargo xtask test --external-services --oidc`로 돈다. 테스트 컨테이너는 Compose 네트워크에 붙고 체크아웃만 마운트한다(Docker 소켓은 넘기지 않음). 프로젝트명 `fvoci-ci-<run_id>-<run_attempt>`로 실행마다 컨테이너·네트워크·볼륨을 분리하고, PostgreSQL은 tmpfs라 매번 빈 DB에서 시작하며, 결과와 상관없이 `down --volumes`로 지운다.
+- **셀프호스트 Supabase 테스트(`supabase` job, D-88): D-64의 이미지 계약 예외.**
+  - **근거**: `cargo xtask test --supabase`는 xtask가 공식 Supabase 구성을 받아 호스트 Docker로 Compose를 띄운다. 기동에 실패하면
+    정리하기 전에 컨테이너 상태·healthcheck 기록·로그를 그 Docker에서 읽는다. base 이미지에는 Docker CLI가 없고 Docker 소켓도
+    넘기지 않는다(`oidc` job과 같은 원칙). 그래서 이 job만 호스트 러너(`ubuntu-24.04`)에서 xtask를 실행한다.
+  - **범위**
+    - 툴체인은 base 이미지와 같은 판을 `rust-toolchain.toml`(1.99.0)이 고정한다.
+    - 다른 job의 image-digest 계약은 그대로다.
+    - 제품 이미지·시크릿은 쓰지 않는다. 서비스 이미지는 `deploy/supabase/compose.test.yaml`에서 digest로 고정한다.
 - **OIDC 검증 기록 (2026-10-17, `feat/first-flow` 작업 트리)**:
 
   | 구분                      | 방법                                                                                 | 결과                                                                                                                                                   |

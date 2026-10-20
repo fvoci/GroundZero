@@ -64,15 +64,42 @@ async fn supabase_roles_cannot_reach_the_fvoci_schema() {
         .await
         .unwrap();
         assert!(tables.is_empty(), "{role} has privileges on {tables:?}");
-        let granted: Vec<String> = sqlx::query_scalar(
-            "SELECT p.oid::regprocedure::text FROM pg_proc p, aclexplode(p.proacl) a
-             WHERE p.pronamespace = 'fvoci'::regnamespace AND a.grantee = $1::regrole",
+        // 유효 권한(PUBLIC·상속·기본 권한 포함). 정의자 함수는 하나도 실행할 수 없어야 한다. PUBLIC에 열린 순수
+        // 도우미(정의자 아님)가 있어도 스키마 USAGE가 없어 부를 수 없다(아래에서 실제로 불러 본다).
+        let definers: Vec<String> = sqlx::query_scalar(
+            "SELECT p.oid::regprocedure::text FROM pg_proc p
+             WHERE p.pronamespace = 'fvoci'::regnamespace AND p.prosecdef
+               AND has_function_privilege($1, p.oid, 'EXECUTE')",
         )
         .bind(role)
         .fetch_all(&mut conn)
         .await
         .unwrap();
-        assert!(granted.is_empty(), "{role} may execute {granted:?}");
+        assert!(definers.is_empty(), "{role} may execute {definers:?}");
+        let can_set: bool = sqlx::query_scalar("SELECT pg_has_role(current_user, $1, 'SET')")
+            .bind(role)
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+        if can_set {
+            for probe in [
+                "SELECT fvoci.app_normalize_key('x')",
+                "SELECT count(*) FROM fvoci.documents",
+            ] {
+                let mut tx = conn.begin().await.unwrap();
+                sqlx::raw_sql(&format!("SET LOCAL ROLE {role}"))
+                    .execute(&mut *tx)
+                    .await
+                    .unwrap();
+                let err = sqlx::query(probe).execute(&mut *tx).await.unwrap_err();
+                let code = err
+                    .as_database_error()
+                    .and_then(|e| e.code())
+                    .map(|c| c.into_owned());
+                assert_eq!(code.as_deref(), Some("42501"), "{role}: {probe}: {err}");
+                tx.rollback().await.unwrap();
+            }
+        }
     }
     let memberships: Vec<String> = sqlx::query_scalar(
         "SELECT r.rolname || ' in ' || g.rolname FROM pg_auth_members m

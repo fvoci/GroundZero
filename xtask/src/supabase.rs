@@ -102,9 +102,74 @@ impl Supabase {
 
     pub fn up(&self, sh: &Shell) -> Result<()> {
         let args = self.args();
-        cmd!(sh, "docker {args...} up --detach --wait db rest supavisor")
-            .run()
-            .with_context(|| format!("docker compose up failed (project {})", self.project))
+        let up = cmd!(sh, "docker {args...} up --detach --wait db rest supavisor").run();
+        if up.is_err() {
+            // 정리(down)가 컨테이너를 지우기 전에 원인을 남긴다.
+            self.diagnose(sh);
+        }
+        up.with_context(|| format!("docker compose up failed (project {})", self.project))
+    }
+
+    /// 서비스마다 상태·종료 코드·재시작 횟수·OOM·healthcheck 기록·최근 로그를 출력한다. 시험 env의 비밀 값은 가린다.
+    pub fn diagnose(&self, sh: &Shell) {
+        let secrets = self.secrets();
+        let redact = |text: &str| {
+            secrets.iter().fold(text.to_owned(), |acc, secret| {
+                acc.replace(secret.as_str(), "***")
+            })
+        };
+        let args = self.args();
+        let state = "status={{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} \
+                     oom={{.State.OOMKilled}} error={{.State.Error}} \
+                     health={{if .State.Health}}{{.State.Health.Status}}{{end}}";
+        let probes = "{{if .State.Health}}{{range .State.Health.Log}}[exit {{.ExitCode}}] {{.Output}}\n{{end}}{{end}}";
+        for service in ["db", "rest", "supavisor"] {
+            println!("==> diagnose {service} ({})", self.project);
+            let args = args.clone();
+            let id = cmd!(sh, "docker {args...} ps --all --quiet {service}")
+                .quiet()
+                .ignore_status()
+                .read()
+                .unwrap_or_default();
+            let Some(id) = id.lines().next().filter(|l| !l.trim().is_empty()) else {
+                println!("no container");
+                continue;
+            };
+            for format in [state, probes] {
+                if let Ok(out) = cmd!(sh, "docker inspect --format {format} {id}")
+                    .quiet()
+                    .ignore_status()
+                    .output()
+                {
+                    print!("{}", redact(&String::from_utf8_lossy(&out.stdout)));
+                }
+            }
+            println!();
+            if let Ok(out) = cmd!(sh, "docker logs --tail 120 {id}")
+                .quiet()
+                .ignore_status()
+                .output()
+            {
+                print!("{}", redact(&String::from_utf8_lossy(&out.stdout)));
+                print!("{}", redact(&String::from_utf8_lossy(&out.stderr)));
+            }
+        }
+    }
+
+    /// 시험 env에서 가릴 값(비밀번호·키·시크릿).
+    fn secrets(&self) -> Vec<String> {
+        let env =
+            std::fs::read_to_string(self.root.join("deploy/supabase/test.env")).unwrap_or_default();
+        env.lines()
+            .filter_map(|line| line.split_once('='))
+            .filter(|(key, value)| {
+                ["PASSWORD", "SECRET", "KEY"]
+                    .iter()
+                    .any(|k| key.contains(k))
+                    && value.len() >= 8
+            })
+            .map(|(_, value)| value.trim().to_owned())
+            .collect()
     }
 
     pub fn down(&self, sh: &Shell) -> Result<()> {
