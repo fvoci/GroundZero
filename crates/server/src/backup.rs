@@ -260,9 +260,9 @@ pub async fn restore(
     check_replication_role(&mut conn).await?;
     // 표는 마이그레이션 역할(표 소유자)로 읽고 채운다. superuser가 아닌 관리자(셀프호스트 Supabase의 `postgres`)는
     // fvoci 표에 권한이 없다. 관리자 권한은 트리거를 잠시 끄는 설정에만 쓴다(`load_tables`, D-88).
-    let granted = crate::db::admin::borrow_migrator(&mut conn).await?;
+    let borrow = crate::db::admin::borrow_migrator(&mut conn).await?;
     let result = restore_as_owner(config, &mut conn, from, &manifest).await;
-    let released = crate::db::admin::release_migrator(&mut conn, granted).await;
+    let released = crate::db::admin::release_migrator(&mut conn, borrow).await;
     let closed = conn.close().await.map_err(AppError::from);
     // 원래 실패(복구)를 먼저 돌려준다. 뒤따른 정리 실패(멤버십 회수·연결 닫기)도 버리지 않고 로그에 남긴다:
     // 회수 실패는 관리자에게 임시 SET 멤버십이 남았다는 뜻이다.
