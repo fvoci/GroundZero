@@ -80,6 +80,16 @@ impl AppError {
             Some("40001" | "40P01") => {
                 Self::Conflict("the change collided with another one; try again".into())
             }
+            // 앱이 넘긴 새 id가 모자랐다(D-88): 상한(`<함수>_ids`)을 본 뒤 다른 트랜잭션이 대상을 늘렸다. 트랜잭션은
+            // 통째로 되돌아가므로(요청의 UserTx가 커밋되지 않음) 다시 보내면 상한부터 새로 본다. 상한 계산이 틀린
+            // 버그도 같은 코드라 경고로 남겨 보이게 한다. 잘못된 id(FV002: 빈 값·UUIDv7 아님)는 서버 버그라 500이다.
+            Some("FV001") => {
+                tracing::warn!(
+                    event = "db.new_ids_short",
+                    "a function needed more new ids than the server passed; the change was rolled back"
+                );
+                Self::Conflict("the data changed while saving; try again".into())
+            }
             _ => Self::Database(err),
         }
     }

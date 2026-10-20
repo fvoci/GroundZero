@@ -14,17 +14,22 @@
 -- 공통 도우미
 ------------------------------------------------------------------------------------------------------------------
 
--- 앱이 넘긴 id 목록의 p_at번째. 없거나(목록이 짧음) UUIDv7이 아니면 멈춘다.
+-- 앱이 넘긴 id 목록의 p_at번째. 두 가지 실패를 다른 코드로 낸다(서버가 다르게 다룬다):
+-- - FV001 목록이 짧다: `<함수>_ids` 상한을 본 뒤 다른 트랜잭션이 대상을 늘렸을 수 있다(다시 하면 된다).
+-- - FV002 목록이 잘못됐다: 빈 값, UUIDv7이 아닌 값, 1보다 작은 위치(서버 버그).
 CREATE FUNCTION app_id(p_ids uuid[], p_at integer) RETURNS uuid
   LANGUAGE plpgsql IMMUTABLE
   SET search_path = fvoci, pg_temp
   AS $$
   BEGIN
-    IF p_at IS NULL OR p_at < 1 OR p_at > coalesce(cardinality(p_ids), 0) OR p_ids[p_at] IS NULL THEN
+    IF p_at IS NULL OR p_at < 1 THEN
+      RAISE EXCEPTION 'invalid new id position %', p_at USING ERRCODE = 'FV002';
+    END IF;
+    IF p_at > coalesce(cardinality(p_ids), 0) THEN
       RAISE EXCEPTION 'new id #% was not supplied by the application', p_at USING ERRCODE = 'FV001';
     END IF;
-    IF uuid_extract_version(p_ids[p_at]) IS DISTINCT FROM 7 THEN
-      RAISE EXCEPTION 'new ids must be UUIDv7' USING ERRCODE = 'FV001';
+    IF p_ids[p_at] IS NULL OR uuid_extract_version(p_ids[p_at]) IS DISTINCT FROM 7 THEN
+      RAISE EXCEPTION 'new ids must be UUIDv7' USING ERRCODE = 'FV002';
     END IF;
     RETURN p_ids[p_at];
   END

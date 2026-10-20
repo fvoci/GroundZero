@@ -107,15 +107,16 @@ pub fn new_ids(n: usize) -> Vec<Uuid> {
 }
 
 /// 만드는 행 수가 미리 정해지지 않는 함수의 id 목록. 그 함수의 `<함수>_ids`(같은 인자, 필요한 개수의 상한)를
-/// 같은 트랜잭션에서 본 함수 바로 앞에 부른다.
+/// 같은 트랜잭션에서 본 함수 바로 앞에 부른다. 대상이 없어 NULL이면 0개(본 함수가 404 등을 낸다).
 pub async fn needed_ids(
     conn: &mut PgConnection,
-    bound: sqlx::query::QueryScalar<'_, Postgres, i32, sqlx::postgres::PgArguments>,
+    bound: sqlx::query::QueryScalar<'_, Postgres, Option<i32>, sqlx::postgres::PgArguments>,
 ) -> Result<Vec<Uuid>, AppError> {
     let n = bound
         .fetch_one(conn)
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(AppError::from_db_function)?
+        .unwrap_or(0);
     Ok(new_ids(usize::try_from(n).unwrap_or(0)))
 }
 
