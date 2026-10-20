@@ -357,9 +357,14 @@
     ? undefined
     : { id: item.id, title: item.title }}
   moduleId={scope?.itemId === undefined ? scope?.moduleId : undefined}
-  onclose={() => {
+  onclose={(created: boolean) => {
     const day = createDay;
     createDay = undefined;
+    // 업무는 만들었지만 마감일을 넣지 못한 채 닫았다: 그 업무가 보이게 다시 읽는다.
+    if (created) {
+      reloadKey += 1;
+      ontaskcreated?.();
+    }
     if (day !== undefined) void focusCreate(day);
   }}
   oncreated={(task: TaskDetailView) => {

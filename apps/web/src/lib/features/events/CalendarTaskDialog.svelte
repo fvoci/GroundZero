@@ -23,7 +23,8 @@
     item?: { id: string; title: string } | undefined;
     /** 모듈 범위: 이 모듈의 항목 가운데 고른다. */
     moduleId?: string | undefined;
-    onclose: () => void;
+    /** 창을 닫는다. `created`는 업무는 만들었지만 마감일을 넣지 못한 채 닫았는지(부르는 쪽이 목록을 다시 읽게). */
+    onclose: (created: boolean) => void;
     oncreated: (task: TaskDetailView) => void;
   }
 
@@ -97,6 +98,9 @@
   });
 
   const targetId = $derived(item?.id ?? pickedItem);
+  function close(): void {
+    onclose(made !== undefined);
+  }
 
   async function putDate(task: TaskDetailView): Promise<void> {
     const result = await api.updateTask(
@@ -161,7 +165,7 @@
 <Dialog.Root
   open={day !== undefined}
   onOpenChange={(o: boolean) => {
-    if (!o) onclose();
+    if (!o) close();
   }}
 >
   <Dialog.Content
@@ -235,7 +239,7 @@
               href={itemTaskPath(workspaceId, task.item_id, task.id)}
               onclick={(e: MouseEvent) => {
                 e.preventDefault();
-                onclose();
+                close();
                 router.navigate(itemTaskPath(workspaceId, task.item_id, task.id));
               }}>{m.events_task_open({ title: task.title })}</a
             >
@@ -243,7 +247,7 @@
         </div>
       {/if}
       <Dialog.Footer>
-        <Button type="button" variant="outline" onclick={onclose}>{m.events_task_cancel()}</Button>
+        <Button type="button" variant="outline" onclick={close}>{m.events_task_cancel()}</Button>
         <Button type="submit" disabled={busy}>
           {made === undefined ? m.events_task_create() : m.events_task_retry_date()}
         </Button>

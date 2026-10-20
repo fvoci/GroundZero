@@ -102,3 +102,27 @@ describe('child documents', () => {
     expect(await screen.findByText('하위 문서를 불러오지 못했습니다.')).toBeTruthy();
   });
 });
+
+describe('child documents after a save', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does not read the list again when only the document object changes (same place)', async () => {
+    await setLocale('ko', { reload: false });
+    const read = vi.spyOn(api, 'wikiDocuments').mockResolvedValue(list);
+    const view = render(ChildDocuments, { props: { doc: view0(), workspaces } });
+    await screen.findByRole('navigation');
+    // 저장하면 화면이 새 문서 객체(리비전·제목 등)를 넘긴다.
+    await view.rerender({
+      doc: { ...view0(), revision: 2, title: '운영 안내 (고침)' },
+      workspaces,
+    });
+    await screen.findByRole('navigation');
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+});
+
+function view0(): DocumentView {
+  return view({});
+}

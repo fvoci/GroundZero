@@ -180,3 +180,44 @@ describe('move under another document (search)', () => {
     expect(within(dialog).getByText('맞는 문서가 없습니다.')).toBeTruthy();
   });
 });
+
+describe('move dialog when only the reload fails', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('closes (the move went through) and says the list could not be reloaded', async () => {
+    const onmove = vi.fn<(id: string, move: TreeMove) => Promise<void>>(() =>
+      Promise.reject(new TreeMoveError(new Error('offline'), true, false)),
+    );
+    render(DocumentTree, {
+      props: {
+        docs,
+        label: '위키',
+        empty: '문서가 없습니다.',
+        hrefFor: (id: string) => `/d/${id}`,
+        navigate: () => undefined,
+        canWrite: true,
+        onmove,
+        oncreatechild: () => Promise.resolve(),
+      },
+    });
+    const row = screen
+      .getAllByRole('treeitem')
+      .find((e) => e.getAttribute('aria-label') === '점검 기록');
+    if (row === undefined) throw new Error('row');
+    await fireEvent.keyDown(row, { key: 'm', altKey: true });
+    const dialog = await screen.findByRole('dialog');
+    await fireEvent.keyDown(within(dialog).getByRole('combobox'), { key: 'Enter' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(screen.getByRole('alert').textContent).toContain(
+      '옮겼지만 목록을 다시 불러오지 못했습니다',
+    );
+    expect(onmove).toHaveBeenCalledTimes(1);
+  });
+});

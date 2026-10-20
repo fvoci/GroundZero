@@ -156,6 +156,25 @@ describe('creating a task from a calendar day', () => {
     expect(update).toHaveBeenCalledTimes(2);
   });
 
+  it('tells the caller a task was created when closed after the date failed', async () => {
+    vi.spyOn(api, 'createTask').mockResolvedValue(created());
+    vi.spyOn(api, 'updateTask').mockRejectedValue(new NetworkError('offline'));
+    const onclose = vi.fn<(made: boolean) => void>();
+    render(CalendarTaskDialog, {
+      props: {
+        workspaceId: 'ws-1',
+        day: '2026-10-23',
+        item: { id: 'i1', title: '대표 항목' },
+        onclose,
+        oncreated: () => undefined,
+      },
+    });
+    await fill('자료 준비');
+    await screen.findByRole('alert');
+    await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(onclose).toHaveBeenCalledWith(true);
+  });
+
   it('in the workspace calendar asks for the module and offers only items it can add tasks to', async () => {
     vi.spyOn(api, 'modules').mockResolvedValue([module]);
     vi.spyOn(api, 'items').mockResolvedValue([

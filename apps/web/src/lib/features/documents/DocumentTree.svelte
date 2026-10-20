@@ -116,6 +116,11 @@
           : m.documents_tree_moved_under({ title: parent.title });
       return undefined;
     } catch (e: unknown) {
+      // 옮기기는 됐는데 목록만 다시 읽지 못했으면 창을 닫고(다시 옮기지 않게) 트리 아래에 알린다.
+      if (e instanceof TreeMoveError && e.moved) {
+        failure = moveFailureText(e);
+        return undefined;
+      }
       return moveFailureText(e);
     } finally {
       busy = false;

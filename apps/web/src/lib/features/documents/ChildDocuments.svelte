@@ -3,6 +3,7 @@
   // 거른다. 목록은 서버가 볼 수 있는 것만 준다. 다른 워크스페이스에서 공유받아 연 문서처럼 그 목록을 읽을 수 없는
   // 자리면 보이지 않는다. 하위 문서가 없으면 아무것도 그리지 않는다.
   import type { Workspace } from '@fvoci/api-client';
+  import { untrack } from 'svelte';
 
   import type { DocumentView, SummaryView } from '$lib/api/client';
   import { api } from '$lib/api/client';
@@ -33,9 +34,17 @@
     return d.access === 'owner' ? () => api.myNotes() : undefined;
   }
 
+  // 저장할 때마다 문서 객체가 바뀌어도 자리가 같으면 다시 읽지 않는다(자리를 정하는 값만 본다).
+  const place = $derived(
+    `${doc.id}|${doc.item_id ?? ''}|${doc.workspace_id ?? ''}|${doc.access === 'owner' ? 'owner' : ''}|${
+      doc.workspace_id !== null && memberOf(doc.workspace_id) ? 'member' : ''
+    }`,
+  );
   $effect(() => {
-    const id = doc.id;
-    const load = listFor(doc);
+    if (place === '') return; // 자리 값이 바뀔 때만 다시 돈다(빈 값은 없다).
+    const d = untrack(() => doc);
+    const id = d.id;
+    const load = untrack(() => listFor(d));
     let cancelled = false;
     children = [];
     failed = false;
