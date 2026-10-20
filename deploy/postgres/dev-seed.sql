@@ -17,9 +17,13 @@ DECLARE
 BEGIN
   IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_seed') THEN
     -- 처음 준비한 발급자와 다르면(개발 Keycloak 포트를 바꿈) 테스트 사용자가 새 계정으로 들어와 준비한 워크스페이스에
-    -- 들어가지 못한다. 조용히 넘기지 않고 알린다(자동으로 지우거나 바꾸지 않는다).
-    IF NOT EXISTS (SELECT 1 FROM users
-                   WHERE issuer = v_issuer AND subject = '00000000-0000-4000-8000-00000000000a') THEN
+    -- 들어가지 못한다. 조용히 넘기지 않고 알린다(자동으로 지우거나 바꾸지 않는다). 지금 발급자의 사용자 행이 있는지가
+    -- 아니라(새 발급자로 이미 로그인했으면 있다) 그 사용자가 준비한 워크스페이스의 멤버인지 본다.
+    IF NOT EXISTS (SELECT 1 FROM instance_state s
+                   JOIN workspace_members wm ON wm.workspace_id = (s.value->>'workspace')::uuid
+                   JOIN users u ON u.id = wm.user_id
+                   WHERE s.key = 'dev_seed' AND u.issuer = v_issuer
+                     AND u.subject = '00000000-0000-4000-8000-00000000000a') THEN
       RAISE EXCEPTION 'the dev seed was made for another OIDC issuer than %; start with the first FVOCI_DEV_KEYCLOAK_PORT again, or reset with cargo xtask down',
         v_issuer;
     END IF;

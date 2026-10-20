@@ -66,3 +66,29 @@ export function mergeForm(
   };
   return { form, baseline, clash };
 }
+
+/** 예상 시간 입력 글자의 값: 빈칸은 없음, 0 이상의 정수만 값, 그 밖은 잘못된 입력. */
+export function estimateOf(text: string): number | null | 'invalid' {
+  const t = text.trim();
+  if (t === '') return null;
+  return /^\d+$/.test(t) ? Number.parseInt(t, 10) : 'invalid';
+}
+
+/**
+ * 다시 채울 때의 예상 시간 칸. 예상 시간은 글자로 입력하므로 `mergeForm`과 따로, 입력한 글자의 값으로 판정한다. 값이
+ * 기준과 같으면("01"과 1) 고치지 않은 칸이라 서버 값을 쓰고(`keepText` 거짓), 잘못된 입력("abc")은 고친 칸으로 지킨다.
+ * 화면 글자와 병합이 같은 판정을 써야 저장할 때 서버의 새 값을 조용히 덮지 않는다.
+ */
+export function mergeEstimate(
+  before: number | null,
+  text: string,
+  fresh: number | null,
+): { keepText: boolean; baseline: number | null; clash: boolean } {
+  const typed = estimateOf(text);
+  const keepText = typed !== before && typed !== fresh;
+  return {
+    keepText,
+    baseline: keepText ? before : fresh,
+    clash: keepText && fresh !== before,
+  };
+}

@@ -86,6 +86,29 @@ describe('timer', () => {
     expect(timer.entry?.id).toBe('t3');
   });
 
+  // 먼저 보낸 시작이 성공한 뒤 뒤의 시작이 네트워크 오류로 실패해도, 버린 앞의 성공을 기억해 서버 상태로 맞춘다.
+  it('reloads when an earlier start succeeded and the later write then fails on the network', async () => {
+    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+    await timer.load();
+    let rejectSecond: (e: Error) => void = () => undefined;
+    vi.spyOn(api, 'startTimer')
+      .mockResolvedValueOnce({ ...running, id: 't4' })
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectSecond = reject;
+          }),
+      );
+    const first = timer.start('work');
+    const second = timer.start('work');
+    await first;
+    expect(timer.entry).toBeNull();
+    vi.spyOn(api, 'currentTimer').mockResolvedValue({ ...running, id: 't4' });
+    rejectSecond(new Error('network'));
+    await expect(second).rejects.toThrow('network');
+    expect(timer.entry?.id).toBe('t4');
+  });
+
   // 옛 읽기의 실패가 그 뒤에 성공한 읽기의 상태 위에 오류를 남기지 않는다.
   it('does not show the error of a read that was overtaken', async () => {
     let rejectOld: (e: Error) => void = () => undefined;

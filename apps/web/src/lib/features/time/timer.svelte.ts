@@ -18,6 +18,8 @@ class TimerStore {
   #seq = 0;
   #writeSeq = 0;
   #writing = 0;
+  // 겹친 쓰기 가운데 결과를 버렸거나 서버 상태와 달라 실패한 것이 있었다. 마지막 쓰기가 끝날 때 서버 상태로 맞춘다.
+  #resync = false;
 
   #beginWrite(): number {
     this.#seq += 1;
@@ -68,11 +70,15 @@ class TimerStore {
   /**
    * 쓰기 하나가 끝났다. 서버 상태와 달라 실패했거나(`applied` 거짓) 뒤에 시작한 쓰기 때문에 결과를 버렸으면, 진행 중인
    * 쓰기가 다 끝난 뒤 서버 상태로 맞춘다(먼저 보낸 시작이 성공하고 뒤의 시작이 409로 실패하면, 앞의 성공을 버린 채 화면이
-   * 비어 있었다).
+   * 비어 있었다). 버린 결과는 마지막 쓰기까지 기억한다(마지막 쓰기가 네트워크 오류로 끝나도 다시 읽는다).
    */
   async #finishWrite(applied: boolean): Promise<void> {
     this.#writing -= 1;
-    if (!applied && this.#writing === 0) await this.load();
+    if (!applied) this.#resync = true;
+    if (this.#writing === 0 && this.#resync) {
+      this.#resync = false;
+      await this.load();
+    }
   }
 
   /** 시작. 이미 진행 중이면 409이므로 먼저 끝내야 한다(호출하는 쪽이 사용자에게 묻는다). */

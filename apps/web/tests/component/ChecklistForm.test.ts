@@ -89,6 +89,26 @@ describe('ChecklistForm (D-30, editor-less screens)', () => {
     expect(ids[1]).toEqual(ids[0]);
   });
 
+  // 응답을 잃은 뒤 줄 순서를 바꿔 다시 펼쳐도 같은 줄은 같은 요청 id다(자리로 붙이면 이미 저장된 줄이 새 id로 중복됐다).
+  it('keeps paste request ids per line content when lines are reordered', async () => {
+    const h = handlers();
+    h.onadd.mockRejectedValueOnce(new Error('network'));
+    render(ChecklistForm, { idPrefix: 't', items: [], canEdit: true, ...h });
+    await fireEvent.click(screen.getByRole('button', { name: 'Markdown 붙여넣기' }));
+    const source = (): HTMLElement => screen.getByLabelText(/붙여넣을 체크리스트/);
+    const expand = (): HTMLElement => screen.getByRole('button', { name: '항목으로 펼치기' });
+    await fireEvent.input(source(), { target: { value: '- [ ] 자료 수집\n- [ ] 초안 작성' } });
+    await fireEvent.click(expand());
+    await fireEvent.click(screen.getByRole('button', { name: /덧붙이기/ }));
+    await fireEvent.input(source(), { target: { value: '- [ ] 초안 작성\n- [ ] 자료 수집' } });
+    await fireEvent.click(expand());
+    await fireEvent.click(screen.getByRole('button', { name: /덧붙이기/ }));
+    const byText = (call: number): Record<string, string> =>
+      Object.fromEntries((h.onadd.mock.calls[call]?.[0] ?? []).map((e) => [e.text, e.requestId]));
+    expect(h.onadd).toHaveBeenCalledTimes(2);
+    expect(byText(1)).toEqual(byText(0));
+  });
+
   it('is read-only without write access', () => {
     const h = handlers();
     render(ChecklistForm, {

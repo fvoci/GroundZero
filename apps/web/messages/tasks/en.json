@@ -170,6 +170,7 @@
   "tasks_start_date": "Start date",
   "tasks_due_date": "Due date",
   "tasks_estimate": "Estimate (minutes)",
+  "tasks_estimate_invalid": "Enter a whole number of minutes (0 or more) for the estimate, or leave it empty.",
   "tasks_tags": "Tags (comma-separated)",
   "tasks_milestone": "Milestone (due date only)",
   "tasks_assignees": "Assignees (share one completion status)",

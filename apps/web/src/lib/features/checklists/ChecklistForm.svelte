@@ -8,7 +8,7 @@
 
   import { newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { canonicalJson } from '$lib/features/documents/drafts';
   import { m } from '$lib/paraglide/messages.js';
 
   import type { ChecklistItem, NewChecklistEntry, ParsedChecklistItem } from './checklist-item';
@@ -30,9 +30,10 @@
   let pasteOpen = $state(false);
   let pasted = $state('');
   let preview = $state<ParsedChecklistItem[]>([]);
-  // 미리보기 줄마다의 재시도 키. 고치지 않고 다시 보내면 같은 id, 고친 줄은 새 id(같은 id면 서버가 처음 것을 남기고
-  // 고친 내용을 버린다).
-  let previewKeys: RetryKey[] = [];
+  // 미리보기 줄의 재시도 id. 줄 자리가 아니라 내용(문구·완료)과 같은 내용 가운데 몇 번째인지에 붙인다: 고치지 않고
+  // 다시 보내면 다시 펼치거나 줄 순서를 바꿔도 같은 id, 고친 줄은 새 id(같은 id면 서버가 처음 것을 남기고 고친 내용을
+  // 버린다). 덧붙이기가 성공했을 때만 비운다.
+  let previewIds: Record<string, string[]> = {};
   // 한 줄 추가의 재시도용 요청 id. 입력이 바뀌면 새로 만든다.
   let draftRequest: { text: string; requestId: string } | undefined;
   let busy = $state(false);
@@ -63,26 +64,29 @@
 
   function expand(): void {
     preview = parseMarkdownChecklist(pasted);
-    // 실패한 뒤 다시 펼쳐도 줄마다의 키를 지킨다(같은 내용이면 같은 id라 응답을 잃은 덧붙이기가 중복되지 않는다).
-    // 덧붙이기가 성공했을 때만 키를 비운다.
-    previewKeys = preview.map((_, index) => previewKeys[index] ?? new RetryKey());
   }
 
   function confirmPaste(): void {
     const confirmed: NewChecklistEntry[] = [];
-    preview.forEach((p, index) => {
+    const seen: Record<string, number> = {};
+    for (const p of preview) {
       const entry = { text: p.text.trim(), done: p.done };
-      if (entry.text === '') return;
-      const key = previewKeys[index] ?? new RetryKey();
-      previewKeys[index] = key;
-      confirmed.push({ ...entry, requestId: key.for(entry) });
-    });
+      if (entry.text === '') continue;
+      const same = canonicalJson(entry);
+      const nth = seen[same] ?? 0;
+      seen[same] = nth + 1;
+      const ids = previewIds[same] ?? [];
+      const requestId = ids[nth] ?? newRequestId();
+      ids[nth] = requestId;
+      previewIds[same] = ids;
+      confirmed.push({ ...entry, requestId });
+    }
     if (confirmed.length === 0) return;
     void guard(async () => {
       await onadd(confirmed);
       pasted = '';
       preview = [];
-      previewKeys = [];
+      previewIds = {};
       pasteOpen = false;
     });
   }

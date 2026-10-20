@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TaskInput } from '$lib/api/client';
-import { mergeForm } from '$lib/features/tasks/form';
+import { estimateOf, mergeEstimate, mergeForm } from '$lib/features/tasks/form';
 
 const base: TaskInput = {
   title: '보고서',
@@ -79,5 +79,34 @@ describe('mergeForm baseline', () => {
       { ...base, title: 'C' },
     );
     expect(second.clash).toBe(false);
+  });
+});
+
+// 예상 시간은 글자로 입력한다. 화면에 남길지와 병합 기준이 같은 판정을 써야 한다(리뷰: "01"을 남긴 채 기준만 서버 값으로
+// 옮겨, 저장하면 서버의 새 값 2를 충돌 없이 1로 덮었다).
+describe('mergeEstimate', () => {
+  it('reads only whole numbers and empty text', () => {
+    expect(estimateOf(' 01 ')).toBe(1);
+    expect(estimateOf('')).toBeNull();
+    expect(estimateOf('1.5')).toBe('invalid');
+    expect(estimateOf('1abc')).toBe('invalid');
+    expect(estimateOf('-3')).toBe('invalid');
+  });
+
+  it('takes the server value when the typed value equals the baseline', () => {
+    expect(mergeEstimate(1, '01', 2)).toEqual({ keepText: false, baseline: 2, clash: false });
+  });
+
+  it('keeps a changed value and reports a clash when the server also changed it', () => {
+    expect(mergeEstimate(1, '5', 2)).toEqual({ keepText: true, baseline: 1, clash: true });
+    expect(mergeEstimate(1, '5', 1)).toEqual({ keepText: true, baseline: 1, clash: false });
+  });
+
+  it('keeps invalid text as an edit', () => {
+    expect(mergeEstimate(null, 'abc', 30)).toEqual({ keepText: true, baseline: null, clash: true });
+  });
+
+  it('moves the baseline when the typed value already matches the server', () => {
+    expect(mergeEstimate(1, '2', 2)).toEqual({ keepText: false, baseline: 2, clash: false });
   });
 });
