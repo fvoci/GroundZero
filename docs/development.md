@@ -1902,6 +1902,9 @@ main `726343c`를 합친 뒤(86.10). 시험은 저장소 밖 임시 worktree를 
 | `84c1ef4`         | `cargo xtask check`                                                       | PASS. 건너뛴 단계 없음, Rust 단위 69건, 웹 시험 57개 파일 265건, svelte-check 2955개 파일 오류·경고 0, 라이선스 포함                             |
 | `84c1ef4`         | `cargo xtask test --oidc`                                                 | PASS. 45개 묶음 255건, 실패·무시 0. NOT RUN은 Supabase 시험 줄 하나(아래에서 따로 돌림)                                                          |
 | `84c1ef4`         | `cargo xtask test --supabase --session-pooler --oidc`                     | PASS. 직접 연결 258건, session pooler 258건, 실패·무시 0, NOT RUN 없음                                                                           |
+| `3346f24`         | `cargo xtask check`                                                       | PASS. 건너뛴 단계 없음, Rust 단위 69건, 웹 시험 57개 파일 266건, svelte-check 2955개 파일 오류·경고 0, 라이선스 포함                             |
+| `3346f24`         | `cargo xtask test --oidc`                                                 | PASS. 45개 묶음 255건, 실패·무시 0. NOT RUN은 Supabase 시험 줄 하나(아래에서 따로 돌림)                                                          |
+| `3346f24`         | `cargo xtask test --supabase --session-pooler --oidc`                     | PASS. 직접 연결 258건, session pooler 258건, 실패·무시 0, NOT RUN 없음                                                                           |
 | 이 줄을 적은 커밋 | 문서만 바뀜                                                               | `prettier --check` 확인. 위 세 검사는 다시 돌리지 않음(NOT RUN), 원격 CI가 이 커밋에서 돈다                                                      |
 
 - 칸반 저장 상태(86.9)를 더한 뒤 `226f087`에서 다시 돌림: `cargo xtask check` PASS(건너뛴 단계 없음, Rust 단위 67건, svelte-check
