@@ -17,7 +17,7 @@
   "documents_tree_down": "Move down",
   "documents_tree_indent": "Indent (under the previous document)",
   "documents_tree_outdent": "Outdent (after the parent document)",
-  "documents_tree_keyboard_hint": "Keyboard: Alt+Up/Down to reorder, Alt+Right/Left to indent or outdent, Alt+Enter for a subdocument.",
+  "documents_tree_keyboard_hint": "Keyboard: Alt+Up/Down to reorder, Alt+Right/Left to indent or outdent, Alt+Enter for a subdocument, Alt+M to search and move.",
   "documents_history_load_failed": "Couldn't load the history.",
   "documents_revision_load_failed": "Couldn't load the revision.",
   "documents_restore_conflict": "Revision {revision} was saved in the meantime. The comparison below now uses that latest content. Check it, then press restore again.",
@@ -330,5 +330,17 @@
   "documents_tree_move_failed_reload_failed": "Couldn't move the document, and the latest list couldn't be loaded either. Reload the page.",
   "documents_tree_moved_reload_failed": "The document was moved, but the list couldn't be reloaded. Reload the page.",
   "documents_tree_create_failed": "Couldn't create the subdocument.",
-  "documents_outline": "Contents"
+  "documents_outline": "Contents",
+  "documents_tree_move_to": "Move under another document…",
+  "documents_tree_moved_under": "Moved under {title}",
+  "documents_tree_moved_root": "Moved to the top level",
+  "documents_reparent_title": "Move {title}",
+  "documents_reparent_description": "Pick a new parent from the documents in this list. The document goes to the end of its subdocuments. The document itself and its subdocuments can't be picked.",
+  "documents_reparent_search": "Find by title or number",
+  "documents_reparent_options": "Where to move",
+  "documents_reparent_none": "No matching documents.",
+  "documents_reparent_to_root": "Top level (no parent)",
+  "documents_reparent_current": "current parent",
+  "documents_reparent_cancel": "Cancel",
+  "documents_reparent_confirm": "Move"
 }

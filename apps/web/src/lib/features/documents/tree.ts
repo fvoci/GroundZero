@@ -129,3 +129,56 @@ export async function moveThenReload(
   if (moved && reloaded) return;
   throw new TreeMoveError(failure, moved, reloaded);
 }
+
+/** 이 문서와 그 하위 문서 전부(그 아래로는 옮길 수 없다). */
+export function selfAndDescendants(docs: readonly TreeDoc[], id: string): Set<string> {
+  const map = childrenMap(docs);
+  const out = new Set<string>();
+  const walk = (doc: string): void => {
+    if (out.has(doc)) return;
+    out.add(doc);
+    for (const child of map.get(doc) ?? []) walk(child.id);
+  };
+  walk(id);
+  return out;
+}
+
+export interface ParentCandidate<T> {
+  doc: T;
+  /** 위에서부터의 상위 문서 제목(같은 제목의 문서를 가려 보이게). */
+  path: string[];
+}
+
+/**
+ * 상위 문서로 고를 수 있는 문서: 같은 목록(같은 자리)에서 자기와 하위 문서를 뺀 것. 제목·번호에 검색어가 들어간 것만,
+ * 목록 순서 그대로. 같은 자리인지와 깊이 한도는 서버가 다시 막는다.
+ */
+export function parentCandidates<T extends TreeDoc & { title: string; reference: string | null }>(
+  docs: readonly T[],
+  id: string,
+  query: string,
+): ParentCandidate<T>[] {
+  const blocked = selfAndDescendants(docs, id);
+  const byId = new Map(docs.map((d) => [d.id, d]));
+  const q = query.trim().toLocaleLowerCase();
+  const pathOf = (doc: T): string[] => {
+    const path: string[] = [];
+    const seen = new Set<string>();
+    let parent = doc.parent_id === null ? undefined : byId.get(doc.parent_id);
+    while (parent !== undefined && !seen.has(parent.id)) {
+      seen.add(parent.id);
+      path.unshift(parent.title);
+      parent = parent.parent_id === null ? undefined : byId.get(parent.parent_id);
+    }
+    return path;
+  };
+  return docs
+    .filter((d) => !blocked.has(d.id))
+    .filter(
+      (d) =>
+        q === '' ||
+        d.title.toLocaleLowerCase().includes(q) ||
+        (d.reference ?? '').toLocaleLowerCase().includes(q),
+    )
+    .map((doc) => ({ doc, path: pathOf(doc) }));
+}

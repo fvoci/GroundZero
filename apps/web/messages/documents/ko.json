@@ -17,7 +17,7 @@
   "documents_tree_down": "아래로",
   "documents_tree_indent": "들여쓰기(앞 문서의 하위로)",
   "documents_tree_outdent": "내어쓰기(상위 문서 다음으로)",
-  "documents_tree_keyboard_hint": "키보드: Alt+위·아래 순서, Alt+오른쪽·왼쪽 들여쓰기·내어쓰기, Alt+Enter 하위 문서.",
+  "documents_tree_keyboard_hint": "키보드: Alt+위·아래 순서, Alt+오른쪽·왼쪽 들여쓰기·내어쓰기, Alt+Enter 하위 문서, Alt+M 검색해서 옮기기.",
   "documents_history_load_failed": "기록을 불러오지 못했습니다.",
   "documents_revision_load_failed": "리비전을 불러오지 못했습니다.",
   "documents_restore_conflict": "그사이 리비전 {revision}이 저장되었습니다. 아래 비교는 그 최신 내용 기준입니다. 확인한 뒤 다시 복원을 누르세요.",
@@ -309,5 +309,17 @@
   "documents_tree_move_failed_reload_failed": "문서를 옮기지 못했고 최신 목록도 불러오지 못했습니다. 새로고침해 주세요.",
   "documents_tree_moved_reload_failed": "문서를 옮겼지만 목록을 다시 불러오지 못했습니다. 새로고침해 주세요.",
   "documents_tree_create_failed": "하위 문서를 만들지 못했습니다.",
-  "documents_outline": "목차"
+  "documents_outline": "목차",
+  "documents_tree_move_to": "다른 문서 아래로 옮기기…",
+  "documents_tree_moved_under": "{title} 아래로 옮겼습니다",
+  "documents_tree_moved_root": "맨 위로 옮겼습니다",
+  "documents_reparent_title": "{title} 옮기기",
+  "documents_reparent_description": "같은 목록의 문서 가운데 새 상위 문서를 고르세요. 그 문서의 하위 문서 맨 끝으로 들어갑니다. 자기 자신과 하위 문서는 고를 수 없습니다.",
+  "documents_reparent_search": "제목이나 번호로 찾기",
+  "documents_reparent_options": "옮길 곳",
+  "documents_reparent_none": "맞는 문서가 없습니다.",
+  "documents_reparent_to_root": "맨 위(상위 문서 없음)",
+  "documents_reparent_current": "지금 상위 문서",
+  "documents_reparent_cancel": "취소",
+  "documents_reparent_confirm": "옮기기"
 }
