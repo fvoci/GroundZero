@@ -41,6 +41,55 @@ fn sha(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+/// 테이블 소유 역할로 연결한다(`database`가 있으면 그 DB). 지울 목록·버전 키를 직접 본다.
+async fn owner(database: Option<&str>) -> sqlx::PgConnection {
+    use sqlx::Connection as _;
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let url = database.map_or(url.clone(), |db| common::with_database(&url, db));
+    sqlx::PgConnection::connect(&url).await.unwrap()
+}
+
+/// 파일의 버전들이 저장소에 쓰는 키.
+async fn version_keys(owner: &mut sqlx::PgConnection, file_id: &str) -> Vec<String> {
+    sqlx::query_scalar(
+        "SELECT storage_key FROM fvoci.file_versions WHERE file_id = $1::uuid ORDER BY version",
+    )
+    .bind(file_id)
+    .fetch_all(owner)
+    .await
+    .unwrap()
+}
+
+/// 지울 목록에 오른 이 객체들이 저장소에서 실제로 지워질 때까지 정리를 돌린다. 지울 목록은 DB 전체가 함께 써서 같은 DB의
+/// 다른 시험의 정리가 먼저 가져갈 수 있으므로, 정리한 수가 아니라 이 키가 목록과 저장소에서 사라졌는지로 확인한다.
+/// 다른 정리가 꺼낸 행은 그 트랜잭션이 끝나야(저장소에서 지운 뒤) 목록에서 사라진다.
+async fn clean_until_gone(state: &AppState, owner: &mut sqlx::PgConnection, keys: &[String]) {
+    assert!(!keys.is_empty());
+    let mut queued = i64::MAX;
+    for _ in 0..200 {
+        fvoci_server::worker::run_all_now(&state.db, None, Some(&state.storage))
+            .await
+            .unwrap();
+        queued = sqlx::query_scalar(
+            "SELECT count(*) FROM fvoci.storage_deletions WHERE storage_key = ANY($1)",
+        )
+        .bind(keys)
+        .fetch_one(&mut *owner)
+        .await
+        .unwrap();
+        if queued == 0 {
+            break;
+        }
+    }
+    assert_eq!(queued, 0, "still queued: {keys:?}");
+    for key in keys {
+        assert!(
+            state.storage.digest(key).await.is_err(),
+            "{key} is still in storage"
+        );
+    }
+}
+
 /// 결정적인 내용(5 MiB 조각 둘: 앞은 꽉, 뒤는 작게).
 fn content(len: usize, seed: u8) -> Vec<u8> {
     (0..len).map(|i| (i % 251) as u8 ^ seed).collect()
@@ -457,6 +506,9 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     );
 
     // 영구 삭제하면 작업 프로세스가 저장소의 모든 버전을 지운다.
+    let mut db = owner(None).await;
+    let keys = version_keys(&mut db, &file_id).await;
+    assert_eq!(keys.len(), 2);
     let trashed = send(
         &app,
         Method::DELETE,
@@ -478,10 +530,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
         .status,
         StatusCode::NO_CONTENT
     );
-    let report = fvoci_server::worker::run_all_now(&state.db, None, Some(&state.storage))
-        .await
-        .unwrap();
-    assert!(report.cleaned >= 2, "{report:?}");
+    clean_until_gone(&state, &mut db, &keys).await;
     assert_eq!(
         send(
             &app,
@@ -642,6 +691,8 @@ async fn concurrent_starts_and_old_version_cleanup() {
             .status,
         StatusCode::NOT_FOUND
     );
+    let mut db = owner(None).await;
+    let old_version = version_keys(&mut db, &file_id).await[..1].to_vec();
     assert_eq!(
         send(&app, Method::DELETE, &version(1), Some(&admin), None)
             .await
@@ -664,15 +715,19 @@ async fn concurrent_starts_and_old_version_cleanup() {
             .2,
         b"two"
     );
-    let report = fvoci_server::worker::run_all_now(&state.db, None, Some(&state.storage))
-        .await
-        .unwrap();
-    assert!(report.cleaned >= 1, "{report:?}");
+    clean_until_gone(&state, &mut db, &old_version).await;
 }
 
 #[tokio::test]
 async fn s3_files_round_trip_and_purge_with_the_document() {
-    let overrides = s3_overrides();
+    // 지울 목록은 DB 전체가 함께 쓴다. 이 시험의 정리가 같은 DB의 로컬 저장소 시험 키를 S3에서 "지우고"(없는 키도 성공)
+    // 목록에서 빼지 않게 새 DB를 쓴다(운영은 저장소가 하나다).
+    use sqlx::Connection as _;
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let mut admin_db = sqlx::PgConnection::connect(&admin_url).await.unwrap();
+    let fresh = common::fresh_database(&mut admin_db, "s3_files").await;
+    let mut overrides = s3_overrides();
+    overrides.push(("DATABASE_URL", fresh.app_url.clone()));
     let pairs: Vec<(&str, &str)> = overrides.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let state = state_with(&pairs);
     let app = common::app(&state);
@@ -704,6 +759,8 @@ async fn s3_files_round_trip_and_purge_with_the_document() {
     );
 
     // 문서를 휴지통에 넣고 영구 삭제하면 붙은 파일과 저장소의 내용도 지워진다.
+    let mut db = owner(Some(&fresh.name)).await;
+    let keys = version_keys(&mut db, &file_id).await;
     let r = send(
         &app,
         Method::DELETE,
@@ -731,10 +788,7 @@ async fn s3_files_round_trip_and_purge_with_the_document() {
         .status,
         StatusCode::NO_CONTENT
     );
-    let report = fvoci_server::worker::run_all_now(&state.db, None, Some(&state.storage))
-        .await
-        .unwrap();
-    assert!(report.cleaned >= 1, "{report:?}");
+    clean_until_gone(&state, &mut db, &keys).await;
 }
 
 /// 감사 반영: 문서를 다른 워크스페이스로 옮기면 첨부도 함께 옮겨진다. 옛 워크스페이스 관리자는 그 파일의 휴지통

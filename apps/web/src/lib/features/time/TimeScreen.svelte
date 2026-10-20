@@ -132,8 +132,9 @@
         memo: manual.memo,
         target: null,
       };
-      await api.addTimeEntry(manualKey.for(entry), entry);
-      manualKey.done();
+      const requestId = manualKey.for(entry);
+      await api.addTimeEntry(requestId, entry);
+      manualKey.done(requestId);
       manual.memo = '';
       manualStatus = m.time_manual_added();
       reloadKey += 1;

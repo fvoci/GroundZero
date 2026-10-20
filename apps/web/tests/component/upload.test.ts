@@ -71,6 +71,28 @@ describe('resuming an upload', () => {
     ]);
   });
 
+  // 두 조각을 다 받은 뒤 첫 조각만 바뀌어 다시 보내면 진행률은 받은 바이트의 합이다(첫 조각의 끝 위치 4/8이 아니라 8/8).
+  it('reports cumulative progress after resending a changed part', async () => {
+    vi.spyOn(api, 'putUploadPart').mockResolvedValue(undefined);
+    const complete = vi
+      .spyOn(api, 'completeUpload')
+      .mockRejectedValueOnce(new ApiError(400, 'bad', 'stop'));
+    const create = vi.spyOn(api, 'createUpload').mockResolvedValue(view([]));
+    await expect(
+      uploadFile(new File(['AAAABBBB'], 'a.bin', { lastModified: 2000 }), { fileId: 'f2' }),
+    ).rejects.toThrow('stop');
+
+    create.mockResolvedValue(view([1, 2]));
+    complete.mockResolvedValue({ ...view([1, 2]), state: 'done' });
+    const seen: number[] = [];
+    await uploadFile(new File(['CCCCBBBB'], 'a.bin', { lastModified: 2000 }), {
+      fileId: 'f2',
+      onProgress: (p) => seen.push(p.sent),
+    });
+    expect(seen.at(0)).toBe(4);
+    expect(seen.at(-1)).toBe(8);
+  });
+
   // 검토(2차) 6번: 그만둔 업로드의 조각 해시가 저장소에 계속 쌓이지 않는다(기한이 지난 업로드는 이어 올릴 수 없다).
   it('drops part hashes of uploads past their expiry', async () => {
     window.localStorage.setItem(

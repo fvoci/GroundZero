@@ -71,28 +71,20 @@
   async function post(): Promise<void> {
     const body = draft.trim();
     if (body === '') return;
-    if (
-      await run(
-        () => api.addComment(target, body, null, draftKey.for({ target: target.id, body })),
-        m.comments_posted(),
-      )
-    ) {
+    const requestId = draftKey.for({ target: target.id, body });
+    if (await run(() => api.addComment(target, body, null, requestId), m.comments_posted())) {
       draft = '';
-      draftKey.done();
+      draftKey.done(requestId);
     }
   }
 
   async function reply(root: string): Promise<void> {
     const body = replyDraft.trim();
     if (body === '') return;
-    if (
-      await run(
-        () => api.addComment(target, body, root, replyKey.for({ target: target.id, root, body })),
-        m.comments_replied(),
-      )
-    ) {
+    const requestId = replyKey.for({ target: target.id, root, body });
+    if (await run(() => api.addComment(target, body, root, requestId), m.comments_replied())) {
       replyDraft = '';
-      replyKey.done();
+      replyKey.done(requestId);
       replyTo = undefined;
     }
   }

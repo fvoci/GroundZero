@@ -132,13 +132,9 @@
     error = undefined;
     try {
       if (creating) {
-        await api.createRecord(
-          item.id,
-          createKey.for({ item: item.id, kind: def.kind, input: built.input }),
-          def.kind,
-          built.input,
-        );
-        createKey.done();
+        const requestId = createKey.for({ item: item.id, kind: def.kind, input: built.input });
+        await api.createRecord(item.id, requestId, def.kind, built.input);
+        createKey.done(requestId);
         status = m.records_added({ label: recordKindLabel(def) });
       } else if (editingId !== undefined) {
         const r = records.find((x) => x.id === editingId);

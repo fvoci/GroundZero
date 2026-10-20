@@ -356,6 +356,15 @@ async fn restore_object(
 ) -> Result<(), AppError> {
     let path = object_path(from, &object.key)?;
     let mut file = tokio::fs::File::open(&path).await.map_err(io)?;
+    // 목록의 크기로 조각 버퍼를 잡으므로 실제 파일 크기와 먼저 맞춘다(목록이 손상돼 크기가 터무니없으면 버퍼를 잡다가
+    // 메모리가 모자라 멈췄다).
+    let actual = file.metadata().await.map_err(io)?.len();
+    if u64::try_from(object.size).ok() != Some(actual) {
+        return Err(AppError::Config(format!(
+            "backup copy of {} is damaged (size differs)",
+            object.key
+        )));
+    }
     let upload = storage.begin(&object.key).await?;
     let chunk = restore_chunk(object.size);
     let sent = async {

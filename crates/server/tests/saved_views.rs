@@ -243,7 +243,16 @@ async fn the_designated_initial_admin_gets_the_first_workspace_once() {
         SESSION_COOKIE, VerifiedIdentity, claim_initial_admin, start_session,
     };
     let subject = format!("operator-{}", uuid::Uuid::now_v7());
+    // 초기 관리자는 DB마다 한 번만 정해진다. 다른 실행·시험이 먼저 정했을 수 있는 공유 DB가 아니라 새 DB를 쓴다(공유 DB를
+    // 다시 쓰면 이미 정해져 실패했다).
+    let fresh = {
+        use sqlx::Connection as _;
+        let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+        let mut admin = sqlx::PgConnection::connect(&admin_url).await.unwrap();
+        common::fresh_database(&mut admin, "initial_admin").await
+    };
     let config = common::config_with(&[
+        ("DATABASE_URL", &fresh.app_url),
         ("FVOCI_OIDC_ISSUER", "https://test-issuer.invalid"),
         ("FVOCI_OIDC_CLIENT_ID", "fvoci-test"),
         ("FVOCI_OIDC_CLIENT_SECRET", "test-only-secret"),

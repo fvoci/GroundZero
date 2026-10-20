@@ -115,6 +115,15 @@ impl Compose {
         Ok(())
     }
 
+    /// 실행 중인 서비스 안에서 명령을 실행하고 표준 출력을 돌려준다(출력은 화면에 남기지 않는다).
+    pub fn exec_read(&self, sh: &Shell, service: &str, command: &[String]) -> Result<String> {
+        let args = self.base_args();
+        cmd!(sh, "docker {args...} exec -T {service} {command...}")
+            .quiet()
+            .read()
+            .with_context(|| format!("{service}: command failed"))
+    }
+
     /// 서비스의 컨테이너 포트에 매핑된 호스트 포트를 돌려준다.
     pub fn host_port(&self, sh: &Shell, service: &str, container_port: u16) -> Result<u16> {
         let args = self.base_args();

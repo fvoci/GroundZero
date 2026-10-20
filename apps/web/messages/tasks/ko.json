@@ -164,6 +164,7 @@
   "tasks_start_date": "시작일",
   "tasks_due_date": "마감일",
   "tasks_estimate": "예상 시간(분)",
+  "tasks_estimate_invalid": "예상 시간에는 0 이상의 정수(분)를 적거나 비워 두세요.",
   "tasks_tags": "태그(쉼표로 구분)",
   "tasks_milestone": "마일스톤 (마감일 하나만)",
   "tasks_assignees": "담당자 (같은 완료 상태를 공유)",

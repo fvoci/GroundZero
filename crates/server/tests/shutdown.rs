@@ -15,8 +15,32 @@ use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+/// 시험이 실패해도(패닉) 띄운 서버를 남기지 않는다.
+struct Running(std::process::Child);
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        if matches!(self.0.try_wait(), Ok(None)) {
+            self.0.kill().ok();
+            self.0.wait().ok();
+        }
+    }
+}
+
 #[test]
 fn server_shuts_down_cleanly_on_sigterm() {
+    // 서버는 뜨자마자 주기 작업(휴지통 비우기·저장소 정리 등)을 한 번 돈다. 공유 테스트 DB를 바꾸지 않게 새 DB를 쓴다.
+    let app_url = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            use sqlx::Connection as _;
+            let admin_url =
+                std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+            let mut admin = sqlx::PgConnection::connect(&admin_url).await.unwrap();
+            common::fresh_database(&mut admin, "shutdown").await.app_url
+        });
     let port = std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
         .local_addr()
@@ -27,7 +51,8 @@ fn server_shuts_down_cleanly_on_sigterm() {
         .env("FVOCI_BIND", format!("127.0.0.1:{port}"))
         .env("FVOCI_PUBLIC_URL", common::PUBLIC_URL)
         .env("FVOCI_LOG_FORMAT", "json")
-        // 잠깐 사는 동안 공유 테스트 DB에서 주기 작업(휴지통 비우기 등)을 잡지 않게 한다.
+        .env("DATABASE_URL", &app_url)
+        // 첫 주기 다음은 잡지 않는다.
         .env("FVOCI_WORKER_INTERVAL_SECS", "3600")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -36,24 +61,24 @@ fn server_shuts_down_cleanly_on_sigterm() {
             command.env_remove(key);
         }
     }
-    let mut child = command.spawn().unwrap();
+    let mut child = Running(command.spawn().unwrap());
 
     // 받을 준비가 될 때까지 기다린다.
     let deadline = Instant::now() + Duration::from_secs(30);
     while std::net::TcpStream::connect(("127.0.0.1", port)).is_err() {
         assert!(Instant::now() < deadline, "server did not start listening");
-        assert!(child.try_wait().unwrap().is_none(), "server exited early");
+        assert!(child.0.try_wait().unwrap().is_none(), "server exited early");
         std::thread::sleep(Duration::from_millis(100));
     }
 
     let status = Command::new("kill")
-        .args(["-TERM", &child.id().to_string()])
+        .args(["-TERM", &child.0.id().to_string()])
         .status()
         .unwrap();
     assert!(status.success());
     let deadline = Instant::now() + Duration::from_secs(15);
     let exit = loop {
-        if let Some(exit) = child.try_wait().unwrap() {
+        if let Some(exit) = child.0.try_wait().unwrap() {
             break exit;
         }
         assert!(Instant::now() < deadline, "server ignored SIGTERM");
@@ -61,6 +86,7 @@ fn server_shuts_down_cleanly_on_sigterm() {
     };
     let mut out = String::new();
     child
+        .0
         .stdout
         .take()
         .unwrap()
@@ -68,6 +94,7 @@ fn server_shuts_down_cleanly_on_sigterm() {
         .unwrap();
     let mut err = String::new();
     child
+        .0
         .stderr
         .take()
         .unwrap()

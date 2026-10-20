@@ -140,3 +140,85 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
         worker::TickReport::default()
     );
 }
+
+/// 같은 순간에 지울 목록에 오른 저장소 객체(버전 여럿인 파일, 파일 여럿을 한 번에 영구 삭제)는 모두 저장소에서 지워진다.
+/// 지울 목록을 빈 표로 분석해 둔 뒤(오래 쓴 설치에서 흔한 통계)에는 꺼내기의 LIMIT이 행마다 다시 돌아 한 번에 여럿을
+/// 목록에서 뺐고, 작업은 그중 하나만 지워 나머지 객체가 영구히 남았다. DB 전체의 대기열을 보므로 새 DB에서 시험한다.
+#[tokio::test]
+async fn storage_cleanup_deletes_every_object_queued_together() {
+    use sqlx::Connection as _;
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let mut admin = sqlx::PgConnection::connect(&admin_url).await.unwrap();
+    let fresh = common::fresh_database(&mut admin, "storage_claim").await;
+    let dir = std::env::temp_dir().join(format!("fvoci-claim-{}", uuid::Uuid::now_v7().simple()));
+    let dir_text = dir.to_str().unwrap().to_owned();
+    let state = fvoci_server::app::build_state(common::config_with(&[
+        ("DATABASE_URL", &fresh.app_url),
+        ("FVOCI_STORAGE_DIR", &dir_text),
+    ]))
+    .unwrap();
+
+    let keys: Vec<String> = (0..3)
+        .map(|i| format!("v1/claim-{}/{i}", uuid::Uuid::now_v7().simple()))
+        .collect();
+    for key in &keys {
+        let upload = state.storage.begin(key).await.unwrap();
+        let etag = state
+            .storage
+            .put_part(key, &upload, 1, bytes::Bytes::from_static(b"x"))
+            .await
+            .unwrap();
+        let part = fvoci_server::storage::Part {
+            number: 1,
+            etag,
+            size: 1,
+        };
+        state.storage.complete(key, &upload, &[part]).await.unwrap();
+        assert!(state.storage.digest(key).await.is_ok());
+    }
+
+    let owner_url = common::with_database(
+        &std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`"),
+        &fresh.name,
+    );
+    let mut owner = sqlx::PgConnection::connect(&owner_url).await.unwrap();
+    // 한때 행이 있다가 비워진 표의 통계(오래 쓴 설치에서 흔하다: 한 쪽, 행 0).
+    sqlx::raw_sql(
+        "INSERT INTO fvoci.storage_deletions (storage_key) VALUES ('v1/claim-warmup');
+         DELETE FROM fvoci.storage_deletions;",
+    )
+    .execute(&mut owner)
+    .await
+    .unwrap();
+    sqlx::raw_sql("ANALYZE fvoci.storage_deletions")
+        .execute(&mut owner)
+        .await
+        .unwrap();
+    // 한 트랜잭션으로 올린다(영구 삭제처럼 queued_at이 같다).
+    let mut tx = owner.begin().await.unwrap();
+    for key in &keys {
+        sqlx::query("INSERT INTO fvoci.storage_deletions (storage_key) VALUES ($1)")
+            .bind(key)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+    }
+    tx.commit().await.unwrap();
+
+    let report = worker::run_all_now(&state.db, None, Some(&state.storage))
+        .await
+        .unwrap();
+    assert_eq!(report.cleaned, 3, "{report:?}");
+    for key in &keys {
+        assert!(
+            state.storage.digest(key).await.is_err(),
+            "{key} is still stored"
+        );
+    }
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM fvoci.storage_deletions")
+        .fetch_one(&mut owner)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+    std::fs::remove_dir_all(&dir).ok();
+}

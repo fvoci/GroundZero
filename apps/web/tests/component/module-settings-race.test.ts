@@ -70,7 +70,12 @@ describe('module settings save while switching modules', () => {
     });
     items.mockClear();
     finishDescription();
-    await new Promise((r) => setTimeout(r, 20));
+    // A의 저장은 설명 다음에 이름·키를 A로, A의 입력값(AAX)으로 보낸다. 그 호출을 기다린다(고정 대기 대신).
+    await waitFor(() => {
+      expect(update).toHaveBeenCalled();
+    });
+    expect(update.mock.calls.at(-1)?.[0]).toBe('A');
+    expect(update.mock.calls.at(-1)?.[2]).toBe('AAX');
 
     for (const call of update.mock.calls) expect(call[0]).toBe('A');
     expect(items.mock.calls.map((c) => c[0])).not.toContain('A');

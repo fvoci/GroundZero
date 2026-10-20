@@ -29,6 +29,8 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
+  import { quickSend } from './quick';
+
   interface Props {
     workspaces: Workspace[];
   }
@@ -137,25 +139,23 @@
     quickError = undefined;
     const title = quick.title.trim();
     if (title === '') return;
+    // 재시도 키는 실제로 보내는 값으로 만든다.
+    const send = quickSend(quick, home?.today ?? '');
+    if (send === undefined) {
+      quickError = m.home_pick_item_required();
+      return;
+    }
+    const requestId = quickKey.for(send);
     try {
-      const requestId = quickKey.for({
-        what: quick.what,
-        item: quick.item,
-        title,
-        date: quick.date,
-      });
-      if (quick.what === 'memo') {
+      if (send.what === 'memo') {
         const note = await api.createNote(requestId, title);
         quickStatus = m.home_memo_created({ title: note.title });
-      } else if (quick.item === '') {
-        quickError = m.home_pick_item_required();
-        return;
-      } else if (quick.what === 'task') {
-        await api.createTask(quick.item, requestId, title);
+      } else if (send.what === 'task') {
+        await api.createTask(send.item, requestId, title);
         quickStatus = m.home_task_created({ title });
       } else {
-        const date = quick.date === '' ? (home?.today ?? '') : quick.date;
-        await api.createEvent(quick.item, requestId, {
+        const date = send.date;
+        await api.createEvent(send.item, requestId, {
           kind: 'event',
           title,
           description: '',
@@ -168,7 +168,7 @@
         });
         quickStatus = m.home_event_created({ title, date: date === '' ? '' : formatDay(date) });
       }
-      quickKey.done();
+      quickKey.done(requestId);
       quick.title = '';
       reloadKey += 1;
     } catch (e: unknown) {

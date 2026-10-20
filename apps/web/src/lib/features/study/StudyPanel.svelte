@@ -245,7 +245,7 @@
     );
     if (ok) {
       draft = { title: '', chapter: '', unit: draft.unit, amount: null, planned_on: '' };
-      draftKey.done();
+      draftKey.done(requestId);
     }
   }
 </script>

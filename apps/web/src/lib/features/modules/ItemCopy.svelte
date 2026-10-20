@@ -55,14 +55,9 @@
     error = undefined;
     try {
       const name = title.trim();
-      const copied = await api.copyItem(
-        item.id,
-        copyKey.for({ item: item.id, target, name, reset }),
-        target,
-        name,
-        reset,
-      );
-      copyKey.done();
+      const requestId = copyKey.for({ item: item.id, target, name, reset });
+      const copied = await api.copyItem(item.id, requestId, target, name, reset);
+      copyKey.done(requestId);
       result = { id: copied.item_id, skipped: copied.skipped_documents };
       open = false;
     } catch (err: unknown) {

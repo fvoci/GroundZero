@@ -134,14 +134,9 @@
     templateError = undefined;
     try {
       const title = templateTitle.trim();
-      const copied = await api.copyItem(
-        source,
-        templateKey.for({ source, moduleId, title }),
-        moduleId,
-        title,
-        true,
-      );
-      templateKey.done();
+      const requestId = templateKey.for({ source, moduleId, title });
+      const copied = await api.copyItem(source, requestId, moduleId, title, true);
+      templateKey.done(requestId);
       router.navigate(itemPath(workspace.id, copied.item_id));
     } catch (e: unknown) {
       templateError = errorText(e, m.modules_create_failed());

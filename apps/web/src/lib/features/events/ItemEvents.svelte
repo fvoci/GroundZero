@@ -53,8 +53,9 @@
   });
 
   async function create(input: EventInput): Promise<void> {
-    await api.createEvent(item.id, createKey.for({ item: item.id, input }), input);
-    createKey.done();
+    const requestId = createKey.for({ item: item.id, input });
+    await api.createEvent(item.id, requestId, input);
+    createKey.done(requestId);
     adding = false;
     onchanged?.();
     await reload();
