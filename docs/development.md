@@ -260,6 +260,13 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 - **캐시**: `Swatinem/rust-cache`와 buildx의 GHA 캐시는 속도용이다. 없어도 같은 명령이 성공해야 한다.
 - **산출물 공유**: 현재 통합 테스트는 in-process라 제품 바이너리를 소비하지 않는다. e2e가 생기면 `build` job이 서버 바이너리와 웹 번들을 한 번 만들고 소스 SHA·아키텍처를 키로 하는 artifact로 넘긴다. 병목 측정 전에는 job을 더 쪼개지 않는다.
 - **베이스 이미지 갱신 절차**: Dockerfile을 바꾸면 base-image 워크플로가 새 digest를 Step Summary에 적는다. `CI_BASE_IMAGE_DIGEST` 변수를 그 값으로 바꾸면 이후 CI가 새 이미지를 쓴다. 주간 스케줄 빌드도 같은 절차로 반영한다.
+- **제품 이미지 릴리스(D-87)**: `.github/workflows/release-image.yml` → `ghcr.io/fvoci/groundzero:X.Y.Z`(linux/amd64·linux/arm64, `latest` 없음).
+  - 트리거: `vX.Y.Z` 태그 push, 또는 Actions → release-image → Run workflow에 이미 있는 태그 입력. 명령으로는 `gh workflow run release-image.yml --ref main -f tag=v0.0.1`. 워크플로가 main에 들어간 뒤에만 수동 실행할 수 있다(그 전 태그는 다시 push하지 않는다).
+  - 순서: 태그 확인(형식·원격 존재·main 포함) → 같은 이미지 태그가 있으면 소스 SHA 비교(같으면 그대로 끝, 다르면 실패) → 플랫폼마다 그 태그 커밋을 빌드해 digest로만 올림 → 받아서 확인 → 두 플랫폼이 다 통과하면 한 manifest로 합쳐 태그. Step Summary에 태그·소스 SHA·플랫폼·manifest digest·`docker pull` 명령이 남는다.
+  - 버전: 태그에서 정한 제품 버전·전체 SHA를 build arg `FVOCI_RELEASE_VERSION`·`FVOCI_SOURCE_SHA`와 OCI 라벨(`org.opencontainers.image.version`·`revision`)에 같이 넣는다. 확인: 라벨, `fvoci-server version`, 시작 로그 `server.starting`의 `version`·`source`, `/healthz`의 `build`가 모두 같아야 한다(서버는 닿지 않는 DB 주소로 띄워 503 본문으로 확인, DB·Keycloak 쓰지 않음). 로컬·개발 빌드는 `dev`. `v0.0.1`은 이 지원 전 소스라 라벨만 붙고 앱 안 버전은 없다(확인이 그렇게 기록).
+  - PR에서 Dockerfile·이 워크플로가 바뀌면 게시 권한 없이 두 플랫폼 빌드와 같은 확인만 한다(시험 값 0.0.0, 게시 안 함). 같은 PR에서 `guard-check`가 기존 이미지 확인의 분기(한 번도 게시하지 않은 패키지·없는 태그 → 없음, 같은 소스 → 그대로, 다른 소스 → 실패, 없는 소유자·토큰 없음 → 실패)를 실제 응답으로 확인한다(`groundzero-ci-base` 사용).
+  - 기존 이미지 확인: 이미지 소유자의 종류(fvoci는 사용자 계정)에 맞는 패키지 API(`/users`·`/orgs`)를 쓰고, "없음"은 그 경로가 "Package not found."로 답한 404일 때만이다. 다른 404·권한 오류·네트워크 오류는 실패로 멈춘다(이미지 없음으로 보지 않는다).
+  - 공개 pull: 처음 게시한 패키지는 GHCR에서 비공개로 생길 수 있다. 공개로 받게 하려면 소유자 fvoci(사용자 계정)의 패키지 `groundzero` 설정에서 공개를 켠다(소유자 작업, 워크플로는 바꾸지 않는다).
 
 ## 11. 프론트엔드 UI 도입 기록 (D-66, 2026-10-17)
 

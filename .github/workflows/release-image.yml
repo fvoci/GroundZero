@@ -1,0 +1,423 @@
+# 제품 이미지 릴리스(D-87). 릴리스 태그(vX.Y.Z)가 가리키는 커밋을 deploy/docker/app.Dockerfile로 빌드해
+# ghcr.io/fvoci/groundzero:X.Y.Z 로 게시한다. latest는 만들지 않는다. 검사 도구 이미지(groundzero-ci-base)와 다르다.
+#
+# - 트리거: v* 태그 push, 또는 수동 실행(workflow_dispatch)에 이미 있는 태그 입력(예: v0.0.1). 태그를 만들거나 옮기지 않는다.
+# - 태그는 형식(vX.Y.Z), 원격 존재, main에 들어간 커밋인지 확인한 뒤 그 커밋을 정확히 checkout한다(main 최신을 빌드하지 않음).
+# - 플랫폼마다 GitHub-hosted 네이티브 무료 러너(ubuntu-24.04, ubuntu-24.04-arm)에서 한 번씩 빌드해 digest로만 올리고,
+#   받아 smoke 검사를 통과한 뒤에만 manifest를 합쳐 태그를 붙인다. 한 플랫폼이라도 실패하면 태그를 붙이지 않는다.
+# - 같은 이미지 태그가 이미 있으면 그 이미지의 소스 SHA(org.opencontainers.image.revision)를 본다. 같으면 아무것도 바꾸지
+#   않고 끝내고, 다르면 실패한다(다른 산출물로 덮지 않는다). 같은 릴리스는 concurrency로 한 번에 하나만 돈다.
+# - pull_request는 Dockerfile·이 워크플로가 바뀔 때 게시 권한 없이 두 플랫폼 빌드와 smoke 검사만 한다.
+# - 게시 권한(packages: write)은 게시 job에만, 기존 GITHUB_TOKEN만 쓴다.
+name: release-image
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '이미 있는 릴리스 태그 (예: v0.0.1)'
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - deploy/docker/app.Dockerfile
+      - .github/workflows/release-image.yml
+
+permissions: {}
+
+concurrency:
+  group: release-image-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || (inputs.tag || github.ref_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/fvoci/groundzero
+  # 이미지 태그가 있는지: `absent` 또는 `present`를 쓰고, 판단할 수 없으면(경로·권한·네트워크) 실패한다. 인자: 이미지
+  # (ghcr.io/소유자/이름), 태그. 필요한 환경: ACTOR, GH_TOKEN(GITHUB_TOKEN, packages: read 이상).
+  # 아직 한 번도 게시하지 않은 패키지는 레지스트리가 404가 아니라 거부로 답하므로 GitHub 패키지 API로 먼저 가린다. 소유자가
+  # 사용자인지 조직인지(fvoci는 사용자) 확인해 맞는 경로(/users·/orgs)를 쓰고, "없음"은 그 경로가 "Package not found."로
+  # 답한 404일 때만 인정한다(다른 404·401·403은 실패, 이미지 없음으로 보지 않는다).
+  TAG_STATE: |
+    set -euo pipefail
+    repo="${1#ghcr.io/}"; ref="$2"; owner="${repo%%/*}"; name="${repo#*/}"
+    api() {
+      curl -sS -w '\n%{http_code}' -H "Authorization: Bearer $GH_TOKEN" \
+        -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "https://api.github.com/$1"
+    }
+    resp=$(api "users/$owner")
+    [ "$(tail -n1 <<<"$resp")" = 200 ] || { echo "::error::owner $owner lookup returned HTTP $(tail -n1 <<<"$resp")" >&2; exit 1; }
+    case "$(sed '$d' <<<"$resp" | jq -r .type)" in
+      User) base=users ;;
+      Organization) base=orgs ;;
+      *) echo "::error::owner $owner has an unexpected type" >&2; exit 1 ;;
+    esac
+    resp=$(api "$base/$owner/packages/container/$name")
+    code=$(tail -n1 <<<"$resp"); message=$(sed '$d' <<<"$resp" | jq -r '.message // empty' 2>/dev/null || true)
+    case "$code" in
+      200) ;;
+      404)
+        if [ "$message" = "Package not found." ]; then echo absent; exit 0; fi
+        echo "::error::package lookup $base/$owner/$name returned 404 ($message), not a missing package" >&2; exit 1 ;;
+      *) echo "::error::package lookup $base/$owner/$name returned HTTP $code ($message)" >&2; exit 1 ;;
+    esac
+    resp=$(curl -sS -w '\n%{http_code}' -u "$ACTOR:$GH_TOKEN" "https://ghcr.io/token?service=ghcr.io&scope=repository:$repo:pull")
+    [ "$(tail -n1 <<<"$resp")" = 200 ] || { echo "::error::registry token returned HTTP $(tail -n1 <<<"$resp")" >&2; exit 1; }
+    token=$(sed '$d' <<<"$resp" | jq -r .token)
+    code=$(curl -sS -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token" \
+      -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+      "https://ghcr.io/v2/$repo/manifests/$ref")
+    case "$code" in
+      404) echo absent ;;
+      200) echo present ;;
+      *) echo "::error::manifest lookup returned HTTP $code" >&2; exit 1 ;;
+    esac
+  # 같은 이미지 태그가 이미 있을 때: 그 이미지의 소스 SHA(revision 라벨)가 기대한 SHA와 같으면 `true`(그대로 두고 끝),
+  # 없으면 `false`(빌드), 다르면 실패(덮어쓰지 않는다). 인자: 이미지, 태그, 기대 SHA. 환경은 TAG_STATE와 같다.
+  EXISTING: |
+    set -euo pipefail
+    image="$1"; ref="$2"; sha="$3"
+    state=$(bash -c "$TAG_STATE" tag-state "$image" "$ref")
+    if [ "$state" = absent ]; then echo false; exit 0; fi
+    revisions=$(docker buildx imagetools inspect "$image:$ref" --format '{{json .Image}}' \
+      | jq -r 'if has("config") then .config.Labels["org.opencontainers.image.revision"] else [.[] | .config.Labels["org.opencontainers.image.revision"]? // empty] | unique | join(",") end')
+    digest=$(docker buildx imagetools inspect "$image:$ref" --format '{{json .Manifest}}' | jq -r .digest)
+    if [ "$revisions" != "$sha" ]; then
+      echo "::error::$image:$ref already exists ($digest) built from '$revisions', not $sha. Not overwriting." >&2
+      exit 1
+    fi
+    echo "- $image:$ref already published from \`$sha\` ($digest). Nothing rebuilt or changed." >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+    echo true
+  # 이미지 smoke 검사(외부 서비스 없이): 플랫폼, 실행 사용자, OCI 라벨(소스 SHA·버전), 웹 자산·HWP 미리보기 WASM·
+  # 제3자 고지 포함. 소스가 버전 주입을 지원하면(inject=true) 빌드 인자와 같은 값이 컴파일 결과(`fvoci-server version`),
+  # 시작 로그(server.starting의 version·source), 버전 응답(/healthz의 build)에 모두 나와야 한다. 서버는 닿지 않는 DB 주소로
+  # 띄운다(연결은 늦게 맺으므로 시작하고, /healthz는 503 본문에 build를 담는다). 인자: 이미지, 플랫폼, 소스 SHA, 버전, inject.
+  SMOKE: |
+    set -euo pipefail
+    ref="$1"; platform="$2"; revision="$3"; version="$4"; inject="$5"
+    fail() { echo "::error::$platform: $*"; exit 1; }
+    actual=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$ref")
+    [ "$actual" = "$platform" ] || fail "platform $actual, expected $platform"
+    label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$1\"}}" "$ref"; }
+    [ "$(label revision)" = "$revision" ] || fail "revision label $(label revision), expected $revision"
+    [ "$(label version)" = "$version" ] || fail "version label $(label version), expected $version"
+    [ "$(docker run --rm --entrypoint id "$ref" -u)" = 10001 ] || fail "not running as uid 10001"
+    docker run --rm --entrypoint sh "$ref" -c '
+      set -e
+      test -x /usr/local/bin/fvoci-server
+      test -s /usr/share/doc/fvoci/THIRD_PARTY_NOTICES.txt
+      test -s /srv/fvoci/web/THIRD_PARTY_NOTICES.txt
+      test -s /srv/fvoci/web/index.html
+      ls /srv/fvoci/web/rhwp/*/ | grep -q .
+      test -d /data/files && test -d /backups' || fail "runtime files missing"
+    want=$(jq -cn --arg v "$version" --arg s "$revision" '{version: $v, source: $s}')
+    if [ "$inject" = true ]; then
+      compiled=$(docker run --rm "$ref" version | jq -c '{version, source}')
+      [ "$compiled" = "$want" ] || fail "compiled build $compiled, expected $want"
+      name="smoke-${platform//\//-}"
+      docker run -d --name "$name" -p 127.0.0.1:18080:8080 \
+        -e DATABASE_URL=postgres://nobody@127.0.0.1:1/none -e FVOCI_ROLE=api "$ref" >/dev/null
+      trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+      served=""
+      for _ in $(seq 1 60); do
+        served=$(curl -s http://127.0.0.1:18080/healthz | jq -c '.build // empty' 2>/dev/null || true)
+        [ -n "$served" ] && break
+        sleep 1
+      done
+      [ "$served" = "$want" ] || fail "/healthz build '$served', expected $want"
+      logged=$(docker logs "$name" 2>&1 | jq -Rc 'fromjson? | select(.event? == "server.starting") | {version, source}' | head -n1)
+      [ "$logged" = "$want" ] || fail "start log '$logged', expected $want"
+      shown="$version (compiled, start log, /healthz and labels agree)"
+    else
+      # 주입 이전 소스(v0.0.1): 앱 안에는 버전이 없다. 라벨만 이 릴리스를 가리킨다.
+      if docker run --rm "$ref" version >/dev/null 2>&1; then fail "source without injection has a version command"; fi
+      shown="not in the app (source predates version injection); labels only"
+    fi
+    echo "smoke ok: $platform, revision $revision, version $shown"
+    echo "- $platform: smoke ok. revision \`$revision\`, version $shown" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+
+jobs:
+  # 태그 확인과 이미 게시된 이미지 확인. 읽기 권한만.
+  resolve:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+      sha: ${{ steps.tag.outputs.sha }}
+      created: ${{ steps.tag.outputs.created }}
+      inject: ${{ steps.tag.outputs.inject }}
+      exists: ${{ steps.existing.outputs.exists }}
+    steps:
+      - id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] \
+            || { echo "::error::'$tag' is not a release tag (vMAJOR.MINOR.PATCH)"; exit 1; }
+          # 원격 태그가 가리키는 커밋(주석 태그면 벗긴 커밋).
+          refs=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/$tag" "refs/tags/$tag^{}")
+          [ -n "$refs" ] || { echo "::error::tag $tag does not exist on the remote"; exit 1; }
+          sha=$(awk -v t="refs/tags/$tag^{}" '$2 == t { print $1 }' <<<"$refs")
+          [ -n "$sha" ] || sha=$(awk '{ print $1; exit }' <<<"$refs")
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$sha" != "$GITHUB_SHA" ]; then
+            echo "::error::tag $tag moved during the run ($sha, event $GITHUB_SHA)"; exit 1
+          fi
+          # main에 들어간 커밋만 릴리스한다(병합 안 된 커밋에 붙인 태그로 게시하지 않게).
+          status=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${sha}...main" --jq .status)
+          case "$status" in ahead|identical) ;; *) echo "::error::$sha is not on main ($status)"; exit 1 ;; esac
+          created=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}" --jq .commit.committer.date)
+          # 그 소스가 버전 주입(D-87)을 지원하는지: Dockerfile이 build arg를 받는가. 지원 이전 태그는 v0.0.1만 허용하고,
+          # 그때는 앱 안 버전 표시 없이 라벨만 붙는다(빌드 인자를 넘겨도 반영되지 않으므로 반영된 것으로 보지 않는다).
+          if gh api "repos/${GITHUB_REPOSITORY}/contents/deploy/docker/app.Dockerfile?ref=${sha}" --jq .content \
+               | base64 -d | grep -q '^ARG FVOCI_RELEASE_VERSION='; then
+            inject=true
+          elif [ "$tag" = v0.0.1 ]; then
+            inject=false
+            echo "::warning::$tag predates version injection: the image gets OCI labels only, the app shows no version"
+          else
+            echo "::error::$tag source does not take FVOCI_RELEASE_VERSION/FVOCI_SOURCE_SHA build args"; exit 1
+          fi
+          {
+            echo "tag=$tag"; echo "version=${tag#v}"; echo "sha=$sha"; echo "created=$created"; echo "inject=$inject"
+          } >> "$GITHUB_OUTPUT"
+          echo "release $tag -> $sha (version injection: $inject)"
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: existing
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          SHA: ${{ steps.tag.outputs.sha }}
+          ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          exists=$(bash -c "$EXISTING" existing "$IMAGE" "$VERSION" "$SHA")
+          echo "exists=$exists" >> "$GITHUB_OUTPUT"
+          echo "$IMAGE:$VERSION already published from this source: $exists"
+
+  # 플랫폼마다 한 번 빌드해 digest로만 올리고(태그 없음), 받아 smoke 검사한다.
+  build:
+    needs: resolve
+    if: needs.resolve.outputs.exists == 'false'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - name: Confirm the checked-out commit
+        env:
+          SHA: ${{ needs.resolve.outputs.sha }}
+        run: test "$(git rev-parse HEAD)" = "$SHA"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: deploy/docker/app.Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          # 버전·SHA는 resolve가 태그에서 한 번 정한 값 하나만 쓴다(빌드 인자·라벨·smoke 기대값 모두). 주입 이전 소스는
+          # 이 인자를 받지 않으므로 smoke가 앱 안에 버전이 없음을 확인한다.
+          build-args: |
+            FVOCI_RELEASE_VERSION=${{ needs.resolve.outputs.version }}
+            FVOCI_SOURCE_SHA=${{ needs.resolve.outputs.sha }}
+          labels: |
+            org.opencontainers.image.title=fvoci
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.resolve.outputs.sha }}
+            org.opencontainers.image.version=${{ needs.resolve.outputs.version }}
+            org.opencontainers.image.created=${{ needs.resolve.outputs.created }}
+          cache-from: type=gha,scope=release-${{ matrix.runner }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.runner }}
+      - id: smoke
+        env:
+          REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          INJECT: ${{ needs.resolve.outputs.inject }}
+        run: |
+          docker pull --platform "$PLATFORM" "$REF"
+          bash -c "$SMOKE" smoke "$REF" "$PLATFORM" "$SHA" "$VERSION" "$INJECT"
+      - name: Keep the digest for the manifest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          mkdir -p digests
+          touch "digests/${DIGEST#sha256:}"
+          echo "- $PLATFORM digest: \`$DIGEST\` (not tagged until both platforms pass)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: digest-${{ matrix.runner }}
+          path: digests/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # 두 플랫폼 digest를 한 manifest로 합쳐 X.Y.Z 태그를 붙인다. 붙이기 직전에 다시 확인해 덮어쓰지 않는다.
+  publish:
+    needs: [resolve, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: digests
+          pattern: digest-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [ "$(ls digests | wc -l)" -eq 2 ] || { echo "::error::expected two platform digests"; ls digests; exit 1; }
+          # 붙이기 직전에 다시: 확실히 없을 때만 붙인다(조회 실패는 멈춤, 덮어쓰지 않는다).
+          state=$(bash -c "$TAG_STATE" tag-state "$IMAGE" "$VERSION")
+          [ "$state" = absent ] || { echo "::error::$IMAGE:$VERSION appeared during the run. Not overwriting."; exit 1; }
+          docker buildx imagetools create -t "$IMAGE:$VERSION" \
+            --annotation "index:org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --annotation "index:org.opencontainers.image.revision=$SHA" \
+            --annotation "index:org.opencontainers.image.version=$VERSION" \
+            $(printf "$IMAGE@sha256:%s " $(ls digests))
+          inspect=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}')
+          digest=$(jq -r .digest <<<"$inspect")
+          platforms=$(jq -r '[.manifests[] | select(.platform.os != "unknown") | "\(.platform.os)/\(.platform.architecture)"] | join(", ")' <<<"$inspect")
+          {
+            echo "### $IMAGE:$VERSION"
+            echo "- tag: \`$TAG\` -> source \`$SHA\`"
+            echo "- platforms: $platforms"
+            echo "- manifest digest: \`$digest\`"
+            echo "- pull: \`docker pull $IMAGE:$VERSION\` or \`docker pull $IMAGE@$digest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # PR: 게시 권한 없이 두 플랫폼 빌드와 smoke 검사만.
+  pr-build:
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: deploy/docker/app.Dockerfile
+          platforms: ${{ matrix.platform }}
+          load: true
+          push: false
+          tags: groundzero:pr
+          # 주입 경로를 같은 방식으로 확인하는 시험 값(게시하지 않음). 0.0.0은 릴리스 태그로 쓰지 않는다.
+          build-args: |
+            FVOCI_RELEASE_VERSION=0.0.0
+            FVOCI_SOURCE_SHA=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=0.0.0
+          cache-from: type=gha,scope=release-${{ matrix.runner }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.runner }}
+      - name: Smoke (not published)
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          SHA: ${{ github.sha }}
+        run: bash -c "$SMOKE" smoke groundzero:pr "$PLATFORM" "$SHA" 0.0.0 true
+
+  # PR: 기존 이미지 확인의 분기를 실제 GitHub·GHCR 응답으로 검증한다(게시 권한 없음). 이미 있는 공개 패키지
+  # groundzero-ci-base(사용자 fvoci 소유), 한 번도 게시하지 않은 패키지, 없는 소유자, 토큰 없는 호출을 쓴다.
+  guard-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    env:
+      ACTOR: ${{ github.actor }}
+      GH_TOKEN: ${{ github.token }}
+      BASE: ghcr.io/fvoci/groundzero-ci-base
+    steps:
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Existing-image branches
+        run: |
+          set -euo pipefail
+          expect() { [ "$2" = "$3" ] || { echo "::error::$1: got '$2', expected '$3'"; exit 1; }; echo "ok: $1 -> $2"; }
+          must_fail() {
+            local what="$1"; shift
+            if out=$("$@" 2>&1); then echo "::error::$what should fail but gave '$out'"; exit 1; fi
+            echo "ok: $what fails: $(tail -n1 <<<"$out")"
+          }
+          expect "never-published package" "$(bash -c "$TAG_STATE" s ghcr.io/fvoci/groundzero-guard-check-missing 1.0.0)" absent
+          expect "missing tag of an existing package" "$(bash -c "$TAG_STATE" s "$BASE" guard-check-missing-tag)" absent
+          # 있는 태그 하나(베이스 이미지는 커밋 SHA로 태그를 붙인다)와 그 이미지의 revision 라벨.
+          token=$(curl -fsS -u "$ACTOR:$GH_TOKEN" \
+            "https://ghcr.io/token?service=ghcr.io&scope=repository:${BASE#ghcr.io/}:pull" | jq -r .token)
+          tag=$(curl -fsS -H "Authorization: Bearer $token" "https://ghcr.io/v2/${BASE#ghcr.io/}/tags/list" \
+            | jq -r '.tags[]' | grep -E '^[0-9a-f]{40}$' | head -n1)
+          [ -n "$tag" ] || { echo "::error::no commit tag found on $BASE"; exit 1; }
+          revision=$(docker buildx imagetools inspect "$BASE:$tag" --format '{{json .Image}}' \
+            | jq -r 'if has("config") then .config.Labels["org.opencontainers.image.revision"] else [.[] | .config.Labels["org.opencontainers.image.revision"]? // empty] | unique | join(",") end')
+          echo "existing tag $BASE:$tag, revision $revision"
+          expect "existing tag" "$(bash -c "$TAG_STATE" s "$BASE" "$tag")" present
+          expect "existing tag, same source -> keep" "$(bash -c "$EXISTING" e "$BASE" "$tag" "$revision")" true
+          must_fail "existing tag, other source -> refuse" bash -c "$EXISTING" e "$BASE" "$tag" 0000000000000000000000000000000000000000
+          must_fail "unknown owner" bash -c "$TAG_STATE" s ghcr.io/fvoci-no-such-owner-7f3a9c/x 1.0.0
+          must_fail "no token" env GH_TOKEN= bash -c "$TAG_STATE" s "$BASE" "$tag"
+          echo "- existing-image branches checked against \`$BASE:$tag\`" >> "$GITHUB_STEP_SUMMARY"
