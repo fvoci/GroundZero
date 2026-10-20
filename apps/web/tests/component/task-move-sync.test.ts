@@ -445,6 +445,43 @@ describe('kanban save states', () => {
     expect(liveText()).toContain('새 업무: 저장을 확인했습니다(진행 중).');
   });
 
+  it('a list read started before a quick add cannot remove the new card while it is saving', async () => {
+    // 다른 카드를 옮긴 뒤의 목록 읽기가 늦어지는 사이 새 카드를 다른 열에 만든다. 그 늦은 목록에는 새 카드가 없다.
+    const slow = deferred<TaskView[]>();
+    let call = 0;
+    vi.spyOn(api, 'tasks').mockImplementation(() => {
+      call += 1;
+      if (call === 1) return Promise.resolve(start);
+      if (call === 2) return slow.promise;
+      if (call === 3) return Promise.reject(new NetworkError('offline'));
+      return Promise.resolve([...start, task('n', '새 업무', 'in_progress', 2)]);
+    });
+    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
+    vi.spyOn(api, 'moveTask')
+      .mockResolvedValueOnce({ ...task('b', '문서 검토', 'in_progress', 2), checklist: [] })
+      .mockReturnValueOnce(save.promise);
+    vi.spyOn(api, 'createTask').mockResolvedValue({ ...task('n', '새 업무'), checklist: [] });
+    await mount();
+    await moveRight('b');
+    await flush();
+    const lane = screen.getByRole('region', { name: /진행 중/ });
+    await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
+    const input = within(lane).getByRole('textbox');
+    await fireEvent.input(input, { target: { value: '새 업무' } });
+    await fireEvent.submit(input.closest('form') ?? input);
+    await flush();
+    expect(saveState('n')).toBe('saving');
+    slow.resolve([task('a', 'API 연결'), task('b', '문서 검토', 'in_progress', 2)]);
+    await flush();
+    expect(laneOf('n')).toBe('in_progress');
+    save.reject(new NetworkError('reset'));
+    await flush();
+    expect(saveState('n')).toBe('unknown');
+    const box = card('n').closest<HTMLElement>('[data-board-card]');
+    if (box === null) throw new Error('box');
+    expect(within(box).getByRole('button', { name: '다시 확인' })).toBeTruthy();
+  });
+
   it('blocks a second move of the same card but not of another card', async () => {
     lists(start);
     const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();

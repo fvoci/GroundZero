@@ -401,7 +401,11 @@
     }
     // 방금 만든 업무는 아직 목록에 없다. 만든 자리("할 일" 끝)에 먼저 넣어 이동 상태(저장 중·확인 못 함·다시 확인)를 그 카드에
     // 보이게 하고, 알림의 제목과 이동 전 자리를 넘긴다(전에는 목록을 다시 읽지 못하면 카드도 다시 확인 단추도 없었다).
-    if (!tasks.some((t) => t.id === created.id)) tasks = [...tasks, created];
+    // 만들기 전에 시작한 목록 읽기는 이 카드가 없는 목록이라, 늦게 와서 카드를 지우지 않게 무효로 한다(이후 읽기만 따른다).
+    if (!tasks.some((t) => t.id === created.id)) {
+      ++reloadSeq;
+      tasks = [...tasks, created];
+    }
     await commitMove(created.id, { status: lane, beforeId: null }, 'menu', created.title, {
       status: created.status,
       nextId: null,
