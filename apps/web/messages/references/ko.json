@@ -25,5 +25,10 @@
   "references_notification_expiry": "{target}: {date}에 수강권이 만료되거나 목표 완료일입니다",
   "references_notification_review_subject": "복습",
   "references_notification_review": "{target}: {subject}의 복습일이 {date}입니다",
-  "references_notification_deadline": "{target}: {subject}의 마감이 {date}입니다"
+  "references_notification_deadline": "{target}: {subject}의 마감이 {date}입니다",
+  "references_focus_found": "이 문서에서 가리키는 곳 {count}곳 가운데 {current}번째입니다.",
+  "references_focus_missing": "가리키던 참조를 이 문서에서 찾지 못했습니다. 그사이 지워졌거나 바뀌었을 수 있어 문서 처음을 보여 줍니다.",
+  "references_focus_previous": "이전 참조",
+  "references_focus_next": "다음 참조",
+  "references_focus_close": "닫기"
 }

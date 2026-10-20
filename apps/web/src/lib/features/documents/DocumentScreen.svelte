@@ -9,6 +9,8 @@
   import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import ChildDocuments from './ChildDocuments.svelte';
+  import { parseReferenceHash } from '$lib/features/references/focus';
+  import ReferenceFocus from '$lib/features/references/ReferenceFocus.svelte';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { referenceHref } from '$lib/features/references/context';
   import { badgeColor, workspaceLabel } from '$lib/features/workspaces/badge';
@@ -144,6 +146,9 @@
       {/if}
     </div>
   </div>
+  {#key doc.id}
+    <ReferenceFocus root={bodyArea} target={parseReferenceHash(router.hash)} />
+  {/key}
   <!-- 넓은 화면에서는 본문 옆에 목차(Outline처럼 읽기 위치를 잡기 쉽게). 좁은 화면에서는 본문만. -->
   <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-6">
     <div bind:this={bodyArea} class="min-w-0">

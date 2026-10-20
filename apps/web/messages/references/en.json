@@ -25,5 +25,10 @@
   "references_notification_expiry": "{target}: course access expires or the target completion date is {date}",
   "references_notification_review_subject": "Review",
   "references_notification_review": "{target}: review of {subject} is due {date}",
-  "references_notification_deadline": "{target}: {subject} is due {date}"
+  "references_notification_deadline": "{target}: {subject} is due {date}",
+  "references_focus_found": "Reference {current} of {count} in this document.",
+  "references_focus_missing": "Couldn't find the reference in this document. It may have been removed or changed, so the document is shown from the top.",
+  "references_focus_previous": "Previous reference",
+  "references_focus_next": "Next reference",
+  "references_focus_close": "Close"
 }

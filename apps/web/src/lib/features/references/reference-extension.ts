@@ -101,6 +101,9 @@ export const Reference = Node.create<ReferenceOptions>({
         dom.textContent = m.references_hidden();
         return { dom };
       }
+      // 백링크로 들어왔을 때 이 참조를 찾을 수 있게 대상을 적어 둔다(본문 저장 형식과 같은 값).
+      dom.dataset.kind = kind;
+      dom.dataset.id = rawId;
       void resolveReference(kind, rawId).then((target) => {
         // 볼 수 없는 대상의 문구는 화면 언어로(내보내기 파일은 resolver의 고정 문구를 쓴다).
         dom.textContent =

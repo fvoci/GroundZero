@@ -7,6 +7,8 @@
   import { m } from '$lib/paraglide/messages.js';
   import { pathFor, router } from '$lib/router.svelte';
 
+  import { referenceHash } from './focus';
+
   interface Props {
     /** 대상 종류와 id. */
     kind: 'document' | 'item' | 'task';
@@ -55,7 +57,7 @@
   {:else}
     <ul class="flex flex-col gap-1" data-testid="backlinks">
       {#each links as link (link.id)}
-        {@const path = pathFor(link, memberOf)}
+        {@const path = `${pathFor(link, memberOf)}${referenceHash({ kind, id })}`}
         <li>
           <a
             class="flex items-baseline gap-2 rounded px-2 py-1 text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
