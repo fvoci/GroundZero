@@ -177,6 +177,10 @@ describe('gantt reschedule', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).toBeNull();
     });
+    // 창이 닫히면 그 업무의 간트 줄로 초점이 돌아온다.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(rowButton(gantt, 'a'));
+    });
   });
 
   it('saves nothing when cancelled and reads the list again', async () => {

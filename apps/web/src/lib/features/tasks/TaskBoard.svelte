@@ -598,18 +598,15 @@
       ganttAsk = { task: t, input, baseVersion, proposals: found, retried: true, done };
       return 'asked';
     }
-    notifyDone(
+    const savedText =
       shifts.length > 0
         ? m.tasks_gantt_saved_shifts({ title: t.title, count: shifts.length })
         : m.tasks_gantt_saved({
             title: t.title,
             dates: datesText(input.start_date, input.due_date),
-          }),
-    );
-    status = m.tasks_gantt_saved({
-      title: t.title,
-      dates: datesText(input.start_date, input.due_date),
-    });
+          });
+    notifyDone(savedText);
+    status = savedText;
     await reload();
     return 'saved';
   }
@@ -636,6 +633,8 @@
       if (outcome !== 'asked') {
         ganttAsk = undefined;
         a.done();
+        // 창이 닫히면 그 업무의 간트 줄로 초점을 돌린다(알림 영역으로 가지 않게).
+        void focusCard(a.task.id);
       }
     }
   }
@@ -646,7 +645,7 @@
     ganttAsk = undefined;
     status = m.tasks_gantt_cancelled({ title: a.task.title });
     a.done();
-    void reload();
+    void reload().then(() => focusCard(a.task.id));
   }
   async function quickAdd(lane: TaskStatus, requestId: string, title: string): Promise<void> {
     const itemId = item.id;

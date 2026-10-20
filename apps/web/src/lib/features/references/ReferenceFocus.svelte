@@ -11,8 +11,8 @@
   import { referenceNodes } from './focus';
 
   interface Props {
-    /** 본문 영역. */
-    root: HTMLElement | undefined;
+    /** 본문 영역(`bind:this`라 그리기 전·바뀌는 사이에는 null일 수 있다). */
+    root: HTMLElement | null | undefined;
     target: ReferenceTarget | undefined;
     /** 찾는 시간 한도(ms). */
     wait?: number;
@@ -41,7 +41,7 @@
     closed = false;
     found = [];
     index = 0;
-    if (el === undefined || t === undefined) {
+    if (el === undefined || el === null || t === undefined) {
       phase = 'idle';
       return;
     }

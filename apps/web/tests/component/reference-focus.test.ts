@@ -120,3 +120,14 @@ describe('router keeps the # apart from the path', () => {
     expect(router.path).toBe('/w/ws-1/documents/log');
   });
 });
+
+describe('reference focus before the body exists', () => {
+  it('waits without failing while the body area is not drawn yet (null)', async () => {
+    await setLocale('ko', { reload: false });
+    const view = render(ReferenceFocus, {
+      props: { root: null, target: { kind: 'item', id: ITEM } },
+    });
+    expect(screen.queryByRole('status')).toBeNull();
+    view.unmount();
+  });
+});
