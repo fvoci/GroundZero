@@ -3,7 +3,8 @@
 //! 선행 관계는 같은 항목 안의 "끝나야 시작" 하나다. 날짜를 바꾸기 전에 미리보기로 영향받는 후속 업무와 제안
 //! 날짜를 계산해 보여 주고, 사용자가 승인한 목록만 업무 고치기(`successor_shifts`)와 같은 트랜잭션에서 옮긴다.
 //! 제안은 선행이 바뀐 만큼만 뒤로 미는 최소 이동이며 기간(시작~마감)을 유지한다. 앞당긴 경우에는 제안하지 않는다.
-//! 처리는 `migrations/0012_task_schedule.sql`의 정의자 함수가 한다.
+//! 초기 정의는 `migrations/0012_task_schedule.sql`, 앱 생성 id를 받는 D-88 전환은
+//! `migrations/0073_app_ids_tasks.sql`에 있다.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 

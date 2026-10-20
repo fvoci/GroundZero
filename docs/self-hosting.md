@@ -4,6 +4,9 @@
 
 한 대의 서버에 Docker Compose로 fvoci를 설치하고 운영하는 방법이다. 구성 파일은 `deploy/compose.selfhost.yaml`이고 비밀 값은 운영자의 `.env`에만 둔다. 개발·테스트 환경은 `docs/development.md`를 본다.
 
+이 문서의 Compose는 자체 PostgreSQL을 함께 띄운다. 기존 셀프호스트 Supabase의 PostgreSQL을 쓰려면
+[Supabase 연결 안내](self-hosting-supabase.md)를 따른다. 두 구성 모두 로그인은 OIDC(Keycloak 등)를 사용한다.
+
 ## 1. 준비
 
 - Docker Engine과 Compose v2(예: Docker 29, Compose 2.40 이상).
@@ -27,13 +30,43 @@ cd fvoci && cp deploy/selfhost.env.example .env && chmod 600 .env
 docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d --build --wait
 ```
 
-처음 실행하면 이미지를 만들고(수 분. HWP·HWPX 미리보기용 rhwp WASM을 고정한 상위 커밋에서 함께 빌드하므로 처음에는 10분 안팎과 Docker 디스크 수 GB가 더 들고, 입력이 같으면 다음부터는 캐시를 쓴다), PostgreSQL과 Meilisearch가 준비되면 역할·스키마 준비(`db bootstrap`)와 마이그레이션(`db migrate`)이 한 번씩 돌고 앱이 뜬다. 상태 확인:
+처음 실행하면 이미지를 만들고(수 분. HWP·HWPX 미리보기용 rhwp WASM을 고정한 상위 커밋에서 함께 빌드하므로 처음에는 10분 안팎과 Docker 디스크 수 GB가 더 들고, 입력이 같으면 다음부터는 캐시를 쓴다), PostgreSQL과 Meilisearch가 준비되면 `bootstrap` → `migrate` → `app` 순서로 실행한다. DB 준비와 마이그레이션은 이 명령들이 처리하므로 설치자가 별도 SQL이나 RLS 설정을 실행할 필요가 없다. 앞 단계가 실패하면 앱은 시작하지 않는다. 상태 확인:
 
 ```bash
-docker compose --env-file .env -f deploy/compose.selfhost.yaml ps
+docker compose --env-file .env -f deploy/compose.selfhost.yaml ps --all
 ```
 
+`bootstrap`·`migrate`의 `Exited (0)`은 정상 완료다.
+
 앱이 `healthy`이면 역방향 프록시가 `FVOCI_LISTEN`(기본 `127.0.0.1:8080`)으로 보내도록 설정하고 `FVOCI_PUBLIC_URL`을 연다. 처음 로그인한 사람은 워크스페이스를 직접 만들거나 초대를 받는다(첫 로그인 사용자를 자동으로 관리자로 만들지 않는다, X-10). 운영자가 `.env`의 `FVOCI_INITIAL_ADMIN_SUBJECT`에 관리자로 정한 사람의 OIDC subject(Keycloak은 사용자 화면의 ID)를 넣으면, 그 사람이 처음 로그인할 때 `FVOCI_INITIAL_WORKSPACE` 이름(기본 `fvoci`)의 첫 워크스페이스가 만들어지고 그 사람이 소유자가 된다(D-51, 한 번만).
+
+<a id="db-setup"></a>
+
+### DB 준비·마이그레이션에서 멈췄을 때
+
+먼저 위 `ps --all`로 멈춘 단계를 찾고 로그를 확인한다. Keycloak 프로필이나 별도 Compose 파일을 썼다면 처음 실행할 때와 같은 옵션을 함께 쓴다.
+
+```bash
+docker compose --env-file .env -f deploy/compose.selfhost.yaml logs --since 10m bootstrap migrate app
+```
+
+| 멈춘 단계                                 | 확인할 것과 다음 조치                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bootstrap`                               | 기본 Compose에서는 `.env`의 `POSTGRES_PASSWORD`·`FVOCI_DB_MIGRATOR_PASSWORD`·`FVOCI_DB_APP_PASSWORD`를 확인한다. Compose가 이 값으로 DB 연결 주소를 만든다. 바이너리나 Supabase 구성은 `DATABASE_ADMIN_URL`과 두 `FVOCI_DB_*_PASSWORD`가 명령의 환경 변수로 전달됐는지 확인한다. 기존 설치는 그 설치에서 쓰던 값을 유지한다. |
+| `migrate` 연결·설정 오류                  | 기본 Compose는 같은 `.env`의 `FVOCI_DB_MIGRATOR_PASSWORD`를 사용한다. 바이너리나 Supabase 구성은 `DATABASE_MIGRATION_URL`이 같은 대상 DB를 가리키고 명령에 전달됐는지 확인한다. 설정을 바로잡은 뒤 처음 사용한 설치 명령을 다시 실행한다.                                                                                    |
+| `migrate` SQL 실행 오류                   | DB·볼륨을 보존하고 로그에 나온 마이그레이션 번호·오류 종류와 사용한 릴리스를 유지보수 담당자에게 전달한다. SQL이나 적용 이력을 수동으로 고쳐서 통과시키지 않는다.                                                                                                                                                            |
+| `migrate`의 파일 변경·누락·부분 적용 오류 | 실행 중인 릴리스와 DB를 준비한 릴리스가 맞는지 확인하고 여기서 멈춘다. DB·볼륨·기존 릴리스와 백업을 보존한다. 적용 이력을 지우거나 고쳐서 통과시키지 않는다. 같은 릴리스의 파일을 확인한 뒤 해결되지 않으면 오류 종류와 릴리스 정보를 전달한다.                                                                              |
+| `app`                                     | `bootstrap`·`migrate`의 정상 완료를 먼저 확인한다. 이후 앱 로그가 지목한 `FVOCI_PUBLIC_URL`·`FVOCI_OIDC_*` 등 설정을 확인한다. 바이너리나 Supabase 구성에서는 `DATABASE_URL`도 명령에 전달해야 한다.                                                                                                                         |
+
+바이너리는 `.env` 파일을 자동으로 읽지 않는다. 배포 도구의 환경 변수·환경 파일 설정으로 각 명령에 값을 전달한다.
+설정 오류를 고친 뒤에는 위 Compose `up` 명령(직접 실행하는 구성은 `db bootstrap` → `db migrate` → 서버 시작)을 다시 따른다.
+기존 역할이나 권한에 대한 오류라면 내부 SQL을 직접 바꾸지 말고 오류 종류와 릴리스 정보를 유지보수 담당자에게 전달한다.
+문제 보고에 `.env`나 연결 URL·비밀번호를 붙이지 않는다.
+
+**D-88 이전 개발 설치:** UUIDv7 생성을 DB에서 앱으로 옮기며 배포 전에 일부 초기 마이그레이션을 고쳤다.
+이전 DB에서 생기는 checksum 불일치는 자체 PostgreSQL과 Supabase에 공통이다. 기존 데이터·볼륨을 보존한 채 중단한다.
+이전 판의 백업은 같은 마이그레이션 판에만 복구할 수 있으므로 새 판에 바로 복구할 수 없다.
+새 설치가 필요한 경우에도 기존 데이터의 보존·이전 방법과 삭제 여부를 먼저 별도로 결정한다.
 
 ## 3. 무엇이 어디에 저장되나
 
@@ -94,13 +127,16 @@ docker compose --env-file .env -f deploy/compose.selfhost.yaml run --rm --no-dep
 
 ## 6. 올리기(업그레이드)
 
+먼저 현재 릴리스에서 백업을 만든다(5절). 새 마이그레이션은 앱이 뜨기 전에 `migrate`가 적용한다.
+이전 개발 설치라면 위 [DB 준비 안내의 D-88 주의사항](#db-setup)을 먼저 확인한다.
+
+PostgreSQL 이미지가 Alpine에서 Debian(`postgres:18.3-bookworm`, D-85)으로 바뀐 판으로 올릴 때는 아래 명령으로 바로 올리지 않는다. 데이터 파일 소유자와 정렬 라이브러리가 달라 기존 `pgdata`를 그대로 쓸 수 없으므로, 이전 판에서 백업을 만들고(5절) 새 판을 새로 설치한 뒤 복구한다.
+
 ```bash
 git pull && docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d --build --wait
 ```
 
-PostgreSQL 이미지가 Alpine에서 Debian(`postgres:18.3-bookworm`, D-85)으로 바뀐 판으로 올릴 때는 위 명령으로 바로 올리지 않는다. 데이터 파일 소유자와 정렬 라이브러리가 달라 기존 `pgdata`를 그대로 쓸 수 없으므로, 이전 판에서 백업을 만들고(5절) 새 판을 새로 설치한 뒤 복구한다.
-
-새 마이그레이션은 앱이 뜨기 전에 `migrate`가 적용한다. 올리기 전에 백업을 만든다. 되돌릴 때는 이전 릴리스로 새로 설치한 뒤 그 릴리스에서 만든 백업을 복구한다(마이그레이션은 되돌리지 않는다).
+실패하면 [DB 준비·마이그레이션 안내](#db-setup)에서 멈춘 단계를 확인한다. 되돌릴 때는 이전 릴리스로 새로 설치한 뒤 그 릴리스에서 만든 백업을 복구한다(마이그레이션은 되돌리지 않는다).
 
 ## 7. 캐시와 CDN(D-77)
 

@@ -3,7 +3,8 @@
 //! 본문의 참조 노드는 종류와 내부 id만 가진다. 표시 이름은 여기서 권한을 확인해 만든다.
 //! 볼 수 없는 대상과 없는 대상은 같은 모양(`visible: false`)으로 돌려준다(존재 여부를 드러내지 않는다).
 //! 링크·언급 기록과 알림 생성은 저장 트랜잭션 안의 DB 함수 `app_record_document_references`가 한다
-//! (`migrations/0008_references.sql`). 언급은 접근 권한을 주지 않는다.
+//! (초기 정의: `migrations/0008_references.sql`, 앱 생성 id를 받는 D-88 전환:
+//! `migrations/0071_app_ids_documents.sql`). 언급은 접근 권한을 주지 않는다.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};

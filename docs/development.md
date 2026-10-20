@@ -49,7 +49,7 @@
 
 ## 6. 개발·통합 테스트 환경: Docker Compose
 
-- PostgreSQL·Meilisearch·격리된 Keycloak은 컨테이너로 실행한다. 테스트용 S3 호환 저장소는 SeaweedFS 고정 버전을 업로드 흐름 구현 시 추가한다(D-61, O-31). 운영 서비스나 개인 개발 DB를 테스트에 사용하지 않는다.
+- PostgreSQL·Meilisearch·격리된 Keycloak은 컨테이너로 실행한다. 테스트용 S3 호환 저장소는 SeaweedFS 고정 버전을 사용한다(D-61, O-31). 운영 서비스나 개인 개발 DB를 테스트에 사용하지 않는다.
 - 통합 테스트는 격리된 Keycloak으로 로그인·세션 만료·로그아웃·권한 거부를 검증한다(결정 D-45). Keycloak 전용 API에 의존하지 않고 표준 OIDC만 사용한다.
 - Dockerfile·Compose·의존성 버전을 저장소에서 관리하고, 로컬과 CI가 동일한 이미지와 검사 명령을 사용하게 한다.
 - 빌드용 이미지와 제품 실행 이미지를 분리한다. 같은 입력으로 만든 이미지는 재사용하며 워커별 중복 빌드를 피한다.
@@ -248,6 +248,14 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 - **제품 검사**: `.github/workflows/ci.yml`. `check`와 `integration` 두 job이 같은 `ghcr.io/fvoci/groundzero-ci-base@<digest>` 컨테이너에서 돈다. digest는 저장소 변수 `CI_BASE_IMAGE_DIGEST`이며 base-image 워크플로가 게시한 값을 옮겨 적는다. 변수가 비면 job이 시작 단계에서 실패하며 성공으로 간주하지 않는다. 호출하는 명령은 `pnpm install --frozen-lockfile`, `cargo xtask check`, `cargo xtask test --external-services`뿐이다.
 - **서비스 격리**: GitHub의 컨테이너 job 안에서는 Compose를 띄울 수 없어 PostgreSQL·Meilisearch를 job `services`로 둔다. 자격 증명은 `compose.test.yaml`과 같은 테스트 값이며, `cargo xtask test --external-services`가 `DATABASE_URL`이 없으면 실패한다. 로컬은 `cargo xtask test`(Compose)로 같은 테스트를 돌린다.
 - **OIDC 로그인 테스트(`oidc` job)**: 컨테이너 job에서는 Compose를 띄울 수 없으므로 GitHub 호스트 러너(`ubuntu-24.04`)에서 `compose.test.yaml`의 `oidc` 프로필(PostgreSQL·Meilisearch·Keycloak)을 띄운다. 테스트는 다른 job과 같은 베이스 이미지 digest 안에서 같은 진입점 `cargo xtask test --external-services --oidc`로 돈다. 테스트 컨테이너는 Compose 네트워크에 붙고 체크아웃만 마운트한다(Docker 소켓은 넘기지 않음). 프로젝트명 `fvoci-ci-<run_id>-<run_attempt>`로 실행마다 컨테이너·네트워크·볼륨을 분리하고, PostgreSQL은 tmpfs라 매번 빈 DB에서 시작하며, 결과와 상관없이 `down --volumes`로 지운다.
+- **셀프호스트 Supabase 테스트(`supabase` job, D-88): D-64의 이미지 계약 예외.**
+  - **근거**: `cargo xtask test --supabase`는 xtask가 공식 Supabase 구성을 받아 호스트 Docker로 Compose를 띄운다. 기동에 실패하면
+    정리하기 전에 컨테이너 상태·healthcheck 기록·로그를 그 Docker에서 읽는다. base 이미지에는 Docker CLI가 없고 Docker 소켓도
+    넘기지 않는다(`oidc` job과 같은 원칙). 그래서 이 job만 호스트 러너(`ubuntu-24.04`)에서 xtask를 실행한다.
+  - **범위**
+    - 툴체인은 base 이미지와 같은 판을 `rust-toolchain.toml`(1.99.0)이 고정한다.
+    - 다른 job의 image-digest 계약은 그대로다.
+    - 제품 이미지·시크릿은 쓰지 않는다. 서비스 이미지는 `deploy/supabase/compose.test.yaml`에서 digest로 고정한다.
 - **OIDC 검증 기록 (2026-10-17, `feat/first-flow` 작업 트리)**:
 
   | 구분                      | 방법                                                                                 | 결과                                                                                                                                                   |
@@ -1691,6 +1699,7 @@ Meilisearch 데이터를 지워 작업 번호가 처음부터 다시 매겨지�
 
 ### 85.1 id는 앱이 만든다
 
+- 호출부를 추가·정리할 때의 인자 계약과 오류 처리 구분은 [Rust→SQL UUID 인자 계약](sql-id-contract.md)을 따른다.
 - **규칙**: 새 행의 id(UUIDv7)는 서버가 `fvoci_server::db::new_ids(n)`로 만들어, 행을 만드는 정의자 함수의 마지막 인자
   `p_ids uuid[]`로 넘긴다. `new_ids`는 `Uuid::now_v7()`을 쓰고, 한 프로세스에서 만든 값은 만든 순서대로 커진다.
   - 함수는 `app_id(p_ids, k)`로 차례로 꺼내 쓴다. 실패는 두 가지로 나눈다.
@@ -1737,6 +1746,60 @@ Meilisearch 데이터를 지워 작업 번호가 처음부터 다시 매겨지�
 | PG18 카탈로그 비교(main 경로 대 새 경로, 빈 DB)               | 차이는 id 기본값 27개 삭제·UUIDv7 CHECK 27개·제목 감사 고유 색인·트리거 삭제·새 도우미 함수뿐. 정책·RLS·표 권한·같은 이름 함수의 SECURITY DEFINER·search_path·실행 권한·소유자 같음   |
 | 서버·테스트의 함수 호출 238개 인자 수                         | DB 서명과 모두 맞음                                                                                                                                                                   |
 | 새 개발 준비 SQL(빈 PG18 DB, 격리 컨테이너)                   | PASS(항목 5·업무 7·기록 18, 감사 79건 모두 UUIDv7). 이 체크아웃·다른 체크아웃의 개발 DB에는 실행하지 않음                                                                             |
+
+### 85.3 셀프호스트 Supabase 시험 구성 (PR-C)
+
+- `cargo xtask test --supabase [--session-pooler] [--oidc]`
+  - 공식 셀프호스트 구성(`supabase/supabase@bc27d26`의 `docker/`)을 `target/supabase/<rev>/`에 얕게 받는다. 저장소에는 넣지 않는다.
+  - `deploy/supabase/compose.test.yaml`을 겹쳐 db·rest·supavisor만 띄운다. 이미지는 digest로 고정하고, 고정 컨테이너 이름을 지우고,
+    `127.0.0.1` 빈 포트와 tmpfs 데이터를 쓴다. Compose 프로젝트는 `fvoci-<체크아웃>-<해시>-supabase`다.
+  - 검색·S3(·Keycloak)은 시험 Compose에서 PostgreSQL만 빼고 띄운다. 값은 `deploy/supabase/test.env`의 시험 값이다.
+  - 관리자는 Supabase의 `postgres`(superuser 아님)다. `cargo xtask down`이 이 프로젝트도 지운다.
+- 빼는 서비스와 이유는 `docs/self-hosting-supabase.md` 6절에 있다. 운영자 안내도 그 문서에 있다.
+- CI `supabase` job이 같은 명령(`--session-pooler --oidc`)을 러너에서 돌린다. Supabase 서비스를 호스트 포트로 열므로 base 이미지
+  컨테이너 안에서 돌리지 않는다.
+- Supabase에서만 도는 시험(`supabase_*`, 다른 구성에서는 NOT RUN)
+  - 관리자가 PG17의 비-superuser `postgres`인지
+  - Supabase 역할이 fvoci 스키마·표·함수에 권한이 없는지, GroundZero 역할이 그 멤버가 아닌지
+  - RLS가 `auth.*`를 쓰지 않는지
+  - PostgREST가 `fvoci` 프로필을 거부하는지
+- 두 구성 공통 시험
+  - `db_context`: 연결 재사용 뒤 사용자 문맥이 남지 않는지
+  - `backup`: 저장소 잠금이 같은 세션에서 풀리는지, 복구 뒤 RLS가 그대로인지
+
+### 85.4 검증 (PR-C, 2026-10-20~21)
+
+대상 커밋은 이 저장소의 커밋이다. `7e52400` 뒤의 커밋은 문서만 바꾼다. 공식 Supabase 구성은 모두 `bc27d26`이다.
+
+| 대상 커밋                                      | 검사                                                                                | 결과                                                                                                                                                                                                                          |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `2bf121f`(로컬 macOS)                          | `cargo xtask test --supabase --session-pooler --oidc`                               | 직접 253·session 253 PASS. 첫 시도는 session 2건 FAIL(`XX000`): 시험 env의 풀 크기 20이 동시 연결보다 작음. 64로 늘린 뒤 통과                                                                                                 |
+| `cbd1e44`(로컬, 서버 코드는 `36f7e15`와 같음)  | 브라우저: 서버·웹을 Supabase DB와 시험 Keycloak으로, 별도 프로젝트·포트 18080/15173 | 아래 순서로 진행했고 마지막에 모두 그대로였다. PG 17.6, 만든 행 id 13개 모두 UUIDv7, 제목 변경 감사 `revision: 2`                                                                                                             |
+| `799389d`(CI 39435831294)                      | `supabase` job                                                                      | FAIL: supavisor가 시작 스크립트의 `ulimit -n 100000`에서 실패(러너의 열린 파일 한도 부족)해 재시작 반복. 정리 전 진단을 넣은 `8b59d3a`에서 로그로 확인했다. `--ulimit nofile=65536`으로 재현(exit 1), 100000으로 해결(exit 0) |
+| `6f1e408`(CI 39440580620)                      | 전체 CI(`supabase` job 포함)                                                        | 모두 PASS. `supabase` job은 직접 255·session 255 PASS, NOT RUN 0                                                                                                                                                              |
+| `6f1e408`(로컬 macOS)                          | `cargo xtask test --supabase --session-pooler --oidc`                               | 직접 255·session 255 PASS                                                                                                                                                                                                     |
+| `7e52400`(로컬 macOS)                          | `cargo xtask test --supabase --session-pooler --oidc`                               | 직접 256·session 256 PASS, NOT RUN 0(관리자 멤버십 보존·연결이 끊긴 뒤 새 연결로 되돌리기 테스트 추가)                                                                                                                        |
+| `7e52400`(로컬, 버리는 Supabase·PG18 컨테이너) | bootstrap·복구 거부 경로, 관리자 멤버십 보존                                        | 아래 표                                                                                                                                                                                                                       |
+| —                                              | Supabase Cloud, transaction 모드(6543), Supabase와 함께 쓰는 앱 Compose 구성        | NOT RUN(범위 밖·제공하지 않음)                                                                                                                                                                                                |
+
+`cbd1e44` 브라우저 검증 순서:
+
+1. OIDC 로그인 → 초기 관리자 워크스페이스
+2. 위키 문서 만들기 → 본문·제목 고치기(리비전 2)
+3. 모듈·항목·업무 만들기 → 항목 설명 고치기
+4. 로그아웃 → 서버 재시작 → 다시 로그인
+
+`7e52400` 거부 경로·멤버십 보존 결과:
+
+| 대상     | 경우                                                                             | 결과                                                               |
+| -------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Supabase | 앱 역할에 `BYPASSRLS`를 붙임                                                     | 두 역할의 비밀번호가 그대로인 채 거부                              |
+| Supabase | `supabase_admin`이 만든 역할                                                     | ADMIN OPTION 안내로 거부                                           |
+| Supabase | 그룹 역할을 거친 ADMIN OPTION                                                    | 통과                                                               |
+| Supabase | `postgres`의 복구 권한 점검                                                      | 통과                                                               |
+| PG18     | 비-superuser 관리자의 복구                                                       | 파일을 올리기 전에 `session_replication_role` 안내로 거부          |
+| Supabase | `postgres`가 스스로 준 SET 없는 멤버십(INHERIT 켬)이 있을 때 bootstrap 다시 실행 | 통과. `postgres`의 `fvoci_migrator` 멤버십 레코드가 실행 전과 같음 |
+| Supabase | 같은 멤버십이 있을 때 복구가 버전 확인에서 멈춤(멤버십을 빌린 뒤)                | 거부. 멤버십 레코드가 실행 전과 같음                               |
 
 ## 참고 자료
 

@@ -8,6 +8,7 @@ mod licenses;
 mod notices;
 mod openapi;
 mod rhwp;
+mod supabase;
 mod test;
 
 use std::path::PathBuf;
@@ -42,6 +43,12 @@ enum Command {
         /// Compose를 띄우지 않고 환경 변수(`DATABASE_URL` 등)로 주어진 외부 서비스를 쓴다. CI 컨테이너 job용.
         #[arg(long)]
         external_services: bool,
+        /// PostgreSQL 대신 셀프호스트 Supabase 공식 구성(고정 revision의 db·rest·supavisor)을 DB로 쓴다(D-88).
+        #[arg(long, conflicts_with = "external_services")]
+        supabase: bool,
+        /// `--supabase`에서 앱 역할 연결을 Supavisor session 모드로 바꿔 한 번 더 돌린다.
+        #[arg(long, requires = "supabase")]
+        session_pooler: bool,
     },
     /// 개발용 Compose를 띄우고 서버를 실행한다. 종료는 Ctrl-C.
     Dev {
@@ -95,7 +102,15 @@ fn main() -> Result<()> {
         Command::Test {
             keep,
             oidc,
+            supabase: true,
+            session_pooler,
+            ..
+        } => test::run_supabase(&root, keep, oidc, session_pooler),
+        Command::Test {
+            keep,
+            oidc,
             external_services,
+            ..
         } => test::run(&root, keep, oidc, external_services),
         Command::Dev { oidc, no_web } => dev::run(&root, oidc, !no_web),
         Command::Down => compose::down_all(&root),
