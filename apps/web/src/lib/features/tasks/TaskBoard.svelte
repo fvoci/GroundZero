@@ -27,6 +27,8 @@
     planBoardMove,
     planDrop,
   } from './board';
+  import type { MoveOrigin } from './move-sync';
+  import { classifyMoveError, originOf, overlayPending, reconcileMove, replan } from './move-sync';
   import type { TaskFilter, TaskSort, TaskViewMode } from './filters';
   import {
     applyFilter,
@@ -202,12 +204,110 @@
   let loadedFor = $state<string | undefined>(undefined);
   const loading = $derived(loadedFor !== item.id);
 
+  // 저장을 기다리는 이동(카드마다 하나, move-sync.ts). 화면은 먼저 옮기고 서버 응답으로 확정한다. 응답이 늦으면 지연을,
+  // 결과를 모르면 목록을 다시 읽어 대조한 결과를 보인다. 이동 API에는 요청 id·판 조건이 없어 자동으로 다시 보내지 않는다.
+  type SavePhase = 'saving' | 'slow' | 'checking' | 'unknown' | 'not_saved';
+  interface PendingMove {
+    seq: number;
+    plan: BoardMove;
+    origin: MoveOrigin;
+    phase: SavePhase;
+    title: string;
+    how: BoardAction | 'drag' | 'menu';
+    /** 이동 요청이 아직 끝나지 않았는지(끝나기 전에는 "반영 안 됨"으로 단정하지 않는다). */
+    inFlight: boolean;
+  }
+  const SLOW_MS = 3000;
+  const CHECK_MS = 10000;
+  let pending = $state<Record<string, PendingMove>>({});
+  let moveSeq = 0;
+  // 다시 읽기마다 번호를 붙여 늦게 도착한 옛 목록이 더 새 화면을 덮지 않게 한다.
+  let reloadSeq = 0;
+  let alive = true;
+  // 카드별 타이머(화면 상태가 아니므로 반응형으로 두지 않는다).
+  const timers: Record<string, ReturnType<typeof setTimeout>[] | undefined> = {};
+
+  function clearTimers(id: string): void {
+    for (const t of timers[id] ?? []) clearTimeout(t);
+    timers[id] = undefined;
+  }
+  function current(id: string, seq: number): boolean {
+    return alive && pending[id]?.seq === seq;
+  }
+  function patch(id: string, seq: number, change: Partial<PendingMove>): void {
+    const p = pending[id];
+    if (p?.seq === seq) pending = { ...pending, [id]: { ...p, ...change } };
+  }
+  function finish(id: string): void {
+    clearTimers(id);
+    pending = Object.fromEntries(Object.entries(pending).filter(([key]) => key !== id));
+  }
+  /**
+   * 저장 결과를 기다리는 이동만 서버 목록 위에 다시 얹는다. "저장 안 됨"과 "확인 못 함"은 얹지 않는다(서버에 있는
+   * 자리를 보인다). `except`는 지금 대조하는 카드.
+   */
+  const overlaid = (server: TaskView[], except?: string): TaskView[] =>
+    overlayPending(
+      server,
+      Object.entries(pending)
+        .filter(([id, p]) => id !== except && p.phase !== 'not_saved' && p.phase !== 'unknown')
+        .map(([id, p]) => ({ id, plan: p.plan })),
+    );
+  /** 다른 일로 목록을 새로 읽었을 때 "확인 못 함"인 이동을 그 목록과 대조해 확정한다. */
+  function settleUnknown(server: TaskView[]): void {
+    for (const [id, p] of Object.entries(pending)) {
+      if (p.phase !== 'unknown') continue;
+      const verdict = reconcileMove(server, id, p.origin, p.plan);
+      if (verdict === 'not_applied') {
+        patch(id, p.seq, { phase: 'not_saved' });
+        moveNotice = m.tasks_move_not_saved({ title: p.title });
+      } else {
+        finish(id);
+        if (verdict !== 'applied') {
+          moveNotice =
+            verdict === 'gone'
+              ? m.tasks_move_error_gone()
+              : m.tasks_move_changed({ title: p.title });
+        }
+      }
+    }
+  }
+  /** 다른 카드의 "저장 안 됨" 안내가 남아 있으면 지우지 않는다(안내는 하나뿐이다). */
+  function clearMoveNotice(): void {
+    if (!Object.values(pending).some((p) => p.phase === 'not_saved')) moveNotice = undefined;
+  }
+  const busy = (id: string): boolean => {
+    const phase = pending[id]?.phase;
+    return phase !== undefined && phase !== 'not_saved';
+  };
+
+  // 화면을 떠나면 타이머를 멈추고 늦게 온 응답은 버린다. 항목이 바뀌면 앞 항목의 기다림을 버린다.
+  $effect(() => {
+    alive = true;
+    return () => {
+      alive = false;
+      for (const id of Object.keys(timers)) clearTimers(id);
+    };
+  });
+  $effect(() => {
+    // item.id를 읽어 항목이 바뀔 때마다 다시 돈다(빈 id는 없다).
+    if (item.id === '') return;
+    untrack(() => {
+      for (const id of Object.keys(timers)) clearTimers(id);
+      pending = {};
+    });
+  });
+
   async function reload(itemId: string = item.id): Promise<void> {
+    const mine = ++reloadSeq;
     try {
-      tasks = await api.tasks(itemId);
+      const server = await api.tasks(itemId);
+      if (!alive || mine !== reloadSeq || itemId !== item.id) return;
+      settleUnknown(server);
+      tasks = overlaid(server);
       error = undefined;
     } catch (e: unknown) {
-      error = errorText(e, m.tasks_load_failed());
+      if (alive && mine === reloadSeq) error = errorText(e, m.tasks_load_failed());
     } finally {
       if (itemId === item.id) loadedFor = itemId;
     }
@@ -290,8 +390,12 @@
       await reload();
       return;
     }
-    // 방금 만든 업무는 아직 목록에 없으므로 알림의 제목을 넘긴다(전에는 ": 옮겼습니다"처럼 비었다).
-    await commitMove(created.id, { status: lane, beforeId: null }, 'menu', created.title);
+    // 방금 만든 업무는 아직 목록에 없으므로 알림의 제목과 이동 전 자리를 넘긴다(전에는 ": 옮겼습니다"처럼 비었다).
+    await commitMove(created.id, { status: lane, beforeId: null }, 'menu', created.title, {
+      status: created.status,
+      nextId: null,
+      version: created.version,
+    });
   }
 
   /** 빠른 추가를 닫고(Esc) 그 열의 "업무 추가" 단추로 초점을 돌린다. */
@@ -301,28 +405,68 @@
     document.querySelector<HTMLElement>(`[data-quick-add="${lane}"]`)?.focus();
   }
 
+  function movedMessage(how: PendingMove['how'], title: string, lane: TaskStatus): string {
+    return how === 'drag'
+      ? m.tasks_moved_drag({ title, status: STATUS_LABEL[lane] })
+      : how === 'menu'
+        ? m.tasks_moved_menu({ title, status: STATUS_LABEL[lane] })
+        : movedText(how, title, lane);
+  }
+
+  /**
+   * 옮기기 한 번(단추·키보드·끌어서 놓기·메뉴 공통). 화면에 먼저 반영하고 기존 이동 API로 저장한다. 같은 카드는 앞선
+   * 저장이 끝날 때까지 다시 옮기지 않는다(다른 카드는 그대로 옮길 수 있다). 서버가 처리하지 않았다고 답하면 되돌리고
+   * 이유를 알린다. 결과를 모르면(응답 없음·게이트웨이 오류) 목록을 다시 읽어 대조한 뒤 확정한다.
+   */
   async function commitMove(
     id: string,
     plan: BoardMove,
-    how: BoardAction | 'drag' | 'menu',
+    how: PendingMove['how'],
     knownTitle?: string,
+    knownOrigin?: MoveOrigin,
+    /** 다시 시도: 이 판의 대기 항목을 그대로 교체한다(지우고 다시 넣는 사이에 같은 카드의 요청이 끼지 않게). */
+    replacing?: number,
   ): Promise<boolean> {
-    const before = tasks;
     const title = knownTitle ?? titleOf(id);
+    if (busy(id) && (replacing === undefined || pending[id]?.seq !== replacing)) {
+      status = m.tasks_move_busy({ title });
+      return false;
+    }
+    const origin = knownOrigin ?? originOf(tasks, id);
+    if (origin === undefined) return false;
+    clearTimers(id);
+    const seq = ++moveSeq;
+    pending = {
+      ...pending,
+      [id]: { seq, plan, origin, phase: 'saving', title, how, inFlight: true },
+    };
     tasks = applyMove(tasks, id, plan);
+    status = m.tasks_move_saving({ title });
+    timers[id] = [
+      setTimeout(() => {
+        if (!current(id, seq)) return;
+        patch(id, seq, { phase: 'slow' });
+        status = m.tasks_move_slow({ title });
+      }, SLOW_MS),
+      // 오래 걸리면 요청을 끊지 않고 서버 목록을 대조해 본다. 이미 반영됐으면 바로 확정한다.
+      setTimeout(() => {
+        if (current(id, seq)) void reconcile(id, seq);
+      }, CHECK_MS),
+    ];
     try {
       await api.moveTask(id, plan.status, plan.beforeId);
+      if (!current(id, seq)) return true;
+      finish(id);
       await reload();
-      moveNotice = undefined;
-      status =
-        how === 'drag'
-          ? m.tasks_moved_drag({ title, status: STATUS_LABEL[plan.status] })
-          : how === 'menu'
-            ? m.tasks_moved_menu({ title, status: STATUS_LABEL[plan.status] })
-            : movedText(how, title, plan.status);
+      clearMoveNotice();
+      status = movedMessage(how, title, plan.status);
       return true;
     } catch (e: unknown) {
-      tasks = before;
+      if (!current(id, seq)) return false;
+      patch(id, seq, { inFlight: false });
+      if (classifyMoveError(e) === 'uncertain') return (await reconcile(id, seq)) === 'applied';
+      finish(id);
+      tasks = applyMove(tasks, id, { status: origin.status, beforeId: origin.nextId });
       const message = moveErrorMessage(e);
       await reload();
       moveNotice = message;
@@ -331,6 +475,112 @@
       return false;
     }
   }
+
+  /**
+   * 결과를 모르는 이동을 서버 목록과 대조해 확정한다. 요청이 아직 끝나지 않았으면 반영된 경우에만 확정하고 나머지는
+   * 기다린다(늦게 반영될 수 있으므로 "저장 안 됨"으로 단정하지 않는다).
+   */
+  async function reconcile(
+    id: string,
+    seq: number,
+  ): Promise<ReturnType<typeof reconcileMove> | undefined> {
+    const p = pending[id];
+    if (p?.seq !== seq) return undefined;
+    patch(id, seq, { phase: 'checking' });
+    status = m.tasks_move_checking({ title: p.title });
+    const mine = ++reloadSeq;
+    let server: TaskView[];
+    try {
+      server = await api.tasks(item.id);
+    } catch {
+      if (!current(id, seq)) return undefined;
+      patch(id, seq, { phase: pending[id]?.inFlight === true ? 'slow' : 'unknown' });
+      status = m.tasks_move_unknown({ title: p.title });
+      return undefined;
+    }
+    if (!current(id, seq)) return undefined;
+    const verdict = reconcileMove(server, id, p.origin, p.plan);
+    const stillInFlight = pending[id]?.inFlight === true;
+    if (verdict === 'applied') {
+      finish(id);
+      clearMoveNotice();
+      status = m.tasks_move_confirmed({ title: p.title, status: STATUS_LABEL[p.plan.status] });
+    } else if (stillInFlight) {
+      patch(id, seq, { phase: 'slow' });
+      status = m.tasks_move_slow({ title: p.title });
+    } else if (verdict === 'not_applied') {
+      clearTimers(id);
+      patch(id, seq, { phase: 'not_saved' });
+      moveNotice = m.tasks_move_not_saved({ title: p.title });
+      status = moveNotice;
+    } else {
+      finish(id);
+      moveNotice =
+        verdict === 'gone' ? m.tasks_move_error_gone() : m.tasks_move_changed({ title: p.title });
+      status = moveNotice;
+    }
+    if (mine === reloadSeq) tasks = overlaid(server);
+    return verdict;
+  }
+
+  /** 결과를 확인하지 못한 이동을 다시 대조한다(사용자가 누름). */
+  function recheck(id: string): void {
+    const p = pending[id];
+    if (p !== undefined && p.phase !== 'checking') void reconcile(id, p.seq);
+  }
+
+  /**
+   * 저장되지 않은 이동을 다시 보낸다. 보내기 직전 서버를 한 번 더 읽어 그사이 다른 곳에서 바뀌었으면 덮지 않고 알린다.
+   */
+  async function retryMove(id: string): Promise<void> {
+    const p = pending[id];
+    if (p?.phase !== 'not_saved') return;
+    patch(id, p.seq, { phase: 'checking' });
+    status = m.tasks_move_checking({ title: p.title });
+    let server: TaskView[];
+    try {
+      server = await api.tasks(item.id);
+    } catch {
+      if (!current(id, p.seq)) return;
+      patch(id, p.seq, { phase: 'not_saved' });
+      status = m.tasks_move_unknown({ title: p.title });
+      return;
+    }
+    if (!current(id, p.seq)) return;
+    const verdict = reconcileMove(server, id, p.origin, p.plan);
+    ++reloadSeq;
+    tasks = overlaid(server, id);
+    if (verdict === 'not_applied') {
+      // 대기 항목을 지우지 않은 채 교체해 보낸다(그사이 끌기·단추가 같은 카드를 다시 보내지 않게).
+      const sent = commitMove(id, replan(server, p.plan), p.how, p.title, undefined, p.seq);
+      clearMoveNotice();
+      await sent;
+      return;
+    }
+    finish(id);
+    if (verdict === 'applied') {
+      clearMoveNotice();
+      status = m.tasks_move_confirmed({ title: p.title, status: STATUS_LABEL[p.plan.status] });
+    } else {
+      moveNotice =
+        verdict === 'gone' ? m.tasks_move_error_gone() : m.tasks_move_changed({ title: p.title });
+      status = moveNotice;
+    }
+  }
+
+  /** "저장 안 됨"을 받아들이고 카드를 서버 자리에 둔다. */
+  function keepAsIs(id: string): void {
+    finish(id);
+    moveNotice = undefined;
+  }
+
+  const SAVE_LABEL: Record<SavePhase, () => string> = {
+    saving: () => m.tasks_card_saving(),
+    slow: () => m.tasks_card_slow(),
+    checking: () => m.tasks_card_checking(),
+    unknown: () => m.tasks_card_unknown(),
+    not_saved: () => m.tasks_card_not_saved(),
+  };
 
   async function move(id: string, action: BoardAction): Promise<void> {
     const plan = planBoardMove(shown, id, action);
@@ -361,6 +611,8 @@
 
   function startDrag(event: PointerEvent, id: string, handle: boolean): void {
     if (!canWrite || drag !== undefined || !event.isPrimary || event.button !== 0) return;
+    // 앞선 이동을 저장하는 카드는 끌지 않는다(같은 카드의 요청이 겹치지 않게).
+    if (busy(id)) return;
     if (!handle && event.pointerType !== 'mouse') return;
     drag = {
       id,
@@ -712,6 +964,46 @@
                       >{t.assignees.map((a) => a.display_name).join(', ')}</span
                     >{/if}
                 </div>
+                {#each [pending[t.id]] as save (save?.seq ?? -1)}
+                  {#if save !== undefined}
+                    <div
+                      class={[
+                        'flex flex-wrap items-center gap-1.5 text-xs',
+                        save.phase === 'unknown' || save.phase === 'not_saved'
+                          ? 'text-destructive'
+                          : 'text-muted-foreground',
+                      ]}
+                      data-save-state={save.phase}
+                    >
+                      <span>{SAVE_LABEL[save.phase]()}</span>
+                      {#if save.phase === 'slow' || save.phase === 'unknown'}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          class="h-6 px-1.5 text-xs"
+                          onclick={() => {
+                            recheck(t.id);
+                          }}>{m.tasks_move_recheck()}</Button
+                        >
+                      {:else if save.phase === 'not_saved'}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          class="h-6 px-1.5 text-xs"
+                          onclick={() => void retryMove(t.id)}>{m.tasks_move_retry()}</Button
+                        >
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          class="h-6 px-1.5 text-xs"
+                          onclick={() => {
+                            keepAsIs(t.id);
+                          }}>{m.tasks_move_keep()}</Button
+                        >
+                      {/if}
+                    </div>
+                  {/if}
+                {/each}
                 {#if canWrite}
                   <div class="flex gap-1" aria-hidden="true">
                     {#each ['left', 'up', 'down', 'right'] as const as action (action)}
@@ -720,7 +1012,8 @@
                         variant="ghost"
                         tabindex={-1}
                         class="h-6 px-1.5 text-xs"
-                        disabled={planBoardMove(shown, t.id, action) === undefined ||
+                        disabled={busy(t.id) ||
+                          planBoardMove(shown, t.id, action) === undefined ||
                           (!ordered && (action === 'up' || action === 'down'))}
                         onclick={() => void move(t.id, action)}
                         >{action === 'left'
@@ -748,6 +1041,7 @@
                     <DropdownMenu.Content align="start">
                       {#each TASK_STATUSES.filter((s) => s !== t.status) as target (target)}
                         <DropdownMenu.Item
+                          disabled={busy(t.id)}
                           onSelect={() =>
                             void commitMove(t.id, { status: target, beforeId: null }, 'menu')}
                           >{MOVE_TO[target]()}</DropdownMenu.Item

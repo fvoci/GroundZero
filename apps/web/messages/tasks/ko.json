@@ -226,5 +226,21 @@
   "tasks_parent_change": "바꾸기",
   "tasks_parent_changed": "상위 업무를 바꿨습니다.",
   "tasks_parent_failed": "상위 업무를 바꾸지 못했습니다.",
-  "tasks_parent_has_subtasks": "하위 업무가 있는 업무는 다른 업무 아래로 옮길 수 없습니다."
+  "tasks_parent_has_subtasks": "하위 업무가 있는 업무는 다른 업무 아래로 옮길 수 없습니다.",
+  "tasks_move_saving": "{title}: 저장 중입니다.",
+  "tasks_move_slow": "{title}: 응답이 지연되고 있습니다. 저장됐는지 확인하는 중입니다.",
+  "tasks_move_checking": "{title}: 저장됐는지 서버에서 확인하는 중입니다.",
+  "tasks_move_confirmed": "{title}: 저장을 확인했습니다({status}).",
+  "tasks_move_unknown": "{title}: 저장됐는지 확인하지 못했습니다. 연결을 확인한 뒤 다시 확인하세요.",
+  "tasks_move_not_saved": "{title}: 저장되지 않았습니다. 카드를 서버에 있는 자리로 되돌렸습니다.",
+  "tasks_move_changed": "{title}: 그사이 다른 곳에서 바뀌어 서버의 최신 상태로 보여 줍니다.",
+  "tasks_move_busy": "{title}: 앞선 이동을 저장하는 중입니다. 끝난 뒤 다시 옮기세요.",
+  "tasks_move_recheck": "다시 확인",
+  "tasks_move_retry": "다시 시도",
+  "tasks_move_keep": "그대로 두기",
+  "tasks_card_saving": "저장 중…",
+  "tasks_card_slow": "응답 지연 · 확인 중",
+  "tasks_card_checking": "확인 중…",
+  "tasks_card_unknown": "저장 여부 확인 못 함",
+  "tasks_card_not_saved": "저장되지 않음"
 }
