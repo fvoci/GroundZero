@@ -256,14 +256,34 @@ pub async fn restore(
     }
     let url = need(db.admin_url.as_ref(), "DATABASE_ADMIN_URL")?;
     let mut conn = PgConnection::connect_with(&crate::db::connect_options(url)?).await?;
-    let version = migration_version(&mut conn).await?;
+    // 표는 마이그레이션 역할(표 소유자)로 읽고 채운다. superuser가 아닌 관리자(셀프호스트 Supabase의 `postgres`)는
+    // fvoci 표에 권한이 없다. 관리자 권한은 트리거를 잠시 끄는 설정에만 쓴다(`load_tables`, D-88).
+    let granted = crate::db::admin::borrow_migrator(&mut conn).await?;
+    let result = restore_as_owner(config, &mut conn, from, &manifest).await;
+    let released = crate::db::admin::release_migrator(&mut conn, granted).await;
+    conn.close().await?;
+    result?;
+    released?;
+    Ok(manifest)
+}
+
+async fn restore_as_owner(
+    config: &Config,
+    conn: &mut PgConnection,
+    from: &Path,
+    manifest: &Manifest,
+) -> Result<(), AppError> {
+    sqlx::query("SET ROLE fvoci_migrator")
+        .execute(&mut *conn)
+        .await?;
+    let version = migration_version(conn).await?;
     if version != manifest.migration_version {
         return Err(AppError::Config(format!(
             "the database is at migration {version} but the backup is at {}; run `db migrate` with the same release",
             manifest.migration_version
         )));
     }
-    let present = tables(&mut conn).await?;
+    let present = tables(conn).await?;
     // 같은 마이그레이션이면 백업할 표도 같다. 목록에서 빠진 표가 있으면 그 내용 없이 끝나므로 거부한다.
     if let Some(name) = present
         .iter()
@@ -282,7 +302,7 @@ pub async fn restore(
             "SELECT EXISTS (SELECT 1 FROM fvoci.{})",
             table.name
         ))
-        .fetch_one(&mut conn)
+        .fetch_one(&mut *conn)
         .await?;
         if used {
             return Err(AppError::Config(format!(
@@ -293,16 +313,15 @@ pub async fn restore(
     }
     sqlx::query("SELECT pg_advisory_lock($1)")
         .bind(STORAGE_LOCK)
-        .execute(&mut conn)
+        .execute(&mut *conn)
         .await?;
     let storage = Storage::new(&config.storage);
-    let result = restore_locked(&mut conn, &storage, from, &manifest).await;
+    let result = restore_locked(conn, &storage, from, manifest).await;
     sqlx::query("SELECT pg_advisory_unlock($1)")
         .bind(STORAGE_LOCK)
-        .execute(&mut conn)
+        .execute(&mut *conn)
         .await?;
-    conn.close().await?;
-    result.map(|()| manifest)
+    result
 }
 
 async fn restore_locked(
@@ -424,9 +443,15 @@ async fn load_tables(
     from: &Path,
     manifest: &Manifest,
 ) -> Result<(), AppError> {
-    sqlx::query("SET LOCAL session_replication_role = replica")
-        .execute(&mut *conn)
-        .await?;
+    // 트리거(외래 키 포함)를 끄는 설정은 관리자 권한이 필요하다. 이 트랜잭션 안에서만 관리자로 돌아가 켜고 다시
+    // 표 소유자로 채운다(커밋·롤백하면 둘 다 원래대로).
+    sqlx::raw_sql(
+        "SET LOCAL ROLE NONE;
+         SET LOCAL session_replication_role = replica;
+         SET LOCAL ROLE fvoci_migrator;",
+    )
+    .execute(&mut *conn)
+    .await?;
     // 복구하는 동안 다른 쓰기가 끼어들지 않게 표를 잠그고 비어 있는지 다시 본다(서버는 멈춰 두는 것을 권한다).
     for table in &manifest.tables {
         sqlx::query(&format!(

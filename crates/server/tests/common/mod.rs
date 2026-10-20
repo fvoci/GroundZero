@@ -290,13 +290,10 @@ pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> Fres
     let mut db_admin = sqlx::PgConnection::connect(&with_database(&admin_url, &name))
         .await
         .unwrap();
-    sqlx::raw_sql(&format!(
-        "GRANT CONNECT ON DATABASE {name} TO fvoci_migrator, fvoci_app;
-         CREATE SCHEMA fvoci AUTHORIZATION fvoci_migrator;"
-    ))
-    .execute(&mut db_admin)
-    .await
-    .unwrap();
+    // 운영자 경로(`db bootstrap`)와 같은 준비. superuser가 아닌 관리자(셀프호스트 Supabase)에서도 된다.
+    fvoci_server::db::admin::prepare_database(&mut db_admin)
+        .await
+        .unwrap();
     db_admin.close().await.unwrap();
     let db = fvoci_server::config::DbCommandConfig {
         admin_url: Some(fvoci_server::config::Secret::new(with_database(

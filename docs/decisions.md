@@ -181,6 +181,9 @@ fvoci는 빈 저장소에서 새로 만드는 통합 작업·지식·학습 관�
   - 서버가 컴파일할 때 받아(`build_info`) `/healthz`의 `build`(제품 버전·소스 SHA만), 시작 로그 `server.starting`, `fvoci-server version`에 같은 값을 낸다. 화면은 이 응답을 읽어 계정 메뉴에 보인다. 값 없이 빌드하면 `dev`로 보이며 정식 릴리스로 보이지 않는다. 하나만 있거나 형식이 틀리면 컴파일이 멈춘다.
   - 이 지원 전에 만든 `v0.0.1`은 태그를 옮기지 않고 그대로 빌드한다: 이미지 라벨만 0.0.1·소스 SHA를 가리키고 앱 안에는 버전이 없다. 그 밖의 주입 이전 태그는 거부한다.
   - amd64·arm64는 무료 GitHub-hosted 네이티브 러너(`ubuntu-24.04`, `ubuntu-24.04-arm`, 공개 저장소)에서 한 번씩 빌드하고 둘 다 확인을 통과해야 태그를 붙인다. 같은 태그가 이미 있으면 소스 SHA가 같을 때만 그대로 두고 다르면 실패한다. 게시 권한은 게시 job에만, 기존 `GITHUB_TOKEN`만 쓰고 PR에서는 게시하지 않는다. 사용법은 `docs/development.md` 10절.
+- **D-88 셀프호스트 Supabase를 추가 DB 배포 대상으로.** 사용자 지시(2026-10-20): 기존 자체 PostgreSQL 지원과 기본 설정을 유지하면서, 셀프호스트 Supabase의 PostgreSQL을 DB로만 쓸 수 있게 한다. Rust 백엔드·Keycloak/OIDC·S3/R2/local 저장소·Meilisearch·작업 대기열은 그대로이고, Supabase Auth·Storage·Realtime·Data API 연동과 화면의 직접 DB 접근은 들이지 않는다. Supabase Cloud와 서비스 전체 이전은 범위 밖이다.
+  - 관리자 연결은 superuser가 아니어도 된다(셀프호스트 Supabase의 `postgres`는 `CREATEROLE`·`CREATEDB`·`BYPASSRLS`만 있다). `db bootstrap`은 이미 있는 역할의 속성을 다시 쓰지 않고 비밀번호만 갱신한 뒤 권한 속성(`SUPERUSER`·`CREATEROLE`·`BYPASSRLS`, 앱 역할은 `CREATEDB`까지)이 없는지 확인해 있으면 멈춘다. 스키마 소유자 지정과 복구처럼 표 소유자로 해야 하는 일은 그동안만 상속 없는 SET 멤버십을 받아 하고 거둔다. 복구에서 관리자 권한은 트리거를 잠시 끄는 설정(`session_replication_role`)에만 쓴다.
+  - 역할 분리(`fvoci_migrator` 소유, 앱은 `fvoci_app` `NOBYPASSRLS`)와 `app.user_id` 트랜잭션 설정 기반 RLS는 그대로다. Supabase `auth.uid()` 정책으로 바꾸지 않고, `fvoci` 스키마를 Data API 노출 스키마에 넣지 않으며 `anon`·`authenticated` 등에 권한을 주지 않는다.
 - **D-44 보류 항목의 취급.** 운영자 대상 암호화(H-01)와 외부 플랫폼 자동 시청 추적(H-02)은 현재 필수 범위의 차단 항목이 아니다. 새 승인이 없는 상태에서 구현 범위를 확대하지 않는다. 근거: 사용자 "현재 필수 범위의 차단 항목에서 분리한다. 새 승인이 없는 상태에서 구현 범위를 확대하지 않는다".
 
 ## 2. 미승인 제안 (검토자)
@@ -511,3 +514,4 @@ fvoci는 빈 저장소에서 새로 만드는 통합 작업·지식·학습 관�
 - 2026-10-18 79차 수정(사용자 지시). O-37에 세 서체 여섯 파일의 SHA-256과 서체 안 판·저작권·상표 문구를 받은 파일에서 읽어 더했다. Noto 라이선스 파일에는 예약 서체 이름이 없어 78차의 "Noto의 'Source'" 표기를 바로잡았다.
 - 2026-10-18 80차 수정(사용자 승인·구현). O-37을 D-86으로 확정: 여섯 서체 파일 한정 OFL-1.1 예외, 필요한 화면에서만 받기(D2Coding은 코드·원문, Noto Serif는 이 브라우저의 명조 선택), 해시 자원 br·gzip 사본, 고지·SHA-256 확인. PR #21·#22·#23은 main에 병합.
 - 2026-10-20 81차 수정(사용자 지시·구현). D-87 제품 이미지 릴리스 워크플로(`release-image.yml`)와 빌드 버전 표시(태그 기준 제품 버전·소스 SHA를 서버·화면·시작 로그·OCI 라벨에 같은 값으로).
+- 2026-10-20 82차 수정(사용자 지시·구현). D-88 셀프호스트 Supabase DB 지원 1단계: superuser가 아닌 관리자로 `db bootstrap`(재실행 포함)과 백업 복구가 되게 했다.
