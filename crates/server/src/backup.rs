@@ -261,9 +261,11 @@ pub async fn restore(
     let granted = crate::db::admin::borrow_migrator(&mut conn).await?;
     let result = restore_as_owner(config, &mut conn, from, &manifest).await;
     let released = crate::db::admin::release_migrator(&mut conn, granted).await;
-    conn.close().await?;
+    // 연결 닫기 실패가 복구 실패·멤버십 회수 실패를 덮지 않게 마지막에 본다.
+    let closed = conn.close().await;
     result?;
     released?;
+    closed?;
     Ok(manifest)
 }
 
