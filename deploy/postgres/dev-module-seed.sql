@@ -183,3 +183,122 @@ END
 $seed$;
 
 SELECT value FROM instance_state WHERE key = 'dev_module_seed_v1';
+
+-- 보강(v2): 같은 합성 워크스페이스에 칸반 카드 여럿(열 이동·순서 바꾸기 체험), 위키 트리 세 단계와 서로 가리키는
+-- 문서(백링크), 구분선 바로 아래 체크리스트가 있는 문서를 더한다. v1과 따로 자기 표시(dev_module_seed_v2)로 한 번만
+-- 실행하며 기존 행을 고치거나 지우지 않는다. 사용자가 예제 워크스페이스를 지웠으면 아무것도 만들지 않고 표시만
+-- 남기며(다시 채우지 않음), 지웠거나 보관한 항목에는 업무를 더하지 않는다. 만들다 실패하면 이 블록만 되돌리고 알린 뒤
+-- 개발 실행은 계속한다(다음 실행에 다시 시도).
+DO $seed2$
+DECLARE
+  v_admin uuid;
+  v_ws uuid;
+  v_v1 jsonb;
+  v_kind text;
+  v_item uuid;
+  v_task uuid;
+  v_row jsonb;
+  v_today date := current_date;
+  v_guide uuid;
+  v_install uuid;
+  v_backup uuid;
+  v_log uuid;
+  v_added integer := 0;
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('fvoci:dev_module_seed_v2', 0));
+  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_module_seed_v2') THEN
+    RETURN;
+  END IF;
+  SELECT value INTO v_v1 FROM instance_state WHERE key = 'dev_module_seed_v1';
+  IF v_v1 IS NULL THEN
+    RETURN;
+  END IF;
+  v_ws := (v_v1->>'workspace')::uuid;
+  IF NOT EXISTS (SELECT 1 FROM workspaces WHERE id = v_ws AND deleted_at IS NULL) THEN
+    INSERT INTO instance_state (key, value)
+      VALUES ('dev_module_seed_v2', jsonb_build_object('skipped', 'example workspace removed'));
+    RETURN;
+  END IF;
+  SELECT id INTO v_admin FROM users
+    WHERE issuer = current_setting('fvoci.dev_issuer') AND subject = '00000000-0000-4000-8000-00000000000a';
+  IF v_admin IS NULL THEN
+    RAISE EXCEPTION 'existing dev test users are required for this issuer';
+  END IF;
+
+  BEGIN
+    PERFORM set_config('app.user_id', v_admin::text, true);
+
+    -- 칸반: 모듈마다 카드를 더해 열마다 두 장 이상이 되게 한다(우선순위·마감 섞음).
+    FOR v_kind IN SELECT jsonb_object_keys(v_v1->'items') LOOP
+      v_item := (v_v1->'items'->>v_kind)::uuid;
+      CONTINUE WHEN NOT EXISTS (
+        SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id
+        WHERE i.id = v_item AND i.deleted_at IS NULL AND m.deleted_at IS NULL
+          AND i.archived_at IS NULL AND m.archived_at IS NULL);
+      FOR v_row IN SELECT * FROM jsonb_array_elements(CASE WHEN v_kind = 'project' THEN '[
+        {"title":"API 연결 점검","status":"todo","priority":"high","due":4},
+        {"title":"문서 초안 검토","status":"todo","priority":"low","due":6},
+        {"title":"배포 체크리스트 확인","status":"in_progress","priority":"urgent","due":1},
+        {"title":"회고 일정 잡기","status":"done","priority":"none"}
+      ]' ELSE '[
+        {"title":"자료 정리","status":"todo","priority":"medium","due":3},
+        {"title":"지난 활동 돌아보기","status":"done","priority":"low"}
+      ]' END::jsonb) LOOP
+        v_task := app_create_task(v_item, uuidv7(), v_row->>'title', NULL);
+        PERFORM app_update_task(v_task, 1, v_row->>'title', '개발용 합성 업무입니다.',
+          v_row->>'status', v_row->>'priority', NULL,
+          CASE WHEN v_row ? 'due' THEN v_today + (v_row->>'due')::integer END,
+          NULL, ARRAY['개발예제'], ARRAY[v_admin], false, '[]');
+        v_added := v_added + 1;
+      END LOOP;
+    END LOOP;
+
+    -- 위키: 운영 안내 › 설치 › 백업 세 단계와, 설치·백업을 가리키는 점검 기록(백링크). 운영 안내 본문은 구분선
+    -- 바로 아래 체크리스트가 있어 블록 손잡이·구분선 다루기를 해 볼 수 있다.
+    v_guide := app_create_wiki_document(v_ws, uuidv7(), '운영 안내 (합성)', 1,
+      '{"type":"doc","content":[
+        {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"개요"}]},
+        {"type":"paragraph","content":[{"type":"text","text":"개발용 합성 위키입니다. 트리에서 하위 문서를 펼치고 Alt+방향키로 옮겨 보세요."}]},
+        {"type":"horizontalRule"},
+        {"type":"taskList","content":[
+          {"type":"taskItem","attrs":{"checked":true},"content":[{"type":"paragraph","content":[{"type":"text","text":"설치 문서 읽기"}]}]},
+          {"type":"taskItem","attrs":{"checked":false},"content":[{"type":"paragraph","content":[{"type":"text","text":"백업 절차 따라 해 보기"}]}]}
+        ]},
+        {"type":"bulletList","content":[
+          {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"구분선 손잡이를 끌어 위치를 바꿔 볼 수 있습니다."}]}]}
+        ]}
+      ]}'::jsonb, NULL, 10);
+    v_install := app_create_wiki_document(v_ws, uuidv7(), '설치', 1, jsonb_build_object(
+      'type', 'doc', 'content', jsonb_build_array(
+        jsonb_build_object('type', 'paragraph', 'content', jsonb_build_array(
+          jsonb_build_object('type', 'text', 'text', '설치 전에 확인할 항목: '),
+          jsonb_build_object('type', 'reference', 'attrs', jsonb_build_object('kind', 'item', 'id', v_v1->'items'->>'project')))))),
+      v_guide, 10);
+    v_backup := app_create_wiki_document(v_ws, uuidv7(), '백업', 1,
+      '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"합성 백업 절차. 실제 서버 정보가 아닙니다."}]}]}'::jsonb,
+      v_install, 10);
+    v_log := app_create_wiki_document(v_ws, uuidv7(), '점검 기록', 1, jsonb_build_object(
+      'type', 'doc', 'content', jsonb_build_array(
+        jsonb_build_object('type', 'paragraph', 'content', jsonb_build_array(
+          jsonb_build_object('type', 'text', 'text', '이번 점검에서 본 문서: '),
+          jsonb_build_object('type', 'reference', 'attrs', jsonb_build_object('kind', 'document', 'id', v_install)),
+          jsonb_build_object('type', 'text', 'text', ', '),
+          jsonb_build_object('type', 'reference', 'attrs', jsonb_build_object('kind', 'document', 'id', v_backup)))))),
+      NULL, 10);
+    -- 저장할 때와 같은 함수로 참조를 기록해 대상 문서·항목의 "이곳을 가리키는 문서"에 보이게 한다(알림은 보내지 않음).
+    PERFORM app_record_document_references(v_install, false);
+    PERFORM app_record_document_references(v_log, false);
+
+    PERFORM set_config('app.user_id', '', true);
+    INSERT INTO instance_state (key, value) VALUES ('dev_module_seed_v2', jsonb_build_object(
+      'workspace', v_ws, 'tasks_added', v_added,
+      'wiki', jsonb_build_object('guide', v_guide, 'install', v_install, 'backup', v_backup, 'log', v_log),
+      'seeded_on', v_today));
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'dev module examples v2 not added (%: %); the dev run continues and tries again next time',
+      SQLSTATE, SQLERRM;
+  END;
+END
+$seed2$;
+
+SELECT value FROM instance_state WHERE key = 'dev_module_seed_v2';
