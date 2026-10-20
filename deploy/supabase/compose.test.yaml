@@ -24,3 +24,10 @@ services:
     image: supabase/supavisor:2.9.13@sha256:07f1a6098ffc04b80263bca4eb5c3e7bd2e03dfd1fc465aa108d7329000a1a4e
     container_name: !reset null
     ports: !override ['127.0.0.1::5432', '127.0.0.1::6543']
+    # 이미지의 시작 스크립트(/app/limits.sh)가 `ulimit -n $RLIMIT_NOFILE`(기본 100000)을 한다. 컨테이너의 열린 파일
+    # 한도가 그보다 낮으면(GitHub 러너의 Docker 기본값) 스크립트가 실패해 재시작만 되풀이한다(CI에서 확인). 필요한
+    # 한도를 컨테이너에 준다.
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000

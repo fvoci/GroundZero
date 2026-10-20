@@ -43,6 +43,9 @@ GroundZero는 Supabase를 **PostgreSQL로만** 쓴다. 로그인은 그대로 OI
   포트는 공식 구성의 5432다. session 모드 테넌트는 데이터베이스 하나(`postgres`)만 받는다. session 모드는 클라이언트 연결마다
   서버 연결을 잡으므로 `POOLER_DEFAULT_POOL_SIZE`를 GroundZero 프로세스 수 × 16(서버 한 프로세스의 연결 풀 최대)보다 크게 둔다.
   모자라면 연결을 기다리다 실패한다(시험에서 기본값 20으로 동시 요청이 `XX000`으로 실패했다).
+- Supavisor 이미지는 시작할 때 열린 파일 한도를 `RLIMIT_NOFILE`(기본 100000)으로 올린다. 컨테이너 한도가 그보다 낮은
+  호스트(예: GitHub 러너의 Docker 기본값)에서는 시작 스크립트가 실패해 재시작만 되풀이한다. 공식 구성에 `ulimits: nofile`을 그만큼
+  주거나 `RLIMIT_NOFILE`을 호스트가 허락하는 값으로 둔다(시험 구성은 `ulimits` 100000).
 - transaction 모드(6543)는 쓰지 않는다. 서버는 트랜잭션마다 `app.user_id`를 트랜잭션 범위로 설정하지만, 백업·작업 프로세스는
   세션 advisory lock을 쓰고 sqlx는 준비한 문장을 연결에 남긴다.
 - 공식 구성은 db 포트를 호스트에 열지 않는다. GroundZero 앱을 Supabase의 Docker 네트워크에 붙이거나 db 포트를 내부망에만 연다.
