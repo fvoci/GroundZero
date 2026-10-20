@@ -107,6 +107,17 @@ jobs:
         if: always()
         run: docker compose --project-name "$PROJECT" --file deploy/compose.test.yaml --profile oidc down --volumes --remove-orphans
 
+  # 셀프호스트 Supabase를 DB로(D-88). 공식 구성을 고정 revision으로 받아 db·rest·supavisor만 띄우고(이미지 digest 고정,
+  # 127.0.0.1 포트) 같은 통합 테스트를 직접 연결과 Supavisor session 모드로 두 번 돈다. 호스트의 Docker 포트를 쓰므로
+  # base 이미지 컨테이너가 아니라 러너에서 돈다(툴체인은 rust-toolchain.toml).
+  supabase:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo xtask test --supabase --session-pooler --oidc
+
   # HWP·HWPX 미리보기 WASM(D-76). 제품 이미지와 같은 단계(rhwp-out)를 만든다. 빌드 안에서 브라우저에 들어가는
   # 그래프만 cargo-deny로 검사한다(취약점·회수·라이선스, 예외는 deploy/rhwp/deny.toml의 HWP 용도 승인분만).
   # 입력(deploy/rhwp의 네 파일)이 같으면 앞서 만든 결과를 다시 쓴다. 고지 파일이 그 결과와 같은지도 본다.
