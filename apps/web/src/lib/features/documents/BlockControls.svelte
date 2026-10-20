@@ -63,9 +63,23 @@
   const selectionBlockFrom = (): number | undefined =>
     blockAt(editor.state.doc, editor.state.selection.from)?.from;
 
+  // 편집 영역의 크기가 바뀌면(창 크기·사이드바 접기로 글이 다시 줄바꿈) 블록 위치가 달라지므로 손잡이 자리를 다시
+  // 계산한다. 전에는 다음 편집·마우스 이동 전까지 옛 자리에 남았다.
+  let layout = $state(0);
+  $effect(() => {
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      layout += 1;
+    });
+    observer.observe(editor.view.dom);
+    return () => {
+      observer.disconnect();
+    };
+  });
+
   /** 지금 손잡이가 붙을 블록. */
   const target = $derived.by((): { block: BlockRange; top: number } | undefined => {
-    if (version < 0 || !editor.isEditable) return undefined;
+    if (version < 0 || layout < 0 || !editor.isEditable) return undefined;
     // 초점은 Tiptap이 초점·흐림 때도 트랜잭션을 내므로(version) 그때마다 편집기에 직접 묻는다.
     const focused = editor.view.hasFocus();
     const from =

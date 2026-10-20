@@ -141,6 +141,25 @@ export function insertBlockBelow(state: EditorState, block: BlockRange): Transac
   return tr.scrollIntoView();
 }
 
+/**
+ * 지금 자리(`range`가 있으면 그 글자를 지운 뒤)에 구분선을 넣고 그 아래에서 이어 쓰게 한다. Tiptap의
+ * `setHorizontalRule`은 바로 뒤가 글줄 블록이 아니면(체크리스트·목록·표·수식) 그 블록을 통째로 골라 두어, 이어서
+ * 입력한 글자가 그 블록의 내용을 덮어썼다. 그때는 구분선과 그 블록 사이에 빈 문단을 넣고 커서를 그 안에 둔다.
+ */
+export function insertDivider(editor: Editor, range?: { from: number; to: number }): boolean {
+  const chain = editor.chain().focus();
+  if (range !== undefined) chain.deleteRange(range);
+  if (!chain.setHorizontalRule().run()) return false;
+  const { state } = editor;
+  const paragraph = state.schema.nodes.paragraph;
+  if (!(state.selection instanceof NodeSelection) || paragraph === undefined) return true;
+  const at = state.selection.from;
+  const tr = state.tr.insert(at, paragraph.create());
+  tr.setSelection(TextSelection.create(tr.doc, at + 1));
+  editor.view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
 /** 끌어 옮기기를 시작할 때 쓸 노드 선택(ProseMirror 기본 끌어 놓기가 옮긴다). */
 export function selectBlock(state: EditorState, block: BlockRange): Transaction {
   return state.tr.setSelection(NodeSelection.create(state.doc, block.from));
