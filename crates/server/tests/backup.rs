@@ -250,3 +250,100 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
         }
     }
 }
+
+/// 관리자의 `fvoci_migrator` 직접 멤버십 레코드(grantor, ADMIN, INHERIT, SET).
+async fn migrator_memberships(
+    conn: &mut PgConnection,
+    member: &str,
+) -> Vec<(String, bool, bool, bool)> {
+    sqlx::query_as(
+        "SELECT g.rolname::text, m.admin_option, m.inherit_option, m.set_option
+           FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.grantor
+          WHERE m.roleid = 'fvoci_migrator'::regrole
+            AND m.member = (SELECT oid FROM pg_roles WHERE rolname = $1)
+          ORDER BY 1",
+    )
+    .bind(member)
+    .fetch_all(conn)
+    .await
+    .unwrap()
+}
+
+/// 표 소유자 역할을 잠시 빌렸다 돌려주면(bootstrap·복구, D-88) 관리자의 멤버십은 빌리기 전과 같다: 새로 만든
+/// 레코드만 지우고, 관리자에게 이미 있던 레코드는 지우지 않고 옵션을 되돌린다. superuser가 아닌 관리자를 시험
+/// 역할로 만들어 본다(시험 관리자는 superuser일 수 있다).
+#[tokio::test]
+async fn borrowing_the_migrator_leaves_the_admins_memberships_as_they_were() {
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let mut admin = PgConnection::connect(&admin_url).await.unwrap();
+    let role = format!("fvoci_borrow_{}", uuid::Uuid::now_v7().simple());
+    let password = uuid::Uuid::now_v7().to_string();
+    sqlx::raw_sql(&format!(
+        "CREATE ROLE {role} LOGIN PASSWORD '{password}';
+         GRANT fvoci_migrator TO {role} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE"
+    ))
+    .execute(&mut admin)
+    .await
+    .unwrap();
+    let options = admin_url
+        .parse::<sqlx::postgres::PgConnectOptions>()
+        .unwrap()
+        .username(&role)
+        .password(&password);
+    let mut conn = PgConnection::connect_with(&options).await.unwrap();
+
+    // 관리자 자신이 준 레코드가 없다: 새 레코드를 만들고 그것만 지운다.
+    let before = migrator_memberships(&mut admin, &role).await;
+    let borrow = fvoci_server::db::admin::borrow_migrator(&mut conn)
+        .await
+        .unwrap();
+    assert!(
+        matches!(
+            borrow,
+            fvoci_server::db::admin::MigratorBorrow::Added { .. }
+        ),
+        "{borrow:?}"
+    );
+    sqlx::query("SET ROLE fvoci_migrator")
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    fvoci_server::db::admin::release_migrator(&mut conn, borrow)
+        .await
+        .unwrap();
+    assert_eq!(migrator_memberships(&mut admin, &role).await, before);
+
+    // 관리자가 스스로 준 SET 없는 레코드(INHERIT 켬)가 있다: 그 레코드를 쓰고 원래 옵션으로 되돌린다.
+    sqlx::raw_sql(&format!(
+        "GRANT fvoci_migrator TO {role} WITH INHERIT TRUE, SET FALSE"
+    ))
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    let before = migrator_memberships(&mut admin, &role).await;
+    assert_eq!(before.len(), 2, "{before:?}");
+    let borrow = fvoci_server::db::admin::borrow_migrator(&mut conn)
+        .await
+        .unwrap();
+    assert!(
+        matches!(
+            &borrow,
+            fvoci_server::db::admin::MigratorBorrow::Changed { grantor, inherit: true } if *grantor == role
+        ),
+        "{borrow:?}"
+    );
+    sqlx::query("SET ROLE fvoci_migrator")
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    fvoci_server::db::admin::release_migrator(&mut conn, borrow)
+        .await
+        .unwrap();
+    assert_eq!(migrator_memberships(&mut admin, &role).await, before);
+
+    conn.close().await.unwrap();
+    sqlx::raw_sql(&format!("DROP ROLE {role}"))
+        .execute(&mut admin)
+        .await
+        .unwrap();
+}
