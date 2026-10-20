@@ -417,6 +417,34 @@ describe('kanban save states', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('a card quick-added to another column shows its save state even when the list cannot be read', async () => {
+    // 빠른 추가는 "할 일"로 만든 뒤 그 열로 옮긴다. 옮기기 결과를 모르고 목록도 읽지 못해도 카드와 다시 확인 단추가 있어야 한다.
+    let call = 0;
+    vi.spyOn(api, 'tasks').mockImplementation(() => {
+      call += 1;
+      if (call === 1) return Promise.resolve(start);
+      if (call === 2) return Promise.reject(new NetworkError('offline'));
+      return Promise.resolve([...start, task('n', '새 업무', 'in_progress', 2)]);
+    });
+    vi.spyOn(api, 'createTask').mockResolvedValue({ ...task('n', '새 업무'), checklist: [] });
+    vi.spyOn(api, 'moveTask').mockRejectedValue(new NetworkError('reset'));
+    await mount();
+    const lane = screen.getByRole('region', { name: /진행 중/ });
+    await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
+    const input = within(lane).getByRole('textbox');
+    await fireEvent.input(input, { target: { value: '새 업무' } });
+    await fireEvent.submit(input.closest('form') ?? input);
+    await flush();
+    expect(laneOf('n')).toBe('in_progress');
+    expect(saveState('n')).toBe('unknown');
+    const box = card('n').closest<HTMLElement>('[data-board-card]');
+    if (box === null) throw new Error('box');
+    await fireEvent.click(within(box).getByRole('button', { name: '다시 확인' }));
+    await flush();
+    expect(saveState('n')).toBeNull();
+    expect(liveText()).toContain('새 업무: 저장을 확인했습니다(진행 중).');
+  });
+
   it('blocks a second move of the same card but not of another card', async () => {
     lists(start);
     const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();

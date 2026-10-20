@@ -399,7 +399,9 @@
       await reload();
       return;
     }
-    // 방금 만든 업무는 아직 목록에 없으므로 알림의 제목과 이동 전 자리를 넘긴다(전에는 ": 옮겼습니다"처럼 비었다).
+    // 방금 만든 업무는 아직 목록에 없다. 만든 자리("할 일" 끝)에 먼저 넣어 이동 상태(저장 중·확인 못 함·다시 확인)를 그 카드에
+    // 보이게 하고, 알림의 제목과 이동 전 자리를 넘긴다(전에는 목록을 다시 읽지 못하면 카드도 다시 확인 단추도 없었다).
+    if (!tasks.some((t) => t.id === created.id)) tasks = [...tasks, created];
     await commitMove(created.id, { status: lane, beforeId: null }, 'menu', created.title, {
       status: created.status,
       nextId: null,
