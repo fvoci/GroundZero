@@ -262,10 +262,10 @@ pub async fn restore(
     // fvoci 표에 권한이 없다. 관리자 권한은 트리거를 잠시 끄는 설정에만 쓴다(`load_tables`, D-88).
     let borrow = crate::db::admin::borrow_migrator(&mut conn).await?;
     let result = restore_as_owner(config, &mut conn, from, &manifest).await;
-    let released = crate::db::admin::release_migrator(&mut conn, borrow).await;
+    let released = crate::db::admin::release_migrator_or_reconnect(&mut conn, url, borrow).await;
     let closed = conn.close().await.map_err(AppError::from);
     // 원래 실패(복구)를 먼저 돌려준다. 뒤따른 정리 실패(멤버십 회수·연결 닫기)도 버리지 않고 로그에 남긴다:
-    // 회수 실패는 관리자에게 임시 SET 멤버십이 남았다는 뜻이다.
+    // 회수 실패(새 관리자 연결로 한 번 더 해 본 뒤)는 관리자에게 임시 SET 멤버십이 남았다는 뜻이다.
     for (step, outcome) in [("release_migrator", &released), ("close", &closed)] {
         if let (Err(_), Err(err)) = (&result, outcome) {
             tracing::error!(
