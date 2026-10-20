@@ -257,5 +257,13 @@
   "tasks_lane_estimate_all": "whole column {duration}",
   "tasks_lane_estimate_missing": "{count} without an estimate",
   "tasks_lane_estimate_none": "No estimates",
-  "tasks_lane_estimate_hint": "Column estimates add up the estimated time on the cards (subtask cards are added separately; time actually spent is not included)."
+  "tasks_lane_estimate_hint": "Column estimates add up the estimated time on the cards (subtask cards are added separately; time actually spent is not included).",
+  "tasks_undo_offer": "{title}: you can undo that move.",
+  "tasks_undo": "Undo",
+  "tasks_undo_label": "Undo moving {title}",
+  "tasks_undone": "{title}: moved back ({status}).",
+  "tasks_undone_end": "{title}: moved back ({status}). The task that was right after it is no longer in that column, so it went to the end.",
+  "tasks_undo_changed": "{title}: it changed elsewhere after the move, so it wasn't moved back. Showing the latest server state.",
+  "tasks_undo_read_failed": "{title}: couldn't check the current state, so it wasn't moved back. Check your connection and press it again.",
+  "tasks_undo_overlapped": "{title}: it changed elsewhere while moving it back, so undoing may have replaced that change. Showing the latest server state."
 }

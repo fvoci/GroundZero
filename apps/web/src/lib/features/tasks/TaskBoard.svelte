@@ -225,6 +225,8 @@
     how: BoardAction | 'drag' | 'menu';
     /** 이동 요청이 아직 끝나지 않았는지(끝나기 전에는 "반영 안 됨"으로 단정하지 않는다). */
     inFlight: boolean;
+    /** 확정되면 되돌리기를 내놓는지(되돌리기 자체의 이동은 내놓지 않는다). */
+    undoable: boolean;
   }
   const SLOW_MS = 3000;
   const CHECK_MS = 10000;
@@ -292,6 +294,74 @@
     return phase !== undefined && phase !== 'not_saved';
   };
 
+  /**
+   * 방금 확정된 이동의 되돌리기(마지막 하나만). 결과를 모르는 이동에는 내놓지 않는다. 다시 읽은 목록에서 그 카드가 이
+   * 이동의 결과(열·바로 뒤 업무·판)와 다르면(다른 사람이 옮기거나 고침) 거둔다. 시간이 지나도 저절로 없애지 않는다.
+   */
+  interface UndoOffer {
+    id: string;
+    title: string;
+    /** 이동 전 서버 자리. */
+    from: MoveOrigin;
+    to: BoardMove;
+    /** 이 이동 뒤의 판. */
+    version: number;
+  }
+  let undoOffer = $state<UndoOffer | undefined>(undefined);
+  function offerUndo(
+    id: string,
+    title: string,
+    from: MoveOrigin,
+    to: BoardMove,
+    version: number,
+  ): void {
+    undoOffer = { id, title, from, to, version };
+  }
+  /** 이 목록에서도 되돌리기가 맞는지(그 카드가 이 이동의 결과 그대로인지). */
+  const undoStillFits = (server: readonly TaskView[], u: UndoOffer): boolean =>
+    server.find((t) => t.id === u.id)?.version === u.version &&
+    reconcileMove(server, u.id, u.from, u.to) === 'applied';
+
+  async function undoMove(): Promise<void> {
+    const u = undoOffer;
+    if (u === undefined || busy(u.id)) return;
+    undoOffer = undefined;
+    status = m.tasks_move_checking({ title: u.title });
+    let server: TaskView[];
+    try {
+      server = await api.tasks(item.id);
+    } catch {
+      if (!alive) return;
+      // 지금 상태를 모르면 보내지 않는다. 다시 누를 수 있게 둔다.
+      undoOffer = u;
+      status = m.tasks_undo_read_failed({ title: u.title });
+      return;
+    }
+    if (!alive) return;
+    ++reloadSeq;
+    tasks = overlaid(server);
+    if (!undoStillFits(server, u)) {
+      moveNotice = m.tasks_undo_changed({ title: u.title });
+      status = moveNotice;
+      await focusCard(u.id);
+      return;
+    }
+    // 원래 바로 뒤에 있던 업무가 그 열에 없으면 열 끝으로 되돌린다(그렇게 알린다).
+    const back = replan(server, { status: u.from.status, beforeId: u.from.nextId });
+    const atEnd = back.beforeId !== u.from.nextId;
+    await commitMove(u.id, back, 'menu', u.title, undefined, undefined, {
+      done: (title, lane) =>
+        atEnd
+          ? m.tasks_undone_end({ title, status: STATUS_LABEL[lane] })
+          : m.tasks_undone({ title, status: STATUS_LABEL[lane] }),
+    });
+    await focusCard(u.id);
+  }
+  async function focusCard(id: string): Promise<void> {
+    await tick();
+    document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(id)}"]`)?.focus();
+  }
+
   // 화면을 떠나면 타이머를 멈추고 늦게 온 응답은 버린다. 항목이 바뀌면 앞 항목의 기다림을 버린다.
   $effect(() => {
     alive = true;
@@ -306,6 +376,7 @@
     untrack(() => {
       for (const id of Object.keys(timers)) clearTimers(id);
       pending = {};
+      undoOffer = undefined;
     });
   });
 
@@ -316,6 +387,7 @@
       if (!alive || mine !== reloadSeq || itemId !== item.id) return;
       settleUnknown(server);
       tasks = overlaid(server);
+      if (undoOffer !== undefined && !undoStillFits(server, undoOffer)) undoOffer = undefined;
       error = undefined;
     } catch (e: unknown) {
       if (alive && mine === reloadSeq) error = errorText(e, m.tasks_load_failed());
@@ -468,6 +540,8 @@
     knownOrigin?: MoveOrigin,
     /** 다시 시도: 이 판의 대기 항목을 그대로 교체한다(지우고 다시 넣는 사이에 같은 카드의 요청이 끼지 않게). */
     replacing?: number,
+    /** 되돌리기: 보내기 직전 서버 자리를 기준으로 보내므로 끼어든 변경을 판으로 알아차리고, 다시 되돌리기는 내놓지 않는다. */
+    undo?: { done: (title: string, lane: TaskStatus) => string },
   ): Promise<boolean> {
     const title = knownTitle ?? titleOf(id);
     if (busy(id) && (replacing === undefined || pending[id]?.seq !== replacing)) {
@@ -476,11 +550,22 @@
     }
     const origin = knownOrigin ?? originOf(tasks, id);
     if (origin === undefined) return false;
+    // 같은 카드를 다시 옮기면 앞선 이동의 되돌리기는 더 이상 맞지 않는다.
+    if (undoOffer?.id === id) undoOffer = undefined;
     clearTimers(id);
     const seq = ++moveSeq;
     pending = {
       ...pending,
-      [id]: { seq, plan, origin, phase: 'saving', title, how, inFlight: true },
+      [id]: {
+        seq,
+        plan,
+        origin,
+        phase: 'saving',
+        title,
+        how,
+        inFlight: true,
+        undoable: undo === undefined,
+      },
     };
     tasks = applyMove(tasks, id, plan);
     status = m.tasks_move_saving({ title });
@@ -502,13 +587,21 @@
       await reload();
       // 다시 시도는 보내기 직전에 읽은 서버 자리를 기준으로 보낸다. 이동 API에는 판 조건이 없어 그 사이 다른 변경이
       // 끼면 이 이동이 덮는다. 응답의 판이 이 이동만으로 될 판보다 크면 그런 변경이 있었던 것이므로 알린다.
-      if (replacing !== undefined && overlapped(origin, plan, saved.version)) {
-        moveNotice = m.tasks_move_overlapped({ title });
+      if (
+        (replacing !== undefined || undo !== undefined) &&
+        overlapped(origin, plan, saved.version)
+      ) {
+        moveNotice =
+          undo === undefined
+            ? m.tasks_move_overlapped({ title })
+            : m.tasks_undo_overlapped({ title });
         status = moveNotice;
         return true;
       }
       clearMoveNotice();
-      status = movedMessage(how, title, plan.status);
+      status =
+        undo === undefined ? movedMessage(how, title, plan.status) : undo.done(title, plan.status);
+      if (undo === undefined) offerUndo(id, title, origin, plan, saved.version);
       return true;
     } catch (e: unknown) {
       if (!current(id, seq)) return false;
@@ -561,6 +654,9 @@
       finish(id);
       clearMoveNotice();
       status = m.tasks_move_confirmed({ title: p.title, status: STATUS_LABEL[p.plan.status] });
+      const confirmed = server.find((t) => t.id === id);
+      if (p.undoable && confirmed !== undefined)
+        offerUndo(id, p.title, p.origin, p.plan, confirmed.version);
     } else if (stillInFlight) {
       patch(id, seq, { phase: 'slow' });
       status = m.tasks_move_slow({ title: p.title });
@@ -936,6 +1032,18 @@
   </div>
   {#if moveNotice !== undefined}
     <p role="alert" class="text-sm text-destructive">{moveNotice}</p>
+  {/if}
+  {#if undoOffer !== undefined}
+    {@const offer = undoOffer}
+    <div class="flex flex-wrap items-center gap-2 text-sm" data-move-undo>
+      <span>{m.tasks_undo_offer({ title: offer.title })}</span>
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label={m.tasks_undo_label({ title: offer.title })}
+        onclick={() => void undoMove()}>{m.tasks_undo()}</Button
+      >
+    </div>
   {/if}
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive">{error}</p>
