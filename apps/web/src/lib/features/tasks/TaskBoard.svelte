@@ -394,7 +394,11 @@
   // 열 끝에 옮긴다. 옮기기가 실패하면 업무는 "할 일"에 남고 실패를 알린다(만든 것은 사라지지 않는다).
   let adding = $state<TaskStatus | undefined>(undefined);
   async function quickAdd(lane: TaskStatus, requestId: string, title: string): Promise<void> {
-    const created = await api.createTask(item.id, requestId, title);
+    const itemId = item.id;
+    const created = await api.createTask(itemId, requestId, title);
+    // 만드는 사이 화면을 떠났거나 다른 항목으로 바뀌었으면 이어서 옮기지 않는다(타이머·요청이 사라진 화면에 남지 않게).
+    // 업무는 이미 만들어졌으므로 "할 일"에 남는다.
+    if (!alive || itemId !== item.id) return;
     if (created.status === lane) {
       await reload();
       return;

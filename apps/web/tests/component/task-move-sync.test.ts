@@ -445,6 +445,24 @@ describe('kanban save states', () => {
     expect(liveText()).toContain('새 업무: 저장을 확인했습니다(진행 중).');
   });
 
+  it('a quick add that finishes after leaving the board does not go on to move it', async () => {
+    lists(start);
+    const made = deferred<Awaited<ReturnType<typeof api.createTask>>>();
+    vi.spyOn(api, 'createTask').mockReturnValue(made.promise);
+    const move = vi.spyOn(api, 'moveTask');
+    const view = await mount();
+    const lane = screen.getByRole('region', { name: /진행 중/ });
+    await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
+    const input = within(lane).getByRole('textbox');
+    await fireEvent.input(input, { target: { value: '새 업무' } });
+    await fireEvent.submit(input.closest('form') ?? input);
+    view.unmount();
+    made.resolve({ ...task('n', '새 업무'), checklist: [] });
+    await flush();
+    expect(move).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('a list read started before a quick add cannot remove the new card while it is saving', async () => {
     // 다른 카드를 옮긴 뒤의 목록 읽기가 늦어지는 사이 새 카드를 다른 열에 만든다. 그 늦은 목록에는 새 카드가 없다.
     const slow = deferred<TaskView[]>();
