@@ -104,7 +104,6 @@ describe('gantt week header', () => {
     estimate_minutes: null,
     tags: [],
     milestone: false,
-    predecessor_ids: [],
     predecessors: [],
     series: null,
     occurrence_date: null,

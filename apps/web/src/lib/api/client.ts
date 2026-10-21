@@ -1039,8 +1039,6 @@ export interface TaskView {
   estimate_minutes: number | null;
   tags: string[];
   milestone: boolean;
-  /** 같은 항목 안의 선행 업무 id(`predecessors`와 같은 순서). */
-  predecessor_ids: string[];
   /** 선행 관계: 선행 업무, 종류, 지연일(D-91). 후속 업무는 다른 업무의 이 목록을 거꾸로 찾는다. */
   predecessors: TaskLinkView[];
   /** 반복 업무의 회차면 그 반복. */
@@ -1170,7 +1168,7 @@ function parseShiftProposal(value: Json): ShiftProposalView {
     from_due_date: optStr(o, 'from_due_date'),
     start_date: optStr(o, 'start_date'),
     due_date: optStr(o, 'due_date'),
-    causes: o.causes === undefined ? [] : parseList(o.causes, parseShiftCause),
+    causes: parseList(o.causes, parseShiftCause),
   };
 }
 
@@ -1263,12 +1261,7 @@ export function parseTask(value: Json): TaskView {
     estimate_minutes: optInt(o, 'estimate_minutes'),
     tags: strings(o.tags),
     milestone: bool(o, 'milestone'),
-    predecessor_ids: strings(o.predecessor_ids),
-    // 옛 응답(종류 없음)은 모두 종료 후 시작·지연 0이다.
-    predecessors:
-      o.predecessors === undefined
-        ? strings(o.predecessor_ids).map((id) => ({ task_id: id, kind: 'FS', lag_days: 0 }))
-        : parseList(o.predecessors, parseTaskLink),
+    predecessors: parseList(o.predecessors, parseTaskLink),
     series:
       o.series === null || o.series === undefined
         ? null
@@ -2228,7 +2221,6 @@ async function expectOk<T>(
 }
 
 export const api = {
-  health: () => expectOk('GET', '/healthz', parseHealth),
   authInfo: () =>
     expectOk('GET', '/api/auth-info', (v): AuthInfo => ({
       oidc_enabled: bool(rec(v, 'auth info'), 'oidc_enabled'),

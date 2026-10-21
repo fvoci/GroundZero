@@ -448,7 +448,7 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 
 - **마일스톤**: 마감일 하나만 가진 업무(`milestone`, DB 검사로 시작일 금지). 간트에 ◆로 보인다.
 - **선행 관계**: 같은 항목 안의 업무 쌍마다 하나(`task_dependencies`). 종류(FS·SS·FF·SF)와 지연일은 D-91·90절. 후속 업무 쓰기 권한으로 추가·삭제하며 순환·자기 참조·다른 항목은 400, 독자는 403, 볼 수 없으면 404. 같은 항목의 관계 변경은 잠금으로 직렬화해 동시에 서로를 선행으로 걸어도 하나만 성공한다. `link_predecessor`·`unlink_predecessor` 감사 기록.
-- **후속 재배치 (D-31 "영향과 충돌을 보여준 뒤 사용자가 승인")**: 날짜를 바꾸고 후속 업무가 있으면 화면이 먼저 `POST /api/tasks/{id}/schedule-plan`(D-91 전에는 `schedule-preview`)으로 제안을 받는다(읽기, 아무것도 바꾸지 않음). 제안은 바뀐 선행이 관계 종류·지연일대로 더 요구하는 만큼만 미는 최소 이동이고(90절) 기간은 유지한다(앞당기면 제안 없음, 날짜 없는 업무는 옮기지 않음). 사용자가 "후속 업무도 옮겨 저장"을 고르면 업무 고치기의 `successor_shifts`로 같은 트랜잭션에서 함께 옮긴다. 승인한 업무 중 하나라도 기준 버전이 지났으면 아무것도 바꾸지 않고 409 `shift_conflict`, 화면은 다시 계산해 묻는다. 후속이 아닌 업무를 옮기라는 요청은 400. 옮긴 업무마다 `reschedule` 감사 기록(이유 `predecessor_moved`). "이 업무만 저장"은 후속 업무를 그대로 둔다.
+- **후속 재배치 (D-31 "영향과 충돌을 보여준 뒤 사용자가 승인")**: 날짜를 바꾸고 후속 업무가 있으면 화면이 먼저 `POST /api/tasks/{id}/schedule-plan`(D-91 전의 `schedule-preview`는 D-92로 없앴다)으로 제안을 받는다(읽기, 아무것도 바꾸지 않음). 제안은 바뀐 선행이 관계 종류·지연일대로 더 요구하는 만큼만 미는 최소 이동이고(90절) 기간은 유지한다(앞당기면 제안 없음, 날짜 없는 업무는 옮기지 않음). 사용자가 "후속 업무도 옮겨 저장"을 고르면 업무 고치기의 `successor_shifts`로 같은 트랜잭션에서 함께 옮긴다. 승인한 업무 중 하나라도 기준 버전이 지났으면 아무것도 바꾸지 않고 409 `shift_conflict`, 화면은 다시 계산해 묻는다. 후속이 아닌 업무를 옮기라는 요청은 400. 옮긴 업무마다 `reschedule` 감사 기록(이유 `predecessor_moved`). "이 업무만 저장"은 후속 업무를 그대로 둔다.
 - **간트**: 항목 업무 영역의 세 번째 보기. 상위 업무 바로 뒤에 하위 업무, 막대·마일스톤·오늘 선. 막대는 보조 표시이고 줄마다 단추가 같은 내용(번호·제목·기간·상태·선행)을 글로 말한다. 가로 이동은 "2주 앞·오늘·2주 뒤" 단추로 키보드에서도 된다. 날짜는 UTC 날짜 번호로 계산해 시간대 때문에 하루가 밀리지 않는다(D-50). 달력·간트 라이브러리는 들이지 않았다: 필요한 것은 읽기 표시와 상세 열기이고 끌어서 옮기기는 없으며, 새 의존성은 허용 목록·접근성 확인 부담(O-30 대기 중)만 늘린다.
 - **리뷰 반영(0011 동시성)**: 열 잠금을 업무 행보다 먼저 잡는다(다시 매기기와의 교착 방지). 다시 매기기는 그 열에 남은 행만 바꾼다. 볼 수 없게 된 담당 정리는 워크스페이스 잠금으로 직렬화해 비공개 전환과 역할 강등이 동시에 일어나도 놓치지 않는다. 새 담당자 목록은 한 번 정해 그 목록만 넣고(그사이 지워진 담당을 확인 없이 되살리지 않음) 멤버 행은 사용자 id 순으로 잠근다. 실제로 지운 경우에만 `unassign` 감사 기록. 잠금 순서: 열 → 업무 행(id 순) → 항목 공유 → 번호.
 - **리뷰 반영(이 조각)**: 업무 행을 잠그는 모든 경로(고치기·옮기기·상위 바꾸기)가 `app_lock_task_rows`로 열 잠금을 (항목, 상태) 순으로 먼저 잡고 행을 id 순으로 잡는다. 잡는 사이 열이 바뀌었거나 교착이 감지되면 409(다시 시도)이며 아무것도 바뀌지 않는다. 승인 재배치는 선행 관계 잠금 아래에서 후속 여부를 확인하고, 같은 업무를 두 번 넣거나 기준 버전이 빠지면 거부한다. 제안은 이번에 옮겨진 선행이 원래보다 더 요구하는 만큼만이며(전부터 겹친 만큼과 완료한 업무는 그대로), 미리보기도 시작일 > 마감일을 거부한다. 화면은 미리보기 패널이 떠 있는 동안 폼을 잠그고 그때의 입력·기준 버전 그대로 보내며, 서버 기준 내용과 날짜가 다르면 언제나 미리 본다(충돌 뒤 다시 저장 포함). 이중 제출을 막고, 패널이 닫히면 저장 단추로 초점을 돌린다. 간트는 최대 400일까지 그리고 그 뒤의 업무는 따로 적는다.
@@ -1015,7 +1015,7 @@ HWP·HWPX는 rhwp(`@rhwp/core` 0.8.7, MIT, npm 의존성 없음, WASM 약 11.8 M
 
 ## 72. 운영 로그 (2026-10-18, D-83, PR #12 `fe8372c`, 마이그레이션 0056)
 
-- **구현**: `crates/server/src/logging.rs`. `FVOCI_LOG`(없으면 `RUST_LOG`, 기본 info)와 `FVOCI_LOG_FORMAT`(json·pretty). 한 사건 한 줄 JSON(공통 필드와 요청·작업 id), 요청마다 접근 줄 하나(경로 틀, 거절이면 `error_code`), 5xx는 응답으로 바꾸는 곳에서 한 번(`error_code`·`detail` 분류). 라이브러리 상한(info)과 PDF 라이브러리 끔, sqlx SQL 문장 로그 끔, 작업 함수 경고는 SQLSTATE만, 패닉 한 줄. 오류 본문과 응답 머리글에 요청 id, 화면은 5xx에 안전한 문구와 요청 ID. Docker `json-file` 회전(10 MB × 5).
+- **구현**: `crates/server/src/logging.rs`. `FVOCI_LOG`(기본 info. 옛 이름 `RUST_LOG`로 대신 읽던 것은 D-92로 없앴다)와 `FVOCI_LOG_FORMAT`(json·pretty). 한 사건 한 줄 JSON(공통 필드와 요청·작업 id), 요청마다 접근 줄 하나(경로 틀, 거절이면 `error_code`), 5xx는 응답으로 바꾸는 곳에서 한 번(`error_code`·`detail` 분류). 라이브러리 상한(info)과 PDF 라이브러리 끔, sqlx SQL 문장 로그 끔, 작업 함수 경고는 SQLSTATE만, 패닉 한 줄. 오류 본문과 응답 머리글에 요청 id, 화면은 5xx에 안전한 문구와 요청 ID. Docker `json-file` 회전(10 MB × 5).
 - **리뷰**: 별도 검토자가 PDF 라이브러리의 첨부 내용 출력, sqlx 느린 쿼리·DB 알림의 원문, 실시간 연결 실패 무기록, 패닉 출력, 필드 덮어쓰기를 찾아 같은 PR에서 고쳤다.
 - **검증**: 통합 `tests/logging.rs` 6건(48개 동시 요청에서 줄마다 JSON, 500을 요청 id로 찾고 한 번만 기록, 받은 요청 id 검사, TRACE에서도 가짜 비밀 값(쿠키·Authorization·OIDC 코드·state·공개 링크 토큰·쿼리·본문·깨진 JSON·DB 비밀번호·라이브러리 trace) 없음, 레벨·모듈 거르기와 라이브러리 상한·PDF 끔·필드 덮어쓰기 없음, pretty 한 줄, ERROR 거르기에서도 감사 기록 유지), 전체 통합 207건 통과(로컬 격리 Compose), CI 통과. 실제 개발 서버 출력에서 모든 줄 JSON·`/healthz` 숨김·쿼리 미기록·요청 id 일치를 확인.
 
@@ -2179,7 +2179,7 @@ CodeRabbit은 push마다 바뀐 부분을 자동 검토했고(`5caedc9`·`acc544
   돌려줌)로 계획을 다시 세워 승인 목록과 비교한다. 다르면 트랜잭션을 버리고 409 `shift_conflict`. `version` 올리기로는 이 경우를 못
   잡는다: 그사이 새로 이어진 업무는 승인 목록에 없어 판을 보지 않는다(advisor 검토, 시험
   `changing_a_link_previews_causes_and_moves_approved_tasks_in_one_transaction`).
-- API: `Task.predecessors`(업무·종류·지연일, `predecessor_ids`와 같은 순서), `ShiftProposal.causes`, `SchedulePlan{shifts, undated}`,
+- API: `Task.predecessors`(업무·종류·지연일. 같은 순서의 `predecessor_ids`도 주다가 D-92로 없앴다), `ShiftProposal.causes`, `SchedulePlan{shifts, undated}`,
   `POST /api/tasks/{id}/schedule-plan`, `POST /api/tasks/{id}/predecessors/{pred}/schedule-plan`, 본문을 받는
   `PUT /api/tasks/{id}/predecessors/{pred}`(본문 없으면 옛 동작. 0082에서 없앴다: 본문 필수, 편집을 시작한 관계 `base`, 바뀌었으면 409
   `link_conflict`). 감사: `link_predecessor`(종류·지연일 포함), `change_predecessor`(이전·새),
