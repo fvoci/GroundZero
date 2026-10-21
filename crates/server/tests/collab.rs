@@ -2316,29 +2316,59 @@ async fn move_to(app: &Router, user: &TestUser, id: &str, to: &str) -> common::R
 
 /// 리뷰(감사 S6 후속): 옮기기 전 방의 리비전 남기기가 실패해도(쓰기 오류·시간 초과) 그대로 옮겨, 실시간이 꺼진 새
 /// 자리에서 리비전이 되지 않은 편집이 남겨졌다. 남기지 못하면 옮기지 않는다(409, 편집은 방에 남는다). 다시 하면 옮긴다.
+/// 문서 행을 다른 트랜잭션이 잠가 체크포인트를 시간 초과로 붙잡는다(표 전체를 잠그는 트리거는 같은 바이너리의 다른
+/// 시험을 늦춘다).
 #[tokio::test]
 async fn a_failed_checkpoint_stops_the_move() {
     let (app, _addr, admin, _writer, from, to, id, e, watcher) =
         live_move_setup("체크포인트 실패 이동").await;
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
-    let name = format!("test_fail_revision_{}", uuid::Uuid::now_v7().simple());
-    sqlx::query(&format!(
-        "CREATE FUNCTION fvoci.{name}() RETURNS trigger LANGUAGE plpgsql AS $$
-         BEGIN RAISE EXCEPTION 'test revision failure'; END $$"
-    ))
-    .execute(&owner)
-    .await
-    .unwrap();
-    sqlx::query(&format!(
-        "CREATE TRIGGER {name} BEFORE INSERT ON fvoci.document_revisions FOR EACH ROW
-         WHEN (NEW.document_id = '{id}'::uuid) EXECUTE FUNCTION fvoci.{name}()"
-    ))
-    .execute(&owner)
-    .await
-    .unwrap();
-
-    let refused = move_to(&app, &admin, &id, &to).await;
+    let mut hold = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *hold)
+        .await
+        .unwrap();
+    sqlx::query("SELECT 1 FROM fvoci.documents WHERE id = $1::uuid FOR UPDATE")
+        .bind(&id)
+        .execute(&mut *hold)
+        .await
+        .unwrap();
+    let request = tokio::spawn({
+        let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
+        async move { move_to(&app, &admin, &id, &to).await }
+    });
+    // 답이 오거나(체크포인트 시간 초과) 이동이 문서 행 잠금을 기다리기 시작하면(고치기 전: 체크포인트 결과를 버리고
+    // 옮김) 잠금을 푼다.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    // 다른 역할의 질의 내용은 관리자만 본다.
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let watcher_db = sqlx::PgPool::connect(&admin_url).await.unwrap();
+    while !request.is_finished() {
+        // 같은 행을 먼저 기다리는 연결(방의 리비전 남기기)이 있으면 이동은 그 연결에 막힌 것으로 보인다(행 잠금 줄).
+        let moving: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity a WHERE a.wait_event_type = 'Lock'
+                                AND a.query = 'SELECT 1 FROM documents WHERE id = $1 FOR UPDATE'
+                                AND ($1 = ANY (pg_blocking_pids(a.pid))
+                                     OR EXISTS (SELECT 1 FROM unnest(pg_blocking_pids(a.pid)) b(pid)
+                                                WHERE $1 = ANY (pg_blocking_pids(b.pid)))))",
+        )
+        .bind(holder)
+        .fetch_one(&watcher_db)
+        .await
+        .unwrap();
+        if moving {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the move neither answered nor proceeded"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    watcher_db.close().await;
+    hold.rollback().await.unwrap();
+    let refused = request.await.unwrap();
     let doc = send(
         &app,
         Method::GET,
@@ -2348,12 +2378,6 @@ async fn a_failed_checkpoint_stops_the_move() {
     )
     .await
     .json;
-    for cleanup in [
-        format!("DROP TRIGGER {name} ON fvoci.document_revisions"),
-        format!("DROP FUNCTION fvoci.{name}()"),
-    ] {
-        sqlx::query(&cleanup).execute(&owner).await.unwrap();
-    }
     assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
     assert!(refused.json.get("gains").is_none(), "{:?}", refused.json);
     assert_eq!(doc["workspace_id"], from.as_str(), "the document moved");
