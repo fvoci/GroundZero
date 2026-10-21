@@ -367,7 +367,7 @@ pub async fn plan(
 /// 함께 하는 사람들의 진행 집계(볼 수 있는 사람).
 #[utoipa::path(get, path = "/api/items/{item_id}/study/participants", operation_id = "study_participants",
     params(("item_id" = String, Path, format = Uuid), TodayQuery),
-    responses((status = 200, body = [StudyParticipant]), (status = 404, body = ErrorBody)), tag = "study")]
+    responses((status = 200, body = [StudyParticipant]), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "study")]
 pub async fn participants(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
