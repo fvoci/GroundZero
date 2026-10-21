@@ -16,7 +16,7 @@
   "search_mine": "내 담당",
   "search_from": "날짜부터",
   "search_to": "까지",
-  "search_date_hint": "날짜는 업무의 기한(없으면 시작일), 일정의 시작일, 그 밖에는 고친 날로 봅니다.",
+  "search_date_hint": "날짜는 업무의 기한(없으면 시작일), 일정의 시작일, 기록의 발생일(없으면 고친 날), 그 밖에는 고친 날로 봅니다.",
   "search_reversed": "시작 날짜가 끝 날짜보다 늦습니다.",
   "search_searching": "찾는 중…",
   "search_failed": "검색하지 못했습니다. 잠시 뒤 다시 시도해 주세요.",
