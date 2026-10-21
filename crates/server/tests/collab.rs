@@ -101,6 +101,8 @@ async fn connect_with(
 
 enum Event {
     Data,
+    /// 내가 보낸 핑의 답(`Client::read_by_server`).
+    Pong,
     Closed(u16),
     Timeout,
 }
@@ -168,6 +170,7 @@ impl Client {
             Some(Ok(WsMessage::Close(frame))) => {
                 Event::Closed(frame.map_or(0, |f| u16::from(f.code)))
             }
+            Some(Ok(WsMessage::Pong(_))) => Event::Pong,
             Some(Ok(_)) => Event::Data,
             Some(Err(_)) | None => Event::Closed(0),
         }
@@ -2486,6 +2489,25 @@ impl Client {
         let frame = Message::Sync(SyncMessage::Update(diff)).encode_v1();
         let _ignored = self.ws.send(WsMessage::Binary(frame.into())).await;
     }
+
+    /// 앞서 보낸 프레임을 서버가 모두 읽어 방의 대기열에 넣을 때까지 기다린다. 서버는 프레임을 차례로 읽고(편집은 방의
+    /// 대기열에 넣은 뒤에 다음 프레임을 읽는다) 핑의 퐁은 그다음 읽기에서 보낸다: 퐁이 오면 앞의 편집은 대기열에 있다.
+    async fn read_by_server(&mut self) {
+        self.ws
+            .send(WsMessage::Ping(Default::default()))
+            .await
+            .unwrap();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            match self.next(Duration::from_millis(500)).await {
+                Event::Pong => return,
+                Event::Closed(code) => panic!("the connection closed ({code}) before the pong"),
+                Event::Data | Event::Timeout => {
+                    assert!(tokio::time::Instant::now() < deadline, "no pong");
+                }
+            }
+        }
+    }
 }
 
 /// 받은 저장 확인 가운데 이 연결이 보낸 편집을 모두 담은 것이 있는지(브라우저는 그때 복구용 초안을 지운다).
@@ -2679,7 +2701,13 @@ async fn edits_held_by_a_move_that_does_not_happen_are_accepted() {
     });
     until_waiting_on_lock("app_lock_move", holder).await;
     e.paragraph("체크포인트 뒤 문단").await;
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    // 서버가 그 편집을 방의 대기열(붙잡힌 이동 명령 뒤)에 넣은 것을 확인한 뒤 잠금을 푼다. 방은 이동 명령 안에 있어 아직
+    // 그 편집을 넣지도 확인하지도 않았다.
+    e.read_by_server().await;
+    assert!(
+        !acked(&e),
+        "the held edit was acknowledged while the move was pending"
+    );
     hold.rollback().await.unwrap();
     let refused = request.await.unwrap();
     assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
@@ -2786,5 +2814,146 @@ async fn no_room_opens_while_a_document_moves() {
     assert_eq!(back.status, StatusCode::OK, "{:?}", back.json);
     let w = connect(addr, Some(&writer), &id, true).await.unwrap();
     w.close().await;
+    owner.close().await;
+}
+
+/// 이 문서의 실시간 상태 행 수(`pending`이면 리비전으로 아직 남지 않은 것만).
+async fn collab_states(owner: &sqlx::PgPool, id: &str, pending: bool) -> i64 {
+    sqlx::query_scalar(
+        "SELECT count(*) FROM fvoci.document_collab_states WHERE document_id = $1::uuid AND (pending OR NOT $2)",
+    )
+    .bind(id)
+    .bind(pending)
+    .fetch_one(owner)
+    .await
+    .unwrap()
+}
+
+/// 마지막 리비전의 번호와 작성자.
+async fn last_revision(owner: &sqlx::PgPool, id: &str) -> (i32, uuid::Uuid) {
+    sqlx::query_as(
+        "SELECT revision, author FROM fvoci.document_revisions WHERE document_id = $1::uuid ORDER BY revision DESC LIMIT 1",
+    )
+    .bind(id)
+    .fetch_one(owner)
+    .await
+    .unwrap()
+}
+
+/// 실시간 상태 행이 조건에 맞을 때까지 기다린다(방이 닫히며 저장하는 것).
+async fn until_collab_states(owner: &sqlx::PgPool, id: &str, pending: bool, want: i64) {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while collab_states(owner, id, pending).await != want {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the live state of {id} did not reach {want} (pending: {pending})"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// #71 리뷰: 열린 방 없이 남은 실시간 상태(앞선 방이 리비전을 남기지 못하고 닫힘: 편집자가 독자가 되어 쓸 수 있는 사람이
+/// 없었다)는 옮기기 전에 리비전이 되지 않았다. 그 편집은 이미 저장 확인을 받았고(브라우저는 초안을 지운다), 실시간이 꺼진
+/// 곳으로 옮기면 되살릴 길이 없어 다음 일반 저장이 버렸다. 이제 방이 없으면 옮기기 전에 그 상태를 리비전으로 남긴다(옮기는
+/// 사람이 대신 작성자). 방을 연 적 없는 문서와 방을 열기만 한 문서(편집기가 저장한 본문의 null 속성은 Yjs에 남지 않는다)는
+/// 옮겨도 상태 행도 리비전도 새로 생기지 않는다.
+#[tokio::test]
+async fn a_move_without_a_room_saves_a_live_state_left_pending() {
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let from = create_workspace(&app, &admin, "남은 상태 켠 곳").await;
+    let to = create_workspace(&app, &admin, "남은 상태 끈 곳").await;
+    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let left = common::create_doc(&app, &admin, &from, "방 없이 남은 상태").await;
+    let left_id = left["id"].as_str().unwrap().to_owned();
+    let never = common::create_doc(&app, &admin, &from, "방을 연 적 없는 문서").await;
+    let never_id = never["id"].as_str().unwrap().to_owned();
+    let opened = common::create_doc(&app, &admin, &from, "방을 열기만 한 문서").await;
+    let opened_id = opened["id"].as_str().unwrap().to_owned();
+    // 실시간을 켜기 전에 편집기처럼 null 속성이 든 본문을 저장한다.
+    let saved = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{opened_id}"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "base_revision": opened["revision"],
+            "title": "방을 열기만 한 문서",
+            "body": { "type": "doc", "content": [{ "type": "orderedList", "attrs": { "start": 3, "type": null },
+                "content": [{ "type": "listItem", "content": [{ "type": "paragraph",
+                    "content": [{ "type": "text", "text": "null 속성" }] }] }] }] } })),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{from}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+
+    // 방을 열기만 한 문서: 방이 닫히며 본문에서 만든 상태를 저장한다(리비전으로 남길 것은 없음).
+    let o = connect(addr, Some(&admin), &opened_id, true).await.unwrap();
+    o.close().await;
+    until_collab_states(&owner, &opened_id, false, 1).await;
+
+    // 작성자가 실시간으로 쓰고 저장 확인을 받은 뒤 독자가 되면 그 연결은 닫히고(4403), 방은 쓸 수 있는 사람이 없어 리비전을
+    // 남기지 못한 채 실시간 상태만 남기고 닫힌다.
+    let mut e = connect(addr, Some(&writer), &left_id, true).await.unwrap();
+    e.paragraph("방 없이 남은 글").await;
+    assert!(e.until(acked).await, "the edit was never acknowledged");
+    let demoted = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{from}/members/{}", writer.id.0),
+        Some(&admin),
+        Some(json!({ "role": "reader" })),
+    )
+    .await;
+    assert!(demoted.status.is_success(), "{:?}", demoted.json);
+    assert_eq!(e.closed().await, Some(4403));
+    until_collab_states(&owner, &left_id, true, 1).await;
+    let before = get_doc(&app, &admin, &left_id).await;
+    assert!(
+        !before["body"].to_string().contains("방 없이 남은 글"),
+        "{before}"
+    );
+
+    // 방 없이 실시간이 꺼진 곳으로 옮긴다: 옮기기 전에 그 상태가 리비전으로 남는다(옮기는 사람이 작성자).
+    let moved = move_to(&app, &admin, &left_id, &to).await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    let after = get_doc(&app, &admin, &left_id).await;
+    assert_eq!(after["workspace_id"], to.as_str());
+    assert!(
+        after["body"].to_string().contains("방 없이 남은 글"),
+        "the acknowledged live edit left without a room is not in the moved document: {after}"
+    );
+    assert_eq!(moved.json["document"]["revision"], after["revision"]);
+    assert_eq!(last_revision(&owner, &left_id).await.1, admin.id.0);
+    assert_eq!(collab_states(&owner, &left_id, true).await, 0);
+
+    // 방을 연 적 없는 문서: 상태 행도 리비전도 생기지 않는다.
+    let never_before = last_revision(&owner, &never_id).await;
+    let moved = move_to(&app, &admin, &never_id, &to).await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    assert_eq!(collab_states(&owner, &never_id, false).await, 0);
+    assert_eq!(last_revision(&owner, &never_id).await, never_before);
+
+    // 방을 열기만 한 문서: 저장된 상태가 본문과 같은 내용이라 리비전이 생기지 않는다.
+    let opened_before = last_revision(&owner, &opened_id).await;
+    let moved = move_to(&app, &admin, &opened_id, &to).await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    assert_eq!(
+        last_revision(&owner, &opened_id).await,
+        opened_before,
+        "moving a document whose room only opened wrote a revision"
+    );
     owner.close().await;
 }
