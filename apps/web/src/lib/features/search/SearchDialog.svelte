@@ -13,7 +13,7 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
-  import { SEARCH_KINDS, searchKindLabel, searchResultPath } from './search';
+  import { readableSnippet, SEARCH_KINDS, searchKindLabel, searchResultPath } from './search';
 
   let {
     open = $bindable(false),
@@ -314,10 +314,15 @@
         </div>
       </div>
     </fieldset>
-    <p class="text-xs text-muted-foreground">
-      {m.search_date_hint()}
-    </p>
-    <p class="text-xs text-muted-foreground">{m.search_author_hint()}</p>
+    <!-- 조건 설명은 접어 둬서 결과가 첫 화면에 바로 보이게 한다(좁은 화면에서 결과가 아래로 밀리지 않게). -->
+    <details class="text-xs text-muted-foreground" data-testid="search-filters-help">
+      <summary
+        class="w-fit cursor-pointer rounded select-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >{m.search_filters_help()}</summary
+      >
+      <p class="mt-1">{m.search_date_hint()}</p>
+      <p class="mt-1">{m.search_author_hint()}</p>
+    </details>
     <div aria-live="polite" class="text-sm text-muted-foreground">
       {#if reversed}
         <span class="text-destructive">{m.search_reversed()}</span>
@@ -355,7 +360,9 @@
                 <span class="truncate font-medium">{r.title}</span>
               </span>
               {#if r.snippet !== null}
-                <span class="mt-0.5 block text-sm text-muted-foreground">{r.snippet}</span>
+                <span class="mt-0.5 line-clamp-2 text-sm break-words text-muted-foreground"
+                  >{readableSnippet(r.snippet)}</span
+                >
               {/if}
             </button>
           </li>

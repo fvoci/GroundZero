@@ -53,7 +53,7 @@
     sortTasks,
     VIEWS,
   } from './filters';
-  import { PRIORITY_LABEL, STATUS_LABEL } from './labels';
+  import { PRIORITY_LABEL, PRIORITY_TONE, STATUS_LABEL } from './labels';
   import GanttChart from './GanttChart.svelte';
   import { formOf } from './form';
   import ShiftProposals from './ShiftProposals.svelte';
@@ -1228,18 +1228,27 @@
         <section
           data-lane={lane}
           class={[
-            'flex min-w-0 flex-col gap-2 rounded-md border p-2',
+            'flex min-w-0 flex-col gap-2 rounded-lg border bg-muted/40 p-2',
             drag?.active === true && drag.slot?.status === lane && 'ring-2 ring-ring',
           ]}
           aria-label={m.tasks_lane_aria({ status: STATUS_LABEL[lane] })}
         >
-          <h3 class="text-sm font-semibold">
+          <!-- 열 이름 옆에 카드 수를 칩으로(참고 제품의 열 머리글 배치), 그 아래 예상 시간 합계. -->
+          <h3 class="flex items-center gap-2 px-1 text-sm font-semibold">
             {STATUS_LABEL[lane]}
-            <span class="font-normal text-muted-foreground">{board[lane].length}</span>
+            <span
+              class="rounded-full bg-background px-2 py-0.5 text-xs font-normal text-muted-foreground tabular-nums"
+              >{board[lane].length}</span
+            >
           </h3>
           {#if laneEstimateText(lane) !== ''}
-            <p class="text-xs text-muted-foreground" data-lane-estimate={lane}>
+            <p class="px-1 text-xs text-muted-foreground" data-lane-estimate={lane}>
               {laneEstimateText(lane)}
+            </p>
+          {/if}
+          {#if board[lane].length === 0}
+            <p class="px-1 text-xs text-muted-foreground" data-lane-empty={lane}>
+              {isFiltered(filter) ? m.tasks_lane_empty_filtered() : m.tasks_lane_empty()}
             </p>
           {/if}
           <ul class="flex min-h-12 flex-col gap-2">
@@ -1250,7 +1259,7 @@
               <li
                 data-board-card={t.id}
                 class={[
-                  'flex flex-col gap-1 rounded-md border bg-card p-2',
+                  'group flex flex-col gap-1.5 rounded-md border bg-card p-2 shadow-xs',
                   canWrite && 'cursor-grab',
                   drag?.active === true && drag.id === t.id && 'opacity-40',
                 ]}
@@ -1281,22 +1290,50 @@
                     onkeydown={(e) => {
                       onCardKey(e, t.id);
                     }}
-                    class="flex items-baseline gap-2 rounded text-left text-sm hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    class="flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded text-left text-sm hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     onclick={() => {
                       if (!justDragged) open(t.id);
                     }}
                   >
-                    <span class="shrink-0 font-mono text-xs text-muted-foreground"
-                      >{t.reference ?? ''}</span
-                    >
-                    <span class="min-w-0 break-words">{t.title}</span>
+                    <span class="font-mono text-xs text-muted-foreground">{t.reference ?? ''}</span>
+                    <span class="max-w-full min-w-0 font-medium break-words">{t.title}</span>
                   </button>
+                  {#if canWrite}
+                    <DropdownMenu.Root>
+                      <DropdownMenu.Trigger>
+                        {#snippet child({ props })}
+                          <Button
+                            {...props}
+                            size="sm"
+                            variant="ghost"
+                            class="-mt-0.5 -mr-1 h-6 shrink-0 px-1.5 text-xs"
+                            aria-label={m.tasks_move_menu({ title: t.title })}>⋯</Button
+                          >
+                        {/snippet}
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Content align="end">
+                        {#each TASK_STATUSES.filter((s) => s !== t.status) as target (target)}
+                          <DropdownMenu.Item
+                            disabled={busy(t.id)}
+                            onSelect={() =>
+                              void commitMove(t.id, { status: target, beforeId: null }, 'menu')}
+                            >{MOVE_TO[target]()}</DropdownMenu.Item
+                          >
+                        {/each}
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Root>
+                  {/if}
                 </div>
                 {#if t.parent_id !== null}
                   <span class="text-xs text-muted-foreground">↳ {titleOf(t.parent_id)}</span>
                 {/if}
-                <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  {#if t.priority !== 'none'}<span>{PRIORITY_LABEL[t.priority]}</span>{/if}
+                <div
+                  class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
+                >
+                  {#if t.priority !== 'none'}<span
+                      class={['rounded px-1.5 py-0.5 font-medium', PRIORITY_TONE[t.priority]]}
+                      >{PRIORITY_LABEL[t.priority]}</span
+                    >{/if}
                   {#if t.due_date !== null}<span>{m.tasks_card_due({ date: t.due_date })}</span
                     >{/if}
                   {#if t.checklist_total > 0}<span>☑ {t.checklist_done}/{t.checklist_total}</span
@@ -1346,7 +1383,12 @@
                   {/if}
                 {/each}
                 {#if canWrite}
-                  <div class="flex gap-1" aria-hidden="true">
+                  <!-- 마우스로 쓰는 화면에서는 가리키거나 카드 안에 초점이 있을 때만 보인다(자리는 그대로 둬 카드 높이가
+                       바뀌지 않게). 터치 화면은 가리키기가 없으므로 늘 보인다. 키보드는 Alt+방향키를 쓴다. -->
+                  <div
+                    class="flex gap-1 transition-opacity pointer-fine:opacity-0 pointer-fine:group-focus-within:opacity-100 pointer-fine:group-hover:opacity-100"
+                    aria-hidden="true"
+                  >
                     {#each ['left', 'up', 'down', 'right'] as const as action (action)}
                       <Button
                         size="sm"
@@ -1367,29 +1409,6 @@
                       >
                     {/each}
                   </div>
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger>
-                      {#snippet child({ props })}
-                        <Button
-                          {...props}
-                          size="sm"
-                          variant="ghost"
-                          class="h-6 self-start px-1.5 text-xs"
-                          aria-label={m.tasks_move_menu({ title: t.title })}>⋯</Button
-                        >
-                      {/snippet}
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content align="start">
-                      {#each TASK_STATUSES.filter((s) => s !== t.status) as target (target)}
-                        <DropdownMenu.Item
-                          disabled={busy(t.id)}
-                          onSelect={() =>
-                            void commitMove(t.id, { status: target, beforeId: null }, 'menu')}
-                          >{MOVE_TO[target]()}</DropdownMenu.Item
-                        >
-                      {/each}
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
                 {/if}
               </li>
             {/each}

@@ -111,6 +111,9 @@
   "tasks_gantt_empty": "No tasks have dates. Add a start or due date in a task's details to see it here as a bar.",
   "tasks_gantt_nav": "Move Gantt period",
   "tasks_gantt_back": "← 2 weeks earlier",
+  "tasks_gantt_month": "{month}/{year}",
+  "tasks_lane_empty": "No cards",
+  "tasks_lane_empty_filtered": "No cards match the filter",
   "tasks_today": "Today",
   "tasks_gantt_forward": "2 weeks later →",
   "tasks_gantt_later": [

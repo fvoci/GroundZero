@@ -46,3 +46,11 @@ export function searchResultPath(
   }
   return r.item_id === null ? calendarPath(r.workspace_id) : itemPath(r.workspace_id, r.item_id);
 }
+
+// 본문의 참조 노드는 색인 글에 `[reference kind="…" id="…"]`로 들어 있다(색인 내용은 그대로 둔다).
+const REFERENCE_MARK = /\[reference kind="[a-z_]+" id="[0-9a-f-]+"\]/g;
+
+/** 결과 요약에서 참조 표기를 id 대신 짧은 표시(↗참조)로 바꾼다. */
+export function readableSnippet(text: string): string {
+  return text.replace(REFERENCE_MARK, `↗${m.search_snippet_reference()}`);
+}

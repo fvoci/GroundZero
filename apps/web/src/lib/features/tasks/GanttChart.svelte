@@ -147,8 +147,52 @@
 
   // 가로 스크롤을 키보드로도 할 수 있게 기간 이동 단추를 둔다(막대 영역 자체는 초점을 받지 않는다).
   let scroller = $state<HTMLElement | undefined>(undefined);
-  const columnPx = (): number =>
-    1.75 * Number.parseFloat(getComputedStyle(document.documentElement).fontSize || '16');
+  let width = $state(0);
+  // 보이는 폭을 따라간다. 크기 관찰을 못 하는 환경에서는 기본 열 너비로 둔다.
+  $effect(() => {
+    const el = scroller;
+    if (el === undefined || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      width = el.clientWidth;
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
+  });
+  const remPx = (): number =>
+    Number.parseFloat(getComputedStyle(document.documentElement).fontSize || '16') || 16;
+  // 날짜 열 너비(rem). 기본 1.75rem이고, 기간이 짧아 오른쪽이 비면 남는 폭을 날짜 열에 나눈다(최대 5rem).
+  const col = $derived(
+    layout.days === 0 || width === 0
+      ? 1.75
+      : Math.min(5, Math.max(1.75, (width / remPx() - 14) / layout.days)),
+  );
+  const columnPx = (): number => col * remPx();
+  const weekend = (day: string): boolean => {
+    const d = new Date(`${day}T00:00:00Z`).getUTCDay();
+    return d === 0 || d === 6;
+  };
+  // 월 머리글: 날짜 칸 위에 따로 한 줄로 둬서 "10/21" 같은 글이 좁은 날짜 칸을 넘치지 않게 한다.
+  const months = $derived.by(() => {
+    const out: { key: string; label: string; start: number; span: number }[] = [];
+    columns.forEach((day, i) => {
+      const key = day.slice(0, 7);
+      const last = out.at(-1);
+      if (last?.key === key) last.span += 1;
+      else
+        out.push({
+          key,
+          label: m.tasks_gantt_month({
+            year: day.slice(0, 4),
+            month: String(Number(day.slice(5, 7))),
+          }),
+          start: i,
+          span: 1,
+        });
+    });
+    return out;
+  });
   function scrollBy(days: number): void {
     scroller?.scrollBy({ left: days * columnPx(), behavior: 'smooth' });
   }
@@ -203,21 +247,43 @@
   <div class="overflow-x-auto rounded-md border" data-testid="task-gantt" bind:this={scroller}>
     <div
       class="grid min-w-max text-xs"
-      style:grid-template-columns={`14rem repeat(${String(layout.days)}, 1.75rem)`}
+      style:grid-template-columns={`14rem repeat(${String(layout.days)}, ${String(col)}rem)`}
     >
-      <div class="sticky left-0 z-10 border-b bg-background p-1 font-medium">{m.tasks_task()}</div>
+      <div
+        class="sticky left-0 z-10 flex items-end border-b bg-background p-1 font-medium"
+        style:grid-row="1 / span 2"
+        style:grid-column="1"
+      >
+        {m.tasks_task()}
+      </div>
+      {#each months as seg (seg.key)}
+        <div
+          aria-hidden="true"
+          class="truncate border-l px-1 pt-1 font-medium text-muted-foreground"
+          style:grid-row="1"
+          style:grid-column={`${String(seg.start + 2)} / span ${String(seg.span)}`}
+        >
+          {seg.label}
+        </div>
+      {/each}
       {#each columns as day, i (day)}
         <div
           aria-hidden="true"
           class={[
-            'border-b border-l p-0.5 text-center text-muted-foreground',
-            i === todayColumn && 'bg-accent font-semibold text-foreground',
+            'flex justify-center overflow-hidden border-b border-l py-0.5 text-muted-foreground tabular-nums',
+            weekend(day) && 'bg-muted/60',
           ]}
+          style:grid-row="2"
+          style:grid-column={String(i + 2)}
           title={day}
+          data-gantt-day={day}
         >
-          {day.endsWith('-01') || i === 0 ? `${String(Number(day.slice(5, 7)))}/` : ''}{Number(
-            day.slice(8),
-          )}
+          <span
+            class={[
+              'min-w-5 rounded-full px-1 text-center',
+              i === todayColumn && 'bg-primary font-semibold text-primary-foreground',
+            ]}>{Number(day.slice(8))}</span
+          >
         </div>
       {/each}
 
@@ -249,10 +315,19 @@
           class="relative border-b"
           style:grid-column={`2 / span ${String(layout.days)}`}
         >
+          {#each columns as day, i (day)}
+            {#if weekend(day)}
+              <div
+                class="absolute inset-y-0 bg-muted/60"
+                style:left={`${String(i * col)}rem`}
+                style:width={`${String(col)}rem`}
+              ></div>
+            {/if}
+          {/each}
           {#if todayColumn >= 0 && todayColumn < layout.days}
             <div
               class="absolute inset-y-0 w-px bg-primary/40"
-              style:left={`calc(${String(todayColumn)} * 1.75rem + 0.875rem)`}
+              style:left={`calc(${String(todayColumn)} * ${String(col)}rem + ${String(col / 2)}rem)`}
             ></div>
           {/if}
           {#if row.task.milestone}
@@ -261,7 +336,7 @@
                 'absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-primary',
                 editable(row.task) && 'cursor-grab touch-none',
               ]}
-              style:left={`calc(${String(span.from)} * 1.75rem + 0.875rem)`}
+              style:left={`calc(${String(span.from)} * ${String(col)}rem + ${String(col / 2)}rem)`}
               data-gantt-bar={row.task.id}
               role="presentation"
               onpointerdown={(e: PointerEvent) => {
@@ -279,8 +354,8 @@
                 editable(row.task) && 'cursor-grab touch-none',
                 draft?.id === row.task.id && 'ring-2 ring-ring',
               ]}
-              style:left={`calc(${String(span.from)} * 1.75rem + 0.125rem)`}
-              style:width={`calc(${String(span.to - span.from + 1)} * 1.75rem - 0.25rem)`}
+              style:left={`calc(${String(span.from)} * ${String(col)}rem + 0.125rem)`}
+              style:width={`calc(${String(span.to - span.from + 1)} * ${String(col)}rem - 0.25rem)`}
               data-gantt-bar={row.task.id}
               role="presentation"
               onpointerdown={(e: PointerEvent) => {

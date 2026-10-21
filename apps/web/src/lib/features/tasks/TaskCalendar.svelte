@@ -1,7 +1,7 @@
 <script lang="ts">
   // 항목 업무의 달력 보기(D-31). 업무는 마감일(없으면 시작일) 한 칸에 놓는다. 날짜가 없는 업무는 아래에 따로.
   import type { TaskView } from '$lib/api/client';
-  import { monthRange, shiftMonth } from '$lib/features/events/calendar';
+  import { isWeekend, monthRange, shiftMonth } from '$lib/features/events/calendar';
   import { displaySettings, formatMonth, weekdays } from '$lib/display';
   import { dayIn } from '$lib/features/events/time';
   import { m } from '$lib/paraglide/messages.js';
@@ -59,20 +59,29 @@
       {@const list = byDay.get(day) ?? []}
       <div
         class={[
-          'flex min-h-20 flex-col gap-0.5 bg-background p-1',
-          day.slice(0, 7) !== month ? 'text-muted-foreground' : '',
-          day === today ? 'ring-1 ring-primary ring-inset' : '',
+          'group flex min-h-20 flex-col gap-0.5 p-1',
+          day.slice(0, 7) !== month
+            ? 'bg-muted text-muted-foreground'
+            : isWeekend(day)
+              ? 'bg-muted/50'
+              : 'bg-background',
         ]}
         role="gridcell"
         aria-label={m.tasks_calendar_day_aria({ day, count: list.length })}
       >
+        <!-- 오늘은 날짜를 채운 원으로(칸 테두리 대신), 만들기 단추는 마우스 화면에서 가리키거나 초점일 때만. -->
         <span class="flex items-center justify-between">
-          <span>{Number(day.slice(8))}</span>
+          <span
+            class={[
+              'min-w-5 rounded-full px-1.5 text-center tabular-nums',
+              day === today && 'bg-primary font-semibold text-primary-foreground',
+            ]}>{Number(day.slice(8))}</span
+          >
           {#if oncreate !== undefined}
             {@const create = oncreate}
             <button
               type="button"
-              class="rounded px-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              class="rounded px-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground focus:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
               aria-label={m.events_task_create_on({ day })}
               title={m.events_task_create_on({ day })}
               data-create-day={day}
