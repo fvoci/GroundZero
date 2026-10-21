@@ -118,6 +118,51 @@ describe('file rename', () => {
     });
   });
 
+  // 리뷰 지적: 같은 파일의 칸을 닫았다가 다시 열면, 앞 요청의 응답이 새 칸을 닫거나 새 입력에 오류를 붙였다.
+  async function submitThenReopen(): Promise<HTMLElement> {
+    const input = await openRename();
+    const form = input.closest('form');
+    if (form === null) throw new Error('form');
+    await fireEvent.submit(form);
+    await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'report.pdf 이름 바꾸기' }));
+    const again = screen.getByRole('textbox', { name: '새 이름' });
+    await fireEvent.input(again, { target: { value: 'report-v2.pdf' } });
+    return again;
+  }
+
+  it('keeps a reopened form of the same file when the earlier rename succeeds', async () => {
+    let resolve: (renamed: FileView) => void = () => undefined;
+    vi.spyOn(api, 'renameFile').mockImplementation(
+      () =>
+        new Promise((yes: (renamed: FileView) => void) => {
+          resolve = yes;
+        }),
+    );
+    await submitThenReopen();
+
+    resolve({ ...file, name: 'report/final.pdf' });
+    await vi.waitFor(() => {
+      expect(screen.getByText('이름을 바꿨습니다: report/final.pdf')).toBeTruthy();
+    });
+    expect(screen.getByRole('textbox', { name: '새 이름' })).toHaveValue('report-v2.pdf');
+  });
+
+  it('does not mark a reopened form of the same file with the earlier failure', async () => {
+    const pending = rejectLater();
+    const again = await submitThenReopen();
+
+    pending.reject(new ApiError(400, 'bad_request', 'invalid file name'));
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: '저장' })).toBeEnabled();
+    });
+    expect(again.getAttribute('aria-invalid')).not.toBe('true');
+    expect(again).toHaveValue('report-v2.pdf');
+    expect(
+      screen.getByText('report.pdf: 처리하지 못했습니다. 입력한 값을 확인해 주세요.'),
+    ).toBeTruthy();
+  });
+
   it('closes the form once the rename succeeds', async () => {
     vi.spyOn(api, 'renameFile').mockResolvedValue({ ...file, name: 'report/final.pdf' });
     const input = await openRename();
