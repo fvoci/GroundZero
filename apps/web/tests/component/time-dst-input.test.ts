@@ -141,6 +141,36 @@ describe('time entries at a wall time that does not exist', () => {
     expect(add).toHaveBeenCalledTimes(2);
   });
 
+  it('manual entry: changing only the date clears the missing-time error beside the field', async () => {
+    // 없는 시각인지는 날짜와 시각을 함께 보고 정하므로, 날짜만 바꿔도 칸 옆 오류를 지운다(다시 저장할 때 다시 본다).
+    const add = vi.spyOn(api, 'addTimeEntry').mockRejectedValue(new Error('not expected'));
+    render(TimeScreen, { props: { workspaces: [] } });
+    const day = await screen.findByLabelText(m.time_date());
+    await fireEvent.input(day, { target: { value: '2026-03-08' } });
+    await fireEvent.input(screen.getByLabelText(m.time_start()), { target: { value: '02:30' } });
+    await fireEvent.input(screen.getByLabelText(m.time_end()), { target: { value: '03:30' } });
+    await submit(day);
+    await waitFor(() => {
+      expect(screen.getByLabelText(m.time_start()).getAttribute('aria-invalid')).toBe('true');
+    });
+    await fireEvent.input(day, { target: { value: '2026-03-09' } });
+    expect(screen.getByLabelText(m.time_start()).getAttribute('aria-invalid')).not.toBe('true');
+    expect(screen.queryByText(m.events_missing_time({ zone: ZONE }))).toBeNull();
+
+    // 끝 칸도 같다(03-07 23:30 → 다음 날 02:30은 없고, 날짜를 03-06으로 바꾸면 03-07 02:30이라 있다).
+    await fireEvent.input(day, { target: { value: '2026-03-07' } });
+    await fireEvent.input(screen.getByLabelText(m.time_start()), { target: { value: '23:30' } });
+    await fireEvent.input(screen.getByLabelText(m.time_end()), { target: { value: '02:30' } });
+    await submit(day);
+    await waitFor(() => {
+      expect(screen.getByLabelText(m.time_end()).getAttribute('aria-invalid')).toBe('true');
+    });
+    await fireEvent.input(day, { target: { value: '2026-03-06' } });
+    expect(screen.getByLabelText(m.time_end()).getAttribute('aria-invalid')).not.toBe('true');
+    expect(screen.queryByText(m.events_missing_time({ zone: ZONE }))).toBeNull();
+    expect(add).not.toHaveBeenCalled();
+  });
+
   it('editing: a changed start at a missing time is refused, and untouched fields keep their stored values', async () => {
     const entry: TimeEntryView = {
       id: 'e1',

@@ -280,7 +280,14 @@
     <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addManual(e)}>
       <div class="flex flex-col gap-1">
         <Label for="time-manual-day">{m.time_date()}</Label>
-        <Input id="time-manual-day" type="date" bind:value={manual.day} required />
+        <!-- 없는 시각인지는 날짜와 시각을 함께 보고 정하므로 날짜만 바꿔도 칸 옆 오류를 지운다. -->
+        <Input
+          id="time-manual-day"
+          type="date"
+          bind:value={manual.day}
+          required
+          oninput={() => (manualMissing = undefined)}
+        />
       </div>
       <div class="flex flex-col gap-1">
         <Label for="time-manual-start">{m.time_start()}</Label>
