@@ -4,12 +4,21 @@
   // 단추에서 Alt+←·→(하루 옮기기), Alt+Shift+←·→(마감 하루). 놓으면 부르는 쪽이 최신 업무로 후속 업무 영향을
   // 미리 보고 승인을 받은 뒤 저장한다(상세의 날짜 편집과 같은 흐름). 끝날 때까지 막대는 바꾼 자리를 미리 보인다.
   import type { TaskView } from '$lib/api/client';
+  import { displaySettings, formatDay } from '$lib/display';
   import { dayIn, localTimeZone } from '$lib/features/events/time';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
   import type { GanttEdit, GanttLink } from './gantt';
-  import { dayNumber, editDates, fromDayNumber, ganttLayout, ganttLinks } from './gantt';
+  import {
+    dayNumber,
+    editDates,
+    fromDayNumber,
+    ganttLayout,
+    ganttLinks,
+    ganttWeeks,
+    weekday,
+  } from './gantt';
   import { STATUS_LABEL } from './labels';
 
   interface Props {
@@ -193,6 +202,57 @@
     });
     return out;
   });
+  // 주 머리글(D-90): 주 경계는 사용자의 한 주 시작(D-81)을 따른다. 월요일 시작이면 ISO 주차("2026년 43주")와
+  // 그 주의 실제 날짜 범위, 일요일 시작이면 ISO 주차가 없으므로 날짜 범위만 보인다. 칸이 좁으면 짧게 쓰고 전체
+  // 설명은 화면 낭독기용 글과 title에 둔다. 표가 주 중간에서 시작·끝나면 보이는 열만큼만 칸을 차지한다.
+  const settings = $derived(displaySettings());
+  const shortDay = (ymd: string): string =>
+    `${String(Number(ymd.slice(5, 7)))}/${String(Number(ymd.slice(8)))}`;
+  const weeks = $derived(
+    ganttWeeks(layout.first, layout.days, settings.weekStart).map((w) => {
+      const from = shortDay(w.from);
+      const to = shortDay(w.to);
+      const full =
+        w.iso === undefined
+          ? m.tasks_gantt_week_range({ from, to })
+          : m.tasks_gantt_week_iso({
+              year: String(w.iso.year),
+              week: String(w.iso.week),
+              from,
+              to,
+            });
+      const fromFull = formatDay(w.from, { dateStyle: 'long' }, settings);
+      const toFull = formatDay(w.to, { dateStyle: 'long' }, settings);
+      const spoken =
+        w.iso === undefined
+          ? m.tasks_gantt_week_spoken_range({ from: fromFull, to: toFull })
+          : m.tasks_gantt_week_spoken_iso({
+              year: String(w.iso.year),
+              week: String(w.iso.week),
+              from: fromFull,
+              to: toFull,
+            });
+      const rem = w.span * col;
+      // 넓으면 전체, 중간이면 주차와 첫날(일요일 시작이면 첫날~), 아주 좁으면 비운다(설명은 남김).
+      const label =
+        rem >= 10
+          ? full
+          : rem >= 4.5
+            ? w.iso === undefined
+              ? m.tasks_gantt_week_short_range({ from })
+              : m.tasks_gantt_week_short_iso({ week: String(w.iso.week), from })
+            : '';
+      return { ...w, key: w.from, label, full, spoken };
+    }),
+  );
+  // 열마다 주 경계·월 경계인지(머리글과 막대 줄의 세로 선이 같은 열에서 그려지게).
+  const weekStartDow = $derived(settings.weekStart === 'mon' ? 1 : 0);
+  const boundary = (day: string, i: number): 'month' | 'week' | undefined =>
+    i > 0 && day.endsWith('-01')
+      ? 'month'
+      : i > 0 && weekday(dayNumber(day)) === weekStartDow
+        ? 'week'
+        : undefined;
   function scrollBy(days: number): void {
     scroller?.scrollBy({ left: days * columnPx(), behavior: 'smooth' });
   }
@@ -264,11 +324,11 @@
     <div
       class="grid min-w-max text-xs"
       style:grid-template-columns={`14rem repeat(${String(layout.days)}, ${String(col)}rem)`}
-      style:grid-template-rows={`auto auto repeat(${String(layout.rows.length)}, ${String(ROW)}rem)`}
+      style:grid-template-rows={`auto auto auto repeat(${String(layout.rows.length)}, ${String(ROW)}rem)`}
     >
       <div
         class="sticky left-0 z-10 flex items-end border-b bg-background p-1 font-medium"
-        style:grid-row="1 / span 2"
+        style:grid-row="1 / span 3"
         style:grid-column="1"
       >
         {m.tasks_task()}
@@ -283,14 +343,29 @@
           {seg.label}
         </div>
       {/each}
+      {#each weeks as w (w.key)}
+        <div
+          class="truncate border-l border-l-foreground/30 px-1 text-muted-foreground tabular-nums"
+          style:grid-row="2"
+          style:grid-column={`${String(w.start + 2)} / span ${String(w.span)}`}
+          title={w.full}
+          data-gantt-week={w.from}
+        >
+          <span aria-hidden="true">{w.label}</span>
+          <span class="sr-only">{w.spoken}</span>
+        </div>
+      {/each}
       {#each columns as day, i (day)}
+        {@const edge = boundary(day, i)}
         <div
           aria-hidden="true"
           class={[
             'flex justify-center overflow-hidden border-b border-l py-0.5 text-muted-foreground tabular-nums',
+            edge === 'month' && 'border-l-2 border-l-foreground/60',
+            edge === 'week' && 'border-l-foreground/30',
             weekend(day) && 'bg-muted/60',
           ]}
-          style:grid-row="2"
+          style:grid-row="3"
           style:grid-column={String(i + 2)}
           title={day}
           data-gantt-day={day}
@@ -309,7 +384,7 @@
         <!-- 줄 번호를 정해 둔다: 연결선 층이 같은 칸을 덮어도 격자가 줄을 다른 자리로 밀지 않게. -->
         <div
           class="sticky left-0 z-10 overflow-hidden border-b bg-background p-1"
-          style:grid-row={String(index + 3)}
+          style:grid-row={String(index + 4)}
           style:grid-column="1"
         >
           <button
@@ -339,15 +414,27 @@
         <div
           aria-hidden="true"
           class="relative border-b"
-          style:grid-row={String(index + 3)}
+          style:grid-row={String(index + 4)}
           style:grid-column={`2 / span ${String(layout.days)}`}
         >
           {#each columns as day, i (day)}
+            {@const edge = boundary(day, i)}
             {#if weekend(day)}
               <div
                 class="absolute inset-y-0 bg-muted/60"
                 style:left={`${String(i * col)}rem`}
                 style:width={`${String(col)}rem`}
+              ></div>
+            {/if}
+            <!-- 머리글과 같은 열에 주 경계(가는 선)·월 경계(굵은 선)를 이어 그린다. 오늘은 primary 선과 머리글의 채운 원. -->
+            {#if edge !== undefined}
+              <div
+                class={[
+                  'absolute inset-y-0',
+                  edge === 'month' ? 'w-0.5 bg-foreground/35' : 'w-px bg-foreground/15',
+                ]}
+                style:left={`${String(i * col)}rem`}
+                data-gantt-boundary={edge}
               ></div>
             {/if}
           {/each}
@@ -426,7 +513,7 @@
              않는다. 좌표는 rem이고 viewBox 단위 하나가 1rem이다(선 두께는 확대와 상관없이 일정). -->
         <div
           class="pointer-events-none relative z-[1]"
-          style:grid-row={`3 / span ${String(layout.rows.length)}`}
+          style:grid-row={`4 / span ${String(layout.rows.length)}`}
           style:grid-column={`2 / span ${String(layout.days)}`}
           data-testid="gantt-links"
         >

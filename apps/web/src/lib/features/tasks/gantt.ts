@@ -223,3 +223,60 @@ export function ganttLinks(
   for (const t of all) if (!at.has(t.id)) consider(t.id, t.predecessor_ids);
   return { links, hidden };
 }
+
+/** 날짜 번호의 요일(일요일=0). 1970-01-01(번호 0)은 목요일이다. */
+export function weekday(day: number): number {
+  return (((day + 4) % 7) + 7) % 7;
+}
+
+/**
+ * ISO 8601 주차(월요일 시작). 주차 연도는 그 주의 목요일이 속한 달력 연도라서 달력 연도와 다를 수 있다
+ * (예: 2024-12-30은 2025년 1주, 2027-01-01은 2026년 53주). 날짜 번호로만 계산해 시간대가 끼지 않는다.
+ */
+export function isoWeek(day: number): { year: number; week: number } {
+  const monday = day - ((weekday(day) + 6) % 7);
+  const thursday = monday + 3;
+  const year = Number(fromDayNumber(thursday).slice(0, 4));
+  const jan1 = dayNumber(`${String(year).padStart(4, '0')}-01-01`);
+  return { year, week: Math.floor((thursday - jan1) / 7) + 1 };
+}
+
+/** 간트의 주 머리 한 칸: 보이는 첫 열·열 수와 그 주 전체(보이는 칸이 주 일부여도 주의 실제 첫날·끝날). */
+export interface GanttWeek {
+  /** 보이는 첫 열(0부터). */
+  start: number;
+  /** 보이는 열 수(표가 주 중간에서 시작·끝나면 7보다 작다). */
+  span: number;
+  /** 그 주의 실제 첫날·끝날(`YYYY-MM-DD`). */
+  from: string;
+  to: string;
+  /** 월요일 시작일 때만 ISO 주차. 일요일 시작이면 ISO 주차가 정의되지 않아 없다. */
+  iso: { year: number; week: number } | undefined;
+}
+
+/**
+ * 보이는 날짜 열을 주로 나눈다. 주 경계는 사용자의 한 주 시작(D-81)을 따른다. 월요일 시작이면 ISO 주차를 붙이고,
+ * 일요일 시작이면 주차 번호 없이 날짜 범위만 둔다(D-90).
+ */
+export function ganttWeeks(first: string, days: number, weekStart: 'mon' | 'sun'): GanttWeek[] {
+  if (days <= 0 || first === '') return [];
+  const firstDay = dayNumber(first);
+  const startDow = weekStart === 'mon' ? 1 : 0;
+  const out: GanttWeek[] = [];
+  let i = 0;
+  while (i < days) {
+    const day = firstDay + i;
+    const weekFirst = day - ((weekday(day) - startDow + 7) % 7);
+    const weekLast = weekFirst + 6;
+    const span = Math.min(weekLast - day + 1, days - i);
+    out.push({
+      start: i,
+      span,
+      from: fromDayNumber(weekFirst),
+      to: fromDayNumber(weekLast),
+      iso: weekStart === 'mon' ? isoWeek(weekFirst) : undefined,
+    });
+    i += span;
+  }
+  return out;
+}

@@ -112,6 +112,12 @@
   "tasks_gantt_nav": "Move Gantt period",
   "tasks_gantt_back": "← 2 weeks earlier",
   "tasks_gantt_month": "{month}/{year}",
+  "tasks_gantt_week_iso": "Week {week}, {year} · {from}–{to}",
+  "tasks_gantt_week_short_iso": "Wk {week} · {from}~",
+  "tasks_gantt_week_range": "{from}–{to}",
+  "tasks_gantt_week_short_range": "{from}~",
+  "tasks_gantt_week_spoken_iso": "ISO week {week} of {year} (weeks start on Monday): {from} to {to}",
+  "tasks_gantt_week_spoken_range": "Week of {from} to {to} (weeks start on Sunday, no week number)",
   "tasks_gantt_links_hint": "Lines run from the end of a predecessor to the start of the task that follows it; the arrow points at the follower. Hover or focus a row name to make its lines bold.",
   "tasks_gantt_links_hidden": [
     {
