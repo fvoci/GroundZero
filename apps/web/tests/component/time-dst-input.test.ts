@@ -67,6 +67,8 @@ describe('time entries at a wall time that does not exist', () => {
     });
     expect(add).not.toHaveBeenCalled();
 
+    // 없는 시각을 넣은 칸 옆에 알린다(끝 칸).
+    expect(screen.getByLabelText(m.time_end()).getAttribute('aria-invalid')).toBe('true');
     // 있는 시각이면 그대로 더한다(03-07 23:30 → 다음 날 03:30 EDT = 07:30Z).
     await fireEvent.input(screen.getByLabelText(m.time_end()), { target: { value: '03:30' } });
     await submit(day);
@@ -76,6 +78,17 @@ describe('time entries at a wall time that does not exist', () => {
     expect(add.mock.calls[0]?.[1]).toMatchObject({
       started_at: '2026-03-08T04:30:00.000Z',
       ended_at: '2026-03-08T07:30:00.000Z',
+    });
+    // 틈이 있는 날(03-08) 23:30 → 02:30은 다음 날(03-09) 02:30으로, 그날에는 있는 시각이라 더한다(같은 날의 02:30만 없다).
+    await fireEvent.input(day, { target: { value: '2026-03-08' } });
+    await fireEvent.input(screen.getByLabelText(m.time_end()), { target: { value: '02:30' } });
+    await submit(day);
+    await waitFor(() => {
+      expect(add).toHaveBeenCalledTimes(2);
+    });
+    expect(add.mock.calls[1]?.[1]).toMatchObject({
+      started_at: '2026-03-09T03:30:00.000Z',
+      ended_at: '2026-03-09T06:30:00.000Z',
     });
   });
 

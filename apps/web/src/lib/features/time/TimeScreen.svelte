@@ -113,30 +113,33 @@
   // 같은 입력의 재시도는 같은 요청 id, 고친 입력은 새 id.
   const manualKey = new RetryKey();
   let manualError = $state<string | undefined>(undefined);
+  /** 그 시간대에 없는 시각을 넣은 칸(칸 옆에 알린다, D-82). */
+  let manualMissing = $state<'start' | 'end' | undefined>(undefined);
   let manualStatus = $state('');
 
   async function addManual(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     manualError = undefined;
     try {
-      // 그 시간대에 없는 시각(여름시간 시작일의 건너뛴 시각, D-81)은 조용히 옮겨 저장하지 않는다. 다음 날 보정보다 먼저
-      // 본다(보정 전에 변환하면 없는 시각이 틈만큼 뒤로 밀려 엉뚱한 길이가 된다). 보정한 다음 날 끝도 같이 본다.
+      // 그 시간대에 없는 시각(여름시간 시작일의 건너뛴 시각, D-81)은 조용히 옮겨 저장하지 않는다. 변환 전에 본다(없는
+      // 시각을 변환하면 틈만큼 뒤로 밀려 엉뚱한 길이가 된다). 끝은 실제로 쓰일 날의 시각만 본다: 그날의 끝이 시작보다
+      // 이르면(없는 시각이면 밀린 값으로 비교) 다음 날로 넘어간 기록이므로 다음 날의 끝을 본다.
+      manualMissing = undefined;
       const startWall = `${manual.day}T${manual.start}`;
-      let endWall = `${manual.day}T${manual.end}`;
-      if (isMissingLocalTime(startWall, zone) || isMissingLocalTime(endWall, zone)) {
-        manualError = m.events_missing_time({ zone });
+      if (isMissingLocalTime(startWall, zone)) {
+        manualMissing = 'start';
         return;
       }
       const started = instantOf(startWall, zone);
+      let endWall = `${manual.day}T${manual.end}`;
       let ended = instantOf(endWall, zone);
-      // 끝이 시작보다 이르면 다음 날로 넘어간 기록으로 본다.
       if (ended <= started) {
         endWall = `${fromDayNumber(dayNumber(manual.day) + 1)}T${manual.end}`;
-        if (isMissingLocalTime(endWall, zone)) {
-          manualError = m.events_missing_time({ zone });
-          return;
-        }
         ended = instantOf(endWall, zone);
+      }
+      if (isMissingLocalTime(endWall, zone)) {
+        manualMissing = 'end';
+        return;
       }
       const entry = {
         started_at: started,
@@ -282,11 +285,37 @@
       </div>
       <div class="flex flex-col gap-1">
         <Label for="time-manual-start">{m.time_start()}</Label>
-        <Input id="time-manual-start" type="time" bind:value={manual.start} required />
+        <Input
+          id="time-manual-start"
+          type="time"
+          bind:value={manual.start}
+          required
+          oninput={() => (manualMissing = undefined)}
+          aria-invalid={manualMissing === 'start'}
+          aria-describedby={manualMissing === 'start' ? 'time-manual-start-error' : undefined}
+        />
+        {#if manualMissing === 'start'}
+          <p id="time-manual-start-error" class="text-xs text-destructive" role="alert">
+            {m.events_missing_time({ zone })}
+          </p>
+        {/if}
       </div>
       <div class="flex flex-col gap-1">
         <Label for="time-manual-end">{m.time_end()}</Label>
-        <Input id="time-manual-end" type="time" bind:value={manual.end} required />
+        <Input
+          id="time-manual-end"
+          type="time"
+          bind:value={manual.end}
+          required
+          oninput={() => (manualMissing = undefined)}
+          aria-invalid={manualMissing === 'end'}
+          aria-describedby={manualMissing === 'end' ? 'time-manual-end-error' : undefined}
+        />
+        {#if manualMissing === 'end'}
+          <p id="time-manual-end-error" class="text-xs text-destructive" role="alert">
+            {m.events_missing_time({ zone })}
+          </p>
+        {/if}
       </div>
       <div class="flex flex-col gap-1">
         <span class="text-sm font-medium" id="time-manual-kind-label">{m.time_kind()}</span>

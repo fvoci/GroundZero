@@ -16,7 +16,7 @@
   import { isWebUrl } from '$lib/url';
 
   import type { EpisodeRow } from './csv';
-  import { parseDuration, parseEpisodesCsv } from './csv';
+  import { MAX_SECONDS, parseDuration, parseEpisodesCsv } from './csv';
   import { courseProgress, daysUntil, plannedOn } from './progress';
 
   interface Props {
@@ -628,7 +628,8 @@
                 // 않고 칸 옆에 알리며 저장된 값은 그대로 둔다(전에는 'abc'가 0초, '12:xx'가 지우기로 저장됐다).
                 const raw = mine.position.trim();
                 const position = raw === '' ? null : parseDuration(raw);
-                if (raw !== '' && position === null) {
+                // 서버와 같은 한도(100시간, i32)를 넘는 값도 보내지 않는다.
+                if (raw !== '' && (position === null || position > MAX_SECONDS)) {
                   positionError = m.courses_position_invalid();
                   return;
                 }

@@ -87,7 +87,7 @@
   "courses_mine_saved": "{number}회 내 메모·날짜를 저장했습니다.",
   "courses_my_planned": "내 계획일",
   "courses_last_position": "마지막 시청 위치(분:초)",
-  "courses_position_invalid": "시청 위치는 분:초(예: 12:30), 시:분:초, 또는 분 수로 넣으세요. 저장하지 않았습니다.",
+  "courses_position_invalid": "시청 위치는 분:초(예: 12:30), 시:분:초, 또는 분 수로 100시간 이하로 넣으세요. 저장하지 않았습니다.",
   "courses_my_note": "내 메모(나만 봄)",
   "courses_new_invalid": "제목과 길이(분 또는 분:초)를 확인해 주세요.",
   "courses_new_title": "새 회차 제목",

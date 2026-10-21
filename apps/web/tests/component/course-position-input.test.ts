@@ -75,7 +75,7 @@ describe('episode watch position input', () => {
   it('refuses text that is not a duration and keeps the stored position', async () => {
     const set = vi.spyOn(api, 'setEpisodeProgress').mockResolvedValue(undefined);
     const field = await openForm();
-    for (const bad of ['abc', '12:xx', '1:2:3:4']) {
+    for (const bad of ['abc', '12:xx', '1:2:3:4', '6001']) {
       await save(field, bad);
       await waitFor(() => {
         expect(screen.getByRole('alert').textContent).toContain(m.courses_position_invalid());

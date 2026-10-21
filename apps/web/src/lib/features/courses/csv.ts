@@ -6,7 +6,7 @@ import { m } from '$lib/paraglide/messages.js';
 
 /** 서버와 같은 한도: 제목 300자, 길이 100시간. */
 const MAX_TITLE = 300;
-const MAX_SECONDS = 360_000;
+export const MAX_SECONDS = 360_000;
 
 export interface EpisodeRow {
   title: string;
