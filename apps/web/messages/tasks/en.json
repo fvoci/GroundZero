@@ -17,7 +17,7 @@
   "tasks_csv_bad_estimate": "Estimate (minutes) must be a number: {value}",
   "tasks_csv_unknown_assignee": "Assignee not found: {name}",
   "tasks_csv_ambiguous_assignee": "More than one person has this name: {name}",
-  "tasks_csv_conflict": "{title}: conflicted with another change. Press again.",
+  "tasks_csv_conflict": "{title}: changed elsewhere in the meantime. Press again to overwrite it with this line.",
   "tasks_csv_progress": "Adding {done} of {total}…",
   "tasks_csv_imported": [
     {
