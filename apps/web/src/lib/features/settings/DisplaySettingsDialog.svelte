@@ -2,6 +2,8 @@
   // 표시 설정(D-50 시간대, D-81 언어·주 시작·시각 표시). 칸마다 따로 고르고 계정에 저장해 기기 사이에 같다. 아직
   // 고르지 않은 칸은 브라우저 언어·시간대와 그 언어의 관례로 제안한다(저장하기 전까지는 제안만 쓴다). 표시만 바꾸며
   // 저장된 일정 시각·날짜는 그대로다.
+  import { untrack } from 'svelte';
+
   import { api, ApiError } from '$lib/api/client';
   import type { DisplayLocale, HourCycle, WeekStart } from '$lib/display';
   import {
@@ -40,7 +42,10 @@
   const unsaved = $derived(me.locale === '' || me.weekStart === '' || me.hourCycle === '');
 
   $effect(() => {
-    if (open) {
+    if (!open) return;
+    // 열 때만 채운다. 채우며 읽는 칸(관례 제안·accountFields)과 me를 의존으로 잡으면, 고를 때마다 효과가 다시 돌아
+    // 저장된 값으로 되돌린다.
+    untrack(() => {
       locale = asLocale(me.locale) ?? suggested.locale;
       zone = me.timeZone;
       weekStart = asWeekStart(me.weekStart) ?? conventionalWeekStart(locale);
@@ -48,7 +53,7 @@
       docFont = storedDocFont();
       opened = accountFields();
       error = undefined;
-    }
+    });
   });
 
   /** 언어를 바꾸면, 아직 저장한 적 없는 주 시작·시각 표시는 그 언어의 관례로 다시 제안한다. */
