@@ -87,16 +87,29 @@
     event.stopPropagation();
     if (event.currentTarget instanceof Element)
       event.currentTarget.setPointerCapture(event.pointerId);
+    // 미리 보기는 실제 날짜(표시 기간 끝에서 잘리기 전의 마감)로 계산하고 그릴 때만 표시 범위에 맞춰 자른다. 잘린 열
+    // 번호로 계산하면 보이는 끝과 저장될 날짜가 어긋난다(`editDates`는 실제 날짜로 계산한다).
+    const end = row.task.due_date ?? row.task.start_date;
+    const to = end === null ? row.to : dayNumber(end) - dayNumber(layout.first);
     drag = {
       id: row.task.id,
       edit,
       pointer: event.pointerId,
       x: event.clientX,
       from: row.from,
-      to: row.to,
+      to,
       days: 0,
     };
     draft = { id: row.task.id, from: row.from, to: row.to };
+  }
+  /**
+   * 미리 보기 막대를 그릴 열 범위(0 ~ 마지막 열)로 자른다. `draft`는 실제 날짜의 열 번호 그대로 두고 막대를 그릴 때만
+   * 자른다: 연결선은 `draft`를 그대로 써서 표 밖으로 나간 끝을 가장자리에 붙이지 않고 숨긴다(#39).
+   */
+  function shownSpan(s: { from: number; to: number }): { from: number; to: number } {
+    const last = layout.days - 1;
+    const from = Math.min(Math.max(s.from, 0), last);
+    return { from, to: Math.max(Math.min(s.to, last), from) };
   }
   function move(event: PointerEvent): void {
     const d = drag;
@@ -409,7 +422,7 @@
       {/each}
 
       {#each layout.rows as row, index (row.task.id)}
-        {@const span = draft?.id === row.task.id ? draft : row}
+        {@const span = draft?.id === row.task.id ? shownSpan(draft) : row}
         <!-- 줄 번호를 정해 둔다: 연결선 층이 같은 칸을 덮어도 격자가 줄을 다른 자리로 밀지 않게. -->
         <div
           class="sticky left-0 z-10 overflow-hidden border-b bg-background p-1"
@@ -520,17 +533,21 @@
                   onpointerup={end}
                   onpointercancel={cancel}
                 ></div>
-                <div
-                  class="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none"
-                  data-gantt-edge="end"
-                  role="presentation"
-                  onpointerdown={(e: PointerEvent) => {
-                    start(e, row, 'end');
-                  }}
-                  onpointermove={move}
-                  onpointerup={end}
-                  onpointercancel={cancel}
-                ></div>
+                <!-- 표시 기간 끝에서 잘린 막대의 끝은 실제 마감이 아니라 끌 손잡이를 두지 않는다(끌어 봐야 보이는 끝이
+                     움직이지 않는다). 마감은 업무 상세의 날짜나 Alt+Shift+←·→로 바꾼다(저장 전 묻는 창이 실제 날짜를 보인다). -->
+                {#if !row.clippedEnd}
+                  <div
+                    class="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none"
+                    data-gantt-edge="end"
+                    role="presentation"
+                    onpointerdown={(e: PointerEvent) => {
+                      start(e, row, 'end');
+                    }}
+                    onpointermove={move}
+                    onpointerup={end}
+                    onpointercancel={cancel}
+                  ></div>
+                {/if}
               {/if}
             </div>
           {/if}

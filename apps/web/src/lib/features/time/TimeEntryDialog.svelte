@@ -4,7 +4,7 @@
   import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
   import { api, TIME_KINDS } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { instantOf, wallTime } from '$lib/features/events/time';
+  import { instantOf, isMissingLocalTime, wallTime } from '$lib/features/events/time';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -38,6 +38,8 @@
   let initial = { start: '', end: '', pausedMinutes: '' };
   let base = $state<TimeEntryView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
+  /** 그 시간대에 없는 시각을 넣은 칸(칸 옆에 알린다). */
+  let missing = $state<'start' | 'end' | undefined>(undefined);
   let busy = $state(false);
   let confirmDelete = $state(false);
   let history = $state<
@@ -97,17 +99,25 @@
       error = m.time_paused_invalid();
       return;
     }
+    // 고친 칸만 변환한다. 고친 시각이 그 시간대에 없으면(여름시간 시작일의 건너뛴 시각, D-81) 조용히 옮겨 저장하지 않고
+    // 그 칸 옆에 알린다(D-82).
+    const startKept = form.start === initial.start;
+    const endKept = form.end === '' || (form.end === initial.end && base.ended_at !== null);
+    missing = undefined;
+    if (!startKept && isMissingLocalTime(form.start, zone)) {
+      missing = 'start';
+      return;
+    }
+    if (!endKept && isMissingLocalTime(form.end, zone)) {
+      missing = 'end';
+      return;
+    }
     busy = true;
     error = undefined;
     try {
       const result = await api.updateTimeEntry(base.id, base.version, {
-        started_at: form.start === initial.start ? base.started_at : instantOf(form.start, zone),
-        ended_at:
-          form.end === ''
-            ? null
-            : form.end === initial.end && base.ended_at !== null
-              ? base.ended_at
-              : instantOf(form.end, zone),
+        started_at: startKept ? base.started_at : instantOf(form.start, zone),
+        ended_at: form.end === '' ? null : endKept ? base.ended_at : instantOf(form.end, zone),
         // 진행 중인 타이머와 고치지 않은 멈춘 시간은 원래 초 단위 값 그대로.
         paused_seconds:
           base.ended_at === null || form.pausedMinutes === initial.pausedMinutes
@@ -166,7 +176,20 @@
       <form class="grid gap-3 sm:grid-cols-2" onsubmit={(e) => void save(e)}>
         <div class="flex flex-col gap-1">
           <Label for="time-edit-start">{m.time_start()}</Label>
-          <Input id="time-edit-start" type="datetime-local" bind:value={f.start} required />
+          <Input
+            id="time-edit-start"
+            type="datetime-local"
+            bind:value={f.start}
+            required
+            oninput={() => (missing = undefined)}
+            aria-invalid={missing === 'start'}
+            aria-describedby={missing === 'start' ? 'time-edit-start-error' : undefined}
+          />
+          {#if missing === 'start'}
+            <p id="time-edit-start-error" class="text-xs text-destructive" role="alert">
+              {m.events_missing_time({ zone })}
+            </p>
+          {/if}
         </div>
         <div class="flex flex-col gap-1">
           <Label for="time-edit-end">{m.time_end()}</Label>
@@ -176,7 +199,15 @@
             bind:value={f.end}
             disabled={running}
             required={!running}
+            oninput={() => (missing = undefined)}
+            aria-invalid={missing === 'end'}
+            aria-describedby={missing === 'end' ? 'time-edit-end-error' : undefined}
           />
+          {#if missing === 'end'}
+            <p id="time-edit-end-error" class="text-xs text-destructive" role="alert">
+              {m.events_missing_time({ zone })}
+            </p>
+          {/if}
         </div>
         <div class="flex flex-col gap-1">
           <Label for="time-edit-paused">{m.time_paused_minutes()}</Label>
