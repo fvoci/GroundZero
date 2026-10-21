@@ -60,6 +60,7 @@
   {/if}
   <ol class="flex flex-col gap-1 text-sm" data-testid="audit-list">
     {#each entries as e (e.id)}
+      {@const subject = auditSubject(e.detail, e.action)}
       <li class="flex flex-wrap items-baseline gap-2 border-b py-1">
         <span class="text-xs text-muted-foreground tabular-nums">{when(e.created_at)}</span>
         <span class="font-medium"
@@ -71,8 +72,8 @@
             action: auditAction(e.action),
           })}</span
         >
-        {#if auditSubject(e.detail) !== ''}
-          <span class="min-w-0 truncate text-muted-foreground">{auditSubject(e.detail)}</span>
+        {#if subject !== ''}
+          <span class="min-w-0 truncate text-muted-foreground">{subject}</span>
         {/if}
       </li>
     {:else}
