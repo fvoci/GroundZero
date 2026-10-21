@@ -131,9 +131,13 @@
   }): Promise<void> {
     if (settingsBusy) return;
     settingsBusy = true;
-    settingsSeq += 1;
+    const mine = ++settingsSeq;
     try {
-      onchanged(await api.setSettings(doc.id, change));
+      const saved = await api.setSettings(doc.id, change);
+      // 그사이 설정 창을 다시 열어 다시 읽었으면 이 응답과 그 읽기 중 어느 쪽이 더 새로운지 모른다. 그대로 넣으면 그사이
+      // 다른 소유자가 바꾼 값을 되돌려 보일 수 있으므로 한 번 더 읽어 서버의 지금 값으로 맞춘다(리뷰).
+      if (mine === settingsSeq) onchanged(saved);
+      else void refreshSettings();
     } catch (e: unknown) {
       fail(e);
     } finally {
@@ -145,10 +149,11 @@
   async function setTemplate(on: boolean): Promise<void> {
     if (settingsBusy) return;
     settingsBusy = true;
-    settingsSeq += 1;
+    const mine = ++settingsSeq;
     try {
       await api.setDocumentTemplate(doc.id, on);
-      onchanged({ ...doc, is_template: on });
+      if (mine === settingsSeq) onchanged({ ...doc, is_template: on });
+      else void refreshSettings();
     } catch (e: unknown) {
       fail(e);
     } finally {
