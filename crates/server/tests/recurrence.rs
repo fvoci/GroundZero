@@ -769,17 +769,25 @@ async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves()
     t1.commit().await.unwrap();
     tick.await.unwrap().unwrap();
 
-    // 완료 뿌리 반복의 다음 회차도 만들어졌다(교착으로 건너뛰지 않았다).
-    let made: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM fvoci.tasks WHERE series_id = $1::uuid AND deleted_at IS NULL
-           AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
-    )
-    .bind(&done_series)
-    .fetch_one(&owner)
-    .await
-    .unwrap();
+    // 두 반복 모두 다음 회차가 만들어졌다(교착으로 건너뛰지 않았다, 리뷰: 할 일 뿌리 반복도 확인).
+    let made = |series: String| {
+        let owner = owner.clone();
+        async move {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM fvoci.tasks WHERE series_id = $1::uuid AND deleted_at IS NULL
+                   AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
+            )
+            .bind(series)
+            .fetch_one(&owner)
+            .await
+            .unwrap()
+        }
+    };
+    let done_made = made(done_series.clone()).await;
+    let todo_made = made(todo_rule["series"]["id"].as_str().unwrap().to_owned()).await;
     owner.close().await;
-    assert!(made >= 1, "the done-rooted series lost its occurrence");
+    assert!(done_made >= 1, "the done-rooted series lost its occurrence");
+    assert!(todo_made >= 1, "the todo-rooted series lost its occurrence");
 }
 
 /// 리뷰(감사 S3 후속): 열 잠금을 반복별 예외 블록 밖에서 잡게 바꾼 뒤로, 한 항목의 열 잠금이 실패하면(교착 상대로
