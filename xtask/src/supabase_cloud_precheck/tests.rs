@@ -394,7 +394,7 @@ fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
         .find("target/debug/xtask supabase-cloud-precheck --connect")
         .context("prebuilt command")?;
     assert!(build < secret && secret < run);
-    assert!(source.contains("actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"));
+    assert!(source.contains("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"));
     assert!(
         !source
             .lines()
