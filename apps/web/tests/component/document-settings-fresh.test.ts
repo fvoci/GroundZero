@@ -156,3 +156,57 @@ describe('document settings from an out-of-date view', () => {
     expect(template).not.toHaveBeenCalled();
   });
 });
+
+// 리뷰: 설정 저장이 끝나기 전에 창을 닫았다 다시 열면 다시 읽기가 먼저 반영되고, 늦게 온 저장 응답이 그 뒤에 화면을
+// 덮었다. 그사이 다른 소유자가 바꾼 값(복제 금지)이 저장 응답의 옛 값으로 되돌아 보였다. 다시 읽은 뒤에 끝난 저장은 한
+// 번 더 읽어 서버의 지금 값으로 맞춘다.
+describe('a settings save that finishes after the dialog was reopened', () => {
+  it('reads the settings again instead of applying the late answer', async () => {
+    const reads = [
+      documentWith('workspace', true),
+      // 다시 열 때: 저장은 아직이고, 다른 소유자가 복제를 막았다.
+      documentWith('workspace', false),
+      // 저장이 끝난 뒤의 서버 값.
+      documentWith('private', false),
+    ];
+    const read = vi
+      .spyOn(api, 'document')
+      .mockImplementation(() => Promise.resolve(reads.shift() ?? documentWith('private', false)));
+    let finish: () => void = () => undefined;
+    vi.spyOn(api, 'setSettings').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          // 저장 응답은 저장한 순간의 값(복제 허용)이다.
+          finish = () => {
+            resolve(documentWith('private', true));
+          };
+        }),
+    );
+    const changed = vi.fn<(doc: DocumentView) => void>();
+    render(DocumentActions, {
+      props: { doc: documentWith('workspace', true), workspaces, onchanged: changed },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+    await fireEvent.click(await screen.findByRole('checkbox', { name: /^비공개/ }));
+    // 저장 중에 창을 닫았다 다시 연다.
+    await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+    await waitFor(() => {
+      expect(read).toHaveBeenCalledTimes(2);
+    });
+
+    finish();
+    await waitFor(() => {
+      expect(read).toHaveBeenCalledTimes(3);
+    });
+    await waitFor(() => {
+      expect(changed).toHaveBeenLastCalledWith(
+        expect.objectContaining({ visibility: 'private', allow_copy: false }),
+      );
+    });
+  });
+});
