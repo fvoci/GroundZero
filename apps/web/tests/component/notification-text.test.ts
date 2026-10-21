@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { NotificationView } from '$lib/api/client';
+import { formatDay } from '$lib/display';
 import { notificationText } from '$lib/features/references/notification-text';
 
 const base: NotificationView = {
@@ -26,7 +27,8 @@ describe('notificationText', () => {
   it('says what kind of notification it is', () => {
     const due = notificationText({ ...base, kind: 'due' });
     expect(due).toContain('TSK-3 보고서');
-    expect(due).toContain('2026-10-20');
+    // 날짜는 표시 언어의 서식으로(감사 W27, D-81).
+    expect(due).toContain(formatDay('2026-10-20'));
     expect(due).not.toBe(notificationText({ ...base, kind: 'mention' }));
     expect(notificationText({ ...base, kind: 'comment', actor_name: '민수' })).toContain('민수');
     expect(notificationText({ ...base, kind: 'reply' })).not.toBe(
