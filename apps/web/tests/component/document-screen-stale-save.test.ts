@@ -132,4 +132,56 @@ describe('a late save for the previous document', () => {
     expect(liveTitle().value).toBe('B 제목');
     expect(screen.queryByText('WIKI-A')).toBeNull();
   });
+
+  it('does not overwrite document A reopened meanwhile (A → B → A) with the old save result', async () => {
+    // 다시 열 때 A는 그사이 리비전 5가 되었다(다른 사람의 편집이 리비전으로 남음).
+    let revisionOfA = 3;
+    vi.spyOn(api, 'document').mockImplementation((id: string) =>
+      Promise.resolve(
+        id === 'A' ? liveDocument('A', 'A 제목', revisionOfA) : liveDocument('B', 'B 제목'),
+      ),
+    );
+    vi.spyOn(api, 'revisions').mockResolvedValue([]);
+    let finishSave: (doc: DocumentView) => void = () => undefined;
+    const save = vi.spyOn(api, 'saveDocument').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishSave = (doc: DocumentView) => {
+            resolve({ kind: 'saved', document: doc });
+          };
+        }),
+    );
+    const view = render(DocumentScreen, { props: { documentId: 'A', workspaces } });
+    await waitFor(() => {
+      expect(liveTitle().value).toBe('A 제목');
+    });
+
+    await fireEvent.input(liveTitle(), { target: { value: 'A 새 제목' } });
+    await fireEvent.blur(liveTitle());
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+    await view.rerender({ documentId: 'B', workspaces });
+    await waitFor(() => {
+      expect(liveTitle().value).toBe('B 제목');
+    });
+    revisionOfA = 5;
+    await view.rerender({ documentId: 'A', workspaces });
+    await waitFor(() => {
+      expect(liveTitle().value).toBe('A 제목');
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '기록' }));
+    await screen.findByText(/^지금은 리비전 5입니다\./);
+
+    // 처음 연 A의 편집기(이미 사라짐)가 보낸 제목 저장이 이제 끝난다(리비전 4).
+    finishSave(liveDocument('A', 'A 새 제목', 4));
+    await tick();
+    await new Promise((r) => setTimeout(r, 0));
+    await tick();
+
+    // 화면의 A는 다시 읽은 리비전 5 그대로다(기록·복원의 기준이 옛 리비전으로 돌아가지 않는다).
+    expect(screen.getByText(/^지금은 리비전 \d+입니다\./).textContent).toMatch(
+      /^지금은 리비전 5입니다\./,
+    );
+  });
 });
