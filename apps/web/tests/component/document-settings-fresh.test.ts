@@ -214,7 +214,7 @@ describe('a settings save that finishes after the dialog was reopened', () => {
   // 다시 읽기가 늦게 오면 같은 id라 새 화면의 설정 표시를 옛 값으로 덮었다. 내린 창의 결과는 넘기지 않는다.
   it('drops a settings answer that arrives after the dialog left the screen', async () => {
     let answer: (doc: DocumentView) => void = () => undefined;
-    vi.spyOn(api, 'document').mockImplementation(
+    const read = vi.spyOn(api, 'document').mockImplementation(
       () =>
         new Promise<DocumentView>((resolve) => {
           answer = resolve;
@@ -226,7 +226,7 @@ describe('a settings save that finishes after the dialog was reopened', () => {
     });
     await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
     await waitFor(() => {
-      expect(api.document).toHaveBeenCalledTimes(1);
+      expect(read).toHaveBeenCalledTimes(1);
     });
 
     view.unmount();
