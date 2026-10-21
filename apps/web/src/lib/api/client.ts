@@ -16,7 +16,12 @@ import type {
   Workspace,
 } from '@fvoci/api-client';
 
-import { connection, reportConnectionLost } from '$lib/features/feedback/feedback.svelte';
+import {
+  auth,
+  connection,
+  reportConnectionLost,
+  reportSessionExpired,
+} from '$lib/features/feedback/feedback.svelte';
 import { m } from '$lib/paraglide/messages.js';
 
 /** Tiptap JSON 노드. 본문 최상위는 `type: "doc"`. */
@@ -2186,10 +2191,19 @@ async function request(
     !(isRecord(json) && typeof json.error === 'string');
   if (gateway) reportConnectionLost();
   else if (connection.lost) connection.lost = false;
+  // 세션이 필요한 요청이 다시 성공하면(다른 탭에서 로그인함) 로그인 배너를 내린다.
+  if (auth.expired && response.ok && needsSession(path)) auth.expired = false;
   return { status: response.status, json, etag: response.headers.get('ETag') };
 }
 
+/** 로그인 없이도 답하는 경로(상태 확인·로그인 방식·공개 링크)가 아닌 API. */
+function needsSession(path: string): boolean {
+  return path.startsWith('/api/') && path !== '/api/auth-info' && !path.startsWith('/api/public/');
+}
+
 function fail(status: number, json: Json): never {
+  // 쓰는 중에 세션이 끝났다(로그인 확인 `api.me()`의 401은 여기 오지 않는다). 앱 전체 배너로 새 탭 로그인을 권한다.
+  if (status === 401) reportSessionExpired();
   if (isRecord(json) && typeof json.error === 'string') {
     let message = typeof json.message === 'string' ? json.message : json.error;
     const requestId = typeof json.request_id === 'string' ? json.request_id : undefined;
