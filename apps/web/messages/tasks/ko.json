@@ -271,5 +271,5 @@
   "tasks_gantt_failed": "{title}: 일정을 바꾸지 못했습니다.",
   "tasks_gantt_dialog_title": "{title} 일정 바꾸기",
   "tasks_gantt_dialog_description": "{from} → {to}. 이 업무를 기다리는 후속 업무도 영향을 받습니다.",
-  "tasks_move_conflict": "{title}: 다시 보내기 전에 다른 곳에서 이 업무가 옮겨져 보내지 않았습니다. 서버의 최신 상태를 보여 줍니다."
+  "tasks_move_conflict": "{title}: 그사이 다른 곳에서 이 업무가 옮겨져, 덮어쓰지 않도록 다시 시도를 저장하지 않았습니다. 서버의 최신 상태를 보여 줍니다."
 }

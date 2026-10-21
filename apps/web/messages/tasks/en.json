@@ -278,5 +278,5 @@
   "tasks_gantt_failed": "{title}: couldn't change the dates.",
   "tasks_gantt_dialog_title": "Change dates of {title}",
   "tasks_gantt_dialog_description": "{from} → {to}. Later tasks that wait for this one are affected.",
-  "tasks_move_conflict": "{title}: it was moved elsewhere before the retry went through, so nothing was sent. Showing the latest server state."
+  "tasks_move_conflict": "{title}: it was moved elsewhere in the meantime, so the retry was not saved and nothing was overwritten. Showing the latest server state."
 }

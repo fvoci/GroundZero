@@ -346,7 +346,7 @@ describe('kanban save states', () => {
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('done');
     expect(screen.getByRole('alert').textContent).toContain(
-      'API 연결: 다시 보내기 전에 다른 곳에서 이 업무가 옮겨져 보내지 않았습니다.',
+      'API 연결: 그사이 다른 곳에서 이 업무가 옮겨져, 덮어쓰지 않도록 다시 시도를 저장하지 않았습니다.',
     );
     expect(liveText()).not.toContain('저장을 확인했습니다');
     await flush(20000);
