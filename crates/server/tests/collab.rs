@@ -2172,3 +2172,265 @@ async fn edits_during_a_restore_are_not_acknowledged_then_dropped() {
     );
     owner.close().await;
 }
+
+/// 감사 S6: 실시간 편집 중인 문서를 실시간이 꺼진 워크스페이스로 옮기면, 옮기기 전에 방을 리비전으로 남기지 않아
+/// 리비전이 아직 없는 실시간 편집이 남겨졌다. 편집자가 새 자리에 쓸 수 없으면 방이 닫힐 때도 저장하지 못하고, 본문은
+/// 옮기기 전 마지막 리비전으로 남아 다음 일반 저장이 그 편집을 버렸다. 옮기기 전에 열린 방을 리비전으로 남긴다.
+#[tokio::test]
+async fn moving_a_live_document_into_a_realtime_off_workspace_keeps_the_live_edits() {
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let from = create_workspace(&app, &admin, "실시간 켠 곳").await;
+    let to = create_workspace(&app, &admin, "실시간 끈 곳").await;
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{from}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+    // 편집자는 옮기기 전 워크스페이스의 작성자일 뿐 새 워크스페이스의 멤버가 아니다.
+    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let doc = common::create_doc(&app, &admin, &from, "회의록").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let mut e = connect(addr, Some(&writer), &id, true).await.unwrap();
+    e.paragraph("옮기기 직전에 쓴 문단").await;
+    e.sync().await;
+    // 방이 그 문단을 받았는지 다른 연결로 확인한 뒤 옮긴다(리뷰: 보낸 변경이 방에 닿기 전에 옮기면 시험이 흔들린다).
+    let mut watcher = connect(addr, Some(&admin), &id, true).await.unwrap();
+    assert!(
+        watcher
+            .until(|c| c.text().contains("옮기기 직전에 쓴 문단"))
+            .await
+    );
+
+    let target = json!({ "target_workspace_id": to, "target_item_id": null });
+    let preview = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{id}/move/preview"),
+        Some(&admin),
+        Some(target),
+    )
+    .await;
+    assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
+    let moved = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{id}/move"),
+        Some(&admin),
+        Some(json!({ "target_workspace_id": to, "target_item_id": null,
+                     "acknowledged": { "gains": preview.json["gains"], "loses": preview.json["loses"] } })),
+    )
+    .await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    // 다음 확인에서 편집자는 접근을 잃고 연결이 닫힌다(방도 닫힌다).
+    assert!(e.closed().await.is_some());
+    let saved = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    assert!(
+        saved["body"].to_string().contains("옮기기 직전에 쓴 문단"),
+        "{saved}"
+    );
+    watcher.close().await;
+}
+
+/// 실시간을 켠 곳(작성자 하나)과 끈 곳, 그 작성자가 실시간으로 쓰고 방이 받은 문서를 만든다.
+async fn live_move_setup(
+    label: &str,
+) -> (
+    Router,
+    SocketAddr,
+    TestUser,
+    TestUser,
+    String,
+    String,
+    String,
+    Client,
+    Client,
+) {
+    // 권한 재확인(기본 30초)이 시험 중에 돌아 방을 닫지 않게 한다.
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "3600")]))
+            .unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let from = create_workspace(&app, &admin, &format!("{label} 켠 곳")).await;
+    let to = create_workspace(&app, &admin, &format!("{label} 끈 곳")).await;
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{from}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let doc = common::create_doc(&app, &admin, &from, label).await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let mut e = connect(addr, Some(&writer), &id, true).await.unwrap();
+    e.paragraph("리비전이 아직 없는 문단").await;
+    let mut watcher = connect(addr, Some(&admin), &id, true).await.unwrap();
+    assert!(
+        watcher
+            .until(|c| c.text().contains("리비전이 아직 없는 문단"))
+            .await
+    );
+    (app, addr, admin, writer, from, to, id, e, watcher)
+}
+
+async fn move_to(app: &Router, user: &TestUser, id: &str, to: &str) -> common::Reply {
+    let target = json!({ "target_workspace_id": to, "target_item_id": null });
+    let preview = send(
+        app,
+        Method::POST,
+        &format!("/api/documents/{id}/move/preview"),
+        Some(user),
+        Some(target),
+    )
+    .await;
+    let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    send(
+        app,
+        Method::POST,
+        &format!("/api/documents/{id}/move"),
+        Some(user),
+        Some(json!({ "target_workspace_id": to, "target_item_id": null, "acknowledged": ack })),
+    )
+    .await
+}
+
+/// 리뷰(감사 S6 후속): 옮기기 전 방의 리비전 남기기가 실패해도(쓰기 오류·시간 초과) 그대로 옮겨, 실시간이 꺼진 새
+/// 자리에서 리비전이 되지 않은 편집이 남겨졌다. 남기지 못하면 옮기지 않는다(409, 편집은 방에 남는다). 다시 하면 옮긴다.
+#[tokio::test]
+async fn a_failed_checkpoint_stops_the_move() {
+    let (app, _addr, admin, _writer, from, to, id, e, watcher) =
+        live_move_setup("체크포인트 실패 이동").await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let name = format!("test_fail_revision_{}", uuid::Uuid::now_v7().simple());
+    sqlx::query(&format!(
+        "CREATE FUNCTION fvoci.{name}() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN RAISE EXCEPTION 'test revision failure'; END $$"
+    ))
+    .execute(&owner)
+    .await
+    .unwrap();
+    sqlx::query(&format!(
+        "CREATE TRIGGER {name} BEFORE INSERT ON fvoci.document_revisions FOR EACH ROW
+         WHEN (NEW.document_id = '{id}'::uuid) EXECUTE FUNCTION fvoci.{name}()"
+    ))
+    .execute(&owner)
+    .await
+    .unwrap();
+
+    let refused = move_to(&app, &admin, &id, &to).await;
+    let doc = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    for cleanup in [
+        format!("DROP TRIGGER {name} ON fvoci.document_revisions"),
+        format!("DROP FUNCTION fvoci.{name}()"),
+    ] {
+        sqlx::query(&cleanup).execute(&owner).await.unwrap();
+    }
+    assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
+    assert!(refused.json.get("gains").is_none(), "{:?}", refused.json);
+    assert_eq!(doc["workspace_id"], from.as_str(), "the document moved");
+
+    // 다시 하면 방의 편집을 리비전으로 남기고 옮긴다.
+    let moved = move_to(&app, &admin, &id, &to).await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    let saved = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    assert_eq!(saved["workspace_id"], to.as_str());
+    assert!(
+        saved["body"]
+            .to_string()
+            .contains("리비전이 아직 없는 문단"),
+        "{saved}"
+    );
+    owner.close().await;
+    e.close().await;
+    watcher.close().await;
+}
+
+/// 리뷰: 옮길 권한이 없는 요청도 권한을 보기 전에 방에 리비전을 남기게 해, 거절될 요청으로 다른 사람의 열린 편집을
+/// 리비전으로 남기거나 방을 기다리게 할 수 있었다. 옮길 수 있는 사람의 요청만 방에 보낸다.
+#[tokio::test]
+async fn a_move_without_permission_leaves_the_room_alone() {
+    let (app, _addr, admin, writer, _from, _to, id, e, watcher) =
+        live_move_setup("권한 없는 이동").await;
+    let elsewhere = create_workspace(&app, &writer, "작성자의 곳").await;
+    let before = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    // 미리보기는 권한이 없어 거절되므로, 형식만 맞는 확인 값으로 바로 옮기기를 보낸다.
+    let refused = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{id}/move"),
+        Some(&writer),
+        Some(
+            json!({ "target_workspace_id": elsewhere, "target_item_id": null,
+                     "acknowledged": { "gains": [], "loses": [] } }),
+        ),
+    )
+    .await;
+    assert!(
+        matches!(
+            refused.status,
+            StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+        ),
+        "{:?}",
+        refused.json
+    );
+    let after = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    assert_eq!(
+        after["revision"], before["revision"],
+        "the refused move made the room save a revision"
+    );
+    e.close().await;
+    watcher.close().await;
+}
