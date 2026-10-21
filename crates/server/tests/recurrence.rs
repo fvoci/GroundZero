@@ -732,6 +732,9 @@ async fn event_rule_saves_from_a_stale_rule_conflict() {
     // 지금 규칙이 이미 보낸 규칙과 같으면(같은 요청 재시도) 성공이다.
     let retry = put(mon_wed.clone(), monday.clone()).await;
     assert_eq!(retry.status, StatusCode::OK, "{:?}", retry.json);
+    // 리뷰: 재시도는 바꿀 것이 없어 판을 다시 올리지 않는다(올리면 응답을 잃고 다시 보낸 화면이 판이 두 번 오른 것으로
+    // 보고 일정 입력의 기준을 놓쳐, 제 변경과 부딪히는 409를 받았다).
+    assert_eq!(retry.json["version"], other.json["version"]);
 
     // 제목만 바뀐 것은 규칙 충돌이 아니다.
     let renamed = send(&app, Method::PUT, &uri, Some(&admin), Some(json!({
