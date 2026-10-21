@@ -781,3 +781,83 @@ async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves()
     owner.close().await;
     assert!(made >= 1, "the done-rooted series lost its occurrence");
 }
+
+/// 리뷰(감사 S3 후속): 열 잠금을 반복별 예외 블록 밖에서 잡게 바꾼 뒤로, 한 항목의 열 잠금이 실패하면(교착 상대로
+/// 골라짐, 잠금 시간 초과) 반복 회차 맞추기 전체가 실패해 다른 항목의 회차까지 다음 주기로 밀렸다. 전처럼 그 항목의
+/// 반복만 경고하고 건너뛴다.
+#[tokio::test]
+async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "열 잠금 실패").await;
+    let today = seoul_today(&state, &admin).await;
+    let daily = json!({"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null});
+    let mut series = Vec::new();
+    let mut items = Vec::new();
+    // 앞 항목(더 작은 id)의 잠금이 실패해도 뒤 항목은 맞춘다.
+    for key in ["LKA", "LKB"] {
+        let item = module_item(&app, &admin, &ws, key).await;
+        let root = dated_task(&app, &admin, &item, "매일", &day(today)).await;
+        let (status, rule) = repeat(&app, &admin, &root, daily.clone()).await;
+        assert_eq!(status, StatusCode::OK, "{rule:?}");
+        let id = rule["series"]["id"].as_str().unwrap().to_owned();
+        common::fixture_sql(
+            "DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
+            &id,
+        )
+        .await;
+        series.push(id);
+        items.push(item["id"].as_str().unwrap().to_owned());
+    }
+
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&url).await.unwrap();
+    // 다른 연결이 앞 항목의 완료 열을 쥐고 있다.
+    let mut holder = owner.acquire().await.unwrap();
+    sqlx::query("SELECT pg_advisory_lock(hashtextextended('fvoci-lane:' || $1 || ':done', 0))")
+        .bind(&items[0])
+        .execute(&mut *holder)
+        .await
+        .unwrap();
+    let mut tx = owner.begin().await.unwrap();
+    sqlx::query("SET LOCAL lock_timeout = '300ms'")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let ticked = sqlx::query_scalar::<_, i32>(
+        "SELECT fvoci.app_system_recurrence_tick(coalesce(
+           (SELECT array_agg(uuidv7()) FROM generate_series(1, fvoci.app_system_recurrence_tick_ids())), '{}'))",
+    )
+    .fetch_one(&mut *tx)
+    .await;
+    if ticked.is_ok() {
+        tx.commit().await.unwrap();
+    }
+    sqlx::query("SELECT pg_advisory_unlock(hashtextextended('fvoci-lane:' || $1 || ':done', 0))")
+        .bind(&items[0])
+        .execute(&mut *holder)
+        .await
+        .unwrap();
+    drop(holder);
+    assert!(ticked.is_ok(), "{ticked:?}");
+
+    let made = |id: String| {
+        let owner = owner.clone();
+        async move {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM fvoci.tasks WHERE series_id = $1::uuid AND deleted_at IS NULL
+                   AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
+            )
+            .bind(id)
+            .fetch_one(&owner)
+            .await
+            .unwrap()
+        }
+    };
+    let skipped = made(series[0].clone()).await;
+    let synced = made(series[1].clone()).await;
+    owner.close().await;
+    assert_eq!(skipped, 0, "the locked item was synced");
+    assert!(synced >= 1, "the other item lost its occurrences");
+}

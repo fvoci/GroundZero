@@ -6,7 +6,8 @@
 -- 완료 열을 쥔 채 할 일 열을 기다리는 사용자 요청과 맞물려 교착(40P01)이 났고, 사용자 쪽은 약 1초 뒤 409, 작업 쪽은 그
 -- 반복의 회차를 다음 주기까지 건너뛰었다. 이제 반복을 항목 순으로 돌고, 한 항목의 첫 반복 앞에서 그 항목의 세 열을 항목
 -- 동기화(`app_sync_item_series`)와 같은 순서로 먼저 잠근다. id 몫을 나누는 순서도 같은 순서를 따른다(개수 함수는 합이라
--- 그대로다).
+-- 그대로다). 열 잠금이 실패하면(교착 상대로 골라짐, 잠금 시간 초과 등) 전처럼 그 항목의 반복만 경고하고 건너뛴다
+-- (전에는 잠금이 반복별 예외 블록 안에서 잡혔다). 그 항목의 id 몫도 건너뛰어 다음 항목의 몫은 그대로다.
 -- 함수 본문은 0073의 마지막 정의와 같고 순서와 열 잠금만 다르다.
 
 -- 작업 프로세스: 모든 반복. id는 반복마다 `app_task_series_bound` 몫(개수는 `_ids`).
@@ -20,6 +21,7 @@ CREATE OR REPLACE FUNCTION app_system_recurrence_tick(p_ids uuid[]) RETURNS inte
     v_made integer := 0;
     v_at   integer := 0;
     v_need integer;
+    v_skip boolean := false;
   BEGIN
     IF app_user_id() IS NOT NULL THEN
       RETURN 0;
@@ -35,17 +37,25 @@ CREATE OR REPLACE FUNCTION app_system_recurrence_tick(p_ids uuid[]) RETURNS inte
       -- 항목이 바뀌면 그 항목의 세 열을 사용자 요청과 같은 순서로 먼저 잠근다(트랜잭션 끝까지 쥔다).
       IF v_item IS DISTINCT FROM v_row.item_id THEN
         v_item := v_row.item_id;
-        PERFORM app_lock_lane(v_item, 'done');
-        PERFORM app_lock_lane(v_item, 'in_progress');
-        PERFORM app_lock_lane(v_item, 'todo');
+        v_skip := false;
+        BEGIN
+          PERFORM app_lock_lane(v_item, 'done');
+          PERFORM app_lock_lane(v_item, 'in_progress');
+          PERFORM app_lock_lane(v_item, 'todo');
+        EXCEPTION WHEN OTHERS THEN
+          RAISE WARNING 'recurrence lane locks of item % failed with SQLSTATE %', v_item, SQLSTATE;
+          v_skip := true;
+        END;
       END IF;
       v_need := app_task_series_bound(v_row.id);
-      BEGIN
-        v_made := v_made + app_sync_task_series_as(v_row.id, true,
-                                                   coalesce(p_ids[v_at + 1:v_at + v_need], '{}'::uuid[]));
-      EXCEPTION WHEN OTHERS THEN
-        RAISE WARNING 'recurrence sync of series % failed with SQLSTATE %', v_row.id, SQLSTATE;
-      END;
+      IF NOT v_skip THEN
+        BEGIN
+          v_made := v_made + app_sync_task_series_as(v_row.id, true,
+                                                     coalesce(p_ids[v_at + 1:v_at + v_need], '{}'::uuid[]));
+        EXCEPTION WHEN OTHERS THEN
+          RAISE WARNING 'recurrence sync of series % failed with SQLSTATE %', v_row.id, SQLSTATE;
+        END;
+      END IF;
       v_at := v_at + v_need;
     END LOOP;
     RETURN v_made;
