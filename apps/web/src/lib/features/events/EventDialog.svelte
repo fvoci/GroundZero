@@ -30,12 +30,21 @@
   let conflict = $state<{ current: EventView; input: EventInput } | undefined>(undefined);
   let confirmDelete = $state(false);
   let epoch = $state(0);
+  // 반복 편집기는 일정 저장 때 다시 그리지 않는다(저장 안 한 규칙 입력을 지우지 않게). "서버 내용 불러오기"에서만 서버
+  // 규칙으로 다시 만든다(그러지 않으면 요약은 서버 규칙인데 칸은 옛 규칙이라, 저장하면 옛 규칙을 다시 보낸다).
+  let ruleEpoch = $state(0);
+  // 보내는 중인 요청 수. 보내는 동안은 닫지 않는다(늦게 온 결과가 다시 연 창에 들어가지 않게, CalendarTaskDialog와 같음).
+  let pending = $state(0);
+  const busy = $derived(pending > 0);
+  // 지금 보이는 일정을 연 차례. 요청을 보낸 뒤 다른 일정을 열었으면(또는 닫았다 다시 열었으면) 늦은 결과를 버린다.
+  let shown = 0;
   // 일정 입력이 바탕으로 삼은 버전. 반복 규칙 저장은 입력을 다시 그리지 않으므로 `event.version`과 따로 둔다.
   let formVersion = 0;
   const zone = localTimeZone();
 
   $effect(() => {
     const id = eventId;
+    shown += 1;
     event = undefined;
     error = undefined;
     conflict = undefined;
@@ -63,9 +72,25 @@
 
   const canEdit = $derived(event !== undefined && event.access !== 'read');
 
+  /** 보내는 동안 닫지 않게 센다. */
+  async function sending<T>(request: Promise<T>): Promise<T> {
+    pending += 1;
+    try {
+      return await request;
+    } finally {
+      pending -= 1;
+    }
+  }
+
   async function save(input: EventInput, baseVersion: number): Promise<void> {
     if (event === undefined) return;
-    const result = await api.updateEvent(event.id, baseVersion, input);
+    const mine = shown;
+    const result = await sending(api.updateEvent(event.id, baseVersion, input));
+    if (mine !== shown) {
+      // 그사이 다른 일정을 열었다. 고친 일정은 목록에서 다시 읽게만 한다.
+      if (result.kind === 'updated') onchanged();
+      return;
+    }
     if (result.kind === 'conflict') {
       conflict = { current: result.current, input };
       return;
@@ -79,9 +104,14 @@
 
   async function saveRule(rule: RecurrenceRule | null): Promise<void> {
     if (event === undefined) return;
+    const mine = shown;
     const before = event.version;
     // 편집 중인 일정 입력과 반복 편집기의 상태(저장 알림·초점)를 지우지 않게 다시 그리지 않는다.
-    const saved = await api.setEventRecurrence(event.id, rule);
+    const saved = await sending(api.setEventRecurrence(event.id, rule));
+    if (mine !== shown) {
+      onchanged();
+      return;
+    }
     // 이 저장 하나만큼 버전이 올랐으면 입력의 기준도 따라간다. 그 사이 다른 사람이 일정을 고쳤으면 기준을 두어
     // 입력 저장이 충돌로 드러나게 한다(새 버전을 기준으로 보내면 그 사람의 변경을 모르고 덮어쓴다).
     if (formVersion === before && saved.version === before + 1) formVersion = saved.version;
@@ -91,35 +121,45 @@
 
   async function skipOccurrence(date: string): Promise<void> {
     if (event === undefined) return;
+    const mine = shown;
     try {
-      await api.excludeOccurrence(event.id, date);
+      await sending(api.excludeOccurrence(event.id, date));
       onchanged();
-      onclose();
+      if (mine === shown) onclose();
     } catch (e: unknown) {
-      error = errorText(e, m.events_skip_failed());
+      if (mine === shown) error = errorText(e, m.events_skip_failed());
     }
   }
 
   async function remove(): Promise<void> {
     if (event === undefined) return;
+    const mine = shown;
     try {
-      await api.deleteEvent(event.id);
+      await sending(api.deleteEvent(event.id));
       onchanged();
-      onclose();
+      if (mine === shown) onclose();
     } catch (e: unknown) {
-      error = errorText(e, m.events_delete_failed());
+      if (mine === shown) error = errorText(e, m.events_delete_failed());
     }
+  }
+
+  function close(): void {
+    if (busy) return;
+    onclose();
   }
 </script>
 
 <Dialog.Root
   open={eventId !== undefined}
   onOpenChange={(o: boolean) => {
-    if (!o) onclose();
+    if (!o) close();
   }}
 >
   <Dialog.Content
     class="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+    escapeKeydownBehavior={busy ? 'ignore' : 'close'}
+    interactOutsideBehavior={busy ? 'ignore' : 'close'}
+    showCloseButton={!busy}
     onCloseAutoFocus={(e: Event) => {
       const target = returnFocus?.() ?? null;
       if (target !== null) {
@@ -154,6 +194,7 @@
                 formVersion = c.current.version;
                 conflict = undefined;
                 epoch += 1;
+                ruleEpoch += 1;
               }}>{m.events_load_server()}</Button
             >
             <Button size="sm" onclick={() => void save(c.input, c.current.version)}
@@ -171,13 +212,15 @@
             onsubmit={(input: EventInput) => save(input, formVersion)}
           />
         {/key}
-        <RecurrenceEditor
-          idPrefix="event-recurrence"
-          rule={current.recurrence}
-          canEdit={true}
-          zoneNote={m.events_zone_note({ zone: current.timezone })}
-          onsave={saveRule}
-        />
+        {#key ruleEpoch}
+          <RecurrenceEditor
+            idPrefix="event-recurrence"
+            rule={current.recurrence}
+            canEdit={true}
+            zoneNote={m.events_zone_note({ zone: current.timezone })}
+            onsave={saveRule}
+          />
+        {/key}
         {#if occurrence !== undefined && current.recurrence !== null}
           <div class="flex items-center gap-2 text-sm">
             <span>{m.events_occurrence_only({ date: occurrence })}</span>
