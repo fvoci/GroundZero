@@ -323,7 +323,7 @@
   "tasks_undone_end": "{title}: moved back ({status}). The task that was right after it is no longer in that column, so it went to the end.",
   "tasks_undo_changed": "{title}: it changed elsewhere after the move, so it wasn't moved back. Showing the latest server state.",
   "tasks_undo_read_failed": "{title}: couldn't check the current state, so it wasn't moved back. Check your connection and press it again.",
-  "tasks_gantt_edit_hint": "Drag a bar to move its dates, or drag either end to change the start or due date. Keyboard: on the task name, Alt+Left/Right moves it a day, Alt+Shift+Left/Right changes the due date by a day (change only the start date in the task details). If later tasks are affected, you're asked before saving.",
+  "tasks_gantt_edit_hint": "Drag a bar to move its dates, or drag either end to change the start or due date. Keyboard: on the task name, Alt+Left/Right moves it a day, Alt+Shift+Left/Right changes the due date by a day (change only the start date in the task details). If later tasks are affected, you're asked before saving. The end of a bar cut off at the end of the shown period cannot be dragged; change its due date with Alt+Shift+Left/Right or in the task details.",
   "tasks_gantt_saved": "{title}: dates changed ({dates}).",
   "tasks_gantt_saved_shifts": "{title}: dates changed, and {count} later tasks moved too.",
   "tasks_gantt_cancelled": "{title}: dates not changed.",

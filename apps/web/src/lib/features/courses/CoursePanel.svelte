@@ -656,6 +656,7 @@
                   id={`mine-position-${e.id}`}
                   bind:value={mine.position}
                   placeholder="12:30"
+                  oninput={() => (positionError = undefined)}
                   aria-invalid={positionError !== undefined}
                   aria-describedby={positionError === undefined
                     ? undefined

@@ -298,7 +298,7 @@
   "tasks_undone_end": "{title}: 되돌렸습니다({status}). 원래 바로 뒤에 있던 업무가 그 열에 없어 열 끝에 두었습니다.",
   "tasks_undo_changed": "{title}: 옮긴 뒤 다른 곳에서 바뀌어 되돌리지 않았습니다. 서버의 최신 상태를 보여 줍니다.",
   "tasks_undo_read_failed": "{title}: 지금 상태를 확인하지 못해 되돌리지 않았습니다. 연결을 확인한 뒤 다시 누르세요.",
-  "tasks_gantt_edit_hint": "막대를 끌어 일정을 옮기고, 양 끝을 끌어 시작일·마감일을 바꿉니다. 키보드: 업무 이름에서 Alt+←·→ 하루 옮기기, Alt+Shift+←·→ 마감 하루 당기기·늦추기(시작일만 바꾸기는 업무 상세에서). 후속 업무에 영향이 있으면 저장 전에 묻습니다.",
+  "tasks_gantt_edit_hint": "막대를 끌어 일정을 옮기고, 양 끝을 끌어 시작일·마감일을 바꿉니다. 키보드: 업무 이름에서 Alt+←·→ 하루 옮기기, Alt+Shift+←·→ 마감 하루 당기기·늦추기(시작일만 바꾸기는 업무 상세에서). 후속 업무에 영향이 있으면 저장 전에 묻습니다. 표시 기간 끝에서 잘린 막대의 끝은 끌 수 없고, 마감은 Alt+Shift+←·→나 업무 상세에서 바꿉니다.",
   "tasks_gantt_saved": "{title}: 일정을 바꿨습니다({dates}).",
   "tasks_gantt_saved_shifts": "{title}: 일정을 바꾸고 후속 업무 {count}개도 옮겼습니다.",
   "tasks_gantt_cancelled": "{title}: 일정을 바꾸지 않았습니다.",
