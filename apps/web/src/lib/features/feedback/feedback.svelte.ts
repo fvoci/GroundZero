@@ -38,9 +38,19 @@ function probe(): void {
  */
 export const auth = $state({ expired: false });
 
+// 401을 알린 횟수. 요청은 시작할 때 이 값을 적어 두고, 그 뒤 401이 없었을 때만 성공으로 배너를 내린다(401보다 먼저
+// 시작한 요청의 늦은 성공은 세션이 돌아왔다는 뜻이 아니다).
+let expiries = 0;
+
 /** 세션이 필요한 API가 401을 돌려줬을 때 부른다(처음 로그인 확인 `/api/me`는 제외). */
 export function reportSessionExpired(): void {
+  expiries += 1;
   auth.expired = true;
+}
+
+/** 지금까지 알린 세션 만료(401) 횟수. */
+export function sessionExpiries(): number {
+  return expiries;
 }
 
 /** API가 응답 없이 실패했을 때(NetworkError) 부른다. */

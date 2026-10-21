@@ -21,6 +21,7 @@ import {
   connection,
   reportConnectionLost,
   reportSessionExpired,
+  sessionExpiries,
 } from '$lib/features/feedback/feedback.svelte';
 import { m } from '$lib/paraglide/messages.js';
 
@@ -2163,6 +2164,7 @@ async function request(
   extra: Record<string, string> = {},
 ): Promise<{ status: number; json: Json; etag: string | null }> {
   let response: Response;
+  const expiriesAtStart = sessionExpiries();
   try {
     const init: RequestInit = {
       method,
@@ -2191,8 +2193,10 @@ async function request(
     !(isRecord(json) && typeof json.error === 'string');
   if (gateway) reportConnectionLost();
   else if (connection.lost) connection.lost = false;
-  // 세션이 필요한 요청이 다시 성공하면(다른 탭에서 로그인함) 로그인 배너를 내린다.
-  if (auth.expired && response.ok && needsSession(path)) auth.expired = false;
+  // 세션이 필요한 요청이 다시 성공하면(다른 탭에서 로그인함) 로그인 배너를 내린다. 마지막 401보다 먼저 시작한
+  // 요청의 늦은 성공은 세지 않는다.
+  if (auth.expired && response.ok && needsSession(path) && expiriesAtStart === sessionExpiries())
+    auth.expired = false;
   return { status: response.status, json, etag: response.headers.get('ETag') };
 }
 
