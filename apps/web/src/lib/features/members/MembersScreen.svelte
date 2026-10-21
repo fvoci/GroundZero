@@ -3,7 +3,7 @@
   import { formatInstant } from '$lib/display';
   import type { Group, Invitation, MembersView, Role, Workspace } from '@fvoci/api-client';
 
-  import { api } from '$lib/api/client';
+  import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
@@ -89,6 +89,12 @@
     try {
       await action();
     } catch (e: unknown) {
+      // 그사이 상태가 바뀌었으면(409: 이미 수락·철회된 초대 등) 지금 상태를 먼저 다시 읽어 보인다. 다시 읽기가
+      // 성공하면 위 알림을 지우므로 이유는 그 뒤에 둔다.
+      if (e instanceof ApiError && e.status === 409) {
+        await load();
+        onchanged();
+      }
       const text = errorText(e, m.members_request_failed());
       if (fail === undefined) error = text;
       else fail(text);
