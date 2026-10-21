@@ -258,6 +258,8 @@
   "tasks_link_editing": "Editing: predecessor {task} → this task",
   "tasks_link_saved": "Dependency saved.",
   "tasks_link_removed": "Dependency removed.",
+  "tasks_link_changed": "This dependency changed elsewhere in the meantime, so nothing was saved. Now: {now}. Save again to apply your values.",
+  "tasks_link_gone": "This dependency was removed elsewhere in the meantime, so nothing was saved.",
   "tasks_add": "Add",
   "tasks_recurrence": "Repeat",
   "tasks_occurrence_note": "This is the {date} occurrence of a repeating task. Change the rule on the first occurrence.",

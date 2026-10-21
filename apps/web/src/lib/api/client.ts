@@ -1089,6 +1089,12 @@ export const LINK_KINDS: readonly LinkKind[] = ['FS', 'SS', 'FF', 'SF'];
 /** 지연일 상한(서버와 같다). */
 export const MAX_LAG_DAYS = 3650;
 
+/** 관계 편집을 시작한 때의 종류·지연일(관계 설정의 기준 조건). */
+export interface LinkBase {
+  kind: LinkKind;
+  lag_days: number;
+}
+
 export interface TaskLinkView {
   task_id: string;
   kind: LinkKind;
@@ -2761,34 +2767,38 @@ export const api = {
       parseSchedulePlan,
       { kind, lag_days: lagDays },
     ),
-  addPredecessor: (id: string, predecessorId: string) =>
-    expectOk(
-      'PUT',
-      `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
-      parseTaskDetail,
-    ),
   /**
-   * 관계를 그 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다(한 트랜잭션). 승인 목록이 그사이 맞지 않게
-   * 됐으면 `shift_conflict`(아무것도 바뀌지 않았으니 다시 미리 본다).
+   * 관계를 그 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다(한 트랜잭션). `base`는 편집을 시작한 관계의
+   * 종류·지연일이다(새 관계면 `null`). 그사이 관계가 바뀌었으면 `link_conflict`, 승인 목록이 맞지 않게 됐으면
+   * `shift_conflict`(둘 다 아무것도 바뀌지 않았고 최신본을 준다).
    */
   async setPredecessor(
     id: string,
     predecessorId: string,
     kind: LinkKind,
     lagDays: number,
+    base: LinkBase | null,
     successorShifts: SuccessorShift[] = [],
   ): Promise<
-    { kind: 'updated'; task: TaskDetailView } | { kind: 'shift_conflict'; current: TaskDetailView }
+    | { kind: 'updated'; task: TaskDetailView }
+    | { kind: 'shift_conflict'; current: TaskDetailView }
+    | { kind: 'link_conflict'; current: TaskDetailView }
   > {
     const { status, json } = await request(
       'PUT',
       `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
-      { kind, lag_days: lagDays, successor_shifts: successorShifts },
+      {
+        kind,
+        lag_days: lagDays,
+        base: base === null ? null : { kind: base.kind, lag_days: base.lag_days },
+        successor_shifts: successorShifts,
+      },
     );
     if (status === 409 && isRecord(json) && json.current !== undefined) {
       const body = rec(json, 'conflict');
-      if (str(body, 'error') === 'shift_conflict') {
-        return { kind: 'shift_conflict', current: parseTaskDetail(body.current) };
+      const error = str(body, 'error');
+      if (error === 'shift_conflict' || error === 'link_conflict') {
+        return { kind: error, current: parseTaskDetail(body.current) };
       }
     }
     if (status !== 200) fail(status, json);
