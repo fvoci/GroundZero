@@ -73,10 +73,15 @@
   let editDescription = $state('');
   let settingsError = $state<string | undefined>(undefined);
   let settingsNote = $state<string | undefined>(undefined);
+  /**
+   * 설정을 저장하는 중. 저장은 요청 여러 개라 두 번 겹치면 먼저 시작해 늦게 실패한 저장이 이미 저장된 일부(아이콘·설명)만
+   * 든 옛 모듈을 화면에 넣어, 뒤 저장이 넣은 이름·키를 되돌려 보였다. 끝날 때까지 다시 보내지 않는다.
+   */
+  let savingSettings = $state(false);
 
   async function saveSettings(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (mod === undefined) return;
+    if (mod === undefined || savingSettings) return;
     const key = normalizeKey(editKey);
     if (editName.trim() === '' || key === undefined) {
       settingsError = m.modules_settings_invalid();
@@ -95,6 +100,7 @@
     const stillHere = (): boolean => moduleId === target.id;
     // 아이콘·설명·이름과 키는 따로 저장된다. 뒤 요청이 막혀도(키 409 등) 이미 저장된 앞 부분은 화면에 넣는다.
     let partial: Module | undefined;
+    savingSettings = true;
     try {
       const before = target.key;
       if (edits.icon !== target.icon) {
@@ -128,6 +134,8 @@
         e instanceof ApiError && e.status === 409
           ? m.modules_key_taken()
           : errorText(e, m.modules_change_failed());
+    } finally {
+      savingSettings = false;
     }
   }
 
@@ -323,7 +331,7 @@
             class="rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           ></textarea>
         </div>
-        <Button type="submit" variant="outline">{m.common_save()}</Button>
+        <Button type="submit" variant="outline" disabled={savingSettings}>{m.common_save()}</Button>
         <Button type="button" variant="outline" onclick={() => void toggleArchive()}
           >{current.archived ? m.modules_unarchive() : m.modules_archive()}</Button
         >

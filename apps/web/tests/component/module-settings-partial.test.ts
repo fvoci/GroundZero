@@ -1,5 +1,5 @@
 import type { Module, Workspace } from '@fvoci/api-client';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { api, ApiError } from '$lib/api/client';
@@ -73,5 +73,70 @@ describe('module settings partial save', () => {
     });
     // 막힌 키 입력은 그대로 남는다.
     expect(field('module-edit-key').value).toBe('OPS');
+  });
+
+  // 리뷰: 저장 중에도 다시 보낼 수 있어 저장이 겹쳤다. 먼저 시작한 저장이 늦게 실패하면 그 저장의 일부(아이콘만 바꾼 옛
+  // 모듈)를 화면에 넣어, 뒤 저장이 서버에 넣은 이름을 화면에서 되돌렸다. 저장이 끝날 때까지 다시 보내지 않는다.
+  it('does not start a second save while one is in flight', async () => {
+    await setLocale('ko', { reload: false });
+    vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+    vi.spyOn(api, 'module').mockResolvedValue(before);
+    vi.spyOn(api, 'items').mockResolvedValue([]);
+    vi.spyOn(api, 'setModuleIcon').mockResolvedValue(undefined);
+    vi.spyOn(workspaceNav, 'refreshModules').mockReturnValue(undefined);
+    // 서버에 저장된 이름. 첫 저장은 이름·키 단계에서 늦게 실패하고, 그 뒤의 저장은 받아들인다.
+    let serverName = before.name;
+    let failFirst: (e: unknown) => void = () => undefined;
+    const update = vi
+      .spyOn(api, 'updateModule')
+      .mockImplementationOnce(
+        () =>
+          new Promise<Module>((_resolve, reject) => {
+            failFirst = reject;
+          }),
+      )
+      .mockImplementation((id: string, name: string, key: string) => {
+        serverName = name;
+        return Promise.resolve({ ...before, id, name, key, icon: '📚' });
+      });
+    render(ModuleScreen, { props: { workspace, moduleId: 'A' } });
+    await screen.findByRole('heading', { name: '개발' });
+
+    await fireEvent.input(field('module-edit-icon'), { target: { value: '📚' } });
+    await fireEvent.input(field('module-edit-name'), { target: { value: '새 이름' } });
+    const form = field('module-edit-name').closest('form');
+    if (form === null) throw new Error('settings form');
+    await fireEvent.submit(form);
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(1);
+    });
+    // 첫 저장이 끝나기 전에 한 번 더 보낸다(두 번 누르기·Enter). 그 저장이 있었다면 끝까지 돌게 둔다.
+    await fireEvent.submit(form);
+    await new Promise((r) => setTimeout(r, 0));
+    failFirst(new ApiError(500, 'internal', 'boom'));
+    await screen.findByRole('alert');
+
+    // 화면 머리는 서버에 저장된 이름과 같아야 한다.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(serverName);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the save button while saving', async () => {
+    await setLocale('ko', { reload: false });
+    vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+    vi.spyOn(api, 'module').mockResolvedValue(before);
+    vi.spyOn(api, 'items').mockResolvedValue([]);
+    vi.spyOn(api, 'updateModule').mockImplementation(() => new Promise<Module>(() => undefined));
+    render(ModuleScreen, { props: { workspace, moduleId: 'A' } });
+    await screen.findByRole('heading', { name: '개발' });
+
+    const form = field('module-edit-name').closest('form');
+    if (form === null) throw new Error('settings form');
+    const save = within(form).getByRole('button', { name: '저장' });
+    expect(save).toBeEnabled();
+    await fireEvent.submit(form);
+    await waitFor(() => {
+      expect(save).toBeDisabled();
+    });
   });
 });
