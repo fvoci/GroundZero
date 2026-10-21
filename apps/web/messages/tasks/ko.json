@@ -228,7 +228,7 @@
   "tasks_link_save": "관계 저장",
   "tasks_link_edit": "고치기",
   "tasks_link_edit_aria": "{task} 관계 고치기",
-  "tasks_link_editing": "{task}와의 관계를 고칩니다.",
+  "tasks_link_editing": "고치는 관계: 선행 업무 {task} → 이 업무",
   "tasks_link_saved": "관계를 저장했습니다.",
   "tasks_add": "추가",
   "tasks_recurrence": "반복",

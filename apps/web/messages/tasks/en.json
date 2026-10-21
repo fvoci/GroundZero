@@ -253,7 +253,7 @@
   "tasks_link_save": "Save dependency",
   "tasks_link_edit": "Edit",
   "tasks_link_edit_aria": "Edit the dependency on {task}",
-  "tasks_link_editing": "Editing the dependency on {task}.",
+  "tasks_link_editing": "Editing: predecessor {task} → this task",
   "tasks_link_saved": "Dependency saved.",
   "tasks_add": "Add",
   "tasks_recurrence": "Repeat",

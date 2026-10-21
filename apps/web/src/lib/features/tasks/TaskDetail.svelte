@@ -475,6 +475,11 @@
     else refresh(fresh);
     linkStatus = [m.tasks_link_saved(), undatedText(undated)].filter((s) => s !== '').join(' ');
     onchanged();
+    // 패널이 사라지면 대화상자의 초점 가두기가 맨 위로 보내므로, 그 뒤 프레임에서 선행 업무 제목으로 돌린다.
+    await tick();
+    requestAnimationFrame(() => {
+      document.getElementById('predecessors-heading')?.focus();
+    });
   }
 
   async function decideLink(withShifts: boolean): Promise<void> {
@@ -812,7 +817,9 @@
     {/if}
 
     <section class="flex flex-col gap-2" aria-labelledby="predecessors-heading">
-      <h3 id="predecessors-heading" class="text-sm font-semibold">{m.tasks_predecessors()}</h3>
+      <h3 id="predecessors-heading" class="text-sm font-semibold" tabindex="-1">
+        {m.tasks_predecessors()}
+      </h3>
       {#each current.predecessors as link (link.task_id)}
         {@const pid = link.task_id}
         <div class="flex flex-wrap items-center gap-x-2 text-sm" data-predecessor={pid}>
