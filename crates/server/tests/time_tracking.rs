@@ -737,6 +737,41 @@ async fn a_running_timer_keeps_its_pauses_inside_its_span() {
     )
     .await;
     assert_eq!(moved.status, StatusCode::BAD_REQUEST, "{:?}", moved.json);
+
+    // 고치기 전 서버가 받아 이미 어긋난 진행 중 타이머(10분 전 시작, 멈춤 1시간). 시작을 그대로 두면 메모는 고칠 수 있고,
+    // 시작을 옮길 때만 범위를 본다.
+    let body =
+        json!({ "request_id": new_request_id(), "kind": "work", "memo": "", "target": null });
+    let (status, second) = start(&app, &me, body).await;
+    assert_eq!(status, StatusCode::CREATED, "{second:?}");
+    common::fixture_sql(
+        "UPDATE fvoci.time_entries SET started_at = now() - interval '10 minutes', paused_seconds = 3600
+         WHERE id = $1::uuid",
+        second["id"].as_str().unwrap(),
+    )
+    .await;
+    let running = send(&app, Method::GET, "/api/me/timer", Some(&me), None)
+        .await
+        .json;
+    assert_eq!(running["paused_seconds"], 3600, "{running}");
+    let second_uri = format!("/api/time-entries/{}", second["id"].as_str().unwrap());
+    let put_second = |cur: &Value, started: Value| {
+        let body = json!({ "base_version": cur["version"], "started_at": started, "ended_at": null,
+                           "paused_seconds": cur["paused_seconds"], "kind": "work", "memo": "메모", "target": null });
+        send(&app, Method::PUT, &second_uri, Some(&me), Some(body))
+    };
+    let kept = put_second(&running, running["started_at"].clone()).await;
+    assert_eq!(kept.status, StatusCode::OK, "{:?}", kept.json);
+    let started = at(&running["started_at"]);
+    let still_short = put_second(&kept.json, text(started - Duration::minutes(5))).await;
+    assert_eq!(
+        still_short.status,
+        StatusCode::BAD_REQUEST,
+        "{:?}",
+        still_short.json
+    );
+    let long_enough = put_second(&kept.json, text(started - Duration::hours(2))).await;
+    assert_eq!(long_enough.status, StatusCode::OK, "{:?}", long_enough.json);
 }
 
 /// 감사 S21·S20: 0시가 두 번 오는 날(아바나 2025-11-02, 05:00Z에 01:00 → 00:00)의 앞쪽 0시~1시 기록이 집계에서
