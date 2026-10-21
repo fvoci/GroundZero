@@ -2637,8 +2637,9 @@ export interface components {
             author_name?: string | null;
             body: string;
             can_delete: boolean;
+            /** @description 쓴 사람이 고칠 수 있는지(지운 댓글이나 보관된 항목의 댓글은 아님). */
             can_edit: boolean;
-            /** @description 스레드를 해결·해제할 수 있는지(첫 댓글에서만). */
+            /** @description 스레드를 해결·해제할 수 있는지(첫 댓글에서만, 보관된 항목에서는 아님). */
             can_resolve: boolean;
             /** Format: date-time */
             created_at: string;
@@ -4837,6 +4838,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     delete_comment: {
@@ -4912,6 +4921,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7035,6 +7052,14 @@ export interface operations {
                     "application/json": components["schemas"]["Participant"][];
                 };
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7621,6 +7646,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudyParticipant"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {
