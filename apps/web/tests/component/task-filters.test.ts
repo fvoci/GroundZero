@@ -18,6 +18,7 @@ const task = (n: number, over: Partial<TaskView>): TaskView => ({
   estimate_minutes: null,
   milestone: false,
   predecessor_ids: [],
+  predecessors: [],
   series: null,
   occurrence_date: null,
   checklist_done: 0,

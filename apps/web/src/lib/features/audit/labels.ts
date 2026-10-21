@@ -38,6 +38,7 @@ const ACTION: Record<string, () => string> = {
   unassign: m.audit_action_unassign,
   link_predecessor: m.audit_action_link_predecessor,
   unlink_predecessor: m.audit_action_unlink_predecessor,
+  change_predecessor: m.audit_action_change_predecessor,
   reschedule: m.audit_action_reschedule,
   set_recurrence: m.audit_action_set_recurrence,
   exclude_occurrence: m.audit_action_exclude_occurrence,

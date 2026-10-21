@@ -12,6 +12,7 @@
     TaskInput,
     TaskStatus,
     TaskView,
+    UndatedTaskView,
   } from '$lib/api/client';
   import { api, ApiError, TASK_STATUSES } from '$lib/api/client';
   import { RetryKey } from '$lib/api/retry-key';
@@ -519,12 +520,21 @@
     input: TaskInput;
     baseVersion: number;
     proposals: ShiftProposalView[];
+    undated: UndatedTaskView[];
     retried: boolean;
     done: () => void;
   }
   let ganttAsk = $state<GanttAsk | undefined>(undefined);
   let ganttBusy = $state(false);
   let ganttNotice = $state<string | undefined>(undefined);
+  // 저장했지만 날짜가 없어 옮기지 않은 후속 업무 알림(오류가 아니다, 날짜를 지어내지 않는다).
+  let ganttInfo = $state('');
+  const undatedText = (undated: UndatedTaskView[]): string =>
+    undated.length > 0
+      ? m.tasks_shift_undated({
+          tasks: undated.map((u) => `${u.reference ?? ''} ${u.title}`.trim()).join(', '),
+        })
+      : '';
   const datesText = (start: string | null, due: string | null): string =>
     start !== null && due !== null && start !== due ? `${start}~${due}` : (due ?? start ?? '');
 
@@ -533,6 +543,7 @@
     dates: { start_date: string | null; due_date: string | null },
   ): Promise<void> {
     ganttNotice = undefined;
+    ganttInfo = '';
     try {
       const fresh = await api.task(t.id);
       if (fresh.start_date !== t.start_date || fresh.due_date !== t.due_date) {
@@ -542,16 +553,23 @@
         return;
       }
       const input = { ...formOf(fresh), ...dates };
-      const found = await api.previewSchedule(t.id, dates.start_date, dates.due_date);
-      if (found.length === 0) {
+      const plan = await api.previewSchedule(t.id, dates.start_date, dates.due_date);
+      if (plan.shifts.length === 0) {
         // 저장하다 후속 업무가 바뀌어 다시 묻게 되면 그 물음이 끝날 때까지 기다린다.
         let finish: () => void = () => undefined;
         const finished = new Promise<void>((resolve) => {
           finish = resolve;
         });
-        const outcome = await saveSchedule(t, input, fresh.version, [], () => {
-          finish();
-        });
+        const outcome = await saveSchedule(
+          t,
+          input,
+          fresh.version,
+          [],
+          () => {
+            finish();
+          },
+          plan.undated,
+        );
         if (outcome === 'asked') await finished;
         return;
       }
@@ -560,7 +578,8 @@
           task: t,
           input,
           baseVersion: fresh.version,
-          proposals: found,
+          proposals: plan.shifts,
+          undated: plan.undated,
           retried: false,
           done,
         };
@@ -580,6 +599,8 @@
     shifts: ShiftProposalView[],
     /** 다시 물을 때 그 물음이 끝나면 부를 것(간트가 미리 보기를 거두는 때). */
     done: () => void = () => undefined,
+    /** 날짜가 없어 옮기지 않는 후속 업무(저장한 뒤 알린다). */
+    undated: UndatedTaskView[] = [],
   ): Promise<'saved' | 'asked' | 'stopped'> {
     const result = await api.updateTask(
       t.id,
@@ -600,9 +621,19 @@
     }
     if (result.kind === 'shift_conflict') {
       // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
-      const found = await api.previewSchedule(t.id, input.start_date, input.due_date);
-      if (found.length === 0) return saveSchedule(t, input, baseVersion, [], done);
-      ganttAsk = { task: t, input, baseVersion, proposals: found, retried: true, done };
+      const plan = await api.previewSchedule(t.id, input.start_date, input.due_date);
+      if (plan.shifts.length === 0) {
+        return saveSchedule(t, input, baseVersion, [], done, plan.undated);
+      }
+      ganttAsk = {
+        task: t,
+        input,
+        baseVersion,
+        proposals: plan.shifts,
+        undated: plan.undated,
+        retried: true,
+        done,
+      };
       return 'asked';
     }
     const savedText =
@@ -613,7 +644,8 @@
             dates: datesText(input.start_date, input.due_date),
           });
     notifyDone(savedText);
-    status = savedText;
+    ganttInfo = undatedText(undated);
+    status = [savedText, ganttInfo].filter((s) => s !== '').join(' ');
     await reload();
     return 'saved';
   }
@@ -630,6 +662,7 @@
         a.baseVersion,
         withShifts ? a.proposals : [],
         a.done,
+        a.undated,
       );
     } catch (e: unknown) {
       ganttNotice = errorText(e, m.tasks_gantt_failed({ title: a.task.title }));
@@ -1474,6 +1507,9 @@
     {#if ganttNotice !== undefined}
       <p role="alert" class="text-sm text-destructive">{ganttNotice}</p>
     {/if}
+    {#if ganttInfo !== ''}
+      <p class="text-sm text-muted-foreground" data-testid="gantt-undated-notice">{ganttInfo}</p>
+    {/if}
     <GanttChart tasks={shown} onopen={open} reschedule={canWrite ? reschedule : undefined} />
   {:else if view === 'calendar'}
     <div bind:this={boardCalendar}>
@@ -1639,6 +1675,7 @@
       </Dialog.Header>
       <ShiftProposals
         proposals={ask.proposals}
+        undated={ask.undated}
         retried={ask.retried}
         busy={ganttBusy}
         headingId="gantt-shift-heading"

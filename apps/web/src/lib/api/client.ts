@@ -1039,8 +1039,10 @@ export interface TaskView {
   estimate_minutes: number | null;
   tags: string[];
   milestone: boolean;
-  /** 같은 항목 안의 선행 업무(끝나야 시작). */
+  /** 같은 항목 안의 선행 업무 id(`predecessors`와 같은 순서). */
   predecessor_ids: string[];
+  /** 선행 관계: 선행 업무, 종류, 지연일(D-91). 후속 업무는 다른 업무의 이 목록을 거꾸로 찾는다. */
+  predecessors: TaskLinkView[];
   /** 반복 업무의 회차면 그 반복. */
   series: TaskSeriesView | null;
   occurrence_date: string | null;
@@ -1078,7 +1080,31 @@ export interface TaskInput {
   milestone: boolean;
 }
 
-/** 선행 업무를 옮길 때 함께 옮길 후속 업무(현재 → 제안). 승인하면 그대로 `SuccessorShift`로 보낸다. */
+/**
+ * 선행 관계 종류(D-91). FS 종료 후 시작, SS 시작 후 시작, FF 종료 후 종료, SF 시작 후 종료. 지연일은 0 이상의
+ * 달력 날짜 수다.
+ */
+export type LinkKind = 'FS' | 'SS' | 'FF' | 'SF';
+export const LINK_KINDS: readonly LinkKind[] = ['FS', 'SS', 'FF', 'SF'];
+/** 지연일 상한(서버와 같다). */
+export const MAX_LAG_DAYS = 3650;
+
+export interface TaskLinkView {
+  task_id: string;
+  kind: LinkKind;
+  lag_days: number;
+}
+
+/** 재배치의 원인 관계. */
+export interface ShiftCauseView {
+  predecessor_id: string;
+  predecessor_reference: string | null;
+  predecessor_title: string;
+  kind: LinkKind;
+  lag_days: number;
+}
+
+/** 선행 업무나 관계를 바꿀 때 함께 옮길 후속 업무(현재 → 제안). 승인하면 그대로 `SuccessorShift`로 보낸다. */
 export interface ShiftProposalView {
   task_id: string;
   reference: string | null;
@@ -1088,6 +1114,21 @@ export interface ShiftProposalView {
   from_due_date: string | null;
   start_date: string | null;
   due_date: string | null;
+  /** 이 업무를 옮기게 한 관계. */
+  causes: ShiftCauseView[];
+}
+
+/** 날짜가 없어 옮기지 않는 업무(날짜를 지어내지 않는다). */
+export interface UndatedTaskView {
+  task_id: string;
+  reference: string | null;
+  title: string;
+}
+
+/** 재배치 계획: 옮길 후속 업무와 날짜가 없어 계산하지 않은 업무. */
+export interface SchedulePlanView {
+  shifts: ShiftProposalView[];
+  undated: UndatedTaskView[];
 }
 
 export interface SuccessorShift {
@@ -1108,6 +1149,46 @@ function parseShiftProposal(value: Json): ShiftProposalView {
     from_due_date: optStr(o, 'from_due_date'),
     start_date: optStr(o, 'start_date'),
     due_date: optStr(o, 'due_date'),
+    causes: o.causes === undefined ? [] : parseList(o.causes, parseShiftCause),
+  };
+}
+
+function linkKind(value: string): LinkKind {
+  const found = LINK_KINDS.find((k) => k === value);
+  if (found === undefined) throw new TypeError(`unknown dependency kind ${value}`);
+  return found;
+}
+
+function parseShiftCause(value: Json): ShiftCauseView {
+  const o = rec(value, 'shift cause');
+  return {
+    predecessor_id: str(o, 'predecessor_id'),
+    predecessor_reference: optStr(o, 'predecessor_reference'),
+    predecessor_title: str(o, 'predecessor_title'),
+    kind: linkKind(str(o, 'kind')),
+    lag_days: int(o, 'lag_days'),
+  };
+}
+
+function parseTaskLink(value: Json): TaskLinkView {
+  const o = rec(value, 'task link');
+  return {
+    task_id: str(o, 'task_id'),
+    kind: linkKind(str(o, 'kind')),
+    lag_days: int(o, 'lag_days'),
+  };
+}
+
+function parseUndated(value: Json): UndatedTaskView {
+  const o = rec(value, 'undated task');
+  return { task_id: str(o, 'task_id'), reference: optStr(o, 'reference'), title: str(o, 'title') };
+}
+
+function parseSchedulePlan(value: Json): SchedulePlanView {
+  const o = rec(value, 'schedule plan');
+  return {
+    shifts: parseList(o.shifts, parseShiftProposal),
+    undated: parseList(o.undated, parseUndated),
   };
 }
 
@@ -1147,6 +1228,11 @@ export function parseTask(value: Json): TaskView {
     tags: strings(o.tags),
     milestone: bool(o, 'milestone'),
     predecessor_ids: strings(o.predecessor_ids),
+    // 옛 응답(종류 없음)은 모두 종료 후 시작·지연 0이다.
+    predecessors:
+      o.predecessors === undefined
+        ? strings(o.predecessor_ids).map((id) => ({ task_id: id, kind: 'FS', lag_days: 0 }))
+        : parseList(o.predecessors, parseTaskLink),
     series:
       o.series === null || o.series === undefined
         ? null
@@ -2631,12 +2717,19 @@ export const api = {
       before_id: beforeId,
       ...(baseMoveVersion === undefined ? {} : { base_move_version: baseMoveVersion }),
     }),
+  /** 날짜를 바꿀 때의 재배치 계획(옮길 후속 업무와 원인 관계, 날짜가 없어 계산하지 않은 업무). */
   previewSchedule: (id: string, startDate: string | null, dueDate: string | null) =>
+    expectOk('POST', `/api/tasks/${encodeURIComponent(id)}/schedule-plan`, parseSchedulePlan, {
+      start_date: startDate,
+      due_date: dueDate,
+    }),
+  /** 관계를 만들거나 종류·지연일을 바꿀 때의 재배치 계획(아무것도 바꾸지 않는다). */
+  previewLink: (id: string, predecessorId: string, kind: LinkKind, lagDays: number) =>
     expectOk(
       'POST',
-      `/api/tasks/${encodeURIComponent(id)}/schedule-preview`,
-      (v) => parseList(v, parseShiftProposal),
-      { start_date: startDate, due_date: dueDate },
+      `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}/schedule-plan`,
+      parseSchedulePlan,
+      { kind, lag_days: lagDays },
     ),
   addPredecessor: (id: string, predecessorId: string) =>
     expectOk(
@@ -2644,6 +2737,33 @@ export const api = {
       `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
       parseTaskDetail,
     ),
+  /**
+   * 관계를 그 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다(한 트랜잭션). 승인 목록이 그사이 맞지 않게
+   * 됐으면 `shift_conflict`(아무것도 바뀌지 않았으니 다시 미리 본다).
+   */
+  async setPredecessor(
+    id: string,
+    predecessorId: string,
+    kind: LinkKind,
+    lagDays: number,
+    successorShifts: SuccessorShift[] = [],
+  ): Promise<
+    { kind: 'updated'; task: TaskDetailView } | { kind: 'shift_conflict'; current: TaskDetailView }
+  > {
+    const { status, json } = await request(
+      'PUT',
+      `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
+      { kind, lag_days: lagDays, successor_shifts: successorShifts },
+    );
+    if (status === 409 && isRecord(json) && json.current !== undefined) {
+      const body = rec(json, 'conflict');
+      if (str(body, 'error') === 'shift_conflict') {
+        return { kind: 'shift_conflict', current: parseTaskDetail(body.current) };
+      }
+    }
+    if (status !== 200) fail(status, json);
+    return { kind: 'updated', task: parseTaskDetail(json) };
+  },
   removePredecessor: (id: string, predecessorId: string) =>
     expectOk(
       'DELETE',

@@ -19,7 +19,7 @@
     ganttWeeks,
     weekday,
   } from './gantt';
-  import { STATUS_LABEL } from './labels';
+  import { STATUS_LABEL, linkText } from './labels';
 
   interface Props {
     tasks: TaskView[];
@@ -264,7 +264,7 @@
 
   // 줄 높이(rem). 열 너비와 같은 단위로 고정해 연결선이 막대와 같은 좌표계를 쓴다(창 크기·확대와 상관없이 맞음).
   const ROW = 1.75;
-  // 연결선(끝나야 시작, D-31): 끄는 중이거나 승인을 기다리는 막대는 미리 보기 자리로 잇는다(막대와 같은 값).
+  // 연결선(관계 종류별 끝, D-31·D-91): 끄는 중이거나 승인을 기다리는 막대는 미리 보기 자리로 잇는다(막대와 같은 값).
   const linkRows = $derived(
     layout.rows.map((r) =>
       draft?.id === r.task.id ? { ...r, from: draft.from, to: draft.to } : r,
@@ -277,20 +277,46 @@
   // 가리킨 줄이 있으면 그 줄, 없으면 초점이 있는 줄(따로 두어 한쪽이 끝나도 다른 쪽 강조가 남는다).
   const activeId = $derived(hoverId ?? focusId);
   const touches = (link: GanttLink): boolean => link.from === activeId || link.to === activeId;
+  const refOf = (id: string): string => {
+    const t = byId.get(id);
+    return t === undefined ? m.tasks_hidden_task() : (t.reference ?? t.title);
+  };
+  // 가리키거나 초점을 둔 업무의 관계를 글로(선 모양·굵기만으로 뜻을 전하지 않는다). 그린 선만이 아니라 그 업무의 모든
+  // 관계(다른 쪽이 이 간트에 없어도)를 같은 목록에서 읽는다.
+  const activeLinks = $derived.by(() => {
+    const id = activeId;
+    if (id === undefined) return [];
+    const into = (byId.get(id)?.predecessors ?? []).map((l) => ({
+      from: l.task_id,
+      to: id,
+      link: l,
+    }));
+    const outOf = tasks.flatMap((t) =>
+      t.predecessors.filter((l) => l.task_id === id).map((l) => ({ from: id, to: t.id, link: l })),
+    );
+    return [...into, ...outOf].map((e) => ({
+      key: `${e.from}>${e.to}`,
+      text: m.tasks_link_edge({ from: refOf(e.from), to: refOf(e.to), relation: linkText(e.link) }),
+    }));
+  });
 
   function describe(t: TaskView): string {
     const when =
       t.milestone || t.start_date === null || t.start_date === t.due_date
         ? (t.due_date ?? t.start_date ?? '')
         : `${t.start_date} ~ ${t.due_date ?? t.start_date}`;
-    const preds = t.predecessor_ids
-      .map((id) => byId.get(id)?.reference ?? '')
-      .filter((r) => r !== '');
+    const preds = t.predecessors
+      .filter((l) => byId.has(l.task_id))
+      .map((l) => `${refOf(l.task_id)} ${linkText(l)}`);
+    const succs = tasks.flatMap((s) =>
+      s.predecessors.filter((l) => l.task_id === t.id).map((l) => `${refOf(s.id)} ${linkText(l)}`),
+    );
     return [
       `${t.reference ?? ''} ${t.title}`.trim(),
       t.milestone ? m.tasks_gantt_milestone({ date: when }) : when,
       STATUS_LABEL[t.status],
       preds.length > 0 ? m.tasks_gantt_predecessors({ refs: preds.join(', ') }) : '',
+      succs.length > 0 ? m.tasks_gantt_successors({ refs: succs.join(', ') }) : '',
     ]
       .filter((s) => s !== '')
       .join(', ');
@@ -537,6 +563,7 @@
                   faint && 'opacity-25',
                 ]}
                 data-gantt-link={link.key}
+                data-gantt-link-kind={link.kind}
                 data-strong={strong ? 'true' : undefined}
               >
                 <path
@@ -557,6 +584,14 @@
   </div>
   {#if linked.links.length > 0}
     <p class="text-xs text-muted-foreground">{m.tasks_gantt_links_hint()}</p>
+  {/if}
+  {#if activeLinks.length > 0}
+    <!-- 줄 단추의 설명이 같은 내용을 말하므로 화면 낭독기에는 다시 읽히지 않게 한다. -->
+    <ul class="text-xs" aria-hidden="true" data-testid="gantt-link-details">
+      {#each activeLinks as l (l.key)}
+        <li>{l.text}</li>
+      {/each}
+    </ul>
   {/if}
   {#if linked.hidden > 0}
     <p class="text-xs text-muted-foreground" data-testid="gantt-links-hidden">

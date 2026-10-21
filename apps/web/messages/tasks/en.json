@@ -118,7 +118,8 @@
   "tasks_gantt_week_short_range": "{from}~",
   "tasks_gantt_week_spoken_iso": "ISO week {week} of {year} (weeks start on Monday): {from} to {to}",
   "tasks_gantt_week_spoken_range": "Week of {from} to {to} (weeks start on Sunday, no week number)",
-  "tasks_gantt_links_hint": "Lines run from the end of a predecessor to the start of the task that follows it; the arrow points at the follower. Hover or focus a row name to make its lines bold.",
+  "tasks_gantt_links_hint": "Depending on the dependency type, lines run from the start or end of a predecessor to the start or end of the task that follows it; the arrow points at the follower. Hover or focus a row name to make its lines bold and describe its dependencies below.",
+  "tasks_gantt_successors": "Followed by {refs}",
   "tasks_gantt_links_hidden": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],
@@ -200,27 +201,60 @@
       "declarations": ["input count", "local countPlural = count: plural"],
       "selectors": ["countPlural"],
       "match": {
-        "countPlural=one": "Dates overlap with {count} following task",
-        "countPlural=other": "Dates overlap with {count} following tasks"
+        "countPlural=one": "{count} following task no longer meets its dependency",
+        "countPlural=other": "{count} following tasks no longer meet their dependencies"
       }
     }
   ],
   "tasks_shift_retried": "The following tasks changed in the meantime, so this was recalculated.",
-  "tasks_shift_hint": "We suggest moving them to start the day after their predecessor ends. Each task keeps its duration.",
+  "tasks_shift_hint": "We suggest moving them later only as far as each dependency (type and lag) needs. Each task keeps its duration.",
   "tasks_shift_save_all": "Move following tasks and save",
   "tasks_shift_save_this": "Save this task only",
+  "tasks_shift_link_save_all": "Save dependency and move following tasks",
+  "tasks_shift_link_save_this": "Save dependency only",
+  "tasks_shift_cause": "Because of {predecessor}: {relation}",
+  "tasks_shift_undated": "Not moved because they have no dates: {tasks}. Set dates to check their dependencies.",
   "tasks_subtasks": "Subtasks",
   "tasks_none": "None.",
   "tasks_subtask_title": "Subtask title",
   "tasks_subtask_placeholder": "e.g. Input validation",
   "tasks_subtask_add": "Add subtask",
-  "tasks_predecessors": "Predecessors (must finish first)",
+  "tasks_predecessors": "Predecessors",
   "tasks_hidden_task": "Hidden task",
   "tasks_predecessor_remove_aria": "Remove predecessor {task}",
   "tasks_remove": "Remove",
-  "tasks_successors": "Tasks after this one: {tasks}",
   "tasks_predecessor_add": "Add predecessor",
   "tasks_predecessor_choose": "Choose a task",
+  "tasks_successors_heading": "Following tasks",
+  "tasks_link_kind_fs": "Finish to start (FS)",
+  "tasks_link_kind_ss": "Start to start (SS)",
+  "tasks_link_kind_ff": "Finish to finish (FF)",
+  "tasks_link_kind_sf": "Start to finish (SF)",
+  "tasks_link_meaning_fs": "Starts the day after the predecessor finishes.",
+  "tasks_link_meaning_ss": "Starts no earlier than the day the predecessor starts.",
+  "tasks_link_meaning_ff": "Finishes no earlier than the day the predecessor finishes.",
+  "tasks_link_meaning_sf": "Finishes no earlier than the day before the predecessor starts.",
+  "tasks_link_lag": [
+    {
+      "declarations": ["input days", "local daysPlural = days: plural"],
+      "selectors": ["daysPlural"],
+      "match": {
+        "daysPlural=one": "{days} day later",
+        "daysPlural=other": "{days} days later"
+      }
+    }
+  ],
+  "tasks_link_text": "{kind}, {lag}",
+  "tasks_link_edge": "{from} → {to}: {relation}",
+  "tasks_link_kind_label": "Dependency type",
+  "tasks_link_lag_label": "Lag (days)",
+  "tasks_link_lag_hint": "Calendar days, 0 or more. Working days are not counted separately.",
+  "tasks_link_lag_invalid": "Enter a whole number of lag days from 0 to 3650.",
+  "tasks_link_save": "Save dependency",
+  "tasks_link_edit": "Edit",
+  "tasks_link_edit_aria": "Edit the dependency on {task}",
+  "tasks_link_editing": "Editing the dependency on {task}.",
+  "tasks_link_saved": "Dependency saved.",
   "tasks_add": "Add",
   "tasks_recurrence": "Repeat",
   "tasks_occurrence_note": "This is the {date} occurrence of a repeating task. Change the rule on the first occurrence.",

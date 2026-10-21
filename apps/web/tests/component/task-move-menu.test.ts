@@ -41,6 +41,7 @@ function task(id: string, title: string): TaskView {
     tags: [],
     milestone: false,
     predecessor_ids: [],
+    predecessors: [],
     series: null,
     occurrence_date: null,
     assignees: [],

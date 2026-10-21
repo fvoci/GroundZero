@@ -1,5 +1,5 @@
 // 업무 상태·우선순위의 표시 이름. 값은 읽을 때 지금 언어로 만든다(언어는 실행 중에 바뀔 수 있다, D-81).
-import type { TaskPriority, TaskStatus } from '$lib/api/client';
+import type { LinkKind, TaskPriority, TaskStatus } from '$lib/api/client';
 import { m } from '$lib/paraglide/messages.js';
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -40,3 +40,43 @@ export const PRIORITY_TONE: Record<TaskPriority, string> = {
   high: 'bg-amber-500/15 text-amber-800 dark:text-amber-200',
   urgent: 'bg-destructive/10 text-destructive',
 };
+
+/** 선행 관계 종류의 이름(뜻과 약어, 예: "종료 후 시작 (FS)", D-91). */
+export const LINK_KIND_LABEL: Record<LinkKind, string> = {
+  get FS() {
+    return m.tasks_link_kind_fs();
+  },
+  get SS() {
+    return m.tasks_link_kind_ss();
+  },
+  get FF() {
+    return m.tasks_link_kind_ff();
+  },
+  get SF() {
+    return m.tasks_link_kind_sf();
+  },
+};
+
+/** 선행 관계 종류가 후속 업무에 요구하는 것을 풀어 쓴 문장. */
+export const LINK_KIND_MEANING: Record<LinkKind, string> = {
+  get FS() {
+    return m.tasks_link_meaning_fs();
+  },
+  get SS() {
+    return m.tasks_link_meaning_ss();
+  },
+  get FF() {
+    return m.tasks_link_meaning_ff();
+  },
+  get SF() {
+    return m.tasks_link_meaning_sf();
+  },
+};
+
+/** 관계 한 줄: 종류 이름과, 지연일이 있으면 "N일 뒤"(예: "시작 후 시작 (SS), 2일 뒤"). */
+export function linkText(link: { kind: LinkKind; lag_days: number }): string {
+  const kind = LINK_KIND_LABEL[link.kind];
+  return link.lag_days > 0
+    ? m.tasks_link_text({ kind, lag: m.tasks_link_lag({ days: link.lag_days }) })
+    : kind;
+}

@@ -7,6 +7,7 @@
 
   import type {
     AssigneeView,
+    LinkKind,
     RecurrenceRule,
     ShiftProposalView,
     TaskDetailView,
@@ -14,8 +15,16 @@
     TaskPriority,
     TaskStatus,
     TaskView,
+    UndatedTaskView,
   } from '$lib/api/client';
-  import { api, ApiError, TASK_PRIORITIES, TASK_STATUSES } from '$lib/api/client';
+  import {
+    api,
+    ApiError,
+    LINK_KINDS,
+    MAX_LAG_DAYS,
+    TASK_PRIORITIES,
+    TASK_STATUSES,
+  } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
   import { canonicalJson } from '$lib/features/documents/drafts';
@@ -37,7 +46,13 @@
   import * as Select from '$lib/ui/select';
 
   import { estimateOf, formOf, mergeEstimate, mergeForm } from './form';
-  import { PRIORITY_LABEL, STATUS_LABEL } from './labels';
+  import {
+    LINK_KIND_LABEL,
+    LINK_KIND_MEANING,
+    PRIORITY_LABEL,
+    STATUS_LABEL,
+    linkText,
+  } from './labels';
   import ShiftProposals from './ShiftProposals.svelte';
 
   interface Props {
@@ -53,7 +68,13 @@
 
   const subtasks = $derived(tasks.filter((t) => t.parent_id === taskId));
   const byId = $derived(new Map(tasks.map((t) => [t.id, t])));
-  const successors = $derived(tasks.filter((t) => t.predecessor_ids.includes(taskId)));
+  // 후속 업무는 같은 관계 목록을 거꾸로 찾는다(관계 정본은 하나, D-91).
+  const successors = $derived(
+    tasks.flatMap((t) => {
+      const link = t.predecessors.find((l) => l.task_id === taskId);
+      return link === undefined ? [] : [{ task: t, link }];
+    }),
+  );
   const label = (t: TaskView | undefined): string =>
     t === undefined ? '' : `${t.reference ?? ''} ${t.title}`.trim();
 
@@ -72,13 +93,35 @@
   // 그대로 보낸다(D-31: 보여 준 영향을 사용자가 승인).
   interface Pending {
     proposals: ShiftProposalView[];
+    undated: UndatedTaskView[];
     input: TaskInput;
     baseVersion: number;
     retried: boolean;
   }
   let pending = $state<Pending | undefined>(undefined);
+  // 저장했지만 날짜가 없어 옮기지 않은 후속 업무 알림(날짜를 지어내지 않는다).
+  let undatedNotice = $state('');
   let busy = $state(false);
   let predecessorChoice = $state('');
+  // 관계 고치기(D-91): 고르는 선행 업무(새 관계) 또는 고치는 관계, 종류, 지연일(글자 그대로 두고 저장할 때 확인).
+  let editing = $state<string | undefined>(undefined);
+  let linkKind = $state<LinkKind>('FS');
+  let lagText = $state('0');
+  let linkStatus = $state('');
+  // 관계를 바꾸면 옮겨야 하는 후속 업무(미리보기). 승인하면 본 관계·목록 그대로 보낸다.
+  interface LinkPending {
+    predecessor: string;
+    kind: LinkKind;
+    lag: number;
+    proposals: ShiftProposalView[];
+    undated: UndatedTaskView[];
+    retried: boolean;
+  }
+  let linkPending = $state<LinkPending | undefined>(undefined);
+  const named = (t: { reference: string | null; title: string }): string =>
+    `${t.reference ?? ''} ${t.title}`.trim();
+  const undatedText = (undated: UndatedTaskView[]): string =>
+    undated.length > 0 ? m.tasks_shift_undated({ tasks: undated.map(named).join(', ') }) : '';
   // 상위 업무 고르기. 'top'은 최상위로 빼기. 서버 규칙(한 단계, 하위 업무가 있으면 옮길 수 없음)에 맞는 후보만 보인다.
   const TOP = 'top';
   let parentChoice = $state('');
@@ -213,16 +256,25 @@
     busy = true;
     error = undefined;
     saved = false;
+    undatedNotice = '';
     try {
       // 목록의 선행 정보는 오래됐을 수 있으므로 날짜가 바뀌면 언제나 서버에 묻는다.
+      let undated: UndatedTaskView[] = [];
       if (input.start_date !== base.start_date || input.due_date !== base.due_date) {
-        const found = await api.previewSchedule(task.id, input.start_date, input.due_date);
-        if (found.length > 0) {
-          pending = { proposals: found, input, baseVersion: base.version, retried: false };
+        const plan = await api.previewSchedule(task.id, input.start_date, input.due_date);
+        if (plan.shifts.length > 0) {
+          pending = {
+            proposals: plan.shifts,
+            undated: plan.undated,
+            input,
+            baseVersion: base.version,
+            retried: false,
+          };
           return;
         }
+        undated = plan.undated;
       }
-      await save(input, base.version, []);
+      await save(input, base.version, [], undated);
     } catch (e: unknown) {
       error = errorText(e, m.tasks_save_failed());
     } finally {
@@ -237,7 +289,7 @@
     busy = true;
     error = undefined;
     try {
-      await save(p.input, p.baseVersion, withShifts ? p.proposals : []);
+      await save(p.input, p.baseVersion, withShifts ? p.proposals : [], p.undated);
     } catch (e: unknown) {
       error = errorText(e, m.tasks_save_failed());
     } finally {
@@ -245,23 +297,21 @@
     }
   }
 
+  const toShift = (s: ShiftProposalView) => ({
+    task_id: s.task_id,
+    base_version: s.base_version,
+    start_date: s.start_date,
+    due_date: s.due_date,
+  });
+
   async function save(
     input: TaskInput,
     baseVersion: number,
     shifts: ShiftProposalView[],
+    undated: UndatedTaskView[] = [],
   ): Promise<void> {
     if (task === undefined) return;
-    const result = await api.updateTask(
-      task.id,
-      baseVersion,
-      input,
-      shifts.map((s) => ({
-        task_id: s.task_id,
-        base_version: s.base_version,
-        start_date: s.start_date,
-        due_date: s.due_date,
-      })),
-    );
+    const result = await api.updateTask(task.id, baseVersion, input, shifts.map(toShift));
     if (result.kind === 'conflict') {
       pending = undefined;
       conflict = result.current;
@@ -269,16 +319,23 @@
     }
     if (result.kind === 'shift_conflict') {
       // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
-      const found = await api.previewSchedule(task.id, input.start_date, input.due_date);
-      if (found.length === 0) {
-        await save(input, baseVersion, []);
+      const plan = await api.previewSchedule(task.id, input.start_date, input.due_date);
+      if (plan.shifts.length === 0) {
+        await save(input, baseVersion, [], plan.undated);
         return;
       }
-      pending = { proposals: found, input, baseVersion, retried: true };
+      pending = {
+        proposals: plan.shifts,
+        undated: plan.undated,
+        input,
+        baseVersion,
+        retried: true,
+      };
       return;
     }
     conflict = undefined;
     fill(result.task);
+    undatedNotice = undatedText(undated);
     saved = true;
     onchanged();
     await focusSave();
@@ -325,6 +382,112 @@
       onchanged();
     } catch (e: unknown) {
       error = errorText(e, m.tasks_predecessor_failed());
+    }
+  }
+
+  /** 지연일 글자: 0~상한의 정수만. */
+  function lagOf(text: string): number | undefined {
+    const t = text.trim();
+    if (!/^\d+$/.test(t)) return undefined;
+    const n = Number(t);
+    return n <= MAX_LAG_DAYS ? n : undefined;
+  }
+
+  function startEdit(predecessor: string): void {
+    const link = task?.predecessors.find((l) => l.task_id === predecessor);
+    if (link === undefined) return;
+    editing = predecessor;
+    linkKind = link.kind;
+    lagText = String(link.lag_days);
+    linkStatus = '';
+  }
+
+  function resetLinkEditor(): void {
+    editing = undefined;
+    predecessorChoice = '';
+    linkKind = 'FS';
+    lagText = '0';
+  }
+
+  /** 관계 저장: 먼저 서버에 영향을 묻고, 옮길 후속 업무가 있으면 사용자에게 보인다(D-31, D-91). */
+  async function applyLink(predecessor: string): Promise<void> {
+    if (task === undefined || busy) return;
+    const lag = lagOf(lagText);
+    if (lag === undefined) {
+      error = m.tasks_link_lag_invalid();
+      return;
+    }
+    busy = true;
+    error = undefined;
+    linkStatus = '';
+    const kind = linkKind;
+    try {
+      const plan = await api.previewLink(task.id, predecessor, kind, lag);
+      if (plan.shifts.length > 0) {
+        linkPending = {
+          predecessor,
+          kind,
+          lag,
+          proposals: plan.shifts,
+          undated: plan.undated,
+          retried: false,
+        };
+        return;
+      }
+      await saveLink(predecessor, kind, lag, [], plan.undated);
+    } catch (e: unknown) {
+      error = errorText(e, m.tasks_predecessor_failed());
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function saveLink(
+    predecessor: string,
+    kind: LinkKind,
+    lag: number,
+    shifts: ShiftProposalView[],
+    undated: UndatedTaskView[],
+  ): Promise<void> {
+    if (task === undefined) return;
+    const result = await api.setPredecessor(task.id, predecessor, kind, lag, shifts.map(toShift));
+    if (result.kind === 'shift_conflict') {
+      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
+      const plan = await api.previewLink(task.id, predecessor, kind, lag);
+      if (plan.shifts.length === 0) {
+        await saveLink(predecessor, kind, lag, [], plan.undated);
+        return;
+      }
+      linkPending = {
+        predecessor,
+        kind,
+        lag,
+        proposals: plan.shifts,
+        undated: plan.undated,
+        retried: true,
+      };
+      return;
+    }
+    linkPending = undefined;
+    resetLinkEditor();
+    const fresh = result.task;
+    if (task.version === fresh.version) task = fresh;
+    else refresh(fresh);
+    linkStatus = [m.tasks_link_saved(), undatedText(undated)].filter((s) => s !== '').join(' ');
+    onchanged();
+  }
+
+  async function decideLink(withShifts: boolean): Promise<void> {
+    const p = linkPending;
+    if (p === undefined || busy) return;
+    busy = true;
+    error = undefined;
+    try {
+      await saveLink(p.predecessor, p.kind, p.lag, withShifts ? p.proposals : [], p.undated);
+    } catch (e: unknown) {
+      error = errorText(e, m.tasks_predecessor_failed());
+    } finally {
+      busy = false;
     }
   }
 
@@ -537,12 +700,18 @@
           <Button id="task-save" type="submit" disabled={busy}>{m.common_save()}</Button>
           {#if saved}<span class="text-sm" role="status">{m.common_saved()}</span>{/if}
         </div>
+        {#if undatedNotice !== ''}
+          <p class="col-span-2 text-sm text-muted-foreground" data-testid="task-undated-notice">
+            {undatedNotice}
+          </p>
+        {/if}
       {/if}
     </form>
 
     {#if pending !== undefined}
       <ShiftProposals
         proposals={pending.proposals}
+        undated={pending.undated}
         retried={pending.retried}
         {busy}
         ondecide={(withShifts: boolean) => void decide(withShifts)}
@@ -644,8 +813,9 @@
 
     <section class="flex flex-col gap-2" aria-labelledby="predecessors-heading">
       <h3 id="predecessors-heading" class="text-sm font-semibold">{m.tasks_predecessors()}</h3>
-      {#each current.predecessor_ids as pid (pid)}
-        <div class="flex items-center gap-2 text-sm">
+      {#each current.predecessors as link (link.task_id)}
+        {@const pid = link.task_id}
+        <div class="flex flex-wrap items-center gap-x-2 text-sm" data-predecessor={pid}>
           <button
             type="button"
             class="rounded px-2 py-1 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
@@ -653,56 +823,146 @@
               onopen(pid);
             }}>{label(byId.get(pid)) || m.tasks_hidden_task()}</button
           >
+          <span class="text-muted-foreground" data-link-text>{linkText(link)}</span>
           {#if canEdit}
-            <Button
-              size="sm"
-              variant="ghost"
-              class="ml-auto"
-              aria-label={m.tasks_predecessor_remove_aria({ task: label(byId.get(pid)) })}
-              onclick={() => void changePredecessor(api.removePredecessor(current.id, pid))}
-              >{m.tasks_remove()}</Button
-            >
+            <span class="ml-auto flex gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy || linkPending !== undefined}
+                aria-label={m.tasks_link_edit_aria({ task: label(byId.get(pid)) })}
+                onclick={() => {
+                  startEdit(pid);
+                }}>{m.tasks_link_edit()}</Button
+              >
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy || linkPending !== undefined}
+                aria-label={m.tasks_predecessor_remove_aria({ task: label(byId.get(pid)) })}
+                onclick={() => void changePredecessor(api.removePredecessor(current.id, pid))}
+                >{m.tasks_remove()}</Button
+              >
+            </span>
           {/if}
         </div>
       {:else}
         <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
       {/each}
-      {#if successors.length > 0}
-        <p class="text-sm text-muted-foreground">
-          {m.tasks_successors({ tasks: successors.map((t) => label(t)).join(', ') })}
-        </p>
-      {/if}
-      {#if canEdit && candidates.length > 0}
-        <div class="flex flex-wrap items-center gap-2">
-          <span id="predecessor-label" class="text-sm font-medium">{m.tasks_predecessor_add()}</span
-          >
-          <Select.Root
-            type="single"
-            value={predecessorChoice}
-            onValueChange={(v: string) => (predecessorChoice = v)}
-          >
-            <Select.Trigger aria-labelledby="predecessor-label"
-              >{predecessorChoice === ''
-                ? m.tasks_predecessor_choose()
-                : label(byId.get(predecessorChoice))}</Select.Trigger
+      {#if canEdit && (editing !== undefined || candidates.length > 0)}
+        <fieldset
+          class="flex flex-col gap-2 rounded-md border p-2"
+          inert={linkPending !== undefined}
+          aria-describedby="link-kind-meaning"
+        >
+          <legend class="px-1 text-sm font-medium" id="predecessor-label">
+            {editing === undefined ? m.tasks_predecessor_add() : m.tasks_link_edit()}
+          </legend>
+          {#if editing !== undefined}
+            <p class="text-sm">{m.tasks_link_editing({ task: label(byId.get(editing)) })}</p>
+          {:else}
+            <Select.Root
+              type="single"
+              value={predecessorChoice}
+              onValueChange={(v: string) => (predecessorChoice = v)}
             >
-            <Select.Content>
-              {#each candidates as c (c.id)}
-                <Select.Item value={c.id} label={label(c)}>{label(c)}</Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
-          <Button
-            size="sm"
-            disabled={predecessorChoice === ''}
-            onclick={() => {
-              const chosen = predecessorChoice;
-              predecessorChoice = '';
-              void changePredecessor(api.addPredecessor(current.id, chosen));
-            }}>{m.tasks_add()}</Button
-          >
-        </div>
+              <Select.Trigger aria-labelledby="predecessor-label"
+                >{predecessorChoice === ''
+                  ? m.tasks_predecessor_choose()
+                  : label(byId.get(predecessorChoice))}</Select.Trigger
+              >
+              <Select.Content>
+                {#each candidates as c (c.id)}
+                  <Select.Item value={c.id} label={label(c)}>{label(c)}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          {/if}
+          <div class="flex flex-wrap items-end gap-2">
+            <div class="flex min-w-0 flex-col gap-1">
+              <span id="link-kind-label" class="text-sm">{m.tasks_link_kind_label()}</span>
+              <Select.Root
+                type="single"
+                value={linkKind}
+                onValueChange={(v: string) => {
+                  const found = LINK_KINDS.find((k) => k === v);
+                  if (found !== undefined) linkKind = found;
+                }}
+              >
+                <Select.Trigger aria-labelledby="link-kind-label" data-testid="link-kind"
+                  >{LINK_KIND_LABEL[linkKind]}</Select.Trigger
+                >
+                <Select.Content>
+                  {#each LINK_KINDS as k (k)}
+                    <Select.Item value={k} label={LINK_KIND_LABEL[k]}
+                      >{LINK_KIND_LABEL[k]}</Select.Item
+                    >
+                  {/each}
+                </Select.Content>
+              </Select.Root>
+            </div>
+            <div class="flex w-28 flex-col gap-1">
+              <Label for="link-lag">{m.tasks_link_lag_label()}</Label>
+              <Input
+                id="link-lag"
+                inputmode="numeric"
+                aria-describedby="link-lag-hint"
+                bind:value={lagText}
+              />
+            </div>
+          </div>
+          <p id="link-kind-meaning" class="text-sm text-muted-foreground">
+            {LINK_KIND_MEANING[linkKind]}
+          </p>
+          <p id="link-lag-hint" class="text-xs text-muted-foreground">{m.tasks_link_lag_hint()}</p>
+          <div class="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              disabled={busy || (editing === undefined && predecessorChoice === '')}
+              onclick={() => void applyLink(editing ?? predecessorChoice)}
+              >{m.tasks_link_save()}</Button
+            >
+            {#if editing !== undefined}
+              <Button size="sm" variant="ghost" disabled={busy} onclick={resetLinkEditor}
+                >{m.common_cancel()}</Button
+              >
+            {/if}
+          </div>
+        </fieldset>
       {/if}
+      {#if linkPending !== undefined}
+        <ShiftProposals
+          proposals={linkPending.proposals}
+          undated={linkPending.undated}
+          retried={linkPending.retried}
+          {busy}
+          forLink
+          headingId="link-shift-heading"
+          ondecide={(withShifts: boolean) => void decideLink(withShifts)}
+          oncancel={() => {
+            linkPending = undefined;
+          }}
+        />
+      {/if}
+      <p aria-live="polite" class="text-sm" data-testid="link-status">{linkStatus}</p>
+    </section>
+
+    <section class="flex flex-col gap-2" aria-labelledby="successors-heading">
+      <h3 id="successors-heading" class="text-sm font-semibold">{m.tasks_successors_heading()}</h3>
+      {#each successors as s (s.task.id)}
+        <div class="flex flex-wrap items-center gap-x-2 text-sm" data-successor={s.task.id}>
+          <button
+            type="button"
+            class="rounded px-2 py-1 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            onclick={() => {
+              onopen(s.task.id);
+            }}>{label(s.task)}</button
+          >
+          <span class="text-muted-foreground" data-link-text>{linkText(s.link)}</span>
+        </div>
+      {:else}
+        <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
+      {/each}
     </section>
 
     {#if current.parent_id === null}
