@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocumentView, RevisionView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import { api, NetworkError } from '$lib/api/client';
 import RevisionHistory from '$lib/features/documents/RevisionHistory.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -59,23 +59,41 @@ function documentAt(revision: number): DocumentView {
   };
 }
 
-/** 리비전마다 손으로 끝내는 응답. */
-function pendingRevisions(): { resolve: (revision: number) => Promise<void> } {
-  const waiting = new Map<number, (value: RevisionView) => void>();
+interface Waiting {
+  resolve: (value: RevisionView) => void;
+  reject: (error: unknown) => void;
+}
+
+/** 리비전마다 손으로 끝내는(또는 실패시키는) 응답. */
+function pendingRevisions(): {
+  resolve: (revision: number) => Promise<void>;
+  reject: (revision: number) => Promise<void>;
+} {
+  const waiting = new Map<number, Waiting>();
   vi.spyOn(api, 'revision').mockImplementation(
     (_id: string, revision: number) =>
-      new Promise<RevisionView>((resolve) => {
-        waiting.set(revision, resolve);
+      new Promise<RevisionView>((resolve, reject) => {
+        waiting.set(revision, { resolve, reject });
       }),
   );
+  const take = (revision: number): Waiting => {
+    const found = waiting.get(revision);
+    if (found === undefined) throw new Error(`r${String(revision)} was not requested`);
+    waiting.delete(revision);
+    return found;
+  };
+  const settle = async (): Promise<void> => {
+    await tick();
+    await new Promise((r) => setTimeout(r, 0));
+  };
   return {
     resolve: async (revision: number) => {
-      const resolve = waiting.get(revision);
-      if (resolve === undefined) throw new Error(`r${String(revision)} was not requested`);
-      waiting.delete(revision);
-      resolve(revisionAt(revision));
-      await tick();
-      await new Promise((r) => setTimeout(r, 0));
+      take(revision).resolve(revisionAt(revision));
+      await settle();
+    },
+    reject: async (revision: number) => {
+      take(revision).reject(new NetworkError('offline'));
+      await settle();
     },
   };
 }
@@ -141,5 +159,22 @@ describe('compare with previous', () => {
     expect(diff).toContain('아홉째 문장');
     expect(diff).toContain('열째 문장');
     expect(diff).not.toContain('둘째 문장');
+  });
+
+  it('stops saying loading when the previous revision fails to load', async () => {
+    const revisions = pendingRevisions();
+    await openHistory();
+    await fireEvent.click(screen.getByRole('option', { name: /^r10 / }));
+    await revisions.resolve(10);
+    await fireEvent.click(screen.getByRole('button', { name: '직전과 비교' }));
+    expect(screen.getByTestId('revision-diff').textContent).toContain('불러오는 중…');
+
+    // 직전 리비전(r9)을 불러오지 못했다: 끝없이 "불러오는 중…"이라고 하지 않고, 차이가 없다고도 하지 않는다.
+    await revisions.reject(9);
+    expect(screen.getByRole('alert').textContent).toContain('리비전을 불러오지 못했습니다.');
+    const diff = screen.getByTestId('revision-diff').textContent;
+    expect(diff).not.toContain('불러오는 중…');
+    expect(diff).not.toContain('차이가 없습니다.');
+    expect(diff).not.toContain('열째 문장');
   });
 });

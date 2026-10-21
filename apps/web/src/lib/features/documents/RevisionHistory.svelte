@@ -50,9 +50,12 @@
 
   // 마지막으로 누른 리비전의 응답만 쓴다(빨리 두 개를 누르면 앞의 응답이 늦게 와 다른 리비전을 고른 것처럼 되지 않게).
   let chosen = 0;
+  // 고른 리비전의 직전 리비전을 불러오지 못했다. 그때는 "불러오는 중…"을 거두고 아래의 오류만 보인다(다시 누르면 다시 묻는다).
+  let previousFailed = $state(false);
 
   async function choose(revision: number): Promise<void> {
     const mine = ++chosen;
+    previousFailed = false;
     try {
       const next = await api.revision(doc.id, revision);
       if (mine !== chosen) return;
@@ -63,6 +66,7 @@
       error = undefined;
     } catch (e: unknown) {
       if (mine !== chosen) return;
+      if (selected?.revision === revision) previousFailed = true;
       error = errorText(e, m.documents_revision_load_failed());
     }
   }
@@ -71,6 +75,7 @@
     open = true;
     // 지난번에 열었을 때 고른 리비전의 늦은 응답은 버린다.
     chosen += 1;
+    previousFailed = false;
     selected = undefined;
     previous = undefined;
     latest = undefined;
@@ -209,7 +214,9 @@
             data-testid="revision-diff"
           >
             {#if compareWith === 'previous' && previousMissing}
-              <p class="text-muted-foreground" aria-live="polite">{m.documents_loading()}</p>
+              {#if !previousFailed}
+                <p class="text-muted-foreground" aria-live="polite">{m.documents_loading()}</p>
+              {/if}
             {:else if !changed}
               <p class="text-muted-foreground">{m.documents_diff_none()}</p>
             {/if}
