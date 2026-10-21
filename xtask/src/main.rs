@@ -69,7 +69,8 @@ enum Command {
     },
     /// 이 체크아웃이 만든 Compose 자원(dev·test)을 정리한다. 다른 체크아웃은 건드리지 않는다.
     Down,
-    /// `contracts/openapi.json`을 서버 정의에서 다시 생성한다. `--check`는 최신 여부만 본다.
+    /// `contracts/openapi.json`을 서버 정의에서 다시 생성한다. `--check`는 그 파일과 거기서 생성한 TS client
+    /// (`packages/api-client/src/generated/schema.ts`)의 최신 여부만 본다.
     Openapi {
         #[arg(long)]
         check: bool,
