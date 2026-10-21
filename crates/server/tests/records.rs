@@ -1317,3 +1317,63 @@ async fn item_files_are_read_only_while_the_item_or_its_module_is_archived() {
     assert!(can_write().await);
     assert_eq!(rename().await, StatusCode::OK);
 }
+
+/// 감사 S10: 기록 만들기도 같은 요청 id로 다시 보낸 요청이 앞 요청을 기다린 뒤 고유 제약(23505)으로 500이었다. 앞
+/// 요청이 만든 기록 하나를 돌려준다.
+#[tokio::test]
+async fn a_retried_record_create_waiting_on_the_first_returns_that_record() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "기록 재시도").await;
+    let project = module(&app, &admin, &ws, "project", "RRT").await;
+    let it = open_item(&app, &admin, &project, "회고 모임").await;
+    let request: uuid::Uuid = new_request_id().parse().unwrap();
+    let item_id: uuid::Uuid = it.parse().unwrap();
+
+    let mut t1 = state.db.begin_as(admin.id).await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(t1.conn())
+        .await
+        .unwrap();
+    let first: uuid::Uuid = sqlx::query_scalar(
+        "SELECT app_create_record($1, $2, 'retrospective', '1차 회고', NULL, '', '{}'::jsonb, '[]'::jsonb, $3)",
+    )
+    .bind(request)
+    .bind(item_id)
+    .bind(fvoci_server::db::new_ids(2))
+    .fetch_one(t1.conn())
+    .await
+    .unwrap();
+    let retry = tokio::spawn({
+        let app = app.clone();
+        let admin = admin.clone();
+        let uri = format!("/api/items/{it}/records");
+        let body = json!({ "request_id": request, "kind": "retrospective", "title": "1차 회고" });
+        async move { send(&app, Method::POST, &uri, Some(&admin), Some(body)).await }
+    });
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let probe = sqlx::PgPool::connect(&url).await.unwrap();
+    let mut blocked = false;
+    for _ in 0..500 {
+        blocked = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(holder)
+        .fetch_one(&probe)
+        .await
+        .unwrap();
+        if blocked {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    probe.close().await;
+    assert!(blocked, "the retried request never waited on the first one");
+    t1.commit().await.unwrap();
+    let retry = retry.await.unwrap();
+    assert_eq!(retry.status, StatusCode::CREATED, "{:?}", retry.json);
+    assert_eq!(retry.json["id"], first.to_string());
+    let (_, list) = records(&app, &admin, &it).await;
+    assert_eq!(list.as_array().unwrap().len(), 1, "{list:?}");
+}
