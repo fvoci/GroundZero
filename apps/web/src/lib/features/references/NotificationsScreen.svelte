@@ -54,8 +54,17 @@
       router.navigate(itemPath(n.workspace_id, n.item_id));
   }
 
+  // "모두 읽음" 실패는 목록 대신이 아니라 단추 곁에 알린다(목록은 그대로 둔다, D-82).
+  let readError = $state<string | undefined>(undefined);
+
   async function readAll(): Promise<void> {
-    await api.markNotificationsRead(null);
+    readError = undefined;
+    try {
+      await api.markNotificationsRead(null);
+    } catch (e: unknown) {
+      readError = errorText(e, m.references_notifications_read_failed());
+      return;
+    }
     await load();
     onchanged();
   }
@@ -72,6 +81,9 @@
       >
     {/if}
   </div>
+  {#if readError !== undefined}
+    <p role="alert" class="text-sm text-destructive">{readError}</p>
+  {/if}
   {#if error !== undefined}
     <p role="alert" class="text-destructive">{error}</p>
   {:else if items === undefined}
