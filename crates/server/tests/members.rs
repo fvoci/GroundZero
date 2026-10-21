@@ -541,13 +541,35 @@ async fn owner_pool() -> sqlx::PgPool {
     sqlx::PgPool::connect(&url).await.unwrap()
 }
 
-/// 트랜잭션 하나를 열어 둔 채 다른 요청을 보내고, 잠시 뒤 트랜잭션을 마친 다음 그 요청의 결과를 돌려준다.
-async fn while_open<F>(tx: fvoci_server::db::UserTx, request: F) -> common::Reply
+/// 트랜잭션 하나를 열어 둔 채 다른 요청을 보내고, 그 요청이 이 트랜잭션의 잠금을 실제로 기다리게 된 뒤 트랜잭션을
+/// 마친 다음 그 요청의 결과를 돌려준다. 고정 시간만 기다리면 느린 환경에서 요청이 잠금에 닿기 전에 커밋해, 경합을
+/// 재현하지 못한 채 통과하거나 엉뚱한 이유로 실패한다. 끝내 기다리지 않으면 시험을 멈춘다.
+async fn while_open<F>(mut tx: fvoci_server::db::UserTx, request: F) -> common::Reply
 where
     F: std::future::Future<Output = common::Reply> + Send + 'static,
 {
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(tx.conn())
+        .await
+        .unwrap();
     let pending = tokio::spawn(request);
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let db = owner_pool().await;
+    let mut blocked = false;
+    for _ in 0..500 {
+        blocked = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(holder)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        if blocked {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    db.close().await;
+    assert!(blocked, "no request waited on the held transaction");
     tx.commit().await.unwrap();
     pending.await.unwrap()
 }
