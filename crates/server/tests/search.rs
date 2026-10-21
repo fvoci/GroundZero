@@ -1250,3 +1250,244 @@ async fn drain_does_not_send_a_row_whose_generation_changed_after_the_claim() {
     assert_eq!(left, Some(newer), "the changed row left the queue");
     assert!(sent_newer, "the newer generation was not sent later");
 }
+
+/// 오늘(DB의 UTC 날짜)과 앞뒤 하루. 자정 무렵에 돌아도 흔들리지 않게 범위로 쓴다.
+async fn around_today(state: &AppState, user: &TestUser) -> (String, String) {
+    let mut tx = state.db.begin_as(user.id).await.unwrap();
+    let (from, to): (time::Date, time::Date) =
+        sqlx::query_as("SELECT current_date - 1, current_date + 1")
+            .fetch_one(tx.conn())
+            .await
+            .unwrap();
+    tx.commit().await.unwrap();
+    (from.to_string(), to.to_string())
+}
+
+/// 감사 델타 SD4: 비공개 항목 안의 문서를 공유로만 보는 사람에게, Meilisearch 경로는 그 항목 id를 돌려주고 모듈로
+/// 걸러도 결과를 냈다. 대체(DB) 경로는 같은 요청에 결과를 내지 않아 두 경로가 갈렸다. 문서 조회와 같이 그 항목의
+/// 맥락(항목 id·모듈)은 주지 않는다. 항목을 보는 사람은 그대로 항목 id와 모듈 필터를 쓴다. 대체 경로의 모듈 필터가
+/// 다른 모듈·위키 문서를 빼는지도 본다(감사 델타 SD8).
+#[tokio::test]
+async fn a_document_shared_out_of_a_private_item_does_not_reveal_the_item() {
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "공유 모듈").await;
+    let (reader, email) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "SHM" }),
+        ),
+    )
+    .await
+    .json;
+    let m = module["id"].as_str().unwrap().to_owned();
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{m}/items"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "비공개 항목" })),
+    )
+    .await
+    .json;
+    let doc = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/documents", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": format!("공유 문서 {tok}") })),
+    )
+    .await;
+    assert_eq!(doc.status, StatusCode::CREATED, "{:?}", doc.json);
+    let doc_id = doc.json["id"].as_str().unwrap().to_owned();
+    let shared = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/shares"),
+        Some(&admin),
+        Some(json!({ "email": email, "permission": "read" })),
+    )
+    .await;
+    assert!(shared.status.is_success(), "{:?}", shared.json);
+    let wiki_title = format!("위키 문서 {tok}");
+    create_doc(&app, &admin, &ws, &wiki_title).await;
+    let shared_title = format!("공유 문서 {tok}");
+    let filtered = format!("{tok}&workspace_id={ws}&module_id={m}");
+    let shared_of = |results: &Value| -> Value {
+        results
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["title"] == shared_title.as_str())
+            .cloned()
+            .unwrap()
+    };
+
+    // Meilisearch 경로: 공유받은 사람은 문서를 찾지만 항목 id는 받지 않고, 모듈로 거르면 나오지 않는다.
+    let found = settle(
+        &state,
+        &app,
+        &reader,
+        &format!("{tok}&kinds=document"),
+        &[&shared_title, &wiki_title],
+    )
+    .await;
+    assert!(shared_of(&found)["item_id"].is_null(), "{found}");
+    assert!(titles(&search(&app, &reader, &filtered).await).is_empty());
+    // 항목을 보는 사람은 그대로다(모듈 밖 위키 문서는 빠진다).
+    let mine = settle(&state, &app, &admin, &filtered, &[&shared_title]).await;
+    assert_eq!(mine[0]["item_id"], item["id"]);
+
+    // 대체(DB) 경로도 같다.
+    let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
+    let plain_app = common::app(&plain);
+    let plain_found = search(&plain_app, &reader, &format!("{tok}&kinds=document")).await;
+    let mut both = [shared_title.clone(), wiki_title];
+    both.sort();
+    assert_eq!(titles(&plain_found), both);
+    assert!(
+        shared_of(&plain_found)["item_id"].is_null(),
+        "{plain_found}"
+    );
+    assert!(titles(&search(&plain_app, &reader, &filtered).await).is_empty());
+    let plain_mine = search(&plain_app, &admin, &filtered).await;
+    assert_eq!(titles(&plain_mine), [shared_title.as_str()]);
+    assert_eq!(plain_mine[0]["item_id"], item["id"]);
+}
+
+/// 감사 델타 SD2: 항목 정보(상태·목표 등)나 템플릿 표시만 바꾸면 `updated_at`은 바뀌어도 다시 색인되지 않아,
+/// Meilisearch 경로의 항목 날짜가 옛 날짜로 남았다(대체 경로는 지금 날짜). 이제 다시 색인한다.
+#[tokio::test]
+async fn changing_an_item_profile_reindexes_its_day() {
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "항목 날짜").await;
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "IDY" }),
+        ),
+    )
+    .await
+    .json;
+    let title = format!("{tok} 항목");
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", module["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": title })),
+    )
+    .await
+    .json;
+    let id = item["id"].as_str().unwrap().to_owned();
+    // 지난날 고친 항목으로 만든다(제목을 다시 써 색인한다).
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    sqlx::query(
+        "UPDATE fvoci.items SET title = title, updated_at = '2026-09-01T03:00:00Z' WHERE id = $1::uuid",
+    )
+    .bind(&id)
+    .execute(&owner)
+    .await
+    .unwrap();
+    owner.close().await;
+    settle(
+        &state,
+        &app,
+        &admin,
+        &format!("{tok}&kinds=item&from=2026-09-01&to=2026-09-01"),
+        &[&title],
+    )
+    .await;
+
+    let profile = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{id}/profile"),
+        Some(&admin),
+        Some(json!({ "leader_id": null, "goal": "목표", "scope": "", "starts_on": null, "ends_on": null,
+                     "status": "active", "details": {} })),
+    )
+    .await;
+    assert_eq!(profile.status, StatusCode::NO_CONTENT, "{:?}", profile.json);
+    let (from, to) = around_today(&state, &admin).await;
+    settle(
+        &state,
+        &app,
+        &admin,
+        &format!("{tok}&kinds=item&from={from}&to={to}"),
+        &[&title],
+    )
+    .await;
+}
+
+/// 감사 델타 SD8: 기록의 날짜는 발생일이 있으면 발생일, 없으면 고친 날이다. 이 규칙은 색인(payload)과 대체 SQL에 따로
+/// 있는데 시험이 없어, 한쪽이 바뀌어도 시험이 통과했다. 두 경로에서 같은 날짜 필터로 확인한다.
+#[tokio::test]
+async fn record_dates_follow_the_occurred_day_then_the_change_day() {
+    let state = search_state().await;
+    let app = common::app(&state);
+    let tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "기록 날짜").await;
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "research", "name": "R", "key": "RDT" })),
+    )
+    .await
+    .json;
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", module["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "연구" })),
+    )
+    .await
+    .json;
+    let uri = format!("/api/items/{}/records", item["id"].as_str().unwrap());
+    let occurred = format!("{tok} 발생일");
+    let changed = format!("{tok} 고친 날");
+    for (title, day) in [(&occurred, json!("2026-03-15")), (&changed, Value::Null)] {
+        let r = send(
+            &app,
+            Method::POST,
+            &uri,
+            Some(&admin),
+            Some(
+                json!({ "request_id": new_request_id(), "kind": "reference", "title": title,
+                         "occurred_on": day, "body": "", "fields": {} }),
+            ),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    }
+    let march = format!("{tok}&kinds=record&from=2026-03-01&to=2026-03-31");
+    let (from, to) = around_today(&state, &admin).await;
+    let now = format!("{tok}&kinds=record&from={from}&to={to}");
+    settle(&state, &app, &admin, &march, &[&occurred]).await;
+    settle(&state, &app, &admin, &now, &[&changed]).await;
+
+    let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
+    let plain_app = common::app(&plain);
+    assert_eq!(
+        titles(&search(&plain_app, &admin, &march).await),
+        [occurred]
+    );
+    assert_eq!(titles(&search(&plain_app, &admin, &now).await), [changed]);
+}
