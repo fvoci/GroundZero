@@ -106,11 +106,34 @@
   // 데스크톱 사이드바를 접었는지(사이드바가 쿠키에 남긴 값). 처음 열 때 그대로 되살린다.
   const sidebarOpen = !document.cookie.split('; ').includes('sidebar_state=false');
 
-  /** 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스 목록을 다시 읽는다. */
+  // 마지막으로 보낸 목록 요청의 차례와, 그 응답을 아직 기다리는지. 늦게 도착한 이전 응답이 그 뒤에 읽거나 고친 값(실시간
+  // 공동 편집 설정 등)을 덮지 않게 마지막 요청의 응답만 넣는다.
+  let workspacesSeq = 0;
+  let workspacesPending = false;
 
+  /** 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스 목록을 다시 읽는다. */
   async function reloadWorkspaces(): Promise<void> {
-    const workspaces = await api.workspaces();
-    if (session.state === 'signed-in') session.workspaces = workspaces;
+    const mine = ++workspacesSeq;
+    workspacesPending = true;
+    try {
+      const workspaces = await api.workspaces();
+      if (mine === workspacesSeq && session.state === 'signed-in') session.workspaces = workspaces;
+    } finally {
+      if (mine === workspacesSeq) workspacesPending = false;
+    }
+  }
+
+  /** 실시간 공동 편집을 켜거나 껐다. */
+  function realtimeChanged(workspaceId: string, enabled: boolean): void {
+    // 다시 들어오거나 다른 화면이 읽어도 지금 값이 보이게 목록의 그 워크스페이스를 고친다.
+    if (session.state === 'signed-in') {
+      session.workspaces = session.workspaces.map((w) =>
+        w.id === workspaceId ? { ...w, realtime_enabled: enabled } : w,
+      );
+    }
+    // 그 전에 보낸 목록 요청을 아직 기다리면 그 응답(바꾸기 전 값일 수 있다)은 버리고 지금 다시 읽는다. 그 요청이
+    // 가져올 멤버십 변화는 새 응답에 들어 있다. 다시 읽지 못하면 고친 목록을 그대로 둔다.
+    if (workspacesPending) reloadWorkspaces().catch(() => undefined);
   }
 
   async function logout(): Promise<void> {
@@ -246,17 +269,7 @@
               onchanged={() => void reloadWorkspaces()}
             />
           {:else if route.name === 'workspace'}
-            <WorkspaceScreen
-              workspace={currentWorkspace}
-              onrealtimechanged={(workspaceId: string, enabled: boolean) => {
-                // 다시 들어오거나 다른 화면이 읽어도 지금 값이 보이게 목록의 그 워크스페이스를 고친다.
-                if (session.state === 'signed-in') {
-                  session.workspaces = session.workspaces.map((w) =>
-                    w.id === workspaceId ? { ...w, realtime_enabled: enabled } : w,
-                  );
-                }
-              }}
-            />
+            <WorkspaceScreen workspace={currentWorkspace} onrealtimechanged={realtimeChanged} />
           {:else if route.name === 'trash'}
             <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
             <TrashScreen workspace={currentWorkspace} />
