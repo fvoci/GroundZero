@@ -1,6 +1,8 @@
 <script lang="ts">
   // 강의 모듈의 강좌 화면(D-37): 강좌 정보, 진도 요약, 회차 목록과 내 진도, 회차 추가·CSV 일괄 등록, 함께
   // 수강하는 사람의 진도 집계. 완료는 직접 표시한다. 회차마다 강의 시간 측정을 시작할 수 있다(D-32).
+  import { tick } from 'svelte';
+
   import type { CourseView, EpisodeStatus, EpisodeView, ParticipantView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { RetryKey } from '$lib/api/retry-key';
@@ -58,6 +60,17 @@
     expires_on: '',
     target_on: '',
   });
+  /** 강좌 정보 입력 칸. 저장하는 사이 더 고친 칸이 있는지 볼 때 쓴다. */
+  const detailKeys = [
+    'subject',
+    'instructor',
+    'platform',
+    'url',
+    'textbook',
+    'starts_on',
+    'expires_on',
+    'target_on',
+  ] as const;
   let openEpisode = $state<string | undefined>(undefined);
   let mine = $state({ planned_on: '', position: '', note: '' });
   /** 시청 위치 입력 오류(칸 옆에 보인다, D-82). */
@@ -66,6 +79,25 @@
   let csvText = $state('');
   /** 공통 정보(번호·제목·링크·자료 등)를 고치는 회차와, 고치기를 열 때(또는 마지막으로 확인할 때) 읽은 그 회차. */
   let editingEpisode = $state<EpisodeView | undefined>(undefined);
+  /**
+   * 지우기를 한 번 더 묻는 회차. 회차를 지우면 서버가 모든 참여자의 그 회차 진도와 개인 메모(본인만 읽는다)까지
+   * 지우고 되돌릴 수 없어, 한 번에 지우지 않고 그 영향을 알린 뒤 지운다.
+   */
+  let confirmingDelete = $state<string | undefined>(undefined);
+  let confirmDeleteButton = $state<HTMLButtonElement | null>(null);
+
+  async function askDelete(id: string): Promise<void> {
+    confirmingDelete = id;
+    await tick();
+    confirmDeleteButton?.focus();
+  }
+
+  /** 지우기를 그만둔다. 묻는 칸이 초점과 함께 사라지므로 그 회차의 지우기 단추로 초점을 돌려준다. */
+  async function cancelDelete(id: string): Promise<void> {
+    confirmingDelete = undefined;
+    await tick();
+    document.getElementById(`episode-delete-${id}`)?.focus();
+  }
   // 번호 칸(type="number")은 숫자를 주고, 비우면 null을 준다.
   let shared = $state<{
     number: number | null;
@@ -109,16 +141,21 @@
       });
   });
 
-  async function run(action: () => Promise<unknown>, done: string): Promise<void> {
+  /** 처리하고 다시 읽는다. 성공하면 true(실패하면 오류를 보이고 false). */
+  async function run(action: () => Promise<unknown>, done: string): Promise<boolean> {
     error = undefined;
     try {
       await action();
       status = done;
       reloadKey += 1;
+      return true;
     } catch (e: unknown) {
       error = errorText(e, m.courses_action_failed());
+      return false;
     }
   }
+
+  let savingDetails = $state(false);
 
   function startEdit(c: CourseView): void {
     const d = c.details;
@@ -332,21 +369,28 @@
             error = m.courses_url_invalid();
             return;
           }
-          editing = false;
+          // 저장에 성공한 뒤에만 닫는다. 실패하면(보관됨·권한·연결) 입력을 그대로 두고 알린다.
+          if (savingDetails) return;
+          savingDetails = true;
+          // 보낸 입력. 응답을 기다리는 사이 더 고친 칸이 있으면 닫지 않는다(보내지 않은 입력이 사라지지 않게).
+          const sent = { ...details };
           void run(
             () =>
               api.setCourseDetails(itemId, {
-                subject: details.subject,
-                instructor: details.instructor,
-                platform: details.platform,
-                url: details.url,
-                textbook: details.textbook,
-                starts_on: orNull(details.starts_on),
-                expires_on: orNull(details.expires_on),
-                target_on: orNull(details.target_on),
+                subject: sent.subject,
+                instructor: sent.instructor,
+                platform: sent.platform,
+                url: sent.url,
+                textbook: sent.textbook,
+                starts_on: orNull(sent.starts_on),
+                expires_on: orNull(sent.expires_on),
+                target_on: orNull(sent.target_on),
               }),
             m.courses_details_saved(),
-          );
+          ).then((ok) => {
+            savingDetails = false;
+            if (ok && detailKeys.every((key) => details[key] === sent[key])) editing = false;
+          });
         }}
       >
         {#each [['subject', m.courses_subject()], ['instructor', m.courses_instructor()], ['platform', m.courses_platform()], ['url', m.courses_url()], ['textbook', m.courses_textbook()]] as const as [key, label] (key)}
@@ -362,7 +406,7 @@
           </div>
         {/each}
         <div class="flex gap-2 sm:col-span-2">
-          <Button type="submit">{m.common_save()}</Button>
+          <Button type="submit" disabled={savingDetails}>{m.common_save()}</Button>
           <Button variant="ghost" onclick={() => (editing = false)}>{m.common_cancel()}</Button>
         </div>
       </form>
@@ -546,14 +590,38 @@
                   editEpisode(e);
                 }}>{m.courses_edit()}</Button
               >
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-label={m.courses_delete_aria({ number: e.number })}
-                onclick={() =>
-                  void run(() => api.deleteEpisode(e.id), m.courses_deleted({ number: e.number }))}
-                >{m.courses_delete()}</Button
-              >
+              {#if confirmingDelete !== e.id}
+                <Button
+                  id={`episode-delete-${e.id}`}
+                  size="sm"
+                  variant="ghost"
+                  aria-label={m.courses_delete_aria({ number: e.number })}
+                  onclick={() => void askDelete(e.id)}>{m.courses_delete()}</Button
+                >
+              {:else}
+                <span class="flex flex-wrap items-center gap-1 text-sm">
+                  <span id={`episode-delete-warning-${e.id}`}
+                    >{m.courses_delete_confirm({ number: e.number })}</span
+                  >
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    bind:ref={confirmDeleteButton}
+                    aria-label={m.courses_delete_aria({ number: e.number })}
+                    aria-describedby={`episode-delete-warning-${e.id}`}
+                    onclick={() => {
+                      confirmingDelete = undefined;
+                      void run(
+                        () => api.deleteEpisode(e.id),
+                        m.courses_deleted({ number: e.number }),
+                      );
+                    }}>{m.courses_delete()}</Button
+                  >
+                  <Button size="sm" variant="ghost" onclick={() => void cancelDelete(e.id)}
+                    >{m.common_cancel()}</Button
+                  >
+                </span>
+              {/if}
             {/if}
           </div>
           {#if e.materials !== ''}
