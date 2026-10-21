@@ -675,3 +675,109 @@ async fn weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_o
         ]
     );
 }
+
+/// 감사 S3: 반복 회차 맞추기가 반복마다 그 뿌리 업무의 열을 잠그고 끝까지 쥐어, 같은 항목에서 할 일 → 완료 순으로 잡았다.
+/// 칸반 이동·항목 동기화는 완료 → 진행 중 → 할 일 순으로 잡으므로 서로 기다리다 교착이 났고, 작업 쪽 반복의 회차가 다음
+/// 주기까지 빠졌다. 작업은 이제 항목의 세 열을 같은 순서로 먼저 잡는다.
+#[tokio::test]
+async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "열 잠금 순서").await;
+    let item = module_item(&app, &admin, &ws, "LKO").await;
+    let item_id = item["id"].as_str().unwrap().to_owned();
+    let today = seoul_today(&state, &admin).await;
+    let daily = json!({"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null});
+    // 뿌리가 할 일인 반복을 먼저(더 작은 id), 뿌리가 완료인 반복을 나중에 만든다.
+    let todo_root = dated_task(&app, &admin, &item, "할 일 뿌리", &day(today)).await;
+    let (status, todo_rule) = repeat(&app, &admin, &todo_root, daily.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{todo_rule:?}");
+    let done_root = dated_task(&app, &admin, &item, "완료 뿌리", &day(today)).await;
+    let (status, done_rule) = repeat(&app, &admin, &done_root, daily.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{done_rule:?}");
+    let current = send(
+        &app,
+        Method::GET,
+        &format!("/api/tasks/{}", done_root["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    let finished = send(&app, Method::PUT, &format!("/api/tasks/{}", done_root["id"].as_str().unwrap()), Some(&admin),
+        Some(json!({ "base_version": current["version"], "title": "완료 뿌리", "description": "", "status": "done",
+                     "priority": "none", "start_date": null, "due_date": day(today), "estimate_minutes": null,
+                     "tags": [], "assignee_ids": [], "milestone": false }))).await;
+    assert_eq!(finished.status, StatusCode::OK, "{:?}", finished.json);
+    let done_series = done_rule["series"]["id"].as_str().unwrap().to_owned();
+    for series in [
+        todo_rule["series"]["id"].as_str().unwrap(),
+        done_series.as_str(),
+    ] {
+        common::fixture_sql(
+            "DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
+            series,
+        )
+        .await;
+    }
+
+    // 사용자 쪽: 완료 열을 잡고(완료 업무를 할 일로 옮기는 중) 할 일 열을 기다린다.
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&url).await.unwrap();
+    let mut t1 = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *t1)
+        .await
+        .unwrap();
+    let lane = |status: &str| {
+        format!(
+            "SELECT pg_advisory_xact_lock(hashtextextended('fvoci-lane:' || $1 || ':{status}', 0))"
+        )
+    };
+    sqlx::query(&lane("done"))
+        .bind(&item_id)
+        .execute(&mut *t1)
+        .await
+        .unwrap();
+    let tick = tokio::spawn({
+        let db = state.db.clone();
+        async move { fvoci_server::worker::run_all_now(&db, None, None).await }
+    });
+    let mut blocked = false;
+    for _ in 0..500 {
+        blocked = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(holder)
+        .fetch_one(&owner)
+        .await
+        .unwrap();
+        if blocked {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(blocked, "the tick never waited on the done lane");
+    let todo = tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        sqlx::query(&lane("todo")).bind(&item_id).execute(&mut *t1),
+    )
+    .await
+    .expect("the user side waited too long");
+    assert!(todo.is_ok(), "{todo:?}");
+    t1.commit().await.unwrap();
+    tick.await.unwrap().unwrap();
+
+    // 완료 뿌리 반복의 다음 회차도 만들어졌다(교착으로 건너뛰지 않았다).
+    let made: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM fvoci.tasks WHERE series_id = $1::uuid AND deleted_at IS NULL
+           AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
+    )
+    .bind(&done_series)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    owner.close().await;
+    assert!(made >= 1, "the done-rooted series lost its occurrence");
+}
