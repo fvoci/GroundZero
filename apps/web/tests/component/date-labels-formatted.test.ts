@@ -19,12 +19,13 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // "Oct 22, 2026"처럼 보여야 한다.
 const ISO_DATE = /\d{4}-\d{2}-\d{2}/;
 
+// 시각은 24시간 표시로 고정한다(12시간 표시는 event-when-hour-cycle.test.ts).
 beforeEach(async () => {
-  me.locale = 'en';
+  Object.assign(me, { locale: 'en', hourCycle: 'h23' });
   await setLocale('en', { reload: false });
 });
 afterEach(() => {
-  me.locale = '';
+  Object.assign(me, { locale: '', hourCycle: '' });
   vi.restoreAllMocks();
 });
 
@@ -94,7 +95,7 @@ describe('dates inside localized text', () => {
   });
 
   // 리뷰: 시각이 있는 일정은 날짜를 `YYYY-MM-DD` 그대로 적었다(보는 시간대의 날짜와 일정 시간대 기준 시각 모두).
-  // 날짜만 공통 서식으로 바꾸고 시각(`HH:mm`)과 시간대 계산은 그대로다.
+  // 날짜를 공통 서식으로 바꾼다. 시간대 계산은 그대로다.
   it('formats the dates of a timed event and keeps the clock', () => {
     const timed = (over: Partial<EventView>): EventView =>
       event({
