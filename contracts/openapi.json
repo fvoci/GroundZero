@@ -13795,6 +13795,56 @@
           }
         }
       },
+      "PlanBlockReason": {
+        "type": "string",
+        "description": "저장할 수 없는 계획의 까닭.",
+        "enum": [
+          "too_many_shifts",
+          "date_out_of_range"
+        ]
+      },
+      "PlanBlocked": {
+        "type": "object",
+        "description": "저장할 수 없는 계획의 까닭과 그 근거(건수 또는 범위 밖 날짜를 받은 업무).",
+        "required": [
+          "reason",
+          "shift_count",
+          "max_shifts"
+        ],
+        "properties": {
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "범위 밖의 제안 날짜(`YYYY-MM-DD`)."
+          },
+          "max_shifts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reason": {
+            "$ref": "#/components/schemas/PlanBlockReason"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shift_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "task_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "PlanEntry": {
         "type": "object",
         "description": "내 계획일 하나.",
@@ -14579,6 +14629,17 @@
           "undated"
         ],
         "properties": {
+          "blocked": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlanBlocked",
+                "description": "이 계획대로는 함께 저장할 수 없는 까닭(승인 전에 알린다). 있으면 \"옮겨 저장\"은 거절되고, 옮기지 않고 저장하기나\n취소만 된다. 계획을 자르거나 일부 업무를 빼지 않는다."
+              }
+            ]
+          },
           "shifts": {
             "type": "array",
             "items": {

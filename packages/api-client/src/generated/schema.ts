@@ -3621,6 +3621,22 @@ export interface components {
             display_name: string;
             user_id: components["schemas"]["UserId"];
         };
+        /**
+         * @description 저장할 수 없는 계획의 까닭.
+         * @enum {string}
+         */
+        PlanBlockReason: "too_many_shifts" | "date_out_of_range";
+        /** @description 저장할 수 없는 계획의 까닭과 그 근거(건수 또는 범위 밖 날짜를 받은 업무). */
+        PlanBlocked: {
+            /** @description 범위 밖의 제안 날짜(`YYYY-MM-DD`). */
+            date?: string | null;
+            max_shifts: number;
+            reason: components["schemas"]["PlanBlockReason"];
+            reference?: string | null;
+            shift_count: number;
+            /** Format: uuid */
+            task_id?: string | null;
+        };
         /** @description 내 계획일 하나. */
         PlanEntry: {
             /** Format: date */
@@ -3885,6 +3901,7 @@ export interface components {
         };
         /** @description 재배치 미리보기: 옮길 후속 업무와, 바뀐 관계가 닿지만 날짜가 없어 계산하지 않은 업무(날짜를 지어내지 않는다). */
         SchedulePlan: {
+            blocked?: null | components["schemas"]["PlanBlocked"];
             shifts: components["schemas"]["ShiftProposal"][];
             undated: components["schemas"]["UndatedTask"][];
         };

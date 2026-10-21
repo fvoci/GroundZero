@@ -23,7 +23,8 @@ use crate::db::UserTx;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::tasks::{
-    MAX_SHIFTS, SuccessorShift, TaskConflict, TaskDetail, format_date, load_detail, parse_date,
+    DATE_YEARS, MAX_SHIFTS, SuccessorShift, TaskConflict, TaskDetail, format_date, load_detail,
+    parse_date,
 };
 use crate::http::AppState;
 use crate::ids::UserId;
@@ -373,6 +374,47 @@ pub struct UndatedTask {
 pub struct SchedulePlan {
     pub shifts: Vec<ShiftProposal>,
     pub undated: Vec<UndatedTask>,
+    /// 이 계획대로는 함께 저장할 수 없는 까닭(승인 전에 알린다). 있으면 "옮겨 저장"은 거절되고, 옮기지 않고 저장하기나
+    /// 취소만 된다. 계획을 자르거나 일부 업무를 빼지 않는다.
+    pub blocked: Option<PlanBlocked>,
+}
+
+/// 저장할 수 없는 계획의 까닭.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanBlockReason {
+    /// 옮길 후속 업무가 한 번에 옮길 수 있는 수(`max_shifts`)보다 많다.
+    TooManyShifts,
+    /// 제안 날짜가 저장할 수 있는 범위(1900~2200년) 밖이다.
+    DateOutOfRange,
+}
+
+/// 저장할 수 없는 계획의 까닭과 그 근거(건수 또는 범위 밖 날짜를 받은 업무).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PlanBlocked {
+    pub reason: PlanBlockReason,
+    pub shift_count: usize,
+    pub max_shifts: usize,
+    #[schema(value_type = Option<String>, format = Uuid)]
+    pub task_id: Option<Uuid>,
+    pub reference: Option<String>,
+    /// 범위 밖의 제안 날짜(`YYYY-MM-DD`).
+    pub date: Option<String>,
+}
+
+/// 계획을 저장할 수 있는지: 건수 한도(승인 저장과 같은 `MAX_SHIFTS`)를 먼저, 그다음 제안 날짜의 범위(저장과 같은
+/// `DATE_YEARS`)를 본다. 막히면 (까닭, 범위 밖 날짜를 받은 업무와 그 날짜).
+fn plan_block(plan: &Plan) -> Option<(PlanBlockReason, Option<(Uuid, Date)>)> {
+    if plan.shifts.len() > MAX_SHIFTS {
+        return Some((PlanBlockReason::TooManyShifts, None));
+    }
+    plan.shifts.iter().find_map(|p| {
+        [p.span.start, p.span.due]
+            .into_iter()
+            .flatten()
+            .find(|d| !DATE_YEARS.contains(&d.year()))
+            .map(|d| (PlanBlockReason::DateOutOfRange, Some((p.task, d))))
+    })
 }
 
 /// 관계 미리보기·설정 입력.
@@ -479,6 +521,14 @@ fn plan_graph(rows: &HashMap<Uuid, Row>, links: &[Link], change: Change) -> Plan
 }
 
 fn plan_view(rows: &HashMap<Uuid, Row>, plan: Plan) -> SchedulePlan {
+    let blocked = plan_block(&plan).map(|(reason, at)| PlanBlocked {
+        reason,
+        shift_count: plan.shifts.len(),
+        max_shifts: MAX_SHIFTS,
+        task_id: at.map(|(id, _)| id),
+        reference: at.and_then(|(id, _)| rows.get(&id)?.reference.clone()),
+        date: at.and_then(|(_, d)| format_date(Some(d))),
+    });
     let shifts = plan
         .shifts
         .into_iter()
@@ -522,7 +572,11 @@ fn plan_view(rows: &HashMap<Uuid, Row>, plan: Plan) -> SchedulePlan {
             })
         })
         .collect();
-    SchedulePlan { shifts, undated }
+    SchedulePlan {
+        shifts,
+        undated,
+        blocked,
+    }
 }
 
 async fn item_of(tx: &mut UserTx, task: Uuid) -> Result<Uuid, AppError> {
@@ -1324,6 +1378,84 @@ mod tests {
                 undated: vec![t[1]]
             }
         );
+    }
+
+    /// 0에서 갈라지는 후속 `n`개를 모두 하루 미는 계획.
+    fn fork_plan(n: u128) -> Plan {
+        let t = ids(n + 1);
+        let mut spans = HashMap::from([(t[0], days("2026-10-01", "2026-10-05"))]);
+        let links: Vec<Link> = t[1..]
+            .iter()
+            .map(|&s| {
+                spans.insert(s, days("2026-10-06", "2026-10-06"));
+                fs(t[0], s)
+            })
+            .collect();
+        plan_shifts(
+            &spans,
+            &links,
+            &HashSet::new(),
+            Change::Move {
+                task: t[0],
+                next: days("2026-10-01", "2026-10-06"),
+            },
+        )
+    }
+
+    #[test]
+    fn the_shift_limit_matches_approval_at_499_500_and_501() {
+        assert_eq!(fork_plan(499).shifts.len(), 499);
+        assert_eq!(plan_block(&fork_plan(499)), None);
+        assert_eq!(plan_block(&fork_plan(500)), None);
+        let over = fork_plan(501);
+        assert_eq!(over.shifts.len(), 501, "the plan is not cut short");
+        assert_eq!(
+            plan_block(&over),
+            Some((PlanBlockReason::TooManyShifts, None))
+        );
+    }
+
+    #[test]
+    fn proposed_dates_outside_the_saveable_years_block_the_plan() {
+        let t = ids(2);
+        let spans = HashMap::from([
+            (t[0], days("2200-12-20", "2200-12-29")),
+            (t[1], days("2200-12-30", "2200-12-31")),
+        ]);
+        let plan = plan_shifts(
+            &spans,
+            &[fs(t[0], t[1])],
+            &HashSet::new(),
+            Change::Move {
+                task: t[0],
+                next: days("2200-12-20", "2200-12-30"),
+            },
+        );
+        // 기간을 자르지 않고 그대로 제안하되 저장할 수 없다고 알린다.
+        assert_eq!(plan.shifts[0].span, days("2200-12-31", "2201-01-01"));
+        assert_eq!(
+            plan_block(&plan),
+            Some((
+                PlanBlockReason::DateOutOfRange,
+                Some((t[1], d("2201-01-01")))
+            ))
+        );
+        // 범위 끝(2200-12-31)에 딱 맞게 밀리면 저장할 수 있다.
+        let spans = HashMap::from([
+            (t[0], days("2200-12-20", "2200-12-28")),
+            (t[1], days("2200-12-29", "2200-12-30")),
+        ]);
+        let edge = plan_shifts(
+            &spans,
+            &[fs(t[0], t[1])],
+            &HashSet::new(),
+            Change::Move {
+                task: t[0],
+                next: days("2200-12-20", "2200-12-29"),
+            },
+        );
+        assert_eq!(edge.shifts[0].span, days("2200-12-30", "2200-12-31"));
+        assert_eq!(plan_block(&edge), None);
     }
 
     #[test]

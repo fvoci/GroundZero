@@ -903,3 +903,248 @@ async fn link_conflicts_come_back_as_task_conflict_or_error_body() {
         json!([{ "task_id": a["id"], "kind": "FS", "lag_days": 0 }])
     );
 }
+
+// ---------------------------------------------------------------------------
+// 일정 경계(#41 감사): 오래된 계획, 건수 한도, 저장할 수 있는 날짜 범위
+// ---------------------------------------------------------------------------
+
+async fn date_plan(app: &Router, user: &TestUser, t: &Value, start: Value, due: Value) -> Value {
+    let r = send(
+        app,
+        Method::POST,
+        &format!("/api/tasks/{}/schedule-plan", t["id"].as_str().unwrap()),
+        Some(user),
+        Some(json!({ "start_date": start, "due_date": due })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    r.json
+}
+
+async fn unlink(app: &Router, user: &TestUser, pred: &Value, succ: &Value) {
+    let r = send(app, Method::DELETE, &path_of(pred, succ), Some(user), None).await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+}
+
+/// 미리 본 뒤 관계가 지워져 승인 목록의 업무가 더는 후속이 아니면, 처음부터 잘못된 요청(400)이 아니라 오래된
+/// 계획(409 `shift_conflict`)이다. 아무것도 바뀌지 않고 다시 미리 보면 저장된다. 선행 쪽·다른 항목 업무를 옮기라는
+/// 요청은 그대로 400이다.
+#[tokio::test]
+async fn a_plan_made_stale_by_a_removed_link_is_a_conflict_not_a_bad_request() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "지운 관계").await;
+    let item = module_item(&app, &admin, &ws, "STL").await;
+    let other = module_item(&app, &admin, &ws, "OTR").await;
+    let a = dated(&app, &admin, &item, "A", "2026-10-01", "2026-10-05").await;
+    let b = dated(&app, &admin, &item, "B", "2026-10-06", "2026-10-07").await;
+    let c = dated(&app, &admin, &item, "C", "2026-10-08", "2026-10-08").await;
+    let x = dated(&app, &admin, &other, "X", "2026-10-08", "2026-10-08").await;
+    for (p, s) in [(&a, &b), (&b, &c)] {
+        assert_eq!(link(&app, &admin, p, s).await, StatusCode::OK);
+    }
+
+    // 날짜 저장 경로: A를 미루는 계획(B·C)을 본 뒤 B → C를 지운다.
+    let plan = date_plan(&app, &admin, &a, json!("2026-10-01"), json!("2026-10-10")).await;
+    assert_eq!(plan["shifts"].as_array().unwrap().len(), 2);
+    let stale = approve(&plan);
+    unlink(&app, &admin, &b, &c).await;
+    let before = [
+        fetch(&app, &admin, &a).await,
+        fetch(&app, &admin, &b).await,
+        fetch(&app, &admin, &c).await,
+    ];
+    let (status, body) = update(
+        &app,
+        &admin,
+        &a,
+        json!({ "due_date": "2026-10-10", "successor_shifts": stale }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"], "shift_conflict");
+    for t in &before {
+        let now = fetch(&app, &admin, t).await;
+        assert_eq!(
+            (dates(&now), now["version"].clone()),
+            (dates(t), t["version"].clone()),
+            "nothing saved"
+        );
+    }
+    let plan = date_plan(&app, &admin, &a, json!("2026-10-01"), json!("2026-10-10")).await;
+    assert_eq!(plan["shifts"].as_array().unwrap().len(), 1, "only B now");
+    let (status, _) = update(
+        &app,
+        &admin,
+        &a,
+        json!({ "due_date": "2026-10-10", "successor_shifts": approve(&plan) }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // 관계 저장 경로: B → C를 다시 잇고 A → B를 FS·3으로 바꾸는 계획(B·C)을 본 뒤 B → C를 지운다.
+    assert_eq!(link(&app, &admin, &b, &c).await, StatusCode::OK);
+    let b_now = fetch(&app, &admin, &b).await;
+    let plan = plan_link(&app, &admin, &a, &b, "FS", 3).await;
+    assert_eq!(
+        plan.json["shifts"].as_array().unwrap().len(),
+        2,
+        "{:?}",
+        plan.json
+    );
+    let stale = approve(&plan.json);
+    unlink(&app, &admin, &b, &c).await;
+    let c_now = fetch(&app, &admin, &c).await;
+    let r = set_link(
+        &app,
+        &admin,
+        &a,
+        &b,
+        json!({ "kind": "FS", "lag_days": 3, "successor_shifts": stale }),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
+    assert_eq!(r.json["error"], "shift_conflict");
+    let b_after = fetch(&app, &admin, &b).await;
+    assert_eq!(b_after["predecessors"][0]["lag_days"], 0, "link unchanged");
+    assert_eq!(
+        (dates(&b_after), b_after["version"].clone()),
+        (dates(&b_now), b_now["version"].clone())
+    );
+    let c_after = fetch(&app, &admin, &c).await;
+    assert_eq!(
+        (dates(&c_after), c_after["version"].clone()),
+        (dates(&c_now), c_now["version"].clone())
+    );
+
+    // 처음부터 잘못된 요청은 400 그대로: 선행 쪽 업무, 다른 항목 업무.
+    let a_now = fetch(&app, &admin, &a).await;
+    for bad in [&a_now, &x] {
+        let (status, body) = update(
+            &app,
+            &admin,
+            &b_after,
+            json!({ "successor_shifts": [{ "task_id": bad["id"], "base_version": bad["version"],
+                    "start_date": bad["start_date"], "due_date": bad["due_date"] }] }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    }
+}
+
+/// 한 번에 옮길 수 있는 후속 업무(500개)보다 많이 옮겨야 하는 계획은 미리보기가 승인 전에 막혔다고 알린다(일부를
+/// 빼거나 나눠 저장하지 않는다). 500개는 그대로 승인된다. 옮기지 않고 저장하기(빈 승인 목록)는 늘 된다.
+#[tokio::test]
+async fn plans_over_the_shift_limit_are_blocked_before_approval() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "한도").await;
+    let item = module_item(&app, &admin, &ws, "LIM").await;
+    let a = dated(&app, &admin, &item, "A", "2026-10-01", "2026-10-05").await;
+    let mut followers = Vec::new();
+    for n in 0..501 {
+        let s = dated(
+            &app,
+            &admin,
+            &item,
+            &format!("S{n}"),
+            "2026-10-06",
+            "2026-10-06",
+        )
+        .await;
+        assert_eq!(link(&app, &admin, &a, &s).await, StatusCode::OK);
+        followers.push(s);
+    }
+    // 501개: 막힘. 제안 목록은 모두 보인다.
+    let plan = date_plan(&app, &admin, &a, json!("2026-10-01"), json!("2026-10-06")).await;
+    assert_eq!(plan["shifts"].as_array().unwrap().len(), 501);
+    assert_eq!(
+        plan["blocked"]["reason"], "too_many_shifts",
+        "{:?}",
+        plan["blocked"]
+    );
+    assert_eq!(plan["blocked"]["shift_count"], 501);
+    assert_eq!(plan["blocked"]["max_shifts"], 500);
+    let (status, _) = update(
+        &app,
+        &admin,
+        &a,
+        json!({ "due_date": "2026-10-06", "successor_shifts": approve(&plan) }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        fetch(&app, &admin, &a).await["due_date"],
+        "2026-10-05",
+        "nothing saved"
+    );
+    // 500개: 막히지 않고 승인하면 모두 옮겨진다.
+    unlink(&app, &admin, &a, &followers[500]).await;
+    let plan = date_plan(&app, &admin, &a, json!("2026-10-01"), json!("2026-10-06")).await;
+    assert_eq!(plan["shifts"].as_array().unwrap().len(), 500);
+    assert!(plan["blocked"].is_null(), "{:?}", plan["blocked"]);
+    let (status, body) = update(
+        &app,
+        &admin,
+        &a,
+        json!({ "due_date": "2026-10-06", "successor_shifts": approve(&plan) }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(
+        fetch(&app, &admin, &followers[0]).await["start_date"],
+        "2026-10-07"
+    );
+    assert_eq!(
+        fetch(&app, &admin, &followers[500]).await["start_date"],
+        "2026-10-06"
+    );
+}
+
+/// 제안 날짜가 저장할 수 있는 범위(1900~2200년) 밖이면 미리보기가 승인 전에 막혔다고 알린다(기간을 자르거나 업무를
+/// 빼지 않는다). 그 목록으로 저장하면 아무것도 바뀌지 않는다. 옮기지 않고 저장하기는 된다.
+#[tokio::test]
+async fn plans_with_dates_outside_the_saveable_range_are_blocked() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "날짜 범위").await;
+    let item = module_item(&app, &admin, &ws, "RNG").await;
+    let a = dated(&app, &admin, &item, "A", "2200-12-20", "2200-12-29").await;
+    let b = dated(&app, &admin, &item, "B", "2200-12-30", "2200-12-31").await;
+    assert_eq!(link(&app, &admin, &a, &b).await, StatusCode::OK);
+    let plan = date_plan(&app, &admin, &a, json!("2200-12-20"), json!("2200-12-30")).await;
+    assert_eq!(
+        plan["shifts"][0]["due_date"], "2201-01-01",
+        "the plan is not clipped"
+    );
+    assert_eq!(
+        plan["blocked"]["reason"], "date_out_of_range",
+        "{:?}",
+        plan["blocked"]
+    );
+    assert_eq!(plan["blocked"]["task_id"], b["id"]);
+    assert_eq!(plan["blocked"]["date"], "2201-01-01");
+    let (status, _) = update(
+        &app,
+        &admin,
+        &a,
+        json!({ "due_date": "2200-12-30", "successor_shifts": approve(&plan) }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        dates(&fetch(&app, &admin, &a).await),
+        dates(&a),
+        "nothing saved"
+    );
+    assert_eq!(dates(&fetch(&app, &admin, &b).await), dates(&b));
+    // 관계 경로도 같다: FS·5는 B를 2201년으로 민다.
+    let plan = plan_link(&app, &admin, &a, &b, "FS", 5).await;
+    assert_eq!(plan.json["blocked"]["reason"], "date_out_of_range");
+    // 옮기지 않고 저장하기(빈 승인 목록)는 정책대로 된다.
+    let (status, _) = update(&app, &admin, &a, json!({ "due_date": "2200-12-30" })).await;
+    assert_eq!(status, StatusCode::OK);
+}

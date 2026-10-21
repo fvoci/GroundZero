@@ -229,6 +229,9 @@ pub struct SuccessorShift {
 /// 한 번에 옮길 수 있는 후속 업무 수.
 pub(crate) const MAX_SHIFTS: usize = 500;
 
+/// 저장할 수 있는 날짜의 연도(터무니없이 먼 날짜는 받지 않는다. 반복 펼치기·달력 계산이 그 거리만큼 커지지 않게).
+pub(crate) const DATE_YEARS: std::ops::RangeInclusive<i32> = 1900..=2200;
+
 /// 칸반 이동: 열(상태)과 그 안에서 바로 뒤에 올 업무(없으면 맨 끝).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MoveTask {
@@ -291,8 +294,7 @@ pub(crate) fn parse_date(raw: Option<&str>, field: &str) -> Result<Option<Date>,
             let date = Date::parse(s, &Iso8601::DATE).map_err(|_| {
                 AppError::BadRequest(format!("{field} must be a date like 2026-10-17"))
             })?;
-            // 터무니없이 먼 날짜는 받지 않는다(반복 펼치기·달력 계산이 그 거리만큼 커지지 않게).
-            if !(1900..=2200).contains(&date.year()) {
+            if !DATE_YEARS.contains(&date.year()) {
                 return Err(AppError::BadRequest(format!(
                     "{field} must be between 1900 and 2200"
                 )));

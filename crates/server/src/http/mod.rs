@@ -490,6 +490,8 @@ async fn api_not_found() -> AppError {
         schedule::ShiftProposal,
         schedule::ShiftCause,
         schedule::SchedulePlan,
+        schedule::PlanBlocked,
+        schedule::PlanBlockReason,
         schedule::UndatedTask,
         schedule::LinkKind,
         schedule::LinkInput,
