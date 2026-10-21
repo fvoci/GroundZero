@@ -25,8 +25,8 @@ jobs:
     container:
       image: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: pnpm install --frozen-lockfile
       # 라이선스는 아래 licenses job이 따로 보인다(D-60 승인 대기 중 실패가 다른 검사 결과를 가리지 않게).
       - run: cargo xtask check --skip-licenses
@@ -38,7 +38,7 @@ jobs:
     container:
       image: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: pnpm install --frozen-lockfile
       - run: cargo xtask licenses
 
@@ -71,8 +71,8 @@ jobs:
       FVOCI_TEST_PG_HOST_PORT: postgres:5432
       FVOCI_TEST_SEARCH_URL: http://meilisearch:7700
     steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo xtask test --external-services
 
   # S3 저장소 테스트(s3_*)는 SeaweedFS에 시작 인자(사용 통계 끄기 등)가 필요해 job 서비스로 띄울 수 없으므로
@@ -88,7 +88,7 @@ jobs:
       PROJECT: fvoci-ci-${{ github.run_id }}-${{ github.run_attempt }}
       IMAGE: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: services (postgres, meilisearch, keycloak)
         run: docker compose --project-name "$PROJECT" --file deploy/compose.test.yaml --profile oidc up --detach --wait
       - name: cargo xtask test --external-services --oidc (base image)
@@ -114,8 +114,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo xtask test --supabase --session-pooler --oidc
 
   # HWP·HWPX 미리보기 WASM(D-76). 제품 이미지와 같은 단계(rhwp-out)를 만든다. 빌드 안에서 브라우저에 들어가는
@@ -127,8 +127,8 @@ jobs:
     env:
       IMAGE: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/rhwp
           key: rhwp-${{ hashFiles('deploy/rhwp/build.sh', 'deploy/rhwp/inputs.env', 'deploy/rhwp/Cargo.lock', 'deploy/rhwp/deny.toml') }}

@@ -7,7 +7,7 @@
 --    바뀌지 않는다). 함수 본문은 0077과 같고 다시 매기기만 더했다.
 -- 2. 앞선 복제가 남긴 겹친 위치는 이 마이그레이션이 한 번에 다시 매긴다(겹친 위치가 있는 열만, 보이는 순서 그대로). 위치가
 --    실제로 바뀐 업무만 이동 판(`move_version`)이 오른다(0076 트리거). 이동 함수에 옛 데이터를 위한 분기를 두지 않는다
---    (v1.0.0 전에는 지난 개발 버전과의 호환 분기를 두지 않는다는 사용자 지시).
+--    (D-92: v1.0.0 전에는 지난 개발 버전과의 호환 분기를 두지 않는다).
 
 CREATE OR REPLACE FUNCTION app_copy_item(p_item uuid, p_module uuid, p_request uuid, p_title text,
                                          p_reset boolean, p_ids uuid[])
