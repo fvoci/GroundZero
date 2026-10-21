@@ -338,7 +338,7 @@ async fn deadlines_bound_connection_query_cleanup_and_total_without_retry() -> R
 }
 
 #[test]
-fn dormant_manual_workflow_builds_before_credentials() -> Result<()> {
+fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
     let source = include_str!("../../../.github/workflows/supabase-cloud-readonly.yml");
     assert!(source.contains("on:\n  workflow_dispatch:"));
     for trigger in [
@@ -355,7 +355,7 @@ fn dormant_manual_workflow_builds_before_credentials() -> Result<()> {
         );
     }
     for required in [
-        "${{ false && github.event_name == 'workflow_dispatch'",
+        "${{ github.event_name == 'workflow_dispatch'",
         "github.repository == 'fvoci/GroundZero'",
         "github.ref == 'refs/heads/main'",
         "ref: ${{ github.sha }}",
@@ -363,14 +363,19 @@ fn dormant_manual_workflow_builds_before_credentials() -> Result<()> {
         "permissions:\n  contents: read",
         "group: supabase-cloud-readonly",
         "cancel-in-progress: false",
+        "    timeout-minutes: 15",
+        "      - name: Build xtask\n        timeout-minutes: 12",
+        "      - name: Read-only session pooler precheck\n        timeout-minutes: 1",
     ] {
         assert!(source.contains(required));
     }
-    for variable in ["HOST", "PORT", "DATABASE", "USER"] {
-        assert!(source.contains(&format!("vars.SUPABASE_TEST_{variable}")));
+    for setting in ["HOST", "PORT", "DATABASE", "USER", "PASSWORD"] {
+        assert!(source.contains(&format!("secrets.SUPABASE_TEST_{setting}")));
     }
     for forbidden in [
         "inputs.",
+        "vars.",
+        "${{ false",
         "upload-artifact",
         "cargo xtask test",
         "DATABASE_ADMIN_URL",
@@ -380,8 +385,7 @@ fn dormant_manual_workflow_builds_before_credentials() -> Result<()> {
     ] {
         assert!(!source.contains(forbidden));
     }
-    assert_eq!(source.matches("secrets.").count(), 1);
-    assert!(source.contains("secrets.SUPABASE_TEST_PASSWORD"));
+    assert_eq!(source.matches("secrets.").count(), 5);
     let build = source
         .find("cargo build --locked --package xtask")
         .context("build step")?;

@@ -29,7 +29,7 @@ struct Cli {
 enum Command {
     /// 전용 Supabase Cloud 대상의 읽기 전용 사전 점검. 기본값은 연결하지 않는다.
     SupabaseCloudPrecheck {
-        /// 승인된 대상에 한 번 연결한다. 별도 수동 workflow의 승인 전 잠금은 그대로다.
+        /// 승인된 대상에 한 번 연결한다. 수동 workflow는 검토된 main에서만 실행한다.
         #[arg(long)]
         connect: bool,
     },

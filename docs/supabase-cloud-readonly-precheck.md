@@ -1,8 +1,9 @@
-# Supabase Cloud 연결 점검 준비
+# Supabase Cloud 읽기 전용 연결 점검
 
 전용 Supabase Cloud의 **Session pooler에 TLS로 연결하여 읽기 전용 `SELECT 1`만 수행**하는
-Rust `xtask` 명령이다. 현재 workflow는 고정 `false` 조건으로 비활성이다. 실제 연결·TLS·SQL 실행은
-**NOT RUN**이며, 이 Draft PR은 Cloud 제품 지원이나 쓰기·마이그레이션·복구 지원을 확정하지 않는다.
+Rust `xtask` 명령이다. 검토·CI 통과 후 main 병합과 읽기 전용 연결 시험 1회가 승인되어 수동 workflow를
+활성화한다. 이 문서는 실행 전 코드 검증 기록이며 실제 연결·TLS·SQL 결과는 해당 Actions run에서 확인한다.
+이 점검은 Cloud 제품 지원이나 쓰기·마이그레이션·복구 지원을 확정하지 않는다.
 
 기존 [ci.yml](../.github/workflows/ci.yml)과 [로컬 Supabase 시험](../xtask/src/supabase.rs)은
 변경하지 않는다. `cargo xtask test --supabase`는 로컬 컨테이너의 bootstrap·migrate·통합 시험용이므로
@@ -11,35 +12,38 @@ Rust `xtask` 명령이다. 현재 workflow는 고정 `false` 조건으로 비활
 
 ## 설정
 
-사용자가 등록했다고 알린 다음 다섯 항목을 사용한다. 설정 목록 API가 Forbidden을 반환하여
+사용자가 Repository secrets에 등록했다고 알린 다음 다섯 항목을 사용한다. 설정 목록 API가 Forbidden을 반환하여
 등록 여부와 값은 독립적으로 확인하지 못했다. 기존 URI Secret은 조회·사용·삭제하지 않는다.
 
-| 종류                | 이름                     | 값                                                                   |
-| ------------------- | ------------------------ | -------------------------------------------------------------------- |
-| Repository Variable | `SUPABASE_TEST_HOST`     | Dashboard Connect의 shared Session pooler 호스트, URI·포트 없이 입력 |
-| Repository Variable | `SUPABASE_TEST_PORT`     | `5432`                                                               |
-| Repository Variable | `SUPABASE_TEST_DATABASE` | `postgres`                                                           |
-| Repository Variable | `SUPABASE_TEST_USER`     | Dashboard Connect의 사용자명                                         |
-| Repository Secret   | `SUPABASE_TEST_PASSWORD` | URI 인코딩하지 않은 비밀번호 원문                                    |
+| 종류              | 이름                     | 값                                                                   |
+| ----------------- | ------------------------ | -------------------------------------------------------------------- |
+| Repository Secret | `SUPABASE_TEST_HOST`     | Dashboard Connect의 shared Session pooler 호스트, URI·포트 없이 입력 |
+| Repository Secret | `SUPABASE_TEST_PORT`     | `5432`                                                               |
+| Repository Secret | `SUPABASE_TEST_DATABASE` | `postgres`                                                           |
+| Repository Secret | `SUPABASE_TEST_USER`     | Dashboard Connect의 사용자명                                         |
+| Repository Secret | `SUPABASE_TEST_PASSWORD` | URI 인코딩하지 않은 비밀번호 원문                                    |
 
 프로젝트 해시, 별도 대상 변수, 반복 확인 입력은 없다. 등록된 설정이 승인된 전용 프로젝트를 가리킨다는
 운영 전제를 사용한다. shared pooler 호스트 형식·5432·postgres DB만 허용하며 6543(transaction)과
 direct endpoint는 거절한다. 연결 종류는 `session_pooler`다. ADMIN은 계정 용도이며 direct 연결을 뜻하지 않는다.
 비밀번호는 SQLx 연결 옵션으로 직접 전달하고 URI를 만들지 않는다. 실제 대상 값을 공개 소스에 넣지 않는다.
-Variables는 비밀 값이 아니므로 GitHub 환경 표시에서 보일 수 있다. 점검 명령 자체는 호스트·사용자명·
-프로젝트 식별자·비밀번호를 출력하지 않는다.
+workflow는 다섯 항목 모두 `secrets` 컨텍스트에서 읽고 GitHub의 Secret 마스킹을 적용받는다.
+점검 명령 자체도 호스트·사용자명·프로젝트 식별자·비밀번호를 출력하지 않는다.
 
 ## 실행과 안전 경계
 
 [workflow](../.github/workflows/supabase-cloud-readonly.yml)는 `workflow_dispatch` 전용이고
 `fvoci/GroundZero`의 `refs/heads/main`에서만 실행하도록 제한한다. 임의 checkout 입력이나 PR trigger는
 없으며 checkout은 dispatch의 `github.sha`를 사용한다. token은 `contents: read`, checkout의
-`persist-credentials`는 false다. 동시 실행을 직렬화하고 작업 전체는 5분으로 제한한다.
+`persist-credentials`는 false다. 동시 실행을 직렬화한다. 새 Rust 환경의 빌드를 위해 작업 전체는 15분,
+빌드 step은 12분으로 제한하고, 자격 증명을 사용하는 점검 step은 별도로 1분으로 제한한다.
+점검 프로그램 자체의 연결 5초·전체 20초 제한은 그대로 유지한다.
 
-고정 `false` 조건은 이번 PR에서 유지한다. **실제 실행을 위해 먼저 필요한 승인은 검토한 workflow의
-활성화 변경을 main에 반영하는 것**이다. 비활성 PR을 그대로 병합하는 것만으로 실행되지는 않는다.
-활성화·병합이 승인되고 완료된 뒤에만 main의 수동 workflow를 실행한다. 현재 PR 코드에 Secret을 주거나
-별도 경로로 Secret을 꺼내 실행하지 않는다. 기존 저장소에는 이 Cloud 설정을 사용하는 실행 경로가 없다.
+승인된 활성화 변경은 고정 `false` 차단만 제거하며 수동/main/저장소 제한은 유지한다. 검토와 일반 CI를
+통과한 정확한 PR HEAD를 merge commit으로 main에 반영한 뒤 수동 workflow를 한 번 실행한다.
+불확실한 dispatch는 run 목록으로 먼저 확인하고, 실패 후 추가 연결 시험은 별도 승인 없이 반복하지 않는다.
+PR 코드에 Secret을 주거나 별도 경로로 Secret을 꺼내 실행하지 않는다. 비밀번호의 실제 사용은
+GitHub Actions에서 Supabase DB 인증에만 한정한다.
 [GitHub 수동 실행 안내](https://docs.github.com/actions/managing-workflow-runs/manually-running-a-workflow)에
 따라 workflow 파일도 기본 브랜치에 있어야 한다.
 
@@ -95,5 +99,6 @@ native-tls를 재사용한다.
 | 실제 Cloud 연결·TLS·SELECT 1                                      | NOT RUN                                                |
 | Cloud workflow 수동 실행·DB 변경·마이그레이션·복구·전체 통합 시험 | NOT RUN                                                |
 
-일반 PR CI의 로컬 Supabase 작업과 이 비활성 Cloud workflow는 별개다. 일반 CI 성공을 실제 Cloud
-연결 성공으로 표시하지 않는다. 고정 `false`로 건너뛴 job 역시 실제 연결 성공을 뜻하지 않는다.
+위 실제 실행 NOT RUN은 이 문서를 작성한 코드 검증 시점의 기록이다. 일반 CI의 로컬 Supabase 작업과
+Cloud 연결 점검은 별개이며, 실행 후에는 해당 run의 연결/TLS/쿼리 JSON과 종료 상태를 함께 확인한다.
+일반 CI나 조건 불일치로 건너뛴 job의 성공을 실제 Cloud 연결 성공으로 표시하지 않는다.
