@@ -54,6 +54,7 @@
       newLinkUrl = undefined;
       void loadShares();
       void loadLinks();
+      void refreshSettings();
     }
     if (next === 'copy') {
       copyTitle = m.documents_copy_default_title({ title: doc.title });
@@ -96,18 +97,56 @@
     }
   }
 
-  async function setSettings(
-    visibility: 'workspace' | 'private',
-    allowCopy: boolean,
-  ): Promise<void> {
+  // 설정을 읽거나 바꾼 순서. 다시 읽기가 늦게 와 그 뒤에 바꾼 설정을 덮지 않게 한다.
+  let settingsSeq = 0;
+
+  // 화면의 문서는 연 뒤로 다시 읽지 않는다. 그사이 다른 소유자가 바꾼 설정(비공개·복제 금지)을 보이고, 바꿀 때 되돌리지
+  // 않도록 설정 창을 열 때와 설정을 보내기 직전에 서버의 지금 값을 읽는다.
+  async function refreshSettings(): Promise<void> {
+    const mine = ++settingsSeq;
     try {
-      onchanged(await api.setSettings(doc.id, visibility, allowCopy));
+      const fresh = await api.document(doc.id);
+      if (mine !== settingsSeq || fresh.id !== doc.id) return;
+      onchanged({
+        ...doc,
+        visibility: fresh.visibility,
+        allow_copy: fresh.allow_copy,
+        is_template: fresh.is_template,
+      });
     } catch (e: unknown) {
       fail(e);
     }
   }
 
+  // 설정 요청이 진행 중인지. 끝나기 전에 다른 설정을 누르면 첫 변경 전의 값을 함께 보내게 되므로 그동안 막는다.
+  let settingsBusy = $state(false);
+
+  /** 바꾼 설정 하나만 고르고, 건드리지 않은 설정은 서버의 지금 값으로 보낸다. */
+  async function setSettings(change: {
+    visibility?: 'workspace' | 'private';
+    allowCopy?: boolean;
+  }): Promise<void> {
+    if (settingsBusy) return;
+    settingsBusy = true;
+    settingsSeq += 1;
+    try {
+      const fresh = await api.document(doc.id);
+      onchanged(
+        await api.setSettings(
+          doc.id,
+          change.visibility ?? fresh.visibility,
+          change.allowCopy ?? fresh.allow_copy,
+        ),
+      );
+    } catch (e: unknown) {
+      fail(e);
+    } finally {
+      settingsBusy = false;
+    }
+  }
+
   async function setTemplate(on: boolean): Promise<void> {
+    settingsSeq += 1;
     try {
       await api.setDocumentTemplate(doc.id, on);
       onchanged({ ...doc, is_template: on });
@@ -395,10 +434,10 @@
           <div class="flex items-center gap-2">
             <Checkbox
               id="doc-private"
-              disabled={restrictOnly && doc.visibility === 'private'}
+              disabled={settingsBusy || (restrictOnly && doc.visibility === 'private')}
               checked={doc.visibility === 'private'}
               onCheckedChange={(v) =>
-                void setSettings(v === true ? 'private' : 'workspace', doc.allow_copy)}
+                void setSettings({ visibility: v === true ? 'private' : 'workspace' })}
             />
             <Label for="doc-private">{m.documents_private_label()}</Label>
           </div>
@@ -406,9 +445,9 @@
         <div class="flex items-center gap-2">
           <Checkbox
             id="doc-allow-copy"
-            disabled={restrictOnly && !doc.allow_copy}
+            disabled={settingsBusy || (restrictOnly && !doc.allow_copy)}
             checked={doc.allow_copy}
-            onCheckedChange={(v) => void setSettings(doc.visibility, v === true)}
+            onCheckedChange={(v) => void setSettings({ allowCopy: v === true })}
           />
           <Label for="doc-allow-copy">{m.documents_allow_copy()}</Label>
         </div>
