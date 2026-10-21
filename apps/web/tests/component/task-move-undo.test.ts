@@ -132,6 +132,37 @@ describe('kanban undo', () => {
     expect(document.activeElement).toBe(card('a'));
   });
 
+  it('undo goes back before the card that was next on the server, not on the optimistic screen', async () => {
+    // 서버 [A,B,C]. B를 열 끝으로 옮기고 응답을 기다리는 동안(화면 [A,C,B]) A를 오른쪽으로 옮겨 성공, 그 뒤 B의 이동이
+    // 실패한다. A의 원점은 서버 기준 "B 앞"이어야 한다. 화면 배열에서 원점을 잡으면 "C 앞"으로 되돌려 [B,A,C]가 된다.
+    const three = [task('a', 'API 연결'), task('b', '문서 검토'), task('c', '회의 준비')];
+    const afterA = [task('b', '문서 검토'), task('c', '회의 준비'), movedA];
+    lists(three, afterA, afterA, afterA, afterA);
+    let failB: (e: Error) => void = () => undefined;
+    const bMove = new Promise<Awaited<ReturnType<typeof api.moveTask>>>((_, reject) => {
+      failB = reject;
+    });
+    const move = vi
+      .spyOn(api, 'moveTask')
+      .mockImplementation((id) =>
+        id === 'b' ? bMove : Promise.resolve({ ...movedA, checklist: [] }),
+      );
+    await mount();
+    await fireEvent.keyDown(card('b'), { key: 'ArrowDown', altKey: true });
+    await tick();
+    expect(move).toHaveBeenLastCalledWith('b', 'todo', null, undefined);
+    await moveRight('a');
+    await flush();
+    expect(undoButton()).not.toBeNull();
+    failB(new ApiError(400, 'stale', 'moved meanwhile'));
+    await flush();
+    const button = undoButton();
+    if (button === null) throw new Error('undo');
+    await fireEvent.click(button);
+    await flush();
+    expect(move).toHaveBeenLastCalledWith('a', 'todo', 'b', 2);
+  });
+
   it('does not offer undo while the result is unknown', async () => {
     let call = 0;
     vi.spyOn(api, 'tasks').mockImplementation(() => {

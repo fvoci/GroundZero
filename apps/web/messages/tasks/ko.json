@@ -276,6 +276,7 @@
   "tasks_move_not_saved": "{title}: 저장되지 않았습니다. 카드를 서버에 있는 자리로 되돌렸습니다.",
   "tasks_move_changed": "{title}: 그사이 다른 곳에서 바뀌어 서버의 최신 상태로 보여 줍니다.",
   "tasks_move_busy": "{title}: 앞선 이동을 저장하는 중입니다. 끝난 뒤 다시 옮기세요.",
+  "tasks_move_unordered": "{title}: 기본 순서가 아닐 때는 열 안 순서를 바꿀 수 없습니다. 정렬을 기본 순서로 바꾼 뒤 옮기세요.",
   "tasks_move_recheck": "다시 확인",
   "tasks_move_retry": "다시 시도",
   "tasks_move_keep": "그대로 두기",

@@ -87,3 +87,42 @@ describe('move menu within a column', () => {
     expect(move.mock.calls[0]?.slice(0, 3)).toEqual(['2', 'todo', '1']);
   });
 });
+
+// 기본 순서가 아닌 정렬(제목순)에서는 같은 열 안 재정렬을 막는다(D-79). 단추·메뉴·키보드가 같은 진입점의 규칙을 따른다.
+describe('reordering under a non-default sort', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+    window.sessionStorage.clear();
+    vi.spyOn(api, 'tasks').mockResolvedValue([task('1', '문서 검토'), task('2', 'API 연결')]);
+    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('Alt+Up/Down sends no move in title order, while Alt+Right still changes the column', async () => {
+    const move = vi
+      .spyOn(api, 'moveTask')
+      .mockResolvedValue({ ...task('1', '문서 검토'), status: 'in_progress', checklist: [] });
+    render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    await screen.findByRole('button', { name: '문서 검토 옮기기' });
+    const card = document.querySelector<HTMLElement>('[data-task-card="1"]');
+    if (card === null) throw new Error('card');
+    await fireEvent.change(screen.getByRole('combobox', { name: '정렬' }), {
+      target: { value: 'title' },
+    });
+    // 제목순에서 "문서 검토"는 두 번째다. 위로 옮기면 저장된 기본 순서(첫 번째)를 바꾸게 되므로 보내지 않는다.
+    await fireEvent.keyDown(card, { key: 'ArrowUp', altKey: true });
+    await fireEvent.keyDown(card, { key: 'ArrowDown', altKey: true });
+    expect(move).not.toHaveBeenCalled();
+    expect(
+      [...document.querySelectorAll('[aria-live="polite"]')].map((e) => e.textContent).join(' '),
+    ).toContain('열 안 순서를 바꿀 수 없습니다');
+    await fireEvent.keyDown(card, { key: 'ArrowRight', altKey: true });
+    await waitFor(() => {
+      expect(move).toHaveBeenCalledTimes(1);
+    });
+    expect(move.mock.calls[0]?.slice(0, 3)).toEqual(['1', 'in_progress', null]);
+  });
+});
