@@ -1,8 +1,16 @@
 // 감사 기록의 동작·대상 이름(D-57). 모르는 코드는 그대로 보인다.
 // 표시 언어가 바뀔 수 있어 메시지 함수를 담아 두고 부를 때 계산한다(D-81).
+import { ITEM_STATUSES } from '$lib/api/client';
+import { asRole, roleLabel } from '$lib/features/members/roles';
+import { itemStatusLabel } from '$lib/features/modules/profile';
 import { m } from '$lib/paraglide/messages.js';
 
 const ACTION: Record<string, () => string> = {
+  archive: m.audit_action_archive,
+  unarchive: m.audit_action_unarchive,
+  mark_template: m.audit_action_mark_template,
+  unmark_template: m.audit_action_unmark_template,
+  set_realtime: m.audit_action_set_realtime,
   create: m.audit_action_create,
   rename: m.audit_action_rename,
   move_in: m.audit_action_move_in,
@@ -82,12 +90,50 @@ export function auditTarget(type: string): string {
   return Object.hasOwn(TARGET, type) ? (TARGET[type]?.() ?? type) : type;
 }
 
-/** 기록의 detail에서 사람이 알아볼 이름(제목·이름·이메일). */
-export function auditSubject(detail: unknown): string {
+function visibilityLabel(value: string): string {
+  if (value === 'workspace') return m.modules_shared_workspace();
+  if (value === 'private') return m.modules_private();
+  return '';
+}
+
+function statusLabel(value: string): string {
+  const status = ITEM_STATUSES.find((s) => s === value);
+  return status === undefined ? '' : itemStatusLabel(status);
+}
+
+function roleText(value: string): string {
+  const role = asRole(value);
+  return role === undefined ? '' : roleLabel(role);
+}
+
+/**
+ * `to`가 코드인 동작: 표시 이름으로 바꾼다. 모르는 코드와 사용자 id(리더)는 보이지 않는다(D-12). 사용자 이름은
+ * 서버가 detail에 넣어 주어야 보일 수 있다.
+ */
+const CODED_TO: Record<string, (value: string) => string> = {
+  change_role: roleText,
+  change_visibility: visibilityLabel,
+  change_status: statusLabel,
+  change_leader: () => '',
+  unset_leader: () => '',
+  // 반복 규칙(RRULE) 원문은 사람이 읽을 글이 아니다.
+  set_recurrence: () => '',
+};
+
+/** 기록의 detail에서 사람이 알아볼 이름(제목·이름·이메일, 바뀐 값의 표시 이름). */
+export function auditSubject(detail: unknown, action = ''): string {
   if (typeof detail !== 'object' || detail === null) return '';
+  if (action === 'set_realtime') {
+    const enabled: unknown = Reflect.get(detail, 'enabled');
+    if (typeof enabled === 'boolean')
+      return enabled ? m.audit_realtime_on() : m.audit_realtime_off();
+    return '';
+  }
   for (const key of ['title', 'name', 'email', 'to']) {
     const value: unknown = Reflect.get(detail, key);
-    if (typeof value === 'string' && value !== '') return value;
+    if (typeof value !== 'string' || value === '') continue;
+    if (key === 'to' && Object.hasOwn(CODED_TO, action)) return CODED_TO[action]?.(value) ?? '';
+    return value;
   }
   return '';
 }

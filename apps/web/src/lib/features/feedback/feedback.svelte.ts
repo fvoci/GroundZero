@@ -1,5 +1,6 @@
 // 사용자 피드백 규칙(D-82). 일반 완료는 토스트, 입력 오류는 필드 옆, 저장 실패·충돌은 그 화면에 남는 메시지, 연결
-// 상태는 배너, 멘션·초대는 알림함이다. 이 모듈은 토스트와 연결 배너만 맡는다(나머지는 각 화면이 그 자리에서 보인다).
+// 상태는 배너, 멘션·초대는 알림함이다. 이 모듈은 토스트와 연결·로그인 배너만 맡는다(나머지는 각 화면이 그 자리에서
+// 보인다).
 // 문구는 부르는 쪽이 i18n 메시지로 넘긴다(D-81).
 import { toast } from 'svelte-sonner';
 
@@ -31,6 +32,27 @@ function probe(): void {
   }, 5_000);
 }
 
+/**
+ * 로그인 상태(배너). 쓰는 중에 세션이 끝나(만료·다른 탭에서 로그아웃) API가 401을 돌려주면 `expired`. 화면을 다시
+ * 읽지 않고 새 탭에서 로그인하게 해 이 창의 입력을 지킨다. 세션이 필요한 요청이 다시 성공하면 내린다.
+ */
+export const auth = $state({ expired: false });
+
+// 401을 알린 횟수. 요청은 시작할 때 이 값을 적어 두고, 그 뒤 401이 없었을 때만 성공으로 배너를 내린다(401보다 먼저
+// 시작한 요청의 늦은 성공은 세션이 돌아왔다는 뜻이 아니다).
+let expiries = 0;
+
+/** 세션이 필요한 API가 401을 돌려줬을 때 부른다(처음 로그인 확인 `/api/me`는 제외). */
+export function reportSessionExpired(): void {
+  expiries += 1;
+  auth.expired = true;
+}
+
+/** 지금까지 알린 세션 만료(401) 횟수. */
+export function sessionExpiries(): number {
+  return expiries;
+}
+
 /** API가 응답 없이 실패했을 때(NetworkError) 부른다. */
 export function reportConnectionLost(): void {
   connection.lost = true;
@@ -54,4 +76,19 @@ export function watchConnection(): () => void {
     if (probing !== undefined) clearInterval(probing);
     probing = undefined;
   };
+}
+
+// 다른 계정으로 바뀌어 이 창을 처음부터 다시 읽는 중인지. 이때는 저장 안 한 편집 경고로 다시 읽기를 막지 않는다
+// (막고 남으면 앞 계정의 화면과 입력이 새 계정의 세션으로 요청을 보낸다). 입력은 앞 계정의 초안(사용자별 키)으로
+// 이미 남아 있다.
+let switching = false;
+
+/** 다른 계정으로 바뀌어 다시 읽기 직전에 부른다. */
+export function markAccountSwitch(): void {
+  switching = true;
+}
+
+/** 다른 계정으로 바뀌어 다시 읽는 중인지. */
+export function accountSwitching(): boolean {
+  return switching;
 }
