@@ -141,13 +141,18 @@
     }
   }
 
+  // 템플릿도 같은 문서의 설정이다. 겹쳐 보내면 늦게 온 다른 설정 응답(그때의 템플릿 값)이 화면을 서버와 다르게 되돌린다.
   async function setTemplate(on: boolean): Promise<void> {
+    if (settingsBusy) return;
+    settingsBusy = true;
     settingsSeq += 1;
     try {
       await api.setDocumentTemplate(doc.id, on);
       onchanged({ ...doc, is_template: on });
     } catch (e: unknown) {
       fail(e);
+    } finally {
+      settingsBusy = false;
     }
   }
 
@@ -451,6 +456,7 @@
           <div class="flex items-center gap-2">
             <Checkbox
               id="doc-template"
+              disabled={settingsBusy}
               checked={doc.is_template}
               onCheckedChange={(v) => void setTemplate(v === true)}
             />

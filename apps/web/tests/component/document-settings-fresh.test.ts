@@ -115,4 +115,44 @@ describe('document settings from an out-of-date view', () => {
     expect(set).toHaveBeenCalledTimes(1);
     finish();
   });
+
+  it('does not change the template setting while another setting is being saved', async () => {
+    vi.spyOn(api, 'document').mockResolvedValue(documentWith('workspace', true));
+    // 서버의 템플릿 값. 설정 변경은 먼저 처리되어 그때의 값(꺼짐)을 돌려주고, 응답만 늦게 온다.
+    let serverTemplate = false;
+    let finish: () => void = () => undefined;
+    vi.spyOn(api, 'setSettings').mockImplementation((_id, change) => {
+      const done: DocumentView = {
+        ...documentWith(change.visibility ?? 'workspace', true),
+        is_template: serverTemplate,
+      };
+      return new Promise((resolve) => {
+        finish = () => {
+          resolve(done);
+        };
+      });
+    });
+    const template = vi.spyOn(api, 'setDocumentTemplate').mockImplementation((_id, on) => {
+      serverTemplate = on;
+      return Promise.resolve(undefined);
+    });
+    const changed = vi.fn<(doc: DocumentView) => void>();
+    render(DocumentActions, {
+      props: { doc: documentWith('workspace', true), workspaces, onchanged: changed },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+
+    // 비공개를 누르고, 응답이 오기 전에 템플릿도 누른다.
+    await fireEvent.click(await screen.findByRole('checkbox', { name: /^비공개/ }));
+    await fireEvent.click(screen.getByRole('checkbox', { name: /^템플릿으로 쓰기/ }));
+    await new Promise((r) => setTimeout(r, 0));
+    finish();
+    await waitFor(() => {
+      expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ visibility: 'private' }));
+    });
+
+    // 늦게 온 설정 응답이 템플릿 표시를 서버와 다르게 되돌리지 않는다. 첫 요청이 끝나기 전에는 템플릿을 바꾸지 않는다.
+    expect(changed.mock.lastCall?.[0].is_template).toBe(serverTemplate);
+    expect(template).not.toHaveBeenCalled();
+  });
 });
