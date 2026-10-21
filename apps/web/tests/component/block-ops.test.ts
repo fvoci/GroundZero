@@ -8,6 +8,7 @@ import {
   blockStartingAt,
   handleOffset,
   HANDLE_ROW,
+  insertDivider,
   mapBlockStart,
   mapBlockStartThrough,
   runBlockOp,
@@ -315,5 +316,68 @@ describe('handle placement', () => {
     expect(top + offset + HANDLE_ROW / 2).toBe(top + 0.5);
     expect(handleOffset(HANDLE_ROW)).toBe(0);
     expect(handleOffset(120)).toBe(0);
+  });
+});
+
+describe('divider from the / menu', () => {
+  /** "/구분"을 친 빈 문단의 글자 범위(메뉴가 지우는 범위). */
+  function slashRange(e: Editor, text: string): { from: number; to: number } {
+    const from = posOf(e, text) - 1;
+    // 메뉴를 고를 때 커서는 친 글자 끝에 있다.
+    e.commands.setTextSelection(from + text.length);
+    return { from, to: from + text.length };
+  }
+
+  it('keeps the checklist below and puts the cursor in a new paragraph under the divider', () => {
+    const e = make({
+      type: 'doc',
+      content: [p('위 문단'), p('/구분'), { type: 'taskList', content: [task('체크 항목', true)] }],
+    });
+    expect(insertDivider(e, slashRange(e, '/구분'))).toBe(true);
+    // 전에는 체크리스트를 통째로 고른 채 끝나 다음 입력이 그 항목을 덮어썼다.
+    e.commands.insertContent('이어 쓰기');
+    // 마지막의 빈 문단은 편집기의 끝 문단 규칙(목록이 끝이면 빈 문단을 둔다).
+    expect(texts(e)).toEqual(['위 문단', '', '이어 쓰기', '[x]체크 항목', '']);
+    expect(e.state.doc.child(1).type.name).toBe('horizontalRule');
+
+    // 대조: Tiptap 명령만 쓰면(고치기 전) 같은 입력이 체크 항목을 덮어쓴다.
+    const old = make({
+      type: 'doc',
+      content: [p('위 문단'), p('/구분'), { type: 'taskList', content: [task('체크 항목', true)] }],
+    });
+    const range = slashRange(old, '/구분');
+    old.chain().focus().deleteRange(range).setHorizontalRule().run();
+    old.commands.insertContent('이어 쓰기');
+    expect(texts(old)).not.toContain('[x]체크 항목');
+  });
+
+  it('does it in one change (a single update notice)', () => {
+    const e = make({
+      type: 'doc',
+      content: [p('위 문단'), p('/구분'), { type: 'taskList', content: [task('체크 항목', true)] }],
+    });
+    const range = slashRange(e, '/구분');
+    let updates = 0;
+    e.on('update', () => {
+      updates += 1;
+    });
+    insertDivider(e, range);
+    // 전에는 구분선과 빈 문단을 따로 반영해 변경 알림이 두 번(첫 번째는 빈 문단이 없는 중간 문서) 나갔다.
+    expect(updates).toBe(1);
+    expect(texts(e)).toEqual(['위 문단', '', '', '[x]체크 항목', '']);
+  });
+
+  it('moves into the following paragraph as before when the next block is text', () => {
+    const e = make({ type: 'doc', content: [p('/구분'), p('아래 문단')] });
+    insertDivider(e, slashRange(e, '/구분'));
+    e.commands.insertContent('앞에 ');
+    expect(texts(e)).toEqual(['', '앞에 아래 문단']);
+  });
+
+  it('adds an empty paragraph at the end of the document', () => {
+    const e = make({ type: 'doc', content: [p('위 문단'), p('/구분')] });
+    insertDivider(e, slashRange(e, '/구분'));
+    e.commands.insertContent('끝');
+    expect(texts(e)).toEqual(['위 문단', '', '끝']);
   });
 });

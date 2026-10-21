@@ -60,7 +60,10 @@
   let form = $state<TaskInput | undefined>(undefined);
   let tagsText = $state('');
   let estimateText = $state('');
-  let people = $state<AssigneeView[]>([]);
+  // 지정할 수 있는 사람. 받기 전(undefined)에는 "없습니다"를 보이지 않는다.
+  let people = $state<AssigneeView[] | undefined>(undefined);
+  // 지정할 수 있는 사람을 받지 못했을 때의 안내(업무는 받았으므로 업무 불러오기 실패와 따로 알린다).
+  let peopleError = $state<string | undefined>(undefined);
   let conflict = $state<TaskDetailView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
   let saved = $state(false);
@@ -152,10 +155,20 @@
     error = undefined;
     void api
       .task(id)
-      .then(async (detail) => {
+      .then((detail) => {
         if (cancelled) return;
         fill(detail);
-        people = await api.assignable(detail.item_id);
+        peopleError = undefined;
+        void api.assignable(detail.item_id).then(
+          (assignable) => {
+            if (!cancelled) people = assignable;
+          },
+          (e: unknown) => {
+            if (cancelled) return;
+            people = undefined;
+            peopleError = errorText(e, m.tasks_assignable_load_failed());
+          },
+        );
       })
       .catch((e: unknown) => {
         if (!cancelled)
@@ -500,21 +513,27 @@
       <fieldset class="flex flex-col gap-2 md:col-span-2">
         <legend class="text-sm font-medium">{m.tasks_assignees()}</legend>
         <div class="flex flex-wrap gap-3">
-          {#each people as person (person.user_id)}
-            <span class="flex items-center gap-1.5">
-              <Checkbox
-                id={`assignee-${person.user_id}`}
-                checked={f.assignee_ids.includes(person.user_id)}
-                disabled={!canEdit}
-                onCheckedChange={(v) => {
-                  toggleAssignee(person.user_id, v === true);
-                }}
-              />
-              <Label for={`assignee-${person.user_id}`}>{person.display_name}</Label>
-            </span>
+          {#if peopleError !== undefined}
+            <span class="text-sm text-destructive" role="alert">{peopleError}</span>
+          {:else if people === undefined}
+            <span class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</span>
           {:else}
-            <span class="text-sm text-muted-foreground">{m.tasks_no_assignable()}</span>
-          {/each}
+            {#each people as person (person.user_id)}
+              <span class="flex items-center gap-1.5">
+                <Checkbox
+                  id={`assignee-${person.user_id}`}
+                  checked={f.assignee_ids.includes(person.user_id)}
+                  disabled={!canEdit}
+                  onCheckedChange={(v) => {
+                    toggleAssignee(person.user_id, v === true);
+                  }}
+                />
+                <Label for={`assignee-${person.user_id}`}>{person.display_name}</Label>
+              </span>
+            {:else}
+              <span class="text-sm text-muted-foreground">{m.tasks_no_assignable()}</span>
+            {/each}
+          {/if}
         </div>
       </fieldset>
       {#if canEdit}

@@ -21,7 +21,7 @@
   import { Button } from '$lib/ui/button';
 
   import BlockControls from './BlockControls.svelte';
-  import { BlockKeys } from './block-ops';
+  import { BlockKeys, insertDivider } from './block-ops';
   import {
     BLOCK_KINDS,
     blockKindHint,
@@ -91,7 +91,7 @@
         hint: m.documents_hint_divider(),
         keywords: ['divider', 'hr', 'rule', 'line', '구분선', '---'],
         run: (e, range) => {
-          e.chain().focus().deleteRange(range).setHorizontalRule().run();
+          insertDivider(e, range);
         },
       },
       {
