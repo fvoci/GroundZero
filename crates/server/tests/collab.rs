@@ -1542,7 +1542,8 @@ async fn a_reader_cannot_make_rooms_persist_through_version_delete() {
 }
 
 /// 검토 8번: 열린 방의 문서를 다른 워크스페이스로 옮기면 방도 새 워크스페이스에 속한다. 새 워크스페이스에서 실시간을
-/// 끄면 그 방도 리비전을 남기고 닫혀야 한다(전에는 옛 워크스페이스로 남아 권한 재확인 때까지 열려 있었다).
+/// 끄면 그 방도 리비전을 남기고 닫혀야 한다(전에는 옛 워크스페이스로 남아 권한 재확인 때까지 열려 있었다). #71 뒤로는
+/// 옮길 때 방이 편집을 리비전으로 남기고 닫혀(4409) 새 자리에서 다시 연다.
 #[tokio::test]
 async fn a_moved_room_follows_its_document_to_the_new_workspace() {
     let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
@@ -1587,7 +1588,14 @@ async fn a_moved_room_follows_its_document_to_the_new_workspace() {
     )
     .await;
     assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    assert_eq!(a.closed().await, Some(4409));
 
+    // 새 자리에서 다시 연 방에서 고친다(다른 연결이 받은 것을 확인한다).
+    let mut b = connect(addr, Some(&admin), &id, true).await.unwrap();
+    assert!(b.text().contains("옮기기 전 실시간 문단"), "{}", b.text());
+    let mut c = connect(addr, Some(&admin), &id, true).await.unwrap();
+    b.paragraph("옮긴 뒤 실시간 문단").await;
+    assert!(c.until(|c| c.text().contains("옮긴 뒤 실시간 문단")).await);
     let off = send(
         &app,
         Method::PUT,
@@ -1597,7 +1605,8 @@ async fn a_moved_room_follows_its_document_to_the_new_workspace() {
     )
     .await;
     assert_eq!(off.status, StatusCode::NO_CONTENT, "{:?}", off.json);
-    assert_eq!(a.closed().await, Some(4410));
+    assert_eq!(b.closed().await, Some(4410));
+    assert_eq!(c.closed().await, Some(4410));
     let saved = send(
         &app,
         Method::GET,
@@ -1609,6 +1618,10 @@ async fn a_moved_room_follows_its_document_to_the_new_workspace() {
     .json;
     assert!(
         saved["body"].to_string().contains("옮기기 전 실시간 문단"),
+        "{saved}"
+    );
+    assert!(
+        saved["body"].to_string().contains("옮긴 뒤 실시간 문단"),
         "{saved}"
     );
 }
@@ -2229,8 +2242,8 @@ async fn moving_a_live_document_into_a_realtime_off_workspace_keeps_the_live_edi
     )
     .await;
     assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
-    // 다음 확인에서 편집자는 접근을 잃고 연결이 닫힌다(방도 닫힌다).
-    assert!(e.closed().await.is_some());
+    // 옮기면 방은 편집을 리비전으로 남기고 연결을 닫는다(새 자리의 권한·설정으로 다시 연다, #71).
+    assert_eq!(e.closed().await, Some(4409));
     let saved = send(
         &app,
         Method::GET,
@@ -2457,4 +2470,321 @@ async fn a_move_without_permission_leaves_the_room_alone() {
     );
     e.close().await;
     watcher.close().await;
+}
+
+impl Client {
+    /// 문단을 보내되, 서버가 이미 연결을 닫았으면 보내지 못해도 넘어간다.
+    async fn try_paragraph(&mut self, text: &'static str) {
+        let before = self.doc.transact().state_vector();
+        let fragment = self.doc.get_or_insert_xml_fragment(FRAGMENT);
+        {
+            let mut txn = self.doc.transact_mut();
+            let p = fragment.push_back(&mut txn, XmlElementPrelim::empty("paragraph"));
+            p.push_back(&mut txn, XmlTextPrelim::new(text));
+        }
+        let diff = self.doc.transact().encode_state_as_update_v1(&before);
+        let frame = Message::Sync(SyncMessage::Update(diff)).encode_v1();
+        let _ignored = self.ws.send(WsMessage::Binary(frame.into())).await;
+    }
+}
+
+/// 받은 저장 확인 가운데 이 연결이 보낸 편집을 모두 담은 것이 있는지(브라우저는 그때 복구용 초안을 지운다).
+fn acked(c: &Client) -> bool {
+    let mine = c.doc.client_id();
+    let sent = c.doc.transact().state_vector().get(&mine);
+    c.persisted.iter().any(|bytes| {
+        yrs::Snapshot::decode_v1(bytes)
+            .unwrap()
+            .state_map
+            .get(&mine)
+            >= sent
+    })
+}
+
+/// #71 시험 준비: 실시간을 켠 곳(작성자·독자)과 끈 곳, 작성자가 실시간으로 쓴 문단을 독자 연결이 받은 문서. 작성자는 끈
+/// 곳의 멤버가 아니다. 지켜보는 연결은 독자다: 쓸 수 있는 사람이 연결돼 있으면 방이 닫힐 때 그 사람이 작성자가 되어 잃음이
+/// 가려진다. 권한 재확인(기본 30초)은 시험 중에 돌지 않게 한다. (앱, 주소, 관리자, 켠 곳, 끈 곳, 문서 id, 작성자 연결,
+/// 독자 연결).
+async fn live_move_race_setup(
+    label: &str,
+) -> (
+    Router,
+    SocketAddr,
+    TestUser,
+    String,
+    String,
+    String,
+    Client,
+    Client,
+) {
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "3600")]))
+            .unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let from = create_workspace(&app, &admin, &format!("{label} 켠 곳")).await;
+    let to = create_workspace(&app, &admin, &format!("{label} 끈 곳")).await;
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{from}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let (reader, _) = add_member(&app, &state, &admin, &from, "reader", "reader").await;
+    let doc = common::create_doc(&app, &admin, &from, label).await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let mut e = connect(addr, Some(&writer), &id, true).await.unwrap();
+    e.paragraph("체크포인트 전 문단").await;
+    let mut r = connect(addr, Some(&reader), &id, true).await.unwrap();
+    assert!(r.until(|c| c.text().contains("체크포인트 전 문단")).await);
+    (app, addr, admin, from, to, id, e, r)
+}
+
+/// 이 워크스페이스의 문서 나무 잠금(이동이 새 자리에서 `app_lock_move`로 잡는 것)을 쥔 트랜잭션과 그 연결의 pid.
+async fn hold_tree(
+    owner: &sqlx::PgPool,
+    workspace: &str,
+) -> (sqlx::Transaction<'static, sqlx::Postgres>, i32) {
+    let mut hold = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *hold)
+        .await
+        .unwrap();
+    sqlx::query("SELECT fvoci.app_lock_tree($1::uuid, NULL, NULL)")
+        .bind(workspace)
+        .execute(&mut *hold)
+        .await
+        .unwrap();
+    (hold, holder)
+}
+
+async fn get_doc(app: &Router, user: &TestUser, id: &str) -> serde_json::Value {
+    send(
+        app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(user),
+        None,
+    )
+    .await
+    .json
+}
+
+/// #71: 옮기기 전 체크포인트가 답한 뒤 이동이 커밋되기까지 온 편집. 전에는 방이 그 편집을 받아 저장 확인을 보냈고(브라우저는
+/// 초안을 지운다), 옮긴 곳에서 편집자가 쓸 수 없고 실시간이 꺼져 있으면 방이 닫힐 때 리비전으로 남지 못해 사라졌다. 이제
+/// 이동은 방 안에서 한다: 그동안 편집은 방의 대기열에서 기다리고(넣지도 확인하지도 않음), 커밋 뒤 그 편집을 넣어 리비전(옮기는
+/// 사람이 대신 작성자)으로 남긴 다음에야 확인을 보내고 연결을 4409로 닫는다. 새 자리의 나무 잠금을 쥐어 이동을 체크포인트
+/// 뒤에 붙잡는다.
+#[tokio::test]
+async fn edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledged() {
+    let (app, _addr, admin, _from, to, id, mut e, mut r) =
+        live_move_race_setup("체크포인트 뒤 편집").await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let (hold, holder) = hold_tree(&owner, &to).await;
+    let request = tokio::spawn({
+        let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
+        async move { move_to(&app, &admin, &id, &to).await }
+    });
+    // 이동이 새 자리 잠금을 기다린다: 체크포인트는 이미 답했다.
+    until_waiting_on_lock("app_lock_move", holder).await;
+    e.paragraph("체크포인트 뒤 문단").await;
+    // 이동이 붙잡힌 동안 주기 저장(3초)보다 오래 지켜본다.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(4);
+    while tokio::time::Instant::now() < deadline {
+        let _ = e.next(Duration::from_millis(100)).await;
+        let _ = r.next(Duration::from_millis(100)).await;
+    }
+    let acked_while_held = acked(&e);
+    hold.rollback().await.unwrap();
+    let moved = request.await.unwrap();
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    // 방이 연결을 닫을 때까지(고친 뒤: 4409) 오는 저장 확인을 모은다.
+    let writer_closed = e.closed().await;
+    let acked_at_all = acked(&e);
+    // 고치기 전에는 연결이 열려 있다. 편집자가 권한 재확인으로 닫히는 것처럼 닫는다(마지막 사람이 나가면 방이 닫힌다).
+    e.close().await;
+    r.close().await;
+    let mut saved = get_doc(&app, &admin, &id).await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while !saved["body"].to_string().contains("체크포인트 뒤 문단")
+        && tokio::time::Instant::now() < deadline
+    {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        saved = get_doc(&app, &admin, &id).await;
+    }
+    let kept = saved["body"].to_string().contains("체크포인트 뒤 문단");
+    assert!(
+        kept || !acked_at_all,
+        "the edit made after the checkpoint was acknowledged but is not in the moved document: {saved}"
+    );
+    // 고친 동작: 이동이 끝나기 전에는 확인하지 않고, 커밋 뒤 리비전으로 남긴 다음 확인하고 4409로 닫는다.
+    assert!(
+        !acked_while_held,
+        "the edit was acknowledged while the move was pending"
+    );
+    assert!(kept, "{saved}");
+    assert!(acked_at_all, "the kept edit was never acknowledged");
+    assert_eq!(writer_closed, Some(4409));
+    assert_eq!(saved["workspace_id"], to.as_str());
+    let author: uuid::Uuid = sqlx::query_scalar(
+        "SELECT author FROM fvoci.document_revisions WHERE document_id = $1::uuid ORDER BY revision DESC LIMIT 1",
+    )
+    .bind(&id)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert_eq!(
+        author, admin.id.0,
+        "the mover stands in for an editor who cannot write in the new place"
+    );
+    // 이동의 답은 그 리비전까지 담은 문서다(화면이 그 판으로 이어 간다).
+    assert_eq!(moved.json["document"]["revision"], saved["revision"]);
+    assert!(
+        moved.json["document"]["body"]
+            .to_string()
+            .contains("체크포인트 뒤 문단")
+    );
+    owner.close().await;
+}
+
+/// #71: 이동이 붙잡혀 있는 동안 대기열에서 기다린 편집은, 이동이 일어나지 않으면(확인한 미리보기가 달라 409) 평소처럼
+/// 받아 다른 연결에 보내고 저장을 확인한다. 연결은 그대로다.
+#[tokio::test]
+async fn edits_held_by_a_move_that_does_not_happen_are_accepted() {
+    let (app, _addr, admin, from, to, id, mut e, mut r) =
+        live_move_race_setup("일어나지 않은 이동").await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let (hold, holder) = hold_tree(&owner, &to).await;
+    let request = tokio::spawn({
+        let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
+        async move {
+            // 미리보기와 다른 확인 값: 잠근 뒤 다시 계산한 미리보기와 달라 옮기지 않는다.
+            send(
+                &app,
+                Method::POST,
+                &format!("/api/documents/{id}/move"),
+                Some(&admin),
+                Some(json!({ "target_workspace_id": to, "target_item_id": null,
+                             "acknowledged": { "gains": ["없는 사람"], "loses": [] } })),
+            )
+            .await
+        }
+    });
+    until_waiting_on_lock("app_lock_move", holder).await;
+    e.paragraph("체크포인트 뒤 문단").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    hold.rollback().await.unwrap();
+    let refused = request.await.unwrap();
+    assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
+    assert!(refused.json["gains"].is_array(), "{:?}", refused.json);
+    assert!(
+        r.until(|c| c.text().contains("체크포인트 뒤 문단")).await,
+        "the held edit did not reach the other connection"
+    );
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
+    let mut closed = None;
+    while !acked(&e) && tokio::time::Instant::now() < deadline {
+        if let Event::Closed(code) = e.next(Duration::from_millis(200)).await {
+            closed = Some(code);
+            break;
+        }
+    }
+    assert_eq!(closed, None, "the connection was closed");
+    assert!(acked(&e), "the held edit was not acknowledged");
+    let doc = get_doc(&app, &admin, &id).await;
+    assert_eq!(doc["workspace_id"], from.as_str(), "the document moved");
+    owner.close().await;
+    e.close().await;
+    r.close().await;
+}
+
+/// #71: 열린 방의 문서를 옮기면, 옮기기 직전에 쓴 편집은 리비전에 남고 연결은 4409로 닫힌다(새 자리의 권한·설정으로 다시
+/// 연다). 전에는 방이 옛 연결을 그대로 받아, 새 자리에서 권한이 없는 편집자의 편집도 다음 권한 재확인까지 받았다. 옮긴
+/// 뒤에 보낸 편집은 받지 않으므로 확인도 오지 않는다(브라우저 초안에 남는다).
+#[tokio::test]
+async fn a_move_closes_the_room_after_saving_its_edits() {
+    let (app, _addr, admin, _from, to, id, mut e, mut r) =
+        live_move_race_setup("옮기면 닫히는 방").await;
+    e.paragraph("옮기기 직전 문단").await;
+    assert!(r.until(|c| c.text().contains("옮기기 직전 문단")).await);
+    let moved = move_to(&app, &admin, &id, &to).await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    e.try_paragraph("옮긴 뒤 문단").await;
+    assert_eq!(
+        e.closed().await,
+        Some(4409),
+        "the editor's connection stayed open after the move"
+    );
+    assert_eq!(r.closed().await, Some(4409));
+    assert!(!acked(&e), "an edit sent after the move was acknowledged");
+    let saved = get_doc(&app, &admin, &id).await;
+    assert_eq!(saved["workspace_id"], to.as_str());
+    assert!(
+        saved["body"].to_string().contains("옮기기 직전 문단"),
+        "{saved}"
+    );
+    assert!(
+        !saved["body"].to_string().contains("옮긴 뒤 문단"),
+        "{saved}"
+    );
+}
+
+/// #71: 열린 방이 없는 문서를 옮기는 동안에는 방이 새로 열리지 않는다(다시 붙으라는 4503). 전에는 옮기는 사이 들어온
+/// 편집자가 옛 자리의 권한으로 방을 열어, 옮긴 뒤에도 그 방에 편집을 보낼 수 있었다. 옮긴 뒤 새 자리의 멤버가 아닌
+/// 사람은 붙지 못하고, 이동이 끝나면 막음이 풀린다.
+#[tokio::test]
+async fn no_room_opens_while_a_document_moves() {
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "3600")]))
+            .unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let from = create_workspace(&app, &admin, "방 없이 옮기는 곳").await;
+    let to = create_workspace(&app, &admin, "방 없이 옮겨 갈 곳").await;
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{from}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let doc = common::create_doc(&app, &admin, &from, "방 없이 옮길 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let (hold, holder) = hold_tree(&owner, &to).await;
+    let request = tokio::spawn({
+        let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
+        async move { move_to(&app, &admin, &id, &to).await }
+    });
+    until_waiting_on_lock("app_lock_move", holder).await;
+    assert_eq!(
+        refused_code(addr, &writer, &id).await,
+        Some(4503),
+        "a live editing room opened while the document was moving"
+    );
+    hold.rollback().await.unwrap();
+    let moved = request.await.unwrap();
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    assert_eq!(
+        connect(addr, Some(&writer), &id, true).await.err(),
+        Some(StatusCode::NOT_FOUND)
+    );
+    // 이동이 끝나면 막음이 풀린다: 되돌려 옮기면 그 편집자가 다시 방을 연다.
+    let back = move_to(&app, &admin, &id, &from).await;
+    assert_eq!(back.status, StatusCode::OK, "{:?}", back.json);
+    let w = connect(addr, Some(&writer), &id, true).await.unwrap();
+    w.close().await;
+    owner.close().await;
 }

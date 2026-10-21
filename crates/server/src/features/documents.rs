@@ -20,8 +20,9 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
+use crate::collab::room::MoveRequest;
 use crate::config::Limits;
-use crate::db::{UserTx, is_unique_violation, needed_ids, new_ids};
+use crate::db::{Db, UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::{member_role, validate_title};
@@ -1163,7 +1164,7 @@ pub struct MoveTarget {
 }
 
 /// 이동 요청. 미리보기에서 접근 변화를 확인했다는 표시(`acknowledge`)가 있어야 이동한다.
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct MoveDocument {
     pub target_workspace_id: Option<WorkspaceId>,
     pub target_item_id: Option<ItemId>,
@@ -1172,7 +1173,7 @@ pub struct MoveDocument {
 }
 
 /// 사용자가 확인한 접근 변화.
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct AcknowledgedPreview {
     pub gains: Vec<String>,
     pub loses: Vec<String>,
@@ -1287,19 +1288,51 @@ pub async fn move_document(
     Path(id): Path<DocumentId>,
     Json(input): Json<MoveDocument>,
 ) -> Result<Response, AppError> {
-    // 실시간으로 편집 중인 문서는 본문(마지막 리비전)이 뒤처져 있을 수 있다. 옮기기 전에 열린 방을 리비전으로 남긴다.
-    // 옮긴 뒤에는 편집자가 새 자리에서 쓸 수 없거나 실시간이 꺼져 있어 방이 남은 편집을 리비전으로 저장하지 못하고, 다음
-    // 일반 저장이 그 편집을 버렸다(감사 S6). 남기지 못하면 옮기지 않는다(409, 편집은 방에 남는다). 방에는 이 이동을 할
-    // 수 있는 요청(문서 소유 권한·대상 쓰기 권한, 미리보기와 같은 확인)만 보낸다: 거절될 요청이 다른 사람의 열린 편집을
-    // 리비전으로 남기게 하거나 방을 기다리게 하지 않는다(리뷰). 거절이면 그 오류를 바로 돌려준다. 아래 트랜잭션이 잠근
-    // 뒤 다시 확인하는 것이 그대로 최종이다. 방을 기다리는 동안 DB 연결을 쥐지 않는다.
+    // 실시간으로 편집 중인 문서는 본문(마지막 리비전)이 뒤처져 있을 수 있다. 열린 방이 있으면 그 방이 옮긴다(감사 S6,
+    // #71): 방의 편집을 리비전으로 남기고(남기지 못하면 옮기지 않고 409, 편집은 방에 남는다) → 아래 이동 트랜잭션 →
+    // 옮겼으면 그사이 받은 편집까지 리비전으로 남긴 뒤 연결을 닫는다(4409, 새 자리의 권한·설정으로 다시 연다). 방이 이
+    // 명령을 처리하는 동안 들어온 편집은 대기열에서 기다리므로, 확인을 받은 편집이 옮긴 곳에서 리비전이 되지 못하고
+    // 사라지는 일이 없다. 방이 없으면 옮기는 동안 방이 새로 열리지 않게 막고 바로 옮긴다. 방에는 이 이동을 할 수 있는
+    // 요청(문서 소유 권한·대상 쓰기 권한, 미리보기와 같은 확인)만 보낸다: 거절될 요청이 다른 사람의 열린 편집을 리비전으로
+    // 남기게 하거나 방을 기다리게 하지 않는다(리뷰). 거절이면 그 오류를 바로 돌려준다. 이동 트랜잭션이 잠근 뒤 다시
+    // 확인하는 것이 그대로 최종이다. 방을 기다리는 동안 DB 연결을 쥐지 않는다.
     {
         let mut tx = state.db.begin_as(user).await?;
         preview(&mut tx, id, input.target_workspace_id, input.target_item_id).await?;
         tx.commit().await?;
     }
-    state.collab.checkpoint(id, user).await?;
-    let mut tx = state.db.begin_as(user).await?;
+    let request = MoveRequest {
+        doc: id,
+        user,
+        input,
+    };
+    match state.collab.move_document(&state.db, request).await? {
+        MoveReply::Moved { outcome, .. } => Ok(Json(outcome).into_response()),
+        MoveReply::Changed(current) => Ok((StatusCode::CONFLICT, Json(current)).into_response()),
+    }
+}
+
+/// 이동 트랜잭션의 결과.
+#[derive(Debug)]
+pub enum MoveReply {
+    /// 옮겼다. `committed_at`: 커밋을 마친 때(열린 방은 이 뒤에 받은 편집을 넣지 않는다).
+    Moved {
+        outcome: Box<MoveOutcome>,
+        committed_at: std::time::Instant,
+    },
+    /// 확인한 미리보기가 없거나 잠근 뒤 다시 계산한 것과 달라 옮기지 않았다(새 미리보기).
+    Changed(MovePreview),
+}
+
+/// 이동 트랜잭션(잠금 → 미리보기 다시 계산·확인 → 옮김). 열린 방이 있으면 방이 자기 명령 안에서 부르고, 없으면 요청
+/// 처리기가 방이 새로 열리지 않게 막은 채 부른다(`Rooms::move_document`).
+pub(crate) async fn move_in_db(
+    db: &Db,
+    user: UserId,
+    id: DocumentId,
+    input: &MoveDocument,
+) -> Result<MoveReply, AppError> {
+    let mut tx = db.begin_as(user).await?;
     // 잠금 순서(자리 → 문서 행 → 항목 → 번호): 원래 자리와 새 자리를 먼저 잠근다.
     sqlx::query("SELECT app_lock_move($1, $2, $3)")
         .bind(id)
@@ -1333,7 +1366,7 @@ pub async fn move_document(
     });
     if !confirmed {
         tx.commit().await?;
-        return Ok((StatusCode::CONFLICT, Json(current)).into_response());
+        return Ok(MoveReply::Changed(current));
     }
     let ids = needed_ids(
         tx.conn(),
@@ -1349,18 +1382,36 @@ pub async fn move_document(
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;
-    let document = match access(&mut tx, id).await? {
-        Some(a) => load(&mut tx, id).await?.map(|row| to_document(row, a)),
-        None => None,
-    };
+    let document = visible_document(&mut tx, id).await?;
     tx.commit().await?;
-    state.collab.moved(id, workspace_id.0);
-    Ok(Json(MoveOutcome {
-        workspace_id,
-        reference,
-        document,
+    Ok(MoveReply::Moved {
+        outcome: Box::new(MoveOutcome {
+            workspace_id,
+            reference,
+            document,
+        }),
+        committed_at: std::time::Instant::now(),
     })
-    .into_response())
+}
+
+/// 이 사람이 볼 수 있으면 그 문서(볼 수 없으면 `None`).
+async fn visible_document(tx: &mut UserTx, id: DocumentId) -> Result<Option<Document>, AppError> {
+    Ok(match access(tx, id).await? {
+        Some(a) => load(tx, id).await?.map(|row| to_document(row, a)),
+        None => None,
+    })
+}
+
+/// 옮긴 뒤 방이 리비전을 더 남겼을 때 이동의 답에 넣을 지금 문서(옮긴 사람이 볼 수 있으면).
+pub(crate) async fn document_for(
+    db: &Db,
+    user: UserId,
+    id: DocumentId,
+) -> Result<Option<Document>, AppError> {
+    let mut tx = db.begin_as(user).await?;
+    let document = visible_document(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(document)
 }
 
 // ---------------------------------------------------------------------------
