@@ -108,6 +108,33 @@ describe('session expired mid-use', () => {
     });
   });
 
+  // 리뷰 지적: 세션이 끝나지 않은 채(이 창이 아직 401을 받기 전) 다른 탭에서 로그아웃하고 다른 계정으로 로그인하면,
+  // 쿠키는 이미 바뀌었는데 이 창은 돌아와도 확인하지 않아 앞 계정의 화면과 입력이 새 계정의 세션으로 남았다.
+  it('reloads on return when another account signed in without an expired session', async () => {
+    currentUser.userId = 'u1';
+    const reload = vi.fn();
+    const me = (id: string) => (input: RequestInfo | URL) =>
+      Promise.resolve(
+        input === '/api/me'
+          ? json(200, { id, display_name: '나', email: null })
+          : json(404, { error: 'not_found' }),
+      );
+    render(FeedbackHost, { props: { reload } });
+    expect(auth.expired).toBe(false);
+
+    // 같은 계정이면 그대로 둔다.
+    vi.stubGlobal('fetch', me('u1'));
+    await fireEvent.focus(window);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(reload).not.toHaveBeenCalled();
+
+    vi.stubGlobal('fetch', me('u2'));
+    await fireEvent.focus(window);
+    await vi.waitFor(() => {
+      expect(reload).toHaveBeenCalledOnce();
+    });
+  });
+
   // 리뷰 지적: 401보다 먼저 시작한 요청의 성공이 늦게 오면, 세션이 돌아오지 않았는데도 배너가 내려갔다.
   it('keeps the banner when a request started before the 401 succeeds late', async () => {
     let release: (response: Response) => void = () => undefined;
