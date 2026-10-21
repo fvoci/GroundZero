@@ -2246,6 +2246,51 @@ CodeRabbit은 push마다 바뀐 부분을 자동 검토했고(`5caedc9`·`acc544
   다시 생김)한 뒤 `debd7fa`에서 편집 칸 닫힘·초점·꺼진 저장(요청 없음)·다른 관계 편집 유지·서버를 멈춘 실패를 확인했다. 지우기 응답이
   늦는 사이의 저장은 실제 화면에서 응답을 늦출 수 없어 컴포넌트 시험으로만 확인했다.
 
+## 93. 감사 후속: 검색의 모듈 필터 연결과 기록 날짜 문구, 설계 제안 두 건 (2026-10-21, D-39, `fix/search-audit`, 시작 main `376b2b6`)
+
+사용자 지시: 검색은 작은 수정과 설계 변경을 분리한다. 기존 API의 `module_id`가 대화상자에 연결되지 않았으면 기존 API로 연결하고, 기록 검색이
+`occurred_on`을 우선하는데 문구가 "고친 날"로만 설명하면 한국어·영어를 정정한다. 수정 시각을 `updated_at::date`로 색인해 사용자 시간대의 날짜와 어긋나는
+문제와 작성자 필터의 후보 300개 제한은 재현·보고만 하고 색인을 전면 변경하지 않는다.
+
+- **모듈 필터** (`SearchDialog.svelte`): 검색 API(`GET /api/search?module_id=`)·계약·클라이언트(`SearchFilters.moduleId`)에는 있었지만 대화상자에
+  고르는 UI와 요청 연결이 없었다(D-39 "모듈·담당자·상태·날짜 필터"의 연결 누락, 확정 기능). 지금 보는 워크스페이스의 모듈(`api.modules`, 보관 제외)
+  을 고르면 요청에 실리고, 워크스페이스가 바뀌어 그 모듈이 없으면 작성자 필터와 같은 방식으로 선택을 거둔다. 거르기는 서버가 한다(Meilisearch
+  `module_id` 필터와 DB 대체 경로 모두 기존 코드). 컴포넌트 시험 `search-module-filter.test.ts` 2건.
+- **기록 날짜 문구**: 색인(`app_system_search_payload`)과 DB 대체 경로 모두 기록은 `coalesce(rc.occurred_on, rc.updated_at::date)`인데 안내
+  (`search_date_hint`)와 API 설명(`from`)은 "그 밖에는 고친 날"로만 말했다. 한국어·영어 문구와 Rust 설명·계약·생성 클라이언트를 실제 규칙("기록의
+  발생일(없으면 고친 날)")에 맞췄다.
+- **설계 제안(수정하지 않음)**: P-24 수정 시각의 날짜 색인, P-25 작성자 필터의 후보 300개 한계(`docs/decisions.md` 2절). 재현은 격리 Compose의
+  실제 DB·Meilisearch·검색 API로 했다(아래).
+- **날짜 색인 재현**(P-24): 발생일 없는 기록을 만들고 고친 때를 2026-10-20 23:30Z(서울 10-21 08:30)로 둔 뒤 다시 색인하면, 같은 검색어에
+  `kinds=record&from=2026-10-21&to=2026-10-21`은 0건, `from=2026-10-20&to=2026-10-20`은 1건이다(실제 Meilisearch·검색 API, 94절의 절차).
+  검색 API에는 시간대 매개변수가 없어 `from`·`to`가 UTC 날짜로 비교된다. 이번에는 색인을 바꾸지 않았다.
+
+## 94. 감사 후속: 추가 후보 두 건의 재현 보고 (2026-10-21, D-31·D-32, `fix/search-audit`)
+
+사용자 지시: 정적 검토 후보 두 건은 재현되면 영향·근거·최소 수정안과 정책 결정을 별도로 보고하고, 핵심 수정 완료를 막는 범위 확장으로 만들지
+않는다. 둘 다 격리 Compose(실제 PostgreSQL·HTTP API)의 임시 시험으로 재현했고(저장소에 넣지 않음, 아래 절차), 고치지 않았다(P-26·P-27).
+
+- **저장한 보기 갱신의 오래된 재시도**: 재현됨. 탭 B가 새 요청 id로 설정 Y를 저장한 뒤, 탭 A가 처음 보냈을 때 서버에 닿지 않았던 요청 id R1·설정
+  X를 다시 보내면(`RetryKey`는 같은 내용이면 같은 id) 서버는 R1을 모르므로 `app_save_view`의 `ON CONFLICT (user_id, item_id, name) DO UPDATE`
+  가 Y를 X로 덮는다(GET 결과 X). 근거: `0072_app_ids_items.sql` 736행대(같은 요청 id면 기존 id 반환, 아니면 조건 없는 덮어쓰기),
+  `saved_views.rs` `SaveView`(판 없음), `TaskBoard.svelte` `saveView`(실패 시 요청 id 보존, 재시도 전 목록 다시 읽지 않음). 영향: 같은
+  사용자의 두 탭 사이(보기는 사용자·항목·이름별 개인 데이터)에서만, 그리고 첫 전송이 서버에 닿지 않은 경우에만 일어난다(닿았으면 같은 요청 id가
+  무해하게 조기 반환). 최소 수정안: 서버 `app_save_view`에 선택 인자 `p_base_version`(또는 읽은 `updated_at`)을 더해 어긋나면 409로 거절하고,
+  웹은 보기 목록에서 읽은 판을 재시도에 붙인다(필드 편집·칸반 이동과 같은 방식, 서버가 최종 판단). 정책 결정(P-26): 개인 보기에 동시성 검사를
+  둘지, 아니면 마지막 저장 우선을 의도로 둘지.
+- **진행 중 타이머의 시작 변경과 누적 멈춤**: 재현됨. 한 시간 전에 시작해 3600초를 멈춘 진행 중 타이머의 시작을 지금으로 옮기는 `PUT
+/api/time-entries/{id}`(끝 없음, `paused_seconds` 3600 그대로)에 서버가 200을 돌려주고, 길이는 `greatest(0, 구간 − 멈춤)`으로 0초가 된다
+  (응답 `seconds` 0, `paused_seconds` 3600). 근거: `0073_app_ids_tasks.sql` `app_update_time_entry`의 진행 중 분기는 `p_started >
+coalesce(paused_at, now())`만 막고, 끝난 기록 분기에만 있는 "멈춤 > 구간" 검사가 없다. 웹(`format.ts` `liveSeconds`)은 서버가 0으로 자른
+  값에 가져온 뒤 경과만 더하므로 멈춤이 소진될 때까지 0이어야 할 화면이 바로 올라가 새로고침 전까지 어긋난다. `TimeEntryDialog`는 진행 중에도
+  시작 칸을 열어 둔다(끝·멈춘 시간은 잠금). 최소 수정안: 서버 진행 중 분기에 끝난 기록과 같은 검사(`paused_seconds > extract(epoch FROM
+coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 조건을 입력 보조로 칸 옆에 알린다(규칙의 최종 판단은 서버). 정책 결정
+  (P-27): 진행 중 타이머의 시작을 멈춤이 구간을 넘지 않는 범위에서만 허용할지, 아예 멈춤 상태에서는 시작 변경을 막을지.
+- **절차**: `cargo xtask test --oidc --keep`로 띄운 스택(`fvoci-groundzero-bf103f-test`)에 임시 시험 파일 `crates/server/tests/audit_scratch.rs`
+  (세 시험: 위 두 건과 93절의 날짜 색인)를 두고 `cargo test -p fvoci-server --test audit_scratch -- --nocapture`로 돌린 뒤 파일을 지웠다. 출력:
+  `saved view after stale retry: {"filter":{},"sort":"due","view":"list"}`, `edit status=200 OK seconds=0 paused=3600`,
+  `record date index: seoul-day hits=0 utc-day hits=1`.
+
 ## 참고 자료
 
 - [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict.html)
