@@ -921,12 +921,17 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
         .execute(&mut *tx)
         .await
         .unwrap();
-    let ticked = sqlx::query_scalar::<_, i32>(
-        "SELECT fvoci.app_system_recurrence_tick(coalesce(
-           (SELECT array_agg(uuidv7()) FROM generate_series(1, fvoci.app_system_recurrence_tick_ids())), '{}'))",
-    )
-    .fetch_one(&mut *tx)
-    .await;
+    // id는 작업 프로세스처럼 서버가 만든다(Supabase의 Postgres에는 `uuidv7()`이 없다).
+    let need: i32 = sqlx::query_scalar("SELECT fvoci.app_system_recurrence_tick_ids()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    let ticked = sqlx::query_scalar::<_, i32>("SELECT fvoci.app_system_recurrence_tick($1)")
+        .bind(fvoci_server::db::new_ids(
+            usize::try_from(need).unwrap_or_default(),
+        ))
+        .fetch_one(&mut *tx)
+        .await;
     if ticked.is_ok() {
         tx.commit().await.unwrap();
     }
