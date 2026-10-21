@@ -1,5 +1,6 @@
 import type { Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, ApiError } from '$lib/api/client';
@@ -84,5 +85,41 @@ describe('workspace realtime checkbox', () => {
     expect(
       screen.getByText('실시간 공동 편집을 켰습니다. 문서를 다시 열면 함께 고칠 수 있습니다.'),
     ).toBeInTheDocument();
+  });
+
+  it('does not send a second change while the first is still being saved', async () => {
+    // 서버는 받은 순서대로 처리하지만 응답은 늦게, 거꾸로 온다.
+    let server = false;
+    const pending: (() => void)[] = [];
+    const set = vi.spyOn(api, 'setWorkspaceRealtime').mockImplementation((_id, enabled) => {
+      server = enabled;
+      return new Promise<undefined>((resolve) => {
+        pending.push(() => {
+          resolve(undefined);
+        });
+      });
+    });
+    const changed = vi.fn<(workspaceId: string, enabled: boolean) => void>();
+    render(WorkspaceScreen, {
+      props: { workspace: workspaceWith(false), onrealtimechanged: changed },
+    });
+
+    // 켜기를 누르고, 응답이 오기 전에 끄기를 누른다. 누르기는 click()으로 한다(브라우저처럼 막힌 칸에는 닿지 않는다).
+    checkbox().click();
+    await tick();
+    checkbox().click();
+    await new Promise((r) => setTimeout(r, 0));
+    for (const resolve of pending.reverse()) {
+      resolve();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    // 앱의 목록에 마지막으로 알린 값과 칸은 서버에 남은 값과 같다. 첫 요청이 끝나기 전에는 두 번째 요청을 보내지 않는다.
+    await waitFor(() => {
+      expect(changed).toHaveBeenCalled();
+    });
+    expect(changed.mock.lastCall?.[1]).toBe(server);
+    expect(checkbox().checked).toBe(server);
+    expect(set).toHaveBeenCalledTimes(1);
   });
 });

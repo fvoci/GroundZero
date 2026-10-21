@@ -52,7 +52,11 @@
     realtime = workspace.realtime_enabled;
     if (workspace.id !== messageFor) realtimeMessage = '';
   });
+  // 바꾸는 요청이 진행 중인지. 겹쳐 보내면 늦게 온 앞 요청의 응답이 마지막 선택과 다른 값을 앱의 목록과 안내에 남긴다.
+  let realtimeBusy = $state(false);
   async function setRealtime(on: boolean): Promise<void> {
+    if (realtimeBusy) return;
+    realtimeBusy = true;
     const id = workspace.id;
     const before = realtime;
     // 칸은 누른 대로 바뀌어 있다. 실패하면 이전 값으로 되돌려야 칸도 다시 그려진다.
@@ -68,6 +72,8 @@
       realtime = before;
       messageFor = id;
       realtimeMessage = errorText(e, m.workspaces_realtime_failed());
+    } finally {
+      realtimeBusy = false;
     }
   }
 </script>
@@ -84,6 +90,7 @@
       <label class="flex items-center gap-2">
         <input
           type="checkbox"
+          disabled={realtimeBusy}
           checked={realtime}
           onchange={(e: Event) => {
             if (e.currentTarget instanceof HTMLInputElement)
