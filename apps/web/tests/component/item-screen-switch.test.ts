@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { ItemProfileView, ItemView } from '$lib/api/client';
+import type { ItemProfileView, ItemView, SummaryView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -178,5 +178,147 @@ describe('item screen results after switching items', () => {
     await view.rerender({ workspace, itemId: 'B', workspaces: [workspace] });
     await screen.findByRole('heading', { name: '항목 B' });
     expect(screen.queryByText('저장했습니다.')).toBeNull();
+  });
+});
+
+function summary(id: string, title: string): SummaryView {
+  return {
+    id,
+    title,
+    parent_id: null,
+    reference: null,
+    revision: 1,
+    updated_at: '2026-10-19T00:00:00Z',
+  };
+}
+
+interface Rerender {
+  rerender: (props: {
+    workspace: Workspace;
+    itemId: string;
+    workspaces: Workspace[];
+  }) => Promise<void>;
+}
+
+/** B로 옮겨 갔다가 A로 돌아온다. 돌아온 A는 새로 읽은 화면이다(제목이 `title`일 때까지 기다린다). */
+async function leaveAndComeBack(view: Rerender, title: string): Promise<void> {
+  await view.rerender({ workspace, itemId: 'B', workspaces: [workspace] });
+  await screen.findByRole('heading', { name: '항목 B' });
+  await view.rerender({ workspace, itemId: 'A', workspaces: [workspace] });
+  await screen.findByRole('heading', { name: title });
+}
+
+// A → B → A로 돌아오면 주소의 항목은 같아도 새로 읽은 화면이다. 항목 id만 맞춰 보면 앞 A 화면에서 보낸 저장·다시
+// 읽기의 늦은 응답이 새 A 화면에 들어왔다(이 화면에서 하지 않은 저장을 "저장했습니다."·오류로 알리거나, 새로 읽은
+// 값을 그보다 먼저 읽은 옛 값으로 되돌렸다). 요청을 시작한 화면이 아직 그 화면일 때만 결과를 넣는다.
+describe('item screen results after leaving and coming back to the same item', () => {
+  it('drops a late save sent before leaving', async () => {
+    await setLocale('ko', { reload: false });
+    quietServer();
+    vi.spyOn(api, 'item').mockImplementation((id: string) =>
+      Promise.resolve(item(id === 'A' ? 'A' : 'B')),
+    );
+    const write = deferred<ItemView>();
+    vi.spyOn(api, 'updateItem').mockReturnValue(write.promise);
+    const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    await screen.findByRole('heading', { name: '항목 A' });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await leaveAndComeBack(view, '항목 A');
+    write.resolve(item('A'));
+    await settle();
+
+    expect(screen.queryByText('저장했습니다.')).toBeNull();
+  });
+
+  it('drops a late save failure from before leaving', async () => {
+    await setLocale('ko', { reload: false });
+    quietServer();
+    vi.spyOn(api, 'item').mockImplementation((id: string) =>
+      Promise.resolve(item(id === 'A' ? 'A' : 'B')),
+    );
+    let fail: (reason: unknown) => void = () => undefined;
+    vi.spyOn(api, 'updateItem').mockReturnValue(
+      new Promise<ItemView>((_, reject) => {
+        fail = reject;
+      }),
+    );
+    const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    await screen.findByRole('heading', { name: '항목 A' });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await leaveAndComeBack(view, '항목 A');
+    fail(new Error('offline'));
+    await settle();
+
+    expect(screen.queryByText('저장하지 못했습니다.')).toBeNull();
+  });
+
+  it('drops a late re-read started before leaving', async () => {
+    await setLocale('ko', { reload: false });
+    quietServer();
+    const reread = deferred<ItemView>();
+    let readsOfA = 0;
+    vi.spyOn(api, 'item').mockImplementation((id: string) => {
+      if (id !== 'A') return Promise.resolve(item('B'));
+      readsOfA += 1;
+      if (readsOfA === 2) return reread.promise;
+      // 돌아와서 읽을 때는 그사이 다른 사람이 제목을 바꿨다.
+      return Promise.resolve(readsOfA === 1 ? item('A') : { ...item('A'), title: '새 제목 A' });
+    });
+    vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
+    vi.spyOn(api, 'setItemProfile').mockResolvedValue(undefined);
+    const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    const panel = await screen.findByRole('region', { name: '정보' });
+    await fireEvent.click(await within(panel).findByRole('button', { name: '고치기' }));
+    await fireEvent.click(within(panel).getByRole('button', { name: '저장' }));
+    await waitFor(() => {
+      expect(readsOfA).toBe(2);
+    });
+
+    await leaveAndComeBack(view, '새 제목 A');
+    // 떠나기 전에 읽은 옛 값.
+    reread.resolve(item('A'));
+    await settle();
+
+    expect(heading()).toHaveTextContent('새 제목 A');
+    expect(screen.getByRole('textbox', { name: '제목' })).toHaveValue('새 제목 A');
+  });
+
+  it('drops a late document list reload started before leaving', async () => {
+    await setLocale('ko', { reload: false });
+    vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+    vi.spyOn(api, 'module').mockResolvedValue(mod);
+    vi.spyOn(api, 'item').mockImplementation((id: string) =>
+      Promise.resolve(item(id === 'A' ? 'A' : 'B')),
+    );
+    const reload = deferred<SummaryView[]>();
+    const two = [summary('d1', '첫 문서'), summary('d2', '둘째 문서')];
+    let listsOfA = 0;
+    vi.spyOn(api, 'itemDocuments').mockImplementation((id: string) => {
+      if (id !== 'A') return Promise.resolve([]);
+      listsOfA += 1;
+      if (listsOfA === 2) return reload.promise;
+      // 돌아와서 읽을 때는 그사이 다른 사람이 문서를 하나 더 만들었다.
+      return Promise.resolve(listsOfA === 1 ? two : [...two, summary('d3', '셋째 문서')]);
+    });
+    // 옮기기가 실패해도 목록은 다시 읽는다. 이 테스트는 그 다시 읽기만 본다.
+    vi.spyOn(api, 'setParent').mockRejectedValue(new Error('conflict'));
+    const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    const rows = await screen.findAllByRole('treeitem');
+    const second = rows[1];
+    if (second === undefined) throw new Error('no second tree item');
+    await fireEvent.keyDown(second, { key: 'ArrowUp', altKey: true });
+    await waitFor(() => {
+      expect(listsOfA).toBe(2);
+    });
+
+    await leaveAndComeBack(view, '항목 A');
+    await screen.findByText('셋째 문서');
+    // 떠나기 전에 읽은 옛 목록.
+    reload.resolve(two);
+    await settle();
+
+    expect(screen.getByText('셋째 문서')).toBeInTheDocument();
   });
 });

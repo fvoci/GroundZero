@@ -88,8 +88,12 @@
     filled = { title: next.title, description: next.description, shared: nextShared };
   }
 
+  // 항목을 (다시) 불러올 때마다 늘리는 차례. A → B → A로 돌아오면 항목 id는 같아도 새로 읽은 화면이다.
+  let loadSeq = 0;
+
   $effect(() => {
     const id = currentItemId;
+    loadSeq += 1;
     let cancelled = false;
     item = undefined;
     mod = undefined;
@@ -134,8 +138,9 @@
   const isOwner = $derived(item?.access === 'owner');
 
   // 이 화면은 다른 항목으로 옮겨 가도 다시 만들어지지 않는다. 기다리는 사이 옮겨 갔으면 시작한 항목의 결과·오류를
-  // 지금 항목 화면에 넣지 않는다(B 주소에 A가 들어앉지 않게).
-  const stillOn = (id: string): boolean => currentItemId === id;
+  // 지금 항목 화면에 넣지 않는다(B 주소에 A가 들어앉지 않게). 같은 항목으로 돌아왔어도 시작할 때의 차례(`mine`)가
+  // 아니면 버린다(앞 A 화면의 늦은 저장이 새 A 화면에 "저장했습니다."를 띄우거나 새로 읽은 값을 옛 값으로 되돌렸다).
+  const stillOn = (id: string, mine: number): boolean => currentItemId === id && loadSeq === mine;
 
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -147,6 +152,7 @@
     formError = undefined;
     saved = false;
     const id = item.id;
+    const mine = loadSeq;
     // 공개 범위는 체크를 바꿨을 때만 보낸다. 늘 보내면 연 뒤 다른 소유 권한자가 바꾼 공개 범위를 되돌렸다(감사 W13).
     const visibility: 'workspace' | 'private' | undefined =
       shared === filled.shared ? undefined : shared ? 'workspace' : 'private';
@@ -159,45 +165,48 @@
         ...(visibility === undefined ? {} : { visibility }),
       });
       forgetReferences();
-      if (!stillOn(id)) return;
+      if (!stillOn(id, mine)) return;
       refresh(next, sent);
       // 더 고친 칸이 남아 있으면 "저장했습니다."를 보이지 않는다(그 입력은 아직 저장되지 않았다).
       saved =
         title === filled.title && description === filled.description && shared === filled.shared;
     } catch (e: unknown) {
-      if (stillOn(id)) formError = errorText(e, m.modules_save_failed());
+      if (stillOn(id, mine)) formError = errorText(e, m.modules_save_failed());
     }
   }
 
   async function toggleTemplate(): Promise<void> {
     if (item === undefined) return;
     const id = item.id;
+    const mine = loadSeq;
     try {
       await api.setItemTemplate(id, !item.is_template);
       const next = await api.item(id);
-      if (stillOn(id)) refresh(next);
+      if (stillOn(id, mine)) refresh(next);
     } catch (e: unknown) {
-      if (stillOn(id)) formError = errorText(e, m.modules_change_failed());
+      if (stillOn(id, mine)) formError = errorText(e, m.modules_change_failed());
     }
   }
 
   async function toggleArchive(): Promise<void> {
     if (item === undefined) return;
     const id = item.id;
+    const mine = loadSeq;
     try {
       const next = await api.archiveItem(id, !item.archived);
-      if (stillOn(id)) fill(next);
+      if (stillOn(id, mine)) fill(next);
     } catch (e: unknown) {
-      if (stillOn(id)) formError = errorText(e, m.modules_change_failed());
+      if (stillOn(id, mine)) formError = errorText(e, m.modules_change_failed());
     }
   }
 
-  /** 항목을 다시 읽어 입력 중인 칸은 두고 넣는다. 그사이 다른 항목으로 옮겨 갔으면 버린다. */
+  /** 항목을 다시 읽어 입력 중인 칸은 두고 넣는다. 그사이 다른 항목으로 옮겨 갔으면(돌아왔어도) 버린다. */
   function reread(id: string, apply: (next: ItemView) => void): void {
+    const mine = loadSeq;
     api
       .item(id)
       .then((next) => {
-        if (stillOn(id)) apply(next);
+        if (stillOn(id, mine)) apply(next);
       })
       .catch(() => undefined);
   }
@@ -407,10 +416,11 @@
           moveThenReload(
             () => api.setParent(id, move.parentId, move.beforeId),
             async () => {
-              // 다시 읽는 사이 다른 항목으로 옮겼으면 이 항목의 목록을 그 화면에 넣지 않는다.
+              // 다시 읽는 사이 다른 항목으로 옮겼으면(같은 항목으로 돌아왔어도) 이 목록을 그 화면에 넣지 않는다.
               const requested = current.id;
+              const mine = loadSeq;
               const list = await api.itemDocuments(requested);
-              if (currentItemId === requested) docs = list;
+              if (stillOn(requested, mine)) docs = list;
             },
           )}
         oncreatechild={async (parentId: string) => {
