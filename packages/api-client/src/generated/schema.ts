@@ -2882,11 +2882,14 @@ export interface components {
          * @description 문서 내부 ID. CRDT 도입 후에도 유지된다 (D-62).
          */
         DocumentId: string;
-        /** @description 문서 설정 변경 요청. */
+        /**
+         * @description 문서 설정 변경 요청. 바꾸는 칸만 보낸다. 없거나 null인 칸은 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
+         *     비공개·복제 금지를 다른 칸만 바꾼 요청이 되돌리지 않게, 감사 W6).
+         */
         DocumentSettings: {
-            allow_copy: boolean;
+            allow_copy?: boolean | null;
             /** @description `workspace` 또는 `private`. */
-            visibility: string;
+            visibility?: string | null;
         };
         /** @description 문서 목록 항목. */
         DocumentSummary: {
@@ -5705,6 +5708,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

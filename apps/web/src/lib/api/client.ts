@@ -2537,11 +2537,11 @@ export const api = {
       template_id: templateId,
     }),
   sharedWithMe: () => expectOk('GET', '/api/me/shared', (v) => parseList(v, parseSharedView)),
-  setSettings: (id: string, visibility: 'workspace' | 'private', allowCopy: boolean) =>
-    expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, {
-      visibility,
-      allow_copy: allowCopy,
-    }),
+  /** 바꾸는 칸만 보낸다. 없는 칸은 서버의 지금 값 그대로다. */
+  setSettings: (
+    id: string,
+    change: { visibility?: 'workspace' | 'private'; allow_copy?: boolean },
+  ) => expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, change),
   shares: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/shares`, (v) =>
       parseList(v, parseShareView),

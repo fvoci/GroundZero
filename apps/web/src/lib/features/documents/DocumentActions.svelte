@@ -100,8 +100,8 @@
   // 설정을 읽거나 바꾼 순서. 다시 읽기가 늦게 와 그 뒤에 바꾼 설정을 덮지 않게 한다.
   let settingsSeq = 0;
 
-  // 화면의 문서는 연 뒤로 다시 읽지 않는다. 그사이 다른 소유자가 바꾼 설정(비공개·복제 금지)을 보이고, 바꿀 때 되돌리지
-  // 않도록 설정 창을 열 때와 설정을 보내기 직전에 서버의 지금 값을 읽는다.
+  // 화면의 문서는 연 뒤로 다시 읽지 않는다. 그사이 다른 소유자가 바꾼 설정(비공개·복제 금지)을 보이도록 설정 창을 열 때
+  // 서버의 지금 값을 읽는다. 바꿀 때 되돌리지 않는 것은 서버가 정한다(바꾼 칸만 보냄).
   async function refreshSettings(): Promise<void> {
     const mine = ++settingsSeq;
     try {
@@ -118,26 +118,22 @@
     }
   }
 
-  // 설정 요청이 진행 중인지. 끝나기 전에 다른 설정을 누르면 첫 변경 전의 값을 함께 보내게 되므로 그동안 막는다.
+  // 설정 요청이 진행 중인지. 응답 전에 다른 체크를 누르면 화면이 첫 변경 전의 값을 보이므로 그동안 막는다.
   let settingsBusy = $state(false);
 
-  /** 바꾼 설정 하나만 고르고, 건드리지 않은 설정은 서버의 지금 값으로 보낸다. */
+  /**
+   * 바꾼 설정 하나만 보낸다. 건드리지 않은 설정은 서버가 잠근 뒤의 지금 값 그대로 둔다(0085, 감사 W6: 화면의 옛 값을
+   * 함께 보내 다른 소유자의 비공개·복제 금지를 되돌렸다).
+   */
   async function setSettings(change: {
     visibility?: 'workspace' | 'private';
-    allowCopy?: boolean;
+    allow_copy?: boolean;
   }): Promise<void> {
     if (settingsBusy) return;
     settingsBusy = true;
     settingsSeq += 1;
     try {
-      const fresh = await api.document(doc.id);
-      onchanged(
-        await api.setSettings(
-          doc.id,
-          change.visibility ?? fresh.visibility,
-          change.allowCopy ?? fresh.allow_copy,
-        ),
-      );
+      onchanged(await api.setSettings(doc.id, change));
     } catch (e: unknown) {
       fail(e);
     } finally {
@@ -447,7 +443,7 @@
             id="doc-allow-copy"
             disabled={settingsBusy || (restrictOnly && !doc.allow_copy)}
             checked={doc.allow_copy}
-            onCheckedChange={(v) => void setSettings({ allowCopy: v === true })}
+            onCheckedChange={(v) => void setSettings({ allow_copy: v === true })}
           />
           <Label for="doc-allow-copy">{m.documents_allow_copy()}</Label>
         </div>

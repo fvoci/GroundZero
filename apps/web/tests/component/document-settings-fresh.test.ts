@@ -46,16 +46,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// 감사 W6(화면 쪽): 이 화면이 문서를 연 뒤 다른 소유자가 "비공개"로 바꿨다. 여기서 "복제 허용"만 바꿀 때 화면이 들고 있던
-// 옛 공개 범위(워크스페이스)를 함께 보내 비공개를 되돌리지 않는다.
+// 감사 W6: 이 화면이 문서를 연 뒤 다른 소유자가 "비공개"로 바꿨다. 여기서 "복제 허용"만 바꿀 때 화면이 들고 있던 옛
+// 공개 범위(워크스페이스)를 함께 보내 비공개를 되돌리지 않는다. 바꾼 칸만 보내고 나머지는 서버가 정한다(0085).
 describe('document settings from an out-of-date view', () => {
-  it('sends the current server value for the setting the user did not touch', async () => {
+  it('sends only the setting the user changed', async () => {
     // 화면의 문서는 아직 "워크스페이스 공개"다. 서버에서는 그사이 비공개가 됐다.
     vi.spyOn(api, 'document').mockResolvedValue(documentWith('private', true));
     const set = vi
       .spyOn(api, 'setSettings')
-      .mockImplementation((_id, visibility, allowCopy) =>
-        Promise.resolve(documentWith(visibility, allowCopy)),
+      .mockImplementation((_id, change) =>
+        Promise.resolve(documentWith(change.visibility ?? 'private', change.allow_copy ?? true)),
       );
     render(DocumentActions, {
       props: { doc: documentWith('workspace', true), workspaces, onchanged: () => undefined },
@@ -68,7 +68,8 @@ describe('document settings from an out-of-date view', () => {
     await waitFor(() => {
       expect(set).toHaveBeenCalledTimes(1);
     });
-    expect(set).toHaveBeenCalledWith('d1', 'private', false);
+    // 바꾼 칸(복제 허용)만 보낸다. 공개 범위는 서버가 지금 값(비공개) 그대로 둔다.
+    expect(set).toHaveBeenCalledWith('d1', { allow_copy: false });
   });
 
   it('shows the current server settings when the dialog opens', async () => {
@@ -90,10 +91,10 @@ describe('document settings from an out-of-date view', () => {
     vi.spyOn(api, 'document').mockResolvedValue(documentWith('workspace', true));
     let finish: () => void = () => undefined;
     const set = vi.spyOn(api, 'setSettings').mockImplementation(
-      (_id, visibility, allowCopy) =>
+      (_id, change) =>
         new Promise((resolve) => {
           finish = () => {
-            resolve(documentWith(visibility, allowCopy));
+            resolve(documentWith(change.visibility ?? 'workspace', change.allow_copy ?? true));
           };
         }),
     );
@@ -107,11 +108,11 @@ describe('document settings from an out-of-date view', () => {
     await waitFor(() => {
       expect(set).toHaveBeenCalledTimes(1);
     });
-    expect(set).toHaveBeenLastCalledWith('d1', 'private', true);
+    expect(set).toHaveBeenLastCalledWith('d1', { visibility: 'private' });
     await fireEvent.click(screen.getByRole('checkbox', { name: '볼 수 있는 사람의 복제 허용' }));
     await new Promise((r) => setTimeout(r, 0));
-    // 첫 요청이 끝나기 전에는 옛 공개 범위(워크스페이스)를 담은 두 번째 요청을 보내지 않는다.
-    expect(set.mock.calls.some(([, visibility]) => visibility === 'workspace')).toBe(false);
+    // 첫 요청이 끝나기 전에는 두 번째 요청을 보내지 않는다(응답 전 화면은 첫 변경 전의 값을 보인다).
+    expect(set).toHaveBeenCalledTimes(1);
     finish();
   });
 });
