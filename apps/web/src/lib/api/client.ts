@@ -3150,7 +3150,8 @@ export const api = {
   item: (id: string) => expectOk('GET', `/api/items/${encodeURIComponent(id)}`, parseItem),
   updateItem: (
     id: string,
-    input: { title: string; description: string; visibility: 'workspace' | 'private' },
+    /** 공개 범위는 바꿀 때만 보낸다(없으면 서버의 지금 값 그대로). */
+    input: { title: string; description: string; visibility?: 'workspace' | 'private' },
   ) => expectOk('PUT', `/api/items/${encodeURIComponent(id)}`, parseItem, input),
   archiveItem: (id: string, archived: boolean) =>
     expectOk('PUT', `/api/items/${encodeURIComponent(id)}/archived`, parseItem, { archived }),

@@ -4476,8 +4476,11 @@ export interface components {
         UpdateItem: {
             description: string;
             title: string;
-            /** @description `workspace` 또는 `private`. */
-            visibility: string;
+            /**
+             * @description `workspace` 또는 `private`. 바꿀 때만 보낸다. 없거나 null이면 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
+             *     공개 범위를 설명만 고친 저장이 되돌리지 않게, 감사 W13).
+             */
+            visibility?: string | null;
         };
         /** @description 모듈 이름·키 변경 요청(관리자). */
         UpdateModule: {
