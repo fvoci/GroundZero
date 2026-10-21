@@ -811,3 +811,71 @@ async fn copies_moves_and_retries_respect_item_boundaries() {
     assert_eq!(b.status, StatusCode::CONFLICT, "{:?}", b.json);
     assert_ne!(item_doc_json["id"], a.json["id"]);
 }
+
+/// 감사 W13: 항목 정보 저장이 공개 범위를 늘 받아, 화면은 연 때의 값을 보냈다. 그사이 다른 소유 권한자가 비공개로
+/// 바꿨으면 설명만 고친 저장이 다시 공개했고, 소유자가 아닌 작성자는 옛 값 때문에 제목도 못 고쳤다(403). 공개 범위는
+/// 보낼 때만 바꾸고, 보내지 않으면 잠근 뒤의 지금 값 그대로다.
+#[tokio::test]
+async fn item_details_keep_the_visibility_unless_it_is_sent() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "공개 범위").await;
+    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "writer").await;
+    let (helper, _) = add_member(&app, &state, &admin, &ws, "helper", "writer").await;
+    let m = module(&app, &admin, &ws, "VIS").await;
+    let it = item(&app, &creator, &m, "설계").await;
+    let uri = format!("/api/items/{}", it["id"].as_str().unwrap());
+
+    // 만든 사람의 화면은 공개로 열려 있는데 관리자가 비공개로 바꾼다.
+    let (status, json) = set_item(&app, &creator, &it, "workspace").await;
+    assert_eq!(status, StatusCode::OK, "{json:?}");
+    let (status, json) = set_item(&app, &admin, &it, "private").await;
+    assert_eq!(status, StatusCode::OK, "{json:?}");
+    let typo = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&creator),
+        Some(json!({ "title": "설계", "description": "오타 고침" })),
+    )
+    .await;
+    assert_eq!(typo.status, StatusCode::OK, "{:?}", typo.json);
+    assert_eq!(typo.json["visibility"], "private");
+    assert_eq!(typo.json["description"], "오타 고침");
+
+    // 공개 항목에서 소유자가 아닌 작성자는 공개 범위 없이 제목을 고친다.
+    let (status, json) = set_item(&app, &admin, &it, "workspace").await;
+    assert_eq!(status, StatusCode::OK, "{json:?}");
+    let renamed = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&helper),
+        Some(json!({ "title": "설계 2", "description": "", "visibility": null })),
+    )
+    .await;
+    assert_eq!(renamed.status, StatusCode::OK, "{:?}", renamed.json);
+    assert_eq!(renamed.json["visibility"], "workspace");
+
+    // 보내면 바꾼다. 소유 권한자만.
+    let denied = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&helper),
+        Some(json!({ "title": "설계 2", "description": "", "visibility": "private" })),
+    )
+    .await;
+    assert_eq!(denied.status, StatusCode::FORBIDDEN, "{:?}", denied.json);
+    let closed = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&creator),
+        Some(json!({ "title": "설계 2", "description": "", "visibility": "private" })),
+    )
+    .await;
+    assert_eq!(closed.status, StatusCode::OK, "{:?}", closed.json);
+    assert_eq!(closed.json["visibility"], "private");
+}

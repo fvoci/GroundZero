@@ -38,6 +38,14 @@
       : undefined,
   );
   let templateId = $state('');
+  // 워크스페이스를 옮겨도 이 화면은 다시 만들어지지 않는다. 앞 워크스페이스에서 고른 템플릿으로 새 문서를 만들지 않게
+  // 워크스페이스가 바뀌면 비운다(같은 워크스페이스의 정보만 새로 오면 그대로 둔다).
+  let templateWorkspace: string | undefined;
+  $effect(() => {
+    if (workspace.id === templateWorkspace) return;
+    templateWorkspace = workspace.id;
+    templateId = '';
+  });
 
   const canWrite = $derived(workspace.role !== 'reader');
 

@@ -744,13 +744,33 @@ fn normalize_fields(
     Ok(Value::Object(out))
 }
 
-/// 종류·칸·사람·강좌·파일 역할을 확인한다.
+/// 칸마다 사람·강좌 id를 모은다. 정의와 맞지 않는 칸은 건너뛴다(그 칸의 확인은 `normalize_fields`가 한다).
+fn ids_by_field(
+    def: &RecordKindDef,
+    fields: &Map<String, Value>,
+) -> std::collections::HashMap<String, (Vec<Uuid>, Vec<Uuid>)> {
+    fields
+        .iter()
+        .filter_map(|(key, value)| {
+            let (mut people, mut courses) = (Vec::new(), Vec::new());
+            let one = Map::from_iter([(key.clone(), value.clone())]);
+            normalize_fields(def, one, &mut people, &mut courses)
+                .ok()
+                .map(|_| (key.clone(), (people, courses)))
+        })
+        .collect()
+}
+
+/// 종류·칸·사람·강좌·파일 역할을 확인한다. `kept`는 고치는 기록에 지금 저장된 칸이다. 거기 이미 있는 사람·강좌 id는
+/// 다시 확인하지 않고 새로 넣는 id만 확인한다. 나간 멤버나 볼 수 없게 된 강좌가 남은 기록도 다른 칸을 고칠 수 있게
+/// 한다(항목 리더와 같은 규칙, 감사 W15). 남은 id로 권한이 넓어지지는 않는다(이미 저장된 값 그대로).
 pub(crate) async fn validate(
     tx: &mut UserTx,
     item: ItemId,
     kind_name: &str,
     title: &str,
     fields: Map<String, Value>,
+    kept: Option<&Map<String, Value>>,
     files: &[RecordFileInput],
 ) -> Result<(Value, Value), AppError> {
     let row: Option<(String, Uuid)> = sqlx::query_as(
@@ -772,7 +792,21 @@ pub(crate) async fn validate(
     }
     let mut people = Vec::new();
     let mut courses = Vec::new();
+    let by_field = kept.map(|_| ids_by_field(def, &fields));
     let fields = normalize_fields(def, fields, &mut people, &mut courses)?;
+    if let (Some(kept), Some(now)) = (kept, by_field) {
+        // 같은 칸에 그대로 남은 id만 다시 확인하지 않는다. 다른 칸에 있던 id를 옮겨 넣으면(출석에 남은 나간 사람을
+        // 진행자로 등) 새로 넣는 것이라 확인한다(리뷰). 저장된 칸이 지금 정의와 맞지 않으면(정의가 바뀜) 그 칸에 남은
+        // id가 없는 것으로 본다.
+        let before = ids_by_field(def, kept);
+        people.clear();
+        courses.clear();
+        for (key, (p, c)) in now {
+            let (kept_people, kept_courses) = before.get(&key).cloned().unwrap_or_default();
+            people.extend(p.into_iter().filter(|id| !kept_people.contains(id)));
+            courses.extend(c.into_iter().filter(|id| !kept_courses.contains(id)));
+        }
+    }
     if !people.is_empty() {
         let found: i64 = sqlx::query_scalar(
             "SELECT count(DISTINCT user_id) FROM workspace_members WHERE workspace_id = $1 AND user_id = ANY($2)",
@@ -945,6 +979,7 @@ pub async fn create(
         &input.kind,
         &input.title,
         input.fields,
+        None,
         &input.files,
     )
     .await?;
@@ -978,18 +1013,25 @@ pub async fn update(
     Json(input): Json<EditRecord>,
 ) -> Result<Json<RecordVersion>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let found: Option<(ItemId, String)> =
-        sqlx::query_as("SELECT item_id, kind FROM item_records WHERE id = $1")
+    let found: Option<(ItemId, String, Value, i32)> =
+        sqlx::query_as("SELECT item_id, kind, fields, version FROM item_records WHERE id = $1")
             .bind(record)
             .fetch_optional(tx.conn())
             .await?;
-    let (item, kind) = found.ok_or(AppError::NotFound)?;
+    let (item, kind, stored, stored_version) = found.ok_or(AppError::NotFound)?;
+    // 이미 저장된 id를 다시 확인하지 않는 기준(`stored`)은 바꿀 그 판이어야 한다. 읽은 판이 보낸 판과 다르면 바로 409다
+    // (아직 커밋되지 않은 다음 판을 짐작해 보내면 옛 판의 id로 확인을 건너뛰고, 다음 판이 커밋된 뒤 판이 맞아 저장했다).
+    // 판은 늘기만 하므로, 여기와 아래 app_update_record(행 잠금)에서 모두 같으면 그 사이 바뀐 것이 없다.
+    if stored_version != input.version {
+        return Err(AppError::Conflict("the record changed; reload it".into()));
+    }
     let (fields, files) = validate(
         &mut tx,
         item,
         &kind,
         &input.title,
         input.fields,
+        stored.as_object(),
         &input.files,
     )
     .await?;
