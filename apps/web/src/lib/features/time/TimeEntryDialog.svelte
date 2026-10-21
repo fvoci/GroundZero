@@ -4,7 +4,10 @@
   import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
   import { api, TIME_KINDS } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { instantOf, isMissingLocalTime, wallTime } from '$lib/features/events/time';
+  import type { EditedWall } from '$lib/features/events/repeated';
+  import { describedBy, readEditedWall, repeatedOptions } from '$lib/features/events/repeated';
+  import RepeatedTimeChoice from '$lib/features/events/RepeatedTimeChoice.svelte';
+  import { wallTime } from '$lib/features/events/time';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -40,6 +43,13 @@
   let error = $state<string | undefined>(undefined);
   /** 그 시간대에 없는 시각을 넣은 칸(칸 옆에 알린다). */
   let missing = $state<'start' | 'end' | undefined>(undefined);
+  // 고친 칸이 두 번 있는 시각(가을 여름시간 끝, D-93)일 때 고른 UTC 시각. 그 칸을 고치면 지운다.
+  let startChoice = $state<string | undefined>(undefined);
+  let endChoice = $state<string | undefined>(undefined);
+  /** 두 번 있는 시각인데 고르지 않고 저장하려 한 칸(칸 옆에 알린다, D-82). */
+  const unchosen = $state({ start: false, end: false });
+  // 고르지 않고 저장하려 한 횟수(다시 막힐 때마다 칸 옆 알림을 새로 그린다).
+  let attempt = $state(0);
   let busy = $state(false);
   let confirmDelete = $state(false);
   let history = $state<
@@ -72,11 +82,30 @@
     };
     initial = { start: next.start, end: next.end, pausedMinutes: next.pausedMinutes };
     form = next;
+    // 다시 채운 칸(다른 기록, 충돌 뒤 서버 내용)에는 앞서 고른 것이 맞지 않는다.
+    startChoice = undefined;
+    endChoice = undefined;
+    unchosen.start = false;
+    unchosen.end = false;
   }
+
+  // 고친 칸이 두 번 있는 시각이면 고를 두 항목(고치지 않은 칸은 저장된 시점을 그대로 보내므로 묻지 않는다).
+  const startOptions = $derived(
+    form !== undefined && form.start !== initial.start ? repeatedOptions(form.start, zone) : [],
+  );
+  const endOptions = $derived(
+    form !== undefined && form.end !== '' && form.end !== initial.end
+      ? repeatedOptions(form.end, zone)
+      : [],
+  );
+  const startInvalid = $derived(unchosen.start && startOptions.length === 2);
+  const endInvalid = $derived(unchosen.end && endOptions.length === 2);
 
   $effect(() => {
     const e = entry;
+    // 다이얼로그는 늘 마운트돼 있다(닫으면 entry만 비운다). 앞 기록의 오류가 다음에 연 기록에 남지 않게 지운다.
     error = undefined;
+    missing = undefined;
     confirmDelete = false;
     history = [];
     if (e === undefined) return;
@@ -94,30 +123,48 @@
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (base === undefined || form === undefined || busy) return;
+    // 앞선 저장의 오류는 먼저 지운다(없는 시각으로 일찍 돌아가도 이미 고친 오류가 남지 않게).
+    error = undefined;
+    missing = undefined;
+    unchosen.start = false;
+    unchosen.end = false;
     const paused = Number(form.pausedMinutes.trim() === '' ? '0' : form.pausedMinutes);
     if (!Number.isInteger(paused) || paused < 0) {
       error = m.time_paused_invalid();
       return;
     }
-    // 고친 칸만 변환한다. 고친 시각이 그 시간대에 없으면(여름시간 시작일의 건너뛴 시각, D-81) 조용히 옮겨 저장하지 않고
-    // 그 칸 옆에 알린다(D-82).
-    const startKept = form.start === initial.start;
-    const endKept = form.end === '' || (form.end === initial.end && base.ended_at !== null);
-    missing = undefined;
-    if (!startKept && isMissingLocalTime(form.start, zone)) {
+    // 고친 칸만 읽는다(D-93). 고치지 않은 칸은 저장된 시점(초 포함)을 그대로 보낸다. 고친 시각이 그 시간대에 없으면
+    // (여름시간 시작일의 건너뛴 시각, D-81) 조용히 옮겨 저장하지 않고, 두 번 있으면(여름시간 끝) 어느 쪽인지 고를 때까지
+    // 보내지 않는다. 둘 다 그 칸 옆에 알린다(D-82). 진행 중인 타이머는 끝이 비어 있어 시작만 본다.
+    const start: EditedWall =
+      form.start === initial.start
+        ? { kind: 'instant', instant: base.started_at }
+        : readEditedWall(form.start, zone, startChoice);
+    const end: EditedWall | null =
+      form.end === ''
+        ? null
+        : base.ended_at !== null && form.end === initial.end
+          ? { kind: 'instant', instant: base.ended_at }
+          : readEditedWall(form.end, zone, endChoice);
+    if (start.kind === 'missing') {
       missing = 'start';
       return;
     }
-    if (!endKept && isMissingLocalTime(form.end, zone)) {
+    if (end !== null && end.kind === 'missing') {
       missing = 'end';
       return;
     }
+    if (start.kind === 'unchosen' || (end !== null && end.kind === 'unchosen')) {
+      unchosen.start = start.kind === 'unchosen';
+      unchosen.end = end !== null && end.kind === 'unchosen';
+      attempt += 1;
+      return;
+    }
     busy = true;
-    error = undefined;
     try {
       const result = await api.updateTimeEntry(base.id, base.version, {
-        started_at: startKept ? base.started_at : instantOf(form.start, zone),
-        ended_at: form.end === '' ? null : endKept ? base.ended_at : instantOf(form.end, zone),
+        started_at: start.instant,
+        ended_at: end === null ? null : end.instant,
         // 진행 중인 타이머와 고치지 않은 멈춘 시간은 원래 초 단위 값 그대로.
         paused_seconds:
           base.ended_at === null || form.pausedMinutes === initial.pausedMinutes
@@ -181,14 +228,37 @@
             type="datetime-local"
             bind:value={f.start}
             required
-            oninput={() => (missing = undefined)}
-            aria-invalid={missing === 'start'}
-            aria-describedby={missing === 'start' ? 'time-edit-start-error' : undefined}
+            oninput={() => {
+              missing = undefined;
+              startChoice = undefined;
+              unchosen.start = false;
+            }}
+            aria-invalid={missing === 'start' || startInvalid}
+            aria-describedby={describedBy(
+              missing === 'start' && 'time-edit-start-error',
+              startOptions.length === 2 && 'time-edit-start-repeated-legend',
+              startInvalid && 'time-edit-start-repeated-error',
+            )}
           />
           {#if missing === 'start'}
             <p id="time-edit-start-error" class="text-xs text-destructive" role="alert">
               {m.events_missing_time({ zone })}
             </p>
+          {/if}
+          {#if startOptions.length === 2}
+            <RepeatedTimeChoice
+              id="time-edit-start"
+              field={m.time_start()}
+              {zone}
+              options={startOptions}
+              chosen={startChoice}
+              invalid={startInvalid}
+              {attempt}
+              onchoose={(instant: string) => {
+                startChoice = instant;
+                unchosen.start = false;
+              }}
+            />
           {/if}
         </div>
         <div class="flex flex-col gap-1">
@@ -199,14 +269,37 @@
             bind:value={f.end}
             disabled={running}
             required={!running}
-            oninput={() => (missing = undefined)}
-            aria-invalid={missing === 'end'}
-            aria-describedby={missing === 'end' ? 'time-edit-end-error' : undefined}
+            oninput={() => {
+              missing = undefined;
+              endChoice = undefined;
+              unchosen.end = false;
+            }}
+            aria-invalid={missing === 'end' || endInvalid}
+            aria-describedby={describedBy(
+              missing === 'end' && 'time-edit-end-error',
+              endOptions.length === 2 && 'time-edit-end-repeated-legend',
+              endInvalid && 'time-edit-end-repeated-error',
+            )}
           />
           {#if missing === 'end'}
             <p id="time-edit-end-error" class="text-xs text-destructive" role="alert">
               {m.events_missing_time({ zone })}
             </p>
+          {/if}
+          {#if endOptions.length === 2}
+            <RepeatedTimeChoice
+              id="time-edit-end"
+              field={m.time_end()}
+              {zone}
+              options={endOptions}
+              chosen={endChoice}
+              invalid={endInvalid}
+              {attempt}
+              onchoose={(instant: string) => {
+                endChoice = instant;
+                unchosen.end = false;
+              }}
+            />
           {/if}
         </div>
         <div class="flex flex-col gap-1">
