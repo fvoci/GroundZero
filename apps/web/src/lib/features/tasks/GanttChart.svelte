@@ -8,8 +8,8 @@
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
-  import type { GanttEdit } from './gantt';
-  import { dayNumber, editDates, fromDayNumber, ganttLayout } from './gantt';
+  import type { GanttEdit, GanttLink } from './gantt';
+  import { dayNumber, editDates, fromDayNumber, ganttLayout, ganttLinks } from './gantt';
   import { STATUS_LABEL } from './labels';
 
   interface Props {
@@ -200,6 +200,19 @@
     scroller?.scrollTo({ left: Math.max(0, todayColumn - 3) * columnPx(), behavior: 'smooth' });
   }
 
+  // 줄 높이(rem). 열 너비와 같은 단위로 고정해 연결선이 막대와 같은 좌표계를 쓴다(창 크기·확대와 상관없이 맞음).
+  const ROW = 1.75;
+  // 연결선(끝나야 시작, D-31): 끄는 중이거나 승인을 기다리는 막대는 미리 보기 자리로 잇는다(막대와 같은 값).
+  const linkRows = $derived(
+    layout.rows.map((r) =>
+      draft?.id === r.task.id ? { ...r, from: draft.from, to: draft.to } : r,
+    ),
+  );
+  const linked = $derived(ganttLinks(linkRows, { col, row: ROW, days: layout.days }, tasks));
+  // 줄 이름에 초점을 두거나 가리키면 그 업무에 닿는 선을 굵게 하고 나머지는 옅게(색만으로 구별하지 않음).
+  let focusId = $state<string | undefined>(undefined);
+  const touches = (link: GanttLink): boolean => link.from === focusId || link.to === focusId;
+
   function describe(t: TaskView): string {
     const when =
       t.milestone || t.start_date === null || t.start_date === t.due_date
@@ -248,6 +261,7 @@
     <div
       class="grid min-w-max text-xs"
       style:grid-template-columns={`14rem repeat(${String(layout.days)}, ${String(col)}rem)`}
+      style:grid-template-rows={`auto auto repeat(${String(layout.rows.length)}, ${String(ROW)}rem)`}
     >
       <div
         class="sticky left-0 z-10 flex items-end border-b bg-background p-1 font-medium"
@@ -289,12 +303,16 @@
 
       {#each layout.rows as row (row.task.id)}
         {@const span = draft?.id === row.task.id ? draft : row}
-        <div class="sticky left-0 z-10 border-b bg-background p-1">
+        <div class="sticky left-0 z-10 overflow-hidden border-b bg-background p-1">
           <button
             type="button"
             data-task-card={row.task.id}
             class="w-full truncate rounded px-1 text-left hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             aria-label={describe(row.task)}
+            onfocus={() => (focusId = row.task.id)}
+            onblur={() => (focusId = undefined)}
+            onmouseenter={() => (focusId = row.task.id)}
+            onmouseleave={() => (focusId = undefined)}
             aria-keyshortcuts={editable(row.task)
               ? 'Alt+ArrowLeft Alt+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight'
               : undefined}
@@ -333,7 +351,7 @@
           {#if row.task.milestone}
             <div
               class={[
-                'absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-primary',
+                'absolute top-1/2 z-[2] size-3 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-primary',
                 editable(row.task) && 'cursor-grab touch-none',
               ]}
               style:left={`calc(${String(span.from)} * ${String(col)}rem + ${String(col / 2)}rem)`}
@@ -349,7 +367,7 @@
           {:else}
             <div
               class={[
-                'absolute inset-y-1 rounded-sm',
+                'absolute inset-y-1 z-[2] rounded-sm',
                 row.task.status === 'done' ? 'bg-muted-foreground/40' : 'bg-primary/70',
                 editable(row.task) && 'cursor-grab touch-none',
                 draft?.id === row.task.id && 'ring-2 ring-ring',
@@ -393,8 +411,59 @@
           {/if}
         </div>
       {/each}
+      {#if linked.links.length > 0}
+        <!-- 선행 → 후속 연결선. 막대 줄들과 같은 격자 칸을 덮고, 막대(z-2) 아래·주말 음영과 오늘 선 위에 그린다. 누르기·끌기·
+             스크롤은 그대로 아래로 지나간다(pointer-events-none). 같은 내용은 줄 단추의 설명("선행: …")이 말하므로 낭독하지
+             않는다. 좌표는 rem이고 viewBox 단위 하나가 1rem이다(선 두께는 확대와 상관없이 일정). -->
+        <div
+          class="pointer-events-none relative z-[1]"
+          style:grid-row={`3 / span ${String(layout.rows.length)}`}
+          style:grid-column={`2 / span ${String(layout.days)}`}
+          data-testid="gantt-links"
+        >
+          <svg
+            class="absolute inset-0 size-full overflow-visible"
+            viewBox={`0 0 ${String(layout.days * col)} ${String(layout.rows.length * ROW)}`}
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            focusable="false"
+          >
+            {#each linked.links as link (link.key)}
+              {@const strong = focusId !== undefined && touches(link)}
+              {@const faint = focusId !== undefined && !touches(link)}
+              <g
+                class={[
+                  'transition-opacity',
+                  strong ? 'text-foreground' : 'text-foreground/60',
+                  faint && 'opacity-25',
+                ]}
+                data-gantt-link={link.key}
+                data-strong={strong ? 'true' : undefined}
+              >
+                <path
+                  d={link.d}
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width={strong ? 2.5 : 1.5}
+                  stroke-linejoin="round"
+                  vector-effect="non-scaling-stroke"
+                />
+                <path d={link.arrow} fill="currentColor" />
+              </g>
+            {/each}
+          </svg>
+        </div>
+      {/if}
     </div>
   </div>
+  {#if linked.links.length > 0}
+    <p class="text-xs text-muted-foreground">{m.tasks_gantt_links_hint()}</p>
+  {/if}
+  {#if linked.hidden > 0}
+    <p class="text-xs text-muted-foreground" data-testid="gantt-links-hidden">
+      {m.tasks_gantt_links_hidden({ count: linked.hidden })}
+    </p>
+  {/if}
 {/if}
 {#if reschedule !== undefined && layout.rows.length > 0}
   <p class="text-xs text-muted-foreground">{m.tasks_gantt_edit_hint()}</p>
