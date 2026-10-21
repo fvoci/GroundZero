@@ -913,3 +913,62 @@ async fn moving_a_document_takes_its_attachments_along() {
     }
     owner.close().await;
 }
+
+/// 감사 S11: 업로드 마무리 중 일시적 오류(여기서는 파일 버전을 기록할 때의 교착)가 나면 업로드가 'completing'에 남아,
+/// 다시 마치기가 5분 동안 "마치는 중"(409)이었다. 웹은 약 60초만 다시 묻고 실패로 알렸다. 멈춘 마무리의 점유를 바로
+/// 풀어 다음 요청이 이어서 마친다.
+#[tokio::test]
+async fn a_transient_failure_while_finishing_lets_the_next_complete_go_through() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "마무리 재시도").await;
+    let doc = create_doc(&app, &admin, &ws, "첨부 문서").await;
+    // 다른 시험의 업로드와 겹치지 않는 크기.
+    let data = vec![7_u8; 3217];
+    let (status, up) = start(
+        &app,
+        &admin,
+        json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] },
+                "name": "자료.bin", "size": data.len(), "content_type": "application/octet-stream" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{up:?}");
+    let id = up["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        part(&app, &admin, &id, 1, &data, &sha(&data)).await,
+        StatusCode::NO_CONTENT
+    );
+
+    // 이 크기의 파일 버전을 기록하는 순간 교착(40P01)으로 실패하게 한다.
+    let mut o = owner(None).await;
+    let name = format!("test_deadlock_{}", uuid::Uuid::now_v7().simple());
+    sqlx::query(&format!(
+        "CREATE FUNCTION fvoci.{name}() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN IF NEW.size = 3217 THEN RAISE EXCEPTION 'test deadlock' USING ERRCODE = '40P01'; END IF;
+         RETURN NEW; END $$"
+    ))
+    .execute(&mut o)
+    .await
+    .unwrap();
+    sqlx::query(&format!(
+        "CREATE TRIGGER {name} BEFORE INSERT ON fvoci.file_versions FOR EACH ROW EXECUTE FUNCTION fvoci.{name}()"
+    ))
+    .execute(&mut o)
+    .await
+    .unwrap();
+    let uri = format!("/api/uploads/{id}/complete");
+    let first = send(&app, Method::POST, &uri, Some(&admin), None).await;
+    for cleanup in [
+        format!("DROP TRIGGER {name} ON fvoci.file_versions"),
+        format!("DROP FUNCTION fvoci.{name}()"),
+    ] {
+        sqlx::query(&cleanup).execute(&mut o).await.unwrap();
+    }
+    assert_eq!(first.status, StatusCode::CONFLICT, "{:?}", first.json);
+
+    // 바로 다시 마치면 이어서 끝난다.
+    let again = send(&app, Method::POST, &uri, Some(&admin), None).await;
+    assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
+    assert_eq!(again.json["state"], "done");
+}

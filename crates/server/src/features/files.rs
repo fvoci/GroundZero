@@ -380,11 +380,19 @@ pub async fn complete_upload(
         let worker = state.clone();
         // 따로 도는 작업에도 요청 id를 붙인다(실패 줄을 사용자가 본 요청 id로 찾게, D-83).
         let request_id = crate::logging::current_request_id().unwrap_or_default();
-        tokio::spawn(crate::logging::REQUEST_ID.scope(request_id, async move {
+        let finished = tokio::spawn(crate::logging::REQUEST_ID.scope(request_id, async move {
             finish(&worker, user, id, row, parts).await
         }))
         .await
-        .map_err(|e| AppError::Config(format!("upload completion task: {e}")))??;
+        .map_err(|e| AppError::Config(format!("upload completion task: {e}")))
+        .and_then(|r| r);
+        if let Err(err) = finished {
+            // 마무리 작업은 멈췄다. 일시적 실패(저장소 읽기 오류, 연결 풀 대기 초과, 교착 등)로 'completing'에 남았으면
+            // 점유를 바로 풀어, 다시 요청이 5분 동안 "마치는 중"(409)을 받지 않게 한다(감사 S11). 닫거나 되돌린 업로드는
+            // 그대로다.
+            release_claim(&state, user, id).await;
+            return Err(err);
+        }
     }
     let mut tx = state.db.begin_as(user).await?;
     let row = my_upload(&mut tx, id).await?;
@@ -468,6 +476,23 @@ async fn finish(
             }
             Err(err)
         }
+    }
+}
+
+/// 멈춘 마무리의 점유를 푼다. 실패해도 원래 오류를 돌려주는 게 우선이라 기록만 남긴다(5분 뒤 넘겨받기는 그대로 된다).
+async fn release_claim(state: &AppState, user: UserId, id: UploadId) {
+    let released = async {
+        let mut tx = state.db.begin_as(user).await?;
+        sqlx::query("SELECT app_release_upload_claim($1)")
+            .bind(id)
+            .execute(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+        tx.commit().await
+    }
+    .await;
+    if let Err(err) = released {
+        tracing::warn!(event = "upload.release_failed", upload = %id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not release the completion claim");
     }
 }
 
