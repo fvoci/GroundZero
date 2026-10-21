@@ -5,7 +5,9 @@
 -- 끝난 기록 분기의 범위 검사(멈춤 > 구간)에 걸려 400이 났다(멈춘 시간을 직접 줄이기 전에는 고칠 수 없음).
 -- - 진행 중 분기: 끝난 기록과 같은 검사를 지금까지의 구간(멈춰 있으면 멈춘 때까지)에 한다. 멈춰 있는 동안의 멈춤은
 --   아직 누적에 없으므로 멈춘 때까지의 구간과 비교한다. 이 검사는 P-27의 두 안(멈춤이 구간을 넘지 않을 때만 허용, 멈춘
---   동안 시작 변경 자체를 막음)에 모두 필요하다. 멈춘 동안 아예 막을지는 그대로 사용자 결정이다.
+--   동안 시작 변경 자체를 막음)에 모두 필요하다. 멈춘 동안 아예 막을지는 그대로 사용자 결정이다. 시작을 바꿀 때만 본다:
+--   시작이 그대로면 구간은 늘기만 하거나 멈춰 있으면 그대로라 새로 어긋나지 않는다. 그래서 이미 어긋난 진행 중 타이머도
+--   메모·종류·대상은 고칠 수 있다.
 -- - 끝난 기록 분기: 시작·끝·멈춤을 바꿀 때만 범위를 검사한다. 이미 저장된 어긋난 기록도 메모·종류·대상은 고칠 수 있고,
 --   데이터는 바꾸지 않는다. 끝을 지우는 수정(`p_ended IS NULL`)은 지금처럼 거절한다.
 -- 본문은 0073과 같고 두 검사만 다르다.
@@ -28,7 +30,8 @@ CREATE OR REPLACE FUNCTION app_update_time_entry(p_entry uuid, p_base_version in
          OR p_started > coalesce(v_entry.paused_at, now()) THEN
         RAISE EXCEPTION 'a running timer only changes its start, kind, memo and target' USING ERRCODE = '22023';
       END IF;
-      IF v_entry.paused_seconds > extract(epoch FROM coalesce(v_entry.paused_at, now()) - p_started) THEN
+      IF p_started IS DISTINCT FROM v_entry.started_at
+         AND v_entry.paused_seconds > extract(epoch FROM coalesce(v_entry.paused_at, now()) - p_started) THEN
         RAISE EXCEPTION 'the start leaves less time than the timer was paused' USING ERRCODE = '22023';
       END IF;
     ELSIF p_ended IS NULL THEN
