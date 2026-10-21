@@ -40,8 +40,8 @@
   let editingId = $state<string | undefined>(undefined);
   /**
    * 고치는 기록의 기준 판: 고치기를 연 때 읽은 판. 저장 때의 최신 목록에서 가져오면 고치는 사이 목록을 다시 읽은 것만으로
-   * 서버의 판 확인이 꺼져 다른 사람의 고침을 덮는다. 409 뒤에도 그대로 두고, 사용자가 충돌 안내에서 서버 내용 불러오기나
-   * 덮어쓰기를 골랐을 때만 그 판으로 옮긴다.
+   * 서버의 판 확인이 꺼져 다른 사람의 고침을 덮는다. 409 뒤에도 그대로 두고, 충돌 안내에서 서버 내용 불러오기를 골랐을
+   * 때만 그 판으로 옮긴다(덮어쓰기는 그 저장 한 번만 보여 준 판을 보낸다).
    */
   let editingVersion = 0;
   /** 409 뒤 다시 읽은, 다른 사람이 먼저 고친 그 기록의 지금 내용. 고르기 전에는 입력과 기준 판을 그대로 둔다. */
@@ -135,13 +135,6 @@
     conflict = undefined;
   }
 
-  /** 충돌 안내에서 덮어쓰기를 골랐다: 보여 준 서버 판을 기준으로 내 입력을 저장한다(그사이 또 바뀌면 다시 409로 알린다). */
-  async function overwrite(def: RecordKindView, latest: RecordView): Promise<void> {
-    editingVersion = latest.version;
-    conflict = undefined;
-    await save(def);
-  }
-
   /**
    * 409를 받은 뒤 이 항목의 기록을 다시 읽는다. 다른 사람이 먼저 고쳐 판이 바뀌었으면(보관으로 막힌 409와 구분) 입력과
    * 기준 판은 그대로 두고 지금 저장된 내용을 보여 준다. 다시 저장해도 같은 기준 판을 보내 덮어쓰지 않고, 덮어쓰기를
@@ -168,7 +161,11 @@
     return true;
   }
 
-  async function save(def: RecordKindView): Promise<void> {
+  /**
+   * `baseVersion`은 고치기에서 보낼 기준 판. 충돌 안내에서 덮어쓰기를 고르면 보여 준 서버 판을 보낸다(그사이 또 바뀌면
+   * 다시 409로 알린다). 입력이 틀려 보내지 못하거나 실패하면 기준 판과 충돌 안내는 그대로 남는다.
+   */
+  async function save(def: RecordKindView, baseVersion = editingVersion): Promise<void> {
     if (form.title.trim() === '') {
       error = m.records_title_required();
       return;
@@ -180,7 +177,7 @@
     }
     error = undefined;
     const base =
-      !creating && editingId !== undefined ? { id: editingId, version: editingVersion } : undefined;
+      !creating && editingId !== undefined ? { id: editingId, version: baseVersion } : undefined;
     try {
       if (creating) {
         const requestId = createKey.for({ item: item.id, kind: def.kind, input: built.input });
@@ -375,7 +372,7 @@
                         startEdit(def, latest);
                       }}>{m.records_load_server()}</Button
                     >
-                    <Button size="sm" onclick={() => void overwrite(def, latest)}
+                    <Button size="sm" onclick={() => void save(def, latest.version)}
                       >{m.records_overwrite()}</Button
                     >
                   </div>

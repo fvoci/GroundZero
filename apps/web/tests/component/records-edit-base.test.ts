@@ -163,6 +163,34 @@ describe('record edit base version', () => {
     expect(await screen.findByText('최종')).toBeInTheDocument();
   });
 
+  // 덮어쓰기를 눌렀지만 입력이 틀려(제목 없음) 보내지 못했으면 충돌 안내와 기준 판이 그대로 남아야 한다. 그렇지 않으면
+  // 제목을 채운 뒤 그냥 저장만 눌러도 안내 없이 최신 판으로 덮어썼다.
+  it('keeps the conflict and the edit-start version when an overwrite is refused by validation', async () => {
+    await setLocale('ko', { reload: false });
+    mockPanel([record('r', '위험 R', 3)], [record('r', '남이 고친 R', 5)]);
+    const update = vi
+      .spyOn(api, 'updateRecord')
+      .mockRejectedValue(new ApiError(409, 'conflict', 'the record changed'));
+    render(RecordsPanel, { props: { item, kind: 'project', canWrite: true } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    await fireEvent.input(titleInput(), { target: { value: '내가 고친 R' } });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await screen.findByText('남이 고친 R');
+
+    await fireEvent.input(titleInput(), { target: { value: ' ' } });
+    await fireEvent.click(screen.getByRole('button', { name: '내 입력으로 덮어쓰기' }));
+    expect(screen.getByText('제목을 적어 주세요.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '내 입력으로 덮어쓰기' })).toBeInTheDocument();
+
+    await fireEvent.input(titleInput(), { target: { value: '내가 고친 R' } });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await vi.waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]?.[1]).toBe(3);
+  });
+
   it('loads the saved version into the form when asked, and then edits from it', async () => {
     await setLocale('ko', { reload: false });
     mockPanel([record('r', '위험 R', 3)], [record('r', '남이 고친 R', 5)]);
