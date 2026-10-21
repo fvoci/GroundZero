@@ -205,9 +205,15 @@ describe('record edit base version', () => {
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await screen.findByRole('alert');
 
-    await fireEvent.click(screen.getByRole('button', { name: '저장된 내용 불러오기' }));
+    const load = screen.getByRole('button', { name: '저장된 내용 불러오기' });
+    load.focus();
+    await fireEvent.click(load);
     expect(titleInput().value).toBe('남이 고친 R');
     expect(screen.queryByRole('alert')).toBeNull();
+    // 눌렀던 단추가 사라져도 초점은 제목 칸으로 간다(키보드 사용자가 자리를 잃지 않음).
+    await vi.waitFor(() => {
+      expect(titleInput()).toHaveFocus();
+    });
 
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await vi.waitFor(() => {

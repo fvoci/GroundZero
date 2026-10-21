@@ -2,6 +2,7 @@
   // 항목 기록(D-33 산출물·위험·문제·회고, D-34 문헌·연구 기록·데이터·변수·분석·투고, D-36 자료·모임·시험·복습,
   // D-38 재료·장비·장비 사용·활동·결과물). 종류와 칸은 서버의 정의대로 그린다. 권한은 항목을 따른다.
   import type { ModuleKind } from '@fvoci/api-client';
+  import { tick } from 'svelte';
 
   import type { FileView, ItemView, RecordKindView, RecordView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl } from '$lib/api/client';
@@ -368,8 +369,11 @@
                     <Button
                       size="sm"
                       variant="outline"
-                      onclick={() => {
+                      onclick={async () => {
                         startEdit(def, latest);
+                        // 안내가 사라지며 누른 단추도 없어지므로 초점을 제목 칸으로 옮긴다(키보드 사용자가 자리를 잃지 않게).
+                        await tick();
+                        document.getElementById(`record-${def.kind}-title`)?.focus();
                       }}>{m.records_load_server()}</Button
                     >
                     <Button size="sm" onclick={() => void save(def, latest.version)}
