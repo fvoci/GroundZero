@@ -109,16 +109,21 @@
       });
   });
 
-  async function run(action: () => Promise<unknown>, done: string): Promise<void> {
+  /** 처리하고 다시 읽는다. 성공하면 true(실패하면 오류를 보이고 false). */
+  async function run(action: () => Promise<unknown>, done: string): Promise<boolean> {
     error = undefined;
     try {
       await action();
       status = done;
       reloadKey += 1;
+      return true;
     } catch (e: unknown) {
       error = errorText(e, m.courses_action_failed());
+      return false;
     }
   }
+
+  let savingDetails = $state(false);
 
   function startEdit(c: CourseView): void {
     const d = c.details;
@@ -332,7 +337,9 @@
             error = m.courses_url_invalid();
             return;
           }
-          editing = false;
+          // 저장에 성공한 뒤에만 닫는다. 실패하면(보관됨·권한·연결) 입력을 그대로 두고 알린다.
+          if (savingDetails) return;
+          savingDetails = true;
           void run(
             () =>
               api.setCourseDetails(itemId, {
@@ -346,7 +353,10 @@
                 target_on: orNull(details.target_on),
               }),
             m.courses_details_saved(),
-          );
+          ).then((ok) => {
+            savingDetails = false;
+            if (ok) editing = false;
+          });
         }}
       >
         {#each [['subject', m.courses_subject()], ['instructor', m.courses_instructor()], ['platform', m.courses_platform()], ['url', m.courses_url()], ['textbook', m.courses_textbook()]] as const as [key, label] (key)}
@@ -362,7 +372,7 @@
           </div>
         {/each}
         <div class="flex gap-2 sm:col-span-2">
-          <Button type="submit">{m.common_save()}</Button>
+          <Button type="submit" disabled={savingDetails}>{m.common_save()}</Button>
           <Button variant="ghost" onclick={() => (editing = false)}>{m.common_cancel()}</Button>
         </div>
       </form>
