@@ -1013,13 +1013,18 @@ pub async fn update(
     Json(input): Json<EditRecord>,
 ) -> Result<Json<RecordVersion>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let found: Option<(ItemId, String, Value)> =
-        sqlx::query_as("SELECT item_id, kind, fields FROM item_records WHERE id = $1")
+    let found: Option<(ItemId, String, Value, i32)> =
+        sqlx::query_as("SELECT item_id, kind, fields, version FROM item_records WHERE id = $1")
             .bind(record)
             .fetch_optional(tx.conn())
             .await?;
-    let (item, kind, stored) = found.ok_or(AppError::NotFound)?;
-    // 그사이 바뀐 기록이면 아래 app_update_record가 판으로 409를 낸다.
+    let (item, kind, stored, stored_version) = found.ok_or(AppError::NotFound)?;
+    // 이미 저장된 id를 다시 확인하지 않는 기준(`stored`)은 바꿀 그 판이어야 한다. 읽은 판이 보낸 판과 다르면 바로 409다
+    // (아직 커밋되지 않은 다음 판을 짐작해 보내면 옛 판의 id로 확인을 건너뛰고, 다음 판이 커밋된 뒤 판이 맞아 저장했다).
+    // 판은 늘기만 하므로, 여기와 아래 app_update_record(행 잠금)에서 모두 같으면 그 사이 바뀐 것이 없다.
+    if stored_version != input.version {
+        return Err(AppError::Conflict("the record changed; reload it".into()));
+    }
     let (fields, files) = validate(
         &mut tx,
         item,

@@ -1404,3 +1404,96 @@ async fn records_keep_a_member_who_left_while_other_fields_change() {
     .await;
     assert_eq!(dropped.status, StatusCode::OK, "{:?}", dropped.json);
 }
+
+/// 리뷰(#58 요약의 보안 우려): 이미 저장된 id는 다시 확인하지 않는데, 그 "저장된 값"을 판 확인 없이 읽었다. 아직
+/// 커밋되지 않은 다음 판을 짐작해 보낸 고치기는 옛 판(나간 사람이 남은 출석)을 읽어 그 사람을 확인 없이 넘기고, 다음 판이
+/// 커밋된 뒤 판이 맞아 저장했다. 읽은 판이 보낸 판과 다르면 바로 409다.
+#[tokio::test]
+async fn kept_ids_come_from_the_version_being_replaced() {
+    use sqlx::Connection;
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "판 묶음").await;
+    let (gone, _) = add_member(&app, &state, &admin, &ws, "gone", "writer").await;
+    let study = module(&app, &admin, &ws, "study", "KVR").await;
+    let group = open_item(&app, &admin, &study, "읽기 모임").await;
+    let created = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{group}/records"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "meeting", "title": "1회",
+                     "fields": { "attendees": [admin.id.0, gone.id.0] } }),
+        ),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{:?}", created.json);
+    let id = created.json["id"].as_str().unwrap().to_owned();
+    let removed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{ws}/members/{}", gone.id.0),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(removed.status.is_success(), "{:?}", removed.json);
+
+    // 다른 쪽이 판 2(나간 사람을 뺀 출석)를 쓰는 중이다(아직 커밋하지 않음, 행 잠금을 쥠).
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let mut owner = sqlx::PgConnection::connect(&owner_url).await.unwrap();
+    let mut held = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *held)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE fvoci.item_records SET fields = jsonb_build_object('attendees', jsonb_build_array($2::text)),
+                version = version + 1 WHERE id = $1::uuid",
+    )
+    .bind(&id)
+    .bind(admin.id.0.to_string())
+    .execute(&mut *held)
+    .await
+    .unwrap();
+
+    // 판 2를 짐작해 나간 사람을 다시 넣는다.
+    let request = tokio::spawn({
+        let app = app.clone();
+        let admin = admin.clone();
+        let uri = format!("/api/records/{id}");
+        let body = json!({ "version": 2, "title": "1회",
+                           "fields": { "attendees": [admin.id.0, gone.id.0] } });
+        async move { send(&app, Method::PUT, &uri, Some(&admin), Some(body)).await }
+    });
+    // 그 고치기가 잠금에 막히거나(고치기 전) 바로 끝날 때(고친 뒤)까지 기다린다.
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let mut watcher = sqlx::PgConnection::connect(&admin_url).await.unwrap();
+    for _ in 0..200 {
+        let waiting: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid))",
+        )
+        .bind(holder)
+        .fetch_one(&mut watcher)
+        .await
+        .unwrap();
+        if waiting > 0 || request.is_finished() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    held.commit().await.unwrap();
+    let r = request.await.unwrap();
+    assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
+    assert_eq!(r.json["message"], "the record changed; reload it");
+    let attendees: Value = sqlx::query_scalar(
+        "SELECT fields->'attendees' FROM fvoci.item_records WHERE id = $1::uuid",
+    )
+    .bind(&id)
+    .fetch_one(&mut owner)
+    .await
+    .unwrap();
+    assert_eq!(attendees, json!([admin.id.0.to_string()]));
+}
