@@ -4,21 +4,41 @@
   // 낭독기에 알린다.
   import { api } from '$lib/api/client';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
+  import { me as currentUser } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
   import { Toaster } from '$lib/ui/sonner';
 
   import { auth, connection, watchConnection } from './feedback.svelte';
 
+  interface Props {
+    /** 이 창을 처음부터 다시 읽는다(시험에서 바꿔 끼운다). */
+    reload?: () => void;
+  }
+
+  const {
+    reload = () => {
+      window.location.reload();
+    },
+  }: Props = $props();
+
   const mobile = new IsMobile();
 
   $effect(() => watchConnection());
 
-  // 세션이 끝난 동안 이 창으로 돌아오면(다른 탭에서 로그인했을 수 있다) 다시 확인한다. 로그인돼 있으면
-  // client.ts가 성공한 응답을 보고 배너를 내린다.
+  // 세션이 끝난 동안 이 창으로 돌아오면(다른 탭에서 로그인했을 수 있다) 다시 확인한다. 같은 계정으로 로그인돼
+  // 있으면 client.ts가 성공한 응답을 보고 배너를 내리고, 화면과 입력은 그대로 둔다. 다른 계정으로 로그인했으면 이
+  // 창의 화면·입력·상태는 앞 계정의 것이므로 남기지 않고 처음부터 다시 읽는다.
   $effect(() => {
     const recheck = (): void => {
-      if (auth.expired) void api.me().catch(() => undefined);
+      if (!auth.expired) return;
+      const signedIn = currentUser.userId;
+      void api
+        .me()
+        .then((now) => {
+          if (now !== undefined && now.id !== signedIn) reload();
+        })
+        .catch(() => undefined);
     };
     window.addEventListener('focus', recheck);
     return () => {

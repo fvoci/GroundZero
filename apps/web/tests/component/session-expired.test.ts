@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '$lib/api/client';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import { auth, connection } from '$lib/features/feedback/feedback.svelte';
+import { me as currentUser } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
 
@@ -35,6 +36,7 @@ describe('session expired mid-use', () => {
     vi.restoreAllMocks();
     auth.expired = false;
     connection.lost = false;
+    currentUser.userId = '';
   });
 
   it('shows a banner with a sign-in link that opens in a new tab and returns to this page', async () => {
@@ -65,9 +67,9 @@ describe('session expired mid-use', () => {
     expect(signInLink()).toBeNull();
   });
 
-  it('lowers the banner after signing in elsewhere and coming back to this window', async () => {
+  /** 401로 배너를 띄운 뒤, 다른 탭에서 `id`로 로그인하고 이 창으로 돌아온다. */
+  async function signInElsewhereAs(id: string): Promise<void> {
     vi.stubGlobal('fetch', () => Promise.resolve(json(401, { error: 'unauthorized' })));
-    render(FeedbackHost);
     await expect(api.workspaces()).rejects.toThrow();
     await vi.waitFor(() => {
       expect(signInLink()).not.toBeNull();
@@ -76,13 +78,33 @@ describe('session expired mid-use', () => {
     vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
       Promise.resolve(
         input === '/api/me'
-          ? json(200, { id: 'u1', display_name: '나', email: null })
+          ? json(200, { id, display_name: '나', email: null })
           : json(404, { error: 'not_found' }),
       ),
     );
     await fireEvent.focus(window);
+  }
+
+  it('lowers the banner after signing in elsewhere and coming back to this window', async () => {
+    currentUser.userId = 'u1';
+    const reload = vi.fn();
+    render(FeedbackHost, { props: { reload } });
+    await signInElsewhereAs('u1');
     await vi.waitFor(() => {
       expect(signInLink()).toBeNull();
+    });
+    // 같은 계정이면 이 창의 화면과 입력을 그대로 둔다.
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  // 리뷰 지적: 새 탭에서 다른 계정으로 로그인하고 돌아오면 배너만 내려가고 앞 계정의 화면·입력이 그대로 남았다.
+  it('reloads the page when the new tab signed in as another account', async () => {
+    currentUser.userId = 'u1';
+    const reload = vi.fn();
+    render(FeedbackHost, { props: { reload } });
+    await signInElsewhereAs('u2');
+    await vi.waitFor(() => {
+      expect(reload).toHaveBeenCalledOnce();
     });
   });
 
