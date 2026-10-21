@@ -31,8 +31,9 @@
   let conflict = $state<{ current: EventView; input: EventInput } | undefined>(undefined);
   let confirmDelete = $state(false);
   let epoch = $state(0);
-  // 반복 편집기는 일정 저장 때 다시 그리지 않는다(저장 안 한 규칙 입력을 지우지 않게). "서버 내용 불러오기"에서만 서버
-  // 규칙으로 다시 만든다(그러지 않으면 요약은 서버 규칙인데 칸은 옛 규칙이라, 저장하면 옛 규칙을 다시 보낸다).
+  // 반복 편집기는 일정 저장 때 다시 그리지 않는다(저장 안 한 규칙 입력을 지우지 않게). 서버 규칙이 화면 규칙과 달라질
+  // 때("서버 내용 불러오기", 충돌 뒤 "내 내용으로 저장")만 서버 규칙으로 다시 만든다(그러지 않으면 요약은 서버 규칙인데
+  // 칸은 옛 규칙이라, 저장하면 옛 규칙을 다시 보낸다).
   let ruleEpoch = $state(0);
   // 보내는 중인 요청 수. 보내는 동안은 닫지 않는다(늦게 온 결과가 다시 연 창에 들어가지 않게, CalendarTaskDialog와 같음).
   let pending = $state(0);
@@ -73,6 +74,18 @@
 
   const canEdit = $derived(event !== undefined && event.access !== 'read');
 
+  function sameRule(a: RecurrenceRule | null, b: RecurrenceRule | null): boolean {
+    if (a === null || b === null) return a === b;
+    return (
+      a.freq === b.freq &&
+      a.interval === b.interval &&
+      a.until === b.until &&
+      a.count === b.count &&
+      a.weekdays.length === b.weekdays.length &&
+      a.weekdays.every((d, i) => d === b.weekdays[i])
+    );
+  }
+
   /** 보내는 동안 닫지 않게 센다. */
   async function sending<T>(request: Promise<T>): Promise<T> {
     pending += 1;
@@ -97,6 +110,9 @@
       return;
     }
     conflict = undefined;
+    // 보통 저장은 기준 버전이 맞아야 되므로 규칙이 그대로다. 충돌 뒤 "내 내용으로 저장"이면 저장된 일정에 다른 사람이
+    // 바꾼 규칙이 들어 있으니 반복 편집기도 그 규칙으로 다시 만든다(요약만 바뀌고 칸은 옛 규칙이면 옛 규칙을 다시 보냄).
+    if (!sameRule(result.event.recurrence, event.recurrence)) ruleEpoch += 1;
     event = result.event;
     formVersion = result.event.version;
     epoch += 1;

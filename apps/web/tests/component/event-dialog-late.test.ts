@@ -204,4 +204,84 @@ describe('event dialog load server', () => {
     });
     expect(setRule.mock.calls[0]?.[1]?.weekdays).toEqual([1, 3]);
   });
+
+  // 리뷰: "내 내용으로 저장"도 저장된 일정(서버 규칙 월·수)을 그대로 받아 요약만 바꾸고 반복 칸은 처음 읽은
+  // 월요일 그대로 두었다. 그대로 반복을 저장하면 다른 사람이 넣은 수요일을 지웠다.
+  it('rebuilds the recurrence editor after saving mine over a changed rule', async () => {
+    await setLocale('ko', { reload: false });
+    const mine: RecurrenceRule = {
+      freq: 'weekly',
+      interval: 1,
+      weekdays: [1],
+      until: null,
+      count: null,
+    };
+    const theirs: RecurrenceRule = { ...mine, weekdays: [1, 3] };
+    vi.spyOn(api, 'event').mockResolvedValue(ev('A', 5, '회의', mine));
+    const update = vi
+      .spyOn(api, 'updateEvent')
+      .mockResolvedValueOnce({ kind: 'conflict', current: ev('A', 6, '회의', theirs) })
+      .mockResolvedValueOnce({ kind: 'updated', event: ev('A', 7, '내 제목', theirs) });
+    const setRule = vi
+      .spyOn(api, 'setEventRecurrence')
+      .mockImplementation((_id: string, rule: RecurrenceRule | null) =>
+        Promise.resolve(ev('A', 8, '내 제목', rule)),
+      );
+    render(EventDialog, {
+      props: { eventId: 'A', onclose: () => undefined, onchanged: () => undefined },
+    });
+    await screen.findByDisplayValue('회의');
+    await fireEvent.input(titleInput(), { target: { value: '내 제목' } });
+    await fireEvent.submit(titleInput().closest('form') ?? titleInput());
+    await fireEvent.click(await screen.findByRole('button', { name: m.events_save_mine() }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    await flush();
+
+    const wednesday = document.getElementById('event-recurrence-wd-3');
+    expect(wednesday?.getAttribute('aria-checked')).toBe('true');
+
+    const rule = document.querySelector('[aria-labelledby="event-recurrence-heading"] form');
+    if (!(rule instanceof HTMLFormElement)) throw new Error('no recurrence form');
+    await fireEvent.submit(rule);
+    await waitFor(() => {
+      expect(setRule).toHaveBeenCalled();
+    });
+    expect(setRule.mock.calls[0]?.[1]?.weekdays).toEqual([1, 3]);
+  });
+
+  it('keeps unsaved rule input when an ordinary save leaves the rule unchanged', async () => {
+    await setLocale('ko', { reload: false });
+    const mine: RecurrenceRule = {
+      freq: 'weekly',
+      interval: 1,
+      weekdays: [1],
+      until: null,
+      count: null,
+    };
+    vi.spyOn(api, 'event').mockResolvedValue(ev('A', 5, '회의', mine));
+    vi.spyOn(api, 'updateEvent').mockImplementation((_id: string, _base: number, input) =>
+      Promise.resolve({ kind: 'updated', event: ev('A', 6, input.title, mine) }),
+    );
+    render(EventDialog, {
+      props: { eventId: 'A', onclose: () => undefined, onchanged: () => undefined },
+    });
+    await screen.findByDisplayValue('회의');
+    const friday = document.getElementById('event-recurrence-wd-5');
+    if (friday === null) throw new Error('no friday checkbox');
+    await fireEvent.click(friday);
+    expect(document.getElementById('event-recurrence-wd-5')?.getAttribute('aria-checked')).toBe(
+      'true',
+    );
+
+    await fireEvent.input(titleInput(), { target: { value: '내 제목' } });
+    await fireEvent.submit(titleInput().closest('form') ?? titleInput());
+    await screen.findByDisplayValue('내 제목');
+    await flush();
+
+    expect(document.getElementById('event-recurrence-wd-5')?.getAttribute('aria-checked')).toBe(
+      'true',
+    );
+  });
 });
