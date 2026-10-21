@@ -81,8 +81,13 @@
         error = m.events_missing_time({ zone });
         return;
       }
-      const kept = (wall: string, baseWall: string, stored: string | null): string | null =>
-        zone === base.timezone && wall === baseWall ? stored : null;
+      // 두 끝은 함께 정한다. 시각·시간대를 하나도 고치지 않았을 때만 원래 값을 보내고, 하나라도 고쳤으면 두 끝 모두
+      // 같은 규칙으로 다시 변환한다. 한쪽만 원래 값으로 두면 두 번 있는 시각(다시 변환하면 앞의 것)이나 초 때문에 끝이
+      // 시작보다 앞서거나(서버가 거절) 화면과 다른 길이가 된다.
+      const keep =
+        zone === base.timezone && f.startWall === base.startWall && f.endWall === base.endWall;
+      const instant = (wall: string, stored: string | null | undefined): string =>
+        keep && stored != null ? stored : instantOf(wall, zone);
       input = {
         kind: f.kind,
         title: f.title,
@@ -90,13 +95,8 @@
         all_day: f.allDay,
         start_date: f.allDay ? f.startDate : null,
         end_date: f.allDay ? f.endDate : null,
-        starts_at: f.allDay
-          ? null
-          : (kept(f.startWall, base.startWall, initial?.starts_at ?? null) ??
-            instantOf(f.startWall, zone)),
-        ends_at: f.allDay
-          ? null
-          : (kept(f.endWall, base.endWall, initial?.ends_at ?? null) ?? instantOf(f.endWall, zone)),
+        starts_at: f.allDay ? null : instant(f.startWall, initial?.starts_at),
+        ends_at: f.allDay ? null : instant(f.endWall, initial?.ends_at),
         timezone: zone,
       };
     } catch {
