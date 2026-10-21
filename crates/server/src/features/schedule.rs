@@ -754,6 +754,17 @@ pub(crate) async fn shift_conflict(
         .into_response())
 }
 
+/// 관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+/// - `TaskConflict`(`error: "shift_conflict"`, `current`): 승인한 재배치가 그사이 맞지 않게 됨(본문 있는 요청만).
+/// - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 보관된 항목, 동시 변경 재시도(40001·40P01), 새 id 부족(FV001).
+///   본문 없는 옛 요청의 409도 이 모양이다.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum PredecessorConflict {
+    Shift(Box<TaskConflict>),
+    State(ErrorBody),
+}
+
 /// 선행 업무 추가·설정(후속 업무 쓰기 권한). 같은 항목만, 자기 자신·순환·잘못된 종류나 지연일은 400.
 ///
 /// 본문이 없으면 옛 동작이다: 없을 때 종료 후 시작·지연 0으로 만들고, 이미 있으면 종류·지연일을 그대로 둔다.
@@ -763,7 +774,10 @@ pub(crate) async fn shift_conflict(
     params(("task_id" = String, Path, format = Uuid), ("predecessor_id" = String, Path, format = Uuid)),
     request_body(content = Option<SetPredecessor>, description = "없으면 옛 동작(없을 때 FS·0으로 추가, 있으면 그대로)"),
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = TaskConflict)), tag = "tasks")]
+              (status = 404, body = ErrorBody),
+              (status = 409, body = PredecessorConflict,
+               description = "`shift_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)")),
+    tag = "tasks")]
 pub async fn add_predecessor(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,

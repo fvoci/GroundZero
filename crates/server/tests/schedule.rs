@@ -848,3 +848,58 @@ async fn two_approvals_of_the_same_preview_save_once() {
     let start = if won == 2 { "2026-10-08" } else { "2026-10-10" };
     assert_eq!(b_now["start_date"], start);
 }
+
+/// 관계 설정의 409는 두 모양이다(계약 `PredecessorConflict`): 오래된 승인은 `TaskConflict`(최신본 포함), 보관된 항목은
+/// `ErrorBody`(`invalid_state`, 최신본 없음). 본문 없는 옛 요청도 보관이면 `ErrorBody`다.
+#[tokio::test]
+async fn link_conflicts_come_back_as_task_conflict_or_error_body() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "409 모양").await;
+    let item = module_item(&app, &admin, &ws, "CNF").await;
+    let a = dated(&app, &admin, &item, "A", "2026-10-01", "2026-10-05").await;
+    let b = dated(&app, &admin, &item, "B", "2026-10-06", "2026-10-07").await;
+    assert_eq!(link(&app, &admin, &a, &b).await, StatusCode::OK);
+
+    // 오래된 승인: 기준 버전을 하나 낮춰 보낸다.
+    let plan = plan_link(&app, &admin, &a, &b, "FS", 2).await;
+    let mut stale = approve(&plan.json);
+    stale[0]["base_version"] = json!(b["version"].as_i64().unwrap() - 1);
+    let r = set_link(
+        &app,
+        &admin,
+        &a,
+        &b,
+        json!({ "kind": "FS", "lag_days": 2, "successor_shifts": stale }),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
+    assert_eq!(r.json["error"], "shift_conflict");
+    assert_eq!(r.json["current"]["id"], b["id"]);
+    assert!(r.json.get("message").is_none());
+
+    // 보관된 항목: 일반 409(ErrorBody).
+    let archived = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{}/archived", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(archived.status, StatusCode::OK, "{:?}", archived.json);
+    for r in [
+        set_link(&app, &admin, &a, &b, json!({ "kind": "SS", "lag_days": 0 })).await,
+        send(&app, Method::PUT, &path_of(&a, &b), Some(&admin), None).await,
+    ] {
+        assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
+        assert_eq!(r.json["error"], "invalid_state");
+        assert!(r.json["message"].is_string());
+        assert!(r.json.get("current").is_none());
+    }
+    assert_eq!(
+        fetch(&app, &admin, &b).await["predecessors"],
+        json!([{ "task_id": a["id"], "kind": "FS", "lag_days": 0 }])
+    );
+}

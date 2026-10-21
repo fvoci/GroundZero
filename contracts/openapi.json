@@ -7572,11 +7572,11 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "`shift_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskConflict"
+                  "$ref": "#/components/schemas/PredecessorConflict"
                 }
               }
             }
@@ -13829,6 +13829,17 @@
             }
           }
         }
+      },
+      "PredecessorConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TaskConflict"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).\n- `TaskConflict`(`error: \"shift_conflict\"`, `current`): 승인한 재배치가 그사이 맞지 않게 됨(본문 있는 요청만).\n- `ErrorBody`(`error: \"invalid_state\"`, `current` 없음): 보관된 항목, 동시 변경 재시도(40001·40P01), 새 id 부족(FV001).\n  본문 없는 옛 요청의 409도 이 모양이다."
       },
       "ProjectedTask": {
         "type": "object",

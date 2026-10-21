@@ -3632,6 +3632,13 @@ export interface components {
         PlanUnits: {
             entries: components["schemas"]["PlanEntry"][];
         };
+        /**
+         * @description 관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+         *     - `TaskConflict`(`error: "shift_conflict"`, `current`): 승인한 재배치가 그사이 맞지 않게 됨(본문 있는 요청만).
+         *     - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 보관된 항목, 동시 변경 재시도(40001·40P01), 새 id 부족(FV001).
+         *       본문 없는 옛 요청의 409도 이 모양이다.
+         */
+        PredecessorConflict: components["schemas"]["TaskConflict"] | components["schemas"]["ErrorBody"];
         /** @description 아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다. */
         ProjectedTask: {
             due_date?: string | null;
@@ -9820,12 +9827,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description `shift_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`) */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskConflict"];
+                    "application/json": components["schemas"]["PredecessorConflict"];
                 };
             };
         };
