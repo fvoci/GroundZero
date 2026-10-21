@@ -660,3 +660,142 @@ async fn checklist_rename_and_toggle_by_two_people_both_stay() {
         assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
     }
 }
+
+/// 칸반 이동 한 번. `base`를 주면 그 이동 판에서 읽은 업무만 옮긴다(D-89).
+async fn move_to(
+    app: &Router,
+    user: &TestUser,
+    task: &str,
+    status: &str,
+    before: Option<&str>,
+    base: Option<i64>,
+) -> (StatusCode, Value) {
+    let mut body = json!({ "status": status, "before_id": before });
+    if let Some(base) = base {
+        body["base_move_version"] = json!(base);
+    }
+    let r = send(
+        app,
+        Method::PUT,
+        &format!("/api/tasks/{task}/position"),
+        Some(user),
+        Some(body),
+    )
+    .await;
+    (r.status, r.json)
+}
+
+/// 항목의 업무를 서버 순서대로: (제목, 상태, 이동 판, 필드 판).
+async fn board(app: &Router, user: &TestUser, item: &Value) -> Vec<(String, String, i64, i64)> {
+    let (status, list) = get(
+        app,
+        user,
+        &format!("/api/items/{}/tasks", item["id"].as_str().unwrap()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{list:?}");
+    list.as_array()
+        .unwrap()
+        .iter()
+        .map(|t| {
+            (
+                t["title"].as_str().unwrap().to_owned(),
+                t["status"].as_str().unwrap().to_owned(),
+                t["move_version"].as_i64().unwrap(),
+                t["version"].as_i64().unwrap(),
+            )
+        })
+        .collect()
+}
+
+/// D-89: 조건부 이동은 읽은 뒤 그사이 그 업무의 열·위치가 바뀌었으면(같은 열 안 순서만 바뀌어도) 아무것도 바꾸지 않고
+/// 409를 돌려준다. 비교와 옮기기는 행을 잠근 한 트랜잭션이라 동시에 보내도 하나만 된다. 조건 없는 이동은 그대로다.
+#[tokio::test]
+async fn conditional_moves_refuse_a_place_changed_since_it_was_read() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "조건부 이동").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let item = module_item(&app, &admin, &ws, "CMV").await;
+    make_public(&app, &admin, &item).await;
+    let a = task(&app, &admin, &item, "가").await;
+    let b = task(&app, &admin, &item, "나").await;
+    let c = task(&app, &admin, &item, "다").await;
+    let id = |t: &Value| t["id"].as_str().unwrap().to_owned();
+    assert_eq!(a["move_version"], 0);
+
+    // 다른 사람이 먼저 옮기면, 그 전에 읽은 판으로 보낸 이동은 409와 지금 업무를 받고 아무것도 바꾸지 못한다.
+    let (status, _) = move_to(&app, &writer, &id(&a), "in_progress", None, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let before = board(&app, &admin, &item).await;
+    let (status, conflict) = move_to(&app, &admin, &id(&a), "done", None, Some(0)).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{conflict:?}");
+    assert_eq!(conflict["error"], "move_conflict");
+    assert_eq!(conflict["current"]["status"], "in_progress");
+    assert_eq!(conflict["current"]["move_version"], 1);
+    assert_eq!(board(&app, &admin, &item).await, before);
+
+    // 같은 열 안에서 순서만 바뀌어도 이동 판이 오른다(필드 판은 그대로라 상세 편집은 막지 않는다).
+    let (status, reordered) = move_to(&app, &writer, &id(&c), "todo", Some(&id(&b)), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(reordered["move_version"], 1);
+    assert_eq!(reordered["version"], c["version"]);
+    let before = board(&app, &admin, &item).await;
+    let (status, _) = move_to(&app, &admin, &id(&c), "done", None, Some(0)).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(board(&app, &admin, &item).await, before);
+    // 지금 판으로 보내면 옮겨진다.
+    let (status, moved) = move_to(&app, &admin, &id(&c), "done", None, Some(1)).await;
+    assert_eq!(status, StatusCode::OK, "{moved:?}");
+    assert_eq!(moved["move_version"], 2);
+
+    // 응답을 잃은 뒤 같은 판으로 다시 보내면(이미 반영됨) 두 번 옮기지 않고 409다.
+    let (status, first) = move_to(&app, &admin, &id(&b), "in_progress", None, Some(0)).await;
+    assert_eq!(status, StatusCode::OK);
+    let after_first = board(&app, &admin, &item).await;
+    let (status, again) = move_to(&app, &admin, &id(&b), "in_progress", None, Some(0)).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{again:?}");
+    assert_eq!(again["current"]["move_version"], first["move_version"]);
+    assert_eq!(board(&app, &admin, &item).await, after_first);
+
+    // 되돌리기: 내 이동 뒤 다른 사람이 같은 열 안에서 순서를 바꿨으면 되돌리지 못한다.
+    let mine = first["move_version"].as_i64().unwrap();
+    let (status, _) = move_to(&app, &writer, &id(&b), "in_progress", Some(&id(&a)), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = move_to(&app, &admin, &id(&b), "todo", None, Some(mine)).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+
+    // 필드 고치기로 상태를 바꿔도 이동 판이 오른다(어느 경로로 바뀌었든 같은 판).
+    let (_, fresh_a) = get(&app, &admin, &format!("/api/tasks/{}", id(&a))).await;
+    let read = fresh_a["move_version"].as_i64().unwrap();
+    let (status, edited) = update(&app, &writer, &fresh_a, json!({ "status": "done" })).await;
+    assert_eq!(status, StatusCode::OK, "{edited:?}");
+    assert_eq!(edited["move_version"].as_i64().unwrap(), read + 1);
+    let (status, _) = move_to(&app, &admin, &id(&a), "todo", None, Some(read)).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+
+    // 같은 판으로 동시에 보내면 하나만 옮겨지고 나머지는 409다(비교와 옮기기 사이에 끼지 못한다).
+    let base = edited["move_version"].as_i64().unwrap();
+    let ta = id(&a);
+    let (one, two) = tokio::join!(
+        move_to(&app, &admin, &ta, "todo", None, Some(base)),
+        move_to(&app, &writer, &ta, "in_progress", None, Some(base)),
+    );
+    let mut statuses = [one.0, two.0];
+    statuses.sort_by_key(StatusCode::as_u16);
+    assert_eq!(statuses, [StatusCode::OK, StatusCode::CONFLICT]);
+    let (_, now) = get(&app, &admin, &format!("/api/tasks/{ta}")).await;
+    assert_eq!(now["move_version"].as_i64().unwrap(), base + 1);
+    let winner = if one.0 == StatusCode::OK {
+        "todo"
+    } else {
+        "in_progress"
+    };
+    assert_eq!(now["status"], winner);
+
+    // 조건 없는 이동은 이전과 같다(판과 상관없이 옮김).
+    let (status, plain) = move_to(&app, &writer, &ta, "done", None, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(plain["status"], "done");
+}

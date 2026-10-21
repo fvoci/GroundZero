@@ -1048,6 +1048,8 @@ export interface TaskView {
   checklist_done: number;
   checklist_total: number;
   version: number;
+  /** 이동 판(D-89): 열이나 열 안 위치가 바뀔 때마다 오른다. 조건부 이동의 기준. */
+  move_version: number;
   completed_at: string | null;
   access: Access;
   updated_at: string;
@@ -1162,6 +1164,7 @@ export function parseTask(value: Json): TaskView {
     checklist_done: int(o, 'checklist_done'),
     checklist_total: int(o, 'checklist_total'),
     version: int(o, 'version'),
+    move_version: int(o, 'move_version'),
     completed_at: optStr(o, 'completed_at'),
     access: access(str(o, 'access')),
     updated_at: str(o, 'updated_at'),
@@ -2618,10 +2621,15 @@ export const api = {
     if (status !== 200) fail(status, json);
     return { kind: 'updated', task: parseTaskDetail(json) };
   },
-  moveTask: (id: string, status: TaskStatus, beforeId: string | null) =>
+  /**
+   * 칸반 이동. `baseMoveVersion`을 주면 그 이동 판에서 읽은 업무만 옮긴다(D-89): 그사이 열·위치가 바뀌었으면 서버가
+   * 아무것도 바꾸지 않고 409 `move_conflict`를 돌려준다(`ApiError`). 주지 않으면 판과 상관없이 옮긴다.
+   */
+  moveTask: (id: string, status: TaskStatus, beforeId: string | null, baseMoveVersion?: number) =>
     expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/position`, parseTaskDetail, {
       status,
       before_id: beforeId,
+      ...(baseMoveVersion === undefined ? {} : { base_move_version: baseMoveVersion }),
     }),
   previewSchedule: (id: string, startDate: string | null, dueDate: string | null) =>
     expectOk(

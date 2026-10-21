@@ -250,7 +250,6 @@
   "tasks_card_checking": "Checking…",
   "tasks_card_unknown": "Save not confirmed",
   "tasks_card_not_saved": "Not saved",
-  "tasks_move_overlapped": "{title}: it changed elsewhere while the move was being sent again, so this move may have replaced that change. Showing the latest server state; check it and move the card again if needed.",
   "tasks_assignable_load_failed": "Couldn't load the people who can be assigned. The current assignees are kept when you save.",
   "tasks_lane_estimate": "Estimate {duration}",
   "tasks_lane_estimate_shown": "Shown cards estimate {duration}",
@@ -265,7 +264,6 @@
   "tasks_undone_end": "{title}: moved back ({status}). The task that was right after it is no longer in that column, so it went to the end.",
   "tasks_undo_changed": "{title}: it changed elsewhere after the move, so it wasn't moved back. Showing the latest server state.",
   "tasks_undo_read_failed": "{title}: couldn't check the current state, so it wasn't moved back. Check your connection and press it again.",
-  "tasks_undo_overlapped": "{title}: it changed elsewhere while moving it back, so undoing may have replaced that change. Showing the latest server state.",
   "tasks_gantt_edit_hint": "Drag a bar to move its dates, or drag either end to change the start or due date. Keyboard: on the task name, Alt+Left/Right moves it a day, Alt+Shift+Left/Right changes the due date by a day (change only the start date in the task details). If later tasks are affected, you're asked before saving.",
   "tasks_gantt_saved": "{title}: dates changed ({dates}).",
   "tasks_gantt_saved_shifts": "{title}: dates changed, and {count} later tasks moved too.",
@@ -274,5 +272,6 @@
   "tasks_gantt_conflict": "{title}: the task changed elsewhere in the meantime, so it wasn't saved. Showing the latest state.",
   "tasks_gantt_failed": "{title}: couldn't change the dates.",
   "tasks_gantt_dialog_title": "Change dates of {title}",
-  "tasks_gantt_dialog_description": "{from} → {to}. Later tasks that wait for this one are affected."
+  "tasks_gantt_dialog_description": "{from} → {to}. Later tasks that wait for this one are affected.",
+  "tasks_move_conflict": "{title}: it was moved elsewhere before the retry went through, so nothing was sent. Showing the latest server state."
 }

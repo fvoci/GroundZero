@@ -49,6 +49,7 @@ function task(id: string, title: string, status: TaskStatus, estimate: number | 
     checklist_done: 0,
     checklist_total: 0,
     version: 1,
+    move_version: 0,
     completed_at: null,
     access: 'write',
     updated_at: '2026-10-21T00:00:00Z',

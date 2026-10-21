@@ -8,7 +8,6 @@ import { api, ApiError, NetworkError } from '$lib/api/client';
 import {
   classifyMoveError,
   originOf,
-  overlapped,
   overlayPending,
   reconcileMove,
   replan,
@@ -57,6 +56,7 @@ function task(id: string, title: string, status: TaskStatus = 'todo', version = 
     checklist_done: 0,
     checklist_total: 0,
     version,
+    move_version: version,
     completed_at: null,
     access: 'write',
     updated_at: '2026-10-21T00:00:00Z',
@@ -65,7 +65,7 @@ function task(id: string, title: string, status: TaskStatus = 'todo', version = 
 
 describe('move result helpers', () => {
   const before = [task('a', 'A'), task('b', 'B'), task('c', 'C', 'in_progress')];
-  const origin = { status: 'todo' as const, nextId: 'b', version: 1 };
+  const origin = { status: 'todo' as const, nextId: 'b', moveVersion: 1 };
   const plan = { status: 'in_progress' as const, beforeId: null };
 
   it('tells applied, not applied, changed and gone apart from a fresh list', () => {
@@ -87,7 +87,7 @@ describe('move result helpers', () => {
   });
 
   it('counts a move whose target is the starting place as applied (the state already matches)', () => {
-    const atEnd = { status: 'todo' as const, nextId: null, version: 1 };
+    const atEnd = { status: 'todo' as const, nextId: null, moveVersion: 1 };
     expect(reconcileMove([task('a', 'A')], 'a', atEnd, { status: 'todo', beforeId: null })).toBe(
       'applied',
     );
@@ -102,16 +102,10 @@ describe('move result helpers', () => {
     expect(classifyMoveError(new TypeError('bad body'))).toBe('uncertain');
   });
 
-  it('notices a change that slipped in before a resend only when it raised the version', () => {
-    // 이 이동만이면 열이 바뀌어 판 1 → 2.
-    expect(overlapped(origin, plan, 2)).toBe(false);
-    // 그사이 다른 사람의 열 이동이나 편집이 판을 올렸다.
-    expect(overlapped(origin, plan, 3)).toBe(true);
-    // 같은 열 안 순서 바꾸기는 판이 오르지 않는다: 이 이동만이면 그대로, 편집이 끼면 오른다.
-    const sameLane = { status: 'todo' as const, beforeId: null };
-    expect(overlapped(origin, sameLane, 1)).toBe(false);
-    expect(overlapped(origin, sameLane, 2)).toBe(true);
-    // 한계: 다른 사람이 같은 열 안에서만 순서를 바꿨다면 판이 같아 알 수 없다(위 첫 경우와 구별되지 않음).
+  it('tells a same-column reorder elsewhere apart from not applied, by the move version', () => {
+    // 같은 자리·같은 열이어도 그사이 이 업무가 열 안에서 옮겨졌다 돌아왔으면 이동 판이 올라 '반영 안 됨'으로 보지 않는다.
+    const reordered = [task('a', 'A', 'todo', 2), task('b', 'B'), task('c', 'C', 'in_progress')];
+    expect(reconcileMove(reordered, 'a', origin, plan)).toBe('changed');
   });
 
   it('keeps other pending moves on top of a fresh list and replans a vanished target', () => {
@@ -276,7 +270,7 @@ describe('kanban save states', () => {
     await fireEvent.click(within(box).getByRole('button', { name: '다시 시도' }));
     await flush();
     expect(move).toHaveBeenCalledTimes(2);
-    expect(move).toHaveBeenLastCalledWith('a', 'in_progress', null);
+    expect(move).toHaveBeenLastCalledWith('a', 'in_progress', null, 1);
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('in_progress');
     // 응답의 판이 이 이동만으로 될 판(1 → 2)이므로 겹친 변경으로 알리지 않는다.
@@ -325,36 +319,37 @@ describe('kanban save states', () => {
     expect(screen.getByRole('alert').textContent).toContain('그사이 다른 곳에서 바뀌어');
   });
 
-  it('a change made elsewhere right after the reread is reported, not confirmed', async () => {
-    // 다시 시도 직전 목록은 이동 전 그대로(판 1)였는데, 보내기 전에 다른 사람이 완료로 옮겼다(판 2). 이동 API에는 판
-    // 조건이 없어 이번 이동이 그 위에 반영되고(판 3) 그 변경을 덮는다. 막을 수는 없으므로 확정이라고 하지 않고 알린다.
-    const overlappedA = task('a', 'API 연결', 'in_progress', 3);
-    const read = lists(start, start, start, [task('b', '문서 검토'), overlappedA]);
+  it('a retry carries the move version it read, and a refusal shows the server state without sending again', async () => {
+    // 다시 시도 직전 목록은 이동 전 그대로(이동 판 1)였다. 보내기 전에 다른 사람이 완료로 옮겼으면 서버가 조건을 보고
+    // 아무것도 바꾸지 않고 409 move_conflict를 돌려준다(D-89). 화면은 최신 상태를 다시 읽어 보이고 다시 보내지 않는다.
+    const elsewhere = [task('b', '문서 검토'), task('a', 'API 연결', 'done', 2)];
+    const read = lists(start, start, start, elsewhere);
     const move = vi
       .spyOn(api, 'moveTask')
       .mockRejectedValueOnce(new NetworkError('reset'))
-      .mockResolvedValueOnce({ ...overlappedA, checklist: [] });
+      .mockRejectedValueOnce(
+        new ApiError(409, 'move_conflict', 'the task moved since it was read'),
+      );
     await mount();
     await moveRight('a');
     await flush();
     expect(saveState('a')).toBe('not_saved');
+    // 처음 옮기기는 조건 없이 보낸다(D-79).
+    expect(move.mock.calls[0]?.[3]).toBeUndefined();
     const box = card('a').closest<HTMLElement>('[data-board-card]');
     if (box === null) throw new Error('box');
     await fireEvent.click(within(box).getByRole('button', { name: '다시 시도' }));
     await flush();
     expect(move).toHaveBeenCalledTimes(2);
-    // 보낸 뒤 서버 목록을 다시 읽어 최신 상태를 보인다.
+    expect(move.mock.calls[1]).toEqual(['a', 'in_progress', null, 1]);
     expect(read).toHaveBeenCalledTimes(4);
     expect(saveState('a')).toBeNull();
-    expect(laneOf('a')).toBe('in_progress');
+    expect(laneOf('a')).toBe('done');
     expect(screen.getByRole('alert').textContent).toContain(
-      'API 연결: 다시 보내는 사이 다른 곳에서 이 업무가 바뀌어, 이번 이동이 그 변경을 덮었을 수 있습니다.',
+      'API 연결: 다시 보내기 전에 다른 곳에서 이 업무가 옮겨져 보내지 않았습니다.',
     );
-    expect(liveText()).not.toContain('옮겼습니다');
     expect(liveText()).not.toContain('저장을 확인했습니다');
-    // 안내는 다음 동작 전까지 남는다(자동으로 지우지 않는다).
     await flush(20000);
-    expect(screen.getByRole('alert').textContent).toContain('덮었을 수 있습니다');
     expect(move).toHaveBeenCalledTimes(2);
   });
 
@@ -511,7 +506,7 @@ describe('kanban save states', () => {
     expect(liveText()).toContain('앞선 이동을 저장하는 중입니다');
     await moveRight('b');
     expect(move).toHaveBeenCalledTimes(2);
-    expect(move).toHaveBeenLastCalledWith('b', 'in_progress', null);
+    expect(move).toHaveBeenLastCalledWith('b', 'in_progress', null, undefined);
   });
 
   it('leaving the screen stops the timers and ignores late answers', async () => {

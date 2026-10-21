@@ -41,14 +41,7 @@
     planDrop,
   } from './board';
   import type { MoveOrigin } from './move-sync';
-  import {
-    classifyMoveError,
-    originOf,
-    overlapped,
-    overlayPending,
-    reconcileMove,
-    replan,
-  } from './move-sync';
+  import { classifyMoveError, originOf, overlayPending, reconcileMove, replan } from './move-sync';
   import type { TaskFilter, TaskSort, TaskViewMode } from './filters';
   import {
     applyFilter,
@@ -325,8 +318,8 @@
     /** 이동 전 서버 자리. */
     from: MoveOrigin;
     to: BoardMove;
-    /** 이 이동 뒤의 판. */
-    version: number;
+    /** 이 이동 뒤의 이동 판(D-89). */
+    moveVersion: number;
   }
   let undoOffer = $state<UndoOffer | undefined>(undefined);
   function offerUndo(
@@ -334,13 +327,13 @@
     title: string,
     from: MoveOrigin,
     to: BoardMove,
-    version: number,
+    moveVersion: number,
   ): void {
-    undoOffer = { id, title, from, to, version };
+    undoOffer = { id, title, from, to, moveVersion };
   }
   /** 이 목록에서도 되돌리기가 맞는지(그 카드가 이 이동의 결과 그대로인지). */
   const undoStillFits = (server: readonly TaskView[], u: UndoOffer): boolean =>
-    server.find((t) => t.id === u.id)?.version === u.version &&
+    server.find((t) => t.id === u.id)?.move_version === u.moveVersion &&
     reconcileMove(server, u.id, u.from, u.to) === 'applied';
 
   async function undoMove(): Promise<void> {
@@ -682,7 +675,7 @@
     await commitMove(created.id, { status: lane, beforeId: null }, 'menu', created.title, {
       status: created.status,
       nextId: null,
-      version: created.version,
+      moveVersion: created.move_version,
     });
   }
 
@@ -714,7 +707,7 @@
     knownOrigin?: MoveOrigin,
     /** 다시 시도: 이 판의 대기 항목을 그대로 교체한다(지우고 다시 넣는 사이에 같은 카드의 요청이 끼지 않게). */
     replacing?: number,
-    /** 되돌리기: 보내기 직전 서버 자리를 기준으로 보내므로 끼어든 변경을 판으로 알아차리고, 다시 되돌리기는 내놓지 않는다. */
+    /** 되돌리기: 보내기 직전 서버 자리와 그 이동 판을 조건으로 보내고(끼어든 변경은 서버가 409로 거절), 다시 되돌리기는 내놓지 않는다. */
     undo?: { done: (title: string, lane: TaskStatus) => string },
   ): Promise<boolean> {
     const title = knownTitle ?? titleOf(id);
@@ -755,27 +748,22 @@
       }, CHECK_MS),
     ];
     try {
-      const saved = await api.moveTask(id, plan.status, plan.beforeId);
+      // 다시 시도·되돌리기는 보내기 직전에 읽은 서버 자리의 이동 판을 조건으로 보낸다(D-89): 그사이 다른 곳에서 이
+      // 업무의 열·위치가 바뀌었으면 서버가 아무것도 바꾸지 않고 409 `move_conflict`를 돌려준다. 처음 옮기기는 조건 없이.
+      const guarded = replacing !== undefined || undo !== undefined;
+      const saved = await api.moveTask(
+        id,
+        plan.status,
+        plan.beforeId,
+        guarded ? origin.moveVersion : undefined,
+      );
       if (!current(id, seq)) return true;
       finish(id);
       await reload();
-      // 다시 시도는 보내기 직전에 읽은 서버 자리를 기준으로 보낸다. 이동 API에는 판 조건이 없어 그 사이 다른 변경이
-      // 끼면 이 이동이 덮는다. 응답의 판이 이 이동만으로 될 판보다 크면 그런 변경이 있었던 것이므로 알린다.
-      if (
-        (replacing !== undefined || undo !== undefined) &&
-        overlapped(origin, plan, saved.version)
-      ) {
-        moveNotice =
-          undo === undefined
-            ? m.tasks_move_overlapped({ title })
-            : m.tasks_undo_overlapped({ title });
-        status = moveNotice;
-        return true;
-      }
       clearMoveNotice();
       status =
         undo === undefined ? movedMessage(how, title, plan.status) : undo.done(title, plan.status);
-      if (undo === undefined) offerUndo(id, title, origin, plan, saved.version);
+      if (undo === undefined) offerUndo(id, title, origin, plan, saved.move_version);
       return true;
     } catch (e: unknown) {
       if (!current(id, seq)) return false;
@@ -786,10 +774,18 @@
       finish(id);
       tasks = applyMove(tasks, id, { status: origin.status, beforeId: origin.nextId });
       // 안내는 다시 읽기 전에 정한다: 다시 읽는 동안 카드는 풀려 있어 그사이 성공한 다음 이동의 안내를 늦게 덮지 않게.
-      const message = moveErrorMessage(e);
+      // 조건부 이동이 거절됐다(그사이 다른 곳에서 이 업무의 열·위치가 바뀜, D-89): 아무것도 바뀌지 않았다. 최신 상태를
+      // 다시 읽어 보이고 다시 보내지 않는다. 항목 자체의 상태(보관·권한)가 바뀐 것이 아니므로 항목은 다시 읽지 않는다.
+      const conflicted = e instanceof ApiError && e.code === 'move_conflict';
+      const message = conflicted
+        ? undo === undefined
+          ? m.tasks_move_conflict({ title })
+          : m.tasks_undo_changed({ title })
+        : moveErrorMessage(e);
       moveNotice = message;
       status = message;
-      if (e instanceof ApiError && (e.status === 403 || e.status === 409)) onstale?.();
+      if (!conflicted && e instanceof ApiError && (e.status === 403 || e.status === 409))
+        onstale?.();
       await reload();
       return false;
     }
@@ -830,7 +826,7 @@
       status = m.tasks_move_confirmed({ title: p.title, status: STATUS_LABEL[p.plan.status] });
       const confirmed = server.find((t) => t.id === id);
       if (p.undoable && confirmed !== undefined)
-        offerUndo(id, p.title, p.origin, p.plan, confirmed.version);
+        offerUndo(id, p.title, p.origin, p.plan, confirmed.move_version);
     } else if (stillInFlight) {
       patch(id, seq, { phase: 'slow' });
       status = m.tasks_move_slow({ title: p.title });
@@ -857,7 +853,7 @@
 
   /**
    * 저장되지 않은 이동을 다시 보낸다. 보내기 직전 서버를 한 번 더 읽어 그때까지 다른 곳에서 바뀌었으면 보내지 않고 알린다.
-   * 읽은 뒤 보내기 전 사이의 변경은 이동 API에 판 조건이 없어 막지 못하므로, 응답의 판으로 알아차려 알린다(`overlapped`).
+   * 읽은 뒤 보내기 전 사이의 변경은 읽은 이동 판을 조건으로 보내 서버가 막는다(D-89, 어긋나면 409 `move_conflict`).
    */
   async function retryMove(id: string): Promise<void> {
     const p = pending[id];
