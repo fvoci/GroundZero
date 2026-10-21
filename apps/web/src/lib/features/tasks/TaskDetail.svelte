@@ -7,6 +7,7 @@
 
   import type {
     AssigneeView,
+    LinkBase,
     LinkKind,
     RecurrenceRule,
     ShiftProposalView,
@@ -110,12 +111,16 @@
   let editing = $state<string | undefined>(undefined);
   let linkKind = $state<LinkKind>('FS');
   let lagText = $state('0');
+  // 편집을 시작한 관계의 종류·지연일(새 관계면 null). 저장할 때 함께 보내 그사이 다른 곳에서 바뀌었으면 서버가 409로
+  // 거절한다(말없이 덮지 않음).
+  let linkBase = $state<LinkBase | null>(null);
   let linkStatus = $state('');
   // 관계를 바꾸면 옮겨야 하는 후속 업무(미리보기). 승인하면 본 관계·목록 그대로 보낸다.
   interface LinkPending {
     predecessor: string;
     kind: LinkKind;
     lag: number;
+    base: LinkBase | null;
     proposals: ShiftProposalView[];
     undated: UndatedTaskView[];
     blocked: PlanBlockedView | null;
@@ -418,6 +423,7 @@
     editing = predecessor;
     linkKind = link.kind;
     lagText = String(link.lag_days);
+    linkBase = { kind: link.kind, lag_days: link.lag_days };
     linkStatus = '';
   }
 
@@ -426,6 +432,7 @@
     predecessorChoice = '';
     linkKind = 'FS';
     lagText = '0';
+    linkBase = null;
   }
 
   /** 관계 저장: 먼저 서버에 영향을 묻고, 옮길 후속 업무가 있으면 사용자에게 보인다(D-31, D-91). */
@@ -445,6 +452,7 @@
     error = undefined;
     linkStatus = '';
     const kind = linkKind;
+    const base = linkBase;
     try {
       const plan = await api.previewLink(task.id, predecessor, kind, lag);
       if (plan.shifts.length > 0) {
@@ -452,6 +460,7 @@
           predecessor,
           kind,
           lag,
+          base,
           proposals: plan.shifts,
           undated: plan.undated,
           blocked: plan.blocked,
@@ -459,7 +468,7 @@
         };
         return;
       }
-      await saveLink(predecessor, kind, lag, [], plan.undated);
+      await saveLink(predecessor, kind, lag, base, [], plan.undated);
     } catch (e: unknown) {
       error = errorText(e, m.tasks_predecessor_failed());
     } finally {
@@ -471,22 +480,50 @@
     predecessor: string,
     kind: LinkKind,
     lag: number,
+    base: LinkBase | null,
     shifts: ShiftProposalView[],
     undated: UndatedTaskView[],
   ): Promise<void> {
     if (task === undefined) return;
-    const result = await api.setPredecessor(task.id, predecessor, kind, lag, shifts.map(toShift));
+    const result = await api.setPredecessor(
+      task.id,
+      predecessor,
+      kind,
+      lag,
+      base,
+      shifts.map(toShift),
+    );
+    if (result.kind === 'link_conflict') {
+      // 편집을 시작한 뒤 다른 곳에서 이 관계가 바뀌었다(아무것도 바뀌지 않음). 최신 관계를 보이고, 입력한 종류·지연일은
+      // 그대로 두며, 다음 저장은 최신 관계를 기준으로 한다(다시 누르면 알고 덮는다).
+      linkPending = undefined;
+      const current = result.current;
+      if (task.version === current.version) task = current;
+      else refresh(current);
+      const now = current.predecessors.find((l) => l.task_id === predecessor);
+      if (now === undefined) {
+        resetLinkEditor();
+        error = m.tasks_link_gone();
+      } else {
+        editing = predecessor;
+        linkBase = { kind: now.kind, lag_days: now.lag_days };
+        error = m.tasks_link_changed({ now: linkText(now) });
+      }
+      onchanged();
+      return;
+    }
     if (result.kind === 'shift_conflict') {
       // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
       const plan = await api.previewLink(task.id, predecessor, kind, lag);
       if (plan.shifts.length === 0) {
-        await saveLink(predecessor, kind, lag, [], plan.undated);
+        await saveLink(predecessor, kind, lag, base, [], plan.undated);
         return;
       }
       linkPending = {
         predecessor,
         kind,
         lag,
+        base,
         proposals: plan.shifts,
         undated: plan.undated,
         blocked: plan.blocked,
@@ -511,7 +548,14 @@
     busy = true;
     error = undefined;
     try {
-      await saveLink(p.predecessor, p.kind, p.lag, withShifts ? p.proposals : [], p.undated);
+      await saveLink(
+        p.predecessor,
+        p.kind,
+        p.lag,
+        p.base,
+        withShifts ? p.proposals : [],
+        p.undated,
+      );
     } catch (e: unknown) {
       error = errorText(e, m.tasks_predecessor_failed());
     } finally {

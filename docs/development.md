@@ -2181,11 +2181,12 @@ CodeRabbit은 push마다 바뀐 부분을 자동 검토했고(`5caedc9`·`acc544
   `changing_a_link_previews_causes_and_moves_approved_tasks_in_one_transaction`).
 - API: `Task.predecessors`(업무·종류·지연일, `predecessor_ids`와 같은 순서), `ShiftProposal.causes`, `SchedulePlan{shifts, undated}`,
   `POST /api/tasks/{id}/schedule-plan`, `POST /api/tasks/{id}/predecessors/{pred}/schedule-plan`, 본문을 받는
-  `PUT /api/tasks/{id}/predecessors/{pred}`(본문 없으면 옛 동작). 감사: `link_predecessor`(종류·지연일 포함), `change_predecessor`(이전·새),
+  `PUT /api/tasks/{id}/predecessors/{pred}`(본문 없으면 옛 동작. 0082에서 없앴다: 본문 필수, 편집을 시작한 관계 `base`, 바뀌었으면 409
+  `link_conflict`). 감사: `link_predecessor`(종류·지연일 포함), `change_predecessor`(이전·새),
   `reschedule`(이유 `dependency_changed`). 관계 설정의 409는 두 모양이다(계약 `PredecessorConflict` = `TaskConflict | ErrorBody`):
   오래된 승인은 `TaskConflict`(`shift_conflict`, 최신본 포함), 보관된 항목·동시 변경 재시도·새 id 부족은 `ErrorBody`(`invalid_state`,
-  최신본 없음, 본문 없는 옛 요청도 같음). 응답 자체는 바꾸지 않고 계약만 맞췄다(`debd7fa`). 웹은 `current`가 있는
-  `shift_conflict`만 다시 묻기로 돌리고 나머지는 일반 오류로 알린다.
+  최신본 없음). 응답 자체는 바꾸지 않고 계약만 맞췄다(`debd7fa`). 웹은 `current`가 있는 `shift_conflict`만 다시 묻기로
+  돌리고 나머지는 일반 오류로 알린다(0082부터 `link_conflict`는 최신 관계를 보이고 입력을 지킨다).
 - 웹: 업무 상세의 선행·후속 목록이 관계를 "시작 후 시작 (SS), 2일 뒤"처럼 글로 보이고, 고치기는 종류(뜻 문장과 함께)·지연일(0~3650
   정수만)을 고른 뒤 미리보기 → 승인/관계만 저장/취소. 승인 목록이 오래됐으면 다시 계산해 다시 묻는다. 간트의 선은 종류에 맞는 끝을
   잇고(SS는 두 시작의 왼쪽, FF는 두 끝의 오른쪽으로 돌아감, FS·SF는 틈이 없으면 줄 경계로), 화살촉은 후속 쪽에서 들어가는 방향을
