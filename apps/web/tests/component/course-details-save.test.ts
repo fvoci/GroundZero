@@ -75,4 +75,36 @@ describe('course details save', () => {
     expect(instructor()).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
   });
+
+  // 리뷰: 저장 응답을 기다리는 사이 더 고친 입력은 요청에 들지 않았는데, 성공하면 폼을 닫아 그 입력이 사라졌다.
+  // 더 고친 칸이 있으면 폼을 열어 둔다.
+  it('keeps the form open with details typed while the save was in flight', async () => {
+    await setLocale('ko', { reload: false });
+    mockCourse();
+    let finish: () => void = () => undefined;
+    const save = vi.spyOn(api, 'setCourseDetails').mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          finish = () => {
+            resolve(undefined);
+          };
+        }),
+    );
+    render(CoursePanel, { props: { itemId: 'i1' } });
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    const field = instructor();
+    if (field === null) throw new Error('course-instructor');
+    await fireEvent.input(field, { target: { value: '박 강사' } });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+    // 응답을 기다리는 사이 강사를 더 고친다.
+    await fireEvent.input(field, { target: { value: '최 강사' } });
+    finish();
+
+    expect(await screen.findByText('강좌 정보를 저장했습니다.')).toBeInTheDocument();
+    expect(save.mock.calls[0]?.[1].instructor).toBe('박 강사');
+    expect(instructor()?.value).toBe('최 강사');
+  });
 });

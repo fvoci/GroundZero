@@ -60,6 +60,17 @@
     expires_on: '',
     target_on: '',
   });
+  /** 강좌 정보 입력 칸. 저장하는 사이 더 고친 칸이 있는지 볼 때 쓴다. */
+  const detailKeys = [
+    'subject',
+    'instructor',
+    'platform',
+    'url',
+    'textbook',
+    'starts_on',
+    'expires_on',
+    'target_on',
+  ] as const;
   let openEpisode = $state<string | undefined>(undefined);
   let mine = $state({ planned_on: '', position: '', note: '' });
   /** 시청 위치 입력 오류(칸 옆에 보인다, D-82). */
@@ -361,22 +372,24 @@
           // 저장에 성공한 뒤에만 닫는다. 실패하면(보관됨·권한·연결) 입력을 그대로 두고 알린다.
           if (savingDetails) return;
           savingDetails = true;
+          // 보낸 입력. 응답을 기다리는 사이 더 고친 칸이 있으면 닫지 않는다(보내지 않은 입력이 사라지지 않게).
+          const sent = { ...details };
           void run(
             () =>
               api.setCourseDetails(itemId, {
-                subject: details.subject,
-                instructor: details.instructor,
-                platform: details.platform,
-                url: details.url,
-                textbook: details.textbook,
-                starts_on: orNull(details.starts_on),
-                expires_on: orNull(details.expires_on),
-                target_on: orNull(details.target_on),
+                subject: sent.subject,
+                instructor: sent.instructor,
+                platform: sent.platform,
+                url: sent.url,
+                textbook: sent.textbook,
+                starts_on: orNull(sent.starts_on),
+                expires_on: orNull(sent.expires_on),
+                target_on: orNull(sent.target_on),
               }),
             m.courses_details_saved(),
           ).then((ok) => {
             savingDetails = false;
-            if (ok) editing = false;
+            if (ok && detailKeys.every((key) => details[key] === sent[key])) editing = false;
           });
         }}
       >
