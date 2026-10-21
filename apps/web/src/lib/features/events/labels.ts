@@ -1,10 +1,10 @@
 // 일정 표시 글자. 시각은 보는 사람의 시간대로 보이고, 일정의 시간대가 다르면 그 기준 시각도 함께 적는다(D-50).
 // 글자는 부를 때 지금 언어로 만든다(언어는 실행 중에 바뀔 수 있다, D-81).
 import type { EventKind, EventView, RecurrenceRule } from '$lib/api/client';
-import { formatDay, weekdays } from '$lib/display';
+import { displaySettings, formatClock, formatDay, weekdays } from '$lib/display';
 import { m } from '$lib/paraglide/messages.js';
 
-import { clock, dayIn } from './time';
+import { dayIn, isKnownZone } from './time';
 
 export const KIND_LABEL: Record<EventKind, string> = {
   get meeting() {
@@ -31,16 +31,24 @@ export function describeWhen(event: EventView, viewerZone: string): string {
   if (event.starts_at === null || event.ends_at === null) return '';
   const startDay = dayIn(event.starts_at, viewerZone);
   const endDay = dayIn(event.ends_at, viewerZone);
-  // 날짜는 표시 언어의 서식으로(D-81), 시각은 그대로 `HH:mm`.
+  // 날짜는 표시 언어의 서식으로, 시각은 시각 표시 설정(12·24시간)으로. 달력 칸과 같은 공통 서식이다(D-81).
   const span =
     startDay === endDay
-      ? `${formatDay(startDay)} ${clock(event.starts_at, viewerZone)}–${clock(event.ends_at, viewerZone)}`
-      : `${formatDay(startDay)} ${clock(event.starts_at, viewerZone)} ~ ${formatDay(endDay)} ${clock(event.ends_at, viewerZone)}`;
+      ? `${formatDay(startDay)} ${timeIn(event.starts_at, viewerZone)}–${timeIn(event.ends_at, viewerZone)}`
+      : `${formatDay(startDay)} ${timeIn(event.starts_at, viewerZone)} ~ ${formatDay(endDay)} ${timeIn(event.ends_at, viewerZone)}`;
   if (event.timezone === viewerZone) return span;
   return m.events_when_in_zone({
     span,
     zone: event.timezone,
-    time: `${formatDay(dayIn(event.starts_at, event.timezone))} ${clock(event.starts_at, event.timezone)}`,
+    time: `${formatDay(dayIn(event.starts_at, event.timezone))} ${timeIn(event.starts_at, event.timezone)}`,
+  });
+}
+
+/** 그 시간대의 시각(`오후 3:05`·`15:05`). 브라우저가 모르는 시간대면 날짜(`dayIn`)처럼 UTC로 보인다. */
+function timeIn(iso: string, timeZone: string): string {
+  return formatClock(iso, {
+    ...displaySettings(),
+    timeZone: isKnownZone(timeZone) ? timeZone : 'UTC',
   });
 }
 
