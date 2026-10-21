@@ -2182,22 +2182,45 @@ CodeRabbit은 push마다 바뀐 부분을 자동 검토했고(`5caedc9`·`acc544
 - API: `Task.predecessors`(업무·종류·지연일, `predecessor_ids`와 같은 순서), `ShiftProposal.causes`, `SchedulePlan{shifts, undated}`,
   `POST /api/tasks/{id}/schedule-plan`, `POST /api/tasks/{id}/predecessors/{pred}/schedule-plan`, 본문을 받는
   `PUT /api/tasks/{id}/predecessors/{pred}`(본문 없으면 옛 동작). 감사: `link_predecessor`(종류·지연일 포함), `change_predecessor`(이전·새),
-  `reschedule`(이유 `dependency_changed`).
+  `reschedule`(이유 `dependency_changed`). 관계 설정의 409는 두 모양이다(계약 `PredecessorConflict` = `TaskConflict | ErrorBody`):
+  오래된 승인은 `TaskConflict`(`shift_conflict`, 최신본 포함), 보관된 항목·동시 변경 재시도·새 id 부족은 `ErrorBody`(`invalid_state`,
+  최신본 없음, 본문 없는 옛 요청도 같음). 응답 자체는 바꾸지 않고 계약만 맞췄다(`debd7fa`). 웹은 `current`가 있는
+  `shift_conflict`만 다시 묻기로 돌리고 나머지는 일반 오류로 알린다.
 - 웹: 업무 상세의 선행·후속 목록이 관계를 "시작 후 시작 (SS), 2일 뒤"처럼 글로 보이고, 고치기는 종류(뜻 문장과 함께)·지연일(0~3650
   정수만)을 고른 뒤 미리보기 → 승인/관계만 저장/취소. 승인 목록이 오래됐으면 다시 계산해 다시 묻는다. 간트의 선은 종류에 맞는 끝을
   잇고(SS는 두 시작의 왼쪽, FF는 두 끝의 오른쪽으로 돌아감, FS·SF는 틈이 없으면 줄 경계로), 화살촉은 후속 쪽에서 들어가는 방향을
   가리킨다. 줄 이름에 초점·가리킴이면 그 업무의 관계를 표 아래에 글로 보인다.
+- 관계 지우기(`a17ee72`, 리뷰 r4334088593): 고치는 중인 관계를 지우면 편집 칸을 닫는다(전에는 편집 칸이 지운 관계를 계속 가리켜
+  "관계 저장"이 그 관계를 다시 만들었다). 지우기 응답을 기다리는 동안 다른 저장을 막고, 다른 관계를 고치던 편집은 그대로 두며,
+  실패하면 관계·편집 내용을 그대로 두고 알린다. 성공하면 "관계를 지웠습니다."와 함께 초점을 선행 업무 제목으로 돌린다. 다른 사람이
+  다른 화면에서 지운 관계를 이 화면의 열린 편집 칸에서 저장하면 그 관계는 새로 생긴다(이 화면이 알 수 없는 변경, 남은 한계).
 - 개발 예제(`dev-module-seed.sql`): 프로젝트 예제에 SS·1, FF·0, SF·0 관계를 더했다(날짜는 이미 관계를 채움). 예제는 한 번만 만드므로
   이미 만든 개발 DB에는 들어가지 않는다.
+- 새 DB에서 개발 예제 전체(`debd7fa`, 일반 PostgreSQL): 별도 worktree(경로가 다르면 Compose 프로젝트·볼륨도 다르다)에서
+  `cargo xtask dev --oidc --no-web`을 그대로 실행했다. 마이그레이션 전부(0077까지)와 `dev-seed.sql`·`dev-module-seed.sql`이 오류 없이
+  적용됐고(`ON_ERROR_STOP=1`), 넣은 행을 다시 읽어 FS·0(옛 함수)·SS·1·FF·0·SF·0 관계 4개가 모두 날짜 제약을 채우는지, 모든 `id`가
+  UUIDv7인지, `id` 기본값과 DB 안 UUID 생성 함수가 없는지 확인했다. 두 번째 실행은 행 수와 관계·업무·워크스페이스 내용 해시가 같았고,
+  예제 워크스페이스를 앱 함수로 지운 뒤(휴지통, 그다음 영구 삭제) 다시 실행해도 만들지 않았다(같은 일회용 DB 안에서만).
+  셀프호스트 Supabase에는 개발 실행 경로(`xtask dev --supabase`)가 없어 예제 실행은 NOT RUN이다(마이그레이션 전부는
+  `test --supabase`가 새 Supabase DB에 적용한다).
+- worktree 사이에 `CARGO_TARGET_DIR`를 같이 쓰면 `xtask`가 마지막으로 빌드된 worktree의 경로(`CARGO_MANIFEST_DIR`, 빌드 때 고정)를
+  쓴다. 다른 worktree에서 `cargo xtask`를 돌리기 전에 그 worktree에서 `xtask`를 다시 빌드한다(이번 검증에서 그 탓에 일회용 프로젝트의
+  컨테이너가 다시 만들어졌다. 마이그레이션·예제는 돌지 않았다).
 - 시험: Rust 단위 13건(종류·지연일별 끝, 이미 채운 관계, 관계 고치기의 증분, 합류·분기·섞인 사슬, 마일스톤·한쪽 날짜, 날짜 없는 업무
-  알림, 승인 목록 비교), 통합 6건(FS·0 유지와 옛 요청, 잘못된 입력·순환·권한, 미리보기 원인과 원자적 승인·오래된 승인 거부, 종류별
-  API, 저장 때 다시 계산, 복제, 같은 미리보기의 동시 승인은 하나만), 웹 `gantt-links.test.ts` 종류별 5건, `task-detail-links.test.ts` 6건.
-  `c0475a4`에서 `cargo xtask check`, `test --oidc`, `test --supabase --oidc`, `test --supabase --session-pooler --oidc` 통과.
-- 마이그레이션 확인: 기존 개발 DB(관계 8개, 0076까지 적용)에 0077을 적용하자 8개 모두 FS·0이 됐다(DB 읽기).
+  알림, 승인 목록 비교), 계약 3건(operationId, 선택 본문, 409 두 모양), 통합 7건(FS·0 유지와 옛 요청, 잘못된 입력·순환·권한, 미리보기
+  원인과 원자적 승인·오래된 승인 거부, 종류별 API, 저장 때 다시 계산, 복제, 같은 미리보기의 동시 승인은 하나만, 409 두 모양), 웹
+  `gantt-links.test.ts` 종류별 5건, `task-detail-links.test.ts` 10건(고치는 중 지우기 4건 포함, 그중 3건은 수정 전 실패),
+  `link-conflict.test.ts` 2건. `debd7fa`에서 `cargo xtask check`(웹 364건), `test --oidc`(275), `test --supabase --oidc`(278),
+  `test --supabase --session-pooler --oidc`(556) 통과.
+- 마이그레이션 확인: 기존 개발 DB(관계 8개, 0076까지 적용)에 0077을 적용하자 8개 모두 FS·0이 됐다(DB 읽기). 별도로 `2edb234`(0076)로
+  새 일회용 DB를 만들고 옛 함수로 FS 관계 3개(예제 1개, 사슬·합류 2개)를 둔 뒤 같은 DB를 `debd7fa`로 올렸다: 관계(선행·후속·항목·
+  만든 사람·만든 때)와 업무(id·판·날짜)의 내용 해시가 그대로이고 세 관계 모두 FS·0, `kind`·`lag_days` 기본값과 CHECK가 생겼다.
 - 브라우저 확인(내장 브라우저, 합성 데이터, 도구의 마우스·키보드 입력이며 사람의 실제 손 조작이 아님): 관계 종류 바꾸기(FS·0 →
   FF·2)의 미리보기와 원인 글, 취소(아무것도 바뀌지 않음), 승인(관계와 세 업무 날짜가 함께 바뀜), 옮길 것이 없는 바꾸기(바로 저장),
   새 관계 만들기와 "관계만 저장", 간트의 SS·FF·SF 선과 가리킴 때 관계 글(밝은·어두운 테마), 375×812 에뮬레이션(실제 기기 아님).
-  저장한 뒤 초점이 대화상자 맨 위로 가던 것을 선행 업무 제목으로 돌렸다(`c0475a4`).
+  저장한 뒤 초점이 대화상자 맨 위로 가던 것을 선행 업무 제목으로 돌렸다(`c0475a4`). 고치는 중 지우기는 `a19db16`에서 재현(지운 관계가
+  다시 생김)한 뒤 `debd7fa`에서 편집 칸 닫힘·초점·꺼진 저장(요청 없음)·다른 관계 편집 유지·서버를 멈춘 실패를 확인했다. 지우기 응답이
+  늦는 사이의 저장은 실제 화면에서 응답을 늦출 수 없어 컴포넌트 시험으로만 확인했다.
 
 ## 참고 자료
 
