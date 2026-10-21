@@ -856,3 +856,179 @@ async fn two_admins_removing_each_other_at_once_leave_one_of_them() {
     assert_eq!(admins, 1, "both admins removed each other");
     db.close().await;
 }
+
+/// 소유자가 관리자 `admin`을 작성자로 내리는 트랜잭션을 열어 둔다(커밋 전). 역할 바꾸기는 두 사람의 멤버 행을 잠근다.
+async fn demoting(
+    state: &fvoci_server::http::AppState,
+    owner: &TestUser,
+    ws_id: uuid::Uuid,
+    admin: &TestUser,
+) -> fvoci_server::db::UserTx {
+    let n: i32 = {
+        let mut tx = state.db.begin_as(owner.id).await.unwrap();
+        let n = sqlx::query_scalar("SELECT app_set_member_role_ids($1, $2)")
+            .bind(ws_id)
+            .bind(admin.id)
+            .fetch_one(tx.conn())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        n
+    };
+    let mut t1 = state.db.begin_as(owner.id).await.unwrap();
+    sqlx::query("SELECT app_set_member_role($1, $2, 'writer', $3)")
+        .bind(ws_id)
+        .bind(admin.id)
+        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+        .execute(t1.conn())
+        .await
+        .unwrap();
+    t1
+}
+
+/// 리뷰(감사 S17 후속): 그룹에 사람을 넣는 관리자 확인이 호출한 사람의 멤버 행을 잠그지 않아, 그 관리자가 동시에 작성자로
+/// 내려져도(먼저 커밋) 넣기가 통과했다. 호출한 사람과 대상의 멤버 행을 잠근 뒤 관리자인지 다시 본다.
+#[tokio::test]
+async fn an_admin_demoted_meanwhile_cannot_add_to_a_group() {
+    let state = common::state();
+    let app = common::app(&state);
+    let owner = login(&state, "owner").await;
+    let ws = create_workspace(&app, &owner, "강등 중 그룹").await;
+    let admin = add_member(&app, &state, &owner, &ws, "admin", "admin").await;
+    let member = add_member(&app, &state, &owner, &ws, "member", "writer").await;
+    let group = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/groups"),
+        Some(&owner),
+        Some(json!({ "name": "팀" })),
+    )
+    .await;
+    assert_eq!(group.status, StatusCode::CREATED, "{:?}", group.json);
+    let gid = group.json["id"].as_str().unwrap().to_owned();
+    let ws_id: uuid::Uuid = ws.parse().unwrap();
+
+    let t1 = demoting(&state, &owner, ws_id, &admin).await;
+    let uri = format!("/api/groups/{gid}/members/{}", member.id.0);
+    let added = while_open(t1, {
+        let app = app.clone();
+        let admin = admin.clone();
+        async move { send(&app, Method::PUT, &uri, Some(&admin), None).await }
+    })
+    .await;
+    assert_eq!(added.status, StatusCode::FORBIDDEN, "{:?}", added.json);
+    let db = owner_pool().await;
+    let rows: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM fvoci.group_members WHERE user_id = $1")
+            .bind(member.id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(rows, 0, "a demoted admin added a group member");
+    db.close().await;
+}
+
+/// 리뷰(감사 S16 후속): 초대 철회의 관리자 확인이 잠그기 전에 한 번뿐이라, 그 관리자가 동시에 작성자로 내려져도(먼저
+/// 커밋) 철회가 통과했다. 워크스페이스와 호출한 사람의 멤버 행을 잠근 뒤 관리자인지 다시 본다.
+#[tokio::test]
+async fn an_admin_demoted_meanwhile_cannot_revoke_an_invitation() {
+    let state = common::state();
+    let app = common::app(&state);
+    let owner = login(&state, "owner").await;
+    let ws = create_workspace(&app, &owner, "강등 중 철회").await;
+    let admin = add_member(&app, &state, &owner, &ws, "admin", "admin").await;
+    let inv = invite(&app, &owner, &ws, &unique_email("invitee"), "writer").await;
+    let inv_id = inv["id"].as_str().unwrap().to_owned();
+    let ws_id: uuid::Uuid = ws.parse().unwrap();
+
+    let t1 = demoting(&state, &owner, ws_id, &admin).await;
+    let uri = format!("/api/invitations/{inv_id}");
+    let revoked = while_open(t1, {
+        let app = app.clone();
+        let admin = admin.clone();
+        async move { send(&app, Method::DELETE, &uri, Some(&admin), None).await }
+    })
+    .await;
+    assert_eq!(revoked.status, StatusCode::FORBIDDEN, "{:?}", revoked.json);
+    let db = owner_pool().await;
+    let closed: Option<String> =
+        sqlx::query_scalar("SELECT close_reason FROM fvoci.invitations WHERE id = $1::uuid")
+            .bind(&inv_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(closed, None, "a demoted admin revoked the invitation");
+    db.close().await;
+}
+
+/// 리뷰(감사 S15 후속): 항목 멤버 정하기가 항목 행을 잡은 뒤에 담당자·리더 정리의 워크스페이스 잠금을 기다려, 그 잠금을
+/// 먼저 쥐고 항목 행을 기다리는 역할 바꾸기(그 항목의 리더)와 교착했다. 이제 그 잠금을 항목 행보다 먼저 잡는다. 여기서는
+/// 역할 바꾸기 쪽을 직접 흉내 낸다: 워크스페이스 잠금을 쥔 채 항목 멤버 정하기가 기다리게 한 뒤 항목 행을 잠근다.
+#[tokio::test]
+async fn setting_item_members_does_not_deadlock_with_the_workspace_assignee_lock() {
+    let state = common::state();
+    let app = common::app(&state);
+    let owner = login(&state, "owner").await;
+    let ws = create_workspace(&app, &owner, "항목 멤버 잠금 순서").await;
+    let member = add_member(&app, &state, &owner, &ws, "member", "writer").await;
+    let item = private_item(&app, &owner, &ws, "LKM").await;
+
+    let db = owner_pool().await;
+    let mut hold = db.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *hold)
+        .await
+        .unwrap();
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('fvoci-assignees:' || $1, 0))")
+        .bind(&ws)
+        .execute(&mut *hold)
+        .await
+        .unwrap();
+    let request = tokio::spawn({
+        let (app, owner, uri, user) = (
+            app.clone(),
+            owner.clone(),
+            format!("/api/items/{item}/members"),
+            member.id.0,
+        );
+        async move {
+            send(
+                &app,
+                Method::PUT,
+                &uri,
+                Some(&owner),
+                Some(json!({ "user_ids": [user], "group_ids": [] })),
+            )
+            .await
+        }
+    });
+    let mut blocked = false;
+    for _ in 0..500 {
+        blocked = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(holder)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        if blocked {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(blocked, "setting item members never waited on the lock");
+    // 역할 바꾸기처럼 그 잠금을 쥔 채 항목 행을 잠근다. 고치기 전에는 요청이 항목 행을 쥐고 있어 교착(40P01)이었다.
+    let locked = tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        sqlx::query("SELECT 1 FROM fvoci.items WHERE id = $1::uuid FOR UPDATE")
+            .bind(&item)
+            .execute(&mut *hold),
+    )
+    .await
+    .expect("locking the item row waited too long");
+    assert!(locked.is_ok(), "{locked:?}");
+    hold.commit().await.unwrap();
+    let set = request.await.unwrap();
+    db.close().await;
+    assert!(set.status.is_success(), "{:?}", set.json);
+}

@@ -12,6 +12,9 @@
 --    덮었다. 수락과 같은 순서(워크스페이스 → 초대)로 잠근 뒤 아직 열려 있는지 다시 본다(아니면 55000, 409).
 -- 4. 관리자끼리 서로 내보내기·강등(S17): 호출한 사람의 관리자 확인을 잠그지 않고 해서 둘 다 통과했다. 두 사람의 멤버 행을
 --    id 순서로 잠근 뒤 확인한다(먼저 끝난 쪽만 통과, 다른 쪽은 이미 관리자가 아니거나 멤버가 아님).
+-- 5. 리뷰 반영: 그룹 멤버 넣기·빼기와 초대 철회도 호출한 사람의 멤버 행을 잠근 뒤 관리자인지 다시 본다(동시에 강등된
+--    관리자가 통과하지 않게). 항목 멤버 정하기는 담당자·리더 정리의 워크스페이스 잠금을 항목 행보다 먼저 잡는다(역할
+--    바꾸기와 같은 순서, 교착 방지).
 -- 함수 본문은 0070·0072의 마지막 정의와 같고 잠금과 다시 확인만 다르다.
 
 CREATE OR REPLACE FUNCTION app_revoke_invitation(p_invitation uuid, p_ids uuid[]) RETURNS void
@@ -26,8 +29,11 @@ CREATE OR REPLACE FUNCTION app_revoke_invitation(p_invitation uuid, p_ids uuid[]
       RAISE EXCEPTION 'invitation not found' USING ERRCODE = 'P0002';
     END IF;
     PERFORM app_require_admin(v_ws);
-    -- 0081: 수락과 같은 순서(워크스페이스 → 초대)로 잠근 뒤 아직 열려 있는지 다시 본다.
+    -- 0081: 수락과 같은 순서(워크스페이스 → 초대)로 잠근 뒤 아직 열려 있는지 다시 본다. 그 사이 호출한 사람의 멤버 행도
+    -- 잠그고 관리자인지 다시 본다(동시에 강등·내보내기가 먼저 끝났으면 거절, 리뷰).
     PERFORM app_lock_live_workspace(v_ws);
+    PERFORM 1 FROM workspace_members WHERE workspace_id = v_ws AND user_id = app_user_id() FOR UPDATE;
+    PERFORM app_require_admin(v_ws);
     PERFORM 1 FROM invitations WHERE id = p_invitation AND closed_at IS NULL FOR UPDATE;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'invitation is no longer open' USING ERRCODE = '55000';
@@ -122,9 +128,12 @@ CREATE OR REPLACE FUNCTION app_set_group_member(p_group uuid, p_member uuid, p_p
       RAISE EXCEPTION 'group not found' USING ERRCODE = 'P0002';
     END IF;
     PERFORM app_require_admin(v_ws);
+    -- 0081: 호출한 사람과 대상의 멤버 행을 id 순서로 잠근 뒤 관리자인지 다시 보고 대상을 확인한다(동시에 내보내기·강등이
+    -- 먼저 끝났으면 끝난 뒤의 상태로 본다, 리뷰).
+    PERFORM 1 FROM workspace_members WHERE workspace_id = v_ws AND user_id IN (app_user_id(), p_member)
+    ORDER BY user_id FOR UPDATE;
+    PERFORM app_require_admin(v_ws);
     IF p_present THEN
-      -- 0081: 대상의 멤버 행을 공유 잠금한 뒤 확인한다(동시에 내보내는 중이면 끝날 때까지 기다린 뒤 다시 본다).
-      PERFORM 1 FROM workspace_members WHERE workspace_id = v_ws AND user_id = p_member FOR SHARE;
       IF NOT EXISTS (SELECT 1 FROM workspace_members WHERE workspace_id = v_ws AND user_id = p_member) THEN
         RAISE EXCEPTION 'only workspace members can join a group' USING ERRCODE = '22023';
       END IF;
@@ -132,7 +141,6 @@ CREATE OR REPLACE FUNCTION app_set_group_member(p_group uuid, p_member uuid, p_p
       PERFORM app_audit(app_id(p_ids, 1), v_ws, 'add_group_member', 'group', p_group,
                         jsonb_build_object('user', p_member));
     ELSE
-      PERFORM 1 FROM workspace_members WHERE workspace_id = v_ws AND user_id = p_member FOR UPDATE;
       DELETE FROM group_members WHERE group_id = p_group AND user_id = p_member;
       v_used := app_drop_unseen_assignees(NULL, v_ws, p_member, 'group_member_removed', p_ids);
       PERFORM app_audit(app_id(p_ids, v_used + 1), v_ws, 'remove_group_member', 'group', p_group,
@@ -158,6 +166,9 @@ CREATE OR REPLACE FUNCTION app_set_item_members(p_item uuid, p_users uuid[], p_g
     PERFORM 1 FROM workspace_members
     WHERE workspace_id = (SELECT workspace_id FROM items WHERE id = p_item) AND user_id = ANY (v_users)
     ORDER BY user_id FOR SHARE;
+    -- 담당자·리더 정리(`app_drop_unseen_assignees`)의 워크스페이스 잠금을 항목 행보다 먼저 잡는다. 역할 바꾸기·내보내기는
+    -- 멤버 행 → 이 잠금 → 항목 행 순서라, 항목 행을 쥔 채 이 잠금을 기다리면 그 리더의 역할을 바꾸는 요청과 교착했다(리뷰).
+    PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-assignees:' || (SELECT workspace_id FROM items WHERE id = p_item)::text, 0));
     SELECT * INTO v_item FROM items WHERE id = p_item FOR UPDATE;
     v_access := app_item_access(p_item);
     IF v_access IS NULL THEN
