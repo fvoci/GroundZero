@@ -300,6 +300,31 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     expect(screen.getByText('업무 3개를 등록했습니다.')).toBeInTheDocument();
   });
 
+  // 검토: 등록하는 동안 글자를 지운 뒤 그 등록이 성공하면 끝난 묶음의 진행 상태를 버린다(새 묶음). 남기면 다음에 같은
+  // 줄을 넣어도 "이미 등록함"으로 건너뛰고 등록했다고만 알렸다.
+  it('starts a new batch when the text was cleared during an import that succeeded', async () => {
+    const server = fakeServer('', new NetworkError('offline'));
+    const release = server.holdNextUpdate();
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('청소\n빨래');
+    await fireEvent.click(screen.getByRole('button', { name: '등록' }));
+    await waitFor(() => {
+      expect(server.update).toHaveBeenCalledTimes(1);
+    });
+    await setText('');
+    release();
+    await waitFor(() => {
+      expect(onimported).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
+    await setText('청소');
+    expect(screen.queryByText(resumeHint)).not.toBeInTheDocument();
+    await pressImport(onimported, 2);
+    expect(server.made).toEqual(['t1', 't2', 't3']);
+    expect(screen.getByText('업무 1개를 등록했습니다.')).toBeInTheDocument();
+  });
+
   // 지우지 않고 새 글자를 붙여 넣은 경우: 지난 줄과 겹치는 줄이 없으면 새 묶음이다.
   it('drops the progress when pasted text shares no rows with it', async () => {
     const server = fakeServer('B', new ApiError(400, 'bad_request', 'at most 20 tags'));
