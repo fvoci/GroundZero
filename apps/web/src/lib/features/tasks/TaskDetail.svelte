@@ -191,6 +191,22 @@
     }
   }
 
+  /**
+   * 충돌 화면의 "내 입력으로 다시 저장": 서버 최신 판(`latest`) 위에 내 입력을 `refresh`와 같은 방식으로 올린 뒤 그
+   * 판 번호로 저장한다. 내가 고치지 않은 칸은 최신 값을 따르고(전에는 폼 전체를 보내 그사이 다른 사람이 바꾼 제목
+   * 등을 옛 값으로 되돌렸다), 내가 고친 칸은 서버에서도 바뀌었어도 내 값을 쓴다(사용자가 고른 것). 그래서 충돌로
+   * 남기지 않고 최신 판을 다음 비교의 기준으로 삼는다.
+   */
+  async function saveMine(latest: TaskDetailView): Promise<void> {
+    if (busy) return;
+    refresh(latest);
+    task = latest;
+    baseline = formOf(latest);
+    baseVersion = latest.version;
+    clashed = false;
+    await submit(latest);
+  }
+
   $effect(() => {
     const id = taskId;
     let cancelled = false;
@@ -587,7 +603,7 @@
               conflict = undefined;
             }}>{m.tasks_load_server()}</Button
           >
-          <Button size="sm" disabled={busy} onclick={() => void submit(latest)}
+          <Button size="sm" disabled={busy} onclick={() => void saveMine(latest)}
             >{m.tasks_save_mine()}</Button
           >
         </div>
