@@ -1317,3 +1317,74 @@ async fn item_files_are_read_only_while_the_item_or_its_module_is_archived() {
     assert!(can_write().await);
     assert_eq!(rename().await, StatusCode::OK);
 }
+
+/// 감사 W15: 사람 칸(출석·참여자·공저자)에 나간 멤버가 남은 기록은, 다른 칸만 고쳐도 서버가 그대로인 id까지 다시
+/// 확인해 400이었다(화면에는 그 사람을 뺄 칸도 없었다). 이미 저장된 id는 다시 확인하지 않는다. 새로 넣는 id는 그대로
+/// 확인한다.
+#[tokio::test]
+async fn records_keep_a_member_who_left_while_other_fields_change() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "나간 출석자").await;
+    let (gone, _) = add_member(&app, &state, &admin, &ws, "gone", "writer").await;
+    let outsider = login(&state, "outsider").await;
+    let study = module(&app, &admin, &ws, "study", "LFT").await;
+    let group = open_item(&app, &admin, &study, "읽기 모임").await;
+    let created = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{group}/records"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "meeting", "title": "1회",
+                     "fields": { "attendees": [admin.id.0, gone.id.0] } }),
+        ),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{:?}", created.json);
+    let uri = format!("/api/records/{}", created.json["id"].as_str().unwrap());
+    let removed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{ws}/members/{}", gone.id.0),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(removed.status.is_success(), "{:?}", removed.json);
+
+    // 제목만 고친다(출석은 그대로).
+    let edited = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&admin),
+        Some(json!({ "version": 1, "title": "1회 모임",
+        "fields": { "attendees": [admin.id.0, gone.id.0] } })),
+    )
+    .await;
+    assert_eq!(edited.status, StatusCode::OK, "{:?}", edited.json);
+    // 새로 넣는 사람은 여전히 멤버여야 한다.
+    let added = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&admin),
+        Some(json!({ "version": 2, "title": "1회 모임",
+        "fields": { "attendees": [admin.id.0, gone.id.0, outsider.id.0] } })),
+    )
+    .await;
+    assert_eq!(added.status, StatusCode::BAD_REQUEST, "{:?}", added.json);
+    // 나간 사람을 빼는 것도 된다.
+    let dropped = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&admin),
+        Some(json!({ "version": 2, "title": "1회 모임",
+        "fields": { "attendees": [admin.id.0] } })),
+    )
+    .await;
+    assert_eq!(dropped.status, StatusCode::OK, "{:?}", dropped.json);
+}

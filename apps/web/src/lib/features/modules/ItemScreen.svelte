@@ -144,11 +144,14 @@
     formError = undefined;
     saved = false;
     const id = item.id;
+    // 공개 범위는 체크를 바꿨을 때만 보낸다. 늘 보내면 연 뒤 다른 소유 권한자가 바꾼 공개 범위를 되돌렸다(감사 W13).
+    const visibility: 'workspace' | 'private' | undefined =
+      shared === filled.shared ? undefined : shared ? 'workspace' : 'private';
     try {
       const next = await api.updateItem(id, {
         title: title.trim(),
         description,
-        visibility: shared ? 'workspace' : 'private',
+        ...(visibility === undefined ? {} : { visibility }),
       });
       forgetReferences();
       if (!stillOn(id)) return;

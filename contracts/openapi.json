@@ -16289,8 +16289,7 @@
         "description": "항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다.",
         "required": [
           "title",
-          "description",
-          "visibility"
+          "description"
         ],
         "properties": {
           "description": {
@@ -16300,8 +16299,11 @@
             "type": "string"
           },
           "visibility": {
-            "type": "string",
-            "description": "`workspace` 또는 `private`."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`workspace` 또는 `private`. 바꿀 때만 보낸다. 없거나 null이면 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼\n공개 범위를 설명만 고친 저장이 되돌리지 않게, 감사 W13)."
           }
         }
       },
