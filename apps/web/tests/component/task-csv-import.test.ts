@@ -57,6 +57,8 @@ function fakeServer(failOnce: string, failure: Error) {
   let loseNext = false;
   // 이 제목의 다음 고치기는 서버에 반영하고 응답만 잃는다.
   const loseUpdates = new Set<string>();
+  // 다음 고치기는 이 약속이 풀릴 때까지 응답하지 않는다(등록하는 중).
+  let gate: Promise<void> = Promise.resolve();
   // 새로 만든 업무 id(만든 순서).
   const made: string[] = [];
   const create = vi
@@ -80,7 +82,10 @@ function fakeServer(failOnce: string, failure: Error) {
     });
   const update = vi
     .spyOn(api, 'updateTask')
-    .mockImplementation((id: string, base: number, input: TaskInput) => {
+    .mockImplementation(async (id: string, base: number, input: TaskInput) => {
+      const held = gate;
+      gate = Promise.resolve();
+      await held;
       if (deleted.has(id)) {
         return Promise.reject(new ApiError(404, 'not_found', 'not found'));
       }
@@ -130,7 +135,15 @@ function fakeServer(failOnce: string, failure: Error) {
   const loseUpdate = (title: string): void => {
     loseUpdates.add(title);
   };
-  return { create, update, bump, remove, loseNextCreate, loseUpdate, made };
+  // 다음 고치기를 붙잡아 둔다. 돌려준 함수를 부르면 응답한다.
+  const holdNextUpdate = (): (() => void) => {
+    let release: () => void = () => undefined;
+    gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return release;
+  };
+  return { create, update, bump, remove, loseNextCreate, loseUpdate, holdNextUpdate, made };
 }
 
 async function setText(value: string): Promise<void> {
@@ -258,6 +271,33 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     expect(firstIds).not.toContain(server.create.mock.calls.at(-1)?.[1]);
     expect(server.made).toEqual(['t1', 't2', 't3']);
     expect(screen.getByText('업무 1개를 등록했습니다.')).toBeInTheDocument();
+  });
+
+  // 등록하는 동안 글자를 지워도 그 등록은 끝까지 간다. 그때 진행 상태를 버리면 실패 뒤 같은 글자로 다시 누를 때(안내는
+  // 이어서 넣는다고 한다) 다 넣은 줄과 제목만 만든 줄을 새 업무로 또 만든다.
+  it('keeps the progress when the text is cleared during an import', async () => {
+    const server = fakeServer('B', new NetworkError('offline'));
+    const release = server.holdNextUpdate();
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('A\nB\nC');
+    await fireEvent.click(screen.getByRole('button', { name: '등록' }));
+    await waitFor(() => {
+      expect(server.update).toHaveBeenCalledTimes(1);
+    });
+    await setText('');
+    release();
+    await waitFor(() => {
+      expect(onimported).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByText(/1개 등록됨/)).toHaveTextContent(
+      '"B" 업무는 제목만 만들어졌습니다. 다시 누르면 그 업무에 나머지를 채웁니다.',
+    );
+    await setText('A\nB\nC');
+    await pressImport(onimported, 2);
+    expect(server.made).toEqual(['t1', 't2', 't3']);
+    expect(server.update.mock.calls.at(-2)?.[0]).toBe('t2');
+    expect(screen.getByText('업무 3개를 등록했습니다.')).toBeInTheDocument();
   });
 
   // 지우지 않고 새 글자를 붙여 넣은 경우: 지난 줄과 겹치는 줄이 없으면 새 묶음이다.

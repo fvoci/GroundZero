@@ -1,7 +1,8 @@
 <script lang="ts">
   // 업무 CSV 일괄 등록(D-39). 한 줄씩 기존 업무 만들기·고치기 API로 넣는다(같은 검증과 권한). 줄마다 진행 상태를
   // 기억해 두어(csv-import.ts) 중간에 실패해도 다시 누르면 다 넣은 줄은 건너뛰고, 제목만 만들어진 줄은 그 업무에 채운다.
-  // 이어서 넣는 동안은 그렇다고 보여 준다. 글자를 모두 지우거나 지난 줄과 겹치지 않는 글자로 누르면 새 묶음이다.
+  // 이어서 넣는 동안은 그렇다고 보여 준다. 등록하지 않는 동안 글자를 모두 지우거나 지난 줄과 겹치지 않는 글자로 누르면
+  // 새 묶음이다.
   import type { AssigneeView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
@@ -52,9 +53,10 @@
   });
 
   // 글자를 모두 지우면 지난 묶음은 끝이다. 그 진행 상태를 남기면 다음 묶음의 같은 줄을 건너뛰거나 같은 제목 줄을 지난
-  // 업무에 채운다. 지난 묶음의 안내도 함께 지운다.
+  // 업무에 채운다. 지난 묶음의 안내도 함께 지운다. 등록하는 동안 지운 것은 묶음을 끝내지 않는다: 그 등록은 끝까지
+  // 가므로, 버리면 실패 뒤 같은 글자로 다시 누를 때(안내는 이어서 넣는다고 한다) 넣은 줄을 새 업무로 또 만든다.
   function edited(value: string): void {
-    if (value.trim() !== '') return;
+    if (value.trim() !== '' || busy) return;
     progress = [];
     error = undefined;
     status = '';
