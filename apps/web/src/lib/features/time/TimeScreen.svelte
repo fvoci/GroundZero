@@ -11,7 +11,7 @@
   import { errorText } from '$lib/api/errors';
   import { displaySettings, formatClock, weekdays } from '$lib/display';
   import { startOfWeek } from '$lib/features/events/calendar';
-  import { dayIn, instantOf } from '$lib/features/events/time';
+  import { dayIn, instantOf, isMissingLocalTime } from '$lib/features/events/time';
   import { dayNumber, fromDayNumber } from '$lib/features/tasks/gantt';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -119,11 +119,25 @@
     event.preventDefault();
     manualError = undefined;
     try {
-      const started = instantOf(`${manual.day}T${manual.start}`, zone);
-      let ended = instantOf(`${manual.day}T${manual.end}`, zone);
+      // 그 시간대에 없는 시각(여름시간 시작일의 건너뛴 시각, D-81)은 조용히 옮겨 저장하지 않는다. 다음 날 보정보다 먼저
+      // 본다(보정 전에 변환하면 없는 시각이 틈만큼 뒤로 밀려 엉뚱한 길이가 된다). 보정한 다음 날 끝도 같이 본다.
+      const startWall = `${manual.day}T${manual.start}`;
+      let endWall = `${manual.day}T${manual.end}`;
+      if (isMissingLocalTime(startWall, zone) || isMissingLocalTime(endWall, zone)) {
+        manualError = m.events_missing_time({ zone });
+        return;
+      }
+      const started = instantOf(startWall, zone);
+      let ended = instantOf(endWall, zone);
       // 끝이 시작보다 이르면 다음 날로 넘어간 기록으로 본다.
-      if (ended <= started)
-        ended = instantOf(`${fromDayNumber(dayNumber(manual.day) + 1)}T${manual.end}`, zone);
+      if (ended <= started) {
+        endWall = `${fromDayNumber(dayNumber(manual.day) + 1)}T${manual.end}`;
+        if (isMissingLocalTime(endWall, zone)) {
+          manualError = m.events_missing_time({ zone });
+          return;
+        }
+        ended = instantOf(endWall, zone);
+      }
       const entry = {
         started_at: started,
         ended_at: ended,

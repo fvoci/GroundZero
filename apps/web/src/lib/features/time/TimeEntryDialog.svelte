@@ -4,7 +4,7 @@
   import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
   import { api, TIME_KINDS } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { instantOf, wallTime } from '$lib/features/events/time';
+  import { instantOf, isMissingLocalTime, wallTime } from '$lib/features/events/time';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -97,17 +97,22 @@
       error = m.time_paused_invalid();
       return;
     }
+    // 고친 칸만 변환한다. 고친 시각이 그 시간대에 없으면(여름시간 시작일의 건너뛴 시각, D-81) 조용히 옮겨 저장하지 않는다.
+    const startKept = form.start === initial.start;
+    const endKept = form.end === '' || (form.end === initial.end && base.ended_at !== null);
+    if (
+      (!startKept && isMissingLocalTime(form.start, zone)) ||
+      (!endKept && isMissingLocalTime(form.end, zone))
+    ) {
+      error = m.events_missing_time({ zone });
+      return;
+    }
     busy = true;
     error = undefined;
     try {
       const result = await api.updateTimeEntry(base.id, base.version, {
-        started_at: form.start === initial.start ? base.started_at : instantOf(form.start, zone),
-        ended_at:
-          form.end === ''
-            ? null
-            : form.end === initial.end && base.ended_at !== null
-              ? base.ended_at
-              : instantOf(form.end, zone),
+        started_at: startKept ? base.started_at : instantOf(form.start, zone),
+        ended_at: form.end === '' ? null : endKept ? base.ended_at : instantOf(form.end, zone),
         // 진행 중인 타이머와 고치지 않은 멈춘 시간은 원래 초 단위 값 그대로.
         paused_seconds:
           base.ended_at === null || form.pausedMinutes === initial.pausedMinutes
