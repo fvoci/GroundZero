@@ -102,8 +102,15 @@
     };
     draft = { id: row.task.id, from: row.from, to: row.to };
   }
-  /** 그릴 수 있는 열 번호로 자른다(표시 기간 끝을 넘는 끝은 마지막 열에 그린다, 잘린 막대와 같게). */
-  const clipTo = (to: number): number => Math.min(to, layout.days - 1);
+  /**
+   * 미리 보기 막대를 그릴 열 범위(0 ~ 마지막 열)로 자른다. `draft`는 실제 날짜의 열 번호 그대로 두고 막대를 그릴 때만
+   * 자른다: 연결선은 `draft`를 그대로 써서 표 밖으로 나간 끝을 가장자리에 붙이지 않고 숨긴다(#39).
+   */
+  function shownSpan(s: { from: number; to: number }): { from: number; to: number } {
+    const last = layout.days - 1;
+    const from = Math.min(Math.max(s.from, 0), last);
+    return { from, to: Math.max(Math.min(s.to, last), from) };
+  }
   function move(event: PointerEvent): void {
     const d = drag;
     if (d?.pointer !== event.pointerId) return;
@@ -112,10 +119,7 @@
       return;
     }
     d.days = Math.round((event.clientX - d.x) / columnPx());
-    const p = preview(d.from, d.to, d.edit, d.days);
-    // 시작도 표시 범위 안에 두고 끝이 시작 앞으로 가지 않게 한다(마지막 열에서 시작하는 잘린 막대를 오른쪽으로 끌 때).
-    const from = clipTo(p.from);
-    draft = { id: d.id, from, to: Math.max(clipTo(p.to), from) };
+    draft = { id: d.id, ...preview(d.from, d.to, d.edit, d.days) };
   }
   function end(event: PointerEvent): void {
     const d = drag;
@@ -418,7 +422,7 @@
       {/each}
 
       {#each layout.rows as row, index (row.task.id)}
-        {@const span = draft?.id === row.task.id ? draft : row}
+        {@const span = draft?.id === row.task.id ? shownSpan(draft) : row}
         <!-- 줄 번호를 정해 둔다: 연결선 층이 같은 칸을 덮어도 격자가 줄을 다른 자리로 밀지 않게. -->
         <div
           class="sticky left-0 z-10 overflow-hidden border-b bg-background p-1"

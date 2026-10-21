@@ -222,6 +222,42 @@ describe('gantt dependency lines on the board', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('hides the line while the predecessor end is dragged past the last column, instead of pinning it to the edge', async () => {
+    // 표는 a 시작(10-20)부터 b 끝(10-27)까지 8열이다. a(열 0~2)를 여섯 칸 뒤로 끌면 끝이 열 8(표 오른쪽 밖)이다.
+    // 막대는 표 안에 잘라 그리되, 선은 가장자리에 붙여 긋지 않고 보이지 않는 관계로 센다(#39와 같은 규칙).
+    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    const gantt = await mount();
+    const bar = q(gantt, '[data-gantt-bar="a"]');
+    const px =
+      1.75 * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
+    await fireEvent.pointerDown(bar, { pointerId: 4, button: 0, buttons: 1, clientX: 100 });
+    await fireEvent.pointerMove(bar, { pointerId: 4, buttons: 1, clientX: 100 + 6 * px });
+    expect(gantt.querySelector('[data-gantt-link]')).toBeNull();
+    expect(screen.getByTestId('gantt-links-hidden').textContent).toContain('관계 1개는');
+    // 막대는 마지막 열에서 끝나게 그린다(표 밖으로 넘치지 않음): 열 6~7.
+    expect(bar.style.left).toBe(`calc(${String(6 * 1.75 + 0.125)}rem)`);
+    expect(bar.style.width).toBe(`calc(${String(2 * 1.75 - 0.25)}rem)`);
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await fireEvent.pointerUp(bar, { pointerId: 4, clientX: 100 + 6 * px });
+    expectLineOnBars(gantt);
+  });
+
+  it('keeps a bar dragged before the first column inside the chart while its line stays hidden', async () => {
+    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    const gantt = await mount();
+    const bar = q(gantt, '[data-gantt-bar="b"]');
+    const px =
+      1.75 * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
+    // b(열 5~7)를 일곱 칸 앞으로: 미리 보기 -2~0. 막대는 열 0부터 그리고 왼쪽 밖으로 넘치지 않는다.
+    await fireEvent.pointerDown(bar, { pointerId: 5, button: 0, buttons: 1, clientX: 400 });
+    await fireEvent.pointerMove(bar, { pointerId: 5, buttons: 1, clientX: 400 - 7 * px });
+    expect(bar.style.left).toBe('calc(0.125rem)');
+    expect(bar.style.width).toBe(`calc(${String(1.75 - 0.25)}rem)`);
+    expect(gantt.querySelector('[data-gantt-link]')).toBeNull();
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await fireEvent.pointerUp(bar, { pointerId: 5, clientX: 400 - 7 * px });
+  });
+
   it('matches the bars after an approved preview, a cancelled one, and a failed save', async () => {
     const movedA = task('a', '설계', '2026-10-20', '2026-10-23', [], 2);
     const movedB = task('b', '구현', '2026-10-26', '2026-10-28', ['a'], 2);

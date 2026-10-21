@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ItemView, TaskView } from '$lib/api/client';
+import type { ItemView, TaskDetailView, TaskView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { MAX_GANTT_DAYS } from '$lib/features/tasks/gantt';
@@ -109,5 +109,28 @@ describe('gantt bar clipped at the end of the shown period', () => {
     expect(bar.style.width).toBe(widthOf(MAX_GANTT_DAYS - 2));
     await fireEvent.keyDown(window, { key: 'Escape' });
     expect(bar.style.width).toBe(width);
+  });
+
+  it('saves the real dates when the clipped bar is moved, not the clipped column', async () => {
+    // 미리 보기는 잘라 그리지만 저장은 실제 날짜로: 2026-01-01~2028-01-01을 두 칸 옮기면 2026-01-03~2028-01-03.
+    const detail = (t: TaskView): TaskDetailView => ({ ...t, checklist: [] });
+    vi.spyOn(api, 'task').mockResolvedValue(detail(long));
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    const update = vi
+      .spyOn(api, 'updateTask')
+      .mockResolvedValue({ kind: 'updated', task: detail(long) });
+    const { bar } = await mount();
+    const px =
+      1.75 * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
+    await fireEvent.pointerDown(bar, { pointerId: 2, button: 0, buttons: 1, clientX: 100 });
+    await fireEvent.pointerMove(bar, { pointerId: 2, buttons: 1, clientX: 100 + 2 * px });
+    await fireEvent.pointerUp(bar, { pointerId: 2, clientX: 100 + 2 * px });
+    await waitFor(() => {
+      expect(update).toHaveBeenCalled();
+    });
+    expect(update.mock.calls[0]?.[2]).toMatchObject({
+      start_date: '2026-01-03',
+      due_date: '2028-01-03',
+    });
   });
 });
