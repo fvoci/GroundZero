@@ -1153,3 +1153,102 @@ async fn purged_module_keys_stay_reserved() {
     .await;
     assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
 }
+
+/// 감사 C22: 개인 노트 휴지통(`GET /api/me/trash`, `POST /api/me/trash/purge-expired`)에는 시험이 없었다. 개인 노트는
+/// 워크스페이스 관리자에게도 비공개다(AGENTS.md). 목록과 만료 비우기는 노트 주인의 것만 보고 지운다.
+#[tokio::test]
+async fn personal_trash_lists_and_purges_only_the_owners_notes() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "개인 휴지통").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let note = |user: &TestUser, title: &str| {
+        let app = app.clone();
+        let user = user.clone();
+        let body = json!({ "request_id": new_request_id(), "title": title });
+        async move {
+            let created = send(&app, Method::POST, "/api/me/notes", Some(&user), Some(body)).await;
+            assert_eq!(created.status, StatusCode::CREATED, "{:?}", created.json);
+            let id = created.json["id"].as_str().unwrap().to_owned();
+            let trashed = send(
+                &app,
+                Method::DELETE,
+                &format!("/api/documents/{id}"),
+                Some(&user),
+                None,
+            )
+            .await;
+            assert_eq!(trashed.status, StatusCode::OK, "{:?}", trashed.json);
+            trashed.json["batch_id"].as_str().unwrap().to_owned()
+        }
+    };
+    let mine_old = note(&member, "지난 메모").await;
+    note(&member, "어제 메모").await;
+    let theirs_old = note(&admin, "관리자 메모").await;
+    for batch in [&mine_old, &theirs_old] {
+        fixture_sql(
+            "UPDATE fvoci.trash_batches SET deleted_at = now() - interval '31 days' WHERE id = $1::uuid",
+            batch,
+        )
+        .await;
+    }
+
+    // 목록은 내 노트만. 관리자의 노트는 같은 워크스페이스 멤버에게도 보이지 않는다(반대도 같다).
+    let titles = |v: &Value| -> Vec<String> {
+        let mut t: Vec<String> = v["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["title"].as_str().unwrap().to_owned())
+            .collect();
+        t.sort();
+        t
+    };
+    let mine = send(&app, Method::GET, "/api/me/trash", Some(&member), None).await;
+    assert_eq!(mine.status, StatusCode::OK, "{:?}", mine.json);
+    assert_eq!(titles(&mine.json), ["어제 메모", "지난 메모"]);
+    let admins = send(&app, Method::GET, "/api/me/trash", Some(&admin), None).await;
+    assert_eq!(titles(&admins.json), ["관리자 메모"]);
+    // 워크스페이스 휴지통에는 개인 노트가 없다.
+    let team = send(
+        &app,
+        Method::GET,
+        &format!("/api/workspaces/{ws}/trash"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(team.status, StatusCode::OK, "{:?}", team.json);
+    assert!(
+        titles(&team.json).iter().all(|t| !t.contains("메모")),
+        "{:?}",
+        team.json
+    );
+
+    // 만료 비우기는 내 만료된 노트만 지운다. 관리자의 만료된 노트와 내 새 노트는 남는다.
+    let purged = send(
+        &app,
+        Method::POST,
+        "/api/me/trash/purge-expired",
+        Some(&member),
+        None,
+    )
+    .await;
+    assert_eq!(purged.status, StatusCode::OK, "{:?}", purged.json);
+    assert_eq!(purged.json["purged"], 1);
+    let mine = send(&app, Method::GET, "/api/me/trash", Some(&member), None).await;
+    assert_eq!(titles(&mine.json), ["어제 메모"]);
+    let admins = send(&app, Method::GET, "/api/me/trash", Some(&admin), None).await;
+    assert_eq!(titles(&admins.json), ["관리자 메모"]);
+    // 남의 묶음은 되살리지 못한다(볼 수 없으면 404).
+    let restore = send(
+        &app,
+        Method::POST,
+        &format!("/api/trash/{theirs_old}/restore"),
+        Some(&member),
+        None,
+    )
+    .await;
+    assert_eq!(restore.status, StatusCode::NOT_FOUND, "{:?}", restore.json);
+}

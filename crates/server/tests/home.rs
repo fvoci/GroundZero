@@ -281,3 +281,50 @@ async fn home_collects_my_upcoming_work_and_marks_only_what_i_can_see() {
         StatusCode::BAD_REQUEST
     );
 }
+
+/// 감사 C33: 고정·즐겨찾기 상태를 읽는 `GET /api/me/marks/{kind}/{id}`에는 시험이 없었다. 본인 표시만 보이고, 볼 수
+/// 없는 대상은 모르는 id와 같이 둘 다 꺼짐이다(있는지 드러내지 않는다). 그런 대상에 켜기는 404다.
+#[tokio::test]
+async fn marks_read_back_only_for_their_owner() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "표시 읽기").await;
+    let (me, _) = add_member(&app, &state, &admin, &ws, "me", "writer").await;
+    let shared = item(&app, &admin, &ws, "MRK", true).await;
+    let private = item(&app, &admin, &ws, "MRP", false).await;
+    let uri = |target: &Value| format!("/api/me/marks/item/{}", target["id"].as_str().unwrap());
+    let set = send(
+        &app,
+        Method::PUT,
+        &uri(&shared),
+        Some(&me),
+        Some(json!({ "mark": "favorite", "on": true })),
+    )
+    .await;
+    assert_eq!(set.status, StatusCode::OK, "{:?}", set.json);
+    let mine = send(&app, Method::GET, &uri(&shared), Some(&me), None).await;
+    assert_eq!(mine.status, StatusCode::OK, "{:?}", mine.json);
+    assert_eq!(mine.json, json!({ "pin": false, "favorite": true }));
+    let theirs = send(&app, Method::GET, &uri(&shared), Some(&admin), None).await;
+    assert_eq!(theirs.json, json!({ "pin": false, "favorite": false }));
+    let hidden = send(&app, Method::GET, &uri(&private), Some(&me), None).await;
+    assert_eq!(hidden.status, StatusCode::OK, "{:?}", hidden.json);
+    assert_eq!(hidden.json, json!({ "pin": false, "favorite": false }));
+    let unknown = format!("/api/me/marks/item/{}", uuid::Uuid::now_v7());
+    assert_eq!(
+        send(&app, Method::GET, &unknown, Some(&me), None)
+            .await
+            .json,
+        hidden.json
+    );
+    let refused = send(
+        &app,
+        Method::PUT,
+        &uri(&private),
+        Some(&me),
+        Some(json!({ "mark": "pin", "on": true })),
+    )
+    .await;
+    assert_eq!(refused.status, StatusCode::NOT_FOUND, "{:?}", refused.json);
+}

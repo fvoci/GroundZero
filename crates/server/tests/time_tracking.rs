@@ -655,3 +655,37 @@ async fn item_totals_group_entries_under_the_item_by_kind() {
         StatusCode::NOT_FOUND
     );
 }
+
+/// 감사 C33: 합계 공유 설정을 읽는 `GET /api/workspaces/{ws}/time-sharing`에는 시험이 없었다. 사람마다·워크스페이스마다
+/// 따로이고, 멤버가 아니면 404다.
+#[tokio::test]
+async fn time_sharing_reads_back_per_person_and_workspace() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "공유 읽기").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let outsider = login(&state, "outsider").await;
+    let uri = format!("/api/workspaces/{ws}/time-sharing");
+    let read = |user: TestUser| {
+        let app = app.clone();
+        let uri = uri.clone();
+        async move { send(&app, Method::GET, &uri, Some(&user), None).await }
+    };
+    let before = read(member.clone()).await;
+    assert_eq!(before.status, StatusCode::OK, "{:?}", before.json);
+    assert_eq!(before.json["enabled"], false);
+    let on = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&member),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::OK, "{:?}", on.json);
+    assert_eq!(read(member.clone()).await.json["enabled"], true);
+    // 다른 사람의 설정은 그대로다.
+    assert_eq!(read(admin.clone()).await.json["enabled"], false);
+    assert_eq!(read(outsider).await.status, StatusCode::NOT_FOUND);
+}
