@@ -1,0 +1,43 @@
+# Preparation only. Remove the literal false ONLY after separate approval of
+# credential use, the target fingerprint and this exact reviewed source.
+name: supabase-cloud-readonly
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_disposable_target:
+        description: 'Confirm the separately approved disposable project for read-only inspection'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-cloud-readonly
+  cancel-in-progress: false
+
+jobs:
+  precheck:
+    if: >-
+      ${{ false && github.event_name == 'workflow_dispatch' &&
+          github.repository == 'fvoci/GroundZero' && github.ref == 'refs/heads/main' &&
+          inputs.confirm_disposable_target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      # Same offline test entry point as the local preparation. No credentials.
+      - name: Offline safety tests
+        run: python3 -I -B -m unittest discover -s deploy/supabase -p test_cloud_readonly_precheck.py
+      - name: Read-only session pooler precheck
+        env:
+          SUPABASE_TEST_DATABASE_ADMIN_URL_SESSION_POOLER: ${{ secrets.SUPABASE_TEST_DATABASE_ADMIN_URL_SESSION_POOLER }}
+          APPROVED_TARGET_SHA256: ${{ vars.SUPABASE_TEST_TARGET_SHA256 }}
+          CONFIRM_DISPOSABLE_TARGET: ${{ inputs.confirm_disposable_target }}
+        run: python3 -I -B deploy/supabase/cloud_readonly_precheck.py --connect
