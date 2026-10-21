@@ -220,6 +220,8 @@
   "tasks_move_to_todo": "할 일로",
   "tasks_move_to_in_progress": "진행 중으로",
   "tasks_move_to_done": "완료로",
+  "tasks_move_up_menu": "이 열에서 위로",
+  "tasks_move_down_menu": "이 열에서 아래로",
   "tasks_moved_menu": "{title}: 옮겼습니다({status}).",
   "tasks_quick_add": "업무 추가",
   "tasks_quick_add_label": "{status}에 업무 추가",

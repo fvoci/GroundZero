@@ -1320,6 +1320,21 @@
                             >{MOVE_TO[target]()}</DropdownMenu.Item
                           >
                         {/each}
+                        <!-- 같은 열 안 순서: 화살표 줄은 보조 표시(aria-hidden)이고 Alt+위·아래는 키보드에서만 되므로, 터치
+                             화면의 낭독기 사용자도 쓸 수 있게 메뉴에도 둔다. 정렬이 기본 순서가 아니면 순서를 바꿀 수 없다. -->
+                        {#if ordered}
+                          <DropdownMenu.Separator />
+                          {#each ['up', 'down'] as const as action (action)}
+                            <DropdownMenu.Item
+                              disabled={busy(t.id) ||
+                                planBoardMove(shown, t.id, action) === undefined}
+                              onSelect={() => void move(t.id, action)}
+                              >{action === 'up'
+                                ? m.tasks_move_up_menu()
+                                : m.tasks_move_down_menu()}</DropdownMenu.Item
+                            >
+                          {/each}
+                        {/if}
                       </DropdownMenu.Content>
                     </DropdownMenu.Root>
                   {/if}
