@@ -132,19 +132,24 @@
     }
   }
 
-  /** 입력 칸은 서버가 받아들인 뒤에만 닫는다. 거절되면 친 이름과 이유가 칸에 남는다. */
-  async function rename(id: string, name: string): Promise<void> {
+  /**
+   * 입력 칸은 서버가 받아들인 뒤에만 닫는다. 거절되면 친 이름과 이유가 칸에 남는다.
+   * 응답 전에 칸을 닫았거나 다른 파일의 칸을 열었으면 실패는 파일 이름과 함께 패널 상태 줄에 보인다.
+   */
+  async function rename(file: FileView, name: string): Promise<void> {
     if (renameBusy) return;
     renameBusy = true;
     renameError = undefined;
     error = undefined;
     try {
-      await api.renameFile(id, name);
-      if (renaming?.id === id) renaming = undefined;
+      await api.renameFile(file.id, name);
+      if (renaming?.id === file.id) renaming = undefined;
       status = m.files_renamed({ name });
       reloadKey += 1;
     } catch (e: unknown) {
-      renameError = errorText(e, m.files_action_failed());
+      const reason = errorText(e, m.files_action_failed());
+      if (renaming?.id === file.id) renameError = reason;
+      else error = m.files_named_error({ name: file.name, error: reason });
     } finally {
       renameBusy = false;
     }
@@ -201,7 +206,7 @@
                 class="flex flex-1 flex-wrap gap-2"
                 onsubmit={(e: SubmitEvent) => {
                   e.preventDefault();
-                  if (renaming !== undefined) void rename(renaming.id, renaming.name);
+                  if (renaming !== undefined) void rename(f, renaming.name);
                 }}
               >
                 <Input

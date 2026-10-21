@@ -61,6 +61,63 @@ describe('file rename', () => {
     );
   });
 
+  // 리뷰 지적: 실패 응답이 늦게 오면 그사이 연 다른 파일의 칸에 붙거나(닫았으면) 아무 데도 보이지 않았다.
+  function rejectLater(): { reject: (e: unknown) => void } {
+    let reject: (e: unknown) => void = () => undefined;
+    vi.spyOn(api, 'renameFile').mockImplementation(
+      () =>
+        new Promise((_, no: (e: unknown) => void) => {
+          reject = no;
+        }),
+    );
+    return {
+      reject: (e) => {
+        reject(e);
+      },
+    };
+  }
+
+  it('does not blame another file opened while the rename was in flight', async () => {
+    const other: FileView = { ...file, id: 'f2', name: 'notes.txt', content_type: 'text/plain' };
+    vi.spyOn(api, 'itemFiles').mockResolvedValue([file, other]);
+    const pending = rejectLater();
+    const input = await openRename();
+    const form = input.closest('form');
+    if (form === null) throw new Error('form');
+    await fireEvent.submit(form);
+    await fireEvent.click(screen.getByRole('button', { name: 'notes.txt 이름 바꾸기' }));
+    const second = screen.getByRole('textbox', { name: '새 이름' });
+    expect(second).toHaveValue('notes.txt');
+
+    pending.reject(new ApiError(400, 'bad_request', 'invalid file name'));
+    // 응답이 끝나면 저장 단추가 다시 켜진다. 그때 B의 칸은 거절당한 적이 없어야 한다.
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: '저장' })).toBeEnabled();
+    });
+    expect(second.getAttribute('aria-invalid')).not.toBe('true');
+    expect(second).not.toHaveAttribute('aria-describedby');
+    expect(
+      screen.getByText('report.pdf: 처리하지 못했습니다. 입력한 값을 확인해 주세요.'),
+    ).toBeTruthy();
+  });
+
+  it('still reports the failure after the form was cancelled', async () => {
+    const pending = rejectLater();
+    const input = await openRename();
+    const form = input.closest('form');
+    if (form === null) throw new Error('form');
+    await fireEvent.submit(form);
+    await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(screen.queryByRole('textbox', { name: '새 이름' })).toBeNull();
+
+    pending.reject(new ApiError(400, 'bad_request', 'invalid file name'));
+    await vi.waitFor(() => {
+      expect(
+        screen.getByText('report.pdf: 처리하지 못했습니다. 입력한 값을 확인해 주세요.'),
+      ).toBeTruthy();
+    });
+  });
+
   it('closes the form once the rename succeeds', async () => {
     vi.spyOn(api, 'renameFile').mockResolvedValue({ ...file, name: 'report/final.pdf' });
     const input = await openRename();
