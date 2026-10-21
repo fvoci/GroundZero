@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+native-tls = "0.2"
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["tls-native-tls"] }
 tokio = { workspace = true, features = ["time"] }
