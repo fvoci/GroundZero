@@ -35,6 +35,21 @@ describe('mergeForm', () => {
       false,
     );
   });
+
+  // 충돌 화면에서 덮어쓸지 물을 칸(D-94): 양쪽이 서로 다르게 바꾼 칸만, 폼 순서로.
+  it('names the fields both sides changed to different values', () => {
+    // 마감일은 같은 값으로 바꿨고 마일스톤은 서버에서만 바꿨다.
+    const mine = { ...base, title: '내 제목', due_date: '2026-11-01', tags: ['내 태그'] };
+    const fresh = {
+      ...base,
+      title: '남의 제목',
+      due_date: '2026-11-01',
+      tags: ['서버'],
+      milestone: true,
+    };
+    expect(mergeForm(base, mine, fresh).clashes).toEqual(['title', 'tags']);
+    expect(mergeForm(base, base, fresh).clashes).toEqual([]);
+  });
 });
 
 describe('mergeForm baseline', () => {

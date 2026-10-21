@@ -20,20 +20,22 @@ export function formOf(task: TaskDetailView): TaskInput {
 
 /**
  * 서버의 새 값(`fresh`)으로 다시 채우되, 기준 값(`before`, 마지막으로 불러온 판)에서 사용자가 바꾼 칸(`mine`)은
- * 그대로 둔다. 사용자가 바꾼 칸을 서버에서도 누가 바꿨으면 `clash`: 그때는 옛 판 번호로 저장해 충돌 화면(409)이
- * 고르게 한다. `baseline`은 다음 비교의 기준: 사용자가 바꾸지 않은 칸만 새 값으로 옮긴다.
+ * 그대로 둔다. 사용자가 바꾼 칸을 서버에서도 누가 다른 값으로 바꿨으면 `clash`이고 그 칸들이 `clashes`(폼 순서):
+ * 다시 채울 때는 옛 판 번호로 저장해 충돌 화면(409)이 고르게 하고, 충돌 화면의 "내 입력으로 다시 저장"은 그 칸들을
+ * 보이고 덮어쓸지 묻는다(D-94). `form`의 그 칸은 내 값이다. `baseline`은 다음 비교의 기준: 사용자가 바꾸지 않은 칸만
+ * 새 값으로 옮긴다.
  */
 export function mergeForm(
   before: TaskInput,
   mine: TaskInput,
   fresh: TaskInput,
-): { form: TaskInput; baseline: TaskInput; clash: boolean } {
-  let clash = false;
+): { form: TaskInput; baseline: TaskInput; clash: boolean; clashes: (keyof TaskInput)[] } {
+  const clashes: (keyof TaskInput)[] = [];
   const same = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
   const untouched = (key: keyof TaskInput): boolean => same(mine[key], before[key]);
   const pick = <K extends keyof TaskInput>(key: K): TaskInput[K] => {
     if (untouched(key) || same(mine[key], fresh[key])) return fresh[key];
-    if (!same(fresh[key], before[key])) clash = true;
+    if (!same(fresh[key], before[key])) clashes.push(key);
     return mine[key];
   };
   // 사용자 값이 서버의 새 값과 같아진 칸도 기준을 새 값으로 옮긴다(그 뒤 사용자가 다시 고쳐도 옛 기준과 비교해 충돌로
@@ -64,7 +66,7 @@ export function mergeForm(
     assignee_ids: pick('assignee_ids'),
     milestone: pick('milestone'),
   };
-  return { form, baseline, clash };
+  return { form, baseline, clash: clashes.length > 0, clashes };
 }
 
 /** 예상 시간 입력 글자의 값: 빈칸은 없음, 0 이상의 정수만 값, 그 밖은 잘못된 입력. */

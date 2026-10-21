@@ -46,12 +46,15 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
+  import ClashConfirm from './ClashConfirm.svelte';
   import { estimateOf, formOf, mergeEstimate, mergeForm } from './form';
+  import type { ClashRow } from './labels';
   import {
     LINK_KIND_LABEL,
     LINK_KIND_MEANING,
     PRIORITY_LABEL,
     STATUS_LABEL,
+    clashRows,
     linkText,
     undatedText,
   } from './labels';
@@ -102,6 +105,13 @@
     retried: boolean;
   }
   let pending = $state<Pending | undefined>(undefined);
+  // 충돌 화면의 "내 입력으로 다시 저장"에서 나와 다른 사람이 서로 다르게 바꾼 칸(D-94). 보내기 전에 그 칸의 서버 값과
+  // 내 값을 보이고 덮어쓸지 묻는다. 묻는 동안 폼은 잠가 보인 값 그대로 덮어쓰고, 취소하면 아무것도 보내지 않는다.
+  interface ClashAsk {
+    latest: TaskDetailView;
+    rows: ClashRow[];
+  }
+  let clashAsk = $state<ClashAsk | undefined>(undefined);
   // 저장했지만 날짜가 없어 옮기지 않은 후속 업무 알림(날짜를 지어내지 않는다).
   let undatedNotice = $state('');
   let busy = $state(false);
@@ -148,8 +158,59 @@
     baseVersion = next.version;
     clashed = false;
     pending = undefined;
+    clashAsk = undefined;
     tagsText = next.tags.join(', ');
     estimateText = next.estimate_minutes === null ? '' : String(next.estimate_minutes);
+  }
+
+  /** 지금 입력을 기준 판에서 서버의 새 판으로 옮긴 결과(`mergeOnto`). */
+  interface Merge {
+    freshForm: TaskInput;
+    form: TaskInput;
+    baseline: TaskInput;
+    /** 나와 서버가 서로 다른 값으로 바꾼 칸. */
+    clashes: (keyof TaskInput)[];
+    keepTagsText: boolean;
+    keepEstimateText: boolean;
+  }
+
+  /**
+   * 내 입력(`mine`)을 기준(`before`)에서 서버의 새 판(`fresh`)으로 옮긴다. 고치지 않은 칸은 새 값, 고친 칸은 내 값이고,
+   * 고친 칸을 서버에서도 다른 값으로 바꿨으면 `clashes`에 든다. 태그는 저장할 때 보내는 값으로 견주고, 예상 시간은
+   * 입력한 글자의 값으로 따로 맞춘다(병합에는 고치지 않은 칸으로 넘긴다). 다시 채우기와 충돌 뒤 저장이 같이 쓴다.
+   */
+  function mergeOnto(fresh: TaskDetailView, mine: TaskInput, before: TaskInput): Merge {
+    const freshForm = formOf(fresh);
+    const estimate = mergeEstimate(
+      before.estimate_minutes,
+      estimateText,
+      freshForm.estimate_minutes,
+    );
+    const merged = mergeForm(
+      before,
+      { ...mine, estimate_minutes: before.estimate_minutes },
+      freshForm,
+    );
+    return {
+      freshForm,
+      form: merged.form,
+      baseline: { ...merged.baseline, estimate_minutes: estimate.baseline },
+      clashes: estimate.clash ? [...merged.clashes, 'estimate_minutes'] : merged.clashes,
+      keepTagsText: canonicalJson(mine.tags) !== canonicalJson(before.tags),
+      keepEstimateText: estimate.keepText,
+    };
+  }
+
+  /** 병합한 값을 폼에 옮긴다. 태그·예상 시간 글자는 내가 고치지 않았을 때만 새 값으로 바꾼다. */
+  function applyMerge(merge: Merge): void {
+    form = merge.form;
+    pending = undefined;
+    clashAsk = undefined;
+    if (!merge.keepTagsText) tagsText = merge.freshForm.tags.join(', ');
+    if (!merge.keepEstimateText) {
+      const fresh = merge.freshForm.estimate_minutes;
+      estimateText = fresh === null ? '' : String(fresh);
+    }
   }
 
   /**
@@ -163,48 +224,70 @@
       fill(fresh);
       return;
     }
-    const freshForm = formOf(fresh);
-    const before = baseline;
-    // 예상 시간은 입력한 글자의 값으로 따로 맞춘다(병합에는 고치지 않은 칸으로 넘긴다).
-    const estimate = mergeEstimate(
-      before.estimate_minutes,
-      estimateText,
-      freshForm.estimate_minutes,
-    );
-    const merged = mergeForm(
-      before,
-      { ...mine, estimate_minutes: before.estimate_minutes },
-      freshForm,
-    );
-    const tagsTouched = canonicalJson(mine.tags) !== canonicalJson(before.tags);
-    baseline = { ...merged.baseline, estimate_minutes: estimate.baseline };
+    const merge = mergeOnto(fresh, mine, baseline);
+    baseline = merge.baseline;
     // 충돌은 지금의 병합으로 다시 본다. 기준은 사용자가 바꾼 칸을 옛 값으로 지키므로, 서버가 그 칸을 다르게 두는 한 계속
     // 충돌이고, 사용자가 서버 값으로 맞추면 풀려 최신 판으로 저장한다.
-    clashed = merged.clash || estimate.clash;
+    clashed = merge.clashes.length > 0;
     if (!clashed) baseVersion = fresh.version;
     task = clashed ? { ...fresh, version: baseVersion } : fresh;
-    form = merged.form;
-    pending = undefined;
-    if (!tagsTouched) tagsText = freshForm.tags.join(', ');
-    if (!estimate.keepText) {
-      estimateText = freshForm.estimate_minutes === null ? '' : String(freshForm.estimate_minutes);
-    }
+    applyMerge(merge);
+  }
+
+  // 충돌 확인에 담당자 이름을 보일 때 쓴다(지정할 수 있는 사람과, 지금 판·서버 판에 지정된 사람).
+  function assigneeNames(latest: TaskDetailView): Map<string, string> {
+    const known = [...(task?.assignees ?? []), ...latest.assignees, ...(people ?? [])];
+    return new Map(known.map((p) => [p.user_id, p.display_name]));
   }
 
   /**
-   * 충돌 화면의 "내 입력으로 다시 저장": 서버 최신 판(`latest`) 위에 내 입력을 `refresh`와 같은 방식으로 올린 뒤 그
-   * 판 번호로 저장한다. 내가 고치지 않은 칸은 최신 값을 따르고(전에는 폼 전체를 보내 그사이 다른 사람이 바꾼 제목
-   * 등을 옛 값으로 되돌렸다), 내가 고친 칸은 서버에서도 바뀌었어도 내 값을 쓴다(사용자가 고른 것). 그래서 충돌로
-   * 남기지 않고 최신 판을 다음 비교의 기준으로 삼는다.
+   * 충돌 화면의 "내 입력으로 다시 저장"(D-94): 서버 최신 판(`latest`) 위에 내가 고친 칸만 올려 그 판 번호로 저장한다.
+   * 내가 고치지 않은 칸은 최신 값을 따르고(전에는 폼 전체를 보내 그사이 다른 사람이 바꾼 제목 등을 옛 값으로
+   * 되돌렸다), 내가 고친 칸 가운데 서버에서는 그대로이거나 같은 값이 된 칸은 내 값을 쓴다. 양쪽이 서로 다른 값으로
+   * 바꾼 칸이 있으면 보내기 전에 그 칸의 서버 값과 내 값을 보이고 덮어쓸지 묻는다(전에는 묻지 않고 내 값으로 덮었다).
    */
   async function saveMine(latest: TaskDetailView): Promise<void> {
-    if (busy) return;
-    refresh(latest);
+    const mine = currentInput();
+    if (busy || mine === undefined || baseline === undefined) return;
+    // 잘못된 예상 시간은 병합 전에 막는다(입력을 그대로 두고 알린다).
+    if (estimateOf(estimateText) === 'invalid') {
+      error = m.tasks_estimate_invalid();
+      return;
+    }
+    const merge = mergeOnto(latest, mine, baseline);
+    if (merge.clashes.length > 0) {
+      error = undefined;
+      clashAsk = {
+        latest,
+        rows: clashRows(merge.clashes, merge.freshForm, mine, assigneeNames(latest)),
+      };
+      return;
+    }
+    await saveMerged(latest, merge);
+  }
+
+  /** 덮어쓰기 확인의 승인: 묻는 동안 폼은 잠겨 있으므로 보인 값 그대로다. 양쪽이 바꾼 칸은 병합에서 이미 내 값이다. */
+  async function overwrite(): Promise<void> {
+    const ask = clashAsk;
+    const mine = currentInput();
+    if (ask === undefined || mine === undefined || baseline === undefined || busy) return;
+    await saveMerged(ask.latest, mergeOnto(ask.latest, mine, baseline));
+  }
+
+  /**
+   * 병합한 입력을 최신 판 번호로 저장한다(서버가 그 판으로 검사한다). 최신 판이 다음 비교의 기준이 되므로, 그사이 또
+   * 바뀌어 다시 409가 오면(충돌 화면이 더 새 판을 보인다) 다음 "내 입력으로 다시 저장"은 방금 받은 값을 고치지 않은
+   * 칸으로 보고 더 새 판 위에 다시 올린다. 실패해도 입력은 폼에 그대로 있다.
+   */
+  async function saveMerged(latest: TaskDetailView, merge: Merge): Promise<void> {
+    applyMerge(merge);
     task = latest;
     baseline = formOf(latest);
     baseVersion = latest.version;
     clashed = false;
     await submit(latest);
+    // 충돌 화면이 남으면(다시 409·실패) 누른 단추가 사라졌거나 잠겼던 자리이므로 "내 입력으로 다시 저장"으로 돌린다.
+    if (conflict !== undefined && pending === undefined) await focusLater('task-save-mine');
   }
 
   $effect(() => {
@@ -212,6 +295,7 @@
     let cancelled = false;
     task = undefined;
     conflict = undefined;
+    clashAsk = undefined;
     error = undefined;
     void api
       .task(id)
@@ -590,8 +674,9 @@
 
     {#if conflict !== undefined}
       {@const latest = conflict}
-      <div class="rounded-md border border-amber-500/50 p-3 text-sm" role="alert">
-        <p>
+      <!-- 알림은 문장에만 둔다(안의 덮어쓰기 확인이 따로 알리므로 알림 전체를 두 번 읽지 않게). -->
+      <div class="rounded-md border border-amber-500/50 p-3 text-sm">
+        <p role="alert">
           {m.tasks_conflict({ title: latest.title, status: STATUS_LABEL[latest.status] })}
         </p>
         <div class="mt-2 flex gap-2">
@@ -603,17 +688,31 @@
               conflict = undefined;
             }}>{m.tasks_load_server()}</Button
           >
-          <Button size="sm" disabled={busy} onclick={() => void saveMine(latest)}
-            >{m.tasks_save_mine()}</Button
+          <Button
+            id="task-save-mine"
+            size="sm"
+            disabled={busy || clashAsk !== undefined}
+            onclick={() => void saveMine(latest)}>{m.tasks_save_mine()}</Button
           >
         </div>
+        {#if clashAsk !== undefined}
+          <ClashConfirm
+            rows={clashAsk.rows}
+            {busy}
+            onconfirm={() => void overwrite()}
+            oncancel={() => {
+              clashAsk = undefined;
+              void focusLater('task-save-mine');
+            }}
+          />
+        {/if}
       </div>
     {/if}
 
     <!-- 제목 다음에 상태·우선순위·날짜를 두 칸으로 먼저 보이고(좁은 화면에서도 스크롤 없이), 설명은 그 아래에 둔다. -->
     <form
       class="grid grid-cols-2 gap-3"
-      inert={pending !== undefined}
+      inert={pending !== undefined || clashAsk !== undefined}
       onsubmit={(e) => {
         e.preventDefault();
         void submit(current);

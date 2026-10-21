@@ -1,5 +1,6 @@
 // 업무 상태·우선순위의 표시 이름. 값은 읽을 때 지금 언어로 만든다(언어는 실행 중에 바뀔 수 있다, D-81).
-import type { LinkKind, TaskPriority, TaskStatus } from '$lib/api/client';
+import type { LinkKind, TaskInput, TaskPriority, TaskStatus } from '$lib/api/client';
+import { formatDay, formatNumber } from '$lib/display';
 import { m } from '$lib/paraglide/messages.js';
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -92,4 +93,111 @@ export function undatedText(
   return undated.length > 0
     ? m.tasks_shift_undated({ tasks: undated.map(taskName).join(', ') })
     : '';
+}
+
+/** 충돌 확인에 보이는 칸 하나: 폼의 칸 이름, 서버의 지금 값, 내 값(읽을 수 있는 글로). */
+export interface ClashRow {
+  key: keyof TaskInput;
+  label: string;
+  server: string;
+  mine: string;
+}
+
+// 폼에 놓인 순서(충돌 확인도 이 순서로 보인다).
+const FIELD_ORDER: readonly (keyof TaskInput)[] = [
+  'title',
+  'description',
+  'status',
+  'priority',
+  'start_date',
+  'due_date',
+  'estimate_minutes',
+  'tags',
+  'assignee_ids',
+  'milestone',
+];
+
+/** 폼의 칸 이름(폼의 이름표와 같은 글). */
+function fieldLabel(key: keyof TaskInput): string {
+  switch (key) {
+    case 'title':
+      return m.tasks_title();
+    case 'description':
+      return m.tasks_description();
+    case 'status':
+      return m.tasks_status();
+    case 'priority':
+      return m.tasks_priority();
+    case 'start_date':
+      return m.tasks_start_date();
+    case 'due_date':
+      return m.tasks_due_date();
+    case 'estimate_minutes':
+      return m.tasks_estimate();
+    case 'tags':
+      return m.tasks_tags();
+    case 'assignee_ids':
+      return m.tasks_assignees();
+    case 'milestone':
+      return m.tasks_milestone();
+  }
+}
+
+// 긴 글(설명 등)은 줄바꿈을 한 칸으로 모으고 앞부분만 보인다.
+const SHORT = 80;
+function shorten(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  if (flat === '') return m.tasks_clash_empty();
+  return flat.length > SHORT ? `${flat.slice(0, SHORT)}…` : flat;
+}
+
+/** 칸 값 하나를 읽을 수 있는 글로. 담당자는 `names`(사용자 id → 이름)에서 이름을 찾는다. */
+function fieldText(
+  key: keyof TaskInput,
+  input: TaskInput,
+  names: ReadonlyMap<string, string>,
+): string {
+  switch (key) {
+    case 'title':
+    case 'description':
+      return shorten(input[key]);
+    case 'status':
+      return STATUS_LABEL[input.status];
+    case 'priority':
+      return PRIORITY_LABEL[input.priority];
+    case 'start_date':
+    case 'due_date': {
+      const day = input[key];
+      return day === null || day === '' ? m.tasks_clash_empty() : formatDay(day);
+    }
+    case 'estimate_minutes':
+      return input.estimate_minutes === null
+        ? m.tasks_clash_empty()
+        : formatNumber(input.estimate_minutes);
+    case 'tags':
+      return shorten(input.tags.join(', '));
+    case 'assignee_ids':
+      return input.assignee_ids.length === 0
+        ? m.tasks_clash_empty()
+        : input.assignee_ids
+            .map((id) => names.get(id) ?? m.tasks_clash_unknown_person())
+            .join(', ');
+    case 'milestone':
+      return input.milestone ? m.tasks_clash_yes() : m.tasks_clash_no();
+  }
+}
+
+/** 양쪽이 서로 다르게 바꾼 칸(`keys`)을 폼 순서로, 서버의 지금 값(`server`)과 내 값(`mine`)과 함께. */
+export function clashRows(
+  keys: readonly (keyof TaskInput)[],
+  server: TaskInput,
+  mine: TaskInput,
+  names: ReadonlyMap<string, string>,
+): ClashRow[] {
+  return FIELD_ORDER.filter((key) => keys.includes(key)).map((key) => ({
+    key,
+    label: fieldLabel(key),
+    server: fieldText(key, server, names),
+    mine: fieldText(key, mine, names),
+  }));
 }
