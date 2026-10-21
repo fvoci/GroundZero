@@ -96,6 +96,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 일정 반복 저장이 그사이 바뀐 규칙과 부딪혔다(409 `rule_conflict`, 감사 W21). 서버가 거절하며 함께 준 지금 일정을
+ * 담는다. 반복 편집기는 저장 실패를 던진 오류로 받으므로 결과 값이 아니라 `ApiError`로 둔다.
+ */
+export class RuleConflict extends ApiError {
+  constructor(readonly current: EventView) {
+    super(409, 'rule_conflict', 'rule_conflict');
+    this.name = 'RuleConflict';
+  }
+}
+
 /** 네트워크 실패(응답 없음). 같은 request_id로 재시도할 수 있다. */
 export class NetworkError extends Error {
   constructor(message: string) {
@@ -2855,10 +2866,30 @@ export const api = {
     expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/recurrences/sync`, (v) =>
       int(rec(v, 'sync'), 'created'),
     ),
-  setEventRecurrence: (id: string, rule: RecurrenceRule | null) =>
-    expectOk('PUT', `/api/events/${encodeURIComponent(id)}/recurrence`, parseEvent, {
-      rule: rule === null ? null : { ...rule },
-    }),
+  /**
+   * 일정 반복 정하기. `base`는 편집을 시작한 규칙(반복이 없었으면 null)이다. 그사이 규칙이 바뀌었으면 서버가 아무것도
+   * 바꾸지 않고 409 `rule_conflict`와 지금 일정으로 거절한다(`RuleConflict`).
+   */
+  async setEventRecurrence(
+    id: string,
+    rule: RecurrenceRule | null,
+    base: RecurrenceRule | null,
+  ): Promise<EventView> {
+    const { status, json } = await request(
+      'PUT',
+      `/api/events/${encodeURIComponent(id)}/recurrence`,
+      { rule: rule === null ? null : { ...rule }, base: base === null ? null : { ...base } },
+    );
+    if (
+      status === 409 &&
+      isRecord(json) &&
+      json.error === 'rule_conflict' &&
+      json.current !== undefined
+    )
+      throw new RuleConflict(parseEvent(json.current));
+    if (status !== 200) fail(status, json);
+    return parseEvent(json);
+  },
   excludeOccurrence: (id: string, date: string) =>
     expectOk('POST', `/api/events/${encodeURIComponent(id)}/exclusions`, none, { date }),
   trashDocument: (id: string) =>

@@ -2227,7 +2227,7 @@
         "tags": [
           "events"
         ],
-        "summary": "일정 반복 정하기·멈추기(쓰기 권한).",
+        "summary": "일정 반복 정하기·멈추기(쓰기 권한). 기준 규칙과 지금 규칙이 다르면 409 `rule_conflict`(감사 W21: 기준 없이 저장해\n그사이 다른 사람이 바꾼 규칙을 옛 규칙으로 말없이 덮었다).",
         "operationId": "set_event_recurrence",
         "parameters": [
           {
@@ -2296,7 +2296,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
+                  "$ref": "#/components/schemas/EventConflict"
                 }
               }
             }
@@ -14769,8 +14769,18 @@
       },
       "SetEventRecurrence": {
         "type": "object",
-        "description": "일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜.",
+        "description": "일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. `base`는 편집을 시작한\n규칙이다(반복이 없었으면 null). 그사이 규칙이 바뀌었으면 아무것도 바꾸지 않고 409 `rule_conflict`(최신 일정)다.",
         "properties": {
+          "base": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecurrenceRule"
+              }
+            ]
+          },
           "rule": {
             "oneOf": [
               {

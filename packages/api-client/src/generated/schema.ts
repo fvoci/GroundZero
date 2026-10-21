@@ -504,7 +504,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 일정 반복 정하기·멈추기(쓰기 권한). */
+        /**
+         * 일정 반복 정하기·멈추기(쓰기 권한). 기준 규칙과 지금 규칙이 다르면 409 `rule_conflict`(감사 W21: 기준 없이 저장해
+         *     그사이 다른 사람이 바꾼 규칙을 옛 규칙으로 말없이 덮었다).
+         */
         put: operations["set_event_recurrence"];
         post?: never;
         delete?: never;
@@ -3931,8 +3934,12 @@ export interface components {
         SetDocumentTemplate: {
             template: boolean;
         };
-        /** @description 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. */
+        /**
+         * @description 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. `base`는 편집을 시작한
+         *     규칙이다(반복이 없었으면 null). 그사이 규칙이 바뀌었으면 아무것도 바꾸지 않고 409 `rule_conflict`(최신 일정)다.
+         */
         SetEventRecurrence: {
+            base?: null | components["schemas"]["RecurrenceRule"];
             rule?: null | components["schemas"]["RecurrenceRule"];
         };
         /** @description 항목 멤버 정하기(항목 소유 권한자). 목록 전체를 보낸다. */
@@ -6224,7 +6231,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["EventConflict"];
                 };
             };
         };
