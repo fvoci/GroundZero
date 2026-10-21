@@ -9,6 +9,7 @@ mod notices;
 mod openapi;
 mod rhwp;
 mod supabase;
+mod supabase_cloud_precheck;
 mod test;
 
 use std::path::PathBuf;
@@ -26,6 +27,12 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// 전용 Supabase Cloud 대상의 읽기 전용 사전 점검. 기본값은 연결하지 않는다.
+    SupabaseCloudPrecheck {
+        /// 승인된 대상에 한 번 연결한다. 수동 workflow는 검토된 main에서만 실행한다.
+        #[arg(long)]
+        connect: bool,
+    },
     /// 포맷·lint·타입·단위 테스트·라이선스·계약 최신 여부를 검사한다. 외부 서비스는 띄우지 않는다.
     Check {
         /// 라이선스 검사를 뺀다. CI는 라이선스를 따로 job(`cargo xtask licenses`)으로 돌려 결과를 나눠 보인다.
@@ -95,9 +102,26 @@ fn repo_root() -> Result<PathBuf> {
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = Cli::try_parse().unwrap_or_else(|error| {
+        // clap의 일반 오류에는 사용자가 잘못 붙인 URI가 포함될 수 있다.
+        // 이 명령의 잘못된 입력은 고정 코드만 보고하고 환경도 읽지 않는다.
+        if std::env::args_os()
+            .nth(1)
+            .is_some_and(|arg| arg == "supabase-cloud-precheck")
+            && !matches!(
+                error.kind(),
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+            )
+        {
+            std::process::exit(supabase_cloud_precheck::rejected_arguments());
+        }
+        error.exit()
+    });
     let root = repo_root()?;
     match cli.command {
+        Command::SupabaseCloudPrecheck { connect } => {
+            std::process::exit(supabase_cloud_precheck::run(connect))
+        }
         Command::Check { skip_licenses } => check::run(&root, skip_licenses),
         Command::Test {
             keep,

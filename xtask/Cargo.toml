@@ -9,6 +9,9 @@ publish.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde_json.workspace = true
+sqlx = { workspace = true, features = ["tls-native-tls"] }
+tokio = { workspace = true, features = ["time"] }
+tracing.workspace = true
 sha2 = "0.10"
 spdx = { version = "0.13", features = ["text"] }
 xshell.workspace = true

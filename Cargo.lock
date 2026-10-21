@@ -2861,6 +2861,7 @@ dependencies = [
  "indexmap 2.14.2",
  "log",
  "memchr",
+ "native-tls",
  "once_cell",
  "percent-encoding",
  "serde",
@@ -3883,6 +3884,9 @@ dependencies = [
  "serde_json",
  "sha2",
  "spdx",
+ "sqlx",
+ "tokio",
+ "tracing",
  "uuid",
  "xshell",
 ]

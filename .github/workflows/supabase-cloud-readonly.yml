@@ -1,0 +1,39 @@
+# Approved manual connection check; never run PR code with database credentials.
+name: supabase-cloud-readonly
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-cloud-readonly
+  cancel-in-progress: false
+
+jobs:
+  precheck:
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' &&
+          github.repository == 'fvoci/GroundZero' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      # rust-toolchain.toml pins the toolchain. Build before injecting credentials.
+      - name: Build xtask
+        timeout-minutes: 12
+        run: cargo build --locked --package xtask
+      - name: Read-only session pooler precheck
+        timeout-minutes: 1
+        env:
+          SUPABASE_TEST_HOST: ${{ secrets.SUPABASE_TEST_HOST }}
+          SUPABASE_TEST_PORT: ${{ secrets.SUPABASE_TEST_PORT }}
+          SUPABASE_TEST_DATABASE: ${{ secrets.SUPABASE_TEST_DATABASE }}
+          SUPABASE_TEST_USER: ${{ secrets.SUPABASE_TEST_USER }}
+          SUPABASE_TEST_PASSWORD: ${{ secrets.SUPABASE_TEST_PASSWORD }}
+        run: target/debug/xtask supabase-cloud-precheck --connect
