@@ -61,7 +61,6 @@ function created(version = 1, due: string | null = null): TaskDetailView {
     estimate_minutes: null,
     tags: [],
     milestone: false,
-    predecessor_ids: [],
     predecessors: [],
     series: null,
     occurrence_date: null,
