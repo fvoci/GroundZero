@@ -148,8 +148,11 @@
   const templateKey = new RetryKey();
 
   async function fromTemplate(moduleId: string): Promise<void> {
-    // 지금 모듈의 템플릿 목록에 있는 것만 보낸다. 고르지 않았거나 목록에 없으면 첫 템플릿.
-    const source = (templates.find((t) => t.id === templateId) ?? templates[0])?.id;
+    // 지금 모듈의 템플릿 목록에 있는 것만 보낸다. 고르지 않았으면 첫 템플릿. 고른 템플릿이 다시 읽은 목록에서
+    // 빠졌으면(보관·템플릿 해제) 선택 칸은 빈 칸으로 보이지만 값은 남는다. 고르지 않은 첫 템플릿으로 바꾸지 않고
+    // 다시 고르게 한다.
+    const source =
+      templateId === '' ? templates[0]?.id : templates.find((t) => t.id === templateId)?.id;
     if (source === undefined || templateTitle.trim() === '') {
       templateError = m.modules_template_required();
       return;
