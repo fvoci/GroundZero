@@ -466,6 +466,8 @@ pub async fn drain(
         .filter(|(_, _, _, attempts)| *attempts > 1)
         .map(|(kind, id, _, _)| uid(kind, *id))
         .collect();
+    // 꺼낸 점유를 구별하는 시도 번호(보내기 직전 재확인에 쓴다).
+    let attempts: Vec<i32> = rows.iter().map(|(_, _, _, a)| *a).collect();
     let claimed: Vec<(String, Uuid, OffsetDateTime)> = rows
         .into_iter()
         .map(|(kind, id, queued_at, _)| (kind, id, queued_at))
@@ -519,20 +521,43 @@ pub async fn drain(
             kind: row.kind,
         });
     }
-    // 보내기 직전에 이 행들을 아직 쥐고 있고(점유가 남음) 세대가 그대로인지 확인하며 점유를 늘린다. 첨부를 읽는 등으로
-    // 점유 시간을 넘긴 사이 더 새 변경이 오르거나 다른 작업 프로세스가 다시 꺼냈으면 옛 내용을 보내지 않는다(늦게 보낸
-    // 옛 내용이 새 색인을 덮었다, 감사 S12). 그 행은 대기열에 남아 다음 차례에 새 내용으로 처리된다.
+    // 보내기 직전에 이 행들의 세대가 그대로이고 그 뒤 아무도 다시 꺼내지 않았는지(시도 번호) 확인하며 점유를 늘린다.
+    // 첨부를 읽는 등으로 점유 시간을 넘긴 사이 더 새 변경이 오르거나 다른 작업 프로세스가 다시 꺼냈으면 옛 내용을 보내지
+    // 않는다(늦게 보낸 옛 내용이 새 색인을 덮었다, 감사 S12). 그 행은 대기열에 남아 다음 차례에 새 내용으로 처리된다.
+    // 시간만 지나고 아무도 꺼내지 않았으면 그대로 보낸다(오래 걸린 묶음이 매번 버려져 갇히지 않게, 리뷰).
     let mut tx = db.begin_anonymous().await?;
     let held: Vec<(String, Uuid)> =
-        sqlx::query_as("SELECT kind, target_id FROM app_system_search_recheck($1, $2, $3)")
+        sqlx::query_as("SELECT kind, target_id FROM app_system_search_recheck($1, $2, $3, $4)")
             .bind(&kinds)
             .bind(&ids)
             .bind(claimed.iter().map(|(_, _, at)| *at).collect::<Vec<_>>())
+            .bind(&attempts)
             .fetch_all(tx.conn())
             .await?;
     tx.commit().await?;
     let held: HashSet<String> = held.iter().map(|(kind, id)| uid(kind, *id)).collect();
     let stale = claimed.len() - held.len();
+    if stale > 0 {
+        // 보내지 않을 행은 이 꺼냄의 점유를 바로 푼다(아직 이 점유이거나, 그 뒤 다시 대기열에 올라 아무도 꺼내지 않았을
+        // 때). 그대로 두면 새 세대를 남은 점유 시간 동안 아무도 꺼내지 못해 검색 반영이 늦었다(리뷰). 재확인 뒤에 따로
+        // 부르는 것은, 같은 문장에서는 문장이 시작된 뒤 커밋된 다시 올리기를 옛 값으로 판단해 놓치기 때문이다.
+        let left: Vec<usize> = (0..claimed.len())
+            .filter(|&i| !held.contains(&uid(&claimed[i].0, claimed[i].1)))
+            .collect();
+        let mut tx = db.begin_anonymous().await?;
+        sqlx::query("SELECT app_system_search_release_stale($1, $2, $3, $4)")
+            .bind(
+                left.iter()
+                    .map(|&i| claimed[i].0.as_str())
+                    .collect::<Vec<_>>(),
+            )
+            .bind(left.iter().map(|&i| claimed[i].1).collect::<Vec<_>>())
+            .bind(left.iter().map(|&i| claimed[i].2).collect::<Vec<_>>())
+            .bind(left.iter().map(|&i| attempts[i]).collect::<Vec<_>>())
+            .execute(tx.conn())
+            .await?;
+        tx.commit().await?;
+    }
     upserts.retain(|d| held.contains(&d.uid));
     deletes.retain(|u| held.contains(u));
     let (again, fresh): (Vec<IndexDoc>, Vec<IndexDoc>) =

@@ -224,8 +224,9 @@ async fn storage_cleanup_deletes_every_object_queued_together() {
 }
 
 /// 감사 S12: 색인 대기열의 꺼냄은 2분짜리 시간 점유뿐이라, 첨부를 읽는 등으로 점유 시간을 넘긴 작업 프로세스가 그 사이
-/// 더 새 변경(세대)을 다른 작업 프로세스가 먼저 반영한 뒤 옛 내용을 보내 덮었다. 보내기 직전에 "아직 쥐고 있고 세대가
-/// 그대로인 행"만 골라 점유를 늘린다(`app_system_search_recheck`). 세대가 바뀌었거나 점유가 지난 행은 고르지 않는다.
+/// 더 새 변경(세대)을 다른 작업 프로세스가 먼저 반영한 뒤 옛 내용을 보내 덮었다. 보내기 직전에 "세대가 그대로이고 그 뒤
+/// 아무도 다시 꺼내지 않은 행"만 골라 점유를 늘린다(`app_system_search_recheck`, 시도 번호로 점유를 구별). 세대가
+/// 바뀌었거나 다른 작업 프로세스가 다시 꺼낸 행은 고르지 않고, 시간만 지난 행은 고른다.
 #[tokio::test]
 async fn indexing_rechecks_the_claim_and_generation_before_sending() {
     let state = common::state();
@@ -236,14 +237,14 @@ async fn indexing_rechecks_the_claim_and_generation_before_sending() {
     let id: uuid::Uuid = doc["id"].as_str().unwrap().parse().unwrap();
     let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&url).await.unwrap();
-    // 이 시험의 행만 다룬다: 작업 프로세스 W1이 꺼낸 것처럼 점유하고 그때의 세대를 기억한다.
+    // 이 시험의 행만 다룬다: 작업 프로세스가 꺼낸 것처럼 점유하고(시도 번호가 오름) 그때의 세대와 시도 번호를 기억한다.
     let claim = |minutes: i32| {
         let owner = owner.clone();
         async move {
-            sqlx::query_scalar::<_, time::OffsetDateTime>(
+            sqlx::query_as::<_, (time::OffsetDateTime, i32)>(
                 "UPDATE fvoci.search_queue SET claimed_until = now() + make_interval(mins => $2), task_uid = NULL,
-                        task_queued_at = NULL
-                 WHERE kind = 'document' AND target_id = $1 RETURNING queued_at",
+                        task_queued_at = NULL, attempts = attempts + 1
+                 WHERE kind = 'document' AND target_id = $1 RETURNING queued_at, attempts",
             )
             .bind(id)
             .bind(minutes)
@@ -252,29 +253,33 @@ async fn indexing_rechecks_the_claim_and_generation_before_sending() {
             .unwrap()
         }
     };
-    let recheck = |queued: time::OffsetDateTime| {
+    let recheck = |(queued, attempts): (time::OffsetDateTime, i32)| {
         let db = state.db.clone();
         async move {
             let mut tx = db.begin_anonymous().await.unwrap();
-            let held: Vec<(String, uuid::Uuid)> =
-                sqlx::query_as("SELECT kind, target_id FROM app_system_search_recheck($1, $2, $3)")
-                    .bind(vec!["document"])
-                    .bind(vec![id])
-                    .bind(vec![queued])
-                    .fetch_all(tx.conn())
-                    .await
-                    .unwrap();
+            let held: Vec<(String, uuid::Uuid)> = sqlx::query_as(
+                "SELECT kind, target_id FROM app_system_search_recheck($1, $2, $3, $4)",
+            )
+            .bind(vec!["document"])
+            .bind(vec![id])
+            .bind(vec![queued])
+            .bind(vec![attempts])
+            .fetch_all(tx.conn())
+            .await
+            .unwrap();
             tx.commit().await.unwrap();
             held
         }
     };
+    let mine = vec![("document".to_owned(), id)];
 
-    // 아직 쥐고 있고 세대가 그대로면 고르고 점유를 늘린다.
+    // 세대가 그대로이고 아무도 다시 꺼내지 않았으면 고르고 점유를 늘린다.
     let first = claim(2).await;
-    assert_eq!(recheck(first).await, vec![("document".to_owned(), id)]);
-    // 그 사이 사용자가 고쳐 세대가 바뀌면 옛 세대로는 고르지 않는다(옛 내용을 보내지 않는다).
-    let newer = sqlx::query_scalar::<_, time::OffsetDateTime>(
-        "UPDATE fvoci.search_queue SET queued_at = queued_at + interval '1 second'
+    assert_eq!(recheck(first).await, mine);
+    // 그 사이 사용자가 고쳐 다시 대기열에 오르면(세대가 바뀌고 시도 번호가 0으로) 옛 세대로는 고르지 않는다(옛 내용을
+    // 보내지 않는다).
+    let newer: time::OffsetDateTime = sqlx::query_scalar(
+        "UPDATE fvoci.search_queue SET queued_at = queued_at + interval '1 second', attempts = 0
          WHERE kind = 'document' AND target_id = $1 RETURNING queued_at",
     )
     .bind(id)
@@ -282,9 +287,57 @@ async fn indexing_rechecks_the_claim_and_generation_before_sending() {
     .await
     .unwrap();
     assert!(recheck(first).await.is_empty());
-    // 점유가 지났으면(다른 작업 프로세스가 다시 꺼낼 수 있음) 세대가 같아도 고르지 않는다.
-    let expired = claim(-1).await;
-    assert_eq!(expired, newer);
-    assert!(recheck(newer).await.is_empty());
+    // 리뷰: 보내지 않기로 한 그 행의 이 꺼냄 점유는 바로 푼다(남은 점유 시간 동안 새 세대를 아무도 꺼내지 못해 검색 반영이
+    // 늦었다). drain은 재확인 뒤 따로 이 함수를 부른다.
+    {
+        let mut tx = state.db.begin_anonymous().await.unwrap();
+        sqlx::query("SELECT app_system_search_release_stale($1, $2, $3, $4)")
+            .bind(vec!["document"])
+            .bind(vec![id])
+            .bind(vec![first.0])
+            .bind(vec![first.1])
+            .execute(tx.conn())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+    }
+    let lease: Option<time::OffsetDateTime> = sqlx::query_scalar(
+        "SELECT claimed_until FROM fvoci.search_queue WHERE kind = 'document' AND target_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert_eq!(
+        lease, None,
+        "the stale claim kept the newer generation locked"
+    );
+
+    // 리뷰: 점유 시각만 지나고 아무도 다시 꺼내지 않았으면 그대로 보낸다(첨부가 많아 준비가 2분을 넘긴 묶음이 매번 버려져
+    // 시도 횟수만 올라 영영 꺼내지 않게 되지 않도록).
+    let second = claim(2).await;
+    assert_eq!(second.0, newer);
+    sqlx::query(
+        "UPDATE fvoci.search_queue SET claimed_until = now() - interval '1 second'
+         WHERE kind = 'document' AND target_id = $1",
+    )
+    .bind(id)
+    .execute(&owner)
+    .await
+    .unwrap();
+    assert_eq!(
+        recheck(second).await,
+        mine,
+        "an expired but untouched claim was dropped"
+    );
+    // 리뷰: 같은 세대를 다른 작업 프로세스가 다시 꺼냈으면(시도 번호가 바뀜) 앞 작업 프로세스는 보내지 않는다(두 번
+    // 보내지 않음).
+    let third = claim(2).await;
+    assert_eq!(third.0, newer);
+    assert!(
+        recheck(second).await.is_empty(),
+        "the earlier claim passed after another worker claimed the row again"
+    );
+    assert_eq!(recheck(third).await, mine);
     owner.close().await;
 }
