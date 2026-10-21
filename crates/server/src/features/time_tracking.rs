@@ -345,8 +345,12 @@ async fn window(tx: &mut UserTx, range: &TimeRange) -> Result<Window, AppError> 
             "the range must be 1 to {MAX_RANGE_DAYS} days"
         )));
     }
+    // 하루의 시작은 그 시간대에서 그날 0시가 처음 오는 시점이다. 0시가 두 번 오는 시간대(아바나·아소르스의 가을)에서
+    // 기본 해석은 뒤의 0시라 앞의 0시~1시가 전날로 밀리고, 집계와 목록이 서로 다른 날에 두었다(감사 S21). 0시가 없는
+    // 날(봄에 0시를 건너뜀)은 기본 해석(건너뛴 직후)을 쓴다. 집계의 날 경계(`summary`)도 같은 식이다.
     let (from_at, to_at): (OffsetDateTime, OffsetDateTime) = sqlx::query_as(
-        "SELECT $1::date::timestamp AT TIME ZONE $3, ($2::date + 1)::timestamp AT TIME ZONE $3",
+        "SELECT coalesce(app_local_instant($1::date::timestamp, $3), $1::date::timestamp AT TIME ZONE $3),
+                coalesce(app_local_instant(($2::date + 1)::timestamp, $3), ($2::date + 1)::timestamp AT TIME ZONE $3)",
     )
     .bind(from)
     .bind(to)
@@ -670,7 +674,9 @@ pub async fn summary(
     let mut tx = state.db.begin_as(user).await?;
     let w = window(&mut tx, &range).await?;
     // 기록을 보는 사람 시간대의 날짜마다 조각으로 나누고, 조각의 초는 누적 경과 비율의 내림 차로 정해 조각의 합이
-    // 기록의 초(app_entry_seconds)와 정확히 같게 한다. 기간 경계도 그 시간대의 자정이다.
+    // 기록의 초(app_entry_seconds)와 정확히 같게 한다. 기간 경계도 그 시간대의 자정이다. 날짜는 기간 안에서만
+    // 펼친다(조각의 초는 기록 전체의 s·f로 나누므로 결과는 같다). 길이 제한이 없는 기록 하나가 조회마다 수백만 날을
+    // 펼치지 않게 한다(감사 S20).
     let rows: Vec<(Date, String, i64)> = sqlx::query_as(
         "WITH e AS (
            SELECT e.kind, e.started_at AS s, coalesce(e.ended_at, now()) AS f, app_entry_seconds(e)::bigint AS active
@@ -678,13 +684,15 @@ pub async fn summary(
            WHERE e.deleted_at IS NULL AND e.started_at < $2 AND coalesce(e.ended_at, now()) >= $1
          ),
          seg AS (
-           SELECT e.kind, e.active, e.s, e.f, g.day,
-                  greatest(e.s, g.day::timestamp AT TIME ZONE $3) AS ss,
-                  least(e.f, (g.day + 1)::timestamp AT TIME ZONE $3) AS sf
+           SELECT e.kind, e.active, e.s, e.f, g.day, greatest(e.s, g.lo) AS ss, least(e.f, g.hi) AS sf
            FROM e
            CROSS JOIN LATERAL (
-             SELECT d::date AS day
-             FROM generate_series((e.s AT TIME ZONE $3)::date, (e.f AT TIME ZONE $3)::date, interval '1 day') d
+             SELECT d::date AS day,
+                    coalesce(app_local_instant(d::date::timestamp, $3), d::date::timestamp AT TIME ZONE $3) AS lo,
+                    coalesce(app_local_instant((d::date + 1)::timestamp, $3),
+                             (d::date + 1)::timestamp AT TIME ZONE $3) AS hi
+             FROM generate_series((greatest(e.s, $1) AT TIME ZONE $3)::date, (least(e.f, $2) AT TIME ZONE $3)::date,
+                                  interval '1 day') d
            ) g
          ),
          part AS (
