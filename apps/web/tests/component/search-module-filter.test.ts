@@ -105,3 +105,32 @@ describe('search module filter', () => {
     expect(screen.getByText('모든 모듈')).toBeTruthy();
   });
 });
+
+// 클라이언트가 `moduleId`를 요청의 `module_id`로 싣는지(대화상자 시험은 `api.search`를 대신하므로 따로 본다).
+describe('search client module parameter', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends module_id as a query parameter only when a module is chosen', async () => {
+    const urlOf = (input: unknown): string =>
+      input instanceof Request
+        ? input.url
+        : input instanceof URL
+          ? input.href
+          : typeof input === 'string'
+            ? input
+            : '';
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(() =>
+        Promise.resolve(
+          new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }),
+        ),
+      );
+    await api.search('회의', null, { moduleId: 'm-1' });
+    expect(urlOf(fetchSpy.mock.calls[0]?.[0])).toContain('module_id=m-1');
+    await api.search('회의', null, {});
+    expect(urlOf(fetchSpy.mock.calls[1]?.[0])).not.toContain('module_id');
+  });
+});
