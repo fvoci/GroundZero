@@ -156,6 +156,8 @@
   }
 
   let savingDetails = $state(false);
+  // 강좌 정보 고치기를 연 차례. 저장을 기다리는 사이 취소하고 다시 열면, 앞 저장의 응답이 새로 연 폼을 닫지 않게 한다.
+  let editSession = 0;
 
   function startEdit(c: CourseView): void {
     const d = c.details;
@@ -169,6 +171,7 @@
       expires_on: d.expires_on ?? '',
       target_on: d.target_on ?? '',
     };
+    editSession += 1;
     editing = true;
   }
 
@@ -374,6 +377,7 @@
           savingDetails = true;
           // 보낸 입력. 응답을 기다리는 사이 더 고친 칸이 있으면 닫지 않는다(보내지 않은 입력이 사라지지 않게).
           const sent = { ...details };
+          const session = editSession;
           void run(
             () =>
               api.setCourseDetails(itemId, {
@@ -389,7 +393,12 @@
             m.courses_details_saved(),
           ).then((ok) => {
             savingDetails = false;
-            if (ok && detailKeys.every((key) => details[key] === sent[key])) editing = false;
+            if (
+              ok &&
+              session === editSession &&
+              detailKeys.every((key) => details[key] === sent[key])
+            )
+              editing = false;
           });
         }}
       >
