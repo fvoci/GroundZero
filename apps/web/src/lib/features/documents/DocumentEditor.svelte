@@ -32,6 +32,7 @@
     plainText,
     removeOffer,
     storeDraft,
+    takeOrReserve,
   } from './drafts';
   import { contentIssues } from './paste-guard';
   import TiptapEditor from './TiptapEditor.svelte';
@@ -80,20 +81,35 @@
   let conflict = $state<DocumentView | undefined>(undefined);
   // 저장하는 사이 실시간 공동 편집이 켜져 본문을 여기서 저장할 수 없다.
   let realtimeOn = $state(false);
-  // 고르게 할 초안이 실시간 편집기가 남긴 줄의 것인지. 그렇다면 고르기 전까지 줄에 그대로 두고(이 편집기의 입력이
-  // 덮지 않게), 되살리거나 버릴 때만 줄에서 뺀다.
+  // 고르게 할 초안이 줄에 있는지(실시간 편집기가 남겼거나, 열 때 이 탭의 지난 초안을 옮겼다). 그렇다면 고르기 전까지
+  // 줄에 그대로 두고(이 편집기의 입력이 덮지 않게), 되살리거나 버릴 때만 줄에서 뺀다.
   let restorableQueued = false;
-  // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다. 이 편집기의 초안이 없으면 실시간 편집기가
-  // 남긴 줄의 첫 초안을 고르게 한다.
-  function pendingDraft(): ReturnType<typeof loadDraft> {
-    const isServer = (d: Draft): boolean =>
-      canonicalJson({ title: d.title.trim(), body: d.body }) ===
-      canonicalJson({ title: start.title, body: start.body });
+  // 고르게 할 초안이 줄로 옮기지 못한(저장소 가득 참) 이 탭의 지난 초안인지. 그렇다면 고를 때까지 이 탭의 초안 키에
+  // 새 편집을 쓰거나 지우지 않는다(덮거나 지워 사라지지 않게).
+  let reservedDraft = false;
+  // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다.
+  const isServer = (d: Draft): boolean =>
+    canonicalJson({ title: d.title.trim(), body: d.body }) ===
+    canonicalJson({ title: start.title, body: start.body });
+  // 이 탭의 지난 초안(새로고침·앱 안에서 다시 열기)은 이 편집기의 입력이 쓰는 키와 같은 키에 있다. 그대로 두고 고르게
+  // 하면 고르기 전의 입력이 덮고 저장 뒤 지운다. 그래서 먼저 고르게 할 줄로 옮긴 뒤 고르게 한다.
+  function takeTabDraft(): Draft | undefined {
     const draft = loadDraft(start.id);
-    if (draft !== undefined) {
-      if (!isServer(draft)) return draft;
+    if (draft === undefined) return undefined;
+    if (isServer(draft)) {
       clearDraft(start.id);
+      return undefined;
     }
+    const { reserved } = takeOrReserve(start.id);
+    if (reserved !== undefined) {
+      reservedDraft = true;
+      return reserved;
+    }
+    restorableQueued = true;
+    return draft;
+  }
+  // 고르게 할 줄(실시간 편집기·닫힌 탭이 남긴 것)의 첫 초안.
+  function nextOffer(): Draft | undefined {
     for (const queued of loadOffers(start.id)) {
       if (isServer(queued)) {
         removeOffer(start.id, queued);
@@ -104,10 +120,11 @@
     }
     return undefined;
   }
-  let restorable = $state(pendingDraft());
+  let restorable = $state(takeTabDraft() ?? nextOffer());
   // 닫힌 탭이 남긴 이 문서의 초안을 줄로 넘겨받는다(살아 있는 탭의 것은 두고). 고를 것이 없으면 그것을 고르게 한다.
+  // 이 탭의 초안 키는 보지 않는다(그사이의 입력을 지난 초안으로 내놓지 않게).
   void adoptOrphans(start.id).then((adopted) => {
-    if (adopted > 0 && restorable === undefined) restorable = pendingDraft();
+    if (adopted > 0 && restorable === undefined) restorable = nextOffer();
   });
   let confirmOverwrite = $state(false);
   let editorVersion = $state(0);
@@ -139,13 +156,19 @@
     }, delay);
   }
 
+  // 이 탭의 초안 키에 지금 편집을 남기거나 지운다. 줄로 옮기지 못한 지난 초안을 고르게 하는 동안은 그 키를 건드리지 않는다.
   function keepDraft(): void {
+    if (reservedDraft) return;
     storeDraft(server.id, {
       baseRevision: server.revision,
       title,
       body,
       savedAt: new Date().toISOString(),
     });
+  }
+
+  function dropDraft(): void {
+    if (!reservedDraft) clearDraft(server.id);
   }
 
   function edited(): void {
@@ -162,10 +185,10 @@
       schedule(AUTOSAVE_DELAY_MS);
     } else {
       // 서버 내용과 같아졌으면(문제 내용을 지우는 등) 지난 저장 안내는 더 필요 없다(로그아웃 안내는 남긴다).
-      // 복원 제안 중인 초안은 사용자가 고를 때까지 남긴다.
+      // 복원 제안 중인 초안은 사용자가 고를 때까지 남긴다(줄에 있거나, 옮기지 못했으면 dropDraft가 두고 간다).
       // 실시간이 켜져 여기서 저장할 수 없다는 안내(사본 단추)는 남긴다.
       if (!signedOut && !realtimeOn) message = undefined;
-      if (restorable === undefined) clearDraft(server.id);
+      dropDraft();
     }
   }
 
@@ -174,7 +197,7 @@
     if (!isDirty()) {
       if (status !== 'signed-out') message = undefined;
       status = 'saved';
-      if (restorable === undefined) clearDraft(server.id);
+      dropDraft();
       return;
     }
     if (title.trim() === '') {
@@ -229,7 +252,7 @@
         schedule(AUTOSAVE_DELAY_MS);
       } else {
         status = 'saved';
-        clearDraft(server.id);
+        dropDraft();
       }
     } catch (error: unknown) {
       if (destroyed) return;
@@ -273,7 +296,7 @@
     editorVersion += 1;
     conflict = undefined;
     attempt = undefined;
-    clearDraft(server.id);
+    dropDraft();
     status = 'saved';
     message = undefined;
   }
@@ -317,7 +340,7 @@
       if (saved.kind === 'conflict') throw new Error('copy conflicted');
       copyNoteKey.done(noteRequest);
       copySaveKey.done(saveRequest);
-      clearDraft(server.id);
+      dropDraft();
       router.guard = undefined;
       router.navigate(standalonePath(created.id));
     } catch (error: unknown) {
@@ -332,6 +355,8 @@
       removeOffer(server.id, restorable);
       restorableQueued = false;
     }
+    // 옮기지 못한 지난 초안이었으면 이제 그것이 지금 편집이다(아래 edited()가 같은 키에 남긴다).
+    reservedDraft = false;
     title = restorable.title;
     body = restorable.body;
     editorVersion += 1;
@@ -342,8 +367,14 @@
   }
 
   function discardDraft(): void {
+    // 줄의 초안이면 줄에서만 뺀다(이 탭의 초안 키에는 그사이의 입력이 있다).
     if (restorable !== undefined && restorableQueued) removeOffer(server.id, restorable);
-    else clearDraft(server.id);
+    else {
+      // 옮기지 못해 이 탭의 키에 둔 지난 초안을 지우고, 고르는 동안 남기지 않았던 지금 편집을 그 자리에 남긴다.
+      clearDraft(server.id);
+      reservedDraft = false;
+      if (isDirty()) keepDraft();
+    }
     restorableQueued = false;
     restorable = undefined;
   }
