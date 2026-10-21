@@ -235,7 +235,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. */
+        /**
+         * 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인
+         *     방의 편집을 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문, 다시 하면 된다)다.
+         */
         post: operations["move_document"];
         delete?: never;
         options?: never;
@@ -3387,6 +3390,12 @@ export interface components {
          * @enum {string}
          */
         ModuleKind: "project" | "research" | "study" | "course" | "hobby";
+        /**
+         * @description 이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+         *     - `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).
+         *     - `ErrorBody`(`error: "conflict"`): 실시간 방의 편집을 먼저 리비전으로 남기지 못했다(옮기지 않음, 다시 하면 된다).
+         */
+        MoveConflict: components["schemas"]["MovePreview"] | components["schemas"]["ErrorBody"];
         /** @description 이동 요청. 미리보기에서 접근 변화를 확인했다는 표시(`acknowledge`)가 있어야 이동한다. */
         MoveDocument: {
             acknowledged?: null | components["schemas"]["AcknowledgedPreview"];
@@ -5343,7 +5352,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MovePreview"];
+                    "application/json": components["schemas"]["MoveConflict"];
                 };
             };
         };
