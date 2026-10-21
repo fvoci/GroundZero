@@ -135,4 +135,67 @@ describe('time entries at a wall time that does not exist', () => {
       memo: '메모',
     });
   });
+
+  const finished = (id: string): TimeEntryView => ({
+    id,
+    started_at: '2026-03-07T14:00:00Z',
+    ended_at: '2026-03-07T15:00:00Z',
+    paused_at: null,
+    paused_seconds: 0,
+    seconds: 3600,
+    kind: 'work',
+    memo: '',
+    target: null,
+    version: 1,
+  });
+
+  it('editing: the missing-time error does not follow the dialog to the next entry it opens', async () => {
+    // 다이얼로그는 화면에 늘 마운트돼 있어(닫으면 entry만 비운다) 칸 옆 오류가 다음에 연 기록에 남지 않아야 한다.
+    const props = { zone: ZONE, onclose: () => undefined, onchanged: () => undefined };
+    const view = render(TimeEntryDialog, { props: { entry: finished('a'), ...props } });
+    const start = await screen.findByLabelText(m.time_start());
+    await fireEvent.input(start, { target: { value: '2026-03-08T02:30' } });
+    await submit(start);
+    await waitFor(() => {
+      expect(screen.getByLabelText(m.time_start()).getAttribute('aria-invalid')).toBe('true');
+    });
+
+    await view.rerender({ entry: undefined, ...props });
+    await view.rerender({ entry: finished('b'), ...props });
+    const reopened = await screen.findByLabelText(m.time_start());
+    expect(reopened.getAttribute('aria-invalid')).not.toBe('true');
+    expect(screen.queryByText(m.events_missing_time({ zone: ZONE }))).toBeNull();
+  });
+
+  it('editing: a general error already fixed does not stay beside a new missing-time error', async () => {
+    const update = vi
+      .spyOn(api, 'updateTimeEntry')
+      .mockResolvedValue({ kind: 'updated', entry: finished('a') });
+    render(TimeEntryDialog, {
+      props: {
+        entry: finished('a'),
+        zone: ZONE,
+        onclose: () => undefined,
+        onchanged: () => undefined,
+      },
+    });
+    const paused = await screen.findByLabelText(m.time_paused_minutes());
+    await fireEvent.input(paused, { target: { value: 'abc' } });
+    await submit(paused);
+    await waitFor(() => {
+      expect(screen.getByText(m.time_paused_invalid())).toBeTruthy();
+    });
+
+    // 멈춘 시간을 고치고 시작을 없는 시각으로 두면 시작 칸 오류만 남는다.
+    await fireEvent.input(paused, { target: { value: '0' } });
+    await fireEvent.input(screen.getByLabelText(m.time_start()), {
+      target: { value: '2026-03-08T02:30' },
+    });
+    await submit(paused);
+    await waitFor(() => {
+      expect(screen.getByLabelText(m.time_start()).getAttribute('aria-invalid')).toBe('true');
+    });
+    expect(screen.queryByText(m.time_paused_invalid())).toBeNull();
+    expect(update).not.toHaveBeenCalled();
+  });
 });

@@ -76,7 +76,9 @@
 
   $effect(() => {
     const e = entry;
+    // 다이얼로그는 늘 마운트돼 있다(닫으면 entry만 비운다). 앞 기록의 오류가 다음에 연 기록에 남지 않게 지운다.
     error = undefined;
+    missing = undefined;
     confirmDelete = false;
     history = [];
     if (e === undefined) return;
@@ -94,6 +96,9 @@
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (base === undefined || form === undefined || busy) return;
+    // 앞선 저장의 오류는 먼저 지운다(없는 시각으로 일찍 돌아가도 이미 고친 오류가 남지 않게).
+    error = undefined;
+    missing = undefined;
     const paused = Number(form.pausedMinutes.trim() === '' ? '0' : form.pausedMinutes);
     if (!Number.isInteger(paused) || paused < 0) {
       error = m.time_paused_invalid();
@@ -103,7 +108,6 @@
     // 그 칸 옆에 알린다(D-82).
     const startKept = form.start === initial.start;
     const endKept = form.end === '' || (form.end === initial.end && base.ended_at !== null);
-    missing = undefined;
     if (!startKept && isMissingLocalTime(form.start, zone)) {
       missing = 'start';
       return;
@@ -113,7 +117,6 @@
       return;
     }
     busy = true;
-    error = undefined;
     try {
       const result = await api.updateTimeEntry(base.id, base.version, {
         started_at: startKept ? base.started_at : instantOf(form.start, zone),
