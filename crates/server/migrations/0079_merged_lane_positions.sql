@@ -5,9 +5,9 @@
 --    그 뒤 "C를 B 앞으로"가 B의 위치 1 아래 최댓값을 찾지 못해 0.5가 되어 [C, A, B]로 간다(통합 시험으로 확인).
 --    복제가 업무를 넣은 뒤 합쳐진 열을 다시 매긴다(`app_renumber_lane`은 보이는 순서(위치, 번호)대로 매기므로 순서는
 --    바뀌지 않는다). 함수 본문은 0077과 같고 다시 매기기만 더했다.
--- 2. 이미 겹친 위치를 가진 열(앞선 복제가 남긴 데이터)에서는 `app_move_task`가 앞자리를 계산하기 전에 그 열을 먼저 다시
---    매긴다. 다시 매긴 업무의 이동 판(`move_version`)은 위치가 실제로 바뀐 것만 오른다(0076의 자릿수 초과 때와 같음).
---    기존 데이터를 한꺼번에 고쳐 쓰지 않는다: 겹친 열은 다음 이동 때 바로잡힌다. 함수 본문은 0076과 같다.
+-- 2. 앞선 복제가 남긴 겹친 위치는 이 마이그레이션이 한 번에 다시 매긴다(겹친 위치가 있는 열만, 보이는 순서 그대로). 위치가
+--    실제로 바뀐 업무만 이동 판(`move_version`)이 오른다(0076 트리거). 이동 함수에 옛 데이터를 위한 분기를 두지 않는다
+--    (v1.0.0 전에는 지난 개발 버전과의 호환 분기를 두지 않는다는 사용자 지시).
 
 CREATE OR REPLACE FUNCTION app_copy_item(p_item uuid, p_module uuid, p_request uuid, p_title text,
                                          p_reset boolean, p_ids uuid[])
@@ -160,69 +160,17 @@ CREATE OR REPLACE FUNCTION app_copy_item(p_item uuid, p_module uuid, p_request u
 REVOKE ALL ON FUNCTION app_copy_item(uuid, uuid, uuid, text, boolean, uuid[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_copy_item(uuid, uuid, uuid, text, boolean, uuid[]) TO fvoci_app;
 
-CREATE OR REPLACE FUNCTION app_move_task(p_task uuid, p_status text, p_before uuid, p_base_move_version integer)
-  RETURNS void
-  LANGUAGE plpgsql VOLATILE SECURITY DEFINER
-  SET search_path = fvoci, pg_temp
-  AS $$
+-- 앞선 초기화 복제가 남긴 겹친 위치를 보이는 순서(위치, 번호)대로 다시 매긴다. 겹친 위치가 있는 열만 건드린다.
+DO $$
   DECLARE
-    v_task     tasks%ROWTYPE;
-    v_before   tasks%ROWTYPE;
-    v_lower    numeric;
-    v_position numeric;
+    v_lane record;
   BEGIN
-    PERFORM app_require_task_write(p_task);
-    -- 지금 열과 옮겨 갈 열을 먼저, 그다음 행(다시 매기기와의 교착 방지).
-    PERFORM app_lock_task_rows(ARRAY[p_task], p_status);
-    SELECT * INTO v_task FROM tasks WHERE id = p_task;
-    PERFORM app_lock_item(v_task.item_id);
-    PERFORM app_require_task_write(p_task);
-    -- D-89: 읽은 뒤 그사이 이 업무의 열·위치가 바뀌었으면(이동 판이 다르면) 아무것도 바꾸지 않는다. 행을 잠근 뒤라
-    -- 비교와 옮기기 사이에 다른 이동이 끼지 못한다.
-    IF p_base_move_version IS NOT NULL AND v_task.move_version IS DISTINCT FROM p_base_move_version THEN
-      RAISE EXCEPTION 'the task moved since it was read' USING ERRCODE = 'FV003';
-    END IF;
-    IF p_status NOT IN ('todo', 'in_progress', 'done') THEN
-      RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
-    END IF;
-    IF p_before IS NOT NULL THEN
-      SELECT * INTO v_before FROM tasks WHERE id = p_before;
-      IF v_before.id IS NULL OR v_before.id = p_task OR v_before.item_id <> v_task.item_id
-         OR v_before.status <> p_status OR app_task_access(p_before) IS NULL THEN
-        RAISE EXCEPTION 'before must be a task in the same column' USING ERRCODE = '22023';
-      END IF;
-      -- 0079: 이 열에 같은 위치값이 둘 이상이면(초기화 복제가 남긴 데이터) 앞자리를 "위치 <" 로 찾을 수 없다(같은 위치의
-      -- 앞 업무를 건너뛰어 그 앞으로 간다). 보이는 순서(위치, 번호)대로 먼저 다시 매긴다.
-      IF EXISTS (SELECT 1 FROM tasks WHERE item_id = v_task.item_id AND status = p_status
-                 GROUP BY position HAVING count(*) > 1) THEN
-        PERFORM app_renumber_lane(v_task.item_id, p_status);
-        SELECT position INTO v_before.position FROM tasks WHERE id = p_before;
-      END IF;
-      SELECT max(position) INTO v_lower FROM tasks
-      WHERE item_id = v_task.item_id AND status = p_status AND id <> p_task AND position < v_before.position;
-      v_position := (coalesce(v_lower, v_before.position - 1) + v_before.position) * 0.5;
-      IF scale(v_position) > 40 THEN
-        -- 같은 틈에 너무 많이 끼워 자릿수가 길어졌다. 열을 다시 매긴 뒤 계산한다.
-        PERFORM app_renumber_lane(v_task.item_id, p_status);
-        SELECT position INTO v_before.position FROM tasks WHERE id = p_before;
-        SELECT max(position) INTO v_lower FROM tasks
-        WHERE item_id = v_task.item_id AND status = p_status AND id <> p_task AND position < v_before.position;
-        v_position := (coalesce(v_lower, v_before.position - 1) + v_before.position) * 0.5;
-      END IF;
-    ELSE
-      SELECT coalesce(max(position), 0) + 1 INTO v_position FROM tasks
-      WHERE item_id = v_task.item_id AND status = p_status AND id <> p_task;
-    END IF;
-    UPDATE tasks SET
-      status = p_status, position = v_position,
-      version = CASE WHEN p_status <> v_task.status THEN version + 1 ELSE version END,
-      completed_at = CASE WHEN p_status = 'done' AND v_task.status <> 'done' THEN now()
-                          WHEN p_status <> 'done' THEN NULL ELSE completed_at END,
-      updated_by = CASE WHEN p_status <> v_task.status THEN app_user_id() ELSE updated_by END,
-      updated_at = CASE WHEN p_status <> v_task.status THEN now() ELSE updated_at END
-    WHERE id = p_task;
+    FOR v_lane IN
+      SELECT item_id, status FROM tasks
+      GROUP BY item_id, status, position
+      HAVING count(*) > 1
+    LOOP
+      PERFORM app_renumber_lane(v_lane.item_id, v_lane.status);
+    END LOOP;
   END
-  $$;
-
-REVOKE ALL ON FUNCTION app_move_task(uuid, text, uuid, integer) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app_move_task(uuid, text, uuid, integer) TO fvoci_app;
+$$;

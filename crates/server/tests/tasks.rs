@@ -801,7 +801,7 @@ async fn conditional_moves_refuse_a_place_changed_since_it_was_read() {
 }
 
 /// 초기화 복제는 모든 열을 "할 일"로 합친다. 원본의 열마다 있던 위치값이 겹치면 그 뒤의 이동이 엉뚱한 자리로 간다
-/// (C를 B 앞으로 옮겼는데 [C, A, B]). 복제가 합친 열의 위치를 다시 매기고, 이미 겹친 열에서는 이동이 먼저 다시 매긴다.
+/// (C를 B 앞으로 옮겼는데 [C, A, B]). 복제가 합친 열의 위치를 다시 매긴다(앞선 복제가 남긴 겹침은 0079가 한 번에 매긴다).
 #[tokio::test]
 async fn reset_copy_merges_lanes_without_duplicate_positions() {
     use sqlx::Connection;
@@ -910,68 +910,6 @@ async fn reset_copy_merges_lanes_without_duplicate_positions() {
         .map(|x| x["title"].as_str().unwrap())
         .collect();
     assert_eq!(titles, vec!["A", "C", "B"]);
-}
-
-/// 이미 위치값이 겹친 열(초기화 복제가 남긴 데이터)에서도 "앞으로 옮기기"가 보이는 순서대로 간다: 이동이 열을 먼저
-/// 다시 매긴다.
-#[tokio::test]
-async fn moving_before_a_task_in_a_lane_with_duplicate_positions_keeps_the_visible_order() {
-    use sqlx::Connection;
-    let state = common::state();
-    let app = common::app(&state);
-    let admin = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin, "겹친 위치").await;
-    let item = module_item(&app, &admin, &ws, "DUP").await;
-    let a = task(&app, &admin, &item, "A").await;
-    let b = task(&app, &admin, &item, "B").await;
-    let c = task(&app, &admin, &item, "C").await;
-    // 겹친 위치를 직접 만든다: A=1, B=1, C=2 (보이는 순서는 position, number라 A, B, C).
-    let mut conn = sqlx::PgConnection::connect(
-        &std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`"),
-    )
-    .await
-    .unwrap();
-    sqlx::query("UPDATE fvoci.tasks SET position = 1 WHERE id = $1::uuid")
-        .bind(b["id"].as_str().unwrap())
-        .execute(&mut conn)
-        .await
-        .unwrap();
-    let (_, list) = get(
-        &app,
-        &admin,
-        &format!("/api/items/{}/tasks", item["id"].as_str().unwrap()),
-    )
-    .await;
-    let titles: Vec<&str> = list
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|x| x["title"].as_str().unwrap())
-        .collect();
-    assert_eq!(titles, vec!["A", "B", "C"]);
-    let r = send(
-        &app,
-        Method::PUT,
-        &format!("/api/tasks/{}/position", c["id"].as_str().unwrap()),
-        Some(&admin),
-        Some(json!({ "status": "todo", "before_id": b["id"] })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
-    let (_, list) = get(
-        &app,
-        &admin,
-        &format!("/api/items/{}/tasks", item["id"].as_str().unwrap()),
-    )
-    .await;
-    let titles: Vec<&str> = list
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|x| x["title"].as_str().unwrap())
-        .collect();
-    assert_eq!(titles, vec!["A", "C", "B"]);
-    drop(a);
 }
 
 /// 되돌리기 원점이 잘못된 요청(감사 2번)을 서버가 복원하지 못함을 실제 API로 보인다: [A, B, C]에서 A를 옮긴 뒤 A를
