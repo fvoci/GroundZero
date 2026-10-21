@@ -47,7 +47,7 @@ pub struct SearchQuery {
     pub status: Option<String>,
     /// 담당자(`me` 또는 사용자 id). 주면 업무만 나온다.
     pub assignee: Option<String>,
-    /// 날짜 범위 시작(YYYY-MM-DD): 업무는 기한(없으면 시작일), 일정은 시작일, 그 밖은 고친 날.
+    /// 날짜 범위 시작(YYYY-MM-DD): 업무는 기한(없으면 시작일), 일정은 시작일, 기록은 발생일(없으면 고친 날), 그 밖은 고친 날.
     pub from: Option<String>,
     /// 날짜 범위 끝(YYYY-MM-DD, 포함).
     pub to: Option<String>,
