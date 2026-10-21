@@ -110,6 +110,15 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
         .collect();
     assert_eq!(titles, ["새 문서"]);
     let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    // 두 번 돌렸어도 만료 묶음은 한 번만 영구 삭제됐다(다시 지우면 감사 기록이 둘이 된다).
+    let purges: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action = 'purge' AND target_id = $1::uuid",
+    )
+    .bind(old["id"].as_str().unwrap())
+    .fetch_one(tx.conn())
+    .await
+    .unwrap();
+    assert_eq!(purges, 1);
     let purge: (Option<uuid::Uuid>, bool) = sqlx::query_as(
         "SELECT actor, (detail->>'system')::boolean FROM audit_log WHERE action = 'purge' AND target_id = $1::uuid",
     )
