@@ -6,7 +6,7 @@ import { api, ApiError, NetworkError } from '$lib/api/client';
 import { canonicalJson } from '$lib/features/documents/drafts';
 import type { TaskRow } from '$lib/features/tasks/csv';
 import type { RowProgress } from '$lib/features/tasks/csv-import';
-import { matchRows } from '$lib/features/tasks/csv-import';
+import { matchRows, rowApplied } from '$lib/features/tasks/csv-import';
 import TaskCsvImport from '$lib/features/tasks/TaskCsvImport.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -44,16 +44,19 @@ function detail(id: string, title: string, version: number): TaskDetailView {
 }
 
 // 서버 흉내: 같은 request_id는 같은 업무를 지금 판으로 돌려주고, 새 id는 새 업무를 만든다. 고치기는 기준 판이 지금
-// 판이면 판을 하나 올리고, 아니면 409(conflict)다. `failOnce` 제목의 첫 고치기는 `failure`로 실패한다.
+// 판이면 판을 하나 올리고, 아니면 409(conflict)와 지금 업무다. `failOnce` 제목의 첫 고치기는 `failure`로 실패한다.
 function fakeServer(failOnce: string, failure: Error) {
   const byRequest = new Map<string, string>();
-  const versions = new Map<string, number>();
+  // 업무 id별 지금 업무(판 포함). 고치기는 서버처럼 같은 태그를 합치고 담당자를 정렬해 저장한다.
+  const tasks = new Map<string, TaskDetailView>();
   // 지운(휴지통) 업무. 만들기는 같은 request_id에 그 업무 id를 찾지만(app_create_task) 지운 업무는 읽을 수 없어 404,
   // 고치기도 404다.
   const deleted = new Set<string>();
   let failed = false;
   // 다음 만들기는 서버에서 만들고 응답만 잃는다.
   let loseNext = false;
+  // 이 제목의 다음 고치기는 서버에 반영하고 응답만 잃는다.
+  const loseUpdates = new Set<string>();
   // 새로 만든 업무 id(만든 순서).
   const made: string[] = [];
   const create = vi
@@ -63,7 +66,7 @@ function fakeServer(failOnce: string, failure: Error) {
       const id = known ?? `t${String(byRequest.size + 1)}`;
       byRequest.set(requestId, id);
       if (known === undefined) {
-        versions.set(id, 1);
+        tasks.set(id, detail(id, title, 1));
         made.push(id);
       }
       if (deleted.has(id)) {
@@ -73,7 +76,7 @@ function fakeServer(failOnce: string, failure: Error) {
         loseNext = false;
         return Promise.reject(new NetworkError('offline'));
       }
-      return Promise.resolve(detail(id, title, versions.get(id) ?? 1));
+      return Promise.resolve(tasks.get(id) ?? detail(id, title, 1));
     });
   const update = vi
     .spyOn(api, 'updateTask')
@@ -85,17 +88,38 @@ function fakeServer(failOnce: string, failure: Error) {
         failed = true;
         return Promise.reject(failure);
       }
-      const current = versions.get(id) ?? 1;
-      if (base !== current) {
-        return Promise.resolve({ kind: 'conflict' as const, current: detail(id, '', current) });
+      const current = tasks.get(id) ?? detail(id, input.title, 1);
+      if (base !== current.version) {
+        return Promise.resolve({ kind: 'conflict' as const, current });
       }
-      const next = base + 1;
-      versions.set(id, next);
-      return Promise.resolve({ kind: 'updated' as const, task: detail(id, input.title, next) });
+      const next: TaskDetailView = {
+        ...current,
+        title: input.title,
+        description: input.description,
+        status: input.status,
+        priority: input.priority,
+        start_date: input.start_date,
+        due_date: input.due_date,
+        estimate_minutes: input.estimate_minutes,
+        tags: [...new Set(input.tags)],
+        assignees: [...new Set(input.assignee_ids)]
+          .sort()
+          .map((user_id) => ({ user_id, display_name: user_id })),
+        milestone: input.milestone,
+        version: base + 1,
+      };
+      tasks.set(id, next);
+      if (loseUpdates.delete(input.title)) {
+        return Promise.reject(new NetworkError('offline'));
+      }
+      return Promise.resolve({ kind: 'updated' as const, task: next });
     });
-  // 다른 사람이 그 업무를 고친 것처럼 판을 올린다.
+  // 다른 사람이 그 업무를 고친 것처럼 설명을 바꾸고 판을 올린다.
   const bump = (id: string): void => {
-    versions.set(id, (versions.get(id) ?? 1) + 5);
+    const task = tasks.get(id);
+    if (task !== undefined) {
+      tasks.set(id, { ...task, description: '팀원이 고침', version: task.version + 5 });
+    }
   };
   const remove = (id: string): void => {
     deleted.add(id);
@@ -103,7 +127,10 @@ function fakeServer(failOnce: string, failure: Error) {
   const loseNextCreate = (): void => {
     loseNext = true;
   };
-  return { create, update, bump, remove, loseNextCreate, made };
+  const loseUpdate = (title: string): void => {
+    loseUpdates.add(title);
+  };
+  return { create, update, bump, remove, loseNextCreate, loseUpdate, made };
 }
 
 async function setText(value: string): Promise<void> {
@@ -333,6 +360,61 @@ describe('TaskCsvImport title-only task (audit W3)', () => {
   });
 });
 
+// 고치기가 서버에 반영되고 응답만 잃으면 그 줄은 아직 다 넣지 못한 줄로 남아, 다시 누를 때 옛 판으로 고치기를 보내 409를
+// 받는다. 서버 값이 이 줄과 같으면 다 넣은 것이다: 다른 곳에서 바뀌었다고 알리지 않고, 한 번 더 누르게 하지 않는다.
+describe('TaskCsvImport lost update response (review)', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+    vi.spyOn(api, 'assignable').mockResolvedValue([
+      { user_id: 'u1', display_name: '가람' },
+      { user_id: 'u2', display_name: '나래' },
+    ]);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // 담당자는 이름순, 같은 태그는 합쳐 저장되므로 줄과 순서·개수가 달라도 같은 내용으로 본다.
+  const rows = 'A\nB,설명,진행 중,높음,2026-11-02,2026-11-09,30,나래;가람,회의;보고;회의';
+
+  async function lostUpdateOfB(
+    server: ReturnType<typeof fakeServer>,
+  ): Promise<() => Promise<void>> {
+    server.loseUpdate('B');
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText(rows);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '등록' })).toBeEnabled();
+    });
+    await pressImport(onimported, 1);
+    expect(screen.getByText(/1개 등록됨/)).toBeInTheDocument();
+    server.update.mockClear();
+    return () => pressImport(onimported, 2);
+  }
+
+  it('treats its own update whose response was lost as done, not as a conflict', async () => {
+    const server = fakeServer('', new NetworkError('offline'));
+    const pressAgain = await lostUpdateOfB(server);
+    await pressAgain();
+    expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
+    expect(screen.queryByText(/그사이 다른 곳에서 바뀌었습니다/)).not.toBeInTheDocument();
+    // 다시 누름은 B에 한 번(409) 보낼 뿐 같은 값으로 덮어쓰지 않는다.
+    expect(server.update.mock.calls.map((c) => c[0])).toEqual(['t2']);
+  });
+
+  it('still reports a conflict when someone else changed the task after the lost response', async () => {
+    const server = fakeServer('', new NetworkError('offline'));
+    const pressAgain = await lostUpdateOfB(server);
+    server.bump('t2');
+    await pressAgain();
+    expect(screen.getByText(/1개 등록됨/)).toHaveTextContent(
+      'B: 그사이 다른 곳에서 바뀌었습니다. 다시 누르면 이 줄 내용으로 덮어씁니다.',
+    );
+  });
+});
+
 describe('matchRows', () => {
   const row = (title: string, description = ''): TaskRow => ({
     title,
@@ -383,5 +465,34 @@ describe('matchRows', () => {
     expect(step?.progress).not.toBe(doneA);
     expect(step?.progress.requestId).not.toBe('r1');
     expect(step?.progress.task).toBeUndefined();
+  });
+});
+
+describe('rowApplied', () => {
+  const row: TaskRow = {
+    title: 'A',
+    description: '',
+    status: 'todo',
+    priority: 'none',
+    start_date: null,
+    due_date: null,
+    estimate_minutes: null,
+    assignee_ids: ['u2', 'u1'],
+    tags: ['회의', '보고', '회의'],
+  };
+  const stored: TaskDetailView = {
+    ...detail('t1', 'A', 2),
+    tags: ['회의', '보고'],
+    assignees: [
+      { user_id: 'u1', display_name: '가람' },
+      { user_id: 'u2', display_name: '나래' },
+    ],
+  };
+
+  it('reads the row as the server stores it and anything else as a change', () => {
+    expect(rowApplied(row, stored)).toBe(true);
+    expect(rowApplied(row, { ...stored, milestone: true })).toBe(false);
+    expect(rowApplied(row, { ...stored, assignees: stored.assignees.slice(1) })).toBe(false);
+    expect(rowApplied(row, { ...stored, tags: ['보고', '회의'] })).toBe(false);
   });
 });

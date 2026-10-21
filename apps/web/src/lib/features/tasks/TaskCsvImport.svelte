@@ -10,7 +10,7 @@
   import { Label } from '$lib/ui/label';
 
   import { parseTasksCsv } from './csv';
-  import { matchRows, resetRow, resumeCounts, type RowProgress } from './csv-import';
+  import { matchRows, resetRow, resumeCounts, rowApplied, type RowProgress } from './csv-import';
 
   interface Props {
     itemId: string;
@@ -102,13 +102,14 @@
             milestone: false,
           });
           titleOnly = undefined;
-          if (updated.kind !== 'updated') {
+          const latest = updated.kind === 'updated' ? updated.task : updated.current;
+          step.task = { id: task.id, version: latest.version };
+          // 겹쳐도 서버 값이 이 줄과 같으면 다 넣은 것이다(지난 고치기가 반영되고 응답만 잃은 줄을 다시 누른 경우).
+          if (updated.kind !== 'updated' && !rowApplied(row, latest)) {
             // 알린 뒤 다시 누르면 지금 판 위에 이 줄을 넣는다(메시지가 덮어쓴다고 알린다).
-            step.task = { id: task.id, version: updated.current.version };
             conflicted = row.title;
             throw new Error('conflict');
           }
-          step.task = { id: task.id, version: updated.task.version };
           step.applied = key;
         }
         done += 1;

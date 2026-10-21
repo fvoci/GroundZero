@@ -2,6 +2,7 @@
 // 줄마다 어디까지 했는지 알아야 한다: 다 넣은 줄은 건너뛰고(다시 고치기를 보내면 그사이 다른 사람이 바꾼 값을 CSV 값으로
 // 되돌린다), 제목만 만들어진 줄은 그 업무에 이어서 채운다(새로 만들면 같은 업무가 둘이 된다). 다 넣은 업무는 다시 고치지
 // 않는다: 내용을 고친 줄이나 다음 묶음의 같은 제목 줄이 그 업무를 덮어쓰게 된다.
+import type { TaskView } from '$lib/api/client';
 import { newRequestId } from '$lib/api/client';
 import { canonicalJson } from '$lib/features/documents/drafts';
 
@@ -74,6 +75,30 @@ export function resetRow(progress: RowProgress): void {
   progress.task = undefined;
   progress.applied = undefined;
   progress.requestId = newRequestId();
+}
+
+/**
+ * 서버의 업무가 이미 이 줄 내용인지. 고치기가 반영되고 응답만 잃은 줄은 다시 누를 때 옛 판으로 보내 겹침(409)을 받는데,
+ * 그 업무가 이 줄과 같으면 다 넣은 것이다(겹침으로 알리면 덮어쓸 것이 없는데도 한 번 더 누르게 한다). 서버가 저장하며
+ * 바꾸는 대로 맞춰 본다: 같은 태그는 앞의 것만 남고(validate_tags), 담당자는 이름순으로 오므로 순서 없이 본다. CSV는
+ * 이정표를 늘 끄므로 켜져 있으면 다른 곳에서 바꾼 것이다. 다르게 읽히면 겹침으로 알린다(안전한 쪽).
+ */
+export function rowApplied(row: TaskRow, task: TaskView): boolean {
+  const people = new Set(task.assignees.map((a) => a.user_id));
+  const wanted = new Set(row.assignee_ids);
+  return (
+    task.title === row.title &&
+    task.description === row.description &&
+    task.status === row.status &&
+    task.priority === row.priority &&
+    task.start_date === row.start_date &&
+    task.due_date === row.due_date &&
+    task.estimate_minutes === row.estimate_minutes &&
+    !task.milestone &&
+    canonicalJson(task.tags) === canonicalJson([...new Set(row.tags)]) &&
+    people.size === wanted.size &&
+    [...wanted].every((id) => people.has(id))
+  );
 }
 
 /** 다시 누르면 이어서 넣을 줄 수: 이미 다 넣어 건너뛸 줄과 제목만 만들어진 업무에 채울 줄. */
