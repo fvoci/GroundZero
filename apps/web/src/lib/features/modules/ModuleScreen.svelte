@@ -38,6 +38,10 @@
     let cancelled = false;
     mod = undefined;
     error = undefined;
+    // 템플릿에서 만들기는 모듈마다 따로다. 앞 모듈에서 고른 템플릿·제목·오류를 새 모듈에 남기지 않는다.
+    templateId = '';
+    templateTitle = '';
+    templateError = undefined;
     Promise.all([api.module(id), api.items(id)])
       .then(([found, list]) => {
         if (cancelled) return;
@@ -126,7 +130,8 @@
   const templateKey = new RetryKey();
 
   async function fromTemplate(moduleId: string): Promise<void> {
-    const source = templateId === '' ? templates[0]?.id : templateId;
+    // 지금 모듈의 템플릿 목록에 있는 것만 보낸다. 고르지 않았거나 목록에 없으면 첫 템플릿.
+    const source = (templates.find((t) => t.id === templateId) ?? templates[0])?.id;
     if (source === undefined || templateTitle.trim() === '') {
       templateError = m.modules_template_required();
       return;
