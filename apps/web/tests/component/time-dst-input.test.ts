@@ -278,3 +278,129 @@ describe('time entries at a wall time that does not exist', () => {
     expect(update).not.toHaveBeenCalled();
   });
 });
+
+// 시간 기록을 고칠 때(D-93): 손대지 않은 칸은 저장된 시점(초 포함)을 그대로 보내고, 고친 칸이 두 번 있는 시각(2026-11-01
+// 뉴욕 01:00~01:59)이면 보내기 전에 어느 쪽인지 묻는다. 항목에는 순서와 UTC 차이를 함께 보인다.
+describe('editing a time entry at a wall time that occurs twice', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+    // 항목의 시각은 표시 설정(D-81)을 따르므로 한국어·24시간 표시로 본다.
+    Object.assign(me, { timeZone: ZONE, locale: 'ko', hourCycle: 'h23' });
+    vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([]);
+  });
+  afterEach(() => {
+    Object.assign(me, { timeZone: '', locale: '', hourCycle: '' });
+    vi.restoreAllMocks();
+  });
+
+  const submit = async (field: HTMLElement): Promise<void> => {
+    const form = field.closest('form');
+    if (form === null) throw new Error('form');
+    await fireEvent.submit(form);
+  };
+  const checked = (el: HTMLElement): boolean => el instanceof HTMLInputElement && el.checked;
+
+  it('an edited end that occurs twice is asked, and the untouched start keeps its seconds', async () => {
+    // 00:00:37 EDT 시작, 두 번째 01:15(EST) 끝으로 저장된 기록.
+    const entry: TimeEntryView = {
+      id: 'e1',
+      started_at: '2026-11-01T04:00:37Z',
+      ended_at: '2026-11-01T06:15:00Z',
+      paused_at: null,
+      paused_seconds: 0,
+      seconds: 8063,
+      kind: 'work',
+      memo: '',
+      target: null,
+      version: 1,
+    };
+    const update = vi
+      .spyOn(api, 'updateTimeEntry')
+      .mockResolvedValue({ kind: 'updated', entry: { ...entry, version: 2 } });
+    render(TimeEntryDialog, {
+      props: { entry, zone: ZONE, onclose: () => undefined, onchanged: () => undefined },
+    });
+    const end = await screen.findByLabelText(m.time_end());
+    // 손대지 않은 칸은 두 번 있는 시각이어도 묻지 않는다.
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    end.focus();
+    await fireEvent.input(end, { target: { value: '2026-11-01T01:45' } });
+    expect(document.activeElement).toBe(end);
+    expect(
+      screen.getByRole('group', {
+        name: m.events_repeated_time_legend({ field: m.time_end(), zone: ZONE }),
+      }),
+    ).toBeTruthy();
+    const first = screen.getByRole('radio', { name: '첫 번째 01:45 (UTC−04:00)' });
+    const second = screen.getByRole('radio', { name: '두 번째 01:45 (UTC−05:00)' });
+    expect(checked(first) || checked(second)).toBe(false);
+
+    await submit(end);
+    await waitFor(() => {
+      expect(end.getAttribute('aria-invalid')).toBe('true');
+    });
+    expect(screen.getByRole('alert').textContent).toContain(m.events_repeated_time_required());
+    expect(end.getAttribute('aria-describedby')).toContain('time-edit-end-repeated-error');
+    expect(update).not.toHaveBeenCalled();
+
+    await fireEvent.click(second);
+    expect(end.getAttribute('aria-invalid')).not.toBe('true');
+    await submit(end);
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(1);
+    });
+    expect(update.mock.calls[0]?.[2]).toMatchObject({
+      started_at: '2026-11-01T04:00:37Z',
+      ended_at: '2026-11-01T06:45:00.000Z',
+    });
+  });
+
+  it('a running timer keeps an untouched start and asks for an edited start that occurs twice', async () => {
+    // 두 번째 01:10(EST)에 시작한 진행 중 타이머. 끝은 고칠 수 없다.
+    const entry: TimeEntryView = {
+      id: 'r1',
+      started_at: '2026-11-01T06:10:00Z',
+      ended_at: null,
+      paused_at: null,
+      paused_seconds: 0,
+      seconds: 0,
+      kind: 'work',
+      memo: '',
+      target: null,
+      version: 1,
+    };
+    const update = vi
+      .spyOn(api, 'updateTimeEntry')
+      .mockResolvedValue({ kind: 'updated', entry: { ...entry, version: 2 } });
+    render(TimeEntryDialog, {
+      props: { entry, zone: ZONE, onclose: () => undefined, onchanged: () => undefined },
+    });
+    const start = await screen.findByLabelText(m.time_start());
+    await fireEvent.input(screen.getByLabelText(m.time_memo()), { target: { value: '메모' } });
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    await submit(start);
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(1);
+    });
+    expect(update.mock.calls[0]?.[2]).toMatchObject({
+      started_at: '2026-11-01T06:10:00Z',
+      ended_at: null,
+    });
+
+    await fireEvent.input(start, { target: { value: '2026-11-01T01:20' } });
+    await submit(start);
+    await waitFor(() => {
+      expect(start.getAttribute('aria-invalid')).toBe('true');
+    });
+    expect(update).toHaveBeenCalledTimes(1);
+    await fireEvent.click(screen.getByRole('radio', { name: '첫 번째 01:20 (UTC−04:00)' }));
+    await submit(start);
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]?.[2]).toMatchObject({
+      started_at: '2026-11-01T05:20:00.000Z',
+      ended_at: null,
+    });
+  });
+});

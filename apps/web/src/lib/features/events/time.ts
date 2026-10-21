@@ -73,25 +73,50 @@ function offsetAt(utcMs: number, timeZone: string): number {
   );
 }
 
-/**
- * 그 시간대의 벽시계 시각(`YYYY-MM-DDTHH:mm`)을 UTC 시각(ISO)으로. 두 번 있는 시각(여름시간 끝)은 앞의 것,
- * 없는 시각(여름시간 시작)은 그 틈만큼 뒤로 민다. 모르는 시간대면 RangeError.
- */
-export function instantOf(wall: string, timeZone: string): string {
+/** 벽시계 시각을 UTC로 읽는 두 후보(앞뒤 하루의 UTC 차이로 계산, 이른 것부터). 모르는 시간대면 RangeError. */
+function candidatesOf(wall: string, timeZone: string): [number, number] {
   if (!isKnownZone(timeZone)) throw new RangeError(`unknown time zone ${timeZone}`);
   const [date = '', time = '00:00'] = wall.split('T');
   const [y = 1970, mo = 1, d = 1] = date.split('-').map(Number);
   const [h = 0, mi = 0] = time.split(':').map(Number);
   const target = Date.UTC(y, mo - 1, d, h, mi);
-  // 앞뒤 하루의 차이 두 가지가 후보다. 그 시각으로 돌아오는 것 중 이른 것을 고른다.
   const before = target - offsetAt(target - 86_400_000, timeZone);
   const after = target - offsetAt(target + 86_400_000, timeZone);
-  const candidates = [before, after].sort((a, b) => a - b);
-  for (const c of candidates) {
-    if (wallTime(new Date(c).toISOString(), timeZone) === wall) return new Date(c).toISOString();
+  return before <= after ? [before, after] : [after, before];
+}
+
+/**
+ * 그 시간대에서 벽시계 시각(`YYYY-MM-DDTHH:mm`)이 그 값인 UTC 시각(ISO) 전부, 이른 것부터. 없는 시각(여름시간
+ * 시작)이면 0개, 보통은 1개, 두 번 있는 시각(여름시간 끝)이면 2개다(D-93). 모르는 시간대면 RangeError.
+ */
+export function instantsOf(wall: string, timeZone: string): string[] {
+  const [early, late] = candidatesOf(wall, timeZone);
+  const found: string[] = [];
+  for (const c of early === late ? [early] : [early, late]) {
+    const iso = new Date(c).toISOString();
+    if (wallTime(iso, timeZone) === wall) found.push(iso);
   }
+  return found;
+}
+
+/**
+ * 그 시간대의 벽시계 시각(`YYYY-MM-DDTHH:mm`)을 UTC 시각(ISO)으로. 두 번 있는 시각(여름시간 끝)은 앞의 것,
+ * 없는 시각(여름시간 시작)은 그 틈만큼 뒤로 민다(새로 만드는 일정·기록, D-81). 모르는 시간대면 RangeError.
+ */
+export function instantOf(wall: string, timeZone: string): string {
+  const [first] = instantsOf(wall, timeZone);
+  if (first !== undefined) return first;
   // 없는 시각: 틈 앞의 차이를 쓰면 틈만큼 뒤의 벽시계 시각이 된다.
-  return new Date(Math.max(before, after)).toISOString();
+  const [, late] = candidatesOf(wall, timeZone);
+  return new Date(late).toISOString();
+}
+
+/** 그 시각의 그 시간대 UTC 차이를 `UTC+09:00`·`UTC−04:00`(빼기는 U+2212)처럼. 두 번 있는 시각을 가를 때 보인다. */
+export function offsetLabel(iso: string, timeZone: string): string {
+  const minutes = Math.round(offsetAt(Date.parse(iso), timeZone) / 60_000);
+  const sign = minutes < 0 ? '−' : '+';
+  const abs = Math.abs(minutes);
+  return `UTC${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
 }
 
 /** 표시용 시각 `HH:mm`(보는 사람의 시간대). */

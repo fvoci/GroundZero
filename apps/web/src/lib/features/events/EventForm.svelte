@@ -12,6 +12,9 @@
   import * as Select from '$lib/ui/select';
 
   import { KIND_LABEL } from './labels';
+  import type { EditedWall } from './repeated';
+  import { describedBy, readEditedWall, repeatedOptions } from './repeated';
+  import RepeatedTimeChoice from './RepeatedTimeChoice.svelte';
   import { dayIn, instantOf, isMissingLocalTime, localTimeZone, wallTime } from './time';
 
   interface Props {
@@ -60,34 +63,93 @@
     };
   }
 
-  // 연 때의 입력값. 시각·시간대를 고치지 않았으면 원래 RFC3339 값을 그대로 보낸다: 입력란은 분 단위라 다시 변환하면 초가
-  // 지워지고, 두 번 있는 시각(여름시간 끝)은 앞의 것으로 바뀐다(제목만 고쳤는데 시각이 바뀌는 일이 없게).
+  // 연 때의 입력값. 고칠 때(D-93) 끝마다 따로 정한다: 그 끝의 시각과 시간대를 고치지 않았으면 저장된 RFC3339 값을 그대로
+  // 보낸다. 입력란은 분 단위라 다시 변환하면 초가 지워지고, 두 번 있는 시각(여름시간 끝)은 다른 쪽으로 바뀔 수 있다.
+  // 시간대를 바꾸면 두 끝 모두 새 시간대로 다시 읽는다. 끝이 시작보다 앞서면 서버가 거절한다(400, 화면은 그 오류를 보인다).
   const base = initialState();
   const f = $state({ ...base });
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
+  /** 이미 있는 일정을 고치는지(새 일정은 D-81: 두 번 있는 시각은 앞의 것). */
+  const editing = $derived(initial !== undefined);
+  // 고친 끝이 두 번 있는 시각일 때 고른 UTC 시각. 그 칸이나 시간대를 고치면 지운다(저장 때 지금 후보인지 다시 본다).
+  let startChoice = $state<string | undefined>(undefined);
+  let endChoice = $state<string | undefined>(undefined);
+  /** 두 번 있는 시각인데 고르지 않고 저장하려 한 칸(칸 옆에 알린다, D-82). */
+  const unchosen = $state({ start: false, end: false });
+
+  /** 그 끝을 고쳤는지: 저장된 시점이 없거나(새 일정·종일에서 바꿈) 시간대나 그 칸의 시각이 연 때와 다르면. */
+  function edited(
+    wall: string,
+    baseWall: string,
+    stored: string | null | undefined,
+    zone: string,
+  ): boolean {
+    return stored == null || zone !== base.timezone || wall !== baseWall;
+  }
+
+  const zoneNow = $derived(f.timezone.trim());
+  const startOptions = $derived(
+    editing && !f.allDay && edited(f.startWall, base.startWall, initial?.starts_at, zoneNow)
+      ? repeatedOptions(f.startWall, zoneNow)
+      : [],
+  );
+  const endOptions = $derived(
+    editing && !f.allDay && edited(f.endWall, base.endWall, initial?.ends_at, zoneNow)
+      ? repeatedOptions(f.endWall, zoneNow)
+      : [],
+  );
+  const startInvalid = $derived(unchosen.start && startOptions.length === 2);
+  const endInvalid = $derived(unchosen.end && endOptions.length === 2);
+
+  /** 한 끝을 보낼 값으로 읽는다. 모르는 시간대면 RangeError. */
+  function readEnd(
+    wall: string,
+    baseWall: string,
+    stored: string | null | undefined,
+    chosen: string | undefined,
+    zone: string,
+  ): EditedWall {
+    // 손대지 않은 끝은 저장된 시점(초 포함) 그대로.
+    if (stored != null && !edited(wall, baseWall, stored, zone)) {
+      return { kind: 'instant', instant: stored };
+    }
+    // 새 일정은 D-81 그대로: 없는 시각은 거절, 두 번 있는 시각은 앞의 것.
+    if (!editing) {
+      return isMissingLocalTime(wall, zone)
+        ? { kind: 'missing' }
+        : { kind: 'instant', instant: instantOf(wall, zone) };
+    }
+    return readEditedWall(wall, zone, chosen);
+  }
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (busy) return;
     error = undefined;
+    unchosen.start = false;
+    unchosen.end = false;
     let input: EventInput;
     try {
       const zone = f.timezone.trim();
-      if (
-        !f.allDay &&
-        (isMissingLocalTime(f.startWall, zone) || isMissingLocalTime(f.endWall, zone))
-      ) {
-        error = m.events_missing_time({ zone });
-        return;
+      let startsAt: string | null = null;
+      let endsAt: string | null = null;
+      if (!f.allDay) {
+        const start = readEnd(f.startWall, base.startWall, initial?.starts_at, startChoice, zone);
+        const end = readEnd(f.endWall, base.endWall, initial?.ends_at, endChoice, zone);
+        if (start.kind === 'missing' || end.kind === 'missing') {
+          error = m.events_missing_time({ zone });
+          return;
+        }
+        // 두 번 있는 시각은 고르기 전에는 보내지 않는다(조용히 한쪽으로 정하지 않음).
+        if (start.kind === 'unchosen' || end.kind === 'unchosen') {
+          unchosen.start = start.kind === 'unchosen';
+          unchosen.end = end.kind === 'unchosen';
+          return;
+        }
+        startsAt = start.instant;
+        endsAt = end.instant;
       }
-      // 두 끝은 함께 정한다. 시각·시간대를 하나도 고치지 않았을 때만 원래 값을 보내고, 하나라도 고쳤으면 두 끝 모두
-      // 같은 규칙으로 다시 변환한다. 한쪽만 원래 값으로 두면 두 번 있는 시각(다시 변환하면 앞의 것)이나 초 때문에 끝이
-      // 시작보다 앞서거나(서버가 거절) 화면과 다른 길이가 된다.
-      const keep =
-        zone === base.timezone && f.startWall === base.startWall && f.endWall === base.endWall;
-      const instant = (wall: string, stored: string | null | undefined): string =>
-        keep && stored != null ? stored : instantOf(wall, zone);
       input = {
         kind: f.kind,
         title: f.title,
@@ -95,8 +157,8 @@
         all_day: f.allDay,
         start_date: f.allDay ? f.startDate : null,
         end_date: f.allDay ? f.endDate : null,
-        starts_at: f.allDay ? null : instant(f.startWall, initial?.starts_at),
-        ends_at: f.allDay ? null : instant(f.endWall, initial?.ends_at),
+        starts_at: startsAt,
+        ends_at: endsAt,
         timezone: zone,
       };
     } catch {
@@ -161,15 +223,83 @@
   {:else}
     <div class="flex flex-col gap-1">
       <Label for={`${idPrefix}-starts`}>{m.events_starts()}</Label>
-      <Input id={`${idPrefix}-starts`} type="datetime-local" bind:value={f.startWall} required />
+      <Input
+        id={`${idPrefix}-starts`}
+        type="datetime-local"
+        bind:value={f.startWall}
+        required
+        oninput={() => {
+          startChoice = undefined;
+          unchosen.start = false;
+        }}
+        aria-invalid={startInvalid}
+        aria-describedby={describedBy(
+          startOptions.length === 2 && `${idPrefix}-starts-repeated-legend`,
+          startInvalid && `${idPrefix}-starts-repeated-error`,
+        )}
+      />
+      {#if startOptions.length === 2}
+        <RepeatedTimeChoice
+          id={`${idPrefix}-starts`}
+          field={m.events_starts()}
+          zone={zoneNow}
+          options={startOptions}
+          chosen={startChoice}
+          invalid={startInvalid}
+          onchoose={(instant: string) => {
+            startChoice = instant;
+            unchosen.start = false;
+          }}
+        />
+      {/if}
     </div>
     <div class="flex flex-col gap-1">
       <Label for={`${idPrefix}-ends`}>{m.events_ends()}</Label>
-      <Input id={`${idPrefix}-ends`} type="datetime-local" bind:value={f.endWall} required />
+      <Input
+        id={`${idPrefix}-ends`}
+        type="datetime-local"
+        bind:value={f.endWall}
+        required
+        oninput={() => {
+          endChoice = undefined;
+          unchosen.end = false;
+        }}
+        aria-invalid={endInvalid}
+        aria-describedby={describedBy(
+          endOptions.length === 2 && `${idPrefix}-ends-repeated-legend`,
+          endInvalid && `${idPrefix}-ends-repeated-error`,
+        )}
+      />
+      {#if endOptions.length === 2}
+        <RepeatedTimeChoice
+          id={`${idPrefix}-ends`}
+          field={m.events_ends()}
+          zone={zoneNow}
+          options={endOptions}
+          chosen={endChoice}
+          invalid={endInvalid}
+          onchoose={(instant: string) => {
+            endChoice = instant;
+            unchosen.end = false;
+          }}
+        />
+      {/if}
     </div>
     <div class="flex flex-col gap-1 md:col-span-2">
       <Label for={`${idPrefix}-tz`}>{m.events_time_zone()}</Label>
-      <Input id={`${idPrefix}-tz`} bind:value={f.timezone} autocomplete="off" required />
+      <!-- 시간대를 바꾸면 두 끝을 새 시간대로 다시 읽으므로 고른 것도 지운다(D-93). -->
+      <Input
+        id={`${idPrefix}-tz`}
+        bind:value={f.timezone}
+        autocomplete="off"
+        required
+        oninput={() => {
+          startChoice = undefined;
+          endChoice = undefined;
+          unchosen.start = false;
+          unchosen.end = false;
+        }}
+      />
     </div>
   {/if}
   <div class="flex flex-col gap-1 md:col-span-2">
