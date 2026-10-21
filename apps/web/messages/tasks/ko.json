@@ -38,6 +38,25 @@
   ],
   "tasks_csv_import_failed": "등록하지 못했습니다.",
   "tasks_csv_import_error": "{reason} ({count}개 등록됨, 다시 누르면 나머지를 이어서 넣습니다)",
+  "tasks_csv_resume_skip": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "이미 등록한 {count}줄은 건너뜁니다."
+      }
+    }
+  ],
+  "tasks_csv_resume_fill": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "제목만 만들어진 업무 {count}개는 이어서 채웁니다."
+      }
+    }
+  ],
+  "tasks_csv_resume_restart": "처음부터 새로 넣으려면 글자를 모두 지우세요.",
   "tasks_csv_summary": "CSV로 여러 업무 등록",
   "tasks_csv_label": "한 줄에 한 업무: 제목, 설명, 상태(할 일·진행 중·완료), 우선순위(없음·낮음·보통·높음·긴급), 시작일, 기한(YYYY-MM-DD), 예상(분), 담당자(이름, ;로 여럿), 태그(;로 여럿)",
   "tasks_csv_read": [

@@ -39,6 +39,27 @@
   ],
   "tasks_csv_import_failed": "Couldn't import.",
   "tasks_csv_import_error": "{reason} ({count} imported; press again to add the rest)",
+  "tasks_csv_resume_skip": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} line already imported will be skipped.",
+        "countPlural=other": "{count} lines already imported will be skipped."
+      }
+    }
+  ],
+  "tasks_csv_resume_fill": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} task created with only its title will be filled in.",
+        "countPlural=other": "{count} tasks created with only their titles will be filled in."
+      }
+    }
+  ],
+  "tasks_csv_resume_restart": "To start a new import instead, clear the text first.",
   "tasks_csv_summary": "Import tasks from CSV",
   "tasks_csv_label": "One task per line: title, description, status (todo, in_progress, done), priority (none, low, medium, high, urgent), start date, due date (YYYY-MM-DD), estimate (minutes), assignees (names, separated by ;), tags (separated by ;)",
   "tasks_csv_read": [

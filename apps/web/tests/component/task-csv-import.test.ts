@@ -149,32 +149,98 @@ describe('TaskCsvImport resume (audit W1, W2)', () => {
     expect(lastB?.[2].start_date).toBe('2026-10-02');
   });
 
-  // 이미 넣은 줄을 고쳐 다시 누르면 그 업무를 이 등록이 받은 판으로 고친다. 그사이 다른 사람이 바꿨으면 덮어쓰지 않고
-  // 알린다. 알린 뒤 다시 누를 때만 이 줄 내용으로 덮어쓴다.
-  it('re-sends an edited finished row on the version it saw and reports a newer change', async () => {
-    const server = fakeServer('B', new NetworkError('offline'));
+  // 다 넣은 줄을 고친 줄은 그 업무를 다시 고치지 않는다(같은 제목이라도 다른 줄일 수 있다). 새 업무로 넣는다.
+  it('never re-sends an edited finished row onto its task', async () => {
+    const server = fakeServer('B', new ApiError(400, 'bad_request', 'at most 20 tags'));
     const onimported = vi.fn(() => Promise.resolve());
     render(TaskCsvImport, { itemId: 'i1', onimported });
     await setText('A\nB');
     await pressImport(onimported, 1);
-    server.bump('t1');
     server.update.mockClear();
-    await setText('A,,완료\nB');
+    await setText('A,설명\nB');
     await pressImport(onimported, 2);
-    expect(server.update.mock.calls.map((c) => [c[0], c[1]])).toEqual([['t1', 2]]);
-    expect(
-      screen.getByText(
-        /A: 그사이 다른 곳에서 바뀌었습니다\. 다시 누르면 이 줄 내용으로 덮어씁니다\./,
-      ),
-    ).toBeInTheDocument();
-    expect(server.create).toHaveBeenCalledTimes(2);
+    expect(server.update.mock.calls.map((c) => c[0])).toEqual(['t3', 't2']);
+    expect(server.made).toEqual(['t1', 't2', 't3']);
+  });
+});
+
+// 지난 묶음의 진행 상태가 다음 묶음에 붙으면 같은 제목의 줄이 지난 업무를 고치거나(덮어씀) 같은 줄이 건너뛰어진다.
+describe('TaskCsvImport new batch after a failure (review)', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const resumeHint = /이미 등록한 1줄은 건너뜁니다/;
+
+  it('drops the progress when the text is cleared and starts a new batch', async () => {
+    const server = fakeServer('B', new ApiError(400, 'bad_request', 'at most 20 tags'));
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('주간 회의,첫 주,,,2026-11-02\nB');
+    await pressImport(onimported, 1);
+    expect(screen.getByText(resumeHint)).toHaveTextContent(
+      '이미 등록한 1줄은 건너뜁니다. 제목만 만들어진 업무 1개는 이어서 채웁니다. 처음부터 새로 넣으려면 글자를 모두 지우세요.',
+    );
+    await setText('');
+    expect(screen.queryByText(resumeHint)).not.toBeInTheDocument();
+    await setText('주간 회의,둘째 주,,,2026-11-09\n주간 보고');
     server.update.mockClear();
-    await pressImport(onimported, 3);
-    expect(server.update.mock.calls.map((c) => [c[0], c[1], c[2].status])).toEqual([
-      ['t1', 7, 'done'],
-      ['t2', 1, 'todo'],
-    ]);
-    expect(server.create).toHaveBeenCalledTimes(2);
+    await pressImport(onimported, 2);
+    expect(server.update.mock.calls.map((c) => c[0])).toEqual(['t3', 't4']);
+    expect(server.made).toEqual(['t1', 't2', 't3', 't4']);
+    expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
+  });
+
+  it('creates an identical row again after the text is cleared', async () => {
+    const server = fakeServer('B', new ApiError(400, 'bad_request', 'at most 20 tags'));
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('청소\nB');
+    await pressImport(onimported, 1);
+    const firstIds = server.create.mock.calls.map((c) => c[1]);
+    await setText('');
+    await setText('청소');
+    await pressImport(onimported, 2);
+    expect(server.create).toHaveBeenCalledTimes(3);
+    expect(firstIds).not.toContain(server.create.mock.calls.at(-1)?.[1]);
+    expect(server.made).toEqual(['t1', 't2', 't3']);
+    expect(screen.getByText('업무 1개를 등록했습니다.')).toBeInTheDocument();
+  });
+
+  // 지우지 않고 새 글자를 붙여 넣은 경우: 지난 줄과 겹치는 줄이 없으면 새 묶음이다.
+  it('drops the progress when pasted text shares no rows with it', async () => {
+    const server = fakeServer('B', new ApiError(400, 'bad_request', 'at most 20 tags'));
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('주간 회의,첫 주,,,2026-11-02\nB');
+    await pressImport(onimported, 1);
+    await setText('주간 회의,둘째 주,,,2026-11-09\n주간 보고');
+    expect(screen.queryByText(resumeHint)).not.toBeInTheDocument();
+    server.update.mockClear();
+    await pressImport(onimported, 2);
+    expect(server.update.mock.calls.map((c) => c[0])).toEqual(['t3', 't4']);
+    expect(server.made).toEqual(['t1', 't2', 't3', 't4']);
+    expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
+  });
+
+  // 지우지 않고 붙여 넣은 글자에 다 넣은 줄과 같은 줄이 있으면 이어서 넣는다. 건너뛸 줄을 누르기 전에 보여 준다.
+  it('shows which rows a resume skips before the press', async () => {
+    const server = fakeServer('B', new ApiError(400, 'bad_request', 'at most 20 tags'));
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('청소\nB');
+    await pressImport(onimported, 1);
+    await setText('청소\n주간 보고');
+    expect(screen.getByText(resumeHint)).toBeInTheDocument();
+    server.update.mockClear();
+    await pressImport(onimported, 2);
+    expect(server.update.mock.calls.map((c) => c[0])).toEqual(['t3']);
+    expect(server.made).toEqual(['t1', 't2', 't3']);
   });
 });
 
@@ -238,5 +304,18 @@ describe('matchRows', () => {
     const fresh = matchRows([row('B')], [doneA]);
     expect(fresh[0]?.progress.requestId).not.toBe('r1');
     expect(fresh[0]?.progress.task).toBeUndefined();
+  });
+
+  it('never hands a finished row to a row with other content', () => {
+    const doneA: RowProgress = {
+      requestId: 'r1',
+      title: 'A',
+      task: { id: 't1', version: 2 },
+      applied: canonicalJson(row('A', 'x')),
+    };
+    const [step] = matchRows([row('A', 'z')], [doneA]);
+    expect(step?.progress).not.toBe(doneA);
+    expect(step?.progress.requestId).not.toBe('r1');
+    expect(step?.progress.task).toBeUndefined();
   });
 });
