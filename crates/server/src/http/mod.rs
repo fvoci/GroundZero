@@ -545,6 +545,7 @@ async fn api_not_found() -> AppError {
         home::MarkKind,
         home::MarkedTarget,
         home::Home,
+        home::UpNextCounts,
         home::SetMark,
         home::MarkState,
         trash::Trashed,
