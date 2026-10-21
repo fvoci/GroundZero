@@ -37,11 +37,14 @@ describe('search module filter', () => {
     vi.restoreAllMocks();
   });
 
-  async function pick(name: string): Promise<void> {
+  async function openModules(): Promise<void> {
     const trigger = document.querySelector<HTMLElement>('[aria-labelledby="search-module-label"]');
     if (trigger === null) throw new Error('module trigger');
     await fireEvent.pointerDown(trigger, { button: 0, pointerType: 'mouse' });
     await fireEvent.click(trigger);
+  }
+  async function pick(name: string, alreadyOpen = false): Promise<void> {
+    if (!alreadyOpen) await openModules();
     const option = await screen.findByRole('option', { name });
     await fireEvent.pointerUp(option, { button: 0, pointerType: 'mouse' });
     await fireEvent.click(option);
@@ -63,8 +66,11 @@ describe('search module filter', () => {
       expect(search).toHaveBeenCalled();
     });
     expect(search.mock.calls.at(-1)?.[2]).not.toHaveProperty('moduleId');
-    await pick('출시');
+    // 메뉴가 열린 상태에서: 보관하지 않은 모듈만 고를 수 있다.
+    await openModules();
+    expect(await screen.findByRole('option', { name: '출시' })).toBeTruthy();
     expect(screen.queryByRole('option', { name: '옛 모듈' })).toBeNull();
+    await pick('출시', true);
     await waitFor(() => {
       const last: SearchFilters | undefined = search.mock.calls.at(-1)?.[2];
       expect(last?.moduleId).toBe('m-1');
