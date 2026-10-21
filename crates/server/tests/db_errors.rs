@@ -85,5 +85,6 @@ async fn database_error_codes_map_to_stable_responses() {
     let (status, body) = raised(&state, &user, "23514").await;
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(body["error"], "internal");
-    assert_ne!(body["message"], "raised 23514");
+    // 고정된 일반 문구만 준다(SQL 설명·세부를 담지 않는다).
+    assert_eq!(body["message"], "Internal Server Error");
 }
