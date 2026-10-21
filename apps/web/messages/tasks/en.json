@@ -21,6 +21,7 @@
   "tasks_csv_tag_too_long": "Each tag can be at most {max} characters",
   "tasks_csv_tag_control": "A tag contains line breaks, tabs or other control characters",
   "tasks_csv_title_only": "\"{title}\" was created with only its title. Press again to fill in the rest of that task.",
+  "tasks_csv_task_gone": "\"{title}\" was deleted or is no longer visible. Press again to create it anew.",
   "tasks_csv_start_after_due": "Start date is after the due date",
   "tasks_csv_bad_estimate": "Estimate (minutes) must be a number: {value}",
   "tasks_csv_unknown_assignee": "Assignee not found: {name}",

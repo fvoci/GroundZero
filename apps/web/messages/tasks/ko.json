@@ -21,6 +21,7 @@
   "tasks_csv_tag_too_long": "태그는 하나에 {max}자까지입니다",
   "tasks_csv_tag_control": "태그에 쓸 수 없는 문자(줄바꿈·탭 등)가 있습니다",
   "tasks_csv_title_only": "\"{title}\" 업무는 제목만 만들어졌습니다. 다시 누르면 그 업무에 나머지를 채웁니다.",
+  "tasks_csv_task_gone": "\"{title}\" 업무가 지워졌거나 볼 수 없습니다. 다시 누르면 새로 만듭니다.",
   "tasks_csv_start_after_due": "시작일이 기한보다 늦습니다",
   "tasks_csv_bad_estimate": "예상 시간(분)은 숫자로 적어 주세요: {value}",
   "tasks_csv_unknown_assignee": "담당자를 찾을 수 없습니다: {name}",

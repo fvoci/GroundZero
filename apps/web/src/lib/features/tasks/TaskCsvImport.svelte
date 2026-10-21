@@ -3,14 +3,14 @@
   // 기억해 두어(csv-import.ts) 중간에 실패해도 다시 누르면 다 넣은 줄은 건너뛰고, 제목만 만들어진 줄은 그 업무에 채운다.
   // 이어서 넣는 동안은 그렇다고 보여 준다. 글자를 모두 지우거나 지난 줄과 겹치지 않는 글자로 누르면 새 묶음이다.
   import type { AssigneeView } from '$lib/api/client';
-  import { api } from '$lib/api/client';
+  import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Label } from '$lib/ui/label';
 
   import { parseTasksCsv } from './csv';
-  import { matchRows, resumeCounts, type RowProgress } from './csv-import';
+  import { matchRows, resetRow, resumeCounts, type RowProgress } from './csv-import';
 
   interface Props {
     itemId: string;
@@ -76,12 +76,15 @@
     let conflicted: string | undefined;
     // 만들었지만 나머지 칸을 아직 넣지 못한(제목만 있는) 업무의 제목. 고치기가 실패하면 어느 업무인지 알린다.
     let titleOnly: string | undefined;
+    // 요청을 보내는 줄의 상태. 만들기·고치기가 404이면 그 줄을 처음부터 다시 만든다.
+    let current: RowProgress | undefined;
     try {
       for (const { row, key, progress: step } of steps) {
         // 다 넣은 줄은 다시 보내지 않는다. 만들기는 같은 요청 id에 지금 판을 돌려주므로, 다시 고치기를 보내면 그사이
         // 다른 사람이 바꾼 상태·담당자를 CSV 값으로 조용히 되돌린다. 여기 오는 줄은 새 줄이거나 아직 다 넣지 못한 줄이다
         // (matchRows는 다 넣은 상태를 내용이 같은 줄에만 준다).
         if (step.applied !== key) {
+          current = step;
           const task = step.task ?? (await api.createTask(itemId, step.requestId, row.title));
           step.task = { id: task.id, version: task.version };
           titleOnly = row.title;
@@ -118,13 +121,19 @@
         progress = [];
       }
     } catch (e: unknown) {
-      const failed = m.tasks_csv_import_error({
-        reason:
-          conflicted === undefined
-            ? errorText(e, m.tasks_csv_import_failed())
-            : m.tasks_csv_conflict({ title: conflicted }),
-        count: done,
-      });
+      let reason = errorText(e, m.tasks_csv_import_failed());
+      if (conflicted !== undefined) {
+        reason = m.tasks_csv_conflict({ title: conflicted });
+      } else if (current !== undefined && e instanceof ApiError && e.status === 404) {
+        // 이 줄이 만든 업무를 그사이 지웠다(또는 볼 수 없다). 고치기도, 같은 요청 id의 만들기도 404이므로 그 줄은
+        // 다음에 새로 만든다. 제목만 만든 업무였으면 남은 업무가 없으니 제목만 만들어졌다고 알리지 않는다.
+        resetRow(current);
+        if (titleOnly !== undefined) {
+          reason = m.tasks_csv_task_gone({ title: titleOnly });
+          titleOnly = undefined;
+        }
+      }
+      const failed = m.tasks_csv_import_error({ reason, count: done });
       error =
         titleOnly === undefined
           ? failed

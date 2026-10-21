@@ -8,8 +8,8 @@ import { canonicalJson } from '$lib/features/documents/drafts';
 import type { TaskRow } from './csv';
 
 export interface RowProgress {
-  /** 만들기 요청 id. 만들기는 제목만 보내므로 제목이 같은 동안 이 id를 지킨다. */
-  readonly requestId: string;
+  /** 만들기 요청 id. 만들기는 제목만 보내므로 제목이 같은 동안 이 id를 지킨다(만든 업무가 지워지면 `resetRow`). */
+  requestId: string;
   readonly title: string;
   /** 만든 업무와 마지막으로 받은 판(만들기·고치기 응답). 아직 만들지 못했으면 undefined. */
   task: { id: string; version: number } | undefined;
@@ -63,6 +63,17 @@ export function matchRows(rows: readonly TaskRow[], known: readonly RowProgress[
       applied: undefined,
     },
   }));
+}
+
+/**
+ * 이 줄이 만든 업무가 지워졌거나 볼 수 없게 되었을 때(만들기·고치기 404) 줄을 처음 상태로 되돌린다. 그 업무에는 채울 수
+ * 없고, 같은 요청 id로 만들면 서버가 지운 업무를 다시 찾아 404를 내므로(app_create_task는 휴지통을 거르지 않는다) 새
+ * 요청 id를 쓴다. 항목이 없어서 난 404였다면 새 id도 404일 뿐이다.
+ */
+export function resetRow(progress: RowProgress): void {
+  progress.task = undefined;
+  progress.applied = undefined;
+  progress.requestId = newRequestId();
 }
 
 /** 다시 누르면 이어서 넣을 줄 수: 이미 다 넣어 건너뛸 줄과 제목만 만들어진 업무에 채울 줄. */

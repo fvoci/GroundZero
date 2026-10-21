@@ -48,7 +48,12 @@ function detail(id: string, title: string, version: number): TaskDetailView {
 function fakeServer(failOnce: string, failure: Error) {
   const byRequest = new Map<string, string>();
   const versions = new Map<string, number>();
+  // 지운(휴지통) 업무. 만들기는 같은 request_id에 그 업무 id를 찾지만(app_create_task) 지운 업무는 읽을 수 없어 404,
+  // 고치기도 404다.
+  const deleted = new Set<string>();
   let failed = false;
+  // 다음 만들기는 서버에서 만들고 응답만 잃는다.
+  let loseNext = false;
   // 새로 만든 업무 id(만든 순서).
   const made: string[] = [];
   const create = vi
@@ -61,11 +66,21 @@ function fakeServer(failOnce: string, failure: Error) {
         versions.set(id, 1);
         made.push(id);
       }
+      if (deleted.has(id)) {
+        return Promise.reject(new ApiError(404, 'not_found', 'not found'));
+      }
+      if (loseNext) {
+        loseNext = false;
+        return Promise.reject(new NetworkError('offline'));
+      }
       return Promise.resolve(detail(id, title, versions.get(id) ?? 1));
     });
   const update = vi
     .spyOn(api, 'updateTask')
     .mockImplementation((id: string, base: number, input: TaskInput) => {
+      if (deleted.has(id)) {
+        return Promise.reject(new ApiError(404, 'not_found', 'not found'));
+      }
       if (input.title === failOnce && !failed) {
         failed = true;
         return Promise.reject(failure);
@@ -82,7 +97,13 @@ function fakeServer(failOnce: string, failure: Error) {
   const bump = (id: string): void => {
     versions.set(id, (versions.get(id) ?? 1) + 5);
   };
-  return { create, update, bump, made };
+  const remove = (id: string): void => {
+    deleted.add(id);
+  };
+  const loseNextCreate = (): void => {
+    loseNext = true;
+  };
+  return { create, update, bump, remove, loseNextCreate, made };
 }
 
 async function setText(value: string): Promise<void> {
@@ -264,6 +285,51 @@ describe('TaskCsvImport title-only task (audit W3)', () => {
     expect(screen.getByText(/1개 등록됨/)).toHaveTextContent(
       '"B" 업무는 제목만 만들어졌습니다. 다시 누르면 그 업무에 나머지를 채웁니다.',
     );
+  });
+
+  // 제목만 만들어진 업무를 보드에서 지우면 그 업무에 채울 수 없다(404). 같은 요청 id로 만들면 지운 업무가 돌아오므로
+  // 다음 누름은 새 요청 id로 한 번만 새로 만든다.
+  it('creates the row anew once when its title-only task was deleted', async () => {
+    const server = fakeServer('B', new ApiError(400, 'bad_request', 'at most 20 tags'));
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('A\nB');
+    await pressImport(onimported, 1);
+    const firstIds = server.create.mock.calls.map((c) => c[1]);
+    server.remove('t2');
+    await pressImport(onimported, 2);
+    const message = screen.getByText(/1개 등록됨/);
+    expect(message).toHaveTextContent(
+      '"B" 업무가 지워졌거나 볼 수 없습니다. 다시 누르면 새로 만듭니다.',
+    );
+    expect(message).not.toHaveTextContent('제목만 만들어졌습니다');
+    server.create.mockClear();
+    server.update.mockClear();
+    await pressImport(onimported, 3);
+    expect(server.create).toHaveBeenCalledTimes(1);
+    expect(firstIds).not.toContain(server.create.mock.calls[0]?.[1]);
+    expect(server.update.mock.calls.map((c) => c[0])).toEqual(['t3']);
+    expect(server.made).toEqual(['t1', 't2', 't3']);
+    expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
+  });
+
+  // 만들기 응답을 잃은 줄의 업무(보드에는 보인다)를 지우면 같은 요청 id의 만들기가 404다. 다음 누름은 새 id로 만든다.
+  it('creates the row anew when the task of a lost create was deleted', async () => {
+    const server = fakeServer('', new NetworkError('offline'));
+    server.loseNextCreate();
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('A');
+    await pressImport(onimported, 1);
+    server.remove('t1');
+    await pressImport(onimported, 2);
+    expect(screen.getByText(/0개 등록됨/)).toBeInTheDocument();
+    await pressImport(onimported, 3);
+    const ids = server.create.mock.calls.map((c) => c[1]);
+    expect(ids[1]).toBe(ids[0]);
+    expect(ids[2]).not.toBe(ids[0]);
+    expect(server.made).toEqual(['t1', 't2']);
+    expect(screen.getByText('업무 1개를 등록했습니다.')).toBeInTheDocument();
   });
 });
 
