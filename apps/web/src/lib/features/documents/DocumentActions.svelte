@@ -99,6 +99,15 @@
 
   // 설정을 읽거나 바꾼 순서. 다시 읽기가 늦게 와 그 뒤에 바꾼 설정을 덮지 않게 한다.
   let settingsSeq = 0;
+  // 이 창이 화면에 있는지. 문서 화면은 다른 문서로 옮기면 이 창을 내리고 돌아오면 새로 만든다(A → B → A). 내린 창의 늦은
+  // 설정 응답이 같은 id의 새 화면 값을 덮지 않게, 내린 뒤에는 결과를 넘기지 않는다(리뷰).
+  let alive = true;
+  $effect(() => () => {
+    alive = false;
+  });
+  function settingsChanged(next: DocumentView): void {
+    if (alive) onchanged(next);
+  }
 
   // 화면의 문서는 연 뒤로 다시 읽지 않는다. 그사이 다른 소유자가 바꾼 설정(비공개·복제 금지)을 보이도록 설정 창을 열 때
   // 서버의 지금 값을 읽는다. 바꿀 때 되돌리지 않는 것은 서버가 정한다(바꾼 칸만 보냄).
@@ -107,7 +116,7 @@
     try {
       const fresh = await api.document(doc.id);
       if (mine !== settingsSeq || fresh.id !== doc.id) return;
-      onchanged({
+      settingsChanged({
         ...doc,
         visibility: fresh.visibility,
         allow_copy: fresh.allow_copy,
@@ -136,8 +145,8 @@
       const saved = await api.setSettings(doc.id, change);
       // 그사이 설정 창을 다시 열어 다시 읽었으면 이 응답과 그 읽기 중 어느 쪽이 더 새로운지 모른다. 그대로 넣으면 그사이
       // 다른 소유자가 바꾼 값을 되돌려 보일 수 있으므로 한 번 더 읽어 서버의 지금 값으로 맞춘다(리뷰).
-      if (mine === settingsSeq) onchanged(saved);
-      else void refreshSettings();
+      if (mine === settingsSeq) settingsChanged(saved);
+      else if (alive) void refreshSettings();
     } catch (e: unknown) {
       fail(e);
     } finally {
@@ -152,8 +161,8 @@
     const mine = ++settingsSeq;
     try {
       await api.setDocumentTemplate(doc.id, on);
-      if (mine === settingsSeq) onchanged({ ...doc, is_template: on });
-      else void refreshSettings();
+      if (mine === settingsSeq) settingsChanged({ ...doc, is_template: on });
+      else if (alive) void refreshSettings();
     } catch (e: unknown) {
       fail(e);
     } finally {

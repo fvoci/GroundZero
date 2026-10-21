@@ -209,4 +209,29 @@ describe('a settings save that finishes after the dialog was reopened', () => {
       );
     });
   });
+
+  // 리뷰(#57 요약): 문서 화면은 다른 문서로 옮기면 이 창을 내리고 돌아오면 새로 만든다(A → B → A). 내린 창이 연 설정
+  // 다시 읽기가 늦게 오면 같은 id라 새 화면의 설정 표시를 옛 값으로 덮었다. 내린 창의 결과는 넘기지 않는다.
+  it('drops a settings answer that arrives after the dialog left the screen', async () => {
+    let answer: (doc: DocumentView) => void = () => undefined;
+    vi.spyOn(api, 'document').mockImplementation(
+      () =>
+        new Promise<DocumentView>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const changed = vi.fn<(doc: DocumentView) => void>();
+    const view = render(DocumentActions, {
+      props: { doc: documentWith('workspace', true), workspaces, onchanged: changed },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+    await waitFor(() => {
+      expect(api.document).toHaveBeenCalledTimes(1);
+    });
+
+    view.unmount();
+    answer(documentWith('private', false));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(changed).not.toHaveBeenCalled();
+  });
 });
