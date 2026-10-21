@@ -99,6 +99,8 @@
   }
   const bucketOf = (b: 'overdue' | 'today' | 'upcoming'): HomeTaskView[] =>
     home?.up_next.filter((t) => t.bucket === b) ?? [];
+  // 묶음의 전체 수는 서버가 센다(목록은 묶음마다 50개까지).
+  const totalOf = (b: 'overdue' | 'today' | 'upcoming'): number => home?.up_next_counts[b] ?? 0;
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
   const workspaceName = (ws: string | null): string =>
     ws === null ? m.home_personal() : (workspaces.find((w) => w.id === ws)?.name ?? '');
@@ -279,10 +281,11 @@
       <h2 id="up-next-heading" class="text-lg font-semibold">{m.home_up_next()}</h2>
       {#each ['overdue', 'today', 'upcoming'] as const as b (b)}
         {@const list = bucketOf(b)}
+        {@const total = totalOf(b)}
         {#if list.length > 0}
           <h3 class={['text-sm font-semibold', b === 'overdue' && 'text-destructive']}>
             {bucketLabel(b)}
-            {list.length}
+            {total}
           </h3>
           <ul class="flex flex-col gap-0.5">
             {#each list as t (t.id)}
@@ -303,6 +306,11 @@
               </li>
             {/each}
           </ul>
+          {#if total > list.length}
+            <p class="px-2 text-xs text-muted-foreground">
+              {m.home_bucket_more({ shown: list.length, total })}
+            </p>
+          {/if}
         {/if}
       {/each}
       {#if home?.up_next.length === 0}
