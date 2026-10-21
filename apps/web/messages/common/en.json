@@ -13,6 +13,8 @@
     }
   ],
   "common_connection_lost": "Can't reach the server. Checking until it's back. Nothing you typed is discarded.",
+  "common_session_expired": "You've been signed out. What you typed is still in this window. Sign in again in a new tab, then come back here and try again.",
+  "common_session_sign_in": "Sign in in a new tab",
   "common_notifications_region": "Notifications",
   "common_saved": "Saved.",
   "common_moved_to_trash": "Moved to trash.",
@@ -27,5 +29,6 @@
   "common_error_bad_request": "Check what you entered.",
   "common_error_invalid_state": "This can't be done right now. Reload and try again.",
   "common_close": "Close",
-  "common_error_unexpected": "Got an unexpected response ({status})."
+  "common_error_unexpected": "Got an unexpected response ({status}).",
+  "common_error_too_large": "What you sent is too large. Make it smaller and try again."
 }

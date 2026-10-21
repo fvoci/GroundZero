@@ -12,6 +12,8 @@
     }
   ],
   "common_connection_lost": "서버에 연결할 수 없습니다. 다시 연결되는지 확인하는 중입니다. 입력한 내용은 지우지 않습니다.",
+  "common_session_expired": "로그인이 끝났습니다. 입력한 내용은 이 창에 그대로 있습니다. 새 탭에서 다시 로그인한 뒤 이 창으로 돌아와 다시 시도하세요.",
+  "common_session_sign_in": "새 탭에서 로그인",
   "common_notifications_region": "알림",
   "common_saved": "저장했습니다.",
   "common_moved_to_trash": "휴지통으로 옮겼습니다.",
@@ -26,5 +28,6 @@
   "common_error_bad_request": "입력한 값을 확인해 주세요.",
   "common_error_invalid_state": "지금 상태에서는 할 수 없습니다. 새로고침한 뒤 다시 시도해 주세요.",
   "common_close": "닫기",
-  "common_error_unexpected": "예상하지 못한 응답을 받았습니다({status})."
+  "common_error_unexpected": "예상하지 못한 응답을 받았습니다({status}).",
+  "common_error_too_large": "보내는 내용이 너무 큽니다. 줄인 뒤 다시 시도해 주세요."
 }
