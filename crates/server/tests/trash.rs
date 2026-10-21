@@ -1172,8 +1172,9 @@ async fn backend_pid(tx: &mut fvoci_server::db::UserTx) -> i32 {
 /// 닿기 전에 커밋해, 경합을 재현하지 못한 채 통과하거나 엉뚱한 이유로 실패한다. 끝내 기다리지 않으면 시험을 멈춘다.
 async fn wait_until_blocked_by(holder: i32) {
     let db = owner_pool().await;
+    let mut blocked = false;
     for _ in 0..500 {
-        let blocked: bool = sqlx::query_scalar(
+        blocked = sqlx::query_scalar(
             "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
         )
         .bind(holder)
@@ -1181,12 +1182,12 @@ async fn wait_until_blocked_by(holder: i32) {
         .await
         .unwrap();
         if blocked {
-            db.close().await;
-            return;
+            break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    panic!("no request waited on the held transaction");
+    db.close().await;
+    assert!(blocked, "no request waited on the held transaction");
 }
 
 async fn new_task(
