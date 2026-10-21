@@ -130,6 +130,8 @@ const DIAMOND_HALF = 0.55;
 /** 막대 끝에서 꺾기 전 수평으로 나가는 길이, 화살촉 크기. */
 const STUB = 0.4;
 const ARROW = 0.3;
+/** 이보다 좁으면(같은 날·겹침·역전) 꺾어 들어갈 틈이 없어 줄 경계로 돌아 들어간다. 바로 다음 날(막대 여백 두 개, 0.25)은 틈으로 본다. */
+const MIN_GAP = 0.2;
 
 const num = (n: number): string => String(Math.round(n * 1000) / 1000);
 
@@ -192,9 +194,10 @@ export function ganttLinks(
       const y1 = (pred.index + 0.5) * row;
       const y2 = (succ.index + 0.5) * row;
       let d: string;
-      if (x2 - x1 >= 2 * STUB) {
-        // 후속이 충분히 뒤: 선행 끝에서 조금 나가 꺾어 내려(올라)가고 후속 시작으로 들어간다.
-        const xm = x1 + STUB;
+      if (x2 - x1 >= MIN_GAP) {
+        // 후속이 뒤: 선행 끝에서 조금 나가(바로 다음 날처럼 틈이 좁으면 틈의 가운데에서) 꺾어 내려(올라)가고 후속
+        // 시작으로 들어간다.
+        const xm = x2 - x1 >= 2 * STUB ? x1 + STUB : (x1 + x2) / 2;
         d = `M${num(x1)} ${num(y1)}H${num(xm)}V${num(y2)}H${num(x2)}`;
       } else {
         // 겹치거나 후속이 앞에 있음: 선행 줄의 아래(후속이 위면 위) 경계선을 따라 되돌아가서 후속 시작 앞에서 들어간다.

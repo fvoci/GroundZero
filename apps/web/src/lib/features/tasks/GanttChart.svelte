@@ -301,9 +301,14 @@
         </div>
       {/each}
 
-      {#each layout.rows as row (row.task.id)}
+      {#each layout.rows as row, index (row.task.id)}
         {@const span = draft?.id === row.task.id ? draft : row}
-        <div class="sticky left-0 z-10 overflow-hidden border-b bg-background p-1">
+        <!-- 줄 번호를 정해 둔다: 연결선 층이 같은 칸을 덮어도 격자가 줄을 다른 자리로 밀지 않게. -->
+        <div
+          class="sticky left-0 z-10 overflow-hidden border-b bg-background p-1"
+          style:grid-row={String(index + 3)}
+          style:grid-column="1"
+        >
           <button
             type="button"
             data-task-card={row.task.id}
@@ -331,6 +336,7 @@
         <div
           aria-hidden="true"
           class="relative border-b"
+          style:grid-row={String(index + 3)}
           style:grid-column={`2 / span ${String(layout.days)}`}
         >
           {#each columns as day, i (day)}

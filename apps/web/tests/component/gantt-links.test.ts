@@ -86,6 +86,13 @@ describe('gantt links', () => {
     expect(down !== undefined && rightAngledInto(down.d, [20.125, 5.25 + 0.875])).toBe(true);
   });
 
+  it('steps in the middle of the gap when the follower starts the very next day', () => {
+    // a는 열 2(포함)에서 끝나고 b는 열 3에서 시작: 두 막대 사이 틈은 여백 두 개(0.25rem)뿐이다.
+    const next = ganttLinks([row('a', 0, 2), row('b', 3, 4, ['a'])], G).links[0];
+    expect(next?.d).toBe('M5.875 0.875H6V2.625H6.125');
+    expect(next !== undefined && rightAngledInto(next.d, [6.125, 2.625])).toBe(true);
+  });
+
   it('routes along the row border when the follower starts the same day, overlaps or comes first', () => {
     // 같은 날: a는 열 2에서 끝나고 b는 열 2에서 시작한다(끝나야 시작을 어긴 일정이어도 그대로 그린다).
     const same = ganttLinks([row('a', 0, 2), row('b', 2, 3, ['a'])], G).links[0];
