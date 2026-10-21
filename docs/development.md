@@ -245,9 +245,18 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 ## 10. CI 구조 (D-64)
 
 - **베이스 이미지**: `deploy/docker/dev.Dockerfile` → `ghcr.io/fvoci/groundzero-ci-base`(공개 패키지, D-65). `.github/workflows/base-image.yml`이 Dockerfile·워크플로 변경, 주 1회 스케줄, 수동 실행 때만 빌드·게시한다. 제품 커밋마다 만들지 않는다. 게시 권한(`packages: write`)은 그 job에만 있고 pull_request에서는 실행되지 않는다.
-- **제품 검사**: `.github/workflows/ci.yml`. `check`와 `integration` 두 job이 같은 `ghcr.io/fvoci/groundzero-ci-base@<digest>` 컨테이너에서 돈다. digest는 저장소 변수 `CI_BASE_IMAGE_DIGEST`이며 base-image 워크플로가 게시한 값을 옮겨 적는다. 변수가 비면 job이 시작 단계에서 실패하며 성공으로 간주하지 않는다. 호출하는 명령은 `pnpm install --frozen-lockfile`, `cargo xtask check`, `cargo xtask test --external-services`뿐이다.
-- **서비스 격리**: GitHub의 컨테이너 job 안에서는 Compose를 띄울 수 없어 PostgreSQL·Meilisearch를 job `services`로 둔다. 자격 증명은 `compose.test.yaml`과 같은 테스트 값이며, `cargo xtask test --external-services`가 `DATABASE_URL`이 없으면 실패한다. 로컬은 `cargo xtask test`(Compose)로 같은 테스트를 돌린다.
-- **OIDC 로그인 테스트(`oidc` job)**: 컨테이너 job에서는 Compose를 띄울 수 없으므로 GitHub 호스트 러너(`ubuntu-24.04`)에서 `compose.test.yaml`의 `oidc` 프로필(PostgreSQL·Meilisearch·Keycloak)을 띄운다. 테스트는 다른 job과 같은 베이스 이미지 digest 안에서 같은 진입점 `cargo xtask test --external-services --oidc`로 돈다. 테스트 컨테이너는 Compose 네트워크에 붙고 체크아웃만 마운트한다(Docker 소켓은 넘기지 않음). 프로젝트명 `fvoci-ci-<run_id>-<run_attempt>`로 실행마다 컨테이너·네트워크·볼륨을 분리하고, PostgreSQL은 tmpfs라 매번 빈 DB에서 시작하며, 결과와 상관없이 `down --volumes`로 지운다.
+- **제품 검사**: `.github/workflows/ci.yml`. job과 호출하는 명령은 다음과 같다.
+  - `check`: `pnpm install --frozen-lockfile`, `cargo xtask check --skip-licenses`
+  - `licenses`: `pnpm install --frozen-lockfile`, `cargo xtask licenses`
+  - `integration`: `cargo xtask test --external-services`
+  - `oidc`: `cargo xtask test --external-services --oidc`(아래)
+  - `supabase`: `cargo xtask test --supabase --session-pooler --oidc`(아래)
+  - `rhwp`: `cargo xtask rhwp`, `git diff --exit-code -- deploy/rhwp/THIRD_PARTY_NOTICES.txt`, `cargo xtask rhwp --audit`
+
+  `check`·`licenses`·`integration`은 같은 `ghcr.io/fvoci/groundzero-ci-base@<digest>` 컨테이너 job으로 돌고, `oidc`의 테스트 단계와 `rhwp --audit`는 같은 이미지를 `docker run`으로 돌린다. digest는 저장소 변수 `CI_BASE_IMAGE_DIGEST`이며 base-image 워크플로가 게시한 값을 옮겨 적는다. 변수가 비면 job이 시작 단계에서 실패하며 성공으로 간주하지 않는다.
+
+- **서비스 격리**: GitHub의 컨테이너 job 안에서는 Compose를 띄울 수 없어 `integration` job은 PostgreSQL·Meilisearch를 job `services`로 둔다. 자격 증명은 `compose.test.yaml`과 같은 테스트 값이다. `cargo xtask test --external-services`는 Compose를 띄우지 않고, `FVOCI_TEST_PG_HOST_PORT`(테스트 관리자 `fvoci`로 닿는 PostgreSQL의 `호스트:포트`)나 `FVOCI_TEST_SEARCH_URL`(Meilisearch)이 없으면 실패하며 `--oidc`면 `FVOCI_TEST_OIDC_ISSUER`도 요구한다. 세 DB 역할 주소와 `DATABASE_URL`은 xtask가 그 호스트·포트와 테스트 자격 증명으로 만든다(밖에서 준 `DATABASE_URL`은 쓰지 않는다). `FVOCI_TEST_S3_ENDPOINT`가 없으면 S3 테스트(`s3_*`)는 NOT RUN으로 표시한다. 그래서 `integration` job은 `oidc_*`·`s3_*`·`supabase_*`를 빼고 돌며, 그 job이 돌리는 테스트는 `oidc` job도 모두 돌린다. 로컬은 `cargo xtask test`(Compose)로 같은 테스트를 돌린다.
+- **OIDC 로그인 테스트(`oidc` job)**: 컨테이너 job에서는 Compose를 띄울 수 없으므로 GitHub 호스트 러너(`ubuntu-24.04`)에서 `compose.test.yaml`의 `oidc` 프로필(PostgreSQL·Meilisearch·SeaweedFS·Keycloak. SeaweedFS는 프로필이 없어 함께 뜨고, S3 테스트도 이 job에서 돈다)을 띄운다. 테스트는 다른 job과 같은 베이스 이미지 digest 안에서 같은 진입점 `cargo xtask test --external-services --oidc`로 돈다. 테스트 컨테이너는 Compose 네트워크에 붙고 체크아웃만 마운트한다(Docker 소켓은 넘기지 않음). 프로젝트명 `fvoci-ci-<run_id>-<run_attempt>`로 실행마다 컨테이너·네트워크·볼륨을 분리하고, PostgreSQL은 tmpfs라 매번 빈 DB에서 시작하며, 결과와 상관없이 `down --volumes`로 지운다.
 - **셀프호스트 Supabase 테스트(`supabase` job, D-88): D-64의 이미지 계약 예외.**
   - **근거**: `cargo xtask test --supabase`는 xtask가 공식 Supabase 구성을 받아 호스트 Docker로 Compose를 띄운다. 기동에 실패하면
     정리하기 전에 컨테이너 상태·healthcheck 기록·로그를 그 Docker에서 읽는다. base 이미지에는 Docker CLI가 없고 Docker 소켓도
@@ -333,7 +342,7 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 
 ### 12.4 남은 제한
 
-- CI에서 OIDC 통합 테스트를 돌리려면 Keycloak을 인자와 함께 띄울 방법이 필요하다(호스트 runner의 Compose 또는 테스트용 Keycloak 이미지 게시). 새 이미지 게시는 승인 대상이라 보류했다.
+- (해소됨) 이 조각에서는 CI에서 Keycloak을 인자와 함께 띄울 방법이 없어 OIDC 통합 테스트를 보류했다. 지금은 호스트 러너의 Compose로 Keycloak을 띄우는 `oidc` job(10절)이 돌린다.
 - `/auth/login` 요청 빈도 제한은 없다. 만료 행은 요청마다 최대 100개씩 지운다.
 - 여러 서버 인스턴스 실행은 검증하지 않았다(디스커버리 캐시는 인스턴스별).
 
