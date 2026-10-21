@@ -646,3 +646,90 @@ async fn due_notices_skip_tasks_in_an_archived_module() {
         .collect();
     assert!(due.is_empty(), "{due:?}");
 }
+
+/// 감사 C24: 업무 댓글 목록(`GET /api/tasks/{id}/comments`)을 읽는 시험이 없었다. 업무를 볼 수 있는 사람만 읽고(비공개
+/// 항목의 멤버가 아니면 404), 스레드 순서와 권한 표시는 문서 댓글과 같다.
+#[tokio::test]
+async fn task_comments_follow_the_item_access() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "업무 댓글").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let m = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "TCM" }),
+        ),
+    )
+    .await
+    .json;
+    // 새 항목은 비공개다(D-20).
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", m["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "비공개 항목" })),
+    )
+    .await
+    .json;
+    let task = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/tasks", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "검토" })),
+    )
+    .await
+    .json;
+    let (status, first) = comment(
+        &app,
+        &admin,
+        json!({ "task_id": task["id"], "body": "첫 의견" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{first:?}");
+    let (status, reply) = comment(
+        &app,
+        &admin,
+        json!({ "task_id": task["id"], "parent_id": first["id"], "body": "답글" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{reply:?}");
+    let uri = format!("/api/tasks/{}/comments", task["id"].as_str().unwrap());
+
+    let hidden = send(&app, Method::GET, &uri, Some(&writer), None).await;
+    assert_eq!(hidden.status, StatusCode::NOT_FOUND, "{:?}", hidden.json);
+    let list = send(&app, Method::GET, &uri, Some(&admin), None).await;
+    assert_eq!(list.status, StatusCode::OK, "{:?}", list.json);
+    let bodies: Vec<&str> = list
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["body"].as_str().unwrap())
+        .collect();
+    assert_eq!(bodies, ["첫 의견", "답글"]);
+    assert_eq!(list.json[0]["can_edit"], true);
+    assert_eq!(list.json[0]["can_resolve"], true);
+    assert_eq!(list.json[1]["can_resolve"], false);
+
+    // 항목을 공개하면 작성자도 읽는다(남의 댓글은 고치지 못한다).
+    let open = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{}", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "title": "비공개 항목", "description": "", "visibility": "workspace" })),
+    )
+    .await;
+    assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
+    let seen = send(&app, Method::GET, &uri, Some(&writer), None).await;
+    assert_eq!(seen.status, StatusCode::OK, "{:?}", seen.json);
+    assert_eq!(seen.json.as_array().unwrap().len(), 2);
+    assert_eq!(seen.json[0]["can_edit"], false);
+}

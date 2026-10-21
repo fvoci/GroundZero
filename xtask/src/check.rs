@@ -39,7 +39,7 @@ pub fn run(root: &Path, skip_licenses: bool) -> Result<()> {
             Box::new(|sh| Ok(cmd!(sh, "cargo deny --locked check advisories bans sources").run()?)),
         ),
         (
-            "openapi up to date",
+            "openapi.json and api-client schema.ts up to date",
             Box::new(|_| crate::openapi::run(root, true)),
         ),
         (
