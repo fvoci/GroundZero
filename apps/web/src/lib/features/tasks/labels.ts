@@ -31,3 +31,12 @@ export const PRIORITY_LABEL: Record<TaskPriority, string> = {
     return m.tasks_priority_urgent();
   },
 };
+
+/** 카드의 우선순위 칩 색. 글자(이름)가 늘 함께 있어 색만으로 뜻을 전하지 않는다. */
+export const PRIORITY_TONE: Record<TaskPriority, string> = {
+  none: '',
+  low: 'bg-muted text-muted-foreground',
+  medium: 'bg-muted text-foreground',
+  high: 'bg-amber-500/15 text-amber-800 dark:text-amber-200',
+  urgent: 'bg-destructive/10 text-destructive',
+};

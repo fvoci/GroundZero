@@ -187,15 +187,16 @@
       </div>
     </aside>
   </div>
+  <!-- 본문 바로 아래에 이 문서와 이어진 문서(하위 문서, 이곳을 가리키는 문서)를 함께 둔다. 첨부·댓글은 그다음. -->
   {#key doc.id}
     <ChildDocuments {doc} {workspaces} />
+  {/key}
+  {#key `${doc.id}:${String(epoch)}`}
+    <Backlinks kind="document" id={doc.id} {workspaces} />
   {/key}
   <AttachmentsPanel
     target={{ kind: 'document', id: doc.id }}
     canWrite={doc.access === 'owner' || doc.access === 'write'}
   />
   <CommentsPanel target={{ kind: 'document', id: doc.id }} />
-  {#key `${doc.id}:${String(epoch)}`}
-    <Backlinks kind="document" id={doc.id} {workspaces} />
-  {/key}
 {/if}

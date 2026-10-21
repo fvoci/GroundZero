@@ -17,7 +17,7 @@
   import { Button } from '$lib/ui/button';
 
   import type { CalendarEntry } from './calendar';
-  import { entriesByDay, monthRange, shiftMonth } from './calendar';
+  import { entriesByDay, isWeekend, monthRange, shiftMonth } from './calendar';
   import CalendarEntryButton from './CalendarEntryButton.svelte';
   import CalendarTaskDialog from './CalendarTaskDialog.svelte';
   import EventDialog from './EventDialog.svelte';
@@ -286,30 +286,34 @@
             {@const entries = byDay.get(day) ?? []}
             <td
               class={[
-                'h-24 border p-1 align-top',
-                day.slice(0, 7) !== month && 'bg-muted/40 text-muted-foreground',
+                'group h-24 border p-1 align-top',
+                day.slice(0, 7) !== month
+                  ? 'bg-muted text-muted-foreground'
+                  : isWeekend(day) && 'bg-muted/50',
               ]}
             >
-              <div
-                class={[
-                  'mb-1 text-xs',
-                  day === today &&
-                    'inline-block rounded-full bg-primary px-1.5 text-primary-foreground',
-                ]}
-              >
-                <span aria-hidden="true">{Number(day.slice(8))}</span>
-                <span class="sr-only">{day === today ? m.events_day_today({ day }) : day}</span>
-              </div>
-              {#if canCreate}
-                <button
-                  type="button"
-                  class="float-right -mt-5 rounded px-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  aria-label={m.events_task_create_on({ day })}
-                  title={m.events_task_create_on({ day })}
-                  data-create-day={day}
-                  onclick={() => (createDay = day)}>+</button
+              <!-- 날짜와 만들기 단추를 한 줄에. 단추는 마우스로 쓰는 화면에서 칸을 가리키거나 초점이 있을 때만 보인다. -->
+              <div class="mb-1 flex items-center justify-between gap-1">
+                <span
+                  class={[
+                    'min-w-5 rounded-full px-1.5 text-center text-xs tabular-nums',
+                    day === today && 'bg-primary font-semibold text-primary-foreground',
+                  ]}
                 >
-              {/if}
+                  <span aria-hidden="true">{Number(day.slice(8))}</span>
+                  <span class="sr-only">{day === today ? m.events_day_today({ day }) : day}</span>
+                </span>
+                {#if canCreate}
+                  <button
+                    type="button"
+                    class="rounded px-1 text-xs text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground focus:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
+                    aria-label={m.events_task_create_on({ day })}
+                    title={m.events_task_create_on({ day })}
+                    data-create-day={day}
+                    onclick={() => (createDay = day)}>+</button
+                  >
+                {/if}
+              </div>
               <div class="flex flex-col gap-0.5">
                 {#each entries as entry (entryKey(day, entry))}
                   <CalendarEntryButton

@@ -174,3 +174,9 @@ export function dateLabel(kind: CalendarDateKind): string {
       return m.events_date_deliverable();
   }
 }
+
+/** 토·일인지(YYYY-MM-DD, 날짜만 보므로 시간대와 상관없다). 주 시작 요일 설정과 무관하게 칸에 음영을 줄 때 쓴다. */
+export function isWeekend(day: string): boolean {
+  const d = new Date(`${day}T00:00:00Z`).getUTCDay();
+  return d === 0 || d === 6;
+}

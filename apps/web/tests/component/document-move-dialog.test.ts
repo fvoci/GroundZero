@@ -99,10 +99,16 @@ describe('move under another document (search)', () => {
     await fireEvent.keyDown(row('설치'), { key: 'm', altKey: true });
     const dialog = await screen.findByRole('dialog');
     const input = within(dialog).getByRole('combobox');
-    // 처음 고른 것은 맨 위. 아래로 한 번(지금 상위)은 보내지 않는다.
+    // 처음 고른 것은 맨 위. 아래로 한 번(지금 상위)은 보내지 않는다. 고른 곳은 단추 위에 글로 보인다.
+    const target = (): string => within(dialog).getByTestId('move-doc-target').textContent.trim();
+    expect(target()).toBe('옮길 곳: 맨 위(상위 문서 없음)');
     await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(target()).toBe('이미 이 문서 아래에 있습니다. 다른 곳을 고르세요.');
     await fireEvent.keyDown(input, { key: 'Enter' });
     expect(onmove).not.toHaveBeenCalled();
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(target()).toBe('옮길 곳: 점검 기록 아래');
+    await fireEvent.keyDown(input, { key: 'ArrowUp' });
     await fireEvent.keyDown(input, { key: 'ArrowUp' });
     await fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => {

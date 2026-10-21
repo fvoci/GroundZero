@@ -343,6 +343,9 @@
   "documents_reparent_current": "current parent",
   "documents_reparent_cancel": "Cancel",
   "documents_reparent_confirm": "Move",
+  "documents_reparent_target": "Moves under: {title}",
+  "documents_reparent_target_root": "Moves to the top level",
+  "documents_reparent_target_current": "It is already under this document. Choose another place.",
   "documents_children_heading": "Subdocuments ({count})",
   "documents_children_failed": "Couldn't load the subdocuments."
 }

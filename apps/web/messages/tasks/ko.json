@@ -109,6 +109,9 @@
   "tasks_gantt_empty": "날짜가 있는 업무가 없습니다. 업무 상세에서 시작일·마감일을 넣으면 여기에 막대로 보입니다.",
   "tasks_gantt_nav": "간트 기간 이동",
   "tasks_gantt_back": "← 2주 앞",
+  "tasks_gantt_month": "{year}년 {month}월",
+  "tasks_lane_empty": "카드 없음",
+  "tasks_lane_empty_filtered": "거르기에 맞는 카드 없음",
   "tasks_today": "오늘",
   "tasks_gantt_forward": "2주 뒤 →",
   "tasks_gantt_later": [

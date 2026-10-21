@@ -96,6 +96,11 @@ describe('lane estimate in the board', () => {
     expect(estimateOf('in_progress')).toBe('예상 시간 없음');
     expect(estimateOf('done')).toBeNull();
     expect(screen.getByText(/열 머리의 예상은 카드에 적은 예상 시간을 더한 값입니다/)).toBeTruthy();
+    // 빈 열은 비어 있다고 글로 말한다(카드가 있는 열에는 없다).
+    expect(document.querySelector('[data-lane-empty="done"]')?.textContent.trim()).toBe(
+      '카드 없음',
+    );
+    expect(document.querySelector('[data-lane-empty="todo"]')).toBeNull();
   });
 
   it('says it counts the shown cards when filtered, and gives the whole column too', async () => {
@@ -106,5 +111,8 @@ describe('lane estimate in the board', () => {
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await screen.findByText('자료 정리');
     expect(estimateOf('todo')).toBe('보이는 카드 예상 30분 · 열 전체 2시간');
+    expect(document.querySelector('[data-lane-empty="in_progress"]')?.textContent.trim()).toBe(
+      '거르기에 맞는 카드 없음',
+    );
   });
 });

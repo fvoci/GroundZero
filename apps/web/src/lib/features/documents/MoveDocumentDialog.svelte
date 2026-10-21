@@ -183,6 +183,19 @@
     {#if failure !== undefined}
       <p role="alert" class="text-sm text-destructive">{failure}</p>
     {/if}
+    <!-- 고른 곳을 단추 옆에 글로 보인다(무엇을 누르면 어디로 가는지 확인하고 누르게). 후보가 없으면 위의 안내만. -->
+    {@const target = options[active]}
+    <p class="text-sm text-muted-foreground" aria-live="polite" data-testid="move-doc-target">
+      {#if target === undefined}
+        <!-- 비움 -->
+      {:else if target.current}
+        {m.documents_reparent_target_current()}
+      {:else if target.id === ROOT}
+        {m.documents_reparent_target_root()}
+      {:else}
+        {m.documents_reparent_target({ title: target.title })}
+      {/if}
+    </p>
     <Dialog.Footer>
       <Button
         variant="outline"

@@ -353,6 +353,10 @@
 {#if error !== undefined}
   <p role="alert" class="text-sm text-destructive">{error}</p>
 {/if}
+{#if task === undefined && error === undefined}
+  <!-- 읽는 동안 빈 창으로 두지 않는다. -->
+  <p class="py-6 text-center text-sm text-muted-foreground" role="status">{m.modules_loading()}</p>
+{/if}
 {#if task !== undefined && form !== undefined}
   {@const current = task}
   {@const f = form}
@@ -399,29 +403,20 @@
       </div>
     {/if}
 
+    <!-- 제목 다음에 상태·우선순위·날짜를 두 칸으로 먼저 보이고(좁은 화면에서도 스크롤 없이), 설명은 그 아래에 둔다. -->
     <form
-      class="grid gap-3 md:grid-cols-2"
+      class="grid grid-cols-2 gap-3"
       inert={pending !== undefined}
       onsubmit={(e) => {
         e.preventDefault();
         void submit(current);
       }}
     >
-      <div class="flex flex-col gap-1 md:col-span-2">
+      <div class="col-span-2 flex flex-col gap-1">
         <Label for="task-title">{m.tasks_title()}</Label>
         <Input id="task-title" bind:value={f.title} disabled={!canEdit} maxlength={200} />
       </div>
-      <div class="flex flex-col gap-1 md:col-span-2">
-        <Label for="task-description">{m.tasks_description()}</Label>
-        <textarea
-          id="task-description"
-          bind:value={f.description}
-          disabled={!canEdit}
-          rows={3}
-          class="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        ></textarea>
-      </div>
-      <div class="flex flex-col gap-1">
+      <div class="flex min-w-0 flex-col gap-1">
         <span class="text-sm font-medium" id="task-status-label">{m.tasks_status()}</span>
         <Select.Root
           type="single"
@@ -442,7 +437,7 @@
           </Select.Content>
         </Select.Root>
       </div>
-      <div class="flex flex-col gap-1">
+      <div class="flex min-w-0 flex-col gap-1">
         <span class="text-sm font-medium" id="task-priority-label">{m.tasks_priority()}</span>
         <Select.Root
           type="single"
@@ -463,7 +458,7 @@
           </Select.Content>
         </Select.Root>
       </div>
-      <div class="flex flex-col gap-1">
+      <div class="flex min-w-0 flex-col gap-1">
         <Label for="task-start">{m.tasks_start_date()}</Label>
         <Input
           id="task-start"
@@ -472,11 +467,21 @@
           disabled={!canEdit || f.milestone}
         />
       </div>
-      <div class="flex flex-col gap-1">
+      <div class="flex min-w-0 flex-col gap-1">
         <Label for="task-due">{m.tasks_due_date()}</Label>
         <Input id="task-due" type="date" bind:value={f.due_date} disabled={!canEdit} />
       </div>
-      <div class="flex flex-col gap-1">
+      <div class="col-span-2 flex flex-col gap-1">
+        <Label for="task-description">{m.tasks_description()}</Label>
+        <textarea
+          id="task-description"
+          bind:value={f.description}
+          disabled={!canEdit}
+          rows={3}
+          class="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        ></textarea>
+      </div>
+      <div class="flex min-w-0 flex-col gap-1">
         <Label for="task-estimate">{m.tasks_estimate()}</Label>
         <Input
           id="task-estimate"
@@ -485,11 +490,11 @@
           disabled={!canEdit}
         />
       </div>
-      <div class="flex flex-col gap-1">
+      <div class="flex min-w-0 flex-col gap-1">
         <Label for="task-tags">{m.tasks_tags()}</Label>
         <Input id="task-tags" bind:value={tagsText} disabled={!canEdit} />
       </div>
-      <div class="flex items-center gap-2 md:col-span-2">
+      <div class="col-span-2 flex items-center gap-2">
         <Checkbox
           id="task-milestone"
           checked={f.milestone}
@@ -501,7 +506,7 @@
         />
         <Label for="task-milestone">{m.tasks_milestone()}</Label>
       </div>
-      <fieldset class="flex flex-col gap-2 md:col-span-2">
+      <fieldset class="col-span-2 flex flex-col gap-2">
         <legend class="text-sm font-medium">{m.tasks_assignees()}</legend>
         <div class="flex flex-wrap gap-3">
           {#if peopleError !== undefined}
@@ -528,7 +533,7 @@
         </div>
       </fieldset>
       {#if canEdit}
-        <div class="flex items-center gap-2 md:col-span-2">
+        <div class="col-span-2 flex items-center gap-2">
           <Button id="task-save" type="submit" disabled={busy}>{m.common_save()}</Button>
           {#if saved}<span class="text-sm" role="status">{m.common_saved()}</span>{/if}
         </div>

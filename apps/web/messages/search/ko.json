@@ -34,5 +34,7 @@
   "search_author_any": "누구나",
   "search_author_me": "나",
   "search_title_only": "제목만",
+  "search_filters_help": "조건 설명",
+  "search_snippet_reference": "참조",
   "search_author_hint": "작성자는 그 문서·업무 등을 만든 사람입니다. 고르면 그 사람이 만든 것 가운데 내가 볼 수 있는 것만 나옵니다. 멤버 목록은 지금 보는 워크스페이스 기준입니다."
 }
