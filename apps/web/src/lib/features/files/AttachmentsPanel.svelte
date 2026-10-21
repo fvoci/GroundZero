@@ -36,7 +36,12 @@
   let status = $state('');
   let progress = $state<{ name: string; percent: number } | undefined>(undefined);
   let versions = $state<{ id: string; list: FileVersionView[] } | undefined>(undefined);
-  let renaming = $state<{ id: string; name: string } | undefined>(undefined);
+  // `opened`: 칸을 열 때마다 새로 매기는 번호. 같은 파일의 칸을 닫았다가 다시 열어도 앞의 칸과 구별한다.
+  let renaming = $state<{ id: string; name: string; opened: number } | undefined>(undefined);
+  let renameOpened = 0;
+  // 이름 바꾸기 실패는 입력 칸 옆에 보이고 입력은 남긴다(D-82).
+  let renameError = $state<string | undefined>(undefined);
+  let renameBusy = $state(false);
   let reloadKey = $state(0);
   // 열려 있는 Office 미리보기(DOCX·XLSX, D-71).
   let office = $state<{ id: string; name: string; size: number; kind: OfficeKind } | undefined>(
@@ -129,6 +134,30 @@
     }
   }
 
+  /**
+   * 입력 칸은 서버가 받아들인 뒤에만 닫는다. 거절되면 친 이름과 이유가 칸에 남는다.
+   * 응답 전에 칸을 닫았거나 다른 칸을 열었으면(같은 파일의 칸을 다시 열었어도) 그 칸은 건드리지 않는다. 새 칸에 친
+   * 이름은 남고, 실패는 파일 이름과 함께 패널 상태 줄에 보인다.
+   */
+  async function rename(file: FileView, name: string, opened: number): Promise<void> {
+    if (renameBusy) return;
+    renameBusy = true;
+    renameError = undefined;
+    error = undefined;
+    try {
+      await api.renameFile(file.id, name);
+      if (renaming?.opened === opened) renaming = undefined;
+      status = m.files_renamed({ name });
+      reloadKey += 1;
+    } catch (e: unknown) {
+      const reason = errorText(e, m.files_action_failed());
+      if (renaming?.opened === opened) renameError = reason;
+      else error = m.files_named_error({ name: file.name, error: reason });
+    } finally {
+      renameBusy = false;
+    }
+  }
+
   const when = (iso: string): string => formatInstant(iso);
 </script>
 
@@ -177,23 +206,38 @@
           <div class="flex flex-wrap items-center gap-2">
             {#if renaming?.id === f.id}
               <form
-                class="flex flex-1 gap-2"
+                class="flex flex-1 flex-wrap gap-2"
                 onsubmit={(e: SubmitEvent) => {
                   e.preventDefault();
-                  const next = renaming;
-                  renaming = undefined;
-                  if (next !== undefined)
-                    void act(
-                      () => api.renameFile(next.id, next.name),
-                      m.files_renamed({ name: next.name }),
-                    );
+                  if (renaming !== undefined) void rename(f, renaming.name, renaming.opened);
                 }}
               >
-                <Input aria-label={m.files_new_name()} bind:value={renaming.name} maxlength={255} />
-                <Button size="sm" type="submit">{m.common_save()}</Button>
-                <Button size="sm" variant="ghost" onclick={() => (renaming = undefined)}
-                  >{m.common_cancel()}</Button
+                <Input
+                  class="min-w-0 flex-1"
+                  aria-label={m.files_new_name()}
+                  bind:value={renaming.name}
+                  maxlength={255}
+                  aria-invalid={renameError !== undefined}
+                  aria-describedby={renameError !== undefined ? `rename-error-${f.id}` : undefined}
+                />
+                <Button size="sm" type="submit" disabled={renameBusy}>{m.common_save()}</Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => {
+                    renaming = undefined;
+                    renameError = undefined;
+                  }}>{m.common_cancel()}</Button
                 >
+                {#if renameError !== undefined}
+                  <p
+                    id={`rename-error-${f.id}`}
+                    role="alert"
+                    class="w-full text-sm text-destructive"
+                  >
+                    {renameError}
+                  </p>
+                {/if}
               </form>
             {:else}
               {#if f.can_download}
@@ -260,7 +304,10 @@
                 size="sm"
                 variant="ghost"
                 aria-label={m.files_rename_aria({ name: f.name })}
-                onclick={() => (renaming = { id: f.id, name: f.name })}>{m.files_rename()}</Button
+                onclick={() => {
+                  renaming = { id: f.id, name: f.name, opened: ++renameOpened };
+                  renameError = undefined;
+                }}>{m.files_rename()}</Button
               >
               <Button
                 size="sm"

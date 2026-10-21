@@ -3,7 +3,7 @@
   import { formatInstant } from '$lib/display';
   import type { Group, Invitation, MembersView, Role, Workspace } from '@fvoci/api-client';
 
-  import { api } from '$lib/api/client';
+  import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
@@ -33,6 +33,9 @@
   let inviteEmail = $state('');
   let inviteRole = $state<Role>('writer');
   let groupName = $state('');
+  // 초대·그룹 만들기 실패는 그 입력 칸 옆에 보이고 입력은 남긴다(D-82).
+  let inviteError = $state<string | undefined>(undefined);
+  let groupError = $state<string | undefined>(undefined);
   let deleteName = $state('');
   let deleteError = $state<string | undefined>(undefined);
   let deleting = $state(false);
@@ -51,7 +54,7 @@
       deleting = false;
     }
   }
-  let confirm = $state<{ title: string; body: string; run: () => Promise<void> } | undefined>(
+  let confirm = $state<{ title: string; body: string; run: () => Promise<unknown> } | undefined>(
     undefined,
   );
 
@@ -73,16 +76,34 @@
     }
   }
 
-  async function act(action: () => Promise<unknown>, done?: string): Promise<void> {
+  /**
+   * 요청을 보내고 성공했는지 돌려준다(실패해도 던지지 않는다). `fail`이 있으면 실패 문구를 화면 위 알림 대신
+   * 그쪽(입력 칸 옆)에 보인다.
+   */
+  async function act(
+    action: () => Promise<unknown>,
+    done?: string,
+    fail?: (text: string) => void,
+  ): Promise<boolean> {
     notice = undefined;
     try {
       await action();
-      if (done !== undefined) notice = done;
-      await load();
-      onchanged();
     } catch (e: unknown) {
-      error = errorText(e, m.members_request_failed());
+      // 그사이 상태가 바뀌었으면(409: 이미 수락·철회된 초대 등) 지금 상태를 먼저 다시 읽어 보인다. 다시 읽기가
+      // 성공하면 위 알림을 지우므로 이유는 그 뒤에 둔다.
+      if (e instanceof ApiError && e.status === 409) {
+        await load();
+        onchanged();
+      }
+      const text = errorText(e, m.members_request_failed());
+      if (fail === undefined) error = text;
+      else fail(text);
+      return false;
     }
+    if (done !== undefined) notice = done;
+    await load();
+    onchanged();
+    return true;
   }
 
   // 다른 워크스페이스로 바뀌면 다시 읽는다.
@@ -199,11 +220,14 @@
           onsubmit={(e) => {
             e.preventDefault();
             const email = inviteEmail;
+            inviteError = undefined;
             void act(
               () => api.invite(workspace.id, email, inviteRole),
               m.members_invited({ email }),
-            ).then(() => {
-              inviteEmail = '';
+              (text: string) => (inviteError = text),
+            ).then((ok: boolean) => {
+              // 성공했을 때만, 그사이 고쳐 치지 않았으면 비운다.
+              if (ok && inviteEmail === email) inviteEmail = '';
             });
           }}
         >
@@ -215,6 +239,8 @@
               bind:value={inviteEmail}
               autocomplete="off"
               required
+              aria-invalid={inviteError !== undefined}
+              aria-describedby={inviteError !== undefined ? 'invite-email-error' : undefined}
             />
           </div>
           <RoleSelect
@@ -223,6 +249,11 @@
             onchange={(r: Role) => (inviteRole = r)}
           />
           <Button type="submit" disabled={inviteEmail.trim() === ''}>{m.members_invite()}</Button>
+          {#if inviteError !== undefined}
+            <p id="invite-email-error" role="alert" class="w-full text-sm text-destructive">
+              {inviteError}
+            </p>
+          {/if}
         </form>
         {#if invitations.length > 0}
           <ul class="flex flex-col gap-1" data-testid="invitation-list">
@@ -292,22 +323,39 @@
       {/each}
       {#if isAdmin}
         <form
-          class="flex items-end gap-2"
+          class="flex flex-wrap items-end gap-2"
           onsubmit={(e) => {
             e.preventDefault();
             const name = groupName;
-            void act(() => api.createGroup(workspace.id, name)).then(() => {
-              groupName = '';
+            groupError = undefined;
+            void act(
+              () => api.createGroup(workspace.id, name),
+              undefined,
+              (text: string) => (groupError = text),
+            ).then((ok: boolean) => {
+              if (ok && groupName === name) groupName = '';
             });
           }}
         >
           <div class="flex flex-1 flex-col gap-1">
             <Label for="group-name">{m.members_new_group_name()}</Label>
-            <Input id="group-name" bind:value={groupName} maxlength={200} autocomplete="off" />
+            <Input
+              id="group-name"
+              bind:value={groupName}
+              maxlength={200}
+              autocomplete="off"
+              aria-invalid={groupError !== undefined}
+              aria-describedby={groupError !== undefined ? 'group-name-error' : undefined}
+            />
           </div>
           <Button type="submit" disabled={groupName.trim() === ''}
             >{m.members_create_group()}</Button
           >
+          {#if groupError !== undefined}
+            <p id="group-name-error" role="alert" class="w-full text-sm text-destructive">
+              {groupError}
+            </p>
+          {/if}
         </form>
       {/if}
     </section>
