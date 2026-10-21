@@ -2,7 +2,8 @@
   // 표시 설정(D-50 시간대, D-81 언어·주 시작·시각 표시). 칸마다 따로 고르고 계정에 저장해 기기 사이에 같다. 아직
   // 고르지 않은 칸은 브라우저 언어·시간대와 그 언어의 관례로 제안한다(저장하기 전까지는 제안만 쓴다). 표시만 바꾸며
   // 저장된 일정 시각·날짜는 그대로다.
-  import { api, ApiError } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import type { DisplayLocale, HourCycle, WeekStart } from '$lib/display';
   import {
     asHourCycle,
@@ -14,7 +15,7 @@
     suggestedSettings,
   } from '$lib/display';
   import type { DocFont } from '$lib/doc-font';
-  import { setDocFont, storedDocFont } from '$lib/doc-font';
+  import { appliedDocFont, setDocFont } from '$lib/doc-font';
   import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -27,6 +28,11 @@
     typeof Intl.supportedValuesOf === 'function'
       ? Intl.supportedValuesOf('timeZone')
       : [suggested.timeZone];
+  // 저장한 시간대가 이 브라우저 목록에 없을 수 있다(엔진마다 다른 이름, 목록을 주지 않는 브라우저). 그래도 고른 값으로
+  // 보이게 목록에 넣는다(없으면 칸이 비어 보인다).
+  const zoneOptions = $derived(
+    me.timeZone === '' || zones.includes(me.timeZone) ? zones : [...zones, me.timeZone].sort(),
+  );
   let locale = $state<DisplayLocale>('ko');
   let zone = $state('');
   let weekStart = $state<WeekStart>('sun');
@@ -45,7 +51,9 @@
       zone = me.timeZone;
       weekStart = asWeekStart(me.weekStart) ?? conventionalWeekStart(locale);
       hourCycle = asHourCycle(me.hourCycle) ?? conventionalHourCycle(locale);
-      docFont = storedDocFont();
+      // 저장한 값이 아니라 지금 적용된 서체(저장소를 쓸 수 없으면 이 화면에만 적용돼 있다). 저장한 값을 보이면
+      // 다른 칸을 바꿔 저장할 때 적용된 서체를 되돌린다.
+      docFont = appliedDocFont();
       opened = accountFields();
       error = undefined;
     }
@@ -69,7 +77,7 @@
 
   async function save(): Promise<void> {
     // 문서 본문 서체는 이 브라우저에만 둔다: 계정 저장과 상관없이 바로 적용한다.
-    const fontChanged = docFont !== storedDocFont();
+    const fontChanged = docFont !== appliedDocFont();
     setDocFont(docFont);
     if (fontChanged && accountFields() === opened) {
       // 서체만 바꿨으면 계정 설정을 쓰지 않고 새로 읽지도 않는다.
@@ -91,7 +99,7 @@
       // 날짜 계산·서식을 새 설정으로 다시 하도록 지금 화면을 새로 읽는다.
       window.location.reload();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : m.settings_save_failed();
+      error = errorText(e, m.settings_save_failed());
     }
   }
 
@@ -128,7 +136,7 @@
         <span class="font-medium">{m.settings_time_zone()}</span>
         <select class={fieldClass} bind:value={zone}>
           <option value="">{m.settings_browser_zone({ zone: suggested.timeZone })}</option>
-          {#each zones as z (z)}<option value={z}>{z}</option>{/each}
+          {#each zoneOptions as z (z)}<option value={z}>{z}</option>{/each}
         </select>
       </label>
       <label class="flex flex-col gap-1">
