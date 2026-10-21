@@ -961,7 +961,16 @@
     not_saved: () => m.tasks_card_not_saved(),
   };
 
+  /** 같은 열 안 순서(위·아래)는 기본 순서에서만 바꾼다(D-79). 단추·메뉴·키보드·끌기가 같은 규칙을 따른다. */
+  const reorderable = (action: BoardAction): boolean =>
+    ordered || (action !== 'up' && action !== 'down');
+
   async function move(id: string, action: BoardAction): Promise<void> {
+    if (!reorderable(action)) {
+      // 제목순 같은 정렬에서 위·아래는 화면 순서와 무관하게 저장된 기본 순서를 바꾸게 되므로 보내지 않는다.
+      status = m.tasks_move_unordered({ title: titleOf(id) });
+      return;
+    }
     const plan = planBoardMove(shown, id, action);
     if (plan === undefined) return;
     await commitMove(id, plan, action);
@@ -1467,8 +1476,8 @@
                         tabindex={-1}
                         class="h-6 px-1.5 text-xs"
                         disabled={busy(t.id) ||
-                          planBoardMove(shown, t.id, action) === undefined ||
-                          (!ordered && (action === 'up' || action === 'down'))}
+                          !reorderable(action) ||
+                          planBoardMove(shown, t.id, action) === undefined}
                         onclick={() => void move(t.id, action)}
                         >{action === 'left'
                           ? '←'
