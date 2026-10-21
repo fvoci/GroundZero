@@ -113,7 +113,16 @@
   "tasks_gantt_back": "← 2 weeks earlier",
   "tasks_gantt_month": "{month}/{year}",
   "tasks_gantt_links_hint": "Lines run from the end of a predecessor to the start of the task that follows it; the arrow points at the follower. Hover or focus a row name to make its lines bold.",
-  "tasks_gantt_links_hidden": "{count} dependencies are not drawn because one of their tasks is not on this chart (filtered, undated or outside the shown period). Task details list all predecessors and followers.",
+  "tasks_gantt_links_hidden": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} dependency is not drawn because one of its tasks is not on this chart (filtered, undated or outside the shown period). Task details list all predecessors and followers.",
+        "countPlural=other": "{count} dependencies are not drawn because one of their tasks is not on this chart (filtered, undated or outside the shown period). Task details list all predecessors and followers."
+      }
+    }
+  ],
   "tasks_lane_empty": "No cards",
   "tasks_lane_empty_filtered": "No cards match the filter",
   "tasks_today": "Today",

@@ -276,4 +276,16 @@ describe('gantt dependency lines on the board', () => {
     expect(gantt.querySelector('[data-testid="gantt-links"]')).toBeNull();
     expect(screen.getByTestId('gantt-links-hidden').textContent).toContain('관계 1개는');
   });
+
+  it('uses the singular and plural in English', async () => {
+    await setLocale('en', { reload: false });
+    vi.spyOn(api, 'tasks').mockResolvedValue([
+      design,
+      task('b', '구현', '2026-10-25', '2026-10-27', ['a', 'zz']),
+    ]);
+    render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    expect((await screen.findByTestId('gantt-links-hidden')).textContent).toContain(
+      '1 dependency is not drawn because one of its tasks',
+    );
+  });
 });
