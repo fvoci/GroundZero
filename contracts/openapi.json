@@ -7524,17 +7524,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "$ref": "#/components/schemas/SetPredecessor"
-                  }
-                ]
+                "$ref": "#/components/schemas/SetPredecessor"
               }
             }
-          }
+          },
+          "required": false
         },
         "responses": {
           "200": {

@@ -9784,7 +9784,7 @@ export interface operations {
         /** @description 없으면 옛 동작(없을 때 FS·0으로 추가, 있으면 그대로) */
         requestBody?: {
             content: {
-                "application/json": null | components["schemas"]["SetPredecessor"];
+                "application/json": components["schemas"]["SetPredecessor"];
             };
         };
         responses: {

@@ -244,6 +244,7 @@ async fn api_not_found() -> AppError {
 #[derive(Debug, OpenApi)]
 #[openapi(
     info(title = "fvoci API", version = "0.1.0"),
+    modifiers(&OptionalBodies),
     paths(
         healthz,
         accounts::login,
@@ -666,6 +667,36 @@ async fn api_not_found() -> AppError {
     )
 )]
 pub struct ApiDoc;
+
+/// 본문을 생략할 수 있는 요청. `Option<Json<T>>`를 utoipa에 `Option<T>`로 적으면 본문 `null`까지 허용하는 것으로
+/// 나오지만, 서버는 `Content-Type`이 없을 때만 본문 없음으로 받는다(있으면 `T`여야 한다). 그래서 계약에는 "선택 본문
+/// `T`"로 적는다(D-91 관계 설정: 본문이 없으면 옛 동작).
+struct OptionalBodies;
+
+impl utoipa::Modify for OptionalBodies {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        use utoipa::openapi::{Ref, RefOr, Required};
+        let bodies = [(
+            "/api/tasks/{task_id}/predecessors/{predecessor_id}",
+            "SetPredecessor",
+        )];
+        for (path, schema) in bodies {
+            let Some(body) = openapi
+                .paths
+                .paths
+                .get_mut(path)
+                .and_then(|item| item.put.as_mut())
+                .and_then(|op| op.request_body.as_mut())
+            else {
+                continue;
+            };
+            body.required = Some(Required::False);
+            for content in body.content.values_mut() {
+                content.schema = Some(RefOr::Ref(Ref::from_schema_name(schema)));
+            }
+        }
+    }
+}
 
 /// 라우터를 조립한다.
 /// 업로드 조각은 서버 전체에서 정해진 수만 동시에 받는다(본문을 읽기 전에 자리를 잡는다, D-52).
@@ -1140,5 +1171,17 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// 관계 설정의 본문은 생략할 수 있지만(옛 동작) `null`은 아니다(D-91). 계약이 서버 동작과 같아야 한다.
+    #[test]
+    fn the_link_body_is_optional_but_not_nullable() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
+        let body = &doc["paths"]["/api/tasks/{task_id}/predecessors/{predecessor_id}"]["put"]["requestBody"];
+        assert_eq!(body["required"], false);
+        assert_eq!(
+            body["content"]["application/json"]["schema"],
+            serde_json::json!({ "$ref": "#/components/schemas/SetPredecessor" })
+        );
     }
 }
