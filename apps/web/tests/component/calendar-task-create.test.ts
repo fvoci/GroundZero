@@ -62,6 +62,7 @@ function created(version = 1, due: string | null = null): TaskDetailView {
     tags: [],
     milestone: false,
     predecessor_ids: [],
+    predecessors: [],
     series: null,
     occurrence_date: null,
     assignees: [],

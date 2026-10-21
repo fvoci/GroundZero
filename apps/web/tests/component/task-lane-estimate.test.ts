@@ -43,6 +43,7 @@ function task(id: string, title: string, status: TaskStatus, estimate: number | 
     tags: [],
     milestone: false,
     predecessor_ids: [],
+    predecessors: [],
     series: null,
     occurrence_date: null,
     assignees: [],

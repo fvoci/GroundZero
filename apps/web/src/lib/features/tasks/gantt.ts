@@ -1,4 +1,5 @@
 // 간트 배치 (D-31). 날짜만 있는 업무(D-50)를 UTC 날짜 번호로 바꿔 열을 정한다(시간대에 따라 하루가 밀리지 않게).
+import type { LinkKind, TaskLinkView } from '$lib/api/client';
 import type { ListTask } from './board';
 import { listOrder } from './board';
 
@@ -102,16 +103,36 @@ export function editDates(
   return { start_date: fromDayNumber(nextFrom), due_date: fromDayNumber(nextTo) };
 }
 
-/** 간트 연결선 하나: 선행 업무의 끝에서 후속 업무의 시작으로(끝나야 시작, D-31). 좌표는 막대와 같은 rem 단위다. */
+/** 업무가 가진 선행 관계(없으면 `predecessor_ids`를 종료 후 시작·지연 0으로 본다). */
+export interface GanttLinkSource {
+  id: string;
+  /** 서버 응답이 아니면 빠질 수 있다(빠지면 관계 없음). */
+  predecessor_ids?: readonly string[];
+  predecessors?: readonly TaskLinkView[];
+}
+
+/**
+ * 간트 연결선 하나. 종류에 따라 선행 업무의 시작(SS·SF) 또는 끝(FS·FF)에서 나와 후속 업무의 시작(FS·SS) 또는
+ * 끝(FF·SF)으로 들어간다(D-91). 화살촉은 늘 후속 업무 쪽이다. 좌표는 막대와 같은 rem 단위다.
+ */
 export interface GanttLink {
   /** `선행 id>후속 id`. 같은 관계는 한 번만 그린다. */
   key: string;
   from: string;
   to: string;
-  /** SVG 경로(직각). 마지막 구간은 늘 왼쪽에서 오른쪽으로 후속 업무의 시작에 들어간다. */
+  kind: LinkKind;
+  lag_days: number;
+  /** SVG 경로(직각). 마지막 구간은 후속 업무의 들어가는 끝(시작이면 왼쪽에서, 끝이면 오른쪽에서)으로 들어간다. */
   d: string;
-  /** 화살촉(후속 업무 시작 쪽). */
+  /** 화살촉(후속 업무의 들어가는 끝). */
   arrow: string;
+}
+
+/** 업무의 선행 관계 목록(종류·지연일). 옛 응답처럼 `predecessors`가 없으면 FS·0. */
+export function linksOf(task: GanttLinkSource): TaskLinkView[] {
+  return task.predecessors !== undefined
+    ? [...task.predecessors]
+    : (task.predecessor_ids ?? []).map((id) => ({ task_id: id, kind: 'FS' as const, lag_days: 0 }));
 }
 
 export interface GanttLinkGeometry {
@@ -142,7 +163,7 @@ const num = (n: number): string => String(Math.round(n * 1000) / 1000);
  */
 export function ganttLinks(
   rows: readonly {
-    task: { id: string; milestone: boolean; predecessor_ids: readonly string[] };
+    task: GanttLinkSource & { milestone: boolean };
     from: number;
     to: number;
     /** 끝이 표시 기간 밖이라 잘려 그린 막대(그 끝에서는 선을 잇지 않는다). */
@@ -150,7 +171,7 @@ export function ganttLinks(
   }[],
   geometry: GanttLinkGeometry,
   /** 이 간트가 받은 모든 업무(그리지 못한 끝을 세는 데만 쓴다). */
-  all: readonly { id: string; predecessor_ids: readonly string[] }[] = [],
+  all: readonly GanttLinkSource[] = [],
 ): { links: GanttLink[]; hidden: number } {
   const { col, row, days } = geometry;
   const width = days * col;
@@ -172,25 +193,35 @@ export function ganttLinks(
   const seen = new Set<string>();
   const links: GanttLink[] = [];
   let hidden = 0;
-  const consider = (succId: string, predIds: readonly string[] | undefined): void => {
-    for (const predId of predIds ?? []) {
-      if (typeof predId !== 'string' || predId === succId) continue;
-      const key = `${predId}>${succId}`;
+  // 막대의 시작(왼쪽)·끝(오른쪽) 가장자리. 마일스톤은 ◆의 왼쪽·오른쪽 꼭짓점.
+  const startX = (b: { from: number; milestone: boolean }): number =>
+    b.milestone ? b.from * col + col / 2 - DIAMOND_HALF : b.from * col + BAR_INSET;
+  const endX = (b: { to: number; milestone: boolean }): number =>
+    b.milestone ? b.to * col + col / 2 + DIAMOND_HALF : (b.to + 1) * col - BAR_INSET;
+  const consider = (succ: GanttLinkSource): void => {
+    for (const { task_id: predId, kind, lag_days } of linksOf(succ)) {
+      if (typeof predId !== 'string' || predId === succ.id) continue;
+      const key = `${predId}>${succ.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
       const pred = at.get(predId);
-      const succ = at.get(succId);
-      // 선행 막대의 끝이 잘려 있으면 진짜 끝을 모르므로 가장자리에서 잇지 않는다.
-      if (pred === undefined || succ === undefined || pred.clippedEnd) {
+      const next = at.get(succ.id);
+      // 선행에서 나가는 끝: FS·FF는 끝(오른쪽으로 나감), SS·SF는 시작(왼쪽으로 나감).
+      // 후속에 들어가는 끝: FS·SS는 시작(왼쪽에서 오른쪽으로 들어감), FF·SF는 끝(오른쪽에서 왼쪽으로 들어감).
+      const fromEnd = kind === 'FS' || kind === 'FF';
+      const toStart = kind === 'FS' || kind === 'SS';
+      // 잘린 막대의 끝은 진짜 끝을 모르므로 그 끝에서 잇지 않는다.
+      if (
+        pred === undefined ||
+        next === undefined ||
+        (fromEnd && pred.clippedEnd) ||
+        (!toStart && next.clippedEnd)
+      ) {
         hidden += 1;
         continue;
       }
-      const x1 = pred.milestone
-        ? pred.to * col + col / 2 + DIAMOND_HALF
-        : (pred.to + 1) * col - BAR_INSET;
-      const x2 = succ.milestone
-        ? succ.from * col + col / 2 - DIAMOND_HALF
-        : succ.from * col + BAR_INSET;
+      const x1 = fromEnd ? endX(pred) : startX(pred);
+      const x2 = toStart ? startX(next) : endX(next);
       // 끄는 중의 미리 보기로 끝이 표 밖(첫 열 앞·마지막 열 뒤)으로 나가면 그 끝은 보이지 않는다. 가장자리에 붙여 잇지
       // 않고 다른 보이지 않는 끝과 같이 센다(놓아 저장하면 다시 읽은 기간에서 다시 그린다).
       if (x1 < 0 || x1 > width || x2 < 0 || x2 > width) {
@@ -198,29 +229,39 @@ export function ganttLinks(
         continue;
       }
       const y1 = (pred.index + 0.5) * row;
-      const y2 = (succ.index + 0.5) * row;
+      const y2 = (next.index + 0.5) * row;
+      // 나가는 쪽(+1 오른쪽, -1 왼쪽)과 들어가며 나아가는 쪽(+1 왼쪽에서 오른쪽으로, -1 오른쪽에서 왼쪽으로).
+      const out = fromEnd ? 1 : -1;
+      const dir = toStart ? 1 : -1;
+      const clamp = (x: number): number => Math.min(Math.max(x, 0), width);
       let d: string;
-      if (x2 - x1 >= MIN_GAP) {
-        // 후속이 뒤: 선행 끝에서 조금 나가(바로 다음 날처럼 틈이 좁으면 틈의 가운데에서) 꺾어 내려(올라)가고 후속
-        // 시작으로 들어간다.
-        const xm = x2 - x1 >= 2 * STUB ? x1 + STUB : (x1 + x2) / 2;
+      if (out !== dir) {
+        // SS는 두 시작보다 왼쪽, FF는 두 끝보다 오른쪽에서 세로로 돌아 들어간다(막대를 가로지르지 않음).
+        const xm = clamp(out < 0 ? Math.min(x1, x2) - STUB : Math.max(x1, x2) + STUB);
+        d = `M${num(x1)} ${num(y1)}H${num(xm)}V${num(y2)}H${num(x2)}`;
+      } else if ((x2 - x1) * dir >= MIN_GAP) {
+        // 나아가는 쪽으로 틈이 있음(FS는 후속이 뒤, SF는 후속 끝이 선행 시작보다 앞): 조금 나가(틈이 좁으면 틈의
+        // 가운데에서) 꺾어 내려(올라)가고 들어간다.
+        const gap = (x2 - x1) * dir;
+        const xm = gap >= 2 * STUB ? x1 + STUB * dir : (x1 + x2) / 2;
         d = `M${num(x1)} ${num(y1)}H${num(xm)}V${num(y2)}H${num(x2)}`;
       } else {
-        // 겹치거나 후속이 앞에 있음: 선행 줄의 아래(후속이 위면 위) 경계선을 따라 되돌아가서 후속 시작 앞에서 들어간다.
-        // 막대는 줄 안쪽(위아래 여백)에 그려지므로 경계선 위의 선은 막대를 가로지르지 않는다. 표의 양 끝을 넘지 않는다.
-        const yb = (succ.index > pred.index ? pred.index + 1 : pred.index) * row;
-        const xa = Math.min(x1 + STUB, width);
-        const xb = Math.max(x2 - STUB, 0);
+        // 틈이 없음(같은 날·겹침·역전): 선행 줄의 아래(후속이 위면 위) 경계선을 따라 되돌아가서 들어가는 끝 앞에서
+        // 들어간다. 막대는 줄 안쪽(위아래 여백)에 그려지므로 경계선 위의 선은 막대를 가로지르지 않는다. 표의 양 끝을
+        // 넘지 않는다.
+        const yb = (next.index > pred.index ? pred.index + 1 : pred.index) * row;
+        const xa = clamp(x1 + STUB * dir);
+        const xb = clamp(x2 - STUB * dir);
         d = `M${num(x1)} ${num(y1)}H${num(xa)}V${num(yb)}H${num(xb)}V${num(y2)}H${num(x2)}`;
       }
-      const base = Math.max(x2 - ARROW, 0);
+      const base = clamp(x2 - ARROW * dir);
       const arrow = `M${num(x2)} ${num(y2)}L${num(base)} ${num(y2 - ARROW * 0.7)}L${num(base)} ${num(y2 + ARROW * 0.7)}Z`;
-      links.push({ key, from: predId, to: succId, d, arrow });
+      links.push({ key, from: predId, to: succ.id, kind, lag_days, d, arrow });
     }
   };
-  for (const r of rows) consider(r.task.id, r.task.predecessor_ids);
+  for (const r of rows) consider(r.task);
   // 그리지 않은 업무(날짜 없음·기간 밖)가 끝인 관계도 센다. 이미 본 관계는 다시 세지 않는다.
-  for (const t of all) if (!at.has(t.id)) consider(t.id, t.predecessor_ids);
+  for (const t of all) if (!at.has(t.id)) consider(t);
   return { links, hidden };
 }
 

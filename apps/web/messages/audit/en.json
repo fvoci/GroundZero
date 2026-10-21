@@ -35,6 +35,7 @@
   "audit_action_unassign": "assignee removed",
   "audit_action_link_predecessor": "predecessor linked",
   "audit_action_unlink_predecessor": "predecessor unlinked",
+  "audit_action_change_predecessor": "dependency changed",
   "audit_action_reschedule": "rescheduled",
   "audit_action_set_recurrence": "recurrence set",
   "audit_action_exclude_occurrence": "occurrence excluded",

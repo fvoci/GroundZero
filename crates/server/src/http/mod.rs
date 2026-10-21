@@ -244,6 +244,7 @@ async fn api_not_found() -> AppError {
 #[derive(Debug, OpenApi)]
 #[openapi(
     info(title = "fvoci API", version = "0.1.0"),
+    modifiers(&OptionalBodies),
     paths(
         healthz,
         accounts::login,
@@ -285,6 +286,8 @@ async fn api_not_found() -> AppError {
         tasks::update_checklist_item,
         tasks::delete_checklist_item,
         schedule::preview,
+        schedule::plan,
+        schedule::plan_link,
         schedule::add_predecessor,
         schedule::remove_predecessor,
         events::list,
@@ -485,6 +488,16 @@ async fn api_not_found() -> AppError {
         tasks::SuccessorShift,
         schedule::SchedulePreviewInput,
         schedule::ShiftProposal,
+        schedule::ShiftCause,
+        schedule::SchedulePlan,
+        schedule::PlanBlocked,
+        schedule::PlanBlockReason,
+        schedule::UndatedTask,
+        schedule::LinkKind,
+        schedule::LinkInput,
+        schedule::SetPredecessor,
+        schedule::PredecessorConflict,
+        schedule::TaskLink,
         events::EventKind,
         events::Event,
         events::EventInput,
@@ -658,6 +671,36 @@ async fn api_not_found() -> AppError {
 )]
 pub struct ApiDoc;
 
+/// 본문을 생략할 수 있는 요청. `Option<Json<T>>`를 utoipa에 `Option<T>`로 적으면 본문 `null`까지 허용하는 것으로
+/// 나오지만, 서버는 `Content-Type`이 없을 때만 본문 없음으로 받는다(있으면 `T`여야 한다). 그래서 계약에는 "선택 본문
+/// `T`"로 적는다(D-91 관계 설정: 본문이 없으면 옛 동작).
+struct OptionalBodies;
+
+impl utoipa::Modify for OptionalBodies {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        use utoipa::openapi::{Ref, RefOr, Required};
+        let bodies = [(
+            "/api/tasks/{task_id}/predecessors/{predecessor_id}",
+            "SetPredecessor",
+        )];
+        for (path, schema) in bodies {
+            let Some(body) = openapi
+                .paths
+                .paths
+                .get_mut(path)
+                .and_then(|item| item.put.as_mut())
+                .and_then(|op| op.request_body.as_mut())
+            else {
+                continue;
+            };
+            body.required = Some(Required::False);
+            for content in body.content.values_mut() {
+                content.schema = Some(RefOr::Ref(Ref::from_schema_name(schema)));
+            }
+        }
+    }
+}
+
 /// 라우터를 조립한다.
 /// 업로드 조각은 서버 전체에서 정해진 수만 동시에 받는다(본문을 읽기 전에 자리를 잡는다, D-52).
 async fn upload_slot(State(state): State<AppState>, req: Request, next: Next) -> Response {
@@ -830,6 +873,11 @@ pub fn router(state: AppState) -> Router {
         .route("/tasks/{task_id}/position", put(tasks::move_task))
         .route("/tasks/{task_id}/parent", put(tasks::set_parent))
         .route("/tasks/{task_id}/schedule-preview", post(schedule::preview))
+        .route("/tasks/{task_id}/schedule-plan", post(schedule::plan))
+        .route(
+            "/tasks/{task_id}/predecessors/{predecessor_id}/schedule-plan",
+            post(schedule::plan_link),
+        )
         .route(
             "/items/{item_id}/events",
             get(events::list).post(events::create),
@@ -1126,5 +1174,55 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// 관계 설정의 본문은 생략할 수 있지만(옛 동작) `null`은 아니다(D-91). 계약이 서버 동작과 같아야 한다.
+    #[test]
+    fn the_link_body_is_optional_but_not_nullable() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
+        let body = &doc["paths"]["/api/tasks/{task_id}/predecessors/{predecessor_id}"]["put"]["requestBody"];
+        assert_eq!(body["required"], false);
+        assert_eq!(
+            body["content"]["application/json"]["schema"],
+            serde_json::json!({ "$ref": "#/components/schemas/SetPredecessor" })
+        );
+    }
+
+    /// 관계 설정의 409는 두 모양이다(D-91): 승인 목록이 맞지 않으면 `TaskConflict`, 보관·동시 변경·id 부족이면
+    /// `ErrorBody`. 계약이 둘 다 적고, 두 스키마가 실제 응답의 필수 칸을 갖는지 본다.
+    #[test]
+    fn the_link_conflict_is_task_conflict_or_error_body() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
+        let conflict = &doc["paths"]["/api/tasks/{task_id}/predecessors/{predecessor_id}"]["put"]["responses"]
+            ["409"]["content"]["application/json"]["schema"];
+        assert_eq!(
+            conflict,
+            &serde_json::json!({ "$ref": "#/components/schemas/PredecessorConflict" })
+        );
+        let schemas = &doc["components"]["schemas"];
+        let one_of: Vec<&str> = schemas["PredecessorConflict"]["oneOf"]
+            .as_array()
+            .map(|v| v.iter().filter_map(|s| s["$ref"].as_str()).collect())
+            .unwrap_or_default();
+        assert_eq!(
+            one_of,
+            [
+                "#/components/schemas/TaskConflict",
+                "#/components/schemas/ErrorBody"
+            ]
+        );
+        let required = |name: &str| -> Vec<String> {
+            schemas[name]["required"]
+                .as_array()
+                .map(|v| {
+                    v.iter()
+                        .filter_map(|s| s.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        assert!(required("TaskConflict").iter().any(|k| k == "current"));
+        assert!(!required("ErrorBody").iter().any(|k| k == "current"));
+        assert!(required("ErrorBody").iter().any(|k| k == "message"));
     }
 }

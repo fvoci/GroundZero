@@ -21,6 +21,8 @@ DECLARE
   v_task uuid;
   v_child uuid;
   v_milestone uuid;
+  v_together uuid;
+  v_linked uuid;
   v_doc uuid;
   v_unit uuid;
   v_episode uuid;
@@ -101,6 +103,23 @@ BEGIN
         NULL, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], true, '[]',
         pg_temp.take(app_update_task_ids(v_milestone, ARRAY[v_admin], '[]')));
       PERFORM app_add_task_dependency(v_task, v_milestone, pg_temp.take(1));
+      -- 관계 종류 예제(D-91): 대표 업무와 함께 시작(SS·1), 함께 끝(FF·0), 그 업무가 시작하기 전에 끝(SF·0).
+      -- 날짜는 이미 관계를 채우므로 옮길 업무가 없다.
+      v_together := app_create_task(v_item, pg_temp.take1(), '관계 예제: 하루 뒤 함께 시작', NULL, pg_temp.take(2));
+      PERFORM app_update_task(v_together, 1, '관계 예제: 하루 뒤 함께 시작', '', 'todo', 'medium',
+        v_today + 1, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, '[]',
+        pg_temp.take(app_update_task_ids(v_together, ARRAY[v_admin], '[]')));
+      PERFORM app_set_task_dependency(v_task, v_together, 'SS', 1, '[]', pg_temp.take(1));
+      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 함께 마무리', NULL, pg_temp.take(2));
+      PERFORM app_update_task(v_linked, 1, '관계 예제: 함께 마무리', '', 'todo', 'low',
+        v_today + 1, v_today + 2, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, '[]',
+        pg_temp.take(app_update_task_ids(v_linked, ARRAY[v_admin], '[]')));
+      PERFORM app_set_task_dependency(v_task, v_linked, 'FF', 0, '[]', pg_temp.take(1));
+      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 시작 전에 준비 끝', NULL, pg_temp.take(2));
+      PERFORM app_update_task(v_linked, 1, '관계 예제: 시작 전에 준비 끝', '', 'todo', 'low',
+        v_today - 1, v_today, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, '[]',
+        pg_temp.take(app_update_task_ids(v_linked, ARRAY[v_admin], '[]')));
+      PERFORM app_set_task_dependency(v_together, v_linked, 'SF', 0, '[]', pg_temp.take(1));
     END IF;
   END LOOP;
 

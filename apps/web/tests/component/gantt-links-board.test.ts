@@ -51,6 +51,7 @@ function task(
     tags: [],
     milestone: false,
     predecessor_ids: preds,
+    predecessors: preds.map((id) => ({ task_id: id, kind: 'FS' as const, lag_days: 0 })),
     series: null,
     occurrence_date: null,
     assignees: [],
@@ -67,6 +68,7 @@ const detail = (t: TaskView): TaskDetailView => ({ ...t, checklist: [] });
 const design = task('a', '설계', '2026-10-20', '2026-10-22');
 const build = task('b', '구현', '2026-10-25', '2026-10-27', ['a']);
 const shift: ShiftProposalView = {
+  causes: [],
   task_id: 'b',
   reference: 'KED-b',
   title: '구현',
@@ -139,7 +141,7 @@ describe('gantt dependency lines on the board', () => {
     expectLineOnBars(gantt);
     // 줄 단추의 설명이 그대로 선행 관계를 말한다(선은 같은 내용을 다시 읽지 않는다).
     expect(q(gantt, '[data-task-card="b"]').getAttribute('aria-label')).toContain('선행 KED-a');
-    expect(screen.getByText(/선은 선행 업무의 끝에서 후속 업무의 시작으로/)).toBeTruthy();
+    expect(screen.getByText(/선은 관계 종류에 따라 선행 업무의 시작 또는 끝에서/)).toBeTruthy();
     // 줄을 눌러 열 수 있다(연결선이 가로막지 않음).
     await fireEvent.click(q(gantt, '[data-task-card="b"]'));
     await waitFor(() => {
@@ -229,7 +231,11 @@ describe('gantt dependency lines on the board', () => {
       .mockResolvedValueOnce([movedA, movedB]) // 승인 뒤
       .mockResolvedValue([movedA, movedB]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue([shift]);
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({
+      shifts: [shift],
+      undated: [],
+      blocked: null,
+    });
     const update = vi
       .spyOn(api, 'updateTask')
       .mockResolvedValueOnce({ kind: 'updated', task: detail(movedA) });
@@ -262,7 +268,7 @@ describe('gantt dependency lines on the board', () => {
     expectLineOnBars(gantt);
     // 서버 실패: 저장되지 않고 다시 읽음 → 같다.
     update.mockRejectedValueOnce(new ApiError(500, 'internal', 'boom'));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue([]);
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [], blocked: null });
     await fireEvent.keyDown(q(gantt, '[data-task-card="a"]'), { key: 'ArrowRight', altKey: true });
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);

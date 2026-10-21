@@ -190,3 +190,68 @@ describe('gantt links', () => {
     expect(wider?.d).toBe('M7.875 0.875H8.275V2.625H12.125');
   });
 });
+
+// 관계 종류별 끝(D-91): FS 끝 → 시작, SS 시작 → 시작, FF 끝 → 끝, SF 시작 → 끝. 화살촉은 늘 후속 쪽이고, 시작으로는
+// 왼쪽에서, 끝으로는 오른쪽에서 들어간다.
+describe('gantt links by dependency kind', () => {
+  const linked = (
+    id: string,
+    from: number,
+    to: number,
+    pred: string,
+    kind: 'FS' | 'SS' | 'FF' | 'SF',
+    clippedEnd = false,
+  ) => ({
+    task: {
+      id,
+      milestone: false,
+      predecessor_ids: [pred],
+      predecessors: [{ task_id: pred, kind, lag_days: 0 }],
+    },
+    from,
+    to,
+    clippedEnd,
+  });
+
+  it('starts at the predecessor start and enters the follower start from the left for SS', () => {
+    const { links } = ganttLinks([row('a', 2, 4), linked('b', 5, 6, 'a', 'SS')], G);
+    expect(links[0]?.kind).toBe('SS');
+    // a의 시작 4.125에서 왼쪽으로 나가 두 시작보다 왼쪽(3.725)에서 내려가 b의 시작 10.125로.
+    expect(links[0]?.d).toBe('M4.125 0.875H3.725V2.625H10.125');
+    expect(links[0]?.arrow).toBe('M10.125 2.625L9.825 2.415L9.825 2.835Z');
+  });
+
+  it('leaves the predecessor end and enters the follower end from the right for FF', () => {
+    const { links } = ganttLinks([row('a', 2, 4), linked('b', 0, 6, 'a', 'FF')], G);
+    // a의 끝 9.875에서 오른쪽으로 두 끝보다 오른쪽(14.275)까지 가서 내려가 b의 끝 13.875로 왼쪽을 향해 들어간다.
+    expect(links[0]?.d).toBe('M9.875 0.875H14.275V2.625H13.875');
+    expect(links[0]?.arrow).toBe('M13.875 2.625L14.175 2.415L14.175 2.835Z');
+  });
+
+  it('runs from the predecessor start back to the follower end for SF, around the row border without a gap', () => {
+    // 후속 끝(5.875)이 선행 시작(10.125)보다 앞: 왼쪽으로 나가 꺾어 들어간다.
+    const gap = ganttLinks([row('a', 5, 6), linked('b', 0, 2, 'a', 'SF')], G).links[0];
+    expect(gap?.d).toBe('M10.125 0.875H9.725V2.625H5.875');
+    expect(gap?.arrow).toBe('M5.875 2.625L6.175 2.415L6.175 2.835Z');
+    // 후속 끝이 선행 시작보다 뒤: 선행 줄 아래 경계(1.75)를 따라 후속 끝의 오른쪽으로 돌아 들어간다.
+    const around = ganttLinks([row('a', 2, 4), linked('b', 2, 6, 'a', 'SF')], G).links[0];
+    expect(around?.d).toBe('M4.125 0.875H3.725V1.75H14.275V2.625H13.875');
+  });
+
+  it('does not join a clipped end but still draws from a known start', () => {
+    // FF로 들어갈 후속 끝이 잘렸으면 그리지 않고 센다.
+    const ff = ganttLinks([row('a', 2, 4), linked('b', 0, 11, 'a', 'FF', true)], G);
+    expect(ff.links).toHaveLength(0);
+    expect(ff.hidden).toBe(1);
+    // SS는 선행의 시작에서 나가므로 선행 끝이 잘려도 그린다.
+    const clipped = { ...row('a', 2, 11), clippedEnd: true };
+    const ss = ganttLinks([clipped, linked('b', 5, 6, 'a', 'SS')], G);
+    expect(ss.links).toHaveLength(1);
+    expect(ss.hidden).toBe(0);
+  });
+
+  it('treats a task without kinds as finish to start with no lag', () => {
+    const { links } = ganttLinks([row('a', 0, 2), row('b', 5, 6, ['a'])], G);
+    expect([links[0]?.kind, links[0]?.lag_days]).toEqual(['FS', 0]);
+  });
+});

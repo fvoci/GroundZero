@@ -35,6 +35,7 @@
   "audit_action_unassign": "담당 해제",
   "audit_action_link_predecessor": "선행 업무 연결",
   "audit_action_unlink_predecessor": "선행 업무 해제",
+  "audit_action_change_predecessor": "선행 관계 변경",
   "audit_action_reschedule": "일정 바꿈",
   "audit_action_set_recurrence": "반복 설정",
   "audit_action_exclude_occurrence": "회차 뺌",
