@@ -26,5 +26,6 @@
   "common_error_bad_request": "입력한 값을 확인해 주세요.",
   "common_error_invalid_state": "지금 상태에서는 할 수 없습니다. 새로고침한 뒤 다시 시도해 주세요.",
   "common_close": "닫기",
-  "common_error_unexpected": "예상하지 못한 응답을 받았습니다({status})."
+  "common_error_unexpected": "예상하지 못한 응답을 받았습니다({status}).",
+  "common_error_too_large": "보내는 내용이 너무 큽니다. 줄인 뒤 다시 시도해 주세요."
 }

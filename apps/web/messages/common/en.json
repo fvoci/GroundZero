@@ -27,5 +27,6 @@
   "common_error_bad_request": "Check what you entered.",
   "common_error_invalid_state": "This can't be done right now. Reload and try again.",
   "common_close": "Close",
-  "common_error_unexpected": "Got an unexpected response ({status})."
+  "common_error_unexpected": "Got an unexpected response ({status}).",
+  "common_error_too_large": "What you sent is too large. Make it smaller and try again."
 }

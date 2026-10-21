@@ -2,7 +2,8 @@
   // 표시 설정(D-50 시간대, D-81 언어·주 시작·시각 표시). 칸마다 따로 고르고 계정에 저장해 기기 사이에 같다. 아직
   // 고르지 않은 칸은 브라우저 언어·시간대와 그 언어의 관례로 제안한다(저장하기 전까지는 제안만 쓴다). 표시만 바꾸며
   // 저장된 일정 시각·날짜는 그대로다.
-  import { api, ApiError } from '$lib/api/client';
+  import { api } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import type { DisplayLocale, HourCycle, WeekStart } from '$lib/display';
   import {
     asHourCycle,
@@ -91,7 +92,7 @@
       // 날짜 계산·서식을 새 설정으로 다시 하도록 지금 화면을 새로 읽는다.
       window.location.reload();
     } catch (e: unknown) {
-      error = e instanceof ApiError ? e.message : m.settings_save_failed();
+      error = errorText(e, m.settings_save_failed());
     }
   }
 
