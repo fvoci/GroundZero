@@ -222,3 +222,69 @@ async fn storage_cleanup_deletes_every_object_queued_together() {
     assert_eq!(left, 0);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// 감사 S12: 색인 대기열의 꺼냄은 2분짜리 시간 점유뿐이라, 첨부를 읽는 등으로 점유 시간을 넘긴 작업 프로세스가 그 사이
+/// 더 새 변경(세대)을 다른 작업 프로세스가 먼저 반영한 뒤 옛 내용을 보내 덮었다. 보내기 직전에 "아직 쥐고 있고 세대가
+/// 그대로인 행"만 골라 점유를 늘린다(`app_system_search_recheck`). 세대가 바뀌었거나 점유가 지난 행은 고르지 않는다.
+#[tokio::test]
+async fn indexing_rechecks_the_claim_and_generation_before_sending() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "색인 재확인").await;
+    let doc = create_doc(&app, &admin, &ws, "기밀 문단이 있던 문서").await;
+    let id: uuid::Uuid = doc["id"].as_str().unwrap().parse().unwrap();
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&url).await.unwrap();
+    // 이 시험의 행만 다룬다: 작업 프로세스 W1이 꺼낸 것처럼 점유하고 그때의 세대를 기억한다.
+    let claim = |minutes: i32| {
+        let owner = owner.clone();
+        async move {
+            sqlx::query_scalar::<_, time::OffsetDateTime>(
+                "UPDATE fvoci.search_queue SET claimed_until = now() + make_interval(mins => $2), task_uid = NULL,
+                        task_queued_at = NULL
+                 WHERE kind = 'document' AND target_id = $1 RETURNING queued_at",
+            )
+            .bind(id)
+            .bind(minutes)
+            .fetch_one(&owner)
+            .await
+            .unwrap()
+        }
+    };
+    let recheck = |queued: time::OffsetDateTime| {
+        let db = state.db.clone();
+        async move {
+            let mut tx = db.begin_anonymous().await.unwrap();
+            let held: Vec<(String, uuid::Uuid)> =
+                sqlx::query_as("SELECT kind, target_id FROM app_system_search_recheck($1, $2, $3)")
+                    .bind(vec!["document"])
+                    .bind(vec![id])
+                    .bind(vec![queued])
+                    .fetch_all(tx.conn())
+                    .await
+                    .unwrap();
+            tx.commit().await.unwrap();
+            held
+        }
+    };
+
+    // 아직 쥐고 있고 세대가 그대로면 고르고 점유를 늘린다.
+    let first = claim(2).await;
+    assert_eq!(recheck(first).await, vec![("document".to_owned(), id)]);
+    // 그 사이 사용자가 고쳐 세대가 바뀌면 옛 세대로는 고르지 않는다(옛 내용을 보내지 않는다).
+    let newer = sqlx::query_scalar::<_, time::OffsetDateTime>(
+        "UPDATE fvoci.search_queue SET queued_at = queued_at + interval '1 second'
+         WHERE kind = 'document' AND target_id = $1 RETURNING queued_at",
+    )
+    .bind(id)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert!(recheck(first).await.is_empty());
+    // 점유가 지났으면(다른 작업 프로세스가 다시 꺼낼 수 있음) 세대가 같아도 고르지 않는다.
+    let expired = claim(-1).await;
+    assert_eq!(expired, newer);
+    assert!(recheck(newer).await.is_empty());
+    owner.close().await;
+}

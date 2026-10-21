@@ -519,6 +519,22 @@ pub async fn drain(
             kind: row.kind,
         });
     }
+    // 보내기 직전에 이 행들을 아직 쥐고 있고(점유가 남음) 세대가 그대로인지 확인하며 점유를 늘린다. 첨부를 읽는 등으로
+    // 점유 시간을 넘긴 사이 더 새 변경이 오르거나 다른 작업 프로세스가 다시 꺼냈으면 옛 내용을 보내지 않는다(늦게 보낸
+    // 옛 내용이 새 색인을 덮었다, 감사 S12). 그 행은 대기열에 남아 다음 차례에 새 내용으로 처리된다.
+    let mut tx = db.begin_anonymous().await?;
+    let held: Vec<(String, Uuid)> =
+        sqlx::query_as("SELECT kind, target_id FROM app_system_search_recheck($1, $2, $3)")
+            .bind(&kinds)
+            .bind(&ids)
+            .bind(claimed.iter().map(|(_, _, at)| *at).collect::<Vec<_>>())
+            .fetch_all(tx.conn())
+            .await?;
+    tx.commit().await?;
+    let held: HashSet<String> = held.iter().map(|(kind, id)| uid(kind, *id)).collect();
+    let stale = claimed.len() - held.len();
+    upserts.retain(|d| held.contains(&d.uid));
+    deletes.retain(|u| held.contains(u));
     let (again, fresh): (Vec<IndexDoc>, Vec<IndexDoc>) =
         upserts.into_iter().partition(|d| retried.contains(&d.uid));
     let mut submitted = upsert_each(client, &fresh, true).await;
@@ -573,7 +589,7 @@ pub async fn drain(
         .execute(tx.conn())
         .await?;
     tx.commit().await?;
-    if finished.is_empty() && pending.is_empty() && settled == 0 {
+    if finished.is_empty() && pending.is_empty() && settled == 0 && stale == 0 {
         return Err(AppError::Config(
             "search indexing made no progress; will retry later".into(),
         ));
