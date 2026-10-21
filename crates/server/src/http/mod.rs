@@ -284,7 +284,6 @@ async fn api_not_found() -> AppError {
         tasks::add_checklist,
         tasks::update_checklist_item,
         tasks::delete_checklist_item,
-        schedule::preview,
         schedule::plan,
         schedule::plan_link,
         schedule::add_predecessor,
@@ -842,7 +841,6 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/tasks/{task_id}/position", put(tasks::move_task))
         .route("/tasks/{task_id}/parent", put(tasks::set_parent))
-        .route("/tasks/{task_id}/schedule-preview", post(schedule::preview))
         .route("/tasks/{task_id}/schedule-plan", post(schedule::plan))
         .route(
             "/tasks/{task_id}/predecessors/{predecessor_id}/schedule-plan",

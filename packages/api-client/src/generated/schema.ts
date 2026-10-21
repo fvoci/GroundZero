@@ -1836,26 +1836,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/tasks/{task_id}/schedule-preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 후속 재배치 미리보기(읽기, 옛 응답 모양). 아무것도 바꾸지 않는다. 업무를 볼 수 없으면 404.
-         *     날짜 없는 업무 알림까지 받으려면 `schedule-plan`을 쓴다.
-         */
-        post: operations["preview_task_schedule"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/tasks/{task_id}/time": {
         parameters: {
             query?: never;
@@ -4257,8 +4237,6 @@ export interface components {
              * @description 하위 업무면 상위 업무.
              */
             parent_id?: string | null;
-            /** @description 같은 항목 안의 선행 업무 id(`predecessors`와 같은 순서). 종류·지연일은 `predecessors`에 있다. */
-            predecessor_ids: string[];
             /** @description 선행 관계: 선행 업무, 종류(FS·SS·FF·SF), 지연일(D-91). 후속 업무는 다른 업무의 이 목록을 거꾸로 찾는다. */
             predecessors: components["schemas"]["TaskLink"][];
             priority: components["schemas"]["TaskPriority"];
@@ -10090,47 +10068,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SchedulePlan"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    preview_task_schedule: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SchedulePreviewInput"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShiftProposal"][];
                 };
             };
             400: {

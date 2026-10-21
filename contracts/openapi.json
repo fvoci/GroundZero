@@ -7927,71 +7927,6 @@
         }
       }
     },
-    "/api/tasks/{task_id}/schedule-preview": {
-      "post": {
-        "tags": [
-          "tasks"
-        ],
-        "summary": "후속 재배치 미리보기(읽기, 옛 응답 모양). 아무것도 바꾸지 않는다. 업무를 볼 수 없으면 404.\n날짜 없는 업무 알림까지 받으려면 `schedule-plan`을 쓴다.",
-        "operationId": "preview_task_schedule",
-        "parameters": [
-          {
-            "name": "task_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SchedulePreviewInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ShiftProposal"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/tasks/{task_id}/time": {
       "get": {
         "tags": [
@@ -15638,7 +15573,6 @@
           "priority",
           "tags",
           "milestone",
-          "predecessor_ids",
           "predecessors",
           "assignees",
           "checklist_done",
@@ -15722,13 +15656,6 @@
             ],
             "format": "uuid",
             "description": "하위 업무면 상위 업무."
-          },
-          "predecessor_ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "같은 항목 안의 선행 업무 id(`predecessors`와 같은 순서). 종류·지연일은 `predecessors`에 있다."
           },
           "predecessors": {
             "type": "array",
