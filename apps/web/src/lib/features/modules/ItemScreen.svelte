@@ -91,6 +91,9 @@
     item = undefined;
     mod = undefined;
     error = undefined;
+    // 앞 항목의 "저장했습니다."·오류를 새 항목에 남기지 않는다.
+    saved = false;
+    formError = undefined;
     api
       .item(id)
       .then(async (it) => {
@@ -125,6 +128,10 @@
   );
   const isOwner = $derived(item?.access === 'owner');
 
+  // 이 화면은 다른 항목으로 옮겨 가도 다시 만들어지지 않는다. 기다리는 사이 옮겨 갔으면 시작한 항목의 결과·오류를
+  // 지금 항목 화면에 넣지 않는다(B 주소에 A가 들어앉지 않게).
+  const stillOn = (id: string): boolean => currentItemId === id;
+
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (item === undefined) return;
@@ -134,38 +141,53 @@
     }
     formError = undefined;
     saved = false;
+    const id = item.id;
     try {
-      fill(
-        await api.updateItem(item.id, {
-          title: title.trim(),
-          description,
-          visibility: shared ? 'workspace' : 'private',
-        }),
-      );
+      const next = await api.updateItem(id, {
+        title: title.trim(),
+        description,
+        visibility: shared ? 'workspace' : 'private',
+      });
       forgetReferences();
+      if (!stillOn(id)) return;
+      fill(next);
       saved = true;
     } catch (e: unknown) {
-      formError = errorText(e, m.modules_save_failed());
+      if (stillOn(id)) formError = errorText(e, m.modules_save_failed());
     }
   }
 
   async function toggleTemplate(): Promise<void> {
     if (item === undefined) return;
+    const id = item.id;
     try {
-      await api.setItemTemplate(item.id, !item.is_template);
-      refresh(await api.item(item.id));
+      await api.setItemTemplate(id, !item.is_template);
+      const next = await api.item(id);
+      if (stillOn(id)) refresh(next);
     } catch (e: unknown) {
-      formError = errorText(e, m.modules_change_failed());
+      if (stillOn(id)) formError = errorText(e, m.modules_change_failed());
     }
   }
 
   async function toggleArchive(): Promise<void> {
     if (item === undefined) return;
+    const id = item.id;
     try {
-      fill(await api.archiveItem(item.id, !item.archived));
+      const next = await api.archiveItem(id, !item.archived);
+      if (stillOn(id)) fill(next);
     } catch (e: unknown) {
-      formError = errorText(e, m.modules_change_failed());
+      if (stillOn(id)) formError = errorText(e, m.modules_change_failed());
     }
+  }
+
+  /** 항목을 다시 읽어 입력 중인 칸은 두고 넣는다. 그사이 다른 항목으로 옮겨 갔으면 버린다. */
+  function reread(id: string, apply: (next: ItemView) => void): void {
+    api
+      .item(id)
+      .then((next) => {
+        if (stillOn(id)) apply(next);
+      })
+      .catch(() => undefined);
   }
 
   // 경로: 워크스페이스는 늘(항목을 못 읽어도 돌아갈 곳), 모듈은 읽은 뒤에.
@@ -328,10 +350,7 @@
         item={view}
         kind={mod.kind}
         onchanged={() => {
-          api
-            .item(current.id)
-            .then(refresh)
-            .catch(() => undefined);
+          reread(current.id, refresh);
         }}
       />
       <RecordsPanel item={current} kind={mod.kind} canWrite={canEdit} />
@@ -423,12 +442,9 @@
       tasksVersion={taskVersion}
       onstale={() => {
         // 권한·보관이 바뀌었을 수 있다. 입력 중인 제목·설명은 두고 항목 상태만 새로 읽는다.
-        api
-          .item(current.id)
-          .then((next) => {
-            item = next;
-          })
-          .catch(() => undefined);
+        reread(current.id, (next: ItemView) => {
+          item = next;
+        });
       }}
     />
     <!-- 일정 목록과 달력은 같은 일정을 따로 읽는다. 한쪽에서 바꾸면 다른 쪽이 다시 읽게 알린다. -->
