@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ItemView, TaskStatus, TaskView } from '$lib/api/client';
 import { api, ApiError, NetworkError } from '$lib/api/client';
 import {
+  backTo,
   classifyMoveError,
   originOf,
   overlayPending,
@@ -66,7 +67,14 @@ function task(id: string, title: string, status: TaskStatus = 'todo', version = 
 
 describe('move result helpers', () => {
   const before = [task('a', 'A'), task('b', 'B'), task('c', 'C', 'in_progress')];
-  const origin = { status: 'todo' as const, nextId: 'b', moveVersion: 1 };
+  const origin = {
+    status: 'todo' as const,
+    nextId: 'b',
+    nextVersion: 1,
+    prevId: null,
+    prevVersion: null,
+    moveVersion: 1,
+  };
   const plan = { status: 'in_progress' as const, beforeId: null };
 
   it('tells applied, not applied, changed and gone apart from a fresh list', () => {
@@ -87,8 +95,53 @@ describe('move result helpers', () => {
     expect(reconcileMove([task('b', 'B')], 'a', origin, plan)).toBe('gone');
   });
 
+  it('a neighbour moved elsewhere does not make a lost move look changed', () => {
+    // A의 요청은 반영되지 않았고(열·이동 판 그대로) 그사이 B가 열 끝으로 옮겨졌다: 여전히 "반영 안 됨"이다.
+    const neighbour = [task('a', 'A'), task('c', 'C'), task('b', 'B', 'todo', 2)];
+    expect(reconcileMove(neighbour, 'a', origin, plan)).toBe('not_applied');
+  });
+
+  it('goes back before the next card, else after the previous one, else to the end', () => {
+    const three = [task('a', 'A'), task('b', 'B'), task('c', 'C')];
+    const from = originOf(three, 'b');
+    if (from === undefined) throw new Error('origin');
+    expect(from).toEqual({
+      status: 'todo',
+      nextId: 'c',
+      nextVersion: 1,
+      prevId: 'a',
+      prevVersion: 1,
+      moveVersion: 1,
+    });
+    // 뒤 업무가 그대로면 그 앞.
+    expect(backTo([task('a', 'A'), task('c', 'C')], from)).toEqual({
+      plan: { status: 'todo', beforeId: 'c' },
+      exact: true,
+    });
+    // 뒤 업무가 옮겨졌으면(판이 오름) 앞 업무 뒤, 곧 그다음 업무 앞.
+    const cMoved = [task('a', 'A'), task('d', 'D'), task('c', 'C', 'todo', 2)];
+    expect(backTo(cMoved, from)).toEqual({ plan: { status: 'todo', beforeId: 'd' }, exact: true });
+    // 앞 업무가 열 끝이면 열 끝(정확한 자리).
+    expect(backTo([task('a', 'A')], from)).toEqual({
+      plan: { status: 'todo', beforeId: null },
+      exact: true,
+    });
+    // 둘 다 없으면 열 끝이되 정확하지 않다고 알린다.
+    expect(backTo([task('d', 'D')], from)).toEqual({
+      plan: { status: 'todo', beforeId: null },
+      exact: false,
+    });
+  });
+
   it('counts a move whose target is the starting place as applied (the state already matches)', () => {
-    const atEnd = { status: 'todo' as const, nextId: null, moveVersion: 1 };
+    const atEnd = {
+      status: 'todo' as const,
+      nextId: null,
+      nextVersion: null,
+      prevId: null,
+      prevVersion: null,
+      moveVersion: 1,
+    };
     expect(reconcileMove([task('a', 'A')], 'a', atEnd, { status: 'todo', beforeId: null })).toBe(
       'applied',
     );
