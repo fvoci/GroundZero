@@ -1193,6 +1193,16 @@ pub struct MovePreview {
     pub children_left_behind: i64,
 }
 
+/// 이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+/// - `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).
+/// - `ErrorBody`(`error: "conflict"`): 실시간 방의 편집을 먼저 리비전으로 남기지 못했다(옮기지 않음, 다시 하면 된다).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum MoveConflict {
+    Preview(Box<MovePreview>),
+    State(ErrorBody),
+}
+
 /// 이동 결과. 이동한 사람이 새 위치에서 문서를 볼 수 없으면 `document`가 없다
 /// (예: 비공개 문서를 작성 권한만 있는 워크스페이스로 옮긴 경우).
 #[derive(Debug, Serialize, ToSchema)]
@@ -1270,7 +1280,7 @@ pub async fn move_preview(
 #[utoipa::path(post, path = "/api/documents/{document_id}/move",
     params(("document_id" = String, Path, format = Uuid)), request_body = MoveDocument,
     responses((status = 200, body = MoveOutcome), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = MovePreview)), tag = "documents")]
+              (status = 404, body = ErrorBody), (status = 409, body = MoveConflict)), tag = "documents")]
 pub async fn move_document(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,

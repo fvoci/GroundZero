@@ -468,6 +468,7 @@ async fn api_not_found() -> AppError {
         documents::MoveTarget,
         documents::MoveDocument,
         documents::MovePreview,
+        documents::MoveConflict,
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
         documents::SetParent,
@@ -1224,5 +1225,29 @@ mod tests {
         assert!(required("TaskConflict").iter().any(|k| k == "current"));
         assert!(!required("ErrorBody").iter().any(|k| k == "current"));
         assert!(required("ErrorBody").iter().any(|k| k == "message"));
+    }
+
+    /// 리뷰: 이동의 409는 두 모양이다. 확인한 미리보기가 맞지 않으면 `MovePreview`, 실시간 방의 편집을 먼저 리비전으로
+    /// 남기지 못하면 `ErrorBody`. 계약이 둘 다 적는다.
+    #[test]
+    fn the_move_conflict_is_a_preview_or_error_body() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
+        let conflict = &doc["paths"]["/api/documents/{document_id}/move"]["post"]["responses"]["409"]
+            ["content"]["application/json"]["schema"];
+        assert_eq!(
+            conflict,
+            &serde_json::json!({ "$ref": "#/components/schemas/MoveConflict" })
+        );
+        let one_of: Vec<&str> = doc["components"]["schemas"]["MoveConflict"]["oneOf"]
+            .as_array()
+            .map(|v| v.iter().filter_map(|s| s["$ref"].as_str()).collect())
+            .unwrap_or_default();
+        assert_eq!(
+            one_of,
+            [
+                "#/components/schemas/MovePreview",
+                "#/components/schemas/ErrorBody"
+            ]
+        );
     }
 }

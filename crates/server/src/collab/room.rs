@@ -405,11 +405,17 @@ impl Rooms {
                 "the live editing room is busy; nothing was moved, try again".into(),
             ));
         }
-        answer.await.unwrap_or_else(|_| {
-            Err(AppError::Conflict(
+        // 방 안의 리비전 남기기에는 시간 제한이 있지만, 방이 앞 명령을 처리하는 동안 기다리는 시간에는 없다. 답 전체를
+        // 그만큼 더 기다리고 넘으면 옮기지 않는다(나중에 방이 리비전을 남겨도 옮기지 않았으니 다시 하면 된다, 리뷰).
+        match tokio::time::timeout(CHECKPOINT_LIMIT * 2, answer).await {
+            Ok(Ok(outcome)) => outcome,
+            Ok(Err(_)) => Err(AppError::Conflict(
                 "the live editing room closed; nothing was moved, try again".into(),
-            ))
-        })
+            )),
+            Err(_) => Err(AppError::Conflict(
+                "the live editing room did not answer in time; nothing was moved, try again".into(),
+            )),
+        }
     }
 
     /// 열린 방이 있으면 그 방이 복원한다(체크포인트 → 복원 → 방 초기화를 한 명령으로). 방이 없으면 `None`(부르는 쪽이

@@ -970,7 +970,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MovePreview"
+                  "$ref": "#/components/schemas/MoveConflict"
                 }
               }
             }
@@ -13147,6 +13147,17 @@
           "course",
           "hobby"
         ]
+      },
+      "MoveConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/MovePreview"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).\n- `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).\n- `ErrorBody`(`error: \"conflict\"`): 실시간 방의 편집을 먼저 리비전으로 남기지 못했다(옮기지 않음, 다시 하면 된다)."
       },
       "MoveDocument": {
         "type": "object",
