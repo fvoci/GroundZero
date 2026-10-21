@@ -973,3 +973,43 @@ async fn moving_before_a_task_in_a_lane_with_duplicate_positions_keeps_the_visib
     assert_eq!(titles, vec!["A", "C", "B"]);
     drop(a);
 }
+
+/// 되돌리기 원점이 잘못된 요청(감사 2번)을 서버가 복원하지 못함을 실제 API로 보인다: [A, B, C]에서 A를 옮긴 뒤 A를
+/// "C 앞"으로 되돌리면(수정 전 웹이 보내던 요청, 정상 이동 판 포함) 서버는 그대로 [B, A, C]로 저장한다. 서버의
+/// 조건(`base_move_version`)은 그사이 바뀐 자리만 막고 위치 의도는 검사할 수 없으므로 원점은 웹이 바르게 잡아야 한다.
+#[tokio::test]
+async fn a_wrong_undo_target_is_saved_as_sent_even_with_a_valid_move_version() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "되돌리기 원점").await;
+    let item = module_item(&app, &admin, &ws, "UNDO").await;
+    let item_id = item["id"].as_str().unwrap().to_owned();
+    let a = task(&app, &admin, &item, "A").await;
+    let _b = task(&app, &admin, &item, "B").await;
+    let c = task(&app, &admin, &item, "C").await;
+    let move_a = |status: &str, before: Value, base: Value| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let uri = format!("/api/tasks/{}/position", a["id"].as_str().unwrap());
+        let body = json!({ "status": status, "before_id": before, "base_move_version": base });
+        async move { send(&app, Method::PUT, &uri, Some(&admin), Some(body)).await }
+    };
+    let moved = move_a("in_progress", Value::Null, Value::Null).await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    // 수정 전 웹의 되돌리기: 화면 배열([A, C, B], B의 낙관적 이동이 얹힘)에서 잡은 원점 "C 앞".
+    let back = move_a("todo", c["id"].clone(), moved.json["move_version"].clone()).await;
+    assert_eq!(back.status, StatusCode::OK, "{:?}", back.json);
+    let (_, list) = get(&app, &admin, &format!("/api/items/{item_id}/tasks")).await;
+    let titles: Vec<&str> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["title"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        titles,
+        vec!["B", "A", "C"],
+        "the server keeps the wrong intent as sent"
+    );
+}

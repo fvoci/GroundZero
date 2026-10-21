@@ -378,7 +378,7 @@
     }
     // 원래 이웃(바로 뒤, 아니면 바로 앞)이 그 열에 그대로 있으면 그 자리로, 둘 다 없으면 열 끝으로 되돌린다(그렇게 알린다).
     const back = backTo(server, u.from);
-    await commitMove(u.id, back.plan, 'menu', u.title, undefined, undefined, {
+    await commitMove(u.id, back.plan, 'menu', u.title, undefined, {
       done: (title, lane) =>
         !back.exact
           ? m.tasks_undone_end({ title, status: STATUS_LABEL[lane] })
@@ -748,7 +748,6 @@
     plan: BoardMove,
     how: PendingMove['how'],
     knownTitle?: string,
-    knownOrigin?: MoveOrigin,
     /** 다시 시도: 이 판의 대기 항목을 그대로 교체한다(지우고 다시 넣는 사이에 같은 카드의 요청이 끼지 않게). */
     replacing?: number,
     /** 되돌리기: 보내기 직전 서버 자리와 그 이동 판을 조건으로 보내고(끼어든 변경은 서버가 409로 거절), 다시 되돌리기는 내놓지 않는다. */
@@ -760,7 +759,7 @@
       return false;
     }
     // 원점은 서버가 확정한 목록에서(화면 배열이 아니라). 확정 목록에 없는 카드(만드는 중)는 옮기지 않는다.
-    const origin = knownOrigin ?? originOf(confirmed, id);
+    const origin = originOf(confirmed, id);
     if (origin === undefined) return false;
     // 같은 카드를 다시 옮기면 앞선 이동의 되돌리기는 더 이상 맞지 않는다.
     if (undoOffer?.id === id) undoOffer = undefined;
@@ -931,7 +930,7 @@
     tasks = overlaid(server, id);
     if (verdict === 'not_applied') {
       // 대기 항목을 지우지 않은 채 교체해 보낸다(그사이 끌기·단추가 같은 카드를 다시 보내지 않게).
-      const sent = commitMove(id, replan(server, p.plan), p.how, p.title, undefined, p.seq);
+      const sent = commitMove(id, replan(server, p.plan), p.how, p.title, p.seq);
       clearMoveNotice();
       await sent;
       return;
