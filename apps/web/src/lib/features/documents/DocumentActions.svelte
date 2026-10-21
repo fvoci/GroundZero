@@ -162,7 +162,9 @@
     try {
       await api.setDocumentTemplate(doc.id, on);
       if (mine === settingsSeq) settingsChanged({ ...doc, is_template: on });
-      else if (alive) void refreshSettings();
+      // 템플릿 응답에는 다른 설정이 없다. 창을 열 때 시작한 다시 읽기가 이 저장 때문에 버려졌을 수 있으므로, 서버의 지금
+      // 값으로 한 번 더 맞춘다(리뷰: 그사이 다른 소유자가 바꾼 비공개·복제 금지가 창을 다시 열 때까지 옛 값으로 보였다).
+      if (alive) void refreshSettings();
     } catch (e: unknown) {
       fail(e);
     } finally {

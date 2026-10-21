@@ -234,4 +234,37 @@ describe('a settings save that finishes after the dialog was reopened', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(changed).not.toHaveBeenCalled();
   });
+
+  // 리뷰: 창을 열 때 시작한 다시 읽기가 끝나기 전에 템플릿을 바꾸면 그 다시 읽기가 버려지고, 템플릿 응답에는 다른
+  // 설정이 없어 그사이 다른 소유자가 바꾼 비공개·복제 금지가 옛 값으로 남았다. 템플릿 저장 뒤 한 번 더 읽는다.
+  it('reads the settings again after a template change that dropped the opening read', async () => {
+    const answers: ((doc: DocumentView) => void)[] = [];
+    const read = vi.spyOn(api, 'document').mockImplementation(
+      () =>
+        new Promise<DocumentView>((resolve) => {
+          answers.push(resolve);
+        }),
+    );
+    vi.spyOn(api, 'setDocumentTemplate').mockResolvedValue(undefined);
+    const changed = vi.fn<(doc: DocumentView) => void>();
+    render(DocumentActions, {
+      props: { doc: documentWith('workspace', true), workspaces, onchanged: changed },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+    await waitFor(() => {
+      expect(read).toHaveBeenCalledTimes(1);
+    });
+    // 여는 다시 읽기가 오기 전에 템플릿을 켠다. 그 사이 서버에서는 비공개·복제 금지가 됐다.
+    await fireEvent.click(await screen.findByRole('checkbox', { name: /^템플릿으로 쓰기/ }));
+    answers[0]?.(documentWith('private', false));
+    await waitFor(() => {
+      expect(read).toHaveBeenCalledTimes(2);
+    });
+    answers[1]?.({ ...documentWith('private', false), is_template: true });
+    await waitFor(() => {
+      expect(changed).toHaveBeenLastCalledWith(
+        expect.objectContaining({ visibility: 'private', allow_copy: false, is_template: true }),
+      );
+    });
+  });
 });
