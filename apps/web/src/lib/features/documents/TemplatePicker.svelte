@@ -19,8 +19,10 @@
   $effect(() => {
     const ws = workspaceId;
     let cancelled = false;
-    // 워크스페이스가 바뀌면 앞 목록에서 고르지 못하게 비우고 새로 읽는다.
+    // 워크스페이스가 바뀌면 앞 목록에서 고르지 못하게 비우고 새로 읽는다. 고른 값도 함께 비운다(새 목록을 읽는 동안이나
+    // 읽지 못하면 선택 칸이 보이지 않는데도 앞 워크스페이스에서 고른 템플릿이 새 문서에 쓰였다).
     templates = [];
+    value = '';
     api
       .documentTemplates(ws)
       .then((list) => {
