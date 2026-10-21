@@ -1376,6 +1376,22 @@ async fn records_keep_a_member_who_left_while_other_fields_change() {
     )
     .await;
     assert_eq!(added.status, StatusCode::BAD_REQUEST, "{:?}", added.json);
+    // 리뷰: 출석에 남은 나간 사람을 다른 칸(진행자)에 새로 넣는 것은 새로 넣는 것이라 확인한다.
+    let promoted = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&admin),
+        Some(json!({ "version": 2, "title": "1회 모임",
+        "fields": { "attendees": [admin.id.0, gone.id.0], "presenter": gone.id.0 } })),
+    )
+    .await;
+    assert_eq!(
+        promoted.status,
+        StatusCode::BAD_REQUEST,
+        "{:?}",
+        promoted.json
+    );
     // 나간 사람을 빼는 것도 된다.
     let dropped = send(
         &app,
