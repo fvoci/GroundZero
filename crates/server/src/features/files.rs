@@ -152,10 +152,12 @@ struct UploadRow {
     failure: Option<String>,
     version_id: Option<Uuid>,
     expires_at: OffsetDateTime,
+    /// 마치기 시도의 점유를 구별한다(`app_begin_complete`가 그 시도에 매긴 시각, 0088).
+    state_changed_at: OffsetDateTime,
 }
 
 const UPLOAD_COLUMNS: &str = "id, name, size, chunk_bytes, storage_key, storage_upload_id, state, failure, \
-                              version_id, expires_at";
+                              version_id, expires_at, state_changed_at";
 
 fn parts_total(size: i64, chunk: i64) -> i64 {
     ((size + chunk - 1) / chunk).max(1)
@@ -378,20 +380,29 @@ pub async fn complete_upload(
     if row.state != "done" {
         // 연결이 끊겨도(프록시 시간 제한 등) 합치기·확인·기록은 끝까지 한다. 다시 요청하면 결과를 본다.
         let worker = state.clone();
+        let claim = row.state_changed_at;
         // 따로 도는 작업에도 요청 id를 붙인다(실패 줄을 사용자가 본 요청 id로 찾게, D-83).
         let request_id = crate::logging::current_request_id().unwrap_or_default();
         let finished = tokio::spawn(crate::logging::REQUEST_ID.scope(request_id, async move {
-            finish(&worker, user, id, row, parts).await
+            let result = finish(&worker, user, id, row, parts, claim).await;
+            if result.is_err() {
+                // 마무리 작업이 멈췄다. 일시적 실패(저장소 읽기 오류, 연결 풀 대기 초과, 교착 등)로 'completing'에
+                // 남았으면 점유를 바로 풀어, 다시 요청이 5분 동안 "마치는 중"(409)을 받지 않게 한다(감사 S11). 연결이
+                // 끊겨 이 요청의 핸들러가 사라져도 풀리게 작업 안에서 푼다. 닫거나 되돌린 업로드, 다른 시도가 넘겨받은
+                // 점유는 그대로다.
+                release_claim(&worker, user, id, claim).await;
+            }
+            result
         }))
-        .await
-        .map_err(|e| AppError::Config(format!("upload completion task: {e}")))
-        .and_then(|r| r);
-        if let Err(err) = finished {
-            // 마무리 작업은 멈췄다. 일시적 실패(저장소 읽기 오류, 연결 풀 대기 초과, 교착 등)로 'completing'에 남았으면
-            // 점유를 바로 풀어, 다시 요청이 5분 동안 "마치는 중"(409)을 받지 않게 한다(감사 S11). 닫거나 되돌린 업로드는
-            // 그대로다.
-            release_claim(&state, user, id).await;
-            return Err(err);
+        .await;
+        match finished {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => return Err(err),
+            Err(e) => {
+                // 작업이 패닉 등으로 끝나 스스로 풀지 못했다.
+                release_claim(&state, user, id, claim).await;
+                return Err(AppError::Config(format!("upload completion task: {e}")));
+            }
         }
     }
     let mut tx = state.db.begin_as(user).await?;
@@ -408,6 +419,7 @@ async fn finish(
     id: UploadId,
     row: UploadRow,
     parts: Vec<(i32, String, i64)>,
+    claim: OffsetDateTime,
 ) -> Result<(), AppError> {
     let storage_upload = row.storage_upload_id.clone().unwrap_or_default();
     let parts: Vec<Part> = parts
@@ -429,6 +441,7 @@ async fn finish(
         Err(err) => {
             tracing::warn!(event = "upload.assemble_failed", upload = %id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "storage could not assemble the upload");
             let mut tx = state.db.begin_as(user).await?;
+            hold_claim(&mut tx, id, claim).await?;
             sqlx::query("SELECT app_reset_upload($1)")
                 .bind(id)
                 .execute(tx.conn())
@@ -448,11 +461,12 @@ async fn finish(
         Err(_) => None,
     };
     if let Some(reason) = failure {
-        fail(state, user, id, &reason).await?;
+        fail(state, user, id, claim, &reason).await?;
         return Err(AppError::Conflict(format!("the upload failed: {reason}")));
     }
     let (sha256, _) = checked?;
     let mut tx = state.db.begin_as(user).await?;
+    hold_claim(&mut tx, id, claim).await?;
     let finished = sqlx::query("SELECT app_finish_upload($1, $2, $3, $4)")
         .bind(id)
         .bind(&sha256)
@@ -472,19 +486,21 @@ async fn finish(
                 .is_some_and(|c| matches!(c.as_ref(), "P0002" | "42501" | "55000"));
             let err = AppError::from_db_function(err);
             if lasting {
-                fail(state, user, id, &err.to_string()).await?;
+                fail(state, user, id, claim, &err.to_string()).await?;
             }
             Err(err)
         }
     }
 }
 
-/// 멈춘 마무리의 점유를 푼다. 실패해도 원래 오류를 돌려주는 게 우선이라 기록만 남긴다(5분 뒤 넘겨받기는 그대로 된다).
-async fn release_claim(state: &AppState, user: UserId, id: UploadId) {
+/// 멈춘 마무리의 점유를 푼다(이 시도의 점유일 때만, 0088). 실패해도 원래 오류를 돌려주는 게 우선이라 기록만
+/// 남긴다(5분 뒤 넘겨받기는 그대로 된다).
+async fn release_claim(state: &AppState, user: UserId, id: UploadId, claim: OffsetDateTime) {
     let released = async {
         let mut tx = state.db.begin_as(user).await?;
-        sqlx::query("SELECT app_release_upload_claim($1)")
+        sqlx::query("SELECT app_release_upload_claim($1, $2)")
             .bind(id)
+            .bind(claim)
             .execute(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;
@@ -496,8 +512,33 @@ async fn release_claim(state: &AppState, user: UserId, id: UploadId) {
     }
 }
 
-async fn fail(state: &AppState, user: UserId, id: UploadId, reason: &str) -> Result<(), AppError> {
+/// 이 시도가 아직 마무리를 맡고 있는지 행을 잠근 채 확인한다(0088). 5분 뒤 다른 요청이 넘겨받았으면 늦게 돌아온 이
+/// 시도는 업로드를 되돌리거나(받은 조각 삭제) 기록·닫지 않는다.
+async fn hold_claim(tx: &mut UserTx, id: UploadId, claim: OffsetDateTime) -> Result<(), AppError> {
+    let held: bool = sqlx::query_scalar("SELECT app_upload_claim_held($1, $2)")
+        .bind(id)
+        .bind(claim)
+        .fetch_one(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    if held {
+        Ok(())
+    } else {
+        Err(AppError::Conflict(
+            "another request took over completing this upload".into(),
+        ))
+    }
+}
+
+async fn fail(
+    state: &AppState,
+    user: UserId,
+    id: UploadId,
+    claim: OffsetDateTime,
+    reason: &str,
+) -> Result<(), AppError> {
     let mut tx = state.db.begin_as(user).await?;
+    hold_claim(&mut tx, id, claim).await?;
     sqlx::query("SELECT app_fail_upload($1, $2)")
         .bind(id)
         .bind(reason)
