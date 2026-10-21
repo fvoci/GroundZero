@@ -87,6 +87,7 @@
   "study_timer_busy": "A timer is already running. Stop it first.",
   "study_delete": "Delete",
   "study_deleted": "Deleted {title}.",
+  "study_delete_confirm": "Deleting this unit also deletes every participant's progress and personal notes on it. This cannot be undone. Delete it?",
   "study_done_amount_invalid": "The amount done must be a whole number, 0 or more.",
   "study_progress_saved": "{title}: progress saved.",
   "study_done_amount": "Amount done ({unit})",

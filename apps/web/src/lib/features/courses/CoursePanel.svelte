@@ -1,6 +1,8 @@
 <script lang="ts">
   // 강의 모듈의 강좌 화면(D-37): 강좌 정보, 진도 요약, 회차 목록과 내 진도, 회차 추가·CSV 일괄 등록, 함께
   // 수강하는 사람의 진도 집계. 완료는 직접 표시한다. 회차마다 강의 시간 측정을 시작할 수 있다(D-32).
+  import { tick } from 'svelte';
+
   import type { CourseView, EpisodeStatus, EpisodeView, ParticipantView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { RetryKey } from '$lib/api/retry-key';
@@ -66,6 +68,18 @@
   let csvText = $state('');
   /** 공통 정보(번호·제목·링크·자료 등)를 고치는 회차와, 고치기를 열 때(또는 마지막으로 확인할 때) 읽은 그 회차. */
   let editingEpisode = $state<EpisodeView | undefined>(undefined);
+  /**
+   * 지우기를 한 번 더 묻는 회차. 회차를 지우면 서버가 모든 참여자의 그 회차 진도와 개인 메모(본인만 읽는다)까지
+   * 지우고 되돌릴 수 없어, 한 번에 지우지 않고 그 영향을 알린 뒤 지운다.
+   */
+  let confirmingDelete = $state<string | undefined>(undefined);
+  let confirmDeleteButton = $state<HTMLButtonElement | null>(null);
+
+  async function askDelete(id: string): Promise<void> {
+    confirmingDelete = id;
+    await tick();
+    confirmDeleteButton?.focus();
+  }
   // 번호 칸(type="number")은 숫자를 주고, 비우면 null을 준다.
   let shared = $state<{
     number: number | null;
@@ -556,14 +570,37 @@
                   editEpisode(e);
                 }}>{m.courses_edit()}</Button
               >
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-label={m.courses_delete_aria({ number: e.number })}
-                onclick={() =>
-                  void run(() => api.deleteEpisode(e.id), m.courses_deleted({ number: e.number }))}
-                >{m.courses_delete()}</Button
-              >
+              {#if confirmingDelete !== e.id}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={m.courses_delete_aria({ number: e.number })}
+                  onclick={() => void askDelete(e.id)}>{m.courses_delete()}</Button
+                >
+              {:else}
+                <span class="flex flex-wrap items-center gap-1 text-sm">
+                  <span id={`episode-delete-warning-${e.id}`}
+                    >{m.courses_delete_confirm({ number: e.number })}</span
+                  >
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    bind:ref={confirmDeleteButton}
+                    aria-label={m.courses_delete_aria({ number: e.number })}
+                    aria-describedby={`episode-delete-warning-${e.id}`}
+                    onclick={() => {
+                      confirmingDelete = undefined;
+                      void run(
+                        () => api.deleteEpisode(e.id),
+                        m.courses_deleted({ number: e.number }),
+                      );
+                    }}>{m.courses_delete()}</Button
+                  >
+                  <Button size="sm" variant="ghost" onclick={() => (confirmingDelete = undefined)}
+                    >{m.common_cancel()}</Button
+                  >
+                </span>
+              {/if}
             {/if}
           </div>
           {#if e.materials !== ''}
