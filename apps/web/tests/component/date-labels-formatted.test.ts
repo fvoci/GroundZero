@@ -93,6 +93,40 @@ describe('dates inside localized text', () => {
     expect(range).toContain(formatDay('2026-11-04'));
   });
 
+  // 리뷰: 시각이 있는 일정은 날짜를 `YYYY-MM-DD` 그대로 적었다(보는 시간대의 날짜와 일정 시간대 기준 시각 모두).
+  // 날짜만 공통 서식으로 바꾸고 시각(`HH:mm`)과 시간대 계산은 그대로다.
+  it('formats the dates of a timed event and keeps the clock', () => {
+    const timed = (over: Partial<EventView>): EventView =>
+      event({
+        all_day: false,
+        start_date: null,
+        end_date: null,
+        starts_at: '2026-11-02T00:00:00Z',
+        ends_at: '2026-11-02T01:00:00Z',
+        timezone: 'Asia/Seoul',
+        ...over,
+      });
+
+    const sameDay = describeWhen(timed({}), 'Asia/Seoul');
+    expect(sameDay).not.toMatch(ISO_DATE);
+    expect(sameDay).toBe(`${formatDay('2026-11-02')} 09:00–10:00`);
+
+    const twoDays = describeWhen(timed({ ends_at: '2026-11-03T01:00:00Z' }), 'Asia/Seoul');
+    expect(twoDays).not.toMatch(ISO_DATE);
+    expect(twoDays).toBe(`${formatDay('2026-11-02')} 09:00 ~ ${formatDay('2026-11-03')} 10:00`);
+
+    // 일정 시간대(뉴욕, 11월 1일 저녁)가 보는 시간대와 다르면 그 기준 시각도 같은 서식으로 적는다.
+    const otherZone = describeWhen(timed({ timezone: 'America/New_York' }), 'Asia/Seoul');
+    expect(otherZone).not.toMatch(ISO_DATE);
+    expect(otherZone).toBe(
+      m.events_when_in_zone({
+        span: `${formatDay('2026-11-02')} 09:00–10:00`,
+        zone: 'America/New_York',
+        time: `${formatDay('2026-11-01')} 19:00`,
+      }),
+    );
+  });
+
   it('formats the single-occurrence label in the event dialog', async () => {
     vi.spyOn(api, 'event').mockResolvedValue(
       event({

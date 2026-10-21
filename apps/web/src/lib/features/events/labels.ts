@@ -4,7 +4,7 @@ import type { EventKind, EventView, RecurrenceRule } from '$lib/api/client';
 import { formatDay, weekdays } from '$lib/display';
 import { m } from '$lib/paraglide/messages.js';
 
-import { clock, dayIn, wallTime } from './time';
+import { clock, dayIn } from './time';
 
 export const KIND_LABEL: Record<EventKind, string> = {
   get meeting() {
@@ -31,15 +31,16 @@ export function describeWhen(event: EventView, viewerZone: string): string {
   if (event.starts_at === null || event.ends_at === null) return '';
   const startDay = dayIn(event.starts_at, viewerZone);
   const endDay = dayIn(event.ends_at, viewerZone);
+  // 날짜는 표시 언어의 서식으로(D-81), 시각은 그대로 `HH:mm`.
   const span =
     startDay === endDay
-      ? `${startDay} ${clock(event.starts_at, viewerZone)}–${clock(event.ends_at, viewerZone)}`
-      : `${startDay} ${clock(event.starts_at, viewerZone)} ~ ${endDay} ${clock(event.ends_at, viewerZone)}`;
+      ? `${formatDay(startDay)} ${clock(event.starts_at, viewerZone)}–${clock(event.ends_at, viewerZone)}`
+      : `${formatDay(startDay)} ${clock(event.starts_at, viewerZone)} ~ ${formatDay(endDay)} ${clock(event.ends_at, viewerZone)}`;
   if (event.timezone === viewerZone) return span;
   return m.events_when_in_zone({
     span,
     zone: event.timezone,
-    time: wallTime(event.starts_at, event.timezone).replace('T', ' '),
+    time: `${formatDay(dayIn(event.starts_at, event.timezone))} ${clock(event.starts_at, event.timezone)}`,
   });
 }
 
