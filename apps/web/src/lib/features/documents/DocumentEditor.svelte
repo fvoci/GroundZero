@@ -31,6 +31,7 @@
     loadOffers,
     plainText,
     removeOffer,
+    sameContent,
     storeDraft,
     takeOrReserve,
   } from './drafts';
@@ -108,13 +109,15 @@
     restorableQueued = true;
     return draft;
   }
-  // 고르게 할 줄(실시간 편집기·닫힌 탭이 남긴 것)의 첫 초안.
-  function nextOffer(): Draft | undefined {
+  // 고르게 할 줄(실시간 편집기·닫힌 탭이 남긴 것)의 첫 초안. `except`(방금 고른 초안)는 줄에서 빼지 못해 남았어도
+  // 다시 내놓지 않는다.
+  function nextOffer(except?: Draft): Draft | undefined {
     for (const queued of loadOffers(start.id)) {
       if (isServer(queued)) {
         removeOffer(start.id, queued);
         continue;
       }
+      if (except?.savedAt === queued.savedAt && sameContent(queued, except)) continue;
       restorableQueued = true;
       return queued;
     }
@@ -350,6 +353,7 @@
 
   function restoreDraft(): void {
     if (restorable === undefined) return;
+    const done = restorable;
     // 줄의 초안이면 이 편집기의 초안으로 먼저 옮겨 둔 뒤에 줄에서 뺀다(옮기지 못하면 줄에 남긴다).
     if (restorableQueued && storeDraft(server.id, restorable)) {
       removeOffer(server.id, restorable);
@@ -364,9 +368,13 @@
     server = { ...server, revision: restorable.baseRevision };
     restorable = undefined;
     edited();
+    // 줄에 다음 초안이 있으면 이어 고르게 한다(다시 열 때까지 숨지 않게).
+    restorableQueued = false;
+    restorable = nextOffer(done);
   }
 
   function discardDraft(): void {
+    const done = restorable;
     // 줄의 초안이면 줄에서만 뺀다(이 탭의 초안 키에는 그사이의 입력이 있다).
     if (restorable !== undefined && restorableQueued) removeOffer(server.id, restorable);
     else {
@@ -375,8 +383,9 @@
       reservedDraft = false;
       if (isDirty()) keepDraft();
     }
+    // 줄에 다음 초안이 있으면 이어 고르게 한다(다시 열 때까지 숨지 않게).
     restorableQueued = false;
-    restorable = undefined;
+    restorable = nextOffer(done);
   }
 
   function statusText(s: Status): string {

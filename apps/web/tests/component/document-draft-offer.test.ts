@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DocNode, DocumentView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import DocumentEditor from '$lib/features/documents/DocumentEditor.svelte';
-import { loadDraft, loadOffers, storeDraft } from '$lib/features/documents/drafts';
+import { loadDraft, loadOffers, queueDraft, storeDraft } from '$lib/features/documents/drafts';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
@@ -142,5 +142,59 @@ describe('typing before answering the draft offer', () => {
     // 버리면 그 자리에 지금 편집이 남는다(여기서는 이미 저장되어 남길 것이 없다).
     await fireEvent.click(screen.getByRole('button', { name: '초안 버리기' }));
     expect(keptTitles()).toEqual([]);
+  });
+});
+
+// 고르게 할 초안이 둘 이상이면 하나를 되살리거나 버린 뒤 다음 것을 바로 고르게 한다(다시 열 때까지 숨지 않는다).
+describe('more than one draft to offer', () => {
+  beforeEach(() => {
+    // 고르게 할 줄에 초안이 둘 있다(지난번 초안, 그 뒤의 두 번째 초안). 이 탭의 키에는 없다.
+    queueDraft('doc-1');
+    storeDraft('doc-1', {
+      baseRevision: 5,
+      title: '두 번째 초안',
+      body: paragraph('두 번째 본문'),
+      savedAt: '2026-10-19T02:00:00Z',
+    });
+    queueDraft('doc-1');
+    vi.spyOn(api, 'saveDocument').mockReturnValue(new Promise(() => undefined));
+  });
+
+  it('offers the next draft right after discarding one', async () => {
+    render(DocumentEditor, { props: { initial: documentAt(5, '제목', serverBody) } });
+    await fireEvent.click(screen.getByRole('button', { name: '초안 버리기' }));
+
+    expect(screen.getByRole('region', { name: '보관된 초안' })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: '초안 복원' }));
+    expect(titleInput().value).toBe('두 번째 초안');
+    expect(screen.queryByRole('region', { name: '보관된 초안' })).toBeNull();
+  });
+
+  it('offers the next draft right after restoring one', async () => {
+    render(DocumentEditor, { props: { initial: documentAt(5, '제목', serverBody) } });
+    await fireEvent.click(screen.getByRole('button', { name: '초안 복원' }));
+    expect(titleInput().value).toBe('지난번 초안');
+
+    expect(screen.getByRole('region', { name: '보관된 초안' })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: '초안 버리기' }));
+    expect(screen.queryByRole('region', { name: '보관된 초안' })).toBeNull();
+    // 되살린 초안은 지금 편집으로 남아 있다.
+    expect(keptTitles()).toEqual(['지난번 초안']);
+  });
+
+  it('offers the next draft, not the restored one again, when it could not leave the queue', async () => {
+    // 지금 편집의 키에 쓸 자리가 없다: 되살린 초안은 줄에 남지만(사라지지 않게) 곧바로 다시 고르게 하지 않고 다음 것을
+    // 고르게 한다.
+    const setItem = window.localStorage.setItem.bind(window.localStorage);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation((key: string, value: string) => {
+      if (key.includes(':tab:')) throw new DOMException('full', 'QuotaExceededError');
+      setItem(key, value);
+    });
+    render(DocumentEditor, { props: { initial: documentAt(5, '제목', serverBody) } });
+    await fireEvent.click(screen.getByRole('button', { name: '초안 복원' }));
+    expect(titleInput().value).toBe('지난번 초안');
+
+    await fireEvent.click(screen.getByRole('button', { name: '초안 복원' }));
+    expect(titleInput().value).toBe('두 번째 초안');
   });
 });
