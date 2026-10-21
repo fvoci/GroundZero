@@ -773,3 +773,75 @@ async fn a_running_timer_keeps_its_pauses_inside_its_span() {
     let long_enough = put_second(&kept.json, text(started - Duration::hours(2))).await;
     assert_eq!(long_enough.status, StatusCode::OK, "{:?}", long_enough.json);
 }
+
+/// 감사 S21·S20: 0시가 두 번 오는 날(아바나 2025-11-02, 05:00Z에 01:00 → 00:00)의 앞쪽 0시~1시 기록이 집계에서
+/// 빠지거나 줄었고, 목록은 그 기록을 전날에 두었다. 하루는 그날 0시가 처음 오는 시점부터다. 또 아주 긴 기록도 조회
+/// 기간의 날만큼만 나눠 같은 값을 낸다.
+#[tokio::test]
+async fn days_start_at_the_first_midnight_and_long_entries_split_within_the_range() {
+    let state = common::state();
+    let app = common::app(&state);
+    let user = login(&state, "havana").await;
+    let add = |started: &str, ended: &str| {
+        let app = app.clone();
+        let user = user.clone();
+        let body = manual(started, ended, "study", Value::Null);
+        async move {
+            let r = send(
+                &app,
+                Method::POST,
+                "/api/me/time-entries",
+                Some(&user),
+                Some(body),
+            )
+            .await;
+            assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+            r.json
+        }
+    };
+    let get = |uri: String| {
+        let app = app.clone();
+        let user = user.clone();
+        async move {
+            let r = send(&app, Method::GET, &uri, Some(&user), None).await;
+            assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+            r.json
+        }
+    };
+    let rows = |v: &Value| -> Vec<(String, i64)> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                (
+                    r["period"].as_str().unwrap().to_owned(),
+                    r["seconds"].as_i64().unwrap(),
+                )
+            })
+            .collect()
+    };
+
+    // 앞쪽 00:30~00:50(CDT) 20분과, 앞쪽 00:30부터 뒤쪽 01:00(CST)까지 90분.
+    add("2025-11-02T04:30:00Z", "2025-11-02T04:50:00Z").await;
+    add("2025-11-02T04:30:00Z", "2025-11-02T06:00:00Z").await;
+    let day = get(
+        "/api/me/time-summary?from=2025-10-27&to=2025-11-02&tz=America/Havana&group=day".into(),
+    )
+    .await;
+    assert_eq!(rows(&day), [("2025-11-02".to_owned(), 1200 + 5400)]);
+    let listed =
+        get("/api/me/time-entries?from=2025-11-02&to=2025-11-02&tz=America/Havana".into()).await;
+    assert_eq!(listed.as_array().unwrap().len(), 2, "{listed:?}");
+    let before =
+        get("/api/me/time-entries?from=2025-11-01&to=2025-11-01&tz=America/Havana".into()).await;
+    assert!(before.as_array().unwrap().is_empty(), "{before:?}");
+
+    // 0001년부터 9999년까지의 기록: 어느 기간을 물어도 그 기간의 날만큼(UTC 하루 86400초)만 나눈다.
+    add("0001-01-01T00:00:00Z", "9999-12-31T23:59:59Z").await;
+    let week =
+        get("/api/me/time-summary?from=2026-03-02&to=2026-03-08&tz=UTC&group=day".into()).await;
+    let week = rows(&week);
+    assert_eq!(week.len(), 7, "{week:?}");
+    assert!(week.iter().all(|(_, s)| *s == 86_400), "{week:?}");
+    assert_eq!(week[0].0, "2026-03-02");
+}
