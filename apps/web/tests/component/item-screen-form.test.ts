@@ -179,6 +179,80 @@ describe('item info form while the item is read again', () => {
   });
 });
 
+// 리뷰: 공개 범위는 체크를 바꿨을 때만 보낸다(감사 W13). 비공개 항목을 공개로 바꿔 저장하고, 응답 전에 체크를 풀어 다시
+// 저장하면 그 저장은 아직 비공개인 연 때 값과 같아 공개 범위를 보내지 않았다. 먼저 보낸 공개가 서버에 남는데 화면은
+// 비공개로 보였다. 저장이 끝날 때까지 다시 보내지 않고, 끝난 뒤의 저장은 응답 값과 비교해 비공개를 보낸다.
+describe('item info save while a visibility change is in flight', () => {
+  it('sends no second save until the public one returns, then sends private', async () => {
+    await setLocale('ko', { reload: false });
+    quietServer();
+    mockItem(item({ visibility: 'private' }));
+    // 서버의 공개 범위. 첫 저장은 손으로 끝내고, 그 뒤의 저장은 보낸 공개 범위만 바꾼다(없으면 그대로).
+    let serverVisibility: ItemView['visibility'] = 'private';
+    let finishFirst: (next: ItemView) => void = () => undefined;
+    const update = vi
+      .spyOn(api, 'updateItem')
+      .mockImplementationOnce(
+        () =>
+          new Promise<ItemView>((resolve) => {
+            finishFirst = resolve;
+          }),
+      )
+      .mockImplementation((_id: string, input: Parameters<typeof api.updateItem>[1]) => {
+        serverVisibility = input.visibility ?? serverVisibility;
+        return Promise.resolve(item({ visibility: serverVisibility }));
+      });
+    render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+
+    const sharedBox = await screen.findByLabelText(/워크스페이스 멤버에게 공개/);
+    const form = screen.getByRole('form', { name: '항목 정보' });
+    const saveButton = within(form).getByRole('button', { name: '저장' });
+    await fireEvent.click(sharedBox);
+    await fireEvent.submit(form);
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(1);
+    });
+    expect(update.mock.calls[0]?.[1]).toEqual({
+      title: '항목',
+      description: '원래 설명',
+      visibility: 'workspace',
+    });
+
+    // 응답 전에 체크를 풀고 다시 보낸다(두 번 누르기·Enter). 그 저장이 있었다면 끝까지 돌게 둔다.
+    await fireEvent.click(sharedBox);
+    await fireEvent.submit(form);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(saveButton).toBeDisabled();
+
+    // 첫 저장이 서버에 공개를 넣고 돌아온다. 보낸 뒤 푼 체크는 그대로 둔다.
+    serverVisibility = 'workspace';
+    finishFirst(item({ visibility: 'workspace' }));
+    await screen.findByText('워크스페이스 공개');
+    expect(sharedBox).not.toBeChecked();
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled();
+    });
+
+    // 끝난 뒤 다시 저장하면 응답(공개)과 다르므로 비공개를 보낸다.
+    await fireEvent.submit(form);
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]?.[1]).toEqual({
+      title: '항목',
+      description: '원래 설명',
+      visibility: 'private',
+    });
+    expect(await screen.findByText('저장했습니다.')).toBeInTheDocument();
+    // 화면은 서버에 남은 값과 같다.
+    expect(serverVisibility).toBe('private');
+    expect(screen.getByText('비공개')).toBeInTheDocument();
+    expect(screen.queryByText('워크스페이스 공개')).toBeNull();
+    expect(sharedBox).not.toBeChecked();
+  });
+});
+
 function task(id: string, title: string): TaskView {
   return {
     id,

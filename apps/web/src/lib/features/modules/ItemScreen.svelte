@@ -142,9 +142,16 @@
   // 아니면 버린다(앞 A 화면의 늦은 저장이 새 A 화면에 "저장했습니다."를 띄우거나 새로 읽은 값을 옛 값으로 되돌렸다).
   const stillOn = (id: string, mine: number): boolean => currentItemId === id && loadSeq === mine;
 
+  /**
+   * 항목 정보를 저장하는 중. 공개 범위는 체크를 바꿨을 때만 보내므로, 공개로 바꾼 저장이 끝나기 전에 체크를 풀고 다시
+   * 저장하면 그 저장은 아직 비공개인 `filled`와 같아 공개 범위를 보내지 않았다. 먼저 보낸 공개가 서버에 남는데 화면은
+   * 비공개로 보였다. 끝날 때까지 다시 보내지 않고, 다음 저장은 응답으로 채운 값과 비교한다.
+   */
+  let saving = $state(false);
+
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (item === undefined) return;
+    if (item === undefined || saving) return;
     if (title.trim() === '') {
       formError = m.modules_title_required();
       return;
@@ -158,6 +165,7 @@
       shared === filled.shared ? undefined : shared ? 'workspace' : 'private';
     // 보낸 입력. 응답을 기다리는 사이 더 고친 칸은 응답 값으로 덮지 않는다(보내지 않은 입력이 사라지지 않게).
     const sent = { title, description, shared };
+    saving = true;
     try {
       const next = await api.updateItem(id, {
         title: title.trim(),
@@ -172,6 +180,8 @@
         title === filled.title && description === filled.description && shared === filled.shared;
     } catch (e: unknown) {
       if (stillOn(id, mine)) formError = errorText(e, m.modules_save_failed());
+    } finally {
+      saving = false;
     }
   }
 
@@ -341,7 +351,7 @@
           </div>
         {/if}
         <div class="flex gap-2">
-          <Button type="submit">{m.common_save()}</Button>
+          <Button type="submit" disabled={saving}>{m.common_save()}</Button>
           {#if isOwner}
             <Button type="button" variant="outline" onclick={() => void toggleArchive()}
               >{m.modules_archive()}</Button
