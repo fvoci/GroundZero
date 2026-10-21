@@ -32,6 +32,10 @@
   // 보존 기간 칸의 입력·저장 오류는 그 칸 옆에 보인다(D-82).
   let daysError = $state<string | undefined>(undefined);
   let versionDaysError = $state<string | undefined>(undefined);
+  // 칸마다 마지막으로 낸 저장 번호. 앞서 낸 저장의 늦은 실패가 그 뒤 저장(성공했거나 입력 오류로 막힌 것)의 칸을
+  // 덮지 않게 한다.
+  let daysSeq = 0;
+  let versionDaysSeq = 0;
   let reloadKey = $state(0);
 
   const isAdmin = $derived(workspace === undefined || workspace.role === 'admin');
@@ -136,6 +140,7 @@
       class="flex flex-wrap items-end gap-2"
       onsubmit={(e) => {
         e.preventDefault();
+        const mine = ++daysSeq;
         const n = Number(days.trim());
         if (!Number.isInteger(n) || n < 1 || n > 3650) {
           daysError = m.trash_retention_invalid();
@@ -145,7 +150,9 @@
         void run(
           () => api.setTrashRetention(workspace.id, n),
           m.trash_retention_changed({ days: n }),
-          (text: string) => (daysError = text),
+          (text: string) => {
+            if (mine === daysSeq) daysError = text;
+          },
         );
       }}
     >
@@ -173,6 +180,7 @@
       aria-label={m.trash_version_retention_region()}
       onsubmit={(e) => {
         e.preventDefault();
+        const mine = ++versionDaysSeq;
         const raw = versionDays.trim();
         const n = raw === '' ? null : Number(raw);
         if (n !== null && (!Number.isInteger(n) || n < 1 || n > 3650)) {
@@ -183,7 +191,9 @@
         void run(
           () => api.setVersionRetention(workspace.id, n),
           n === null ? m.trash_versions_forever() : m.trash_versions_days({ days: n }),
-          (text: string) => (versionDaysError = text),
+          (text: string) => {
+            if (mine === versionDaysSeq) versionDaysError = text;
+          },
         );
       }}
     >

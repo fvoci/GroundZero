@@ -78,4 +78,57 @@ describe('trash retention field errors', () => {
     expect(set).toHaveBeenCalledWith('ws-1', 90);
     expect(input).toHaveValue('90');
   });
+
+  // 리뷰 지적: 같은 칸을 연달아 저장하면, 앞 저장의 늦은 실패가 뒤 저장이 성공한 칸에 오류로 남았다.
+  async function saveTwiceThenFailFirst(
+    label: string,
+    install: (first: () => Promise<undefined>) => void,
+  ): Promise<HTMLElement> {
+    let reject: (e: unknown) => void = () => undefined;
+    install(
+      () =>
+        new Promise<undefined>((_, no: (e: unknown) => void) => {
+          reject = no;
+        }),
+    );
+    render(TrashScreen, { props: { workspace } });
+    const days = await screen.findByLabelText('보존 기간(일)');
+    await vi.waitFor(() => {
+      expect(days).toHaveValue('30');
+    });
+    const input = screen.getByLabelText(label);
+    const form = input.closest('form');
+    if (form === null) throw new Error('form');
+    await fireEvent.input(input, { target: { value: '40' } });
+    await fireEvent.submit(form);
+    await fireEvent.input(input, { target: { value: '45' } });
+    await fireEvent.submit(form);
+    await new Promise((r) => setTimeout(r, 0));
+
+    reject(new ApiError(400, 'bad_request', 'days must be 1..3650'));
+    await new Promise((r) => setTimeout(r, 0));
+    return input;
+  }
+
+  it('does not mark the trash retention field with an earlier save that failed late', async () => {
+    const input = await saveTwiceThenFailFirst('보존 기간(일)', (first) => {
+      vi.spyOn(api, 'setTrashRetention')
+        .mockImplementationOnce(first)
+        .mockResolvedValueOnce(undefined);
+    });
+    expect(input).not.toHaveAttribute('aria-invalid', 'true');
+    expect(describedText(input)).toBeUndefined();
+    expect(input).toHaveValue('45');
+  });
+
+  it('does not mark the version retention field with an earlier save that failed late', async () => {
+    const input = await saveTwiceThenFailFirst('이전 파일 버전 보존(일, 비우면 영구)', (first) => {
+      vi.spyOn(api, 'setVersionRetention')
+        .mockImplementationOnce(first)
+        .mockResolvedValueOnce(undefined);
+    });
+    expect(input).not.toHaveAttribute('aria-invalid', 'true');
+    expect(describedText(input)).toBeUndefined();
+    expect(input).toHaveValue('45');
+  });
 });
