@@ -173,7 +173,7 @@ pub struct Participant {
     pub done_seconds: i64,
 }
 
-/// 오늘(사용자 시간대의 날짜).
+/// 오늘(사용자 시간대의 날짜). 서버 날짜에서 하루 넘게 떨어지면 400.
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct TodayQuery {
     #[param(value_type = String, format = Date)]
@@ -424,7 +424,7 @@ pub async fn set_progress(
 /// 함께 수강하는 사람들의 진도 집계(볼 수 있는 사람).
 #[utoipa::path(get, path = "/api/items/{item_id}/course/participants", operation_id = "course_participants",
     params(("item_id" = String, Path, format = Uuid), TodayQuery),
-    responses((status = 200, body = [Participant]), (status = 404, body = ErrorBody)), tag = "courses")]
+    responses((status = 200, body = [Participant]), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "courses")]
 pub async fn participants(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,

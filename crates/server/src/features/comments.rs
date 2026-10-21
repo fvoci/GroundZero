@@ -34,9 +34,10 @@ pub struct Comment {
     pub deleted: bool,
     /// 스레드 첫 댓글의 해결 표시.
     pub resolved: bool,
+    /// 쓴 사람이 고칠 수 있는지(지운 댓글이나 보관된 항목의 댓글은 아님).
     pub can_edit: bool,
     pub can_delete: bool,
-    /// 스레드를 해결·해제할 수 있는지(첫 댓글에서만).
+    /// 스레드를 해결·해제할 수 있는지(첫 댓글에서만, 보관된 항목에서는 아님).
     pub can_resolve: bool,
 }
 
@@ -89,12 +90,14 @@ async fn list(
     document: Option<Uuid>,
     task: Option<Uuid>,
 ) -> Result<Vec<Comment>, AppError> {
-    let access: Option<String> = sqlx::query_scalar("SELECT app_comment_target_access($1, $2)")
-        .bind(document)
-        .bind(task)
-        .fetch_one(tx.conn())
-        .await?;
-    let Some(access) = access else {
+    // 보관된 항목의 댓글은 고치거나 해결하지 못한다(서버가 409). 표시도 서버의 같은 판단을 따른다.
+    let target: Option<(String, bool)> =
+        sqlx::query_as("SELECT access, archived FROM app_comment_target_state($1, $2)")
+            .bind(document)
+            .bind(task)
+            .fetch_optional(tx.conn())
+            .await?;
+    let Some((access, archived)) = target else {
         return Err(AppError::NotFound);
     };
     let me = tx.user();
@@ -137,9 +140,9 @@ async fn list(
                     edited,
                     deleted,
                     resolved,
-                    can_edit: mine && !deleted,
+                    can_edit: mine && !deleted && !archived,
                     can_delete: (mine || owner) && !deleted,
-                    can_resolve: parent_id.is_none() && (mine || writer),
+                    can_resolve: parent_id.is_none() && (mine || writer) && !archived,
                 }
             },
         )
@@ -212,7 +215,7 @@ pub async fn add(
 #[utoipa::path(put, path = "/api/comments/{comment_id}", operation_id = "edit_comment",
     params(("comment_id" = String, Path, format = Uuid)), request_body = EditComment,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "comments")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "comments")]
 pub async fn edit(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -254,7 +257,7 @@ pub async fn delete(
 #[utoipa::path(post, path = "/api/comments/{comment_id}/resolve", operation_id = "resolve_comment",
     params(("comment_id" = String, Path, format = Uuid)), request_body = ResolveComment,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "comments")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "comments")]
 pub async fn resolve(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
