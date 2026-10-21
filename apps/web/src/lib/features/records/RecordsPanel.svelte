@@ -39,10 +39,13 @@
   let creating = $state(false);
   let editingId = $state<string | undefined>(undefined);
   /**
-   * 고치는 기록의 기준 판: 고치기를 연 때(또는 409 뒤 다시 확인할 때) 읽은 판. 저장 때의 최신 목록에서 가져오면 고치는
-   * 사이 목록을 다시 읽은 것만으로 서버의 판 확인이 꺼져 다른 사람의 고침을 덮는다.
+   * 고치는 기록의 기준 판: 고치기를 연 때 읽은 판. 저장 때의 최신 목록에서 가져오면 고치는 사이 목록을 다시 읽은 것만으로
+   * 서버의 판 확인이 꺼져 다른 사람의 고침을 덮는다. 409 뒤에도 그대로 두고, 사용자가 충돌 안내에서 서버 내용 불러오기나
+   * 덮어쓰기를 골랐을 때만 그 판으로 옮긴다.
    */
   let editingVersion = 0;
+  /** 409 뒤 다시 읽은, 다른 사람이 먼저 고친 그 기록의 지금 내용. 고르기 전에는 입력과 기준 판을 그대로 둔다. */
+  let conflict = $state<RecordView | undefined>(undefined);
   let confirming = $state<string | undefined>(undefined);
   // 같은 종류 기록을 표로 나란히 비교(D-34 선행연구 비교 등).
   let asTable = $state(false);
@@ -120,6 +123,7 @@
     form = emptyForm();
     createKey.done();
     editingId = undefined;
+    conflict = undefined;
     creating = true;
   }
 
@@ -128,12 +132,20 @@
     creating = false;
     editingId = r.id;
     editingVersion = r.version;
+    conflict = undefined;
+  }
+
+  /** 충돌 안내에서 덮어쓰기를 골랐다: 보여 준 서버 판을 기준으로 내 입력을 저장한다(그사이 또 바뀌면 다시 409로 알린다). */
+  async function overwrite(def: RecordKindView, latest: RecordView): Promise<void> {
+    editingVersion = latest.version;
+    conflict = undefined;
+    await save(def);
   }
 
   /**
-   * 409를 받은 뒤 이 항목의 기록을 다시 읽는다. 다른 사람이 먼저 고쳐 판이 바뀌었으면(보관으로 막힌 409와 구분) 기준을
-   * 지금 판으로 바꾸고 알린다(입력은 그대로, 다시 저장하면 명시적으로 바꾼다). 기록이 지워졌으면 고치기를 닫고 알린다.
-   * 처리했으면 true.
+   * 409를 받은 뒤 이 항목의 기록을 다시 읽는다. 다른 사람이 먼저 고쳐 판이 바뀌었으면(보관으로 막힌 409와 구분) 입력과
+   * 기준 판은 그대로 두고 지금 저장된 내용을 보여 준다. 다시 저장해도 같은 기준 판을 보내 덮어쓰지 않고, 덮어쓰기를
+   * 골라야 바꾼다. 기록이 지워졌으면 고치기를 닫고 알린다. 처리했으면 true.
    */
   async function recordMovedOn(id: string, version: number): Promise<boolean> {
     let list: RecordView[];
@@ -152,8 +164,7 @@
       return true;
     }
     if (latest.version === version) return false;
-    editingVersion = latest.version;
-    error = m.records_changed();
+    conflict = latest;
     return true;
   }
 
@@ -182,11 +193,12 @@
       }
       creating = false;
       editingId = undefined;
+      conflict = undefined;
       reloadKey += 1;
     } catch (e: unknown) {
-      const conflict = e instanceof ApiError && e.status === 409;
-      if (conflict && base !== undefined && (await recordMovedOn(base.id, base.version))) return;
-      error = conflict ? m.records_conflict() : errorText(e, m.records_save_failed());
+      const refused = e instanceof ApiError && e.status === 409;
+      if (refused && base !== undefined && (await recordMovedOn(base.id, base.version))) return;
+      error = refused ? m.records_conflict() : errorText(e, m.records_save_failed());
     }
   }
 
@@ -221,6 +233,7 @@
             selected = d.kind;
             creating = false;
             editingId = undefined;
+            conflict = undefined;
           }}>{recordKindLabel(d)} {count(d.kind)}</Button
         >
       {/each}
@@ -324,6 +337,50 @@
         {#each shown as r (r.id)}
           <li class="flex flex-col gap-1 rounded-md border p-2 text-sm">
             {#if editingId === r.id}
+              {#if conflict?.id === r.id}
+                {@const latest = conflict}
+                <!-- 다른 사람이 먼저 고쳤다: 지금 저장된 내용을 보이고, 불러올지 덮어쓸지 사용자가 고른다(일정 충돌과 같은 원칙). -->
+                <div
+                  class="flex flex-col gap-2 rounded-md border border-amber-500/50 p-3"
+                  role="alert"
+                >
+                  <p>{m.records_changed()}</p>
+                  <dl class="grid grid-cols-[max-content_1fr] gap-x-3">
+                    <dt class="text-muted-foreground">{m.records_title()}</dt>
+                    <dd>{latest.title}</dd>
+                    {#if latest.occurred_on !== null && dateLabel !== null}
+                      <dt class="text-muted-foreground">{dateLabel}</dt>
+                      <dd>{formatDay(latest.occurred_on)}</dd>
+                    {/if}
+                    {#each summary(def, latest, names, courseNames) as line (line.key)}
+                      <dt class="text-muted-foreground">{line.label}</dt>
+                      <dd class="whitespace-pre-wrap">{line.text}</dd>
+                    {/each}
+                    {#if latest.body !== ''}
+                      <dt class="text-muted-foreground">{m.records_body()}</dt>
+                      <dd class="whitespace-pre-wrap">{latest.body}</dd>
+                    {/if}
+                    {#if latest.files.length > 0}
+                      <dt class="text-muted-foreground">{m.records_linked_files()}</dt>
+                      <dd>
+                        {latest.files.map((f) => `${f.file_name} v${String(f.version)}`).join(', ')}
+                      </dd>
+                    {/if}
+                  </dl>
+                  <div class="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onclick={() => {
+                        startEdit(def, latest);
+                      }}>{m.records_load_server()}</Button
+                    >
+                    <Button size="sm" onclick={() => void overwrite(def, latest)}
+                      >{m.records_overwrite()}</Button
+                    >
+                  </div>
+                </div>
+              {/if}
               <RecordEditor
                 {def}
                 bind:form
@@ -335,6 +392,7 @@
                 oncancel={() => {
                   creating = false;
                   editingId = undefined;
+                  conflict = undefined;
                 }}
               />
             {:else}

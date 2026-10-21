@@ -113,14 +113,59 @@ describe('record edit base version', () => {
     expect(update.mock.calls[0]?.[1]).toBe(3);
   });
 
-  it('keeps the typed input on 409 and saves over the newer version only when saved again', async () => {
+  // 리뷰: 409 뒤 기준 판을 말없이 최신 판으로 옮기면, 다시 저장만 눌러도 다른 사람이 고친 칸을 보지도 못한 채
+  // 덮어썼다. 입력과 고치기를 연 때의 판을 그대로 두고 지금 저장된 내용을 보인 뒤, 덮어쓰기를 골라야만 최신 판으로 보낸다.
+  it('keeps the typed input and the edit-start version on 409; overwrites only through the explicit button', async () => {
     await setLocale('ko', { reload: false });
-    // 처음 판 3 → 409 뒤 다시 읽으면 판 5 → 다시 저장한 뒤 다시 읽기.
+    // 처음 판 3 → 409 뒤 다시 읽으면 남이 고친 판 5 → 덮어쓴 뒤 다시 읽기.
     mockPanel(
       [record('r', '위험 R', 3)],
       [record('r', '남이 고친 R', 5)],
+      [record('r', '남이 고친 R', 5)],
       [record('r', '최종', 6)],
     );
+    // 서버처럼 판 5를 기준으로 보낼 때만 받아들인다.
+    const update = vi
+      .spyOn(api, 'updateRecord')
+      .mockImplementation((_id: string, version: number) =>
+        version === 5
+          ? Promise.resolve(6)
+          : Promise.reject(new ApiError(409, 'conflict', 'the record changed')),
+      );
+    render(RecordsPanel, { props: { item, kind: 'project', canWrite: true } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    await fireEvent.input(titleInput(), { target: { value: '내가 고친 R' } });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('다른 사람이 이 기록을 먼저 고쳤습니다');
+    // 지금 저장된 내용(남이 고친 제목)을 보인다.
+    expect(alert).toHaveTextContent('남이 고친 R');
+    expect(titleInput().value).toBe('내가 고친 R');
+
+    // 그냥 다시 저장하면 여전히 고치기를 연 때의 판을 보낸다(말없이 덮어쓰지 않는다).
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await vi.waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]?.[1]).toBe(3);
+    expect(await screen.findByRole('alert')).toHaveTextContent('남이 고친 R');
+    expect(titleInput().value).toBe('내가 고친 R');
+
+    // 덮어쓰기를 골라야 보여 준 최신 판을 기준으로 내 입력을 보낸다.
+    await fireEvent.click(screen.getByRole('button', { name: '내 입력으로 덮어쓰기' }));
+    await vi.waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(3);
+    });
+    expect(update.mock.calls[2]?.[1]).toBe(5);
+    expect(update.mock.calls[2]?.[2].title).toBe('내가 고친 R');
+    expect(await screen.findByText('최종')).toBeInTheDocument();
+  });
+
+  it('loads the saved version into the form when asked, and then edits from it', async () => {
+    await setLocale('ko', { reload: false });
+    mockPanel([record('r', '위험 R', 3)], [record('r', '남이 고친 R', 5)]);
     const update = vi
       .spyOn(api, 'updateRecord')
       .mockRejectedValueOnce(new ApiError(409, 'conflict', 'the record changed'))
@@ -130,19 +175,17 @@ describe('record edit base version', () => {
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await fireEvent.input(titleInput(), { target: { value: '내가 고친 R' } });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await screen.findByRole('alert');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '다른 사람이 이 기록을 먼저 고쳤습니다',
-    );
-    expect(titleInput().value).toBe('내가 고친 R');
+    await fireEvent.click(screen.getByRole('button', { name: '저장된 내용 불러오기' }));
+    expect(titleInput().value).toBe('남이 고친 R');
+    expect(screen.queryByRole('alert')).toBeNull();
 
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await vi.waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
     expect(update.mock.calls[1]?.[1]).toBe(5);
-    expect(update.mock.calls[1]?.[2].title).toBe('내가 고친 R');
-    expect(await screen.findByText('최종')).toBeInTheDocument();
   });
 
   it('closes the editor with a not-found message when the record was deleted meanwhile', async () => {
