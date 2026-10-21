@@ -2,8 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { EventView, RecurrenceRule } from '$lib/api/client';
-import { api, ApiError } from '$lib/api/client';
+import { api, RuleConflict } from '$lib/api/client';
 import EventDialog from '$lib/features/events/EventDialog.svelte';
+import { describeRule } from '$lib/features/events/labels';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -12,6 +13,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 기준으로 보내 입력한 규칙으로 바꾼다.
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 const monday: RecurrenceRule = {
@@ -50,13 +52,20 @@ function ruleForm(): HTMLFormElement {
   return form;
 }
 
+function reply(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 describe('event rule saved from a stale rule', () => {
   it('shows the current rule, keeps the typed one, and saves it on the next try', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'event').mockResolvedValueOnce(ev(5, monday)).mockResolvedValue(ev(6, monWed));
+    vi.spyOn(api, 'event').mockResolvedValue(ev(5, monday));
     const setRule = vi
       .spyOn(api, 'setEventRecurrence')
-      .mockRejectedValueOnce(new ApiError(409, 'rule_conflict', 'rule_conflict'))
+      .mockRejectedValueOnce(new RuleConflict(ev(6, monWed)))
       .mockImplementation((_id: string, rule: RecurrenceRule | null) =>
         Promise.resolve(ev(7, rule)),
       );
@@ -86,5 +95,55 @@ describe('event rule saved from a stale rule', () => {
     });
     expect(setRule.mock.calls[1]?.[2]).toEqual(monWed);
     expect(setRule.mock.calls[1]?.[1]?.weekdays).toEqual([1, 5]);
+  });
+
+  // 리뷰: 충돌 뒤 일정을 따로 다시 읽었는데, 그 읽기가 실패하면 옛 규칙이 남아 다시 저장해도 옛 기준을 보내 같은 409만
+  // 되풀이했다. 서버는 409에 지금 일정을 함께 주므로 그것을 쓴다(다시 읽기에 기대지 않는다).
+  it('takes the current rule from the conflict reply even when the event cannot be read again', async () => {
+    await setLocale('ko', { reload: false });
+    const puts: unknown[] = [];
+    let gets = 0;
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? 'GET';
+      if (url === '/api/events/A' && method === 'GET') {
+        gets += 1;
+        return Promise.resolve(
+          gets === 1
+            ? reply(200, ev(5, monday))
+            : reply(500, { error: 'internal', message: 'read failed' }),
+        );
+      }
+      if (url === '/api/events/A/recurrence' && method === 'PUT') {
+        const raw = init?.body;
+        puts.push(typeof raw === 'string' ? JSON.parse(raw) : null);
+        return Promise.resolve(
+          puts.length === 1
+            ? reply(409, { error: 'rule_conflict', current: ev(6, monWed) })
+            : reply(200, ev(7, { ...monWed, weekdays: [1, 5] })),
+        );
+      }
+      return Promise.resolve(reply(404, { error: 'not_found', message: url }));
+    });
+    render(EventDialog, {
+      props: { eventId: 'A', onclose: () => undefined, onchanged: () => undefined },
+    });
+    await screen.findByDisplayValue('회의');
+
+    await fireEvent.click(document.getElementById('event-recurrence-wd-5') ?? document.body);
+    await fireEvent.submit(ruleForm());
+    expect(await screen.findByText(m.events_rule_changed_meanwhile())).toBeTruthy();
+    const summary =
+      document.querySelector('[aria-labelledby="event-recurrence-heading"] > p')?.textContent ?? '';
+
+    // 다시 저장하면 409가 알려 준 지금 규칙(월·수)을 기준으로 보낸다.
+    await fireEvent.submit(ruleForm());
+    await waitFor(() => {
+      expect(puts).toHaveLength(2);
+    });
+    expect(puts[1]).toMatchObject({ base: monWed, rule: { weekdays: [1, 5] } });
+    expect(summary).toContain(describeRule(monWed));
+    // 충돌 뒤 일정을 따로 다시 읽지 않는다.
+    expect(gets).toBe(1);
   });
 });

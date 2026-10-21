@@ -2,7 +2,7 @@
   // 일정 상세 대화상자: 보기·고치기·지우기. 고치기는 기준 버전으로 충돌을 막고, 충돌하면 입력을 두고 서버 내용을
   // 보여 준다(D-53과 같은 원칙). 지우기는 한 번 더 묻는다(행은 남고 휴지통 조각에서 되살린다).
   import type { EventInput, EventView, RecurrenceRule } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { api, ApiError, RuleConflict } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import { m } from '$lib/paraglide/messages.js';
@@ -130,16 +130,10 @@
     try {
       saved = await sending(api.setEventRecurrence(id, rule, event.recurrence));
     } catch (e: unknown) {
-      if (e instanceof ApiError && e.code === 'rule_conflict' && mine === shown) {
-        // 지금 규칙을 요약에 보이고 다음 저장의 기준으로 삼는다. 입력한 칸은 그대로 둔다(다시 저장하면 덮어씀).
-        // 일정 입력의 기준 판은 두어, 일정 저장이 다른 사람의 변경을 충돌로 드러내게 한다.
-        try {
-          const fresh = await sending(api.event(id));
-          if (mine === shown) event = fresh;
-        } catch {
-          // 다시 읽지 못했어도 이유는 반복 편집기가 보인다.
-        }
-      }
+      // 서버가 거절하며 함께 준 지금 규칙을 요약에 보이고 다음 저장의 기준으로 삼는다(따로 다시 읽지 않으니 다시 읽기가
+      // 실패해 옛 기준으로 같은 409를 되풀이할 일이 없다). 입력한 칸은 그대로 둔다(다시 저장하면 덮어씀).
+      // 일정 입력의 기준 판은 두어, 일정 저장이 다른 사람의 변경을 충돌로 드러내게 한다.
+      if (e instanceof RuleConflict && mine === shown) event = e.current;
       throw e;
     }
     if (mine !== shown) {
