@@ -104,12 +104,17 @@
   }
   /**
    * 미리 보기 막대를 그릴 열 범위(0 ~ 마지막 열)로 자른다. `draft`는 실제 날짜의 열 번호 그대로 두고 막대를 그릴 때만
-   * 자른다: 연결선은 `draft`를 그대로 써서 표 밖으로 나간 끝을 가장자리에 붙이지 않고 숨긴다(#39).
+   * 자른다: 연결선은 `draft`를 그대로 써서 표 밖으로 나간 끝을 가장자리에 붙이지 않고 숨긴다(#39). 기간 전체가 표 밖이면
+   * (`off`) 보이는 열이 하나도 없으므로 가장자리 한 칸에 붙여 그리지 않고 막대·◆를 숨긴다(실제와 다른 날짜를 보이지 않게).
    */
-  function shownSpan(s: { from: number; to: number }): { from: number; to: number } {
+  function shownSpan(s: { from: number; to: number }): { from: number; to: number; off: boolean } {
     const last = layout.days - 1;
     const from = Math.min(Math.max(s.from, 0), last);
-    return { from, to: Math.max(Math.min(s.to, last), from) };
+    return {
+      from,
+      to: Math.max(Math.min(s.to, last), from),
+      off: s.to < 0 || s.from > last,
+    };
   }
   function move(event: PointerEvent): void {
     const d = drag;
@@ -422,7 +427,8 @@
       {/each}
 
       {#each layout.rows as row, index (row.task.id)}
-        {@const span = draft?.id === row.task.id ? shownSpan(draft) : row}
+        {@const span =
+          draft?.id === row.task.id ? shownSpan(draft) : { from: row.from, to: row.to, off: false }}
         <!-- 줄 번호를 정해 둔다: 연결선 층이 같은 칸을 덮어도 격자가 줄을 다른 자리로 밀지 않게. -->
         <div
           class="sticky left-0 z-10 overflow-hidden border-b bg-background p-1"
@@ -486,14 +492,17 @@
               style:left={`calc(${String(todayColumn)} * ${String(col)}rem + ${String(col / 2)}rem)`}
             ></div>
           {/if}
+          <!-- 미리 보기가 표 밖으로 다 나가면 숨기기만 하고 요소는 둔다: 끄는 요소가 포인터를 잡고 있어 빼면 끌기가 끊긴다. -->
           {#if row.task.milestone}
             <div
               class={[
                 'absolute top-1/2 z-[2] size-3 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-primary',
                 editable(row.task) && 'cursor-grab touch-none',
+                span.off && 'invisible',
               ]}
               style:left={`calc(${String(span.from)} * ${String(col)}rem + ${String(col / 2)}rem)`}
               data-gantt-bar={row.task.id}
+              data-gantt-offchart={span.off ? 'true' : undefined}
               role="presentation"
               onpointerdown={(e: PointerEvent) => {
                 start(e, row, 'move');
@@ -509,10 +518,12 @@
                 row.task.status === 'done' ? 'bg-muted-foreground/40' : 'bg-primary/70',
                 editable(row.task) && 'cursor-grab touch-none',
                 draft?.id === row.task.id && 'ring-2 ring-ring',
+                span.off && 'invisible',
               ]}
               style:left={`calc(${String(span.from)} * ${String(col)}rem + 0.125rem)`}
               style:width={`calc(${String(span.to - span.from + 1)} * ${String(col)}rem - 0.25rem)`}
               data-gantt-bar={row.task.id}
+              data-gantt-offchart={span.off ? 'true' : undefined}
               role="presentation"
               onpointerdown={(e: PointerEvent) => {
                 start(e, row, 'move');
