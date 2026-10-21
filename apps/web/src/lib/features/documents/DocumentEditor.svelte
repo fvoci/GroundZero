@@ -139,17 +139,26 @@
     }, delay);
   }
 
+  function keepDraft(): void {
+    storeDraft(server.id, {
+      baseRevision: server.revision,
+      title,
+      body,
+      savedAt: new Date().toISOString(),
+    });
+  }
+
   function edited(): void {
-    if (!server.can_edit || status === 'conflict') return;
+    if (!server.can_edit) return;
+    if (status === 'conflict') {
+      // 충돌 화면을 보며 고친 내용도 초안에 남긴다(떠나거나 새로고침해도 남게). 상태와 저장은 사용자가 고를 때까지 둔다.
+      keepDraft();
+      return;
+    }
     const signedOut = status === 'signed-out';
     status = isDirty() ? 'dirty' : 'saved';
     if (status === 'dirty') {
-      storeDraft(server.id, {
-        baseRevision: server.revision,
-        title,
-        body,
-        savedAt: new Date().toISOString(),
-      });
+      keepDraft();
       schedule(AUTOSAVE_DELAY_MS);
     } else {
       // 서버 내용과 같아졌으면(문제 내용을 지우는 등) 지난 저장 안내는 더 필요 없다(로그아웃 안내는 남긴다).
