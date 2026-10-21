@@ -144,6 +144,13 @@ enum Command {
     Snapshot {
         done: oneshot::Sender<()>,
     },
+    /// 모아 둔 변경을 넣고 아직 리비전으로 남지 않은 편집을 지금 리비전으로 남긴 뒤, 남겼는지(남길 것이 없었으면 Ok)
+    /// 답한다. 문서를 옮기기 직전에 쓴다(남기지 못하면 옮기지 않는다). `fallback`은 편집한 사람이 남길 수 없을 때의
+    /// 작성자(옮기는 소유 권한자).
+    Checkpoint {
+        fallback: UserId,
+        done: oneshot::Sender<Result<(), AppError>>,
+    },
     /// 옛 리비전으로 복원한다. 체크포인트(리비전으로 남기지 않은 편집 남기기) → 복원 → 방 초기화를 이 명령 하나 안에서
     /// 해 그 사이 편집·참여가 끼어들지 않게 한다. 체크포인트가 실패하거나 시간 안에 끝나지 않으면 복원하지 않는다.
     Restore {
@@ -379,6 +386,36 @@ impl Rooms {
             done,
         })
         .await;
+    }
+
+    /// 이 문서의 열린 방이 아직 리비전으로 남지 않은 편집을 지금 남기게 하고 답을 기다린다(문서 옮기기 직전, 감사 S6).
+    /// 방이 없거나 남길 것이 없으면 Ok. 남기지 못했거나 시간 안에 끝나지 않았거나 방이 바쁘거나 그사이 닫혔으면 409다
+    /// (옮기지 않는다. 다시 하면 된다). `fallback`은 편집한 사람이 남길 수 없을 때의 작성자(옮기는 소유 권한자).
+    pub async fn checkpoint(&self, doc: DocumentId, fallback: UserId) -> Result<(), AppError> {
+        let Some(handle) = self.lock().get(&doc).cloned() else {
+            return Ok(());
+        };
+        let (done, answer) = oneshot::channel();
+        if handle
+            .tx
+            .try_send(Command::Checkpoint { fallback, done })
+            .is_err()
+        {
+            return Err(AppError::Conflict(
+                "the live editing room is busy; nothing was moved, try again".into(),
+            ));
+        }
+        // 방 안의 리비전 남기기에는 시간 제한이 있지만, 방이 앞 명령을 처리하는 동안 기다리는 시간에는 없다. 답 전체를
+        // 그만큼 더 기다리고 넘으면 옮기지 않는다(나중에 방이 리비전을 남겨도 옮기지 않았으니 다시 하면 된다, 리뷰).
+        match tokio::time::timeout(CHECKPOINT_LIMIT * 2, answer).await {
+            Ok(Ok(outcome)) => outcome,
+            Ok(Err(_)) => Err(AppError::Conflict(
+                "the live editing room closed; nothing was moved, try again".into(),
+            )),
+            Err(_) => Err(AppError::Conflict(
+                "the live editing room did not answer in time; nothing was moved, try again".into(),
+            )),
+        }
     }
 
     /// 열린 방이 있으면 그 방이 복원한다(체크포인트 → 복원 → 방 초기화를 한 명령으로). 방이 없으면 `None`(부르는 쪽이
@@ -686,6 +723,32 @@ impl Room {
                 // 리비전을 남기면 상태도 저장한다. 남기지 못하면(편집할 수 있는 사람이 없음 등) 방에 그대로 둔다.
                 let _kept = self.snapshot().await;
                 let _ignored = done.send(());
+                true
+            }
+            Command::Checkpoint { fallback, done } => {
+                self.flush().await;
+                // 복원 앞의 체크포인트와 같다. 남겼는지 확인되지 않으면 옮기지 않는다(그 편집은 방에 남는다).
+                let outcome = if self.dirty_since_snapshot {
+                    self.changed_outside = false;
+                    match tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot_with(Some(fallback)))
+                        .await
+                    {
+                        Ok(true) if !self.changed_outside => Ok(()),
+                        Ok(true) => Err(AppError::Conflict(
+                            "the document changed outside live editing before its live edits were saved; nothing was moved".into(),
+                        )),
+                        Ok(false) => Err(AppError::Conflict(
+                            "live edits could not be saved as a revision first; nothing was moved, try again".into(),
+                        )),
+                        Err(_) => Err(AppError::Conflict(
+                            "saving live edits as a revision took too long; nothing was moved, try again"
+                                .into(),
+                        )),
+                    }
+                } else {
+                    Ok(())
+                };
+                let _ignored = done.send(outcome);
                 true
             }
             Command::Restore { request, done } => {
