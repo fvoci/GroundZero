@@ -21,7 +21,6 @@ const task = {
   estimate_minutes: null,
   tags: [],
   milestone: false,
-  predecessor_ids: ['a'],
   predecessors: [{ task_id: 'a', kind: 'FS', lag_days: 0 }],
   series: null,
   occurrence_date: null,
