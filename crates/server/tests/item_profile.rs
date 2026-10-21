@@ -431,7 +431,7 @@ async fn items_copy_with_fresh_numbers_and_templates() {
         Method::PUT,
         &format!("/api/tasks/{b_id}/predecessors/{a_id}"),
         Some(&writer),
-        None,
+        Some(json!({ "kind": "FS", "lag_days": 0, "base": null })),
     )
     .await;
     assert!(dep.status.is_success(), "{:?}", dep.json);

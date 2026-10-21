@@ -148,7 +148,7 @@ describe('task detail dependency kinds', () => {
       within(panel).getByRole('button', { name: '관계 저장하고 후속 업무 옮기기' }),
     );
     await waitFor(() => {
-      expect(set).toHaveBeenCalledWith('b', 'a', 'SS', 3, [
+      expect(set).toHaveBeenCalledWith('b', 'a', 'SS', 3, { kind: 'SS', lag_days: 1 }, [
         { task_id: 'b', base_version: 1, start_date: '2026-10-22', due_date: '2026-10-24' },
       ]);
     });
@@ -200,6 +200,48 @@ describe('task detail dependency kinds', () => {
     expect(set).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the typed values and shows the latest link when the link changed elsewhere meanwhile', async () => {
+    // 감사 W4: 편집을 시작한 관계(SS·1)가 그사이 다른 곳에서 FF·4로 바뀌었다. 서버가 409 link_conflict로 거절하면
+    // 덮지 않고 최신 관계를 알리며, 입력한 지연일은 그대로 두고 다음 저장은 최신 관계를 기준으로 보낸다.
+    await setLocale('ko', { reload: false });
+    mount();
+    vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    const latest = {
+      ...build,
+      version: 2,
+      predecessors: [{ task_id: 'a', kind: 'FF' as const, lag_days: 4 }],
+      checklist: [],
+    };
+    const set = vi
+      .spyOn(api, 'setPredecessor')
+      .mockResolvedValueOnce({ kind: 'link_conflict', current: latest })
+      .mockResolvedValueOnce({
+        kind: 'updated',
+        task: { ...latest, version: 3, predecessors: [{ task_id: 'a', kind: 'SS', lag_days: 2 }] },
+      });
+    await editLagTo('2');
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledTimes(1);
+    });
+    expect(set.mock.calls[0]?.[4]).toEqual({ kind: 'SS', lag_days: 1 });
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      '지금: 종료 후 종료 (FF), 4일 뒤',
+    );
+    const lag = screen.getByLabelText('지연(일)');
+    expect(lag instanceof HTMLInputElement ? lag.value : '').toBe('2');
+    await fireEvent.click(screen.getByRole('button', { name: '관계 저장' }));
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledTimes(2);
+    });
+    expect(set.mock.calls[1]?.slice(0, 5)).toEqual([
+      'b',
+      'a',
+      'SS',
+      2,
+      { kind: 'FF', lag_days: 4 },
+    ]);
+  });
+
   it('saves directly when nothing moves and says which undated followers were not checked', async () => {
     await setLocale('ko', { reload: false });
     mount();
@@ -213,7 +255,7 @@ describe('task detail dependency kinds', () => {
       .mockResolvedValue({ kind: 'updated', task: { ...build, checklist: [] } });
     await editLagTo('0');
     await waitFor(() => {
-      expect(set).toHaveBeenCalledWith('b', 'a', 'SS', 0, []);
+      expect(set).toHaveBeenCalledWith('b', 'a', 'SS', 0, { kind: 'SS', lag_days: 1 }, []);
     });
     expect((await screen.findByTestId('link-status')).textContent).toContain(
       '날짜가 없어 옮기지 않는 업무: KED-c 검토',
@@ -255,7 +297,7 @@ describe('task detail dependency kinds', () => {
     expect(set).not.toHaveBeenCalled();
     await fireEvent.click(within(panel).getByRole('button', { name: '관계만 저장' }));
     await waitFor(() => {
-      expect(set).toHaveBeenCalledWith('b', 'a', 'SS', 3, []);
+      expect(set).toHaveBeenCalledWith('b', 'a', 'SS', 3, { kind: 'SS', lag_days: 1 }, []);
     });
   });
 
