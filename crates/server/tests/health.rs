@@ -194,3 +194,14 @@ async fn assets_are_served_precompressed_when_available() {
     assert_eq!(header(&headers, "content-encoding"), None);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// 감사 C33: 로그인 화면이 처음 읽는 `GET /api/auth-info`에는 시험이 없었다. 로그인 없이 읽고, OIDC를 설정하지 않은
+/// 서버는 꺼짐으로 답한다.
+#[tokio::test]
+async fn auth_info_is_public_and_reports_whether_oidc_is_configured() {
+    let state = common::state();
+    let app = common::app(&state);
+    let r = common::send(&app, axum::http::Method::GET, "/api/auth-info", None, None).await;
+    assert_eq!(r.status, axum::http::StatusCode::OK, "{:?}", r.json);
+    assert_eq!(r.json, serde_json::json!({ "oidc_enabled": false }));
+}

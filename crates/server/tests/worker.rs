@@ -85,14 +85,13 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
     let series = r.json["series"]["id"].as_str().unwrap().to_owned();
     fixture_sql("DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date", &series).await;
 
+    // 작업은 DB 전체를 본다. 같은 DB를 쓰는 다른 시험이 남긴 묶음이나, 한국 자정을 넘기면 앞선 시험들의 매일 반복도
+    // 함께 처리되므로 전체 수가 아니라 이 시험의 묶음·반복만 센다(전에는 자정에 돈 CI에서 회차 2로 실패했다).
     let report = worker::run_all_now(&state.db, None, None).await.unwrap();
-    assert_eq!(report.purged, 1);
-    assert_eq!(report.occurrences, 1);
-    // 다시 돌려도 더 할 일이 없다.
-    assert_eq!(
-        worker::run_all_now(&state.db, None, None).await.unwrap(),
-        worker::TickReport::default()
-    );
+    assert!(report.purged >= 1, "{report:?}");
+    assert!(report.occurrences >= 1, "{report:?}");
+    // 다시 돌려도 이 시험의 일은 더 없다(아래에서 회차 1개·만료 묶음만 지워졌음을 본다).
+    worker::run_all_now(&state.db, None, None).await.unwrap();
 
     let entries = send(
         &app,

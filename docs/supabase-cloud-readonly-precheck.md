@@ -2,7 +2,7 @@
 
 전용 Supabase Cloud의 **Session pooler에 TLS로 연결하여 읽기 전용 `SELECT 1`만 수행**하는
 Rust `xtask` 명령이다. 검토·CI 통과 후 main 병합과 읽기 전용 연결 시험 1회가 승인되어 수동 workflow를
-활성화했다. 코드 검증 기록과 실제 Actions 실행 결과를 아래에서 구분한다.
+활성화했다(PR #42). 추가 연결 시험은 별도 승인 후 진행한다. 코드 검증 기록과 실제 Actions 실행 결과를 아래에서 구분한다.
 이 점검은 Cloud 제품 지원이나 쓰기·마이그레이션·복구 지원을 확정하지 않는다.
 
 기존 [ci.yml](../.github/workflows/ci.yml)과 [로컬 Supabase 시험](../xtask/src/supabase.rs)은
@@ -42,7 +42,7 @@ CA 파일은 공개 저장소에 넣지 않는다. Secret 값이나 등록 목�
 점검 프로그램 자체의 연결 5초·전체 20초 제한은 그대로 유지한다.
 
 승인된 활성화 변경은 고정 `false` 차단만 제거했으며 수동/main/저장소 제한은 유지한다. 검토와 일반 CI를
-통과한 PR #42를 merge commit으로 main에 반영했고 사용자가 수동 workflow를 한 번 실행했다.
+통과한 PR #42를 merge commit으로 main에 반영했다. 이 문서에 기록된 수동 실행은 두 번이며 둘 다 실패했다(아래 실패 진단).
 불확실한 dispatch는 run 목록으로 먼저 확인하고, 실패 후 추가 연결 시험은 별도 승인 없이 반복하지 않는다.
 PR 코드에 Secret을 주거나 별도 경로로 Secret을 꺼내 실행하지 않는다. 비밀번호의 실제 사용은
 GitHub Actions에서 Supabase DB 인증에만 한정한다.
@@ -102,8 +102,8 @@ DNS·TCP·TLS·인증·서버 startup 거절 중 원인을 더 좁힐 수 없다
 분류와 원문 미출력을 검증한다. [오류 분류 반영 후 실행](https://github.com/fvoci/GroundZero/actions/runs/39592575350)은
 SHA `30266525b1ee8b9915a71299e779f6afe4f85029`에서 빌드 성공 후 `connection_tls`로 실패했다.
 연결/TLS는 `UNCONFIRMED`, 쿼리/변경은 `NOT RUN`이며 이 결과만으로 CA 누락을 확정하지 않는다.
-CA 명시 변경 후 실제 Cloud 시험은 **NOT RUN**이다. 현재 승인은 코드 준비·검증과 Draft PR까지이며,
-병합과 다음 연결 1회는 별도 승인 후 진행한다. 기존 dispatch API의 `Forbidden`은
+CA 명시 변경은 PR #47로 main에 반영되었다. 그 뒤의 실제 Cloud 연결 결과는 이 문서에 기록되어 있지 않으므로
+연결/TLS/쿼리는 미확인이다. 다음 연결 시험은 별도 승인 후 진행한다. 기존 dispatch API의 `Forbidden`은
 재시도하거나 다른 인증·브라우저 경로로 우회하지 않는다.
 
 ## TLS 공식 근거

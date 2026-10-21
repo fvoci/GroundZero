@@ -47,8 +47,9 @@ GroundZero는 Supabase를 **PostgreSQL로만** 쓴다. 로그인은 그대로 OI
 - Supavisor 이미지는 시작할 때 열린 파일 한도를 `RLIMIT_NOFILE`(기본 100000)으로 올린다. 컨테이너 한도가 그보다 낮은
   호스트(예: GitHub 러너의 Docker 기본값)에서는 시작 스크립트가 실패해 재시작만 되풀이한다. 공식 구성에 `ulimits: nofile`을 그만큼
   주거나 `RLIMIT_NOFILE`을 호스트가 허락하는 값으로 둔다(시험 구성은 `ulimits` 100000).
-- transaction 모드(6543)는 쓰지 않는다. 서버는 트랜잭션마다 `app.user_id`를 트랜잭션 범위로 설정하지만, 백업·작업 프로세스는
-  세션 advisory lock을 쓰고 sqlx는 준비한 문장을 연결에 남긴다.
+- transaction 모드(6543)는 쓰지 않는다. 서버는 트랜잭션마다 `app.user_id`를 트랜잭션 범위로 설정하고, 서버·작업 프로세스의
+  advisory lock도 모두 트랜잭션 범위다. 세션 advisory lock은 백업·복구만 쓰며 그 연결은 위의 직접 연결이다. 그래도 sqlx가
+  준비한 문장을 연결에 남기므로 `DATABASE_URL`을 transaction 모드로 둘 수 없다.
 - 공식 구성은 db 포트를 호스트에 열지 않는다. GroundZero 앱을 Supabase의 Docker 네트워크에 붙이거나 db 포트를 내부망에만 연다.
   인터넷에 열지 않는다.
 - 네트워크를 건너면 TLS를 켜고 `sslmode=verify-full`(인증서 검증)로 연결한다. 검증을 끄는 방식으로 오류를 피하지 않는다.

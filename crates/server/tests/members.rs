@@ -856,3 +856,69 @@ async fn two_admins_removing_each_other_at_once_leave_one_of_them() {
     assert_eq!(admins, 1, "both admins removed each other");
     db.close().await;
 }
+
+/// 감사 C23: 소유권 인계 제안 취소(`DELETE /api/workspaces/{ws}/ownership`)에는 시험이 없었다. 취소는 소유자만 하고,
+/// 열린 제안이 없으면 404이며, 감사 기록을 남긴다.
+#[tokio::test]
+async fn only_the_owner_cancels_an_ownership_offer() {
+    let state = common::state();
+    let app = common::app(&state);
+    let owner = login(&state, "owner").await;
+    let ws = create_workspace(&app, &owner, "인계 취소").await;
+    let admin2 = add_member(&app, &state, &owner, &ws, "admin2", "admin").await;
+    let path = format!("/api/workspaces/{ws}/ownership");
+    let offered = send(
+        &app,
+        Method::POST,
+        &path,
+        Some(&owner),
+        Some(json!({ "to_user": admin2.id.0 })),
+    )
+    .await;
+    assert_eq!(offered.status, StatusCode::NO_CONTENT, "{:?}", offered.json);
+
+    // 소유자가 아닌 관리자(제안받은 사람이어도)는 취소하지 못한다.
+    let denied = send(&app, Method::DELETE, &path, Some(&admin2), None).await;
+    assert_eq!(denied.status, StatusCode::FORBIDDEN, "{:?}", denied.json);
+    let cancelled = send(&app, Method::DELETE, &path, Some(&owner), None).await;
+    assert_eq!(
+        cancelled.status,
+        StatusCode::NO_CONTENT,
+        "{:?}",
+        cancelled.json
+    );
+    let view = send(
+        &app,
+        Method::GET,
+        &format!("/api/workspaces/{ws}/members"),
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert!(view.json["pending_owner"].is_null(), "{:?}", view.json);
+    // 열린 제안이 없으면 404, 취소된 제안은 수락할 수 없다.
+    let again = send(&app, Method::DELETE, &path, Some(&owner), None).await;
+    assert_eq!(again.status, StatusCode::NOT_FOUND, "{:?}", again.json);
+    let accept = send(
+        &app,
+        Method::POST,
+        &format!("{path}/accept"),
+        Some(&admin2),
+        None,
+    )
+    .await;
+    assert_eq!(accept.status, StatusCode::NOT_FOUND, "{:?}", accept.json);
+
+    let mut tx = state.db.begin_as(owner.id).await.unwrap();
+    let actions: Vec<String> = sqlx::query_scalar(
+        "SELECT action FROM audit_log WHERE workspace_id = $1::uuid AND target_type = 'workspace' ORDER BY created_at, id",
+    )
+    .bind(&ws)
+    .fetch_all(tx.conn())
+    .await
+    .unwrap();
+    assert!(
+        actions.iter().any(|a| a == "cancel_ownership_offer"),
+        "{actions:?}"
+    );
+}
