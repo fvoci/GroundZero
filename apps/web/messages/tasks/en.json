@@ -227,6 +227,8 @@
   "tasks_move_to_todo": "To do",
   "tasks_move_to_in_progress": "In progress",
   "tasks_move_to_done": "Done",
+  "tasks_move_up_menu": "Up in this column",
+  "tasks_move_down_menu": "Down in this column",
   "tasks_moved_menu": "{title}: moved ({status}).",
   "tasks_quick_add": "Add task",
   "tasks_quick_add_label": "Add a task to {status}",
