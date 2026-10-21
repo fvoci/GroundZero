@@ -80,6 +80,13 @@
     await tick();
     confirmDeleteButton?.focus();
   }
+
+  /** 지우기를 그만둔다. 묻는 칸이 초점과 함께 사라지므로 그 회차의 지우기 단추로 초점을 돌려준다. */
+  async function cancelDelete(id: string): Promise<void> {
+    confirmingDelete = undefined;
+    await tick();
+    document.getElementById(`episode-delete-${id}`)?.focus();
+  }
   // 번호 칸(type="number")은 숫자를 주고, 비우면 null을 준다.
   let shared = $state<{
     number: number | null;
@@ -572,6 +579,7 @@
               >
               {#if confirmingDelete !== e.id}
                 <Button
+                  id={`episode-delete-${e.id}`}
                   size="sm"
                   variant="ghost"
                   aria-label={m.courses_delete_aria({ number: e.number })}
@@ -596,7 +604,7 @@
                       );
                     }}>{m.courses_delete()}</Button
                   >
-                  <Button size="sm" variant="ghost" onclick={() => (confirmingDelete = undefined)}
+                  <Button size="sm" variant="ghost" onclick={() => void cancelDelete(e.id)}
                     >{m.common_cancel()}</Button
                   >
                 </span>

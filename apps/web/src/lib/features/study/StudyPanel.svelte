@@ -90,6 +90,13 @@
     await tick();
     confirmDeleteButton?.focus();
   }
+
+  /** 지우기를 그만둔다. 묻는 칸이 초점과 함께 사라지므로 그 단위의 지우기 단추로 초점을 돌려준다. */
+  async function cancelDelete(id: string): Promise<void> {
+    confirmingDelete = undefined;
+    await tick();
+    document.getElementById(`unit-delete-${id}`)?.focus();
+  }
   let shared = $state<UnitDraft & { number: number | null }>({
     number: null,
     title: '',
@@ -432,16 +439,22 @@
                 }}>{m.study_edit()}</Button
               >
               {#if confirmingDelete !== u.id}
-                <Button size="sm" variant="ghost" onclick={() => void askDelete(u.id)}
-                  >{m.study_delete()}</Button
+                <Button
+                  id={`unit-delete-${u.id}`}
+                  size="sm"
+                  variant="ghost"
+                  aria-label={m.study_delete_aria({ title: u.title })}
+                  onclick={() => void askDelete(u.id)}>{m.study_delete()}</Button
                 >
               {:else}
                 <span class="flex flex-wrap items-center gap-1 text-sm">
                   <span id={`unit-delete-warning-${u.id}`}>{m.study_delete_confirm()}</span>
+                  <!-- 초점을 받는 확인 단추가 어느 단위를 지우는지 말하게 한다(회차 지우기와 같다). -->
                   <Button
                     size="sm"
                     variant="destructive"
                     bind:ref={confirmDeleteButton}
+                    aria-label={m.study_delete_aria({ title: u.title })}
                     aria-describedby={`unit-delete-warning-${u.id}`}
                     onclick={() => {
                       confirmingDelete = undefined;
@@ -451,7 +464,7 @@
                       );
                     }}>{m.study_delete()}</Button
                   >
-                  <Button size="sm" variant="ghost" onclick={() => (confirmingDelete = undefined)}
+                  <Button size="sm" variant="ghost" onclick={() => void cancelDelete(u.id)}
                     >{m.common_cancel()}</Button
                   >
                 </span>
