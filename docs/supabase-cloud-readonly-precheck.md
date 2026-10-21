@@ -42,7 +42,8 @@ CA 파일은 공개 저장소에 넣지 않는다. Secret 값이나 등록 목�
 점검 프로그램 자체의 연결 5초·전체 20초 제한은 그대로 유지한다.
 
 승인된 활성화 변경은 고정 `false` 차단만 제거했으며 수동/main/저장소 제한은 유지한다. 검토와 일반 CI를
-통과한 PR #42를 merge commit으로 main에 반영했다. 이 문서에 기록된 수동 실행은 두 번이며 둘 다 실패했다(아래 실패 진단).
+통과한 PR #42를 merge commit으로 main에 반영했다. 수동 실행은 세 번이었다. 앞의 두 번은 실패했고(아래 실패 진단), CA 명시(PR #47)
+뒤의 세 번째는 성공했다(아래 실패 진단 끝).
 불확실한 dispatch는 run 목록으로 먼저 확인하고, 실패 후 추가 연결 시험은 별도 승인 없이 반복하지 않는다.
 PR 코드에 Secret을 주거나 별도 경로로 Secret을 꺼내 실행하지 않는다. 비밀번호의 실제 사용은
 GitHub Actions에서 Supabase DB 인증에만 한정한다.
@@ -102,8 +103,11 @@ DNS·TCP·TLS·인증·서버 startup 거절 중 원인을 더 좁힐 수 없다
 분류와 원문 미출력을 검증한다. [오류 분류 반영 후 실행](https://github.com/fvoci/GroundZero/actions/runs/39592575350)은
 SHA `30266525b1ee8b9915a71299e779f6afe4f85029`에서 빌드 성공 후 `connection_tls`로 실패했다.
 연결/TLS는 `UNCONFIRMED`, 쿼리/변경은 `NOT RUN`이며 이 결과만으로 CA 누락을 확정하지 않는다.
-CA 명시 변경은 PR #47로 main에 반영되었다. 그 뒤의 실제 Cloud 연결 결과는 이 문서에 기록되어 있지 않으므로
-연결/TLS/쿼리는 미확인이다. 다음 연결 시험은 별도 승인 후 진행한다. 기존 dispatch API의 `Forbidden`은
+CA 명시 변경은 PR #47로 main에 반영되었다. 그 뒤의 [세 번째 실행](https://github.com/fvoci/GroundZero/actions/runs/39600271650)
+(SHA `f9e5fd0`, 2026-10-21 12:31 UTC)은 성공했다. 결과는 연결 `PASS`(session pooler), TLS 인증서·호스트 `PASS`,
+읽기 전용 질의 `PASS`, 변경 시험 `NOT RUN`이다. 이것은 Cloud 프로젝트에 TLS 검증으로 붙어 `SELECT 1`을 읽기 전용으로
+실행할 수 있다는 확인일 뿐이다. 제품 서버 실행, 전체 마이그레이션, 앱 역할의 RLS·권한은 확인하지 않았다. 다음 연결 시험은
+별도 승인 후 진행한다. 기존 dispatch API의 `Forbidden`은
 재시도하거나 다른 인증·브라우저 경로로 우회하지 않는다.
 
 ## TLS 공식 근거
