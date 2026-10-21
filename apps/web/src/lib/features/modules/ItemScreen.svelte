@@ -91,9 +91,11 @@
     item = undefined;
     mod = undefined;
     error = undefined;
-    // 앞 항목의 "저장했습니다."·오류를 새 항목에 남기지 않는다.
+    // 앞 항목의 "저장했습니다."·오류, 새 문서에 고른 템플릿을 새 항목에 남기지 않는다(다른 워크스페이스 항목으로
+    // 옮겨 가면 그 템플릿은 목록에 없어 보이지 않는데도 쓰였다).
     saved = false;
     formError = undefined;
+    docTemplate = '';
     api
       .item(id)
       .then(async (it) => {
