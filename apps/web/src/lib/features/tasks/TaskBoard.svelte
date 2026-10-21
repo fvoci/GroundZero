@@ -54,7 +54,7 @@
     sortTasks,
     VIEWS,
   } from './filters';
-  import { PRIORITY_LABEL, PRIORITY_TONE, STATUS_LABEL } from './labels';
+  import { PRIORITY_LABEL, PRIORITY_TONE, STATUS_LABEL, undatedText } from './labels';
   import GanttChart from './GanttChart.svelte';
   import { formOf } from './form';
   import ShiftProposals from './ShiftProposals.svelte';
@@ -529,12 +529,6 @@
   let ganttNotice = $state<string | undefined>(undefined);
   // 저장했지만 날짜가 없어 옮기지 않은 후속 업무 알림(오류가 아니다, 날짜를 지어내지 않는다).
   let ganttInfo = $state('');
-  const undatedText = (undated: UndatedTaskView[]): string =>
-    undated.length > 0
-      ? m.tasks_shift_undated({
-          tasks: undated.map((u) => `${u.reference ?? ''} ${u.title}`.trim()).join(', '),
-        })
-      : '';
   const datesText = (start: string | null, due: string | null): string =>
     start !== null && due !== null && start !== due ? `${start}~${due}` : (due ?? start ?? '');
 

@@ -157,7 +157,7 @@ describe('task detail dependency kinds', () => {
     );
   });
 
-  it('saves nothing when the preview is cancelled', async () => {
+  it('saves nothing when the preview is cancelled and returns focus to the save button', async () => {
     await setLocale('ko', { reload: false });
     mount();
     vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [shift], undated: [] });
@@ -172,6 +172,11 @@ describe('task detail dependency kinds', () => {
       expect(screen.queryByRole('heading', { name: /관계를 지키지 못합니다/ })).toBeNull();
     });
     expect(set).not.toHaveBeenCalled();
+    // 편집 칸은 그대로 남고 초점은 관계 저장 단추로 돌아온다(대화상자 맨 위로 가지 않게).
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe('link-save');
+    });
+    expect(screen.getByLabelText<HTMLInputElement>('지연(일)').value).toBe('3');
   });
 
   it('asks again with the recalculated plan when the approved list went stale', async () => {

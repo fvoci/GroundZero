@@ -5,7 +5,7 @@
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
-  import { linkText } from './labels';
+  import { linkText, taskName, undatedText } from './labels';
 
   interface Props {
     proposals: ShiftProposalView[];
@@ -37,8 +37,6 @@
     start !== null && due !== null && start !== due
       ? `${start}~${due}`
       : (due ?? start ?? m.tasks_no_dates());
-  const named = (t: { reference: string | null; title: string }): string =>
-    `${t.reference ?? ''} ${t.title}`.trim();
 
   let heading = $state<HTMLElement | undefined>(undefined);
   $effect(() => {
@@ -65,7 +63,7 @@
         {#each s.causes as c (c.predecessor_id)}
           <span class="block text-xs text-muted-foreground" data-shift-cause={c.predecessor_id}>
             {m.tasks_shift_cause({
-              predecessor: named({
+              predecessor: taskName({
                 reference: c.predecessor_reference,
                 title: c.predecessor_title,
               }),
@@ -78,7 +76,7 @@
   </ul>
   {#if undated.length > 0}
     <p class="text-muted-foreground" data-testid="shift-undated">
-      {m.tasks_shift_undated({ tasks: undated.map(named).join(', ') })}
+      {undatedText(undated)}
     </p>
   {/if}
   <div class="flex flex-wrap gap-2">

@@ -80,3 +80,16 @@ export function linkText(link: { kind: LinkKind; lag_days: number }): string {
     ? m.tasks_link_text({ kind, lag: m.tasks_link_lag({ days: link.lag_days }) })
     : kind;
 }
+
+/** 업무 이름(참조 번호와 제목). 미리보기·알림이 같은 표기를 쓴다. */
+export const taskName = (t: { reference: string | null; title: string }): string =>
+  `${t.reference ?? ''} ${t.title}`.trim();
+
+/** 날짜가 없어 옮기지 않는 업무 알림(없으면 빈 글). */
+export function undatedText(
+  undated: readonly { reference: string | null; title: string }[],
+): string {
+  return undated.length > 0
+    ? m.tasks_shift_undated({ tasks: undated.map(taskName).join(', ') })
+    : '';
+}

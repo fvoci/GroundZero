@@ -52,6 +52,7 @@
     PRIORITY_LABEL,
     STATUS_LABEL,
     linkText,
+    undatedText,
   } from './labels';
   import ShiftProposals from './ShiftProposals.svelte';
 
@@ -118,10 +119,6 @@
     retried: boolean;
   }
   let linkPending = $state<LinkPending | undefined>(undefined);
-  const named = (t: { reference: string | null; title: string }): string =>
-    `${t.reference ?? ''} ${t.title}`.trim();
-  const undatedText = (undated: UndatedTaskView[]): string =>
-    undated.length > 0 ? m.tasks_shift_undated({ tasks: undated.map(named).join(', ') }) : '';
   // 상위 업무 고르기. 'top'은 최상위로 빼기. 서버 규칙(한 단계, 하위 업무가 있으면 옮길 수 없음)에 맞는 후보만 보인다.
   const TOP = 'top';
   let parentChoice = $state('');
@@ -341,12 +338,16 @@
     await focusSave();
   }
 
-  // 패널이 사라질 때 대화상자의 초점 가두기가 첫 입력란으로 초점을 옮기므로, 그 뒤 프레임에서 저장 단추로 돌린다.
-  async function focusSave(): Promise<void> {
+  // 패널이 사라질 때 대화상자의 초점 가두기가 첫 입력란으로 초점을 옮기므로, 그 뒤 프레임에서 요소로 돌린다.
+  async function focusLater(id: string): Promise<void> {
     await tick();
     requestAnimationFrame(() => {
-      document.getElementById('task-save')?.focus();
+      document.getElementById(id)?.focus();
     });
+  }
+
+  async function focusSave(): Promise<void> {
+    await focusLater('task-save');
   }
 
   async function reloadChecklist(next: Promise<unknown>): Promise<void> {
@@ -475,11 +476,8 @@
     else refresh(fresh);
     linkStatus = [m.tasks_link_saved(), undatedText(undated)].filter((s) => s !== '').join(' ');
     onchanged();
-    // 패널이 사라지면 대화상자의 초점 가두기가 맨 위로 보내므로, 그 뒤 프레임에서 선행 업무 제목으로 돌린다.
-    await tick();
-    requestAnimationFrame(() => {
-      document.getElementById('predecessors-heading')?.focus();
-    });
+    // 패널과 편집 칸이 닫히므로 선행 업무 제목으로 돌린다.
+    await focusLater('predecessors-heading');
   }
 
   async function decideLink(withShifts: boolean): Promise<void> {
@@ -926,6 +924,7 @@
             <Button
               size="sm"
               disabled={busy || (editing === undefined && predecessorChoice === '')}
+              id="link-save"
               onclick={() => void applyLink(editing ?? predecessorChoice)}
               >{m.tasks_link_save()}</Button
             >
@@ -947,7 +946,9 @@
           headingId="link-shift-heading"
           ondecide={(withShifts: boolean) => void decideLink(withShifts)}
           oncancel={() => {
+            // 편집 칸은 그대로 두고 관계 저장 단추로 돌린다(고친 값으로 다시 시도할 수 있게).
             linkPending = undefined;
+            void focusLater('link-save');
           }}
         />
       {/if}
