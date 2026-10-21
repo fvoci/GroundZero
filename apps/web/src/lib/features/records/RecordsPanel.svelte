@@ -38,6 +38,11 @@
   let status = $state('');
   let creating = $state(false);
   let editingId = $state<string | undefined>(undefined);
+  /**
+   * 고치는 기록의 기준 판: 고치기를 연 때(또는 409 뒤 다시 확인할 때) 읽은 판. 저장 때의 최신 목록에서 가져오면 고치는
+   * 사이 목록을 다시 읽은 것만으로 서버의 판 확인이 꺼져 다른 사람의 고침을 덮는다.
+   */
+  let editingVersion = 0;
   let confirming = $state<string | undefined>(undefined);
   // 같은 종류 기록을 표로 나란히 비교(D-34 선행연구 비교 등).
   let asTable = $state(false);
@@ -93,6 +98,11 @@
         loadError = undefined;
         defs = mine;
         records = list;
+        // 고치던 기록이 그사이 지워졌으면 편집기가 말없이 사라지지 않게 알린다.
+        if (editingId !== undefined && !list.some((r) => r.id === editingId)) {
+          editingId = undefined;
+          error = m.common_error_not_found();
+        }
         people = members.members.map((x) => ({ id: x.user_id, name: x.display_name }));
         courses = courseList;
         if (selected === undefined || !mine.some((d) => d.kind === selected))
@@ -117,6 +127,34 @@
     form = formOf(def, r);
     creating = false;
     editingId = r.id;
+    editingVersion = r.version;
+  }
+
+  /**
+   * 409를 받은 뒤 이 항목의 기록을 다시 읽는다. 다른 사람이 먼저 고쳐 판이 바뀌었으면(보관으로 막힌 409와 구분) 기준을
+   * 지금 판으로 바꾸고 알린다(입력은 그대로, 다시 저장하면 명시적으로 바꾼다). 기록이 지워졌으면 고치기를 닫고 알린다.
+   * 처리했으면 true.
+   */
+  async function recordMovedOn(id: string, version: number): Promise<boolean> {
+    let list: RecordView[];
+    try {
+      list = await api.itemRecords(item.id);
+    } catch {
+      return false;
+    }
+    records = list;
+    // 기다리는 사이 고치기를 닫았거나 다른 기록을 열었으면 그 편집에 손대지 않는다.
+    if (editingId !== id) return true;
+    const latest = list.find((x) => x.id === id);
+    if (latest === undefined) {
+      editingId = undefined;
+      error = m.common_error_not_found();
+      return true;
+    }
+    if (latest.version === version) return false;
+    editingVersion = latest.version;
+    error = m.records_changed();
+    return true;
   }
 
   async function save(def: RecordKindView): Promise<void> {
@@ -130,26 +168,25 @@
       return;
     }
     error = undefined;
+    const base =
+      !creating && editingId !== undefined ? { id: editingId, version: editingVersion } : undefined;
     try {
       if (creating) {
         const requestId = createKey.for({ item: item.id, kind: def.kind, input: built.input });
         await api.createRecord(item.id, requestId, def.kind, built.input);
         createKey.done(requestId);
         status = m.records_added({ label: recordKindLabel(def) });
-      } else if (editingId !== undefined) {
-        const r = records.find((x) => x.id === editingId);
-        if (r === undefined) return;
-        await api.updateRecord(r.id, r.version, built.input);
+      } else if (base !== undefined) {
+        await api.updateRecord(base.id, base.version, built.input);
         status = m.records_updated({ label: recordKindLabel(def) });
       }
       creating = false;
       editingId = undefined;
       reloadKey += 1;
     } catch (e: unknown) {
-      error =
-        e instanceof ApiError && e.status === 409
-          ? m.records_conflict()
-          : errorText(e, m.records_save_failed());
+      const conflict = e instanceof ApiError && e.status === 409;
+      if (conflict && base !== undefined && (await recordMovedOn(base.id, base.version))) return;
+      error = conflict ? m.records_conflict() : errorText(e, m.records_save_failed());
     }
   }
 

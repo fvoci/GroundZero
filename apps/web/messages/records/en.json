@@ -8,6 +8,7 @@
   "records_added": "Added a record to {label}.",
   "records_updated": "Updated a record in {label}.",
   "records_conflict": "This changed in the meantime. Reload and edit again.",
+  "records_changed": "Someone else changed this record first. Your input is kept. Save again to replace it with your input, or cancel to see what is saved now.",
   "records_save_failed": "Couldn't save.",
   "records_deleted": "Record deleted.",
   "records_delete_failed": "Couldn't delete.",
