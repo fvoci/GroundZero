@@ -853,3 +853,95 @@ async fn group_changes_and_leaving_end_item_roles() {
     let p = send(&app, Method::GET, &profile_uri, Some(&owner), None).await;
     assert_eq!(p.json["members"], json!([]), "{:?}", p.json);
 }
+
+/// 다른 세션이 `holder`의 잠금을 실제로 기다릴 때까지 기다린다(고정 시간 대기는 경합을 재현하지 못한 채 지나갈 수 있다).
+async fn wait_until_blocked_by(holder: i32) {
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let db = sqlx::PgPool::connect(&url).await.unwrap();
+    let mut blocked = false;
+    for _ in 0..500 {
+        blocked = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(holder)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        if blocked {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    db.close().await;
+    assert!(blocked, "no request waited on the held transaction");
+}
+
+/// 감사 S10: 오래 걸리는 복제의 응답을 잃고 같은 요청 id로 다시 보내면, 앞 요청이 끝나기를 기다린 두 번째 요청이 고유
+/// 제약(23505)으로 500이었다. 같은 요청 id면 앞 요청이 만든 복제본 하나를 돌려준다(업무도 한 벌만).
+#[tokio::test]
+async fn a_retried_copy_waiting_on_the_first_returns_that_copy() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "복제 재시도").await;
+    let source_module = module(&app, &admin, &ws, "project", "CPS").await;
+    let target_module = module(&app, &admin, &ws, "project", "CPT").await;
+    let src = item(&app, &admin, &source_module, "원본").await;
+    let t = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{src}/tasks"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "업무 하나" })),
+    )
+    .await;
+    assert_eq!(t.status, StatusCode::CREATED, "{:?}", t.json);
+    let request: uuid::Uuid = new_request_id().parse().unwrap();
+    let src_id: uuid::Uuid = src.parse().unwrap();
+    let target_id: uuid::Uuid = target_module.parse().unwrap();
+
+    // 첫 요청: 같은 처리로 복제하고 아직 끝내지 않는다.
+    let mut t1 = state.db.begin_as(admin.id).await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(t1.conn())
+        .await
+        .unwrap();
+    let n: i32 = sqlx::query_scalar("SELECT app_copy_item_ids($1)")
+        .bind(src_id)
+        .fetch_one(t1.conn())
+        .await
+        .unwrap();
+    let (first, _): (uuid::Uuid, i32) = sqlx::query_as(
+        "SELECT copied_item, skipped_count FROM app_copy_item($1, $2, $3, $4, false, $5)",
+    )
+    .bind(src_id)
+    .bind(target_id)
+    .bind(request)
+    .bind("복제본")
+    .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+    .fetch_one(t1.conn())
+    .await
+    .unwrap();
+    // 다시 보낸 요청은 앞 요청을 기다린다.
+    let retry = tokio::spawn({
+        let app = app.clone();
+        let admin = admin.clone();
+        let uri = format!("/api/items/{src}/copy");
+        let body = json!({ "request_id": request, "module_id": target_module, "title": "복제본", "reset": false });
+        async move { send(&app, Method::POST, &uri, Some(&admin), Some(body)).await }
+    });
+    wait_until_blocked_by(holder).await;
+    t1.commit().await.unwrap();
+    let retry = retry.await.unwrap();
+    assert_eq!(retry.status, StatusCode::CREATED, "{:?}", retry.json);
+    assert_eq!(retry.json["item_id"], first.to_string());
+    let tasks = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{first}/tasks"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(tasks.json.as_array().unwrap().len(), 1, "{:?}", tasks.json);
+}
