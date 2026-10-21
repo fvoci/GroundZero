@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DocNode, DocumentView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
+import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -174,6 +175,7 @@ describe('a late save for the previous document', () => {
     await screen.findByText(/^지금은 리비전 5입니다\./);
 
     // 처음 연 A의 편집기(이미 사라짐)가 보낸 제목 저장이 이제 끝난다(리비전 4).
+    const refresh = vi.spyOn(workspaceNav, 'refreshDocs');
     finishSave(liveDocument('A', 'A 새 제목', 4));
     await tick();
     await new Promise((r) => setTimeout(r, 0));
@@ -183,5 +185,7 @@ describe('a late save for the previous document', () => {
     expect(screen.getByText(/^지금은 리비전 \d+입니다\./).textContent).toMatch(
       /^지금은 리비전 5입니다\./,
     );
+    // 사이드바 목록은 새 제목으로 다시 읽는다.
+    expect(refresh).toHaveBeenCalled();
   });
 });

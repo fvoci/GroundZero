@@ -171,6 +171,12 @@
                 workspaceNav.refreshDocs();
                 return;
               }
+              // 같은 문서를 다시 연 뒤 앞 편집기의 제목 저장이 늦게 끝났으면(A → B → A) 다시 읽은 더 새 리비전을 옛 결과로
+              // 덮지 않는다(기록·복원의 기준이 옛 리비전으로 돌아감). 목록만 새 제목으로 다시 읽는다.
+              if (doc !== undefined && saved.revision < doc.revision) {
+                workspaceNav.refreshDocs();
+                return;
+              }
               if (saved.title !== doc?.title) workspaceNav.refreshDocs();
               doc = saved;
             }}

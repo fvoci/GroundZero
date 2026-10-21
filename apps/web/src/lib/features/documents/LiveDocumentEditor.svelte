@@ -217,12 +217,8 @@
     open();
   }
 
-  // 화면에서 사라졌는지. 그 뒤에 끝난 제목 저장의 결과는 부모에 넘기지 않는다(같은 문서를 다시 열었으면 그 화면이 다시
-  // 읽은 더 새 내용을 옛 결과로 덮는다).
-  let destroyed = false;
   open();
   onDestroy(() => {
-    destroyed = true;
     keepIfDirty();
     watch?.stop();
     if (session !== undefined) closeLive(session);
@@ -292,7 +288,6 @@
           body: current.body,
         });
         if (result.kind === 'saved') {
-          if (destroyed) return;
           savedTitle = result.document.title;
           onsaved?.(result.document);
           return;
