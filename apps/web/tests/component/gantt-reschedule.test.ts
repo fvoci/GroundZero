@@ -131,7 +131,9 @@ describe('gantt reschedule', () => {
   it('Alt+Right moves the task a day and saves when no later task is affected', async () => {
     vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
-    const preview = vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [] });
+    const preview = vi
+      .spyOn(api, 'previewSchedule')
+      .mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
       kind: 'updated',
       task: detail(task('a', '설계', '2026-10-21', '2026-10-23', 2)),
@@ -153,7 +155,11 @@ describe('gantt reschedule', () => {
   it('asks before moving later tasks and saves them together when approved', async () => {
     vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [shift], undated: [] });
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({
+      shifts: [shift],
+      undated: [],
+      blocked: null,
+    });
     const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
       kind: 'updated',
       task: detail(task('a', '설계', '2026-10-20', '2026-10-23', 2)),
@@ -186,10 +192,55 @@ describe('gantt reschedule', () => {
     });
   });
 
+  it('says before approval when more followers would move than one save allows', async () => {
+    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    vi.spyOn(api, 'task').mockResolvedValue(detail(design));
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({
+      shifts: [shift],
+      undated: [],
+      blocked: {
+        reason: 'too_many_shifts',
+        shift_count: 501,
+        max_shifts: 500,
+        task_id: null,
+        reference: null,
+        date: null,
+      },
+    });
+    const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
+      kind: 'updated',
+      task: detail(task('a', '설계', '2026-10-20', '2026-10-23', 2)),
+    });
+    const gantt = await mount();
+    await fireEvent.keyDown(rowButton(gantt, 'a'), {
+      key: 'ArrowRight',
+      altKey: true,
+      shiftKey: true,
+    });
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByTestId('shift-blocked').textContent).toBe(
+      '옮길 후속 업무가 501개로 한 번에 옮길 수 있는 500개를 넘어 함께 저장할 수 없습니다. 후속 업무를 옮기지 않고 저장하거나 취소하세요.',
+    );
+    const all = within(dialog).getByRole('button', { name: '후속 업무도 옮겨 저장' });
+    expect(all).toHaveProperty('disabled', true);
+    await fireEvent.click(all);
+    expect(update).not.toHaveBeenCalled();
+    // 일부만 옮기지 않는다: 이 업무만 저장하면 후속 목록은 비어 있다.
+    await fireEvent.click(within(dialog).getByRole('button', { name: '이 업무만 저장' }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalled();
+    });
+    expect(update.mock.calls[0]?.[3]).toEqual([]);
+  });
+
   it('cannot be cancelled once the change is being saved', async () => {
     vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [shift], undated: [] });
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({
+      shifts: [shift],
+      undated: [],
+      blocked: null,
+    });
     let finish: (v: Awaited<ReturnType<typeof api.updateTask>>) => void = () => undefined;
     const update = vi.spyOn(api, 'updateTask').mockReturnValue(
       new Promise((resolve) => {
@@ -215,7 +266,11 @@ describe('gantt reschedule', () => {
   it('saves nothing when cancelled and reads the list again', async () => {
     const read = vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [shift], undated: [] });
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({
+      shifts: [shift],
+      undated: [],
+      blocked: null,
+    });
     const update = vi.spyOn(api, 'updateTask');
     const gantt = await mount();
     await fireEvent.keyDown(rowButton(gantt, 'a'), { key: 'ArrowRight', altKey: true });
@@ -234,7 +289,7 @@ describe('gantt reschedule', () => {
       .spyOn(api, 'task')
       .mockResolvedValueOnce(detail(task('a', '설계', '2026-10-21', '2026-10-24', 2)))
       .mockResolvedValue(detail(design));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [] });
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
       kind: 'conflict',
       current: detail(task('a', '설계', '2026-10-20', '2026-10-22', 3)),
@@ -257,7 +312,7 @@ describe('gantt reschedule', () => {
   it('dragging the bar by two columns moves it two days; Escape cancels a drag', async () => {
     vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [] });
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
       kind: 'updated',
       task: detail(task('a', '설계', '2026-10-22', '2026-10-24', 2)),

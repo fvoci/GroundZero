@@ -12,6 +12,7 @@
     TaskInput,
     TaskStatus,
     TaskView,
+    PlanBlockedView,
     UndatedTaskView,
   } from '$lib/api/client';
   import { api, ApiError, TASK_STATUSES } from '$lib/api/client';
@@ -521,6 +522,7 @@
     baseVersion: number;
     proposals: ShiftProposalView[];
     undated: UndatedTaskView[];
+    blocked: PlanBlockedView | null;
     retried: boolean;
     done: () => void;
   }
@@ -574,6 +576,7 @@
           baseVersion: fresh.version,
           proposals: plan.shifts,
           undated: plan.undated,
+          blocked: plan.blocked,
           retried: false,
           done,
         };
@@ -625,6 +628,7 @@
         baseVersion,
         proposals: plan.shifts,
         undated: plan.undated,
+        blocked: plan.blocked,
         retried: true,
         done,
       };
@@ -1670,6 +1674,7 @@
       <ShiftProposals
         proposals={ask.proposals}
         undated={ask.undated}
+        blocked={ask.blocked}
         retried={ask.retried}
         busy={ganttBusy}
         headingId="gantt-shift-heading"

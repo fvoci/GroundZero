@@ -15,6 +15,7 @@
     TaskPriority,
     TaskStatus,
     TaskView,
+    PlanBlockedView,
     UndatedTaskView,
   } from '$lib/api/client';
   import {
@@ -95,6 +96,7 @@
   interface Pending {
     proposals: ShiftProposalView[];
     undated: UndatedTaskView[];
+    blocked: PlanBlockedView | null;
     input: TaskInput;
     baseVersion: number;
     retried: boolean;
@@ -116,6 +118,7 @@
     lag: number;
     proposals: ShiftProposalView[];
     undated: UndatedTaskView[];
+    blocked: PlanBlockedView | null;
     retried: boolean;
   }
   let linkPending = $state<LinkPending | undefined>(undefined);
@@ -263,6 +266,7 @@
           pending = {
             proposals: plan.shifts,
             undated: plan.undated,
+            blocked: plan.blocked,
             input,
             baseVersion: base.version,
             retried: false,
@@ -324,6 +328,7 @@
       pending = {
         proposals: plan.shifts,
         undated: plan.undated,
+        blocked: plan.blocked,
         input,
         baseVersion,
         retried: true,
@@ -449,6 +454,7 @@
           lag,
           proposals: plan.shifts,
           undated: plan.undated,
+          blocked: plan.blocked,
           retried: false,
         };
         return;
@@ -483,6 +489,7 @@
         lag,
         proposals: plan.shifts,
         undated: plan.undated,
+        blocked: plan.blocked,
         retried: true,
       };
       return;
@@ -733,6 +740,7 @@
       <ShiftProposals
         proposals={pending.proposals}
         undated={pending.undated}
+        blocked={pending.blocked}
         retried={pending.retried}
         {busy}
         ondecide={(withShifts: boolean) => void decide(withShifts)}
@@ -957,6 +965,7 @@
         <ShiftProposals
           proposals={linkPending.proposals}
           undated={linkPending.undated}
+          blocked={linkPending.blocked}
           retried={linkPending.retried}
           {busy}
           forLink

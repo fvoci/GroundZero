@@ -1125,10 +1125,25 @@ export interface UndatedTaskView {
   title: string;
 }
 
-/** 재배치 계획: 옮길 후속 업무와 날짜가 없어 계산하지 않은 업무. */
+/** 계획을 함께 저장할 수 없는 까닭: 건수 한도를 넘거나, 제안 날짜가 저장 범위(1900~2200년) 밖이다. */
+export type PlanBlockReason = 'too_many_shifts' | 'date_out_of_range';
+const PLAN_BLOCK_REASONS: readonly PlanBlockReason[] = ['too_many_shifts', 'date_out_of_range'];
+
+/** 저장할 수 없는 계획의 까닭과 근거(건수, 또는 범위 밖 날짜를 받은 업무와 그 날짜). */
+export interface PlanBlockedView {
+  reason: PlanBlockReason;
+  shift_count: number;
+  max_shifts: number;
+  task_id: string | null;
+  reference: string | null;
+  date: string | null;
+}
+
+/** 재배치 계획: 옮길 후속 업무와 날짜가 없어 계산하지 않은 업무, 함께 저장할 수 없으면 그 까닭. */
 export interface SchedulePlanView {
   shifts: ShiftProposalView[];
   undated: UndatedTaskView[];
+  blocked: PlanBlockedView | null;
 }
 
 export interface SuccessorShift {
@@ -1184,11 +1199,26 @@ function parseUndated(value: Json): UndatedTaskView {
   return { task_id: str(o, 'task_id'), reference: optStr(o, 'reference'), title: str(o, 'title') };
 }
 
+function parsePlanBlocked(value: Json): PlanBlockedView {
+  const o = rec(value, 'plan blocked');
+  const reason = PLAN_BLOCK_REASONS.find((r) => r === str(o, 'reason'));
+  if (reason === undefined) throw new TypeError(`unknown plan block reason ${str(o, 'reason')}`);
+  return {
+    reason,
+    shift_count: int(o, 'shift_count'),
+    max_shifts: int(o, 'max_shifts'),
+    task_id: optStr(o, 'task_id'),
+    reference: optStr(o, 'reference'),
+    date: optStr(o, 'date'),
+  };
+}
+
 function parseSchedulePlan(value: Json): SchedulePlanView {
   const o = rec(value, 'schedule plan');
   return {
     shifts: parseList(o.shifts, parseShiftProposal),
     undated: parseList(o.undated, parseUndated),
+    blocked: o.blocked === null || o.blocked === undefined ? null : parsePlanBlocked(o.blocked),
   };
 }
 

@@ -231,7 +231,11 @@ describe('gantt dependency lines on the board', () => {
       .mockResolvedValueOnce([movedA, movedB]) // 승인 뒤
       .mockResolvedValue([movedA, movedB]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [shift], undated: [] });
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({
+      shifts: [shift],
+      undated: [],
+      blocked: null,
+    });
     const update = vi
       .spyOn(api, 'updateTask')
       .mockResolvedValueOnce({ kind: 'updated', task: detail(movedA) });
@@ -264,7 +268,7 @@ describe('gantt dependency lines on the board', () => {
     expectLineOnBars(gantt);
     // 서버 실패: 저장되지 않고 다시 읽음 → 같다.
     update.mockRejectedValueOnce(new ApiError(500, 'internal', 'boom'));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [] });
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [], blocked: null });
     await fireEvent.keyDown(q(gantt, '[data-task-card="a"]'), { key: 'ArrowRight', altKey: true });
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);

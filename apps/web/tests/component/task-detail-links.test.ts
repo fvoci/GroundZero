@@ -124,7 +124,7 @@ describe('task detail dependency kinds', () => {
     mount();
     const preview = vi
       .spyOn(api, 'previewLink')
-      .mockResolvedValue({ shifts: [shift], undated: [] });
+      .mockResolvedValue({ shifts: [shift], undated: [], blocked: null });
     const set = vi.spyOn(api, 'setPredecessor').mockResolvedValue({
       kind: 'updated',
       task: {
@@ -160,7 +160,7 @@ describe('task detail dependency kinds', () => {
   it('saves nothing when the preview is cancelled and returns focus to the save button', async () => {
     await setLocale('ko', { reload: false });
     mount();
-    vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [shift], undated: [] });
+    vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [shift], undated: [], blocked: null });
     const set = vi.spyOn(api, 'setPredecessor');
     await editLagTo('3');
     const panel = (await screen.findByRole('heading', { name: /관계를 지키지 못합니다/ })).closest(
@@ -185,8 +185,8 @@ describe('task detail dependency kinds', () => {
     const moved = { ...shift, start_date: '2026-10-23', due_date: '2026-10-25' };
     const preview = vi
       .spyOn(api, 'previewLink')
-      .mockResolvedValueOnce({ shifts: [shift], undated: [] })
-      .mockResolvedValueOnce({ shifts: [moved], undated: [] });
+      .mockResolvedValueOnce({ shifts: [shift], undated: [], blocked: null })
+      .mockResolvedValueOnce({ shifts: [moved], undated: [], blocked: null });
     const set = vi
       .spyOn(api, 'setPredecessor')
       .mockResolvedValue({ kind: 'shift_conflict', current: { ...build, checklist: [] } });
@@ -206,6 +206,7 @@ describe('task detail dependency kinds', () => {
     vi.spyOn(api, 'previewLink').mockResolvedValue({
       shifts: [],
       undated: [{ task_id: 'c', reference: 'KED-c', title: '검토' }],
+      blocked: null,
     });
     const set = vi
       .spyOn(api, 'setPredecessor')
@@ -217,6 +218,45 @@ describe('task detail dependency kinds', () => {
     expect((await screen.findByTestId('link-status')).textContent).toContain(
       '날짜가 없어 옮기지 않는 업무: KED-c 검토',
     );
+  });
+
+  it('explains a plan with a date outside the saveable range and only offers saving the link alone', async () => {
+    await setLocale('ko', { reload: false });
+    mount();
+    const far = { ...shift, start_date: '2201-01-01', due_date: '2201-01-03' };
+    vi.spyOn(api, 'previewLink').mockResolvedValue({
+      shifts: [far],
+      undated: [],
+      blocked: {
+        reason: 'date_out_of_range',
+        shift_count: 1,
+        max_shifts: 500,
+        task_id: 'b',
+        reference: 'KED-b',
+        date: '2201-01-01',
+      },
+    });
+    const set = vi
+      .spyOn(api, 'setPredecessor')
+      .mockResolvedValue({ kind: 'updated', task: { ...build, checklist: [] } });
+    await editLagTo('3');
+    const panel = (
+      await screen.findByRole('heading', { name: '후속 업무 1개가 관계를 지키지 못합니다' })
+    ).closest('section');
+    if (panel === null) throw new Error('panel');
+    // 제안 날짜를 자르지 않고 그대로 보이며, 왜 함께 저장할 수 없는지 승인 전에 알린다.
+    expect(within(panel).getByText(/→ 2201-01-01~2201-01-03/)).toBeTruthy();
+    expect(within(panel).getByTestId('shift-blocked').textContent).toBe(
+      'KED-b 구현의 제안 날짜 2201-01-01이(가) 저장할 수 있는 범위(1900~2200년) 밖이라 함께 저장할 수 없습니다. 후속 업무를 옮기지 않고 저장하거나 취소하세요.',
+    );
+    const all = within(panel).getByRole('button', { name: '관계 저장하고 후속 업무 옮기기' });
+    expect(all).toHaveProperty('disabled', true);
+    await fireEvent.click(all);
+    expect(set).not.toHaveBeenCalled();
+    await fireEvent.click(within(panel).getByRole('button', { name: '관계만 저장' }));
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledWith('b', 'a', 'SS', 3, []);
+    });
   });
 
   it('rejects a lag that is not a whole number from 0 to 3650 before asking the server', async () => {
@@ -249,7 +289,9 @@ describe('removing a dependency while editing', () => {
     await setLocale('ko', { reload: false });
     mount(two, [design, prep]);
     const remove = vi.spyOn(api, 'removePredecessor').mockResolvedValue(without('a'));
-    const preview = vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [], undated: [] });
+    const preview = vi
+      .spyOn(api, 'previewLink')
+      .mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const set = vi.spyOn(api, 'setPredecessor');
     await fireEvent.click(await screen.findByRole('button', { name: 'KED-a 설계 관계 고치기' }));
     expect(screen.getByText('고치는 관계: 선행 업무 KED-a 설계 → 이 업무')).toBeTruthy();
@@ -303,7 +345,9 @@ describe('removing a dependency while editing', () => {
     mount(two, [design, prep]);
     let finish: (v: ReturnType<typeof without>) => void = () => undefined;
     vi.spyOn(api, 'removePredecessor').mockReturnValue(new Promise((r) => (finish = r)));
-    const preview = vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [], undated: [] });
+    const preview = vi
+      .spyOn(api, 'previewLink')
+      .mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const set = vi.spyOn(api, 'setPredecessor');
     await fireEvent.click(await screen.findByRole('button', { name: 'KED-a 설계 관계 고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: 'KED-a 설계 선행 관계 지우기' }));

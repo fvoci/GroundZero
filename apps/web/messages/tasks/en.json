@@ -208,6 +208,8 @@
   ],
   "tasks_shift_retried": "The following tasks changed in the meantime, so this was recalculated.",
   "tasks_shift_hint": "We suggest moving them later only as far as each dependency (type and lag) needs. Each task keeps its duration.",
+  "tasks_shift_blocked_count": "{count} following tasks would move, more than the {max} that can move at once, so they can't be saved together. Save without moving them, or cancel.",
+  "tasks_shift_blocked_date": "The proposed date {date} for {task} is outside the dates that can be saved (1900–2200), so they can't be saved together. Save without moving them, or cancel.",
   "tasks_shift_save_all": "Move following tasks and save",
   "tasks_shift_save_this": "Save this task only",
   "tasks_shift_link_save_all": "Save dependency and move following tasks",

@@ -192,6 +192,8 @@
   ],
   "tasks_shift_retried": "후속 업무가 그사이 바뀌어 다시 계산했습니다.",
   "tasks_shift_hint": "관계(종류·지연일)를 지키는 데 필요한 만큼만 뒤로 옮기자고 제안합니다. 각 업무의 기간은 그대로입니다.",
+  "tasks_shift_blocked_count": "옮길 후속 업무가 {count}개로 한 번에 옮길 수 있는 {max}개를 넘어 함께 저장할 수 없습니다. 후속 업무를 옮기지 않고 저장하거나 취소하세요.",
+  "tasks_shift_blocked_date": "{task}의 제안 날짜 {date}이(가) 저장할 수 있는 범위(1900~2200년) 밖이라 함께 저장할 수 없습니다. 후속 업무를 옮기지 않고 저장하거나 취소하세요.",
   "tasks_shift_save_all": "후속 업무도 옮겨 저장",
   "tasks_shift_save_this": "이 업무만 저장",
   "tasks_shift_link_save_all": "관계 저장하고 후속 업무 옮기기",
