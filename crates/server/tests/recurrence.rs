@@ -897,13 +897,7 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
         let root = dated_task(&app, &admin, &item, "매일", &day(today)).await;
         let (status, rule) = repeat(&app, &admin, &root, daily.clone()).await;
         assert_eq!(status, StatusCode::OK, "{rule:?}");
-        let id = rule["series"]["id"].as_str().unwrap().to_owned();
-        common::fixture_sql(
-            "DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
-            &id,
-        )
-        .await;
-        series.push(id);
+        series.push(rule["series"]["id"].as_str().unwrap().to_owned());
         items.push(item["id"].as_str().unwrap().to_owned());
     }
 
@@ -916,6 +910,15 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
         .execute(&mut *holder)
         .await
         .unwrap();
+    // 잠근 뒤에 미래 회차를 지운다. 같은 바이너리의 다른 시험이 회차 맞추기를 돌려도 앞 항목은 이 잠금에서 기다리고(지우기
+    // 전에 다시 만들지 못함), 아래에서 세는 동안에도 그렇다(리뷰).
+    for id in &series {
+        common::fixture_sql(
+            "DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
+            id,
+        )
+        .await;
+    }
     let mut tx = owner.begin().await.unwrap();
     sqlx::query("SET LOCAL lock_timeout = '300ms'")
         .execute(&mut *tx)
@@ -935,14 +938,8 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
     if ticked.is_ok() {
         tx.commit().await.unwrap();
     }
-    sqlx::query("SELECT pg_advisory_unlock(hashtextextended('fvoci-lane:' || $1 || ':done', 0))")
-        .bind(&items[0])
-        .execute(&mut *holder)
-        .await
-        .unwrap();
-    drop(holder);
-    assert!(ticked.is_ok(), "{ticked:?}");
 
+    // 잠금을 풀기 전에 센다(풀면 다른 시험의 회차 맞추기가 앞 항목을 채울 수 있다).
     let made = |id: String| {
         let owner = owner.clone();
         async move {
@@ -958,7 +955,14 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
     };
     let skipped = made(series[0].clone()).await;
     let synced = made(series[1].clone()).await;
+    sqlx::query("SELECT pg_advisory_unlock(hashtextextended('fvoci-lane:' || $1 || ':done', 0))")
+        .bind(&items[0])
+        .execute(&mut *holder)
+        .await
+        .unwrap();
+    drop(holder);
     owner.close().await;
+    assert!(ticked.is_ok(), "{ticked:?}");
     assert_eq!(skipped, 0, "the locked item was synced");
     assert!(synced >= 1, "the other item lost its occurrences");
 }
