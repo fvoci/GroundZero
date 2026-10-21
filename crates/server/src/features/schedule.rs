@@ -637,21 +637,6 @@ async fn date_plan(
     Ok(plan_view(&rows, plan))
 }
 
-/// 후속 재배치 미리보기(읽기, 옛 응답 모양). 아무것도 바꾸지 않는다. 업무를 볼 수 없으면 404.
-/// 날짜 없는 업무 알림까지 받으려면 `schedule-plan`을 쓴다.
-#[utoipa::path(post, path = "/api/tasks/{task_id}/schedule-preview", operation_id = "preview_task_schedule",
-    params(("task_id" = String, Path, format = Uuid)), request_body = SchedulePreviewInput,
-    responses((status = 200, body = [ShiftProposal]), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
-    tag = "tasks")]
-pub async fn preview(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(id): Path<Uuid>,
-    Json(input): Json<SchedulePreviewInput>,
-) -> Result<Json<Vec<ShiftProposal>>, AppError> {
-    Ok(Json(date_plan(&state, user, id, &input).await?.shifts))
-}
-
 /// 날짜를 바꿀 때의 재배치 계획(읽기). 옮길 후속 업무와 원인 관계, 날짜가 없어 계산하지 않은 업무.
 #[utoipa::path(post, path = "/api/tasks/{task_id}/schedule-plan", operation_id = "plan_task_schedule",
     params(("task_id" = String, Path, format = Uuid)), request_body = SchedulePreviewInput,
