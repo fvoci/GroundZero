@@ -87,17 +87,23 @@
     event.stopPropagation();
     if (event.currentTarget instanceof Element)
       event.currentTarget.setPointerCapture(event.pointerId);
+    // 미리 보기는 실제 날짜(표시 기간 끝에서 잘리기 전의 마감)로 계산하고 그릴 때만 표시 범위에 맞춰 자른다. 잘린 열
+    // 번호로 계산하면 보이는 끝과 저장될 날짜가 어긋난다(`editDates`는 실제 날짜로 계산한다).
+    const end = row.task.due_date ?? row.task.start_date;
+    const to = end === null ? row.to : dayNumber(end) - dayNumber(layout.first);
     drag = {
       id: row.task.id,
       edit,
       pointer: event.pointerId,
       x: event.clientX,
       from: row.from,
-      to: row.to,
+      to,
       days: 0,
     };
     draft = { id: row.task.id, from: row.from, to: row.to };
   }
+  /** 그릴 수 있는 열 번호로 자른다(표시 기간 끝을 넘는 끝은 마지막 열에 그린다, 잘린 막대와 같게). */
+  const clipTo = (to: number): number => Math.min(to, layout.days - 1);
   function move(event: PointerEvent): void {
     const d = drag;
     if (d?.pointer !== event.pointerId) return;
@@ -106,7 +112,8 @@
       return;
     }
     d.days = Math.round((event.clientX - d.x) / columnPx());
-    draft = { id: d.id, ...preview(d.from, d.to, d.edit, d.days) };
+    const p = preview(d.from, d.to, d.edit, d.days);
+    draft = { id: d.id, from: p.from, to: clipTo(p.to) };
   }
   function end(event: PointerEvent): void {
     const d = drag;
@@ -520,17 +527,21 @@
                   onpointerup={end}
                   onpointercancel={cancel}
                 ></div>
-                <div
-                  class="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none"
-                  data-gantt-edge="end"
-                  role="presentation"
-                  onpointerdown={(e: PointerEvent) => {
-                    start(e, row, 'end');
-                  }}
-                  onpointermove={move}
-                  onpointerup={end}
-                  onpointercancel={cancel}
-                ></div>
+                <!-- 표시 기간 끝에서 잘린 막대의 끝은 실제 마감이 아니라 끌 손잡이를 두지 않는다(끌어 봐야 보이는 끝이
+                     움직이지 않는다). 마감은 업무 상세의 날짜나 Alt+Shift+←·→로 바꾼다(저장 전 묻는 창이 실제 날짜를 보인다). -->
+                {#if !row.clippedEnd}
+                  <div
+                    class="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none"
+                    data-gantt-edge="end"
+                    role="presentation"
+                    onpointerdown={(e: PointerEvent) => {
+                      start(e, row, 'end');
+                    }}
+                    onpointermove={move}
+                    onpointerup={end}
+                    onpointercancel={cancel}
+                  ></div>
+                {/if}
               {/if}
             </div>
           {/if}
