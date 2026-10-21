@@ -93,13 +93,19 @@
       description: editDescription.trim(),
     };
     const stillHere = (): boolean => moduleId === target.id;
+    // 아이콘·설명·이름과 키는 따로 저장된다. 뒤 요청이 막혀도(키 409 등) 이미 저장된 앞 부분은 화면에 넣는다.
+    let partial: Module | undefined;
     try {
       const before = target.key;
-      if (edits.icon !== target.icon) await api.setModuleIcon(target.id, edits.icon);
+      if (edits.icon !== target.icon) {
+        await api.setModuleIcon(target.id, edits.icon);
+        partial = { ...target, icon: edits.icon };
+      }
       if (edits.description !== target.description) {
-        await api.setModuleDescription(target.id, edits.description);
+        partial = await api.setModuleDescription(target.id, edits.description);
       }
       const saved = await api.updateModule(target.id, edits.name, key);
+      partial = undefined;
       workspaceNav.refreshModules();
       forgetReferences();
       if (!stillHere()) return;
@@ -113,6 +119,10 @@
         settingsNote = m.modules_key_changed({ before, after: saved.key });
       }
     } catch (e: unknown) {
+      if (partial !== undefined) {
+        workspaceNav.refreshModules();
+        if (stillHere()) mod = partial;
+      }
       if (!stillHere()) return;
       settingsError =
         e instanceof ApiError && e.status === 409
