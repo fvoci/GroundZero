@@ -60,7 +60,10 @@
     };
   }
 
-  const f = $state(initialState());
+  // 연 때의 입력값. 시각·시간대를 고치지 않았으면 원래 RFC3339 값을 그대로 보낸다: 입력란은 분 단위라 다시 변환하면 초가
+  // 지워지고, 두 번 있는 시각(여름시간 끝)은 앞의 것으로 바뀐다(제목만 고쳤는데 시각이 바뀌는 일이 없게).
+  const base = initialState();
+  const f = $state({ ...base });
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
 
@@ -78,6 +81,8 @@
         error = m.events_missing_time({ zone });
         return;
       }
+      const kept = (wall: string, baseWall: string, stored: string | null): string | null =>
+        zone === base.timezone && wall === baseWall ? stored : null;
       input = {
         kind: f.kind,
         title: f.title,
@@ -85,9 +90,14 @@
         all_day: f.allDay,
         start_date: f.allDay ? f.startDate : null,
         end_date: f.allDay ? f.endDate : null,
-        starts_at: f.allDay ? null : instantOf(f.startWall, f.timezone.trim()),
-        ends_at: f.allDay ? null : instantOf(f.endWall, f.timezone.trim()),
-        timezone: f.timezone.trim(),
+        starts_at: f.allDay
+          ? null
+          : (kept(f.startWall, base.startWall, initial?.starts_at ?? null) ??
+            instantOf(f.startWall, zone)),
+        ends_at: f.allDay
+          ? null
+          : (kept(f.endWall, base.endWall, initial?.ends_at ?? null) ?? instantOf(f.endWall, zone)),
+        timezone: zone,
       };
     } catch {
       error = m.events_zone_invalid();
