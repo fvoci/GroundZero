@@ -6737,7 +6737,7 @@
           {
             "name": "from",
             "in": "query",
-            "description": "날짜 범위 시작(YYYY-MM-DD): 업무는 기한(없으면 시작일), 일정은 시작일, 그 밖은 고친 날.",
+            "description": "날짜 범위 시작(YYYY-MM-DD): 업무는 기한(없으면 시작일), 일정은 시작일, 기록은 발생일(없으면 고친 날), 그 밖은 고친 날.",
             "required": false,
             "schema": {
               "type": [
