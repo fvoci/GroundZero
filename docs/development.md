@@ -2270,6 +2270,13 @@ CodeRabbit은 push마다 바뀐 부분을 자동 검토했고(`5caedc9`·`acc544
 - **시험**: 새 컴포넌트 시험 `time-dst-input.test.ts` 2건, `event-form-keeps-instants.test.ts` 3건, `course-position-input.test.ts` 2건,
   `gantt-clipped-end.test.ts` 2건. 수정 전 소스(`376b2b6`)에서 9건 모두 실패(요청 발생·`09:00:00.000Z`·`05:30:00.000Z`·0·null 전송·끝 손잡이 있음·
   표 밖 미리 보기), 수정 후 통과. 웹 전체 375건, `pnpm lint`, `svelte-check` 통과. 간트 끌기는 jsdom 합성 포인터다. 실행: `pnpm --filter @fvoci/web exec vitest run tests/component/time-dst-input.test.ts tests/component/event-form-keeps-instants.test.ts tests/component/course-position-input.test.ts tests/component/gantt-clipped-end.test.ts`(수정 전은 `376b2b6`의 소스에 같은 시험 파일을 두고, 수정 후는 리뷰 반영 `5517418`과 그 뒤 커밋에서), 전체는 `pnpm --filter @fvoci/web run test`·`pnpm run lint`·`pnpm --filter @fvoci/web run check`. 리뷰 반영(`5517418`): 없는 시각 안내를 해당 칸 옆에(D-82), 다음 날로 넘어가는 끝은 그날의 시각만 검사(틈이 있는 날 23:30→02:30은 더해짐), 시청 위치 100시간 한도.
+- **브라우저 확인**(내장 브라우저, 합성 데이터 워크스페이스 "모듈 예제", 세 후속 브랜치를 main `6965f8f` 위에 합친 로컬 브랜치에서 `cargo xtask dev --oidc`,
+  뷰포트 2018×924, 도구의 실제 입력이며 사람의 손 조작이 아님): 시간대는 `PUT /api/me/settings`로 America/New_York(표시 설정 대화상자의 시간대
+  select가 내장 브라우저의 값 설정으로 반영되지 않아 API로 두고 끝나고 되돌림). 수동 기록 2026-03-08 02:30~03:30 → `POST` 없음, 시작 칸
+  `aria-invalid`와 문구. 일정: API로 만든 `09:00:37Z` 일정의 제목만 고쳐 저장 → `PUT` 본문과 저장 결과 모두 `09:00:37Z` 유지(판 2). 강의: DEVC-1 1회
+  위치 `abc` → `PUT` 없음·칸 옆 오류·저장값 유지, `12:30` → `PUT` 750·저장 750. 간트: API로 만든 2026-01-01~2028-01-01 업무는 끝 손잡이가 없고
+  (시작 손잡이는 있음), 막대를 실제로 두 칸 끌자 후속이 없어 바로 저장되며 안내와 저장이 모두 2026-01-03~2028-01-03(첫 시도는 줄 이름을 끌어
+  상세가 열렸고 끌기가 아니었다). 스크린샷은 세션 산출물로 따로 전달.
 
 ## 참고 자료
 
