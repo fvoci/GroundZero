@@ -4,6 +4,7 @@
   import type { EventInput, EventView, RecurrenceRule } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { formatDay } from '$lib/display';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -223,7 +224,7 @@
         {/key}
         {#if occurrence !== undefined && current.recurrence !== null}
           <div class="flex items-center gap-2 text-sm">
-            <span>{m.events_occurrence_only({ date: occurrence })}</span>
+            <span>{m.events_occurrence_only({ date: formatDay(occurrence) })}</span>
             <Button size="sm" variant="outline" onclick={() => void skipOccurrence(occurrence)}
               >{m.events_skip_occurrence()}</Button
             >

@@ -1,11 +1,13 @@
 // 알림 문장(종류별). 알림 화면과 홈이 같이 쓴다(홈이 모든 알림을 "언급"으로 보이던 것을 고침).
 import type { NotificationView } from '$lib/api/client';
+import { formatDay } from '$lib/display';
 import { m } from '$lib/paraglide/messages.js';
 
 export function notificationText(n: NotificationView): string {
   const who = n.actor_name ?? m.references_notification_someone();
   const target = `${n.document_reference ?? ''} ${n.document_title}`.trim();
-  const date = n.due_date ?? '';
+  // 날짜는 표시 언어의 서식으로(D-81).
+  const date = n.due_date === null ? '' : formatDay(n.due_date);
   switch (n.kind) {
     case 'mention':
       return m.references_notification_mention({ who, target });
