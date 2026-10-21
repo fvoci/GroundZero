@@ -1,9 +1,11 @@
 //! 백그라운드 작업 (O-19: 한 바이너리, 실행 역할로 나눔, 작업 기록은 PostgreSQL 테이블).
 //!
-//! 정해진 주기의 일(만료된 휴지통 비우기, 반복 업무 회차 만들기)을 한 번씩
-//! 처리하는 [`run_once`]와, 그것을 간격마다 부르는 [`spawn`]이 있다. 주기 작업은 DB의 `app_claim_schedule`로
+//! 확인 간격(`FVOCI_WORKER_INTERVAL_SECS`)마다 저장소 정리와 검색 색인 반영을 하고, 간격이 정해진 일(휴지통
+//! 만료와 이전 파일 버전 정리는 매시간, 반복 업무 회차는 15분마다, 업무 기한·항목 알림은 매시간)은 때가 되었을
+//! 때만 하는 [`run_once`]와, 그것을 간격마다 부르는 [`spawn`]이 있다. 간격이 정해진 일은 DB의 `app_claim_schedule`로
 //! 이름마다 한 번만 돌므로 여러 프로세스가 `all`·`worker` 역할로 떠 있어도 겹치지 않는다. 요청 처리 경로의
 //! 동기화(`/recurrences/sync`)와 관리자 비우기는 그대로 두어, 작업 프로세스가 없을 때도 따라잡을 수 있다.
+//! 알림·색인·저장소 정리는 요청 처리 경로가 대신하지 않으므로 `api` 역할만 띄우면 하지 않는다.
 //! 작업은 사용자 문맥 없이(`app.user_id` 없음) 정책에 묶인 `app_system_*` 함수만 부른다.
 
 use std::time::Duration;
@@ -328,6 +330,8 @@ pub fn spawn(
                     purged = report.purged,
                     occurrences = report.occurrences,
                     indexed = report.indexed,
+                    cleaned = report.cleaned,
+                    notified = report.notified,
                     "background tick"
                 );
             }
