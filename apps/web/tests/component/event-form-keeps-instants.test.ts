@@ -152,7 +152,9 @@ describe('event form keeps stored instants when only other fields change', () =>
     await waitFor(() => {
       expect(end.getAttribute('aria-invalid')).toBe('true');
     });
-    expect(screen.getByRole('alert').textContent).toContain(m.events_repeated_time_required());
+    expect(screen.getByRole('alert').textContent).toContain(
+      m.events_repeated_time_required({ field: m.events_ends() }),
+    );
     expect(end.getAttribute('aria-describedby')).toContain('ev-ends-repeated-error');
     expect(onsubmit).not.toHaveBeenCalled();
 
@@ -278,5 +280,49 @@ describe('event form keeps stored instants when only other fields change', () =>
       ends_at: '2026-11-01T05:45:00.000Z',
       timezone: NY,
     });
+  });
+
+  // 검증 리뷰: 고친 시각이 없는 시각(봄 여름시간 시작)이면 지금처럼 보내지 않고 알린다(D-81).
+  it('editing to a skipped spring time is refused with the missing-time message', async () => {
+    const onsubmit = renderForm(event('2026-03-08T07:30:00Z', '2026-03-08T08:00:00Z', NY));
+    const start = await screen.findByLabelText(m.events_starts());
+    await fireEvent.input(start, { target: { value: '2026-03-08T02:30' } });
+    await submit(start);
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain(m.events_missing_time({ zone: NY }));
+    });
+    expect(onsubmit).not.toHaveBeenCalled();
+  });
+
+  // 검증 리뷰: 다시 막힌 저장도 화면 낭독기가 다시 읽도록 칸 옆 알림을 새로 그린다.
+  it('announces a blocked save again each time', async () => {
+    const onsubmit = renderForm(event('2026-11-01T06:30:00Z', '2026-11-01T07:00:00Z', NY));
+    const end = await screen.findByLabelText(m.events_ends());
+    await fireEvent.input(end, { target: { value: '2026-11-01T01:55' } });
+    await submit(end);
+    const firstAlert = await screen.findByRole('alert');
+    await submit(end);
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).not.toBe(firstAlert);
+    });
+    expect(screen.getByRole('alert').textContent).toContain(
+      m.events_repeated_time_required({ field: m.events_ends() }),
+    );
+    expect(onsubmit).not.toHaveBeenCalled();
+  });
+
+  // 검증 리뷰: 종일로 바꿨다 되돌리면 앞서 막힌 "고르세요" 알림이 저장 시도 없이 다시 나타났다.
+  it('turning all day on and off clears an earlier choose-one alert', async () => {
+    renderForm(event('2026-11-01T06:30:00Z', '2026-11-01T07:00:00Z', NY));
+    const end = await screen.findByLabelText(m.events_ends());
+    await fireEvent.input(end, { target: { value: '2026-11-01T01:55' } });
+    await submit(end);
+    await screen.findByRole('alert');
+    const allDay = screen.getByRole('checkbox', { name: m.events_all_day() });
+    await fireEvent.click(allDay);
+    await fireEvent.click(allDay);
+    const again = await screen.findByLabelText(m.events_ends());
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(again.getAttribute('aria-invalid')).not.toBe('true');
   });
 });

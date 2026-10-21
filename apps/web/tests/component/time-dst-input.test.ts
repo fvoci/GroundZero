@@ -339,7 +339,9 @@ describe('editing a time entry at a wall time that occurs twice', () => {
     await waitFor(() => {
       expect(end.getAttribute('aria-invalid')).toBe('true');
     });
-    expect(screen.getByRole('alert').textContent).toContain(m.events_repeated_time_required());
+    expect(screen.getByRole('alert').textContent).toContain(
+      m.events_repeated_time_required({ field: m.time_end() }),
+    );
     expect(end.getAttribute('aria-describedby')).toContain('time-edit-end-repeated-error');
     expect(update).not.toHaveBeenCalled();
 

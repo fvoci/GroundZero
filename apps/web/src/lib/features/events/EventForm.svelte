@@ -77,6 +77,8 @@
   let endChoice = $state<string | undefined>(undefined);
   /** 두 번 있는 시각인데 고르지 않고 저장하려 한 칸(칸 옆에 알린다, D-82). */
   const unchosen = $state({ start: false, end: false });
+  // 고르지 않고 저장하려 한 횟수(다시 막힐 때마다 칸 옆 알림을 새로 그린다).
+  let attempt = $state(0);
 
   /** 그 끝을 고쳤는지: 저장된 시점이 없거나(새 일정·종일에서 바꿈) 시간대나 그 칸의 시각이 연 때와 다르면. */
   function edited(
@@ -145,6 +147,7 @@
         if (start.kind === 'unchosen' || end.kind === 'unchosen') {
           unchosen.start = start.kind === 'unchosen';
           unchosen.end = end.kind === 'unchosen';
+          attempt += 1;
           return;
         }
         startsAt = start.instant;
@@ -207,6 +210,11 @@
       checked={f.allDay}
       onCheckedChange={(v) => {
         f.allDay = v === true;
+        // 종일로 바꿨다 되돌리면 시각 칸을 다시 고르는 것이므로 앞서 고른 것과 알림을 지운다.
+        startChoice = undefined;
+        endChoice = undefined;
+        unchosen.start = false;
+        unchosen.end = false;
       }}
     />
     <Label for={`${idPrefix}-all-day`}>{m.events_all_day()}</Label>
@@ -246,6 +254,7 @@
           options={startOptions}
           chosen={startChoice}
           invalid={startInvalid}
+          {attempt}
           onchoose={(instant: string) => {
             startChoice = instant;
             unchosen.start = false;
@@ -278,6 +287,7 @@
           options={endOptions}
           chosen={endChoice}
           invalid={endInvalid}
+          {attempt}
           onchoose={(instant: string) => {
             endChoice = instant;
             unchosen.end = false;

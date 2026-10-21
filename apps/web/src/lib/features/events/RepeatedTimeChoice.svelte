@@ -16,10 +16,12 @@
     chosen: string | undefined;
     /** 고르지 않고 저장하려 했는지. */
     invalid: boolean;
+    /** 고르지 않고 저장하려 한 횟수. 다시 막히면 알림을 새로 그려 화면 낭독기가 다시 읽게 한다. */
+    attempt: number;
     onchoose: (instant: string) => void;
   }
 
-  const { id, field, zone, options, chosen, invalid, onchoose }: Props = $props();
+  const { id, field, zone, options, chosen, invalid, attempt, onchoose }: Props = $props();
 </script>
 
 <fieldset
@@ -45,7 +47,9 @@
   {/each}
 </fieldset>
 {#if invalid}
-  <p id={`${id}-repeated-error`} class="text-xs text-destructive" role="alert">
-    {m.events_repeated_time_required()}
-  </p>
+  {#key attempt}
+    <p id={`${id}-repeated-error`} class="text-xs text-destructive" role="alert">
+      {m.events_repeated_time_required({ field })}
+    </p>
+  {/key}
 {/if}

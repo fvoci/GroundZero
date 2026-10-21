@@ -48,6 +48,8 @@
   let endChoice = $state<string | undefined>(undefined);
   /** 두 번 있는 시각인데 고르지 않고 저장하려 한 칸(칸 옆에 알린다, D-82). */
   const unchosen = $state({ start: false, end: false });
+  // 고르지 않고 저장하려 한 횟수(다시 막힐 때마다 칸 옆 알림을 새로 그린다).
+  let attempt = $state(0);
   let busy = $state(false);
   let confirmDelete = $state(false);
   let history = $state<
@@ -155,6 +157,7 @@
     if (start.kind === 'unchosen' || (end !== null && end.kind === 'unchosen')) {
       unchosen.start = start.kind === 'unchosen';
       unchosen.end = end !== null && end.kind === 'unchosen';
+      attempt += 1;
       return;
     }
     busy = true;
@@ -250,6 +253,7 @@
               options={startOptions}
               chosen={startChoice}
               invalid={startInvalid}
+              {attempt}
               onchoose={(instant: string) => {
                 startChoice = instant;
                 unchosen.start = false;
@@ -290,6 +294,7 @@
               options={endOptions}
               chosen={endChoice}
               invalid={endInvalid}
+              {attempt}
               onchoose={(instant: string) => {
                 endChoice = instant;
                 unchosen.end = false;
