@@ -166,9 +166,8 @@ DO $$
     v_lane record;
   BEGIN
     FOR v_lane IN
-      SELECT item_id, status FROM tasks
-      GROUP BY item_id, status, position
-      HAVING count(*) > 1
+      SELECT DISTINCT item_id, status
+      FROM (SELECT item_id, status FROM tasks GROUP BY item_id, status, position HAVING count(*) > 1) d
     LOOP
       PERFORM app_renumber_lane(v_lane.item_id, v_lane.status);
     END LOOP;
