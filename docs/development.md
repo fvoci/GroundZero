@@ -2254,7 +2254,7 @@ CodeRabbit은 push마다 바뀐 부분을 자동 검토했고(`5caedc9`·`acc544
 
 - **5가. 존재하지 않는 DST 시각** (`TimeScreen.svelte`, `TimeEntryDialog.svelte`): 수동 기록은 시작·끝의 현지 시각 존재 여부(`isMissingLocalTime`)를
   다음 날 보정보다 먼저 보고, 보정한 다음 날 끝도 본다. 없는 시각이면 저장하지 않고 `events_missing_time` 문구로 알린다. 전에는 뉴욕 2026-03-08
-  02:30~03:30이 둘 다 07:30Z로 변환돼 끝이 시작보다 이르다고 보아 다음 날로 넘겨 24시간 기록이 됐다. 고치기는 고친 칸만 변환·검사하고 고치지 않은 칸은
+  02:30~03:30이 둘 다 07:30Z로 변환돼 둘 다 07:30Z가 되어 "끝이 시작보다 늦지 않다"(`ended <= started`)고 보아 다음 날로 넘겨 24시간 기록이 됐다. 고치기는 고친 칸만 변환·검사하고 고치지 않은 칸은
   원래 RFC3339 값을 그대로 보낸다(전과 같음).
 - **5나. 제목만 고쳐도 시각이 바뀜** (`EventForm.svelte`): 연 때의 시각·시간대 입력값(`base`)을 기억해 두고, 같으면 원래 `starts_at`·`ends_at`을 그대로
   보낸다(`TimeEntryDialog`의 보존 방식). 시각이나 시간대를 고치면 전처럼 변환한다. 전에는 09:00:37Z가 09:00:00Z로, 뉴욕 2026-11-01의 두 번째 01:30
@@ -2269,7 +2269,7 @@ CodeRabbit은 push마다 바뀐 부분을 자동 검토했고(`5caedc9`·`acc544
   `tasks_gantt_edit_hint`에 잘린 끝 한 문장을 더했다.
 - **시험**: 새 컴포넌트 시험 `time-dst-input.test.ts` 2건, `event-form-keeps-instants.test.ts` 3건, `course-position-input.test.ts` 2건,
   `gantt-clipped-end.test.ts` 2건. 수정 전 소스(`376b2b6`)에서 9건 모두 실패(요청 발생·`09:00:00.000Z`·`05:30:00.000Z`·0·null 전송·끝 손잡이 있음·
-  표 밖 미리 보기), 수정 후 통과. 웹 전체 375건, `pnpm lint`, `svelte-check` 통과. 간트 끌기는 jsdom 합성 포인터다.
+  표 밖 미리 보기), 수정 후 통과. 웹 전체 375건, `pnpm lint`, `svelte-check` 통과. 간트 끌기는 jsdom 합성 포인터다. 실행: `pnpm --filter @fvoci/web exec vitest run tests/component/time-dst-input.test.ts tests/component/event-form-keeps-instants.test.ts tests/component/course-position-input.test.ts tests/component/gantt-clipped-end.test.ts`(수정 전은 `376b2b6`의 소스에 같은 시험 파일을 두고, 수정 후는 리뷰 반영 `5517418`과 그 뒤 커밋에서), 전체는 `pnpm --filter @fvoci/web run test`·`pnpm run lint`·`pnpm --filter @fvoci/web run check`. 리뷰 반영(`5517418`): 없는 시각 안내를 해당 칸 옆에(D-82), 다음 날로 넘어가는 끝은 그날의 시각만 검사(틈이 있는 날 23:30→02:30은 더해짐), 시청 위치 100시간 한도.
 
 ## 참고 자료
 

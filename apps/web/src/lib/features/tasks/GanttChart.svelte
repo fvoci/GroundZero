@@ -113,7 +113,9 @@
     }
     d.days = Math.round((event.clientX - d.x) / columnPx());
     const p = preview(d.from, d.to, d.edit, d.days);
-    draft = { id: d.id, from: p.from, to: clipTo(p.to) };
+    // 시작도 표시 범위 안에 두고 끝이 시작 앞으로 가지 않게 한다(마지막 열에서 시작하는 잘린 막대를 오른쪽으로 끌 때).
+    const from = clipTo(p.from);
+    draft = { id: d.id, from, to: Math.max(clipTo(p.to), from) };
   }
   function end(event: PointerEvent): void {
     const d = drag;
