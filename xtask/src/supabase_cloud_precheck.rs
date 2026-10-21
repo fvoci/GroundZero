@@ -44,7 +44,13 @@ enum Failure {
     InvalidArguments,
     InvalidTarget,
     AmbientSettingsNotAllowed,
-    ConnectionTlsOrQueryFailed,
+    ConnectionNetworkIo,
+    ConnectionTls,
+    ConnectionAuthentication,
+    ConnectionDatabase,
+    ConnectionProtocol,
+    ConnectionUnclassified,
+    QueryFailed,
     UnexpectedQueryResult,
     ClientError,
     Timeout,
@@ -57,11 +63,43 @@ impl Failure {
             Self::InvalidArguments => "invalid_arguments",
             Self::InvalidTarget => "invalid_target",
             Self::AmbientSettingsNotAllowed => "ambient_settings_not_allowed",
-            Self::ConnectionTlsOrQueryFailed => "connection_tls_or_query_failed",
+            Self::ConnectionNetworkIo => "connection_network_io",
+            Self::ConnectionTls => "connection_tls",
+            Self::ConnectionAuthentication => "connection_authentication",
+            Self::ConnectionDatabase => "connection_database",
+            Self::ConnectionProtocol => "connection_protocol",
+            Self::ConnectionUnclassified => "connection_unclassified",
+            Self::QueryFailed => "query_failed",
             Self::UnexpectedQueryResult => "unexpected_query_result",
             Self::ClientError => "client_error",
             Self::Timeout => "timeout",
         }
+    }
+}
+
+fn classify_connection_error(error: sqlx::Error) -> Failure {
+    // Classify only typed driver errors and SQLSTATE class 28. Never inspect or
+    // format messages: they can contain credentials and connection identities.
+    match error {
+        // SQLx does not reliably separate DNS, TCP and later socket I/O here.
+        sqlx::Error::Io(_) => Failure::ConnectionNetworkIo,
+        // Includes TLS negotiation failures, not only certificate validation.
+        sqlx::Error::Tls(_) => Failure::ConnectionTls,
+        sqlx::Error::Database(error) => {
+            if error.code().is_some_and(|code| {
+                code.len() == 5
+                    && code.starts_with("28")
+                    && code
+                        .bytes()
+                        .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
+            }) {
+                Failure::ConnectionAuthentication
+            } else {
+                Failure::ConnectionDatabase
+            }
+        }
+        sqlx::Error::Protocol(_) => Failure::ConnectionProtocol,
+        _ => Failure::ConnectionUnclassified,
     }
 }
 
@@ -184,7 +222,7 @@ impl NativeClient {
         sqlx::raw_sql(statement)
             .execute(self.connection()?)
             .await
-            .map_err(|_| Failure::ConnectionTlsOrQueryFailed)?;
+            .map_err(|_| Failure::QueryFailed)?;
         Ok(())
     }
 }
@@ -194,7 +232,7 @@ impl ConnectionClient for NativeClient {
         self.0 = Some(
             PgConnection::connect_with(&connect_options(target))
                 .await
-                .map_err(|_| Failure::ConnectionTlsOrQueryFailed)?,
+                .map_err(classify_connection_error)?,
         );
         Ok(())
     }
@@ -205,7 +243,7 @@ impl ConnectionClient for NativeClient {
         sqlx::query_scalar(SELECT_ONE)
             .fetch_one(self.connection()?)
             .await
-            .map_err(|_| Failure::ConnectionTlsOrQueryFailed)
+            .map_err(|_| Failure::QueryFailed)
     }
     async fn rollback(&mut self) -> Result<(), Failure> {
         self.statement("ROLLBACK").await
