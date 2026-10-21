@@ -21,6 +21,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::Access;
 use crate::features::recurrence::RecurrenceRule;
+use crate::features::schedule::{self, Change, LinkKind, Span, TaskLink};
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use crate::ids::{ItemId, ModuleId, UserId, WorkspaceId};
@@ -135,9 +136,11 @@ pub struct Task {
     pub tags: Vec<String>,
     /// 마일스톤이면 마감일 하나만 쓴다.
     pub milestone: bool,
-    /// 같은 항목 안의 선행 업무(끝나야 시작).
+    /// 같은 항목 안의 선행 업무 id(`predecessors`와 같은 순서). 종류·지연일은 `predecessors`에 있다.
     #[schema(value_type = Vec<String>)]
     pub predecessor_ids: Vec<Uuid>,
+    /// 선행 관계: 선행 업무, 종류(FS·SS·FF·SF), 지연일(D-91). 후속 업무는 다른 업무의 이 목록을 거꾸로 찾는다.
+    pub predecessors: Vec<TaskLink>,
     /// 반복 업무의 회차면 그 반복.
     pub series: Option<TaskSeries>,
     /// 반복 회차의 날짜(규칙 기준).
@@ -224,7 +227,7 @@ pub struct SuccessorShift {
 }
 
 /// 한 번에 옮길 수 있는 후속 업무 수.
-const MAX_SHIFTS: usize = 500;
+pub(crate) const MAX_SHIFTS: usize = 500;
 
 /// 칸반 이동: 열(상태)과 그 안에서 바로 뒤에 올 업무(없으면 맨 끝).
 #[derive(Debug, Deserialize, ToSchema)]
@@ -357,6 +360,8 @@ struct TaskRow {
     tags: Vec<String>,
     milestone: bool,
     predecessor_ids: Vec<Uuid>,
+    predecessor_kinds: Vec<String>,
+    predecessor_lags: Vec<i32>,
     series_id: Option<Uuid>,
     series_root: Option<Uuid>,
     series_rule: Option<serde_json::Value>,
@@ -376,6 +381,10 @@ const TASK_SELECT: &str = "SELECT t.id, t.item_id, i.module_id, t.workspace_id, 
         t.start_date, t.due_date, t.estimate_minutes, t.tags, t.milestone,
         ARRAY(SELECT d.predecessor_id FROM task_dependencies d WHERE d.successor_id = t.id
               ORDER BY d.created_at, d.predecessor_id) AS predecessor_ids,
+        ARRAY(SELECT d.kind FROM task_dependencies d WHERE d.successor_id = t.id
+              ORDER BY d.created_at, d.predecessor_id) AS predecessor_kinds,
+        ARRAY(SELECT d.lag_days FROM task_dependencies d WHERE d.successor_id = t.id
+              ORDER BY d.created_at, d.predecessor_id) AS predecessor_lags,
         s.id AS series_id, s.root_task_id AS series_root, s.rule AS series_rule, s.timezone AS series_timezone,
         t.occurrence_date,
         c.done AS checklist_done, c.total AS checklist_total,
@@ -434,6 +443,8 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 tags,
                 milestone,
                 predecessor_ids,
+                predecessor_kinds,
+                predecessor_lags,
                 series_id,
                 series_root,
                 series_rule,
@@ -451,6 +462,20 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 .extract_if(.., |(task, _)| *task == id)
                 .map(|(_, a)| a)
                 .collect();
+            let predecessors = predecessor_ids
+                .iter()
+                .zip(&predecessor_kinds)
+                .zip(&predecessor_lags)
+                .map(|((&task_id, kind), &lag_days)| {
+                    Ok(TaskLink {
+                        task_id,
+                        kind: LinkKind::parse(kind).ok_or_else(|| {
+                            AppError::Config(format!("unknown dependency kind {kind}"))
+                        })?,
+                        lag_days,
+                    })
+                })
+                .collect::<Result<Vec<_>, AppError>>()?;
             Ok(Task {
                 id,
                 item_id,
@@ -470,6 +495,7 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 tags,
                 milestone,
                 predecessor_ids,
+                predecessors,
                 series: match (series_id, series_root, series_timezone) {
                     (Some(id), Some(root_task_id), Some(timezone)) => Some(TaskSeries {
                         id,
@@ -650,23 +676,17 @@ pub async fn update(
         ));
     }
     let tags = validate_tags(&input.tags)?;
-    if input.successor_shifts.len() > MAX_SHIFTS {
-        return Err(AppError::BadRequest(format!(
-            "at most {MAX_SHIFTS} successor shifts"
-        )));
-    }
-    let mut shifts = Vec::with_capacity(input.successor_shifts.len());
-    for shift in &input.successor_shifts {
-        // 날짜 형식은 업무 날짜와 같은 규칙으로 확인한 뒤 DB에 넘긴다.
-        shifts.push(serde_json::json!({
-            "task_id": shift.task_id,
-            "base_version": shift.base_version,
-            "start_date": format_date(parse_date(shift.start_date.as_deref(), "start_date")?),
-            "due_date": format_date(parse_date(shift.due_date.as_deref(), "due_date")?),
-        }));
-    }
-    let shifts = serde_json::Value::Array(shifts);
+    let (shifts, approved) = schedule::approved_shifts(&input.successor_shifts)?;
     let mut tx = state.db.begin_as(user).await?;
+    // 승인 목록을 다시 계산해 볼 때 쓰는 옮기기 전 날짜(이 업무와 옮길 업무).
+    let before = if approved.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        let ids: Vec<Uuid> = std::iter::once(id)
+            .chain(approved.iter().map(|&(t, _)| t))
+            .collect();
+        schedule::spans_before(&mut tx, &ids).await?
+    };
     let ids = needed_ids(
         tx.conn(),
         sqlx::query_scalar("SELECT app_update_task_ids($1, $2, $3)")
@@ -695,6 +715,26 @@ pub async fn update(
     .fetch_one(tx.conn())
     .await
     .map_err(AppError::from_db_function)?;
+    // 승인한 재배치가 지금(잠근 뒤) 상태로 다시 세운 계획과 같아야 한다. 그사이 관계·종류·지연일·다른 업무의
+    // 날짜나 완료가 바뀌어 다르면 아무것도 바꾸지 않는다(D-91). 승인 목록이 비면(옮기지 않기로 함) 보지 않는다.
+    if outcome == "updated"
+        && !approved.is_empty()
+        && !schedule::approved_still_planned(
+            &mut tx,
+            id,
+            &before,
+            None,
+            Change::Move {
+                task: id,
+                next: Span { start, due },
+            },
+            &approved,
+        )
+        .await?
+    {
+        drop(tx);
+        return schedule::shift_conflict(&state, user, id).await;
+    }
     let detail = load_detail(&mut tx, id).await?;
     tx.commit().await?;
     // 반복 업무를 고쳤으면 그 반복의 회차를 맞춘다(별도 트랜잭션). 실패해도 고치기는 이미 끝났으므로 기록만 한다.

@@ -285,6 +285,8 @@ async fn api_not_found() -> AppError {
         tasks::update_checklist_item,
         tasks::delete_checklist_item,
         schedule::preview,
+        schedule::plan,
+        schedule::plan_link,
         schedule::add_predecessor,
         schedule::remove_predecessor,
         events::list,
@@ -485,6 +487,13 @@ async fn api_not_found() -> AppError {
         tasks::SuccessorShift,
         schedule::SchedulePreviewInput,
         schedule::ShiftProposal,
+        schedule::ShiftCause,
+        schedule::SchedulePlan,
+        schedule::UndatedTask,
+        schedule::LinkKind,
+        schedule::LinkInput,
+        schedule::SetPredecessor,
+        schedule::TaskLink,
         events::EventKind,
         events::Event,
         events::EventInput,
@@ -830,6 +839,11 @@ pub fn router(state: AppState) -> Router {
         .route("/tasks/{task_id}/position", put(tasks::move_task))
         .route("/tasks/{task_id}/parent", put(tasks::set_parent))
         .route("/tasks/{task_id}/schedule-preview", post(schedule::preview))
+        .route("/tasks/{task_id}/schedule-plan", post(schedule::plan))
+        .route(
+            "/tasks/{task_id}/predecessors/{predecessor_id}/schedule-plan",
+            post(schedule::plan_link),
+        )
         .route(
             "/items/{item_id}/events",
             get(events::list).post(events::create),
