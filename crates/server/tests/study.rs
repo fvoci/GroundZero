@@ -316,6 +316,9 @@ async fn two_writers_on_the_same_unit_version_do_not_overwrite() {
     )
     .await;
     assert_eq!(second.status, StatusCode::CONFLICT, "{:?}", second.json);
+    // 판 충돌은 다시 보내라는 재시도가 아니라 다시 읽으라는 뜻이다(감사 C32, #77): 409 `invalid_state`와 SQL의 설명 그대로.
+    assert_eq!(second.json["error"], "invalid_state");
+    assert_eq!(second.json["message"], "the unit changed; reload it");
     let now = plan(&app, &writer, &item).await["units"][0].clone();
     assert_eq!(now["title"], "1장 기술통계");
     assert_eq!(now["unit"], "pages");

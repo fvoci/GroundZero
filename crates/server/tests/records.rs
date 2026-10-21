@@ -226,12 +226,11 @@ async fn analysis_records_pin_file_versions_and_follow_item_access() {
     let edited = send(&app, Method::PUT, &edit_uri, Some(&other), Some(edit(1))).await;
     assert_eq!(edited.status, StatusCode::OK, "{:?}", edited.json);
     assert_eq!(edited.json["version"], 2);
-    assert_eq!(
-        send(&app, Method::PUT, &edit_uri, Some(&other), Some(edit(1)))
-            .await
-            .status,
-        StatusCode::CONFLICT
-    );
+    let stale = send(&app, Method::PUT, &edit_uri, Some(&other), Some(edit(1))).await;
+    assert_eq!(stale.status, StatusCode::CONFLICT, "{:?}", stale.json);
+    // 판 충돌은 다시 보내라는 재시도가 아니라 다시 읽으라는 뜻이다(감사 C32, #77): 409 `invalid_state`와 SQL의 설명 그대로.
+    assert_eq!(stale.json["error"], "invalid_state");
+    assert_eq!(stale.json["message"], "the record changed; reload it");
     // 연결을 v2로 바꿨으니 v1은 이제 지울 수 있다.
     assert_eq!(
         send(
