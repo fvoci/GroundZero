@@ -29,6 +29,9 @@
   let editingDays = false;
   let versionDays = $state('');
   let editingVersionDays = false;
+  // 보존 기간 칸의 입력·저장 오류는 그 칸 옆에 보인다(D-82).
+  let daysError = $state<string | undefined>(undefined);
+  let versionDaysError = $state<string | undefined>(undefined);
   let reloadKey = $state(0);
 
   const isAdmin = $derived(workspace === undefined || workspace.role === 'admin');
@@ -54,7 +57,12 @@
       });
   });
 
-  async function run(action: () => Promise<unknown>, done: string): Promise<void> {
+  /** `fail`이 있으면 실패 문구를 화면 위 공용 알림 대신 그쪽(칸 옆)에 보인다. */
+  async function run(
+    action: () => Promise<unknown>,
+    done: string,
+    fail?: (text: string) => void,
+  ): Promise<void> {
     error = undefined;
     try {
       await action();
@@ -66,7 +74,9 @@
       workspaceNav.refreshModules();
       workspaceNav.refreshDocs();
     } catch (e: unknown) {
-      error = errorText(e, m.trash_action_failed());
+      const text = errorText(e, m.trash_action_failed());
+      if (fail === undefined) error = text;
+      else fail(text);
     }
   }
 
@@ -128,12 +138,14 @@
         e.preventDefault();
         const n = Number(days.trim());
         if (!Number.isInteger(n) || n < 1 || n > 3650) {
-          error = m.trash_retention_invalid();
+          daysError = m.trash_retention_invalid();
           return;
         }
+        daysError = undefined;
         void run(
           () => api.setTrashRetention(workspace.id, n),
           m.trash_retention_changed({ days: n }),
+          (text: string) => (daysError = text),
         );
       }}
     >
@@ -145,9 +157,16 @@
           inputmode="numeric"
           bind:value={days}
           oninput={() => (editingDays = true)}
+          aria-invalid={daysError !== undefined}
+          aria-describedby={daysError !== undefined ? 'trash-retention-error' : undefined}
         />
       </div>
       <Button type="submit" variant="outline">{m.trash_change()}</Button>
+      {#if daysError !== undefined}
+        <p id="trash-retention-error" role="alert" class="w-full text-sm text-destructive">
+          {daysError}
+        </p>
+      {/if}
     </form>
     <form
       class="flex flex-wrap items-end gap-2"
@@ -157,12 +176,14 @@
         const raw = versionDays.trim();
         const n = raw === '' ? null : Number(raw);
         if (n !== null && (!Number.isInteger(n) || n < 1 || n > 3650)) {
-          error = m.trash_version_retention_invalid();
+          versionDaysError = m.trash_version_retention_invalid();
           return;
         }
+        versionDaysError = undefined;
         void run(
           () => api.setVersionRetention(workspace.id, n),
           n === null ? m.trash_versions_forever() : m.trash_versions_days({ days: n }),
+          (text: string) => (versionDaysError = text),
         );
       }}
     >
@@ -174,9 +195,16 @@
           inputmode="numeric"
           bind:value={versionDays}
           oninput={() => (editingVersionDays = true)}
+          aria-invalid={versionDaysError !== undefined}
+          aria-describedby={versionDaysError !== undefined ? 'version-retention-error' : undefined}
         />
       </div>
       <Button type="submit" variant="outline">{m.trash_change()}</Button>
+      {#if versionDaysError !== undefined}
+        <p id="version-retention-error" role="alert" class="w-full text-sm text-destructive">
+          {versionDaysError}
+        </p>
+      {/if}
       <p class="w-full text-sm text-muted-foreground">
         {m.trash_version_retention_hint()}
       </p>
