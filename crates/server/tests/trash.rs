@@ -1160,6 +1160,35 @@ async fn owner_pool() -> sqlx::PgPool {
     sqlx::PgPool::connect(&url).await.unwrap()
 }
 
+/// 열어 둔 트랜잭션의 서버 프로세스 번호.
+async fn backend_pid(tx: &mut fvoci_server::db::UserTx) -> i32 {
+    sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(tx.conn())
+        .await
+        .unwrap()
+}
+
+/// 다른 세션이 `holder`의 잠금을 실제로 기다릴 때까지 기다린다. 고정 시간만 기다리면 느린 환경에서 요청이 잠금에
+/// 닿기 전에 커밋해, 경합을 재현하지 못한 채 통과하거나 엉뚱한 이유로 실패한다. 끝내 기다리지 않으면 시험을 멈춘다.
+async fn wait_until_blocked_by(holder: i32) {
+    let db = owner_pool().await;
+    for _ in 0..500 {
+        let blocked: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(holder)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        if blocked {
+            db.close().await;
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("no request waited on the held transaction");
+}
+
 async fn new_task(
     app: &Router,
     user: &TestUser,
@@ -1195,6 +1224,7 @@ async fn trashing_a_parent_leaves_a_subtask_detached_while_it_waited() {
 
     // T1: 하위 업무를 최상위로 뗀다(아직 끝나지 않음, 하위 업무 행을 잡고 있다).
     let mut t1 = state.db.begin_as(admin.id).await.unwrap();
+    let holder = backend_pid(&mut t1).await;
     sqlx::query("SELECT app_set_task_parent($1, NULL, $2)")
         .bind(sub_id)
         .bind(fvoci_server::db::new_ids(1))
@@ -1208,7 +1238,7 @@ async fn trashing_a_parent_leaves_a_subtask_detached_while_it_waited() {
         let admin = admin.clone();
         async move { send(&app, Method::DELETE, &parent_uri, Some(&admin), None).await }
     });
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    wait_until_blocked_by(holder).await;
     t1.commit().await.unwrap();
     let second = second.await.unwrap();
     assert_eq!(second.status, StatusCode::OK, "{:?}", second.json);
@@ -1272,6 +1302,7 @@ async fn trashing_a_document_moved_to_another_workspace_meanwhile_conflicts() {
 
     // T1: 관리자가 문서를 w2로 옮긴다(옮기기 처리와 같은 순서, 아직 끝나지 않음).
     let mut t1 = state.db.begin_as(admin.id).await.unwrap();
+    let holder = backend_pid(&mut t1).await;
     sqlx::query("SELECT app_lock_move($1, $2, NULL)")
         .bind(doc_id)
         .bind(w2_id)
@@ -1297,7 +1328,7 @@ async fn trashing_a_document_moved_to_another_workspace_meanwhile_conflicts() {
         let writer = writer.clone();
         async move { send(&app, Method::DELETE, &uri, Some(&writer), None).await }
     });
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    wait_until_blocked_by(holder).await;
     t1.commit().await.unwrap();
     let second = second.await.unwrap();
     assert_eq!(second.status, StatusCode::CONFLICT, "{:?}", second.json);
