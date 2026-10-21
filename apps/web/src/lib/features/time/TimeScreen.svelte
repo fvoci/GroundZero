@@ -122,25 +122,24 @@
     manualError = undefined;
     try {
       // 그 시간대에 없는 시각(여름시간 시작일의 건너뛴 시각, D-81)은 조용히 옮겨 저장하지 않는다. 변환 전에 본다(없는
-      // 시각을 변환하면 틈만큼 뒤로 밀려 엉뚱한 길이가 된다). 끝은 실제로 쓰일 날의 시각만 본다: 그날의 끝이 시작보다
-      // 이르면(없는 시각이면 밀린 값으로 비교) 다음 날로 넘어간 기록이므로 다음 날의 끝을 본다.
+      // 시각을 변환하면 틈만큼 뒤로 밀려 엉뚱한 길이가 된다). 끝은 실제로 쓰일 날의 시각만 본다: 입력한 끝이 시작보다
+      // 이르면(벽시계 기준. 밀린 값으로 비교하면 틈 안의 끝이 시작보다 늦어 보인다) 다음 날로 넘어간 기록이므로 다음 날의
+      // 끝을 본다. 두 값 모두 type="time"의 0을 채운 `HH:mm`이라 문자열 비교가 시각 순서와 같다.
       manualMissing = undefined;
       const startWall = `${manual.day}T${manual.start}`;
       if (isMissingLocalTime(startWall, zone)) {
         manualMissing = 'start';
         return;
       }
-      const started = instantOf(startWall, zone);
-      let endWall = `${manual.day}T${manual.end}`;
-      let ended = instantOf(endWall, zone);
-      if (ended <= started) {
-        endWall = `${fromDayNumber(dayNumber(manual.day) + 1)}T${manual.end}`;
-        ended = instantOf(endWall, zone);
-      }
+      const endDay =
+        manual.end <= manual.start ? fromDayNumber(dayNumber(manual.day) + 1) : manual.day;
+      const endWall = `${endDay}T${manual.end}`;
       if (isMissingLocalTime(endWall, zone)) {
         manualMissing = 'end';
         return;
       }
+      const started = instantOf(startWall, zone);
+      const ended = instantOf(endWall, zone);
       const entry = {
         started_at: started,
         ended_at: ended,

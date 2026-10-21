@@ -92,6 +92,55 @@ describe('time entries at a wall time that does not exist', () => {
     });
   });
 
+  it('manual entry: an end earlier on the clock than the start goes to the next day even if that hour is missing today', async () => {
+    // 다음 날로 넘길지는 입력한 벽시계 시각으로 정한다. 틈만큼 밀린 값으로 비교하면 03:00 → 02:30은 같은 날의 없는
+    // 02:30으로 거절되고 03:30 → 02:30은 더해져, 같은 꼴의 입력이 시작 시각에 따라 갈린다.
+    const add = vi.spyOn(api, 'addTimeEntry').mockResolvedValue({
+      id: 'n1',
+      started_at: '2026-03-08T07:00:00Z',
+      ended_at: '2026-03-09T06:30:00Z',
+      paused_at: null,
+      paused_seconds: 0,
+      seconds: 84_600,
+      kind: 'work',
+      memo: '',
+      target: null,
+      version: 1,
+    });
+    render(TimeScreen, { props: { workspaces: [] } });
+    const day = await screen.findByLabelText(m.time_date());
+    await fireEvent.input(day, { target: { value: '2026-03-08' } });
+    await fireEvent.input(screen.getByLabelText(m.time_start()), { target: { value: '03:00' } });
+    await fireEvent.input(screen.getByLabelText(m.time_end()), { target: { value: '02:30' } });
+    await submit(day);
+    await waitFor(() => {
+      expect(add).toHaveBeenCalledTimes(1);
+    });
+    expect(add.mock.calls[0]?.[1]).toMatchObject({
+      started_at: '2026-03-08T07:00:00.000Z',
+      ended_at: '2026-03-09T06:30:00.000Z',
+    });
+
+    // 대조: 03:30 → 02:30도 다음 날 02:30까지.
+    await fireEvent.input(screen.getByLabelText(m.time_start()), { target: { value: '03:30' } });
+    await submit(day);
+    await waitFor(() => {
+      expect(add).toHaveBeenCalledTimes(2);
+    });
+    expect(add.mock.calls[1]?.[1]).toMatchObject({
+      started_at: '2026-03-08T07:30:00.000Z',
+      ended_at: '2026-03-09T06:30:00.000Z',
+    });
+
+    // 끝이 시작보다 늦으면 같은 날이라 없는 02:30은 계속 거절한다.
+    await fireEvent.input(screen.getByLabelText(m.time_start()), { target: { value: '01:30' } });
+    await submit(day);
+    await waitFor(() => {
+      expect(screen.getByLabelText(m.time_end()).getAttribute('aria-invalid')).toBe('true');
+    });
+    expect(add).toHaveBeenCalledTimes(2);
+  });
+
   it('editing: a changed start at a missing time is refused, and untouched fields keep their stored values', async () => {
     const entry: TimeEntryView = {
       id: 'e1',
