@@ -65,6 +65,7 @@
   "events_count_invalid": "Count must be a whole number from 1 to 1000.",
   "events_until_required": "Choose an end date.",
   "events_recurrence_save_failed": "Couldn't save the repeat rule.",
+  "events_rule_changed_meanwhile": "Someone changed the repeat rule meanwhile. The summary above shows the current rule; save again to replace it with yours.",
   "events_recurrence": "Repeat",
   "events_no_recurrence": "Doesn't repeat.",
   "events_frequency": "Frequency",

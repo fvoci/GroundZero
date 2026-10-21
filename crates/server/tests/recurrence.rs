@@ -675,3 +675,80 @@ async fn weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_o
         ]
     );
 }
+
+/// 감사 W21: 일정 반복 정하기가 기준 없이 저장해, 화면을 연 뒤 다른 사람이 바꾼 규칙(수요일 추가)을 옛 규칙으로 말없이
+/// 덮었다. 편집을 시작한 규칙(`base`)이 지금 규칙과 다르면 409 `rule_conflict`(최신 일정)이고 아무것도 바꾸지 않는다.
+/// 규칙만 보므로 그사이 제목만 바뀐 것은 충돌이 아니고, 이미 보낸 규칙과 같으면 같은 요청의 재시도다.
+#[tokio::test]
+async fn event_rule_saves_from_a_stale_rule_conflict() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "규칙 기준").await;
+    let item = module_item(&app, &admin, &ws, "EVB").await;
+    let r = send(&app, Method::POST, &format!("/api/items/{}/events", item["id"].as_str().unwrap()), Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "meeting", "title": "주간 회의", "description": "",
+                     "all_day": true, "start_date": "2026-11-02", "end_date": "2026-11-02", "starts_at": null,
+                     "ends_at": null, "timezone": "Asia/Seoul" }))).await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    let uri = format!("/api/events/{}", r.json["id"].as_str().unwrap());
+    let rule_uri = format!("{uri}/recurrence");
+    let monday = json!({"freq":"weekly","interval":1,"weekdays":[1],"until":null,"count":null});
+    let mon_wed = json!({"freq":"weekly","interval":1,"weekdays":[1,3],"until":null,"count":null});
+    let ten_mondays = json!({"freq":"weekly","interval":1,"weekdays":[1],"until":null,"count":10});
+    let put = |rule: Value, base: Value| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let uri = rule_uri.clone();
+        async move {
+            send(
+                &app,
+                Method::PUT,
+                &uri,
+                Some(&admin),
+                Some(json!({ "rule": rule, "base": base })),
+            )
+            .await
+        }
+    };
+
+    // 반복이 없던 일정에 매주 월요일(기준 없음).
+    let set = put(monday.clone(), Value::Null).await;
+    assert_eq!(set.status, StatusCode::OK, "{:?}", set.json);
+    // 다른 사람이 수요일을 더한다(기준 = 월요일).
+    let other = put(mon_wed.clone(), monday.clone()).await;
+    assert_eq!(other.status, StatusCode::OK, "{:?}", other.json);
+    // 월요일만 보던 화면이 "10회"로 저장하면 충돌이고, 수요일은 남는다.
+    let stale = put(ten_mondays.clone(), monday.clone()).await;
+    assert_eq!(stale.status, StatusCode::CONFLICT, "{:?}", stale.json);
+    assert_eq!(stale.json["error"], "rule_conflict");
+    assert_eq!(
+        stale.json["current"]["recurrence"]["weekdays"],
+        json!([1, 3])
+    );
+    // 반복이 있는데 없던 것으로 알고 보내도 충돌이다.
+    let blind = put(ten_mondays.clone(), Value::Null).await;
+    assert_eq!(blind.status, StatusCode::CONFLICT, "{:?}", blind.json);
+    // 지금 규칙이 이미 보낸 규칙과 같으면(같은 요청 재시도) 성공이다.
+    let retry = put(mon_wed.clone(), monday.clone()).await;
+    assert_eq!(retry.status, StatusCode::OK, "{:?}", retry.json);
+
+    // 제목만 바뀐 것은 규칙 충돌이 아니다.
+    let renamed = send(&app, Method::PUT, &uri, Some(&admin), Some(json!({
+        "base_version": retry.json["version"], "kind": "meeting", "title": "주간 회의(이름 바꿈)", "description": "",
+        "all_day": true, "start_date": "2026-11-02", "end_date": "2026-11-02", "starts_at": null, "ends_at": null,
+        "timezone": "Asia/Seoul" }))).await;
+    assert_eq!(renamed.status, StatusCode::OK, "{:?}", renamed.json);
+    let after_rename = put(ten_mondays.clone(), mon_wed.clone()).await;
+    assert_eq!(
+        after_rename.status,
+        StatusCode::OK,
+        "{:?}",
+        after_rename.json
+    );
+    assert_eq!(after_rename.json["recurrence"]["count"], 10);
+    // 멈추기도 같은 기준을 따른다.
+    let stop = put(Value::Null, ten_mondays.clone()).await;
+    assert_eq!(stop.status, StatusCode::OK, "{:?}", stop.json);
+    assert!(stop.json["recurrence"].is_null());
+}

@@ -123,8 +123,25 @@
     if (event === undefined) return;
     const mine = shown;
     const before = event.version;
-    // 편집 중인 일정 입력과 반복 편집기의 상태(저장 알림·초점)를 지우지 않게 다시 그리지 않는다.
-    const saved = await sending(api.setEventRecurrence(event.id, rule));
+    const id = event.id;
+    // 편집 중인 일정 입력과 반복 편집기의 상태(저장 알림·초점)를 지우지 않게 다시 그리지 않는다. 기준은 화면이 보이는
+    // 규칙이다(그사이 바뀌었으면 서버가 409, 감사 W21).
+    let saved: EventView;
+    try {
+      saved = await sending(api.setEventRecurrence(id, rule, event.recurrence));
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.code === 'rule_conflict' && mine === shown) {
+        // 지금 규칙을 요약에 보이고 다음 저장의 기준으로 삼는다. 입력한 칸은 그대로 둔다(다시 저장하면 덮어씀).
+        // 일정 입력의 기준 판은 두어, 일정 저장이 다른 사람의 변경을 충돌로 드러내게 한다.
+        try {
+          const fresh = await sending(api.event(id));
+          if (mine === shown) event = fresh;
+        } catch {
+          // 다시 읽지 못했어도 이유는 반복 편집기가 보인다.
+        }
+      }
+      throw e;
+    }
     if (mine !== shown) {
       onchanged();
       return;

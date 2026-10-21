@@ -64,6 +64,7 @@
   "events_count_invalid": "횟수는 1~1000 사이의 정수여야 합니다.",
   "events_until_required": "끝 날짜를 고르세요.",
   "events_recurrence_save_failed": "반복을 저장하지 못했습니다.",
+  "events_rule_changed_meanwhile": "그사이 다른 사람이 반복 규칙을 바꿨습니다. 위 요약이 지금 규칙이고, 다시 저장하면 입력한 규칙으로 바꿉니다.",
   "events_recurrence": "반복",
   "events_no_recurrence": "반복하지 않습니다.",
   "events_frequency": "주기",

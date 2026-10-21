@@ -2853,9 +2853,14 @@ export const api = {
     expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/recurrences/sync`, (v) =>
       int(rec(v, 'sync'), 'created'),
     ),
-  setEventRecurrence: (id: string, rule: RecurrenceRule | null) =>
+  /**
+   * 일정 반복 정하기. `base`는 편집을 시작한 규칙(반복이 없었으면 null)이다. 그사이 규칙이 바뀌었으면 서버가 아무것도
+   * 바꾸지 않고 409 `rule_conflict`로 거절한다(`ApiError`).
+   */
+  setEventRecurrence: (id: string, rule: RecurrenceRule | null, base: RecurrenceRule | null) =>
     expectOk('PUT', `/api/events/${encodeURIComponent(id)}/recurrence`, parseEvent, {
       rule: rule === null ? null : { ...rule },
+      base: base === null ? null : { ...base },
     }),
   excludeOccurrence: (id: string, date: string) =>
     expectOk('POST', `/api/events/${encodeURIComponent(id)}/exclusions`, none, { date }),
