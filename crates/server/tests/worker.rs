@@ -85,14 +85,13 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
     let series = r.json["series"]["id"].as_str().unwrap().to_owned();
     fixture_sql("DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date", &series).await;
 
+    // 작업은 DB 전체를 본다. 같은 DB를 쓰는 다른 시험이 남긴 묶음이나, 한국 자정을 넘기면 앞선 시험들의 매일 반복도
+    // 함께 처리되므로 전체 수가 아니라 이 시험의 묶음·반복만 센다(전에는 자정에 돈 CI에서 회차 2로 실패했다).
     let report = worker::run_all_now(&state.db, None, None).await.unwrap();
-    assert_eq!(report.purged, 1);
-    assert_eq!(report.occurrences, 1);
-    // 다시 돌려도 더 할 일이 없다.
-    assert_eq!(
-        worker::run_all_now(&state.db, None, None).await.unwrap(),
-        worker::TickReport::default()
-    );
+    assert!(report.purged >= 1, "{report:?}");
+    assert!(report.occurrences >= 1, "{report:?}");
+    // 다시 돌려도 이 시험의 일은 더 없다(아래에서 회차 1개·만료 묶음만 지워졌음을 본다).
+    worker::run_all_now(&state.db, None, None).await.unwrap();
 
     let entries = send(
         &app,
@@ -111,6 +110,15 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
         .collect();
     assert_eq!(titles, ["새 문서"]);
     let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    // 두 번 돌렸어도 만료 묶음은 한 번만 영구 삭제됐다(다시 지우면 감사 기록이 둘이 된다).
+    let purges: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action = 'purge' AND target_id = $1::uuid",
+    )
+    .bind(old["id"].as_str().unwrap())
+    .fetch_one(tx.conn())
+    .await
+    .unwrap();
+    assert_eq!(purges, 1);
     let purge: (Option<uuid::Uuid>, bool) = sqlx::query_as(
         "SELECT actor, (detail->>'system')::boolean FROM audit_log WHERE action = 'purge' AND target_id = $1::uuid",
     )
