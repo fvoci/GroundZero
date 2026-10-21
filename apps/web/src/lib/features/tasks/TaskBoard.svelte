@@ -43,7 +43,14 @@
     planDrop,
   } from './board';
   import type { MoveOrigin } from './move-sync';
-  import { classifyMoveError, originOf, overlayPending, reconcileMove, replan } from './move-sync';
+  import {
+    backTo,
+    classifyMoveError,
+    originOf,
+    overlayPending,
+    reconcileMove,
+    replan,
+  } from './move-sync';
   import type { TaskFilter, TaskSort, TaskViewMode } from './filters';
   import {
     applyFilter,
@@ -247,6 +254,12 @@
   const SLOW_MS = 3000;
   const CHECK_MS = 10000;
   let pending = $state<Record<string, PendingMove>>({});
+  /**
+   * 서버가 확정한 목록(마지막으로 읽은 목록에 그 뒤 성공 응답을 받은 이동을 반영한 것). 화면 `tasks`는 이 위에 저장을
+   * 기다리는 이동을 얹은 것이다. 이동 전 자리(원점)는 여기서 잡는다: 화면 배열에는 다른 카드의 아직 확정되지 않은 이동이
+   * 섞여 있어, 그 카드가 실패하거나 응답이 거꾸로 오면 되돌리기가 엉뚱한 자리로 간다.
+   */
+  let confirmed: TaskView[] = [];
   let moveSeq = 0;
   // 다시 읽기마다 번호를 붙여 늦게 도착한 옛 목록이 더 새 화면을 덮지 않게 한다.
   let reloadSeq = 0;
@@ -355,6 +368,7 @@
     }
     if (!alive) return;
     ++reloadSeq;
+    confirmed = server;
     tasks = overlaid(server);
     if (!undoStillFits(server, u)) {
       moveNotice = m.tasks_undo_changed({ title: u.title });
@@ -362,12 +376,11 @@
       await focusCard(u.id);
       return;
     }
-    // 원래 바로 뒤에 있던 업무가 그 열에 없으면 열 끝으로 되돌린다(그렇게 알린다).
-    const back = replan(server, { status: u.from.status, beforeId: u.from.nextId });
-    const atEnd = back.beforeId !== u.from.nextId;
-    await commitMove(u.id, back, 'menu', u.title, undefined, undefined, {
+    // 원래 이웃(바로 뒤, 아니면 바로 앞)이 그 열에 그대로 있으면 그 자리로, 둘 다 없으면 열 끝으로 되돌린다(그렇게 알린다).
+    const back = backTo(server, u.from);
+    await commitMove(u.id, back.plan, 'menu', u.title, undefined, {
       done: (title, lane) =>
-        atEnd
+        !back.exact
           ? m.tasks_undone_end({ title, status: STATUS_LABEL[lane] })
           : m.tasks_undone({ title, status: STATUS_LABEL[lane] }),
     });
@@ -392,6 +405,7 @@
     untrack(() => {
       for (const id of Object.keys(timers)) clearTimers(id);
       pending = {};
+      confirmed = [];
       undoOffer = undefined;
     });
   });
@@ -402,6 +416,7 @@
       const server = await api.tasks(itemId);
       if (!alive || mine !== reloadSeq || itemId !== item.id) return;
       settleUnknown(server);
+      confirmed = server;
       tasks = overlaid(server);
       if (undoOffer !== undefined && !undoStillFits(server, undoOffer)) undoOffer = undefined;
       error = undefined;
@@ -703,11 +718,9 @@
       ++reloadSeq;
       tasks = [...tasks, created];
     }
-    await commitMove(created.id, { status: lane, beforeId: null }, 'menu', created.title, {
-      status: created.status,
-      nextId: null,
-      moveVersion: created.move_version,
-    });
+    // 서버가 돌려준 업무이므로 확정 목록에도 넣는다(이 카드와 이웃의 원점이 이 카드를 본다).
+    if (!confirmed.some((t) => t.id === created.id)) confirmed = [...confirmed, created];
+    await commitMove(created.id, { status: lane, beforeId: null }, 'menu', created.title);
   }
 
   /** 빠른 추가를 닫고(Esc) 그 열의 "업무 추가" 단추로 초점을 돌린다. */
@@ -735,7 +748,6 @@
     plan: BoardMove,
     how: PendingMove['how'],
     knownTitle?: string,
-    knownOrigin?: MoveOrigin,
     /** 다시 시도: 이 판의 대기 항목을 그대로 교체한다(지우고 다시 넣는 사이에 같은 카드의 요청이 끼지 않게). */
     replacing?: number,
     /** 되돌리기: 보내기 직전 서버 자리와 그 이동 판을 조건으로 보내고(끼어든 변경은 서버가 409로 거절), 다시 되돌리기는 내놓지 않는다. */
@@ -746,7 +758,8 @@
       status = m.tasks_move_busy({ title });
       return false;
     }
-    const origin = knownOrigin ?? originOf(tasks, id);
+    // 원점은 서버가 확정한 목록에서(화면 배열이 아니라). 확정 목록에 없는 카드(만드는 중)는 옮기지 않는다.
+    const origin = originOf(confirmed, id);
     if (origin === undefined) return false;
     // 같은 카드를 다시 옮기면 앞선 이동의 되돌리기는 더 이상 맞지 않는다.
     if (undoOffer?.id === id) undoOffer = undefined;
@@ -789,6 +802,12 @@
         guarded ? origin.moveVersion : undefined,
       );
       if (!current(id, seq)) return true;
+      // 성공 응답이 확정이다: 다시 읽기 전에 옮기는 다른 카드의 원점이 이 결과를 보도록 확정 목록에 먼저 반영한다.
+      confirmed = applyMove(
+        confirmed.map((t) => (t.id === id ? { ...t, move_version: saved.move_version } : t)),
+        id,
+        plan,
+      );
       finish(id);
       await reload();
       clearMoveNotice();
@@ -803,7 +822,8 @@
       patch(id, seq, { inFlight: false });
       if (classifyMoveError(e) === 'uncertain') return (await reconcile(id, seq)) === 'applied';
       finish(id);
-      tasks = applyMove(tasks, id, { status: origin.status, beforeId: origin.nextId });
+      // 서버는 아무것도 바꾸지 않았다: 확정 목록 위에 남은 다른 카드의 기다리는 이동만 다시 얹는다.
+      tasks = overlaid(confirmed);
       // 안내는 다시 읽기 전에 정한다: 다시 읽는 동안 카드는 풀려 있어 그사이 성공한 다음 이동의 안내를 늦게 덮지 않게.
       // 조건부 이동이 거절됐다(그사이 다른 곳에서 이 업무의 열·위치가 바뀜, D-89): 아무것도 바뀌지 않았다. 최신 상태를
       // 다시 읽어 보이고 다시 보내지 않는다. 항목 자체의 상태(보관·권한)가 바뀐 것이 아니므로 항목은 다시 읽지 않는다.
@@ -872,7 +892,10 @@
         verdict === 'gone' ? m.tasks_move_error_gone() : m.tasks_move_changed({ title: p.title });
       status = moveNotice;
     }
-    if (mine === reloadSeq) tasks = overlaid(server);
+    if (mine === reloadSeq) {
+      confirmed = server;
+      tasks = overlaid(server);
+    }
     return verdict;
   }
 
@@ -903,10 +926,11 @@
     if (!current(id, p.seq)) return;
     const verdict = reconcileMove(server, id, p.origin, p.plan);
     ++reloadSeq;
+    confirmed = server;
     tasks = overlaid(server, id);
     if (verdict === 'not_applied') {
       // 대기 항목을 지우지 않은 채 교체해 보낸다(그사이 끌기·단추가 같은 카드를 다시 보내지 않게).
-      const sent = commitMove(id, replan(server, p.plan), p.how, p.title, undefined, p.seq);
+      const sent = commitMove(id, replan(server, p.plan), p.how, p.title, p.seq);
       clearMoveNotice();
       await sent;
       return;
@@ -936,7 +960,16 @@
     not_saved: () => m.tasks_card_not_saved(),
   };
 
+  /** 같은 열 안 순서(위·아래)는 기본 순서에서만 바꾼다(D-79). 단추·메뉴·키보드·끌기가 같은 규칙을 따른다. */
+  const reorderable = (action: BoardAction): boolean =>
+    ordered || (action !== 'up' && action !== 'down');
+
   async function move(id: string, action: BoardAction): Promise<void> {
+    if (!reorderable(action)) {
+      // 제목순 같은 정렬에서 위·아래는 화면 순서와 무관하게 저장된 기본 순서를 바꾸게 되므로 보내지 않는다.
+      status = m.tasks_move_unordered({ title: titleOf(id) });
+      return;
+    }
     const plan = planBoardMove(shown, id, action);
     if (plan === undefined) return;
     await commitMove(id, plan, action);
@@ -1442,8 +1475,8 @@
                         tabindex={-1}
                         class="h-6 px-1.5 text-xs"
                         disabled={busy(t.id) ||
-                          planBoardMove(shown, t.id, action) === undefined ||
-                          (!ordered && (action === 'up' || action === 'down'))}
+                          !reorderable(action) ||
+                          planBoardMove(shown, t.id, action) === undefined}
                         onclick={() => void move(t.id, action)}
                         >{action === 'left'
                           ? '←'

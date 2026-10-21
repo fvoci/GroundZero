@@ -799,3 +799,155 @@ async fn conditional_moves_refuse_a_place_changed_since_it_was_read() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(plain["status"], "done");
 }
+
+/// 초기화 복제는 모든 열을 "할 일"로 합친다. 원본의 열마다 있던 위치값이 겹치면 그 뒤의 이동이 엉뚱한 자리로 간다
+/// (C를 B 앞으로 옮겼는데 [C, A, B]). 복제가 합친 열의 위치를 다시 매긴다(앞선 복제가 남긴 겹침은 0079가 한 번에 매긴다).
+#[tokio::test]
+async fn reset_copy_merges_lanes_without_duplicate_positions() {
+    use sqlx::Connection;
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "복제 위치").await;
+    let item = module_item(&app, &admin, &ws, "CPY").await;
+    let item_id = item["id"].as_str().unwrap().to_owned();
+    let _a = task(&app, &admin, &item, "A").await;
+    let b = task(&app, &admin, &item, "B").await;
+    let _c = task(&app, &admin, &item, "C").await;
+    // 원본: A(todo, 1), B(done, 1), C(todo, 3). 복제가 합치면 A와 B의 위치가 겹친다.
+    let moved = send(
+        &app,
+        Method::PUT,
+        &format!("/api/tasks/{}/position", b["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "status": "done", "before_id": null })),
+    )
+    .await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    let positions = |item: &str| {
+        let item = item.to_owned();
+        async move {
+            let mut conn = sqlx::PgConnection::connect(
+                &std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`"),
+            )
+            .await
+            .unwrap();
+            let rows: Vec<(String, String, String)> = sqlx::query_as(
+                "SELECT title, status, position::text FROM fvoci.tasks WHERE item_id = $1::uuid \
+                 ORDER BY array_position(ARRAY['todo', 'in_progress', 'done'], status), position, number",
+            )
+            .bind(item)
+            .fetch_all(&mut conn)
+            .await
+            .unwrap();
+            rows
+        }
+    };
+    let src = positions(&item_id).await;
+    assert_eq!(
+        src.iter()
+            .map(|(t, s, p)| format!("{t}:{s}:{p}"))
+            .collect::<Vec<_>>(),
+        vec!["A:todo:1", "C:todo:3", "B:done:1"],
+        "{src:?}"
+    );
+
+    let copied = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/copy"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "module_id": item["module_id"],
+                     "title": "복제", "reset": true }),
+        ),
+    )
+    .await;
+    assert_eq!(copied.status, StatusCode::CREATED, "{:?}", copied.json);
+    let copy_id = copied.json["item_id"].as_str().unwrap().to_owned();
+    let (_, list) = get(&app, &admin, &format!("/api/items/{copy_id}/tasks")).await;
+    let by_title = |title: &str| {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["title"] == title)
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let cb = by_title("B");
+    // 합쳐진 "할 일" 열의 위치값은 서로 다르고 보이는 순서(A, B, C)를 유지한다.
+    let merged = positions(&copy_id).await;
+    assert_eq!(
+        merged
+            .iter()
+            .map(|(t, s, _)| format!("{t}:{s}"))
+            .collect::<Vec<_>>(),
+        vec!["A:todo", "B:todo", "C:todo"]
+    );
+    let mut seen = std::collections::HashSet::new();
+    assert!(
+        merged.iter().all(|(_, _, p)| seen.insert(p.clone())),
+        "duplicate positions {merged:?}"
+    );
+
+    // C를 B 바로 앞으로: 기대 [A, C, B].
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/tasks/{}/position", by_title("C")),
+        Some(&admin),
+        Some(json!({ "status": "todo", "before_id": cb })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let (_, list) = get(&app, &admin, &format!("/api/items/{copy_id}/tasks")).await;
+    let titles: Vec<&str> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["title"].as_str().unwrap())
+        .collect();
+    assert_eq!(titles, vec!["A", "C", "B"]);
+}
+
+/// 되돌리기 원점이 잘못된 요청(감사 2번)을 서버가 복원하지 못함을 실제 API로 보인다: [A, B, C]에서 A를 옮긴 뒤 A를
+/// "C 앞"으로 되돌리면(수정 전 웹이 보내던 요청, 정상 이동 판 포함) 서버는 그대로 [B, A, C]로 저장한다. 서버의
+/// 조건(`base_move_version`)은 그사이 바뀐 자리만 막고 위치 의도는 검사할 수 없으므로 원점은 웹이 바르게 잡아야 한다.
+#[tokio::test]
+async fn a_wrong_undo_target_is_saved_as_sent_even_with_a_valid_move_version() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "되돌리기 원점").await;
+    let item = module_item(&app, &admin, &ws, "UNDO").await;
+    let item_id = item["id"].as_str().unwrap().to_owned();
+    let a = task(&app, &admin, &item, "A").await;
+    let _b = task(&app, &admin, &item, "B").await;
+    let c = task(&app, &admin, &item, "C").await;
+    let move_a = |status: &str, before: Value, base: Value| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let uri = format!("/api/tasks/{}/position", a["id"].as_str().unwrap());
+        let body = json!({ "status": status, "before_id": before, "base_move_version": base });
+        async move { send(&app, Method::PUT, &uri, Some(&admin), Some(body)).await }
+    };
+    let moved = move_a("in_progress", Value::Null, Value::Null).await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    // 수정 전 웹의 되돌리기: 화면 배열([A, C, B], B의 낙관적 이동이 얹힘)에서 잡은 원점 "C 앞".
+    let back = move_a("todo", c["id"].clone(), moved.json["move_version"].clone()).await;
+    assert_eq!(back.status, StatusCode::OK, "{:?}", back.json);
+    let (_, list) = get(&app, &admin, &format!("/api/items/{item_id}/tasks")).await;
+    let titles: Vec<&str> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["title"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        titles,
+        vec!["B", "A", "C"],
+        "the server keeps the wrong intent as sent"
+    );
+}

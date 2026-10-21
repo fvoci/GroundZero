@@ -301,6 +301,7 @@
   "tasks_move_not_saved": "{title}: not saved. The card is back where the server has it.",
   "tasks_move_changed": "{title}: it changed elsewhere in the meantime, so the latest server state is shown.",
   "tasks_move_busy": "{title}: still saving the previous move. Move it again once that finishes.",
+  "tasks_move_unordered": "{title}: the order within a column cannot change unless sorted by default order. Switch the sort to default order first.",
   "tasks_move_recheck": "Check again",
   "tasks_move_retry": "Try again",
   "tasks_move_keep": "Leave it",
