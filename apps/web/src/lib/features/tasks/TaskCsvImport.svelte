@@ -48,6 +48,8 @@
     let done = 0;
     // 다른 변경과 겹쳐 멈춘 줄의 제목.
     let conflicted: string | undefined;
+    // 만들었지만 나머지 칸을 아직 넣지 못한(제목만 있는) 업무의 제목. 고치기가 실패하면 어느 업무인지 알린다.
+    let titleOnly: string | undefined;
     try {
       for (const { row, key, progress: step } of steps) {
         // 다 넣은 줄은 다시 보내지 않는다. 만들기는 같은 요청 id에 지금 판을 돌려주므로, 다시 고치기를 보내면 그사이
@@ -55,6 +57,7 @@
         if (step.applied !== key) {
           const task = step.task ?? (await api.createTask(itemId, step.requestId, row.title));
           step.task = { id: task.id, version: task.version };
+          titleOnly = step.applied === undefined ? row.title : undefined;
           // 기준 판은 이 등록이 받은 판이다(만들기 또는 지난 고치기). 그사이 다른 곳에서 바뀌었으면 409.
           const updated = await api.updateTask(task.id, step.task.version, {
             title: row.title,
@@ -68,6 +71,7 @@
             assignee_ids: row.assignee_ids,
             milestone: false,
           });
+          titleOnly = undefined;
           if (updated.kind !== 'updated') {
             // 알린 뒤 다시 누르면 지금 판 위에 이 줄을 넣는다(메시지가 덮어쓴다고 알린다).
             step.task = { id: task.id, version: updated.current.version };
@@ -87,13 +91,17 @@
         progress = [];
       }
     } catch (e: unknown) {
-      error = m.tasks_csv_import_error({
+      const failed = m.tasks_csv_import_error({
         reason:
           conflicted === undefined
             ? errorText(e, m.tasks_csv_import_failed())
             : m.tasks_csv_conflict({ title: conflicted }),
         count: done,
       });
+      error =
+        titleOnly === undefined
+          ? failed
+          : `${failed} ${m.tasks_csv_title_only({ title: titleOnly })}`;
     } finally {
       busy = false;
       await onimported();

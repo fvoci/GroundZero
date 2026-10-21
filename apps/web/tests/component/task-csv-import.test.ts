@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskDetailView, TaskInput } from '$lib/api/client';
-import { api, NetworkError } from '$lib/api/client';
+import { api, ApiError, NetworkError } from '$lib/api/client';
 import { canonicalJson } from '$lib/features/documents/drafts';
 import type { TaskRow } from '$lib/features/tasks/csv';
 import type { RowProgress } from '$lib/features/tasks/csv-import';
@@ -175,6 +175,29 @@ describe('TaskCsvImport resume (audit W1, W2)', () => {
       ['t2', 1, 'todo'],
     ]);
     expect(server.create).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('TaskCsvImport title-only task (audit W3)', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // 만들기(제목만) 뒤 고치기가 거부되면 그 업무는 제목만 있는 채로 남는다. 어느 업무인지 알린다.
+  it('names the task left with only its title when filling it in fails', async () => {
+    fakeServer('B', new ApiError(400, 'bad_request', 'at most 20 tags'));
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('A\nB\nC');
+    await pressImport(onimported, 1);
+    expect(screen.getByText(/1개 등록됨/)).toHaveTextContent(
+      '"B" 업무는 제목만 만들어졌습니다. 다시 누르면 그 업무에 나머지를 채웁니다.',
+    );
   });
 });
 
