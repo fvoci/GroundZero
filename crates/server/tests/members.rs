@@ -534,3 +534,325 @@ async fn membership_changes_are_audited() {
         ]
     );
 }
+
+/// 테이블 소유 역할 연결(시험 확인용).
+async fn owner_pool() -> sqlx::PgPool {
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    sqlx::PgPool::connect(&url).await.unwrap()
+}
+
+/// 트랜잭션 하나를 열어 둔 채 다른 요청을 보내고, 그 요청이 이 트랜잭션의 잠금을 실제로 기다리게 된 뒤 트랜잭션을
+/// 마친 다음 그 요청의 결과를 돌려준다. 고정 시간만 기다리면 느린 환경에서 요청이 잠금에 닿기 전에 커밋해, 경합을
+/// 재현하지 못한 채 통과하거나 엉뚱한 이유로 실패한다. 끝내 기다리지 않으면 시험을 멈춘다.
+async fn while_open<F>(mut tx: fvoci_server::db::UserTx, request: F) -> common::Reply
+where
+    F: std::future::Future<Output = common::Reply> + Send + 'static,
+{
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(tx.conn())
+        .await
+        .unwrap();
+    let pending = tokio::spawn(request);
+    let db = owner_pool().await;
+    let mut blocked = false;
+    for _ in 0..500 {
+        blocked = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(holder)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        if blocked {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    db.close().await;
+    assert!(blocked, "no request waited on the held transaction");
+    tx.commit().await.unwrap();
+    pending.await.unwrap()
+}
+
+async fn private_item(app: &axum::Router, admin: &TestUser, ws: &str, key: &str) -> String {
+    let m = send(
+        app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "project", "name": key, "key": key })),
+    )
+    .await;
+    assert_eq!(m.status, StatusCode::CREATED, "{:?}", m.json);
+    let i = send(
+        app,
+        Method::POST,
+        &format!("/api/modules/{}/items", m.json["id"].as_str().unwrap()),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "title": "비공개 항목" })),
+    )
+    .await;
+    assert_eq!(i.status, StatusCode::CREATED, "{:?}", i.json);
+    let id = i.json["id"].as_str().unwrap().to_owned();
+    let private = send(
+        app,
+        Method::PUT,
+        &format!("/api/items/{id}"),
+        Some(admin),
+        Some(json!({ "title": "비공개 항목", "description": "", "visibility": "private" })),
+    )
+    .await;
+    assert!(private.status.is_success(), "{:?}", private.json);
+    id
+}
+
+/// 감사 S14: 소유권 인계를 수락하는 사이 그 사람을 내보내면, 내보내기가 옛 소유자를 보고 통과해 소유자가 멤버가 아닌
+/// 워크스페이스가 남았다. 내보내기는 워크스페이스 행을 먼저 잠그고(수락과 같은 순서) 소유자를 다시 본다.
+#[tokio::test]
+async fn removing_a_member_who_is_accepting_ownership_meanwhile_conflicts() {
+    let state = common::state();
+    let app = common::app(&state);
+    let owner = login(&state, "owner").await;
+    let ws = create_workspace(&app, &owner, "인계 경합").await;
+    let heir = add_member(&app, &state, &owner, &ws, "heir", "admin").await;
+    let other = add_member(&app, &state, &owner, &ws, "other-admin", "admin").await;
+    let offered = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/ownership"),
+        Some(&owner),
+        Some(json!({ "to_user": heir.id.0 })),
+    )
+    .await;
+    assert!(offered.status.is_success(), "{:?}", offered.json);
+    let ws_id: uuid::Uuid = ws.parse().unwrap();
+
+    let mut t1 = state.db.begin_as(heir.id).await.unwrap();
+    sqlx::query("SELECT app_accept_ownership($1, $2)")
+        .bind(ws_id)
+        .bind(fvoci_server::db::new_ids(1))
+        .execute(t1.conn())
+        .await
+        .unwrap();
+    let uri = format!("/api/workspaces/{ws}/members/{}", heir.id.0);
+    let removal = while_open(t1, {
+        let app = app.clone();
+        let other = other.clone();
+        async move { send(&app, Method::DELETE, &uri, Some(&other), None).await }
+    })
+    .await;
+    assert_eq!(removal.status, StatusCode::CONFLICT, "{:?}", removal.json);
+
+    let db = owner_pool().await;
+    let member: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM fvoci.workspaces w JOIN fvoci.workspace_members m
+                        ON m.workspace_id = w.id AND m.user_id = w.owner_id WHERE w.id = $1)",
+    )
+    .bind(ws_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(member, "the workspace owner is not a member");
+    db.close().await;
+}
+
+/// 감사 S15·S8: 멤버를 내보내는 사이 그 사람을 비공개 항목 멤버나 그룹에 넣으면, 넣기는 아직 커밋되지 않은 내보내기를
+/// 보지 못해 통과했고 내보내기는 그 행을 보지 못해 지우지 않았다(다시 초대되면 비공개 항목이 저절로 열림). 넣는 쪽은
+/// 대상의 멤버 행을 잠근 뒤 확인하고, 내보내기는 멤버 행을 먼저 잠근다.
+#[tokio::test]
+async fn adding_a_member_who_is_being_removed_does_not_survive_the_removal() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "내보내기 경합").await;
+    let leaving = add_member(&app, &state, &admin, &ws, "leaving", "writer").await;
+    let item = private_item(&app, &admin, &ws, "PRV").await;
+    let group = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/groups"),
+        Some(&admin),
+        Some(json!({ "name": "팀" })),
+    )
+    .await;
+    assert_eq!(group.status, StatusCode::CREATED, "{:?}", group.json);
+    let group_id = group.json["id"].as_str().unwrap().to_owned();
+    let ws_id: uuid::Uuid = ws.parse().unwrap();
+
+    for target in ["item", "group"] {
+        // 매번 다시 넣고 시작한다.
+        if target == "group" {
+            let again = add_member(&app, &state, &admin, &ws, "leaving-again", "writer").await;
+            run_removal_race(
+                &app, &state, &admin, ws_id, &again, target, &item, &group_id,
+            )
+            .await;
+        } else {
+            run_removal_race(
+                &app, &state, &admin, ws_id, &leaving, target, &item, &group_id,
+            )
+            .await;
+        }
+    }
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "test helper with the race's inputs"
+)]
+async fn run_removal_race(
+    app: &axum::Router,
+    state: &fvoci_server::http::AppState,
+    admin: &TestUser,
+    ws_id: uuid::Uuid,
+    member: &TestUser,
+    target: &str,
+    item: &str,
+    group: &str,
+) {
+    let n: i32 = {
+        let mut tx = state.db.begin_as(admin.id).await.unwrap();
+        let n = sqlx::query_scalar("SELECT app_remove_member_ids($1, $2)")
+            .bind(ws_id)
+            .bind(member.id)
+            .fetch_one(tx.conn())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        n
+    };
+    let mut t1 = state.db.begin_as(admin.id).await.unwrap();
+    sqlx::query("SELECT app_remove_member($1, $2, $3)")
+        .bind(ws_id)
+        .bind(member.id)
+        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+        .execute(t1.conn())
+        .await
+        .unwrap();
+    let (method, uri, body) = if target == "item" {
+        (
+            Method::PUT,
+            format!("/api/items/{item}/members"),
+            Some(json!({ "user_ids": [member.id.0], "group_ids": [] })),
+        )
+    } else {
+        (
+            Method::PUT,
+            format!("/api/groups/{group}/members/{}", member.id.0),
+            None,
+        )
+    };
+    let added = while_open(t1, {
+        let app = app.clone();
+        let admin = admin.clone();
+        async move { send(&app, method, &uri, Some(&admin), body).await }
+    })
+    .await;
+    assert_eq!(
+        added.status,
+        StatusCode::BAD_REQUEST,
+        "{target}: {:?}",
+        added.json
+    );
+    let db = owner_pool().await;
+    let left: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM fvoci.item_members WHERE user_id = $1)
+              + (SELECT count(*) FROM fvoci.group_members WHERE user_id = $1)",
+    )
+    .bind(member.id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(left, 0, "{target}: a removed member kept a membership row");
+    db.close().await;
+}
+
+/// 감사 S16: 초대를 수락하는 사이 철회하면, 철회가 수락된 초대를 '철회됨'으로 덮어썼다(이미 멤버인데). 철회는 수락과
+/// 같은 순서로 잠근 뒤 아직 열려 있는지 다시 본다.
+#[tokio::test]
+async fn revoking_an_invitation_being_accepted_does_not_overwrite_the_acceptance() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "철회 경합").await;
+    let email = unique_email("invitee");
+    let invitee = login_with_email(&state, "invitee", &email, true).await;
+    let inv = invite(&app, &admin, &ws, &email, "writer").await;
+    let inv_id: uuid::Uuid = inv["id"].as_str().unwrap().parse().unwrap();
+
+    let mut t1 = state.db.begin_as(invitee.id).await.unwrap();
+    sqlx::query("SELECT app_respond_invitation($1, true, $2)")
+        .bind(inv_id)
+        .bind(fvoci_server::db::new_ids(1))
+        .execute(t1.conn())
+        .await
+        .unwrap();
+    let uri = format!("/api/invitations/{inv_id}");
+    let revoked = while_open(t1, {
+        let app = app.clone();
+        let admin = admin.clone();
+        async move { send(&app, Method::DELETE, &uri, Some(&admin), None).await }
+    })
+    .await;
+    assert_eq!(revoked.status, StatusCode::CONFLICT, "{:?}", revoked.json);
+    let db = owner_pool().await;
+    let reason: Option<String> =
+        sqlx::query_scalar("SELECT close_reason FROM fvoci.invitations WHERE id = $1")
+            .bind(inv_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(reason.as_deref(), Some("accepted"));
+    db.close().await;
+}
+
+/// 감사 S17: 소유자가 아닌 관리자 둘이 동시에 서로를 내보내면 둘 다 통과해 둘 다 빠졌다. 내보내기는 두 사람의 멤버 행을
+/// id 순서로 잠근 뒤 관리자인지 본다(먼저 끝난 쪽만 통과).
+#[tokio::test]
+async fn two_admins_removing_each_other_at_once_leave_one_of_them() {
+    let state = common::state();
+    let app = common::app(&state);
+    let owner = login(&state, "owner").await;
+    let ws = create_workspace(&app, &owner, "관리자 경합").await;
+    let a = add_member(&app, &state, &owner, &ws, "admin-a", "admin").await;
+    let b = add_member(&app, &state, &owner, &ws, "admin-b", "admin").await;
+    let ws_id: uuid::Uuid = ws.parse().unwrap();
+    let n: i32 = {
+        let mut tx = state.db.begin_as(a.id).await.unwrap();
+        let n = sqlx::query_scalar("SELECT app_remove_member_ids($1, $2)")
+            .bind(ws_id)
+            .bind(b.id)
+            .fetch_one(tx.conn())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        n
+    };
+    let mut t1 = state.db.begin_as(a.id).await.unwrap();
+    sqlx::query("SELECT app_remove_member($1, $2, $3)")
+        .bind(ws_id)
+        .bind(b.id)
+        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+        .execute(t1.conn())
+        .await
+        .unwrap();
+    let uri = format!("/api/workspaces/{ws}/members/{}", a.id.0);
+    let second = while_open(t1, {
+        let app = app.clone();
+        let b = b.clone();
+        async move { send(&app, Method::DELETE, &uri, Some(&b), None).await }
+    })
+    .await;
+    assert_ne!(second.status, StatusCode::NO_CONTENT, "{:?}", second.json);
+    let db = owner_pool().await;
+    let admins: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM fvoci.workspace_members WHERE workspace_id = $1 AND user_id = ANY ($2)",
+    )
+    .bind(ws_id)
+    .bind(vec![a.id.0, b.id.0])
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(admins, 1, "both admins removed each other");
+    db.close().await;
+}
