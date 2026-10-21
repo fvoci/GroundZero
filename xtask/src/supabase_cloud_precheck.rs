@@ -10,10 +10,11 @@ use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use sqlx::{ConnectOptions, Connection, PgConnection};
 
 const PASSWORD_NAME: &str = "SUPABASE_TEST_PASSWORD";
+const SSL_ROOT_CERT_NAME: &str = "SUPABASE_TEST_SSL_ROOT_CERT";
 const BEGIN_READ_ONLY: &str = "BEGIN TRANSACTION READ ONLY";
 const SELECT_ONE: &str = "SELECT 1";
 // new_without_pgpass still reads ambient defaults. Reject presence without
-// printing values or mutating environment; TLS trust also stays with the OS.
+// printing values or mutating environment; the extra CA is scoped to this connection.
 const AMBIENT_SETTINGS: &[&str] = &[
     "PGHOSTADDR",
     "PGHOST",
@@ -43,6 +44,8 @@ enum Failure {
     ExplicitConnectRequired,
     InvalidArguments,
     InvalidTarget,
+    MissingSslRootCert,
+    InvalidSslRootCert,
     AmbientSettingsNotAllowed,
     ConnectionNetworkIo,
     ConnectionTls,
@@ -62,6 +65,8 @@ impl Failure {
             Self::ExplicitConnectRequired => "explicit_connect_required",
             Self::InvalidArguments => "invalid_arguments",
             Self::InvalidTarget => "invalid_target",
+            Self::MissingSslRootCert => "missing_ssl_root_cert",
+            Self::InvalidSslRootCert => "invalid_ssl_root_cert",
             Self::AmbientSettingsNotAllowed => "ambient_settings_not_allowed",
             Self::ConnectionNetworkIo => "connection_network_io",
             Self::ConnectionTls => "connection_tls",
@@ -107,6 +112,7 @@ struct Target {
     host: String,
     user: String,
     password: String,
+    ssl_root_cert: Vec<u8>,
 }
 
 impl fmt::Debug for Target {
@@ -121,6 +127,7 @@ fn parse_target(
     database: &str,
     user: &str,
     password: &str,
+    ssl_root_cert: &str,
 ) -> Result<Target, Failure> {
     let name = host
         .strip_prefix("aws-")
@@ -155,7 +162,25 @@ fn parse_target(
         host: host.to_owned(),
         user: user.to_owned(),
         password: password.to_owned(),
+        ssl_root_cert: parse_ssl_root_cert(ssl_root_cert)?,
     })
+}
+
+fn parse_ssl_root_cert(value: &str) -> Result<Vec<u8>, Failure> {
+    let pem = value.trim();
+    if pem.is_empty() {
+        return Err(Failure::MissingSslRootCert);
+    }
+    // Require one certificate only: reject keys, bundles and surrounding data.
+    // The TLS library validates PEM encoding and X.509; do not parse them here.
+    let body = pem
+        .strip_prefix("-----BEGIN CERTIFICATE-----")
+        .and_then(|body| body.strip_suffix("-----END CERTIFICATE-----"));
+    if value.len() > 64 * 1024 || body.is_none_or(|body| body.contains("-----")) {
+        return Err(Failure::InvalidSslRootCert);
+    }
+    native_tls::Certificate::from_pem(pem.as_bytes()).map_err(|_| Failure::InvalidSslRootCert)?;
+    Ok(pem.as_bytes().to_vec())
 }
 
 fn connect_options(target: &Target) -> PgConnectOptions {
@@ -166,6 +191,7 @@ fn connect_options(target: &Target) -> PgConnectOptions {
         .username(&target.user)
         .password(&target.password)
         .ssl_mode(PgSslMode::VerifyFull)
+        .ssl_root_cert_from_pem(target.ssl_root_cert.clone())
         .statement_cache_capacity(0)
         .application_name("fvoci-cloud-readonly-precheck")
         .options([
@@ -351,6 +377,7 @@ fn run_with(
         &lookup("SUPABASE_TEST_DATABASE").unwrap_or_default(),
         &lookup("SUPABASE_TEST_USER").unwrap_or_default(),
         &lookup(PASSWORD_NAME).unwrap_or_default(),
+        &lookup(SSL_ROOT_CERT_NAME).unwrap_or_default(),
     );
     match target {
         Ok(target) => executor(&target),

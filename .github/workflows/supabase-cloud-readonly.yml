@@ -36,4 +36,5 @@ jobs:
           SUPABASE_TEST_DATABASE: ${{ secrets.SUPABASE_TEST_DATABASE }}
           SUPABASE_TEST_USER: ${{ secrets.SUPABASE_TEST_USER }}
           SUPABASE_TEST_PASSWORD: ${{ secrets.SUPABASE_TEST_PASSWORD }}
+          SUPABASE_TEST_SSL_ROOT_CERT: ${{ secrets.SUPABASE_TEST_SSL_ROOT_CERT }}
         run: target/debug/xtask supabase-cloud-precheck --connect

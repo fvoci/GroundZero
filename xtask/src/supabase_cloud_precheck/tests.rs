@@ -1,5 +1,5 @@
-//! Offline tests: synthetic split settings and a fake connection only.
-//! The native driver, process environment and network are never accessed here.
+//! Offline tests: synthetic settings, certificate parsing and a fake connection.
+//! Native connections, the process environment and network are never accessed here.
 
 use super::*;
 use std::borrow::Cow;
@@ -10,6 +10,19 @@ use anyhow::{Context, Result};
 
 const HOST: &str = "aws-0-fake-region-1.pooler.supabase.com";
 const USER: &str = "postgres.abcdefghijklmnopqrst";
+// Locally generated public test CA. Its private key was discarded at creation;
+// this certificate has no relationship to Supabase or any deployed service.
+const TEST_CA: &str = "-----BEGIN CERTIFICATE-----
+MIIBoDCCAUWgAwIBAgIUad+jX2jS520v1Cx2wXFPvNT6Y6YwCgYIKoZIzj0EAwIw
+JTEjMCEGA1UEAwwaR3JvdW5kWmVybyBvZmZsaW5lIHRlc3QgQ0EwHhcNMjYxMDIx
+MTE1ODM0WhcNMzYxMDE4MTE1ODM0WjAlMSMwIQYDVQQDDBpHcm91bmRaZXJvIG9m
+ZmxpbmUgdGVzdCBDQTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABC1pFjfw6wy2
+tPsO/PY1E9gP0xMdY6QBE2cWhqZl9r1EK/X9OrohR9nl41T8GXQ1LJufpsPb9gaa
+aBV1eU2+6jyjUzBRMB0GA1UdDgQWBBSDrapwu+71kUjuUOlkCk20R4M38DAfBgNV
+HSMEGDAWgBSDrapwu+71kUjuUOlkCk20R4M38DAPBgNVHRMBAf8EBTADAQH/MAoG
+CCqGSM49BAMCA0kAMEYCIQC46SlExBFYzajzhtPqUupczLjPKWkZlh5Dd6CDnlHh
+XAIhAPRRlb7xvWOtUlGeh8LBRl3rIirruH+uKWl/Jn8QNmsP
+-----END CERTIFICATE-----";
 
 fn raw_password() -> Result<String> {
     let value = include_str!("../../../deploy/supabase/test.env")
@@ -26,17 +39,18 @@ fn settings() -> Result<BTreeMap<String, String>> {
         ("SUPABASE_TEST_DATABASE".into(), "postgres".into()),
         ("SUPABASE_TEST_USER".into(), USER.into()),
         ("SUPABASE_TEST_PASSWORD".into(), raw_password()?),
+        (SSL_ROOT_CERT_NAME.into(), TEST_CA.into()),
     ]))
 }
 
 fn target() -> Result<Target> {
-    parse_target(HOST, "5432", "postgres", USER, &raw_password()?)
+    parse_target(HOST, "5432", "postgres", USER, &raw_password()?, TEST_CA)
         .map_err(|error| anyhow::anyhow!(error.code()))
 }
 
 fn assert_private(report: &Value) -> Result<()> {
     let output = report.to_string();
-    for sensitive in [HOST, USER, &raw_password()?] {
+    for sensitive in [HOST, USER, &raw_password()?, TEST_CA, "MIIBoDCCAUWg"] {
         assert!(!output.contains(sensitive));
     }
     assert_eq!(report["connection_kind"], "session_pooler");
@@ -200,7 +214,8 @@ fn split_settings_preserve_raw_password_and_reject_non_session_targets() -> Resu
     assert_eq!(target.host, HOST);
     assert_eq!(target.user, USER);
     assert_eq!(target.password, raw_password()?);
-    for private in [HOST, USER, &raw_password()?] {
+    assert_eq!(target.ssl_root_cert, TEST_CA.as_bytes());
+    for private in [HOST, USER, &raw_password()?, TEST_CA, "MIIBoDCCAUWg"] {
         assert!(!format!("{target:?}").contains(private));
     }
     let password = raw_password()?;
@@ -234,7 +249,7 @@ fn split_settings_preserve_raw_password_and_reject_non_session_targets() -> Resu
         (HOST, "5432", "postgres", USER, ""),
         (HOST, "5432", "postgres", USER, "invalid\0password"),
     ] {
-        assert!(parse_target(host, port, database, user, password).is_err());
+        assert!(parse_target(host, port, database, user, password, TEST_CA).is_err());
     }
     let values = settings()?;
     let calls = Cell::new(0);
@@ -244,10 +259,69 @@ fn split_settings_preserve_raw_password_and_reject_non_session_targets() -> Resu
         |passed| {
             calls.set(calls.get() + 1);
             assert_eq!(passed.password, password);
+            assert_eq!(passed.ssl_root_cert, TEST_CA.as_bytes());
             (empty_report(), 0)
         },
     );
     assert_eq!((calls.get(), code), (1, 0));
+    Ok(())
+}
+
+#[test]
+fn missing_or_invalid_ca_never_starts_client_and_exposes_only_fixed_codes() -> Result<()> {
+    let key = "-----BEGIN PRIVATE KEY-----\nsynthetic-test-only\n-----END PRIVATE KEY-----";
+    for pem in [
+        None,
+        Some(String::new()),
+        Some(" \r\n ".into()),
+        Some("not-a-certificate".into()),
+        Some("-----BEGIN CERTIFICATE-----\n!!!!\n-----END CERTIFICATE-----".into()),
+        Some("-----BEGIN CERTIFICATE-----\nYWJj\n-----END CERTIFICATE-----".into()),
+        Some(TEST_CA.replace('\n', "\\n")),
+        Some(TEST_CA.replace("-----END CERTIFICATE-----", "")),
+        Some(format!("{TEST_CA}\n{TEST_CA}")),
+        Some(key.into()),
+        Some(format!("{key}\n{TEST_CA}")),
+        Some(format!("{TEST_CA}\n{key}")),
+        Some(format!("{TEST_CA}\nunexpected-trailing-data")),
+        Some(format!("{}{TEST_CA}", " ".repeat(64 * 1024))),
+    ] {
+        let mut values = settings()?;
+        values.remove(SSL_ROOT_CERT_NAME);
+        if let Some(pem) = &pem {
+            values.insert(SSL_ROOT_CERT_NAME.into(), pem.clone());
+        }
+        let calls = Cell::new(0);
+        let (report, code) = run_with(
+            true,
+            |name| values.get(name).cloned(),
+            |_| {
+                calls.set(calls.get() + 1);
+                (empty_report(), 0)
+            },
+        );
+        assert_eq!((calls.get(), code), (0, 1));
+        assert_eq!(
+            report["failure_code"],
+            if pem.as_ref().is_none_or(|pem| pem.trim().is_empty()) {
+                "missing_ssl_root_cert"
+            } else {
+                "invalid_ssl_root_cert"
+            }
+        );
+        assert_private(&report)?;
+        assert!(!report.to_string().contains("synthetic-test-only"));
+        for field in ["connection", "tls_certificate_and_hostname", "query"] {
+            assert_eq!(report[field], "NOT RUN");
+        }
+    }
+    // Dashboard PEM with either normal line ending and surrounding whitespace.
+    for pem in [format!("\n{TEST_CA}\n"), TEST_CA.replace('\n', "\r\n")] {
+        assert_eq!(
+            parse_ssl_root_cert(&pem),
+            Ok(pem.trim().as_bytes().to_vec())
+        );
+    }
     Ok(())
 }
 
@@ -342,6 +416,7 @@ async fn one_connection_runs_only_read_only_select_one_then_rolls_back() -> Resu
     let source = include_str!("../supabase_cloud_precheck.rs");
     for required in [
         ".ssl_mode(PgSslMode::VerifyFull)",
+        ".ssl_root_cert_from_pem(target.ssl_root_cert.clone())",
         ".password(&target.password)",
         ".disable_statement_logging()",
         "NoSubscriber::default()",
@@ -484,7 +559,14 @@ fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
     ] {
         assert!(source.contains(required));
     }
-    for setting in ["HOST", "PORT", "DATABASE", "USER", "PASSWORD"] {
+    for setting in [
+        "HOST",
+        "PORT",
+        "DATABASE",
+        "USER",
+        "PASSWORD",
+        "SSL_ROOT_CERT",
+    ] {
         assert!(source.contains(&format!("secrets.SUPABASE_TEST_{setting}")));
     }
     for forbidden in [
@@ -500,7 +582,7 @@ fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
     ] {
         assert!(!source.contains(forbidden));
     }
-    assert_eq!(source.matches("secrets.").count(), 5);
+    assert_eq!(source.matches("secrets.").count(), 6);
     let build = source
         .find("cargo build --locked --package xtask")
         .context("build step")?;
