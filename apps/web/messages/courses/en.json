@@ -90,6 +90,7 @@
   "courses_mine_saved": "Saved your notes and dates for episode {number}.",
   "courses_my_planned": "My plan date",
   "courses_last_position": "Last position (min:sec)",
+  "courses_position_invalid": "Enter the position as min:sec (e.g. 12:30), h:min:sec, or a number of minutes. Nothing was saved.",
   "courses_my_note": "My note (only you can see it)",
   "courses_new_invalid": "Check the title and length (minutes or min:sec).",
   "courses_new_title": "New episode title",

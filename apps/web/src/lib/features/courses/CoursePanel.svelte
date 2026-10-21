@@ -60,6 +60,8 @@
   });
   let openEpisode = $state<string | undefined>(undefined);
   let mine = $state({ planned_on: '', position: '', note: '' });
+  /** 시청 위치 입력 오류(칸 옆에 보인다, D-82). */
+  let positionError = $state<string | undefined>(undefined);
   let newEpisode = $state({ title: '', chapter: '', duration: '', planned_on: '' });
   let csvText = $state('');
   /** 공통 정보(번호·제목·링크·자료 등)를 고치는 회차와, 고치기를 열 때(또는 마지막으로 확인할 때) 읽은 그 회차. */
@@ -163,6 +165,7 @@
       return;
     }
     openEpisode = e.id;
+    positionError = undefined;
     mine = {
       planned_on: e.mine.planned_on ?? '',
       position:
@@ -621,13 +624,21 @@
               class="grid gap-2 border-t pt-2 sm:grid-cols-3"
               onsubmit={(ev: SubmitEvent) => {
                 ev.preventDefault();
-                const position = parseDuration(mine.position.includes(':') ? mine.position : '');
+                // 빈칸은 위치 지우기(null), 그 밖은 분:초·시:분:초·분 수(CSV와 같은 규칙). 읽을 수 없는 입력은 보내지
+                // 않고 칸 옆에 알리며 저장된 값은 그대로 둔다(전에는 'abc'가 0초, '12:xx'가 지우기로 저장됐다).
+                const raw = mine.position.trim();
+                const position = raw === '' ? null : parseDuration(raw);
+                if (raw !== '' && position === null) {
+                  positionError = m.courses_position_invalid();
+                  return;
+                }
+                positionError = undefined;
                 void run(
                   async () =>
                     api.setEpisodeProgress(e.id, {
                       status: (await freshMine(e)).status,
                       planned_on: orNull(mine.planned_on),
-                      last_position_seconds: mine.position === '' ? null : position,
+                      last_position_seconds: position,
                       note: mine.note,
                       today,
                     }),
@@ -645,7 +656,20 @@
                   id={`mine-position-${e.id}`}
                   bind:value={mine.position}
                   placeholder="12:30"
+                  aria-invalid={positionError !== undefined}
+                  aria-describedby={positionError === undefined
+                    ? undefined
+                    : `mine-position-error-${e.id}`}
                 />
+                {#if positionError !== undefined}
+                  <p
+                    id={`mine-position-error-${e.id}`}
+                    class="text-xs text-destructive"
+                    role="alert"
+                  >
+                    {positionError}
+                  </p>
+                {/if}
               </div>
               <div class="flex flex-col gap-1 sm:col-span-3">
                 <Label for={`mine-note-${e.id}`}>{m.courses_my_note()}</Label>
