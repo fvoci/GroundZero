@@ -3881,6 +3881,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "native-tls",
  "serde_json",
  "sha2",
  "spdx",
