@@ -374,15 +374,28 @@
     onchanged();
   }
 
-  async function changePredecessor(action: Promise<TaskDetailView>): Promise<void> {
+  /**
+   * 선행 관계 지우기. 응답을 기다리는 동안은 다른 관계 저장을 막는다(늦게 온 지우기와 저장이 겹쳐 지운 관계를 다시
+   * 만들지 않게). 고치던 관계를 지웠으면 편집 칸을 닫는다(그대로 두면 "관계 저장"이 지운 관계를 새로 만든다). 다른
+   * 관계를 고치던 중이면 그 편집은 그대로 둔다. 실패하면 관계와 편집 내용을 그대로 두고 알린다.
+   */
+  async function removeLink(predecessor: string): Promise<void> {
+    if (task === undefined || busy) return;
+    busy = true;
     error = undefined;
+    linkStatus = '';
     try {
-      const fresh = await action;
-      if (task?.version === fresh.version) task = fresh;
+      const fresh = await api.removePredecessor(task.id, predecessor);
+      if (task.version === fresh.version) task = fresh;
       else refresh(fresh);
+      if (editing === predecessor) resetLinkEditor();
+      linkStatus = m.tasks_link_removed();
       onchanged();
+      await focusLater('predecessors-heading');
     } catch (e: unknown) {
       error = errorText(e, m.tasks_predecessor_failed());
+    } finally {
+      busy = false;
     }
   }
 
@@ -412,7 +425,12 @@
 
   /** 관계 저장: 먼저 서버에 영향을 묻고, 옮길 후속 업무가 있으면 사용자에게 보인다(D-31, D-91). */
   async function applyLink(predecessor: string): Promise<void> {
-    if (task === undefined || busy) return;
+    if (task === undefined || busy || predecessor === '') return;
+    // 고치던 관계가 그사이 없어졌으면(다시 읽은 판에 없음) 새로 만들지 않고 편집 칸을 닫는다.
+    if (editing !== undefined && !task.predecessors.some((l) => l.task_id === editing)) {
+      resetLinkEditor();
+      return;
+    }
     const lag = lagOf(lagText);
     if (lag === undefined) {
       error = m.tasks_link_lag_invalid();
@@ -845,8 +863,7 @@
                 variant="ghost"
                 disabled={busy || linkPending !== undefined}
                 aria-label={m.tasks_predecessor_remove_aria({ task: label(byId.get(pid)) })}
-                onclick={() => void changePredecessor(api.removePredecessor(current.id, pid))}
-                >{m.tasks_remove()}</Button
+                onclick={() => void removeLink(pid)}>{m.tasks_remove()}</Button
               >
             </span>
           {/if}

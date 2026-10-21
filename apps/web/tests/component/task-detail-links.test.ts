@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ShiftProposalView, TaskLinkView, TaskView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import { api, NetworkError } from '$lib/api/client';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -82,15 +82,15 @@ const shift: ShiftProposalView = {
   ],
 };
 
-function mount(): void {
-  vi.spyOn(api, 'task').mockResolvedValue({ ...build, checklist: [] });
+function mount(current: TaskView = build, others: TaskView[] = [design, review]): void {
+  vi.spyOn(api, 'task').mockResolvedValue({ ...current, checklist: [] });
   vi.spyOn(api, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
   render(TaskDetail, {
     props: {
-      taskId: 'b',
-      tasks: [design, build, review],
+      taskId: current.id,
+      tasks: [...others, current],
       workspaces: [],
       onchanged: () => undefined,
       onopen: () => undefined,
@@ -228,5 +228,93 @@ describe('task detail dependency kinds', () => {
       expect(await screen.findByText('지연일은 0부터 3650까지의 정수로 입력합니다.')).toBeTruthy();
     }
     expect(preview).not.toHaveBeenCalled();
+  });
+});
+
+// 고치는 중인 관계를 지우면(#41 리뷰): 편집 칸이 지운 관계를 계속 가리키면 "관계 저장"이 그 관계를 다시 만든다.
+describe('removing a dependency while editing', () => {
+  const prep = task('x', '준비', [], ['2026-10-15', '2026-10-16']);
+  const two = task('b', '구현', [
+    { task_id: 'a', kind: 'SS', lag_days: 1 },
+    { task_id: 'x', kind: 'FS', lag_days: 0 },
+  ]);
+  const without = (id: string) => ({
+    ...two,
+    predecessor_ids: two.predecessor_ids.filter((p) => p !== id),
+    predecessors: two.predecessors.filter((l) => l.task_id !== id),
+    checklist: [],
+  });
+
+  it('closes the editor of the removed link, returns focus and does not recreate it on save', async () => {
+    await setLocale('ko', { reload: false });
+    mount(two, [design, prep]);
+    const remove = vi.spyOn(api, 'removePredecessor').mockResolvedValue(without('a'));
+    const preview = vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [], undated: [] });
+    const set = vi.spyOn(api, 'setPredecessor');
+    await fireEvent.click(await screen.findByRole('button', { name: 'KED-a 설계 관계 고치기' }));
+    expect(screen.getByText('고치는 관계: 선행 업무 KED-a 설계 → 이 업무')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'KED-a 설계 선행 관계 지우기' }));
+    await waitFor(() => {
+      expect(remove).toHaveBeenCalledWith('b', 'a');
+    });
+    // 편집 칸은 새 관계 추가로 돌아가고(고르지 않으면 저장할 수 없음), 지운 관계를 가리키는 글이 없다.
+    await waitFor(() => {
+      expect(screen.queryByText(/고치는 관계: 선행 업무 KED-a/)).toBeNull();
+    });
+    expect(screen.getByText('선행 업무 추가')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '관계 저장' }).hasAttribute('disabled')).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: '관계 저장' }));
+    expect(preview).not.toHaveBeenCalled();
+    expect(set).not.toHaveBeenCalled();
+    expect((await screen.findByTestId('link-status')).textContent).toContain('관계를 지웠습니다.');
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe('predecessors-heading');
+    });
+  });
+
+  it('keeps the editor of another link when a different link is removed', async () => {
+    await setLocale('ko', { reload: false });
+    mount(two, [design, prep]);
+    vi.spyOn(api, 'removePredecessor').mockResolvedValue(without('x'));
+    await fireEvent.click(await screen.findByRole('button', { name: 'KED-a 설계 관계 고치기' }));
+    await fireEvent.input(screen.getByLabelText('지연(일)'), { target: { value: '4' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'KED-x 준비 선행 관계 지우기' }));
+    expect((await screen.findByTestId('link-status')).textContent).toContain('관계를 지웠습니다.');
+    expect(screen.getByText('고치는 관계: 선행 업무 KED-a 설계 → 이 업무')).toBeTruthy();
+    expect(screen.getByLabelText<HTMLInputElement>('지연(일)').value).toBe('4');
+  });
+
+  it('keeps the link and the unsaved edit when removing fails', async () => {
+    await setLocale('ko', { reload: false });
+    mount(two, [design, prep]);
+    vi.spyOn(api, 'removePredecessor').mockRejectedValue(new NetworkError('offline'));
+    await fireEvent.click(await screen.findByRole('button', { name: 'KED-a 설계 관계 고치기' }));
+    await fireEvent.input(screen.getByLabelText('지연(일)'), { target: { value: '5' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'KED-a 설계 선행 관계 지우기' }));
+    expect(await screen.findByText(/선행 업무를 바꾸지 못했습니다/)).toBeTruthy();
+    expect(screen.getByText('고치는 관계: 선행 업무 KED-a 설계 → 이 업무')).toBeTruthy();
+    expect(screen.getByLabelText<HTMLInputElement>('지연(일)').value).toBe('5');
+    expect(screen.queryByText('관계를 지웠습니다.')).toBeNull();
+    expect(document.querySelector('[data-predecessor="a"]')).not.toBeNull();
+  });
+
+  it('does not let a save start while the removal is still waiting for the server', async () => {
+    await setLocale('ko', { reload: false });
+    mount(two, [design, prep]);
+    let finish: (v: ReturnType<typeof without>) => void = () => undefined;
+    vi.spyOn(api, 'removePredecessor').mockReturnValue(new Promise((r) => (finish = r)));
+    const preview = vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [], undated: [] });
+    const set = vi.spyOn(api, 'setPredecessor');
+    await fireEvent.click(await screen.findByRole('button', { name: 'KED-a 설계 관계 고치기' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'KED-a 설계 선행 관계 지우기' }));
+    // 지우기 응답 전에 저장을 눌러도 아무 요청도 가지 않는다.
+    await fireEvent.click(screen.getByRole('button', { name: '관계 저장' }));
+    expect(preview).not.toHaveBeenCalled();
+    finish(without('a'));
+    await waitFor(() => {
+      expect(screen.queryByText(/고치는 관계: 선행 업무 KED-a/)).toBeNull();
+    });
+    expect(preview).not.toHaveBeenCalled();
+    expect(set).not.toHaveBeenCalled();
   });
 });

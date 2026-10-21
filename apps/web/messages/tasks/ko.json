@@ -230,6 +230,7 @@
   "tasks_link_edit_aria": "{task} 관계 고치기",
   "tasks_link_editing": "고치는 관계: 선행 업무 {task} → 이 업무",
   "tasks_link_saved": "관계를 저장했습니다.",
+  "tasks_link_removed": "관계를 지웠습니다.",
   "tasks_add": "추가",
   "tasks_recurrence": "반복",
   "tasks_occurrence_note": "반복 업무의 {date} 회차입니다. 규칙은 첫 회차에서 바꿉니다.",
