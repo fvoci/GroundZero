@@ -1276,6 +1276,13 @@ pub async fn move_document(
     Path(id): Path<DocumentId>,
     Json(input): Json<MoveDocument>,
 ) -> Result<Response, AppError> {
+    // 실시간으로 편집 중인 문서는 본문(마지막 리비전)이 뒤처져 있을 수 있다. 옮기기 전에 열린 방을 리비전으로 남긴다
+    // (내보내기와 같다). 옮긴 뒤에는 편집자가 새 자리에서 쓸 수 없거나 실시간이 꺼져 있어 방이 남은 편집을 리비전으로
+    // 저장하지 못하고, 다음 일반 저장이 그 편집을 버렸다(감사 S6). 방을 기다리는 동안 DB 연결을 쥐지 않는다.
+    state
+        .collab
+        .snapshot_documents(&std::collections::HashSet::from([id]))
+        .await;
     let mut tx = state.db.begin_as(user).await?;
     // 잠금 순서(자리 → 문서 행 → 항목 → 번호): 원래 자리와 새 자리를 먼저 잠근다.
     sqlx::query("SELECT app_lock_move($1, $2, $3)")

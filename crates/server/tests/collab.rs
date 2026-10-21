@@ -2172,3 +2172,69 @@ async fn edits_during_a_restore_are_not_acknowledged_then_dropped() {
     );
     owner.close().await;
 }
+
+/// 감사 S6: 실시간 편집 중인 문서를 실시간이 꺼진 워크스페이스로 옮기면, 옮기기 전에 방을 리비전으로 남기지 않아
+/// 리비전이 아직 없는 실시간 편집이 남겨졌다. 편집자가 새 자리에 쓸 수 없으면 방이 닫힐 때도 저장하지 못하고, 본문은
+/// 옮기기 전 마지막 리비전으로 남아 다음 일반 저장이 그 편집을 버렸다. 옮기기 전에 열린 방을 리비전으로 남긴다.
+#[tokio::test]
+async fn moving_a_live_document_into_a_realtime_off_workspace_keeps_the_live_edits() {
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let from = create_workspace(&app, &admin, "실시간 켠 곳").await;
+    let to = create_workspace(&app, &admin, "실시간 끈 곳").await;
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{from}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+    // 편집자는 옮기기 전 워크스페이스의 작성자일 뿐 새 워크스페이스의 멤버가 아니다.
+    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let doc = common::create_doc(&app, &admin, &from, "회의록").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let mut e = connect(addr, Some(&writer), &id, true).await.unwrap();
+    e.paragraph("옮기기 직전에 쓴 문단").await;
+    e.sync().await;
+
+    let target = json!({ "target_workspace_id": to, "target_item_id": null });
+    let preview = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{id}/move/preview"),
+        Some(&admin),
+        Some(target),
+    )
+    .await;
+    assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
+    let moved = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{id}/move"),
+        Some(&admin),
+        Some(json!({ "target_workspace_id": to, "target_item_id": null,
+                     "acknowledged": { "gains": preview.json["gains"], "loses": preview.json["loses"] } })),
+    )
+    .await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    // 다음 확인에서 편집자는 접근을 잃고 연결이 닫힌다(방도 닫힌다).
+    assert!(e.closed().await.is_some());
+    let saved = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    assert!(
+        saved["body"].to_string().contains("옮기기 직전에 쓴 문단"),
+        "{saved}"
+    );
+}
