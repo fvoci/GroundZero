@@ -287,7 +287,7 @@ describe('gantt dependency lines on the board', () => {
       ),
     ).toEqual(['a>b']);
     expect(screen.getByTestId('gantt-links-hidden').textContent).toContain(
-      '관계 2개는 한쪽 업무가 이 간트에 없어',
+      '관계 2개는 한쪽 연결 지점을 이 간트에 놓을 수 없어',
     );
   });
 
@@ -310,7 +310,7 @@ describe('gantt dependency lines on the board', () => {
     ]);
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     expect((await screen.findByTestId('gantt-links-hidden')).textContent).toContain(
-      '1 dependency is not drawn because one of its tasks',
+      '1 dependency is not drawn because one of its ends cannot be placed',
     );
   });
 });

@@ -124,8 +124,8 @@
       "declarations": ["input count", "local countPlural = count: plural"],
       "selectors": ["countPlural"],
       "match": {
-        "countPlural=one": "{count} dependency is not drawn because one of its tasks is not on this chart (filtered, undated or outside the shown period). Task details list all predecessors and followers.",
-        "countPlural=other": "{count} dependencies are not drawn because one of their tasks is not on this chart (filtered, undated or outside the shown period). Task details list all predecessors and followers."
+        "countPlural=one": "{count} dependency is not drawn because one of its ends cannot be placed on this chart (a task is filtered, undated or outside the shown period, a bar is cut off at the end of the period, or an end is dragged off the chart). Task details list all predecessors and followers.",
+        "countPlural=other": "{count} dependencies are not drawn because one of their ends cannot be placed on this chart (a task is filtered, undated or outside the shown period, a bar is cut off at the end of the period, or an end is dragged off the chart). Task details list all predecessors and followers."
       }
     }
   ],
