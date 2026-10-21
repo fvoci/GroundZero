@@ -64,11 +64,25 @@
   let saved = $state(false);
   let docTemplate = $state('');
 
+  // 마지막으로 서버 값으로 채운 입력란 값. 입력란이 이 값과 같으면 아직 고치지 않은 것이다.
+  let filled = { title: '', description: '', shared: false };
+
   function fill(next: ItemView): void {
     item = next;
     title = next.title;
     description = next.description;
     shared = next.visibility === 'workspace';
+    filled = { title, description, shared };
+  }
+
+  /** 항목을 다시 읽었을 때(정보 저장·템플릿 표시 뒤): 고치지 않은 입력란만 새 값으로, 입력 중인 칸은 그대로 둔다. */
+  function refresh(next: ItemView): void {
+    item = next;
+    const nextShared = next.visibility === 'workspace';
+    if (title === filled.title) title = next.title;
+    if (description === filled.description) description = next.description;
+    if (shared === filled.shared) shared = nextShared;
+    filled = { title: next.title, description: next.description, shared: nextShared };
   }
 
   $effect(() => {
@@ -139,7 +153,7 @@
     if (item === undefined) return;
     try {
       await api.setItemTemplate(item.id, !item.is_template);
-      fill(await api.item(item.id));
+      refresh(await api.item(item.id));
     } catch (e: unknown) {
       formError = errorText(e, m.modules_change_failed());
     }
@@ -316,7 +330,7 @@
         onchanged={() => {
           api
             .item(current.id)
-            .then(fill)
+            .then(refresh)
             .catch(() => undefined);
         }}
       />
