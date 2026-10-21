@@ -259,6 +259,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       },
@@ -359,6 +369,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -3478,6 +3498,16 @@
               }
             }
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "404": {
             "description": "",
             "content": {
@@ -4324,6 +4354,16 @@
                   "items": {
                     "$ref": "#/components/schemas/StudyParticipant"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -10933,11 +10973,12 @@
             "type": "boolean"
           },
           "can_edit": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "쓴 사람이 고칠 수 있는지(지운 댓글이나 보관된 항목의 댓글은 아님)."
           },
           "can_resolve": {
             "type": "boolean",
-            "description": "스레드를 해결·해제할 수 있는지(첫 댓글에서만)."
+            "description": "스레드를 해결·해제할 수 있는지(첫 댓글에서만, 보관된 항목에서는 아님)."
           },
           "created_at": {
             "type": "string",
