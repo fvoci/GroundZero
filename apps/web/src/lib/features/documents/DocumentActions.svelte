@@ -54,6 +54,7 @@
       newLinkUrl = undefined;
       void loadShares();
       void loadLinks();
+      void refreshSettings();
     }
     if (next === 'copy') {
       copyTitle = m.documents_copy_default_title({ title: doc.title });
@@ -96,23 +97,67 @@
     }
   }
 
-  async function setSettings(
-    visibility: 'workspace' | 'private',
-    allowCopy: boolean,
-  ): Promise<void> {
+  // 설정을 읽거나 바꾼 순서. 다시 읽기가 늦게 와 그 뒤에 바꾼 설정을 덮지 않게 한다.
+  let settingsSeq = 0;
+
+  // 화면의 문서는 연 뒤로 다시 읽지 않는다. 그사이 다른 소유자가 바꾼 설정(비공개·복제 금지)을 보이도록 설정 창을 열 때
+  // 서버의 지금 값을 읽는다. 바꿀 때 되돌리지 않는 것은 서버가 정한다(바꾼 칸만 보냄).
+  async function refreshSettings(): Promise<void> {
+    const mine = ++settingsSeq;
     try {
-      onchanged(await api.setSettings(doc.id, visibility, allowCopy));
+      const fresh = await api.document(doc.id);
+      if (mine !== settingsSeq || fresh.id !== doc.id) return;
+      onchanged({
+        ...doc,
+        visibility: fresh.visibility,
+        allow_copy: fresh.allow_copy,
+        is_template: fresh.is_template,
+      });
     } catch (e: unknown) {
       fail(e);
     }
   }
 
-  async function setTemplate(on: boolean): Promise<void> {
+  // 설정 요청이 진행 중인지. 응답 전에 다른 체크를 누르면 화면이 첫 변경 전의 값을 보이므로 그동안 막는다.
+  let settingsBusy = $state(false);
+
+  /**
+   * 바꾼 설정 하나만 보낸다. 건드리지 않은 설정은 서버가 잠근 뒤의 지금 값 그대로 둔다(0085, 감사 W6: 화면의 옛 값을
+   * 함께 보내 다른 소유자의 비공개·복제 금지를 되돌렸다).
+   */
+  async function setSettings(change: {
+    visibility?: 'workspace' | 'private';
+    allow_copy?: boolean;
+  }): Promise<void> {
+    if (settingsBusy) return;
+    settingsBusy = true;
+    const mine = ++settingsSeq;
     try {
-      await api.setDocumentTemplate(doc.id, on);
-      onchanged({ ...doc, is_template: on });
+      const saved = await api.setSettings(doc.id, change);
+      // 그사이 설정 창을 다시 열어 다시 읽었으면 이 응답과 그 읽기 중 어느 쪽이 더 새로운지 모른다. 그대로 넣으면 그사이
+      // 다른 소유자가 바꾼 값을 되돌려 보일 수 있으므로 한 번 더 읽어 서버의 지금 값으로 맞춘다(리뷰).
+      if (mine === settingsSeq) onchanged(saved);
+      else void refreshSettings();
     } catch (e: unknown) {
       fail(e);
+    } finally {
+      settingsBusy = false;
+    }
+  }
+
+  // 템플릿도 같은 문서의 설정이다. 겹쳐 보내면 늦게 온 다른 설정 응답(그때의 템플릿 값)이 화면을 서버와 다르게 되돌린다.
+  async function setTemplate(on: boolean): Promise<void> {
+    if (settingsBusy) return;
+    settingsBusy = true;
+    const mine = ++settingsSeq;
+    try {
+      await api.setDocumentTemplate(doc.id, on);
+      if (mine === settingsSeq) onchanged({ ...doc, is_template: on });
+      else void refreshSettings();
+    } catch (e: unknown) {
+      fail(e);
+    } finally {
+      settingsBusy = false;
     }
   }
 
@@ -395,10 +440,10 @@
           <div class="flex items-center gap-2">
             <Checkbox
               id="doc-private"
-              disabled={restrictOnly && doc.visibility === 'private'}
+              disabled={settingsBusy || (restrictOnly && doc.visibility === 'private')}
               checked={doc.visibility === 'private'}
               onCheckedChange={(v) =>
-                void setSettings(v === true ? 'private' : 'workspace', doc.allow_copy)}
+                void setSettings({ visibility: v === true ? 'private' : 'workspace' })}
             />
             <Label for="doc-private">{m.documents_private_label()}</Label>
           </div>
@@ -406,9 +451,9 @@
         <div class="flex items-center gap-2">
           <Checkbox
             id="doc-allow-copy"
-            disabled={restrictOnly && !doc.allow_copy}
+            disabled={settingsBusy || (restrictOnly && !doc.allow_copy)}
             checked={doc.allow_copy}
-            onCheckedChange={(v) => void setSettings(doc.visibility, v === true)}
+            onCheckedChange={(v) => void setSettings({ allow_copy: v === true })}
           />
           <Label for="doc-allow-copy">{m.documents_allow_copy()}</Label>
         </div>
@@ -416,6 +461,7 @@
           <div class="flex items-center gap-2">
             <Checkbox
               id="doc-template"
+              disabled={settingsBusy}
               checked={doc.is_template}
               onCheckedChange={(v) => void setTemplate(v === true)}
             />
