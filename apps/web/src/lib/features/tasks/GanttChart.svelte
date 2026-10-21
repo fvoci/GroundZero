@@ -233,9 +233,11 @@
               to: toFull,
             });
       const rem = w.span * col;
-      // 넓으면 전체, 중간이면 주차와 첫날(일요일 시작이면 첫날~), 아주 좁으면 비운다(설명은 남김).
+      // 넓으면 전체, 중간이면 주차와 첫날(일요일 시작이면 첫날~), 아주 좁으면 비운다(설명은 남김). 보이는 날짜 영역
+      // (스크롤 영역 - 줄 이름 14rem)이 12rem보다 좁은 화면(휴대 폭)에서는 칸이 넓어도 짧게 쓴다.
+      const narrowView = width > 0 && width / remPx() - 14 < 12;
       const label =
-        rem >= 10
+        rem >= 10 && !narrowView
           ? full
           : rem >= 4.5
             ? w.iso === undefined
@@ -336,22 +338,23 @@
       {#each months as seg (seg.key)}
         <div
           aria-hidden="true"
-          class="truncate border-l px-1 pt-1 font-medium text-muted-foreground"
+          class="overflow-clip border-l px-1 pt-1 font-medium whitespace-nowrap text-muted-foreground"
           style:grid-row="1"
           style:grid-column={`${String(seg.start + 2)} / span ${String(seg.span)}`}
         >
-          {seg.label}
+          <!-- 가로로 넘기면 글이 줄 이름 열(14rem) 바로 옆에 붙어 남는다(칸 앞부분이 그 열 아래로 들어가도 읽힘). -->
+          <span class="sticky left-56 inline-block">{seg.label}</span>
         </div>
       {/each}
       {#each weeks as w (w.key)}
         <div
-          class="truncate border-l border-l-foreground/30 px-1 text-muted-foreground tabular-nums"
+          class="relative overflow-clip border-l border-l-foreground/30 px-1 whitespace-nowrap text-muted-foreground tabular-nums"
           style:grid-row="2"
           style:grid-column={`${String(w.start + 2)} / span ${String(w.span)}`}
           title={w.full}
           data-gantt-week={w.from}
         >
-          <span aria-hidden="true">{w.label}</span>
+          <span class="sticky left-56 inline-block" aria-hidden="true">{w.label}</span>
           <span class="sr-only">{w.spoken}</span>
         </div>
       {/each}
