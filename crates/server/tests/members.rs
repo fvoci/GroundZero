@@ -710,6 +710,31 @@ async fn run_removal_race(
     item: &str,
     group: &str,
 ) {
+    // 리뷰: 경합 대상이 아닌 쪽의 멤버십을 미리 만들어, 내보내기가 이미 있던 행도 지우는지 함께 본다.
+    let existing = if target == "item" {
+        send(
+            app,
+            Method::PUT,
+            &format!("/api/groups/{group}/members/{}", member.id.0),
+            Some(admin),
+            None,
+        )
+        .await
+    } else {
+        send(
+            app,
+            Method::PUT,
+            &format!("/api/items/{item}/members"),
+            Some(admin),
+            Some(json!({ "user_ids": [member.id.0], "group_ids": [] })),
+        )
+        .await
+    };
+    assert!(
+        existing.status.is_success(),
+        "{target}: {:?}",
+        existing.json
+    );
     let n: i32 = {
         let mut tx = state.db.begin_as(admin.id).await.unwrap();
         let n = sqlx::query_scalar("SELECT app_remove_member_ids($1, $2)")
