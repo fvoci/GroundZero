@@ -201,6 +201,25 @@ describe('gantt dependency lines on the board', () => {
     expect(preview).not.toHaveBeenCalled();
   });
 
+  it('hides the line while the follower is dragged before the first column, and brings it back on Escape', async () => {
+    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    const update = vi.spyOn(api, 'updateTask');
+    const gantt = await mount();
+    const bar = q(gantt, '[data-gantt-bar="b"]');
+    const px =
+      1.75 * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
+    // b(열 5~7)를 일곱 칸 앞으로: 미리 보기 시작이 열 -2(표 왼쪽 밖)다.
+    await fireEvent.pointerDown(bar, { pointerId: 3, button: 0, buttons: 1, clientX: 400 });
+    await fireEvent.pointerMove(bar, { pointerId: 3, buttons: 1, clientX: 400 - 7 * px });
+    expect(gantt.querySelector('[data-gantt-link]')).toBeNull();
+    expect(screen.getByTestId('gantt-links-hidden').textContent).toContain('관계 1개는');
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await fireEvent.pointerUp(bar, { pointerId: 3, clientX: 400 - 7 * px });
+    expectLineOnBars(gantt);
+    expect(screen.queryByTestId('gantt-links-hidden')).toBeNull();
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('matches the bars after an approved preview, a cancelled one, and a failed save', async () => {
     const movedA = task('a', '설계', '2026-10-20', '2026-10-23', [], 2);
     const movedB = task('b', '구현', '2026-10-26', '2026-10-28', ['a'], 2);

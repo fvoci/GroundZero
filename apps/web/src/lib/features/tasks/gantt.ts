@@ -191,6 +191,12 @@ export function ganttLinks(
       const x2 = succ.milestone
         ? succ.from * col + col / 2 - DIAMOND_HALF
         : succ.from * col + BAR_INSET;
+      // 끄는 중의 미리 보기로 끝이 표 밖(첫 열 앞·마지막 열 뒤)으로 나가면 그 끝은 보이지 않는다. 가장자리에 붙여 잇지
+      // 않고 다른 보이지 않는 끝과 같이 센다(놓아 저장하면 다시 읽은 기간에서 다시 그린다).
+      if (x1 < 0 || x1 > width || x2 < 0 || x2 > width) {
+        hidden += 1;
+        continue;
+      }
       const y1 = (pred.index + 0.5) * row;
       const y2 = (succ.index + 0.5) * row;
       let d: string;

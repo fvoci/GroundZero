@@ -133,6 +133,18 @@ describe('gantt links', () => {
     expect(hidden).toBe(2);
   });
 
+  it('draws nothing to an end dragged outside the chart, instead of pinning it to the edge', () => {
+    // 끄는 중의 미리 보기: 후속 b를 첫 열 앞(-2)으로, 선행 c를 마지막 열 뒤로 옮긴 경우.
+    const left = ganttLinks([row('a', 0, 1), row('b', -2, -2, ['a'])], G);
+    expect(left.links).toEqual([]);
+    expect(left.hidden).toBe(1);
+    const right = ganttLinks([row('c', 13, 14), row('d', 5, 6, ['c'])], G);
+    expect(right.links).toEqual([]);
+    expect(right.hidden).toBe(1);
+    // 첫 열과 마지막 열 안이면 그대로 그린다(경계값).
+    expect(ganttLinks([row('a', 0, 0), row('b', 11, 11, ['a'])], G).links).toHaveLength(1);
+  });
+
   it('does not start a line from a bar cut off at the end of the shown period', () => {
     const base = { status: 'todo' as const, parent_id: null, milestone: false };
     const layout = ganttLayout([
