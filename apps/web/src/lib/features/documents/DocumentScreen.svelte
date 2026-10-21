@@ -8,6 +8,9 @@
   import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
   import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
+  import ChildDocuments from './ChildDocuments.svelte';
+  import { parseReferenceHash } from '$lib/features/references/focus';
+  import ReferenceFocus from '$lib/features/references/ReferenceFocus.svelte';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { referenceHref } from '$lib/features/references/context';
   import { badgeColor, workspaceLabel } from '$lib/features/workspaces/badge';
@@ -143,6 +146,10 @@
       {/if}
     </div>
   </div>
+  <!-- 본문 편집기와 같은 키: 복원·다시 열기로 본문을 새로 그리면 참조 자리도 다시 찾는다. -->
+  {#key `${doc.id}:${String(epoch)}:${String(doc.realtime)}`}
+    <ReferenceFocus root={bodyArea} target={parseReferenceHash(router.hash)} />
+  {/key}
   <!-- 넓은 화면에서는 본문 옆에 목차(Outline처럼 읽기 위치를 잡기 쉽게). 좁은 화면에서는 본문만. -->
   <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-6">
     <div bind:this={bodyArea} class="min-w-0">
@@ -180,12 +187,16 @@
       </div>
     </aside>
   </div>
+  <!-- 본문 바로 아래에 이 문서와 이어진 문서(하위 문서, 이곳을 가리키는 문서)를 함께 둔다. 첨부·댓글은 그다음. -->
+  {#key doc.id}
+    <ChildDocuments {doc} {workspaces} />
+  {/key}
+  {#key `${doc.id}:${String(epoch)}`}
+    <Backlinks kind="document" id={doc.id} {workspaces} />
+  {/key}
   <AttachmentsPanel
     target={{ kind: 'document', id: doc.id }}
     canWrite={doc.access === 'owner' || doc.access === 'write'}
   />
   <CommentsPanel target={{ kind: 'document', id: doc.id }} />
-  {#key `${doc.id}:${String(epoch)}`}
-    <Backlinks kind="document" id={doc.id} {workspaces} />
-  {/key}
 {/if}

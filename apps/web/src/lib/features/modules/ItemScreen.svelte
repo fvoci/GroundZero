@@ -53,6 +53,8 @@
   // 항목 일정 목록에서 바꾸면 달력을, 달력에서 바꾸면 목록을 다시 읽게 하는 값.
   let calendarVersion = $state(0);
   let listVersion = $state(0);
+  // 항목 달력의 날짜 칸에서 업무를 만들면 같은 화면의 업무 보드가 다시 읽는다.
+  let taskVersion = $state(0);
   let error = $state<string | undefined>(undefined);
 
   let title = $state('');
@@ -404,6 +406,7 @@
       item={view}
       {workspaces}
       openTaskId={taskId}
+      tasksVersion={taskVersion}
       onstale={() => {
         // 권한·보관이 바뀌었을 수 있다. 입력 중인 제목·설명은 두고 항목 상태만 새로 읽는다.
         api
@@ -425,10 +428,14 @@
     <CalendarScreen
       {workspace}
       scope={{ itemId: current.id }}
+      item={view}
       embedded
       version={calendarVersion}
       onchanged={() => {
         listVersion += 1;
+      }}
+      ontaskcreated={() => {
+        taskVersion += 1;
       }}
     />
     <Backlinks kind="item" id={current.id} {workspaces} />

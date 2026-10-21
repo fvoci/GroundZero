@@ -245,26 +245,32 @@ impl SearchClient {
     }
 
     /// 거친 범위로 찾는다. 결과는 반드시 접근 함수로 다시 거른다.
+    /// `title_only`면 제목에서만 찾는다(질의 단위 설정이라 색인 설정은 그대로).
     pub async fn query(
         &self,
         q: &str,
         filter: &str,
         offset: usize,
         limit: usize,
+        title_only: bool,
     ) -> Result<Vec<Hit>, AppError> {
+        let mut request = json!({
+            "q": q,
+            "filter": filter,
+            "offset": offset,
+            "limit": limit,
+            "attributesToCrop": ["text"],
+            "cropLength": 24,
+            "cropMarker": "…",
+            "attributesToRetrieve": ["kind", "id", "title", "workspace_id", "item_id"]
+        });
+        if title_only {
+            request["attributesToSearchOn"] = json!(["title"]);
+        }
         let body: Value = self
             .request(reqwest::Method::POST, &format!("/indexes/{INDEX}/search"))
             .timeout(QUERY_TIMEOUT)
-            .json(&json!({
-                "q": q,
-                "filter": filter,
-                "offset": offset,
-                "limit": limit,
-                "attributesToCrop": ["text"],
-                "cropLength": 24,
-                "cropMarker": "…",
-                "attributesToRetrieve": ["kind", "id", "title", "workspace_id", "item_id"]
-            }))
+            .json(&request)
             .send()
             .await
             .and_then(reqwest::Response::error_for_status)

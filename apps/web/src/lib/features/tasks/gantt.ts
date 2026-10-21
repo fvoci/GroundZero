@@ -65,3 +65,36 @@ export function ganttLayout<T extends GanttTask>(tasks: readonly T[]): GanttLayo
     later: spans.filter((s) => s.begin > last).map((s) => s.task),
   };
 }
+
+/** 간트에서 바꾸는 방법: 막대 옮기기(시작·마감 함께), 시작 끝, 마감 끝. */
+export type GanttEdit = 'move' | 'start' | 'end';
+
+/**
+ * 막대를 `days`일 바꾼 날짜. 옮기기는 있는 날짜만 같이 옮긴다(없는 날짜는 그대로 없음). 끝을 끌면 시작·마감을 모두
+ * 정한다(날짜 하나뿐인 업무도 기간이 된다). 시작이 마감보다 늦어지거나 마일스톤의 끝을 끌면 바꾸지 않는다(undefined).
+ */
+export function editDates(
+  task: Pick<GanttTask, 'start_date' | 'due_date' | 'milestone'>,
+  edit: GanttEdit,
+  days: number,
+): { start_date: string | null; due_date: string | null } | undefined {
+  if (days === 0) return undefined;
+  const begin = task.start_date ?? task.due_date;
+  const end = task.due_date ?? task.start_date;
+  if (begin === null || end === null) return undefined;
+  const from = dayNumber(begin);
+  const to = dayNumber(end);
+  if (task.milestone) {
+    return edit === 'move' ? { start_date: null, due_date: fromDayNumber(to + days) } : undefined;
+  }
+  if (edit === 'move') {
+    return {
+      start_date: task.start_date === null ? null : fromDayNumber(from + days),
+      due_date: task.due_date === null ? null : fromDayNumber(to + days),
+    };
+  }
+  const nextFrom = edit === 'start' ? from + days : from;
+  const nextTo = edit === 'end' ? to + days : to;
+  if (nextFrom > nextTo) return undefined;
+  return { start_date: fromDayNumber(nextFrom), due_date: fromDayNumber(nextTo) };
+}

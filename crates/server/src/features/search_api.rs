@@ -51,6 +51,10 @@ pub struct SearchQuery {
     pub from: Option<String>,
     /// 날짜 범위 끝(YYYY-MM-DD, 포함).
     pub to: Option<String>,
+    /// 작성자(`me` 또는 사용자 id): 그 사람이 만든 것만(각 대상의 `created_by`). 볼 수 있는 범위는 넓히지 않는다.
+    pub author: Option<String>,
+    /// `true`면 제목에서만 찾는다(본문·첨부 글자·번호는 보지 않는다).
+    pub title_only: Option<bool>,
 }
 
 /// 검색 조건 중 필터.
@@ -61,6 +65,7 @@ struct Filters {
     assignee: Option<Uuid>,
     from: Option<time::Date>,
     to: Option<time::Date>,
+    author: Option<Uuid>,
 }
 
 fn parse_day(raw: Option<&str>, name: &str) -> Result<Option<time::Date>, AppError> {
@@ -79,20 +84,24 @@ fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
         Some(s @ ("todo" | "in_progress" | "done")) => Some(s.to_owned()),
         Some(other) => return Err(AppError::BadRequest(format!("unknown status {other}"))),
     };
-    let assignee = match query.assignee.as_deref().map(str::trim) {
-        None | Some("") => None,
-        Some("me") => Some(me.0),
-        Some(raw) => Some(
-            Uuid::parse_str(raw)
-                .map_err(|_| AppError::BadRequest("assignee must be me or a user id".into()))?,
-        ),
+    let person = |raw: Option<&str>, name: &str| -> Result<Option<Uuid>, AppError> {
+        match raw.map(str::trim) {
+            None | Some("") => Ok(None),
+            Some("me") => Ok(Some(me.0)),
+            Some(raw) => Uuid::parse_str(raw)
+                .map(Some)
+                .map_err(|_| AppError::BadRequest(format!("{name} must be me or a user id"))),
+        }
     };
+    let assignee = person(query.assignee.as_deref(), "assignee")?;
+    let author = person(query.author.as_deref(), "author")?;
     Ok(Filters {
         module: query.module_id,
         status,
         assignee,
         from: parse_day(query.from.as_deref(), "from")?,
         to: parse_day(query.to.as_deref(), "to")?,
+        author,
     })
 }
 
@@ -215,6 +224,28 @@ async fn visible(
     Ok(rows.into_iter().collect())
 }
 
+/// 후보 가운데 그 사람이 만든 것(각 대상의 `created_by`). 호출자 권한(RLS)으로 읽으므로 볼 수 없는 행은 나오지 않는다.
+async fn authored(
+    tx: &mut UserTx,
+    author: Uuid,
+    candidates: &[(String, Uuid)],
+) -> Result<HashSet<(String, Uuid)>, AppError> {
+    let ids: Vec<Uuid> = candidates.iter().map(|(_, id)| *id).collect();
+    let rows: Vec<(String, Uuid)> = sqlx::query_as(
+        "SELECT 'document', id FROM documents WHERE id = ANY($2) AND created_by = $1
+         UNION ALL SELECT 'task', id FROM tasks WHERE id = ANY($2) AND created_by = $1
+         UNION ALL SELECT 'item', id FROM items WHERE id = ANY($2) AND created_by = $1
+         UNION ALL SELECT 'event', id FROM events WHERE id = ANY($2) AND created_by = $1
+         UNION ALL SELECT 'file', id FROM files WHERE id = ANY($2) AND created_by = $1
+         UNION ALL SELECT 'record', id FROM item_records WHERE id = ANY($2) AND created_by = $1",
+    )
+    .bind(author)
+    .bind(&ids)
+    .fetch_all(tx.conn())
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
 /// 파일이 붙은 문서(파일 결과에서 문서로 열 때).
 async fn file_document(tx: &mut UserTx, kind: &str, id: Uuid) -> Result<Option<Uuid>, AppError> {
     if kind != "file" {
@@ -281,7 +312,10 @@ pub async fn search(
         meili_filters(&wanted)
     );
     tx.commit().await?;
-    if let Some(results) = indexed(&state, client, user, q, &filter).await? {
+    let title_only = query.title_only.unwrap_or(false);
+    if let Some(results) =
+        indexed(&state, client, user, q, &filter, title_only, wanted.author).await?
+    {
         return Ok(Json(results));
     }
     // 검색 서비스가 응답하지 않으면 제목 검색으로 대신한다.
@@ -299,10 +333,15 @@ async fn indexed(
     user: UserId,
     q: &str,
     filter: &str,
+    title_only: bool,
+    author: Option<Uuid>,
 ) -> Result<Option<Vec<SearchResult>>, AppError> {
     let mut results = Vec::new();
     for page in 0..MAX_PAGES {
-        let hits = match client.query(q, filter, page * CANDIDATES, CANDIDATES).await {
+        let hits = match client
+            .query(q, filter, page * CANDIDATES, CANDIDATES, title_only)
+            .await
+        {
             Ok(hits) => hits,
             Err(err) if page == 0 => {
                 tracing::warn!(
@@ -330,11 +369,19 @@ async fn indexed(
             .collect();
         let mut tx = state.db.begin_as(user).await?;
         let allowed = visible(&mut tx, &candidates).await?;
+        let made = match author {
+            Some(author) => Some(authored(&mut tx, author, &candidates).await?),
+            None => None,
+        };
         for h in hits {
             let Some(id) = Uuid::parse_str(&h.id).ok() else {
                 continue;
             };
-            if results.len() == MAX_RESULTS || !allowed.contains(&(h.kind.clone(), id)) {
+            let key = (h.kind.clone(), id);
+            if results.len() == MAX_RESULTS
+                || !allowed.contains(&key)
+                || made.as_ref().is_some_and(|m| !m.contains(&key))
+            {
                 continue;
             }
             let snippet = h
@@ -387,32 +434,33 @@ async fn fallback(
         "SELECT kind, id, title, workspace_id, item_id FROM (
            SELECT 'document' AS kind, d.id, d.title, d.workspace_id, d.item_id, d.updated_at,
                   (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status,
-                  NULL::uuid[] AS assignees, d.updated_at::date AS day
+                  NULL::uuid[] AS assignees, d.updated_at::date AS day, d.created_by
            FROM documents d WHERE d.title ILIKE $1 AND d.deleted_at IS NULL
            UNION ALL
            SELECT 'task', t.id, t.title, t.workspace_id, t.item_id, t.updated_at,
                   (SELECT module_id FROM items WHERE id = t.item_id), t.status,
-                  ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id), coalesce(t.due_date, t.start_date)
+                  ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id), coalesce(t.due_date, t.start_date),
+                  t.created_by
            FROM tasks t WHERE t.title ILIKE $1 AND t.deleted_at IS NULL
            UNION ALL
            SELECT 'item', i.id, i.title, i.workspace_id, NULL, i.updated_at, i.module_id, NULL, NULL,
-                  i.updated_at::date
+                  i.updated_at::date, i.created_by
            FROM items i WHERE i.title ILIKE $1 AND i.deleted_at IS NULL
            UNION ALL
            SELECT 'event', e.id, e.title, e.workspace_id, e.item_id, e.updated_at,
                   (SELECT module_id FROM items WHERE id = e.item_id), NULL, NULL,
-                  coalesce(e.start_date, (e.starts_at AT TIME ZONE e.timezone)::date)
+                  coalesce(e.start_date, (e.starts_at AT TIME ZONE e.timezone)::date), e.created_by
            FROM events e WHERE e.title ILIKE $1 AND e.deleted_at IS NULL
            UNION ALL
            SELECT 'file', f.id, f.name, f.workspace_id, coalesce(f.item_id, d.item_id), f.updated_at,
                   (SELECT module_id FROM items WHERE id = coalesce(f.item_id, d.item_id)), NULL, NULL,
-                  f.updated_at::date
+                  f.updated_at::date, f.created_by
            FROM files f LEFT JOIN documents d ON d.id = f.document_id
            WHERE f.name ILIKE $1 AND f.deleted_at IS NULL
            UNION ALL
            SELECT 'record', rc.id, rc.title, rc.workspace_id, rc.item_id, rc.updated_at,
                   (SELECT module_id FROM items WHERE id = rc.item_id), NULL, NULL,
-                  coalesce(rc.occurred_on, rc.updated_at::date)
+                  coalesce(rc.occurred_on, rc.updated_at::date), rc.created_by
            FROM item_records rc WHERE rc.title ILIKE $1
          ) r
          WHERE r.kind = ANY($2) AND ($3::uuid IS NULL OR r.workspace_id = $3)
@@ -421,6 +469,7 @@ async fn fallback(
            AND ($6::uuid IS NULL OR $6 = ANY (r.assignees))
            AND ($7::date IS NULL OR r.day >= $7)
            AND ($8::date IS NULL OR r.day <= $8)
+           AND ($9::uuid IS NULL OR r.created_by = $9)
          ORDER BY r.updated_at DESC LIMIT 60",
     )
     .bind(&pattern)
@@ -431,6 +480,7 @@ async fn fallback(
     .bind(wanted.assignee)
     .bind(wanted.from)
     .bind(wanted.to)
+    .bind(wanted.author)
     .fetch_all(tx.conn())
     .await?;
     let candidates: Vec<(String, Uuid)> = rows.iter().map(|r| (r.0.clone(), r.1)).collect();

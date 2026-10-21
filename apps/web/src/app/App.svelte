@@ -186,6 +186,7 @@
   <SearchDialog
     bind:open={searchOpen}
     memberOf={(ws: string) => signedIn.workspaces.some((w) => w.id === ws)}
+    workspace={currentWorkspace}
   />
   <DisplaySettingsDialog bind:open={displayOpen} />
   <Sidebar.Provider open={sidebarOpen}>

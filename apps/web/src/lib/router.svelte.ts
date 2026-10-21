@@ -149,6 +149,8 @@ export function pathFor(
 
 class Router {
   path = $state(window.location.pathname);
+  /** 주소의 `#` 부분(백링크가 원문 문서 안의 참조 자리를 가리킬 때). 경로 해석에는 쓰지 않는다. */
+  hash = $state(window.location.hash);
   route = $derived(parseRoute(this.path));
   /** 이동 전에 확인할 함수(미저장 변경 보호). false면 이동하지 않는다. */
   guard: (() => boolean) | undefined = undefined;
@@ -156,14 +158,20 @@ class Router {
   constructor() {
     window.addEventListener('popstate', () => {
       this.path = window.location.pathname;
+      this.hash = window.location.hash;
     });
   }
 
-  navigate(path: string): void {
-    if (path === this.path) return;
-    if (this.guard !== undefined && !this.guard()) return;
-    window.history.pushState(null, '', path);
+  navigate(target: string): void {
+    const at = target.indexOf('#');
+    const path = at < 0 ? target : target.slice(0, at);
+    const hash = at < 0 ? '' : target.slice(at);
+    if (path === this.path && hash === this.hash) return;
+    // 같은 화면 안에서 `#`만 바뀌면 화면을 떠나지 않으므로 미저장 확인을 묻지 않는다.
+    if (path !== this.path && this.guard !== undefined && !this.guard()) return;
+    window.history.pushState(null, '', target);
     this.path = path;
+    this.hash = hash;
   }
 
   /** 바로 앞 기록으로 돌아간다(이 화면이 기록을 쌓아 연 대화상자를 닫을 때). 주소는 popstate가 맞춘다. 가드가 막으면 false. */

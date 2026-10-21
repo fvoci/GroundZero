@@ -11,6 +11,7 @@
   import { Button } from '$lib/ui/button';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
 
+  import MoveDocumentDialog from './MoveDocumentDialog.svelte';
   import type { TreeAction, TreeMove } from './tree';
   import { planMove, TreeMoveError, visibleRows } from './tree';
 
@@ -98,6 +99,34 @@
     }
   }
 
+  // 검색으로 상위 문서를 골라 옮기기(창). 맨 끝 자식으로 들어간다.
+  let moving = $state<string | undefined>(undefined);
+  async function moveUnder(id: string, parentId: string | null): Promise<string | undefined> {
+    // 다른 옮기기가 진행 중이면 이번 것은 보내지 않았다(성공으로 알리면 창이 닫히므로 실패로 돌려준다).
+    if (busy) return m.documents_tree_move_failed_plain();
+    busy = true;
+    try {
+      failure = undefined;
+      await onmove(id, { parentId, beforeId: null });
+      if (parentId !== null) toggle(parentId, true);
+      const parent = parentId === null ? undefined : docs.find((d) => d.id === parentId);
+      status =
+        parent === undefined
+          ? m.documents_tree_moved_root()
+          : m.documents_tree_moved_under({ title: parent.title });
+      return undefined;
+    } catch (e: unknown) {
+      // 옮기기는 됐는데 목록만 다시 읽지 못했으면 창을 닫고(다시 옮기지 않게) 트리 아래에 알린다.
+      if (e instanceof TreeMoveError && e.moved) {
+        failure = moveFailureText(e);
+        return undefined;
+      }
+      return moveFailureText(e);
+    } finally {
+      busy = false;
+    }
+  }
+
   async function createChild(id: string): Promise<void> {
     if (busy) return;
     busy = true;
@@ -132,6 +161,11 @@
       if (event.key === 'Enter') {
         event.preventDefault();
         void createChild(id);
+        return;
+      }
+      if (event.key === 'm' || event.key === 'M' || event.code === 'KeyM') {
+        event.preventDefault();
+        moving = id;
         return;
       }
     }
@@ -200,7 +234,7 @@
         aria-expanded={row.hasChildren ? !collapsed.has(id) : undefined}
         aria-selected={current?.doc.id === id}
         aria-keyshortcuts={canWrite
-          ? 'Alt+ArrowUp Alt+ArrowDown Alt+ArrowRight Alt+ArrowLeft Alt+Enter'
+          ? 'Alt+ArrowUp Alt+ArrowDown Alt+ArrowRight Alt+ArrowLeft Alt+Enter Alt+M'
           : undefined}
         tabindex={current?.doc.id === id ? 0 : -1}
         class="group flex items-center gap-1 rounded py-0.5 pr-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
@@ -274,6 +308,9 @@
                 onSelect={() => void act(id, 'outdent')}
                 >{m.documents_tree_outdent()}</DropdownMenu.Item
               >
+              <DropdownMenu.Item onSelect={() => (moving = id)}
+                >{m.documents_tree_move_to()}</DropdownMenu.Item
+              >
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         {/if}
@@ -293,3 +330,14 @@
   <p role="alert" class="text-sm text-destructive">{failure}</p>
 {/if}
 <p class="sr-only" aria-live="polite">{status}</p>
+<MoveDocumentDialog
+  {docs}
+  docId={moving}
+  onconfirm={(parentId: string | null) =>
+    moving === undefined ? Promise.resolve(undefined) : moveUnder(moving, parentId)}
+  onclose={() => {
+    const id = moving;
+    moving = undefined;
+    void focusRow(id);
+  }}
+/>

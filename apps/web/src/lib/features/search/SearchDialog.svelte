@@ -1,6 +1,6 @@
 <script lang="ts">
   // 통합 검색 창(D-39). 사이드바 단추나 Ctrl/⌘+K로 연다. 볼 수 있는 것만 서버가 돌려준다.
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
 
   import type { SearchFilters, SearchKind, SearchResultView, TaskStatus } from '$lib/api/client';
   import { api } from '$lib/api/client';
@@ -13,10 +13,18 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
-  import { SEARCH_KINDS, searchKindLabel, searchResultPath } from './search';
+  import { readableSnippet, SEARCH_KINDS, searchKindLabel, searchResultPath } from './search';
 
-  let { open = $bindable(false), memberOf }: { open?: boolean; memberOf: (ws: string) => boolean } =
-    $props();
+  let {
+    open = $bindable(false),
+    memberOf,
+    workspace,
+  }: {
+    open?: boolean;
+    memberOf: (ws: string) => boolean;
+    /** 지금 보는 워크스페이스. 있으면 작성자로 그 멤버를 고를 수 있다. */
+    workspace?: { id: string; name: string } | undefined;
+  } = $props();
 
   const TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'done'];
 
@@ -32,6 +40,49 @@
   let mine = $state(false);
   let from = $state('');
   let to = $state('');
+  // 작성자(만든 사람)와 제목만. 작성자 거르기는 좁히기만 한다(볼 수 없는 것은 그대로 안 나온다).
+  let author = $state<string>('any');
+  let titleOnly = $state(false);
+  let people = $state<{ user_id: string; display_name: string }[]>([]);
+  // 고른 사람이 지금 멤버 목록에 없으면(다른 워크스페이스로 옮김·목록을 못 읽음) 그 선택을 거둔다(표시는 "누구나"인데
+  // 거르기는 남아 있는 일이 없게). "나"·"누구나"는 그대로.
+  function dropMissingAuthor(list: readonly { user_id: string }[]): void {
+    untrack(() => {
+      if (author === 'any' || author === 'me' || list.some((p) => p.user_id === author)) return;
+      author = 'any';
+      refilter();
+    });
+  }
+  $effect(() => {
+    const ws = workspace?.id;
+    people = [];
+    if (!open) return;
+    if (ws === undefined) {
+      dropMissingAuthor([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .members(ws)
+      .then((v) => {
+        if (cancelled) return;
+        people = v.members;
+        dropMissingAuthor(v.members);
+      })
+      .catch(() => {
+        if (!cancelled) dropMissingAuthor([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+  const authorLabel = $derived(
+    author === 'any'
+      ? m.search_author_any()
+      : author === 'me'
+        ? m.search_author_me()
+        : (people.find((p) => p.user_id === author)?.display_name ?? m.search_author_any()),
+  );
   const taskOnly = $derived(taskStatus !== 'any' || mine);
   const reversed = $derived(from !== '' && to !== '' && from > to);
 
@@ -43,6 +94,8 @@
     if (mine) f.assignee = 'me';
     if (from !== '') f.from = from;
     if (to !== '') f.to = to;
+    if (author !== 'any') f.author = author;
+    if (titleOnly) f.titleOnly = true;
     return f;
   }
 
@@ -189,6 +242,41 @@
           </Select.Content>
         </Select.Root>
       </div>
+      <div class="flex flex-col gap-1">
+        <span id="search-author-label" class="font-medium">{m.search_author()}</span>
+        <Select.Root
+          type="single"
+          value={author}
+          onValueChange={(v: string) => {
+            author = v === '' ? 'any' : v;
+            refilter();
+          }}
+        >
+          <Select.Trigger class="w-36" aria-labelledby="search-author-label"
+            >{authorLabel}</Select.Trigger
+          >
+          <Select.Content>
+            <Select.Item value="any" label={m.search_author_any()}
+              >{m.search_author_any()}</Select.Item
+            >
+            <Select.Item value="me" label={m.search_author_me()}>{m.search_author_me()}</Select.Item
+            >
+            {#each people as p (p.user_id)}
+              <Select.Item value={p.user_id} label={p.display_name}>{p.display_name}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="flex items-center gap-2 pb-2">
+        <Checkbox
+          id="search-title-only"
+          bind:checked={titleOnly}
+          onCheckedChange={() => {
+            refilter();
+          }}
+        />
+        <Label for="search-title-only">{m.search_title_only()}</Label>
+      </div>
       <div class="flex items-center gap-2 pb-2">
         <Checkbox
           id="search-mine"
@@ -226,9 +314,15 @@
         </div>
       </div>
     </fieldset>
-    <p class="text-xs text-muted-foreground">
-      {m.search_date_hint()}
-    </p>
+    <!-- 조건 설명은 접어 둬서 결과가 첫 화면에 바로 보이게 한다(좁은 화면에서 결과가 아래로 밀리지 않게). -->
+    <details class="text-xs text-muted-foreground" data-testid="search-filters-help">
+      <summary
+        class="w-fit cursor-pointer rounded select-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >{m.search_filters_help()}</summary
+      >
+      <p class="mt-1">{m.search_date_hint()}</p>
+      <p class="mt-1">{m.search_author_hint()}</p>
+    </details>
     <div aria-live="polite" class="text-sm text-muted-foreground">
       {#if reversed}
         <span class="text-destructive">{m.search_reversed()}</span>
@@ -266,7 +360,9 @@
                 <span class="truncate font-medium">{r.title}</span>
               </span>
               {#if r.snippet !== null}
-                <span class="mt-0.5 block text-sm text-muted-foreground">{r.snippet}</span>
+                <span class="mt-0.5 line-clamp-2 text-sm break-words text-muted-foreground"
+                  >{readableSnippet(r.snippet)}</span
+                >
               {/if}
             </button>
           </li>

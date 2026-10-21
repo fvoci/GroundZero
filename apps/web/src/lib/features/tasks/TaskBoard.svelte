@@ -4,7 +4,15 @@
   import type { Workspace } from '@fvoci/api-client';
   import { tick, untrack } from 'svelte';
 
-  import type { ItemView, SavedViewView, TaskStatus, TaskView } from '$lib/api/client';
+  import type {
+    ItemView,
+    SavedViewView,
+    ShiftProposalView,
+    TaskDetailView,
+    TaskInput,
+    TaskStatus,
+    TaskView,
+  } from '$lib/api/client';
   import { api, ApiError, TASK_STATUSES } from '$lib/api/client';
   import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
@@ -16,11 +24,16 @@
   import { Button } from '$lib/ui/button';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Dialog from '$lib/ui/dialog';
+  import { durationText } from '$lib/features/time/format';
+  import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { formatDay } from '$lib/display';
 
   import type { BoardAction, BoardMove, CardBox, DropSlot } from './board';
   import {
     applyMove,
     dropBefore,
+    laneEstimate,
     lanes,
     listOrder,
     moveErrorMessage,
@@ -47,8 +60,10 @@
     sortTasks,
     VIEWS,
   } from './filters';
-  import { PRIORITY_LABEL, STATUS_LABEL } from './labels';
+  import { PRIORITY_LABEL, PRIORITY_TONE, STATUS_LABEL } from './labels';
   import GanttChart from './GanttChart.svelte';
+  import { formOf } from './form';
+  import ShiftProposals from './ShiftProposals.svelte';
   import TaskCalendar from './TaskCalendar.svelte';
   import TaskDetail from './TaskDetail.svelte';
 
@@ -59,9 +74,17 @@
     openTaskId: string | undefined;
     /** 옮기기가 권한·보관 때문에 거절되면 항목을 다시 읽게 한다(쓰기 단추를 끄기 위해). */
     onstale?: () => void;
+    /** 같은 화면의 다른 곳(항목 달력)에서 업무를 만들 때마다 늘어난다(목록을 다시 읽는다). */
+    tasksVersion?: number;
   }
 
-  const { item, workspaces, openTaskId, onstale }: Props = $props();
+  const { item, workspaces, openTaskId, onstale, tasksVersion = 0 }: Props = $props();
+  $effect(() => {
+    if (tasksVersion === 0) return;
+    untrack(() => {
+      void reload();
+    });
+  });
 
   let tasks = $state<TaskView[]>([]);
   let view = $state<TaskViewMode>('board');
@@ -223,6 +246,8 @@
     how: BoardAction | 'drag' | 'menu';
     /** 이동 요청이 아직 끝나지 않았는지(끝나기 전에는 "반영 안 됨"으로 단정하지 않는다). */
     inFlight: boolean;
+    /** 확정되면 되돌리기를 내놓는지(되돌리기 자체의 이동은 내놓지 않는다). */
+    undoable: boolean;
   }
   const SLOW_MS = 3000;
   const CHECK_MS = 10000;
@@ -290,6 +315,74 @@
     return phase !== undefined && phase !== 'not_saved';
   };
 
+  /**
+   * 방금 확정된 이동의 되돌리기(마지막 하나만). 결과를 모르는 이동에는 내놓지 않는다. 다시 읽은 목록에서 그 카드가 이
+   * 이동의 결과(열·바로 뒤 업무·판)와 다르면(다른 사람이 옮기거나 고침) 거둔다. 시간이 지나도 저절로 없애지 않는다.
+   */
+  interface UndoOffer {
+    id: string;
+    title: string;
+    /** 이동 전 서버 자리. */
+    from: MoveOrigin;
+    to: BoardMove;
+    /** 이 이동 뒤의 판. */
+    version: number;
+  }
+  let undoOffer = $state<UndoOffer | undefined>(undefined);
+  function offerUndo(
+    id: string,
+    title: string,
+    from: MoveOrigin,
+    to: BoardMove,
+    version: number,
+  ): void {
+    undoOffer = { id, title, from, to, version };
+  }
+  /** 이 목록에서도 되돌리기가 맞는지(그 카드가 이 이동의 결과 그대로인지). */
+  const undoStillFits = (server: readonly TaskView[], u: UndoOffer): boolean =>
+    server.find((t) => t.id === u.id)?.version === u.version &&
+    reconcileMove(server, u.id, u.from, u.to) === 'applied';
+
+  async function undoMove(): Promise<void> {
+    const u = undoOffer;
+    if (u === undefined || busy(u.id)) return;
+    undoOffer = undefined;
+    status = m.tasks_move_checking({ title: u.title });
+    let server: TaskView[];
+    try {
+      server = await api.tasks(item.id);
+    } catch {
+      if (!alive) return;
+      // 지금 상태를 모르면 보내지 않는다. 다시 누를 수 있게 둔다.
+      undoOffer = u;
+      status = m.tasks_undo_read_failed({ title: u.title });
+      return;
+    }
+    if (!alive) return;
+    ++reloadSeq;
+    tasks = overlaid(server);
+    if (!undoStillFits(server, u)) {
+      moveNotice = m.tasks_undo_changed({ title: u.title });
+      status = moveNotice;
+      await focusCard(u.id);
+      return;
+    }
+    // 원래 바로 뒤에 있던 업무가 그 열에 없으면 열 끝으로 되돌린다(그렇게 알린다).
+    const back = replan(server, { status: u.from.status, beforeId: u.from.nextId });
+    const atEnd = back.beforeId !== u.from.nextId;
+    await commitMove(u.id, back, 'menu', u.title, undefined, undefined, {
+      done: (title, lane) =>
+        atEnd
+          ? m.tasks_undone_end({ title, status: STATUS_LABEL[lane] })
+          : m.tasks_undone({ title, status: STATUS_LABEL[lane] }),
+    });
+    await focusCard(u.id);
+  }
+  async function focusCard(id: string): Promise<void> {
+    await tick();
+    document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(id)}"]`)?.focus();
+  }
+
   // 화면을 떠나면 타이머를 멈추고 늦게 온 응답은 버린다. 항목이 바뀌면 앞 항목의 기다림을 버린다.
   $effect(() => {
     alive = true;
@@ -304,6 +397,7 @@
     untrack(() => {
       for (const id of Object.keys(timers)) clearTimers(id);
       pending = {};
+      undoOffer = undefined;
     });
   });
 
@@ -314,6 +408,7 @@
       if (!alive || mine !== reloadSeq || itemId !== item.id) return;
       settleUnknown(server);
       tasks = overlaid(server);
+      if (undoOffer !== undefined && !undoStillFits(server, undoOffer)) undoOffer = undefined;
       error = undefined;
     } catch (e: unknown) {
       if (alive && mine === reloadSeq) error = errorText(e, m.tasks_load_failed());
@@ -335,6 +430,27 @@
 
   const canWrite = $derived(item.access !== 'read' && !item.archived);
   const board = $derived(lanes(shown));
+  // 열 머리의 예상 합계(D-31 예상 시간). 거르기 중이면 보이는 카드 기준과 열 전체를 함께 보인다(실제 시간은 목록에 없어 넣지 않음).
+  const allLanes = $derived(lanes(tasks));
+  function laneEstimateText(lane: TaskStatus): string {
+    const shownSum = laneEstimate(board[lane]);
+    if (shownSum.count === 0) return '';
+    const duration = durationText(shownSum.minutes * 60);
+    const parts = [
+      shownSum.missing === shownSum.count
+        ? m.tasks_lane_estimate_none()
+        : isFiltered(filter)
+          ? m.tasks_lane_estimate_shown({ duration })
+          : m.tasks_lane_estimate({ duration }),
+    ];
+    if (shownSum.missing > 0 && shownSum.missing < shownSum.count)
+      parts.push(m.tasks_lane_estimate_missing({ count: shownSum.missing }));
+    if (isFiltered(filter)) {
+      const all = laneEstimate(allLanes[lane]);
+      parts.push(m.tasks_lane_estimate_all({ duration: durationText(all.minutes * 60) }));
+    }
+    return parts.join(' · ');
+  }
   const list = $derived(ordered ? listOrder(shown) : shown);
   const titleOf = (id: string | null): string =>
     id === null ? '' : (tasks.find((t) => t.id === id)?.title ?? '');
@@ -393,6 +509,159 @@
   // 열마다 빠르게 더하기(Kaneo처럼 열 아래). 만들기는 "할 일"로 만들어지므로, 다른 열이면 같은 이동 저장 경로로 그
   // 열 끝에 옮긴다. 옮기기가 실패하면 업무는 "할 일"에 남고 실패를 알린다(만든 것은 사라지지 않는다).
   let adding = $state<TaskStatus | undefined>(undefined);
+  // 달력 보기의 날짜 칸에서 이 항목에 업무 만들기(그 날짜가 마감일).
+  let createDay = $state<string | undefined>(undefined);
+  let boardCalendar = $state<HTMLElement | undefined>(undefined);
+  /** 만들기 창이 닫히면 이 보드 달력의 그 날짜 단추로(같은 화면의 다른 달력 단추가 아니라). */
+  async function focusCreate(day: string): Promise<void> {
+    await tick();
+    boardCalendar?.querySelector<HTMLElement>(`[data-create-day="${day}"]`)?.focus();
+  }
+
+  // 간트에서 일정 바꾸기(D-31). 최신 업무를 읽어 그 판으로 후속 업무 영향을 미리 보고, 있으면 묻고(승인·이 업무만·취소),
+  // 없으면 바로 저장한다. 그사이 그 업무의 날짜가 바뀌었으면(다른 사람) 저장하지 않는다. 끝나면 목록을 다시 읽어
+  // 막대를 서버 상태로 되돌리거나 맞춘다(취소·거절·실패·충돌 모두).
+  interface GanttAsk {
+    task: TaskView;
+    input: TaskInput;
+    baseVersion: number;
+    proposals: ShiftProposalView[];
+    retried: boolean;
+    done: () => void;
+  }
+  let ganttAsk = $state<GanttAsk | undefined>(undefined);
+  let ganttBusy = $state(false);
+  let ganttNotice = $state<string | undefined>(undefined);
+  const datesText = (start: string | null, due: string | null): string =>
+    start !== null && due !== null && start !== due ? `${start}~${due}` : (due ?? start ?? '');
+
+  async function reschedule(
+    t: TaskView,
+    dates: { start_date: string | null; due_date: string | null },
+  ): Promise<void> {
+    ganttNotice = undefined;
+    try {
+      const fresh = await api.task(t.id);
+      if (fresh.start_date !== t.start_date || fresh.due_date !== t.due_date) {
+        ganttNotice = m.tasks_gantt_changed({ title: t.title });
+        status = ganttNotice;
+        await reload();
+        return;
+      }
+      const input = { ...formOf(fresh), ...dates };
+      const found = await api.previewSchedule(t.id, dates.start_date, dates.due_date);
+      if (found.length === 0) {
+        // 저장하다 후속 업무가 바뀌어 다시 묻게 되면 그 물음이 끝날 때까지 기다린다.
+        let finish: () => void = () => undefined;
+        const finished = new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        const outcome = await saveSchedule(t, input, fresh.version, [], () => {
+          finish();
+        });
+        if (outcome === 'asked') await finished;
+        return;
+      }
+      await new Promise<void>((done) => {
+        ganttAsk = {
+          task: t,
+          input,
+          baseVersion: fresh.version,
+          proposals: found,
+          retried: false,
+          done,
+        };
+      });
+    } catch (e: unknown) {
+      ganttNotice = errorText(e, m.tasks_gantt_failed({ title: t.title }));
+      status = ganttNotice;
+      await reload();
+    }
+  }
+
+  /** 저장. 후속 업무가 그사이 바뀌어(shift_conflict) 다시 물어야 하면 `asked`. */
+  async function saveSchedule(
+    t: TaskView,
+    input: TaskInput,
+    baseVersion: number,
+    shifts: ShiftProposalView[],
+    /** 다시 물을 때 그 물음이 끝나면 부를 것(간트가 미리 보기를 거두는 때). */
+    done: () => void = () => undefined,
+  ): Promise<'saved' | 'asked' | 'stopped'> {
+    const result = await api.updateTask(
+      t.id,
+      baseVersion,
+      input,
+      shifts.map((s) => ({
+        task_id: s.task_id,
+        base_version: s.base_version,
+        start_date: s.start_date,
+        due_date: s.due_date,
+      })),
+    );
+    if (result.kind === 'conflict') {
+      ganttNotice = m.tasks_gantt_conflict({ title: t.title });
+      status = ganttNotice;
+      await reload();
+      return 'stopped';
+    }
+    if (result.kind === 'shift_conflict') {
+      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
+      const found = await api.previewSchedule(t.id, input.start_date, input.due_date);
+      if (found.length === 0) return saveSchedule(t, input, baseVersion, [], done);
+      ganttAsk = { task: t, input, baseVersion, proposals: found, retried: true, done };
+      return 'asked';
+    }
+    const savedText =
+      shifts.length > 0
+        ? m.tasks_gantt_saved_shifts({ title: t.title, count: shifts.length })
+        : m.tasks_gantt_saved({
+            title: t.title,
+            dates: datesText(input.start_date, input.due_date),
+          });
+    notifyDone(savedText);
+    status = savedText;
+    await reload();
+    return 'saved';
+  }
+
+  async function decideGantt(withShifts: boolean): Promise<void> {
+    const a = ganttAsk;
+    if (a === undefined || ganttBusy) return;
+    ganttBusy = true;
+    let outcome: 'saved' | 'asked' | 'stopped' = 'stopped';
+    try {
+      outcome = await saveSchedule(
+        a.task,
+        a.input,
+        a.baseVersion,
+        withShifts ? a.proposals : [],
+        a.done,
+      );
+    } catch (e: unknown) {
+      ganttNotice = errorText(e, m.tasks_gantt_failed({ title: a.task.title }));
+      status = ganttNotice;
+      await reload();
+    } finally {
+      ganttBusy = false;
+      if (outcome !== 'asked') {
+        ganttAsk = undefined;
+        a.done();
+        // 창이 닫히면 그 업무의 간트 줄로 초점을 돌린다(알림 영역으로 가지 않게).
+        void focusCard(a.task.id);
+      }
+    }
+  }
+
+  function cancelGantt(): void {
+    const a = ganttAsk;
+    // 저장을 보낸 뒤에는 취소할 수 없다(결과를 기다린다).
+    if (a === undefined || ganttBusy) return;
+    ganttAsk = undefined;
+    status = m.tasks_gantt_cancelled({ title: a.task.title });
+    a.done();
+    void reload().then(() => focusCard(a.task.id));
+  }
   async function quickAdd(lane: TaskStatus, requestId: string, title: string): Promise<void> {
     const itemId = item.id;
     const created = await api.createTask(itemId, requestId, title);
@@ -445,6 +714,8 @@
     knownOrigin?: MoveOrigin,
     /** 다시 시도: 이 판의 대기 항목을 그대로 교체한다(지우고 다시 넣는 사이에 같은 카드의 요청이 끼지 않게). */
     replacing?: number,
+    /** 되돌리기: 보내기 직전 서버 자리를 기준으로 보내므로 끼어든 변경을 판으로 알아차리고, 다시 되돌리기는 내놓지 않는다. */
+    undo?: { done: (title: string, lane: TaskStatus) => string },
   ): Promise<boolean> {
     const title = knownTitle ?? titleOf(id);
     if (busy(id) && (replacing === undefined || pending[id]?.seq !== replacing)) {
@@ -453,11 +724,22 @@
     }
     const origin = knownOrigin ?? originOf(tasks, id);
     if (origin === undefined) return false;
+    // 같은 카드를 다시 옮기면 앞선 이동의 되돌리기는 더 이상 맞지 않는다.
+    if (undoOffer?.id === id) undoOffer = undefined;
     clearTimers(id);
     const seq = ++moveSeq;
     pending = {
       ...pending,
-      [id]: { seq, plan, origin, phase: 'saving', title, how, inFlight: true },
+      [id]: {
+        seq,
+        plan,
+        origin,
+        phase: 'saving',
+        title,
+        how,
+        inFlight: true,
+        undoable: undo === undefined,
+      },
     };
     tasks = applyMove(tasks, id, plan);
     status = m.tasks_move_saving({ title });
@@ -479,13 +761,21 @@
       await reload();
       // 다시 시도는 보내기 직전에 읽은 서버 자리를 기준으로 보낸다. 이동 API에는 판 조건이 없어 그 사이 다른 변경이
       // 끼면 이 이동이 덮는다. 응답의 판이 이 이동만으로 될 판보다 크면 그런 변경이 있었던 것이므로 알린다.
-      if (replacing !== undefined && overlapped(origin, plan, saved.version)) {
-        moveNotice = m.tasks_move_overlapped({ title });
+      if (
+        (replacing !== undefined || undo !== undefined) &&
+        overlapped(origin, plan, saved.version)
+      ) {
+        moveNotice =
+          undo === undefined
+            ? m.tasks_move_overlapped({ title })
+            : m.tasks_undo_overlapped({ title });
         status = moveNotice;
         return true;
       }
       clearMoveNotice();
-      status = movedMessage(how, title, plan.status);
+      status =
+        undo === undefined ? movedMessage(how, title, plan.status) : undo.done(title, plan.status);
+      if (undo === undefined) offerUndo(id, title, origin, plan, saved.version);
       return true;
     } catch (e: unknown) {
       if (!current(id, seq)) return false;
@@ -538,6 +828,9 @@
       finish(id);
       clearMoveNotice();
       status = m.tasks_move_confirmed({ title: p.title, status: STATUS_LABEL[p.plan.status] });
+      const confirmed = server.find((t) => t.id === id);
+      if (p.undoable && confirmed !== undefined)
+        offerUndo(id, p.title, p.origin, p.plan, confirmed.version);
     } else if (stillInFlight) {
       patch(id, seq, { phase: 'slow' });
       status = m.tasks_move_slow({ title: p.title });
@@ -914,6 +1207,18 @@
   {#if moveNotice !== undefined}
     <p role="alert" class="text-sm text-destructive">{moveNotice}</p>
   {/if}
+  {#if undoOffer !== undefined}
+    {@const offer = undoOffer}
+    <div class="flex flex-wrap items-center gap-2 text-sm" data-move-undo>
+      <span>{m.tasks_undo_offer({ title: offer.title })}</span>
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label={m.tasks_undo_label({ title: offer.title })}
+        onclick={() => void undoMove()}>{m.tasks_undo()}</Button
+      >
+    </div>
+  {/if}
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive">{error}</p>
   {/if}
@@ -921,20 +1226,35 @@
   {#if loading}
     <p class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</p>
   {:else if view === 'board'}
+    <p class="text-xs text-muted-foreground">{m.tasks_lane_estimate_hint()}</p>
     <div class="grid gap-3 md:grid-cols-3" data-testid="task-board">
       {#each TASK_STATUSES as lane (lane)}
         <section
           data-lane={lane}
           class={[
-            'flex min-w-0 flex-col gap-2 rounded-md border p-2',
+            'flex min-w-0 flex-col gap-2 rounded-lg border bg-muted/40 p-2',
             drag?.active === true && drag.slot?.status === lane && 'ring-2 ring-ring',
           ]}
           aria-label={m.tasks_lane_aria({ status: STATUS_LABEL[lane] })}
         >
-          <h3 class="text-sm font-semibold">
+          <!-- 열 이름 옆에 카드 수를 칩으로(참고 제품의 열 머리글 배치), 그 아래 예상 시간 합계. -->
+          <h3 class="flex items-center gap-2 px-1 text-sm font-semibold">
             {STATUS_LABEL[lane]}
-            <span class="font-normal text-muted-foreground">{board[lane].length}</span>
+            <span
+              class="rounded-full bg-background px-2 py-0.5 text-xs font-normal text-muted-foreground tabular-nums"
+              >{board[lane].length}</span
+            >
           </h3>
+          {#if laneEstimateText(lane) !== ''}
+            <p class="px-1 text-xs text-muted-foreground" data-lane-estimate={lane}>
+              {laneEstimateText(lane)}
+            </p>
+          {/if}
+          {#if board[lane].length === 0}
+            <p class="px-1 text-xs text-muted-foreground" data-lane-empty={lane}>
+              {isFiltered(filter) ? m.tasks_lane_empty_filtered() : m.tasks_lane_empty()}
+            </p>
+          {/if}
           <ul class="flex min-h-12 flex-col gap-2">
             {#each board[lane] as t (t.id)}
               {#if dropMark(lane, t.id)}
@@ -943,7 +1263,7 @@
               <li
                 data-board-card={t.id}
                 class={[
-                  'flex flex-col gap-1 rounded-md border bg-card p-2',
+                  'group flex flex-col gap-1.5 rounded-md border bg-card p-2 shadow-xs',
                   canWrite && 'cursor-grab',
                   drag?.active === true && drag.id === t.id && 'opacity-40',
                 ]}
@@ -974,22 +1294,65 @@
                     onkeydown={(e) => {
                       onCardKey(e, t.id);
                     }}
-                    class="flex items-baseline gap-2 rounded text-left text-sm hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    class="flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded text-left text-sm hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     onclick={() => {
                       if (!justDragged) open(t.id);
                     }}
                   >
-                    <span class="shrink-0 font-mono text-xs text-muted-foreground"
-                      >{t.reference ?? ''}</span
-                    >
-                    <span class="min-w-0 break-words">{t.title}</span>
+                    <span class="font-mono text-xs text-muted-foreground">{t.reference ?? ''}</span>
+                    <span class="max-w-full min-w-0 font-medium break-words">{t.title}</span>
                   </button>
+                  {#if canWrite}
+                    <DropdownMenu.Root>
+                      <DropdownMenu.Trigger>
+                        {#snippet child({ props })}
+                          <Button
+                            {...props}
+                            size="sm"
+                            variant="ghost"
+                            class="-mt-0.5 -mr-1 h-6 shrink-0 px-1.5 text-xs"
+                            aria-label={m.tasks_move_menu({ title: t.title })}>⋯</Button
+                          >
+                        {/snippet}
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Content align="end">
+                        {#each TASK_STATUSES.filter((s) => s !== t.status) as target (target)}
+                          <DropdownMenu.Item
+                            disabled={busy(t.id)}
+                            onSelect={() =>
+                              void commitMove(t.id, { status: target, beforeId: null }, 'menu')}
+                            >{MOVE_TO[target]()}</DropdownMenu.Item
+                          >
+                        {/each}
+                        <!-- 같은 열 안 순서: 화살표 줄은 보조 표시(aria-hidden)이고 Alt+위·아래는 키보드에서만 되므로, 터치
+                             화면의 낭독기 사용자도 쓸 수 있게 메뉴에도 둔다. 정렬이 기본 순서가 아니면 순서를 바꿀 수 없다. -->
+                        {#if ordered}
+                          <DropdownMenu.Separator />
+                          {#each ['up', 'down'] as const as action (action)}
+                            <DropdownMenu.Item
+                              disabled={busy(t.id) ||
+                                planBoardMove(shown, t.id, action) === undefined}
+                              onSelect={() => void move(t.id, action)}
+                              >{action === 'up'
+                                ? m.tasks_move_up_menu()
+                                : m.tasks_move_down_menu()}</DropdownMenu.Item
+                            >
+                          {/each}
+                        {/if}
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Root>
+                  {/if}
                 </div>
                 {#if t.parent_id !== null}
                   <span class="text-xs text-muted-foreground">↳ {titleOf(t.parent_id)}</span>
                 {/if}
-                <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  {#if t.priority !== 'none'}<span>{PRIORITY_LABEL[t.priority]}</span>{/if}
+                <div
+                  class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
+                >
+                  {#if t.priority !== 'none'}<span
+                      class={['rounded px-1.5 py-0.5 font-medium', PRIORITY_TONE[t.priority]]}
+                      >{PRIORITY_LABEL[t.priority]}</span
+                    >{/if}
                   {#if t.due_date !== null}<span>{m.tasks_card_due({ date: t.due_date })}</span
                     >{/if}
                   {#if t.checklist_total > 0}<span>☑ {t.checklist_done}/{t.checklist_total}</span
@@ -1039,7 +1402,12 @@
                   {/if}
                 {/each}
                 {#if canWrite}
-                  <div class="flex gap-1" aria-hidden="true">
+                  <!-- 마우스로 쓰는 화면에서는 가리키거나 카드 안에 초점이 있을 때만 보인다(자리는 그대로 둬 카드 높이가
+                       바뀌지 않게). 터치 화면은 가리키기가 없으므로 늘 보인다. 키보드는 Alt+방향키를 쓴다. -->
+                  <div
+                    class="flex gap-1 transition-opacity pointer-fine:opacity-0 pointer-fine:group-focus-within:opacity-100 pointer-fine:group-hover:opacity-100"
+                    aria-hidden="true"
+                  >
                     {#each ['left', 'up', 'down', 'right'] as const as action (action)}
                       <Button
                         size="sm"
@@ -1060,29 +1428,6 @@
                       >
                     {/each}
                   </div>
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger>
-                      {#snippet child({ props })}
-                        <Button
-                          {...props}
-                          size="sm"
-                          variant="ghost"
-                          class="h-6 self-start px-1.5 text-xs"
-                          aria-label={m.tasks_move_menu({ title: t.title })}>⋯</Button
-                        >
-                      {/snippet}
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content align="start">
-                      {#each TASK_STATUSES.filter((s) => s !== t.status) as target (target)}
-                        <DropdownMenu.Item
-                          disabled={busy(t.id)}
-                          onSelect={() =>
-                            void commitMove(t.id, { status: target, beforeId: null }, 'menu')}
-                          >{MOVE_TO[target]()}</DropdownMenu.Item
-                        >
-                      {/each}
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
                 {/if}
               </li>
             {/each}
@@ -1130,9 +1475,22 @@
       </p>
     {/if}
   {:else if view === 'gantt'}
-    <GanttChart tasks={shown} onopen={open} />
+    {#if ganttNotice !== undefined}
+      <p role="alert" class="text-sm text-destructive">{ganttNotice}</p>
+    {/if}
+    <GanttChart tasks={shown} onopen={open} reschedule={canWrite ? reschedule : undefined} />
   {:else if view === 'calendar'}
-    <TaskCalendar tasks={shown} onopen={open} />
+    <div bind:this={boardCalendar}>
+      <TaskCalendar
+        tasks={shown}
+        onopen={open}
+        oncreate={canWrite
+          ? (day: string) => {
+              createDay = day;
+            }
+          : undefined}
+      />
+    </div>
   {:else}
     <table class="w-full text-sm" data-testid="task-list">
       <thead class="text-left text-muted-foreground">
@@ -1227,6 +1585,70 @@
           onopen={open}
         />
       {/key}
+    {/if}
+  </Dialog.Content>
+</Dialog.Root>
+
+<CalendarTaskDialog
+  workspaceId={item.workspace_id}
+  day={createDay}
+  item={{ id: item.id, title: item.title }}
+  onclose={(created: boolean) => {
+    const day = createDay;
+    createDay = undefined;
+    // 업무는 만들었지만 마감일을 넣지 못한 채 닫았다: 그 업무가 보드에 보이게 다시 읽는다.
+    if (created) void reload();
+    if (day !== undefined) void focusCreate(day);
+  }}
+  oncreated={(task: TaskDetailView) => {
+    const day = createDay;
+    createDay = undefined;
+    // 만든 뒤에도 그 날짜의 만들기 단추로 초점을 돌린다(달력을 다시 읽어도 단추는 그대로 있다).
+    if (day !== undefined) void focusCreate(day);
+    notifyDone(
+      m.events_task_created({
+        title: task.title,
+        day: task.due_date === null ? '' : formatDay(task.due_date),
+      }),
+    );
+    void reload();
+  }}
+/>
+
+<Dialog.Root
+  open={ganttAsk !== undefined}
+  onOpenChange={(o: boolean) => {
+    if (!o) cancelGantt();
+  }}
+>
+  <Dialog.Content
+    class="sm:max-w-lg"
+    escapeKeydownBehavior={ganttBusy ? 'ignore' : 'close'}
+    interactOutsideBehavior={ganttBusy ? 'ignore' : 'close'}
+    showCloseButton={!ganttBusy}
+    onCloseAutoFocus={(e: Event) => {
+      e.preventDefault();
+    }}
+  >
+    {#if ganttAsk !== undefined}
+      {@const ask = ganttAsk}
+      <Dialog.Header>
+        <Dialog.Title>{m.tasks_gantt_dialog_title({ title: ask.task.title })}</Dialog.Title>
+        <Dialog.Description>
+          {m.tasks_gantt_dialog_description({
+            from: datesText(ask.task.start_date, ask.task.due_date),
+            to: datesText(ask.input.start_date, ask.input.due_date),
+          })}
+        </Dialog.Description>
+      </Dialog.Header>
+      <ShiftProposals
+        proposals={ask.proposals}
+        retried={ask.retried}
+        busy={ganttBusy}
+        headingId="gantt-shift-heading"
+        ondecide={(withShifts: boolean) => void decideGantt(withShifts)}
+        oncancel={cancelGantt}
+      />
     {/if}
   </Dialog.Content>
 </Dialog.Root>

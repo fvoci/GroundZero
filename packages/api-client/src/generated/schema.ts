@@ -9146,6 +9146,10 @@ export interface operations {
                 from?: string | null;
                 /** @description 날짜 범위 끝(YYYY-MM-DD, 포함). */
                 to?: string | null;
+                /** @description 작성자(`me` 또는 사용자 id): 그 사람이 만든 것만(각 대상의 `created_by`). 볼 수 있는 범위는 넓히지 않는다. */
+                author?: string | null;
+                /** @description `true`면 제목에서만 찾는다(본문·첨부 글자·번호는 보지 않는다). */
+                title_only?: boolean | null;
             };
             header?: never;
             path?: never;
