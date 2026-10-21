@@ -117,12 +117,19 @@ describe('gantt week header', () => {
     access: 'write',
     updated_at: '2026-10-21T00:00:00Z',
   });
-  const weekCells = (): { from: string; column: string; text: string; spoken: string }[] =>
+  const weekCells = (): {
+    from: string;
+    column: string;
+    text: string;
+    spoken: string;
+    title: string;
+  }[] =>
     [...document.querySelectorAll<HTMLElement>('[data-gantt-week]')].map((el) => ({
       from: el.dataset.ganttWeek ?? '',
       column: el.style.gridColumn,
       text: el.querySelector('[aria-hidden="true"]')?.textContent.trim() ?? '',
       spoken: el.querySelector('.sr-only')?.textContent.trim() ?? '',
+      title: el.title,
     }));
 
   it('shows ISO weeks with their real dates on a Monday week start, aligned to the day columns', async () => {
@@ -162,5 +169,19 @@ describe('gantt week header', () => {
     ]);
     expect(cells[0]?.spoken).toContain('weeks start on Sunday, no week number');
     expect(cells.every((c) => !/Week \d/.test(c.text))).toBe(true);
+  });
+
+  it('keeps the year and the rule in the hover title even when the label is short', async () => {
+    await setLocale('ko', { reload: false });
+    me.weekStart = 'sun';
+    // 2026-12-30(수) ~ 2027-01-01(금): 연도를 넘는 주가 3칸뿐이라 표기는 연도 없는 "12/27~"지만 title은 연도와 규칙까지 담은 전체 설명이다.
+    render(GanttChart, {
+      props: { tasks: [task('a', '2026-12-30', '2027-01-01')], onopen: () => undefined },
+    });
+    const [cell] = weekCells();
+    expect(cell?.text).toBe('12/27~');
+    expect(cell?.title).toBe(cell?.spoken);
+    expect(cell?.title).toMatch(/2026.*27.*2027|27.*2026.*2027/);
+    expect(cell?.title).toContain('일요일 시작, 주차 번호 없음');
   });
 });

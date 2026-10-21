@@ -377,7 +377,7 @@
           class="relative overflow-clip border-l border-l-foreground/30 px-1 whitespace-nowrap text-muted-foreground tabular-nums"
           style:grid-row="2"
           style:grid-column={`${String(w.start + 2)} / span ${String(w.span)}`}
-          title={w.full}
+          title={w.spoken}
           data-gantt-week={w.from}
         >
           <span class="sticky left-56 inline-block" aria-hidden="true">{w.label}</span>
