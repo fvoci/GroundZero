@@ -4,6 +4,7 @@
   "home_bucket_overdue": "기한 지남",
   "home_bucket_today": "오늘",
   "home_bucket_upcoming": "다가오는 일",
+  "home_bucket_more": "마감이 이른 {shown}개만 보입니다(모두 {total}개).",
   "home_personal": "개인",
   "home_memo_created": "메모를 만들었습니다: “{title}”",
   "home_pick_item_required": "어느 항목에 넣을지 고르세요.",
