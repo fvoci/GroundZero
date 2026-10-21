@@ -30,6 +30,8 @@
       }
     }
   ],
+  "search_module": "모듈",
+  "search_module_any": "모든 모듈",
   "search_author": "작성자",
   "search_author_any": "누구나",
   "search_author_me": "나",

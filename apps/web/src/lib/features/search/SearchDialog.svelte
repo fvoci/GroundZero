@@ -2,6 +2,8 @@
   // 통합 검색 창(D-39). 사이드바 단추나 Ctrl/⌘+K로 연다. 볼 수 있는 것만 서버가 돌려준다.
   import { onMount, untrack } from 'svelte';
 
+  import type { Module } from '@fvoci/api-client';
+
   import type { SearchFilters, SearchKind, SearchResultView, TaskStatus } from '$lib/api/client';
   import { api } from '$lib/api/client';
   import { STATUS_LABEL } from '$lib/features/tasks/labels';
@@ -44,6 +46,45 @@
   let author = $state<string>('any');
   let titleOnly = $state(false);
   let people = $state<{ user_id: string; display_name: string }[]>([]);
+  // 모듈(D-39 모듈 필터). 기존 API의 `module_id`를 지금 보는 워크스페이스의 모듈 목록과 잇는다. 작성자와 같이 좁히기만
+  // 한다. 고른 모듈이 목록에 없으면(다른 워크스페이스로 옮김·목록을 못 읽음) 그 선택을 거둔다.
+  let moduleId = $state<string>('any');
+  let modules = $state<Module[]>([]);
+  function dropMissingModule(list: readonly Module[]): void {
+    untrack(() => {
+      if (moduleId === 'any' || list.some((x) => x.id === moduleId)) return;
+      moduleId = 'any';
+      refilter();
+    });
+  }
+  $effect(() => {
+    const ws = workspace?.id;
+    modules = [];
+    if (!open) return;
+    if (ws === undefined) {
+      dropMissingModule([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .modules(ws)
+      .then((list) => {
+        if (cancelled) return;
+        modules = list.filter((x) => !x.archived);
+        dropMissingModule(modules);
+      })
+      .catch(() => {
+        if (!cancelled) dropMissingModule([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+  const moduleLabel = $derived(
+    moduleId === 'any'
+      ? m.search_module_any()
+      : (modules.find((x) => x.id === moduleId)?.name ?? m.search_module_any()),
+  );
   // 고른 사람이 지금 멤버 목록에 없으면(다른 워크스페이스로 옮김·목록을 못 읽음) 그 선택을 거둔다(표시는 "누구나"인데
   // 거르기는 남아 있는 일이 없게). "나"·"누구나"는 그대로.
   function dropMissingAuthor(list: readonly { user_id: string }[]): void {
@@ -95,6 +136,7 @@
     if (from !== '') f.from = from;
     if (to !== '') f.to = to;
     if (author !== 'any') f.author = author;
+    if (moduleId !== 'any') f.moduleId = moduleId;
     if (titleOnly) f.titleOnly = true;
     return f;
   }
@@ -242,6 +284,31 @@
           </Select.Content>
         </Select.Root>
       </div>
+      {#if workspace !== undefined}
+        <div class="flex flex-col gap-1">
+          <span id="search-module-label" class="font-medium">{m.search_module()}</span>
+          <Select.Root
+            type="single"
+            value={moduleId}
+            onValueChange={(v: string) => {
+              moduleId = v === '' ? 'any' : v;
+              refilter();
+            }}
+          >
+            <Select.Trigger class="w-40" aria-labelledby="search-module-label"
+              >{moduleLabel}</Select.Trigger
+            >
+            <Select.Content>
+              <Select.Item value="any" label={m.search_module_any()}
+                >{m.search_module_any()}</Select.Item
+              >
+              {#each modules as x (x.id)}
+                <Select.Item value={x.id} label={x.name}>{x.name}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+      {/if}
       <div class="flex flex-col gap-1">
         <span id="search-author-label" class="font-medium">{m.search_author()}</span>
         <Select.Root

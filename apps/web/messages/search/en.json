@@ -31,6 +31,8 @@
       }
     }
   ],
+  "search_module": "Module",
+  "search_module_any": "Any module",
   "search_author": "Author",
   "search_author_any": "Anyone",
   "search_author_me": "Me",
