@@ -168,6 +168,12 @@ describe('gantt dependency lines on the board', () => {
     expect(strong().sort()).toEqual(['a>b', 'b>c']);
     await fireEvent.mouseLeave(q(gantt, '[data-task-card="b"]'));
     expect(strong()).toEqual([]);
+    // 키보드 초점이 a에 있는 채로 b를 가리켰다 떼면 a의 강조가 다시 보인다(가리킴과 초점을 따로 둔다).
+    await fireEvent.focus(q(gantt, '[data-task-card="a"]'));
+    await fireEvent.mouseEnter(q(gantt, '[data-task-card="c"]'));
+    expect(strong()).toEqual(['b>c']);
+    await fireEvent.mouseLeave(q(gantt, '[data-task-card="c"]'));
+    expect(strong()).toEqual(['a>b']);
   });
 
   it('follows the bar while dragging, goes back on Escape, and sends nothing for the line itself', async () => {

@@ -211,7 +211,10 @@
   const linked = $derived(ganttLinks(linkRows, { col, row: ROW, days: layout.days }, tasks));
   // 줄 이름에 초점을 두거나 가리키면 그 업무에 닿는 선을 굵게 하고 나머지는 옅게(색만으로 구별하지 않음).
   let focusId = $state<string | undefined>(undefined);
-  const touches = (link: GanttLink): boolean => link.from === focusId || link.to === focusId;
+  let hoverId = $state<string | undefined>(undefined);
+  // 가리킨 줄이 있으면 그 줄, 없으면 초점이 있는 줄(따로 두어 한쪽이 끝나도 다른 쪽 강조가 남는다).
+  const activeId = $derived(hoverId ?? focusId);
+  const touches = (link: GanttLink): boolean => link.from === activeId || link.to === activeId;
 
   function describe(t: TaskView): string {
     const when =
@@ -316,8 +319,8 @@
             aria-label={describe(row.task)}
             onfocus={() => (focusId = row.task.id)}
             onblur={() => (focusId = undefined)}
-            onmouseenter={() => (focusId = row.task.id)}
-            onmouseleave={() => (focusId = undefined)}
+            onmouseenter={() => (hoverId = row.task.id)}
+            onmouseleave={() => (hoverId = undefined)}
             aria-keyshortcuts={editable(row.task)
               ? 'Alt+ArrowLeft Alt+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight'
               : undefined}
@@ -435,8 +438,8 @@
             focusable="false"
           >
             {#each linked.links as link (link.key)}
-              {@const strong = focusId !== undefined && touches(link)}
-              {@const faint = focusId !== undefined && !touches(link)}
+              {@const strong = activeId !== undefined && touches(link)}
+              {@const faint = activeId !== undefined && !touches(link)}
               <g
                 class={[
                   'transition-opacity',
