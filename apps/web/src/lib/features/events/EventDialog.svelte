@@ -1,6 +1,9 @@
 <script lang="ts">
   // 일정 상세 대화상자: 보기·고치기·지우기. 고치기는 기준 버전으로 충돌을 막고, 충돌하면 입력을 두고 서버 내용을
-  // 보여 준다(D-53과 같은 원칙). 지우기는 한 번 더 묻는다(행은 남고 휴지통 조각에서 되살린다).
+  // 보여 준다(D-53과 같은 원칙). 충돌 뒤 다시 저장하면 내가 고친 칸만 서버 최신 일정에 얹고, 같은 칸을 다른 사람도
+  // 고쳤으면 양쪽 값을 보여 덮어쓸지 묻는다(D-94). 지우기는 한 번 더 묻는다(행은 남고 휴지통 조각에서 되살린다).
+  import { tick } from 'svelte';
+
   import type { EventInput, EventView, RecurrenceRule } from '$lib/api/client';
   import { api, ApiError, RuleConflict } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
@@ -9,6 +12,8 @@
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
 
+  import type { EventUnit } from './conflict';
+  import { mergeEventInput, sameUnit } from './conflict';
   import EventForm from './EventForm.svelte';
   import RecurrenceEditor from './RecurrenceEditor.svelte';
   import { describeRule, describeWhen, KIND_LABEL } from './labels';
@@ -28,7 +33,11 @@
 
   let event = $state<EventView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
-  let conflict = $state<{ current: EventView; input: EventInput } | undefined>(undefined);
+  let conflict = $state<{ current: EventView } | undefined>(undefined);
+  // 충돌 뒤 다시 저장하려는데 같은 칸을 양쪽이 서로 다른 값으로 고쳤다(D-94). 물은 때의 서버 일정·내 입력·겹친 칸.
+  let clash = $state<{ current: EventView; mine: EventInput; units: EventUnit[] } | undefined>(
+    undefined,
+  );
   let confirmDelete = $state(false);
   let epoch = $state(0);
   // 반복 편집기는 일정 저장 때 다시 그리지 않는다(저장 안 한 규칙 입력을 지우지 않게). 서버 규칙이 화면 규칙과 달라질
@@ -42,14 +51,26 @@
   let shown = 0;
   // 일정 입력이 바탕으로 삼은 버전. 반복 규칙 저장은 입력을 다시 그리지 않으므로 `event.version`과 따로 둔다.
   let formVersion = 0;
+  // 일정 입력을 만든 일정(D-94). 충돌 뒤 다시 저장할 때 내가 무엇을 고쳤는지 이것과 비교한다. 입력을 다시 그릴 때만
+  // 바꾼다(반복 규칙 저장은 입력을 다시 그리지 않으므로 그대로 둔다).
+  let formBase = $state.raw<EventView | undefined>(undefined);
+  // 일정 입력을 감싼 요소. 다시 저장은 이 안의 입력 양식을 제출해 지금 입력(알림 뒤에 고친 것 포함)을 받는다.
+  let formWrap = $state<HTMLDivElement | undefined>(undefined);
+  let clashBox = $state<HTMLDivElement | undefined>(undefined);
+  let saveMineButton = $state<HTMLButtonElement | null>(null);
+  // 지금 입력 양식 제출이 충돌 알림의 단추에서 시작됐는지. 양식은 제출 이벤트 안에서 곧바로(첫 await 전에) onsubmit을
+  // 부르므로 requestSubmit() 동안만 둔다.
+  let submitMode: 'merge' | 'overwrite' | undefined;
   const zone = localTimeZone();
 
   $effect(() => {
     const id = eventId;
     shown += 1;
     event = undefined;
+    formBase = undefined;
     error = undefined;
     conflict = undefined;
+    clash = undefined;
     confirmDelete = false;
     if (id === undefined) return;
     let cancelled = false;
@@ -58,6 +79,7 @@
       .then((e) => {
         if (cancelled) return;
         event = e;
+        formBase = e;
         formVersion = e.version;
       })
       .catch((e: unknown) => {
@@ -106,17 +128,109 @@
       return;
     }
     if (result.kind === 'conflict') {
-      conflict = { current: result.current, input };
+      // 다시 저장하는 사이 또 바뀌었으면 알림이 더 새 일정을 보인다. 입력과 그 기준(`formBase`)은 그대로 두어 다음
+      // 다시 저장이 가장 새 일정에 합치게 한다(D-94).
+      conflict = { current: result.current };
+      clash = undefined;
       return;
     }
     conflict = undefined;
+    clash = undefined;
     // 보통 저장은 기준 버전이 맞아야 되므로 규칙이 그대로다. 충돌 뒤 "내 내용으로 저장"이면 저장된 일정에 다른 사람이
     // 바꾼 규칙이 들어 있으니 반복 편집기도 그 규칙으로 다시 만든다(요약만 바뀌고 칸은 옛 규칙이면 옛 규칙을 다시 보냄).
     if (!sameRule(result.event.recurrence, event.recurrence)) ruleEpoch += 1;
     event = result.event;
+    formBase = result.event;
     formVersion = result.event.version;
     epoch += 1;
     onchanged();
+  }
+
+  /**
+   * 충돌 알림의 단추로 일정 입력 양식을 제출한다. 양식 자신의 확인(필수 칸·없는 시각·시간대)을 거친 지금 입력이
+   * `submitted`로 온다. 확인에 걸리면 제출되지 않고 아무것도 보내지 않는다.
+   */
+  function submitForm(mode: 'merge' | 'overwrite'): void {
+    const form = formWrap?.querySelector('form');
+    if (!(form instanceof HTMLFormElement)) return;
+    submitMode = mode;
+    try {
+      form.requestSubmit();
+    } finally {
+      submitMode = undefined;
+    }
+  }
+
+  /** 일정 입력 양식의 제출. 충돌 알림의 단추에서 시작됐으면 서버 최신 일정에 합쳐 보낸다. */
+  function submitted(input: EventInput): Promise<void> {
+    const mode = submitMode;
+    submitMode = undefined;
+    if (mode !== undefined && conflict !== undefined && formBase !== undefined)
+      return saveMine(input, formBase, conflict.current, mode === 'overwrite');
+    return save(input, formVersion);
+  }
+
+  /**
+   * "내 입력으로 다시 저장"(D-94): 입력을 만든 일정(`base`)과 비교해 내가 고친 칸만 서버 최신 일정에 얹어 최신 판
+   * 번호로 보낸다(그사이 또 바뀌었으면 서버가 다시 409). 같은 칸을 서버도 다른 값으로 바꿨으면 보내지 않고 양쪽 값을
+   * 보여 덮어쓸지 묻는다. `overwrite`는 물은 뒤 "덮어쓰고 저장"을 누른 경우로, 물은 칸과 그때의 내 값 그대로일 때만
+   * 덮어쓴다(그사이 입력을 고쳐 겹친 칸이나 값이 달라졌으면 다시 묻는다).
+   */
+  async function saveMine(
+    input: EventInput,
+    base: EventView,
+    current: EventView,
+    overwrite: boolean,
+  ): Promise<void> {
+    const merged = mergeEventInput(base, input, current);
+    const asked = clash;
+    const confirmed =
+      overwrite &&
+      asked?.current === current &&
+      merged.clashes.every((u) => asked.units.includes(u) && sameUnit(u, input, asked.mine));
+    if (merged.clashes.length > 0 && !confirmed) {
+      const mine = shown;
+      clash = { current, mine: input, units: merged.clashes };
+      await tick();
+      if (mine === shown) clashBox?.focus();
+      return;
+    }
+    await save(merged.input, current.version);
+  }
+
+  /** 덮어쓰지 않는다: 아무것도 보내지 않고 알림과 입력을 그대로 둔다. */
+  async function cancelClash(): Promise<void> {
+    clash = undefined;
+    await tick();
+    saveMineButton?.focus();
+  }
+
+  /** 겹친 칸의 이름(입력 칸의 이름을 쓴다). */
+  function unitLabel(unit: EventUnit): string {
+    switch (unit) {
+      case 'kind':
+        return m.events_kind();
+      case 'title':
+        return m.events_title();
+      case 'description':
+        return m.events_description();
+      case 'when':
+        return m.events_clash_when();
+    }
+  }
+
+  /** 겹친 칸의 값. 일시는 머리말과 같은 글로 보인다. */
+  function unitText(unit: EventUnit, e: EventView): string {
+    switch (unit) {
+      case 'kind':
+        return KIND_LABEL[e.kind];
+      case 'title':
+        return e.title;
+      case 'description':
+        return e.description === '' ? m.events_clash_empty() : e.description;
+      case 'when':
+        return describeWhen(e, zone);
+    }
   }
 
   async function saveRule(rule: RecurrenceRule | null): Promise<void> {
@@ -209,37 +323,89 @@
       {@const current = event}
       {#if conflict !== undefined}
         {@const c = conflict}
-        <div class="rounded-md border border-amber-500/50 p-3 text-sm" role="alert">
-          <p>
-            {m.events_conflict({ title: c.current.title, when: describeWhen(c.current, zone) })}
-          </p>
-          <div class="mt-2 flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onclick={() => {
-                event = c.current;
-                formVersion = c.current.version;
-                conflict = undefined;
-                epoch += 1;
-                ruleEpoch += 1;
-              }}>{m.events_load_server()}</Button
-            >
-            <Button size="sm" onclick={() => void save(c.input, c.current.version)}
-              >{m.events_save_mine()}</Button
-            >
+        <div class="rounded-md border border-amber-500/50 p-3 text-sm">
+          <div role="alert">
+            <p>
+              {m.events_conflict({ title: c.current.title, when: describeWhen(c.current, zone) })}
+            </p>
+            <div class="mt-2 flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onclick={() => {
+                  event = c.current;
+                  formBase = c.current;
+                  formVersion = c.current.version;
+                  conflict = undefined;
+                  clash = undefined;
+                  epoch += 1;
+                  ruleEpoch += 1;
+                }}>{m.events_load_server()}</Button
+              >
+              <Button
+                size="sm"
+                bind:ref={saveMineButton}
+                onclick={() => {
+                  submitForm('merge');
+                }}>{m.events_save_mine()}</Button
+              >
+            </div>
           </div>
+          {#if clash !== undefined}
+            {@const k = clash}
+            {@const mineView = { ...k.current, ...k.mine }}
+            <!-- 같은 칸을 양쪽이 고쳤다: 서버 값과 내 값을 보이고 덮어쓸지 묻는다(D-94). 취소하면 아무것도 보내지 않는다. -->
+            <div
+              bind:this={clashBox}
+              role="alertdialog"
+              aria-labelledby="event-clash-question"
+              aria-describedby="event-clash-list"
+              tabindex="-1"
+              class="mt-3 flex flex-col gap-2 border-t border-amber-500/50 pt-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <p id="event-clash-question" class="font-medium">{m.events_clash_question()}</p>
+              <dl id="event-clash-list" class="flex flex-col gap-2">
+                {#each k.units as unit (unit)}
+                  <div>
+                    <dt class="font-medium">{unitLabel(unit)}</dt>
+                    <dd class="break-words whitespace-pre-wrap">
+                      {m.events_clash_server({ value: unitText(unit, k.current) })}
+                    </dd>
+                    <dd class="break-words whitespace-pre-wrap">
+                      {m.events_clash_mine({ value: unitText(unit, mineView) })}
+                    </dd>
+                  </div>
+                {/each}
+              </dl>
+              <div class="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onclick={() => {
+                    submitForm('overwrite');
+                  }}>{m.events_clash_overwrite()}</Button
+                >
+                <Button size="sm" variant="outline" onclick={() => void cancelClash()}
+                  >{m.common_cancel()}</Button
+                >
+              </div>
+            </div>
+          {/if}
         </div>
       {/if}
       {#if canEdit}
-        {#key epoch}
-          <EventForm
-            idPrefix="event-edit"
-            initial={current}
-            submitLabel={m.common_save()}
-            onsubmit={(input: EventInput) => save(input, formVersion)}
-          />
-        {/key}
+        <!-- 입력 양식을 감싼다(다시 저장이 이 안의 양식을 제출한다). 배치에는 끼지 않는다. 입력은 그것을 만든 일정에서
+             시작한다(반복 규칙 저장으로 `event`가 바뀌어도 손대지 않은 시각은 그 일정의 값으로 보낸다). -->
+        <div class="contents" bind:this={formWrap}>
+          {#key epoch}
+            <EventForm
+              idPrefix="event-edit"
+              initial={formBase ?? current}
+              submitLabel={m.common_save()}
+              onsubmit={submitted}
+            />
+          {/key}
+        </div>
         {#key ruleEpoch}
           <RecurrenceEditor
             idPrefix="event-recurrence"
