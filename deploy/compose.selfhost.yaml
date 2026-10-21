@@ -110,6 +110,10 @@ services:
       FVOCI_S3_SECRET_KEY: ${FVOCI_S3_SECRET_KEY:-}
       FVOCI_MAX_FILE_BYTES: ${FVOCI_MAX_FILE_BYTES:-1073741824}
       FVOCI_MAX_WORKSPACE_STORAGE_BYTES: ${FVOCI_MAX_WORKSPACE_STORAGE_BYTES:-53687091200}
+      # 업로드 조각 크기(5~64 MiB). CDN을 앞에 두면 요청 본문 한도보다 작게 둔다(docs/self-hosting.md 7절).
+      FVOCI_UPLOAD_CHUNK_BYTES: ${FVOCI_UPLOAD_CHUNK_BYTES:-8388608}
+      # 실시간 공동 편집에 연결된 사람의 권한을 다시 확인하는 간격(초).
+      FVOCI_COLLAB_RECHECK_SECS: ${FVOCI_COLLAB_RECHECK_SECS:-30}
     ports:
       # 기본은 이 컴퓨터에서만 열린다. 앞단 역방향 프록시(HTTPS)를 두는 것을 권한다.
       - '${FVOCI_LISTEN:-127.0.0.1:8080}:8080'

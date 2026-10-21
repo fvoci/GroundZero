@@ -38,6 +38,12 @@ docker compose --env-file .env -f deploy/compose.selfhost.yaml ps --all
 
 `bootstrap`·`migrate`의 `Exited (0)`은 정상 완료다.
 
+**게시된 이미지 쓰기(D-87)**: 직접 빌드하는 대신 릴리스 이미지 `ghcr.io/fvoci/groundzero:X.Y.Z`(linux/amd64·linux/arm64, `latest` 없음)를 쓸 수 있다. 같은 릴리스 태그를 체크아웃하고(`git checkout vX.Y.Z`) `.env`에 `FVOCI_IMAGE=ghcr.io/fvoci/groundzero:X.Y.Z`를 넣은 뒤, `--build` 대신 아래 명령으로 받아서 띄운다(`--no-build`로 로컬 빌드를 막는다). 올릴 때(6절)도 새 태그를 체크아웃하고 `FVOCI_IMAGE`를 바꾼 뒤 같은 명령을 쓴다.
+
+```bash
+docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d --pull missing --no-build --wait
+```
+
 앱이 `healthy`이면 역방향 프록시가 `FVOCI_LISTEN`(기본 `127.0.0.1:8080`)으로 보내도록 설정하고 `FVOCI_PUBLIC_URL`을 연다. 처음 로그인한 사람은 워크스페이스를 직접 만들거나 초대를 받는다(첫 로그인 사용자를 자동으로 관리자로 만들지 않는다, X-10). 운영자가 `.env`의 `FVOCI_INITIAL_ADMIN_SUBJECT`에 관리자로 정한 사람의 OIDC subject(Keycloak은 사용자 화면의 ID)를 넣으면, 그 사람이 처음 로그인할 때 `FVOCI_INITIAL_WORKSPACE` 이름(기본 `fvoci`)의 첫 워크스페이스가 만들어지고 그 사람이 소유자가 된다(D-51, 한 번만).
 
 <a id="db-setup"></a>
