@@ -85,6 +85,14 @@ describe('search module filter', () => {
     await waitFor(() => {
       expect(search.mock.calls.at(-1)?.[2]?.moduleId).toBe('m-1');
     });
+    // 새 워크스페이스의 모듈 목록이 오기 전이라도 옛 모듈로 검색하지 않는다(목록 응답을 미룬다).
+    let giveModules: (list: Module[]) => void = () => undefined;
+    vi.spyOn(api, 'modules').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          giveModules = resolve;
+        }),
+    );
     await view.rerender({
       open: true,
       memberOf: () => true,
@@ -93,6 +101,7 @@ describe('search module filter', () => {
     await waitFor(() => {
       expect(search.mock.calls.at(-1)?.[2]).not.toHaveProperty('moduleId');
     });
+    giveModules([]);
     expect(screen.getByText('모든 모듈')).toBeTruthy();
   });
 });

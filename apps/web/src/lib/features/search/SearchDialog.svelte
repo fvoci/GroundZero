@@ -50,6 +50,8 @@
   // 한다. 고른 모듈이 목록에 없으면(다른 워크스페이스로 옮김·목록을 못 읽음) 그 선택을 거둔다.
   let moduleId = $state<string>('any');
   let modules = $state<Module[]>([]);
+  // 고른 모듈이 속한 워크스페이스. 워크스페이스가 바뀌면 새 목록이 오기 전에 바로 선택을 거둔다(옛 모듈 id로 검색하지 않게).
+  let moduleWs: string | undefined;
   function dropMissingModule(list: readonly Module[]): void {
     untrack(() => {
       if (moduleId === 'any' || list.some((x) => x.id === moduleId)) return;
@@ -60,11 +62,9 @@
   $effect(() => {
     const ws = workspace?.id;
     modules = [];
+    if (moduleWs !== ws) dropMissingModule([]);
     if (!open) return;
-    if (ws === undefined) {
-      dropMissingModule([]);
-      return;
-    }
+    if (ws === undefined) return;
     let cancelled = false;
     api
       .modules(ws)
@@ -292,6 +292,7 @@
             value={moduleId}
             onValueChange={(v: string) => {
               moduleId = v === '' ? 'any' : v;
+              moduleWs = workspace.id;
               refilter();
             }}
           >
