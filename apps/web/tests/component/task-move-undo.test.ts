@@ -4,7 +4,7 @@ import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskStatus, TaskView } from '$lib/api/client';
-import { api, NetworkError } from '$lib/api/client';
+import { api, ApiError, NetworkError } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -49,6 +49,7 @@ function task(id: string, title: string, status: TaskStatus = 'todo', version = 
     checklist_done: 0,
     checklist_total: 0,
     version,
+    move_version: version,
     completed_at: null,
     access: 'write',
     updated_at: '2026-10-21T00:00:00Z',
@@ -122,7 +123,7 @@ describe('kanban undo', () => {
     await flush();
     // 보내기 전에 서버를 다시 읽고, 원래 자리(할 일, 문서 검토 앞)로 보낸다.
     expect(read).toHaveBeenCalledTimes(4);
-    expect(move).toHaveBeenLastCalledWith('a', 'todo', 'b');
+    expect(move).toHaveBeenLastCalledWith('a', 'todo', 'b', 2);
     expect(laneOf('a')).toBe('todo');
     expect(liveText()).toContain('API 연결: 되돌렸습니다(할 일).');
     expect(undoButton()).toBeNull();
@@ -171,12 +172,17 @@ describe('kanban undo', () => {
     expect(screen.getByRole('alert').textContent).toContain('되돌리지 않았습니다');
   });
 
-  it('says so when another change slipped in while moving back', async () => {
-    lists(start, moved, moved, start);
-    vi.spyOn(api, 'moveTask')
+  it('sends the move version it read, and a refusal changes nothing and is not sent again', async () => {
+    // 되돌리기 직전 목록은 이 이동의 결과(이동 판 2)였다. 보내기 전에 다른 사람이 같은 열 안에서 순서를 바꿨으면 서버가
+    // 조건을 보고 409 move_conflict로 거절한다(D-89). 아무것도 바뀌지 않았으니 최신 상태를 보이고 다시 보내지 않는다.
+    const reordered = [movedA, task('b', '문서 검토')];
+    lists(start, moved, moved, reordered);
+    const move = vi
+      .spyOn(api, 'moveTask')
       .mockResolvedValueOnce({ ...movedA, checklist: [] })
-      // 되돌리기만이면 판 2 → 3인데 4가 왔다: 그사이 다른 변경이 끼었다.
-      .mockResolvedValueOnce({ ...task('a', 'API 연결', 'todo', 4), checklist: [] });
+      .mockRejectedValueOnce(
+        new ApiError(409, 'move_conflict', 'the task moved since it was read'),
+      );
     await mount();
     await moveRight('a');
     await flush();
@@ -184,10 +190,11 @@ describe('kanban undo', () => {
     if (button === null) throw new Error('undo');
     await fireEvent.click(button);
     await flush();
-    expect(screen.getByRole('alert').textContent).toContain(
-      '되돌리기가 그 변경을 덮었을 수 있습니다',
-    );
+    expect(move.mock.calls[1]).toEqual(['a', 'todo', 'b', 2]);
+    expect(screen.getByRole('alert').textContent).toContain('되돌리지 않았습니다');
     expect(liveText()).not.toContain('되돌렸습니다');
+    await flush(20000);
+    expect(move).toHaveBeenCalledTimes(2);
   });
 
   it('withdraws the offer when the same card is moved again', async () => {

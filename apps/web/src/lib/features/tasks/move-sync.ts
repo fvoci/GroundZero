@@ -1,7 +1,8 @@
 // 칸반 이동의 저장 확인 (D-79·D-82). 화면은 먼저 옮기고(낙관적 이동) 서버 저장 결과로 확정한다.
-// 이동 API(`PUT /api/tasks/{id}/position`)에는 요청 id도 버전 조건도 없어 같은 요청을 다시 보내면 그사이 다른 사람이 옮긴
-// 것을 덮을 수 있다. 그래서 자동으로 다시 보내지 않고, 결과를 모르면 목록을 다시 읽어 대조한다. 이동은 열이 바뀔 때만
-// 업무 판(version)을 올리고 같은 열 안의 순서는 올리지 않으므로, 대조는 열·바로 뒤 업무·판을 함께 본다.
+// 이동 API(`PUT /api/tasks/{id}/position`)에는 요청 id가 없어 결과를 모르는 이동을 자동으로 다시 보내지 않는다. 결과를
+// 모르면 목록을 다시 읽어 대조한다. 업무마다 이동 판(`move_version`, D-89)이 있어 열이나 열 안 위치가 바뀔 때마다 오르므로,
+// 대조는 열·바로 뒤 업무·이동 판을 함께 보고, 다시 시도·되돌리기는 읽은 이동 판을 조건으로 보낸다(그사이 바뀌었으면
+// 서버가 아무것도 바꾸지 않고 409 `move_conflict`).
 import { ApiError, NetworkError } from '$lib/api/client';
 
 import type { BoardMove, BoardTask } from './board';
@@ -9,14 +10,14 @@ import { applyMove, lanes } from './board';
 
 /** 대조에 쓰는 업무 모양(목록 응답의 일부). */
 export interface SyncTask extends BoardTask {
-  version: number;
+  move_version: number;
 }
 
-/** 이동 직전 서버 기준의 자리: 열, 바로 뒤 업무(없으면 열 끝), 판. */
+/** 이동 직전 서버 기준의 자리: 열, 바로 뒤 업무(없으면 열 끝), 이동 판. */
 export interface MoveOrigin {
   status: BoardTask['status'];
   nextId: string | null;
-  version: number;
+  moveVersion: number;
 }
 
 /** 전체 목록(거르지 않은 서버 순서)에서 업무 바로 뒤의 같은 열 업무. */
@@ -31,7 +32,7 @@ export function originOf(tasks: readonly SyncTask[], id: string): MoveOrigin | u
   const task = tasks.find((t) => t.id === id);
   const nextId = nextInLane(tasks, id);
   if (task === undefined || nextId === undefined) return undefined;
-  return { status: task.status, nextId, version: task.version };
+  return { status: task.status, nextId, moveVersion: task.move_version };
 }
 
 /**
@@ -50,7 +51,7 @@ export function classifyMoveError(error: unknown): 'failed' | 'uncertain' {
 /**
  * 다시 읽은 서버 목록으로 이동 결과를 정한다.
  * - 'applied': 업무가 목표 열에서 목표 업무 바로 앞(없으면 열 끝)에 있다.
- * - 'not_applied': 이동 전 자리·판 그대로다(이 요청은 반영되지 않았다).
+ * - 'not_applied': 이동 전 자리·이동 판 그대로다(이 요청은 반영되지 않았다).
  * - 'changed': 둘 다 아니다(다른 사람이 옮기거나 고쳤다). 서버 상태를 따른다.
  * - 'gone': 업무가 목록에 없다(지워졌거나 볼 수 없다).
  */
@@ -67,19 +68,11 @@ export function reconcileMove(
   if (
     task.status === origin.status &&
     nextId === origin.nextId &&
-    task.version === origin.version
+    task.move_version === origin.moveVersion
   ) {
     return 'not_applied';
   }
   return 'changed';
-}
-
-/**
- * 이동 응답의 판이 이 이동만으로 될 판(열이 바뀌면 +1)보다 큰지. 크면 기준으로 삼은 서버 자리를 읽은 뒤 다른 변경(다른
- * 사람의 열 이동·편집)이 끼었고 이 이동이 그 위에 덮였다. 판을 올리지 않는 같은 열 안 순서 바꾸기는 알 수 없다.
- */
-export function overlapped(origin: MoveOrigin, plan: BoardMove, savedVersion: number): boolean {
-  return savedVersion > origin.version + (plan.status === origin.status ? 0 : 1);
 }
 
 /** 서버 목록 위에 아직 저장을 기다리는 다른 카드들의 이동을 다시 얹는다(다시 읽기가 그 카드들을 되돌리지 않게). */

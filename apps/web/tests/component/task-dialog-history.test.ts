@@ -53,6 +53,7 @@ function task(id: string, title: string): TaskView {
     checklist_done: 0,
     checklist_total: 0,
     version: 1,
+    move_version: 0,
     completed_at: null,
     access: 'write',
     updated_at: '2026-10-19T00:00:00Z',
@@ -152,7 +153,7 @@ describe('move menu', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'API 연결 옮기기' }));
     await fireEvent.click(await screen.findByRole('menuitem', { name: '완료로' }));
     await waitFor(() => {
-      expect(move).toHaveBeenCalledWith('2', 'done', null);
+      expect(move).toHaveBeenCalledWith('2', 'done', null, undefined);
     });
   });
 });
@@ -178,7 +179,7 @@ describe('quick add in a column', () => {
     await fireEvent.input(input, { target: { value: '새 업무' } });
     await fireEvent.submit(input.closest('form') ?? input);
     await waitFor(() => {
-      expect(move).toHaveBeenCalledWith('9', 'in_progress', null);
+      expect(move).toHaveBeenCalledWith('9', 'in_progress', null, undefined);
     });
     expect(create.mock.calls[0]?.[2]).toBe('새 업무');
   });
@@ -284,7 +285,7 @@ describe('drag cancel when the release is not seen', () => {
       clientY: 10,
     });
     await waitFor(() => {
-      expect(move).toHaveBeenCalledWith('2', 'done', null);
+      expect(move).toHaveBeenCalledWith('2', 'done', null, undefined);
     });
   });
 

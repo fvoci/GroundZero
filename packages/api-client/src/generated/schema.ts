@@ -1743,7 +1743,11 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 칸반 이동(쓰기 권한). 버전과 상관없이 바로 반영한다. */
+        /**
+         * 칸반 이동(쓰기 권한). `base_move_version`이 없으면 판과 상관없이 바로 반영한다(D-79). 있으면 행을 잠근 같은
+         *     트랜잭션에서 이동 판을 비교하고, 그사이 열·위치가 바뀌었으면 아무것도 바꾸지 않고 409 `move_conflict`와 지금
+         *     업무를 돌려준다(D-89).
+         */
         put: operations["move_task"];
         post?: never;
         delete?: never;
@@ -3372,6 +3376,12 @@ export interface components {
         };
         /** @description 칸반 이동: 열(상태)과 그 안에서 바로 뒤에 올 업무(없으면 맨 끝). */
         MoveTask: {
+            /**
+             * Format: int32
+             * @description 이 이동 판(`move_version`)에서 읽은 업무만 옮긴다(D-89). 그사이 열·위치가 바뀌었으면 아무것도 바꾸지 않고
+             *     409 `move_conflict`. 없으면 판과 상관없이 옮긴다(D-79).
+             */
+            base_move_version?: number | null;
             /** Format: uuid */
             before_id?: string | null;
             status: components["schemas"]["TaskStatus"];
@@ -4109,6 +4119,11 @@ export interface components {
             /** @description 마일스톤이면 마감일 하나만 쓴다. */
             milestone: boolean;
             module_id: components["schemas"]["ModuleId"];
+            /**
+             * Format: int32
+             * @description 이동 판(D-89): 열이나 열 안 위치가 바뀔 때마다 오른다. 조건부 이동(`base_move_version`)의 기준.
+             */
+            move_version: number;
             /** @description 반복 회차의 날짜(규칙 기준). */
             occurrence_date?: string | null;
             /**
@@ -9644,6 +9659,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskConflict"];
                 };
             };
         };

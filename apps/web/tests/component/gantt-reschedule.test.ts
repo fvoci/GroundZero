@@ -55,6 +55,7 @@ function task(
     checklist_done: 0,
     checklist_total: 0,
     version,
+    move_version: version,
     completed_at: null,
     access: 'write',
     updated_at: '2026-10-21T00:00:00Z',

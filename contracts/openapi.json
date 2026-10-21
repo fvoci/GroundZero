@@ -7414,7 +7414,7 @@
         "tags": [
           "tasks"
         ],
-        "summary": "칸반 이동(쓰기 권한). 버전과 상관없이 바로 반영한다.",
+        "summary": "칸반 이동(쓰기 권한). `base_move_version`이 없으면 판과 상관없이 바로 반영한다(D-79). 있으면 행을 잠근 같은\n트랜잭션에서 이동 판을 비교하고, 그사이 열·위치가 바뀌었으면 아무것도 바꾸지 않고 409 `move_conflict`와 지금\n업무를 돌려준다(D-89).",
         "operationId": "move_task",
         "parameters": [
           {
@@ -7474,6 +7474,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskConflict"
                 }
               }
             }
@@ -13106,6 +13116,14 @@
           "status"
         ],
         "properties": {
+          "base_move_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "이 이동 판(`move_version`)에서 읽은 업무만 옮긴다(D-89). 그사이 열·위치가 바뀌었으면 아무것도 바꾸지 않고\n409 `move_conflict`. 없으면 판과 상관없이 옮긴다(D-79)."
+          },
           "before_id": {
             "type": [
               "string",
@@ -15196,6 +15214,7 @@
           "checklist_done",
           "checklist_total",
           "version",
+          "move_version",
           "access",
           "updated_at"
         ],
@@ -15253,6 +15272,11 @@
           },
           "module_id": {
             "$ref": "#/components/schemas/ModuleId"
+          },
+          "move_version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "이동 판(D-89): 열이나 열 안 위치가 바뀔 때마다 오른다. 조건부 이동(`base_move_version`)의 기준."
           },
           "occurrence_date": {
             "type": [

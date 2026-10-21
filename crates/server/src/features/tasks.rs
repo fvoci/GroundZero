@@ -147,6 +147,8 @@ pub struct Task {
     pub checklist_total: i64,
     /// 필드 고치기의 기준 버전.
     pub version: i32,
+    /// 이동 판(D-89): 열이나 열 안 위치가 바뀔 때마다 오른다. 조건부 이동(`base_move_version`)의 기준.
+    pub move_version: i32,
     #[serde(with = "time::serde::rfc3339::option")]
     #[schema(value_type = Option<String>, format = DateTime)]
     pub completed_at: Option<OffsetDateTime>,
@@ -230,6 +232,10 @@ pub struct MoveTask {
     pub status: TaskStatus,
     #[schema(value_type = Option<String>, format = Uuid)]
     pub before_id: Option<Uuid>,
+    /// 이 이동 판(`move_version`)에서 읽은 업무만 옮긴다(D-89). 그사이 열·위치가 바뀌었으면 아무것도 바꾸지 않고
+    /// 409 `move_conflict`. 없으면 판과 상관없이 옮긴다(D-79).
+    #[serde(default)]
+    pub base_move_version: Option<i32>,
 }
 
 /// 상위 업무 바꾸기. 없으면 최상위.
@@ -359,6 +365,7 @@ struct TaskRow {
     checklist_done: i64,
     checklist_total: i64,
     version: i32,
+    move_version: i32,
     completed_at: Option<OffsetDateTime>,
     access: String,
     updated_at: OffsetDateTime,
@@ -372,7 +379,7 @@ const TASK_SELECT: &str = "SELECT t.id, t.item_id, i.module_id, t.workspace_id, 
         s.id AS series_id, s.root_task_id AS series_root, s.rule AS series_rule, s.timezone AS series_timezone,
         t.occurrence_date,
         c.done AS checklist_done, c.total AS checklist_total,
-        t.version, t.completed_at, app_task_access(t.id) AS access, t.updated_at
+        t.version, t.move_version, t.completed_at, app_task_access(t.id) AS access, t.updated_at
  FROM tasks t JOIN items i ON i.id = t.item_id
  LEFT JOIN task_series s ON s.id = t.series_id
  CROSS JOIN LATERAL app_task_checklist_counts(t.id) c";
@@ -435,6 +442,7 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 checklist_done,
                 checklist_total,
                 version,
+                move_version,
                 completed_at,
                 access,
                 updated_at,
@@ -476,6 +484,7 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 checklist_done,
                 checklist_total,
                 version,
+                move_version,
                 completed_at,
                 access: Access::parse(&access)
                     .ok_or_else(|| AppError::Config(format!("unknown access {access}")))?,
@@ -711,28 +720,52 @@ pub async fn update(
         .into_response())
 }
 
-/// 칸반 이동(쓰기 권한). 버전과 상관없이 바로 반영한다.
+/// 칸반 이동(쓰기 권한). `base_move_version`이 없으면 판과 상관없이 바로 반영한다(D-79). 있으면 행을 잠근 같은
+/// 트랜잭션에서 이동 판을 비교하고, 그사이 열·위치가 바뀌었으면 아무것도 바꾸지 않고 409 `move_conflict`와 지금
+/// 업무를 돌려준다(D-89).
 #[utoipa::path(put, path = "/api/tasks/{task_id}/position",
     params(("task_id" = String, Path, format = Uuid)), request_body = MoveTask,
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = TaskConflict)), tag = "tasks")]
 pub async fn move_task(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Json(input): Json<MoveTask>,
-) -> Result<Json<TaskDetail>, AppError> {
+) -> Result<Response, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_move_task($1, $2, $3)")
+    let moved = sqlx::query("SELECT app_move_task($1, $2, $3, $4)")
         .bind(id)
         .bind(input.status.as_str())
         .bind(input.before_id)
+        .bind(input.base_move_version)
         .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
+        .await;
+    if let Err(err) = moved {
+        if err
+            .as_database_error()
+            .and_then(|db| db.code())
+            .is_some_and(|code| code == "FV003")
+        {
+            // 아무것도 바뀌지 않았다(트랜잭션을 버린다). 지금 업무를 새 트랜잭션으로 읽어 함께 돌려준다.
+            drop(tx);
+            let mut fresh = state.db.begin_as(user).await?;
+            let current = load_detail(&mut fresh, id).await?;
+            fresh.commit().await?;
+            return Ok((
+                StatusCode::CONFLICT,
+                Json(TaskConflict {
+                    error: "move_conflict",
+                    current,
+                }),
+            )
+                .into_response());
+        }
+        return Err(AppError::from_db_function(err));
+    }
     let detail = load_detail(&mut tx, id).await?;
     tx.commit().await?;
-    Ok(Json(detail))
+    Ok(Json(detail).into_response())
 }
 
 /// 상위 업무 바꾸기(같은 항목, 한 단계).
