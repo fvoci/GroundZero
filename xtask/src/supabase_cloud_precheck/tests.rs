@@ -2,6 +2,7 @@
 //! The native driver, process environment and network are never accessed here.
 
 use super::*;
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::collections::BTreeMap;
 
@@ -40,6 +41,107 @@ fn assert_private(report: &Value) -> Result<()> {
     }
     assert_eq!(report["connection_kind"], "session_pooler");
     assert_eq!(report["changes"], "NOT RUN");
+    Ok(())
+}
+
+struct FakeDatabaseError(Option<&'static str>);
+
+impl fmt::Debug for FakeDatabaseError {
+    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+        panic!("driver Debug must not be called");
+    }
+}
+
+impl fmt::Display for FakeDatabaseError {
+    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+        panic!("driver Display must not be called");
+    }
+}
+
+impl std::error::Error for FakeDatabaseError {}
+
+impl sqlx::error::DatabaseError for FakeDatabaseError {
+    fn message(&self) -> &str {
+        panic!("driver message must not be read");
+    }
+
+    fn code(&self) -> Option<Cow<'_, str>> {
+        self.0.map(Cow::Borrowed)
+    }
+
+    fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+        self
+    }
+
+    fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+        self
+    }
+
+    fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+        self
+    }
+
+    fn kind(&self) -> sqlx::error::ErrorKind {
+        sqlx::error::ErrorKind::Other
+    }
+}
+
+#[test]
+fn connection_errors_use_only_types_and_sqlstate_class_without_exposing_details() -> Result<()> {
+    let details = format!(
+        "{HOST} {USER} {} 28P01 untrusted-certificate-detail DNS",
+        raw_password()?
+    );
+    let mut cases = vec![
+        (
+            sqlx::Error::Io(io::Error::other(details.clone())),
+            "connection_network_io",
+        ),
+        (sqlx::Error::Tls(details.clone().into()), "connection_tls"),
+        (
+            sqlx::Error::Protocol(details.clone()),
+            "connection_protocol",
+        ),
+        (
+            sqlx::Error::Configuration(details.into()),
+            "connection_unclassified",
+        ),
+    ];
+    for code in [
+        Some("28000"),
+        Some("28P01"),
+        Some("3D000"),
+        None,
+        Some("28"),
+        Some("28p01"),
+        Some("28P010"),
+    ] {
+        cases.push((
+            sqlx::Error::Database(Box::new(FakeDatabaseError(code))),
+            if matches!(code, Some("28000" | "28P01")) {
+                "connection_authentication"
+            } else {
+                "connection_database"
+            },
+        ));
+    }
+    for (error, expected) in cases {
+        let (report, code) = fail(empty_report(), classify_connection_error(error), 1);
+        assert_eq!(code, 1);
+        assert_eq!(report["failure_code"], expected);
+        assert_private(&report)?;
+        for raw in [
+            "28000",
+            "28P01",
+            "3D000",
+            "28p01",
+            "28P010",
+            "untrusted-certificate-detail",
+            "DNS",
+        ] {
+            assert!(!report.to_string().contains(raw));
+        }
+    }
     Ok(())
 }
 
@@ -174,7 +276,11 @@ impl FakeConnection {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         if self.failure == Some(name) {
-            Err(Failure::ConnectionTlsOrQueryFailed)
+            Err(match name {
+                "connect" => Failure::ConnectionUnclassified,
+                "close" => Failure::ClientError,
+                _ => Failure::QueryFailed,
+            })
         } else {
             Ok(())
         }
@@ -274,6 +380,15 @@ async fn connection_query_cleanup_failures_and_wrong_answer_are_sanitized() -> R
         let (report, code) = inspect(&mut connection, &target()?, short_limits()).await;
         assert_ne!(code, 0);
         assert_private(&report)?;
+        assert_eq!(
+            report["failure_code"],
+            match stage {
+                "connect" => "connection_unclassified",
+                "close" => "client_error",
+                "wrong_answer" => "unexpected_query_result",
+                _ => "query_failed",
+            }
+        );
         assert_ne!(report["query"], "PASS");
         assert_eq!(
             connection
