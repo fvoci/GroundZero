@@ -1580,19 +1580,28 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
         "the file was restored into a document the restorer can no longer write"
     );
     owner.close().await;
-    // 문서를 쓸 수 있는 사람(쓴 사람)은 되살릴 수 있다.
-    let by_author = send(
+    // 다시 쓰기 공유를 받은 지운 사람은 되살릴 수 있다(관리자 우회가 아닌 지운 사람의 문서 쓰기 검사).
+    let reshared = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/shares"),
+        Some(&author),
+        Some(json!({ "email": helper_email, "permission": "write" })),
+    )
+    .await;
+    assert_eq!(reshared.status, StatusCode::CREATED, "{:?}", reshared.json);
+    let by_helper = send(
         &app,
         Method::POST,
         &format!("/api/trash/{batch}/restore"),
-        Some(&author),
+        Some(&helper),
         None,
     )
     .await;
     assert_eq!(
-        by_author.status,
+        by_helper.status,
         StatusCode::NO_CONTENT,
         "{:?}",
-        by_author.json
+        by_helper.json
     );
 }
