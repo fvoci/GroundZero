@@ -77,3 +77,18 @@ export function watchConnection(): () => void {
     probing = undefined;
   };
 }
+
+// 다른 계정으로 바뀌어 이 창을 처음부터 다시 읽는 중인지. 이때는 저장 안 한 편집 경고로 다시 읽기를 막지 않는다
+// (막고 남으면 앞 계정의 화면과 입력이 새 계정의 세션으로 요청을 보낸다). 입력은 앞 계정의 초안(사용자별 키)으로
+// 이미 남아 있다.
+let switching = false;
+
+/** 다른 계정으로 바뀌어 다시 읽기 직전에 부른다. */
+export function markAccountSwitch(): void {
+  switching = true;
+}
+
+/** 다른 계정으로 바뀌어 다시 읽는 중인지. */
+export function accountSwitching(): boolean {
+  return switching;
+}

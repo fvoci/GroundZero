@@ -9,7 +9,7 @@
   import { router } from '$lib/router.svelte';
   import { Toaster } from '$lib/ui/sonner';
 
-  import { auth, connection, watchConnection } from './feedback.svelte';
+  import { auth, connection, markAccountSwitch, watchConnection } from './feedback.svelte';
 
   interface Props {
     /** 이 창을 처음부터 다시 읽는다(시험에서 바꿔 끼운다). */
@@ -36,7 +36,10 @@
       void api
         .me()
         .then((now) => {
-          if (now !== undefined && now.id !== signedIn) reload();
+          if (now !== undefined && now.id !== signedIn) {
+            markAccountSwitch();
+            reload();
+          }
         })
         .catch(() => undefined);
     };

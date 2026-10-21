@@ -12,6 +12,7 @@
   import { api, ApiError, fileContentUrl, NetworkError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { RetryKey } from '$lib/api/retry-key';
+  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
   import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { m } from '$lib/paraglide/messages.js';
@@ -360,7 +361,8 @@
 
   onMount(() => {
     const beforeUnload = (event: BeforeUnloadEvent): void => {
-      if (isDirty()) event.preventDefault();
+      // 다른 계정으로 바뀌어 다시 읽을 때는 막지 않는다(입력은 앞 계정의 초안으로 남아 있다).
+      if (isDirty() && !accountSwitching()) event.preventDefault();
     };
     window.addEventListener('beforeunload', beforeUnload);
     router.guard = () => !isDirty() || window.confirm(m.documents_leave_confirm());
