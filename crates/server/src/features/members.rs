@@ -326,7 +326,8 @@ pub async fn list_invitations(
 /// 초대 취소(관리자).
 #[utoipa::path(delete, path = "/api/invitations/{invitation_id}",
     params(("invitation_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "members")]
+    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn revoke_invitation(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,

@@ -127,12 +127,37 @@ pub struct MarkedTarget {
     pub item_id: Option<ItemId>,
 }
 
+/// Up Next 묶음마다의 전체 수.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct UpNextCounts {
+    pub overdue: i64,
+    pub today: i64,
+    pub upcoming: i64,
+}
+
+/// Up Next가 묶음마다 보이는 최대 수. 묶음마다 따로 세어, 밀린 업무가 많아도 오늘·다가오는 일이 빠지지 않는다.
+pub const UP_NEXT_PER_BUCKET: i64 = 50;
+
+/// Up Next 후보: 내 업무(내가 담당이거나, 담당자가 없고 내가 만든 것) 중 이번 주($1 + 7)까지 마감인 미완료.
+/// 보관된 항목·모듈의 업무는 뺀다.
+const UP_NEXT_MINE: &str = "SELECT t.id, t.item_id, t.workspace_id, t.title, t.status, t.due_date, t.number
+     FROM tasks t JOIN items i ON i.id = t.item_id JOIN modules m ON m.id = i.module_id
+     WHERE t.status <> 'done' AND t.due_date IS NOT NULL AND t.due_date <= $1 + 7
+       AND i.archived_at IS NULL AND m.archived_at IS NULL
+       AND t.workspace_id IN (SELECT app_my_workspace_ids())
+       AND (EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = app_user_id())
+            OR (NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id)
+                AND t.created_by = app_user_id()))";
+
 /// 홈.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Home {
     /// 보는 사람 시간대의 오늘.
     pub today: String,
+    /// 묶음(기한 지남·오늘·다가오는 일)마다 마감이 이른 것부터 50개까지(`UP_NEXT_PER_BUCKET`).
     pub up_next: Vec<HomeTask>,
+    /// 묶음마다의 전체 수. `up_next`보다 많으면 잘린 것이다.
+    pub up_next_counts: UpNextCounts,
     pub recent_tasks: Vec<HomeTask>,
     pub recent_documents: Vec<HomeDocument>,
     pub active_items: Vec<HomeItem>,
@@ -232,20 +257,30 @@ pub async fn home(
         .bind(tz)
         .fetch_one(tx.conn())
         .await?;
-    // 내 업무: 내가 담당이거나, 담당자가 없고 내가 만든 것. 보관된 항목의 업무는 뺀다.
-    let up_next: Vec<TaskRow> = sqlx::query_as(
-        "SELECT t.id, t.item_id, t.workspace_id, app_task_reference(t.id), t.title, t.status, t.due_date
-         FROM tasks t JOIN items i ON i.id = t.item_id JOIN modules m ON m.id = i.module_id
-         WHERE t.status <> 'done' AND t.due_date IS NOT NULL AND t.due_date <= $1 + 7
-           AND i.archived_at IS NULL AND m.archived_at IS NULL
-           AND t.workspace_id IN (SELECT app_my_workspace_ids())
-           AND (EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = app_user_id())
-                OR (NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id)
-                    AND t.created_by = app_user_id()))
-         ORDER BY t.due_date, t.number LIMIT 50",
-    )
+    // 묶음마다 따로 자른다. 한 번에 50개로 자르면 밀린 업무가 많을 때 오늘·다가오는 일이 빠졌다(감사 W23).
+    let up_next: Vec<TaskRow> = sqlx::query_as(&format!(
+        "WITH mine AS ({UP_NEXT_MINE}),
+         ranked AS (
+           SELECT mine.*, row_number() OVER (
+                    PARTITION BY CASE WHEN due_date < $1 THEN 0 WHEN due_date = $1 THEN 1 ELSE 2 END
+                    ORDER BY due_date, number, id) AS rn
+           FROM mine
+         )
+         SELECT id, item_id, workspace_id, app_task_reference(id), title, status, due_date
+         FROM ranked WHERE rn <= $2 ORDER BY due_date, number, id"
+    ))
     .bind(today)
+    .bind(UP_NEXT_PER_BUCKET)
     .fetch_all(tx.conn())
+    .await?;
+    let (overdue, due_today, upcoming): (i64, i64, i64) = sqlx::query_as(&format!(
+        "WITH mine AS ({UP_NEXT_MINE})
+         SELECT count(*) FILTER (WHERE due_date < $1), count(*) FILTER (WHERE due_date = $1),
+                count(*) FILTER (WHERE due_date > $1)
+         FROM mine"
+    ))
+    .bind(today)
+    .fetch_one(tx.conn())
     .await?;
     let recent_tasks: Vec<TaskRow> = sqlx::query_as(
         "SELECT t.id, t.item_id, t.workspace_id, app_task_reference(t.id), t.title, t.status, t.due_date
@@ -301,6 +336,11 @@ pub async fn home(
             .into_iter()
             .map(|r| to_task(r, Some(today)))
             .collect::<Result<_, _>>()?,
+        up_next_counts: UpNextCounts {
+            overdue,
+            today: due_today,
+            upcoming,
+        },
         recent_tasks: recent_tasks
             .into_iter()
             .map(|r| to_task(r, None))

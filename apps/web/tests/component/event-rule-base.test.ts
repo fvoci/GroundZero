@@ -37,7 +37,7 @@ describe('event dialog base version after a rule save', () => {
   async function saveRuleThenForm(ruleResult: EventView): Promise<number | undefined> {
     await setLocale('ko', { reload: false });
     vi.spyOn(api, 'event').mockResolvedValue(event(1, '처음 제목'));
-    vi.spyOn(api, 'setEventRecurrence').mockResolvedValue(ruleResult);
+    const setRule = vi.spyOn(api, 'setEventRecurrence').mockResolvedValue(ruleResult);
     const update = vi
       .spyOn(api, 'updateEvent')
       .mockImplementation((_id: string, _base: number, input) =>
@@ -51,7 +51,7 @@ describe('event dialog base version after a rule save', () => {
     if (!(rule instanceof HTMLFormElement)) throw new Error('no recurrence form');
     await fireEvent.submit(rule);
     await waitFor(() => {
-      expect(api.setEventRecurrence).toHaveBeenCalled();
+      expect(setRule).toHaveBeenCalled();
     });
     await new Promise((r) => setTimeout(r, 0));
     await fireEvent.input(title, { target: { value: '내 제목' } });

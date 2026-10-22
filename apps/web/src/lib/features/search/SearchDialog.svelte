@@ -46,10 +46,16 @@
   let author = $state<string>('any');
   let titleOnly = $state(false);
   let people = $state<{ user_id: string; display_name: string }[]>([]);
+  // 고를 때의 사람 이름. 대화상자를 다시 열어 멤버 목록을 다시 읽는 동안에도 작성자 거르기는 남으므로, 목록이 오기 전에는
+  // 이 이름을 보인다(표시는 "누구나"인데 거르기는 남아 있는 일이 없게. 모듈도 같다).
+  let authorName = $state('');
   // 모듈(D-39 모듈 필터). 기존 API의 `module_id`를 지금 보는 워크스페이스의 모듈 목록과 잇는다. 작성자와 같이 좁히기만
   // 한다. 고른 모듈이 목록에 없으면(다른 워크스페이스로 옮김·목록을 못 읽음) 그 선택을 거둔다.
   let moduleId = $state<string>('any');
   let modules = $state<Module[]>([]);
+  // 고를 때의 모듈 이름. 대화상자를 다시 열어 목록을 다시 읽는 동안에도 선택(거르기)은 남으므로, 목록이 오기 전에는 이
+  // 이름을 보인다(표시는 "모든 모듈"인데 거르기는 남아 있는 일이 없게).
+  let moduleName = $state('');
   // 고른 모듈이 속한 워크스페이스. 워크스페이스가 바뀌면 새 목록이 오기 전에 바로 선택을 거둔다(옛 모듈 id로 검색하지 않게).
   let moduleWs: string | undefined;
   function dropMissingModule(list: readonly Module[]): void {
@@ -83,7 +89,8 @@
   const moduleLabel = $derived(
     moduleId === 'any'
       ? m.search_module_any()
-      : (modules.find((x) => x.id === moduleId)?.name ?? m.search_module_any()),
+      : (modules.find((x) => x.id === moduleId)?.name ??
+          (moduleName === '' ? m.search_module_any() : moduleName)),
   );
   // 고른 사람이 지금 멤버 목록에 없으면(다른 워크스페이스로 옮김·목록을 못 읽음) 그 선택을 거둔다(표시는 "누구나"인데
   // 거르기는 남아 있는 일이 없게). "나"·"누구나"는 그대로.
@@ -122,7 +129,8 @@
       ? m.search_author_any()
       : author === 'me'
         ? m.search_author_me()
-        : (people.find((p) => p.user_id === author)?.display_name ?? m.search_author_any()),
+        : (people.find((p) => p.user_id === author)?.display_name ??
+          (authorName === '' ? m.search_author_any() : authorName)),
   );
   const taskOnly = $derived(taskStatus !== 'any' || mine);
   const reversed = $derived(from !== '' && to !== '' && from > to);
@@ -293,6 +301,7 @@
             onValueChange={(v: string) => {
               moduleId = v === '' ? 'any' : v;
               moduleWs = workspace.id;
+              moduleName = modules.find((x) => x.id === v)?.name ?? '';
               refilter();
             }}
           >
@@ -317,6 +326,7 @@
           value={author}
           onValueChange={(v: string) => {
             author = v === '' ? 'any' : v;
+            authorName = people.find((p) => p.user_id === v)?.display_name ?? '';
             refilter();
           }}
         >

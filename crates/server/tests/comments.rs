@@ -500,3 +500,236 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
         .count();
     assert_eq!(on_task, 1);
 }
+
+/// 항목 하나와 업무 하나(워크스페이스 공개). 업무 응답을 돌려준다.
+async fn item_task(app: &Router, admin: &TestUser, ws: &str, key: &str) -> (Value, Value, Value) {
+    let m = send(
+        app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "project", "name": key, "key": key })),
+    )
+    .await
+    .json;
+    let item = send(
+        app,
+        Method::POST,
+        &format!("/api/modules/{}/items", m["id"].as_str().unwrap()),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "title": "항목" })),
+    )
+    .await
+    .json;
+    let open = send(
+        app,
+        Method::PUT,
+        &format!("/api/items/{}", item["id"].as_str().unwrap()),
+        Some(admin),
+        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+    )
+    .await;
+    assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
+    let task = send(
+        app,
+        Method::POST,
+        &format!("/api/items/{}/tasks", item["id"].as_str().unwrap()),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "title": "보고서" })),
+    )
+    .await
+    .json;
+    (m, item, task)
+}
+
+/// 감사 W11: 보관된 항목에는 새 댓글을 달 수 없는데 쓴 사람의 고치기와 스레드 해결은 통과했다. 둘 다 409이고,
+/// 목록의 고치기·해결 표시도 꺼진다.
+#[tokio::test]
+async fn comments_in_an_archived_item_are_not_edited_or_resolved() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "보관 댓글").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (_, item, task) = item_task(&app, &admin, &ws, "ARC").await;
+    let (status, created) = comment(
+        &app,
+        &writer,
+        json!({ "task_id": task["id"], "body": "초안 올렸어요" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created:?}");
+    let uri = format!("/api/comments/{}", created["id"].as_str().unwrap());
+    let list_uri = format!("/api/tasks/{}/comments", task["id"].as_str().unwrap());
+    let list = send(&app, Method::GET, &list_uri, Some(&writer), None)
+        .await
+        .json;
+    assert_eq!(list[0]["can_edit"], true, "{list:?}");
+    assert_eq!(list[0]["can_resolve"], true, "{list:?}");
+
+    let archived = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{}/archived", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(archived.status, StatusCode::OK, "{:?}", archived.json);
+    let edit = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&writer),
+        Some(json!({ "body": "보관 뒤에 고침" })),
+    )
+    .await;
+    assert_eq!(edit.status, StatusCode::CONFLICT, "{:?}", edit.json);
+    let resolve = send(
+        &app,
+        Method::POST,
+        &format!("{uri}/resolve"),
+        Some(&writer),
+        Some(json!({ "resolved": true })),
+    )
+    .await;
+    assert_eq!(resolve.status, StatusCode::CONFLICT, "{:?}", resolve.json);
+    let list = send(&app, Method::GET, &list_uri, Some(&writer), None)
+        .await
+        .json;
+    assert_eq!(list[0]["body"], "초안 올렸어요");
+    assert_eq!(list[0]["resolved"], false);
+    assert_eq!(list[0]["can_edit"], false, "{list:?}");
+    assert_eq!(list[0]["can_resolve"], false, "{list:?}");
+}
+
+/// 감사 S19: 모듈을 보관하면 그 아래 업무는 읽기 전용인데 마감 알림은 계속 나갔다(항목 알림·홈은 보관된 모듈을 뺀다).
+/// 보관된 모듈의 업무는 마감일이 다가와도 알리지 않는다.
+#[tokio::test]
+async fn due_notices_skip_tasks_in_an_archived_module() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "보관 모듈 기한").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (m, _, task) = item_task(&app, &admin, &ws, "DUE").await;
+    let task_id = task["id"].as_str().unwrap().to_owned();
+    // 마감은 아직 멀다(다른 시험의 작업 실행이 먼저 알리지 않게).
+    let later = time::OffsetDateTime::now_utc().date() + time::Duration::days(20);
+    let updated = send(&app, Method::PUT, &format!("/api/tasks/{task_id}"), Some(&admin), Some(json!({
+        "base_version": task["version"], "title": "보고서", "description": "", "status": "todo",
+        "priority": task["priority"], "start_date": null, "due_date": later.to_string(), "estimate_minutes": null,
+        "tags": [], "milestone": false, "assignee_ids": [writer.id.0] }))).await;
+    assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
+    let archived = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{}/archived", m["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert!(archived.status.is_success(), "{:?}", archived.json);
+    // 날이 지나 마감이 내일이 된다.
+    common::fixture_sql(
+        "UPDATE fvoci.tasks SET due_date = current_date + 1 WHERE id = $1::uuid",
+        &task_id,
+    )
+    .await;
+    fvoci_server::worker::run_all_now(&state.db, None, None)
+        .await
+        .unwrap();
+    let due: Vec<Value> = notes(&app, &writer)
+        .await
+        .into_iter()
+        .filter(|x| x["kind"] == "due" && x["task_id"] == task["id"])
+        .collect();
+    assert!(due.is_empty(), "{due:?}");
+}
+
+/// 감사 C24: 업무 댓글 목록(`GET /api/tasks/{id}/comments`)을 읽는 시험이 없었다. 업무를 볼 수 있는 사람만 읽고(비공개
+/// 항목의 멤버가 아니면 404), 스레드 순서와 권한 표시는 문서 댓글과 같다.
+#[tokio::test]
+async fn task_comments_follow_the_item_access() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "업무 댓글").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let m = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "TCM" }),
+        ),
+    )
+    .await
+    .json;
+    // 새 항목은 비공개다(D-20).
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", m["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "비공개 항목" })),
+    )
+    .await
+    .json;
+    let task = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{}/tasks", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "검토" })),
+    )
+    .await
+    .json;
+    let (status, first) = comment(
+        &app,
+        &admin,
+        json!({ "task_id": task["id"], "body": "첫 의견" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{first:?}");
+    let (status, reply) = comment(
+        &app,
+        &admin,
+        json!({ "task_id": task["id"], "parent_id": first["id"], "body": "답글" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{reply:?}");
+    let uri = format!("/api/tasks/{}/comments", task["id"].as_str().unwrap());
+
+    let hidden = send(&app, Method::GET, &uri, Some(&writer), None).await;
+    assert_eq!(hidden.status, StatusCode::NOT_FOUND, "{:?}", hidden.json);
+    let list = send(&app, Method::GET, &uri, Some(&admin), None).await;
+    assert_eq!(list.status, StatusCode::OK, "{:?}", list.json);
+    let bodies: Vec<&str> = list
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["body"].as_str().unwrap())
+        .collect();
+    assert_eq!(bodies, ["첫 의견", "답글"]);
+    assert_eq!(list.json[0]["can_edit"], true);
+    assert_eq!(list.json[0]["can_resolve"], true);
+    assert_eq!(list.json[1]["can_resolve"], false);
+
+    // 항목을 공개하면 작성자도 읽는다(남의 댓글은 고치지 못한다).
+    let open = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{}", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "title": "비공개 항목", "description": "", "visibility": "workspace" })),
+    )
+    .await;
+    assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
+    let seen = send(&app, Method::GET, &uri, Some(&writer), None).await;
+    assert_eq!(seen.status, StatusCode::OK, "{:?}", seen.json);
+    assert_eq!(seen.json.as_array().unwrap().len(), 2);
+    assert_eq!(seen.json[0]["can_edit"], false);
+}

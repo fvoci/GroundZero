@@ -147,6 +147,9 @@ async fn study_units_are_shared_and_progress_is_personal() {
     let units = p["units"].as_array().unwrap().clone();
     assert_eq!(units.len(), 3);
     let today = time::OffsetDateTime::now_utc().date();
+    // 밀린 단위의 계획일은 오늘 기준(참여자 집계의 today는 서버 날짜에서 하루 안이어야 한다).
+    let two_days_ago = today - time::Duration::days(2);
+    let yesterday = today - time::Duration::days(1);
     let progress =
         |unit: &Value| format!("/api/study-units/{}/progress", unit["id"].as_str().unwrap());
     let done = send(
@@ -175,14 +178,17 @@ async fn study_units_are_shared_and_progress_is_personal() {
         Some(&reader),
         Some(json!({
         "entries": [
-            { "unit_id": units[1]["id"], "planned_on": "2026-10-20" },
-            { "unit_id": units[2]["id"], "planned_on": "2026-10-21" }
+            { "unit_id": units[1]["id"], "planned_on": two_days_ago.to_string() },
+            { "unit_id": units[2]["id"], "planned_on": yesterday.to_string() }
         ] })),
     )
     .await;
     assert_eq!(replan.json["planned"], 2, "{:?}", replan.json);
     let mine = plan(&app, &reader, &item).await;
-    assert_eq!(mine["units"][1]["mine"]["planned_on"], "2026-10-20");
+    assert_eq!(
+        mine["units"][1]["mine"]["planned_on"],
+        two_days_ago.to_string()
+    );
     assert_eq!(mine["units"][1]["mine"]["status"], "not_started");
     assert_eq!(mine["units"][0]["mine"]["status"], "done");
     let foreign = send(
@@ -204,7 +210,7 @@ async fn study_units_are_shared_and_progress_is_personal() {
             send(
                 &app,
                 Method::GET,
-                &format!("/api/items/{item}/study/participants?today=2026-10-30"),
+                &format!("/api/items/{item}/study/participants?today={today}"),
                 Some(&user),
                 None,
             )
@@ -218,6 +224,22 @@ async fn study_units_are_shared_and_progress_is_personal() {
     assert_eq!(list[0]["done_amount"], 30);
     assert_eq!(list[0]["overdue"], 2);
     assert!(list[0].get("note").is_none());
+    // 감사 S9: 서버 날짜에서 하루 넘게 떨어진 today는 400(today를 바꿔 가며 물어 밀린 수의 계단에서 다른 사람의
+    // 개인 계획일을 알아내지 못하게).
+    for far in [
+        today + time::Duration::days(30),
+        today - time::Duration::days(30),
+    ] {
+        let r = send(
+            &app,
+            Method::GET,
+            &format!("/api/items/{item}/study/participants?today={far}"),
+            Some(&writer),
+            None,
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+    }
     send(
         &app,
         Method::PUT,
@@ -316,6 +338,9 @@ async fn two_writers_on_the_same_unit_version_do_not_overwrite() {
     )
     .await;
     assert_eq!(second.status, StatusCode::CONFLICT, "{:?}", second.json);
+    // 판 충돌은 다시 보내라는 재시도가 아니라 다시 읽으라는 뜻이다(감사 C32, #77): 409 `invalid_state`와 SQL의 설명 그대로.
+    assert_eq!(second.json["error"], "invalid_state");
+    assert_eq!(second.json["message"], "the unit changed; reload it");
     let now = plan(&app, &writer, &item).await["units"][0].clone();
     assert_eq!(now["title"], "1장 기술통계");
     assert_eq!(now["unit"], "pages");

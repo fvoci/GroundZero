@@ -47,7 +47,8 @@ enum Command {
         /// OIDC 통합 테스트용 Keycloak도 함께 띄운다.
         #[arg(long)]
         oidc: bool,
-        /// Compose를 띄우지 않고 환경 변수(`DATABASE_URL` 등)로 주어진 외부 서비스를 쓴다. CI 컨테이너 job용.
+        /// Compose를 띄우지 않고 환경 변수(`FVOCI_TEST_PG_HOST_PORT`·`FVOCI_TEST_SEARCH_URL`, `--oidc`면
+        /// `FVOCI_TEST_OIDC_ISSUER`)로 주어진 외부 서비스를 쓴다. CI job용.
         #[arg(long)]
         external_services: bool,
         /// PostgreSQL 대신 셀프호스트 Supabase 공식 구성(고정 revision의 db·rest·supavisor)을 DB로 쓴다(D-88).
@@ -68,7 +69,8 @@ enum Command {
     },
     /// 이 체크아웃이 만든 Compose 자원(dev·test)을 정리한다. 다른 체크아웃은 건드리지 않는다.
     Down,
-    /// `contracts/openapi.json`을 서버 정의에서 다시 생성한다. `--check`는 최신 여부만 본다.
+    /// `contracts/openapi.json`을 서버 정의에서 다시 생성한다. `--check`는 그 파일과 거기서 생성한 TS client
+    /// (`packages/api-client/src/generated/schema.ts`)의 최신 여부만 본다.
     Openapi {
         #[arg(long)]
         check: bool,

@@ -149,6 +149,13 @@ pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -
             } else {
                 None
             };
+            // 시험마다 앱 상태(연결 풀 최대 16)를 따로 만드므로 한 바이너리에서 동시에 도는 시험을 4개로 묶는다. session
+            // 모드는 클라이언트 연결마다 서버 연결을 잡고, 풀(`POOLER_DEFAULT_POOL_SIZE` 64)을 넘는 클라이언트는 기다리지 않고
+            // 거절한다(`EMAXCONNSESSION`, 시험에는 500 `XX000`): 64 / 16 = 4. 직접 연결도 db의 `max_connections` 100에서
+            // superuser 몫 3과 Supabase 자체 서비스 몫(약 10)을 빼면 남는 것이 적다. 기본값(코어 수)이면 32코어 기계에서 시험이
+            // 많은 바이너리(collab)가 session 단계에서 풀과 db 연결을 다 썼고 직접 연결 단계에서도 97개 가운데 94개까지 썼다.
+            // CI 러너는 4코어라 그대로다.
+            let _threads = sh.push_env("RUST_TEST_THREADS", "4");
             {
                 println!("==> integration tests, direct connection");
                 let _app = sh.push_env("DATABASE_URL", &urls.app);
@@ -193,8 +200,9 @@ pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -
     result
 }
 
-/// 외부에서 준비된 서비스로 테스트한다(CI 컨테이너 job). 필요한 환경 변수가 없으면 실패한다.
-/// `DATABASE_ADMIN_URL`의 호스트로 세 역할 URL을 만든다.
+/// 외부에서 준비된 서비스로 테스트한다(CI job). `FVOCI_TEST_PG_HOST_PORT`(PostgreSQL `호스트:포트`)와
+/// `FVOCI_TEST_SEARCH_URL`, `--oidc`면 `FVOCI_TEST_OIDC_ISSUER`도 없으면 실패한다. 세 역할 URL과 `DATABASE_URL`은
+/// 그 호스트·포트와 테스트 자격 증명으로 만든다. `FVOCI_TEST_S3_ENDPOINT`가 없으면 S3 테스트를 뺀다.
 fn run_external(root: &Path, oidc: bool) -> Result<()> {
     let sh = Shell::new()?;
     sh.change_dir(root);
