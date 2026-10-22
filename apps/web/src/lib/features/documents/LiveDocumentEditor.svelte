@@ -23,6 +23,7 @@
   import {
     adoptOrphans,
     clearDraft,
+    loadDraft,
     loadOffers,
     takeOrReserve,
     removeOffer,
@@ -110,6 +111,18 @@
     return watch?.dirty === true || (start.can_edit && title.trim() !== savedTitle);
   }
 
+  // 서버가 연결을 닫아(권한·세션 끝 4403, 문서가 바뀜 4409 등) 확인받지 못한 편집이 있다. 서버에 반영하지 않은 것과
+  // 화면에서 없애는 것은 다르다: 초안으로 남겼으면(`kept`) 다시 열어 고를 때까지 알리고, 남기지 못했으면(`lost`) 그렇게
+  // 알리며 화면을 바꾸지 않아 내용을 옮겨 둘 수 있게 한다.
+  let unsaved = $state<'kept' | 'lost' | undefined>(undefined);
+
+  /** 서버가 연결을 닫을 때: 확인받지 못한 편집이 있으면 초안으로 남기고 알린다. 남기지 못했으면 거짓. */
+  function keepUnsaved(): boolean {
+    if (watch?.dirty !== true) return true;
+    unsaved = keepDraft() ? 'kept' : 'lost';
+    return unsaved === 'kept';
+  }
+
   /** 처음 맞춰진 뒤 지난 초안을 고르게 한다. */
   function compareEarlier(): void {
     if (checkedEarlier) return;
@@ -126,6 +139,10 @@
     // `found`는 $state라 넣은 객체의 프록시가 된다. 어느 것을 고르게 하는지는 따로 적는다(객체 비교 대신).
     foundIsReserved = rest[0] === undefined && reserved !== undefined;
     found = rest[0] ?? reserved;
+    // 남긴 초안을 모두 골랐다(보존·버림·이미 반영). 고를 것이 더 있거나 이 탭에 새로 남긴 초안이 있으면 알림을 둔다.
+    if (unsaved === 'kept' && found === undefined && loadDraft(start.id) === undefined) {
+      unsaved = undefined;
+    }
   }
 
   /** 지금 고르게 한 초안을 줄에서 뺀다(보존했거나 버렸다). 다음 것이 있으면 이어 고르게 한다. */
@@ -176,22 +193,28 @@
         if (event?.code === 1006) void checkRefusal(next);
         return;
       }
-      keepIfDirty();
+      if (stop === 'account') {
+        // 이 편집기를 연 계정이 아닌 세션으로 다시 붙었다(4412). 방에 들어가지 않았다. 확인받지 못한 편집(저장하지 않은
+        // 제목 포함)을 앞 계정의 초안으로 남겼으면 이 창을 지금 계정으로 다시 읽는다. 남기지 못했으면(저장소 가득 참 등)
+        // 다시 읽으면 사라지므로 화면에 두고 알린다(사람이 옮겨 둔 뒤 새로 고친다).
+        next.provider.disconnect();
+        stopped = stop;
+        if (!hasPending() || keepDraft()) switchAccount();
+        else accountUnsavedLost = true;
+        return;
+      }
+      const kept = keepUnsaved();
       next.provider.disconnect();
-      if (stop === 'reload') {
+      if (!kept) {
+        // 남기지 못한 편집이 화면에만 있다. 바꾸지 않고 멈춰 사람이 옮겨 둔 뒤 다시 연결하게 한다.
+        stopped = stop;
+      } else if (stop === 'reload') {
         // 문서가 다른 길(복원 등)로 바뀌었다. 옛 내용을 섞지 않도록 새 문서로 다시 연다.
         restart();
       } else if (stop === 'off') {
         onrealtimeoff?.();
       } else {
         stopped = stop;
-        // 이 편집기를 연 계정이 아닌 세션으로 다시 붙었다(4412). 방에 들어가지 않았다. 확인받지 못한 편집을 앞 계정의
-        // 초안으로 남겼으면 이 창을 지금 계정으로 다시 읽는다. 남기지 못했으면(저장소 가득 참 등) 다시 읽으면 사라지므로
-        // 화면에 두고 알린다(사람이 옮겨 둔 뒤 새로 고친다).
-        if (stop === 'account') {
-          if (!hasPending() || keepDraft()) switchAccount();
-          else accountUnsavedLost = true;
-        }
       }
     });
     session = next;
@@ -207,13 +230,14 @@
     try {
       const doc = await api.document(start.id);
       if (session?.provider !== current.provider || doc.realtime) return;
-      keepIfDirty();
+      const kept = keepUnsaved();
       current.provider.disconnect();
-      onrealtimeoff?.();
+      if (kept) onrealtimeoff?.();
+      else stopped = 'off';
     } catch (e: unknown) {
       if (session?.provider !== current.provider || !(e instanceof ApiError)) return;
       if (e.status === 401 || e.status === 403 || e.status === 404) {
-        keepIfDirty();
+        keepUnsaved();
         current.provider.disconnect();
         stopped = 'denied';
       }
@@ -228,6 +252,12 @@
       onreload();
       return;
     }
+    if (stopped === 'off' && onrealtimeoff !== undefined) {
+      onrealtimeoff();
+      return;
+    }
+    // 남기지 못한 편집은 사람이 옮겨 둔 뒤 다시 연결했다(새 내용으로 바뀐다).
+    if (unsaved === 'lost') unsaved = undefined;
     if (session !== undefined) closeLive(session);
     session = undefined;
     stopped = undefined;
@@ -403,6 +433,13 @@
       >
     {/if}
   </form>
+  {#if unsaved === 'lost'}
+    <p role="alert" class="text-sm text-destructive">{m.documents_live_unsaved_lost()}</p>
+  {:else if unsaved === 'kept' && found === undefined}
+    <p role="status" aria-live="polite" class="text-sm text-destructive">
+      {m.documents_live_unsaved_kept()}
+    </p>
+  {/if}
   {#if found !== undefined}
     <div
       class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"

@@ -954,6 +954,11 @@ export interface RevisionSummaryView {
   author_name: string | null;
   created_at: string;
   restored_from: number | null;
+  /**
+   * 저장한 사람이 고친 사람 대신 남긴 리비전(실시간 편집, D-95)이면 실제로 고친 사람. 보통 리비전은 null, 기록이 없으면 빈
+   * 목록. 이름을 볼 수 없는 사람은 null.
+   */
+  edited_by_names: (string | null)[] | null;
 }
 
 export interface RevisionView extends RevisionSummaryView {
@@ -969,6 +974,17 @@ function optInt(o: Record<string, unknown>, key: string): number | null {
   return v;
 }
 
+/** 이름 목록(항목은 이름이나 null). 없으면 null. */
+function optNameList(o: Record<string, unknown>, key: string): (string | null)[] | null {
+  const v = o[key];
+  if (v === null || v === undefined) return null;
+  if (!Array.isArray(v)) throw new TypeError(`expected array or null at ${key}`);
+  return v.map((name: unknown) => {
+    if (name === null || typeof name === 'string') return name;
+    throw new TypeError(`expected string or null in ${key}`);
+  });
+}
+
 export function parseRevisionSummary(value: Json): RevisionSummaryView {
   const o = rec(value, 'revision');
   return {
@@ -977,6 +993,7 @@ export function parseRevisionSummary(value: Json): RevisionSummaryView {
     author_name: optStr(o, 'author_name'),
     created_at: str(o, 'created_at'),
     restored_from: optInt(o, 'restored_from'),
+    edited_by_names: optNameList(o, 'edited_by_names'),
   };
 }
 

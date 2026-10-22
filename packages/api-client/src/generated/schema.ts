@@ -237,7 +237,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. */
+        /**
+         * 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인
+         *     방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문)다. 편집은 그대로
+         *     남고 다시 하면 된다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 경우처럼 다시 해도 남길 수 없을 때도 같은 409로
+         *     옮기지 않는다(문구에 "try again"이 없다). 다른 변경이 문서나 그 자리를 쥐어 잠금 하나를
+         *     한도(`LOCK_LIMIT`)보다 오래 기다리면 옮기지 않고 409다(편집은 방에 남는다, 다시 하면 된다).
+         */
         post: operations["move_document"];
         delete?: never;
         options?: never;
@@ -364,7 +370,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 옛 리비전의 내용으로 새 리비전을 만든다(쓰기 권한). 기준 리비전이 지났으면 409와 서버 최신본. */
+        /**
+         * 옛 리비전의 내용으로 새 리비전을 만든다(쓰기 권한). 기준 리비전이 지났으면 409와 서버 최신본. 실시간 편집(열린 방의
+         *     편집이나 방 없이 남은 저장 대기 상태)을 먼저 리비전으로 남기지 못하면 복원하지 않고 409(오류 본문, `invalid_state`)다.
+         *     편집은 남는다. 남겼으면 기준이 지나 최신본과 함께 409다.
+         */
         post: operations["restore_revision"];
         delete?: never;
         options?: never;
@@ -3396,6 +3406,15 @@ export interface components {
          * @enum {string}
          */
         ModuleKind: "project" | "research" | "study" | "course" | "hobby";
+        /**
+         * @description 이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+         *     - `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).
+         *     - `ErrorBody`(`error: "invalid_state"`): 옮기지 않았다. 실시간 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저
+         *       리비전으로 남기지 못했거나(편집은 남는다), 다른 변경이 문서나 그 자리를 잠금 한도보다 오래 쥐었거나, 방이 바쁘거나
+         *       닫혔다. `message`가 "try again"으로 끝나면 다시 하면 된다. 그 밖(본문 검사를 통과하지 못하는 편집, 그 사이 다른 길로
+         *       바뀐 본문)은 문서를 다시 열어 보고 판단한다.
+         */
+        MoveConflict: components["schemas"]["MovePreview"] | components["schemas"]["ErrorBody"];
         /** @description 이동 요청. 미리보기에서 접근 변화를 확인했다는 표시(`acknowledge`)가 있어야 이동한다. */
         MoveDocument: {
             acknowledged?: null | components["schemas"]["AcknowledgedPreview"];
@@ -3837,6 +3856,13 @@ export interface components {
             visible: boolean;
             workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
+        /**
+         * @description 복원의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+         *     - `ConflictBody`(`current` 포함): 기준 리비전이 지났다(먼저 남긴 실시간 편집의 리비전 때문일 수 있다).
+         *     - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 복원하지 않았다. 실시간 편집을 먼저 리비전으로 남기지 못했거나
+         *       (편집은 남는다), 다른 변경이 문서를 잠금 한도보다 오래 쥐었거나, 방이 바쁘거나 닫혔다.
+         */
+        RestoreConflict: components["schemas"]["ConflictBody"] | components["schemas"]["ErrorBody"];
         /** @description 복원 요청. `base_revision`은 사용자가 보고 있던 현재 리비전이다. */
         RestoreRevision: {
             /** Format: int32 */
@@ -3850,6 +3876,8 @@ export interface components {
             body: Record<string, never>;
             /** Format: date-time */
             created_at: string;
+            /** @description `RevisionSummary::edited_by_names`와 같다. */
+            edited_by_names?: (string | null)[] | null;
             /** Format: int32 */
             restored_from?: number | null;
             /** Format: int32 */
@@ -3864,6 +3892,11 @@ export interface components {
             author_name?: string | null;
             /** Format: date-time */
             created_at: string;
+            /**
+             * @description 저장한 사람이 고친 사람 대신 남긴 리비전(실시간 편집, D-95)이면 실제로 고친 사람(마지막이 앞). 보통 리비전은
+             *     없음, 대신 저장했으나 고친 사람 기록이 없으면 빈 목록. 이름을 볼 수 없는 사람은 `author_name`처럼 null이다.
+             */
+            edited_by_names?: (string | null)[] | null;
             /**
              * Format: int32
              * @description 복원으로 만든 리비전이면 원본 리비전 번호.
@@ -5362,7 +5395,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MovePreview"];
+                    "application/json": components["schemas"]["MoveConflict"];
                 };
             };
         };
@@ -5702,12 +5735,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description 기준이 지났으면 ConflictBody(최신본 포함), 실시간 편집을 먼저 남기지 못했거나 잠금 한도를 넘었으면 ErrorBody(`invalid_state`) */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConflictBody"];
+                    "application/json": components["schemas"]["RestoreConflict"];
                 };
             };
         };

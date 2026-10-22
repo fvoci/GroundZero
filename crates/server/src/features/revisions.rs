@@ -21,8 +21,8 @@ use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
-    ConflictBody, Document, SCHEMA_VERSION, access, conflict, document_reply, load_with_access,
-    to_document, validate_body,
+    ConflictBody, Document, SCHEMA_VERSION, access, conflict, document_reply, limit_lock_wait,
+    load_with_access, lock_limit_error, to_document, validate_body,
 };
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
@@ -43,6 +43,9 @@ pub struct RevisionSummary {
     pub created_at: OffsetDateTime,
     /// 복원으로 만든 리비전이면 원본 리비전 번호.
     pub restored_from: Option<i32>,
+    /// 저장한 사람이 고친 사람 대신 남긴 리비전(실시간 편집, D-95)이면 실제로 고친 사람(마지막이 앞). 보통 리비전은
+    /// 없음, 대신 저장했으나 고친 사람 기록이 없으면 빈 목록. 이름을 볼 수 없는 사람은 `author_name`처럼 null이다.
+    pub edited_by_names: Option<Vec<Option<String>>>,
 }
 
 /// 리비전 하나(본문 포함).
@@ -58,7 +61,15 @@ pub struct Revision {
     #[schema(value_type = String, format = DateTime)]
     pub created_at: OffsetDateTime,
     pub restored_from: Option<i32>,
+    /// `RevisionSummary::edited_by_names`와 같다.
+    pub edited_by_names: Option<Vec<Option<String>>>,
 }
+
+/// 대신 저장한 리비전의 실제 편집자 이름(`edited_by` 순서). 보통 리비전은 NULL, 기록이 없으면 빈 배열. 볼 수 없는
+/// 사용자는 작성자 이름과 같이 NULL(사용자 행이 RLS로 걸러진다).
+const EDITED_BY_NAMES: &str = "CASE WHEN r.edited_by IS NULL THEN NULL
+         ELSE ARRAY(SELECT e.display_name FROM unnest(r.edited_by) WITH ORDINALITY AS x(id, n)
+                    LEFT JOIN users e ON e.id = x.id ORDER BY x.n) END";
 
 /// 목록 범위. `before`보다 작은 리비전을 최신순으로 돌려준다.
 #[derive(Debug, Deserialize, IntoParams)]
@@ -74,7 +85,14 @@ pub struct RestoreRevision {
     pub base_revision: i32,
 }
 
-type SummaryRow = (i32, String, Option<String>, OffsetDateTime, Option<i32>);
+type SummaryRow = (
+    i32,
+    String,
+    Option<String>,
+    OffsetDateTime,
+    Option<i32>,
+    Option<Vec<Option<String>>>,
+);
 
 /// 리비전 목록(최신순, 한 번에 100개). 볼 수 없으면 404.
 #[utoipa::path(get, path = "/api/documents/{document_id}/revisions", operation_id = "list_revisions",
@@ -88,12 +106,12 @@ pub async fn list(
 ) -> Result<Json<Vec<RevisionSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
-    let rows: Vec<SummaryRow> = sqlx::query_as(
-        "SELECT r.revision, r.title, u.display_name, r.created_at, r.restored_from
+    let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
+        "SELECT r.revision, r.title, u.display_name, r.created_at, r.restored_from, {EDITED_BY_NAMES}
          FROM document_revisions r LEFT JOIN users u ON u.id = r.author
          WHERE r.document_id = $1 AND ($2::integer IS NULL OR r.revision < $2)
-         ORDER BY r.revision DESC LIMIT $3",
-    )
+         ORDER BY r.revision DESC LIMIT $3"
+    ))
     .bind(id)
     .bind(page.before)
     .bind(PAGE)
@@ -103,12 +121,15 @@ pub async fn list(
     Ok(Json(
         rows.into_iter()
             .map(
-                |(revision, title, author_name, created_at, restored_from)| RevisionSummary {
-                    revision,
-                    title,
-                    author_name,
-                    created_at,
-                    restored_from,
+                |(revision, title, author_name, created_at, restored_from, edited_by_names)| {
+                    RevisionSummary {
+                        revision,
+                        title,
+                        author_name,
+                        created_at,
+                        restored_from,
+                        edited_by_names,
+                    }
                 },
             )
             .collect(),
@@ -123,6 +144,7 @@ type RevisionRow = (
     Option<String>,
     OffsetDateTime,
     Option<i32>,
+    Option<Vec<Option<String>>>,
 );
 
 /// 리비전 하나. 문서나 리비전이 없거나 볼 수 없으면 404.
@@ -146,26 +168,35 @@ async fn fetch_revision(
     id: DocumentId,
     revision: i32,
 ) -> Result<Option<Revision>, AppError> {
-    let row: Option<RevisionRow> = sqlx::query_as(
-        "SELECT r.revision, r.title, r.body, r.schema_version, u.display_name, r.created_at, r.restored_from
+    let row: Option<RevisionRow> = sqlx::query_as(&format!(
+        "SELECT r.revision, r.title, r.body, r.schema_version, u.display_name, r.created_at, r.restored_from,
+                {EDITED_BY_NAMES}
          FROM document_revisions r LEFT JOIN users u ON u.id = r.author
-         WHERE r.document_id = $1 AND r.revision = $2",
-    )
+         WHERE r.document_id = $1 AND r.revision = $2"
+    ))
     .bind(id)
     .bind(revision)
     .fetch_optional(tx.conn())
     .await?;
     Ok(row.map(
-        |(revision, title, body, schema_version, author_name, created_at, restored_from)| {
-            Revision {
-                revision,
-                title,
-                body,
-                schema_version,
-                author_name,
-                created_at,
-                restored_from,
-            }
+        |(
+            revision,
+            title,
+            body,
+            schema_version,
+            author_name,
+            created_at,
+            restored_from,
+            edited_by_names,
+        )| Revision {
+            revision,
+            title,
+            body,
+            schema_version,
+            author_name,
+            created_at,
+            restored_from,
+            edited_by_names,
         },
     ))
 }
@@ -221,12 +252,28 @@ pub async fn export(
     Ok(Json(found))
 }
 
-/// 옛 리비전의 내용으로 새 리비전을 만든다(쓰기 권한). 기준 리비전이 지났으면 409와 서버 최신본.
+/// 복원의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+/// - `ConflictBody`(`current` 포함): 기준 리비전이 지났다(먼저 남긴 실시간 편집의 리비전 때문일 수 있다).
+/// - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 복원하지 않았다. 실시간 편집을 먼저 리비전으로 남기지 못했거나
+///   (편집은 남는다), 다른 변경이 문서를 잠금 한도보다 오래 쥐었거나, 방이 바쁘거나 닫혔다.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum RestoreConflict {
+    Stale(Box<ConflictBody>),
+    State(ErrorBody),
+}
+
+/// 옛 리비전의 내용으로 새 리비전을 만든다(쓰기 권한). 기준 리비전이 지났으면 409와 서버 최신본. 실시간 편집(열린 방의
+/// 편집이나 방 없이 남은 저장 대기 상태)을 먼저 리비전으로 남기지 못하면 복원하지 않고 409(오류 본문, `invalid_state`)다.
+/// 편집은 남는다. 남겼으면 기준이 지나 최신본과 함께 409다.
 #[utoipa::path(post, path = "/api/documents/{document_id}/revisions/{revision}/restore", operation_id = "restore_revision",
     params(("document_id" = String, Path, format = Uuid), ("revision" = i32, Path)),
     request_body = RestoreRevision,
     responses((status = 200, body = Document), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ConflictBody)), tag = "documents")]
+              (status = 404, body = ErrorBody),
+              (status = 409, body = RestoreConflict,
+               description = "기준이 지났으면 ConflictBody(최신본 포함), 실시간 편집을 먼저 남기지 못했거나 잠금 한도를 넘었으면 ErrorBody(`invalid_state`)")),
+    tag = "documents")]
 pub async fn restore(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -241,35 +288,22 @@ pub async fn restore(
         base_revision: input.base_revision,
     };
     // 실시간 방이 열려 있으면 그 방이 체크포인트(리비전으로 남기지 않은 편집 남기기) → 복원 → 방 초기화를 한 명령으로
-    // 한다. 그 사이 편집이 끼어들지 않고, 남겼는지 확인되지 않으면 복원하지 않는다(D-27). 기준은 화면이 보낸 그대로다:
-    // 체크포인트가 리비전을 남겼으면 충돌로 알려 사람이 지금 내용을 보고 다시 하게 한다. 고칠 수 없는 사람의 요청은
-    // 방을 건드리지 않고 아래에서 거절된다.
+    // 한다. 그 사이 편집이 끼어들지 않고, 남겼는지 확인되지 않으면 복원하지 않는다(D-27). 방이 없으면 방이 새로 열리지
+    // 않게 막은 채 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남긴다(D-95 조건 4, 상태의 편집자만 남기고 복원하는 사람은
+    // 대신 저장하지 않는다. 남기지 못하면 409). 기준은 화면이 보낸 그대로다: 체크포인트가 리비전을 남겼으면 충돌로 알려 사람이 지금 내용을 보고
+    // 다시 하게 한다. 고칠 수 없는 사람의 요청은 방과 저장 대기 상태를 건드리지 않고 여기서 거절한다(볼 수 없으면 404, 읽기만
+    // 하면 403). 그 사람이 막 쓰기 권한을 얻었더라도 막음·체크포인트 없이 복원하지 않는다(그 사이 열린 방의 편집을 잃지
+    // 않게, #64 반박 검증). 권한의 최종 확인은 복원 함수가 한다.
     let mut tx = state.db.begin_as(user).await?;
-    let can_write = access(&mut tx, id).await?.is_some_and(|a| a.can_write());
+    let access_now = access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
     tx.commit().await?;
-    let in_room = if can_write {
-        state.collab.restore(request).await
-    } else {
-        None
-    };
-    let outcome = match in_room {
-        Some(outcome) => outcome?,
-        None => {
-            let request = RestoreRequest {
-                doc: id,
-                user,
-                revision,
-                request_id: input.request_id,
-                base_revision: input.base_revision,
-            };
-            let outcome = restore_in_db(&state.db, &state.config.limits, &request).await?;
-            // 그 사이 새로 열린 방이 있으면 저장 없이 닫고 복원된 본문으로 다시 열게 한다(D-70).
-            if outcome == "restored" {
-                state.collab.reset(id).await;
-            }
-            outcome
-        }
-    };
+    if !access_now.can_write() {
+        return Err(AppError::Forbidden);
+    }
+    let outcome = state
+        .collab
+        .restore(&state.db, &state.config.limits, request)
+        .await?;
     let mut tx = state.db.begin_as(user).await?;
     let (row, access) = load_with_access(&mut tx, id).await?;
     tx.commit().await?;
@@ -287,6 +321,8 @@ pub(crate) async fn restore_in_db(
     request: &RestoreRequest,
 ) -> Result<String, AppError> {
     let mut tx = db.begin_as(request.user).await?;
+    // 열린 방은 이 복원을 자기 명령 안에서 한다: 문서·항목 잠금을 한도까지만 기다린다(이동과 같다, `documents::LOCK_LIMIT`).
+    limit_lock_wait(&mut tx).await?;
     // 복원할 내용도 지금의 한도(제목 길이·본문 크기·참조 수)를 지켜야 한다. 한도를 낮춘 뒤 옛 리비전으로
     // 한도를 넘는 문서가 다시 생기지 않게 한다. 볼 수 없거나 없는 리비전은 아래 함수와 같이 404.
     let source: Option<(String, Value)> = sqlx::query_as(
@@ -310,7 +346,12 @@ pub(crate) async fn restore_in_db(
             .bind(crate::db::new_ids(2))
             .fetch_one(tx.conn())
             .await
-            .map_err(AppError::from_db_function)?;
+            .map_err(|err| {
+                lock_limit_error(
+                    err,
+                    "another change is holding the document; nothing was restored, try again",
+                )
+            })?;
     tx.commit().await?;
     Ok(outcome)
 }
