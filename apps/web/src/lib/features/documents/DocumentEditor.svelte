@@ -12,8 +12,13 @@
   import { api, ApiError, fileContentUrl, NetworkError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { RetryKey } from '$lib/api/retry-key';
-  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
+  import {
+    accountSwitching,
+    reportSessionExpired,
+    switchAccount,
+  } from '$lib/features/feedback/feedback.svelte';
   import { uploadFile } from '$lib/features/files/upload';
+  import { me as currentUser } from '$lib/me.svelte';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { m } from '$lib/paraglide/messages.js';
   import { router, standalonePath } from '$lib/router.svelte';
@@ -182,6 +187,30 @@
       message = blocked;
       return;
     }
+    // 보내기 전에 이 창을 연 계정이 아직 로그인돼 있는지 본다. 다른 탭에서 다른 계정으로 로그인하면 쿠키가 바뀌어,
+    // 이 창이 돌아오기(focus) 전에 나가는 예약·재시도 저장이 앞 계정의 편집을 새 계정의 이름으로 남긴다. 직접 누른
+    // 저장도 화면은 앞 계정의 것이라 같게 본다. 확인하지 못하면 보내지 않는다. 요청 id·보낼 내용은 확인 뒤에 정한다.
+    status = 'saving';
+    const who = await signedInAs();
+    if (who === 'gone') return;
+    if (who === 'other') {
+      // 입력은 앞 계정의 초안(사용자별 키)으로 이미 남아 있다(edited()).
+      status = 'dirty';
+      switchAccount();
+      return;
+    }
+    if (who === 'signed-out') {
+      status = 'signed-out';
+      message = m.documents_signed_out();
+      reportSessionExpired();
+      return;
+    }
+    if (who === 'unknown') {
+      status = 'retrying';
+      message = m.documents_save_retrying();
+      schedule(RETRY_DELAY_MS);
+      return;
+    }
     const snap = snapshot();
     if (attempt?.snapshot !== snap) attempt = { requestId: newRequestId(), snapshot: snap };
     const { requestId } = attempt;
@@ -246,6 +275,24 @@
         message = errorText(error, m.documents_save_failed());
       }
     }
+  }
+
+  /**
+   * 지금 로그인한 계정이 이 창을 연 계정인지. 묻지 못했거나(연결 오류 등) 이 창의 계정을 모르면 `unknown`, 묻는 사이
+   * 편집기가 사라졌으면 `gone`.
+   */
+  async function signedInAs(): Promise<'same' | 'other' | 'signed-out' | 'unknown' | 'gone'> {
+    const mine = currentUser.userId;
+    if (mine === '') return 'unknown';
+    let now: Awaited<ReturnType<typeof api.me>>;
+    try {
+      now = await api.me();
+    } catch {
+      return destroyed ? 'gone' : 'unknown';
+    }
+    if (destroyed) return 'gone';
+    if (now === undefined) return 'signed-out';
+    return now.id === mine ? 'same' : 'other';
   }
 
   /** 저장이 409(상태)로 거절됐을 때 그사이 실시간이 켜졌는지. 확인하지 못하면 아니라고 본다. */

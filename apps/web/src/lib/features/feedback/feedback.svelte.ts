@@ -92,3 +92,21 @@ export function markAccountSwitch(): void {
 export function accountSwitching(): boolean {
   return switching;
 }
+
+// 계정이 바뀐 것을 안 곳(창 복귀 확인 밖, 예: 문서의 배경 저장)에서 이 창을 다시 읽는 방법. FeedbackHost가 정한다.
+let reloadForSwitch: (() => void) | undefined;
+
+/** 계정이 바뀌었을 때 이 창을 다시 읽는 방법을 정한다(FeedbackHost). 정리 함수를 돌려준다. */
+export function onAccountSwitch(reload: () => void): () => void {
+  reloadForSwitch = reload;
+  return () => {
+    if (reloadForSwitch === reload) reloadForSwitch = undefined;
+  };
+}
+
+/** 다른 계정으로 바뀐 것을 알았을 때 부른다: 표시하고 이 창을 처음부터 다시 읽는다. */
+export function switchAccount(): void {
+  markAccountSwitch();
+  if (reloadForSwitch !== undefined) reloadForSwitch();
+  else window.location.reload();
+}

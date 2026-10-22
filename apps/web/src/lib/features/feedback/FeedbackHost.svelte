@@ -9,7 +9,13 @@
   import { router } from '$lib/router.svelte';
   import { Toaster } from '$lib/ui/sonner';
 
-  import { auth, connection, markAccountSwitch, watchConnection } from './feedback.svelte';
+  import {
+    auth,
+    connection,
+    markAccountSwitch,
+    onAccountSwitch,
+    watchConnection,
+  } from './feedback.svelte';
 
   interface Props {
     /** 이 창을 처음부터 다시 읽는다(시험에서 바꿔 끼운다). */
@@ -25,6 +31,8 @@
   const mobile = new IsMobile();
 
   $effect(() => watchConnection());
+  // 화면(문서의 배경 저장 등)이 계정이 바뀐 것을 알면 아래 확인과 같게 다시 읽는다.
+  $effect(() => onAccountSwitch(reload));
 
   // 이 창으로 돌아올 때마다 누구로 로그인돼 있는지 다시 확인한다(다른 탭에서 로그아웃하고 다른 계정으로 로그인했을 수
   // 있다. 세션이 끝난 동안이 아니어도 쿠키는 이미 바뀌었다). 같은 계정이면 화면과 입력은 그대로 두고, 세션이 끝난
