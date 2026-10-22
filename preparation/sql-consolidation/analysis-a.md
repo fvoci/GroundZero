@@ -29,6 +29,68 @@ D-92의 과거 개발 버전 호환 제거와 구분한다. `auth.uid()`, Supaba
 설치 문서의 `db bootstrap` → `db migrate`, xtask의 같은 명령 호출, 백업/복구의 원장 확인이 유지되어야 한다.
 준비 후보는 운영 설치 경로에 연결하지 않는다. 실제 전환 시에는 최종 기준선, 새 SQLx 버전 정책, 기존 개발 DB 처리와 문서 갱신이 별도 구현 범위다.
 
+## 공통 SQL과 제한된 설치 권한
+
+2026-10-22 추가 확인: 현재 후보를 PostgreSQL과 Supabase용으로 나눌 근거는 없다.
+후보의 앱 함수 298개는 SQL 93개와 PL/pgSQL 205개이고, 모두 제품 스키마 `fvoci`에 속한다.
+새 확장·역할·DB·이벤트 트리거 생성, 시스템 객체 변경, LANGUAGE internal/C 함수 생성, LEAKPROOF 지정이 없다.
+Supabase 역할·`auth`/`storage`/`extensions` 스키마·서비스 API를 참조하지 않는다.
+동일한 후보 SQL을 사용하고, DB 주소·TLS·직접/session 연결과 초기 관리자 권한을 환경 설정으로 둔다.
+
+| 단계                  | 현재 코드·후보에 필요한 권한과 전제                                                                                                                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 설치 관리자 연결      | 대상 DB의 CONNECT·CREATE. bootstrap이 두 제품 역할에 CONNECT를 부여하므로 CONNECT 위임 권한도 준비한다. DB 소유권은 이를 충족하는 한 방법이며 필수 조건은 아니다.                                                             |
+| 역할 준비             | 새 역할을 만드는 CREATEROLE. 이미 존재하는 제품 역할에는 ADMIN OPTION도 있어야 한다. 새로 만든 역할의 ADMIN OPTION으로 migrator에 대한 SET을 잠시 부여하고 원래 옵션으로 복구한다.                                            |
+| `fvoci` 스키마 준비   | 관리자에게 DB CREATE와 migrator로 SET할 권한이 필요하다. 스키마 소유자인 migrator 자체에는 DB CREATE가 필요하지 않다. 기존 스키마의 소유자는 migrator여야 한다.                                                               |
+| 후보 적용             | `fvoci_migrator`로 접속하며 `fvoci` 스키마를 소유한다. SQL/PL/pgSQL 언어와 인자·반환 타입의 USAGE, 사용하는 PostgreSQL 기본 함수의 EXECUTE가 필요하다. 통상 엔진 기본 권한으로 제공되는 항목도 실제 환경에서 유지되어야 한다. |
+| 소유자·ACL·RLS·트리거 | 후보에서 생성한 객체는 migrator 소유다. 같은 소유자로 명시한 ALTER OWNER와 자기 객체에 대한 GRANT/REVOKE, RLS·정책·트리거 설정은 그 소유권으로 실행한다. 앱에는 최종 카탈로그에 있는 권한만 부여한다.                         |
+| 앱 실행               | `fvoci_app`의 LOGIN·CONNECT, 후보의 스키마/객체 권한과 트랜잭션별 `app.user_id`를 사용한다. 앱은 테이블 소유자가 아니며 BYPASSRLS가 없다.                                                                                     |
+
+위 요구는 [현재 bootstrap](../../crates/server/src/db/admin.rs),
+[PostgreSQL 역할 속성](https://www.postgresql.org/docs/17/role-attributes.html),
+[함수 생성 권한](https://www.postgresql.org/docs/17/sql-createfunction.html)을 대조한 것이다.
+PostgreSQL 17.0의 [스키마 생성 구현](https://github.com/postgres/postgres/blob/REL_17_0/src/backend/commands/schemacmds.c#L84)은
+DB CREATE를 호출 관리자에게 검사한다. [동일 소유자의 ALTER SCHEMA](https://github.com/postgres/postgres/blob/REL_17_0/src/backend/commands/schemacmds.c#L344)는
+소유권 변경 없이 성공하므로 후보 첫 문장을 위해 migrator에 DB CREATE를 추가할 필요가 없다.
+
+277개 SECURITY DEFINER 함수는 스키마/테이블 소유자인 migrator의 객체 권한으로 실행한다.
+SUPERUSER나 BYPASSRLS 속성을 부여해서 실행하는 구조가 아니다. 현재 FORCE RLS가 0개인 상태와
+각 함수의 `search_path=fvoci, pg_temp`, PUBLIC EXECUTE 회수는 그대로 보존한다.
+기본 ACL을 새로 변경하거나 앱 역할에 스키마 CREATE를 주지 않는다.
+
+### UUID 검사 함수의 출처
+
+`pg_catalog.uuid_extract_version(uuid)`는 **PostgreSQL 17.0부터 있는 엔진 기본 함수**다.
+[17 릴리스 노트](https://www.postgresql.org/docs/17/release-17.html)와 최초 17.0 태그의
+[카탈로그 선언](https://github.com/postgres/postgres/blob/REL_17_0/src/include/catalog/pg_proc.dat#L8847),
+[함수 구현](https://github.com/postgres/postgres/blob/REL_17_0/src/backend/utils/adt/uuid.c#L445)에서 확인했다.
+따라서 Supabase PG17에 이 함수가 있는 것을 별도 backport나 Supabase 확장 의존성으로 해석하지 않는다.
+이 함수는 UUID의 버전을 읽으며, 앱이 전달한 UUIDv7도 검사할 수 있다. DB에서 UUIDv7을 생성하는 기능의 버전 조건과 구분한다.
+
+로컬 PG18.3과 셀프호스트 Supabase PG17.6 카탈로그에서 모두 반환형 smallint,
+LANGUAGE internal, IMMUTABLE/PARALLEL SAFE/STRICT/LEAKPROOF인 기본 함수를 확인했다.
+소유자는 각각 초기 클러스터 역할 `fvoci`와 `supabase_admin`이지만 앱이 그 역할의 권한을 빌리지는 않는다.
+PUBLIC EXECUTE가 있고 SECURITY DEFINER가 아니다. 후보는 이 함수의 생성·교체·소유자 변경·ACL 변경을 하지 않는다.
+제품 ID는 계속 앱이 공급하며 UUID 생성 fallback을 추가하지 않는다.
+
+### 실제 검증 범위와 남는 조건
+
+B의 기존 PostgreSQL 18.3 / 셀프호스트 Supabase 17.6 비교는 동일 후보를 일반 migrator로 적용해
+객체·덤프 동일성을 확인했다. 별도로 제한 설치관리자에 LOGIN·CREATEROLE, 대상 DB CREATE·CONNECT 위임만 주고,
+DB 소유권·전역 역할 멤버십·SUPERUSER·CREATEDB·BYPASSRLS·복제 설정 권한 없이 bootstrap부터 검증한다.
+`createrole_self_grant=''`로 시작하여 bootstrap의 임시 SET 부여·복구도 실행되도록 한다.
+이 검증의 실제 PASS/FAIL과 동작 시험 범위는 [B 실행 결과](verification/results.md)에 기록한다.
+
+Cloud의 기존 원격 실행 근거는 TLS/session 연결과 SELECT 1까지다.
+실제 프로젝트의 엔진 버전·역할 속성·ADMIN OPTION·DB 권한·기본 함수 ACL은 그 실행으로 확인되지 않았다.
+Cloud PG17 이상과 위 권한·접속 조건이 충족되면 동일 SQL을 사용하는 설계이며,
+로컬 제한 권한 시험을 Cloud 프로젝트의 설치·동작 실측으로 표시하지 않는다. 이번 작업에서 Cloud DB를 변경하지 않는다.
+
+복구는 별도 제약이 있다. [현재 복구 코드](../../crates/server/src/backup.rs)는
+`session_replication_role=replica` 설정 권한을 요구하며, 후보 SQL이나 일반 앱 실행에는 그 권한이 필요하지 않다.
+제한 관리자에서 이 권한이 없으면 현재 복구 경로까지 공통 동작한다고 선언할 수 없다.
+Supabase의 별도 허용 동작에 의존하지 않는 복구 설계는 이 준비 후보만으로 해결된 사항이 아니다.
+
 ## 이미 대체된 정의
 
 정확한 CREATE/REPLACE/DROP 위치와 인자 전체는 `inventory/function-history.jsonl`에 있다. 일부 같은 이름은 살아 있는 다른 서명이 있으므로 이름 전체를 제거해서는 안 된다.

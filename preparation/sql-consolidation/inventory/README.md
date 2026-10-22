@@ -65,7 +65,9 @@ PK가 54개인 것은 원본 상태다. 후보에서 임의로 추가하거나 �
 
 ## DB 제공 의존성과 D-88
 
-PG18의 `uuid_extract_version(uuid)`는 `pg_catalog`의 LANGUAGE internal 함수이며 새 UUID를 생성하지 않는다.
+`uuid_extract_version(uuid)`는 PostgreSQL 17.0부터 있는 `pg_catalog`의 LANGUAGE internal 함수이며 새 UUID를 생성하지 않는다.
+최초 17.0 태그의 [카탈로그](https://github.com/postgres/postgres/blob/REL_17_0/src/include/catalog/pg_proc.dat#L8847)와
+[구현](https://github.com/postgres/postgres/blob/REL_17_0/src/backend/utils/adt/uuid.c#L445)에서 확인되므로 Supabase 전용 의존성이 아니다.
 이 테스트 DB에서 소유자는 클러스터 초기 역할 `fvoci`, 반환형 smallint, IMMUTABLE/PARALLEL SAFE/STRICT/LEAKPROOF다.
 카탈로그의 function 항목에 정확한 정의·ACL을 남겼다. `plpgsql` 1.0은 DB 제공 확장으로 `pg_catalog`에 있고,
 앱 SQL이 새로 설치하는 확장은 0개다. 후보는 이 시스템 객체를 재정의하지 않는다.
