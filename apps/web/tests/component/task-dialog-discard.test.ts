@@ -315,8 +315,16 @@ describe('closing the task dialog with unsaved input', () => {
     const save = document.getElementById('task-save');
     if (save === null) throw new Error('task-save');
     await fireEvent.click(save);
-    for (const id of ['task-title', 'task-description', 'task-estimate', 'task-tags'])
-      expect(field(id).disabled).toBe(true);
+    // 시작일도(CodeRabbit 8cc2a52: 마일스톤 조건과 함께 쓰는 칸이라 빠졌다).
+    for (const id of [
+      'task-title',
+      'task-start',
+      'task-due',
+      'task-description',
+      'task-estimate',
+      'task-tags',
+    ])
+      expect(field(id).disabled, id).toBe(true);
     late.resolve({ kind: 'updated', task: task('t1', { title: '새 제목', version: 3 }) });
     await screen.findByText('저장했습니다.');
     await waitFor(() => {

@@ -856,7 +856,7 @@
             id="task-start"
             type="date"
             bind:value={f.start_date}
-            disabled={!canEdit || f.milestone}
+            disabled={locked || f.milestone}
           />
         </div>
         <div class="flex min-w-0 flex-col gap-1">
