@@ -104,3 +104,23 @@ PG17 A/B 및 제한 권한, 지원 미달/필수 권한 거부의 실제 결과�
 카탈로그 무변경을 확인했다. 비밀번호는 카탈로그에서 추정하지 않았다. 별도 SCRAM 경로에서 두 역할의
 잘못된 비밀번호가 거부되고, 세 bootstrap 실패 후 원래 비밀번호의 로그인 6회가 성공한 증거를 확인했다.
 컨테이너 내부 localhost의 trust 인증은 이 비밀번호 보존 증거로 사용하지 않는다.
+
+## 사용자 요청 재리뷰의 결과 기록 오류 진단
+
+CodeRabbit 재리뷰 `2bcbf141-1ff2-4d18-bdb5-7f029e664383`가 `08cdcba`에 남긴
+[Minor 지적](https://github.com/fvoci/GroundZero/pull/92#discussion_r4349753858)을 확인했다.
+작업 또는 정리 오류와 결과 파일 기록 오류가 겹치면 반환 우선순위 때문에 기록 오류가 진단에서 사라졌다.
+종합 커밋 `dd538ae5c4845f96365296fb11fb2cf72ee85b61`은 기록 오류의 원인 체인을 stderr에 남기고,
+작업 오류 → 첫 정리 오류 → 기록 오류의 반환 우선순위를 유지한다.
+
+- 기존 실패 주입 시험에서 작업·정리 실패 유무 네 조합에 기록 실패를 겹쳐, 반환 오류·정리 상태·기록 시도와 진단 내용을 확인했다.
+- `cargo test -p xtask sql_compare::tests --locked`: **4개 PASS**, 실패·무시 0.
+- `cargo clippy -p xtask --all-targets --locked -- -D warnings`, `cargo fmt --all --check`, `git diff --check`: PASS.
+- 단위 로그: 로컬 `target/sql-consolidation-check/rereview-record-unit.log`, SHA-256
+  `44e069739e4647ed80b76d7afdf75b96b4699b72d19cf1d756881bb0325f034a`.
+- Clippy 로그: 로컬 `target/sql-consolidation-check/rereview-record-clippy.log`, SHA-256
+  `7da0a4755fb0b3b50e1529710d3318eb7aa40ffecc9cb8fea78217707c4148ec`.
+
+이 수정은 비교기의 오류 진단과 해당 시험에 한정한다. SQL·카탈로그 비교·역할·행동 시험 입력은 같으므로
+DB 행렬을 다시 실행하지 않았다. 앞선 DB 실행 소스와 현재 비교기 사이에는 이 진단 변경이 있으며,
+이전 파일 해시가 현재 비교기와 같다고 주장하지 않는다. 원격 CI와 후속 리뷰 상태는 Draft PR에 별도로 기록한다.
