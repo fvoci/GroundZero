@@ -184,3 +184,54 @@ describe('a live connection refused because the account changed, when the draft 
     expect(opened).toHaveLength(1);
   });
 });
+
+// CodeRabbit(#60 6ff6187): 계정 전환의 다시 읽기는 저장 API의 409 `account_changed`나 창 복귀 확인에서도 일어난다.
+// 실시간 편집기도 떠나기 전에 반영되지 않은 편집(확인받지 못한 본문·저장하지 않은 제목)을 초안으로 남기고, 남기지
+// 못하면 떠나기를 막는다.
+describe('leaving the live editor with edits the server has not got', () => {
+  function unload(): Event {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event;
+  }
+
+  it('keeps unconfirmed body edits as a draft, or blocks leaving when it cannot', async () => {
+    me.userId = 'user-a';
+    render(LiveDocumentEditor, { props: { initial: doc } });
+    await fireEvent.click(screen.getByRole('button', { name: 'stub-type' }));
+    opened.at(-1)?.session.document.getText('t').insert(0, '확인받지 못한 문장');
+
+    expect(unload().defaultPrevented).toBe(false);
+    expect(drafts('user-a').length).toBeGreaterThan(0);
+
+    window.localStorage.clear();
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+    expect(unload().defaultPrevented).toBe(true);
+  });
+
+  it('counts an unsaved title as pending on a 4412 too', async () => {
+    me.userId = 'user-a';
+    const reload = vi.fn();
+    render(FeedbackHost, { props: { reload } });
+    render(LiveDocumentEditor, { props: { initial: doc } });
+    const title = document.getElementById('live-title');
+    if (!(title instanceof HTMLInputElement)) throw new Error('live-title');
+    await fireEvent.input(title, { target: { value: '저장하지 않은 제목' } });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+    const last = opened.at(-1);
+    last?.session.provider.emit('connection-close', [
+      new CloseEvent('close', { code: 4412 }),
+      last.session.provider,
+    ]);
+
+    expect(reload).not.toHaveBeenCalled();
+    expect((await screen.findByRole('alert')).textContent).toMatch(
+      /이 브라우저에도 남기지 못했습니다/,
+    );
+    expect(unload().defaultPrevented).toBe(true);
+  });
+});

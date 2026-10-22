@@ -4,7 +4,7 @@
   // 서버와 맞춰지지 않은 동안(끊김) 고친 본문은 이 사용자의 초안으로 남겨, 실시간이 꺼지거나 권한이 바뀌거나
   // 새로고침해도 사라지지 않게 한다. 다시 열 때 서버 내용과 다르면 내 노트로 보존할지 묻는다(실시간 문서에 섞지 않음).
   import { formatInstant } from '$lib/display';
-  import { onDestroy, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
 
   import type { DocNode, DocumentView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
@@ -104,6 +104,11 @@
     if (watch?.dirty === true) keepDraft();
   }
 
+  /** 서버에 반영되지 않은 편집이 있는지: 확인받지 못한 본문, 또는 저장하지 않은 제목. */
+  function hasPending(): boolean {
+    return watch?.dirty === true || (start.can_edit && title.trim() !== savedTitle);
+  }
+
   /** 처음 맞춰진 뒤 지난 초안을 고르게 한다. */
   function compareEarlier(): void {
     if (checkedEarlier) return;
@@ -183,7 +188,7 @@
         // 초안으로 남겼으면 이 창을 지금 계정으로 다시 읽는다. 남기지 못했으면(저장소 가득 참 등) 다시 읽으면 사라지므로
         // 화면에 두고 알린다(사람이 옮겨 둔 뒤 새로 고친다).
         if (stop === 'account') {
-          if (watch?.dirty !== true || keepDraft()) switchAccount();
+          if (!hasPending() || keepDraft()) switchAccount();
           else accountUnsavedLost = true;
         }
       }
@@ -233,6 +238,18 @@
   }
 
   open();
+  // 창을 떠나거나 다시 읽을 때(계정 전환으로 다시 읽기 포함: 저장 API의 409 `account_changed`, 창 복귀 확인) 반영되지 않은
+  // 편집을 초안으로 남긴다. 남기지 못하면(저장 공간 부족 등) 떠나기를 경고해 화면의 내용을 지킨다.
+  onMount(() => {
+    const beforeUnload = (event: BeforeUnloadEvent): void => {
+      if (!hasPending() || keepDraft()) return;
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload);
+    };
+  });
   onDestroy(() => {
     keepIfDirty();
     watch?.stop();
