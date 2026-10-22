@@ -44,3 +44,15 @@ B가 DB 비교를 실행한 로컬 커밋 `efdaa5a7ffa1248ed3587b46bcbe8f8927606
 
 DB 담당자는 같은 수정의 실제 PostgreSQL A/A 실행에서 설치·스냅숏·객체·변조·정지 단계를 재확인했다.
 최종 비교기 소스와 이 후속 실행의 근거는 `verification/results.md`에서 별도로 구분한다.
+
+## 출력 경로 경합 수정 후 확인
+
+종합 커밋 `71c029dc1ea31ee33babaf4f484b9bd07ee23903`에서 출력 디렉터리를 원자적으로 확보하도록 수정했다.
+8개 동시 요청 중 하나만 성공하며, 나머지 요청과 재실행이 기존 증거를 덮지 않는 시험을 추가했다.
+SQL 적용·카탈로그·행동 입력에는 변화가 없어 DB 행렬을 반복하지 않았다.
+
+- `cargo fmt --all --check`: PASS.
+- `cargo clippy -p xtask --all-targets --locked -- -D warnings`: PASS.
+- `cargo test -p xtask --locked`: 16개 PASS, 실패·무시 0. 비교기 시험은 4개다.
+- 원본 로그: 로컬 `target/sql-consolidation-check/atomic-output-unit.log`.
+- 로그 SHA-256: `701e0be8490a7529e734a9c24e013dee20fae2feb313e968e64b804acd369bf0`.
