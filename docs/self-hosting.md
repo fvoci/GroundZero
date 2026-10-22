@@ -7,6 +7,33 @@
 이 문서의 Compose는 자체 PostgreSQL을 함께 띄운다. 기존 셀프호스트 Supabase의 PostgreSQL을 쓰려면
 [Supabase 연결 안내](self-hosting-supabase.md)를 따른다. 두 구성 모두 로그인은 OIDC(Keycloak 등)를 사용한다.
 
+<a id="postgres-support"></a>
+
+### PostgreSQL 지원 버전과 공통 구현
+
+최소 버전은 **PostgreSQL 17**이다(D-100). 현재 검증 대상 메이저는 **17·18**이며, 다음 메이저는 검증 결과를
+추가하기 전까지 지원 목록에 포함하지 않는다. 버전 확인 성공과 제품 설치·앱·복구 검증은 구별한다.
+
+| 환경                                | 현재 검증 상태                                                                                                           |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 표준 PostgreSQL 18                  | 기본 Compose, 마이그레이션·전체 통합 시험 검증. 기본 설치 이미지는 18 유지                                               |
+| 표준 PostgreSQL 17                  | 최소 버전의 전용 통합 검증 진행 중. 완료 결과를 기록하기 전에는 검증 완료로 표시하지 않음                                |
+| 셀프호스트 Supabase PostgreSQL 17.6 | [고정 구성](self-hosting-supabase.md#1-검증한-조합)의 직접 연결·앱 session 연결 검증                                     |
+| Supabase Cloud                      | 같은 제품 SQL의 설계·검증 대상. 기존 TLS·읽기 전용 연결만 확인했으며 버전 확인과 실제 제품 설치·앱·복구 결과는 별도 기록 |
+
+모든 환경에서 같은 제품 SQL과 `db bootstrap` → `db migrate` → 서버 시작을 사용한다. 환경 차이는 초기 DB/역할
+준비 권한과 기존 세 연결 URL·TLS·pooler 설정으로 제한한다. Supabase 전용 서비스에 의존하거나 별도 제품 SQL을
+유지하지 않는다. 앱은 `fvoci_app`, 마이그레이션은 `fvoci_migrator`로 연결하며 설치자가 RLS 내부를 편집하지 않는다.
+
+기존 PostgreSQL 18의 데이터 볼륨은 18 이미지로 계속 운영한다. 최소 버전이 17이라는 이유로 이미지 태그를 내려서
+기존 볼륨을 연결하면 안 된다. PostgreSQL 17 미만의 DB 업그레이드나 데이터 이전은 이 설치 명령이 자동 수행하지 않는다.
+
+`db bootstrap`과 `db migrate`는 PG17 미만이면 역할·스키마 변경이나 SQLx 적용 이력 생성 전에 버전을 포함한
+설정 오류로 멈춘다. 기존 DB·데이터를 보존하고 운영자가 업그레이드 계획을 준비한다. 초기화·마이그레이션에는 실제
+migrator가 기본 `sql`·`plpgsql` 언어의 USAGE와 `pg_catalog.uuid_extract_version(uuid)`의 EXECUTE를 사용할 수
+있는지도 확인한다. 필요한 것은 PostgreSQL 기본 언어·함수이며 추가 확장을 설치하거나 Supabase 전용 SQL을 넣지 않는다.
+권한 오류는 관리자 설정을 확인하고 해결하며, 명령이 권한을 자동 확대하거나 RLS를 완화하지 않는다.
+
 ## 1. 준비
 
 - Docker Engine과 Compose v2(예: Docker 29, Compose 2.40 이상).

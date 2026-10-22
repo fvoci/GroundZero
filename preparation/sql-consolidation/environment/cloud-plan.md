@@ -5,6 +5,10 @@
 일반 PostgreSQL/Supabase 제품 SQL 분기나 Supabase 서비스 의존성은 만들지 않는다. 아래 단계는 별도 승인된 전용
 프로젝트에서 실행할 후속안을 구체화한 것이며, 공통 설계·로컬 시험 권한을 원격 변경 권한으로 해석하지 않는다.
 
+2026-10-22 추가 요청은 기존 Cloud의 서버 버전 읽기 전용 조회를 허용한다. 기존 점검 명령에
+`server_version_num` 조회만 추가하며 실행 결과는 [전용 점검 기록](../../../docs/supabase-cloud-readonly-precheck.md)에
+별도로 남긴다. 아래 제품 설치·권한·복구의 변경 시험은 계속 PLAN ONLY이며, 버전 조회에 역할/기능 카탈로그를 더하지 않는다.
+
 ## 확인한 기존 증거
 
 | 항목                  | 결과                                                                | 근거와 한계                                                                                                                      |
@@ -13,7 +17,7 @@
 | 실행 SHA·시각         | `f9e5fd035601de5f5236b199400a8fc4a8fa74d4`, 2026-10-21 12:31:22 UTC | `precheck` job과 `Read-only session pooler precheck` step이 success. 새 실행 아님                                                |
 | 연결·TLS·SELECT 1     | 기존 기록 PASS                                                      | `docs/supabase-cloud-readonly-precheck.md:106–110`. 실제 run 결과의 저장소 기록이며 이번에는 원격 DB에 다시 연결하지 않음        |
 | 대상 역할·DB 권한     | 미확인                                                              | 점검은 역할 카탈로그를 조회하지 않음. 관리자 용도 Secret이라는 사실만으로 실제 역할·CREATEROLE·ADMIN OPTION을 입증하지 않음      |
-| PG 버전·공통 함수     | 미확인                                                              | 대상의 `server_version_num`, `pg_catalog.uuid_extract_version(uuid)` 서명·EXECUTE 권한은 기존 점검에서 조회하지 않음             |
+| PG 버전·공통 함수     | 기존 점검에서는 미확인                                              | 사용자 요청으로 서버 버전 조회 추가. 실제 결과는 전용 점검 기록과 구분하며 UUID 함수 서명·EXECUTE 권한은 이 조회에 포함하지 않음 |
 | 제품 설치·앱·RLS·복구 | NOT RUN                                                             | 기존 점검도 명시적으로 미수행. 앱 prepared statement·복수 연결·pool 재사용도 미검증                                              |
 
 기준 소스(`cb65cc31156c0fd8d28cf856bc132d4a506c8885`)의 점검은 session pooler 5432·DB `postgres`만 허용하고,

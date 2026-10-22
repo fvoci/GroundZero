@@ -18,7 +18,7 @@ description: 통합 테스트, Docker Compose, Dockerfile, CI 워크플로, xtas
 
 ## 서비스
 
-- 기본(`deploy/compose.test.yaml`): PostgreSQL 18, Meilisearch, SeaweedFS(S3 호환 테스트 저장소, D-61·O-31, `s3_*` 테스트). Keycloak은 `oidc` 프로필로만 기동한다(`cargo xtask test --oidc`). 포맷·단위 검사에는 띄우지 않는다.
+- 기본(`deploy/compose.test.yaml`): PostgreSQL 17, Meilisearch, SeaweedFS(S3 호환 테스트 저장소, D-61·O-31, `s3_*` 테스트). CI의 기존 OIDC 포함 작업은 PostgreSQL 18도 검증한다. Keycloak은 `oidc` 프로필로만 기동한다(`cargo xtask test --oidc`). 포맷·단위 검사에는 띄우지 않는다.
 - `cargo xtask test --supabase`는 PostgreSQL 대신 셀프호스트 Supabase 공식 구성(db·rest·supavisor, `deploy/supabase/compose.test.yaml`)을 DB로 쓴다(D-88).
 - 새 서비스 추가는 비용·라이선스에 영향을 주므로 먼저 보고한다.
 - 이미지 태그는 고정한다. healthcheck 없는 서비스를 `--wait`에 넣지 않는다. Keycloak 이미지에는 curl이 없어 bash `/dev/tcp`로 검사한다.

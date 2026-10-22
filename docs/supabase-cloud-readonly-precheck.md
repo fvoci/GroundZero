@@ -1,13 +1,14 @@
 # Supabase Cloud 읽기 전용 연결 점검
 
-전용 Supabase Cloud의 **Session pooler에 TLS로 연결하여 읽기 전용 `SELECT 1`만 수행**하는
+전용 Supabase Cloud의 **Session pooler에 TLS로 연결하여 읽기 전용 `SELECT 1`과 숫자형 서버 버전을 조회**하는
 Rust `xtask` 명령이다. 검토·CI 통과 후 main 병합과 읽기 전용 연결 시험 1회가 승인되어 수동 workflow를
-활성화했다(PR #42). 추가 연결 시험은 별도 승인 후 진행한다. 코드 검증 기록과 실제 Actions 실행 결과를 아래에서 구분한다.
+활성화했다(PR #42). 2026-10-22 사용자 요청으로 기존 자격 증명·경로를 재사용한 서버 버전 확인을 추가했다(D-100).
+코드 검증 기록과 실제 Actions 실행 결과를 아래에서 구분한다.
 이 점검은 Cloud 제품 지원이나 쓰기·마이그레이션·복구 지원을 확정하지 않는다.
 
-기존 [ci.yml](../.github/workflows/ci.yml)과 [로컬 Supabase 시험](../xtask/src/supabase.rs)은
-변경하지 않는다. `cargo xtask test --supabase`는 로컬 컨테이너의 bootstrap·migrate·통합 시험용이므로
-이 점검에 사용하지 않는다. 기준은 [결정 D-88](decisions.md)과
+이 점검은 일반 [ci.yml](../.github/workflows/ci.yml)과 [로컬 Supabase 시험](../xtask/src/supabase.rs)과 별도다.
+`cargo xtask test --supabase`는 로컬 컨테이너의 bootstrap·migrate·통합 시험용이므로
+이 점검에 사용하지 않는다. 기준은 [결정 D-88·D-100](decisions.md)과
 [개발 문서](development.md)의 기존 Rust·의존성·검사 규칙이다.
 
 ## 설정
@@ -57,7 +58,8 @@ GitHub Actions에서 Supabase DB 인증에만 한정한다.
 [Rust 명령](../xtask/src/supabase_cloud_precheck.rs)은 `--connect` 없이는 환경을 읽지 않고
 `NOT RUN`으로 종료한다. 연결할 때는 단일 `PgConnection`을 만들며 재시도나 pool을 사용하지 않는다.
 연결 5초, 문장 5초, 전체 20초로 제한한다. read-only 세션의 `BEGIN READ ONLY` 안에서 고정된
-`SELECT 1`을 수행하고 `ROLLBACK`한다. 역할·스키마·기능 카탈로그, 사용자 데이터는 조회하지 않는다.
+`SELECT 1`, `SELECT pg_catalog.current_setting('server_version_num')::integer`를 수행하고 `ROLLBACK`한다.
+후자는 내장 함수로 설정값 하나만 읽으며 역할·스키마·기능 카탈로그의 행이나 사용자 데이터는 조회하지 않는다.
 CREATE/ALTER/DROP, bootstrap, migrate, seed, restore, 역할·비밀번호 변경도 실행하지 않는다.
 
 CA PEM은 네트워크 연결 전에 기존 native-tls 파서로 검사한다. 누락·빈 값은 `missing_ssl_root_cert`,
@@ -69,7 +71,10 @@ CA PEM은 네트워크 연결 전에 기존 native-tls 파서로 검사한다. �
 상속된 PostgreSQL·TLS 환경 설정에 의한 우회를 거부한다. 검증 실패 시 TLS 모드를 낮추거나 검증을
 생략하지 않으며 CA 없이 재시도하지 않는다. 드라이버 오류와 서버 notice는 원문 출력하지 않고 고정 오류 코드만 출력한다.
 
-결과 JSON은 연결/TLS 상태, 읽기 전용 `SELECT 1` 상태, 변경 시험 `NOT RUN`을 구분한다.
+결과 JSON은 연결/TLS 상태, 읽기 전용 질의·정리 상태(`query`), 버전 조회 상태(`server_version_query`),
+변경 시험 `NOT RUN`을 구분한다. 두 질의·rollback·연결 종료가 모두 성공해야 질의 상태를 PASS로 표시하며,
+그때만 `server_version_num`과 `postgres_major`를 JSON 숫자로 출력한다. `version()`의 전체 문자열이나 호스트·사용자
+정보를 출력하지 않는다. 예를 들어 `170006`은 메이저 17이며, 버전 조회 자체는 미지원 메이저도 관측값으로 보고한다.
 연결 실패 시 연결/TLS는 미확인 상태를 유지하며 아래의 고정 오류 분류만 출력한다.
 연결 후 쿼리가 실패하면 연결/TLS 성공과 쿼리 실패를 분리한다. `SELECT 1` 성공은 애플리케이션
 권한·마이그레이션·쓰기·복구 지원 검증을 뜻하지 않는다.
@@ -88,15 +93,15 @@ DNS·TCP·TLS·인증·서버 startup 거절 중 원인을 더 좁힐 수 없다
 선택한다. 오류 메시지나 오류 체인을 문자열로 해석하지 않고, SQLSTATE는 class 28 판별에만 사용한다.
 오류 원문과 SQLSTATE 값은 출력하지 않는다.
 
-| 코드                        | 확인할 수 있는 범위                                                        |
-| --------------------------- | -------------------------------------------------------------------------- |
-| `connection_network_io`     | 연결 중 I/O 오류. DNS·TCP·TLS 교환 중 I/O를 따로 확정하지 않음             |
-| `connection_tls`            | TLS 연결 수립 오류. 인증서·호스트 불일치 등 세부 원인은 미확정             |
-| `connection_authentication` | 서버가 SQLSTATE class 28 인증·인가 거절을 반환. 비밀번호 오류로 단정 안 함 |
-| `connection_database`       | 연결 중 그 밖의 서버 오류 응답. 구체적인 startup 거절 이유는 미확정        |
-| `connection_protocol`       | 연결 중 드라이버 프로토콜 오류. TLS·인증·startup 단계의 세부 원인은 미확정 |
-| `connection_unclassified`   | 위 분류에 해당하지 않는 연결 오류                                          |
-| `query_failed`              | 연결 성공 후 `BEGIN READ ONLY`·`SELECT 1`·`ROLLBACK` 중 실패               |
+| 코드                        | 확인할 수 있는 범위                                                         |
+| --------------------------- | --------------------------------------------------------------------------- |
+| `connection_network_io`     | 연결 중 I/O 오류. DNS·TCP·TLS 교환 중 I/O를 따로 확정하지 않음              |
+| `connection_tls`            | TLS 연결 수립 오류. 인증서·호스트 불일치 등 세부 원인은 미확정              |
+| `connection_authentication` | 서버가 SQLSTATE class 28 인증·인가 거절을 반환. 비밀번호 오류로 단정 안 함  |
+| `connection_database`       | 연결 중 그 밖의 서버 오류 응답. 구체적인 startup 거절 이유는 미확정         |
+| `connection_protocol`       | 연결 중 드라이버 프로토콜 오류. TLS·인증·startup 단계의 세부 원인은 미확정  |
+| `connection_unclassified`   | 위 분류에 해당하지 않는 연결 오류                                           |
+| `query_failed`              | 연결 성공 후 `BEGIN READ ONLY`·`SELECT 1`·서버 버전 조회·`ROLLBACK` 중 실패 |
 
 연결이 완전히 수립된 경우에만 연결/TLS를 `PASS`로 표시한다. `timeout`, `client_error`,
 `unexpected_query_result`와 설정 검증 코드는 그대로 유지한다. 단위 시험은 가짜 드라이버 오류로
@@ -106,9 +111,22 @@ SHA `30266525b1ee8b9915a71299e779f6afe4f85029`에서 빌드 성공 후 `connecti
 CA 명시 변경은 PR #47로 main에 반영되었다. 그 뒤의 [세 번째 실행](https://github.com/fvoci/GroundZero/actions/runs/39600271650)
 (SHA `f9e5fd0`, 2026-10-21 12:31 UTC)은 성공했다. 결과는 연결 `PASS`(session pooler), TLS 인증서·호스트 `PASS`,
 읽기 전용 질의 `PASS`, 변경 시험 `NOT RUN`이다. 이것은 Cloud 프로젝트에 TLS 검증으로 붙어 `SELECT 1`을 읽기 전용으로
-실행할 수 있다는 확인일 뿐이다. 제품 서버 실행, 전체 마이그레이션, 앱 역할의 RLS·권한은 확인하지 않았다. 다음 연결 시험은
-별도 승인 후 진행한다. 기존 dispatch API의 `Forbidden`은
+실행할 수 있다는 확인일 뿐이다. 이 과거 실행은 서버 버전을 조회하지 않았다. 제품 서버 실행, 전체 마이그레이션,
+앱 역할의 RLS·권한도 확인하지 않았다. 2026-10-22에 요청된 버전 확인은 아래 별도 기록으로 구분한다. 기존 dispatch API의 `Forbidden`은
 재시도하거나 다른 인증·브라우저 경로로 우회하지 않는다.
+
+## 2026-10-22 서버 버전 확인
+
+사용자가 최소 PostgreSQL 버전 17과 검증한 메이저만의 지원 목록을 결정하고, 기존 Cloud의 실제 서버 버전 조회를
+요청했다. 변경된 명령은 기존 여섯 Secret, TLS VerifyFull, main 전용 수동 workflow를 유지한다. 새 자격 증명을
+설정하거나 원격 DB·역할·비밀번호·버전을 변경하지 않는다. 추가 조회는 `server_version_num` 하나다.
+
+현재 원격 버전 조회 결과는 **NOT RUN**이다. 실행 후 run URL·소스 SHA·`server_version_num`·메이저·연결/TLS/질의 상태를
+여기에 기록한다. 버전이 17 또는 18이어도 Cloud 설치·앱 RLS·복구 검증을 완료했다는 의미가 아니다. 실제 실행은
+이 변경이 검토를 거쳐 main에 반영된 뒤 기존 workflow를 수동 실행하는 경로를 따른다. main 전용 게이트를 완화하거나
+PR 코드를 DB 자격 증명과 함께 실행하지 않는다. 같은 요청을 여러 작업자가 중복 실행하지 않는다.
+기존 성공 run `39600271650`의 job `119222705064` 로그를 2026-10-22에 재확인했으며, 당시 JSON에는
+연결·TLS·질의·변경 상태만 있고 서버 버전은 없었다. 과거 로그로 현재 버전을 확정하지 않는다.
 
 ## TLS 공식 근거
 

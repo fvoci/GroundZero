@@ -177,7 +177,12 @@ fn absent_connect_missing_settings_or_ambient_overrides_never_start_client() -> 
     assert_eq!((lookups.get(), calls.get()), (0, 0));
     assert_ne!(code, 0);
     assert_private(&report)?;
-    for key in ["connection", "tls_certificate_and_hostname", "query"] {
+    for key in [
+        "connection",
+        "tls_certificate_and_hostname",
+        "query",
+        "server_version_query",
+    ] {
         assert_eq!(report[key], "NOT RUN");
     }
     let required = settings()?;
@@ -328,6 +333,7 @@ fn missing_or_invalid_ca_never_starts_client_and_exposes_only_fixed_codes() -> R
 struct FakeConnection {
     events: Vec<&'static str>,
     answer: i32,
+    version: i32,
     failure: Option<&'static str>,
     stall: Option<&'static str>,
     password_seen: Option<String>,
@@ -338,6 +344,7 @@ impl FakeConnection {
         Self {
             events: Vec::new(),
             answer: 1,
+            version: 170_006,
             failure: None,
             stall: None,
             password_seen: None,
@@ -373,6 +380,10 @@ impl ConnectionClient for FakeConnection {
         self.step("select_one").await?;
         Ok(self.answer)
     }
+    async fn server_version(&mut self) -> std::result::Result<i32, Failure> {
+        self.step("server_version").await?;
+        Ok(self.version)
+    }
     async fn rollback(&mut self) -> std::result::Result<(), Failure> {
         self.step("rollback").await
     }
@@ -390,26 +401,38 @@ fn short_limits() -> Limits {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn one_connection_runs_only_read_only_select_one_then_rolls_back() -> Result<()> {
+async fn one_connection_reads_probe_and_numeric_version_then_rolls_back() -> Result<()> {
     let mut connection = FakeConnection::new();
     let (report, code) = inspect(&mut connection, &target()?, short_limits()).await;
     assert_eq!(code, 0);
     assert_private(&report)?;
-    for key in ["connection", "tls_certificate_and_hostname", "query"] {
+    for key in [
+        "connection",
+        "tls_certificate_and_hostname",
+        "query",
+        "server_version_query",
+    ] {
         assert_eq!(report[key], "PASS");
     }
+    assert_eq!(report["server_version_num"], 170_006);
+    assert_eq!(report["postgres_major"], 17);
     assert_eq!(
         connection.events,
         [
             "connect",
             "begin_read_only",
             "select_one",
+            "server_version",
             "rollback",
             "close"
         ]
     );
     assert_eq!(connection.password_seen, Some(raw_password()?));
     assert_eq!(SELECT_ONE, "SELECT 1");
+    assert_eq!(
+        SELECT_SERVER_VERSION,
+        "SELECT pg_catalog.current_setting('server_version_num')::integer"
+    );
     assert_eq!(BEGIN_READ_ONLY, "BEGIN TRANSACTION READ ONLY");
     // Constructing SQLx options would read ambient defaults. Inspect the native
     // adapter source instead; the fake above verifies the data and lifecycle.
@@ -429,7 +452,7 @@ async fn one_connection_runs_only_read_only_select_one_then_rolls_back() -> Resu
         "to_url_lossy",
         "PgSslMode::Require",
         "PgSslMode::Disable",
-        "pg_catalog",
+        "FROM pg_catalog",
     ] {
         assert!(!source.contains(forbidden));
     }
@@ -442,13 +465,17 @@ async fn connection_query_cleanup_failures_and_wrong_answer_are_sanitized() -> R
         "connect",
         "begin_read_only",
         "select_one",
+        "server_version",
         "rollback",
         "close",
         "wrong_answer",
+        "invalid_version",
     ] {
         let mut connection = FakeConnection::new();
         if stage == "wrong_answer" {
             connection.answer = 2;
+        } else if stage == "invalid_version" {
+            connection.version = -1;
         } else {
             connection.failure = Some(stage);
         }
@@ -460,11 +487,20 @@ async fn connection_query_cleanup_failures_and_wrong_answer_are_sanitized() -> R
             match stage {
                 "connect" => "connection_unclassified",
                 "close" => "client_error",
-                "wrong_answer" => "unexpected_query_result",
+                "wrong_answer" | "invalid_version" => "unexpected_query_result",
                 _ => "query_failed",
             }
         );
         assert_ne!(report["query"], "PASS");
+        assert_ne!(report["server_version_query"], "PASS");
+        assert!(report.get("server_version_num").is_none());
+        assert!(report.get("postgres_major").is_none());
+        if matches!(
+            stage,
+            "connect" | "begin_read_only" | "select_one" | "wrong_answer"
+        ) {
+            assert!(!connection.events.contains(&"server_version"));
+        }
         assert_eq!(
             connection
                 .events
@@ -486,6 +522,21 @@ async fn connection_query_cleanup_failures_and_wrong_answer_are_sanitized() -> R
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn version_probe_reports_older_and_newer_servers_without_claiming_support() -> Result<()> {
+    for version in [150_014, 170_006, 180_003, 190_001] {
+        let mut connection = FakeConnection::new();
+        connection.version = version;
+        let (report, code) = inspect(&mut connection, &target()?, short_limits()).await;
+        assert_eq!(code, 0);
+        assert_eq!(report["server_version_num"], version);
+        assert_eq!(report["postgres_major"], version / 10_000);
+        assert!(report.get("supported").is_none());
+        assert_private(&report)?;
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn deadlines_bound_connection_query_cleanup_and_total_without_retry() -> Result<()> {
     let defaults = Limits::default();
     assert_eq!(defaults.connect, Duration::from_secs(5));
@@ -495,6 +546,7 @@ async fn deadlines_bound_connection_query_cleanup_and_total_without_retry() -> R
         "connect",
         "begin_read_only",
         "select_one",
+        "server_version",
         "rollback",
         "close",
     ] {

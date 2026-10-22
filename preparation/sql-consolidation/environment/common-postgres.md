@@ -75,12 +75,15 @@ Supabase 전용 확장·패치가 있어야 하는 함수로 취급하지
 [PG17.0 태그의 함수 선언](https://github.com/postgres/postgres/blob/REL_17_0/src/include/catalog/pg_proc.dat#L8848),
 [PG18 UUID 함수](https://www.postgresql.org/docs/18/functions-uuid.html).
 
-기존 대상은 일반 PG18과 셀프호스트 Supabase PG17이며 이 조사로 하위 버전 지원을 추가하지 않는다.
+사용자가 최소 PostgreSQL 버전을 17로 확정했다(D-100). 일반 PG17의 실제 검증을 추가하고 검증한 메이저만 지원 목록에 둔다.
+기존 결과는 일반 PG18과 셀프호스트 Supabase PG17이며, 일반 PG17의 결과는 추가 시험 기록으로 구분한다.
 실제 Cloud 대상의 `server_version_num`, `to_regprocedure('pg_catalog.uuid_extract_version(uuid)')`, 반환형과
 두 제품 역할의 EXECUTE 권한, UUIDv7 입력의 결과는 기존 SELECT 1 점검에서 확인하지 않았다. 버전 숫자나
 프로젝트 생성일을 추측해 통과 처리하지 않는다. Supabase는 프로젝트별 업그레이드와 현재 서비스 버전 확인을 안내하므로
 실제 대상의 버전을 기록해야 한다. [Supabase 업그레이드 안내](https://supabase.com/docs/guides/platform/upgrading).
 함수가 없거나 실행할 수 없는 대상은 명확한 미충족 조건으로 기록하며 공통 SQL을 환경별 대체 함수로 분기하지 않는다.
+사용자 요청으로 기존 Cloud 읽기 전용 명령에 `server_version_num` 조회만 추가했다. 실제 버전 조회 결과와 다른 능력의
+미검증 상태는 [전용 점검 기록](../../../docs/supabase-cloud-readonly-precheck.md)에서 구분한다.
 
 ## 실제 Cloud와 공통 복구에 남는 증거
 

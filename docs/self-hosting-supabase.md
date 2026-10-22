@@ -1,8 +1,9 @@
 # 셀프호스트 Supabase를 DB로 쓰기
 
 GroundZero는 기본으로 자체 PostgreSQL(`deploy/compose.selfhost.yaml`, PostgreSQL 18)을 쓴다. 이미 셀프호스트 Supabase를 운영한다면
-그 PostgreSQL을 GroundZero의 DB로 쓸 수 있다(D-88). 이 문서는 **검증한 셀프호스트 Supabase 구성**만 다룬다. Supabase Cloud는
-확인하지 않았다(아래 7절).
+그 PostgreSQL을 GroundZero의 DB로 쓸 수 있다(D-88·D-100). 최소 PostgreSQL 버전은 17이고 검증한 메이저만
+[지원 목록](self-hosting.md#postgres-support)에 둔다. 이 문서의 설치 절차는 **검증한 셀프호스트 Supabase 구성**을
+기준으로 하며, 같은 제품 SQL을 쓰는 Cloud의 확인 범위는 아래 7절에 구분한다.
 
 GroundZero는 Supabase를 **PostgreSQL로만** 쓴다. 로그인은 그대로 OIDC(Keycloak 등)이고, 파일은 S3/R2/로컬, 검색은 Meilisearch,
 작업 대기열은 GroundZero 자신의 PostgreSQL 표다. Supabase Auth·Storage·Realtime·Data API(PostgREST)와는 연결하지 않으며 화면이 DB에
@@ -10,16 +11,20 @@ GroundZero는 Supabase를 **PostgreSQL로만** 쓴다. 로그인은 그대로 OI
 
 ## 1. 검증한 조합
 
-| 항목          | 값                                                                                                                      |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| 공식 구성     | `supabase/supabase` 저장소 `docker/`, revision `bc27d2661edd09a5d0b8d76ce33da6d4071a756e`(2026-10-16)                   |
-| DB 이미지     | `supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00`(PostgreSQL 17.6) |
-| Data API      | `postgrest/postgrest:v14.18@sha256:c7cd7e265a85b05248abf53f4473fcec7e327c282d0bd0cf60f1551996d09fcf`                    |
-| 연결 풀러     | `supabase/supavisor:2.9.13@sha256:07f1a6098ffc04b80263bca4eb5c3e7bd2e03dfd1fc465aa108d7329000a1a4e`                     |
-| 런타임 연결   | db 직접 연결(권장), Supavisor **session** 모드(5432)                                                                    |
-| 지원하지 않음 | Supavisor transaction 모드(6543), Supabase Cloud, 공식 구성의 PG15 override(`docker-compose.pg15.yml`)                  |
+| 항목           | 값                                                                                                                      |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 공식 구성      | `supabase/supabase` 저장소 `docker/`, revision `bc27d2661edd09a5d0b8d76ce33da6d4071a756e`(2026-10-16)                   |
+| DB 이미지      | `supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00`(PostgreSQL 17.6) |
+| Data API       | `postgrest/postgrest:v14.18@sha256:c7cd7e265a85b05248abf53f4473fcec7e327c282d0bd0cf60f1551996d09fcf`                    |
+| 연결 풀러      | `supabase/supavisor:2.9.13@sha256:07f1a6098ffc04b80263bca4eb5c3e7bd2e03dfd1fc465aa108d7329000a1a4e`                     |
+| 런타임 연결    | db 직접 연결(권장), Supavisor **session** 모드(5432)                                                                    |
+| 지원하지 않음  | Supavisor transaction 모드(6543), 공식 구성의 PG15 override(`docker-compose.pg15.yml`)                                  |
+| 추가 검증 대상 | Supabase Cloud의 실제 제품 설치·앱·복구. 기존 읽기 전용 점검 결과는 아래 7절에서 구분                                   |
 
 다른 revision·이미지는 확인하지 않은 조합이다. 올리기 전에 아래 6절의 시험을 그 조합으로 돌린다.
+Supabase의 [공식 PG17 안내](https://supabase.com/docs/guides/self-hosting/postgres-upgrade-17)는 새 셀프호스트 배포의
+기본을 PG17로 설명하며 PG15에서의 업그레이드 절차를 따로 제공한다. 기존 DB는 백업·운영 계획 없이 자동 업그레이드하지
+않으며, 공식 가이드의 데이터/키 보존 조건을 확인한다. 이 제품은 PG15를 위한 별도 SQL을 유지하지 않는다.
 
 ## 2. 역할과 권한
 
@@ -29,6 +34,9 @@ GroundZero는 Supabase를 **PostgreSQL로만** 쓴다. 로그인은 그대로 OI
 - 다시 실행해도 같다. 이미 있는 역할은 비밀번호만 맞추고 속성은 확인만 한다. 권한 속성이 붙어 있으면 멈춘다. 스키마 소유자를 정하는
   동안만 `postgres`가 `fvoci_migrator`의 상속 없는 SET 멤버십을 받고, 끝나면 원래대로 돌린다(`postgres`에게 이미 있던 멤버십
   레코드는 옵션만 되돌리고 지우지 않는다).
+- 이 구성의 `postgres`가 가진 CREATEDB·BYPASSRLS는 일반 설치의 최소 요구가 아니다. bootstrap에는 역할 생성/기존 역할
+  ADMIN OPTION, 대상 DB의 CREATE와 CONNECT 부여 권한이 필요하다. migrator는 소유한 `fvoci` 스키마를 사용하며
+  DB 생성 권한은 필요 없다. 복구의 매개변수 SET 권한은 아래 5절의 별도 초기 조건이다.
 - 런타임은 `fvoci_app`만 쓴다. 스키마 소유자·superuser·`BYPASSRLS` 역할로 서버를 돌리지 않는다. Supabase의 `postgres`도
   `BYPASSRLS`이므로 서버 연결에 쓰지 않는다.
 - RLS는 GroundZero의 트랜잭션 설정 `app.user_id`를 본다. Supabase `auth.uid()` 정책을 쓰지 않는다.
@@ -91,7 +99,7 @@ GroundZero는 Supabase를 **PostgreSQL로만** 쓴다. 로그인은 그대로 OI
 
 - 포트는 127.0.0.1의 빈 포트이고 데이터는 tmpfs다.
 - 기존 개발·시험 환경과 다른 Compose 프로젝트로 돈다.
-- 관리자 `postgres`로 bootstrap·migrate를 한 뒤 전체 통합 테스트를 직접 연결로 돌린다.
+- 관리자 `postgres`로 bootstrap, `fvoci_migrator`로 migrate를 한 뒤 실제 앱 역할의 전체 통합 테스트를 직접 연결로 돌린다.
 - `--session-pooler`를 주면 앱 역할 연결을 Supavisor session 모드로 바꿔 한 번 더 돌린다.
 
 빼는 공식 서비스와 이유는 다음과 같다. GroundZero가 쓰지 않으며, 빼도 DB 초기화(역할·스키마·확장)는 db 이미지와 공식 초기화 SQL이
@@ -105,15 +113,26 @@ GroundZero는 Supabase를 **PostgreSQL로만** 쓴다. 로그인은 그대로 OI
 | realtime                                | 공동 편집은 GroundZero 서버가 한다 |
 | meta, functions, analytics/vector(로그) | 쓰지 않음                          |
 
-## 7. Supabase Cloud(확인하지 않음)
+## 7. Supabase Cloud의 공통 구현과 확인 범위
 
-Cloud는 이번에 시험하지 않았다. 옮기기 전에 따로 확인해야 하는 것:
+Cloud도 표준 PostgreSQL·셀프호스트 Supabase와 같은 제품 SQL·RLS·역할 분리를 사용하도록 설계한다(D-100).
+기존 [읽기 전용 점검](supabase-cloud-readonly-precheck.md)은 TLS·session 연결·`SELECT 1`을 확인했다.
+사용자 요청으로 서버 버전 조회를 추가하며 실제 결과는 그 문서에 기록한다. 제품 설치·앱·복구 실행은 아직 검증하지 않았다.
 
-- `postgres` 역할의 `CREATEROLE`과, 역할을 만든 사람에게 주는 권한(`createrole_self_grant`)이 셀프호스트와 같은지
-- supautils가 `session_replication_role`을 허락하는지(복구)
-- 직접 연결 주소(IPv6 전용 여부)와 풀러 주소·사용자 이름 규칙, TLS 인증서
-- 여러 데이터베이스를 만들 수 있는지(시험은 같은 클러스터에 빈 DB를 만든다)
-- 플랫폼이 자동으로 주는 권한·확장·이벤트 트리거가 fvoci 스키마에 닿지 않는지
+설치 전에 실제 PG 버전, 관리자의 CREATEROLE·기존 역할 ADMIN/SET과 DB CREATE·CONNECT 부여 권한, 앱/migrator
+자체 로그인, 제품 외 객체 보존을 확인해야 한다. 앱은 `fvoci_app`, migrator는 `fvoci_migrator`를 사용한다.
+shared session pooler의 URL 사용자 표기는 `<role>.<project-ref>`이며 TLS와 직접 연결의 IP 조건은
+[공식 연결 안내](https://supabase.com/docs/guides/database/connecting-to-postgres)를 따른다.
+관리자·migrator의 session 경유 동작은 앱 session 시험만으로 입증되지 않는다. transaction pooler는 지원하지 않는다.
+
+복구는 같은 구현을 사용하며, Supabase [공식 설정 안내](https://supabase.com/docs/guides/database/custom-postgres-config)는
+`postgres`가 변경할 수 있는 설정에 `session_replication_role`을 명시한다. 실제 프로젝트에서 제품의 `SET LOCAL`이
+허용되는지 별도로 확인한다. 일반 PG는 운영자가 표준 `GRANT SET ON PARAMETER`로 이 초기 권한을 준비할 수 있다.
+제한된 설치 계정의 권한 부족을 Cloud 복구 불가로 단정하거나 복구 기능을 제외하지 않는다.
+
+기존 전체 로컬 시험은 추가 DB 생성과 컨테이너 서비스를 사용하므로 Cloud에 그대로 연결하지 않는다. 별도 DB 생성은
+제품 설치 요구가 아니며 Cloud 버전 조회 승인도 bootstrap·migrate·역할/비밀번호 변경·업그레이드 승인이 아니다.
+관리형 스키마·기본 역할·플랫폼 설정을 자동 변경하지 않고 설치자가 내부 SQL을 수동 수정하게 하지 않는다.
 
 ## 8. 이전 설치에서 올릴 때
 
