@@ -28,6 +28,8 @@
   "documents_revisions_label": "Revisions",
   "documents_unknown_author": "Unknown",
   "documents_restored_from": "restored from r{revision}",
+  "documents_saved_for_editors": "Edited by {editors} · saved for them by {author}",
+  "documents_saved_for_unknown": "Editors not recorded · saved for them by {author}",
   "documents_load_more": "Load more",
   "documents_history_pick": "Choose a revision on the left.",
   "documents_compare_label": "Compare with",

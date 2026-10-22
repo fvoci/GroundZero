@@ -7,6 +7,8 @@
 //! - **한도**: 한 프레임의 메시지 수, 연결마다 초당 바이트·메시지 수, Yjs 상태 크기, 참여자 표시 수·크기.
 //! - **저장**: 몇 초마다 Yjs 상태를 저장하고, 60초 조용하거나 마지막 사람이 나가면 저장 API와 같은 길
 //!   (`documents::write_revision`)으로 리비전을 만든다. 마지막으로 고친 사람이 쓸 수 없으면 연결된 다른 작성자로 쓴다.
+//!   작성자가 마지막 리비전 뒤로 고친 사람이 아니면(대신 저장) 고친 사람을 리비전에 따로 적는다(D-95, `edited_by`).
+//!   고친 사람은 저장 대기 상태와 함께 저장해 방이 닫힌 뒤에도 잃지 않는다.
 //!   그 사이 본문이 다른 길(복원)로 바뀌었으면 쓰지 않고 방을 닫는다. 저장 확인(`MSG_PERSISTED`)은 방이 계속 편집을
 //!   지니고 있을 때나 리비전을 남긴 뒤에만 보낸다: 리비전을 남기지 못한 채 연결을 닫을 때는 닫은 뒤에 상태를 저장한다
 //!   (확인받지 못한 편집은 브라우저가 초안으로 지닌다).
@@ -56,7 +58,8 @@ pub struct RestoreRequest {
 }
 
 /// 문서 옮기기 요청(소유 권한자, 미리보기와 같은 권한 확인을 거친 것). 열린 방이 있으면 방이, 없으면 요청 처리기가 방이
-/// 새로 열리지 않게 막은 채 `documents::move_in_db`로 한다(`Rooms::move_document`).
+/// 새로 열리지 않게 막은 채 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기고(남기지 못하면 옮기지 않고 409)
+/// `documents::move_in_db`로 한다(`Rooms::move_document`).
 #[derive(Debug, Clone)]
 pub struct MoveRequest {
     pub doc: DocumentId,
@@ -539,7 +542,9 @@ impl Rooms {
     }
 
     /// 방 없이 남은 실시간 상태(리비전으로 남지 않은 편집)를 리비전으로 남긴다. 실시간을 끄기 전, 방을 모두 닫은
-    /// 뒤(`begin_closing` 아래)에 쓴다. 작성자는 실시간을 끄는 관리자. 남겼거나 남길 것이 없으면 참.
+    /// 뒤(`begin_closing` 아래)에 쓴다. 작성자는 그 상태를 고친 사람(`load`가 이어받은 편집자, 마지막이 앞) 가운데 아직 쓸
+    /// 수 있는 사람, 없으면 실시간을 끄는 관리자다(대신 저장, 실제 편집자를 리비전에 따로 적는다, D-95). 남겼거나 남길
+    /// 것이 없으면 참.
     pub async fn save_pending(
         &self,
         db: &Db,
@@ -569,9 +574,12 @@ impl Rooms {
 
     /// 방 없이 남은 실시간 상태를 옮기기 전에 리비전으로 남긴다(#71 리뷰). 앞선 방이 리비전을 남기지 못하고 닫혔거나(쓸 수
     /// 있는 사람이 없음) 서버가 주기 저장 뒤 갑자기 멈춘 경우로, 그 편집은 이미 저장 확인을 받았을 수 있다. 실시간이 꺼진
-    /// 곳으로 옮기면 그곳에서 되살릴 길이 없고 다음 일반 저장이 버린다. 작성자는 `snapshot_with` 순서를 따르고 옮기는 사람이
-    /// 대신한다(`save_pending`의 관리자, 방 안 체크포인트와 같다). 남길 것이 없으면(저장된 상태가 없음·본문과 같은 내용,
-    /// 실시간이 꺼짐) 아무것도 하지 않는다. 남기지 못하면 방 안 체크포인트와 같은 409(옮기지 않는다).
+    /// 곳으로 옮기면 그곳에서 되살릴 길이 없고 다음 일반 저장이 버린다. 새로 만든 방이라 연결이 없으므로 작성자 순서는 그
+    /// 상태와 함께 저장된 편집자(마지막 리비전 뒤로 고친 사람, 마지막이 앞) 가운데 아직 쓸 수 있는 사람, 그다음 옮기는
+    /// 사람이다(`save_pending`의 관리자 자리, 방 안 체크포인트와 같다). 옮기는 사람이 대신 남기면 실제 편집자를 리비전에
+    /// 따로 적는다(D-95, 편집자 기록이 없는 옛 상태면 빈 목록). 남길 것이 없으면(저장된 상태가 없음·본문과 같은 내용,
+    /// 실시간이 꺼짐) 아무것도 하지 않는다. 남기지 못하면 방 안 체크포인트와 같은 409로 옮기지 않고 상태는 그대로 둔다
+    /// (본문 검사 실패처럼 다시 해도 남길 수 없는 경우도 같다).
     async fn save_pending_before_move(
         &self,
         db: &Db,
@@ -692,6 +700,9 @@ struct Pending {
     update: Vec<u8>,
 }
 
+/// `app_collab_load`의 한 줄: 문서 리비전, 제목, 본문, 저장된 상태와 그 편집자(상태를 쓸 수 없으면 둘 다 없음).
+type LoadRow = (i32, String, Value, Option<Vec<u8>>, Option<Vec<Uuid>>);
+
 struct Room {
     doc_id: DocumentId,
     generation: u64,
@@ -718,8 +729,11 @@ struct Room {
     last_change: Instant,
     /// 마지막으로 DB에 저장한(또는 저장된 것을 불러온) 상태의 스냅숏(v1). 들어오는 연결에 처음 메시지와 함께 보낸다.
     persisted: Option<Vec<u8>>,
-    /// 고친 사람(마지막이 앞). 리비전 작성자를 고를 때 쓴다.
+    /// 고친 사람(마지막이 앞, 방이 열린 동안 모두). 리비전 작성자를 고를 때 쓴다.
     editors: Vec<UserId>,
+    /// 마지막 리비전 뒤로 고친 사람(마지막이 앞). 리비전을 남기면 비운다. 상태와 함께 저장하고(D-95), 작성자가 이 안에
+    /// 없으면(대신 저장) 리비전에 실제 편집자로 적는다(`edited_by`).
+    edited_since: Vec<UserId>,
     last_recheck: Instant,
     /// 연결의 세션·권한을 다시 확인하는 간격(`FVOCI_COLLAB_RECHECK_SECS`).
     recheck_every: Duration,
@@ -754,6 +768,7 @@ impl Room {
             last_change: Instant::now(),
             persisted: None,
             editors: Vec::new(),
+            edited_since: Vec::new(),
             last_recheck: Instant::now(),
             recheck_every,
         }
@@ -986,7 +1001,8 @@ impl Room {
         self.rooms.moved(self.doc_id, outcome.workspace_id.0);
         let shutdowns = self.drain_after_move(committed_at, rx).await;
         // 커밋 전에 받은 편집까지 새 자리에서 리비전으로 남긴다. 작성자는 마지막으로 고친 사람·연결된 작성자 가운데 새
-        // 자리에서 쓸 수 있는 사람, 없으면 옮긴 사람. 남기면 그때 상태를 저장하고 그 편집의 확인을 처음 보낸다.
+        // 자리에서 쓸 수 있는 사람, 없으면 옮긴 사람(대신 저장이면 실제 편집자를 따로 적는다, D-95). 남기면 그때 상태를
+        // 저장하고 그 편집의 확인을 처음 보낸다.
         let before = self.base_revision;
         let kept = tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot_with(Some(request.user)))
             .await
@@ -1022,6 +1038,15 @@ impl Room {
     /// 따른다. 다른 명령은 답 없이 버린다: 방이 곧 닫히므로 참여는 새 방에서 새 자리의 권한으로 다시 하고, 다른 요청은
     /// 방이 닫힌 것으로 본다. 닫기 요청(`Shutdown`)의 답 자리만 돌려준다: 답 없이 버리면 리비전을 남긴 것으로 읽혀
     /// (`close_all`), 새 자리의 실시간 끄기가 이 방이 리비전이나 상태를 남기기 전에 남은 상태를 찾고 끝낼 수 있다.
+    ///
+    /// 이것은 그 틈을 좁힐 뿐 닫지 않는다. 커밋과 `Rooms::moved` 사이에 새 자리의 실시간 끄기가 방 목록을 모으면 이 방은
+    /// 아직 옛 워크스페이스로 보여 닫기 요청을 받지 않는다. 커밋 전에 대기열에 들어온 닫기 요청(옛 워크스페이스의 실시간
+    /// 끄기, 서버 종료)도 여기서 비워져 옮긴 뒤의 결과로 답을 받는다(남겼으면 참, 못 남겼으면 그 끄기는 409). `moved`를 커밋
+    /// 전에 부를 수는 없다: 옮길지는 이동 트랜잭션이 잠근 뒤 다시 계산해 정하므로, 먼저 새 자리로 적으면 옮기지 않은 방을 새
+    /// 자리의 끄기가 닫을 수 있고(4410, 문서는 옛 자리에서 실시간이 켜진 채), 방 목록 잠금(동기 잠금)은 커밋을 기다리는
+    /// 동안 쥘 수 없다. 남는 틈에 걸린 것은 확인받지 않은 편집뿐이다: 체크포인트까지의 편집은 이미 리비전이고, 그 뒤의
+    /// 편집은 커밋 뒤 리비전을 남겨야 처음 확인을 받는다. 그 리비전을 남기지 못하면 연결을 닫은 뒤 상태만 저장하므로
+    /// 브라우저가 그 편집을 초안으로 지닌다.
     async fn drain_after_move(
         &mut self,
         committed_at: Instant,
@@ -1055,9 +1080,11 @@ impl Room {
     }
 
     /// 저장된 Yjs 상태(그 뒤로 본문이 바뀌지 않았을 때) 또는 본문에서 방 문서를 만든다. 들어오는 사람의 권한으로 읽는다.
+    /// 상태를 이어받으면 그 상태의 편집자(마지막 리비전 뒤로 고친 사람)도 이어받는다: 작성자를 고르는 순서의 앞에 두고
+    /// 대신 저장할 때 실제 편집자로 적는다(D-95).
     async fn load(&mut self, user: UserId) -> Result<Doc, AppError> {
         let mut tx = self.db.begin_as(user).await?;
-        let (revision, _title, body, state): (i32, String, Value, Option<Vec<u8>>) =
+        let (revision, _title, body, state, editors): LoadRow =
             sqlx::query_as("SELECT * FROM app_collab_load($1)")
                 .bind(self.doc_id)
                 .fetch_one(tx.conn())
@@ -1085,6 +1112,13 @@ impl Room {
         self.lineage = lineage_of(&doc).unwrap_or_default();
         self.base_revision = revision;
         self.base_body = body;
+        let editors: Vec<UserId> = editors
+            .unwrap_or_default()
+            .into_iter()
+            .map(UserId)
+            .collect();
+        self.editors.clone_from(&editors);
+        self.edited_since = editors;
         // 저장된 상태에서 불러왔으니 이 상태는 이미 DB에 있다.
         self.persisted = Some(doc.transact().snapshot().encode_v1());
         Ok(doc)
@@ -1314,8 +1348,10 @@ impl Room {
             self.dirty_state = true;
             self.dirty_since_snapshot = true;
             self.last_change = Instant::now();
-            self.editors.retain(|u| *u != user);
-            self.editors.insert(0, user);
+            for list in [&mut self.editors, &mut self.edited_since] {
+                list.retain(|u| *u != user);
+                list.insert(0, user);
+            }
             let message = Message::Sync(SyncMessage::Update(merged)).encode_v1();
             self.broadcast(&message, Some(conn));
         }
@@ -1412,16 +1448,19 @@ impl Room {
             let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
             convert::read_doc(&doc.transact(), &fragment)
         });
+        let editors: Vec<Uuid> = self.edited_since.iter().map(|u| u.0).collect();
         let result = async {
             let mut tx = self.db.begin_anonymous().await?;
-            // 리비전으로 아직 남지 않은 편집이 있는지도 적는다(실시간을 끄기 전에 남긴다, 마이그레이션 0050).
+            // 리비전으로 아직 남지 않은 편집이 있는지와 그 편집자도 적는다(실시간을 끄기 전·옮기기 전에 남긴다, 마이그레이션
+            // 0050·0094).
             let stored: bool =
-                sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3, $4, $5)")
+                sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3, $4, $5, $6)")
                     .bind(self.doc_id)
                     .bind(self.base_revision)
                     .bind(state)
                     .bind(self.dirty_since_snapshot)
                     .bind(body)
+                    .bind(editors)
                     .fetch_one(tx.conn())
                     .await?;
             tx.commit().await?;
@@ -1445,12 +1484,13 @@ impl Room {
     }
 
     /// 방 문서를 저장 API와 같은 길로 리비전에 남긴다. 작성자는 마지막으로 고친 사람, 그 사람이 쓸 수 없으면
-    /// 최근에 고친 다른 사람, 그다음은 연결된 작성자 순.
+    /// 최근에 고친 다른 사람, 그다음은 연결된 작성자 순. 작성자가 마지막 리비전 뒤로 고친 사람이 아니면(대신 저장) 고친
+    /// 사람을 리비전에 따로 적는다(D-95, `write_snapshot`).
     async fn snapshot(&mut self) -> bool {
         self.snapshot_with(None).await
     }
 
-    /// `fallback`: 편집한 사람·연결된 작성자 모두 남길 수 없을 때의 작성자(실시간을 끄는 관리자).
+    /// `fallback`: 편집한 사람·연결된 작성자 모두 남길 수 없을 때의 작성자(실시간을 끄는 관리자, 옮기는 사람).
     async fn snapshot_with(&mut self, fallback: Option<UserId>) -> bool {
         if !self.dirty_since_snapshot {
             return true;
@@ -1479,6 +1519,7 @@ impl Room {
                     self.base_revision = revision;
                     self.base_body = body;
                     self.dirty_since_snapshot = false;
+                    self.edited_since.clear();
                     self.dirty_state = true;
                     // 리비전 번호와 상태가 어긋난 채로 멈추지 않도록 바로 저장한다.
                     self.persist().await;
@@ -1492,6 +1533,7 @@ impl Room {
                         let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
                     }
                     self.dirty_since_snapshot = false;
+                    self.edited_since.clear();
                     self.dirty_state = false;
                     return true;
                 }
@@ -1524,9 +1566,12 @@ impl Room {
         }
     }
 
-    /// 새 리비전 번호, 또는 본문이 다른 길로 바뀌었으면 `None`.
-    async fn write_snapshot(&self, editor: UserId, body: &Value) -> Result<Option<i32>, AppError> {
-        let mut tx = self.db.begin_as(editor).await?;
+    /// 새 리비전 번호, 또는 본문이 다른 길로 바뀌었으면 `None`. 작성자(`author`, 이 트랜잭션을 연 사람)가 마지막 리비전
+    /// 뒤로 고친 사람에 들지 않으면 그 사람들을 리비전의 실제 편집자로 적는다(D-95: 옮긴 사람·관리자·연결된 다른 작성자가
+    /// 대신 저장해도 내용을 쓴 것처럼 보이지 않게). 고친 사람을 모르면(이 기록 전에 저장된 대기 상태) 빈 목록이다.
+    async fn write_snapshot(&self, author: UserId, body: &Value) -> Result<Option<i32>, AppError> {
+        let edited_by = (!self.edited_since.contains(&author)).then_some(&self.edited_since[..]);
+        let mut tx = self.db.begin_as(author).await?;
         sqlx::query("SELECT app_lock_item((SELECT item_id FROM documents WHERE id = $1))")
             .bind(self.doc_id)
             .execute(tx.conn())
@@ -1549,8 +1594,15 @@ impl Room {
             return Ok(Some(current.revision));
         }
         let title = current.title.clone();
-        let row =
-            documents::write_revision(&mut tx, self.doc_id, &title, body, Uuid::now_v7()).await?;
+        let row = documents::write_revision(
+            &mut tx,
+            self.doc_id,
+            &title,
+            body,
+            Uuid::now_v7(),
+            edited_by,
+        )
+        .await?;
         tx.commit().await?;
         Ok(Some(row.revision))
     }

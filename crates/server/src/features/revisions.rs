@@ -43,6 +43,9 @@ pub struct RevisionSummary {
     pub created_at: OffsetDateTime,
     /// 복원으로 만든 리비전이면 원본 리비전 번호.
     pub restored_from: Option<i32>,
+    /// 저장한 사람이 고친 사람 대신 남긴 리비전(실시간 편집, D-95)이면 실제로 고친 사람(마지막이 앞). 보통 리비전은
+    /// 없음, 대신 저장했으나 고친 사람 기록이 없으면 빈 목록. 이름을 볼 수 없는 사람은 `author_name`처럼 null이다.
+    pub edited_by_names: Option<Vec<Option<String>>>,
 }
 
 /// 리비전 하나(본문 포함).
@@ -58,7 +61,15 @@ pub struct Revision {
     #[schema(value_type = String, format = DateTime)]
     pub created_at: OffsetDateTime,
     pub restored_from: Option<i32>,
+    /// `RevisionSummary::edited_by_names`와 같다.
+    pub edited_by_names: Option<Vec<Option<String>>>,
 }
+
+/// 대신 저장한 리비전의 실제 편집자 이름(`edited_by` 순서). 보통 리비전은 NULL, 기록이 없으면 빈 배열. 볼 수 없는
+/// 사용자는 작성자 이름과 같이 NULL(사용자 행이 RLS로 걸러진다).
+const EDITED_BY_NAMES: &str = "CASE WHEN r.edited_by IS NULL THEN NULL
+         ELSE ARRAY(SELECT e.display_name FROM unnest(r.edited_by) WITH ORDINALITY AS x(id, n)
+                    LEFT JOIN users e ON e.id = x.id ORDER BY x.n) END";
 
 /// 목록 범위. `before`보다 작은 리비전을 최신순으로 돌려준다.
 #[derive(Debug, Deserialize, IntoParams)]
@@ -74,7 +85,14 @@ pub struct RestoreRevision {
     pub base_revision: i32,
 }
 
-type SummaryRow = (i32, String, Option<String>, OffsetDateTime, Option<i32>);
+type SummaryRow = (
+    i32,
+    String,
+    Option<String>,
+    OffsetDateTime,
+    Option<i32>,
+    Option<Vec<Option<String>>>,
+);
 
 /// 리비전 목록(최신순, 한 번에 100개). 볼 수 없으면 404.
 #[utoipa::path(get, path = "/api/documents/{document_id}/revisions", operation_id = "list_revisions",
@@ -88,12 +106,12 @@ pub async fn list(
 ) -> Result<Json<Vec<RevisionSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
-    let rows: Vec<SummaryRow> = sqlx::query_as(
-        "SELECT r.revision, r.title, u.display_name, r.created_at, r.restored_from
+    let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
+        "SELECT r.revision, r.title, u.display_name, r.created_at, r.restored_from, {EDITED_BY_NAMES}
          FROM document_revisions r LEFT JOIN users u ON u.id = r.author
          WHERE r.document_id = $1 AND ($2::integer IS NULL OR r.revision < $2)
-         ORDER BY r.revision DESC LIMIT $3",
-    )
+         ORDER BY r.revision DESC LIMIT $3"
+    ))
     .bind(id)
     .bind(page.before)
     .bind(PAGE)
@@ -103,12 +121,15 @@ pub async fn list(
     Ok(Json(
         rows.into_iter()
             .map(
-                |(revision, title, author_name, created_at, restored_from)| RevisionSummary {
-                    revision,
-                    title,
-                    author_name,
-                    created_at,
-                    restored_from,
+                |(revision, title, author_name, created_at, restored_from, edited_by_names)| {
+                    RevisionSummary {
+                        revision,
+                        title,
+                        author_name,
+                        created_at,
+                        restored_from,
+                        edited_by_names,
+                    }
                 },
             )
             .collect(),
@@ -123,6 +144,7 @@ type RevisionRow = (
     Option<String>,
     OffsetDateTime,
     Option<i32>,
+    Option<Vec<Option<String>>>,
 );
 
 /// 리비전 하나. 문서나 리비전이 없거나 볼 수 없으면 404.
@@ -146,26 +168,35 @@ async fn fetch_revision(
     id: DocumentId,
     revision: i32,
 ) -> Result<Option<Revision>, AppError> {
-    let row: Option<RevisionRow> = sqlx::query_as(
-        "SELECT r.revision, r.title, r.body, r.schema_version, u.display_name, r.created_at, r.restored_from
+    let row: Option<RevisionRow> = sqlx::query_as(&format!(
+        "SELECT r.revision, r.title, r.body, r.schema_version, u.display_name, r.created_at, r.restored_from,
+                {EDITED_BY_NAMES}
          FROM document_revisions r LEFT JOIN users u ON u.id = r.author
-         WHERE r.document_id = $1 AND r.revision = $2",
-    )
+         WHERE r.document_id = $1 AND r.revision = $2"
+    ))
     .bind(id)
     .bind(revision)
     .fetch_optional(tx.conn())
     .await?;
     Ok(row.map(
-        |(revision, title, body, schema_version, author_name, created_at, restored_from)| {
-            Revision {
-                revision,
-                title,
-                body,
-                schema_version,
-                author_name,
-                created_at,
-                restored_from,
-            }
+        |(
+            revision,
+            title,
+            body,
+            schema_version,
+            author_name,
+            created_at,
+            restored_from,
+            edited_by_names,
+        )| Revision {
+            revision,
+            title,
+            body,
+            schema_version,
+            author_name,
+            created_at,
+            restored_from,
+            edited_by_names,
         },
     ))
 }

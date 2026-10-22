@@ -237,7 +237,9 @@ export interface paths {
         put?: never;
         /**
          * 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인
-         *     방의 편집을 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문, 다시 하면 된다)다.
+         *     방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문)다. 편집은 그대로
+         *     남고 다시 하면 된다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 경우처럼 다시 해도 남길 수 없을 때도 같은 409로
+         *     옮기지 않는다.
          */
         post: operations["move_document"];
         delete?: never;
@@ -3397,7 +3399,8 @@ export interface components {
         /**
          * @description 이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
          *     - `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).
-         *     - `ErrorBody`(`error: "conflict"`): 실시간 방의 편집을 먼저 리비전으로 남기지 못했다(옮기지 않음, 다시 하면 된다).
+         *     - `ErrorBody`(`error: "conflict"`): 실시간 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지
+         *       못했다(옮기지 않음, 편집은 남는다, 다시 하면 된다).
          */
         MoveConflict: components["schemas"]["MovePreview"] | components["schemas"]["ErrorBody"];
         /** @description 이동 요청. 미리보기에서 접근 변화를 확인했다는 표시(`acknowledge`)가 있어야 이동한다. */
@@ -3854,6 +3857,8 @@ export interface components {
             body: Record<string, never>;
             /** Format: date-time */
             created_at: string;
+            /** @description `RevisionSummary::edited_by_names`와 같다. */
+            edited_by_names?: (string | null)[] | null;
             /** Format: int32 */
             restored_from?: number | null;
             /** Format: int32 */
@@ -3868,6 +3873,11 @@ export interface components {
             author_name?: string | null;
             /** Format: date-time */
             created_at: string;
+            /**
+             * @description 저장한 사람이 고친 사람 대신 남긴 리비전(실시간 편집, D-95)이면 실제로 고친 사람(마지막이 앞). 보통 리비전은
+             *     없음, 대신 저장했으나 고친 사람 기록이 없으면 빈 목록. 이름을 볼 수 없는 사람은 `author_name`처럼 null이다.
+             */
+            edited_by_names?: (string | null)[] | null;
             /**
              * Format: int32
              * @description 복원으로 만든 리비전이면 원본 리비전 번호.

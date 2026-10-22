@@ -696,7 +696,9 @@ async fn refused_code_with(
 
 /// 실시간 끄기 회귀(사용자 지시 2026-10-17, 리뷰 반영): 끄는 동안 새 방이 열리지 않고(4503), 열린 방과 방 없이 남은
 /// 실시간 상태의 편집이 모두 리비전으로 남은 뒤에만 꺼진다. 편집한 사람이 더는 쓸 수 없으면 끄는 관리자가 작성자가
-/// 된다. 같은 워크스페이스를 동시에 끄는 요청이 겹쳐도 편집이 남는다. 끈 뒤 저장 API는 그 리비전 위에서만 성공한다.
+/// 되고 실제 편집자를 리비전에 따로 적는다(D-95). 방 없이 남은 상태도 그 상태와 함께 저장한 편집자가 아직 쓸 수 있으면 그
+/// 사람이 작성자이므로, 여기서 관리자가 작성자인 것은 w1이 그때 독자이기 때문이다. 같은 워크스페이스를 동시에 끄는
+/// 요청이 겹쳐도 편집이 남는다. 끈 뒤 저장 API는 그 리비전 위에서만 성공한다(보통 리비전).
 #[tokio::test]
 async fn turning_realtime_off_keeps_live_edits() {
     let state =
@@ -812,6 +814,14 @@ async fn turning_realtime_off_keeps_live_edits() {
         assert_eq!(doc["realtime"], false);
         assert!(doc["body"].to_string().contains(text), "{doc:?}");
         assert_eq!(last_author(id.clone()).await, admin.id.0);
+        // D-95: 관리자가 대신 남긴 리비전에는 실제로 고친 사람을 따로 적는다(열린 방은 방이 지닌 편집자, 방 없이 남은
+        // 상태는 상태와 함께 저장한 편집자).
+        let (last, _) = last_revision(&owner, id).await;
+        assert_eq!(
+            revision_authors(&owner, id, last).await.1,
+            Some(vec![w1.id.0]),
+            "{id}"
+        );
     }
     let pending: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM fvoci.document_collab_states WHERE pending AND document_id IN ($1::uuid, $2::uuid)",
@@ -853,6 +863,10 @@ async fn turning_realtime_off_keeps_live_edits() {
     )
     .await;
     assert_eq!(fresh.status, StatusCode::OK, "{:?}", fresh.json);
+    // 저장 API의 리비전은 늘 보통 리비전이다(대신 저장 기록 없음).
+    let (last, author) = last_revision(&owner, &a_id).await;
+    assert_eq!(author, w1.id.0);
+    assert_eq!(revision_authors(&owner, &a_id, last).await.1, None);
     owner.close().await;
 }
 
@@ -1315,7 +1329,7 @@ async fn live_ref_store_and_old_version_cleanup_do_not_race() {
         "text": format!("/api/files/{file_id}/content?version=1&inline=true") }] }] });
     let mut t1 = owner.begin().await.unwrap();
     let stored: bool = sqlx::query_scalar(
-        "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2)",
+        "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2, '{}'::uuid[])",
     )
     .bind(&id)
     .bind(&body)
@@ -1696,7 +1710,7 @@ async fn file_refs_lock_versions_before_they_are_written() {
             let body = body.clone();
             tokio::spawn(async move {
                 let stored: bool = sqlx::query_scalar(
-                    "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2)",
+                    "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2, '{}'::uuid[])",
                 )
                 .bind(&id)
                 .bind(&body)
@@ -2525,11 +2539,12 @@ fn acked(c: &Client) -> bool {
 
 /// #71 시험 준비: 실시간을 켠 곳(작성자·독자)과 끈 곳, 작성자가 실시간으로 쓴 문단을 독자 연결이 받은 문서. 작성자는 끈
 /// 곳의 멤버가 아니다. 지켜보는 연결은 독자다: 쓸 수 있는 사람이 연결돼 있으면 방이 닫힐 때 그 사람이 작성자가 되어 잃음이
-/// 가려진다. 권한 재확인(기본 30초)은 시험 중에 돌지 않게 한다. (앱, 주소, 관리자, 켠 곳, 끈 곳, 문서 id, 작성자 연결,
-/// 독자 연결).
+/// 가려진다. 권한 재확인(기본 30초)은 시험 중에 돌지 않게 한다. (상태, 앱, 주소, 관리자, 켠 곳, 끈 곳, 문서 id, 작성자
+/// 연결, 독자 연결).
 async fn live_move_race_setup(
     label: &str,
 ) -> (
+    fvoci_server::http::AppState,
     Router,
     SocketAddr,
     TestUser,
@@ -2564,7 +2579,7 @@ async fn live_move_race_setup(
     e.paragraph("체크포인트 전 문단").await;
     let mut r = connect(addr, Some(&reader), &id, true).await.unwrap();
     assert!(r.until(|c| c.text().contains("체크포인트 전 문단")).await);
-    (app, addr, admin, from, to, id, e, r)
+    (state, app, addr, admin, from, to, id, e, r)
 }
 
 /// 이 워크스페이스의 문서 나무 잠금(이동이 새 자리에서 `app_lock_move`로 잡는 것)을 쥔 트랜잭션과 그 연결의 pid.
@@ -2604,7 +2619,7 @@ async fn get_doc(app: &Router, user: &TestUser, id: &str) -> serde_json::Value {
 /// 뒤에 붙잡는다.
 #[tokio::test]
 async fn edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledged() {
-    let (app, _addr, admin, _from, to, id, mut e, mut r) =
+    let (_state, app, _addr, admin, _from, to, id, mut e, mut r) =
         live_move_race_setup("체크포인트 뒤 편집").await;
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
@@ -2654,16 +2669,20 @@ async fn edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledge
     assert!(acked_at_all, "the kept edit was never acknowledged");
     assert_eq!(writer_closed, Some(4409));
     assert_eq!(saved["workspace_id"], to.as_str());
-    let author: uuid::Uuid = sqlx::query_scalar(
-        "SELECT author FROM fvoci.document_revisions WHERE document_id = $1::uuid ORDER BY revision DESC LIMIT 1",
-    )
-    .bind(&id)
-    .fetch_one(&owner)
-    .await
-    .unwrap();
+    let (last, author) = last_revision(&owner, &id).await;
     assert_eq!(
         author, admin.id.0,
         "the mover stands in for an editor who cannot write in the new place"
+    );
+    // D-95: 체크포인트 리비전은 고친 사람(아직 옛 자리에서 쓸 수 있는 작성자)이 남긴 보통 리비전이다. 커밋 뒤 리비전은
+    // 옮기는 사람이 대신 남겼으므로 실제로 고친 사람을 따로 적는다.
+    let (editor, checkpoint_edited_by) = revision_authors(&owner, &id, last - 1).await;
+    assert_ne!(editor, admin.id.0);
+    assert_eq!(checkpoint_edited_by, None, "an editor's own revision");
+    assert_eq!(
+        revision_authors(&owner, &id, last).await.1,
+        Some(vec![editor]),
+        "the stand-in revision does not name the actual editor"
     );
     // 이동의 답은 그 리비전까지 담은 문서다(화면이 그 판으로 이어 간다).
     assert_eq!(moved.json["document"]["revision"], saved["revision"]);
@@ -2679,7 +2698,7 @@ async fn edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledge
 /// 받아 다른 연결에 보내고 저장을 확인한다. 연결은 그대로다.
 #[tokio::test]
 async fn edits_held_by_a_move_that_does_not_happen_are_accepted() {
-    let (app, _addr, admin, from, to, id, mut e, mut r) =
+    let (_state, app, _addr, admin, from, to, id, mut e, mut r) =
         live_move_race_setup("일어나지 않은 이동").await;
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
@@ -2733,12 +2752,104 @@ async fn edits_held_by_a_move_that_does_not_happen_are_accepted() {
     r.close().await;
 }
 
+/// D-95 조건 4(#71): 이동 요청이 방이 그 명령을 처리하기 전에 끊기면 방은 체크포인트 리비전을 남기지 않고 옮기지도 않는다.
+/// 그 명령 뒤에서 기다린 편집은 평소처럼 받아 확인하고 원래 자리에 남는다. 방은 주기 저장에서 붙잡는다(상태 행을 잠가
+/// 저장이 기다림). 이동은 요청 처리기가 미리보기 확인 뒤 부르는 `Rooms::move_document`를 한 번만 진행해(이동 명령을 방의
+/// 대기열에 넣고 답을 기다리는 자리) 버린다: 요청이 끊기면 axum이 처리기를 그 자리에서 버리는 것과 같다. 시험과 방은 한
+/// 스레드에서 돌므로, 진행한 뒤 버리기까지 방이 그 명령을 처리하지 않는다.
+#[tokio::test]
+async fn a_move_dropped_before_the_room_handles_it_changes_nothing() {
+    let (state, app, _addr, admin, from, to, id, mut e, mut r) =
+        live_move_race_setup("끊긴 이동").await;
+    assert!(
+        e.until(acked).await,
+        "the first edit was never acknowledged"
+    );
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let before = last_revision(&owner, &id).await;
+    let mut hold = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *hold)
+        .await
+        .unwrap();
+    sqlx::query(
+        "SELECT 1 FROM fvoci.document_collab_states WHERE document_id = $1::uuid FOR UPDATE",
+    )
+    .bind(&id)
+    .execute(&mut *hold)
+    .await
+    .unwrap();
+    // 다음 편집의 주기 저장이 그 잠금을 기다린다: 방은 그동안 대기열을 읽지 않는다.
+    e.paragraph("붙잡힌 저장의 문단").await;
+    until_waiting_on_lock("app_system_collab_store", holder).await;
+
+    let preview = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{id}/move/preview"),
+        Some(&admin),
+        Some(json!({ "target_workspace_id": to, "target_item_id": null })),
+    )
+    .await;
+    assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
+    let request = fvoci_server::collab::room::MoveRequest {
+        doc: fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap()),
+        user: admin.id,
+        input: serde_json::from_value(json!({ "target_workspace_id": to, "target_item_id": null,
+            "acknowledged": { "gains": preview.json["gains"], "loses": preview.json["loses"] } }))
+        .unwrap(),
+    };
+    let mut moving = Box::pin(
+        state
+            .collab
+            .move_document(&state.db, &state.config.limits, request),
+    );
+    let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+    assert!(
+        moving.as_mut().poll(&mut cx).is_pending(),
+        "the move did not wait for the room"
+    );
+    // 그 뒤에 보낸 편집은 방의 대기열에서 이동 명령 뒤에 기다린다.
+    e.paragraph("끊긴 이동 뒤 문단").await;
+    e.read_by_server().await;
+    // 방이 이동 명령을 처리하기 전에 요청이 끊긴다. 그다음 방을 놓아 준다.
+    drop(moving);
+    hold.rollback().await.unwrap();
+
+    assert!(
+        r.until(|c| c.text().contains("끊긴 이동 뒤 문단")).await,
+        "the held edit did not reach the other connection"
+    );
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
+    let mut closed = None;
+    while !acked(&e) && tokio::time::Instant::now() < deadline {
+        if let Event::Closed(code) = e.next(Duration::from_millis(200)).await {
+            closed = Some(code);
+            break;
+        }
+    }
+    assert_eq!(closed, None, "the connection was closed");
+    assert!(acked(&e), "the held edit was not acknowledged");
+    let doc = get_doc(&app, &admin, &id).await;
+    assert_eq!(doc["workspace_id"], from.as_str(), "the document moved");
+    assert_eq!(
+        last_revision(&owner, &id).await,
+        before,
+        "the dropped move wrote a checkpoint revision"
+    );
+    assert_eq!(collab_states(&owner, &id, true).await, 1);
+    owner.close().await;
+    e.close().await;
+    r.close().await;
+}
+
 /// #71: 열린 방의 문서를 옮기면, 옮기기 직전에 쓴 편집은 리비전에 남고 연결은 4409로 닫힌다(새 자리의 권한·설정으로 다시
 /// 연다). 전에는 방이 옛 연결을 그대로 받아, 새 자리에서 권한이 없는 편집자의 편집도 다음 권한 재확인까지 받았다. 옮긴
 /// 뒤에 보낸 편집은 받지 않으므로 확인도 오지 않는다(브라우저 초안에 남는다).
 #[tokio::test]
 async fn a_move_closes_the_room_after_saving_its_edits() {
-    let (app, _addr, admin, _from, to, id, mut e, mut r) =
+    let (_state, app, _addr, admin, _from, to, id, mut e, mut r) =
         live_move_race_setup("옮기면 닫히는 방").await;
     e.paragraph("옮기기 직전 문단").await;
     assert!(r.until(|c| c.text().contains("옮기기 직전 문단")).await);
@@ -2840,6 +2951,47 @@ async fn last_revision(owner: &sqlx::PgPool, id: &str) -> (i32, uuid::Uuid) {
     .unwrap()
 }
 
+/// 그 리비전의 작성자와 실제 편집자(작성자가 고친 사람 대신 남겼을 때만 있다, D-95).
+async fn revision_authors(
+    owner: &sqlx::PgPool,
+    id: &str,
+    revision: i32,
+) -> (uuid::Uuid, Option<Vec<uuid::Uuid>>) {
+    sqlx::query_as(
+        "SELECT author, edited_by FROM fvoci.document_revisions WHERE document_id = $1::uuid AND revision = $2",
+    )
+    .bind(id)
+    .bind(revision)
+    .fetch_one(owner)
+    .await
+    .unwrap()
+}
+
+/// 이 문서의 방이 닫혀 서버의 방 목록에서 빠질 때까지 기다린다. `Rooms::restore`는 열린 방이 없으면 아무것도 하지 않고
+/// `None`이다. 방이 있으면 그 방이 복원을 시도하지만 기준 리비전 0은 늘 지난 것이라 복원하지 않는다(충돌). 그 앞의
+/// 체크포인트가 리비전을 남길 수 있으므로 그 방에 쓸 수 있는 사람이 없을 때만 쓴다.
+async fn until_no_room(state: &fvoci_server::http::AppState, user: &TestUser, id: &str) {
+    let doc = fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(id).unwrap());
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let probe = fvoci_server::collab::room::RestoreRequest {
+            doc,
+            user: user.id,
+            revision: 1,
+            request_id: uuid::Uuid::now_v7(),
+            base_revision: 0,
+        };
+        if state.collab.restore(probe).await.is_none() {
+            return;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the live editing room of {id} stayed open"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
 /// 실시간 상태 행이 조건에 맞을 때까지 기다린다(방이 닫히며 저장하는 것).
 async fn until_collab_states(owner: &sqlx::PgPool, id: &str, pending: bool, want: i64) {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
@@ -2855,8 +3007,9 @@ async fn until_collab_states(owner: &sqlx::PgPool, id: &str, pending: bool, want
 /// #71 리뷰: 열린 방 없이 남은 실시간 상태(앞선 방이 리비전을 남기지 못하고 닫힘: 편집자가 독자가 되어 쓸 수 있는 사람이
 /// 없었다)는 옮기기 전에 리비전이 되지 않았다. 그 편집은 이미 저장 확인을 받았고(브라우저는 초안을 지운다), 실시간이 꺼진
 /// 곳으로 옮기면 되살릴 길이 없어 다음 일반 저장이 버렸다. 이제 방이 없으면 옮기기 전에 그 상태를 리비전으로 남긴다(옮기는
-/// 사람이 대신 작성자). 방을 연 적 없는 문서와 방을 열기만 한 문서(편집기가 저장한 본문의 null 속성은 Yjs에 남지 않는다)는
-/// 옮겨도 상태 행도 리비전도 새로 생기지 않는다.
+/// 사람이 대신 작성자, 실제 편집자는 리비전에 따로 적는다, D-95). 남기지 못하면 옮기지 않고 409이며 상태는 남는다. 방을 연
+/// 적 없는 문서와 방을 열기만 한 문서(편집기가 저장한 본문의 null 속성은 Yjs에 남지 않는다)는 옮겨도 상태 행도 리비전도
+/// 새로 생기지 않는다.
 #[tokio::test]
 async fn a_move_without_a_room_saves_a_live_state_left_pending() {
     let state =
@@ -2920,13 +3073,35 @@ async fn a_move_without_a_room_saves_a_live_state_left_pending() {
     assert!(demoted.status.is_success(), "{:?}", demoted.json);
     assert_eq!(e.closed().await, Some(4403));
     until_collab_states(&owner, &left_id, true, 1).await;
+    // 저장 대기 행은 확인을 보낸 주기 저장이 이미 만들었다(방이 닫혔다는 표시가 아니다). 방이 서버의 방 목록에서 빠질
+    // 때까지 기다려, 아래 이동이 방 없는 길을 지나게 한다.
+    until_no_room(&state, &admin, &left_id).await;
     let before = get_doc(&app, &admin, &left_id).await;
     assert!(
         !before["body"].to_string().contains("방 없이 남은 글"),
         "{before}"
     );
 
-    // 방 없이 실시간이 꺼진 곳으로 옮긴다: 옮기기 전에 그 상태가 리비전으로 남는다(옮기는 사람이 작성자).
+    // D-95 조건 3: 그 상태를 리비전으로 남기지 못하면(여기서는 본문 한도를 낮춘 서버라 다시 해도 남길 수 없다) 옮기지 않고
+    // 409이며, 저장 대기 상태는 그대로 남는다.
+    let strict = fvoci_server::app::build_state(config_with(&[
+        ("FVOCI_COLLAB_RECHECK_SECS", "1"),
+        ("FVOCI_MAX_DOCUMENT_BYTES", "40"),
+    ]))
+    .unwrap();
+    let refused = move_to(&common::app(&strict), &admin, &left_id, &to).await;
+    assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
+    assert_eq!(refused.json["error"], "conflict", "{:?}", refused.json);
+    assert_eq!(
+        get_doc(&app, &admin, &left_id).await["workspace_id"],
+        from.as_str(),
+        "the document moved"
+    );
+    assert_eq!(last_revision(&owner, &left_id).await.0, before["revision"]);
+    assert_eq!(collab_states(&owner, &left_id, true).await, 1);
+
+    // 방 없이 실시간이 꺼진 곳으로 옮긴다: 옮기기 전에 그 상태가 리비전으로 남는다. 고친 사람은 쓸 수 없어 옮기는 사람이
+    // 대신 작성자가 되고, 실제 편집자를 리비전에 따로 적는다(D-95, 상태와 함께 저장한 편집자).
     let moved = move_to(&app, &admin, &left_id, &to).await;
     assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
     let after = get_doc(&app, &admin, &left_id).await;
@@ -2936,8 +3111,38 @@ async fn a_move_without_a_room_saves_a_live_state_left_pending() {
         "the acknowledged live edit left without a room is not in the moved document: {after}"
     );
     assert_eq!(moved.json["document"]["revision"], after["revision"]);
-    assert_eq!(last_revision(&owner, &left_id).await.1, admin.id.0);
+    let (saved_at, author) = last_revision(&owner, &left_id).await;
+    assert_eq!(author, admin.id.0);
+    assert_eq!(
+        revision_authors(&owner, &left_id, saved_at).await.1,
+        Some(vec![writer.id.0]),
+        "the mover's stand-in revision does not name the actual editor"
+    );
     assert_eq!(collab_states(&owner, &left_id, true).await, 0);
+    // 기록 API는 대신 저장한 리비전에 실제 편집자 이름을 함께 보인다. 보통 리비전(문서를 만든 리비전)은 없다.
+    let history = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{left_id}/revisions"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    assert_eq!(history[0]["revision"], saved_at);
+    assert_eq!(history[0]["author_name"], "admin");
+    assert_eq!(history[0]["edited_by_names"], json!(["writer"]));
+    assert_eq!(history[1]["edited_by_names"], serde_json::Value::Null);
+    let one = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{left_id}/revisions/{saved_at}"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    assert_eq!(one["edited_by_names"], json!(["writer"]));
 
     // 방을 연 적 없는 문서: 상태 행도 리비전도 생기지 않는다.
     let never_before = last_revision(&owner, &never_id).await;

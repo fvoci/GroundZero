@@ -841,19 +841,22 @@ pub async fn save(
         ));
     }
 
-    let row = write_revision(&mut tx, id, &title, &input.body, input.request_id).await?;
+    // 저장 API는 늘 저장하는 사람이 쓴 내용이다(대신 저장 기록 없음, D-95).
+    let row = write_revision(&mut tx, id, &title, &input.body, input.request_id, None).await?;
     tx.commit().await?;
     document_reply(user, &to_document(row, access))
 }
 
 /// 저장의 끝부분: 문서 행을 새 리비전으로 바꾸고 리비전·링크·언급을 기록한다. 저장 API와 실시간 편집의
-/// 리비전(collab)이 같은 길을 쓴다. 호출하는 쪽이 문서 행을 잠그고 쓰기 권한을 확인한다.
+/// 리비전(collab)이 같은 길을 쓴다. 호출하는 쪽이 문서 행을 잠그고 쓰기 권한을 확인한다. `edited_by`: 실시간 방이 고친
+/// 사람 대신 남기는 리비전의 실제 편집자(D-95). 작성자는 늘 이 트랜잭션의 사용자다(`document_revisions_insert`).
 pub(crate) async fn write_revision(
     tx: &mut UserTx,
     id: DocumentId,
     title: &str,
     body: &Value,
     request_id: Uuid,
+    edited_by: Option<&[UserId]>,
 ) -> Result<DocRow, AppError> {
     let row: DocRow = sqlx::query_as(&format!(
         "UPDATE documents
@@ -870,9 +873,11 @@ pub(crate) async fn write_revision(
     .await?
     // 잠금 뒤 권한이 바뀌어 갱신 정책이 행을 거른 경우(예: 그사이 항목 보관): 500이 아니라 403.
     .ok_or(AppError::Forbidden)?;
+    let edited_by: Option<Vec<Uuid>> = edited_by.map(|users| users.iter().map(|u| u.0).collect());
     sqlx::query(
-        "INSERT INTO document_revisions (document_id, revision, title, schema_version, body, author, request_id)
-         VALUES ($1, $2, $3, $4, $5, app_user_id(), $6)",
+        "INSERT INTO document_revisions (document_id, revision, title, schema_version, body, author, request_id,
+                                         edited_by)
+         VALUES ($1, $2, $3, $4, $5, app_user_id(), $6, $7)",
     )
     .bind(id)
     .bind(row.revision)
@@ -880,6 +885,7 @@ pub(crate) async fn write_revision(
     .bind(SCHEMA_VERSION)
     .bind(body)
     .bind(request_id)
+    .bind(edited_by)
     .execute(tx.conn())
     .await?;
     // 제목이 바뀌었으면 감사 기록을 남긴다(이전·새 제목은 함수가 두 리비전에서 읽는다, 본문은 남기지 않는다).
@@ -1196,7 +1202,8 @@ pub struct MovePreview {
 
 /// 이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
 /// - `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).
-/// - `ErrorBody`(`error: "conflict"`): 실시간 방의 편집을 먼저 리비전으로 남기지 못했다(옮기지 않음, 다시 하면 된다).
+/// - `ErrorBody`(`error: "conflict"`): 실시간 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지
+///   못했다(옮기지 않음, 편집은 남는다, 다시 하면 된다).
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(untagged)]
 pub enum MoveConflict {
@@ -1277,7 +1284,9 @@ pub async fn move_preview(
 }
 
 /// 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인
-/// 방의 편집을 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문, 다시 하면 된다)다.
+/// 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문)다. 편집은 그대로
+/// 남고 다시 하면 된다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 경우처럼 다시 해도 남길 수 없을 때도 같은 409로
+/// 옮기지 않는다.
 #[utoipa::path(post, path = "/api/documents/{document_id}/move",
     params(("document_id" = String, Path, format = Uuid)), request_body = MoveDocument,
     responses((status = 200, body = MoveOutcome), (status = 403, body = ErrorBody),
@@ -1293,7 +1302,8 @@ pub async fn move_document(
     // 옮겼으면 그사이 받은 편집까지 리비전으로 남긴 뒤 연결을 닫는다(4409, 새 자리의 권한·설정으로 다시 연다). 방이 이
     // 명령을 처리하는 동안 들어온 편집은 대기열에서 기다리므로, 확인을 받은 편집이 옮긴 곳에서 리비전이 되지 못하고
     // 사라지는 일이 없다. 방이 없으면 옮기는 동안 방이 새로 열리지 않게 막고, 방 없이 남은 실시간 상태(앞선 방이 리비전을
-    // 남기지 못하고 닫힘)를 먼저 리비전으로 남긴 뒤(옮기는 사람이 대신 작성자, 남기지 못하면 409) 옮긴다. 방에는 이
+    // 남기지 못하고 닫힘)를 먼저 리비전으로 남긴 뒤(그 상태를 고친 사람 가운데 아직 쓸 수 있는 사람, 없으면 옮기는 사람이
+    // 대신 작성자이고 실제 편집자를 따로 적는다, D-95. 남기지 못하면 409) 옮긴다. 방에는 이
     // 이동을 할 수 있는 요청(문서 소유 권한·대상 쓰기 권한, 미리보기와 같은 확인)만 보낸다: 거절될 요청이 다른 사람의 열린
     // 편집을 리비전으로 남기게 하거나 방을 기다리게 하지 않는다(리뷰). 거절이면 그 오류를 바로 돌려준다. 이동 트랜잭션이
     // 잠근 뒤 다시 확인하는 것이 그대로 최종이다. 방을 기다리는 동안 DB 연결을 쥐지 않는다.
