@@ -11,6 +11,7 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
+  import { trimLikeServer } from './conflict';
   import { KIND_LABEL } from './labels';
   import { dayIn, instantOf, isMissingLocalTime, localTimeZone, wallTime } from './time';
 
@@ -20,9 +21,11 @@
     submitLabel: string;
     onsubmit: (input: EventInput) => Promise<void>;
     oncancel?: (() => void) | undefined;
+    /** 연 때와 다르게 고친 칸이 있는지 바뀔 때마다 알린다. */
+    onunsaved?: ((unsaved: boolean) => void) | undefined;
   }
 
-  const { idPrefix, initial, submitLabel, onsubmit, oncancel }: Props = $props();
+  const { idPrefix, initial, submitLabel, onsubmit, oncancel, onunsaved }: Props = $props();
 
   /** 오늘(사용자 시간대, D-81). */
   function today(): string {
@@ -67,6 +70,8 @@
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
 
+  // onsubmit은 제출 이벤트 안에서 곧바로(이 함수의 첫 await 전에) 불러야 한다. EventDialog는 충돌 알림의 단추가
+  // 시작한 제출인지를 requestSubmit() 동안만 두는 표시로 가린다(D-94).
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (busy) return;
@@ -112,6 +117,27 @@
       busy = false;
     }
   }
+
+  // 연 때와 다르게 고친 칸이 있는지(대화상자가 닫기 전에 버릴지 묻는다). 서버가 저장할 값으로 본다: 제목·설명은
+  // 서버처럼 앞뒤 공백을 지우고(D-94 비교와 같음), 시간대는 보낼 때처럼 지운다. 보내지 않는 칸(종일이면 시각, 아니면
+  // 날짜)은 보지 않는다.
+  const unsaved = $derived(
+    f.kind !== base.kind ||
+      trimLikeServer(f.title) !== trimLikeServer(base.title) ||
+      trimLikeServer(f.description) !== trimLikeServer(base.description) ||
+      f.allDay !== base.allDay ||
+      (f.allDay
+        ? f.startDate !== base.startDate || f.endDate !== base.endDate
+        : f.startWall !== base.startWall ||
+          f.endWall !== base.endWall ||
+          f.timezone.trim() !== base.timezone),
+  );
+  $effect(() => {
+    onunsaved?.(unsaved);
+    return () => {
+      onunsaved?.(false);
+    };
+  });
 </script>
 
 <form class="grid gap-3 md:grid-cols-2" onsubmit={(e) => void submit(e)}>
