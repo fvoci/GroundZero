@@ -59,6 +59,7 @@
 - 시크릿은 이미지·Git·로그에 넣지 않는다. 테스트 자격 증명은 운영용과 분리한다.
 - 불필요한 privileged 모드, Docker 소켓 마운트, 호스트 전체 디렉터리 마운트를 금지한다.
 - CPU·메모리·디스크의 실제 사용량에 맞춰 무거운 작업의 동시 실행 수를 제한한다. 컨테이너를 쓴다고 자원 부족이 없어지는 것은 아니다.
+- 메모리 한도를 둔 시험 컨테이너가 작업자·스레드 수를 호스트 코어 수로 정하면 CPU도 함께 묶는다. 시험 Meilisearch는 CPU 2다(32코어 기계에서 묶지 않으면 512m를 넘어 OOM, 4로는 최고 약 470MB). 그래서 `cargo xtask test`는 CPU 2개 이상인 기계가 필요하다(그보다 적으면 Docker가 기동을 거부한다).
 - 작업 종료 시 자신이 생성한 컨테이너·네트워크·테스트 볼륨만 정리한다. 전역 prune이나 다른 작업의 자원 삭제는 하지 않는다.
 - 빠른 편집·포맷·타입 검사는 고정 버전의 호스트 도구 사용을 허용하되, 최종 통합 검증은 표준 컨테이너 환경에서 실행한다.
 - xtask와 pnpm 명령으로 실행·검사·종료할 수 있게 하고, 별도의 복잡한 실행 프레임워크는 만들지 않는다.
@@ -1756,6 +1757,11 @@ Meilisearch 데이터를 지워 작업 번호가 처음부터 다시 매겨지�
   - `deploy/supabase/compose.test.yaml`을 겹쳐 db·rest·supavisor만 띄운다. 이미지는 digest로 고정하고, 고정 컨테이너 이름을 지우고,
     `127.0.0.1` 빈 포트와 tmpfs 데이터를 쓴다. Compose 프로젝트는 `fvoci-<체크아웃>-<해시>-supabase`다.
   - 검색·S3(·Keycloak)은 시험 Compose에서 PostgreSQL만 빼고 띄운다. 값은 `deploy/supabase/test.env`의 시험 값이다.
+  - 바이너리마다 동시에 도는 시험을 4개로 묶는다(`RUST_TEST_THREADS=4`, 직접 연결·session 두 단계). session 모드는 풀
+    크기(64)를 넘는 클라이언트를 기다리게 하지 않고 거절하는데, 시험마다 앱 상태(연결 풀 최대 16)를 따로 만들어 64 / 16 = 4다.
+    db의 `max_connections`(100, superuser 몫 3)에서 Supabase 자체 서비스가 약 10개를 쓰므로 직접 연결 단계도 같이 묶는다.
+    기본값(코어 수)이면 32코어 기계에서 collab 시험이 session 단계에서 앱 연결 64·DB 연결 97개 가운데 95개까지 써
+    `XX000`으로 실패했고, 직접 연결 단계에서도 94개까지 썼다(W14).
   - 관리자는 Supabase의 `postgres`(superuser 아님)다. `cargo xtask down`이 이 프로젝트도 지운다.
 - 빼는 서비스와 이유는 `docs/self-hosting-supabase.md` 6절에 있다. 운영자 안내도 그 문서에 있다.
 - CI `supabase` job이 같은 명령(`--session-pooler --oidc`)을 러너에서 돌린다. Supabase 서비스를 호스트 포트로 열므로 base 이미지
