@@ -300,6 +300,10 @@ describe('closing the task dialog with unsaved input', () => {
     if (save === null) throw new Error('task-save');
     await fireEvent.click(save);
     await screen.findByText('저장했습니다.');
+    // 저장이 끝나 다시 닫을 수 있게 된 뒤(닫기 단추가 돌아온다).
+    await waitFor(() => {
+      expect(within(content()).queryByRole('button', { name: m.common_close() })).not.toBeNull();
+    });
     field('task-title').focus();
     await escape();
     expect(back).toHaveBeenCalledTimes(1);
@@ -333,7 +337,9 @@ describe('closing the task dialog with unsaved input', () => {
     expect(field('task-title').value).toBe('새 제목');
   });
 
-  it('asks while a save is still on its way and keeps the dialog when I keep editing', async () => {
+  // CodeRabbit(cf44454): 저장 중에 "버리고 닫기"를 골라도 이미 보낸 저장은 서버에 남는다. 일정 대화상자처럼 폼을 저장하는
+  // 동안은 닫지도 묻지도 않는다(Esc·바깥 클릭은 무시, 닫기 단추는 숨김). 저장이 끝나면 다시 닫을 수 있다.
+  it('neither asks nor closes while the form saves', async () => {
     const { back } = await openBoard();
     const late = deferred<{ kind: 'updated'; task: TaskDetailView }>();
     vi.spyOn(api, 'updateTask').mockReturnValue(late.promise);
@@ -341,19 +347,19 @@ describe('closing the task dialog with unsaved input', () => {
     const save = document.getElementById('task-save');
     if (save === null) throw new Error('task-save');
     await fireEvent.click(save);
-    field('task-title').focus();
-    await escape();
-    const box = await findConfirm();
+    await escape(content());
+    await clickOutside();
+    await flush();
+    expect(confirmBox()).toBeNull();
+    expect(back).not.toHaveBeenCalled();
+    expect(within(content()).queryByRole('button', { name: m.common_close() })).toBeNull();
     late.resolve({ kind: 'updated', task: task('t1', { title: '새 제목', version: 3 }) });
     await screen.findByText('저장했습니다.');
-    // 늦게 온 저장 결과가 확인을 닫거나 대화상자를 닫지 않는다.
-    expect(confirmBox()).toBe(box);
-    await fireEvent.click(within(box).getByRole('button', { name: m.common_discard_keep() }));
     await waitFor(() => {
-      expect(confirmBox()).toBeNull();
+      expect(within(content()).queryByRole('button', { name: m.common_close() })).not.toBeNull();
     });
-    expect(back).not.toHaveBeenCalled();
-    expect(field('task-title').value).toBe('새 제목');
+    await escape(content());
+    expect(back).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the overwrite question and my input when I keep editing from the close button', async () => {

@@ -487,6 +487,8 @@
   // 업무 상세에 기준과 다르게 고친 칸이 있는지, 그래서 닫기 전에 버릴지 묻는 중인지. 물은 업무(`askedFor`)가 지금 연
   // 업무일 때만 버리고 닫는다. 계속 편집하면 물을 때 초점이 있던 곳(대화상자 밖이었으면 대화상자)으로 돌아간다.
   let detailUnsaved = $state(false);
+  // 폼을 저장하는 동안은 닫지도 묻지도 않는다: 이미 보낸 저장은 서버에 남으므로 "버리고 닫기"가 거짓이 된다(일정 대화상자와 같음).
+  let detailSaving = $state(false);
   let confirmClose = $state(false);
   let askedFor: string | undefined;
   let keepFocus: HTMLElement | null = null;
@@ -494,7 +496,7 @@
 
   /** Esc·바깥 클릭·닫기 단추. 저장하지 않은 입력이 있으면 닫지 않고 버릴지 묻는다. */
   function requestClose(): void {
-    if (confirmClose) return;
+    if (confirmClose || detailSaving) return;
     if (detailUnsaved && openTaskId !== undefined) {
       const active = document.activeElement;
       keepFocus =
@@ -508,7 +510,7 @@
 
   function discard(): void {
     confirmClose = false;
-    if (askedFor !== undefined && askedFor === openTaskId) close();
+    if (askedFor !== undefined && askedFor === openTaskId && !detailSaving) close();
   }
 
   function close(): void {
@@ -1655,8 +1657,9 @@
   <Dialog.Content
     bind:ref={dialogContent}
     class="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
-    escapeKeydownBehavior={confirmClose ? 'ignore' : 'close'}
-    interactOutsideBehavior={confirmClose ? 'ignore' : 'close'}
+    escapeKeydownBehavior={confirmClose || detailSaving ? 'ignore' : 'close'}
+    interactOutsideBehavior={confirmClose || detailSaving ? 'ignore' : 'close'}
+    showCloseButton={!detailSaving}
     onCloseAutoFocus={(e: Event) => {
       const card =
         returnTo === undefined
@@ -1684,6 +1687,9 @@
           onopen={open}
           onunsaved={(value: boolean) => {
             detailUnsaved = value;
+          }}
+          onsaving={(value: boolean) => {
+            detailSaving = value;
           }}
         />
       {/key}

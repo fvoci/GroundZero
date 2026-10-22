@@ -79,9 +79,11 @@
     onopen: (taskId: string) => void;
     /** 기준과 다르게 고친 칸이 있는지 바뀔 때마다 알린다(대화상자가 닫기 전에 묻는다). */
     onunsaved?: ((unsaved: boolean) => void) | undefined;
+    /** 폼을 저장하는 중인지 바뀔 때마다 알린다(대화상자는 그동안 닫지 않는다). */
+    onsaving?: ((saving: boolean) => void) | undefined;
   }
 
-  const { taskId, tasks, workspaces, onchanged, onopen, onunsaved }: Props = $props();
+  const { taskId, tasks, workspaces, onchanged, onopen, onunsaved, onsaving }: Props = $props();
 
   const subtasks = $derived(tasks.filter((t) => t.parent_id === taskId));
   const byId = $derived(new Map(tasks.map((t) => [t.id, t])));
@@ -413,6 +415,12 @@
     onunsaved?.(unsaved);
     return () => {
       onunsaved?.(false);
+    };
+  });
+  $effect(() => {
+    onsaving?.(saving);
+    return () => {
+      onsaving?.(false);
     };
   });
 
