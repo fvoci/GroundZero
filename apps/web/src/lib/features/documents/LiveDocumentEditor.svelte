@@ -9,6 +9,7 @@
   import type { DocNode, DocumentView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { switchAccount } from '$lib/features/feedback/feedback.svelte';
   import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
@@ -222,7 +223,9 @@
         // 남기지 못한 편집이 화면에만 있다. 바꾸지 않고 멈춰 사람이 옮겨 둔 뒤 다시 연결하게 한다.
         stopped = stop;
       } else if (stop === 'reload') {
-        // 문서가 다른 길(복원 등)로 바뀌었다. 옛 내용을 섞지 않도록 새 문서로 다시 연다.
+        // 문서가 다른 길(복원 등)로 바뀌었다. 옛 내용을 섞지 않도록 새 문서로 다시 연다. 다시 열기 전에 남기지 못하면
+        // 멈춘 채로 둔다(다시 연결·버리기 단추가 보이게).
+        stopped = stop;
         restart();
       } else if (stop === 'off') {
         if (onrealtimeoff !== undefined) handOff(onrealtimeoff);
@@ -260,11 +263,34 @@
   }
 
   function restart(): void {
-    // 다시 열면 이 화면의 편집이 바뀌거나(본문) 이 편집기가 없어진다. 반영되지 않은 편집을 먼저 남기고, 남기지 못했는데
-    // 아직 알리지 않았으면 진행하지 않고 알린다(옮겨 둘 수 있게). 알린 뒤 다시 누른 것은 옮겨 둔 뒤의 명시적 진행이다
-    // (그때도 먼저 다시 남겨 본다, CodeRabbit #91).
-    const informed = unsaved === 'lost';
-    if (!keepUnsaved() && !informed) return;
+    // 다시 열면 이 화면의 편집이 바뀌거나(본문) 이 편집기가 없어진다. 반영되지 않은 편집을 먼저 남기고, 남기지 못했으면
+    // 몇 번을 눌러도 진행하지 않고 알린다(알린 뒤 다시 누른 것을 버리기로 보지 않는다). 버리려면 따로 확인받는다
+    // (`discardAndReopen`, 사용자 결정 2026-10-22).
+    if (!keepUnsaved()) return;
+    reopen();
+  }
+
+  // "편집 버리고 다시 연결"의 확인. 남기지 못한 편집이 있을 때만 그 단추를 보인다.
+  let confirmDiscard = $state(false);
+
+  /**
+   * 남기지 못한 편집을 버리고 다시 연다. 버린 편집은 저장소에 쓰지 않고, 이미 남아 있는 초안(다른 문서·다른 계정·고를
+   * 때까지 둔 지난 초안)도 지우거나 덮지 않는다. 부모에게 맡기면 이 편집기는 없어질 때·떠날 때 다시 남기지 않고
+   * (`handedOff`), 이 자리에서 다시 열면 버린 편집이 더는 반영되지 않은 편집으로 남지 않게 한다(그 뒤 새로 고친 것은 남긴다).
+   */
+  function discardAndReopen(): void {
+    confirmDiscard = false;
+    if (keepTimer !== undefined) clearTimeout(keepTimer);
+    keepTimer = undefined;
+    title = savedTitle;
+    // 버린 제목을 저장하지 못했다는 알림도 거둔다.
+    titleMessage = undefined;
+    latest = undefined;
+    unsaved = undefined;
+    reopen();
+  }
+
+  function reopen(): void {
     if (stopped === 'denied' && onreload !== undefined) {
       handOff(onreload);
       return;
@@ -273,12 +299,13 @@
       handOff(onrealtimeoff);
       return;
     }
-    // 남기지 못한 편집은 사람이 옮겨 둔 뒤 다시 연결했다(새 내용으로 바뀐다).
+    // 남기지 못한다고 알린 뒤 사람이 그 편집을 되돌려 반영할 것이 없어졌다.
     if (unsaved === 'lost') unsaved = undefined;
     if (session !== undefined) closeLive(session);
     session = undefined;
     stopped = undefined;
     // 새 문서로 다시 연다(4409 등). 방금 남긴 초안(서버가 받지 않은 편집)을 줄 뒤에 붙여 다시 맞춰진 뒤 고르게 한다.
+    // 버리고 다시 열 때도 이 탭에 앞서 남은 초안이 있으면 같다(줄로 옮기지 못하면 그 자리에 두고 고르게 한다).
     reserved ??= takeOrReserve(start.id).reserved;
     if (found === undefined) checkedEarlier = false;
     epoch += 1;
@@ -290,7 +317,8 @@
   // 편집을 초안으로 남긴다. 남기지 못하면(저장 공간 부족 등) 떠나기를 경고해 화면의 내용을 지킨다.
   onMount(() => {
     const beforeUnload = (event: BeforeUnloadEvent): void => {
-      if (!hasPending() || keepDraft()) return;
+      // 부모에게 맡긴 뒤로는 남기지 않는다(맡길 때 남겼거나 버렸다). 남기면 다시 열 때 또 나온다.
+      if (handedOff || !hasPending() || keepDraft()) return;
       event.preventDefault();
     };
     window.addEventListener('beforeunload', beforeUnload);
@@ -425,6 +453,17 @@
       <Button size="sm" variant="outline" disabled={handedOff} onclick={restart}
         >{m.documents_live_reconnect()}</Button
       >
+      {#if unsaved === 'lost'}
+        <Button
+          id="live-discard-reconnect"
+          size="sm"
+          variant="ghost"
+          disabled={handedOff}
+          onclick={() => {
+            confirmDiscard = true;
+          }}>{m.documents_live_discard_reconnect()}</Button
+        >
+      {/if}
     {/if}
   </div>
   <form
@@ -502,4 +541,14 @@
   <p class="text-xs text-muted-foreground">
     {m.documents_live_hint()}
   </p>
+  <DiscardChangesConfirm
+    open={confirmDiscard}
+    description={m.documents_live_discard_description()}
+    confirmLabel={m.documents_live_discard_reconnect()}
+    onkeep={() => {
+      confirmDiscard = false;
+    }}
+    ondiscard={discardAndReopen}
+    returnFocus={() => document.getElementById('live-discard-reconnect')}
+  />
 </section>
