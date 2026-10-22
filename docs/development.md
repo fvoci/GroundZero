@@ -2593,7 +2593,7 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   | #80                | 실제 브라우저 점검: 표시 설정 대화상자가 고른 값을 저장 전에 저장값으로 되돌림(main에도 있음, D-50·D-81)                                                                                                                         |
   | #81 (0093)         | 판이 지난 회차·단위·기록 수정은 "다시 시도"가 아니라 "다시 읽기"(409 `invalid_state`, 메시지 보존), SQLSTATE 변환 표 시험(C32, #77)                                                                                              |
   | #82                | 업무 저장 충돌 뒤 "내 입력으로 다시 저장"(D-94), 닫기 확인(D-97), 충돌 확인 값 상자의 키보드 접근(D-98)                                                                                                                          |
-  | #89                | 시험 스택: 시험 Meilisearch CPU 한도, 세션 풀러 시험의 스레드 수(W14가 마무리 중, push 뒤 갱신)                                                                                                                                  |
+  | #89                | 시험 스택: 시험 Meilisearch CPU 한도, Supabase 두 단계의 시험 스레드 4개(`01f17fb`)                                                                                                                                              |
 
   #57·#58·#59는 서버 마이그레이션을 그 화면의 웹 수정과 한 PR에 담았다. 서버 판단을 옮긴 결함이 그 화면에서 드러나 함께 시험했기 때문이다. 대신 SQL을
   먼저 병합하려면 이 세 PR을 통째로 병합해야 한다.
@@ -2602,7 +2602,8 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   정의하지 않는다.
   - 순서: 0080 #51 → 0081 #52 → 0082 #53 → 0083 #54 → 0084 #58 → 0085 #57 → 0086 #59 → 0087 #62 → 0088 #65 → 0089 #66 → 0090 #67 →
     0091 #74 → 0092 #75 → 0093 #81 → 0094 #64(D-95). 그 뒤 #55·#56·#60·#61·#63·#68·#72·#73·#80을 넣고, 마지막에 이 기록(#69)을 넣는다.
-    #82·#89의 자리와 실제 병합 결과는 최종 통합 뒤 갱신한다.
+    실제로는 #89를 맨 앞에, #64를 #63 뒤에(#55·#56·#60·#61·#63에는 마이그레이션이 없어 적용 순서는 같다), #82를 #80 뒤에 넣었다.
+    최종 통합의 단계와 실제 병합 결과는 아래 「최종 통합과 병합 결과」.
   - 뒤에 병합하는 PR이 정리할 것(지금 그 PR에는 고칠 파일이 없어 미리 넣을 수 없다):
     - `predecessor_ids`(#62가 없앰)를 쓰는 #56·#58의 웹 시험 고정 값.
     - `up_next_counts`(#61이 더함)가 없는 #59의 `HomeView` 고정 값.
@@ -2650,12 +2651,12 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   | #65 | `b9f5c22` | Review completed, Merge Risk Minimal                           | 0                  | W7 `6e6a860`·`b9f5c22`                                    |
   | #66 | `5142fb0` | Review completed, Merge Risk Minimal                           | 0                  | W9 `5142fb0`(통합 시험의 간헐 실패, CodeRabbit 지적 아님) |
   | #82 | `4d3ae8a` | Review completed, Merge Risk Moderate(실제 브라우저 초점 확인) | 1(아래 34)         | W2 `1640dbc`, W11 `36e43d6`~`4d3ae8a`(D-97·D-98)          |
-  | #89 | `2518724` | Review completed, Merge Risk Low                               | 0                  | W8 `7d9529c`·`2518724`, W14 마무리 중                     |
+  | #89 | `01f17fb` | Review completed, Merge Risk Minimal(병합 `6240425`)           | 0                  | W8 `7d9529c`·`2518724`, W14 `01f17fb`                     |
   - #64의 DB 행렬(세 환경 PASS)은 `cfae027`에서 돌았다. `56e9108`·`2acebe9`는 계약 문구·문서 서식·웹만 바꿨고 `cargo xtask check`(56e9108)와 웹
     검사(2acebe9)만 돌았다.
   - #89: W14가 #64의 늘어난 collab 시험이 세션 풀러 단계에서 Supavisor 풀(64)과 DB 연결 한도(97)를 다 쓰는 것을 찾았다(`2acebe9` + #89에서 세 번 중
-    두 번 FAIL, 제품 결함이 아닌 시험 구성). 시험 스레드 수를 줄이는 수정은 아직 #89 머리에 없으며, push 뒤 갱신한다. 그때까지 세션 풀러 행렬은
-    간헐 실패할 수 있다.
+    두 번 FAIL, 제품 결함이 아닌 시험 구성). 그 뒤 #89 `01f17fb`가 Supabase 두 단계의 시험 스레드를 4개로 줄였고(`RUST_TEST_THREADS=4`),
+    R8의 세션 풀러 단계가 끝까지 통과했다(아래 「R8」). #89 행의 CodeRabbit 상태는 2026-10-22T10:35Z에 다시 확인했다.
 
   | #   | PR   | 지적(요지)                                                                     | 상태                                 | 수정 SHA·근거                                                                                                                                           | 링크                                                                     |
   | --- | ---- | ------------------------------------------------------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -2682,7 +2683,7 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   | 21  | #60  | `81c9d99` diff 밖 Major: 초안을 못 남기면 계정 전환 때 경고 유지               | FIXED                                | W6 `0345026`(수정 전 FAIL)                                                                                                                              | https://github.com/fvoci/GroundZero/pull/60#pullrequestreview-5608659609 |
   | 22  | #60  | `1bc1f57`: 만료 업로드 다시 시작, 4412에서 초안을 못 남기면 다시 읽지 않음     | FIXED                                | W10 `6ff6187`                                                                                                                                           | https://github.com/fvoci/GroundZero/pull/60#pullrequestreview-5609622877 |
   | 23  | #60  | `6ff6187`: 다른 다시 읽기 경로에서 실시간 편집 보존, 저장 안 한 제목           | FIXED                                | W10 `8e42036`                                                                                                                                           | https://github.com/fvoci/GroundZero/pull/60#pullrequestreview-5609809776 |
-  | 24  | #60  | `8e42036` diff 밖 Minor: 첫 본문 동기화 전 제목만 고친 초안을 남기지 못함      | OPEN                                 | 머리에 수정 없음(#60 담당). 요약 Merge Risk Low의 남은 우려와 같다                                                                                      | https://github.com/fvoci/GroundZero/pull/60#pullrequestreview-5609979485 |
+  | 24  | #60  | `8e42036` diff 밖 Minor: 첫 본문 동기화 전 제목만 고친 초안을 남기지 못함      | FIXED                                | #60 `a811f92`(`live-title-before-sync.test.ts`), 그 머리에서 요약 Merge Risk Minimal                                                                    | https://github.com/fvoci/GroundZero/pull/60#pullrequestreview-5609979485 |
   | 25  | #60  | 요약 `_proposed_`: 버전을 맞춘 배포·되돌리기 절차 문서화                       | OPEN                                 | 답글 없음(#60 담당). 값 없는 옛 요청은 400으로 거절된다(D-92)                                                                                           | https://github.com/fvoci/GroundZero/pull/60#issuecomment-6319780473      |
   | 26  | #64  | `fb3a11e` diff 밖: 복원 409 계약                                               | FIXED                                | W1 `0446746`                                                                                                                                            | https://github.com/fvoci/GroundZero/pull/64#issuecomment-6331937772      |
   | 27  | #64  | `56e9108` Major: 초안을 못 남겨도 "저장되지 않음" 안내                         | FIXED                                | W1b `2acebe9`(수정 전 FAIL), 스레드 해결                                                                                                                | https://github.com/fvoci/GroundZero/pull/64#pullrequestreview-5609387577 |
@@ -2694,12 +2695,16 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   | 33  | #59  | `19161fc` 인라인 Minor: 충돌 저장 단추도 요청 중 막기                          | FIXED                                | W11 `180a0ae`                                                                                                                                           | https://github.com/fvoci/GroundZero/pull/59#pullrequestreview-5609700261 |
   | 34  | #82  | `cf44454` 인라인 Minor: 폼 저장 중에는 닫기·버리기 막기                        | FIXED                                | W11 `4d3ae8a`. 스레드는 풀리지 않았고 답글 없음                                                                                                         | https://github.com/fvoci/GroundZero/pull/82#discussion_r4344782202       |
   | 35  | #82  | `8cc2a52` diff 밖 Major: 시작일 칸도 잠그기                                    | FIXED                                | W11 `cf44454`                                                                                                                                           | https://github.com/fvoci/GroundZero/pull/82#pullrequestreview-5609394051 |
-  | 36  | #82  | 요약 Merge Risk Moderate: 확인 내용을 누른 뒤 초점이 밖이면 Esc가 닫을 수 있음 | OPEN(최종 통합 뒤 갱신)              | 실제 브라우저 확인이 필요(jsdom은 클릭에 따른 초점 이동을 하지 않음)                                                                                    | https://github.com/fvoci/GroundZero/pull/82#issuecomment-6329814237      |
+  | 36  | #82  | 요약 Merge Risk Moderate: 확인 내용을 누른 뒤 초점이 밖이면 Esc가 닫을 수 있음 | REJECTED(실제 브라우저 PASS)         | `07be34d` Chromium: 확인 내용을 실제 마우스로 누른 뒤 Esc도 확인만 닫음(W17 `b5-1`). Safari NOT RUN                                                     | https://github.com/fvoci/GroundZero/pull/82#issuecomment-6329814237      |
   | 37  | #89  | `7d9529c` Minor: CPU 2개 미만 호스트                                           | FIXED                                | W8 `2518724`(최소 요구 문서화)                                                                                                                          | https://github.com/fvoci/GroundZero/pull/89#discussion_r4344246865       |
   | 38  | #89  | `2518724` Minor: CPU 2개를 최소 조건으로 쓰지 말라                             | REJECTED                             | Docker는 호스트 CPU보다 큰 한도의 컨테이너 생성을 거부함(재현), CodeRabbit이 철회                                                                       | https://github.com/fvoci/GroundZero/pull/89#discussion_r4344280105       |
+  | 39  | #64  | `be7ef22` 인라인 Minor: 제목만 고친 편집을 실시간 끝에 남기지 않음             | OPEN(main에 있음)                    | 타당(코드 확인): `LiveDocumentEditor.svelte:121`이 `hasPending()` 대신 `watch?.dirty`를 봄. 수정 PR·이슈 없음                                           | https://github.com/fvoci/GroundZero/pull/64#discussion_r4346901085       |
+  | 40  | #82  | `217c6c5` 인라인 Minor: 상세 안의 다른 업무 열기가 닫기 확인을 건너뜀          | OPEN(main에 있음)                    | 타당(코드 확인): `TaskBoard.svelte:1692`의 `onopen={open}`이 D-97 확인을 거치지 않음. 수정 PR·이슈 없음                                                 | https://github.com/fvoci/GroundZero/pull/82#discussion_r4347201952       |
 
-  인계 장부의 OPEN 26건(실질 17 + 정보성 9)과 #82 추가 2건은 위 1~20에서 모두 처리 상태가 정해졌다. 그 뒤 새로 온 지적 가운데 OPEN은 24·25(#60)와
-  36(#82, 실제 브라우저)이다. #69 자체의 이 갱신 push 뒤 CodeRabbit 결과는 PR 대화에서 확인한다.
+  인계 장부의 OPEN 26건(실질 17 + 정보성 9)과 #82 추가 2건은 위 1~20에서 모두 처리 상태가 정해졌다. 그 뒤 새로 온 지적 가운데 OPEN은 25(#60, 배포·
+  되돌리기 절차 문서)와 최종 갱신 커밋에 온 39(#64)·40(#82)이다. 39·40은 병합 직전에 게시됐고(#64 리뷰 2026-10-22T09:52:28Z·병합 09:58:56Z,
+  #82 리뷰 10:25:16Z·병합 10:26:23Z) 수정 없이 병합되어 스레드가 풀리지 않은 채 main에 남았다(Minor 둘, 편집을 확인 없이 잃는 경로). 24는
+  `a811f92`, 36은 실제 브라우저로 정리했다. #69 자체의 이 갱신 push 뒤 CodeRabbit 결과는 PR 대화에서 확인한다.
 
 - **델타 감사(`07a9ab5..a5cda4e`)**: 바뀐 24개 파일을 서버·웹으로 나눠 다시 찾고 반박 검증했다. 남은 12건(WD1~WD6, SD1~SD5, SD8. SD6·SD7은 반박됨)을 다음처럼 처리했다.
   - 웹 WD1~WD4 → #72, WD5·WD6 → #73.
@@ -2748,6 +2753,7 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   | R4   | 20:07~20:15      | `a0a45bb`(R3 + #75 `235e95d` + #64 `2e1d3a1`)                                | `cargo xtask down` 뒤 R0과 같음                                                    | 세 환경                       | PASS: 45건 ok·328개 / 45건·339개 / 90건·678개                                                                                                                                                                                 |
   | R5   | 20:38~20:42      | #68 브랜치 `cfe3dbf` + worker.rs 단언(곧 `cd2c1bd`로 커밋)                   | `cargo xtask test --keep`                                                          | PostgreSQL(OIDC 없음)         | PASS: 45건 ok·282개                                                                                                                                                                                                           |
   | R6   | 21:32~21:35      | `36f52d7`(a0a45bb + #58 `22860eb`·#59 `dbd1861`·#68 `cd2c1bd`·#80 `48c0087`) | `cargo xtask check --skip-licenses`                                                | —                             | R3과 같은 한 건만 FAIL, 나머지 PASS(웹 118개 파일·578건)                                                                                                                                                                      |
+  | R7   | 22:50~23:01      | `156b8d0`(#64 없음, #57 `40f54cb`·#81 `bf55696` 전)                          | check, `cargo xtask down`, 이어서 R0과 같음                                        | 세 환경                       | check는 R3과 같은 한 건만 FAIL. PASS: 46건·326개 / 46건·337개 / 92건·674개(인계 문서 6절)                                                                                                                                     |
   - R0의 원인: 그때 #64 머리(`8f39981`)의 새 시험이 트리거를 지워(`DROP TRIGGER`) 표 잠금을 잡아, 같은 바이너리의 다른 방 저장을 늦췄다(시험 스레드
     10개). #64 `c5eca50`에서 문서 행만 잠그는 방식으로 바꿨고, R2는 그 뒤의 별개 실행이다.
   - 첫 통합 상태(`912c48a`·`634019f`·`7d6775c`)에서 `cargo xtask check`를 돌린 기록은 찾지 못했다(미확인).
@@ -2757,7 +2763,138 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
     #63 → #68 → #72 → #73, 통합 전용 고정 값 커밋 `2286a9d`, #75 재병합, #64(→ `a0a45bb`), 그 뒤 #58·#59·#68 새 머리와 #80(→ `36f52d7`).
   - 이 행렬들은 모두 합친 최종 상태만 본다. 각 PR의 CI는 main과 그 PR 하나를 합친 상태를 본다. 하나씩 병합할 때의 중간 상태는 병합하면서
     PR CI로 다시 확인한다.
-  - 94차의 PR 갱신(#59·#60·#64·#65·#66·#82·#89)을 모두 합친 최종 통합 실행(R8)의 SHA·명령·결과는 최종 통합 뒤 갱신한다.
+  - R0~R7과 아래 리허설은 모두 최종 머리보다 앞의 상태라 최종 수용 검증으로 쓰지 않는다(인계 문서 6절). 최종 실행은 아래 「R8」 하나다.
+
+- **리허설(최종 수용 검증 아님)**: 로컬 통합 브랜치(push하지 않음). 증거는 아래 「증거 보존」 브랜치의 `w5/`·`w13/`.
+  - W5 `audit/int5-dry` `ae68989`(main `a5cda4e` + 그때 머리 26개 + 통합 전용 고정 값): `cargo xtask check --skip-licenses`는 cargo deny 빼고
+    PASS(cargo deny는 도구가 없어 NOT RUN). `cargo xtask test --oidc` 5회 모두 FAIL: `search.rs` 4~5건(시험 Meilisearch가 512m 한도에서 OOM,
+    `docker events` oom·exit 137)에서 멈췄고, `--no-fail-fast` 진단 실행은 바이너리 45개 모두·330 통과·5 실패(모두 `search.rs`). main `a5cda4e`도
+    같은 증상이라 통합이 만든 실패는 아니다. 이 실행들은 `search.rs`를 뺀 **부분 통과**로만 남긴다. 원인은 #89(시험 Meilisearch CPU 2)가 고쳤다.
+  - W13 `audit/int6` `2427544`(그때 머리 + #89 `2518724`): check(licenses·cargo deny 포함) PASS(vitest 123파일·670개), `--oidc` 46줄·348 통과,
+    `--supabase --oidc` 46줄·359 통과. `--supabase --session-pooler --oidc`는 **4회 중 3회 FAIL**: 직접 연결 단계는 네 번 모두 359 통과,
+    session 단계에서 `collab.rs`가 HTTP 500 `XX000`(Supavisor `EMAXCONNSESSION`, `pool_size` 64)으로 실패했다. 원인은 #64의 늘어난 collab 시험의
+    연결 수(위 「장부 갱신」의 #89 줄)이고, #89 `01f17fb`(Supabase 두 단계 `RUST_TEST_THREADS=4`)로 고쳤다.
+- **최종 통합과 병합 결과**:
+  - 최종 통합 SHA: 로컬 브랜치 `audit/final`(push하지 않음) `07be34d2486b2fe60507ccc3156fb7e33b5fde44`(tree `ff5db09`). main `a5cda4e` 위에
+    PR 하나당 merge 커밋 하나씩 27단계(첫 부모 사슬)다. 깨끗 13(#89·#51·#52·#53·#54·#58·#57·#65·#67·#75·#81·#72·#73), 갱신 14(나머지: 충돌 해결이나
+    앞 PR에 맞춘 시험 고정 값 수정). 단계 표 `final-steps.tsv`(순서·PR·고정 머리·단계 커밋·단계 tree·종류·충돌/바뀐 파일), 해결 `resolutions/<pr>/`,
+    단계 스크립트 `step.sh`·`build.sh`, 병합 스크립트 `merge-plan.sh`(증거 `w16/`). 빈 브랜치에서 다시 지어 27개 단계 tree가 모두 같음을 확인했다.
+  - W13 뒤 새로 생긴 충돌: #60(`messages/common`, `DocumentEditor.svelte`의 `keepDraft`와 `accountChanged`), #64(`LiveDocumentEditor.svelte`
+    `keepDraft`, 그리고 글자 충돌 없이 합쳐진 `connection-close`의 의미 충돌: 4412는 #60의 처리로 먼저 끝내고 나머지 닫기 코드는 #64대로, 수정 전
+    #60 시험 실패 확인), #82(`messages/common`, #62가 없앤 `predecessor_ids` 고정 값 둘), #69(이 절과 96절을 절 번호 순서로).
+  - 병합(coordinator, `merge-plan.sh`를 보강해 실행): 단계마다 fetch 뒤 main tree가 앞 단계 tree와 같은지 확인 → PR을 Ready로 바꾸고 base를
+    main으로(REST) → 갱신 단계는 `git commit-tree <단계 tree> -p <고정 머리> -p <main>`을 PR 브랜치에 fast-forward push(메시지
+    `chore: merge main into <branch> for the final integration (step N)`) → 저장소 CI 6개만 기다림(#60·#64 단계는 CodeRabbit 완료도 기다림) →
+    `gh pr merge --merge --match-head-commit` → main tree가 그 단계 tree와 같은지 확인. 그래서 깨끗 단계는 고정 머리를, 갱신 단계는 갱신 커밋을 병합했다.
+
+    | PR  | 병합한 머리 | merge commit | 병합 시각(UTC, GitHub `mergedAt`) |
+    | --- | ----------- | ------------ | --------------------------------- |
+    | #89 | `01f17fb`   | `6240425`    | 2026-10-22T08:28:03Z              |
+    | #51 | `eb88193`   | `3063297`    | 2026-10-22T08:28:29Z              |
+    | #52 | `591f939`   | `42d5ffb`    | 2026-10-22T08:28:49Z              |
+    | #53 | `3fc48a5`   | `f222066`    | 2026-10-22T08:29:08Z              |
+    | #54 | `4c15e3a`   | `a9037ca`    | 2026-10-22T08:29:27Z              |
+    | #58 | `c9a2bce`   | `f7386a4`    | 2026-10-22T08:29:46Z              |
+    | #57 | `40f54cb`   | `8a6fbd7`    | 2026-10-22T08:30:07Z              |
+    | #59 | `14efc13`   | `bda99a6`    | 2026-10-22T08:38:11Z              |
+    | #62 | `5c47157`   | `045b634`    | 2026-10-22T08:46:07Z              |
+    | #65 | `b9f5c22`   | `9c196eb`    | 2026-10-22T08:46:26Z              |
+    | #66 | `f470eb2`   | `f1ac684`    | 2026-10-22T08:54:21Z              |
+    | #67 | `e3d0df7`   | `44b465e`    | 2026-10-22T08:54:41Z              |
+    | #74 | `bc06b2a`   | `e132f54`    | 2026-10-22T09:02:05Z              |
+    | #75 | `235e95d`   | `3a99f79`    | 2026-10-22T09:02:25Z              |
+    | #81 | `bf55696`   | `7129237`    | 2026-10-22T09:02:44Z              |
+    | #55 | `1bbfbc5`   | `ba7e56f`    | 2026-10-22T09:11:10Z              |
+    | #56 | `90d43e5`   | `a008e10`    | 2026-10-22T09:19:05Z              |
+    | #60 | `6b7fd14`   | `61febd9`    | 2026-10-22T09:27:17Z              |
+    | #61 | `050e7b0`   | `898b642`    | 2026-10-22T09:35:42Z              |
+    | #63 | `8ffe1a0`   | `7412408`    | 2026-10-22T09:43:37Z              |
+    | #64 | `be7ef22`   | `ebac6b9`    | 2026-10-22T09:58:56Z              |
+    | #68 | `58705e7`   | `fc3d70f`    | 2026-10-22T10:07:52Z              |
+    | #72 | `0213eb8`   | `82f4f26`    | 2026-10-22T10:08:12Z              |
+    | #73 | `067ef36`   | `0766796`    | 2026-10-22T10:08:32Z              |
+    | #80 | `48b9644`   | `3518ddc`    | 2026-10-22T10:16:57Z              |
+    | #82 | `217c6c5`   | `cb1d32d`    | 2026-10-22T10:26:23Z              |
+    | #69 | 이 PR       | 이 PR        | 마지막                            |
+
+    merge commit의 커미터 시각(`git log`)은 몇 줄에서 `mergedAt`과 1초 다르다. 표는 `gh pr view --json mergedAt`(2026-10-22T10:3xZ 조회)과 같다.
+
+  - 확인(이 기록): main 첫 부모의 merge 커밋 26개의 tree가 모두 `final-steps.tsv`의 같은 단계 tree와 같다. `git diff 07be34d origin/main --stat`
+    (main `cb1d32d`)은 `docs/decisions.md`·`docs/development.md` 두 파일뿐이다(= #69 단계가 더한 문서). 이 PR은 `origin/main`을 합친 커밋
+    (tree `ff5db09`, 단계 27 tree와 같음) 위에 이 기록만 더하므로, 병합 뒤 main은 검증한 `07be34d`와 이 두 문서만 다르다. 병합 뒤 main CI는
+    PR #69 댓글 참조.
+- **R8(`07be34d`)**: WSL2 Linux 32코어, 같은 체크아웃에서 차례로(동시 실행 없음), 명령마다 1회. 로그 첫 줄에 SHA·명령·시작, 끝 줄에 rc·끝(UTC).
+  "결과 줄"은 `test result:` 줄 수(시험 바이너리 46 + doc 1).
+
+  | R8  | 명령                                                  | 시작 → 끝(UTC, 10-22)       | 결과                                                                                                                                                                       |
+  | --- | ----------------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | (a) | `cargo xtask check`(licenses·cargo deny 포함)         | 06:52:15Z → 06:55:18Z, rc=0 | **PASS** 전 단계: fmt·clippy·unit·cargo deny(advisories·bans·sources)·licenses(cargo deny, pnpm)·openapi 최신·format·lint·svelte-check·i18n·vitest 129파일 718개·rhwp·고지 |
+  | (b) | `cargo xtask test --oidc`                             | 06:55:26Z → 06:57:27Z, rc=0 | **PASS** 결과 줄 47, 359 통과·0 실패. 시험 Postgres 비superuser 연결 최고 85/97(앱 64, owner 22), 한도 오류 0건                                                            |
+  | (c) | `cargo xtask test --supabase --oidc`                  | 06:57:47Z → 07:00:26Z, rc=0 | **PASS** 결과 줄 47, 370 통과·0 실패. 연결 최고 25/97, Supavisor `EMAXCONN` 0건                                                                                            |
+  | (d) | `cargo xtask test --supabase --session-pooler --oidc` | 07:00:37Z → 07:05:15Z, rc=0 | **PASS** 직접 연결 단계 47줄·370 통과·0 실패, session 단계 47줄·370 통과·0 실패. 연결 최고 25(직접)·27(session)/97, `EMAXCONN` 0건                                         |
+  - W13과 달리 (d)의 session 단계가 끝까지 통과했다. 한 번씩만 돌려 간헐 실패율은 재지 않았다. 연결 수는 0.25초마다 `pg_stat_activity`의
+    client backend를 역할별로 센 최댓값이다.
+  - (b) 기본 `--oidc` 스택은 libtest 기본 스레드(코어 수)라 한도에 가깝다(여유 12, #89의 4스레드 제한은 Supabase 단계에만). 후속
+    fvoci/GroundZero#90.
+  - 로그: 증거 브랜치 `w16/logs/r8{a,b,c,d}-*-07be34d.log`(측정 `-pg-activity.txt`·`-db.log`·`-supavisor.log`), 요약 `w16/README.md` 4절.
+
+- **실제 브라우저(`07be34d`)**: 최종 통합 체크아웃(`audit/final`, 작업 트리 깨끗)의 `cargo xtask dev --oidc`(새 볼륨, 합성 시드), 2026-10-22
+  07:58~08:22Z 무렵.
+  Orca 내장 브라우저 Chromium 150.0.7871.250, 기본 1280×800(DPR 1), 좁은 화면은 375×812 DPR 2·iPhone 15 UA 에뮬레이션. 계정 test-user·test-user-2,
+  다른 사용자는 격리 프로필 탭, 계정 전환은 같은 프로필의 탭 둘. 증거 브랜치 `w17/INDEX.md`(항목별 파일·조작·결과).
+
+  | 항목                                                        | 결과                                                                                                     |
+  | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+  | 1 문서 이동 전후·대신 저장 이력·실패·취소·방 없는 대기 편집 | **PASS**. 이력·내보내기에 "편집: Second User · 대신 저장: Test User". 방 없는 대기 편집의 복원은 NOT RUN |
+  | 2 4403/4409 닫힘의 미확인 편집 초안·안내·다시 열기          | **PASS**(관찰 1건, 아래)                                                                                 |
+  | 3 업무 409 다시 저장(D-94)                                  | **PASS**. 앞선 `d7ea7fc`의 FAIL(B가 A의 제목을 되돌림)을 다시 확인                                       |
+  | 4 일정 409 다시 저장·시간 묶음(D-94)                        | **PASS**                                                                                                 |
+  | 5 Escape·다시 열기·늦은 응답                                | **PASS**(확인 내용을 실제 마우스로 누른 뒤 Esc도 확인만 닫음, 장부 36)                                   |
+  | 6 미저장 닫기(D-97)                                         | **PASS**(관찰: 저장 중 필드가 비활성이라 초점이 잠시 body로 갔다가 돌아옴)                               |
+  | 7 계정 전환(D-96)                                           | **PASS**. 서버 409 `account_changed` 2건, 실시간 다시 붙기 4412. 남는 창 관찰(아래)                      |
+  | 8 D-93 DST                                                  | **PASS**. 손대지 않은 시작 `05:10:17Z`가 초까지 그대로                                                   |
+  | 9 표시 설정·간트·375px·키보드·#82 값 상자(D-98)             | **PASS**(Chromium). Safari NOT RUN                                                                       |
+  - FAIL 0. 스크린숏은 대부분 NOT RUN이다: 데스크톱 창이 그려지지 않아 `orca screenshot`이 빈 PNG를 돌려줬고, 렌더링된 PNG 4장(`b4-2`·`b4-3`·
+    `b4-4b`·`b9-4`)만 남았다. 나머지는 같은 순간의 접근성 snapshot 텍스트, eval로 읽은 DOM 상태, 요청 기록(방법·주소·상태·기대 사용자 머리 유무),
+    서버 접근 로그의 `error_code`가 증거다. 인쇄 렌더링 PDF 14개는 보조 자료다. 증거 브랜치 묶음을 만들 때 PNG·PDF를 하나씩 열어 합성 데이터만인지
+    확인했다(`MANIFEST.md`).
+  - 상태를 만들려고 페이지 메모리에만 시험용 훅을 넣었다(코드 변경 아님): 요청을 늦추거나 붙잡기, WebSocket open/close 코드 기록.
+  - NOT RUN: 실제 휴대 기기, Safari(WebKit)·Firefox, 화면 낭독기, Safari 값 상자 키보드 스크롤, 방 없이 남은 저장 대기 편집의 **복원**(이동만
+    확인), 이동 트랜잭션이 DB 잠금을 기다리는 동안 들어온 편집(브라우저로 잠금 대기를 만들 수 없어 이동 직전·닫히기 직전 편집으로 대신). 뒤의 둘은
+    통합 시험(`collab.rs`)으로만 확인했다.
+  - 관찰: 4409 뒤에는 "Some of your edits were not saved…" 줄 대신 초안 제안이 바로 보인다(제안이 떠 있으면 템플릿이 그 줄을 감춤, 제안이 같은 내용을
+    알림, 편집은 초안으로 남음. 설계대로로 봄). 계정 전환에서 새 로그인이 앞 세션을 회전한 뒤 다음 재확인(기본 30초) 전까지 끊기기 전의 앞 계정
+    연결로 보낸 글이 앞 계정 이름으로 반영됐다. 96절 「남는 위험」에 적은 창이며 다른 계정 이름으로 쓰이지는 않았다.
+
+- **CodeRabbit(최종 갱신 커밋)**: 갱신 단계 커밋의 CodeRabbit 상태(커밋 상태와 PR의 리뷰·요약, 2026-10-22T10:35Z 조회). 깨끗 단계는 위
+  「장부 갱신」의 머리 그대로 병합했다.
+
+  | PR  | 갱신 커밋 | 커밋 상태(갱신 시각 UTC)               | 리뷰·요약                                                                                     |
+  | --- | --------- | -------------------------------------- | --------------------------------------------------------------------------------------------- |
+  | #59 | `14efc13` | Review skipped(08:46:31Z)              | 요약 Merge Risk Minimal은 `180a0ae`까지                                                       |
+  | #62 | `5c47157` | Review skipped(08:53:14Z)              | 이 커밋의 리뷰 없음                                                                           |
+  | #66 | `f470eb2` | Review skipped(08:55:13Z)              | 이 커밋의 리뷰 없음                                                                           |
+  | #74 | `bc06b2a` | Review skipped(09:10:00Z)              | 이 커밋의 리뷰 없음                                                                           |
+  | #55 | `1bbfbc5` | Review skipped(09:13:23Z)              | 이 커밋의 리뷰 없음                                                                           |
+  | #56 | `90d43e5` | Review skipped(09:27:45Z)              | 이 커밋의 리뷰 없음                                                                           |
+  | #60 | `6b7fd14` | Review skipped(09:27:36Z)              | 요약 Merge Risk Minimal은 `a811f92`까지. 병합 뒤 `review`·`resume`은 "Pull request is closed" |
+  | #61 | `050e7b0` | Review skipped(09:37:41Z)              | 이 커밋의 리뷰 없음                                                                           |
+  | #63 | `8ffe1a0` | Review skipped(09:45:02Z)              | 이 커밋의 리뷰 없음                                                                           |
+  | #64 | `be7ef22` | Review completed(10:00:57Z)            | 리뷰 09:52:28Z: Actionable 1(장부 39), 요약 Merge Risk Low(`be7ef22`까지)                     |
+  | #68 | `58705e7` | Review skipped(10:23:07Z)              | 이 커밋의 리뷰 없음                                                                           |
+  | #80 | `48b9644` | Review completed(10:15:07Z)            | 요약 Merge Risk Minimal(`48b9644`까지)                                                        |
+  | #82 | `217c6c5` | Review in progress(10:17:16Z에서 멈춤) | 리뷰 10:25:16Z: Actionable 1(장부 40). 커밋 상태는 그 뒤 바뀌지 않음                          |
+  - "Review skipped" 10건은 모두 그 PR의 병합 시각 뒤에 적혔다. 갱신 커밋은 main을 합친 커밋이라, 그 PR의 diff는 고정 머리의 diff에 충돌 해결과
+    앞 PR에 맞춘 시험 고정 값을 더한 것이다. 이 차이는 단계 표(`final-steps.tsv`의 conflicted·changed)와 저장소 CI 6개로 확인했고, CodeRabbit이
+    검토한 머리는 위 「장부 갱신」과 이 표의 요약 범위다(검토하지 않은 갱신 커밋을 CodeRabbit 통과로 적지 않는다).
+
+- **증거 보존**: 브랜치 `handoff/audit-final-evidence` `2b0829b`(병합하지 않음, main의 조상 아님). `docs/handoff/evidence-final/`에 W1~W17
+  작업자 증거의 공개 사본 757개 파일(`MANIFEST.md`에 사본 규칙·뺀 파일·폴더별 설명, `SHA256SUMS`로 확인, 로컬 경로·비밀값 형태 값 제거).
+  앞선 묶음은 `089c4e5:docs/handoff/evidence/`.
+- **이슈 갱신(2026-10-22)**: fvoci/GroundZero#90(기본 `--oidc` 시험 스택의 Postgres 연결 여유, R8 (b)의 85/97, @coderabbitai가 만듦, 열림).
+  #85에 D-70 인용 오류를 덧붙였다(`crates/server/src/config.rs`가 `FVOCI_COLLAB_RECHECK_SECS` 30초의 근거로 D-70을 들지만 D-70 본문에 간격 값이
+  없음, https://github.com/fvoci/GroundZero/issues/85#issuecomment-6334958760). #71·#77·#78은 #64·#81·#72 병합으로 자동 종료됐다. #88은 남은 체크
+  항목 셋(다시 읽기가 막히거나 실패할 때의 안전 상태, 계정 확인 시점, 실제 브라우저 시험 공백)으로 열려 있다.
 
 - **시험 빈틈**: C22~C24·C33·C25~C27은 #68에, C26의 이동 409 `ErrorBody` 웹 경로는 #64(`2e1d3a1`)에 시험을 더했다. C32(판이 지난 수정의 40001
   메시지가 "다시 시도"로 바뀜, 23514의 500 매핑 시험)는 후속 이슈 fvoci/GroundZero#77로 넘겼다가 #81(0093, 변환 표 시험 `db_errors.rs`)로 고쳤다.
@@ -2791,6 +2928,7 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   들어온 실시간 편집, #64가 고침), fvoci/GroundZero#76(반복 끝 뒤로 옮길 때의 화면 문구), fvoci/GroundZero#77(판이 지난 수정의 40001 메시지·23514 매핑 시험, #81로 고침), fvoci/GroundZero#78(일정·시간 기록 고치기의 한쪽 끝 다시 변환, 사용자 결정 D-93으로 #72에서 고침), fvoci/GroundZero#79(CSV 제목 한도와 서버 설정)다. #70만 이 계정으로 직접 만들었고 나머지는 해당 PR에서 @coderabbitai에게 요청해 만들었다. fvoci/GroundZero#50(칸반 재번호 뒤 되돌리기)은 그보다 먼저 #45 리뷰에서 나왔다. 2026-10-22 장부 분류(위 「장부 갱신」)에서
   fvoci/GroundZero#83(Zotero 재가져오기 시험)·#84(업무 CSV 진행 상태)·#85(작업의 부분 실패 격리 시험, 큰 재확인 간격 경고)·#86(보관 장벽)·
   #87(첨부 복원과 공유 철회의 순서)·#88(계정 전환 다시 읽기의 안전 상태. 다른 계정으로 저장되는 경로는 D-96으로 #60이 고침)을 해당 PR에서 @coderabbitai에게 요청해 만들었다.
+  R8 뒤 fvoci/GroundZero#90(기본 `--oidc` 시험 스택의 연결 여유)을 @coderabbitai에게 요청해 만들었다. 병합으로 #71·#77·#78이 닫혔다(위 「이슈 갱신」).
 - **남는 위험(기록)**:
   - 이동이 잠금을 기다리는 동안의 권한 철회 창(최대 재확인 간격 + 재확인 1회, 판정하지 못한 회차에는 깨짐)과 0094 전 대기 상태의 방 없는 복원
     409(D-95 아래 「남는 제한」, #64).
@@ -2810,13 +2948,38 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
 - **NOT RUN**:
   - 실제 모바일 기기·다른 브라우저 엔진·화면 낭독기 확인. 좁은 화면·키보드·포커스·끌기는 위 「브라우저 확인」의 범위만 봤다.
   - 실제 Safari에서 충돌 확인 값 상자의 키보드 스크롤(D-98). 이 환경에 Safari가 없다.
-  - D-94 충돌 재저장·D-96 계정 전환·D-97 닫기 확인 화면과 #64의 기록·내보내기 표시("대신 저장")의 실제 브라우저 확인: 최종 통합 뒤 갱신(지금은 jsdom 시험까지).
+  - D-94 충돌 재저장·D-96 계정 전환·D-97 닫기 확인 화면과 #64의 기록·내보내기 표시("대신 저장")는 `07be34d`의 실제 브라우저(Chromium)에서 PASS다
+    (위 「실제 브라우저」). 그 가운데 방 없이 남은 저장 대기 편집의 복원과 DB 잠금 대기 중 들어온 편집은 브라우저로 NOT RUN(통합 시험까지).
   - Supabase Cloud: 읽기 전용 연결 점검(#47 뒤 세 번째 수동 실행 39600271650: 연결·TLS·쿼리 PASS, 변경 NOT RUN, #68에서 문서 정정)만 있다. 이
     결과를 제품 서버·전체 마이그레이션·앱 역할 RLS 검증 성공으로 넓히지 않는다.
   - 작업 프로세스 둘을 실제로 띄운 검색 점유 경합(S12는 `drain` 경로의 시험까지).
   - #58의 저장 경합(응답 전 두 번째 저장)은 실제 브라우저로 만들지 못했다(느린 응답이 필요). jsdom 시험까지다.
   - 태그·배포.
   - 시험 중 Docker VM 메모리 부족으로 Postgres 체크포인터가 한 번 SIGKILL 되어, 그때의 시험 바이너리를 다시 돌렸다.
+- **마감 정리(2026-10-22, 코드 PR 26개 병합 뒤, 이 PR이 마지막)**:
+  - 사용자 결정: D-93(손대지 않은 끝 보존·겹친 시각 묻기, #72), D-94(충돌 뒤 내 입력으로 다시 저장, #82·#59), D-95(이동 중 대신 저장과 실제
+    편집자 구분, P-34 채택, #64), D-96(저장 요청의 기대 사용자 비교, #60), D-97(닫기 전 확인, #59·#82), D-98(Safari 키보드 접근성, #82).
+    D-95 아래의 구현 해석(방 안·방 없는 복원의 작성자, 복원 처리기의 권한 확인, 이동 대기 중 재확인)과 #64 W1b의 대기 중 재확인 방식은 사용자
+    결정이 아니라 구현자·coordinator 판단이다(`docs/decisions.md` D-95 아래, `w16/README.md` 2절).
+  - 사용자 결정이 남은 것: 미승인 제안 P-24~P-33·P-35·P-36(P-34는 D-95로 채택). 장부 39·40의 처리(수정 PR이나 후속 이슈)도 정해지지 않았다.
+  - 남은 위험(병합 뒤 main):
+    - 장부 39(#64: 본문은 그대로이고 제목만 고친 채 실시간이 꺼지면 제목을 잃음)·40(#82: 업무 상세 안의 다른 업무 열기가 D-97 확인을 건너뜀).
+      둘 다 Minor이고 main에 있으며 수정 PR·이슈가 없다.
+    - 기본 `--oidc` 시험 스택의 연결 최고 85/97(R8 (b), fvoci/GroundZero#90). 시험이 늘면 넘을 수 있다.
+    - D-96의 남는 창(계정을 바꾸기 전에 열린 실시간 연결은 다음 재확인까지 앞 계정으로 쓸 수 있음, 실제 브라우저에서 관찰)과 위 「남는 위험(기록)」.
+    - 장부 OPEN 25(#60 배포·되돌리기 절차 문서)와 열린 후속 이슈 #50·#70·#76·#79·#83~#88·#90.
+  - NOT RUN(모음): 위 「NOT RUN」, 「실제 브라우저」의 NOT RUN, R8 반복 실행(각 1회), 단계별 전체 검사(R8은 최종 SHA에서만), 병합 뒤 main에서의 R8
+    재실행(main은 `07be34d`와 문서 두 파일만 다름), 갱신 커밋 10개의 CodeRabbit 검토(위 「CodeRabbit(최종 갱신 커밋)」), 태그·배포.
+  - SQL 정리(말아올리기) 전 차단 사항. 위 「SQL 통합 전 반드시 해결할 것」의 지금 상태다.
+    1. 0080~0094는 번호 순서로 main에 들어갔다(앞 네 자리 중복 없음, `w16/migrations-0079-0094.txt`). 정리본은 각 함수의 마지막 정의를 기준으로 하고,
+       지운 함수는 넣지 않는다.
+    2. `0075`의 효과 없는 `ALTER COLUMN id DROP DEFAULT`는 그대로(정리 때 빼도 됨).
+    3. 개발 예제 SQL은 새 서명(#53). 개발 DB 재생성은 D-88에 따라 사용자 확인 뒤(아직 하지 않음).
+    4. 정리본을 PostgreSQL·셀프호스트 Supabase(세션 풀러 포함)에서 역할 준비와 전체 마이그레이션으로 다시 확인한다. R8은 마이그레이션을 쌓은
+       지금 상태의 확인이고 정리본의 확인이 아니다.
+    5. 병합 전 리뷰로 다시 고친 0081·0086·0088·0089·0090·0092를 미리 적용한 개발·시험 DB는 다시 만든다.
+    6. SQL 함수나 스키마를 바꾸는 미승인 제안 P-24·P-25·P-26·P-28·P-29·P-30·P-31·P-35는 SQL 정리 전에 사용자 결정이 필요하다. 결정 없이 정리하면
+       정리본 뒤에 마이그레이션이 또 생긴다.
 
 ## 96. 저장 요청의 기대 사용자 (2026-10-22, PR #60·이슈 #88, `fix/audit-web-shell-members-files`)
 
