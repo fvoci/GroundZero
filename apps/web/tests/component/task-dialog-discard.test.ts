@@ -6,6 +6,7 @@ import { api } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { itemTaskPath, router } from '$lib/router.svelte';
 
 // 사용자 결정(2026-10-22): 업무 대화상자는 고친 입력이 있어도 Esc·바깥 클릭·닫기 단추로 말없이 닫혀 입력을 버렸다.
 // 이제 고친 입력이 있으면 "계속 편집 / 변경 버리고 닫기"를 묻고, 버리기를 고를 때만 닫는다. 고친 것이 없으면 바로 닫는다.
@@ -403,5 +404,78 @@ describe('closing the task dialog with unsaved input', () => {
     field('task-title').focus();
     await escape();
     expect(back).toHaveBeenCalledTimes(1);
+  });
+});
+
+// CodeRabbit(#82): 상세 안의 상위·하위·선행·후속·첫 회차 단추는 다른 업무를 연다(같은 대화상자, `{#key openTaskId}`로 폼을
+// 새로 그림). 닫기와 달리 묻지 않아 고친 입력이 말없이 사라졌다. 이제 고친 입력이 있으면 같은 확인으로 묻고, 버리기를
+// 고를 때만 그 업무를 연다. 고친 것이 없으면 바로 열고, 저장하는 동안은 옮기지 않는다.
+describe('opening another task from the dialog with unsaved input', () => {
+  const linked = (): TaskDetailView[] => [task('t1'), task('t2', { parent_id: 't1' })];
+  const subtaskLink = (): HTMLElement =>
+    within(content()).getByRole('button', { name: /KED-2\s*다른 업무/ });
+
+  it('opens at once when nothing was changed', async () => {
+    await openBoard(linked());
+    const navigate = vi.spyOn(router, 'navigate');
+    await fireEvent.click(subtaskLink());
+    expect(confirmBox()).toBeNull();
+    expect(navigate).toHaveBeenCalledWith(itemTaskPath('ws-1', 'i1', 't2'));
+  });
+
+  it('asks first, and keeping editing stays on this task with my input and focus', async () => {
+    await openBoard(linked());
+    const navigate = vi.spyOn(router, 'navigate');
+    await type('task-description', '메모');
+    const link = subtaskLink();
+    link.focus();
+    await fireEvent.click(link);
+    const box = await findConfirm();
+    expect(navigate).not.toHaveBeenCalled();
+    await fireEvent.click(within(box).getByRole('button', { name: m.common_discard_keep() }));
+    await waitFor(() => {
+      expect(confirmBox()).toBeNull();
+    });
+    expect(navigate).not.toHaveBeenCalled();
+    expect(field('task-description').value).toBe('메모');
+    await waitFor(() => {
+      expect(document.activeElement).toBe(link);
+    });
+  });
+
+  it('opens the other task only after I choose to discard', async () => {
+    const { reopen } = await openBoard(linked());
+    const navigate = vi.spyOn(router, 'navigate');
+    const update = vi.spyOn(api, 'updateTask');
+    await type('task-title', '새 제목');
+    await fireEvent.click(subtaskLink());
+    const box = await findConfirm();
+    expect(box.textContent).toContain(m.tasks_discard_open_description());
+    await fireEvent.click(
+      within(box).getByRole('button', { name: m.tasks_discard_open_confirm() }),
+    );
+    expect(navigate).toHaveBeenCalledWith(itemTaskPath('ws-1', 'i1', 't2'));
+    expect(update).not.toHaveBeenCalled();
+    await reopen('t2');
+    await waitFor(() => {
+      expect(field('task-title').value).toBe('다른 업무');
+    });
+  });
+
+  it('does not move while the form saves', async () => {
+    await openBoard(linked());
+    const late = deferred<{ kind: 'updated'; task: TaskDetailView }>();
+    vi.spyOn(api, 'updateTask').mockReturnValue(late.promise);
+    await type('task-title', '새 제목');
+    const save = document.getElementById('task-save');
+    if (save === null) throw new Error('task-save');
+    await fireEvent.click(save);
+    const navigate = vi.spyOn(router, 'navigate');
+    await fireEvent.click(subtaskLink());
+    await flush();
+    expect(confirmBox()).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+    late.resolve({ kind: 'updated', task: task('t1', { title: '새 제목', version: 3 }) });
+    await screen.findByText('저장했습니다.');
   });
 });

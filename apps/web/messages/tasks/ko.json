@@ -132,6 +132,8 @@
   "tasks_create": "업무 만들기",
   "tasks_task": "업무",
   "tasks_dialog_description": "업무의 상태·담당·일정·체크리스트를 고칩니다.",
+  "tasks_discard_open_description": "다른 업무를 열면 이 창에서 고친 내용이 사라집니다.",
+  "tasks_discard_open_confirm": "변경 버리고 열기",
   "tasks_gantt_milestone": "마일스톤 {date}",
   "tasks_gantt_predecessors": "선행 {refs}",
   "tasks_gantt_empty": "날짜가 있는 업무가 없습니다. 업무 상세에서 시작일·마감일을 넣으면 여기에 막대로 보입니다.",
