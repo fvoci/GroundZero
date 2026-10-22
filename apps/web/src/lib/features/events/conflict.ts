@@ -22,15 +22,18 @@ function sameInstant(a: string | null, b: string | null): boolean {
   return Number.isNaN(x) || Number.isNaN(y) ? a === b : x === y;
 }
 
-/** 그 칸의 값이 같은지. */
+/**
+ * 그 칸의 값이 같은지. 제목·설명은 서버가 앞뒤 공백을 지워 저장하므로 지운 값으로 비교한다(공백만 덧붙인 칸을
+ * 내가 고친 칸으로 보아 서버 값을 되돌리거나 겹쳤다고 묻지 않게).
+ */
 export function sameUnit(unit: EventUnit, a: EventInput, b: EventInput): boolean {
   switch (unit) {
     case 'kind':
       return a.kind === b.kind;
     case 'title':
-      return a.title === b.title;
+      return a.title.trim() === b.title.trim();
     case 'description':
-      return a.description === b.description;
+      return a.description.trim() === b.description.trim();
     case 'when':
       return (
         a.all_day === b.all_day &&

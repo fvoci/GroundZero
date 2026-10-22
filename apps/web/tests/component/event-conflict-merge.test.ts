@@ -77,6 +77,14 @@ describe('mergeEventInput', () => {
     );
   });
 
+  it('treats a title or description that differs only by surrounding spaces as untouched', () => {
+    // 서버는 제목·설명의 앞뒤 공백을 지워 저장한다. 공백만 덧붙였으면 고친 것이 아니니 서버 값을 두고 묻지 않는다.
+    const server = ev({ title: '새 제목', description: '그쪽 설명' }, 6);
+    const merged = mergeEventInput(base, input({ title: ' 회의 ', description: '\n' }), server);
+    expect(merged.clashes).toEqual([]);
+    expect(merged.input).toEqual(input({ title: '새 제목', description: '그쪽 설명' }));
+  });
+
   it('compares instants by value, not by how they are written', () => {
     // 서버가 같은 시각을 다른 표기로 돌려줘도 바뀐 것이 아니다. 내 시각도 소수 초 표기로 같으면 고친 것이 아니다.
     const server = ev(

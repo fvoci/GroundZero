@@ -58,6 +58,7 @@
   let formWrap = $state<HTMLDivElement | undefined>(undefined);
   let clashBox = $state<HTMLDivElement | undefined>(undefined);
   let saveMineButton = $state<HTMLButtonElement | null>(null);
+  let heading = $state<HTMLElement | null>(null);
   // 지금 입력 양식 제출이 충돌 알림의 단추에서 시작됐는지. 양식은 제출 이벤트 안에서 곧바로(첫 await 전에) onsubmit을
   // 부르므로 requestSubmit() 동안만 둔다.
   let submitMode: 'merge' | 'overwrite' | undefined;
@@ -95,6 +96,15 @@
   });
 
   const canEdit = $derived(event !== undefined && event.access !== 'read');
+  // 충돌 알림이 보이고 다시 저장이 합칠 서버 일정(D-94). 알림 뒤 반복 규칙을 저장했으면 `event`가 더 새 판이다(옛 판에
+  // 합치면 보내자마자 다시 409이고, "서버 내용 불러오기"가 방금 저장한 규칙을 되돌린다).
+  const latest = $derived(
+    conflict === undefined
+      ? undefined
+      : event !== undefined && event.version > conflict.current.version
+        ? event
+        : conflict.current,
+  );
 
   function sameRule(a: RecurrenceRule | null, b: RecurrenceRule | null): boolean {
     if (a === null || b === null) return a === b;
@@ -165,16 +175,28 @@
   function submitted(input: EventInput): Promise<void> {
     const mode = submitMode;
     submitMode = undefined;
-    if (mode !== undefined && conflict !== undefined && formBase !== undefined)
-      return saveMine(input, formBase, conflict.current, mode === 'overwrite');
+    if (mode !== undefined && latest !== undefined && formBase !== undefined)
+      return saveMine(input, formBase, latest, mode === 'overwrite');
     return save(input, formVersion);
+  }
+
+  /**
+   * 누른 단추가 사라진 뒤 초점을 옮긴다. 대화상자의 초점 가두기가 먼저 첫 칸으로 옮기므로 그 뒤 프레임에서
+   * 옮긴다(TaskDetail과 같음). 그사이 다른 일정을 열었으면 옮기지 않는다.
+   */
+  async function focusLater(target: () => HTMLElement | null | undefined): Promise<void> {
+    const mine = shown;
+    await tick();
+    requestAnimationFrame(() => {
+      if (mine === shown) target()?.focus();
+    });
   }
 
   /**
    * "내 입력으로 다시 저장"(D-94): 입력을 만든 일정(`base`)과 비교해 내가 고친 칸만 서버 최신 일정에 얹어 최신 판
    * 번호로 보낸다(그사이 또 바뀌었으면 서버가 다시 409). 같은 칸을 서버도 다른 값으로 바꿨으면 보내지 않고 양쪽 값을
-   * 보여 덮어쓸지 묻는다. `overwrite`는 물은 뒤 "덮어쓰고 저장"을 누른 경우로, 물은 칸과 그때의 내 값 그대로일 때만
-   * 덮어쓴다(그사이 입력을 고쳐 겹친 칸이나 값이 달라졌으면 다시 묻는다).
+   * 보여 덮어쓸지 묻는다. `overwrite`는 물은 뒤 "덮어쓰고 저장"을 누른 경우로, 물은 칸과 그때 보인 양쪽 값이 그대로일
+   * 때만 덮어쓴다(그사이 입력을 고쳐 겹친 칸이나 값이 달라졌으면 다시 묻는다).
    */
   async function saveMine(
     input: EventInput,
@@ -182,20 +204,29 @@
     current: EventView,
     overwrite: boolean,
   ): Promise<void> {
+    const mine = shown;
     const merged = mergeEventInput(base, input, current);
     const asked = clash;
     const confirmed =
       overwrite &&
-      asked?.current === current &&
-      merged.clashes.every((u) => asked.units.includes(u) && sameUnit(u, input, asked.mine));
+      asked !== undefined &&
+      merged.clashes.every(
+        (u) =>
+          asked.units.includes(u) &&
+          sameUnit(u, current, asked.current) &&
+          sameUnit(u, input, asked.mine),
+      );
     if (merged.clashes.length > 0 && !confirmed) {
-      const mine = shown;
       clash = { current, mine: input, units: merged.clashes };
       await tick();
       if (mine === shown) clashBox?.focus();
       return;
     }
     await save(merged.input, current.version);
+    if (mine !== shown) return;
+    // 또 바뀌어 다시 409면 덮어쓰기 단추가 사라졌으니 새 알림의 다시 저장 단추로, 저장됐으면 알림이 사라지니
+    // 머리말(저장된 제목)로 초점을 옮긴다.
+    await focusLater(() => (conflict !== undefined ? saveMineButton : heading));
   }
 
   /** 덮어쓰지 않는다: 아무것도 보내지 않고 알림과 입력을 그대로 둔다. */
@@ -302,6 +333,12 @@
     escapeKeydownBehavior={busy ? 'ignore' : 'close'}
     interactOutsideBehavior={busy ? 'ignore' : 'close'}
     showCloseButton={!busy}
+    onEscapeKeydown={(e: KeyboardEvent) => {
+      // 덮어쓸지 묻는 중이면 Esc는 그 물음만 거둔다(취소와 같음: 보내지 않고 입력을 두며 대화상자도 닫지 않는다).
+      if (clash === undefined) return;
+      e.preventDefault();
+      void cancelClash();
+    }}
     onCloseAutoFocus={(e: Event) => {
       const target = returnFocus?.() ?? null;
       if (target !== null) {
@@ -311,7 +348,9 @@
     }}
   >
     <Dialog.Header>
-      <Dialog.Title>{event?.title ?? m.events_event()}</Dialog.Title>
+      <Dialog.Title bind:ref={heading} tabindex={-1}
+        >{event?.title ?? m.events_event()}</Dialog.Title
+      >
       <Dialog.Description>
         {#if event !== undefined}{KIND_LABEL[event.kind]} · {describeWhen(event, zone)}{/if}
       </Dialog.Description>
@@ -321,21 +360,21 @@
     {/if}
     {#if event !== undefined}
       {@const current = event}
-      {#if conflict !== undefined}
-        {@const c = conflict}
+      {#if latest !== undefined}
+        {@const c = latest}
         <div class="rounded-md border border-amber-500/50 p-3 text-sm">
           <div role="alert">
             <p>
-              {m.events_conflict({ title: c.current.title, when: describeWhen(c.current, zone) })}
+              {m.events_conflict({ title: c.title, when: describeWhen(c, zone) })}
             </p>
             <div class="mt-2 flex gap-2">
               <Button
                 size="sm"
                 variant="outline"
                 onclick={() => {
-                  event = c.current;
-                  formBase = c.current;
-                  formVersion = c.current.version;
+                  event = c;
+                  formBase = c;
+                  formVersion = c.version;
                   conflict = undefined;
                   clash = undefined;
                   epoch += 1;

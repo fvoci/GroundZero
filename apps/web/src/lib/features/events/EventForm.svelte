@@ -67,6 +67,8 @@
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
 
+  // onsubmit은 제출 이벤트 안에서 곧바로(이 함수의 첫 await 전에) 불러야 한다. EventDialog는 충돌 알림의 단추가
+  // 시작한 제출인지를 requestSubmit() 동안만 두는 표시로 가린다(D-94).
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (busy) return;

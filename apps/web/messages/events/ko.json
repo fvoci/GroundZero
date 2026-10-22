@@ -86,7 +86,7 @@
   "events_load_server": "서버 내용 불러오기",
   "events_save_mine": "내 입력으로 다시 저장",
   "events_clash_question": "아래 칸은 다른 사람도 바꿨습니다. 내 입력으로 덮어쓸까요?",
-  "events_clash_when": "날짜·시각·시간대",
+  "events_clash_when": "날짜·시각·시간대·종일 여부",
   "events_clash_server": "지금 서버: {value}",
   "events_clash_mine": "내 입력: {value}",
   "events_clash_empty": "(비어 있음)",

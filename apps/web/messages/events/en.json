@@ -87,7 +87,7 @@
   "events_load_server": "Load their version",
   "events_save_mine": "Save mine again",
   "events_clash_question": "Someone else also changed the fields below. Overwrite them with your input?",
-  "events_clash_when": "Date, time and time zone",
+  "events_clash_when": "Date, time, time zone and all-day",
   "events_clash_server": "Now on the server: {value}",
   "events_clash_mine": "Your input: {value}",
   "events_clash_empty": "(empty)",
