@@ -6,17 +6,20 @@ Worker B가 소유한 `sqlprep-b-cb65cc31-postgres-1`을 사용했다. A는 DB�
 
 ## 읽는 순서
 
-| 파일 | 내용과 한계 |
-| --- | --- |
-| `catalog-postgres.jsonl` | 객체별 실제 카탈로그. `kind`, `identity`, `definition`의 JSON Lines. B의 `verification/catalog.sql` 초기판으로 얻은 `verification/baseline/catalog-rows.txt`를 JSON으로 변환. SQLx 원장과 DB 기본 역할·확장을 포함하므로 객체 이름을 구분해서 센다 |
-| `function-history.json` | 현재 소스의 함수 CREATE 431건, CREATE OR REPLACE 189건, DROP 133건, 총 753건. 각 선언의 원본 파일·시작 줄·전체 인자 목록. OUT 인자로 반환형을 표현한 함수도 포함 |
-| `function-map.json` | 최종 앱 함수 298개의 서명·소유자·SECURITY DEFINER·search_path·ACL, 마지막 선언 위치, SQL 본문의 다른 최종 함수 이름, 소스 등장 위치 |
-| `retired-signatures.json` | 133개 과거 DROP 선언과 같은 이름으로 현재 남은 서명. 같은 이름의 새 서명이 있으므로 이름 전체를 삭제하라는 목록이 아님 |
-| `source-occurrences.json` | `crates/server/src`, `crates/server/tests`, `xtask/src`, `deploy/postgres`, `docs`의 app_* 등장 589건. 실제 호출, 문자열 Job, 문서·주석이 원문과 경로로 구분됨 |
-| `direct-table-occurrences.json` | 같은 경로에서 최종 테이블에 대한 FROM/JOIN/INTO/UPDATE/TABLE 문맥 345건. 직접 조회·변경·테스트 fixture·문서의 근거이며 SQL parser 결과는 아님 |
-| `object-function-references.json` | CHECK·정책·트리거에서 최종 함수 이름을 참조하는 객체 71개. 테이블 RLS와 SQL 내부 호출을 외부 Rust 호출과 함께 보기 위한 목록 |
-| `dependencies.sql`, `dependencies-postgres.jsonl` | pg_depend가 기록한 의존성 3079건. 행 타입·테이블·제약·트리거·함수 사이의 구조적 의존성. 물리 OID 대신 객체 식별자를 사용 |
-| `tables.md` | 55개 테이블의 실제 RLS/강제 RLS 상태와 테이블 ACL. 열 단위 권한은 원본 카탈로그의 column 항목으로 확인 |
+| 파일                                              | 내용과 한계                                                                                                                                                                                                                                        |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `catalog-postgres.jsonl`                          | 객체별 실제 카탈로그. `kind`, `identity`, `definition`의 JSON Lines. B의 `verification/catalog.sql` 초기판으로 얻은 `verification/baseline/catalog-rows.txt`를 JSON으로 변환. SQLx 원장과 DB 기본 역할·확장을 포함하므로 객체 이름을 구분해서 센다 |
+| `function-history.jsonl`                          | 현재 소스의 함수 CREATE 431건, CREATE OR REPLACE 189건, DROP 133건, 총 753건. 각 선언의 원본 파일·시작 줄·전체 인자 목록. OUT 인자로 반환형을 표현한 함수도 포함                                                                                   |
+| `function-map.jsonl`                              | 최종 앱 함수 298개의 서명·소유자·SECURITY DEFINER·search_path·ACL, 마지막 선언 위치, SQL 본문의 다른 최종 함수 이름, 소스 등장 위치                                                                                                                |
+| `retired-signatures.jsonl`                        | 133개 과거 DROP 선언과 같은 이름으로 현재 남은 서명. 같은 이름의 새 서명이 있으므로 이름 전체를 삭제하라는 목록이 아님                                                                                                                             |
+| `source-occurrences.jsonl`                        | `crates/server/src`, `crates/server/tests`, `xtask/src`, `deploy/postgres`, `docs`의 app_* 등장 589건. 실제 호출, 문자열 Job, 문서·주석이 원문과 경로로 구분됨                                                                                     |
+| `direct-table-occurrences.jsonl`                  | 같은 경로에서 최종 테이블에 대한 FROM/JOIN/INTO/UPDATE/TABLE 문맥 345건. 직접 조회·변경·테스트 fixture·문서의 근거이며 SQL parser 결과는 아님                                                                                                      |
+| `object-function-references.jsonl`                | CHECK·정책·트리거에서 최종 함수 이름을 참조하는 객체 71개. 테이블 RLS와 SQL 내부 호출을 외부 Rust 호출과 함께 보기 위한 목록                                                                                                                       |
+| `dependencies.sql`, `dependencies-postgres.jsonl` | pg_depend가 기록한 의존성 3079건. 행 타입·테이블·제약·트리거·함수 사이의 구조적 의존성. 물리 OID 대신 객체 식별자를 사용                                                                                                                           |
+| `tables.md`                                       | 55개 테이블의 실제 RLS/강제 RLS 상태와 테이블 ACL. 열 단위 권한은 원본 카탈로그의 column 항목으로 확인                                                                                                                                             |
+
+모든 JSON 목록은 객체 하나를 한 줄에 담는 JSON Lines다. `jq -s`로 읽으면 행 순서를 유지한 배열이 된다.
+배열 형식에서 변환한 여섯 목록은 변환 전후 객체 키를 정렬한 배열의 SHA-256과 행 수를 대조하여 데이터가 같음을 확인했다.
 
 함수 지도에서 `body_name_references`는 주석을 뺀 본문을 최종 함수 이름 목록과 대조한 **이름 참조**다.
 문자열 본문은 pg_depend에 모두 기록되지 않으므로 이 목록과 구조적 의존성을 함께 본다.
@@ -28,17 +31,17 @@ Worker B가 소유한 `sqlprep-b-cb65cc31-postgres-1`을 사용했다. A는 DB�
 
 SQLx 원장을 뺀 앱 객체를 센다. PostgreSQL 18은 NOT NULL을 pg_constraint에 노출하므로 이전 major와 단순 숫자 비교하지 않는다.
 
-| 종류 | 수 |
-| --- | ---: |
-| 테이블 / 실제 테이블 열 | 55 / 493 |
-| 함수 / SECURITY DEFINER | 298 / 277 |
-| PK / UNIQUE / FK / CHECK / NOT NULL / 제약 트리거 | 54 / 30 / 138 / 144 / 382 / 1 |
-| 인덱스 | 160 |
-| 사용자 트리거(제약 트리거 포함) | 24 |
-| RLS 정책 / RLS 활성 테이블 / 강제 RLS 테이블 | 51 / 51 / 0 |
-| 명시 sequence / view / materialized view / enum / domain | 0 / 0 / 0 / 0 / 0 |
-| 앱 역할 명시 기본 ACL 레코드 | 0 |
-| 마이그레이션 직후 필수 초기 데이터 행 | 0 |
+| 종류                                                     |                            수 |
+| -------------------------------------------------------- | ----------------------------: |
+| 테이블 / 실제 테이블 열                                  |                      55 / 493 |
+| 함수 / SECURITY DEFINER                                  |                     298 / 277 |
+| PK / UNIQUE / FK / CHECK / NOT NULL / 제약 트리거        | 54 / 30 / 138 / 144 / 382 / 1 |
+| 인덱스                                                   |                           160 |
+| 사용자 트리거(제약 트리거 포함)                          |                            24 |
+| RLS 정책 / RLS 활성 테이블 / 강제 RLS 테이블             |                   51 / 51 / 0 |
+| 명시 sequence / view / materialized view / enum / domain |             0 / 0 / 0 / 0 / 0 |
+| 앱 역할 명시 기본 ACL 레코드                             |                             0 |
+| 마이그레이션 직후 필수 초기 데이터 행                    |                             0 |
 
 카탈로그 파일에는 인덱스의 pg_attribute 행도 있으므로 전체 column 행 768개를 실제 테이블 열 493개로 잘못 해석하지 않는다.
 테이블마다 자동 생성되는 composite/array 타입과 SQLx 원장 타입도 type 항목에 포함되어 있다.
@@ -75,7 +78,7 @@ PostgreSQL의 고정 시스템 객체와 문자열 SQL 본문은 의존성 행�
 1. 동일 소스 SHA의 모든 기존 마이그레이션을 빈 격리 DB에 실제 SQLx로 적용한다.
 2. `pg_dump --schema-only --schema=fvoci --exclude-table=fvoci._sqlx_migrations`로 마지막 정의와 owner/ACL을 내보낸다.
 3. `verification/catalog.sql`로 별도 카탈로그를 얻고, 모든 테이블의 초기 행 수를 확인한다. 카탈로그의 비밀번호·비밀값은 수집하지 않는다.
-4. `dependencies.sql`은 읽기 전용 트랜잭션으로 실행한다. 위 두 JSON 목록과 소스의 CREATE/REPLACE/DROP 선언 및 호출 문맥을 대조한다.
+4. `dependencies.sql`은 읽기 전용 트랜잭션으로 실행한다. 위 JSON Lines 목록과 소스의 CREATE/REPLACE/DROP 선언 및 호출 문맥을 대조한다.
 5. 후보는 bootstrap이 만드는 CREATE SCHEMA와 psql 메타 명령을 빼고, 설치용 설정만 SET LOCAL로 한정한다.
    pg_dump의 함수/행 타입/테이블 순서를 보존하며, 파일 번호는 시험 후보의 실제 SQLx 버전이다.
 6. B의 원본 대 원본·후보 비교와 기존 앱 역할 테스트를 완료하기 전에는 파일 수나 호출 검색 결과만으로 동일성 PASS를 선언하지 않는다.

@@ -30,50 +30,50 @@ D-92의 과거 개발 버전 호환 제거와 구분한다. `auth.uid()`, Supaba
 
 ## 이미 대체된 정의
 
-정확한 CREATE/REPLACE/DROP 위치와 인자 전체는 `inventory/function-history.json`에 있다. 일부 같은 이름은 살아 있는 다른 서명이 있으므로 이름 전체를 제거해서는 안 된다.
+정확한 CREATE/REPLACE/DROP 위치와 인자 전체는 `inventory/function-history.jsonl`에 있다. 일부 같은 이름은 살아 있는 다른 서명이 있으므로 이름 전체를 제거해서는 안 된다.
 
-| 이력 | 최종 후보에서 재생하지 않을 것 | 유지하는 의미 |
-| --- | --- | --- |
-| 0002 | 첫 OIDC 상태 테이블을 만들고 지우는 단계 | 쿠키 비밀값의 해시로 찾고 별도 state를 비교하는 최종 테이블·함수 |
-| 0003–0069의 교체 | 앞선 함수 본문, 교체 전 반환형·서명·정책·트리거 | 마지막 카탈로그 정의. 아래 함수 지도에서 최종 위치 추적 |
-| 0006 | `app_next_wiki_number(uuid)`와 문서만 있던 번호 대장 | 공통 `app_allocate_number`와 `numbered_targets`, 번호 비재사용 |
-| 0034 | `comments.workspace_id`와 저장된 알림 excerpt | 대상에서 워크스페이스·권한을 판단하고 현재 댓글로 excerpt 계산 |
-| 0070–0075 | 0075가 DROP한 ID 목록 없는 옛 서명 102개, ID `DROP DEFAULT` 반복 | 새 행 UUIDv7은 앱이 명시 제공. 최종 27개 ID CHECK, 부족 `FV001`, 잘못된 값 `FV002` |
-| 0071 | 문서 제목 변경 감사 트리거와 중간 정의 | 명시 `app_audit_document_rename`, 리비전별 한 번의 감사 인덱스 |
-| 0076 | 인자 3개 `app_move_task` | 조건 인자를 가진 최종 함수와 이동 판 트리거. 현재 무조건 첫 이동도 지원 |
-| 0082 | `app_add_task_dependency(uuid,uuid,uuid[])`, base 없는 `app_set_task_dependency` | 최신 관계 base 비교·승인 목록 검사·잠금과 현재 생성 동작 |
-| 0086 | `app_set_event_recurrence(uuid,jsonb,uuid[])` | 규칙 base를 받는 최종 서명과 충돌 처리 |
-| 0087 | `app_set_time_zone(text)` | 언어·시간대·주 시작·시각 표시를 함께 저장하는 `app_set_display_settings` |
-| 0094 | editors 없는 `app_system_collab_store`, 예전 반환형 `app_collab_load` | edited_by/editors 열과 실제 편집자 기록. 이전 저장 대기 상태는 빈 목록 의미 유지 |
+| 이력             | 최종 후보에서 재생하지 않을 것                                                   | 유지하는 의미                                                                      |
+| ---------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 0002             | 첫 OIDC 상태 테이블을 만들고 지우는 단계                                         | 쿠키 비밀값의 해시로 찾고 별도 state를 비교하는 최종 테이블·함수                   |
+| 0003–0069의 교체 | 앞선 함수 본문, 교체 전 반환형·서명·정책·트리거                                  | 마지막 카탈로그 정의. 아래 함수 지도에서 최종 위치 추적                            |
+| 0006             | `app_next_wiki_number(uuid)`와 문서만 있던 번호 대장                             | 공통 `app_allocate_number`와 `numbered_targets`, 번호 비재사용                     |
+| 0034             | `comments.workspace_id`와 저장된 알림 excerpt                                    | 대상에서 워크스페이스·권한을 판단하고 현재 댓글로 excerpt 계산                     |
+| 0070–0075        | 0075가 DROP한 ID 목록 없는 옛 서명 102개, ID `DROP DEFAULT` 반복                 | 새 행 UUIDv7은 앱이 명시 제공. 최종 27개 ID CHECK, 부족 `FV001`, 잘못된 값 `FV002` |
+| 0071             | 문서 제목 변경 감사 트리거와 중간 정의                                           | 명시 `app_audit_document_rename`, 리비전별 한 번의 감사 인덱스                     |
+| 0076             | 인자 3개 `app_move_task`                                                         | 조건 인자를 가진 최종 함수와 이동 판 트리거. 현재 무조건 첫 이동도 지원            |
+| 0082             | `app_add_task_dependency(uuid,uuid,uuid[])`, base 없는 `app_set_task_dependency` | 최신 관계 base 비교·승인 목록 검사·잠금과 현재 생성 동작                           |
+| 0086             | `app_set_event_recurrence(uuid,jsonb,uuid[])`                                    | 규칙 base를 받는 최종 서명과 충돌 처리                                             |
+| 0087             | `app_set_time_zone(text)`                                                        | 언어·시간대·주 시작·시각 표시를 함께 저장하는 `app_set_display_settings`           |
+| 0094             | editors 없는 `app_system_collab_store`, 예전 반환형 `app_collab_load`            | edited_by/editors 열과 실제 편집자 기록. 이전 저장 대기 상태는 빈 목록 의미 유지   |
 
 ## 데이터 보정과 새 설치 불변식
 
 다음 SQL은 과거 행을 다음 구조로 맞추는 단계다. 빈 DB의 동일한 최종 상태를 만드는 데 불필요하더라도, 그 보정의 **의미**까지 제거해서는 안 된다.
 기존 DB에 후보를 직접 적용하거나 기존 원장을 지우는 것은 허용하지 않는다.
 
-| 과거 보정 | 빈 DB에서의 처리와 유지 근거 |
-| --- | --- |
-| 0003: `workspaces.owner_id = created_by` | 최종 owner_id NOT NULL/FK와 현재 생성 함수의 소유자 지정. 처음부터 행이 없어 UPDATE 불필요 |
-| 0006: 기존 위키를 numbered_targets로 INSERT | 현재 공통 번호 할당 함수가 새 행마다 카운터와 대장을 함께 기록 |
-| 0010: 기존 문서 위치를 자리별로 다시 매김 | 최종 position 기본값·삽입 트리거·자리 잠금·형제 순서 함수 유지 |
-| 0016: task_series.effective_from을 anchor로 채움 | 최종 NOT NULL 열과 현재 규칙 생성·변경 함수가 유효 시작일 제공 |
+| 과거 보정                                            | 빈 DB에서의 처리와 유지 근거                                                                                                  |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 0003: `workspaces.owner_id = created_by`             | 최종 owner_id NOT NULL/FK와 현재 생성 함수의 소유자 지정. 처음부터 행이 없어 UPDATE 불필요                                    |
+| 0006: 기존 위키를 numbered_targets로 INSERT          | 현재 공통 번호 할당 함수가 새 행마다 카운터와 대장을 함께 기록                                                                |
+| 0010: 기존 문서 위치를 자리별로 다시 매김            | 최종 position 기본값·삽입 트리거·자리 잠금·형제 순서 함수 유지                                                                |
+| 0016: task_series.effective_from을 anchor로 채움     | 최종 NOT NULL 열과 현재 규칙 생성·변경 함수가 유효 시작일 제공                                                                |
 | 0022: 예전 방식으로 지운 일정을 휴지통 묶음으로 옮김 | 빈 DB에 옛 삭제 행이 없음. 현재 휴지통 함수는 앱 ID를 받아 묶음 생성. 옛 DO 블록은 ID 없는 INSERT이므로 새 후보에 남기지 않음 |
-| 0034: 알림의 옛 excerpt 삭제 | 현재 댓글 내용을 읽는 최종 알림 조회와 생성 함수 유지 |
-| 0034: 허용되지 않는 강좌/회차 URL을 빈 문자열로 바꿈 | 최종 `app_web_url_ok` CHECK와 생성·수정 검증 유지 |
-| 0045: 이미 탈퇴한 사용자 item_members 삭제 | 최종 멤버 제거 함수의 관련 행 정리·잠금 유지. 초기 행 없음 |
-| 0045: 기존 문서 리비전의 파일 참조 INSERT | 최종 리비전 INSERT 트리거 및 참조 고정·버전 잠금 유지 |
-| 0075: UUID id 기본값 DROP, UUIDv7 CHECK 추가 | 테이블 정의부터 UUID 기본값 없음·CHECK 있음. DB 생성이나 다른 버전 UUID 대체 없음 |
-| 0077: 기존 관계 kind/lag를 FS/0로 | 최종 기본값 FS/0와 허용 값 CHECK 유지. 관계는 복합 키로 새 UUID 불필요 |
-| 0079: 겹친 칸반 열 위치를 다시 매김 | 최종 초기화 복제의 `app_renumber_lane` 호출, 순서·move_version 트리거 유지 |
-| 0091: 기존 항목 검색 대기열 갱신 | 최종 items_search가 updated_at 변경도 감지. 빈 DB의 초기 검색 대기열은 비어 있음 |
-| 0094: 추가된 editors 열의 기본 빈 배열 | NULL/빈 배열/실제 편집자 목록의 구분을 최종 열 기본값과 함수에 보존 |
+| 0034: 알림의 옛 excerpt 삭제                         | 현재 댓글 내용을 읽는 최종 알림 조회와 생성 함수 유지                                                                         |
+| 0034: 허용되지 않는 강좌/회차 URL을 빈 문자열로 바꿈 | 최종 `app_web_url_ok` CHECK와 생성·수정 검증 유지                                                                             |
+| 0045: 이미 탈퇴한 사용자 item_members 삭제           | 최종 멤버 제거 함수의 관련 행 정리·잠금 유지. 초기 행 없음                                                                    |
+| 0045: 기존 문서 리비전의 파일 참조 INSERT            | 최종 리비전 INSERT 트리거 및 참조 고정·버전 잠금 유지                                                                         |
+| 0075: UUID id 기본값 DROP, UUIDv7 CHECK 추가         | 테이블 정의부터 UUID 기본값 없음·CHECK 있음. DB 생성이나 다른 버전 UUID 대체 없음                                             |
+| 0077: 기존 관계 kind/lag를 FS/0로                    | 최종 기본값 FS/0와 허용 값 CHECK 유지. 관계는 복합 키로 새 UUID 불필요                                                        |
+| 0079: 겹친 칸반 열 위치를 다시 매김                  | 최종 초기화 복제의 `app_renumber_lane` 호출, 순서·move_version 트리거 유지                                                    |
+| 0091: 기존 항목 검색 대기열 갱신                     | 최종 items_search가 updated_at 변경도 감지. 빈 DB의 초기 검색 대기열은 비어 있음                                              |
+| 0094: 추가된 editors 열의 기본 빈 배열               | NULL/빈 배열/실제 편집자 목록의 구분을 최종 열 기본값과 함수에 보존                                                           |
 
 0003, 0004, 0006의 DO 블록 중 함수 ACL을 설정하는 블록은 데이터 보정이 아니다. 카탈로그의 **실효 ACL**로 펼쳐 적용한다.
 마이그레이션 직후 전체 테이블 행 수도 비교하여 필수 초기 행을 놓치지 않았는지 확인한다. 개발 예제는 운영 필수 초기 데이터가 아니다.
 
 ## 호출 경로와 검증 경계
 
-`inventory/source-occurrences.json`은 서버·worker·테스트·xtask·개발 seed·문서의 함수 이름 등장 위치와 원문을 보존한다.
+`inventory/source-occurrences.jsonl`은 서버·worker·테스트·xtask·개발 seed·문서의 함수 이름 등장 위치와 원문을 보존한다.
 문서·주석과 실제 호출을 같은 의미로 세지 않는다. SQL 함수 내부 호출 및 정책·트리거 경로는 카탈로그에서 별도로 대조한다.
 UUID 목록 개수와 호출 순서는 `docs/sql-id-contract.md`의 `new_ids` / `needed_ids` 계약을 유지한다.
 worker는 상한 조회부터 트랜잭션 전체를 최대 세 번 재시도하며, HTTP의 FV001은 409다.
