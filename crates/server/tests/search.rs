@@ -1138,6 +1138,119 @@ async fn pending_index_tasks_are_tracked_until_they_succeed() {
         .unwrap();
 }
 
+/// 리뷰(감사 S12 후속): 꺼낸 행의 재확인은 SQL 함수 시험만 있어, `drain`이 재확인을 부르지 않거나 그 결과로 거르지
+/// 않아도 시험이 통과했다. `drain`이 꺼낸 뒤 내용을 읽는 사이 그 행의 세대가 바뀌면(사용자가 다시 고침) 그 꺼냄으로는
+/// 보내지 않고 행을 남긴다(새 세대는 다음 꺼냄이 보낸다). 내용 읽기를 문서 표 잠금으로 붙잡아 그 사이에 세대를 바꾼다.
+/// 표를 잠그고 전체 대기열을 꺼내므로 이 시험만의 DB를 쓴다.
+#[tokio::test]
+async fn drain_does_not_send_a_row_whose_generation_changed_after_the_claim() {
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let mut admin = <sqlx::PgConnection as sqlx::Connection>::connect(&admin_url)
+        .await
+        .unwrap();
+    let fresh = common::fresh_database(&mut admin, "search_recheck").await;
+    let (url, fake) = fake_search().await;
+    let state = fvoci_server::app::build_state(config_with(&[
+        ("DATABASE_URL", &fresh.app_url),
+        ("FVOCI_SEARCH_URL", &url),
+        ("FVOCI_SEARCH_KEY", "fake-search-key-for-tests"),
+    ]))
+    .unwrap();
+    let app = common::app(&state);
+    let search = state.search.clone().unwrap();
+    prepare(&state.db, &search).await.unwrap();
+    let owner_url = common::with_database(
+        &std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`"),
+        &fresh.name,
+    );
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    fake.lock().unwrap().new_status = "succeeded".into();
+
+    let user = login(&state, "admin").await;
+    let ws = create_workspace(&app, &user, "세대 재확인").await;
+    while drain(&state.db, &search, None).await.unwrap() > 0 {}
+    let doc = common::create_doc(&app, &user, &ws, "세대가 바뀔 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let doc_uid = format!("document_{}", id.replace('-', ""));
+    let sent_before = fake.lock().unwrap().submitted.len();
+
+    // 꺼낸 뒤 내용을 읽는 질의가 문서 표에서 기다리게 한다.
+    let mut lock = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *lock)
+        .await
+        .unwrap();
+    sqlx::query("LOCK TABLE fvoci.documents IN ACCESS EXCLUSIVE MODE")
+        .execute(&mut *lock)
+        .await
+        .unwrap();
+    let draining = tokio::spawn({
+        let state = state.clone();
+        let search = search.clone();
+        async move { drain(&state.db, &search, None).await }
+    });
+    let mut blocked = false;
+    for _ in 0..500 {
+        blocked = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(holder)
+        .fetch_one(&owner)
+        .await
+        .unwrap();
+        if blocked {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(blocked, "the drain never waited to read the document");
+    // 그 사이 사용자가 다시 고쳐 세대가 바뀐다(꺼낸 표시는 그대로).
+    let newer: time::OffsetDateTime = sqlx::query_scalar(
+        "UPDATE fvoci.search_queue SET queued_at = queued_at + interval '1 second'
+         WHERE kind = 'document' AND target_id = $1::uuid RETURNING queued_at",
+    )
+    .bind(&id)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    lock.commit().await.unwrap();
+    draining.await.unwrap().unwrap();
+
+    let sent_stale = fake.lock().unwrap().submitted[sent_before..]
+        .iter()
+        .any(|(_, body)| body.to_string().contains(&doc_uid));
+    let left: Option<time::OffsetDateTime> = sqlx::query_scalar(
+        "SELECT queued_at FROM fvoci.search_queue WHERE kind = 'document' AND target_id = $1::uuid",
+    )
+    .bind(&id)
+    .fetch_optional(&owner)
+    .await
+    .unwrap();
+    // 꺼낸 표시가 지나면 다음 꺼냄이 새 세대를 보낸다.
+    sqlx::query(
+        "UPDATE fvoci.search_queue SET claimed_until = now() - interval '1 second'
+         WHERE kind = 'document' AND target_id = $1::uuid",
+    )
+    .bind(&id)
+    .execute(&owner)
+    .await
+    .unwrap();
+    let sent_after = fake.lock().unwrap().submitted.len();
+    drain(&state.db, &search, None).await.unwrap();
+    let sent_newer = fake.lock().unwrap().submitted[sent_after..]
+        .iter()
+        .any(|(_, body)| body.to_string().contains(&doc_uid));
+    owner.close().await;
+    state.db.close().await;
+    sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fresh.name))
+        .execute(&mut admin)
+        .await
+        .unwrap();
+    assert!(!sent_stale, "the drain sent a row whose generation changed");
+    assert_eq!(left, Some(newer), "the changed row left the queue");
+    assert!(sent_newer, "the newer generation was not sent later");
+}
+
 /// 오늘(DB의 UTC 날짜)과 앞뒤 하루. 자정 무렵에 돌아도 흔들리지 않게 범위로 쓴다.
 async fn around_today(state: &AppState, user: &TestUser) -> (String, String) {
     let mut tx = state.db.begin_as(user.id).await.unwrap();

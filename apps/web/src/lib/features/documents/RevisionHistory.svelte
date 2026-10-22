@@ -48,18 +48,34 @@
     }
   }
 
+  // 마지막으로 누른 리비전의 응답만 쓴다(빨리 두 개를 누르면 앞의 응답이 늦게 와 다른 리비전을 고른 것처럼 되지 않게).
+  let chosen = 0;
+  // 고른 리비전의 직전 리비전을 불러오지 못했다. 그때는 "불러오는 중…"을 거두고 아래의 오류만 보인다(다시 누르면 다시 묻는다).
+  let previousFailed = $state(false);
+
   async function choose(revision: number): Promise<void> {
+    const mine = ++chosen;
+    previousFailed = false;
     try {
-      selected = await api.revision(doc.id, revision);
-      previous = revision > 1 ? await api.revision(doc.id, revision - 1) : undefined;
+      const next = await api.revision(doc.id, revision);
+      if (mine !== chosen) return;
+      selected = next;
+      const before = revision > 1 ? await api.revision(doc.id, revision - 1) : undefined;
+      if (mine !== chosen) return;
+      previous = before;
       error = undefined;
     } catch (e: unknown) {
+      if (mine !== chosen) return;
+      if (selected?.revision === revision) previousFailed = true;
       error = errorText(e, m.documents_revision_load_failed());
     }
   }
 
   function openHistory(): void {
     open = true;
+    // 지난번에 열었을 때 고른 리비전의 늦은 응답은 버린다.
+    chosen += 1;
+    previousFailed = false;
     selected = undefined;
     previous = undefined;
     latest = undefined;
@@ -67,9 +83,16 @@
     void load(null);
   }
 
+  // 직전과 비교할 리비전을 아직 받지 못했다(다른 리비전을 고른 뒤 그 직전 리비전을 불러오는 중이거나 실패). 그동안 앞서
+  // 고른 리비전의 직전 리비전과 비교해 "r9 → r10"이라고 보이지 않는다.
+  const previousMissing = $derived(
+    selected !== undefined && selected.revision > 1 && previous?.revision !== selected.revision - 1,
+  );
+
   const lines = $derived.by((): DiffLine[] => {
     if (selected === undefined) return [];
     if (compareWith === 'previous') {
+      if (previousMissing) return [];
       return previous === undefined
         ? diffRevisions({ title: '', body: { type: 'doc' } }, selected)
         : diffRevisions(previous, selected);
@@ -190,7 +213,11 @@
             class="min-h-0 flex-1 overflow-y-auto rounded border p-2 font-code text-sm"
             data-testid="revision-diff"
           >
-            {#if !changed}
+            {#if compareWith === 'previous' && previousMissing}
+              {#if !previousFailed}
+                <p class="text-muted-foreground" aria-live="polite">{m.documents_loading()}</p>
+              {/if}
+            {:else if !changed}
               <p class="text-muted-foreground">{m.documents_diff_none()}</p>
             {/if}
             {#each lines as line, index (index)}
