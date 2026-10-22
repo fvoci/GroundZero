@@ -171,6 +171,8 @@
    * `submitted`로 온다. 확인에 걸리면 제출되지 않고 아무것도 보내지 않는다.
    */
   function submitForm(mode: 'merge' | 'overwrite'): void {
+    // 다른 요청(반복 규칙 저장 등)이 가는 동안은 보내지 않는다(두 저장이 겹치면 늦게 온 쪽이 옛 일정을 놓는다).
+    if (busy) return;
     const form = formWrap?.querySelector('form');
     if (!(form instanceof HTMLFormElement)) return;
     submitMode = mode;
@@ -411,6 +413,7 @@
               <Button
                 size="sm"
                 bind:ref={saveMineButton}
+                disabled={busy}
                 onclick={() => {
                   submitForm('merge');
                 }}>{m.events_save_mine()}</Button
@@ -447,6 +450,7 @@
                 <Button
                   size="sm"
                   variant="destructive"
+                  disabled={busy}
                   onclick={() => {
                     submitForm('overwrite');
                   }}>{m.events_clash_overwrite()}</Button

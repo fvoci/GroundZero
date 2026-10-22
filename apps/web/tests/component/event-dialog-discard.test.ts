@@ -367,6 +367,31 @@ describe('closing the event dialog with unsaved input', () => {
     });
   });
 
+  // CodeRabbit(19161fc): 충돌 알림의 "내 입력으로 다시 저장"은 잠근 칸 밖에 있어, 반복 규칙 저장이 가는 동안에도 일정
+  // 저장을 보내 두 요청이 겹쳤다. 요청이 가는 동안은 그 단추도 잠그고 보내지 않는다.
+  it('does not send "save mine" while a rule save is on its way', async () => {
+    const update = stub({ kind: 'conflict', current: ev('A', { description: '다른 사람' }, 6) });
+    const lateRule = deferred<EventView>();
+    vi.spyOn(api, 'setEventRecurrence').mockReturnValue(lateRule.promise);
+    await open();
+    await typeTitle('새 회의');
+    await fireEvent.submit(eventForm());
+    const saveMine = await screen.findByRole('button', { name: m.events_save_mine() });
+    const ruleForm = screen
+      .getByRole('button', { name: m.events_recurrence_save() })
+      .closest('form');
+    if (ruleForm === null) throw new Error('no rule form');
+    await fireEvent.submit(ruleForm);
+    expect(saveMine.matches(':disabled')).toBe(true);
+    await fireEvent.click(saveMine);
+    await flush();
+    expect(update).toHaveBeenCalledTimes(1);
+    lateRule.resolve(ev('A', {}, 6));
+    await waitFor(() => {
+      expect(saveMine.matches(':disabled')).toBe(false);
+    });
+  });
+
   it('keeps the conflict notice and my input when I keep editing after a conflict', async () => {
     stub({ kind: 'conflict', current: ev('A', { description: '다른 사람' }, 6) });
     const onclose = vi.fn();
