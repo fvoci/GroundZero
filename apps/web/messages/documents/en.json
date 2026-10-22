@@ -54,6 +54,7 @@
   "documents_live_invalid": "The server rejected a change, so the connection was closed. Please reload.",
   "documents_live_reload": "The document changed. Reopening.",
   "documents_live_off": "Live editing was turned off.",
+  "documents_live_account_changed": "Live editing stopped because a different account is now signed in. Edits not saved on the server are kept in this browser as a draft of the account that opened this window; reloading for the current account.",
   "documents_live_label": "Live co-editing",
   "documents_live_reconnect": "Reconnect",
   "documents_title_label": "Title",

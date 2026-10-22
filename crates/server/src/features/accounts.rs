@@ -529,18 +529,22 @@ impl FromRequestParts<AppState> for ExpectedUser {
                 "send exactly one {EXPECTED_USER_HEADER} header"
             )));
         };
-        let expected = value
-            .to_str()
-            .ok()
-            .and_then(|v| Uuid::parse_str(v).ok())
-            .map(UserId)
-            .ok_or_else(|| {
-                AppError::BadRequest(format!("{EXPECTED_USER_HEADER} must be a user id"))
-            })?;
-        if expected != user {
-            return Err(AppError::AccountChanged);
-        }
+        check_expected_user(user, value.to_str().ok(), EXPECTED_USER_HEADER)?;
         Ok(Self(user))
+    }
+}
+
+/// 기대 사용자 값(머리, 실시간 연결의 `expected_user` 질의)을 세션의 사용자와 비교한다. 값이 없거나 UUID가 아니면
+/// 400, 다르면 `AccountChanged`. 비교만 하고 아무것도 허용하지 않는다. `name`은 오류 문구에 쓰는 값의 이름.
+pub fn check_expected_user(user: UserId, raw: Option<&str>, name: &str) -> Result<(), AppError> {
+    let expected = raw
+        .and_then(|v| Uuid::parse_str(v).ok())
+        .map(UserId)
+        .ok_or_else(|| AppError::BadRequest(format!("{name} must be a user id")))?;
+    if expected == user {
+        Ok(())
+    } else {
+        Err(AppError::AccountChanged)
     }
 }
 

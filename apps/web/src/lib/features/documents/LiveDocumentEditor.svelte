@@ -9,6 +9,7 @@
   import type { DocNode, DocumentView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { switchAccount } from '$lib/features/feedback/feedback.svelte';
   import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { me } from '$lib/me.svelte';
@@ -44,8 +45,8 @@
 
   const { initial, references, onsaved, onrealtimeoff, onreload }: Props = $props();
   const start = untrack(() => initial);
-  // 이 화면을 연 사용자. 제목 저장·초안 보존(저장 API)에 그대로 보내 서버가 세션의 사용자와 비교한다(#60).
-  // 실시간 연결(본문)은 이 값을 쓰지 않는다: 연결을 열 때의 세션으로 묶인다(docs/development.md 96절).
+  // 이 화면을 연 사용자. 제목 저장·초안 보존(저장 API)과 실시간 연결(다시 붙을 때도)에 그대로 보내 서버가 세션의
+  // 사용자와 비교한다(#60, docs/development.md 96절).
   const editingUser = untrack(() => me.userId);
   const INLINE_IMAGES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
@@ -142,6 +143,7 @@
         color: colorFor(me.userId),
       },
       start.can_edit,
+      editingUser,
     );
     watch?.stop();
     watch = watchUnsynced(next.document, next.provider, next.persisted, {
@@ -174,6 +176,9 @@
         onrealtimeoff?.();
       } else {
         stopped = stop;
+        // 이 편집기를 연 계정이 아닌 세션으로 다시 붙었다(4412). 방에 들어가지 않았다. 확인받지 못한 편집은 위에서 앞
+        // 계정의 초안으로 남겼고, 이 창은 지금 계정으로 다시 읽는다.
+        if (stop === 'account') switchAccount();
       }
     });
     session = next;
@@ -327,6 +332,8 @@
         return m.documents_live_reload();
       case 'off':
         return m.documents_live_off();
+      case 'account':
+        return m.documents_live_account_changed();
     }
   }
 </script>
@@ -337,7 +344,7 @@
     <span role="status" aria-live="polite" class="text-muted-foreground"
       >{stopped === undefined ? statusText(status) : stopText(stopped)}</span
     >
-    {#if stopped !== undefined}
+    {#if stopped !== undefined && stopped !== 'account'}
       <Button size="sm" variant="outline" onclick={restart}>{m.documents_live_reconnect()}</Button>
     {/if}
   </div>

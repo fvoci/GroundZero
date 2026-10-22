@@ -184,7 +184,8 @@ pub enum SaveConflict {
 const EXPECTED_USER_DOC: &str = "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 \
     아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 \
     아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, \
-    `POST /api/me/notes`)뿐이고 다른 경로는 이 머리를 읽지 않는다. 실시간 편집 연결은 연결할 때의 세션으로 묶인다";
+    `POST /api/me/notes`)와 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 \
+    이 값을 읽지 않는다";
 
 pub(crate) fn empty_body() -> Value {
     serde_json::json!({ "type": "doc", "content": [{ "type": "paragraph" }] })
