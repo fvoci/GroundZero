@@ -1,6 +1,6 @@
 //! Preparation-only comparison. Production migration/bootstrap commands stay unchanged.
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
@@ -92,14 +92,8 @@ pub fn run(
     behavior: bool,
     supabase: bool,
 ) -> Result<()> {
-    ensure!(
-        !output.exists(),
-        "evidence directory already exists: {}",
-        output.display()
-    );
     let candidate = candidate.map(std::fs::canonicalize).transpose()?;
-    std::fs::create_dir_all(output)?;
-    let output = std::fs::canonicalize(output)?;
+    let output = claim_output(output)?;
     let sh = Shell::new()?;
     sh.change_dir(root);
     let run = uuid::Uuid::now_v7().simple().to_string();
@@ -244,6 +238,20 @@ pub fn run(
             )
         },
     )
+}
+
+fn claim_output(output: &Path) -> Result<PathBuf> {
+    if let Some(parent) = output.parent().filter(|path| !path.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)?;
+    }
+    // Only one run may create the leaf, even when competitors share missing parents.
+    std::fs::create_dir(output).with_context(|| {
+        format!(
+            "could not claim evidence directory {} (must not already exist)",
+            output.display()
+        )
+    })?;
+    std::fs::canonicalize(output).context("could not resolve claimed evidence directory")
 }
 
 // Register before starting: a failed Compose up can still have created containers.
@@ -591,6 +599,52 @@ fn run_behavior(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concurrent_output_claim_has_one_winner_and_preserves_existing_evidence() -> Result<()> {
+        let base = std::env::temp_dir().join(format!("sql-compare-{}", uuid::Uuid::now_v7()));
+        let output = base.join("nested/run");
+        let gate = std::sync::Barrier::new(8);
+        let attempts = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..8)
+                .map(|id| {
+                    let output = &output;
+                    let gate = &gate;
+                    scope.spawn(move || -> Result<Option<usize>> {
+                        gate.wait();
+                        match claim_output(output) {
+                            Ok(claimed) => {
+                                std::fs::write(claimed.join("owner.txt"), id.to_string())?;
+                                Ok(Some(id))
+                            }
+                            Err(error) => {
+                                assert_eq!(
+                                    error.downcast_ref::<std::io::Error>().map(|e| e.kind()),
+                                    Some(std::io::ErrorKind::AlreadyExists)
+                                );
+                                Ok(None)
+                            }
+                        }
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().expect("claim thread panicked"))
+                .collect::<Result<Vec<_>>>()
+        })?;
+        let winners: Vec<_> = attempts.into_iter().flatten().collect();
+        assert_eq!(winners.len(), 1);
+        let expected = winners[0].to_string();
+        assert_eq!(std::fs::read_to_string(output.join("owner.txt"))?, expected);
+        assert!(claim_output(&output).is_err());
+        assert_eq!(std::fs::read_to_string(output.join("owner.txt"))?, expected);
+        std::fs::remove_file(output.join("owner.txt"))?;
+        std::fs::remove_dir(&output)?;
+        std::fs::remove_dir(base.join("nested"))?;
+        std::fs::remove_dir(base)?;
+        Ok(())
+    }
 
     #[test]
     fn failed_database_and_service_starts_remain_registered_for_stop() {

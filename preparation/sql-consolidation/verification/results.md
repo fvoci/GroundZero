@@ -86,6 +86,12 @@ CHECK (length(btrim(name)) >= 1 AND length(btrim(name)) <= 255 AND name !~ '[\x0
 
 수정한 소스로 `cargo xtask sql-compare --output target/sql-compare-cleanup-aa`를 실행해 A/A 객체 차이 0, 변조 검출·원복 4/4, `cleanup: PASS`를 확인했다. [실행 입력](runs/cleanup-control/inputs.json), [결과](runs/cleanup-control/result.json), [정지 로그](runs/cleanup-control/orchestration.txt)를 보존했다. 위의 여섯 행동 경로는 표에 명시한 기존 소스의 결과이며, 자원 수명 관리만 바꾼 이 수정 후 다시 실행하지 않았다.
 
+## 후속 출력 경로 경합 검증
+
+출력 경로 존재 확인과 디렉터리 생성 사이의 경합도 수정했다. 부모 경로만 `create_dir_all`로 준비한 뒤 출력 디렉터리 자체는 원자적인 `create_dir`로 생성한다. 이미 존재하면 파일 기록이나 Docker 시작 전에 거부한다.
+
+8개 스레드가 동일한 새 출력 경로를 동시에 요청하는 시험에서 하나만 성공하고 나머지는 `AlreadyExists`로 실패했다. 이후 같은 경로에 다시 요청해도 승자가 기록한 증거가 보존됨을 확인했다. `cargo test -p xtask sql_compare::tests --locked` 4/4 PASS, `cargo clippy -p xtask --all-targets --locked -- -D warnings` PASS다. 출력 준비 단계만 바꿨으므로 위의 SQL·행동 매트릭스는 다시 실행하지 않았다.
+
 ## 실행 자원과 보존
 
 첫 A/A 진단에는 보존 요청과 어긋난 정리 명령이 한 번 실행됐다. 수정 전 바이너리가 다음 전용 프로젝트의 B PostgreSQL 컨테이너와 네트워크를 삭제했다.
