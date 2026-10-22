@@ -252,7 +252,9 @@ pub async fn export(
     Ok(Json(found))
 }
 
-/// 옛 리비전의 내용으로 새 리비전을 만든다(쓰기 권한). 기준 리비전이 지났으면 409와 서버 최신본.
+/// 옛 리비전의 내용으로 새 리비전을 만든다(쓰기 권한). 기준 리비전이 지났으면 409와 서버 최신본. 실시간 편집(열린 방의
+/// 편집이나 방 없이 남은 저장 대기 상태)을 먼저 리비전으로 남기지 못하면 복원하지 않고 409(오류 본문, `invalid_state`)다.
+/// 편집은 남는다. 남겼으면 기준이 지나 최신본과 함께 409다.
 #[utoipa::path(post, path = "/api/documents/{document_id}/revisions/{revision}/restore", operation_id = "restore_revision",
     params(("document_id" = String, Path, format = Uuid), ("revision" = i32, Path)),
     request_body = RestoreRevision,
@@ -272,34 +274,25 @@ pub async fn restore(
         base_revision: input.base_revision,
     };
     // 실시간 방이 열려 있으면 그 방이 체크포인트(리비전으로 남기지 않은 편집 남기기) → 복원 → 방 초기화를 한 명령으로
-    // 한다. 그 사이 편집이 끼어들지 않고, 남겼는지 확인되지 않으면 복원하지 않는다(D-27). 기준은 화면이 보낸 그대로다:
-    // 체크포인트가 리비전을 남겼으면 충돌로 알려 사람이 지금 내용을 보고 다시 하게 한다. 고칠 수 없는 사람의 요청은
-    // 방을 건드리지 않고 아래에서 거절된다.
+    // 한다. 그 사이 편집이 끼어들지 않고, 남겼는지 확인되지 않으면 복원하지 않는다(D-27). 방이 없으면 방이 새로 열리지
+    // 않게 막은 채 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남긴다(D-95 조건 4, 복원하는 사람은 대신 저장하지 않는다.
+    // 남기지 못하면 409). 기준은 화면이 보낸 그대로다: 체크포인트가 리비전을 남겼으면 충돌로 알려 사람이 지금 내용을 보고
+    // 다시 하게 한다. 고칠 수 없는 사람의 요청은 방과 저장 대기 상태를 건드리지 않고 아래에서 거절된다.
     let mut tx = state.db.begin_as(user).await?;
     let can_write = access(&mut tx, id).await?.is_some_and(|a| a.can_write());
     tx.commit().await?;
-    let in_room = if can_write {
-        state.collab.restore(request).await
+    let outcome = if can_write {
+        state
+            .collab
+            .restore(&state.db, &state.config.limits, request)
+            .await?
     } else {
-        None
-    };
-    let outcome = match in_room {
-        Some(outcome) => outcome?,
-        None => {
-            let request = RestoreRequest {
-                doc: id,
-                user,
-                revision,
-                request_id: input.request_id,
-                base_revision: input.base_revision,
-            };
-            let outcome = restore_in_db(&state.db, &state.config.limits, &request).await?;
-            // 그 사이 새로 열린 방이 있으면 저장 없이 닫고 복원된 본문으로 다시 열게 한다(D-70).
-            if outcome == "restored" {
-                state.collab.reset(id).await;
-            }
-            outcome
+        let outcome = restore_in_db(&state.db, &state.config.limits, &request).await?;
+        // 위 확인 뒤 쓰기 권한을 얻어 복원했고 그 사이 방이 열려 있으면 저장 없이 닫고 복원된 본문으로 다시 열게 한다(D-70).
+        if outcome == "restored" {
+            state.collab.reset(id).await;
         }
+        outcome
     };
     let mut tx = state.db.begin_as(user).await?;
     let (row, access) = load_with_access(&mut tx, id).await?;

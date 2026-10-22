@@ -3396,3 +3396,222 @@ async fn an_editor_who_lost_write_access_before_a_move_cannot_edit_during_it() {
     owner.close().await;
     r.close().await;
 }
+
+/// D-95 조건 4(방 없는 복원, main에도 있던 빈틈): 방 없이 남은 저장 대기 상태(확인받은 편집)가 있는 문서를 복원하면 그
+/// 상태를 리비전으로 남기지 않고 바로 복원해, 다른 리비전으로 바뀐 본문이 그 상태를 이어받지 못하게 되어 편집이 사라졌다.
+/// 이제 이동처럼 방이 열리지 않게 막고 먼저 리비전으로 남긴다. 작성자는 상태와 함께 저장한 편집자 가운데 아직 쓸 수 있는
+/// 사람뿐이다(복원하는 사람은 대신 저장하지 않는다). 남기지 못하면 409이고 상태는 남는다. 남겼으면 기준이 지나 복원은
+/// 충돌(409와 그 편집을 담은 최신본)이다. 저장 대기 상태가 없는 문서는 평소처럼 복원한다. 저장 API와 복원의 리비전에는
+/// 대신 저장 기록이 없다.
+#[tokio::test]
+async fn a_restore_without_a_room_saves_a_live_state_left_pending_first() {
+    // 권한 재확인(기본 30초)이 시험 중에 돌아 방을 닫지 않게 한다.
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "3600")]))
+            .unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "방 없는 복원").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    // 리비전 2(저장 API, 실시간을 켜기 전): 복원하면 본문이 바뀌도록. 저장 대기 상태가 없을 문서도 같이 만든다.
+    let mut ids = Vec::new();
+    for title in ["방 없는 복원", "대기 상태 없는 문서"] {
+        let doc = common::create_doc(&app, &admin, &ws, title).await;
+        let id = doc["id"].as_str().unwrap().to_owned();
+        let saved = send(
+            &app,
+            Method::PUT,
+            &format!("/api/documents/{id}"),
+            Some(&admin),
+            Some(
+                json!({ "request_id": new_request_id(), "base_revision": 1, "title": title,
+                         "body": { "type": "doc", "content": [{ "type": "paragraph",
+                             "content": [{ "type": "text", "text": "두 번째 판" }] }] } }),
+            ),
+        )
+        .await;
+        assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+        assert_eq!(revision_authors(&owner, &id, 2).await, (admin.id.0, None));
+        ids.push(id);
+    }
+    let (id, plain_id) = (ids[0].clone(), ids[1].clone());
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+
+    // 작성자가 실시간으로 쓰고 확인받은 뒤 독자가 되면 방은 리비전을 남기지 못한 채 상태만 남기고 닫힌다.
+    let mut e = connect(addr, Some(&writer), &id, true).await.unwrap();
+    e.paragraph("방 없이 남은 복원 전 글").await;
+    assert!(e.until(acked).await, "the edit was never acknowledged");
+    let role = |role: &'static str| {
+        let (app, admin, ws, writer) = (app.clone(), admin.clone(), ws.clone(), writer.clone());
+        async move {
+            let r = send(
+                &app,
+                Method::PUT,
+                &format!("/api/workspaces/{ws}/members/{}", writer.id.0),
+                Some(&admin),
+                Some(json!({ "role": role })),
+            )
+            .await;
+            assert!(r.status.is_success(), "{:?}", r.json);
+        }
+    };
+    role("reader").await;
+    // 권한 재확인(3600초)을 기다리지 않고 독자가 된 연결을 닫는다.
+    e.close().await;
+    until_no_room(&state, &id).await;
+    until_collab_states(&owner, &id, true, 1).await;
+    let restore = |base: i64| {
+        let (app, admin, id) = (app.clone(), admin.clone(), id.clone());
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &format!("/api/documents/{id}/revisions/1/restore"),
+                Some(&admin),
+                Some(json!({ "request_id": new_request_id(), "base_revision": base })),
+            )
+            .await
+        }
+    };
+
+    // 쓸 수 있는 편집자가 없다: 복원하는 사람은 대신 저장하지 않으므로 409이고 상태와 리비전은 그대로다.
+    let refused = restore(2).await;
+    assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
+    assert_eq!(refused.json["error"], "invalid_state", "{:?}", refused.json);
+    assert_eq!(last_revision(&owner, &id).await, (2, admin.id.0));
+    assert_eq!(collab_states(&owner, &id, true).await, 1);
+    assert!(!state.collab.has_room(fvoci_server::ids::DocumentId(
+        uuid::Uuid::parse_str(&id).unwrap()
+    )));
+
+    // 편집자가 다시 쓸 수 있으면 그 사람이 작성자로 먼저 리비전을 남기고(대신 저장 아님), 복원은 기준이 지나 충돌이다.
+    role("writer").await;
+    let conflict = restore(2).await;
+    assert_eq!(conflict.status, StatusCode::CONFLICT, "{:?}", conflict.json);
+    assert!(
+        conflict.json["current"]["body"]
+            .to_string()
+            .contains("방 없이 남은 복원 전 글"),
+        "{:?}",
+        conflict.json
+    );
+    assert_eq!(conflict.json["current"]["revision"], 3);
+    assert_eq!(revision_authors(&owner, &id, 3).await, (writer.id.0, None));
+    assert_eq!(collab_states(&owner, &id, true).await, 0);
+
+    // 지금 기준으로 다시 하면 복원한다. 복원 리비전에는 대신 저장 기록이 없다.
+    let restored = restore(3).await;
+    assert_eq!(restored.status, StatusCode::OK, "{:?}", restored.json);
+    assert_eq!(revision_authors(&owner, &id, 4).await, (admin.id.0, None));
+
+    // 저장 대기 상태가 없는 문서는 평소처럼 복원한다.
+    let plain_restored = restore_rev1(&app, &admin, &plain_id, &json!(2)).await;
+    assert_eq!(
+        plain_restored.status,
+        StatusCode::OK,
+        "{:?}",
+        plain_restored.json
+    );
+    assert_eq!(collab_states(&owner, &plain_id, false).await, 0);
+    owner.close().await;
+}
+
+/// D-95: 마지막으로 고친 사람이 쓸 수 없어 연결된 다른 작성자가 대신 리비전을 남기면, 그 리비전에 실제로 고친 사람을 따로
+/// 적는다(작성자는 남긴 사람 그대로). 기록 API는 그 이름을 보이고, 이름을 볼 수 없는 사람에게는 null이다.
+#[tokio::test]
+async fn a_connected_writer_saving_for_an_editor_is_recorded_as_a_stand_in() {
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "연결된 작성자의 대신 저장").await;
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+    let (first, _) = add_member(&app, &state, &admin, &ws, "first-editor", "writer").await;
+    let (second, _) = add_member(&app, &state, &admin, &ws, "second-writer", "writer").await;
+    let doc = common::create_doc(&app, &admin, &ws, "대신 저장 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let mut a = connect(addr, Some(&first), &id, true).await.unwrap();
+    let mut b = connect(addr, Some(&second), &id, true).await.unwrap();
+    a.paragraph("처음 편집자의 문단").await;
+    assert!(b.until(|c| c.text().contains("처음 편집자의 문단")).await);
+    let demoted = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/members/{}", first.id.0),
+        Some(&admin),
+        Some(json!({ "role": "reader" })),
+    )
+    .await;
+    assert!(demoted.status.is_success(), "{:?}", demoted.json);
+    assert_eq!(a.closed().await, Some(4403));
+    // 반출 직전처럼 방에 지금 리비전을 남기게 한다: 고친 사람은 쓸 수 없고 연결된 다른 작성자가 남긴다.
+    let doc_id = fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap());
+    state
+        .collab
+        .snapshot_documents(&std::collections::HashSet::from([doc_id]))
+        .await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let (last, author) = last_revision(&owner, &id).await;
+    assert_eq!(author, second.id.0, "the connected writer did not save");
+    assert_eq!(
+        revision_authors(&owner, &id, last).await.1,
+        Some(vec![first.id.0]),
+        "the stand-in revision does not name the actual editor"
+    );
+    let history = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}/revisions"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    assert_eq!(history[0]["revision"], last);
+    assert_eq!(history[0]["author_name"], "second-writer");
+    assert_eq!(history[0]["edited_by_names"], json!(["first-editor"]));
+    // 고친 사람이 워크스페이스를 떠나 함께 속한 곳이 없으면 그 이름은 보이지 않는다(작성자 이름과 같은 규칙).
+    let removed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{ws}/members/{}", first.id.0),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(removed.status.is_success(), "{:?}", removed.json);
+    for path in [
+        format!("/api/documents/{id}/revisions"),
+        format!("/api/documents/{id}/revisions/{last}"),
+    ] {
+        let seen = send(&app, Method::GET, &path, Some(&second), None)
+            .await
+            .json;
+        let row = if seen.is_array() { &seen[0] } else { &seen };
+        assert_eq!(row["author_name"], "second-writer", "{seen}");
+        assert_eq!(row["edited_by_names"], json!([null]), "{seen}");
+    }
+    owner.close().await;
+    b.close().await;
+}
