@@ -331,6 +331,42 @@ describe('closing the event dialog with unsaved input', () => {
     expect(field(m.events_title()).value).toBe('새 회의');
   });
 
+  // CodeRabbit(7179119): 일정 저장과 반복 규칙 저장이 겹치면 늦게 온 쪽이 더 옛 일정을 다시 놓았다. 한 요청이 가는 동안은
+  // 일정 입력과 반복 규칙 입력을 함께 잠가 둘이 겹치지 않게 한다.
+  it('locks the rule editor while the event saves and the event fields while the rule saves', async () => {
+    vi.spyOn(api, 'event').mockResolvedValue(ev('A'));
+    const lateEvent = deferred<UpdateResult>();
+    vi.spyOn(api, 'updateEvent').mockReturnValue(lateEvent.promise);
+    const lateRule = deferred<EventView>();
+    vi.spyOn(api, 'setEventRecurrence').mockReturnValue(lateRule.promise);
+    await open();
+    const frequency = (): HTMLButtonElement => {
+      const el = document.querySelector('[aria-labelledby="event-recurrence-freq-label"]');
+      if (!(el instanceof HTMLButtonElement)) throw new Error('no frequency');
+      return el;
+    };
+    const ruleSave = (): HTMLElement =>
+      screen.getByRole('button', { name: m.events_recurrence_save() });
+
+    await typeTitle('새 회의');
+    await fireEvent.submit(eventForm());
+    expect(frequency().matches(':disabled')).toBe(true);
+    expect(ruleSave().matches(':disabled')).toBe(true);
+    lateEvent.resolve({ kind: 'updated', event: ev('A', { title: '새 회의' }, 6) });
+    await waitFor(() => {
+      expect(ruleSave().matches(':disabled')).toBe(false);
+    });
+
+    const form = ruleSave().closest('form');
+    if (form === null) throw new Error('no rule form');
+    await fireEvent.submit(form);
+    expect(field(m.events_title()).matches(':disabled')).toBe(true);
+    lateRule.resolve(ev('A', { title: '새 회의' }, 7));
+    await waitFor(() => {
+      expect(field(m.events_title()).matches(':disabled')).toBe(false);
+    });
+  });
+
   it('keeps the conflict notice and my input when I keep editing after a conflict', async () => {
     stub({ kind: 'conflict', current: ev('A', { description: '다른 사람' }, 6) });
     const onclose = vi.fn();
