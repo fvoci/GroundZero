@@ -107,4 +107,47 @@ describe('account switch reload and the unsaved-edit warning', () => {
     );
     expect(kept.length).toBeGreaterThan(0);
   });
+
+  // 리뷰 지적(81c9d99): 이 브라우저에 초안을 남기지 못하면(저장소를 쓸 수 없음) 계정이 바뀐 다시 읽기가 경고 없이
+  // 입력을 버렸다. 그때는 보통 떠나기처럼 경고한다(남으면 저장은 계정 확인에서 막힌다).
+  it('still warns when the edit could not be kept as a draft for the first account', async () => {
+    await setLocale('ko', { reload: false });
+    currentUser.userId = 'u1';
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    vi.spyOn(api, 'saveDocument').mockReturnValue(new Promise(() => undefined));
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    let blockedOnReload: boolean | undefined;
+    render(FeedbackHost, {
+      props: {
+        reload: () => {
+          blockedOnReload = unloadBlocked();
+        },
+      },
+    });
+    render(DocumentEditor, { props: { initial: doc } });
+
+    const title = document.getElementById('doc-title');
+    if (!(title instanceof HTMLInputElement)) throw new Error('doc-title');
+    await fireEvent.input(title, { target: { value: '고친 제목' } });
+
+    vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
+      Promise.resolve(
+        input === '/api/me'
+          ? json(200, { id: 'u2', display_name: '다른 사람', email: null })
+          : json(404, { error: 'not_found' }),
+      ),
+    );
+    await fireEvent.focus(window);
+
+    await vi.waitFor(() => {
+      expect(blockedOnReload).toBe(true);
+    });
+  });
 });

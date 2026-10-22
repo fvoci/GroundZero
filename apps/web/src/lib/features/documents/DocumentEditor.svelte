@@ -408,8 +408,18 @@
 
   onMount(() => {
     const beforeUnload = (event: BeforeUnloadEvent): void => {
-      // 다른 계정으로 바뀌어 다시 읽을 때는 막지 않는다(입력은 앞 계정의 초안으로 남아 있다).
-      if (isDirty() && !accountSwitching()) event.preventDefault();
+      if (!isDirty()) return;
+      // 다른 계정으로 바뀌어 다시 읽을 때는 지금 입력을 앞 계정의 초안으로 남길 수 있으면 막지 않는다. 남기지
+      // 못하면(저장소를 쓸 수 없음) 보통 떠나기처럼 경고한다(남아도 저장은 계정 확인에서 막힌다).
+      const kept =
+        accountSwitching() &&
+        storeDraft(server.id, {
+          baseRevision: server.revision,
+          title,
+          body,
+          savedAt: new Date().toISOString(),
+        });
+      if (!kept) event.preventDefault();
     };
     window.addEventListener('beforeunload', beforeUnload);
     router.guard = () => !isDirty() || window.confirm(m.documents_leave_confirm());
