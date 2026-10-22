@@ -153,8 +153,10 @@ pub struct CreateItem {
 pub struct UpdateItem {
     pub title: String,
     pub description: String,
-    /// `workspace` 또는 `private`.
-    pub visibility: String,
+    /// `workspace` 또는 `private`. 바꿀 때만 보낸다. 없거나 null이면 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
+    /// 공개 범위를 설명만 고친 저장이 되돌리지 않게, 감사 W13).
+    #[serde(default)]
+    pub visibility: Option<String>,
 }
 
 /// 키 정규화: 앞뒤 공백 제거, 대문자. 형식이 틀리면 400 (D-18).

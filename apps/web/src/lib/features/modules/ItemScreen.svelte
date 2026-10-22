@@ -64,19 +64,45 @@
   let saved = $state(false);
   let docTemplate = $state('');
 
+  // 마지막으로 서버 값으로 채운 입력란 값. 입력란이 이 값과 같으면 아직 고치지 않은 것이다.
+  let filled = { title: '', description: '', shared: false };
+
   function fill(next: ItemView): void {
     item = next;
     title = next.title;
     description = next.description;
     shared = next.visibility === 'workspace';
+    filled = { title, description, shared };
   }
+
+  /**
+   * 항목을 다시 읽었을 때(정보 저장·템플릿 표시 뒤): 고치지 않은 입력란만 새 값으로, 입력 중인 칸은 그대로 둔다.
+   * `base`는 "고치지 않았다"를 가를 기준 값(기본은 마지막으로 채운 서버 값, 저장 응답에서는 보낸 값).
+   */
+  function refresh(next: ItemView, base = filled): void {
+    item = next;
+    const nextShared = next.visibility === 'workspace';
+    if (title === base.title) title = next.title;
+    if (description === base.description) description = next.description;
+    if (shared === base.shared) shared = nextShared;
+    filled = { title: next.title, description: next.description, shared: nextShared };
+  }
+
+  // 항목을 (다시) 불러올 때마다 늘리는 차례. A → B → A로 돌아오면 항목 id는 같아도 새로 읽은 화면이다.
+  let loadSeq = 0;
 
   $effect(() => {
     const id = currentItemId;
+    loadSeq += 1;
     let cancelled = false;
     item = undefined;
     mod = undefined;
     error = undefined;
+    // 앞 항목의 "저장했습니다."·오류, 새 문서에 고른 템플릿을 새 항목에 남기지 않는다(다른 워크스페이스 항목으로
+    // 옮겨 가면 그 템플릿은 목록에 없어 보이지 않는데도 쓰였다).
+    saved = false;
+    formError = undefined;
+    docTemplate = '';
     api
       .item(id)
       .then(async (it) => {
@@ -111,47 +137,88 @@
   );
   const isOwner = $derived(item?.access === 'owner');
 
+  // 이 화면은 다른 항목으로 옮겨 가도 다시 만들어지지 않는다. 기다리는 사이 옮겨 갔으면 시작한 항목의 결과·오류를
+  // 지금 항목 화면에 넣지 않는다(B 주소에 A가 들어앉지 않게). 같은 항목으로 돌아왔어도 시작할 때의 차례(`mine`)가
+  // 아니면 버린다(앞 A 화면의 늦은 저장이 새 A 화면에 "저장했습니다."를 띄우거나 새로 읽은 값을 옛 값으로 되돌렸다).
+  const stillOn = (id: string, mine: number): boolean => currentItemId === id && loadSeq === mine;
+
+  /**
+   * 항목 정보를 저장하는 중. 공개 범위는 체크를 바꿨을 때만 보내므로, 공개로 바꾼 저장이 끝나기 전에 체크를 풀고 다시
+   * 저장하면 그 저장은 아직 비공개인 `filled`와 같아 공개 범위를 보내지 않았다. 먼저 보낸 공개가 서버에 남는데 화면은
+   * 비공개로 보였다. 끝날 때까지 다시 보내지 않고, 다음 저장은 응답으로 채운 값과 비교한다.
+   */
+  let saving = $state(false);
+
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (item === undefined) return;
+    if (item === undefined || saving) return;
     if (title.trim() === '') {
       formError = m.modules_title_required();
       return;
     }
     formError = undefined;
     saved = false;
+    const id = item.id;
+    const mine = loadSeq;
+    // 공개 범위는 체크를 바꿨을 때만 보낸다. 늘 보내면 연 뒤 다른 소유 권한자가 바꾼 공개 범위를 되돌렸다(감사 W13).
+    const visibility: 'workspace' | 'private' | undefined =
+      shared === filled.shared ? undefined : shared ? 'workspace' : 'private';
+    // 보낸 입력. 응답을 기다리는 사이 더 고친 칸은 응답 값으로 덮지 않는다(보내지 않은 입력이 사라지지 않게).
+    const sent = { title, description, shared };
+    saving = true;
     try {
-      fill(
-        await api.updateItem(item.id, {
-          title: title.trim(),
-          description,
-          visibility: shared ? 'workspace' : 'private',
-        }),
-      );
+      const next = await api.updateItem(id, {
+        title: title.trim(),
+        description,
+        ...(visibility === undefined ? {} : { visibility }),
+      });
       forgetReferences();
-      saved = true;
+      if (!stillOn(id, mine)) return;
+      refresh(next, sent);
+      // 더 고친 칸이 남아 있으면 "저장했습니다."를 보이지 않는다(그 입력은 아직 저장되지 않았다).
+      saved =
+        title === filled.title && description === filled.description && shared === filled.shared;
     } catch (e: unknown) {
-      formError = errorText(e, m.modules_save_failed());
+      if (stillOn(id, mine)) formError = errorText(e, m.modules_save_failed());
+    } finally {
+      saving = false;
     }
   }
 
   async function toggleTemplate(): Promise<void> {
     if (item === undefined) return;
+    const id = item.id;
+    const mine = loadSeq;
     try {
-      await api.setItemTemplate(item.id, !item.is_template);
-      fill(await api.item(item.id));
+      await api.setItemTemplate(id, !item.is_template);
+      const next = await api.item(id);
+      if (stillOn(id, mine)) refresh(next);
     } catch (e: unknown) {
-      formError = errorText(e, m.modules_change_failed());
+      if (stillOn(id, mine)) formError = errorText(e, m.modules_change_failed());
     }
   }
 
   async function toggleArchive(): Promise<void> {
     if (item === undefined) return;
+    const id = item.id;
+    const mine = loadSeq;
     try {
-      fill(await api.archiveItem(item.id, !item.archived));
+      const next = await api.archiveItem(id, !item.archived);
+      if (stillOn(id, mine)) fill(next);
     } catch (e: unknown) {
-      formError = errorText(e, m.modules_change_failed());
+      if (stillOn(id, mine)) formError = errorText(e, m.modules_change_failed());
     }
+  }
+
+  /** 항목을 다시 읽어 입력 중인 칸은 두고 넣는다. 그사이 다른 항목으로 옮겨 갔으면(돌아왔어도) 버린다. */
+  function reread(id: string, apply: (next: ItemView) => void): void {
+    const mine = loadSeq;
+    api
+      .item(id)
+      .then((next) => {
+        if (stillOn(id, mine)) apply(next);
+      })
+      .catch(() => undefined);
   }
 
   // 경로: 워크스페이스는 늘(항목을 못 읽어도 돌아갈 곳), 모듈은 읽은 뒤에.
@@ -284,7 +351,7 @@
           </div>
         {/if}
         <div class="flex gap-2">
-          <Button type="submit">{m.common_save()}</Button>
+          <Button type="submit" disabled={saving}>{m.common_save()}</Button>
           {#if isOwner}
             <Button type="button" variant="outline" onclick={() => void toggleArchive()}
               >{m.modules_archive()}</Button
@@ -314,10 +381,7 @@
         item={view}
         kind={mod.kind}
         onchanged={() => {
-          api
-            .item(current.id)
-            .then(fill)
-            .catch(() => undefined);
+          reread(current.id, refresh);
         }}
       />
       <RecordsPanel item={current} kind={mod.kind} canWrite={canEdit} />
@@ -362,10 +426,11 @@
           moveThenReload(
             () => api.setParent(id, move.parentId, move.beforeId),
             async () => {
-              // 다시 읽는 사이 다른 항목으로 옮겼으면 이 항목의 목록을 그 화면에 넣지 않는다.
+              // 다시 읽는 사이 다른 항목으로 옮겼으면(같은 항목으로 돌아왔어도) 이 목록을 그 화면에 넣지 않는다.
               const requested = current.id;
+              const mine = loadSeq;
               const list = await api.itemDocuments(requested);
-              if (currentItemId === requested) docs = list;
+              if (stillOn(requested, mine)) docs = list;
             },
           )}
         oncreatechild={async (parentId: string) => {
@@ -408,13 +473,9 @@
       openTaskId={taskId}
       tasksVersion={taskVersion}
       onstale={() => {
-        // 권한·보관이 바뀌었을 수 있다. 입력 중인 제목·설명은 두고 항목 상태만 새로 읽는다.
-        api
-          .item(current.id)
-          .then((next) => {
-            item = next;
-          })
-          .catch(() => undefined);
+        // 권한·보관이 바뀌었을 수 있다. 입력 중인 칸은 두고, 항목 상태와 고치지 않은 칸은 새로 읽은 값으로 바꾼다
+        // (옛 값이 남으면 다음 저장이 그사이 바뀐 제목·설명을 되돌린다).
+        reread(current.id, refresh);
       }}
     />
     <!-- 일정 목록과 달력은 같은 일정을 따로 읽는다. 한쪽에서 바꾸면 다른 쪽이 다시 읽게 알린다. -->

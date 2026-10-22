@@ -81,6 +81,11 @@
             : m.documents_load_failed();
       });
   }
+  /**
+   * 지금 주소의 문서에 대한 결과인지. 다른 문서로 옮긴 뒤(같은 화면에서 문서만 바뀜) 늦게 온 이전 문서의 저장·복원·설정
+   * 결과를 화면에 넣으면 새 주소 아래에 이전 문서가 다시 보인다.
+   */
+  const isShown = (d: DocumentView): boolean => d.id === documentId;
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
 
   function referencesFor(d: DocumentView): ReferenceContext {
@@ -111,13 +116,14 @@
       {workspaces}
       onchanged={(next: DocumentView) => {
         // 설정·이동은 리비전을 바꾸지 않는다. 편집 중인 내용은 편집기가 그대로 가진다.
-        if (doc !== undefined)
+        if (doc !== undefined && isShown(next))
           doc = { ...doc, ...next, body: doc.body, title: doc.title, revision: doc.revision };
       }}
     />
     <RevisionHistory
       {doc}
       onrestored={(restored: DocumentView) => {
+        if (!isShown(restored)) return;
         doc = restored;
         epoch += 1;
       }}
@@ -159,6 +165,18 @@
             initial={doc}
             references={referencesFor(doc)}
             onsaved={(saved: DocumentView) => {
+              if (!isShown(saved)) {
+                // 이전 문서의 제목 저장이 늦게 끝났다(제목 칸을 떠나며 다른 문서로 옮김). 화면은 그대로 두고 목록만
+                // 새 제목으로 다시 읽는다.
+                workspaceNav.refreshDocs();
+                return;
+              }
+              // 같은 문서를 다시 연 뒤 앞 편집기의 제목 저장이 늦게 끝났으면(A → B → A) 다시 읽은 더 새 리비전을 옛 결과로
+              // 덮지 않는다(기록·복원의 기준이 옛 리비전으로 돌아감). 목록만 새 제목으로 다시 읽는다.
+              if (doc !== undefined && saved.revision < doc.revision) {
+                workspaceNav.refreshDocs();
+                return;
+              }
               if (saved.title !== doc?.title) workspaceNav.refreshDocs();
               doc = saved;
             }}
@@ -171,6 +189,7 @@
             references={referencesFor(doc)}
             onsaved={(saved: DocumentView) => {
               // 기록 비교(지금과 비교)와 복원의 기준 리비전이 최신이 되도록 저장 결과를 따라간다.
+              if (!isShown(saved)) return;
               if (saved.title !== doc?.title) workspaceNav.refreshDocs();
               doc = saved;
             }}

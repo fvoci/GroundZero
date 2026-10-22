@@ -31,5 +31,9 @@
   "common_error_account_changed": "Not applied: you are now signed in with a different account than the one this window was opened with. Reloading for that account.",
   "common_close": "Close",
   "common_error_unexpected": "Got an unexpected response ({status}).",
+  "common_discard_title": "You have unsaved changes",
+  "common_discard_description": "If you close now, the changes you made here will be lost.",
+  "common_discard_keep": "Keep editing",
+  "common_discard_confirm": "Discard changes and close",
   "common_error_too_large": "What you sent is too large. Make it smaller and try again."
 }

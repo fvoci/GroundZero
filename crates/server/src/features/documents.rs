@@ -997,19 +997,23 @@ pub async fn set_parent(
 // 설정·공유 (소유 권한자)
 // ---------------------------------------------------------------------------
 
-/// 문서 설정 변경 요청.
+/// 문서 설정 변경 요청. 바꾸는 칸만 보낸다. 없거나 null인 칸은 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
+/// 비공개·복제 금지를 다른 칸만 바꾼 요청이 되돌리지 않게, 감사 W6).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct DocumentSettings {
     /// `workspace` 또는 `private`.
-    pub visibility: String,
-    pub allow_copy: bool,
+    #[serde(default)]
+    pub visibility: Option<String>,
+    #[serde(default)]
+    pub allow_copy: Option<bool>,
 }
 
 /// 비공개·복제 허용 설정(소유 권한자). 감사 기록을 남긴다.
 #[utoipa::path(put, path = "/api/documents/{document_id}/settings",
     params(("document_id" = String, Path, format = Uuid)), request_body = DocumentSettings,
     responses((status = 200, body = Document), (status = 400, body = ErrorBody),
-              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn set_settings(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,

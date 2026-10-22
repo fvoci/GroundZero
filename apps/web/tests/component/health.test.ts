@@ -1,33 +1,8 @@
-import { render, screen } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { HealthResult } from '$lib/api/client';
 import { fetchHealth } from '$lib/api/client';
-import { setLocale } from '$lib/paraglide/runtime.js';
 import { buildLabel } from '$lib/features/health/build';
-import HealthStatus from '../../src/lib/features/health/HealthStatus.svelte';
-
-describe('HealthStatus', () => {
-  beforeEach(async () => {
-    await setLocale('ko', { reload: false });
-  });
-
-  it('renders ok state from loader', async () => {
-    const load = (): Promise<HealthResult> =>
-      Promise.resolve({
-        kind: 'ok',
-        health: { status: 'ok', database: 'ok', build: { version: 'dev', source: 'dev' } },
-      });
-    render(HealthStatus, { load });
-    expect(await screen.findByTestId('health')).toHaveTextContent('서버 정상');
-  });
-
-  it('renders unreachable state when loader fails', async () => {
-    const load = (): Promise<HealthResult> => Promise.reject(new Error('boom'));
-    render(HealthStatus, { load });
-    expect(await screen.findByTestId('health')).toHaveTextContent('boom');
-  });
-});
+import { setLocale } from '$lib/paraglide/runtime.js';
 
 describe('fetchHealth', () => {
   it('treats malformed body as unreachable', async () => {

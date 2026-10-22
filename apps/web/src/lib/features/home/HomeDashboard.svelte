@@ -79,6 +79,8 @@
           from,
           to,
           zone,
+          // 업무·일정 밖 날짜(D-80)도 달력과 같이 보인다.
+          calendars.flatMap((c) => c.dates),
         );
         const notes = await api.notifications();
         if (mine !== loadSeq) return;

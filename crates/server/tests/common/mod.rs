@@ -299,6 +299,10 @@ pub struct FreshDb {
 
 pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> FreshDb {
     use sqlx::Connection as _;
+    // 같은 시험 바이너리에서 새 DB 준비가 겹치면 클러스터 공용 행(역할 권한 등)을 함께 고쳐 "tuple concurrently
+    // updated"(XX000)로 실패한다. 준비와 마이그레이션은 한 번에 하나씩 한다.
+    static PREPARE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _serial = PREPARE.lock().await;
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
     let migration_url =
         std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");

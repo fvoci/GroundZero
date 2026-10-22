@@ -30,5 +30,9 @@
   "common_error_account_changed": "이 창을 연 계정이 아닌 다른 계정으로 로그인돼 있어 서버가 받지 않았습니다. 지금 계정으로 다시 읽습니다.",
   "common_close": "닫기",
   "common_error_unexpected": "예상하지 못한 응답을 받았습니다({status}).",
+  "common_discard_title": "저장하지 않은 변경이 있습니다",
+  "common_discard_description": "닫으면 이 창에서 고친 내용이 사라집니다.",
+  "common_discard_keep": "계속 편집",
+  "common_discard_confirm": "변경 버리고 닫기",
   "common_error_too_large": "보내는 내용이 너무 큽니다. 줄인 뒤 다시 시도해 주세요."
 }

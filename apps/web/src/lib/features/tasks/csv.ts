@@ -6,6 +6,44 @@ import { m } from '$lib/paraglide/messages.js';
 
 /** 업무 제목 한도(서버 기본 FVOCI_MAX_TITLE_CHARS). */
 const MAX_TITLE = 200;
+// 서버가 고치기에서 거부하는 값(crates/server/src/features/tasks.rs). 만들기는 제목만 보내 먼저 성공하므로, 여기서 놓치면
+// 제목만 있는 업무가 남는다. 글자 수는 서버처럼 문자(코드 포인트)로 센다.
+/** 설명 글자 수(MAX_DESCRIPTION_CHARS). */
+const MAX_DESCRIPTION = 10_000;
+/** 태그 수(MAX_TAGS, 같은 태그를 합치기 전)와 태그 하나의 글자 수(MAX_TAG_CHARS). */
+const MAX_TAGS = 20;
+const MAX_TAG_CHARS = 50;
+/** 날짜의 해(DATE_YEARS). */
+const MIN_YEAR = 1900;
+const MAX_YEAR = 2200;
+/** 예상(분)은 i32. */
+const MAX_ESTIMATE = 2_147_483_647;
+
+const chars = (s: string): number => Array.from(s).length;
+/** 제어 문자(Rust `char::is_control`, 일반 범주 Cc). */
+const CONTROL = /\p{Cc}/u;
+/** 설명은 줄바꿈·탭만 받는다(validate_text). */
+const CONTROL_IN_TEXT = /(?![\n\t])\p{Cc}/u;
+
+/** 날짜 칸을 서버(parse_date)처럼 읽는다: 비었으면 null, 있는 날짜면 그 값, 아니면 오류 문구. */
+function taskDate(raw: string): { value: string | null } | { reason: string } {
+  const date = csvDate(raw);
+  if (date === undefined) return { reason: m.tasks_csv_bad_date() };
+  if (date === null) return { value: null };
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(5, 7));
+  const day = Number(date.slice(8, 10));
+  if (year < MIN_YEAR || year > MAX_YEAR) {
+    return { reason: m.tasks_csv_date_range({ min: MIN_YEAR, max: MAX_YEAR }) };
+  }
+  // 2026-02-30처럼 없는 날은 Date가 다음 달로 넘기므로 되읽어 비교한다.
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  const real =
+    probe.getUTCFullYear() === year &&
+    probe.getUTCMonth() === month - 1 &&
+    probe.getUTCDate() === day;
+  return real ? { value: date } : { reason: m.tasks_csv_bad_date() };
+}
 
 export interface TaskRow {
   title: string;
@@ -78,8 +116,16 @@ export function parseTasksCsv(text: string, assignable: readonly AssigneeView[])
       fail(m.tasks_csv_no_title());
       return;
     }
-    if (title.length > MAX_TITLE) {
+    if (chars(title) > MAX_TITLE) {
       fail(m.tasks_csv_title_too_long({ max: MAX_TITLE }));
+      return;
+    }
+    if (chars(description) > MAX_DESCRIPTION) {
+      fail(m.tasks_csv_description_too_long({ max: MAX_DESCRIPTION }));
+      return;
+    }
+    if (CONTROL_IN_TEXT.test(description)) {
+      fail(m.tasks_csv_description_control());
       return;
     }
     const st = STATUS[status.toLowerCase()];
@@ -92,13 +138,17 @@ export function parseTasksCsv(text: string, assignable: readonly AssigneeView[])
       fail(m.tasks_csv_unknown_priority({ value: priority }));
       return;
     }
-    const startDate = csvDate(start);
-    const dueDate = csvDate(due);
-    if (startDate === undefined || dueDate === undefined) {
-      fail(m.tasks_csv_bad_date());
+    const startDate = taskDate(start);
+    if ('reason' in startDate) {
+      fail(startDate.reason);
       return;
     }
-    if (startDate !== null && dueDate !== null && startDate > dueDate) {
+    const dueDate = taskDate(due);
+    if ('reason' in dueDate) {
+      fail(dueDate.reason);
+      return;
+    }
+    if (startDate.value !== null && dueDate.value !== null && startDate.value > dueDate.value) {
       fail(m.tasks_csv_start_after_due());
       return;
     }
@@ -109,6 +159,10 @@ export function parseTasksCsv(text: string, assignable: readonly AssigneeView[])
         return;
       }
       minutes = Number(estimate);
+      if (minutes > MAX_ESTIMATE) {
+        fail(m.tasks_csv_estimate_too_large({ value: estimate }));
+        return;
+      }
     }
     const ids: string[] = [];
     for (const name of list(people)) {
@@ -123,16 +177,29 @@ export function parseTasksCsv(text: string, assignable: readonly AssigneeView[])
       }
       ids.push(found[0].user_id);
     }
+    const tagList = list(tags);
+    if (tagList.length > MAX_TAGS) {
+      fail(m.tasks_csv_too_many_tags({ max: MAX_TAGS }));
+      return;
+    }
+    if (tagList.some((t) => chars(t) > MAX_TAG_CHARS)) {
+      fail(m.tasks_csv_tag_too_long({ max: MAX_TAG_CHARS }));
+      return;
+    }
+    if (tagList.some((t) => CONTROL.test(t))) {
+      fail(m.tasks_csv_tag_control());
+      return;
+    }
     rows.push({
       title,
       description,
       status: st,
       priority: pr,
-      start_date: startDate,
-      due_date: dueDate,
+      start_date: startDate.value,
+      due_date: dueDate.value,
       estimate_minutes: minutes,
       assignee_ids: ids,
-      tags: list(tags),
+      tags: tagList,
     });
   });
   return { rows, errors };
