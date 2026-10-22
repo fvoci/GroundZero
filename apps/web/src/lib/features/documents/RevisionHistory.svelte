@@ -9,6 +9,7 @@
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
 
+  import { standInLabel } from './revision-author';
   import type { DiffLine } from './revision-diff';
   import { diffRevisions } from './revision-diff';
 
@@ -138,7 +139,7 @@
           >
             <span class="font-mono">r{rev.revision}</span>
             <span class="text-muted-foreground"
-              >{rev.author_name ?? m.documents_unknown_author()}</span
+              >{standInLabel(rev) ?? rev.author_name ?? m.documents_unknown_author()}</span
             >
             <span class="block text-xs text-muted-foreground">
               {when(rev.created_at)}{rev.restored_from === null

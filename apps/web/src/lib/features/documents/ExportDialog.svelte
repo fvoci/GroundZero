@@ -15,6 +15,7 @@
   import type { ExportFormat } from './export';
   import { exportFileName, prepareExport, saveBlob, toMarkdown, toZip } from './export';
   import { printDocumentHtml, printToPdf } from './export-print';
+  import { standInLabel } from './revision-author';
 
   interface Props {
     doc: DocumentView;
@@ -49,6 +50,11 @@
   ]);
 
   const when = (iso: string): string => formatInstant(iso);
+  /** 리비전을 남긴 사람. 대신 저장한 리비전은 실제 편집자와 함께 보인다(D-95). */
+  function byline(rev: RevisionSummaryView): string {
+    const label = standInLabel(rev) ?? rev.author_name;
+    return label === null ? '' : ` · ${label}`;
+  }
   const latest = $derived(selected === doc.revision);
 
   function openDialog(): void {
@@ -143,7 +149,7 @@
                 ? m.documents_revision_latest({ revision: rev.revision })
                 : m.documents_revision_n({ revision: rev.revision })} · {when(
                 rev.created_at,
-              )}{rev.author_name === null ? '' : ` · ${rev.author_name}`}
+              )}{byline(rev)}
             </option>
           {/each}
         </select>

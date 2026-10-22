@@ -46,6 +46,7 @@ function revisionAt(revision: number, text: string): RevisionView {
     author_name: '나',
     created_at: '2026-10-19T00:00:00Z',
     restored_from: null,
+    edited_by_names: null,
     body: paragraph(text),
     schema_version: 1,
   };

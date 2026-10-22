@@ -28,6 +28,8 @@
   "documents_revisions_label": "리비전",
   "documents_unknown_author": "알 수 없음",
   "documents_restored_from": "r{revision}에서 복원",
+  "documents_saved_for_editors": "편집: {editors} · 대신 저장: {author}",
+  "documents_saved_for_unknown": "편집한 사람 기록 없음 · 대신 저장: {author}",
   "documents_load_more": "더 보기",
   "documents_history_pick": "왼쪽에서 리비전을 고르세요.",
   "documents_compare_label": "비교 대상",
