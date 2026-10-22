@@ -2707,8 +2707,9 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   - 39·40은 최종 갱신 커밋(`be7ef22`·`217c6c5`)에 병합 직전 게시됐다(#64 리뷰 2026-10-22T09:52:28Z·병합 09:58:56Z, #82 리뷰 10:25:16Z·병합
     10:26:23Z). 수정 없이 병합되어 병합 뒤에 발견했다(Minor 둘, 편집을 확인 없이 잃는 경로, 스레드 풀리지 않음). W20이 새 PR
     `fix/audit-unsaved-followups`에서 재현·수정 중이고, #69는 그 PR 다음에 병합한다. PR 번호·수정 SHA: 추후 기록.
-  - 절차 결함: coordinator의 병합 스크립트는 CodeRabbit을 커밋 상태(완료 여부)로만 보고, 게시된 리뷰의 인라인 지적을 읽지 않았다(#60·#64 단계만
-    완료를 기다렸고 나머지 단계는 저장소 CI만 기다림). 그래서 #64의 완료 상태와 함께 온 Actionable 지적과, 기다리지 않은 #82 단계의 리뷰 지적이
+  - 절차 결함: coordinator의 병합 스크립트는 CodeRabbit을 커밋 상태로만 보고, 게시된 리뷰의 인라인 지적을 읽지 않았다(#60·#64 단계만 상태를
+    기다렸고 나머지 단계는 저장소 CI만 기다림). 또 상태의 success만 보고 '완료'로 여겨, #60 `6b7fd14`의 "Review skipped"(검토 안 함)를 완료로
+    잘못 적었다(아래 「CodeRabbit(최종 갱신 커밋)」의 #60). 그래서 #64의 완료 상태와 함께 온 Actionable 지적과, 기다리지 않은 #82 단계의 리뷰 지적이
     병합을 막지 못했다.
 
 - **델타 감사(`07a9ab5..a5cda4e`)**: 바뀐 24개 파일을 서버·웹으로 나눠 다시 찾고 반박 검증했다. 남은 12건(WD1~WD6, SD1~SD5, SD8. SD6·SD7은 반박됨)을 다음처럼 처리했다.
@@ -2789,7 +2790,7 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
     #60 시험 실패 확인), #82(`messages/common`, #62가 없앤 `predecessor_ids` 고정 값 둘), #69(이 절과 96절을 절 번호 순서로).
   - 병합(coordinator, `merge-plan.sh`를 보강해 실행): 단계마다 fetch 뒤 main tree가 앞 단계 tree와 같은지 확인 → PR을 Ready로 바꾸고 base를
     main으로(REST) → 갱신 단계는 `git commit-tree <단계 tree> -p <고정 머리> -p <main>`을 PR 브랜치에 fast-forward push(메시지
-    `chore: merge main into <branch> for the final integration (step N)`) → 저장소 CI 6개만 기다림(#60·#64 단계는 CodeRabbit 완료도 기다림) →
+    `chore: merge main into <branch> for the final integration (step N)`) → 저장소 CI 6개만 기다림(#60·#64 단계는 CodeRabbit 상태도 기다림) →
     `gh pr merge --merge --match-head-commit` → main tree가 그 단계 tree와 같은지 확인. 그래서 깨끗 단계는 고정 머리를, 갱신 단계는 갱신 커밋을 병합했다.
 
     | PR  | 병합한 머리 | merge commit | 병합 시각(UTC, GitHub `mergedAt`) |
@@ -2878,21 +2879,26 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
 - **CodeRabbit(최종 갱신 커밋)**: 갱신 단계 커밋의 CodeRabbit 상태(커밋 상태와 PR의 리뷰·요약, 2026-10-22T10:35Z 조회). 깨끗 단계는 위
   「장부 갱신」의 머리 그대로 병합했다.
 
-  | PR  | 갱신 커밋 | 커밋 상태(갱신 시각 UTC)               | 리뷰·요약                                                                                     |
-  | --- | --------- | -------------------------------------- | --------------------------------------------------------------------------------------------- |
-  | #59 | `14efc13` | Review skipped(08:46:31Z)              | 요약 Merge Risk Minimal은 `180a0ae`까지                                                       |
-  | #62 | `5c47157` | Review skipped(08:53:14Z)              | 이 커밋의 리뷰 없음                                                                           |
-  | #66 | `f470eb2` | Review skipped(08:55:13Z)              | 이 커밋의 리뷰 없음                                                                           |
-  | #74 | `bc06b2a` | Review skipped(09:10:00Z)              | 이 커밋의 리뷰 없음                                                                           |
-  | #55 | `1bbfbc5` | Review skipped(09:13:23Z)              | 이 커밋의 리뷰 없음                                                                           |
-  | #56 | `90d43e5` | Review skipped(09:27:45Z)              | 이 커밋의 리뷰 없음                                                                           |
-  | #60 | `6b7fd14` | Review skipped(09:27:36Z)              | 요약 Merge Risk Minimal은 `a811f92`까지. 병합 뒤 `review`·`resume`은 "Pull request is closed" |
-  | #61 | `050e7b0` | Review skipped(09:37:41Z)              | 이 커밋의 리뷰 없음                                                                           |
-  | #63 | `8ffe1a0` | Review skipped(09:45:02Z)              | 이 커밋의 리뷰 없음                                                                           |
-  | #64 | `be7ef22` | Review completed(10:00:57Z)            | 리뷰 09:52:28Z: Actionable 1(장부 39), 요약 Merge Risk Low(`be7ef22`까지)                     |
-  | #68 | `58705e7` | Review skipped(10:23:07Z)              | 이 커밋의 리뷰 없음                                                                           |
-  | #80 | `48b9644` | Review completed(10:15:07Z)            | 요약 Merge Risk Minimal(`48b9644`까지)                                                        |
-  | #82 | `217c6c5` | Review in progress(10:17:16Z에서 멈춤) | 리뷰 10:25:16Z: Actionable 1(장부 40). 커밋 상태는 그 뒤 바뀌지 않음                          |
+  | PR  | 갱신 커밋 | 커밋 상태(갱신 시각 UTC)               | 리뷰·요약                                                                                                         |
+  | --- | --------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+  | #59 | `14efc13` | Review skipped(08:46:31Z)              | 요약 Merge Risk Minimal은 `180a0ae`까지                                                                           |
+  | #62 | `5c47157` | Review skipped(08:53:14Z)              | 이 커밋의 리뷰 없음                                                                                               |
+  | #66 | `f470eb2` | Review skipped(08:55:13Z)              | 이 커밋의 리뷰 없음                                                                                               |
+  | #74 | `bc06b2a` | Review skipped(09:10:00Z)              | 이 커밋의 리뷰 없음                                                                                               |
+  | #55 | `1bbfbc5` | Review skipped(09:13:23Z)              | 이 커밋의 리뷰 없음                                                                                               |
+  | #56 | `90d43e5` | Review skipped(09:27:45Z)              | 이 커밋의 리뷰 없음                                                                                               |
+  | #60 | `6b7fd14` | Review skipped(09:27:36Z)              | 검토 없음(요약은 `a811f92`까지). 병합 스크립트가 success를 완료로 잘못 봄. coordinator 직접 검토: 문제 없음(아래) |
+  | #61 | `050e7b0` | Review skipped(09:37:41Z)              | 이 커밋의 리뷰 없음                                                                                               |
+  | #63 | `8ffe1a0` | Review skipped(09:45:02Z)              | 이 커밋의 리뷰 없음                                                                                               |
+  | #64 | `be7ef22` | Review completed(10:00:57Z)            | 리뷰 09:52:28Z: Actionable 1(장부 39), 요약 Merge Risk Low(`be7ef22`까지)                                         |
+  | #68 | `58705e7` | Review skipped(10:23:07Z)              | 이 커밋의 리뷰 없음                                                                                               |
+  | #80 | `48b9644` | Review completed(10:15:07Z)            | 요약 Merge Risk Minimal(`48b9644`까지)                                                                            |
+  | #82 | `217c6c5` | Review in progress(10:17:16Z에서 멈춤) | 리뷰 10:25:16Z: Actionable 1(장부 40). 커밋 상태는 그 뒤 바뀌지 않음                                              |
+  - #60 `6b7fd14`의 coordinator 직접 검토(CodeRabbit 대신): 자동 병합(`git merge-tree 6b7fd14^1 6b7fd14^2`)과 비교한 해결 차이는 셋이다.
+    (1) `DocumentEditor.svelte` `edited()`에서 main(#57)의 `keepDraft()`(고르기를 기다리는 지난 초안 `reservedDraft` 보호 포함, 같은 `storeDraft`
+    필드)를 쓰고 #60의 `if (!accountChanged) schedule(...)`을 유지(양쪽 의도 보존). (2) `messages/common` ko·en 번역 키의 합집합(누락 없음).
+    (3) `document-draft-conflict`·`document-draft-offer` 시험에 #60의 저장 전 계정 확인용 `api.me` 흉내 추가(기대값 완화 없음). 판정: 문제 없음.
+    이 tree는 R8과 실제 브라우저를 돌린 `07be34d`에 들어 있다.
   - "Review skipped" 10건은 모두 그 PR의 병합 시각 뒤에 적혔다. 갱신 커밋은 main을 합친 커밋이라, 그 PR의 diff는 고정 머리의 diff에 충돌 해결과
     앞 PR에 맞춘 시험 고정 값을 더한 것이다. 이 차이는 단계 표(`final-steps.tsv`의 conflicted·changed)와 저장소 CI 6개로 확인했고, CodeRabbit이
     검토한 머리는 위 「장부 갱신」과 이 표의 요약 범위다(검토하지 않은 갱신 커밋을 CodeRabbit 통과로 적지 않는다).
