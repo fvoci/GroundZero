@@ -1,0 +1,10 @@
+== prettier
+Checking formatting...
+All matched files use Prettier code style!
+rc=0
+== eslint
+rc=0
+== svelte-check
+1792629680617 START "<scratch>/wt-taskmerge/apps/web"
+1792629680631 COMPLETED 3108 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+rc=0

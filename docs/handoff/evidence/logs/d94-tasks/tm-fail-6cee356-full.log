@@ -1,0 +1,1655 @@
+
+ RUN  v5.0.5 <scratch>/wt-taskmerge/apps/web
+
+ ❯ tests/component/task-conflict-save-mine.test.ts (6 tests | 1 failed | 5 skipped) 1160ms
+   ❯ saving my input after a task conflict (6)
+     × asks before saving my value over fields the other person changed too 1159ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > saving my input after a task conflict > asks before saving my value over fields the other person changed too
+TestingLibraryElementError: Unable to find role="alertdialog" and name "다른 사람도 바꾼 칸이 있습니다"
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [0m [0m
+    [0m [0m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col gap-4"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-wrap items-baseline gap-2"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-mono text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0mKED-1[0m
+        [36m</span>[39m
+        [0m [0m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"ml-auto flex flex-wrap items-center gap-1"[39m
+        [36m>[39m
+          [0m[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"flex flex-wrap items-center gap-1"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"[39m
+              [33mdata-slot[39m=[32m"button"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [0m업무 지우기[0m
+            [36m</button>[39m
+            [0m[0m
+            [0m [0m
+          [36m</span>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [0m [0m
+      [0m [0m
+      [36m<form[39m
+        [33mclass[39m=[32m"grid grid-cols-2 gap-3"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"col-span-2 flex flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-title"[39m
+            [33mid[39m=[32m"bits-c1"[39m
+          [36m>[39m
+            [0m제목[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-title"[39m
+            [33mmaxlength[39m=[32m"200"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-sm font-medium"[39m
+            [33mid[39m=[32m"task-status-label"[39m
+          [36m>[39m
+            [0m상태[0m
+          [36m</span>[39m
+          [0m [0m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"false"[39m
+            [33maria-haspopup[39m=[32m"listbox"[39m
+            [33maria-labelledby[39m=[32m"task-status-label"[39m
+            [33mclass[39m=[32m"border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"[39m
+            [33mdata-select-trigger[39m=[32m""[39m
+            [33mdata-size[39m=[32m"default"[39m
+            [33mdata-slot[39m=[32m"select-trigger"[39m
+            [33mdata-state[39m=[32m"closed"[39m
+            [33mid[39m=[32m"bits-c2"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m할 일[0m
+            [0m [0m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m>[39m
+                [0m[0m
+              [36m</path>[39m
+              [0m[0m
+            [36m</svg>[39m
+          [36m</button>[39m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-sm font-medium"[39m
+            [33mid[39m=[32m"task-priority-label"[39m
+          [36m>[39m
+            [0m우선순위[0m
+          [36m</span>[39m
+          [0m [0m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"false"[39m
+            [33maria-haspopup[39m=[32m"listbox"[39m
+            [33maria-labelledby[39m=[32m"task-priority-label"[39m
+            [33mclass[39m=[32m"border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"[39m
+            [33mdata-select-trigger[39m=[32m""[39m
+            [33mdata-size[39m=[32m"default"[39m
+            [33mdata-slot[39m=[32m"select-trigger"[39m
+            [33mdata-state[39m=[32m"closed"[39m
+            [33mid[39m=[32m"bits-c3"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m높음[0m
+            [0m [0m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m>[39m
+                [0m[0m
+              [36m</path>[39m
+              [0m[0m
+            [36m</svg>[39m
+          [36m</button>[39m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-start"[39m
+            [33mid[39m=[32m"bits-c4"[39m
+          [36m>[39m
+            [0m시작일[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-start"[39m
+            [33mtype[39m=[32m"date"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-due"[39m
+            [33mid[39m=[32m"bits-c5"[39m
+          [36m>[39m
+            [0m마감일[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-due"[39m
+            [33mtype[39m=[32m"date"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"col-span-2 flex flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-description"[39m
+            [33mid[39m=[32m"bits-c6"[39m
+          [36m>[39m
+            [0m설명[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<textarea[39m
+            [33mclass[39m=[32m"rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"[39m
+            [33mid[39m=[32m"task-description"[39m
+            [33mrows[39m=[32m"3"[39m
+          [36m/>[39m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-estimate"[39m
+            [33mid[39m=[32m"bits-c7"[39m
+          [36m>[39m
+            [0m예상 시간(분)[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-estimate"[39m
+            [33minputmode[39m=[32m"numeric"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-tags"[39m
+            [33mid[39m=[32m"bits-c8"[39m
+          [36m>[39m
+            [0m태그(쉼표로 구분)[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-tags"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"col-span-2 flex items-center gap-2"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-checked[39m=[32m"false"[39m
+            [33maria-readonly[39m=[32m"false"[39m
+            [33maria-required[39m=[32m"false"[39m
+            [33mclass[39m=[32m"border-input dark:bg-input/30 data-checked:bg-primary data-checked:text-primary-foreground dark:data-checked:bg-primary data-checked:border-primary aria-invalid:aria-checked:border-primary aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 flex size-4 items-center justify-center rounded-[4px] border transition-colors group-has-disabled/field:opacity-50 focus-visible:ring-3 aria-invalid:ring-3 group-has-[:focus-visible]/field-label:ring-0 group-has-[:focus-visible]/field-label:not-data-checked:border-input group-has-[:focus-visible]/field-label:data-checked:border-primary peer relative shrink-0 outline-none after:absolute after:-inset-x-3 after:-inset-y-2 disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-checkbox-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"checkbox"[39m
+            [33mdata-state[39m=[32m"unchecked"[39m
+            [33mid[39m=[32m"task-milestone"[39m
+            [33mrole[39m=[32m"checkbox"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"[&>svg]:size-3.5 grid place-content-center text-current transition-none"[39m
+              [33mdata-slot[39m=[32m"checkbox-indicator"[39m
+            [36m/>[39m
+          [36m</button>[39m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-milestone"[39m
+            [33mid[39m=[32m"bits-c10"[39m
+          [36m>[39m
+            [0m마일스톤 (마감일 하나만)[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<fieldset[39m
+          [33mclass[39m=[32m"col-span-2 flex flex-col gap-2"[39m
+        [36m>[39m
+          [36m<legend[39m
+            [33mclass[39m=[32m"text-sm font-medium"[39m
+          [36m>[39m
+            [0m담당자 (같은 완료 상태를 공유)[0m
+          [36m</legend>[39m
+          [0m [0m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-wrap gap-3"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+            [36m>[39m
+              [0m지정할 수 있는 사람이 없습니다.[0m
+            [36m</span>[39m
+            [0m[0m
+          [36m</div>[39m
+        [36m</fieldset>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"col-span-2 flex items-center gap-2"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mid[39m=[32m"task-save"[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [0m저장[0m
+          [36m</button>[39m
+          [0m[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-sm"[39m
+            [33mrole[39m=[32m"status"[39m
+          [36m>[39m
+            [0m저장했습니다.[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [0m [0m
+      [36m</form>[39m
+      [0m [0m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"parent-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"parent-heading"[39m
+        [36m>[39m
+          [0m상위 업무[0m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m없음(최상위 업무)[0m
+        [36m</p>[39m
+        [0m [0m
+        [0m [0m
+        [36m<p[39m
+          [33maria-live[39m=[32m"polite"[39m
+          [33mclass[39m=[32m"text-sm"[39m
+        [36m>[39m
+          [0m[0m
+        [36m</p>[39m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"subtasks-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"subtasks-heading"[39m
+        [36m>[39m
+          [0m하위 업무[0m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m없습니다.[0m
+        [36m</p>[39m
+        [0m [0m
+        [36m<form[39m
+          [33mclass[39m=[32m"flex flex-wrap items-end gap-2"[39m
+          [33mnovalidate[39m=[32m""[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex min-w-40 flex-1 flex-col gap-1"[39m
+          [36m>[39m
+            [36m<label[39m
+              [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+              [33mdata-label-root[39m=[32m""[39m
+              [33mdata-slot[39m=[32m"label"[39m
+              [33mfor[39m=[32m"new-subtask"[39m
+              [33mid[39m=[32m"bits-c11"[39m
+            [36m>[39m
+              [0m하위 업무 제목[0m
+            [36m</label>[39m
+            [0m[0m
+            [0m[0m
+            [0m [0m
+            [36m<input[39m
+              [33maria-invalid[39m=[32m"false"[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+              [33mdata-slot[39m=[32m"input"[39m
+              [33mid[39m=[32m"new-subtask"[39m
+              [33mmaxlength[39m=[32m"200"[39m
+              [33mplaceholder[39m=[32m"예: 입력 검증"[39m
+            [36m/>[39m
+            [0m[0m
+          [36m</div>[39m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [0m하위 업무 추가[0m
+          [36m</button>[39m
+          [0m[0m
+        [36m</form>[39m
+        [0m [0m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"predecessors-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"predecessors-heading"[39m
+          [33mtabindex[39m=[32m"-1"[39m
+        [36m>[39m
+          [0m선행 업무[0m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m없습니다.[0m
+        [36m</p>[39m
+        [0m [0m
+        [0m [0m
+        [0m [0m
+        [36m<p[39m
+          [33maria-live[39m=[32m"polite"[39m
+          [33mclass[39m=[32m"text-sm"[39m
+          [33mdata-testid[39m=[32m"link-status"[39m
+        [36m>[39m
+          [0m[0m
+        [36m</p>[39m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"successors-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"successors-heading"[39m
+        [36m>[39m
+          [0m후속 업무[0m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m없습니다.[0m
+        [36m</p>[39m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"task-recurrence-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"task-recurrence-heading"[39m
+        [36m>[39m
+          [0m반복[0m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m반복하지 않습니다. ("오늘"은 Asia/Seoul 기준)[0m
+        [36m</p>[39m
+        [0m [0m
+        [36m<form[39m
+          [33mclass[39m=[32m"flex flex-wrap items-end gap-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-col gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"text-sm font-medium"[39m
+              [33mid[39m=[32m"task-recurrence-freq-label"[39m
+            [36m>[39m
+              [0m주기[0m
+            [36m</span>[39m
+            [0m [0m
+            [36m<button[39m
+              [33maria-expanded[39m=[32m"false"[39m
+              [33maria-haspopup[39m=[32m"listbox"[39m
+              [33maria-labelledby[39m=[32m"task-recurrence-freq-label"[39m
+              [33mclass[39m=[32m"border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"[39m
+              [33mdata-select-trigger[39m=[32m""[39m
+              [33mdata-size[39m=[32m"default"[39m
+              [33mdata-slot[39m=[32m"select-trigger"[39m
+              [33mdata-state[39m=[32m"closed"[39m
+              [33mid[39m=[32m"bits-c15"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [0m반복 안 함[0m
+              [0m [0m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"m6 9 6 6 6-6"[39m
+                [36m>[39m
+                  [0m[0m
+                [36m</path>[39m
+                [0m[0m
+              [36m</svg>[39m
+            [36m</button>[39m
+            [0m[0m
+            [0m[0m
+            [0m[0m
+            [0m[0m
+            [0m [0m
+            [0m[0m
+            [0m[0m
+            [0m[0m
+            [0m[0m
+            [0m [0m
+            [0m[0m
+            [0m[0m
+          [36m</div>[39m
+          [0m [0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [0m반복 저장[0m
+          [36m</button>[39m
+          [0m[0m
+          [0m [0m
+        [36m</form>[39m
+        [0m [0m
+      [36m</section>[39m
+      [0m [0m
+      [0m[0m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"task-t1-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-3"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"task-t1-heading"[39m
+        [36m>[39m
+          [0m체크리스트 [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-normal text-muted-foreground"[39m
+          [36m>[39m
+            [0m0/0[0m
+          [36m</span>[39m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<ul[39m
+          [33mclass[39m=[32m"flex flex-col gap-2"[39m
+          [33mdata-testid[39m=[32m"checklist-items"[39m
+        [36m>[39m
+          [36m<li[39m
+            [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+          [36m>[39m
+            [0m항목이 없습니다.[0m
+          [36m</li>[39m
+          [0m[0m
+        [36m</ul>[39m
+        [0m [0m
+        [36m<form[39m
+          [33mclass[39m=[32m"flex items-end gap-2"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-1 flex-col gap-1"[39m
+          [36m>[39m
+            [36m<label[39m
+              [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+              [33mdata-label-root[39m=[32m""[39m
+              [33mdata-slot[39m=[32m"label"[39m
+              [33mfor[39m=[32m"task-t1-new"[39m
+              [33mid[39m=[32m"bits-c12"[39m
+            [36m>[39m
+              [0m새 항목[0m
+            [36m</label>[39m
+            [0m[0m
+            [0m[0m
+            [0m [0m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+              [33mdata-slot[39m=[32m"input"[39m
+              [33mid[39m=[32m"task-t1-new"[39m
+              [33mplaceholder[39m=[32m"할 일을 입력"[39m
+            [36m/>[39m
+            [0m[0m
+          [36m</div>[39m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mdisabled[39m=[32m""[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [0m추가[0m
+          [36m</button>[39m
+          [0m[0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mMarkdown 붙여넣기[0m
+          [36m</button>[39m
+          [0m[0m
+        [36m</form>[39m
+        [0m [0m
+        [0m [0m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"task-time-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"task-time-heading"[39m
+        [36m>[39m
+          [0m시간[0m
+        [36m</h3>[39m
+        [0m [0m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-wrap items-center gap-2"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m이 업무 시간 재기[0m
+          [36m</button>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"comments-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-3"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"text-lg font-semibold focus-visible:outline-none"[39m
+          [33mid[39m=[32m"comments-heading"[39m
+          [33mtabindex[39m=[32m"-1"[39m
+        [36m>[39m
+          [0m댓글[0m
+        [36m</h2>[39m
+        [0m [0m
+        [36m<p[39m
+          [33maria-live[39m=[32m"polite"[39m
+          [33mclass[39m=[32m"text-sm"[39m
+        [36m>[39m
+          [0m[0m
+        [36m</p>[39m
+        [0m [0m
+        [36m<ul[39m
+          [33mclass[39m=[32m"flex flex-col gap-3"[39m
+          [33mdata-testid[39m=[32m"comments"[39m
+        [36m>[39m
+          [36m<li[39m
+            [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+          [36m>[39m
+            [0m댓글이 없습니다.[0m
+          [36m</li>[39m
+          [0m[0m
+        [36m</ul>[39m
+        [0m [0m
+        [36m<form[39m
+          [33mclass[39m=[32m"flex flex-col gap-2"[39m
+        [36m>[39m
+          [36m<textarea[39m
+            [33maria-label[39m=[32m"새 댓글(Ctrl·⌘+Enter로 달기)"[39m
+            [33mclass[39m=[32m"min-h-20 rounded-md border bg-background p-2 text-sm"[39m
+            [33mmaxlength[39m=[32m"10000"[39m
+            [33mplaceholder[39m=[32m"댓글"[39m
+          [36m/>[39m
+          [0m [0m
+          [36m<div>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+              [33mdata-slot[39m=[32m"button"[39m
+              [33mdisabled[39m=[32m""[39m
+              [33mtype[39m=[32m"submit"[39m
+            [36m>[39m
+              [0m댓글 달기[0m
+            [36m</button>[39m
+            [0m[0m
+          [36m</div>[39m
+        [36m</form>[39m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"backlinks-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2 border-t pt-4"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"backlinks-heading"[39m
+        [36m>[39m
+          [0m이곳을 가리키는 문서[0m
+        [36m</h2>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m없습니다.[0m
+        [36m</p>[39m
+      [36m</section>[39m
+    [36m</div>[39m
+    [0m[0m
+  [36m</div>[39m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [0m [0m
+    [0m [0m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col gap-4"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-wrap items-baseline gap-2"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-mono text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0mKED-1[0m
+        [36m</span>[39m
+        [0m [0m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"ml-auto flex flex-wrap items-center gap-1"[39m
+        [36m>[39m
+          [0m[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"flex flex-wrap items-center gap-1"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"[39m
+              [33mdata-slot[39m=[32m"button"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [0m업무 지우기[0m
+            [36m</button>[39m
+            [0m[0m
+            [0m [0m
+          [36m</span>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [0m [0m
+      [0m [0m
+      [36m<form[39m
+        [33mclass[39m=[32m"grid grid-cols-2 gap-3"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"col-span-2 flex flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-title"[39m
+            [33mid[39m=[32m"bits-c1"[39m
+          [36m>[39m
+            [0m제목[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-title"[39m
+            [33mmaxlength[39m=[32m"200"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-sm font-medium"[39m
+            [33mid[39m=[32m"task-status-label"[39m
+          [36m>[39m
+            [0m상태[0m
+          [36m</span>[39m
+          [0m [0m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"false"[39m
+            [33maria-haspopup[39m=[32m"listbox"[39m
+            [33maria-labelledby[39m=[32m"task-status-label"[39m
+            [33mclass[39m=[32m"border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"[39m
+            [33mdata-select-trigger[39m=[32m""[39m
+            [33mdata-size[39m=[32m"default"[39m
+            [33mdata-slot[39m=[32m"select-trigger"[39m
+            [33mdata-state[39m=[32m"closed"[39m
+            [33mid[39m=[32m"bits-c2"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m할 일[0m
+            [0m [0m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m>[39m
+                [0m[0m
+              [36m</path>[39m
+              [0m[0m
+            [36m</svg>[39m
+          [36m</button>[39m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-sm font-medium"[39m
+            [33mid[39m=[32m"task-priority-label"[39m
+          [36m>[39m
+            [0m우선순위[0m
+          [36m</span>[39m
+          [0m [0m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"false"[39m
+            [33maria-haspopup[39m=[32m"listbox"[39m
+            [33maria-labelledby[39m=[32m"task-priority-label"[39m
+            [33mclass[39m=[32m"border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"[39m
+            [33mdata-select-trigger[39m=[32m""[39m
+            [33mdata-size[39m=[32m"default"[39m
+            [33mdata-slot[39m=[32m"select-trigger"[39m
+            [33mdata-state[39m=[32m"closed"[39m
+            [33mid[39m=[32m"bits-c3"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m높음[0m
+            [0m [0m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m>[39m
+                [0m[0m
+              [36m</path>[39m
+              [0m[0m
+            [36m</svg>[39m
+          [36m</button>[39m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-start"[39m
+            [33mid[39m=[32m"bits-c4"[39m
+          [36m>[39m
+            [0m시작일[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-start"[39m
+            [33mtype[39m=[32m"date"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-due"[39m
+            [33mid[39m=[32m"bits-c5"[39m
+          [36m>[39m
+            [0m마감일[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-due"[39m
+            [33mtype[39m=[32m"date"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"col-span-2 flex flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-description"[39m
+            [33mid[39m=[32m"bits-c6"[39m
+          [36m>[39m
+            [0m설명[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<textarea[39m
+            [33mclass[39m=[32m"rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"[39m
+            [33mid[39m=[32m"task-description"[39m
+            [33mrows[39m=[32m"3"[39m
+          [36m/>[39m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-estimate"[39m
+            [33mid[39m=[32m"bits-c7"[39m
+          [36m>[39m
+            [0m예상 시간(분)[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-estimate"[39m
+            [33minputmode[39m=[32m"numeric"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-tags"[39m
+            [33mid[39m=[32m"bits-c8"[39m
+          [36m>[39m
+            [0m태그(쉼표로 구분)[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-tags"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"col-span-2 flex items-center gap-2"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-checked[39m=[32m"false"[39m
+            [33maria-readonly[39m=[32m"false"[39m
+            [33maria-required[39m=[32m"false"[39m
+            [33mclass[39m=[32m"border-input dark:bg-input/30 data-checked:bg-primary data-checked:text-primary-foreground dark:data-checked:bg-primary data-checked:border-primary aria-invalid:aria-checked:border-primary aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 flex size-4 items-center justify-center rounded-[4px] border transition-colors group-has-disabled/field:opacity-50 focus-visible:ring-3 aria-invalid:ring-3 group-has-[:focus-visible]/field-label:ring-0 group-has-[:focus-visible]/field-label:not-data-checked:border-input group-has-[:focus-visible]/field-label:data-checked:border-primary peer relative shrink-0 outline-none after:absolute after:-inset-x-3 after:-inset-y-2 disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-checkbox-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"checkbox"[39m
+            [33mdata-state[39m=[32m"unchecked"[39m
+            [33mid[39m=[32m"task-milestone"[39m
+            [33mrole[39m=[32m"checkbox"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"[&>svg]:size-3.5 grid place-content-center text-current transition-none"[39m
+              [33mdata-slot[39m=[32m"checkbox-indicator"[39m
+            [36m/>[39m
+          [36m</button>[39m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-milestone"[39m
+            [33mid[39m=[32m"bits-c10"[39m
+          [36m>[39m
+            [0m마일스톤 (마감일 하나만)[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<fieldset[39m
+          [33mclass[39m=[32m"col-span-2 flex flex-col gap-2"[39m
+        [36m>[39m
+          [36m<legend[39m
+            [33mclass[39m=[32m"text-sm font-medium"[39m
+          [36m>[39m
+            [0m담당자 (같은 완료 상태를 공유)[0m
+          [36m</legend>[39m
+          [0m [0m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-wrap gap-3"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+            [36m>[39m
+              [0m지정할 수 있는 사람이 없습니다.[0m
+            [36m</span>[39m
+            [0m[0m
+          [36m</div>[39m
+        [36m</fieldset>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"col-span-2 flex items-center gap-2"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mid[39m=[32m"task-save"[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [0m저장[0m
+          [36m</button>[39m
+          [0m[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-sm"[39m
+            [33mrole[39m=[32m"status"[39m
+          [36m>[39m
+            [0m저장했습니다.[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [0m [0m
+      [36m</form>[39m
+      [0m [0m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"parent-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"parent-heading"[39m
+        [36m>[39m
+          [0m상위 업무[0m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m없음(최상위 업무)[0m
+        [36m</p>[39m
+        [0m [0m
+        [0m [0m
+        [36m<p[39m
+          [33maria-live[39m=[32m"polite"[39m
+          [33mclass[39m=[32m"text-sm"[39m
+        [36m>[39m
+          [0m[0m
+        [36m</p>[39m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"subtasks-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"subtasks-heading"[39m
+        [36m>[39m
+          [0m하위 업무[0m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m없습니다.[0m
+        [36m</p>[39m
+        [0m [0m
+        [36m<form[39m
+          [33mclass[39m=[32m"flex flex-wrap items-end gap-2"[39m
+          [33mnovalidate[39m=[32m""[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex min-w-40 flex-1 flex-col gap-1"[39m
+          [36m>[39m
+            [36m<label[39m
+              [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+              [33mdata-label-root[39m=[32m""[39m
+              [33mdata-slot[39m=[32m"label"[39m
+              [33mfor[39m=[32m"new-subtask"[39m
+              [33mid[39m=[32m"bits-c11"[39m
+            [36m>[39m
+              [0m하위 업무 제목[0m
+            [36m</label>[39m
+            [0m[0m
+            [0m[0m
+            [0m [0m
+            [36m<input[39m
+              [33maria-invalid[39m=[32m"false"[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+              [33mdata-slot[39m=[32m"input"[39m
+              [33mid[39m=[32m"new-subtask"[39m
+              [33mmaxlength[39m=[32m"200"[39m
+              [33mplaceholder[39m=[32m"예: 입력 검증"[39m
+            [36m/>[39m
+            [0m[0m
+          [36m</div>[39m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [0m하위 업무 추가[0m
+          [36m</button>[39m
+          [0m[0m
+        [36m</form>[39m
+        [0m [0m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"predecessors-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"predecessors-heading"[39m
+          [33mtabindex[39m=[32m"-1"[39m
+        [36m>[39m
+          [0m선행 업무[0m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m없습니다.[0m
+        [36m</p>[39m
+        [0m [0m
+        [0m [0m
+        [0m [0m
+        [36m<p[39m
+          [33maria-live[39m=[32m"polite"[39m
+          [33mclass[39m=[32m"text-sm"[39m
+          [33mdata-testid[39m=[32m"link-status"[39m
+        [36m>[39m
+          [0m[0m
+        [36m</p>[39m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"successors-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"successors-heading"[39m
+        [36m>[39m
+          [0m후속 업무[0m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m없습니다.[0m
+        [36m</p>[39m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"task-recurrence-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"task-recurrence-heading"[39m
+        [36m>[39m
+          [0m반복[0m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m반복하지 않습니다. ("오늘"은 Asia/Seoul 기준)[0m
+        [36m</p>[39m
+        [0m [0m
+        [36m<form[39m
+          [33mclass[39m=[32m"flex flex-wrap items-end gap-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-col gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"text-sm font-medium"[39m
+              [33mid[39m=[32m"task-recurrence-freq-label"[39m
+            [36m>[39m
+              [0m주기[0m
+            [36m</span>[39m
+            [0m [0m
+            [36m<button[39m
+              [33maria-expanded[39m=[32m"false"[39m
+              [33maria-haspopup[39m=[32m"listbox"[39m
+              [33maria-labelledby[39m=[32m"task-recurrence-freq-label"[39m
+              [33mclass[39m=[32m"border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"[39m
+              [33mdata-select-trigger[39m=[32m""[39m
+              [33mdata-size[39m=[32m"default"[39m
+              [33mdata-slot[39m=[32m"select-trigger"[39m
+              [33mdata-state[39m=[32m"closed"[39m
+              [33mid[39m=[32m"bits-c15"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [0m반복 안 함[0m
+              [0m [0m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"m6 9 6 6 6-6"[39m
+                [36m>[39m
+                  [0m[0m
+                [36m</path>[39m
+                [0m[0m
+              [36m</svg>[39m
+            [36m</button>[39m
+            [0m[0m
+            [0m[0m
+            [0m[0m
+            [0m[0m
+            [0m [0m
+            [0m[0m
+            [0m[0m
+            [0m[0m
+            [0m[0m
+            [0m [0m
+            [0m[0m
+            [0m[0m
+          [36m</div>[39m
+          [0m [0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [0m반복 저장[0m
+          [36m</button>[39m
+          [0m[0m
+          [0m [0m
+        [36m</form>[39m
+        [0m [0m
+      [36m</section>[39m
+      [0m [0m
+      [0m[0m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"task-t1-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-3"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"task-t1-heading"[39m
+        [36m>[39m
+          [0m체크리스트 [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-normal text-muted-foreground"[39m
+          [36m>[39m
+            [0m0/0[0m
+          [36m</span>[39m
+        [36m</h3>[39m
+        [0m [0m
+        [36m<ul[39m
+          [33mclass[39m=[32m"flex flex-col gap-2"[39m
+          [33mdata-testid[39m=[32m"checklist-items"[39m
+        [36m>[39m
+          [36m<li[39m
+            [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+          [36m>[39m
+            [0m항목이 없습니다.[0m
+          [36m</li>[39m
+          [0m[0m
+        [36m</ul>[39m
+        [0m [0m
+        [36m<form[39m
+          [33mclass[39m=[32m"flex items-end gap-2"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-1 flex-col gap-1"[39m
+          [36m>[39m
+            [36m<label[39m
+              [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+              [33mdata-label-root[39m=[32m""[39m
+              [33mdata-slot[39m=[32m"label"[39m
+              [33mfor[39m=[32m"task-t1-new"[39m
+              [33mid[39m=[32m"bits-c12"[39m
+            [36m>[39m
+              [0m새 항목[0m
+            [36m</label>[39m
+            [0m[0m
+            [0m[0m
+            [0m [0m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+              [33mdata-slot[39m=[32m"input"[39m
+              [33mid[39m=[32m"task-t1-new"[39m
+              [33mplaceholder[39m=[32m"할 일을 입력"[39m
+            [36m/>[39m
+            [0m[0m
+          [36m</div>[39m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mdisabled[39m=[32m""[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [0m추가[0m
+          [36m</button>[39m
+          [0m[0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mMarkdown 붙여넣기[0m
+          [36m</button>[39m
+          [0m[0m
+        [36m</form>[39m
+        [0m [0m
+        [0m [0m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"task-time-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2"[39m
+      [36m>[39m
+        [36m<h3[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"task-time-heading"[39m
+        [36m>[39m
+          [0m시간[0m
+        [36m</h3>[39m
+        [0m [0m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-wrap items-center gap-2"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"[39m
+            [33mdata-slot[39m=[32m"button"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m이 업무 시간 재기[0m
+          [36m</button>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"comments-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-3"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"text-lg font-semibold focus-visible:outline-none"[39m
+          [33mid[39m=[32m"comments-heading"[39m
+          [33mtabindex[39m=[32m"-1"[39m
+        [36m>[39m
+          [0m댓글[0m
+        [36m</h2>[39m
+        [0m [0m
+        [36m<p[39m
+          [33maria-live[39m=[32m"polite"[39m
+          [33mclass[39m=[32m"text-sm"[39m
+        [36m>[39m
+          [0m[0m
+        [36m</p>[39m
+        [0m [0m
+        [36m<ul[39m
+          [33mclass[39m=[32m"flex flex-col gap-3"[39m
+          [33mdata-testid[39m=[32m"comments"[39m
+        [36m>[39m
+          [36m<li[39m
+            [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+          [36m>[39m
+            [0m댓글이 없습니다.[0m
+          [36m</li>[39m
+          [0m[0m
+        [36m</ul>[39m
+        [0m [0m
+        [36m<form[39m
+          [33mclass[39m=[32m"flex flex-col gap-2"[39m
+        [36m>[39m
+          [36m<textarea[39m
+            [33maria-label[39m=[32m"새 댓글(Ctrl·⌘+Enter로 달기)"[39m
+            [33mclass[39m=[32m"min-h-20 rounded-md border bg-background p-2 text-sm"[39m
+            [33mmaxlength[39m=[32m"10000"[39m
+            [33mplaceholder[39m=[32m"댓글"[39m
+          [36m/>[39m
+          [0m [0m
+          [36m<div>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+              [33mdata-slot[39m=[32m"button"[39m
+              [33mdisabled[39m=[32m""[39m
+              [33mtype[39m=[32m"submit"[39m
+            [36m>[39m
+              [0m댓글 달기[0m
+            [36m</button>[39m
+            [0m[0m
+          [36m</div>[39m
+        [36m</form>[39m
+      [36m</section>[39m
+      [0m [0m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"backlinks-heading"[39m
+        [33mclass[39m=[32m"flex flex-col gap-2 border-t pt-4"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"text-sm font-semibold"[39m
+          [33mid[39m=[32m"backlinks-heading"[39m
+        [36m>[39m
+          [0m이곳을 가리키는 문서[0m
+        [36m</h2>[39m
+        [0m [0m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0m없습니다.[0m
+        [36m</p>[39m
+      [36m</section>[39m
+    [36m</div>[39m
+    [0m[0m
+  [36m</div>[39m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+  [0m[0m
+[36m</body>[39m
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/component/task-conflict-save-mine.test.ts:160:30
+    158|     // 제목·예상 시간은 양쪽에서 서로 다르게 바꿨다: 보내기 전에 칸마다 서버 값과 내 값을 보이고 묻는다.
+    159|     await fireEvent.click(saveMineButton());
+    160|     const ask = await screen.findByRole('alertdialog', { name: '다른 사람도…
+       |                              ^
+    161|     expect(update).toHaveBeenCalledTimes(1);
+    162|     const title = ask.querySelector('[data-clash-field="title"]');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  08:50:00
+   Duration  3.30s (tests 36%, transform 33%, import 18%, environment 10%, setup 3%)
+

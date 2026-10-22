@@ -1,0 +1,1168 @@
+
+ RUN  v5.0.5 <scratch>/wt59-d94/apps/web
+
+ ❯ tests/component/event-conflict-merge.test.ts (8 tests | 1 failed) 7ms
+   ❯ mergeEventInput (8)
+     × treats a title or description that differs only by surrounding spaces as untouched 3ms
+ ❯ tests/component/event-save-mine.test.ts (10 tests | 5 failed) 2515ms
+   ❯ saving my input after an event conflict (D-94) (10)
+     × asks before overwriting a time both changed: cancel sends nothing, confirm sends my time 36ms
+     × Escape on the overwrite question cancels only the question and keeps the dialog 28ms
+     × focuses "save mine" after a repeated 409 and the heading after the save 1057ms
+     × merges onto the newer version a rule save returned while the notice was shown 48ms
+     × shows the newer version a rule save returned in the notice 1032ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/event-conflict-merge.test.ts > mergeEventInput > treats a title or description that differs only by surrounding spaces as untouched
+AssertionError: expected [ 'title', 'description' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "title",
++   "description",
++ ]
+
+ ❯ tests/component/event-conflict-merge.test.ts:84:28
+     82|     const server = ev({ title: '새 제목', description: '그쪽 설명' }, 6);
+     83|     const merged = mergeEventInput(base, input({ title: ' 회의 ', descri…
+     84|     expect(merged.clashes).toEqual([]);
+       |                            ^
+     85|     expect(merged.input).toEqual(input({ title: '새 제목', description: '…
+     86|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/component/event-save-mine.test.ts > saving my input after an event conflict (D-94) > asks before overwriting a time both changed: cancel sends nothing, confirm sends my time
+AssertionError: expected '날짜·시각·시간대' to contain '종일'
+
+Expected: "종일"
+Received: "날짜·시각·시간대"
+
+ ❯ tests/component/event-save-mine.test.ts:195:35
+    193|     ).toEqual([m.events_clash_when()]);
+    194|     // 일시 묶음의 이름은 종일 여부까지 가리킨다(종일 전환도 이 묶음으로 덮어쓴다).
+    195|     expect(m.events_clash_when()).toContain(m.events_all_day());
+       |                                   ^
+    196|     expect(box.textContent).toContain(m.events_clash_server({ value: d…
+    197|     expect(box.textContent).toContain(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/component/event-save-mine.test.ts > saving my input after an event conflict (D-94) > Escape on the overwrite question cancels only the question and keeps the dialog
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array []
+
+
+Number of calls: 1
+
+ ❯ tests/component/event-save-mine.test.ts:299:25
+    297|
+    298|     await fireEvent.keyDown(box, { key: 'Escape' });
+    299|     expect(onclose).not.toHaveBeenCalled();
+       |                         ^
+    300|     expect(screen.queryByRole('alertdialog')).toBeNull();
+    301|     await waitFor(() => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/component/event-save-mine.test.ts > saving my input after an event conflict (D-94) > focuses "save mine" after a repeated 409 and the heading after the save
+AssertionError: expected <div …(13)>…(6)</div> to be <button data-slot="button" …(2)></button> // Object.is equality
+
+Ignored nodes: comments, script, style
+<html>
+  <head />
+  <body
+    style="--scrollbar-width: 1024px; overflow: hidden; pointer-events: none; padding-right: 7168px; margin-right: 0px;"
+  >
+    <div>
+      
+      
+      
+      
+      
+      
+      
+    </div>
+    <div
+      class="data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate z-50"
+      data-dialog-overlay=""
+      data-slot="dialog-overlay"
+      data-state="open"
+      id="bits-c145"
+      style="pointer-events: auto; --bits-dialog-depth: 0; --bits-dialog-nested-count: 0;"
+    />
+    
+    
+    
+     
+     
+    <div
+      aria-describedby="bits-c148"
+      aria-labelledby="bits-c147"
+      aria-modal="true"
+      class="bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%_-_2rem)] gap-4 rounded-xl p-4 text-sm ring-1 duration-100 fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+      data-dialog-content=""
+      data-slot="dialog-content"
+      data-state="open"
+      escapekeydownbehavior="close"
+      id="bits-c146"
+      interactoutsidebehavior="close"
+      role="dialog"
+      style="pointer-events: auto; --bits-dialog-depth: 0; --bits-dialog-nested-count: 0; contain: layout style;"
+      tabindex="-1"
+    >
+      <div
+        class="gap-2 flex flex-col"
+        data-slot="dialog-header"
+      >
+        <div
+          aria-level="2"
+          class="text-base leading-none font-medium"
+          data-dialog-title=""
+          data-slot="dialog-title"
+          data-state="open"
+          id="bits-c147"
+          role="heading"
+        >
+          회의
+        </div>
+        
+        
+         
+        <div
+          class="text-muted-foreground *:[a]:hover:text-foreground text-sm *:[a]:underline *:[a]:underline-offset-3"
+          data-dialog-description=""
+          data-slot="dialog-description"
+          data-state="open"
+          id="bits-c148"
+        >
+          회의 · Oct 20, 2026 10:00 AM–11:00 AM
+          
+        </div>
+        
+        
+      </div>
+       
+       
+      <div
+        class="rounded-md border border-amber-500/50 p-3 text-sm"
+      >
+        <div
+          role="alert"
+        >
+          <p>
+            그사이 다른 사람이 이 일정을 바꿨습니다(지금: “더 새 제목”, Oct 20, 2026 2:00 PM–3:00 PM). 내 입력은 그대로 있습니다.
+          </p>
+           
+          <div
+            class="mt-2 flex gap-2"
+          >
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              type="button"
+            >
+              서버 내용 불러오기
+            </button>
+            
+             
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              type="button"
+            >
+              내 입력으로 다시 저장
+            </button>
+            
+          </div>
+        </div>
+         
+      </div>
+       
+      <div
+        class="contents"
+      >
+        <form
+          class="grid gap-3 md:grid-cols-2"
+        >
+          <div
+            class="flex flex-col gap-1 md:col-span-2"
+          >
+            <label
+              class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+              data-label-root=""
+              data-slot="label"
+              for="event-edi...
+
+- Expected
++ Received
+
++ <div
++   aria-describedby="bits-c148"
++   aria-labelledby="bits-c147"
++   aria-modal="true"
++   class="bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%_-_2rem)] gap-4 rounded-xl p-4 text-sm ring-1 duration-100 fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none max-h-[90vh] overflow-y-auto sm:max-w-2xl"
++   data-dialog-content=""
++   data-slot="dialog-content"
++   data-state="open"
++   escapekeydownbehavior="close"
++   id="bits-c146"
++   interactoutsidebehavior="close"
++   role="dialog"
++   style="pointer-events: auto; --bits-dialog-depth: 0; --bits-dialog-nested-count: 0; contain: layout style;"
++   tabindex="-1"
++ >
++   <!---->
++   <!---->
++   <div
++     class="gap-2 flex flex-col"
++     data-slot="dialog-header"
++   >
++     <!---->
++     <!---->
++     <!---->
++     <div
++       aria-level="2"
++       class="text-base leading-none font-medium"
++       data-dialog-title=""
++       data-slot="dialog-title"
++       data-state="open"
++       id="bits-c147"
++       role="heading"
++     >
++       회의
++       <!---->
++     </div>
++     
++     
++     <!---->
++      
++     <!---->
++     <!---->
++     <div
++       class="text-muted-foreground *:[a]:hover:text-foreground text-sm *:[a]:underline *:[a]:underline-offset-3"
++       data-dialog-description=""
++       data-slot="dialog-description"
++       data-state="open"
++       id="bits-c148"
++     >
++       <!---->
++       회의 · Oct 20, 2026 10:00 AM–11:00 AM
++       
++       <!---->
++     </div>
++     
++     
++     <!---->
++     <!---->
++   </div>
++   <!---->
++    
++   <!---->
++    
++   <!---->
++   <div
++     class="rounded-md border border-amber-500/50 p-3 text-sm"
++   >
++     <div
++       role="alert"
++     >
++       <p>
++         그사이 다른 사람이 이 일정을 바꿨습니다(지금: “더 새 제목”, Oct 20, 2026 2:00 PM–3:00 PM). 내 입력은 그대로 있습니다.
++       </p>
++        
++       <div
++         class="mt-2 flex gap-2"
++       >
++         <!---->
+          <button
++           class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
++           data-slot="button"
++           type="button"
++         >
++           서버 내용 불러오기
++           <!---->
++         </button>
++         
++         <!---->
++          
++         <!---->
++         <button
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            내 입력으로 다시 저장
++           <!---->
++         </button>
++         
++         <!---->
++       </div>
++     </div>
++      
++     <!---->
++   </div>
++   <!---->
++    
++   <div
++     class="contents"
++   >
++     <form
++       class="grid gap-3 md:grid-cols-2"
++     >
++       <div
++         class="flex flex-col gap-1 md:col-span-2"
++       >
++         <!---->
++         <!---->
++         <label
++           class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
++           data-label-root=""
++           data-slot="label"
++           for="event-edit-title"
++           id="bits-c150"
++         >
++           제목
++           <!---->
++         </label>
++         
++         
++         <!---->
++          
++         <!---->
++         <input
++           class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
++           data-slot="input"
++           id="event-edit-title"
++           maxlength="200"
++           required=""
++         />
++         
++         <!---->
++       </div>
++        
++       <div
++         class="flex flex-col gap-1"
++       >
++         <span
++           class="text-sm font-medium"
++           id="event-edit-kind-label"
++         >
++           종류
++         </span>
++          
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <button
++           aria-expanded="false"
++           aria-haspopup="listbox"
++           aria-labelledby="event-edit-kind-label"
++           class="border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"
++           data-select-trigger=""
++           data-size="default"
++           data-slot="select-trigger"
++           data-state="closed"
++           id="bits-c151"
++           type="button"
++         >
++           <!---->
++           회의
++           <!---->
++            
++           <svg
++             aria-hidden="true"
++             class="lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"
++             fill="none"
++             height="24"
++             stroke="currentColor"
++             stroke-linecap="round"
++             stroke-linejoin="round"
++             stroke-width="2"
++             viewBox="0 0 24 24"
++             width="24"
++             xmlns="http://www.w3.org/2000/svg"
++           >
++             <!---->
++             <path
++               d="m6 9 6 6 6-6"
++             >
++               
++             </path>
++             
++             <!---->
++             <!---->
++           </svg>
++           <!---->
++           <!---->
++         </button>
++         
++         
++         
++         
++         <!---->
++          
++         <!---->
++         <!---->
++         
++         
++         <!---->
++         
++         
++         <!---->
++          
++         <!---->
++         
++         <!---->
++         
++         <!---->
++       </div>
++        
++       <div
++         class="flex items-center gap-2 self-end"
++       >
++         <!---->
++         <!---->
++         <button
++           aria-checked="false"
++           aria-readonly="false"
++           aria-required="false"
++           class="border-input dark:bg-input/30 data-checked:bg-primary data-checked:text-primary-foreground dark:data-checked:bg-primary data-checked:border-primary aria-invalid:aria-checked:border-primary aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 flex size-4 items-center justify-center rounded-[4px] border transition-colors group-has-disabled/field:opacity-50 focus-visible:ring-3 aria-invalid:ring-3 group-has-[:focus-visible]/field-label:ring-0 group-has-[:focus-visible]/field-label:not-data-checked:border-input group-has-[:focus-visible]/field-label:data-checked:border-primary peer relative shrink-0 outline-none after:absolute after:-inset-x-3 after:-inset-y-2 disabled:cursor-not-allowed disabled:opacity-50"
++           data-checkbox-root=""
++           data-slot="checkbox"
++           data-state="unchecked"
++           id="event-edit-all-day"
++           role="checkbox"
++           type="button"
++         >
++           <div
++             class="[&>svg]:size-3.5 grid place-content-center text-current transition-none"
++             data-slot="checkbox-indicator"
++           >
++             <!---->
++           </div>
++           <!---->
++         </button>
++         <!---->
++          
++         <!---->
++         
++         <!---->
++         
++         <!---->
++          
++         <!---->
++         <!---->
++         <label
++           class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
++           data-label-root=""
++           data-slot="label"
++           for="event-edit-all-day"
++           id="bits-c153"
++         >
++           종일
++           <!---->
++         </label>
++         
++         
++         <!---->
++       </div>
++        
++       <div
++         class="flex flex-col gap-1"
++       >
++         <!---->
++         <!---->
++         <label
++           class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
++           data-label-root=""
++           data-slot="label"
++           for="event-edit-starts"
++           id="bits-c154"
++         >
++           시작
++           <!---->
++         </label>
++         
++         
++         <!---->
++          
++         <!---->
++         <input
++           class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
++           data-slot="input"
++           id="event-edit-starts"
++           required=""
++           type="datetime-local"
++         />
++         
++         <!---->
++       </div>
++        
++       <div
++         class="flex flex-col gap-1"
++       >
++         <!---->
++         <!---->
++         <label
++           class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
++           data-label-root=""
++           data-slot="label"
++           for="event-edit-ends"
++           id="bits-c155"
++         >
++           종료
++           <!---->
++         </label>
++         
++         
++         <!---->
++          
++         <!---->
++         <input
++           class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
++           data-slot="input"
++           id="event-edit-ends"
++           required=""
++           type="datetime-local"
++         />
++         
++         <!---->
++       </div>
++        
++       <div
++         class="flex flex-col gap-1 md:col-span-2"
++       >
++         <!---->
++         <!---->
++         <label
++           class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
++           data-label-root=""
++           data-slot="label"
++           for="event-edit-tz"
++           id="bits-c156"
++         >
++           시간대 (시작·종료 시각의 기준)
++           <!---->
++         </label>
++         
++         
++         <!---->
++          
++         <!---->
++         <input
++           autocomplete="off"
++           class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
++           data-slot="input"
++           id="event-edit-tz"
++           required=""
++         />
++         
++         <!---->
++       </div>
++       <!---->
++        
++       <div
++         class="flex flex-col gap-1 md:col-span-2"
++       >
++         <!---->
++         <!---->
++         <label
++           class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
++           data-label-root=""
++           data-slot="label"
++           for="event-edit-description"
++           id="bits-c157"
++         >
++           설명
++           <!---->
++         </label>
++         
++         
++         <!---->
++          
++         <textarea
++           class="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
++           id="event-edit-description"
++           rows="2"
++         />
++       </div>
++        
++       <!---->
++        
++       <div
++         class="flex gap-2 md:col-span-2"
++       >
++         <!---->
++         <button
++           class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"
++           data-slot="button"
++           type="submit"
++         >
++           저장
++           <!---->
++         </button>
++         
++         <!---->
++          
++         <!---->
++       </div>
++     </form>
++     <!---->
++   </div>
++    
++   <section
++     aria-labelledby="event-recurrence-heading"
++     class="flex flex-col gap-2"
++   >
++     <h3
++       class="text-sm font-semibold"
++       id="event-recurrence-heading"
++     >
++       반복
++     </h3>
++      
++     <p
++       class="text-sm text-muted-foreground"
++     >
++       반복하지 않습니다. (Asia/Seoul 기준)
++     </p>
++      
++     <form
++       class="flex flex-wrap items-end gap-3"
++     >
++       <div
++         class="flex flex-col gap-1"
++       >
++         <span
++           class="text-sm font-medium"
++           id="event-recurrence-freq-label"
++         >
++           주기
++         </span>
++          
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <!---->
++         <button
++           aria-expanded="false"
++           aria-haspopup="listbox"
++           aria-labelledby="event-recurrence-freq-label"
++           class="border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"
++           data-select-trigger=""
++           data-size="default"
++           data-slot="select-trigger"
++           data-state="closed"
++           id="bits-c158"
++           type="button"
++         >
+            <!---->
++           반복 안 함
++           <!---->
++            
++           <svg
++             aria-hidden="true"
++             class="lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"
++             fill="none"
++             height="24"
++             stroke="currentColor"
++             stroke-linecap="round"
++             stroke-linejoin="round"
++             stroke-width="2"
++             viewBox="0 0 24 24"
++             width="24"
++             xmlns="http://www.w3.org/2000/svg"
++           >
++             <!---->
++             <path
++               d="m6 9 6 6 6-6"
++             >
++               
++             </path>
++             
++             <!---->
++             <!---->
++           </svg>
++           <!---->
++           <!---->
++         </button>
++         
++         
++         
++         
++         <!---->
++          
++         <!---->
++         <!---->
++         
++         
++         <!---->
++         
++         
++         <!---->
++          
++         <!---->
++         
++         <!---->
++         
++         <!---->
++       </div>
++        
++       <!---->
++        
++       <!---->
++       <button
++         class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
++         data-slot="button"
++         type="submit"
++       >
++         반복 저장
++         <!---->
+        </button>
++       
++       <!---->
++        
++       <!---->
++     </form>
++      
++     <!---->
++     <!---->
++   </section>
++   <!---->
++    
++   <!---->
++    
++   <div
++     class="flex items-center gap-2 border-t pt-3"
++   >
++     <!---->
++     <button
++       class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
++       data-slot="button"
++       type="button"
++     >
++       일정 지우기
++       <!---->
++     </button>
++     
++     <!---->
++   </div>
++   <!---->
++   <!---->
++   <!---->
++    
++   <!---->
++   <!---->
++   <!---->
++   <!---->
++   <button
++     class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg absolute top-2 right-2"
++     data-dialog-close=""
++     data-slot="dialog-close"
++     data-state="open"
++     id="bits-c162"
++     tabindex="0"
++     type="button"
++   >
++     <!---->
++     <svg
++       aria-hidden="true"
++       class="lucide lucide-x lucide-icon"
++       fill="none"
++       height="24"
++       stroke="currentColor"
++       stroke-linecap="round"
++       stroke-linejoin="round"
++       stroke-width="2"
++       viewBox="0 0 24 24"
++       width="24"
++       xmlns="http://www.w3.org/2000/svg"
++     >
++       <!---->
++       <path
++         d="M18 6 6 18"
++       >
++         
++       </path>
++       
++       <!---->
++       <path
++         d="m6 6 12 12"
++       >
++         
++       </path>
++       
++       <!---->
++       <!---->
++     </svg>
++     <!---->
++      
++     <span
++       class="sr-only"
++     >
++       닫기
++     </span>
++     <!---->
++   </button>
++   
++   
++   
++   
++   <!---->
++   <!---->
++ </div>
+
+ ❯ tests/component/event-save-mine.test.ts:324:38
+    322|     });
+    323|     await waitFor(() => {
+    324|       expect(document.activeElement).toBe(saveMineButton());
+       |                                      ^
+    325|     });
+    326|
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/component/event-save-mine.test.ts > saving my input after an event conflict (D-94) > merges onto the newer version a rule save returned while the notice was shown
+AssertionError: expected [ 'A', 6, { kind: 'meeting', …(8) } ] to deeply equal [ 'A', 7, { kind: 'meeting', …(8) } ]
+
+- Expected
++ Received
+
+  [
+    "A",
+-   7,
++   6,
+    {
+      "all_day": false,
+      "description": "내 설명",
+      "end_date": null,
+      "ends_at": "2026-10-20T06:00:00Z",
+      "kind": "meeting",
+      "start_date": null,
+      "starts_at": "2026-10-20T05:00:00Z",
+      "timezone": "Asia/Seoul",
+-     "title": "규칙 뒤 제목",
++     "title": "새 제목",
+    },
+  ]
+
+ ❯ tests/component/event-save-mine.test.ts:362:34
+    360|       expect(update).toHaveBeenCalledTimes(2);
+    361|     });
+    362|     expect(update.mock.calls[1]).toEqual([
+       |                                  ^
+    363|       'A',
+    364|       7,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/component/event-save-mine.test.ts > saving my input after an event conflict (D-94) > shows the newer version a rule save returned in the notice
+TestingLibraryElementError: Unable to find an element with the text: 그사이 다른 사람이 이 일정을 바꿨습니다(지금: “규칙 뒤 제목”, Oct 20, 2026 2:00 PM–3:00 PM). 내 입력은 그대로 있습니다.. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body
+  style="--scrollbar-width: 1024px; overflow: hidden; pointer-events: none; padding-right: 9216px; margin-right: 0px;"
+>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  <div
+    class="data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate z-50"
+    data-dialog-overlay=""
+    data-slot="dialog-overlay"
+    data-state="open"
+    id="bits-c191"
+    style="pointer-events: auto; --bits-dialog-depth: 0; --bits-dialog-nested-count: 0;"
+  />
+  
+  
+  
+   
+   
+  <div
+    aria-describedby="bits-c194"
+    aria-labelledby="bits-c193"
+    aria-modal="true"
+    class="bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%_-_2rem)] gap-4 rounded-xl p-4 text-sm ring-1 duration-100 fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+    data-dialog-content=""
+    data-slot="dialog-content"
+    data-state="open"
+    escapekeydownbehavior="close"
+    id="bits-c192"
+    interactoutsidebehavior="close"
+    role="dialog"
+    style="pointer-events: auto; --bits-dialog-depth: 0; --bits-dialog-nested-count: 0; contain: layout style;"
+    tabindex="-1"
+  >
+    <div
+      class="gap-2 flex flex-col"
+      data-slot="dialog-header"
+    >
+      <div
+        aria-level="2"
+        class="text-base leading-none font-medium"
+        data-dialog-title=""
+        data-slot="dialog-title"
+        data-state="open"
+        id="bits-c193"
+        role="heading"
+      >
+        규칙 뒤 제목
+      </div>
+      
+      
+       
+      <div
+        class="text-muted-foreground *:[a]:hover:text-foreground text-sm *:[a]:underline *:[a]:underline-offset-3"
+        data-dialog-description=""
+        data-slot="dialog-description"
+        data-state="open"
+        id="bits-c194"
+      >
+        회의 · Oct 20, 2026 2:00 PM–3:00 PM
+        
+      </div>
+      
+      
+    </div>
+     
+     
+    <div
+      class="rounded-md border border-amber-500/50 p-3 text-sm"
+    >
+      <div
+        role="alert"
+      >
+        <p>
+          그사이 다른 사람이 이 일정을 바꿨습니다(지금: “새 제목”, Oct 20, 2026 2:00 PM–3:00 PM). 내 입력은 그대로 있습니다.
+        </p>
+         
+        <div
+          class="mt-2 flex gap-2"
+        >
+          <button
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            서버 내용 불러오기
+          </button>
+          
+           
+          <button
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            내 입력으로 다시 저장
+          </button>
+          
+        </div>
+      </div>
+       
+    </div>
+     
+    <div
+      class="contents"
+    >
+      <form
+        class="grid gap-3 md:grid-cols-2"
+      >
+        <div
+          class="flex flex-col gap-1 md:col-span-2"
+        >
+          <label
+            class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+            data-label-root=""
+            data-slot="label"
+            for="event-edit-title"
+            id="bits-c196"
+          >
+            제목
+          </label>
+          
+          
+           
+          <input
+            class="dark:bg-input/30 border-inp...
+
+Ignored nodes: comments, script, style
+<body
+  style="--scrollbar-width: 1024px; overflow: hidden; pointer-events: none; padding-right: 9216px; margin-right: 0px;"
+>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  <div
+    class="data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate z-50"
+    data-dialog-overlay=""
+    data-slot="dialog-overlay"
+    data-state="open"
+    id="bits-c191"
+    style="pointer-events: auto; --bits-dialog-depth: 0; --bits-dialog-nested-count: 0;"
+  />
+  
+  
+  
+   
+   
+  <div
+    aria-describedby="bits-c194"
+    aria-labelledby="bits-c193"
+    aria-modal="true"
+    class="bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%_-_2rem)] gap-4 rounded-xl p-4 text-sm ring-1 duration-100 fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+    data-dialog-content=""
+    data-slot="dialog-content"
+    data-state="open"
+    escapekeydownbehavior="close"
+    id="bits-c192"
+    interactoutsidebehavior="close"
+    role="dialog"
+    style="pointer-events: auto; --bits-dialog-depth: 0; --bits-dialog-nested-count: 0; contain: layout style;"
+    tabindex="-1"
+  >
+    <div
+      class="gap-2 flex flex-col"
+      data-slot="dialog-header"
+    >
+      <div
+        aria-level="2"
+        class="text-base leading-none font-medium"
+        data-dialog-title=""
+        data-slot="dialog-title"
+        data-state="open"
+        id="bits-c193"
+        role="heading"
+      >
+        규칙 뒤 제목
+      </div>
+      
+      
+       
+      <div
+        class="text-muted-foreground *:[a]:hover:text-foreground text-sm *:[a]:underline *:[a]:underline-offset-3"
+        data-dialog-description=""
+        data-slot="dialog-description"
+        data-state="open"
+        id="bits-c194"
+      >
+        회의 · Oct 20, 2026 2:00 PM–3:00 PM
+        
+      </div>
+      
+      
+    </div>
+     
+     
+    <div
+      class="rounded-md border border-amber-500/50 p-3 text-sm"
+    >
+      <div
+        role="alert"
+      >
+        <p>
+          그사이 다른 사람이 이 일정을 바꿨습니다(지금: “새 제목”, Oct 20, 2026 2:00 PM–3:00 PM). 내 입력은 그대로 있습니다.
+        </p>
+         
+        <div
+          class="mt-2 flex gap-2"
+        >
+          <button
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            서버 내용 불러오기
+          </button>
+          
+           
+          <button
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            내 입력으로 다시 저장
+          </button>
+          
+        </div>
+      </div>
+       
+    </div>
+     
+    <div
+      class="contents"
+    >
+      <form
+        class="grid gap-3 md:grid-cols-2"
+      >
+        <div
+          class="flex flex-col gap-1 md:col-span-2"
+        >
+          <label
+            class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+            data-label-root=""
+            data-slot="label"
+            for="event-edit-title"
+            id="bits-c196"
+          >
+            제목
+          </label>
+          
+          
+           
+          <input
+            class="dark:bg-input/30 border-inp...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/component/event-save-mine.test.ts:382:20
+    380|     const zone = localTimeZone();
+    381|     expect(
+    382|       await screen.findByText(
+       |                    ^
+    383|         m.events_conflict({ title: '규칙 뒤 제목', when: describeWhen(after…
+    384|       ),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  6 failed | 12 passed (18)
+   Start at  09:18:40
+   Duration  4.18s (tests 57%, transform 19%, environment 12%, import 10%, setup 2%)
+

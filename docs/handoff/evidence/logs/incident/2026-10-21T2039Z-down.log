@@ -1,0 +1,75 @@
+==> down fvoci-groundzero-bf103f-dev
+$ docker compose --project-name fvoci-groundzero-bf103f-dev --file deploy/compose.dev.yaml --profile oidc down --volumes --remove-orphans
+ Container fvoci-groundzero-bf103f-dev-postgres-1 Stopping 
+ Container fvoci-groundzero-bf103f-dev-keycloak-1 Stopping 
+ Container fvoci-groundzero-bf103f-dev-meilisearch-1 Stopping 
+ Container fvoci-groundzero-bf103f-dev-meilisearch-1 Stopped 
+ Container fvoci-groundzero-bf103f-dev-meilisearch-1 Removing 
+ Container fvoci-groundzero-bf103f-dev-meilisearch-1 Removed 
+ Container fvoci-groundzero-bf103f-dev-postgres-1 Stopped 
+ Container fvoci-groundzero-bf103f-dev-postgres-1 Removing 
+ Container fvoci-groundzero-bf103f-dev-postgres-1 Removed 
+ Container fvoci-groundzero-bf103f-dev-keycloak-1 Stopped 
+ Container fvoci-groundzero-bf103f-dev-keycloak-1 Removing 
+ Container fvoci-groundzero-bf103f-dev-keycloak-1 Removed 
+ Volume fvoci-groundzero-bf103f-dev_kcdata Removing 
+ Volume fvoci-groundzero-bf103f-dev_pgdata Removing 
+ Network fvoci-groundzero-bf103f-dev_default Removing 
+ Volume fvoci-groundzero-bf103f-dev_meilidata Removing 
+ Volume fvoci-groundzero-bf103f-dev_kcdata Removed 
+ Volume fvoci-groundzero-bf103f-dev_pgdata Removed 
+ Volume fvoci-groundzero-bf103f-dev_meilidata Removed 
+ Network fvoci-groundzero-bf103f-dev_default Removed 
+==> down fvoci-groundzero-bf103f-test
+$ docker compose --project-name fvoci-groundzero-bf103f-test --file deploy/compose.test.yaml --profile oidc down --volumes --remove-orphans
+==> down fvoci-groundzero-bf103f-supabase
+$ docker compose --project-name fvoci-groundzero-bf103f-supabase --project-directory <home>/GroundZero/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file <home>/GroundZero/deploy/supabase/test.env --file <home>/GroundZero/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file <home>/GroundZero/deploy/supabase/compose.test.yaml down --volumes --remove-orphans
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"OPENAI_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SUPABASE_SECRET_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"STUDIO_DEFAULT_ORGANIZATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"STUDIO_DEFAULT_PROJECT\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SUPABASE_PUBLISHABLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SMTP_PASS\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"MAILER_URLPATHS_INVITE\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"ADDITIONAL_REDIRECT_URLS\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SMTP_PORT\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"MAILER_URLPATHS_EMAIL_CHANGE\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SMTP_HOST\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"MAILER_URLPATHS_CONFIRMATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"ENABLE_PHONE_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"ENABLE_EMAIL_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"MAILER_URLPATHS_RECOVERY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"ENABLE_PHONE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SMTP_SENDER_NAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SMTP_USER\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"DISABLE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"ENABLE_ANONYMOUS_USERS\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"ENABLE_EMAIL_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SMTP_ADMIN_EMAIL\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SITE_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"IMGPROXY_AUTO_WEBP\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"DASHBOARD_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"DASHBOARD_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"GLOBAL_S3_BUCKET\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"STORAGE_TENANT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"REGION\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-22T05:39:04+09:00" level=warning msg="The \"FUNCTIONS_VERIFY_JWT\" variable is not set. Defaulting to a blank string."

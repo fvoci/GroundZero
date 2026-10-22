@@ -1,0 +1,397 @@
+
+ RUN  v5.0.5 <scratch>/wt-taskmerge/apps/web
+
+ ❯ tests/component/task-conflict-save-mine.test.ts (6 tests | 5 failed) 1525ms
+   ❯ saving my input after a task conflict (6)
+     × keeps the title the other person changed when I only edited the description 228ms
+     × asks before saving my value over fields the other person changed too 1050ms
+     × shows the newer version when it changed again and merges onto it next time 46ms
+     × keeps my input when saving again fails 66ms
+     × previews follower moves with my new due date on top of the latest version 84ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > saving my input after a task conflict > keeps the title the other person changed when I only edited the description
+AssertionError: expected 2nd "updateTask" call to have been called with [ Array(4) ]
+
+- Expected
++ Received
+
+@@ -9,9 +9,9 @@
+      "milestone": false,
+      "priority": "none",
+      "start_date": null,
+      "status": "todo",
+      "tags": [],
+-     "title": "새 제목",
++     "title": "옛 제목",
+    },
+    [],
+  ]
+
+ ❯ tests/component/task-conflict-save-mine.test.ts:118:20
+    116|     });
+    117|     // 겹친 칸이 없으므로 묻지 않고 최신 판 번호로 저장한다.
+    118|     expect(update).toHaveBeenNthCalledWith(
+       |                    ^
+    119|       2,
+    120|       't1',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > saving my input after a task conflict > asks before saving my value over fields the other person changed too
+TestingLibraryElementError: Unable to find role="alertdialog" and name "다른 사람도 바꾼 칸이 있습니다"
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [0m [0m
+    [0m [0m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col gap-4"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-wrap items-baseline gap-2"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-mono text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0mKED-1[0m
+        [36m</span>[39m
+        [0m [0m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"ml-auto flex flex-wrap items-center gap-1"[39m
+        [36m>[39m
+          [0m[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"flex flex-wrap items-center gap-1"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"[39m
+              [33mdata-slot[39m=[32m"button"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [0m업무 지우기[0m
+            [36m</button>[39m
+            [0m[0m
+            [0m [0m
+          [36m</span>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [0m [0m
+      [0m [0m
+      [36m<form[39m
+        [33mclass[39m=[32m"grid grid-cols-2 gap-3"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"col-span-2 flex flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-title"[39m
+            [33mid[39m=[32m"bits-c15"[39m
+          [36m>[39m
+            [0m제목[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-title"[39m
+            [33mmaxlength[39m=[32m"200"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-sm font-medium"[39m
+            [33mid[39m=[32m"task-status-label"[39m
+          [36m>[39m
+            [0m상태[0m
+          [36m</span>[39m
+          [0m [0m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"false"[39m
+            [33maria-haspopup[39m=[32m"listbox"[39m
+            [33maria-labelledby[39m=[32m"task-status-label"[39m
+            [33mclass[39m=[32m"border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"[39m
+            [33mdata-select-trigger[39m=[32m""[39m
+            [33mdata-size[39m=[32m"default"[39m
+            [33mdata-slot[39m=[32m"select-trigger"[39m
+            [33mdata-state[39m=[32m"closed"[39m
+            [33mid[39m=[32m"bits-c16"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m할 일[0m
+            [0m [0m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m>[39m
+                [0m[0m
+              [36m</path>[39m
+              [0m[0m
+            [36m</svg>[39m
+          [36m</button>[39m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          ...
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [0m [0m
+    [0m [0m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col gap-4"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-wrap items-baseline gap-2"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-mono text-sm text-muted-foreground"[39m
+        [36m>[39m
+          [0mKED-1[0m
+        [36m</span>[39m
+        [0m [0m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"ml-auto flex flex-wrap items-center gap-1"[39m
+        [36m>[39m
+          [0m[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"flex flex-wrap items-center gap-1"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"[39m
+              [33mdata-slot[39m=[32m"button"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [0m업무 지우기[0m
+            [36m</button>[39m
+            [0m[0m
+            [0m [0m
+          [36m</span>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [0m [0m
+      [0m [0m
+      [36m<form[39m
+        [33mclass[39m=[32m"grid grid-cols-2 gap-3"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"col-span-2 flex flex-col gap-1"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"[39m
+            [33mdata-label-root[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"label"[39m
+            [33mfor[39m=[32m"task-title"[39m
+            [33mid[39m=[32m"bits-c15"[39m
+          [36m>[39m
+            [0m제목[0m
+          [36m</label>[39m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [36m<input[39m
+            [33mclass[39m=[32m"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"[39m
+            [33mdata-slot[39m=[32m"input"[39m
+            [33mid[39m=[32m"task-title"[39m
+            [33mmaxlength[39m=[32m"200"[39m
+          [36m/>[39m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-sm font-medium"[39m
+            [33mid[39m=[32m"task-status-label"[39m
+          [36m>[39m
+            [0m상태[0m
+          [36m</span>[39m
+          [0m [0m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"false"[39m
+            [33maria-haspopup[39m=[32m"listbox"[39m
+            [33maria-labelledby[39m=[32m"task-status-label"[39m
+            [33mclass[39m=[32m"border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"[39m
+            [33mdata-select-trigger[39m=[32m""[39m
+            [33mdata-size[39m=[32m"default"[39m
+            [33mdata-slot[39m=[32m"select-trigger"[39m
+            [33mdata-state[39m=[32m"closed"[39m
+            [33mid[39m=[32m"bits-c16"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m할 일[0m
+            [0m [0m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m>[39m
+                [0m[0m
+              [36m</path>[39m
+              [0m[0m
+            [36m</svg>[39m
+          [36m</button>[39m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m[0m
+          [0m [0m
+          [0m[0m
+          [0m[0m
+        [36m</div>[39m
+        [0m [0m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-1"[39m
+        [36m>[39m
+          ...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/component/task-conflict-save-mine.test.ts:160:30
+    158|     // 제목·예상 시간은 양쪽에서 서로 다르게 바꿨다: 보내기 전에 칸마다 서버 값과 내 값을 보이고 묻는다.
+    159|     await fireEvent.click(saveMineButton());
+    160|     const ask = await screen.findByRole('alertdialog', { name: '다른 사람도…
+       |                              ^
+    161|     expect(update).toHaveBeenCalledTimes(1);
+    162|     const title = ask.querySelector('[data-clash-field="title"]');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > saving my input after a task conflict > shows the newer version when it changed again and merges onto it next time
+AssertionError: expected 2nd "updateTask" call to have been called with [ Array(4) ]
+
+- Expected
++ Received
+
+@@ -9,9 +9,9 @@
+      "milestone": false,
+      "priority": "none",
+      "start_date": null,
+      "status": "todo",
+      "tags": [],
+-     "title": "새 제목",
++     "title": "옛 제목",
+    },
+    [],
+  ]
+
+ ❯ tests/component/task-conflict-save-mine.test.ts:236:20
+    234|     // 서버가 판 3으로 검사해 다시 409로 답했다: 충돌 화면이 더 새 판을 보이고 입력은 그대로다.
+    235|     expect(await screen.findByText(/지금 제목: “세 번째 제목”, 상태: 진행 중/)).toBe…
+    236|     expect(update).toHaveBeenNthCalledWith(
+       |                    ^
+    237|       2,
+    238|       't1',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > saving my input after a task conflict > keeps my input when saving again fails
+AssertionError: expected '옛 제목' to be '새 제목' // Object.is equality
+
+Expected: "새 제목"
+Received: "옛 제목"
+
+ ❯ tests/component/task-conflict-save-mine.test.ts:280:39
+    278|     expect(update).toHaveBeenCalledTimes(2);
+    279|     expect(field('task-description').value).toBe('B 설명');
+    280|     expect(field('task-title').value).toBe('새 제목');
+       |                                       ^
+    281|     // 충돌 화면은 남아 다시 시도할 수 있다.
+    282|     expect(saveMineButton()).toBeTruthy();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > saving my input after a task conflict > previews follower moves with my new due date on top of the latest version
+AssertionError: expected 2nd "updateTask" call to have been called with [ 't1', 3, …(2) ]
+
+- Expected
++ Received
+
+@@ -9,11 +9,11 @@
+      "milestone": false,
+      "priority": "none",
+      "start_date": "2026-10-19",
+      "status": "todo",
+      "tags": [],
+-     "title": "새 제목",
++     "title": "옛 제목",
+    },
+    [
+      {
+        "base_version": 1,
+        "due_date": "2026-10-27",
+
+ ❯ tests/component/task-conflict-save-mine.test.ts:336:20
+    334|       expect(update).toHaveBeenCalledTimes(2);
+    335|     });
+    336|     expect(update).toHaveBeenNthCalledWith(
+       |                    ^
+    337|       2,
+    338|       't1',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 1 passed (6)
+   Start at  08:50:10
+   Duration  5.36s (transform 44%, tests 29%, import 18%, environment 8%, setup 1%)
+
