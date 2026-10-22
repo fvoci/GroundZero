@@ -16,7 +16,14 @@ import type {
   Workspace,
 } from '@fvoci/api-client';
 
-import { connection, reportConnectionLost } from '$lib/features/feedback/feedback.svelte';
+import {
+  auth,
+  connection,
+  reportConnectionLost,
+  reportSessionExpired,
+  sessionExpiries,
+  switchAccount,
+} from '$lib/features/feedback/feedback.svelte';
 import { m } from '$lib/paraglide/messages.js';
 
 /** Tiptap JSON 노드. 본문 최상위는 `type: "doc"`. */
@@ -93,6 +100,17 @@ export class ApiError extends Error {
   ) {
     super(message);
     this.name = 'ApiError';
+  }
+}
+
+/**
+ * 일정 반복 저장이 그사이 바뀐 규칙과 부딪혔다(409 `rule_conflict`, 감사 W21). 서버가 거절하며 함께 준 지금 일정을
+ * 담는다. 반복 편집기는 저장 실패를 던진 오류로 받으므로 결과 값이 아니라 `ApiError`로 둔다.
+ */
+export class RuleConflict extends ApiError {
+  constructor(readonly current: EventView) {
+    super(409, 'rule_conflict', 'rule_conflict');
+    this.name = 'RuleConflict';
   }
 }
 
@@ -1039,8 +1057,6 @@ export interface TaskView {
   estimate_minutes: number | null;
   tags: string[];
   milestone: boolean;
-  /** 같은 항목 안의 선행 업무 id(`predecessors`와 같은 순서). */
-  predecessor_ids: string[];
   /** 선행 관계: 선행 업무, 종류, 지연일(D-91). 후속 업무는 다른 업무의 이 목록을 거꾸로 찾는다. */
   predecessors: TaskLinkView[];
   /** 반복 업무의 회차면 그 반복. */
@@ -1088,6 +1104,12 @@ export type LinkKind = 'FS' | 'SS' | 'FF' | 'SF';
 export const LINK_KINDS: readonly LinkKind[] = ['FS', 'SS', 'FF', 'SF'];
 /** 지연일 상한(서버와 같다). */
 export const MAX_LAG_DAYS = 3650;
+
+/** 관계 편집을 시작한 때의 종류·지연일(관계 설정의 기준 조건). */
+export interface LinkBase {
+  kind: LinkKind;
+  lag_days: number;
+}
 
 export interface TaskLinkView {
   task_id: string;
@@ -1164,7 +1186,7 @@ function parseShiftProposal(value: Json): ShiftProposalView {
     from_due_date: optStr(o, 'from_due_date'),
     start_date: optStr(o, 'start_date'),
     due_date: optStr(o, 'due_date'),
-    causes: o.causes === undefined ? [] : parseList(o.causes, parseShiftCause),
+    causes: parseList(o.causes, parseShiftCause),
   };
 }
 
@@ -1257,12 +1279,7 @@ export function parseTask(value: Json): TaskView {
     estimate_minutes: optInt(o, 'estimate_minutes'),
     tags: strings(o.tags),
     milestone: bool(o, 'milestone'),
-    predecessor_ids: strings(o.predecessor_ids),
-    // 옛 응답(종류 없음)은 모두 종료 후 시작·지연 0이다.
-    predecessors:
-      o.predecessors === undefined
-        ? strings(o.predecessor_ids).map((id) => ({ task_id: id, kind: 'FS', lag_days: 0 }))
-        : parseList(o.predecessors, parseTaskLink),
+    predecessors: parseList(o.predecessors, parseTaskLink),
     series:
       o.series === null || o.series === undefined
         ? null
@@ -1601,6 +1618,8 @@ export interface HomeTaskView {
 export interface HomeView {
   today: string;
   up_next: HomeTaskView[];
+  /** 묶음마다의 전체 수. `up_next`는 묶음마다 50개까지라 이보다 적을 수 있다. */
+  up_next_counts: { overdue: number; today: number; upcoming: number };
   recent_tasks: HomeTaskView[];
   recent_documents: {
     id: string;
@@ -1665,11 +1684,17 @@ function parseMarked(value: Json): MarkedTargetView {
   };
 }
 
+function parseUpNextCounts(value: unknown): HomeView['up_next_counts'] {
+  const c = rec(value, 'up next counts');
+  return { overdue: int(c, 'overdue'), today: int(c, 'today'), upcoming: int(c, 'upcoming') };
+}
+
 function parseHome(value: Json): HomeView {
   const o = rec(value, 'home');
   return {
     today: str(o, 'today'),
     up_next: parseList(o.up_next, parseHomeTask),
+    up_next_counts: parseUpNextCounts(o.up_next_counts),
     recent_tasks: parseList(o.recent_tasks, parseHomeTask),
     recent_documents: parseList(o.recent_documents, (v) => {
       const d = rec(v, 'home document');
@@ -2151,6 +2176,12 @@ export interface MoveTargetInput {
 
 const none = (): undefined => undefined;
 
+/**
+ * 편집·초안을 시작한 사용자 id를 서버에 알리는 머리(문서 저장·내 노트 만들기). 서버는 세션의 사용자와 비교만 하고
+ * 권한은 세션으로만 정한다.
+ */
+const EXPECTED_USER = 'x-fvoci-expected-user';
+
 async function request(
   method: string,
   path: string,
@@ -2158,6 +2189,7 @@ async function request(
   extra: Record<string, string> = {},
 ): Promise<{ status: number; json: Json; etag: string | null }> {
   let response: Response;
+  const expiriesAtStart = sessionExpiries();
   try {
     const init: RequestInit = {
       method,
@@ -2186,10 +2218,24 @@ async function request(
     !(isRecord(json) && typeof json.error === 'string');
   if (gateway) reportConnectionLost();
   else if (connection.lost) connection.lost = false;
+  // 세션이 필요한 요청이 다시 성공하면(다른 탭에서 로그인함) 로그인 배너를 내린다. 마지막 401보다 먼저 시작한
+  // 요청의 늦은 성공은 세지 않는다.
+  if (auth.expired && response.ok && needsSession(path) && expiriesAtStart === sessionExpiries())
+    auth.expired = false;
   return { status: response.status, json, etag: response.headers.get('ETag') };
 }
 
+/** 로그인 없이도 답하는 경로(상태 확인·로그인 방식·공개 링크)가 아닌 API. */
+function needsSession(path: string): boolean {
+  return path.startsWith('/api/') && path !== '/api/auth-info' && !path.startsWith('/api/public/');
+}
+
 function fail(status: number, json: Json): never {
+  // 쓰는 중에 세션이 끝났다(로그인 확인 `api.me()`의 401은 여기 오지 않는다). 앱 전체 배너로 새 탭 로그인을 권한다.
+  if (status === 401) reportSessionExpired();
+  // 이 창의 편집을 시작한 계정이 아닌 계정의 세션으로 보냈다(다른 탭에서 계정을 바꿈). 서버는 아무것도 바꾸지
+  // 않았다. 이 창은 앞 계정의 것이라 남기지 않고 계정 전환 처리(다시 읽기)로 넘긴다. 화면은 다시 보내지 않는다.
+  if (status === 409 && isRecord(json) && json.error === 'account_changed') switchAccount();
   if (isRecord(json) && typeof json.error === 'string') {
     let message = typeof json.message === 'string' ? json.message : json.error;
     const requestId = typeof json.request_id === 'string' ? json.request_id : undefined;
@@ -2222,7 +2268,6 @@ async function expectOk<T>(
 }
 
 export const api = {
-  health: () => expectOk('GET', '/healthz', parseHealth),
   authInfo: () =>
     expectOk('GET', '/api/auth-info', (v): AuthInfo => ({
       oidc_enabled: bool(rec(v, 'auth info'), 'oidc_enabled'),
@@ -2319,8 +2364,12 @@ export const api = {
   deleteFileVersion: (id: string, version: number) =>
     expectOk('DELETE', `/api/files/${encodeURIComponent(id)}/versions/${String(version)}`, none),
   trashFile: (id: string) => expectOk('DELETE', `/api/files/${encodeURIComponent(id)}`, parseBatch),
-  /** 업로드 시작. 같은 requestId면 같은 업로드(이어 올리기). */
-  createUpload: (input: {
+  /**
+   * 업로드 시작. 같은 requestId면 같은 업로드(이어 올리기). `expectedUser`는 올리기를 시작한 화면의 사용자 id(서버가
+   * 세션과 다르면 409 `account_changed`, 만료된 업로드를 스스로 다시 시작할 때 새 계정의 업로드를 만들지 않게).
+   */
+  async createUpload(input: {
+    expectedUser: string;
     requestId: string;
     target?: FileTarget;
     fileId?: string;
@@ -2328,16 +2377,24 @@ export const api = {
     note: string;
     contentType: string;
     size: number;
-  }) =>
-    expectOk('POST', '/api/uploads', parseUpload, {
-      request_id: input.requestId,
-      target: input.target ?? null,
-      file_id: input.fileId ?? null,
-      name: input.name,
-      note: input.note,
-      content_type: input.contentType,
-      size: input.size,
-    }),
+  }): Promise<UploadView> {
+    const { status, json } = await request(
+      'POST',
+      '/api/uploads',
+      {
+        request_id: input.requestId,
+        target: input.target ?? null,
+        file_id: input.fileId ?? null,
+        name: input.name,
+        note: input.note,
+        content_type: input.contentType,
+        size: input.size,
+      },
+      { [EXPECTED_USER]: input.expectedUser },
+    );
+    if (status < 200 || status >= 300) fail(status, json);
+    return parseUpload(json);
+  },
   upload: (id: string) => expectOk('GET', `/api/uploads/${encodeURIComponent(id)}`, parseUpload),
   putUploadPart: putPart,
   completeUpload: (id: string) =>
@@ -2524,24 +2581,29 @@ export const api = {
       none,
     ),
   myNotes: () => expectOk('GET', '/api/me/notes', (v) => parseList(v, parseSummary)),
-  createNote: (
+  /** 내 노트 만들기. `expectedUser`는 이 만들기를 시작한 화면의 사용자 id(서버가 세션과 다르면 409 `account_changed`). */
+  async createNote(
+    expectedUser: string,
     requestId: string,
     title: string,
     parentId: string | null = null,
     templateId: string | null = null,
-  ) =>
-    expectOk('POST', '/api/me/notes', parseDocument, {
-      request_id: requestId,
-      title,
-      parent_id: parentId,
-      template_id: templateId,
-    }),
+  ): Promise<DocumentView> {
+    const { status, json } = await request(
+      'POST',
+      '/api/me/notes',
+      { request_id: requestId, title, parent_id: parentId, template_id: templateId },
+      { [EXPECTED_USER]: expectedUser },
+    );
+    if (status < 200 || status >= 300) fail(status, json);
+    return parseDocument(json);
+  },
   sharedWithMe: () => expectOk('GET', '/api/me/shared', (v) => parseList(v, parseSharedView)),
-  setSettings: (id: string, visibility: 'workspace' | 'private', allowCopy: boolean) =>
-    expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, {
-      visibility,
-      allow_copy: allowCopy,
-    }),
+  /** 바꾸는 칸만 보낸다. 없는 칸은 서버의 지금 값 그대로다. */
+  setSettings: (
+    id: string,
+    change: { visibility?: 'workspace' | 'private'; allow_copy?: boolean },
+  ) => expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, change),
   shares: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/shares`, (v) =>
       parseList(v, parseShareView),
@@ -2761,34 +2823,38 @@ export const api = {
       parseSchedulePlan,
       { kind, lag_days: lagDays },
     ),
-  addPredecessor: (id: string, predecessorId: string) =>
-    expectOk(
-      'PUT',
-      `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
-      parseTaskDetail,
-    ),
   /**
-   * 관계를 그 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다(한 트랜잭션). 승인 목록이 그사이 맞지 않게
-   * 됐으면 `shift_conflict`(아무것도 바뀌지 않았으니 다시 미리 본다).
+   * 관계를 그 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다(한 트랜잭션). `base`는 편집을 시작한 관계의
+   * 종류·지연일이다(새 관계면 `null`). 그사이 관계가 바뀌었으면 `link_conflict`, 승인 목록이 맞지 않게 됐으면
+   * `shift_conflict`(둘 다 아무것도 바뀌지 않았고 최신본을 준다).
    */
   async setPredecessor(
     id: string,
     predecessorId: string,
     kind: LinkKind,
     lagDays: number,
+    base: LinkBase | null,
     successorShifts: SuccessorShift[] = [],
   ): Promise<
-    { kind: 'updated'; task: TaskDetailView } | { kind: 'shift_conflict'; current: TaskDetailView }
+    | { kind: 'updated'; task: TaskDetailView }
+    | { kind: 'shift_conflict'; current: TaskDetailView }
+    | { kind: 'link_conflict'; current: TaskDetailView }
   > {
     const { status, json } = await request(
       'PUT',
       `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
-      { kind, lag_days: lagDays, successor_shifts: successorShifts },
+      {
+        kind,
+        lag_days: lagDays,
+        base: base === null ? null : { kind: base.kind, lag_days: base.lag_days },
+        successor_shifts: successorShifts,
+      },
     );
     if (status === 409 && isRecord(json) && json.current !== undefined) {
       const body = rec(json, 'conflict');
-      if (str(body, 'error') === 'shift_conflict') {
-        return { kind: 'shift_conflict', current: parseTaskDetail(body.current) };
+      const error = str(body, 'error');
+      if (error === 'shift_conflict' || error === 'link_conflict') {
+        return { kind: error, current: parseTaskDetail(body.current) };
       }
     }
     if (status !== 200) fail(status, json);
@@ -2853,10 +2919,30 @@ export const api = {
     expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/recurrences/sync`, (v) =>
       int(rec(v, 'sync'), 'created'),
     ),
-  setEventRecurrence: (id: string, rule: RecurrenceRule | null) =>
-    expectOk('PUT', `/api/events/${encodeURIComponent(id)}/recurrence`, parseEvent, {
-      rule: rule === null ? null : { ...rule },
-    }),
+  /**
+   * 일정 반복 정하기. `base`는 편집을 시작한 규칙(반복이 없었으면 null)이다. 그사이 규칙이 바뀌었으면 서버가 아무것도
+   * 바꾸지 않고 409 `rule_conflict`와 지금 일정으로 거절한다(`RuleConflict`).
+   */
+  async setEventRecurrence(
+    id: string,
+    rule: RecurrenceRule | null,
+    base: RecurrenceRule | null,
+  ): Promise<EventView> {
+    const { status, json } = await request(
+      'PUT',
+      `/api/events/${encodeURIComponent(id)}/recurrence`,
+      { rule: rule === null ? null : { ...rule }, base: base === null ? null : { ...base } },
+    );
+    if (
+      status === 409 &&
+      isRecord(json) &&
+      json.error === 'rule_conflict' &&
+      json.current !== undefined
+    )
+      throw new RuleConflict(parseEvent(json.current));
+    if (status !== 200) fail(status, json);
+    return parseEvent(json);
+  },
   excludeOccurrence: (id: string, date: string) =>
     expectOk('POST', `/api/events/${encodeURIComponent(id)}/exclusions`, none, { date }),
   trashDocument: (id: string) =>
@@ -3148,7 +3234,8 @@ export const api = {
   item: (id: string) => expectOk('GET', `/api/items/${encodeURIComponent(id)}`, parseItem),
   updateItem: (
     id: string,
-    input: { title: string; description: string; visibility: 'workspace' | 'private' },
+    /** 공개 범위는 바꿀 때만 보낸다(없으면 서버의 지금 값 그대로). */
+    input: { title: string; description: string; visibility?: 'workspace' | 'private' },
   ) => expectOk('PUT', `/api/items/${encodeURIComponent(id)}`, parseItem, input),
   archiveItem: (id: string, archived: boolean) =>
     expectOk('PUT', `/api/items/${encodeURIComponent(id)}/archived`, parseItem, { archived }),
@@ -3214,10 +3301,13 @@ export const api = {
   /**
    * 저장. 충돌(409 기준 리비전이 지남, 412 `If-Match`가 맞지 않음)이면 `{ kind: 'conflict', current }`.
    * `etag`가 강한 값일 때만 `If-Match`로 보낸다(D-77). 없거나 약하면 `base_revision`만으로 판단한다.
+   * `expectedUser`는 이 편집을 시작한 사용자 id다(편집기를 열 때 고정한 값, 보내기 직전에 다시 채우지 않는다).
+   * 서버가 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 `account_changed`(`ApiError`)를 돌려준다.
    */
   async saveDocument(
     id: string,
     input: {
+      expectedUser: string;
       requestId: string;
       baseRevision: number;
       title: string;
@@ -3236,7 +3326,9 @@ export const api = {
         title: input.title,
         body: input.body,
       },
-      isStrongEtag(input.etag) ? { 'If-Match': input.etag } : {},
+      isStrongEtag(input.etag)
+        ? { [EXPECTED_USER]: input.expectedUser, 'If-Match': input.etag }
+        : { [EXPECTED_USER]: input.expectedUser },
     );
     const current = conflictCurrent(status, json);
     if (current !== undefined) return { kind: 'conflict', current };

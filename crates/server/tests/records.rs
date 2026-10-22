@@ -226,12 +226,11 @@ async fn analysis_records_pin_file_versions_and_follow_item_access() {
     let edited = send(&app, Method::PUT, &edit_uri, Some(&other), Some(edit(1))).await;
     assert_eq!(edited.status, StatusCode::OK, "{:?}", edited.json);
     assert_eq!(edited.json["version"], 2);
-    assert_eq!(
-        send(&app, Method::PUT, &edit_uri, Some(&other), Some(edit(1)))
-            .await
-            .status,
-        StatusCode::CONFLICT
-    );
+    let stale = send(&app, Method::PUT, &edit_uri, Some(&other), Some(edit(1))).await;
+    assert_eq!(stale.status, StatusCode::CONFLICT, "{:?}", stale.json);
+    // 판 충돌은 다시 보내라는 재시도가 아니라 다시 읽으라는 뜻이다(감사 C32, #77): 409 `invalid_state`와 SQL의 설명 그대로.
+    assert_eq!(stale.json["error"], "invalid_state");
+    assert_eq!(stale.json["message"], "the record changed; reload it");
     // 연결을 v2로 바꿨으니 v1은 이제 지울 수 있다.
     assert_eq!(
         send(
@@ -1316,6 +1315,186 @@ async fn item_files_are_read_only_while_the_item_or_its_module_is_archived() {
     assert_eq!(archive(item_path, false).await, StatusCode::OK);
     assert!(can_write().await);
     assert_eq!(rename().await, StatusCode::OK);
+}
+
+/// 감사 W15: 사람 칸(출석·참여자·공저자)에 나간 멤버가 남은 기록은, 다른 칸만 고쳐도 서버가 그대로인 id까지 다시
+/// 확인해 400이었다(화면에는 그 사람을 뺄 칸도 없었다). 이미 저장된 id는 다시 확인하지 않는다. 새로 넣는 id는 그대로
+/// 확인한다.
+#[tokio::test]
+async fn records_keep_a_member_who_left_while_other_fields_change() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "나간 출석자").await;
+    let (gone, _) = add_member(&app, &state, &admin, &ws, "gone", "writer").await;
+    let outsider = login(&state, "outsider").await;
+    let study = module(&app, &admin, &ws, "study", "LFT").await;
+    let group = open_item(&app, &admin, &study, "읽기 모임").await;
+    let created = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{group}/records"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "meeting", "title": "1회",
+                     "fields": { "attendees": [admin.id.0, gone.id.0] } }),
+        ),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{:?}", created.json);
+    let uri = format!("/api/records/{}", created.json["id"].as_str().unwrap());
+    let removed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{ws}/members/{}", gone.id.0),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(removed.status.is_success(), "{:?}", removed.json);
+
+    // 제목만 고친다(출석은 그대로).
+    let edited = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&admin),
+        Some(json!({ "version": 1, "title": "1회 모임",
+        "fields": { "attendees": [admin.id.0, gone.id.0] } })),
+    )
+    .await;
+    assert_eq!(edited.status, StatusCode::OK, "{:?}", edited.json);
+    // 새로 넣는 사람은 여전히 멤버여야 한다.
+    let added = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&admin),
+        Some(json!({ "version": 2, "title": "1회 모임",
+        "fields": { "attendees": [admin.id.0, gone.id.0, outsider.id.0] } })),
+    )
+    .await;
+    assert_eq!(added.status, StatusCode::BAD_REQUEST, "{:?}", added.json);
+    // 리뷰: 출석에 남은 나간 사람을 다른 칸(진행자)에 새로 넣는 것은 새로 넣는 것이라 확인한다.
+    let promoted = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&admin),
+        Some(json!({ "version": 2, "title": "1회 모임",
+        "fields": { "attendees": [admin.id.0, gone.id.0], "presenter": gone.id.0 } })),
+    )
+    .await;
+    assert_eq!(
+        promoted.status,
+        StatusCode::BAD_REQUEST,
+        "{:?}",
+        promoted.json
+    );
+    // 나간 사람을 빼는 것도 된다.
+    let dropped = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&admin),
+        Some(json!({ "version": 2, "title": "1회 모임",
+        "fields": { "attendees": [admin.id.0] } })),
+    )
+    .await;
+    assert_eq!(dropped.status, StatusCode::OK, "{:?}", dropped.json);
+}
+
+/// 리뷰(#58 요약의 보안 우려): 이미 저장된 id는 다시 확인하지 않는데, 그 "저장된 값"을 판 확인 없이 읽었다. 아직
+/// 커밋되지 않은 다음 판을 짐작해 보낸 고치기는 옛 판(나간 사람이 남은 출석)을 읽어 그 사람을 확인 없이 넘기고, 다음 판이
+/// 커밋된 뒤 판이 맞아 저장했다. 읽은 판이 보낸 판과 다르면 바로 409다.
+#[tokio::test]
+async fn kept_ids_come_from_the_version_being_replaced() {
+    use sqlx::Connection;
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "판 묶음").await;
+    let (gone, _) = add_member(&app, &state, &admin, &ws, "gone", "writer").await;
+    let study = module(&app, &admin, &ws, "study", "KVR").await;
+    let group = open_item(&app, &admin, &study, "읽기 모임").await;
+    let created = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{group}/records"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "meeting", "title": "1회",
+                     "fields": { "attendees": [admin.id.0, gone.id.0] } }),
+        ),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{:?}", created.json);
+    let id = created.json["id"].as_str().unwrap().to_owned();
+    let removed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{ws}/members/{}", gone.id.0),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert!(removed.status.is_success(), "{:?}", removed.json);
+
+    // 다른 쪽이 판 2(나간 사람을 뺀 출석)를 쓰는 중이다(아직 커밋하지 않음, 행 잠금을 쥠).
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let mut owner = sqlx::PgConnection::connect(&owner_url).await.unwrap();
+    let mut held = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *held)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE fvoci.item_records SET fields = jsonb_build_object('attendees', jsonb_build_array($2::text)),
+                version = version + 1 WHERE id = $1::uuid",
+    )
+    .bind(&id)
+    .bind(admin.id.0.to_string())
+    .execute(&mut *held)
+    .await
+    .unwrap();
+
+    // 판 2를 짐작해 나간 사람을 다시 넣는다.
+    let request = tokio::spawn({
+        let app = app.clone();
+        let admin = admin.clone();
+        let uri = format!("/api/records/{id}");
+        let body = json!({ "version": 2, "title": "1회",
+                           "fields": { "attendees": [admin.id.0, gone.id.0] } });
+        async move { send(&app, Method::PUT, &uri, Some(&admin), Some(body)).await }
+    });
+    // 그 고치기가 잠금에 막히거나(고치기 전) 바로 끝날 때(고친 뒤)까지 기다린다.
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let mut watcher = sqlx::PgConnection::connect(&admin_url).await.unwrap();
+    for _ in 0..200 {
+        let waiting: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid))",
+        )
+        .bind(holder)
+        .fetch_one(&mut watcher)
+        .await
+        .unwrap();
+        if waiting > 0 || request.is_finished() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    held.commit().await.unwrap();
+    let r = request.await.unwrap();
+    assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
+    assert_eq!(r.json["message"], "the record changed; reload it");
+    let attendees: Value = sqlx::query_scalar(
+        "SELECT fields->'attendees' FROM fvoci.item_records WHERE id = $1::uuid",
+    )
+    .bind(&id)
+    .fetch_one(&mut owner)
+    .await
+    .unwrap();
+    assert_eq!(attendees, json!([admin.id.0.to_string()]));
 }
 
 /// 감사 S10: 기록 만들기도 같은 요청 id로 다시 보낸 요청이 앞 요청을 기다린 뒤 고유 제약(23505)으로 500이었다. 앞

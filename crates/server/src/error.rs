@@ -55,6 +55,10 @@ pub enum AppError {
     /// 현재 상태에서 할 수 없는 요청(예: 소유자 탈퇴, 이미 닫힌 초대).
     #[error("invalid state: {0}")]
     Conflict(String),
+    /// 요청의 기대 사용자(`x-fvoci-expected-user`)가 세션의 사용자와 다름. 다른 탭에서 계정을 바꾼 뒤 앞 계정의 화면이
+    /// 보낸 요청이다. 아무것도 바꾸지 않고 409 `account_changed`.
+    #[error("account changed")]
+    AccountChanged,
     /// 파일 저장소(로컬·S3) 실패.
     #[error("storage error: {0}")]
     Storage(String),
@@ -107,6 +111,7 @@ impl AppError {
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             Self::Conflict(_) => (StatusCode::CONFLICT, "invalid_state"),
+            Self::AccountChanged => (StatusCode::CONFLICT, "account_changed"),
             Self::Oidc(_) => (StatusCode::BAD_GATEWAY, "oidc_error"),
             Self::Storage(_) => (StatusCode::BAD_GATEWAY, "storage_error"),
             Self::Upstream(_) => (StatusCode::BAD_GATEWAY, "upstream_error"),
@@ -144,6 +149,9 @@ impl IntoResponse for AppError {
         }
         let message = match &self {
             Self::BadRequest(msg) | Self::Conflict(msg) | Self::Upstream(msg) => msg.clone(),
+            Self::AccountChanged => {
+                "the signed-in account is not the one this edit was started with".to_owned()
+            }
             _ => status.canonical_reason().unwrap_or("error").to_owned(),
         };
         let body = ErrorBody {

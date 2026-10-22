@@ -38,6 +38,10 @@
     let cancelled = false;
     mod = undefined;
     error = undefined;
+    // 템플릿에서 만들기는 모듈마다 따로다. 앞 모듈에서 고른 템플릿·제목·오류를 새 모듈에 남기지 않는다.
+    templateId = '';
+    templateTitle = '';
+    templateError = undefined;
     Promise.all([api.module(id), api.items(id)])
       .then(([found, list]) => {
         if (cancelled) return;
@@ -69,10 +73,15 @@
   let editDescription = $state('');
   let settingsError = $state<string | undefined>(undefined);
   let settingsNote = $state<string | undefined>(undefined);
+  /**
+   * 설정을 저장하는 중. 저장은 요청 여러 개라 두 번 겹치면 먼저 시작해 늦게 실패한 저장이 이미 저장된 일부(아이콘·설명)만
+   * 든 옛 모듈을 화면에 넣어, 뒤 저장이 넣은 이름·키를 되돌려 보였다. 끝날 때까지 다시 보내지 않는다.
+   */
+  let savingSettings = $state(false);
 
   async function saveSettings(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (mod === undefined) return;
+    if (mod === undefined || savingSettings) return;
     const key = normalizeKey(editKey);
     if (editName.trim() === '' || key === undefined) {
       settingsError = m.modules_settings_invalid();
@@ -89,13 +98,20 @@
       description: editDescription.trim(),
     };
     const stillHere = (): boolean => moduleId === target.id;
+    // 아이콘·설명·이름과 키는 따로 저장된다. 뒤 요청이 막혀도(키 409 등) 이미 저장된 앞 부분은 화면에 넣는다.
+    let partial: Module | undefined;
+    savingSettings = true;
     try {
       const before = target.key;
-      if (edits.icon !== target.icon) await api.setModuleIcon(target.id, edits.icon);
+      if (edits.icon !== target.icon) {
+        await api.setModuleIcon(target.id, edits.icon);
+        partial = { ...target, icon: edits.icon };
+      }
       if (edits.description !== target.description) {
-        await api.setModuleDescription(target.id, edits.description);
+        partial = await api.setModuleDescription(target.id, edits.description);
       }
       const saved = await api.updateModule(target.id, edits.name, key);
+      partial = undefined;
       workspaceNav.refreshModules();
       forgetReferences();
       if (!stillHere()) return;
@@ -109,11 +125,17 @@
         settingsNote = m.modules_key_changed({ before, after: saved.key });
       }
     } catch (e: unknown) {
+      if (partial !== undefined) {
+        workspaceNav.refreshModules();
+        if (stillHere()) mod = partial;
+      }
       if (!stillHere()) return;
       settingsError =
         e instanceof ApiError && e.status === 409
           ? m.modules_key_taken()
           : errorText(e, m.modules_change_failed());
+    } finally {
+      savingSettings = false;
     }
   }
 
@@ -126,7 +148,11 @@
   const templateKey = new RetryKey();
 
   async function fromTemplate(moduleId: string): Promise<void> {
-    const source = templateId === '' ? templates[0]?.id : templateId;
+    // 지금 모듈의 템플릿 목록에 있는 것만 보낸다. 고르지 않았으면 첫 템플릿. 고른 템플릿이 다시 읽은 목록에서
+    // 빠졌으면(보관·템플릿 해제) 선택 칸은 빈 칸으로 보이지만 값은 남는다. 고르지 않은 첫 템플릿으로 바꾸지 않고
+    // 다시 고르게 한다.
+    const source =
+      templateId === '' ? templates[0]?.id : templates.find((t) => t.id === templateId)?.id;
     if (source === undefined || templateTitle.trim() === '') {
       templateError = m.modules_template_required();
       return;
@@ -308,7 +334,7 @@
             class="rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           ></textarea>
         </div>
-        <Button type="submit" variant="outline">{m.common_save()}</Button>
+        <Button type="submit" variant="outline" disabled={savingSettings}>{m.common_save()}</Button>
         <Button type="button" variant="outline" onclick={() => void toggleArchive()}
           >{current.archived ? m.modules_unarchive() : m.modules_archive()}</Button
         >

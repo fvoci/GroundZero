@@ -431,7 +431,7 @@ async fn items_copy_with_fresh_numbers_and_templates() {
         Method::PUT,
         &format!("/api/tasks/{b_id}/predecessors/{a_id}"),
         Some(&writer),
-        None,
+        Some(json!({ "kind": "FS", "lag_days": 0, "base": null })),
     )
     .await;
     assert!(dep.status.is_success(), "{:?}", dep.json);
@@ -561,7 +561,9 @@ async fn items_copy_with_fresh_numbers_and_templates() {
     assert_eq!(na["estimate_minutes"], 120);
     assert_eq!(na["assignees"], json!([]));
     assert_eq!(na1["parent_id"], na["id"]);
-    assert_eq!(nb["predecessor_ids"], json!([na["id"]]));
+    assert_eq!(nb["predecessors"][0]["task_id"], na["id"]);
+    assert_eq!(nb["predecessors"].as_array().unwrap().len(), 1);
+    assert!(nb.get("predecessor_ids").is_none());
     assert_eq!(nb["checklist_total"], 2);
     assert_eq!(nb["checklist_done"], 0);
     let docs = send(

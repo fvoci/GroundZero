@@ -2,7 +2,8 @@
   // 앱 셸: 로그인 확인 → 사이드바(워크스페이스) + 경로별 화면.
   import type { Me, Workspace } from '@fvoci/api-client';
 
-  import { api } from '$lib/api/client';
+  import { api, ApiError, NetworkError } from '$lib/api/client';
+  import { errorText } from '$lib/api/errors';
   import LoginScreen from '$lib/features/auth/LoginScreen.svelte';
   import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
   import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
@@ -21,6 +22,7 @@
   import { setLocale } from '$lib/paraglide/runtime.js';
   import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
   import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
+  import { connection } from '$lib/features/feedback/feedback.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
   import TimeScreen from '$lib/features/time/TimeScreen.svelte';
   import TimerWidget from '$lib/features/time/TimerWidget.svelte';
@@ -29,6 +31,7 @@
   import { me as currentUser } from '$lib/me.svelte';
   import AppSidebar from '$lib/features/nav/AppSidebar.svelte';
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
+  import { Button } from '$lib/ui/button';
   import * as Sidebar from '$lib/ui/sidebar';
 
   import BackLink from './BackLink.svelte';
@@ -37,7 +40,8 @@
     | { state: 'loading' }
     | { state: 'anonymous'; oidcEnabled: boolean }
     | { state: 'signed-in'; me: Me; workspaces: Workspace[] }
-    | { state: 'error'; message: string };
+    /** `network`: 서버에 닿지 않았다(연결 배너가 내려가면 다시 읽는다). */
+    | { state: 'error'; message: string; network: boolean };
 
   let session = $state<Session>({ state: 'loading' });
   let searchOpen = $state(false);
@@ -62,14 +66,28 @@
       document.documentElement.lang = displaySettings().locale;
       session = { state: 'signed-in', me, workspaces: await api.workspaces() };
     } catch (e: unknown) {
+      // 브라우저·서버의 원문 대신 번역된 문구(D-81). 서버에 닿지 않은 경우는 다시 시도하면 된다고 알린다.
+      const network =
+        e instanceof NetworkError || (e instanceof ApiError && e.code === 'unreachable');
       session = {
         state: 'error',
-        message: e instanceof Error ? e.message : m.app_server_unreachable(),
+        message: network ? m.app_server_unreachable() : errorText(e, m.app_start_failed()),
+        network,
       };
     }
   }
 
   void load();
+
+  async function retry(): Promise<void> {
+    session = { state: 'loading' };
+    await load();
+  }
+
+  // 첫 화면을 서버에 닿지 못해 그리지 못했으면, 연결 배너가 내려갈 때(서버가 다시 답함) 다시 읽는다.
+  $effect(() => {
+    if (session.state === 'error' && session.network && !connection.lost) void retry();
+  });
 
   // 읽지 않은 알림 수(알림은 접근 권한을 따라 서버가 거른다). 화면을 옮길 때 다시 세되 30초 안에는
   // 다시 묻지 않는다. 알림 화면에서 읽음 처리하면 곧바로, 창으로 돌아오면 다시 센다.
@@ -106,11 +124,34 @@
   // 데스크톱 사이드바를 접었는지(사이드바가 쿠키에 남긴 값). 처음 열 때 그대로 되살린다.
   const sidebarOpen = !document.cookie.split('; ').includes('sidebar_state=false');
 
-  /** 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스 목록을 다시 읽는다. */
+  // 마지막으로 보낸 목록 요청의 차례와, 그 응답을 아직 기다리는지. 늦게 도착한 이전 응답이 그 뒤에 읽거나 고친 값(실시간
+  // 공동 편집 설정 등)을 덮지 않게 마지막 요청의 응답만 넣는다.
+  let workspacesSeq = 0;
+  let workspacesPending = false;
 
+  /** 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스 목록을 다시 읽는다. */
   async function reloadWorkspaces(): Promise<void> {
-    const workspaces = await api.workspaces();
-    if (session.state === 'signed-in') session.workspaces = workspaces;
+    const mine = ++workspacesSeq;
+    workspacesPending = true;
+    try {
+      const workspaces = await api.workspaces();
+      if (mine === workspacesSeq && session.state === 'signed-in') session.workspaces = workspaces;
+    } finally {
+      if (mine === workspacesSeq) workspacesPending = false;
+    }
+  }
+
+  /** 실시간 공동 편집을 켜거나 껐다. */
+  function realtimeChanged(workspaceId: string, enabled: boolean): void {
+    // 다시 들어오거나 다른 화면이 읽어도 지금 값이 보이게 목록의 그 워크스페이스를 고친다.
+    if (session.state === 'signed-in') {
+      session.workspaces = session.workspaces.map((w) =>
+        w.id === workspaceId ? { ...w, realtime_enabled: enabled } : w,
+      );
+    }
+    // 그 전에 보낸 목록 요청을 아직 기다리면 그 응답(바꾸기 전 값일 수 있다)은 버리고 지금 다시 읽는다. 그 요청이
+    // 가져올 멤버십 변화는 새 응답에 들어 있다. 다시 읽지 못하면 고친 목록을 그대로 둔다.
+    if (workspacesPending) reloadWorkspaces().catch(() => undefined);
   }
 
   async function logout(): Promise<void> {
@@ -178,7 +219,10 @@
 {:else if session.state === 'loading'}
   <p class="p-6" aria-live="polite">{m.app_loading()}</p>
 {:else if session.state === 'error'}
-  <p class="p-6 text-destructive" role="alert">{session.message}</p>
+  <div class="flex flex-col items-start gap-3 p-6">
+    <p class="text-destructive" role="alert">{session.message}</p>
+    <Button variant="outline" onclick={() => void retry()}>{m.common_retry()}</Button>
+  </div>
 {:else if session.state === 'anonymous'}
   <LoginScreen oidcEnabled={session.oidcEnabled} returnTo={router.path} />
 {:else}
@@ -246,7 +290,7 @@
               onchanged={() => void reloadWorkspaces()}
             />
           {:else if route.name === 'workspace'}
-            <WorkspaceScreen workspace={currentWorkspace} />
+            <WorkspaceScreen workspace={currentWorkspace} onrealtimechanged={realtimeChanged} />
           {:else if route.name === 'trash'}
             <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
             <TrashScreen workspace={currentWorkspace} />

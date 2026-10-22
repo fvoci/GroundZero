@@ -103,11 +103,10 @@ export function editDates(
   return { start_date: fromDayNumber(nextFrom), due_date: fromDayNumber(nextTo) };
 }
 
-/** 업무가 가진 선행 관계(없으면 `predecessor_ids`를 종료 후 시작·지연 0으로 본다). */
+/** 업무가 가진 선행 관계. */
 export interface GanttLinkSource {
   id: string;
-  /** 서버 응답이 아니면 빠질 수 있다(빠지면 관계 없음). */
-  predecessor_ids?: readonly string[];
+  /** 서버 응답이 아닌 업무(그리는 중인 미리보기 등)에는 없을 수 있다(없으면 관계 없음). */
   predecessors?: readonly TaskLinkView[];
 }
 
@@ -128,11 +127,9 @@ export interface GanttLink {
   arrow: string;
 }
 
-/** 업무의 선행 관계 목록(종류·지연일). 옛 응답처럼 `predecessors`가 없으면 FS·0. */
+/** 업무의 선행 관계 목록(종류·지연일). */
 export function linksOf(task: GanttLinkSource): TaskLinkView[] {
-  return task.predecessors !== undefined
-    ? [...task.predecessors]
-    : (task.predecessor_ids ?? []).map((id) => ({ task_id: id, kind: 'FS' as const, lag_days: 0 }));
+  return [...(task.predecessors ?? [])];
 }
 
 export interface GanttLinkGeometry {

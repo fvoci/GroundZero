@@ -426,13 +426,23 @@ pub struct LinkInput {
 }
 
 /// 관계 설정. 종류·지연일이 바뀌어 후속 업무를 옮겨야 하면 미리보기에서 승인한 목록을 함께 보낸다(같은 트랜잭션).
-/// 비우면 관계만 바꾼다.
+/// 비우면 관계만 바꾼다. `base`는 화면이 편집을 시작한 관계의 종류·지연일이다(새 관계면 `null`). 지금 관계와 다르면
+/// 아무것도 바꾸지 않고 409 `link_conflict`(최신본 포함)다. 다른 사람이 그사이 바꾼 종류·지연일을 말없이 덮지 않는다.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct SetPredecessor {
     pub kind: LinkKind,
     pub lag_days: i32,
     #[serde(default)]
+    pub base: Option<LinkBase>,
+    #[serde(default)]
     pub successor_shifts: Vec<SuccessorShift>,
+}
+
+/// 관계 편집을 시작한 때의 종류·지연일(관계 설정의 기준 조건).
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+pub struct LinkBase {
+    pub kind: LinkKind,
+    pub lag_days: i32,
 }
 
 /// 업무의 선행 관계 하나.
@@ -627,21 +637,6 @@ async fn date_plan(
     Ok(plan_view(&rows, plan))
 }
 
-/// 후속 재배치 미리보기(읽기, 옛 응답 모양). 아무것도 바꾸지 않는다. 업무를 볼 수 없으면 404.
-/// 날짜 없는 업무 알림까지 받으려면 `schedule-plan`을 쓴다.
-#[utoipa::path(post, path = "/api/tasks/{task_id}/schedule-preview", operation_id = "preview_task_schedule",
-    params(("task_id" = String, Path, format = Uuid)), request_body = SchedulePreviewInput,
-    responses((status = 200, body = [ShiftProposal]), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
-    tag = "tasks")]
-pub async fn preview(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(id): Path<Uuid>,
-    Json(input): Json<SchedulePreviewInput>,
-) -> Result<Json<Vec<ShiftProposal>>, AppError> {
-    Ok(Json(date_plan(&state, user, id, &input).await?.shifts))
-}
-
 /// 날짜를 바꿀 때의 재배치 계획(읽기). 옮길 후속 업무와 원인 관계, 날짜가 없어 계산하지 않은 업무.
 #[utoipa::path(post, path = "/api/tasks/{task_id}/schedule-plan", operation_id = "plan_task_schedule",
     params(("task_id" = String, Path, format = Uuid)), request_body = SchedulePreviewInput,
@@ -808,10 +803,29 @@ pub(crate) async fn shift_conflict(
         .into_response())
 }
 
+/// 편집을 시작한 관계(`base`)가 그사이 바뀌었을 때의 409 응답(아무것도 바꾸지 않았다). 최신본은 새 트랜잭션에서 읽는다.
+pub(crate) async fn link_conflict(
+    state: &AppState,
+    user: UserId,
+    task: Uuid,
+) -> Result<Response, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let current = load_detail(&mut tx, task).await?;
+    tx.commit().await?;
+    Ok((
+        StatusCode::CONFLICT,
+        Json(TaskConflict {
+            error: "link_conflict",
+            current,
+        }),
+    )
+        .into_response())
+}
+
 /// 관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
-/// - `TaskConflict`(`error: "shift_conflict"`, `current`): 승인한 재배치가 그사이 맞지 않게 됨(본문 있는 요청만).
+/// - `TaskConflict`(`error: "shift_conflict"` 또는 `"link_conflict"`, `current`): 승인한 재배치가 그사이 맞지 않게
+///   됨, 또는 편집을 시작한 관계(`base`)가 그사이 바뀌거나 생기거나 지워짐.
 /// - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 보관된 항목, 동시 변경 재시도(40001·40P01), 새 id 부족(FV001).
-///   본문 없는 옛 요청의 409도 이 모양이다.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(untagged)]
 pub enum PredecessorConflict {
@@ -821,47 +835,36 @@ pub enum PredecessorConflict {
 
 /// 선행 업무 추가·설정(후속 업무 쓰기 권한). 같은 항목만, 자기 자신·순환·잘못된 종류나 지연일은 400.
 ///
-/// 본문이 없으면 옛 동작이다: 없을 때 종료 후 시작·지연 0으로 만들고, 이미 있으면 종류·지연일을 그대로 둔다.
-/// 본문(`SetPredecessor`)이 있으면 그 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다. 승인 목록의
-/// 기준 버전이 지났거나 지금 다시 계산한 계획과 다르면 아무것도 바꾸지 않고 409 `shift_conflict`.
+/// 본문(`SetPredecessor`)의 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다. 편집을 시작한 관계(`base`)가
+/// 지금과 다르면 409 `link_conflict`, 승인 목록의 기준 버전이 지났거나 지금 다시 계산한 계획과 다르면 409
+/// `shift_conflict`(둘 다 아무것도 바꾸지 않음).
 #[utoipa::path(put, path = "/api/tasks/{task_id}/predecessors/{predecessor_id}", operation_id = "add_predecessor",
     params(("task_id" = String, Path, format = Uuid), ("predecessor_id" = String, Path, format = Uuid)),
-    request_body(content = Option<SetPredecessor>, description = "없으면 옛 동작(없을 때 FS·0으로 추가, 있으면 그대로)"),
+    request_body = SetPredecessor,
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody),
               (status = 409, body = PredecessorConflict,
-               description = "`shift_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)")),
+               description = "`shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)")),
     tag = "tasks")]
 pub async fn add_predecessor(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
     Path((id, predecessor)): Path<(Uuid, Uuid)>,
-    input: Option<Json<SetPredecessor>>,
+    Json(input): Json<SetPredecessor>,
 ) -> Result<Response, AppError> {
-    let Some(Json(input)) = input else {
-        let mut tx = state.db.begin_as(user).await?;
-        sqlx::query("SELECT app_add_task_dependency($1, $2, $3)")
-            .bind(predecessor)
-            .bind(id)
-            .bind(crate::db::new_ids(1))
-            .execute(tx.conn())
-            .await
-            .map_err(AppError::from_db_function)?;
-        let detail = load_detail(&mut tx, id).await?;
-        tx.commit().await?;
-        return Ok(Json(detail).into_response());
-    };
     check_lag(input.lag_days)?;
     let (shifts, approved) = approved_shifts(&input.successor_shifts)?;
     let mut tx = state.db.begin_as(user).await?;
     let ids: Vec<Uuid> = approved.iter().map(|&(id, _)| id).collect();
     let before = spans_before(&mut tx, &ids).await?;
     let (outcome, old_kind, old_lag): (String, Option<String>, Option<i32>) =
-        sqlx::query_as("SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6)")
+        sqlx::query_as("SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)")
             .bind(predecessor)
             .bind(id)
             .bind(input.kind.as_str())
             .bind(input.lag_days)
+            .bind(input.base.map(|b| b.kind.as_str()))
+            .bind(input.base.map(|b| b.lag_days))
             .bind(&shifts)
             .bind(crate::db::new_ids(1 + approved.len()))
             .fetch_one(tx.conn())
@@ -870,6 +873,10 @@ pub async fn add_predecessor(
     if outcome == "shift_conflict" {
         drop(tx);
         return shift_conflict(&state, user, id).await;
+    }
+    if outcome == "link_conflict" {
+        drop(tx);
+        return link_conflict(&state, user, id).await;
     }
     if !approved.is_empty() {
         let old = match (old_kind.as_deref().and_then(LinkKind::parse), old_lag) {
