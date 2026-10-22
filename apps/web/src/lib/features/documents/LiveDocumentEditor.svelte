@@ -22,6 +22,7 @@
   import {
     adoptOrphans,
     clearDraft,
+    loadDraft,
     loadOffers,
     takeOrReserve,
     removeOffer,
@@ -74,11 +75,12 @@
   let foundRequest: { note: string; save: string } | undefined;
   let keepTimer: ReturnType<typeof setTimeout> | undefined;
 
-  function keepDraft(): void {
+  /** 남겼으면 참. 고를 때까지 자리를 비워 둔 지난 초안이 있거나(`reserved`) 저장소가 가득 차면 남기지 못한다. */
+  function keepDraft(): boolean {
     if (keepTimer !== undefined) clearTimeout(keepTimer);
     keepTimer = undefined;
-    if (latest === undefined || reserved !== undefined) return;
-    storeDraft(start.id, {
+    if (latest === undefined || reserved !== undefined) return false;
+    return storeDraft(start.id, {
       baseRevision: start.revision,
       title,
       body: latest,
@@ -97,15 +99,16 @@
     if (watch?.dirty === true) keepDraft();
   }
 
-  // 서버가 연결을 닫아(권한·세션 끝 4403, 문서가 바뀜 4409 등) 확인받지 못한 편집을 초안으로 남겼다. 다시 열어 그 초안을
-  // 고르게 할 때까지 "저장되지 않았다"고 알린다(서버에 반영하지 않은 것과 화면에서 없애는 것은 다르다).
-  let unsavedKept = $state(false);
+  // 서버가 연결을 닫아(권한·세션 끝 4403, 문서가 바뀜 4409 등) 확인받지 못한 편집이 있다. 서버에 반영하지 않은 것과
+  // 화면에서 없애는 것은 다르다: 초안으로 남겼으면(`kept`) 다시 열어 고를 때까지 알리고, 남기지 못했으면(`lost`) 그렇게
+  // 알리며 화면을 바꾸지 않아 내용을 옮겨 둘 수 있게 한다.
+  let unsaved = $state<'kept' | 'lost' | undefined>(undefined);
 
-  /** 서버가 연결을 닫을 때: 확인받지 못한 편집이 있으면 초안으로 남기고 알린다. */
-  function keepUnsaved(): void {
-    if (watch?.dirty !== true) return;
-    keepDraft();
-    unsavedKept = true;
+  /** 서버가 연결을 닫을 때: 확인받지 못한 편집이 있으면 초안으로 남기고 알린다. 남기지 못했으면 거짓. */
+  function keepUnsaved(): boolean {
+    if (watch?.dirty !== true) return true;
+    unsaved = keepDraft() ? 'kept' : 'lost';
+    return unsaved === 'kept';
   }
 
   /** 처음 맞춰진 뒤 지난 초안을 고르게 한다. */
@@ -124,6 +127,10 @@
     // `found`는 $state라 넣은 객체의 프록시가 된다. 어느 것을 고르게 하는지는 따로 적는다(객체 비교 대신).
     foundIsReserved = rest[0] === undefined && reserved !== undefined;
     found = rest[0] ?? reserved;
+    // 남긴 초안을 모두 골랐다(보존·버림·이미 반영). 고를 것이 더 있거나 이 탭에 새로 남긴 초안이 있으면 알림을 둔다.
+    if (unsaved === 'kept' && found === undefined && loadDraft(start.id) === undefined) {
+      unsaved = undefined;
+    }
   }
 
   /** 지금 고르게 한 초안을 줄에서 뺀다(보존했거나 버렸다). 다음 것이 있으면 이어 고르게 한다. */
@@ -139,8 +146,6 @@
     }
     found = undefined;
     foundRequest = undefined;
-    // 남긴 초안을 골랐다(보존·버림). 알림은 다음에 서버가 닫을 때 다시 띄운다.
-    unsavedKept = false;
     showNextOffer();
   }
 
@@ -175,9 +180,12 @@
         if (event?.code === 1006) void checkRefusal(next);
         return;
       }
-      keepUnsaved();
+      const kept = keepUnsaved();
       next.provider.disconnect();
-      if (stop === 'reload') {
+      if (!kept) {
+        // 남기지 못한 편집이 화면에만 있다. 바꾸지 않고 멈춰 사람이 옮겨 둔 뒤 다시 연결하게 한다.
+        stopped = stop;
+      } else if (stop === 'reload') {
         // 문서가 다른 길(복원 등)로 바뀌었다. 옛 내용을 섞지 않도록 새 문서로 다시 연다.
         restart();
       } else if (stop === 'off') {
@@ -199,9 +207,10 @@
     try {
       const doc = await api.document(start.id);
       if (session?.provider !== current.provider || doc.realtime) return;
-      keepUnsaved();
+      const kept = keepUnsaved();
       current.provider.disconnect();
-      onrealtimeoff?.();
+      if (kept) onrealtimeoff?.();
+      else stopped = 'off';
     } catch (e: unknown) {
       if (session?.provider !== current.provider || !(e instanceof ApiError)) return;
       if (e.status === 401 || e.status === 403 || e.status === 404) {
@@ -220,6 +229,12 @@
       onreload();
       return;
     }
+    if (stopped === 'off' && onrealtimeoff !== undefined) {
+      onrealtimeoff();
+      return;
+    }
+    // 남기지 못한 편집은 사람이 옮겨 둔 뒤 다시 연결했다(새 내용으로 바뀐다).
+    if (unsaved === 'lost') unsaved = undefined;
     if (session !== undefined) closeLive(session);
     session = undefined;
     stopped = undefined;
@@ -374,7 +389,9 @@
       >
     {/if}
   </form>
-  {#if unsavedKept && found === undefined}
+  {#if unsaved === 'lost'}
+    <p role="alert" class="text-sm text-destructive">{m.documents_live_unsaved_lost()}</p>
+  {:else if unsaved === 'kept' && found === undefined}
     <p role="status" aria-live="polite" class="text-sm text-destructive">
       {m.documents_live_unsaved_kept()}
     </p>

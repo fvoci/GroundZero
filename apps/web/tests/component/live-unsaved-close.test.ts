@@ -38,6 +38,7 @@ vi.mock('$lib/features/documents/live', async (original) => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   opened.length = 0;
   window.localStorage.clear();
   me.userId = '';
@@ -113,4 +114,49 @@ describe('live editor closed by the server with unconfirmed edits', () => {
       });
     });
   }
+});
+
+describe('live editor that cannot keep unconfirmed edits', () => {
+  it('says they were not kept and keeps them on screen instead of reopening', async () => {
+    await setLocale('ko', { reload: false });
+    me.userId = 'user-a';
+    render(LiveDocumentEditor, { props: { initial: doc } });
+    await editUnconfirmed();
+    // 저장 공간이 가득 찼다.
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+
+    closeWith(4409);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/이 브라우저에도 남기지 못했습니다/);
+    expect(screen.queryByText(/초안으로 남겼습니다/)).toBeNull();
+    // 새 내용으로 바꾸지 않는다(다시 열지 않음). 사람이 옮겨 둔 뒤 다시 연결한다.
+    expect(opened).toHaveLength(1);
+    expect(screen.getByText(/다시 연결하면 새 내용으로 엽니다/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'stub-type' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: '다시 연결' }));
+    expect(opened).toHaveLength(2);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('choosing an earlier draft', () => {
+  it('keeps the notice while a draft kept at a later close is still waiting', async () => {
+    await setLocale('ko', { reload: false });
+    me.userId = 'user-a';
+    render(LiveDocumentEditor, { props: { initial: doc } });
+    await editUnconfirmed();
+    closeWith(4409);
+    opened.at(-1)?.provider.emit('sync', [true]);
+    await screen.findByRole('region', { name: /초안/ });
+    // 지난 초안을 고르기 전에 새 편집이 또 확인받지 못한 채 닫힌다(이 탭의 초안으로 남음).
+    await editUnconfirmed();
+    closeWith(4403);
+
+    await fireEvent.click(screen.getByRole('button', { name: '초안 버리기' }));
+
+    expect(await screen.findByText(/서버에 저장되지 않은 편집이 있어/)).toBeTruthy();
+  });
 });
