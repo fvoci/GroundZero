@@ -2702,10 +2702,11 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   | 40  | #82  | `217c6c5` 인라인 Minor: 상세 안의 다른 업무 열기가 닫기 확인을 건너뜀          | FIXED(#91, 병합 뒤 발견)             | #91 `abd7210`(`TaskBoard` `requestOpen`, `task-dialog-discard.test.ts`), 답글 r4347584536                                                               | https://github.com/fvoci/GroundZero/pull/82#discussion_r4347201952       |
   | 41  | #69  | `5e5e9da` 인라인 Minor: 표 뒤 빈 줄(markdownlint MD058)                        | REJECTED                             | 저장소 형식 검사(prettier, `cargo xtask check`)가 목록 안 표 뒤 빈 줄을 지움(넣으면 `--check` 실패), 답글 r4347534519                                   | https://github.com/fvoci/GroundZero/pull/69#discussion_r4347518864       |
   | 42  | #69  | `e4cae26` 인라인 Minor: NOT RUN 목록에 PASS 항목이 섞임                        | FIXED                                | NOT RUN 목록에는 실행하지 않은 범위만 남김(PASS는 위 「실제 브라우저」), 이 행을 더한 커밋                                                              | https://github.com/fvoci/GroundZero/pull/69#discussion_r4348758070       |
+  | 43  | #69  | `9985768` 인라인 Minor: 마감 요약에 감사 기준과 후속 범위 구분                 | FIXED                                | 마감 정리 제목과 `docs/decisions.md` 95차 줄에 감사 기준 `cb1d32d`·후속 #91·#94·R8 범위, 이 행을 더한 커밋                                              | https://github.com/fvoci/GroundZero/pull/69#discussion_r4349571792       |
 
   인계 장부의 OPEN 26건(실질 17 + 정보성 9)과 #82 추가 2건은 위 1~20에서 모두 처리 상태가 정해졌다. 그 뒤 새로 온 지적 가운데 OPEN은 25(#60, 배포·
   되돌리기 절차 문서)뿐이다. 39(#64)·40(#82)은 병합 뒤에 발견해 #91로 고쳤다. 24는 `a811f92`, 36은 실제 브라우저로 정리했다. #69의 95차 push
-  (`5e5e9da`) 뒤 지적은 41, `e4cae26` 뒤 지적은 42다.
+  (`5e5e9da`) 뒤 지적은 41, `e4cae26` 뒤 지적은 42, `9985768` 뒤 지적은 43이다.
   - 39·40은 최종 갱신 커밋(`be7ef22`·`217c6c5`)에 병합 직전 게시됐다(#64 리뷰 2026-10-22T09:52:28Z·병합 09:58:56Z, #82 리뷰 10:25:16Z·병합
     10:26:23Z). 수정 없이 병합되어 병합 뒤에 발견했다(Minor 둘, 편집을 확인 없이 잃는 경로). #91(`fix/audit-unsaved-followups`)에서 고쳤다
     (아래 「#91(병합 뒤 후속)」).
@@ -3018,7 +3019,7 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   - #58의 저장 경합(응답 전 두 번째 저장)은 실제 브라우저로 만들지 못했다(느린 응답이 필요). jsdom 시험까지다.
   - 태그·배포.
   - 시험 중 Docker VM 메모리 부족으로 Postgres 체크포인터가 한 번 SIGKILL 되어, 그때의 시험 바이너리를 다시 돌렸다.
-- **마감 정리(2026-10-22, 코드 PR 26개 병합 뒤, 이 PR이 마지막)**:
+- **마감 정리(2026-10-22, 감사 기준 `cb1d32d`까지 코드 PR 26개 병합, 그 뒤 후속 #91·#94(웹만), R8은 `07be34d`에서만, 이 PR이 마지막)**:
   - 사용자 결정: D-93(손대지 않은 끝 보존·겹친 시각 묻기, #72), D-94(충돌 뒤 내 입력으로 다시 저장, #82·#59), D-95(이동 중 대신 저장과 실제
     편집자 구분, P-34 채택, #64), D-96(저장 요청의 기대 사용자 비교, #60), D-97(닫기 전 확인, #59·#82), D-98(Safari 키보드 접근성, #82),
     D-99(남기지 못한 실시간 편집의 다시 연결과 버리기, #91의 coordinator 판단을 대체, #94).
