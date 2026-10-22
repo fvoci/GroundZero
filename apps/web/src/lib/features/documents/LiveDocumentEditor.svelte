@@ -283,6 +283,8 @@
     if (keepTimer !== undefined) clearTimeout(keepTimer);
     keepTimer = undefined;
     title = savedTitle;
+    // 버린 제목을 저장하지 못했다는 알림도 거둔다.
+    titleMessage = undefined;
     latest = undefined;
     unsaved = undefined;
     reopen();
