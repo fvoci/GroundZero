@@ -507,10 +507,11 @@ impl Rooms {
     /// 옛 리비전으로 복원한다(쓰기 권한을 확인한 요청). 복원하는 동안 이 문서의 방이 새로 열리지 않게 막는다(`hold`).
     /// 열린 방이 있으면 그 방이 복원한다(체크포인트 → 복원 → 방 초기화를 한 명령으로, `Command::Restore`). 방이 없으면 방
     /// 없이 남은 저장 대기 상태를 먼저 리비전으로 남긴 뒤 복원한다(D-95 조건 4, 이동과 같다). 그 작성자는 상태와 함께 저장한
-    /// 편집자 가운데 아직 쓸 수 있는 사람뿐이다: 복원하는 사람은 대신 저장하지 않는다(방 안 복원과 같다). 남기지 못하면
-    /// 복원하지 않고 409이며 상태는 그대로 남는다. 남겼으면 기준 리비전이 지나 복원은 충돌(`conflict`)로 끝난다(화면이 지금
-    /// 내용을 보고 다시 한다). 방의 답은 시간 제한 없이 기다린다: 여기서 그만두면 방이 복원을 마쳤는데 실패로 답할 수
-    /// 있다. 방이 이 명령을 받기 전에 닫혔으면 복원하지 않았으므로 다시 본다.
+    /// 편집자 가운데 아직 쓸 수 있는 사람뿐이다: 연결이 없으므로 복원하는 사람은 대신 저장하지 않는다(방 안 복원에서는
+    /// 연결된 복원하는 사람도 연결된 작성자로서 대신 저장할 수 있다). 남기지 못하면 복원하지 않고 409이며 상태는 그대로
+    /// 남는다. 남겼으면 기준 리비전이 지나 복원은 충돌(`conflict`)로 끝난다(화면이 지금 내용을 보고 다시 한다). 방의 답은
+    /// 시간 제한 없이 기다린다: 여기서 그만두면 방이 복원을 마쳤는데 실패로 답할 수 있다. 방이 이 명령을 받기 전에
+    /// 닫혔으면 복원하지 않았으므로 다시 본다.
     pub async fn restore(
         &self,
         db: &Db,
@@ -601,8 +602,9 @@ impl Rooms {
     /// 새로 만든 방이라 연결이 없으므로 작성자 순서는 그 상태와 함께 저장된 편집자(마지막 리비전 뒤로 고친 사람, 마지막이
     /// 앞) 가운데 아직 쓸 수 있는 사람이다. 옮길 때는 그다음 옮기는 사람이 대신 남기고(`save_pending`의 관리자 자리, 방 안
     /// 체크포인트와 같다) 실제 편집자를 리비전에 따로 적는다(D-95, 편집자 기록이 없는 옛 상태면 빈 목록). 복원하는 사람은
-    /// 대신 남기지 않는다(방 안 복원과 같다). 남길 것이 없으면(저장된 상태가 없음·본문과 같은 내용, 실시간이 꺼짐) 아무것도
-    /// 하지 않는다. 남기지 못하면 방 안 체크포인트와 같은 409로 하지 않고 상태는 그대로 둔다.
+    /// 대신 남기지 않는다(연결이 없으므로 연결된 작성자 자리도 없다, 인계 2.2절 해석). 남길 것이 없으면(저장된 상태가
+    /// 없음·본문과 같은 내용, 실시간이 꺼짐) 아무것도 하지 않는다. 남기지 못하면 방 안 체크포인트와 같은 409로 하지 않고
+    /// 상태는 그대로 둔다.
     async fn save_pending_before(
         &self,
         db: &Db,
@@ -901,7 +903,7 @@ impl Room {
                 self.flush().await;
                 // 리비전으로 남기지 않은 편집을 먼저 남긴다. 남겼는지 확인되지 않으면 복원하지 않는다(그 편집은 방에 남는다).
                 // 남겼으면 그 리비전 때문에 화면의 기준이 지나 아래 복원이 충돌로 알린다(사람이 지금 내용을 보고 다시 한다).
-                // 복원하는 사람은 대신 남기지 않는다(`checkpoint`): 남길 수 있는 사람은 고친 사람과 다른 연결된 작성자다.
+                // 남길 수 있는 사람은 고친 사람과 연결된 작성자다(연결된 복원하는 사람도 든다, `checkpoint`).
                 if self.dirty_since_snapshot
                     && let Some(reason) = self.checkpoint(Change::Restore, request.user).await
                 {
@@ -1556,16 +1558,6 @@ impl Room {
 
     /// `fallback`: 편집한 사람·연결된 작성자 모두 남길 수 없을 때의 작성자(실시간을 끄는 관리자, 옮기는 사람).
     async fn snapshot_with(&mut self, fallback: Option<UserId>) -> bool {
-        self.snapshot_as(fallback, None).await
-    }
-
-    /// `snapshot_with`와 같되 `not_for_others`(복원하는 사람)는 마지막 리비전 뒤로 고친 사람이 아니면 작성자로 고르지 않는다
-    /// (그 사람이 남긴 것처럼 대신 저장하지 않는다).
-    async fn snapshot_as(
-        &mut self,
-        fallback: Option<UserId>,
-        not_for_others: Option<UserId>,
-    ) -> bool {
         if !self.dirty_since_snapshot {
             return true;
         }
@@ -1587,9 +1579,6 @@ impl Room {
         }
         if let Some(admin) = fallback.filter(|a| !authors.contains(a)) {
             authors.push(admin);
-        }
-        if let Some(user) = not_for_others.filter(|u| !self.edited_since.contains(u)) {
-            authors.retain(|a| *a != user);
         }
         for author in authors {
             match self.write_snapshot(author, &body).await {
@@ -1626,22 +1615,17 @@ impl Room {
         false
     }
 
-    /// 옮기거나 복원하기 전 체크포인트: 리비전으로 남기지 않은 편집을 남긴다. `user`(옮기거나 복원하는 사람): 옮길 때는
-    /// 편집한 사람·연결된 작성자가 남길 수 없으면 대신 작성자가 된다(D-95). 복원할 때는 마지막 리비전 뒤로 고친 사람이
-    /// 아니면 연결돼 있어도 대신 남기지 않는다(방이 있든 없든 같다). 남겼으면 `None`, 남겼는지 확인되지 않으면 하지 않는
-    /// 이유(409). 다시 해도 남길 수 없는 원인(본문 검사 실패)에는 "다시 하라"고 하지 않는다.
+    /// 옮기거나 복원하기 전 체크포인트: 리비전으로 남기지 않은 편집을 남긴다. 작성자는 편집한 사람, 그다음 연결된 작성자
+    /// 순이다(`snapshot_with`, 연결된 작성자에는 연결돼 있는 복원하는 사람도 든다. 대신 저장이면 실제 편집자를 따로 적는다,
+    /// D-95). 옮길 때는 그 모두가 남길 수 없으면 옮기는 사람(`user`)이 대신 작성자가 된다. 복원하는 사람은 그 자리에 두지
+    /// 않는다(방 없는 복원은 연결이 없어 저장 대기 상태의 편집자만 남길 수 있다). 남겼으면 `None`, 남겼는지 확인되지 않으면
+    /// 하지 않는 이유(409). 다시 해도 남길 수 없는 원인(본문 검사 실패)에는 "다시 하라"고 하지 않는다.
     async fn checkpoint(&mut self, change: Change, user: UserId) -> Option<&'static str> {
         self.changed_outside = false;
         self.failed_checks = false;
         let moving = matches!(change, Change::Move);
-        let (stand_in, not_for_others) = if moving {
-            (Some(user), None)
-        } else {
-            (None, Some(user))
-        };
-        let saved =
-            tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot_as(stand_in, not_for_others))
-                .await;
+        let stand_in = moving.then_some(user);
+        let saved = tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot_with(stand_in)).await;
         match saved {
             Ok(true) if !self.changed_outside => None,
             Ok(true) if moving => Some(

@@ -3618,8 +3618,8 @@ async fn a_connected_writer_saving_for_an_editor_is_recorded_as_a_stand_in() {
 
 /// #64 반박 검증: 방 없이 남은 저장 대기 상태(확인받은 편집)를 다시 연 방(독자 연결이면 충분하다)이 이어받으면 그 편집을
 /// 아직 리비전이 아닌 것으로 보지 않아, 방 안의 복원·이동이 체크포인트를 건너뛰고 그 편집을 잃었다(방 없는 길만 고쳤던 것).
-/// 이제 방이 이어받은 상태가 본문과 다르면 리비전으로 남길 것으로 본다. 방 안 복원에서도 복원하는 사람은 연결돼 있어도
-/// 대신 저장하지 않는다(쓸 수 있는 편집자가 없으면 409, 상태는 남는다).
+/// 이제 방이 이어받은 상태가 본문과 다르면 리비전으로 남길 것으로 본다. 방 안 복원의 체크포인트 작성자는 main과 같다(고친
+/// 사람, 그다음 연결된 작성자. 연결된 복원하는 사람도 든다): 복원하는 사람이 대신 남기면 실제 편집자를 `edited_by`에 적는다.
 #[tokio::test]
 async fn a_room_reopened_on_a_pending_state_saves_it_before_a_restore_or_move() {
     let state =
@@ -3634,24 +3634,31 @@ async fn a_room_reopened_on_a_pending_state_saves_it_before_a_restore_or_move() 
     let (reader, _) = add_member(&app, &state, &admin, &from, "reader", "reader").await;
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
-    let restored_doc = common::create_doc(&app, &admin, &from, "다시 연 방 복원").await;
-    let a = restored_doc["id"].as_str().unwrap().to_owned();
-    let moved_doc = common::create_doc(&app, &admin, &from, "다시 연 방 이동").await;
-    let b = moved_doc["id"].as_str().unwrap().to_owned();
-    // 리비전 2(저장 API, 실시간을 켜기 전): 복원하면 본문이 바뀌도록.
-    let saved = send(
-        &app,
-        Method::PUT,
-        &format!("/api/documents/{a}"),
-        Some(&admin),
-        Some(
-            json!({ "request_id": new_request_id(), "base_revision": 1, "title": "다시 연 방 복원",
-                     "body": { "type": "doc", "content": [{ "type": "paragraph",
-                         "content": [{ "type": "text", "text": "두 번째 판" }] }] } }),
-        ),
-    )
-    .await;
-    assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+    let mut docs = Vec::new();
+    for title in [
+        "다시 연 방 복원",
+        "다시 연 방 대신 저장 복원",
+        "다시 연 방 이동",
+    ] {
+        let doc = common::create_doc(&app, &admin, &from, title).await;
+        let id = doc["id"].as_str().unwrap().to_owned();
+        // 리비전 2(저장 API, 실시간을 켜기 전): 복원하면 본문이 바뀌도록.
+        let saved = send(
+            &app,
+            Method::PUT,
+            &format!("/api/documents/{id}"),
+            Some(&admin),
+            Some(
+                json!({ "request_id": new_request_id(), "base_revision": 1, "title": title,
+                         "body": { "type": "doc", "content": [{ "type": "paragraph",
+                             "content": [{ "type": "text", "text": "두 번째 판" }] }] } }),
+            ),
+        )
+        .await;
+        assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+        docs.push(id);
+    }
+    let (a, c, b) = (docs[0].clone(), docs[1].clone(), docs[2].clone());
     let on = send(
         &app,
         Method::PUT,
@@ -3675,9 +3682,13 @@ async fn a_room_reopened_on_a_pending_state_saves_it_before_a_restore_or_move() 
             assert!(r.status.is_success(), "{:?}", r.json);
         }
     };
-    // 두 문서 모두 작성자가 실시간으로 쓰고 확인받은 뒤 독자가 되어, 방이 리비전을 남기지 못한 채 상태만 남기고 닫힌다.
+    // 세 문서 모두 작성자가 실시간으로 쓰고 확인받은 뒤 독자가 되어, 방이 리비전을 남기지 못한 채 상태만 남기고 닫힌다.
     let mut editors = Vec::new();
-    for (id, text) in [(&a, "복원 전 확인받은 글"), (&b, "이동 전 확인받은 글")] {
+    for (id, text) in [
+        (&a, "복원 전 확인받은 글"),
+        (&c, "대신 저장될 확인받은 글"),
+        (&b, "이동 전 확인받은 글"),
+    ] {
         let mut e = connect(addr, Some(&writer), id, true).await.unwrap();
         e.paragraph(text).await;
         assert!(e.until(acked).await, "the edit was never acknowledged");
@@ -3688,18 +3699,18 @@ async fn a_room_reopened_on_a_pending_state_saves_it_before_a_restore_or_move() 
     for e in editors {
         e.close().await;
     }
-    for id in [&a, &b] {
+    for id in [&a, &c, &b] {
         // 방이 닫히며 남긴 것: 쓸 수 있는 편집자가 없어 저장 대기 상태다.
         until_no_room(&state, id).await;
         until_collab_states(&owner, id, true, 1).await;
     }
-    let restore = |base: i64| {
-        let (app, admin, a) = (app.clone(), admin.clone(), a.clone());
+    let restore = |id: &str, base: i64| {
+        let (app, admin, id) = (app.clone(), admin.clone(), id.to_owned());
         async move {
             send(
                 &app,
                 Method::POST,
-                &format!("/api/documents/{a}/revisions/1/restore"),
+                &format!("/api/documents/{id}/revisions/1/restore"),
                 Some(&admin),
                 Some(json!({ "request_id": new_request_id(), "base_revision": base })),
             )
@@ -3707,21 +3718,30 @@ async fn a_room_reopened_on_a_pending_state_saves_it_before_a_restore_or_move() 
         }
     };
 
-    // 복원하는 관리자가 쓰기 연결로 방을 다시 열었다: 그 상태는 리비전으로 남길 것이지만 고친 사람은 쓸 수 없고, 복원하는
-    // 사람은 대신 남기지 않는다. 복원하지 않고 409, 상태와 리비전은 그대로다.
-    let c = connect(addr, Some(&admin), &a, true).await.unwrap();
-    let refused = restore(2).await;
-    assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
-    assert_eq!(refused.json["error"], "invalid_state", "{:?}", refused.json);
-    assert_eq!(last_revision(&owner, &a).await, (2, admin.id.0));
-    c.close().await;
-    until_no_room(&state, &a).await;
-    assert_eq!(collab_states(&owner, &a, true).await, 1);
+    // 복원하는 관리자가 쓰기 연결로 방을 다시 열었다. 고친 사람은 쓸 수 없으므로 체크포인트는 연결된 작성자인 복원하는
+    // 사람이 대신 남기고(main과 같은 작성자 순서) 실제 편집자를 따로 적는다(D-95). 기준이 지나 복원은 충돌이다.
+    let restorer = connect(addr, Some(&admin), &c, true).await.unwrap();
+    let stood_in = restore(&c, 2).await;
+    assert_eq!(stood_in.status, StatusCode::CONFLICT, "{:?}", stood_in.json);
+    assert!(
+        stood_in.json["current"]["body"]
+            .to_string()
+            .contains("대신 저장될 확인받은 글"),
+        "the acknowledged edit was restored away: {:?}",
+        stood_in.json
+    );
+    assert_eq!(
+        revision_authors(&owner, &c, 3).await,
+        (admin.id.0, Some(vec![writer.id.0])),
+        "the connected restorer's stand-in revision does not name the actual editor"
+    );
+    assert_eq!(collab_states(&owner, &c, true).await, 0);
+    restorer.close().await;
 
     // 고친 사람이 다시 쓸 수 있고 독자만 방을 열었다: 체크포인트가 그 사람의 리비전으로 남기고 복원은 충돌이다.
     role("writer").await;
     let r = connect(addr, Some(&reader), &a, true).await.unwrap();
-    let conflict = restore(2).await;
+    let conflict = restore(&a, 2).await;
     assert_eq!(conflict.status, StatusCode::CONFLICT, "{:?}", conflict.json);
     assert!(
         conflict.json["current"]["body"]
