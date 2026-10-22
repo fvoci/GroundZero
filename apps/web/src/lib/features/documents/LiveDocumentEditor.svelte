@@ -116,6 +116,14 @@
   // 알리며 화면을 바꾸지 않아 내용을 옮겨 둘 수 있게 한다.
   let unsaved = $state<'kept' | 'lost' | undefined>(undefined);
 
+  // 남긴 초안을 두고 부모에게 다시 열기를 맡겼다. 부모는 새 편집기를 먼저 만들어(그 초안을 고를 줄로 옮김) 이 편집기를
+  // 나중에 없애므로, 없어질 때 다시 남기면 버린 초안이 다시 열 때 또 나온다.
+  let handedOff = false;
+  function handOff(reopen: () => void): void {
+    handedOff = true;
+    reopen();
+  }
+
   /**
    * 서버가 연결을 닫을 때: 반영되지 않은 편집이 있으면 초안으로 남기고 알린다. 남기지 못했으면 거짓. 제목만 고쳤어도
    * 남긴다(실시간이 꺼지거나 권한이 바뀌어 다시 열면 이 편집기와 함께 사라진다, CodeRabbit #64).
@@ -215,7 +223,7 @@
         // 문서가 다른 길(복원 등)로 바뀌었다. 옛 내용을 섞지 않도록 새 문서로 다시 연다.
         restart();
       } else if (stop === 'off') {
-        onrealtimeoff?.();
+        if (onrealtimeoff !== undefined) handOff(onrealtimeoff);
       } else {
         stopped = stop;
       }
@@ -235,8 +243,8 @@
       if (session?.provider !== current.provider || doc.realtime) return;
       const kept = keepUnsaved();
       current.provider.disconnect();
-      if (kept) onrealtimeoff?.();
-      else stopped = 'off';
+      if (!kept) stopped = 'off';
+      else if (onrealtimeoff !== undefined) handOff(onrealtimeoff);
     } catch (e: unknown) {
       if (session?.provider !== current.provider || !(e instanceof ApiError)) return;
       if (e.status === 401 || e.status === 403 || e.status === 404) {
@@ -252,11 +260,11 @@
   function restart(): void {
     keepIfDirty();
     if (stopped === 'denied' && onreload !== undefined) {
-      onreload();
+      handOff(onreload);
       return;
     }
     if (stopped === 'off' && onrealtimeoff !== undefined) {
-      onrealtimeoff();
+      handOff(onrealtimeoff);
       return;
     }
     // 남기지 못한 편집은 사람이 옮겨 둔 뒤 다시 연결했다(새 내용으로 바뀐다).
@@ -285,7 +293,7 @@
     };
   });
   onDestroy(() => {
-    keepIfDirty();
+    if (!handedOff) keepIfDirty();
     watch?.stop();
     if (session !== undefined) closeLive(session);
   });

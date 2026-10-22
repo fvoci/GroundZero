@@ -114,6 +114,22 @@ describe('a title-only edit when the server ends live editing', () => {
     expect(title.value).toBe(EDITED);
   });
 
+  // 부모는 일반 편집기를 먼저 만들고(남긴 초안을 고를 줄로 옮김) 실시간 편집기를 나중에 없앤다(실제 브라우저에서 확인).
+  // 없어지는 실시간 편집기가 같은 초안을 이 탭의 키에 다시 남기면, 버린 초안이 다시 열 때 또 나왔다.
+  it('is not stored again when the live editor goes away after handing it over', async () => {
+    const live = render(LiveDocumentEditor, { props: { initial: doc, onrealtimeoff: vi.fn() } });
+    await editTitleOnly();
+    closeWith(4410);
+    render(DocumentEditor, { props: { initial: { ...doc, realtime: false, revision: 4 } } });
+    await screen.findByRole('region', { name: m.documents_draft_region() });
+
+    live.unmount();
+    await fireEvent.click(screen.getByRole('button', { name: m.documents_draft_discard() }));
+
+    expect(loadDraft('d1')).toBeUndefined();
+    expect(loadOffers('d1')).toEqual([]);
+  });
+
   it('is kept as a draft when a refused reconnect finds realtime off', async () => {
     vi.spyOn(api, 'document').mockResolvedValue({ ...doc, realtime: false });
     const off = vi.fn();
