@@ -200,8 +200,9 @@ pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -
     result
 }
 
-/// 외부에서 준비된 서비스로 테스트한다(CI 컨테이너 job). 필요한 환경 변수가 없으면 실패한다.
-/// `DATABASE_ADMIN_URL`의 호스트로 세 역할 URL을 만든다.
+/// 외부에서 준비된 서비스로 테스트한다(CI job). `FVOCI_TEST_PG_HOST_PORT`(PostgreSQL `호스트:포트`)와
+/// `FVOCI_TEST_SEARCH_URL`, `--oidc`면 `FVOCI_TEST_OIDC_ISSUER`도 없으면 실패한다. 세 역할 URL과 `DATABASE_URL`은
+/// 그 호스트·포트와 테스트 자격 증명으로 만든다. `FVOCI_TEST_S3_ENDPOINT`가 없으면 S3 테스트를 뺀다.
 fn run_external(root: &Path, oidc: bool) -> Result<()> {
     let sh = Shell::new()?;
     sh.change_dir(root);

@@ -246,9 +246,18 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 ## 10. CI 구조 (D-64)
 
 - **베이스 이미지**: `deploy/docker/dev.Dockerfile` → `ghcr.io/fvoci/groundzero-ci-base`(공개 패키지, D-65). `.github/workflows/base-image.yml`이 Dockerfile·워크플로 변경, 주 1회 스케줄, 수동 실행 때만 빌드·게시한다. 제품 커밋마다 만들지 않는다. 게시 권한(`packages: write`)은 그 job에만 있고 pull_request에서는 실행되지 않는다.
-- **제품 검사**: `.github/workflows/ci.yml`. `check`와 `integration` 두 job이 같은 `ghcr.io/fvoci/groundzero-ci-base@<digest>` 컨테이너에서 돈다. digest는 저장소 변수 `CI_BASE_IMAGE_DIGEST`이며 base-image 워크플로가 게시한 값을 옮겨 적는다. 변수가 비면 job이 시작 단계에서 실패하며 성공으로 간주하지 않는다. 호출하는 명령은 `pnpm install --frozen-lockfile`, `cargo xtask check`, `cargo xtask test --external-services`뿐이다.
-- **서비스 격리**: GitHub의 컨테이너 job 안에서는 Compose를 띄울 수 없어 PostgreSQL·Meilisearch를 job `services`로 둔다. 자격 증명은 `compose.test.yaml`과 같은 테스트 값이며, `cargo xtask test --external-services`가 `DATABASE_URL`이 없으면 실패한다. 로컬은 `cargo xtask test`(Compose)로 같은 테스트를 돌린다.
-- **OIDC 로그인 테스트(`oidc` job)**: 컨테이너 job에서는 Compose를 띄울 수 없으므로 GitHub 호스트 러너(`ubuntu-24.04`)에서 `compose.test.yaml`의 `oidc` 프로필(PostgreSQL·Meilisearch·Keycloak)을 띄운다. 테스트는 다른 job과 같은 베이스 이미지 digest 안에서 같은 진입점 `cargo xtask test --external-services --oidc`로 돈다. 테스트 컨테이너는 Compose 네트워크에 붙고 체크아웃만 마운트한다(Docker 소켓은 넘기지 않음). 프로젝트명 `fvoci-ci-<run_id>-<run_attempt>`로 실행마다 컨테이너·네트워크·볼륨을 분리하고, PostgreSQL은 tmpfs라 매번 빈 DB에서 시작하며, 결과와 상관없이 `down --volumes`로 지운다.
+- **제품 검사**: `.github/workflows/ci.yml`. job과 호출하는 명령은 다음과 같다.
+  - `check`: `pnpm install --frozen-lockfile`, `cargo xtask check --skip-licenses`
+  - `licenses`: `pnpm install --frozen-lockfile`, `cargo xtask licenses`
+  - `integration`: `cargo xtask test --external-services`
+  - `oidc`: `cargo xtask test --external-services --oidc`(아래)
+  - `supabase`: `cargo xtask test --supabase --session-pooler --oidc`(아래)
+  - `rhwp`: `cargo xtask rhwp`, `git diff --exit-code -- deploy/rhwp/THIRD_PARTY_NOTICES.txt`, `cargo xtask rhwp --audit`
+
+  `check`·`licenses`·`integration`은 같은 `ghcr.io/fvoci/groundzero-ci-base@<digest>` 컨테이너 job으로 돌고, `oidc`의 테스트 단계와 `rhwp --audit`는 같은 이미지를 `docker run`으로 돌린다. digest는 저장소 변수 `CI_BASE_IMAGE_DIGEST`이며 base-image 워크플로가 게시한 값을 옮겨 적는다. 변수가 비면 job이 시작 단계에서 실패하며 성공으로 간주하지 않는다.
+
+- **서비스 격리**: GitHub의 컨테이너 job 안에서는 Compose를 띄울 수 없어 `integration` job은 PostgreSQL·Meilisearch를 job `services`로 둔다. 자격 증명은 `compose.test.yaml`과 같은 테스트 값이다. `cargo xtask test --external-services`는 Compose를 띄우지 않고, `FVOCI_TEST_PG_HOST_PORT`(테스트 관리자 `fvoci`로 닿는 PostgreSQL의 `호스트:포트`)나 `FVOCI_TEST_SEARCH_URL`(Meilisearch)이 없으면 실패하며 `--oidc`면 `FVOCI_TEST_OIDC_ISSUER`도 요구한다. 세 DB 역할 주소와 `DATABASE_URL`은 xtask가 그 호스트·포트와 테스트 자격 증명으로 만든다(밖에서 준 `DATABASE_URL`은 쓰지 않는다). `FVOCI_TEST_S3_ENDPOINT`가 없으면 S3 테스트(`s3_*`)는 NOT RUN으로 표시한다. 그래서 `integration` job은 `oidc_*`·`s3_*`·`supabase_*`를 빼고 돌며, 그 job이 돌리는 테스트는 `oidc` job도 모두 돌린다. 로컬은 `cargo xtask test`(Compose)로 같은 테스트를 돌린다.
+- **OIDC 로그인 테스트(`oidc` job)**: 컨테이너 job에서는 Compose를 띄울 수 없으므로 GitHub 호스트 러너(`ubuntu-24.04`)에서 `compose.test.yaml`의 `oidc` 프로필(PostgreSQL·Meilisearch·SeaweedFS·Keycloak. SeaweedFS는 프로필이 없어 함께 뜨고, S3 테스트도 이 job에서 돈다)을 띄운다. 테스트는 다른 job과 같은 베이스 이미지 digest 안에서 같은 진입점 `cargo xtask test --external-services --oidc`로 돈다. 테스트 컨테이너는 Compose 네트워크에 붙고 체크아웃만 마운트한다(Docker 소켓은 넘기지 않음). 프로젝트명 `fvoci-ci-<run_id>-<run_attempt>`로 실행마다 컨테이너·네트워크·볼륨을 분리하고, PostgreSQL은 tmpfs라 매번 빈 DB에서 시작하며, 결과와 상관없이 `down --volumes`로 지운다.
 - **셀프호스트 Supabase 테스트(`supabase` job, D-88): D-64의 이미지 계약 예외.**
   - **근거**: `cargo xtask test --supabase`는 xtask가 공식 Supabase 구성을 받아 호스트 Docker로 Compose를 띄운다. 기동에 실패하면
     정리하기 전에 컨테이너 상태·healthcheck 기록·로그를 그 Docker에서 읽는다. base 이미지에는 Docker CLI가 없고 Docker 소켓도
@@ -334,7 +343,7 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 
 ### 12.4 남은 제한
 
-- CI에서 OIDC 통합 테스트를 돌리려면 Keycloak을 인자와 함께 띄울 방법이 필요하다(호스트 runner의 Compose 또는 테스트용 Keycloak 이미지 게시). 새 이미지 게시는 승인 대상이라 보류했다.
+- (해소됨) 이 조각에서는 CI에서 Keycloak을 인자와 함께 띄울 방법이 없어 OIDC 통합 테스트를 보류했다. 지금은 호스트 러너의 Compose로 Keycloak을 띄우는 `oidc` job(10절)이 돌린다.
 - `/auth/login` 요청 빈도 제한은 없다. 만료 행은 요청마다 최대 100개씩 지운다.
 - 여러 서버 인스턴스 실행은 검증하지 않았다(디스커버리 캐시는 인스턴스별).
 
@@ -509,9 +518,10 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 
 ## 27. 백그라운드 작업 (2026-10-17, O-19 해소, 마이그레이션 0021)
 
-- **구조(O-19 권장안 채택)**: 한 바이너리가 API와 작업을 함께 갖고 `FVOCI_ROLE`로 나눈다. `all`(기본, 셀프호스트 한 프로세스), `api`(HTTP만), `worker`(작업만, HTTP를 열지 않음). 간격은 `FVOCI_WORKER_INTERVAL_SECS`(기본 60초). 별도 작업 서비스·외부 큐는 들이지 않았다.
+- **구조(O-19 권장안 채택)**: 한 바이너리가 API와 작업을 함께 갖고 `FVOCI_ROLE`로 나눈다. `all`(기본, 셀프호스트 한 프로세스), `api`(HTTP만, 백그라운드 작업은 하나도 하지 않음), `worker`(작업만, HTTP를 열지 않음). 간격은 `FVOCI_WORKER_INTERVAL_SECS`(기본 60초). 별도 작업 서비스·외부 큐는 들이지 않았다.
 - **주기 작업**: 만료된 휴지통 영구 삭제(매시간, D-41), 반복 업무 회차 맞추기(15분마다, D-31). 반복 회차 맞추기는 반복을 항목 순으로 돌며 그 항목의 세 열을 칸반 이동·항목 동기화와 같은 순서(완료 → 진행 중 → 할 일)로 먼저 잡는다(0089, 감사 S3: 반복마다 뿌리 열만 잡아 사용자 이동과 교착이 났다). `scheduled_runs` 표와 이름별 잠금(`app_claim_schedule`)으로 여러 프로세스가 떠 있어도 간격마다 한 번만 돈다. 한 묶음·한 반복이 실패해도 나머지는 계속하고 경고만 남긴다.
-- **권한 경계**: 작업은 사용자 문맥 없이 `app_system_purge_expired`·`app_system_recurrence_tick`만 부른다. 둘 다 정책이 이미 정한 일(만료분만 삭제, 오늘까지와 다음 회차만 생성)만 하고 같은 일을 두 번 해도 결과가 같다. HTTP 경로는 이 함수를 부르지 않는다. 본문은 사용자 경로와 같은 함수(`app_sync_task_series_as`·`app_purge_batch_as`)를 쓰고 권한 확인만 건너뛴다. 작업용 DB 계정을 앱 계정과 나누는 일은 아직 하지 않았다(같은 `fvoci_app`로 실행). 운영에서 분리가 필요하면 다음 조각에서 `db bootstrap`에 작업 역할을 더한다.
+  - 이후 더해진 작업(현재 목록은 `crates/server/src/worker.rs`): 확인 간격마다 저장소 정리(31절)와 검색 색인 반영(28절), 휴지통 만료와 같은 매시간 묶음의 이전 파일 버전 정리(49절, D-56), 매시간 업무 기한 알림(36절)과 항목 알림(44절). 알림·색인·저장소 정리는 요청 처리 경로가 대신하지 않으므로 `api` 역할만 띄우면 하지 않는다.
+- **권한 경계**: 작업은 사용자 문맥 없이 정책에 묶인 `app_system_*` 함수만 부른다. 이 조각에서는 `app_system_purge_expired`·`app_system_recurrence_tick` 둘이었다. 둘 다 정책이 이미 정한 일(만료분만 삭제, 오늘까지와 다음 회차만 생성)만 하고 같은 일을 두 번 해도 결과가 같다. HTTP 경로는 이 함수를 부르지 않는다. 본문은 사용자 경로와 같은 함수(`app_sync_task_series_as`·`app_purge_batch_as`)를 쓰고 권한 확인만 건너뛴다. 작업용 DB 계정을 앱 계정과 나누는 일은 아직 하지 않았다(같은 `fvoci_app`로 실행). 운영에서 분리가 필요하면 다음 조각에서 `db bootstrap`에 작업 역할을 더한다.
 - **감사(D-57)**: 작업이 한 일은 주체가 없으므로 `actor`를 비우고 detail에 `system: true`(휴지통은 `reason: retention`)를 남긴다. 반복 회차의 `created_by`는 반복을 정한 사람이다.
 - **사용자 경로 유지**: 관리자의 만료 비우기와 쓰기 권한으로 항목을 열 때의 회차 동기화는 그대로 둔다(작업 프로세스가 없거나 멈췄을 때 따라잡기).
 - **검증**: 통합 테스트 1건(만료된 묶음만 영구 삭제하고 system 감사, 지운 다음 회차를 다시 만들고 system 감사, 두 번째 실행은 할 일 없음, 동시에 두 번 돌려도 주기 작업은 한 번).
