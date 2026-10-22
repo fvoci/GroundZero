@@ -14,6 +14,11 @@ export function storedDocFont(): DocFont {
   }
 }
 
+/** 지금 화면에 적용된 선택. 저장소를 쓸 수 없는 브라우저에서는 저장한 값과 다를 수 있다(이 화면에만 적용). */
+export function appliedDocFont(): DocFont {
+  return document.documentElement.dataset.docFont === 'serif' ? 'serif' : 'sans';
+}
+
 /** 화면에 적용한다(`:root[data-doc-font='serif']`가 문서 본문 서체를 바꾼다). */
 export function applyDocFont(font: DocFont): void {
   if (font === 'serif') document.documentElement.dataset.docFont = 'serif';

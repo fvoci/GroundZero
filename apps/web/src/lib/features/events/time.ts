@@ -94,7 +94,7 @@ export function instantOf(wall: string, timeZone: string): string {
   return new Date(Math.max(before, after)).toISOString();
 }
 
-/** 표시용 시각 `HH:mm`(보는 사람의 시간대). */
+/** 그 시간대의 벽시계 시각 `HH:mm`(정렬 키 등). 화면에 보이는 시각은 표시 설정을 따르는 `formatClock`으로(D-81). */
 export function clock(iso: string, timeZone: string): string {
   return wallTime(iso, timeZone).slice(11);
 }

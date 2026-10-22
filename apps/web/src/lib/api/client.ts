@@ -96,6 +96,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 일정 반복 저장이 그사이 바뀐 규칙과 부딪혔다(409 `rule_conflict`, 감사 W21). 서버가 거절하며 함께 준 지금 일정을
+ * 담는다. 반복 편집기는 저장 실패를 던진 오류로 받으므로 결과 값이 아니라 `ApiError`로 둔다.
+ */
+export class RuleConflict extends ApiError {
+  constructor(readonly current: EventView) {
+    super(409, 'rule_conflict', 'rule_conflict');
+    this.name = 'RuleConflict';
+  }
+}
+
 /** 네트워크 실패(응답 없음). 같은 request_id로 재시도할 수 있다. */
 export class NetworkError extends Error {
   constructor(message: string) {
@@ -1039,8 +1050,6 @@ export interface TaskView {
   estimate_minutes: number | null;
   tags: string[];
   milestone: boolean;
-  /** 같은 항목 안의 선행 업무 id(`predecessors`와 같은 순서). */
-  predecessor_ids: string[];
   /** 선행 관계: 선행 업무, 종류, 지연일(D-91). 후속 업무는 다른 업무의 이 목록을 거꾸로 찾는다. */
   predecessors: TaskLinkView[];
   /** 반복 업무의 회차면 그 반복. */
@@ -1088,6 +1097,12 @@ export type LinkKind = 'FS' | 'SS' | 'FF' | 'SF';
 export const LINK_KINDS: readonly LinkKind[] = ['FS', 'SS', 'FF', 'SF'];
 /** 지연일 상한(서버와 같다). */
 export const MAX_LAG_DAYS = 3650;
+
+/** 관계 편집을 시작한 때의 종류·지연일(관계 설정의 기준 조건). */
+export interface LinkBase {
+  kind: LinkKind;
+  lag_days: number;
+}
 
 export interface TaskLinkView {
   task_id: string;
@@ -1164,7 +1179,7 @@ function parseShiftProposal(value: Json): ShiftProposalView {
     from_due_date: optStr(o, 'from_due_date'),
     start_date: optStr(o, 'start_date'),
     due_date: optStr(o, 'due_date'),
-    causes: o.causes === undefined ? [] : parseList(o.causes, parseShiftCause),
+    causes: parseList(o.causes, parseShiftCause),
   };
 }
 
@@ -1257,12 +1272,7 @@ export function parseTask(value: Json): TaskView {
     estimate_minutes: optInt(o, 'estimate_minutes'),
     tags: strings(o.tags),
     milestone: bool(o, 'milestone'),
-    predecessor_ids: strings(o.predecessor_ids),
-    // 옛 응답(종류 없음)은 모두 종료 후 시작·지연 0이다.
-    predecessors:
-      o.predecessors === undefined
-        ? strings(o.predecessor_ids).map((id) => ({ task_id: id, kind: 'FS', lag_days: 0 }))
-        : parseList(o.predecessors, parseTaskLink),
+    predecessors: parseList(o.predecessors, parseTaskLink),
     series:
       o.series === null || o.series === undefined
         ? null
@@ -2222,7 +2232,6 @@ async function expectOk<T>(
 }
 
 export const api = {
-  health: () => expectOk('GET', '/healthz', parseHealth),
   authInfo: () =>
     expectOk('GET', '/api/auth-info', (v): AuthInfo => ({
       oidc_enabled: bool(rec(v, 'auth info'), 'oidc_enabled'),
@@ -2537,11 +2546,11 @@ export const api = {
       template_id: templateId,
     }),
   sharedWithMe: () => expectOk('GET', '/api/me/shared', (v) => parseList(v, parseSharedView)),
-  setSettings: (id: string, visibility: 'workspace' | 'private', allowCopy: boolean) =>
-    expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, {
-      visibility,
-      allow_copy: allowCopy,
-    }),
+  /** 바꾸는 칸만 보낸다. 없는 칸은 서버의 지금 값 그대로다. */
+  setSettings: (
+    id: string,
+    change: { visibility?: 'workspace' | 'private'; allow_copy?: boolean },
+  ) => expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, change),
   shares: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/shares`, (v) =>
       parseList(v, parseShareView),
@@ -2761,34 +2770,38 @@ export const api = {
       parseSchedulePlan,
       { kind, lag_days: lagDays },
     ),
-  addPredecessor: (id: string, predecessorId: string) =>
-    expectOk(
-      'PUT',
-      `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
-      parseTaskDetail,
-    ),
   /**
-   * 관계를 그 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다(한 트랜잭션). 승인 목록이 그사이 맞지 않게
-   * 됐으면 `shift_conflict`(아무것도 바뀌지 않았으니 다시 미리 본다).
+   * 관계를 그 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다(한 트랜잭션). `base`는 편집을 시작한 관계의
+   * 종류·지연일이다(새 관계면 `null`). 그사이 관계가 바뀌었으면 `link_conflict`, 승인 목록이 맞지 않게 됐으면
+   * `shift_conflict`(둘 다 아무것도 바뀌지 않았고 최신본을 준다).
    */
   async setPredecessor(
     id: string,
     predecessorId: string,
     kind: LinkKind,
     lagDays: number,
+    base: LinkBase | null,
     successorShifts: SuccessorShift[] = [],
   ): Promise<
-    { kind: 'updated'; task: TaskDetailView } | { kind: 'shift_conflict'; current: TaskDetailView }
+    | { kind: 'updated'; task: TaskDetailView }
+    | { kind: 'shift_conflict'; current: TaskDetailView }
+    | { kind: 'link_conflict'; current: TaskDetailView }
   > {
     const { status, json } = await request(
       'PUT',
       `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
-      { kind, lag_days: lagDays, successor_shifts: successorShifts },
+      {
+        kind,
+        lag_days: lagDays,
+        base: base === null ? null : { kind: base.kind, lag_days: base.lag_days },
+        successor_shifts: successorShifts,
+      },
     );
     if (status === 409 && isRecord(json) && json.current !== undefined) {
       const body = rec(json, 'conflict');
-      if (str(body, 'error') === 'shift_conflict') {
-        return { kind: 'shift_conflict', current: parseTaskDetail(body.current) };
+      const error = str(body, 'error');
+      if (error === 'shift_conflict' || error === 'link_conflict') {
+        return { kind: error, current: parseTaskDetail(body.current) };
       }
     }
     if (status !== 200) fail(status, json);
@@ -2853,10 +2866,30 @@ export const api = {
     expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/recurrences/sync`, (v) =>
       int(rec(v, 'sync'), 'created'),
     ),
-  setEventRecurrence: (id: string, rule: RecurrenceRule | null) =>
-    expectOk('PUT', `/api/events/${encodeURIComponent(id)}/recurrence`, parseEvent, {
-      rule: rule === null ? null : { ...rule },
-    }),
+  /**
+   * 일정 반복 정하기. `base`는 편집을 시작한 규칙(반복이 없었으면 null)이다. 그사이 규칙이 바뀌었으면 서버가 아무것도
+   * 바꾸지 않고 409 `rule_conflict`와 지금 일정으로 거절한다(`RuleConflict`).
+   */
+  async setEventRecurrence(
+    id: string,
+    rule: RecurrenceRule | null,
+    base: RecurrenceRule | null,
+  ): Promise<EventView> {
+    const { status, json } = await request(
+      'PUT',
+      `/api/events/${encodeURIComponent(id)}/recurrence`,
+      { rule: rule === null ? null : { ...rule }, base: base === null ? null : { ...base } },
+    );
+    if (
+      status === 409 &&
+      isRecord(json) &&
+      json.error === 'rule_conflict' &&
+      json.current !== undefined
+    )
+      throw new RuleConflict(parseEvent(json.current));
+    if (status !== 200) fail(status, json);
+    return parseEvent(json);
+  },
   excludeOccurrence: (id: string, date: string) =>
     expectOk('POST', `/api/events/${encodeURIComponent(id)}/exclusions`, none, { date }),
   trashDocument: (id: string) =>
@@ -3148,7 +3181,8 @@ export const api = {
   item: (id: string) => expectOk('GET', `/api/items/${encodeURIComponent(id)}`, parseItem),
   updateItem: (
     id: string,
-    input: { title: string; description: string; visibility: 'workspace' | 'private' },
+    /** 공개 범위는 바꿀 때만 보낸다(없으면 서버의 지금 값 그대로). */
+    input: { title: string; description: string; visibility?: 'workspace' | 'private' },
   ) => expectOk('PUT', `/api/items/${encodeURIComponent(id)}`, parseItem, input),
   archiveItem: (id: string, archived: boolean) =>
     expectOk('PUT', `/api/items/${encodeURIComponent(id)}/archived`, parseItem, { archived }),

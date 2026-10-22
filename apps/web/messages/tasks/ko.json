@@ -261,6 +261,8 @@
   "tasks_link_editing": "고치는 관계: 선행 업무 {task} → 이 업무",
   "tasks_link_saved": "관계를 저장했습니다.",
   "tasks_link_removed": "관계를 지웠습니다.",
+  "tasks_link_changed": "그사이 다른 곳에서 이 관계가 바뀌어 저장하지 않았습니다. 지금: {now}. 입력한 값으로 바꾸려면 다시 저장하세요.",
+  "tasks_link_gone": "그사이 다른 곳에서 이 관계가 지워져 저장하지 않았습니다.",
   "tasks_add": "추가",
   "tasks_recurrence": "반복",
   "tasks_occurrence_note": "반복 업무의 {date} 회차입니다. 규칙은 첫 회차에서 바꿉니다.",

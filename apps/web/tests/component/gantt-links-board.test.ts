@@ -50,7 +50,6 @@ function task(
     estimate_minutes: null,
     tags: [],
     milestone: false,
-    predecessor_ids: preds,
     predecessors: preds.map((id) => ({ task_id: id, kind: 'FS' as const, lag_days: 0 })),
     series: null,
     occurrence_date: null,

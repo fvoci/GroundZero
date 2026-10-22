@@ -27,7 +27,6 @@ function detail(id: string, title: string, version: number): TaskDetailView {
     estimate_minutes: null,
     tags: [],
     milestone: false,
-    predecessor_ids: [],
     predecessors: [],
     series: null,
     occurrence_date: null,
