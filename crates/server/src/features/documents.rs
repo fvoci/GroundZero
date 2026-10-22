@@ -1342,27 +1342,39 @@ pub enum MoveReply {
     Changed(MovePreview),
 }
 
-/// 이동 트랜잭션이 잠금 하나를 기다리는 한도. 열린 방은 이동을 자기 명령 안에서 하므로(#71) 그동안 편집과 권한
-/// 재확인이 멈춘다. 끝없이 기다리지 않고 409로 돌려준다(옮기지 않음, 편집은 방에 남는다, #64 리뷰). 잠금마다의 한도라
+/// 이동·복원 트랜잭션이 잠금 하나를 기다리는 한도. 열린 방은 이동·복원을 자기 명령 안에서 하므로(#71) 그동안 편집과 권한
+/// 재확인이 멈춘다. 끝없이 기다리지 않고 409로 돌려준다(하지 않음, 편집은 방에 남는다, #64 리뷰). 잠금마다의 한도라
 /// 가장 오래 기다려도 잠그는 문장 수의 몇 배에서 끝난다. 다른 이동·항목 변경은 보통 이보다 훨씬 짧게 잠근다.
-const MOVE_LOCK_LIMIT: &str = "10s";
+pub(crate) const LOCK_LIMIT: &str = "10s";
 
-/// 이동 트랜잭션의 잠금 대기가 한도를 넘은 것(55P03)은 409(옮기지 않음, 다시 하면 된다). 그 밖은 `from_db_function`.
-fn move_lock_error(err: sqlx::Error) -> AppError {
+/// 이 트랜잭션에만 잠금 대기 한도(`LOCK_LIMIT`)를 건다(세션 풀러의 연결에 남지 않는다).
+pub(crate) async fn limit_lock_wait(tx: &mut UserTx) -> Result<(), AppError> {
+    sqlx::query(&format!("SET LOCAL lock_timeout = '{LOCK_LIMIT}'"))
+        .execute(tx.conn())
+        .await?;
+    Ok(())
+}
+
+/// 잠금 대기가 한도를 넘은 것(55P03)은 409(`refused`: 하지 않았다, 다시 하면 된다). 그 밖은 `from_db_function`.
+pub(crate) fn lock_limit_error(err: sqlx::Error, refused: &'static str) -> AppError {
     if err
         .as_database_error()
         .is_some_and(|db| db.code().as_deref() == Some("55P03"))
     {
-        return AppError::Conflict(
-            "another change is holding the document or its places; nothing was moved, try again"
-                .into(),
-        );
+        return AppError::Conflict(refused.into());
     }
     AppError::from_db_function(err)
 }
 
+fn move_lock_error(err: sqlx::Error) -> AppError {
+    lock_limit_error(
+        err,
+        "another change is holding the document or its places; nothing was moved, try again",
+    )
+}
+
 /// 이동 트랜잭션(잠금 → 미리보기 다시 계산·확인 → 옮김). 열린 방이 있으면 방이 자기 명령 안에서 부르고, 없으면 요청
-/// 처리기가 방이 새로 열리지 않게 막은 채 부른다(`Rooms::move_document`). 잠금은 `MOVE_LOCK_LIMIT`까지만 기다린다.
+/// 처리기가 방이 새로 열리지 않게 막은 채 부른다(`Rooms::move_document`). 잠금은 `LOCK_LIMIT`까지만 기다린다.
 pub(crate) async fn move_in_db(
     db: &Db,
     user: UserId,
@@ -1370,10 +1382,7 @@ pub(crate) async fn move_in_db(
     input: &MoveDocument,
 ) -> Result<MoveReply, AppError> {
     let mut tx = db.begin_as(user).await?;
-    // 이 트랜잭션에만 건다(세션 풀러의 연결에 남지 않는다).
-    sqlx::query(&format!("SET LOCAL lock_timeout = '{MOVE_LOCK_LIMIT}'"))
-        .execute(tx.conn())
-        .await?;
+    limit_lock_wait(&mut tx).await?;
     // 잠금 순서(자리 → 문서 행 → 항목 → 번호): 원래 자리와 새 자리를 먼저 잠근다.
     sqlx::query("SELECT app_lock_move($1, $2, $3)")
         .bind(id)

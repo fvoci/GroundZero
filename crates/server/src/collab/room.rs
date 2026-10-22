@@ -393,22 +393,6 @@ impl Rooms {
         ))
     }
 
-    /// 문서가 다른 길로 바뀌었다(복원). 방을 저장 없이 닫고 다시 열게 한다.
-    pub async fn reset(&self, doc: DocumentId) {
-        let handle = self.lock().get(&doc).cloned();
-        if let Some(handle) = handle {
-            let _ignored = handle
-                .tx
-                .send(Command::Shutdown {
-                    reason: CloseReason::Reload,
-                    snapshot: false,
-                    saved: None,
-                    fallback: None,
-                })
-                .await;
-        }
-    }
-
     /// 방이 문서를 다른 워크스페이스로 옮겼다. 방이 닫히기까지 그 워크스페이스에 속하게 한다(실시간 끄기·파일 버전
     /// 지우기가 워크스페이스로 방을 찾는다).
     fn moved(&self, doc: DocumentId, workspace: Uuid) {
@@ -478,7 +462,7 @@ impl Rooms {
     /// 자기 명령 안에서 옮긴다(체크포인트 → 이동 → 리비전 → 연결 닫기, `Command::Move`): 그동안 온 편집은 방의 대기열에서
     /// 기다려, 확인받은 편집이 옮긴 곳에서 리비전이 되지 못하는 일이 없다. 방이 없으면 방 없이 남은 실시간 상태를 먼저
     /// 리비전으로 남기고(남기지 못하면 옮기지 않고 409) 옮긴다. 방의 답은 복원처럼 시간 제한 없이 기다린다(여기서 그만두면
-    /// 방이 옮겼는데 실패로 답할 수 있다). 방 안의 이동 트랜잭션은 잠금을 `documents::MOVE_LOCK_LIMIT`까지만 기다리므로 그
+    /// 방이 옮겼는데 실패로 답할 수 있다). 방 안의 이동 트랜잭션은 잠금을 `documents::LOCK_LIMIT`까지만 기다리므로 그
     /// 답도 끝이 있다. 방이 바쁘면 (대기열이 참) 409. 방이 이 명령을 받기 전에 닫혔으면 옮기지 않았으므로 다시 본다.
     pub async fn move_document(
         &self,
@@ -643,26 +627,13 @@ impl Rooms {
             Err(AppError::Conflict(_)) => return Ok(()),
             Err(err) => return Err(err),
         };
-        // 본문에서 새로 만들었으면(저장된 상태가 없거나 그 뒤로 본문이 바뀜) 남길 것이 없다. 상태 행도 만들지 않는다.
-        if room.persisted.is_none() {
-            return Ok(());
-        }
-        // 방을 열기만 했거나 이미 리비전으로 남긴 상태도 저장돼 있다. 본문을 Yjs로 옮긴 모양과 같으면 남길 것이 없다(편집기가
-        // 저장한 본문의 null 속성 등은 Yjs에 남지 않아 본문과 그대로 비교하면 옮길 때마다 리비전이 생긴다).
-        let live = {
-            let fragment = loaded.get_or_insert_xml_fragment(FRAGMENT);
-            convert::read_doc(&loaded.transact(), &fragment)
-        };
-        if live == live_form(&room.base_body) {
+        // 이어받은 상태에 아직 리비전이 아닌 편집이 있을 때만 남긴다(`load`가 본다). 본문에서 새로 만들었으면(저장된 상태가
+        // 없거나 그 뒤로 본문이 바뀜) 남길 것이 없고 상태 행도 만들지 않는다.
+        if !room.dirty_since_snapshot {
             return Ok(());
         }
         room.doc = Some(loaded);
-        room.dirty_since_snapshot = true;
-        let stand_in = match change {
-            Change::Move => Some(user),
-            Change::Restore => None,
-        };
-        room.checkpoint(stand_in, change)
+        room.checkpoint(change, user)
             .await
             .map_or(Ok(()), |reason| Err(AppError::Conflict(reason.into())))
     }
@@ -923,12 +894,16 @@ impl Room {
             }
             Command::Move { request, done } => self.move_document(request, done, rx).await,
             Command::Restore { request, done } => {
+                if let Err(err) = self.ensure_loaded(request.user).await {
+                    let _ignored = done.send(Err(err));
+                    return false;
+                }
                 self.flush().await;
                 // 리비전으로 남기지 않은 편집을 먼저 남긴다. 남겼는지 확인되지 않으면 복원하지 않는다(그 편집은 방에 남는다).
                 // 남겼으면 그 리비전 때문에 화면의 기준이 지나 아래 복원이 충돌로 알린다(사람이 지금 내용을 보고 다시 한다).
-                // 복원하는 사람은 대신 남기지 않는다: 남길 수 있는 사람은 고친 사람과 연결된 작성자뿐이다.
+                // 복원하는 사람은 대신 남기지 않는다(`checkpoint`): 남길 수 있는 사람은 고친 사람과 다른 연결된 작성자다.
                 if self.dirty_since_snapshot
-                    && let Some(reason) = self.checkpoint(None, Change::Restore).await
+                    && let Some(reason) = self.checkpoint(Change::Restore, request.user).await
                 {
                     let _ignored = done.send(Err(AppError::Conflict(reason.into())));
                     return true;
@@ -992,14 +967,18 @@ impl Room {
         done: oneshot::Sender<Result<MoveReply, AppError>>,
         rx: &mut mpsc::Receiver<Command>,
     ) -> bool {
-        self.flush().await;
         // 기다리던 요청이 이미 끝났으면(연결이 끊김) 체크포인트 리비전도 남기지 않는다.
         if done.is_closed() {
             return true;
         }
+        if let Err(err) = self.ensure_loaded(request.user).await {
+            let _ignored = done.send(Err(err));
+            return false;
+        }
+        self.flush().await;
         // 리비전으로 남기지 않은 편집을 먼저 남긴다. 남겼는지 확인되지 않으면 옮기지 않는다(그 편집은 방에 남는다).
         if self.dirty_since_snapshot
-            && let Some(reason) = self.checkpoint(Some(request.user), Change::Move).await
+            && let Some(reason) = self.checkpoint(Change::Move, request.user).await
         {
             let _ignored = done.send(Err(AppError::Conflict(reason.into())));
             return true;
@@ -1010,7 +989,7 @@ impl Room {
         }
         // 이동 트랜잭션이 잠금을 기다리는 동안 이 방은 주기 재확인을 하지 못한다. 그동안 대기열에 들어와 커밋 전 것으로
         // 받을 편집은 옛 자리의 권한으로 판단하므로, 바로 앞에서 세션과 옛 자리 권한을 다시 확인해 둔다(#64 리뷰). 남는
-        // 틈은 잠금 대기(`documents::MOVE_LOCK_LIMIT`)뿐이고 평소 재확인 간격보다 짧다. 세션은 `drain_after_move`가 한 번
+        // 틈은 잠금 대기(`documents::LOCK_LIMIT`)뿐이고 평소 재확인 간격보다 짧다. 세션은 `drain_after_move`가 한 번
         // 더 본다.
         self.recheck().await;
         let (mut outcome, committed_at) = match documents::move_in_db(
@@ -1139,6 +1118,23 @@ impl Room {
         }
     }
 
+    /// 방이 아직 문서를 불러오지 않았으면 불러온다(옮기기·복원하는 사람의 권한으로). 방을 연 연결의 참여 요청보다 이동·복원
+    /// 명령이 먼저 닿으면(방 목록에 넣은 뒤 참여 요청을 보내기 전에 `Rooms::hold`가 그 방을 찾음) 저장 대기 상태를 이어받지
+    /// 않은 채 복원·이동해 그 편집을 잃을 수 있다(#64 반박 검증). 실시간이 꺼졌으면(409) 이어받을 상태가 없다.
+    async fn ensure_loaded(&mut self, user: UserId) -> Result<(), AppError> {
+        if self.doc.is_some() {
+            return Ok(());
+        }
+        match self.load(user).await {
+            Ok(doc) => {
+                self.doc = Some(doc);
+                Ok(())
+            }
+            Err(AppError::Conflict(_)) => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
+
     /// 저장된 Yjs 상태(그 뒤로 본문이 바뀌지 않았을 때) 또는 본문에서 방 문서를 만든다. 들어오는 사람의 권한으로 읽는다.
     /// 상태를 이어받으면 그 상태의 편집자(마지막 리비전 뒤로 고친 사람)도 이어받는다: 작성자를 고르는 순서의 앞에 두고
     /// 대신 저장할 때 실제 편집자로 적는다(D-95).
@@ -1181,6 +1177,14 @@ impl Room {
         self.edited_since = editors;
         // 저장된 상태에서 불러왔으니 이 상태는 이미 DB에 있다.
         self.persisted = Some(doc.transact().snapshot().encode_v1());
+        // 앞선 방이 리비전으로 남기지 못한 편집(이미 확인을 받았을 수 있다)을 이어받았으면 아직 리비전이 아니다: 이 방의
+        // 리비전 남기기(복원·이동 앞의 체크포인트, 닫힐 때)가 그 편집도 남기게 한다(#64 반박 검증). 본문을 Yjs로 옮긴 모양과
+        // 같으면(방을 열기만 함·이미 리비전으로 남김, 편집기가 저장한 본문의 null 속성은 Yjs에 남지 않음) 남길 것이 없다.
+        let live = {
+            let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
+            convert::read_doc(&doc.transact(), &fragment)
+        };
+        self.dirty_since_snapshot = live != live_form(&self.base_body);
         Ok(doc)
     }
 
@@ -1552,6 +1556,16 @@ impl Room {
 
     /// `fallback`: 편집한 사람·연결된 작성자 모두 남길 수 없을 때의 작성자(실시간을 끄는 관리자, 옮기는 사람).
     async fn snapshot_with(&mut self, fallback: Option<UserId>) -> bool {
+        self.snapshot_as(fallback, None).await
+    }
+
+    /// `snapshot_with`와 같되 `not_for_others`(복원하는 사람)는 마지막 리비전 뒤로 고친 사람이 아니면 작성자로 고르지 않는다
+    /// (그 사람이 남긴 것처럼 대신 저장하지 않는다).
+    async fn snapshot_as(
+        &mut self,
+        fallback: Option<UserId>,
+        not_for_others: Option<UserId>,
+    ) -> bool {
         if !self.dirty_since_snapshot {
             return true;
         }
@@ -1573,6 +1587,9 @@ impl Room {
         }
         if let Some(admin) = fallback.filter(|a| !authors.contains(a)) {
             authors.push(admin);
+        }
+        if let Some(user) = not_for_others.filter(|u| !self.edited_since.contains(u)) {
+            authors.retain(|a| *a != user);
         }
         for author in authors {
             match self.write_snapshot(author, &body).await {
@@ -1609,18 +1626,22 @@ impl Room {
         false
     }
 
-    /// 옮기거나 복원하기 전 체크포인트: 리비전으로 남기지 않은 편집을 남긴다. `stand_in`: 편집한 사람·연결된 작성자가
-    /// 남길 수 없을 때의 작성자(옮기는 사람. 복원하는 사람은 대신 남기지 않는다). 남겼으면 `None`, 남겼는지 확인되지
-    /// 않으면 하지 않는 이유(409). 다시 해도 남길 수 없는 원인(본문 검사 실패)에는 "다시 하라"고 하지 않는다.
-    async fn checkpoint(
-        &mut self,
-        stand_in: Option<UserId>,
-        change: Change,
-    ) -> Option<&'static str> {
+    /// 옮기거나 복원하기 전 체크포인트: 리비전으로 남기지 않은 편집을 남긴다. `user`(옮기거나 복원하는 사람): 옮길 때는
+    /// 편집한 사람·연결된 작성자가 남길 수 없으면 대신 작성자가 된다(D-95). 복원할 때는 마지막 리비전 뒤로 고친 사람이
+    /// 아니면 연결돼 있어도 대신 남기지 않는다(방이 있든 없든 같다). 남겼으면 `None`, 남겼는지 확인되지 않으면 하지 않는
+    /// 이유(409). 다시 해도 남길 수 없는 원인(본문 검사 실패)에는 "다시 하라"고 하지 않는다.
+    async fn checkpoint(&mut self, change: Change, user: UserId) -> Option<&'static str> {
         self.changed_outside = false;
         self.failed_checks = false;
-        let saved = tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot_with(stand_in)).await;
         let moving = matches!(change, Change::Move);
+        let (stand_in, not_for_others) = if moving {
+            (Some(user), None)
+        } else {
+            (None, Some(user))
+        };
+        let saved =
+            tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot_as(stand_in, not_for_others))
+                .await;
         match saved {
             Ok(true) if !self.changed_outside => None,
             Ok(true) if moving => Some(

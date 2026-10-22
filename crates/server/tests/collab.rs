@@ -3615,3 +3615,172 @@ async fn a_connected_writer_saving_for_an_editor_is_recorded_as_a_stand_in() {
     owner.close().await;
     b.close().await;
 }
+
+/// #64 반박 검증: 방 없이 남은 저장 대기 상태(확인받은 편집)를 다시 연 방(독자 연결이면 충분하다)이 이어받으면 그 편집을
+/// 아직 리비전이 아닌 것으로 보지 않아, 방 안의 복원·이동이 체크포인트를 건너뛰고 그 편집을 잃었다(방 없는 길만 고쳤던 것).
+/// 이제 방이 이어받은 상태가 본문과 다르면 리비전으로 남길 것으로 본다. 방 안 복원에서도 복원하는 사람은 연결돼 있어도
+/// 대신 저장하지 않는다(쓸 수 있는 편집자가 없으면 409, 상태는 남는다).
+#[tokio::test]
+async fn a_room_reopened_on_a_pending_state_saves_it_before_a_restore_or_move() {
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "3600")]))
+            .unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let from = create_workspace(&app, &admin, "다시 연 방 켠 곳").await;
+    let to = create_workspace(&app, &admin, "다시 연 방 끈 곳").await;
+    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let (reader, _) = add_member(&app, &state, &admin, &from, "reader", "reader").await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let restored_doc = common::create_doc(&app, &admin, &from, "다시 연 방 복원").await;
+    let a = restored_doc["id"].as_str().unwrap().to_owned();
+    let moved_doc = common::create_doc(&app, &admin, &from, "다시 연 방 이동").await;
+    let b = moved_doc["id"].as_str().unwrap().to_owned();
+    // 리비전 2(저장 API, 실시간을 켜기 전): 복원하면 본문이 바뀌도록.
+    let saved = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{a}"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "base_revision": 1, "title": "다시 연 방 복원",
+                     "body": { "type": "doc", "content": [{ "type": "paragraph",
+                         "content": [{ "type": "text", "text": "두 번째 판" }] }] } }),
+        ),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{from}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+    let role = |role: &'static str| {
+        let (app, admin, from, writer) = (app.clone(), admin.clone(), from.clone(), writer.clone());
+        async move {
+            let r = send(
+                &app,
+                Method::PUT,
+                &format!("/api/workspaces/{from}/members/{}", writer.id.0),
+                Some(&admin),
+                Some(json!({ "role": role })),
+            )
+            .await;
+            assert!(r.status.is_success(), "{:?}", r.json);
+        }
+    };
+    // 두 문서 모두 작성자가 실시간으로 쓰고 확인받은 뒤 독자가 되어, 방이 리비전을 남기지 못한 채 상태만 남기고 닫힌다.
+    let mut editors = Vec::new();
+    for (id, text) in [(&a, "복원 전 확인받은 글"), (&b, "이동 전 확인받은 글")] {
+        let mut e = connect(addr, Some(&writer), id, true).await.unwrap();
+        e.paragraph(text).await;
+        assert!(e.until(acked).await, "the edit was never acknowledged");
+        editors.push(e);
+    }
+    role("reader").await;
+    // 권한 재확인(3600초)을 기다리지 않고 독자가 된 연결을 닫는다.
+    for e in editors {
+        e.close().await;
+    }
+    for id in [&a, &b] {
+        // 방이 닫히며 남긴 것: 쓸 수 있는 편집자가 없어 저장 대기 상태다.
+        until_no_room(&state, id).await;
+        until_collab_states(&owner, id, true, 1).await;
+    }
+    let restore = |base: i64| {
+        let (app, admin, a) = (app.clone(), admin.clone(), a.clone());
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &format!("/api/documents/{a}/revisions/1/restore"),
+                Some(&admin),
+                Some(json!({ "request_id": new_request_id(), "base_revision": base })),
+            )
+            .await
+        }
+    };
+
+    // 복원하는 관리자가 쓰기 연결로 방을 다시 열었다: 그 상태는 리비전으로 남길 것이지만 고친 사람은 쓸 수 없고, 복원하는
+    // 사람은 대신 남기지 않는다. 복원하지 않고 409, 상태와 리비전은 그대로다.
+    let c = connect(addr, Some(&admin), &a, true).await.unwrap();
+    let refused = restore(2).await;
+    assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
+    assert_eq!(refused.json["error"], "invalid_state", "{:?}", refused.json);
+    assert_eq!(last_revision(&owner, &a).await, (2, admin.id.0));
+    c.close().await;
+    until_no_room(&state, &a).await;
+    assert_eq!(collab_states(&owner, &a, true).await, 1);
+
+    // 고친 사람이 다시 쓸 수 있고 독자만 방을 열었다: 체크포인트가 그 사람의 리비전으로 남기고 복원은 충돌이다.
+    role("writer").await;
+    let r = connect(addr, Some(&reader), &a, true).await.unwrap();
+    let conflict = restore(2).await;
+    assert_eq!(conflict.status, StatusCode::CONFLICT, "{:?}", conflict.json);
+    assert!(
+        conflict.json["current"]["body"]
+            .to_string()
+            .contains("복원 전 확인받은 글"),
+        "the acknowledged edit was restored away: {:?}",
+        conflict.json
+    );
+    assert_eq!(revision_authors(&owner, &a, 3).await, (writer.id.0, None));
+    r.close().await;
+
+    // 독자만 방을 연 문서를 실시간이 꺼진 곳으로 옮긴다: 옮기기 전에 그 상태가 리비전으로 남는다.
+    let r = connect(addr, Some(&reader), &b, true).await.unwrap();
+    let moved = move_to(&app, &admin, &b, &to).await;
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    let after = get_doc(&app, &admin, &b).await;
+    assert_eq!(after["workspace_id"], to.as_str());
+    assert!(
+        after["body"].to_string().contains("이동 전 확인받은 글"),
+        "the acknowledged edit is not in the moved document: {after}"
+    );
+    drop(r);
+    owner.close().await;
+}
+
+/// #64 반박 검증: 복원도 잠금을 끝없이 기다리지 않는다(이동과 같은 한도, 409 `invalid_state`). 방 없는 복원은 그동안 방
+/// 열기를 막으므로 더 중요하다. 막음은 답한 뒤 풀린다.
+#[tokio::test]
+async fn a_restore_held_past_the_lock_limit_is_refused() {
+    let (state, app, addr, admin, _writer, _ws, id) = live_restore_setup("잠금 한도 복원").await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let mut hold = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *hold)
+        .await
+        .unwrap();
+    sqlx::query("SELECT 1 FROM fvoci.documents WHERE id = $1::uuid FOR UPDATE")
+        .bind(&id)
+        .execute(&mut *hold)
+        .await
+        .unwrap();
+    let request = tokio::spawn({
+        let (app, admin, id) = (app.clone(), admin.clone(), id.clone());
+        async move { restore_rev1(&app, &admin, &id, &json!(1)).await }
+    });
+    until_waiting_on_lock("app_restore_document_revision", holder).await;
+    let answered = finishes_within(&request, Duration::from_secs(30)).await;
+    hold.rollback().await.unwrap();
+    assert!(
+        answered,
+        "the restore kept waiting on the lock past the limit"
+    );
+    let refused = request.await.unwrap();
+    assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
+    assert_eq!(refused.json["error"], "invalid_state", "{:?}", refused.json);
+    let doc = fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap());
+    assert!(!state.collab.has_room(doc));
+    let c = connect(addr, Some(&admin), &id, true).await.unwrap();
+    c.close().await;
+    owner.close().await;
+}

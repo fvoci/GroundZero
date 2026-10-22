@@ -21,8 +21,8 @@ use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
-    ConflictBody, Document, SCHEMA_VERSION, access, conflict, document_reply, load_with_access,
-    to_document, validate_body,
+    ConflictBody, Document, SCHEMA_VERSION, access, conflict, document_reply, limit_lock_wait,
+    load_with_access, lock_limit_error, to_document, validate_body,
 };
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
@@ -277,23 +277,19 @@ pub async fn restore(
     // 한다. 그 사이 편집이 끼어들지 않고, 남겼는지 확인되지 않으면 복원하지 않는다(D-27). 방이 없으면 방이 새로 열리지
     // 않게 막은 채 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남긴다(D-95 조건 4, 복원하는 사람은 대신 저장하지 않는다.
     // 남기지 못하면 409). 기준은 화면이 보낸 그대로다: 체크포인트가 리비전을 남겼으면 충돌로 알려 사람이 지금 내용을 보고
-    // 다시 하게 한다. 고칠 수 없는 사람의 요청은 방과 저장 대기 상태를 건드리지 않고 아래에서 거절된다.
+    // 다시 하게 한다. 고칠 수 없는 사람의 요청은 방과 저장 대기 상태를 건드리지 않고 여기서 거절한다(볼 수 없으면 404, 읽기만
+    // 하면 403). 그 사람이 막 쓰기 권한을 얻었더라도 막음·체크포인트 없이 복원하지 않는다(그 사이 열린 방의 편집을 잃지
+    // 않게, #64 반박 검증). 권한의 최종 확인은 복원 함수가 한다.
     let mut tx = state.db.begin_as(user).await?;
-    let can_write = access(&mut tx, id).await?.is_some_and(|a| a.can_write());
+    let access_now = access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
     tx.commit().await?;
-    let outcome = if can_write {
-        state
-            .collab
-            .restore(&state.db, &state.config.limits, request)
-            .await?
-    } else {
-        let outcome = restore_in_db(&state.db, &state.config.limits, &request).await?;
-        // 위 확인 뒤 쓰기 권한을 얻어 복원했고 그 사이 방이 열려 있으면 저장 없이 닫고 복원된 본문으로 다시 열게 한다(D-70).
-        if outcome == "restored" {
-            state.collab.reset(id).await;
-        }
-        outcome
-    };
+    if !access_now.can_write() {
+        return Err(AppError::Forbidden);
+    }
+    let outcome = state
+        .collab
+        .restore(&state.db, &state.config.limits, request)
+        .await?;
     let mut tx = state.db.begin_as(user).await?;
     let (row, access) = load_with_access(&mut tx, id).await?;
     tx.commit().await?;
@@ -311,6 +307,8 @@ pub(crate) async fn restore_in_db(
     request: &RestoreRequest,
 ) -> Result<String, AppError> {
     let mut tx = db.begin_as(request.user).await?;
+    // 열린 방은 이 복원을 자기 명령 안에서 한다: 문서·항목 잠금을 한도까지만 기다린다(이동과 같다, `documents::LOCK_LIMIT`).
+    limit_lock_wait(&mut tx).await?;
     // 복원할 내용도 지금의 한도(제목 길이·본문 크기·참조 수)를 지켜야 한다. 한도를 낮춘 뒤 옛 리비전으로
     // 한도를 넘는 문서가 다시 생기지 않게 한다. 볼 수 없거나 없는 리비전은 아래 함수와 같이 404.
     let source: Option<(String, Value)> = sqlx::query_as(
@@ -334,7 +332,12 @@ pub(crate) async fn restore_in_db(
             .bind(crate::db::new_ids(2))
             .fetch_one(tx.conn())
             .await
-            .map_err(AppError::from_db_function)?;
+            .map_err(|err| {
+                lock_limit_error(
+                    err,
+                    "another change is holding the document; nothing was restored, try again",
+                )
+            })?;
     tx.commit().await?;
     Ok(outcome)
 }
