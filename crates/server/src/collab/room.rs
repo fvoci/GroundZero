@@ -462,8 +462,9 @@ impl Rooms {
     /// 자기 명령 안에서 옮긴다(체크포인트 → 이동 → 리비전 → 연결 닫기, `Command::Move`): 그동안 온 편집은 방의 대기열에서
     /// 기다려, 확인받은 편집이 옮긴 곳에서 리비전이 되지 못하는 일이 없다. 방이 없으면 방 없이 남은 실시간 상태를 먼저
     /// 리비전으로 남기고(남기지 못하면 옮기지 않고 409) 옮긴다. 방의 답은 복원처럼 시간 제한 없이 기다린다(여기서 그만두면
-    /// 방이 옮겼는데 실패로 답할 수 있다). 방 안의 이동 트랜잭션은 잠금을 `documents::LOCK_LIMIT`까지만 기다리므로 그
-    /// 답도 끝이 있다. 방이 바쁘면 (대기열이 참) 409. 방이 이 명령을 받기 전에 닫혔으면 옮기지 않았으므로 다시 본다.
+    /// 방이 옮겼는데 실패로 답할 수 있다). 방 안의 이동 트랜잭션은 잠금 하나를 `documents::LOCK_LIMIT`까지만 기다리므로
+    /// 잠금 대기는 끝이 있다(요청 전체의 상한은 아니다). 방이 바쁘면 (대기열이 참) 409. 방이 이 명령을 받기 전에
+    /// 닫혔으면 옮기지 않았으므로 다시 본다.
     pub async fn move_document(
         &self,
         db: &Db,
@@ -989,19 +990,12 @@ impl Room {
         if done.is_closed() {
             return true;
         }
-        // 이동 트랜잭션이 잠금을 기다리는 동안 이 방은 주기 재확인을 하지 못한다. 그동안 대기열에 들어와 커밋 전 것으로
-        // 받을 편집은 옛 자리의 권한으로 판단하므로, 바로 앞에서 세션과 옛 자리 권한을 다시 확인해 둔다(#64 리뷰). 남는
-        // 틈은 잠금 대기(`documents::LOCK_LIMIT`)뿐이고 평소 재확인 간격보다 짧다. 세션은 `drain_after_move`가 한 번
-        // 더 본다.
+        // 커밋 전에 대기열에 들어온 편집은 옛 자리의 권한으로 판단한다. 바로 앞에서 세션과 옛 자리 권한을 다시 확인하고,
+        // 이동 트랜잭션이 잠금을 기다리는 동안에도 재확인 간격마다 다시 본다(`move_rechecking`, #64 리뷰·W1b). 커밋 뒤에는
+        // 옛 자리 권한을 볼 수 없으므로 남는 창은 마지막 재확인 ~ 커밋이고 그 길이는 재확인 간격을 넘지 않는다(문서화된
+        // 권한 철회 지연과 같다). 세션은 `drain_after_move`가 한 번 더 본다.
         self.recheck().await;
-        let (mut outcome, committed_at) = match documents::move_in_db(
-            &self.db,
-            request.user,
-            self.doc_id,
-            &request.input,
-        )
-        .await
-        {
+        let (mut outcome, committed_at) = match self.move_rechecking(&request).await {
             Ok(MoveReply::Moved {
                 outcome,
                 committed_at,
@@ -1047,6 +1041,28 @@ impl Room {
         false
     }
 
+    /// 이동 트랜잭션을 하며, 그것이 잠금을 기다리는 동안 재확인 간격마다 연결의 세션·옛 자리 권한을 다른 DB 연결로 다시
+    /// 본다(`recheck_peers`). 잃은 연결은 4403으로 닫아 그 대기 편집이 커밋 뒤에 들어가지 않게 한다(확인받지 않은 것뿐이다:
+    /// 이 명령 동안에는 저장 확인을 보내지 않는다). 실시간이 꺼진 것을 알아도 여기서는 리비전을 남기거나 연결을 닫지 않는다:
+    /// 이동 트랜잭션이 문서를 잠그고 있고, 옮겼으면 새 자리의 설정으로 다시 열리며 옮기지 않았으면 다음 재확인이 따른다.
+    async fn move_rechecking(&mut self, request: &MoveRequest) -> Result<MoveReply, AppError> {
+        let db = self.db.clone();
+        let moving = documents::move_in_db(&db, request.user, self.doc_id, &request.input);
+        tokio::pin!(moving);
+        let mut every = tokio::time::interval_at(
+            tokio::time::Instant::now() + self.recheck_every,
+            self.recheck_every,
+        );
+        loop {
+            tokio::select! {
+                reply = &mut moving => return reply,
+                _ = every.tick() => {
+                    let _off = self.recheck_peers().await;
+                }
+            }
+        }
+    }
+
     /// 문서를 옮긴 커밋 뒤: 대기열에 쌓인 것을 비운다. 커밋 전에 받은 메시지(그때 그 사람은 원래 자리의 권한이 있었다)만
     /// 평소처럼 검사해 넣고, 커밋 뒤에 받은 것은 버린다(새 자리에서 권한을 잃은 사람의 쓰기를 받지 않는다). 나가기는
     /// 따른다. 다른 명령은 답 없이 버린다: 방이 곧 닫히므로 참여는 새 방에서 새 자리의 권한으로 다시 하고, 다른 요청은
@@ -1062,9 +1078,10 @@ impl Room {
     /// 편집은 커밋 뒤 리비전을 남겨야 처음 확인을 받는다. 그 리비전을 남기지 못하면 연결을 닫은 뒤 상태만 저장하므로
     /// 브라우저가 그 편집을 초안으로 지닌다.
     ///
-    /// 커밋 전 편집은 이동 바로 앞의 재확인(`move_document`)에서 본 쓰기 권한으로 받는다. 그 뒤 잠금을 기다리는 동안 세션이
-    /// 끝났거나 끊긴 사람의 편집은 넣기 전에 세션만 다시 보고 버린다(연결을 4403으로 닫는다, #64 리뷰). 세션은 자리와
-    /// 상관없어 옮긴 뒤에도 볼 수 있다. 옛 자리 권한은 커밋 뒤에는 다시 볼 수 없어 이동 앞의 재확인으로 갈음한다.
+    /// 커밋 전 편집은 마지막 재확인(이동 바로 앞, 잠금 대기 중에는 재확인 간격마다, `move_rechecking`)에서 본 쓰기
+    /// 권한으로 받는다. 그 재확인이 닫은 연결의 편집은 넣지 않는다. 넣기 전에 세션만 한 번 더 보고 끝났으면 버린다(연결을
+    /// 4403으로 닫는다, #64 리뷰). 세션은 자리와 상관없어 옮긴 뒤에도 볼 수 있다. 옛 자리 권한은 커밋 뒤에는 다시 볼 수
+    /// 없어 마지막 재확인으로 갈음한다.
     async fn drain_after_move(
         &mut self,
         committed_at: Instant,
@@ -1699,6 +1716,25 @@ impl Room {
     /// 연결마다 세션과 권한을 다시 본다. 끝났거나 쓰기 권한을 잃었으면 닫고(4403, 다시 붙으면 지금 권한으로),
     /// 실시간이 꺼졌으면 리비전을 남기고 닫으며, 읽기에서 쓰기로 바뀌었으면 따른다. 일시적인 DB 오류로는 닫지 않는다.
     async fn recheck(&mut self) {
+        if self.recheck_peers().await {
+            self.flush().await;
+            // 리비전을 남기면 그때 상태를 저장하고 확인을 보낸다. 남기지 못한 편집은 확인하지 않는다: 연결을 닫은 뒤에
+            // 상태만 저장한다(#71).
+            self.snapshot().await;
+            for (_, c) in self.conns.drain() {
+                let _ignored = c
+                    .peer
+                    .out
+                    .try_send(Outbound::Close(CloseReason::RealtimeOff));
+            }
+            self.persist().await;
+        }
+    }
+
+    /// 연결마다 세션과 권한만 다시 본다(끝났거나 쓰기 권한을 잃은 연결은 4403으로 닫고, 읽기에서 쓰기로 바뀌었으면 따른다).
+    /// 실시간이 꺼졌으면 참(닫기는 부르는 쪽이 한다). 닫힌 연결이 대기열에 남긴 편집은 넣지 않는다(`incoming`·`flush`가 그
+    /// 연결을 찾지 못한다).
+    async fn recheck_peers(&mut self) -> bool {
         self.last_recheck = Instant::now();
         let peers: Vec<(u64, Peer)> = self
             .conns
@@ -1721,19 +1757,7 @@ impl Room {
                 PeerAccess::Unknown => {}
             }
         }
-        if off {
-            self.flush().await;
-            // 리비전을 남기면 그때 상태를 저장하고 확인을 보낸다. 남기지 못한 편집은 확인하지 않는다: 연결을 닫은 뒤에
-            // 상태만 저장한다(#71).
-            self.snapshot().await;
-            for (_, c) in self.conns.drain() {
-                let _ignored = c
-                    .peer
-                    .out
-                    .try_send(Outbound::Close(CloseReason::RealtimeOff));
-            }
-            self.persist().await;
-        }
+        off
     }
 }
 

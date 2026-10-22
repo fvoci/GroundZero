@@ -97,6 +97,17 @@
     if (watch?.dirty === true) keepDraft();
   }
 
+  // 서버가 연결을 닫아(권한·세션 끝 4403, 문서가 바뀜 4409 등) 확인받지 못한 편집을 초안으로 남겼다. 다시 열어 그 초안을
+  // 고르게 할 때까지 "저장되지 않았다"고 알린다(서버에 반영하지 않은 것과 화면에서 없애는 것은 다르다).
+  let unsavedKept = $state(false);
+
+  /** 서버가 연결을 닫을 때: 확인받지 못한 편집이 있으면 초안으로 남기고 알린다. */
+  function keepUnsaved(): void {
+    if (watch?.dirty !== true) return;
+    keepDraft();
+    unsavedKept = true;
+  }
+
   /** 처음 맞춰진 뒤 지난 초안을 고르게 한다. */
   function compareEarlier(): void {
     if (checkedEarlier) return;
@@ -128,6 +139,8 @@
     }
     found = undefined;
     foundRequest = undefined;
+    // 남긴 초안을 골랐다(보존·버림). 알림은 다음에 서버가 닫을 때 다시 띄운다.
+    unsavedKept = false;
     showNextOffer();
   }
 
@@ -162,7 +175,7 @@
         if (event?.code === 1006) void checkRefusal(next);
         return;
       }
-      keepIfDirty();
+      keepUnsaved();
       next.provider.disconnect();
       if (stop === 'reload') {
         // 문서가 다른 길(복원 등)로 바뀌었다. 옛 내용을 섞지 않도록 새 문서로 다시 연다.
@@ -186,13 +199,13 @@
     try {
       const doc = await api.document(start.id);
       if (session?.provider !== current.provider || doc.realtime) return;
-      keepIfDirty();
+      keepUnsaved();
       current.provider.disconnect();
       onrealtimeoff?.();
     } catch (e: unknown) {
       if (session?.provider !== current.provider || !(e instanceof ApiError)) return;
       if (e.status === 401 || e.status === 403 || e.status === 404) {
-        keepIfDirty();
+        keepUnsaved();
         current.provider.disconnect();
         stopped = 'denied';
       }
@@ -361,6 +374,11 @@
       >
     {/if}
   </form>
+  {#if unsavedKept && found === undefined}
+    <p role="status" aria-live="polite" class="text-sm text-destructive">
+      {m.documents_live_unsaved_kept()}
+    </p>
+  {/if}
   {#if found !== undefined}
     <div
       class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
