@@ -4,7 +4,7 @@
 아니다.
 
 - 작성: 2026-10-22, 기존 환경(macOS arm64 데스크톱의 Claude Code 세션)
-- 원격 상태를 마지막으로 확인한 시각: 2026-10-22T01:24:17Z
+- 원격 상태를 마지막으로 확인한 시각: 2026-10-22T01:32:55Z
 - 이 문서가 있는 브랜치: `handoff/audit-resume` (main `a5cda4e` 위, 이 문서와 `docs/handoff/` 아래 파일만 더함). 병합하지 않는다.
 - 기존 환경은 인계 체크포인트 뒤 이 저장소의 브랜치·PR·원격 DB를 더 고치지 않는다. 인계 중에 돌던 작업(D-95 구현)은
   멈췄고, 읽기 전용 검증·수집만 끝까지 돌렸다. 새 환경은 0절에서 이를 확인한 뒤 시작한다.
@@ -19,7 +19,7 @@
 4. 9절의 "로컬에만 남은 것"이 새 환경에 필요한지 판단한다(필요한 것은 없게 만들었다. 원본 로그는 공개 저장소에 올리지 않았다).
 5. 인수 결과(일치/불일치, 누락)를 사용자에게 알린다. 기존 환경이 더 고치지 않는지(이 문서 머리말) 사용자에게 확인받은 뒤 작업을 시작한다.
 
-## 1. 원격 상태 (2026-10-22T01:24:17Z 확인)
+## 1. 원격 상태 (2026-10-22T01:32:55Z 확인)
 
 - 저장소: `fvoci/GroundZero`(공개). main: `a5cda4e169e237c6a33075fdde21c4b20fec8a1a`(Merge PR #48). 감사 PR은 아직 하나도
   병합하지 않았다. main에 보호 규칙은 없다(`branches/main/protection` 404). 병합은 기존 방식의 merge commit.
@@ -63,14 +63,14 @@ PR이 아닌 원격 브랜치(이번 인계에서 올림, 병합하지 않는다
 
 | 브랜치                             | 전체 SHA                                   | 내용                                                                                                                                          |
 | ---------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `wip/audit-d95-stand-in-record`    | `ab0ffaf317e5b81f806b1884321a9edfd4339d5a` | D-95 구현 도중 멈춘 스냅숏(`5edd8f4` 위 한 커밋, 0094 포함). **미완성·미검증**                                                                |
+| `wip/audit-d95-stand-in-record`    | `0fce62b0eb9a9ec36a67e5032979010e860bf00f` | D-95 구현 도중 멈춘 스냅숏(`5edd8f4` 위 한 커밋, 0094 포함). **미완성·미검증**. `ab0ffaf`(스냅숏) 위에 시험 단언 하나를 고친 `0fce62b`        |
 | `handoff/ref-integration-1`        | `7d6775c59bca594f031ed207afa1b00e34cfbdc5` | 첫 통합(로컬 `audit/integration`). R0·R1의 `634019f`, `912c48a`, R2의 `7d6775c`를 포함. 통합 전용 고정 값 커밋 `912c48a`                      |
 | `handoff/ref-integration-2`        | `36f52d7b596b7bdde4f88755aae44d56c464d770` | 둘째 통합. R3 `2286a9d`(통합 전용 고정 값 커밋), R4 `a0a45bb`, R6 `36f52d7`                                                                   |
 | `handoff/ref-integration-3`        | `d7ea7fc7044c668831436d15d0b55e2306d50a58` | 셋째 통합(#64 없음). R7 `156b8d0`(통합 전용 고정 값 커밋), 실제 브라우저 확인 `d7ea7fc`                                                       |
 | `handoff/ref-integration-4-prefix` | `7e7137159efeb14a753bfc7c8e5ab9d30edf19af` | 병합 순서대로 다시 짓기 시작한 통합의 앞부분(#51→#52→#53→#54→#58→#57, 모두 충돌 없음)                                                         |
 | `handoff/ref-int4-dry`             | `cd2d9b62b478f0d7675cf20795f4a6b8fe68a957` | 위 순서를 #80까지 지금(인계 전) 머리로 미리 합쳐 본 것. #64는 옛 머리 `2e1d3a1`, #59는 옛 머리 `dbd1861`, 고정 값 수정 없음. 충돌 해결 참고용 |
 
-후속 이슈(모두 OPEN, 2026-10-22T01:24:17Z): fvoci/GroundZero#50, #70, #71, #76, #77, #78, #79. #77은 #81, #78은 #72, #71은 #64가 병합되면
+후속 이슈(모두 OPEN, 2026-10-22T01:32:55Z): fvoci/GroundZero#50, #70, #71, #76, #77, #78, #79. #77은 #81, #78은 #72, #71은 #64가 병합되면
 닫힌다(#64는 D-95를 마친 뒤 본문에 `Closes #71`을 넣는다).
 
 ## 2. 결정 (확정·해석·미확정)
@@ -158,7 +158,7 @@ P-36(CI `integration` job 정리). SQL을 바꾸는 제안(P-24·P-25·P-26·P-2
     `cargo xtask check --skip-licenses` 통과, 반박 검증 통과.
 - **미완(병합 차단)**: D-95 조건 2(실제 편집자와 대리 저장자 구분)는 #64 브랜치에 없다. 지금 #64의 대신 저장은 옮긴 사람을 작성자로만
   적는다. 이동 취소 경로 시험, 방 없는 복원의 저장 대기 상태 보존(main에도 있는 빈틈)도 없다.
-- WIP `wip/audit-d95-stand-in-record`(`ab0ffaf`, 부모 `5edd8f4`): 위 미완 부분을 구현하던 중 인계 때문에 멈춘 스냅숏. 0094
+- WIP `wip/audit-d95-stand-in-record`(지금 `0fce62b`, 인계 스냅숏 `ab0ffaf`, 부모 `5edd8f4`): 위 미완 부분을 구현하던 중 인계 때문에 멈춘 스냅숏. 0094
   `crates/server/migrations/0094_collab_stand_in_editors.sql`(`document_revisions.edited_by uuid[]`, `document_collab_states.editors`,
   `app_system_collab_store`에 편집자 인자, `app_collab_load`가 편집자 반환), room.rs·revisions.rs·documents.rs, OpenAPI·생성 클라이언트,
   RevisionHistory·ExportDialog 표시, 시험 일부. 확인한 것: `cargo check -p fvoci-server --tests` 통과, svelte-check 0 오류, 웹 시험 2파일
@@ -167,8 +167,13 @@ P-36(CI `integration` job 정리). SQL을 바꾸는 제안(P-24·P-25·P-26·P-2
   P-34 시험 `a_move_without_a_room_saves_a_live_state_left_pending`이고, 409 "live edits could not be saved as a revision first"였다
   (`evidence/logs/d95-wip/test1.log`). **인계 체크포인트에서 스냅숏 `ab0ffaf`를 다시 돌린 결과(확정)**: `cargo xtask test --keep`(PostgreSQL,
   OIDC 없음)에서 collab 27개 통과·1개 실패로 같은 P-34 시험이 같은 409로 실패했고, cargo가 그 시험 바이너리에서 멈춰 뒤의 시험
-  바이너리는 돌지 않았다(`evidence/logs/d95-wip/ab0ffaf-xtask-test-keep.log`). 곧 **WIP에는 확인된 회귀가 있다**. 원인은 아직
+  바이너리는 돌지 않았다(`evidence/logs/d95-wip/ab0ffaf-xtask-test-keep.log`). 다만 아래처럼 서버 회귀가 아니라 새 시험 단언의 오류였다. 원인은 아직
   조사하지 않았다(새 환경의 첫 D-95 작업).
+  **원인과 처리(`0fce62b`, 같은 WIP 브랜치)**: 서버 동작은 맞았고, WIP가 새로 넣은 단언이 틀렸다. 거절된 이동은 409에 오류 코드
+  `invalid_state`인데(`AppError::Conflict`, `error.rs`, D-83, 다른 모든 충돌과 같음) 시험은 `"conflict"`를 기대했다. 그 단언만 고친 뒤
+  `cargo xtask test --keep`(PostgreSQL, OIDC 없음) 45개 바이너리·287개 시험 통과(`evidence/logs/d95-wip/0fce62b-xtask-test-keep.log`),
+  `cargo xtask check --skip-licenses` 통과(`0fce62b-check.log`). OIDC·Supabase 실행, 반박 검증, D-95의 나머지(취소 경로 시험 등)는 아직이고
+  WIP는 여전히 미완성이다.
 - **CodeRabbit의 `5edd8f4` 새 지적(OPEN, 병합 전 처리)**: (1) 방 안에서 도는 `move_in_db`가 `app_lock_move`·`FOR UPDATE`·`app_lock_item`을
   `lock_timeout` 없이 기다려 방과 보내는 쪽이 끝없이 멈출 수 있고, 55P03이 409로 바뀌지 않는다
   (https://github.com/fvoci/GroundZero/pull/64#discussion_r4343460648). (2) 그 기다림 동안 방의 권한 재확인이 돌지 못해, 커밋 전에 받은 편집이
@@ -303,7 +308,7 @@ RLS 검증 완료로 보지 않는다. Cloud에는 쓰기·마이그레이션을
   구현 명시). **비차단** — 나머지는 기존 동작의 강화 제안이나 남은 관찰이다. 새 환경은 기존 이슈를 먼저 찾고, 필요하면 해당 PR 스레드에서
   `@coderabbitai`로 이슈 생성을 요청해 실제 URL을 확인한 뒤 장부를 갱신한다. 데이터 유실·덮어쓰기에 해당하면 이슈로 넘기지 않고 고친다.
 - FOLLOW_UP으로 실제 이슈가 있는 것: fvoci/GroundZero#76, fvoci/GroundZero#77, fvoci/GroundZero#78, fvoci/GroundZero#79
-- 장부는 각 PR의 그때 머리를 기준으로 했다. **인계에서 새로 올린 머리**의 리뷰 상태(2026-10-22T01:24:17Z):
+- 장부는 각 PR의 그때 머리를 기준으로 했다. **인계에서 새로 올린 머리**의 리뷰 상태(2026-10-22T01:32:55Z):
   | PR  | 머리           | CodeRabbit 상태              | 요약                                                                                   | 풀리지 않은 스레드                                                     |
   | --- | -------------- | ---------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
   | #59 | `df2261597ccc` | Review completed (00:50:45Z) | No actionable comments, Merge Risk Minimal up to `df226`                               | 0                                                                      |
@@ -311,14 +316,14 @@ RLS 검증 완료로 보지 않는다. Cloud에는 쓰기·마이그레이션을
   | #69 | `6ed1df82f288` | Review completed (00:46:30Z) | Merge Risk Low up to `6ed1d`, 새 OPEN 1건(D-95를 부분 구현으로 명시)                   | 1 (https://github.com/fvoci/GroundZero/pull/69#discussion_r4343454624) |
   | #82 | `70435e4ea952` | Review completed (00:47:30Z) | No actionable comments, Merge Risk Minimal up to `70435`(새 PR, 장부의 PR 표에는 없음) | 0                                                                      |
 
-| #82 | `263e47163b29` | Review in progress(01:22:09Z 시작, 01:23:56Z 확인) | 인계 체크포인트에서 올린 Esc 수정. CI도 진행 중(check·integration·oidc·supabase·rhwp 결과 전) — 새 환경이 결과 확인 | — |
+| #82 | `263e47163b29` | Review in progress(01:22:09Z 시작, 01:32:00Z에도 진행 중) | 인계 체크포인트에서 올린 Esc 수정. 저장소 CI 6개(check·licenses·integration·oidc·supabase·rhwp) 모두 SUCCESS(01:30:11Z) — CodeRabbit 결과는 새 환경이 확인 | — |
 
 - 리뷰 본문이 비었거나 스레드가 resolved라는 것만으로 위험이 해결됐다고 보지 않는다. 요약의 "Some tools did not complete"
   (Clippy·ESLint 실행 실패) 경고는 CodeRabbit 쪽 도구 문제이며 저장소 CI(check·licenses·integration·oidc·supabase·rhwp)와 별개다.
 
 ## 8. 증거 묶음 (`docs/handoff/evidence/`)
 
-- 목록·관련 코드 SHA·시나리오·결과: `docs/handoff/evidence/MANIFEST.md`. 체크섬: `docs/handoff/evidence/SHA256SUMS`(파일 123개).
+- 목록·관련 코드 SHA·시나리오·결과: `docs/handoff/evidence/MANIFEST.md`. 체크섬: `docs/handoff/evidence/SHA256SUMS`(파일 125개).
 - 구성: `logs/`(R0~R7, 사고, #71, P-34, D-95 WIP, D-94 업무·일정), `screenshots/`(실제 브라우저 세 묶음, 각 `INDEX.md`), `patches/`(이번에
   올린 커밋의 사본, 통합 충돌 해결 예시).
 - 공개 저장소이므로 원본 로그 대신 비밀값·로컬 경로를 지운 사본만 올렸다(MANIFEST 머리말). 공개가 부적절해 따로 보낼 자료는 없다고
@@ -434,6 +439,9 @@ DST 일정("DST 확인: 뉴욕 두 번째 01:30", America/New_York 2026-11-01 01
 - 다른 체크아웃(`GroundZero-int`·`-linecheck`·`-seedfresh`·`-seedfresh2`·`-seedupgrade`)의 개발 볼륨은 지금도 남아 있다(이 세션이
   건드린 기록 없음).
 
+**Docker 이벤트 기록**: `docker events --filter type=volume`으로 2026-10-15 이후 볼륨 이벤트를 찾았으나 하나도 남아 있지 않았다(데몬이 보관하는 범위 밖). 그래서 11:35Z·12:19Z에
+어느 볼륨이 지워졌는지 직접 확인할 길은 없다.
+
 **백업·복구 가능성**(읽기 전용으로 확인): Time Machine 대상이 설정돼 있지 않고(`tmutil destinationinfo`: No destinations configured), APFS
 로컬 스냅숏도 없으며(`tmutil listlocalsnapshots /` 비어 있음), Docker Desktop 가상 디스크(`Docker.raw`, 2026-09-07 생성, 저장소 초기화 없음)는
 Time Machine 제외 대상이다. pg_dump 파일·`docker commit` 이미지·볼륨 사본도 찾지 못했다. 따라서 **이 컴퓨터에서 찾은 복구 경로는 없다**.
@@ -474,14 +482,14 @@ Time Machine 제외 대상이다. pg_dump 파일·`docker commit` 이미지·볼
 
 ## 13. 다음 작업과 완료 기준
 
-| 순서 | 작업             | 완료 기준                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ---- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | 인수 확인        | 0절 모두 OK, 사용자에게 보고, 기존 환경 중단 확인                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| 2    | D-95 마무리(#64) | WIP `ab0ffaf`를 검토해 이어서 구현하거나 다시 짠다. 대리 저장 리비전이 실제 편집자를 따로 기록(API·이력·내보내기 화면), 대리 저장은 이동 권한 확인 뒤 서버 안에서만, 저장 실패 시 409·편집 보존, 이동 실패·취소·방 없는 복원 경로 시험(고치기 전 실패 포함), `cargo xtask test`(+Supabase) 통과, 반박 검증, 3.3절 비차단 지적 처리 또는 근거, #64 본문에 `Closes #71`, CodeRabbit `5edd8f4` OPEN 2건(잠금 대기 시간 제한·55P03 매핑, 기다린 편집의 권한 재확인) 처리, WIP의 P-34 시험 실패 원인 확인 |
-| 3    | D-94 업무(#82)   | 2차 반박 검증의 [낮음]·nit 처리, `263e471`(Esc 입력 유실 수정)의 반박 재검증, 실제 브라우저에서 409 재저장·같은 칸 확인·취소 보존 확인                                                                                                                                                                                                                                                                                                                                                               |
-| 4    | D-94 일정(#59)   | 회귀 시험 둘 추가와 nit, 실제 브라우저 확인                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| 5    | CodeRabbit       | 새 머리(#59·#64·#69·#82와 이후 커밋) 리뷰 완료 확인, `coderabbit-ledger.md`의 OPEN 항목을 수정·근거 있는 기각·후속 이슈(실제 URL)로 분류, 지적 분류에 수정 SHA·기각 근거·이슈 URL                                                                                                                                                                                                                                                                                                                    |
-| 6    | 최종 통합·R8     | 4절 순서의 통합 SHA 고정, R8 세 환경 + check PASS 기록                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| 7    | 실제 브라우저    | 12절 7번 항목 모두 SHA·스크린숏과 함께 PASS 또는 결함 기록                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| 8    | 병합             | 순서대로 merge commit, 각 단계 CI, 마지막 main CI 링크, `git diff <최종 통합> origin/main`이 빔                                                                                                                                                                                                                                                                                                                                                                                                      |
-| 9    | #69 마감         | 최종 결과·사용자 결정·NOT RUN·SQL 정리 차단 사항 반영, CodeRabbit OPEN(93차 줄과 95절에 D-95 부분 구현·남은 공백 명시) 처리                                                                                                                                                                                                                                                                                                                                                                          |
+| 순서 | 작업             | 완료 기준                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | 인수 확인        | 0절 모두 OK, 사용자에게 보고, 기존 환경 중단 확인                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 2    | D-95 마무리(#64) | WIP `0fce62b`(스냅숏 `ab0ffaf` + 시험 단언 수정)를 검토해 이어서 구현하거나 다시 짠다. 대리 저장 리비전이 실제 편집자를 따로 기록(API·이력·내보내기 화면), 대리 저장은 이동 권한 확인 뒤 서버 안에서만, 저장 실패 시 409·편집 보존, 이동 실패·취소·방 없는 복원 경로 시험(고치기 전 실패 포함), `cargo xtask test`(+Supabase) 통과, 반박 검증, 3.3절 비차단 지적 처리 또는 근거, #64 본문에 `Closes #71`, CodeRabbit `5edd8f4` OPEN 2건(잠금 대기 시간 제한·55P03 매핑, 기다린 편집의 권한 재확인) 처리, WIP `0fce62b`에서 이어서(시험 단언 오류는 고침) |
+| 3    | D-94 업무(#82)   | 2차 반박 검증의 [낮음]·nit 처리, `263e471`(Esc 입력 유실 수정)의 반박 재검증, 실제 브라우저에서 409 재저장·같은 칸 확인·취소 보존 확인                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| 4    | D-94 일정(#59)   | 회귀 시험 둘 추가와 nit, 실제 브라우저 확인                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| 5    | CodeRabbit       | 새 머리(#59·#64·#69·#82와 이후 커밋) 리뷰 완료 확인, `coderabbit-ledger.md`의 OPEN 항목을 수정·근거 있는 기각·후속 이슈(실제 URL)로 분류, 지적 분류에 수정 SHA·기각 근거·이슈 URL                                                                                                                                                                                                                                                                                                                                                                        |
+| 6    | 최종 통합·R8     | 4절 순서의 통합 SHA 고정, R8 세 환경 + check PASS 기록                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| 7    | 실제 브라우저    | 12절 7번 항목 모두 SHA·스크린숏과 함께 PASS 또는 결함 기록                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 8    | 병합             | 순서대로 merge commit, 각 단계 CI, 마지막 main CI 링크, `git diff <최종 통합> origin/main`이 빔                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 9    | #69 마감         | 최종 결과·사용자 결정·NOT RUN·SQL 정리 차단 사항 반영, CodeRabbit OPEN(93차 줄과 95절에 D-95 부분 구현·남은 공백 명시) 처리                                                                                                                                                                                                                                                                                                                                                                                                                              |
