@@ -4,7 +4,7 @@
 아니다.
 
 - 작성: 2026-10-22, 기존 환경(macOS arm64 데스크톱의 Claude Code 세션)
-- 원격 상태를 마지막으로 확인한 시각: 2026-10-22T01:32:55Z
+- 원격 상태를 마지막으로 확인한 시각: 2026-10-22T01:36:26Z
 - 이 문서가 있는 브랜치: `handoff/audit-resume` (main `a5cda4e` 위, 이 문서와 `docs/handoff/` 아래 파일만 더함). 병합하지 않는다.
 - 기존 환경은 인계 체크포인트 뒤 이 저장소의 브랜치·PR·원격 DB를 더 고치지 않는다. 인계 중에 돌던 작업(D-95 구현)은
   멈췄고, 읽기 전용 검증·수집만 끝까지 돌렸다. 새 환경은 0절에서 이를 확인한 뒤 시작한다.
@@ -19,7 +19,7 @@
 4. 9절의 "로컬에만 남은 것"이 새 환경에 필요한지 판단한다(필요한 것은 없게 만들었다. 원본 로그는 공개 저장소에 올리지 않았다).
 5. 인수 결과(일치/불일치, 누락)를 사용자에게 알린다. 기존 환경이 더 고치지 않는지(이 문서 머리말) 사용자에게 확인받은 뒤 작업을 시작한다.
 
-## 1. 원격 상태 (2026-10-22T01:32:55Z 확인)
+## 1. 원격 상태 (2026-10-22T01:36:26Z 확인)
 
 - 저장소: `fvoci/GroundZero`(공개). main: `a5cda4e169e237c6a33075fdde21c4b20fec8a1a`(Merge PR #48). 감사 PR은 아직 하나도
   병합하지 않았다. main에 보호 규칙은 없다(`branches/main/protection` 404). 병합은 기존 방식의 merge commit.
@@ -70,7 +70,7 @@ PR이 아닌 원격 브랜치(이번 인계에서 올림, 병합하지 않는다
 | `handoff/ref-integration-4-prefix` | `7e7137159efeb14a753bfc7c8e5ab9d30edf19af` | 병합 순서대로 다시 짓기 시작한 통합의 앞부분(#51→#52→#53→#54→#58→#57, 모두 충돌 없음)                                                         |
 | `handoff/ref-int4-dry`             | `cd2d9b62b478f0d7675cf20795f4a6b8fe68a957` | 위 순서를 #80까지 지금(인계 전) 머리로 미리 합쳐 본 것. #64는 옛 머리 `2e1d3a1`, #59는 옛 머리 `dbd1861`, 고정 값 수정 없음. 충돌 해결 참고용 |
 
-후속 이슈(모두 OPEN, 2026-10-22T01:32:55Z): fvoci/GroundZero#50, #70, #71, #76, #77, #78, #79. #77은 #81, #78은 #72, #71은 #64가 병합되면
+후속 이슈(모두 OPEN, 2026-10-22T01:36:26Z): fvoci/GroundZero#50, #70, #71, #76, #77, #78, #79. #77은 #81, #78은 #72, #71은 #64가 병합되면
 닫힌다(#64는 D-95를 마친 뒤 본문에 `Closes #71`을 넣는다).
 
 ## 2. 결정 (확정·해석·미확정)
@@ -129,7 +129,7 @@ P-36(CI `integration` job 정리). SQL을 바꾸는 제안(P-24·P-25·P-26·P-2
   `Dialog.Content`로 간 뒤의 Esc는 지금처럼 대화상자를 닫는다(확인이 떠 있지 않을 때와 같은 기존 동작).
   설명은 https://github.com/fvoci/GroundZero/pull/82#issuecomment-6330375703 .
 - 남은 것: 2차 검증의 [낮음]·nit 지적, `263e471`의 반박 재검증, 실제 브라우저 확인(NOT RUN), 최종 통합 시험. CodeRabbit은 `70435e4`에서
-  "No actionable comments", 합병 위험 Minimal. `263e471`의 리뷰 상태는 7절 표를 본다.
+  "No actionable comments", 합병 위험 Minimal. `263e471`에서는 Merge Risk Low, Outside diff 2건(Minor, OPEN: 같은 이름 담당자 구분, 비동기 갱신이 확인을 닫음 — 2차 검증 [낮음]과 같은 내용).
 - 알려진 범위 밖: 화면에서 같은 태그를 두 번 치면 클라이언트는 겹침을 빼지 않아 고친 칸·충돌로 볼 수 있음. 값 칸의 스크롤 영역은
   Safari에서 키보드 초점을 받지 않음(tabindex는 lint 경고, 규칙 완화는 사용자 확인 대상).
 
@@ -285,7 +285,7 @@ RLS 검증 완료로 보지 않는다. Cloud에는 쓰기·마이그레이션을
 모았다(읽기 전용). 이전 분류표(80건)를 출발점으로 삼아 빠진 것을 더하고 틀린 것을 고쳤다. 비판 검토(critic)의 표본 대조 결과는 장부
 끝에 있다.
 
-- 상태별 개수: FIXED: 80, FOLLOW_UP: 5, OPEN: 26, OUTDATED_BY_LATER_CHANGE: 1, REJECTED: 13, (OPEN 가운데 정보성 관찰, 조치 없음: 9건 — 종류 summary-info)
+- 상태별 개수(장부 수집 때, 그 뒤 #82 `263e471`의 Outside diff 2건 OPEN이 더해짐): FIXED: 80, FOLLOW_UP: 5, OPEN: 26, OUTDATED_BY_LATER_CHANGE: 1, REJECTED: 13, (OPEN 가운데 정보성 관찰, 조치 없음: 9건 — 종류 summary-info)
 - **OPEN(처리 안 됨, 새 환경이 처리)**:
   - #51 [summary-concern] Proposed hardening: define and test the ordering of attachment restore against a concurrent share revocation. Restore locks the file and revocation locks the document; the test only covers revocation that finished before the restore. — https://github.com/fvoci/GroundZero/pull/51#issuecomment-6317916714
   - #54 [summary-concern] Proposed hardening: archiving is not a strict barrier. Comment edit/resolve and deadline-notification selection do not take the item/module archive locks, so an operation overlapping an archive can finish after it. — https://github.com/fvoci/GroundZero/pull/54#issuecomment-6319644662
@@ -304,11 +304,13 @@ RLS 검증 완료로 보지 않는다. Cloud에는 쓰기·마이그레이션을
   - #68 [summary-concern] Document an acceptable collaboration permission-revocation delay and warn on unusually large FVOCI_COLLAB_RECHECK_SECS values. — https://github.com/fvoci/GroundZero/pull/68#issuecomment-6320980000
   - #69 [inline] The 93rd-revision history line implies D-95 is implemented; it should say D-95 is only partly implemented (condition 2, which records the real editor separately from the mover who saves in their place, was not done at handoff) and list the remaining risks — https://github.com/fvoci/GroundZero/pull/69#discussion_r4343454624
   - #69 [summary-concern] The documentation may overstate D-95 completion (same as inline r4343454624) — https://github.com/fvoci/GroundZero/pull/69#issuecomment-6321134313
+  - #82 [outside-diff] 충돌 확인 값에 담당자 ID를 함께 보이기(같은 이름 구분) — https://github.com/fvoci/GroundZero/pull/82#pullrequestreview-5608239771
+  - #82 [outside-diff] 비동기 갱신이 열린 충돌 확인을 닫지 않게 — https://github.com/fvoci/GroundZero/pull/82#pullrequestreview-5608239771
 - 구분(인계 작성자 판단): **병합 차단** — #64 2건(방 안 이동의 잠금 대기 시간 제한·55P03 매핑, 기다린 편집의 권한 재확인), #69 2건(D-95 부분
   구현 명시). **비차단** — 나머지는 기존 동작의 강화 제안이나 남은 관찰이다. 새 환경은 기존 이슈를 먼저 찾고, 필요하면 해당 PR 스레드에서
   `@coderabbitai`로 이슈 생성을 요청해 실제 URL을 확인한 뒤 장부를 갱신한다. 데이터 유실·덮어쓰기에 해당하면 이슈로 넘기지 않고 고친다.
 - FOLLOW_UP으로 실제 이슈가 있는 것: fvoci/GroundZero#76, fvoci/GroundZero#77, fvoci/GroundZero#78, fvoci/GroundZero#79
-- 장부는 각 PR의 그때 머리를 기준으로 했다. **인계에서 새로 올린 머리**의 리뷰 상태(2026-10-22T01:32:55Z):
+- 장부는 각 PR의 그때 머리를 기준으로 했다. **인계에서 새로 올린 머리**의 리뷰 상태(2026-10-22T01:36:26Z):
   | PR  | 머리           | CodeRabbit 상태              | 요약                                                                                   | 풀리지 않은 스레드                                                     |
   | --- | -------------- | ---------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
   | #59 | `df2261597ccc` | Review completed (00:50:45Z) | No actionable comments, Merge Risk Minimal up to `df226`                               | 0                                                                      |
@@ -316,7 +318,7 @@ RLS 검증 완료로 보지 않는다. Cloud에는 쓰기·마이그레이션을
   | #69 | `6ed1df82f288` | Review completed (00:46:30Z) | Merge Risk Low up to `6ed1d`, 새 OPEN 1건(D-95를 부분 구현으로 명시)                   | 1 (https://github.com/fvoci/GroundZero/pull/69#discussion_r4343454624) |
   | #82 | `70435e4ea952` | Review completed (00:47:30Z) | No actionable comments, Merge Risk Minimal up to `70435`(새 PR, 장부의 PR 표에는 없음) | 0                                                                      |
 
-| #82 | `263e47163b29` | Review in progress(01:22:09Z 시작, 01:32:00Z에도 진행 중) | 인계 체크포인트에서 올린 Esc 수정. 저장소 CI 6개(check·licenses·integration·oidc·supabase·rhwp) 모두 SUCCESS(01:30:11Z) — CodeRabbit 결과는 새 환경이 확인 | — |
+| #82 | `263e47163b29` | Review completed(01:34:25Z) | Esc 수정. 저장소 CI 6개 SUCCESS. Merge Risk Low up to `263e4`, Outside diff 2건(Minor, OPEN: 같은 이름 담당자 구분, 비동기 갱신이 확인을 닫음) — https://github.com/fvoci/GroundZero/pull/82#pullrequestreview-5608239771 | — |
 
 - 리뷰 본문이 비었거나 스레드가 resolved라는 것만으로 위험이 해결됐다고 보지 않는다. 요약의 "Some tools did not complete"
   (Clippy·ESLint 실행 실패) 경고는 CodeRabbit 쪽 도구 문제이며 저장소 CI(check·licenses·integration·oidc·supabase·rhwp)와 별개다.
