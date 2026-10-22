@@ -8,6 +8,7 @@
   import { api, ApiError, RuleConflict } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -62,6 +63,13 @@
   // 지금 입력 양식 제출이 충돌 알림의 단추에서 시작됐는지. 양식은 제출 이벤트 안에서 곧바로(첫 await 전에) onsubmit을
   // 부르므로 requestSubmit() 동안만 둔다.
   let submitMode: 'merge' | 'overwrite' | undefined;
+  // 일정 입력에 연 때와 다르게 고친 칸이 있는지, 그래서 닫기 전에 버릴지 묻는 중인지. 물은 차례(`asked`)가 지금 연
+  // 차례와 같을 때만 버리고 닫는다. 계속 편집하면 물을 때 초점이 있던 칸(대화상자 밖이었으면 머리말)으로 돌아간다.
+  let unsaved = $state(false);
+  let confirmClose = $state(false);
+  let asked = 0;
+  let keepFocus: HTMLElement | null = null;
+  let content = $state<HTMLElement | null>(null);
   const zone = localTimeZone();
 
   $effect(() => {
@@ -73,6 +81,8 @@
     conflict = undefined;
     clash = undefined;
     confirmDelete = false;
+    unsaved = false;
+    confirmClose = false;
     if (id === undefined) return;
     let cancelled = false;
     api
@@ -316,22 +326,39 @@
     }
   }
 
+  /** Esc·바깥 클릭·닫기 단추. 고친 입력이 있으면 닫지 않고 버릴지 묻는다. */
   function close(): void {
-    if (busy) return;
+    if (busy || confirmClose) return;
+    if (unsaved) {
+      const active = document.activeElement;
+      keepFocus = active instanceof HTMLElement && content?.contains(active) ? active : heading;
+      asked = shown;
+      confirmClose = true;
+      return;
+    }
     onclose();
+  }
+
+  function discard(): void {
+    confirmClose = false;
+    if (asked === shown && !busy) onclose();
   }
 </script>
 
+<!-- 닫기를 대화상자가 정하지 않고 close()가 정한다(고친 입력이 있으면 열어 둔 채 묻는다). -->
 <Dialog.Root
-  open={eventId !== undefined}
-  onOpenChange={(o: boolean) => {
-    if (!o) close();
-  }}
+  bind:open={
+    () => eventId !== undefined,
+    (o: boolean) => {
+      if (!o) close();
+    }
+  }
 >
   <Dialog.Content
+    bind:ref={content}
     class="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
-    escapeKeydownBehavior={busy ? 'ignore' : 'close'}
-    interactOutsideBehavior={busy ? 'ignore' : 'close'}
+    escapeKeydownBehavior={busy || confirmClose ? 'ignore' : 'close'}
+    interactOutsideBehavior={busy || confirmClose ? 'ignore' : 'close'}
     showCloseButton={!busy}
     onEscapeKeydown={(e: KeyboardEvent) => {
       // 덮어쓸지 묻는 중이면 Esc는 그 물음만 거둔다(취소와 같음: 보내지 않고 입력을 두며 대화상자도 닫지 않는다).
@@ -442,6 +469,9 @@
               initial={formBase ?? current}
               submitLabel={m.common_save()}
               onsubmit={submitted}
+              onunsaved={(value: boolean) => {
+                unsaved = value;
+              }}
             />
           {/key}
         </div>
@@ -488,5 +518,13 @@
         {/if}
       {/if}
     {/if}
+    <DiscardChangesConfirm
+      open={confirmClose}
+      onkeep={() => {
+        confirmClose = false;
+      }}
+      ondiscard={discard}
+      returnFocus={() => (keepFocus?.isConnected === true ? keepFocus : heading)}
+    />
   </Dialog.Content>
 </Dialog.Root>
