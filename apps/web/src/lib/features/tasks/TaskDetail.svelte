@@ -372,8 +372,10 @@
   });
 
   const canEdit = $derived(task !== undefined && task.access !== 'read');
-  // 보내는 동안은 폼 칸을 잠근다: 저장되면 폼을 저장된 판으로 다시 채우므로(`fill`) 그사이 친 글이 말없이 사라졌다.
-  const locked = $derived(!canEdit || busy);
+  // 폼을 저장하는 동안은 폼 칸을 잠근다: 저장되면 폼을 저장된 판으로 다시 채우므로(`fill`) 그사이 친 글이 말없이
+  // 사라졌다. 관계·상위 업무 요청은 돌아오면 고친 칸을 지켜 다시 채우므로(`refresh`) 잠그지 않는다.
+  let saving = $state(false);
+  const locked = $derived(!canEdit || saving);
 
   function currentInput(): TaskInput | undefined {
     if (form === undefined) return undefined;
@@ -424,6 +426,7 @@
       return;
     }
     busy = true;
+    saving = true;
     error = undefined;
     saved = false;
     undatedNotice = '';
@@ -450,6 +453,7 @@
       error = errorText(e, m.tasks_save_failed());
     } finally {
       busy = false;
+      saving = false;
     }
   }
 
@@ -458,6 +462,7 @@
     const p = pending;
     if (p === undefined || busy) return;
     busy = true;
+    saving = true;
     error = undefined;
     try {
       await save(p.input, p.baseVersion, withShifts ? p.proposals : [], p.undated);
@@ -465,6 +470,7 @@
       error = errorText(e, m.tasks_save_failed());
     } finally {
       busy = false;
+      saving = false;
     }
   }
 
