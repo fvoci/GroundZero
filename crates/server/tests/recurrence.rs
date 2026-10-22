@@ -13,6 +13,16 @@ use common::{TestUser, add_member, create_workspace, login, new_request_id, send
 use serde_json::{Value, json};
 use time::Date;
 
+/// 열을 쥔 채 DB 전체의 반복 회차 맞추기를 돌리는 시험끼리는 차례로 돈다. 함께 돌면 한쪽 작업이 앞 항목들의 열을 쥐고
+/// 다른 쪽이 쥔 열에서 기다리고, 다른 쪽 작업(잠금 시간 300ms)은 그 항목마다 시간 초과를 기다려 반복이 쌓일수록
+/// 길어졌다(W9: 항목 58개에서 17초). 그동안 열 순서 시험은 자기 열에서 기다리는 작업을 보지 못하고 실패했다.
+static LANE_TICK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// 상한(`app_system_recurrence_tick_ids`)을 본 뒤 다른 시험이 반복을 만들거나 회차를 지우면 뒤 반복의 몫이 모자라
+/// 그 반복이 FV001 경고로 건너뛴다(작업 프로세스는 다음 주기에 다시 한다, D-88). 시험은 회차 맞추기를 한 번만 부르므로
+/// id를 넉넉히 준다(남는 id는 버린다). 한 반복이 한 번에 쓰는 몫은 회차 50개 × 3 = 150개다(체크리스트 줄 없음).
+const SPARE_TICK_IDS: usize = 10_000;
+
 async fn module_item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> Value {
     let m = send(
         app,
@@ -850,4 +860,209 @@ async fn event_rule_saves_from_a_stale_rule_conflict() {
     let stop = put(Value::Null, ten_mondays.clone()).await;
     assert_eq!(stop.status, StatusCode::OK, "{:?}", stop.json);
     assert!(stop.json["recurrence"].is_null());
+}
+
+/// 감사 S3: 반복 회차 맞추기가 반복마다 그 뿌리 업무의 열을 잠그고 끝까지 쥐어, 같은 항목에서 할 일 → 완료 순으로 잡았다.
+/// 칸반 이동·항목 동기화는 완료 → 진행 중 → 할 일 순으로 잡으므로 서로 기다리다 교착이 났고, 작업 쪽 반복의 회차가 다음
+/// 주기까지 빠졌다. 작업은 이제 항목의 세 열을 같은 순서로 먼저 잡는다.
+#[tokio::test]
+async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves() {
+    let _serial = LANE_TICK.lock().await;
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "열 잠금 순서").await;
+    let item = module_item(&app, &admin, &ws, "LKO").await;
+    let item_id = item["id"].as_str().unwrap().to_owned();
+    let today = seoul_today(&state, &admin).await;
+    let daily = json!({"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null});
+    // 뿌리가 할 일인 반복을 먼저(더 작은 id), 뿌리가 완료인 반복을 나중에 만든다.
+    let todo_root = dated_task(&app, &admin, &item, "할 일 뿌리", &day(today)).await;
+    let (status, todo_rule) = repeat(&app, &admin, &todo_root, daily.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{todo_rule:?}");
+    let done_root = dated_task(&app, &admin, &item, "완료 뿌리", &day(today)).await;
+    let (status, done_rule) = repeat(&app, &admin, &done_root, daily.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{done_rule:?}");
+    let current = send(
+        &app,
+        Method::GET,
+        &format!("/api/tasks/{}", done_root["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    let finished = send(&app, Method::PUT, &format!("/api/tasks/{}", done_root["id"].as_str().unwrap()), Some(&admin),
+        Some(json!({ "base_version": current["version"], "title": "완료 뿌리", "description": "", "status": "done",
+                     "priority": "none", "start_date": null, "due_date": day(today), "estimate_minutes": null,
+                     "tags": [], "assignee_ids": [], "milestone": false }))).await;
+    assert_eq!(finished.status, StatusCode::OK, "{:?}", finished.json);
+    let done_series = done_rule["series"]["id"].as_str().unwrap().to_owned();
+    for series in [
+        todo_rule["series"]["id"].as_str().unwrap(),
+        done_series.as_str(),
+    ] {
+        common::fixture_sql(
+            "DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
+            series,
+        )
+        .await;
+    }
+
+    // 사용자 쪽: 완료 열을 잡고(완료 업무를 할 일로 옮기는 중) 할 일 열을 기다린다.
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&url).await.unwrap();
+    let mut t1 = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *t1)
+        .await
+        .unwrap();
+    let lane = |status: &str| {
+        format!(
+            "SELECT pg_advisory_xact_lock(hashtextextended('fvoci-lane:' || $1 || ':{status}', 0))"
+        )
+    };
+    sqlx::query(&lane("done"))
+        .bind(&item_id)
+        .execute(&mut *t1)
+        .await
+        .unwrap();
+    let tick = tokio::spawn({
+        let db = state.db.clone();
+        async move { fvoci_server::worker::run_all_now(&db, None, None).await }
+    });
+    let mut blocked = false;
+    for _ in 0..500 {
+        blocked = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(holder)
+        .fetch_one(&owner)
+        .await
+        .unwrap();
+        if blocked {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(blocked, "the tick never waited on the done lane");
+    let todo = tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        sqlx::query(&lane("todo")).bind(&item_id).execute(&mut *t1),
+    )
+    .await
+    .expect("the user side waited too long");
+    assert!(todo.is_ok(), "{todo:?}");
+    t1.commit().await.unwrap();
+    tick.await.unwrap().unwrap();
+
+    // 두 반복 모두 다음 회차가 만들어졌다(교착으로 건너뛰지 않았다, 리뷰: 할 일 뿌리 반복도 확인).
+    let made = |series: String| {
+        let owner = owner.clone();
+        async move {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM fvoci.tasks WHERE series_id = $1::uuid AND deleted_at IS NULL
+                   AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
+            )
+            .bind(series)
+            .fetch_one(&owner)
+            .await
+            .unwrap()
+        }
+    };
+    let done_made = made(done_series.clone()).await;
+    let todo_made = made(todo_rule["series"]["id"].as_str().unwrap().to_owned()).await;
+    owner.close().await;
+    assert!(done_made >= 1, "the done-rooted series lost its occurrence");
+    assert!(todo_made >= 1, "the todo-rooted series lost its occurrence");
+}
+
+/// 리뷰(감사 S3 후속): 열 잠금을 반복별 예외 블록 밖에서 잡게 바꾼 뒤로, 한 항목의 열 잠금이 실패하면(교착 상대로
+/// 골라짐, 잠금 시간 초과) 반복 회차 맞추기 전체가 실패해 다른 항목의 회차까지 다음 주기로 밀렸다. 전처럼 그 항목의
+/// 반복만 경고하고 건너뛴다.
+#[tokio::test]
+async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
+    let _serial = LANE_TICK.lock().await;
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "열 잠금 실패").await;
+    let today = seoul_today(&state, &admin).await;
+    let daily = json!({"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null});
+    let mut series = Vec::new();
+    let mut items = Vec::new();
+    // 앞 항목(더 작은 id)의 잠금이 실패해도 뒤 항목은 맞춘다.
+    for key in ["LKA", "LKB"] {
+        let item = module_item(&app, &admin, &ws, key).await;
+        let root = dated_task(&app, &admin, &item, "매일", &day(today)).await;
+        let (status, rule) = repeat(&app, &admin, &root, daily.clone()).await;
+        assert_eq!(status, StatusCode::OK, "{rule:?}");
+        series.push(rule["series"]["id"].as_str().unwrap().to_owned());
+        items.push(item["id"].as_str().unwrap().to_owned());
+    }
+
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&url).await.unwrap();
+    // 다른 연결이 앞 항목의 완료 열을 쥐고 있다.
+    let mut holder = owner.acquire().await.unwrap();
+    sqlx::query("SELECT pg_advisory_lock(hashtextextended('fvoci-lane:' || $1 || ':done', 0))")
+        .bind(&items[0])
+        .execute(&mut *holder)
+        .await
+        .unwrap();
+    // 잠근 뒤에 미래 회차를 지운다. 같은 바이너리의 다른 시험이 회차 맞추기를 돌려도 앞 항목은 이 잠금에서 기다리고(지우기
+    // 전에 다시 만들지 못함), 아래에서 세는 동안에도 그렇다(리뷰).
+    for id in &series {
+        common::fixture_sql(
+            "DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
+            id,
+        )
+        .await;
+    }
+    let mut tx = owner.begin().await.unwrap();
+    sqlx::query("SET LOCAL lock_timeout = '300ms'")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    // id는 작업 프로세스처럼 서버가 만든다(Supabase의 Postgres에는 `uuidv7()`이 없다). 상한 뒤의 경합에 대비해 넉넉히.
+    let need: i32 = sqlx::query_scalar("SELECT fvoci.app_system_recurrence_tick_ids()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    let ticked = sqlx::query_scalar::<_, i32>("SELECT fvoci.app_system_recurrence_tick($1)")
+        .bind(fvoci_server::db::new_ids(
+            usize::try_from(need).unwrap_or_default() + SPARE_TICK_IDS,
+        ))
+        .fetch_one(&mut *tx)
+        .await;
+    if ticked.is_ok() {
+        tx.commit().await.unwrap();
+    }
+
+    // 잠금을 풀기 전에 센다(풀면 다른 시험의 회차 맞추기가 앞 항목을 채울 수 있다).
+    let made = |id: String| {
+        let owner = owner.clone();
+        async move {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM fvoci.tasks WHERE series_id = $1::uuid AND deleted_at IS NULL
+                   AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
+            )
+            .bind(id)
+            .fetch_one(&owner)
+            .await
+            .unwrap()
+        }
+    };
+    let skipped = made(series[0].clone()).await;
+    let synced = made(series[1].clone()).await;
+    sqlx::query("SELECT pg_advisory_unlock(hashtextextended('fvoci-lane:' || $1 || ':done', 0))")
+        .bind(&items[0])
+        .execute(&mut *holder)
+        .await
+        .unwrap();
+    drop(holder);
+    owner.close().await;
+    assert!(ticked.is_ok(), "{ticked:?}");
+    assert_eq!(skipped, 0, "the locked item was synced");
+    assert!(synced >= 1, "the other item lost its occurrences");
 }
