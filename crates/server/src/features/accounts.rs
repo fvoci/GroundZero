@@ -506,6 +506,48 @@ impl FromRequestParts<AppState> for CurrentUser {
     }
 }
 
+/// 요청의 기대 사용자 머리. 편집·초안을 시작한 화면의 사용자 id(UUID)를 담는다.
+pub const EXPECTED_USER_HEADER: &str = "x-fvoci-expected-user";
+
+/// 기대 사용자를 확인한 요청한 사용자(#60). 사용자 초안을 들고 자동 저장·재시도하는 쓰기(문서 저장, 내 노트 만들기)에
+/// 쓴다. 순서: 세션으로 사용자를 정하고(없으면 401) → 머리가 없거나 둘 이상이거나 UUID가 아니면 400 → 세션의 사용자와
+/// 다르면 409 `account_changed`. 처리기 본문(트랜잭션·쓰기)보다 먼저 끝난다.
+///
+/// 머리는 비교에만 쓴다. 돌려주는 사용자는 언제나 세션의 사용자이고 권한도 그 사용자로 판단한다(머리로 아무것도
+/// 허용하지 않는다). 다른 탭에서 계정을 바꾼 뒤 앞 계정의 화면이 보낸 요청이 새 계정의 이름으로 남지 않게 한다.
+#[derive(Debug, Clone, Copy)]
+pub struct ExpectedUser(pub UserId);
+
+impl FromRequestParts<AppState> for ExpectedUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, AppError> {
+        let CurrentUser(user) = CurrentUser::from_request_parts(parts, state).await?;
+        let mut values = parts.headers.get_all(EXPECTED_USER_HEADER).iter();
+        let (Some(value), None) = (values.next(), values.next()) else {
+            return Err(AppError::BadRequest(format!(
+                "send exactly one {EXPECTED_USER_HEADER} header"
+            )));
+        };
+        check_expected_user(user, value.to_str().ok(), EXPECTED_USER_HEADER)?;
+        Ok(Self(user))
+    }
+}
+
+/// 기대 사용자 값(머리, 실시간 연결의 `expected_user` 질의)을 세션의 사용자와 비교한다. 값이 없거나 UUID가 아니면
+/// 400, 다르면 `AccountChanged`. 비교만 하고 아무것도 허용하지 않는다. `name`은 오류 문구에 쓰는 값의 이름.
+pub fn check_expected_user(user: UserId, raw: Option<&str>, name: &str) -> Result<(), AppError> {
+    let expected = raw
+        .and_then(|v| Uuid::parse_str(v).ok())
+        .map(UserId)
+        .ok_or_else(|| AppError::BadRequest(format!("{name} must be a user id")))?;
+    if expected == user {
+        Ok(())
+    } else {
+        Err(AppError::AccountChanged)
+    }
+}
+
 /// 현재 사용자 정보.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Me {

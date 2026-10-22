@@ -2,7 +2,7 @@
   // 반복 규칙 입력(업무·일정 공통, D-31). 단순한 규칙만: 매일·매주(요일)·매달·매년, 간격, 끝(없음·날짜·횟수).
   // 없는 날(31일·2월 29일)은 건너뛴다. 저장하면 이미 만든 회차는 바뀌지 않는다.
   import type { Frequency, RecurrenceRule } from '$lib/api/client';
-  import { FREQUENCIES } from '$lib/api/client';
+  import { ApiError, FREQUENCIES } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -101,7 +101,11 @@
       await onsave(rule);
       saved = true;
     } catch (e: unknown) {
-      error = errorText(e, m.events_recurrence_save_failed());
+      // 그사이 다른 사람이 규칙을 바꿨다(서버 409). 입력한 칸은 그대로 두고, 요약(서버 규칙)과 함께 알린다.
+      error =
+        e instanceof ApiError && e.code === 'rule_conflict'
+          ? m.events_rule_changed_meanwhile()
+          : errorText(e, m.events_recurrence_save_failed());
     } finally {
       busy = false;
     }

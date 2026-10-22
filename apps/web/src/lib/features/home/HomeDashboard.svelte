@@ -15,6 +15,7 @@
   import { api } from '$lib/api/client';
   import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
+  import { me } from '$lib/me.svelte';
   import type { CalendarEntry } from '$lib/features/events/calendar';
   import { entriesByDay, startOfWeek } from '$lib/features/events/calendar';
   import { displaySettings, formatDay, weekdays } from '$lib/display';
@@ -78,6 +79,8 @@
           from,
           to,
           zone,
+          // 업무·일정 밖 날짜(D-80)도 달력과 같이 보인다.
+          calendars.flatMap((c) => c.dates),
         );
         const notes = await api.notifications();
         if (mine !== loadSeq) return;
@@ -97,6 +100,8 @@
   }
   const bucketOf = (b: 'overdue' | 'today' | 'upcoming'): HomeTaskView[] =>
     home?.up_next.filter((t) => t.bucket === b) ?? [];
+  // 묶음의 전체 수는 서버가 센다(목록은 묶음마다 50개까지).
+  const totalOf = (b: 'overdue' | 'today' | 'upcoming'): number => home?.up_next_counts[b] ?? 0;
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
   const workspaceName = (ws: string | null): string =>
     ws === null ? m.home_personal() : (workspaces.find((w) => w.id === ws)?.name ?? '');
@@ -148,7 +153,8 @@
     const requestId = quickKey.for(send);
     try {
       if (send.what === 'memo') {
-        const note = await api.createNote(requestId, title);
+        // 이 창을 연 사용자. 다른 탭에서 계정을 바꿨으면 서버가 409 account_changed로 막는다(#60).
+        const note = await api.createNote(me.userId, requestId, title);
         quickStatus = m.home_memo_created({ title: note.title });
       } else if (send.what === 'task') {
         await api.createTask(send.item, requestId, title);
@@ -277,10 +283,11 @@
       <h2 id="up-next-heading" class="text-lg font-semibold">{m.home_up_next()}</h2>
       {#each ['overdue', 'today', 'upcoming'] as const as b (b)}
         {@const list = bucketOf(b)}
+        {@const total = totalOf(b)}
         {#if list.length > 0}
           <h3 class={['text-sm font-semibold', b === 'overdue' && 'text-destructive']}>
             {bucketLabel(b)}
-            {list.length}
+            {total}
           </h3>
           <ul class="flex flex-col gap-0.5">
             {#each list as t (t.id)}
@@ -301,6 +308,11 @@
               </li>
             {/each}
           </ul>
+          {#if total > list.length}
+            <p class="px-2 text-xs text-muted-foreground">
+              {m.home_bucket_more({ shown: list.length, total })}
+            </p>
+          {/if}
         {/if}
       {/each}
       {#if home?.up_next.length === 0}

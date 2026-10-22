@@ -1154,6 +1154,458 @@ async fn purged_module_keys_stay_reserved() {
     assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
 }
 
+/// 테이블 소유 역할 연결(시험 확인용).
+async fn owner_pool() -> sqlx::PgPool {
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    sqlx::PgPool::connect(&url).await.unwrap()
+}
+
+/// 열어 둔 트랜잭션의 서버 프로세스 번호.
+async fn backend_pid(tx: &mut fvoci_server::db::UserTx) -> i32 {
+    sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(tx.conn())
+        .await
+        .unwrap()
+}
+
+/// 다른 세션이 `holder`의 잠금을 실제로 기다릴 때까지 기다린다. 고정 시간만 기다리면 느린 환경에서 요청이 잠금에
+/// 닿기 전에 커밋해, 경합을 재현하지 못한 채 통과하거나 엉뚱한 이유로 실패한다. 끝내 기다리지 않으면 시험을 멈춘다.
+async fn wait_until_blocked_by(holder: i32) {
+    let db = owner_pool().await;
+    let mut blocked = false;
+    for _ in 0..500 {
+        blocked = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+        )
+        .bind(holder)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        if blocked {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    db.close().await;
+    assert!(blocked, "no request waited on the held transaction");
+}
+
+async fn new_task(
+    app: &Router,
+    user: &TestUser,
+    item_id: &str,
+    title: &str,
+    parent: Option<&Value>,
+) -> Value {
+    let r = send(
+        app,
+        Method::POST,
+        &format!("/api/items/{item_id}/tasks"),
+        Some(user),
+        Some(json!({ "request_id": new_request_id(), "title": title, "parent_id": parent.map(|p| p["id"].clone()) })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    r.json
+}
+
+/// 감사 S1: 상위 업무를 지우는 사이 하위 업무가 떨어져 나가면(다른 상위로 옮기거나 최상위로) 그 업무는 함께 지우지 않는다.
+/// 전에는 잠그기 전에 고른 목록을 잠근 뒤에도 그대로 써서, 방금 독립시킨 업무가 상위 업무의 묶음으로 휴지통에 들어갔다.
+#[tokio::test]
+async fn trashing_a_parent_leaves_a_subtask_detached_while_it_waited() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "하위 떼기 경합").await;
+    let it = item(&app, &admin, &ws, "TRD").await;
+    let item_id = it["id"].as_str().unwrap();
+    let parent = new_task(&app, &admin, item_id, "상위", None).await;
+    let sub = new_task(&app, &admin, item_id, "하위", Some(&parent)).await;
+    let sub_id: uuid::Uuid = sub["id"].as_str().unwrap().parse().unwrap();
+
+    // T1: 하위 업무를 최상위로 뗀다(아직 끝나지 않음, 하위 업무 행을 잡고 있다).
+    let mut t1 = state.db.begin_as(admin.id).await.unwrap();
+    let holder = backend_pid(&mut t1).await;
+    sqlx::query("SELECT app_set_task_parent($1, NULL, $2)")
+        .bind(sub_id)
+        .bind(fvoci_server::db::new_ids(1))
+        .execute(t1.conn())
+        .await
+        .unwrap();
+    // T2: 그동안 상위 업무를 지운다(하위 업무 행을 기다린다).
+    let parent_uri = format!("/api/tasks/{}", parent["id"].as_str().unwrap());
+    let second = tokio::spawn({
+        let app = app.clone();
+        let admin = admin.clone();
+        async move { send(&app, Method::DELETE, &parent_uri, Some(&admin), None).await }
+    });
+    wait_until_blocked_by(holder).await;
+    t1.commit().await.unwrap();
+    let second = second.await.unwrap();
+    assert_eq!(second.status, StatusCode::OK, "{:?}", second.json);
+
+    let owner = owner_pool().await;
+    let (deleted, parent_id): (Option<String>, Option<uuid::Uuid>) =
+        sqlx::query_as("SELECT deleted_at::text, parent_id FROM fvoci.tasks WHERE id = $1")
+            .bind(sub_id)
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+    assert_eq!(
+        deleted, None,
+        "the detached subtask went to the trash with its old parent"
+    );
+    assert_eq!(parent_id, None);
+    let count: i32 =
+        sqlx::query_scalar("SELECT member_count FROM fvoci.trash_batches WHERE id = $1::uuid")
+            .bind(second.json["batch_id"].as_str().unwrap())
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+    assert_eq!(count, 1);
+    owner.close().await;
+}
+
+/// 감사 S5: 지우기가 문서 자리 잠금을 기다리는 사이 문서가 다른 워크스페이스로 옮겨지면, 옛 자리(옛 워크스페이스)
+/// 기준으로 휴지통 묶음을 만들지 않고 409로 다시 하게 한다(옮기기·자리 바꾸기와 같은 규칙).
+#[tokio::test]
+async fn trashing_a_document_moved_to_another_workspace_meanwhile_conflicts() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let w1 = create_workspace(&app, &admin, "옮기기 전").await;
+    let w2 = create_workspace(&app, &admin, "옮긴 뒤").await;
+    let (writer, email) = add_member(&app, &state, &admin, &w1, "author", "writer").await;
+    // 쓴 사람은 옮겨 갈 워크스페이스에도 있다(읽기만).
+    let inv = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{w2}/invitations"),
+        Some(&admin),
+        Some(json!({ "email": email, "role": "reader" })),
+    )
+    .await;
+    let accepted = send(
+        &app,
+        Method::POST,
+        &format!(
+            "/api/invitations/{}/accept",
+            inv.json["id"].as_str().unwrap()
+        ),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert_eq!(accepted.status, StatusCode::OK, "{:?}", accepted.json);
+    let doc = create_doc(&app, &writer, &w1, "옮겨질 문서").await;
+    let doc_id: uuid::Uuid = doc["id"].as_str().unwrap().parse().unwrap();
+    let w2_id: uuid::Uuid = w2.parse().unwrap();
+
+    // T1: 관리자가 문서를 w2로 옮긴다(옮기기 처리와 같은 순서, 아직 끝나지 않음).
+    let mut t1 = state.db.begin_as(admin.id).await.unwrap();
+    let holder = backend_pid(&mut t1).await;
+    sqlx::query("SELECT app_lock_move($1, $2, NULL)")
+        .bind(doc_id)
+        .bind(w2_id)
+        .execute(t1.conn())
+        .await
+        .unwrap();
+    let n: i32 = sqlx::query_scalar("SELECT app_move_document_ids($1)")
+        .bind(doc_id)
+        .fetch_one(t1.conn())
+        .await
+        .unwrap();
+    sqlx::query("SELECT * FROM app_move_document($1, $2, NULL, $3)")
+        .bind(doc_id)
+        .bind(w2_id)
+        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+        .execute(t1.conn())
+        .await
+        .unwrap();
+    // T2: 쓴 사람이 그동안 문서를 지운다(옛 자리의 트리 잠금을 기다린다).
+    let uri = format!("/api/documents/{doc_id}");
+    let second = tokio::spawn({
+        let app = app.clone();
+        let writer = writer.clone();
+        async move { send(&app, Method::DELETE, &uri, Some(&writer), None).await }
+    });
+    wait_until_blocked_by(holder).await;
+    t1.commit().await.unwrap();
+    let second = second.await.unwrap();
+    assert_eq!(second.status, StatusCode::CONFLICT, "{:?}", second.json);
+
+    let owner = owner_pool().await;
+    let (deleted, ws): (Option<String>, Option<uuid::Uuid>) =
+        sqlx::query_as("SELECT deleted_at::text, workspace_id FROM fvoci.documents WHERE id = $1")
+            .bind(doc_id)
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+    assert_eq!(deleted, None);
+    assert_eq!(ws, Some(w2_id));
+    let batches: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM fvoci.trash_batches WHERE root_id = $1 AND root_kind = 'document'",
+    )
+    .bind(doc_id)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert_eq!(batches, 0);
+    owner.close().await;
+}
+
+/// 감사 S7: 휴지통에 든 항목의 업무 담당자·리더는 역할이 바뀌거나 그룹이 지워졌다는 이유만으로 빠지지 않는다(휴지통이라
+/// 지금 볼 수 없을 뿐 권한을 잃은 것이 아니다). 워크스페이스에서 나간 사람은 휴지통에 있어도 빠진다.
+#[tokio::test]
+async fn trashed_items_keep_assignees_who_did_not_lose_access() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "휴지통 담당자").await;
+    let (keep, _) = add_member(&app, &state, &admin, &ws, "keeper", "writer").await;
+    let (gone, _) = add_member(&app, &state, &admin, &ws, "leaver", "writer").await;
+    let it = item(&app, &admin, &ws, "TAS").await;
+    let item_id = it["id"].as_str().unwrap();
+    let task = new_task(&app, &admin, item_id, "담당 업무", None).await;
+    let task_id = task["id"].as_str().unwrap();
+    let assigned = send(&app, Method::PUT, &format!("/api/tasks/{task_id}"), Some(&admin), Some(json!({
+        "base_version": task["version"], "title": "담당 업무", "description": "", "status": "todo", "priority": "none",
+        "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
+        "assignee_ids": [keep.id.0, gone.id.0] }))).await;
+    assert_eq!(assigned.status, StatusCode::OK, "{:?}", assigned.json);
+    let lead = send(&app, Method::PUT, &format!("/api/items/{item_id}/profile"), Some(&admin), Some(json!({
+        "leader_id": gone.id.0, "goal": "", "scope": "", "starts_on": null, "ends_on": null, "status": "active",
+        "details": {} }))).await;
+    assert!(lead.status.is_success(), "{:?}", lead.json);
+
+    let trashed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/items/{item_id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(trashed.status, StatusCode::OK, "{:?}", trashed.json);
+    // 휴지통에 든 동안: 남는 사람은 역할만 바뀌고(올림), 떠나는 사람은 워크스페이스에서 나간다.
+    let promoted = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/members/{}", keep.id.0),
+        Some(&admin),
+        Some(json!({ "role": "admin" })),
+    )
+    .await;
+    assert_eq!(
+        promoted.status,
+        StatusCode::NO_CONTENT,
+        "{:?}",
+        promoted.json
+    );
+    let removed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/workspaces/{ws}/members/{}", gone.id.0),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT, "{:?}", removed.json);
+
+    let restored = send(
+        &app,
+        Method::POST,
+        &format!(
+            "/api/trash/{}/restore",
+            trashed.json["batch_id"].as_str().unwrap()
+        ),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(
+        restored.status,
+        StatusCode::NO_CONTENT,
+        "{:?}",
+        restored.json
+    );
+    let detail = send(
+        &app,
+        Method::GET,
+        &format!("/api/tasks/{task_id}"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    let assignees: Vec<String> = detail.json["assignees"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["user_id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(
+        assignees,
+        vec![keep.id.0.to_string()],
+        "role change dropped a kept assignee or a leaver stayed"
+    );
+    let profile = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{item_id}/profile"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(
+        profile.json["leader_id"],
+        Value::Null,
+        "a person who left stayed leader of the restored item"
+    );
+}
+
+/// 문서에 파일 하나를 올린다(한 조각). 파일 id를 돌려준다.
+async fn attach(app: &Router, user: &TestUser, doc: &Value, name: &str, data: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let started = send(app, Method::POST, "/api/uploads", Some(user), Some(json!({
+        "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] }, "name": name,
+        "size": data.len(), "content_type": "text/plain" }))).await;
+    assert_eq!(started.status, StatusCode::CREATED, "{:?}", started.json);
+    let id = started.json["id"].as_str().unwrap();
+    let hash = hex::encode(Sha256::digest(data));
+    let (status, _, _) = common::send_raw(
+        app,
+        Method::PUT,
+        &format!("/api/uploads/{id}/parts/1"),
+        Some(user),
+        &[
+            ("x-content-sha256", hash.as_str()),
+            ("content-type", "application/octet-stream"),
+        ],
+        data.to_vec(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let done = send(
+        app,
+        Method::POST,
+        &format!("/api/uploads/{id}/complete"),
+        Some(user),
+        None,
+    )
+    .await;
+    assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
+    done.json["file_id"].as_str().unwrap().to_owned()
+}
+
+/// 감사 S13: 첨부를 휴지통에 넣은 사람은 그 문서에 쓸 수 없게 되면(공유 철회 등) 첨부를 되살리지 못한다. 전에는 항목
+/// 권한만 다시 봐서, 항목이 없는 위키 문서의 첨부는 볼 수도 없는 문서에 되살렸다.
+#[tokio::test]
+async fn restoring_an_attachment_needs_write_access_to_its_document() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "첨부 되살리기").await;
+    // 비공개 설정은 문서 소유 권한자(여기서는 관리자)가 한다.
+    let author = admin.clone();
+    let (helper, helper_email) =
+        add_member(&app, &state, &admin, &ws, "doc-helper", "writer").await;
+    let doc = create_doc(&app, &author, &ws, "비공개 문서").await;
+    let doc_id = doc["id"].as_str().unwrap();
+    let private = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{doc_id}/settings"),
+        Some(&author),
+        Some(json!({ "visibility": "private", "allow_copy": true })),
+    )
+    .await;
+    assert!(private.status.is_success(), "{:?}", private.json);
+    let shared = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/shares"),
+        Some(&author),
+        Some(json!({ "email": helper_email, "permission": "write" })),
+    )
+    .await;
+    assert_eq!(shared.status, StatusCode::CREATED, "{:?}", shared.json);
+    let file_id = attach(&app, &author, &doc, "메모.txt", b"note").await;
+
+    let trashed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/files/{file_id}"),
+        Some(&helper),
+        None,
+    )
+    .await;
+    assert_eq!(trashed.status, StatusCode::OK, "{:?}", trashed.json);
+    let revoked = send(
+        &app,
+        Method::DELETE,
+        &format!(
+            "/api/document-shares/{}",
+            shared.json["id"].as_str().unwrap()
+        ),
+        Some(&author),
+        None,
+    )
+    .await;
+    assert!(revoked.status.is_success(), "{:?}", revoked.json);
+
+    let batch = trashed.json["batch_id"].as_str().unwrap();
+    let restored = send(
+        &app,
+        Method::POST,
+        &format!("/api/trash/{batch}/restore"),
+        Some(&helper),
+        None,
+    )
+    .await;
+    assert_eq!(
+        restored.status,
+        StatusCode::NOT_FOUND,
+        "{:?}",
+        restored.json
+    );
+    let owner = owner_pool().await;
+    let deleted: Option<String> =
+        sqlx::query_scalar("SELECT deleted_at::text FROM fvoci.files WHERE id = $1::uuid")
+            .bind(&file_id)
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+    assert!(
+        deleted.is_some(),
+        "the file was restored into a document the restorer can no longer write"
+    );
+    owner.close().await;
+    // 다시 쓰기 공유를 받은 지운 사람은 되살릴 수 있다(관리자 우회가 아닌 지운 사람의 문서 쓰기 검사).
+    let reshared = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/shares"),
+        Some(&author),
+        Some(json!({ "email": helper_email, "permission": "write" })),
+    )
+    .await;
+    assert_eq!(reshared.status, StatusCode::CREATED, "{:?}", reshared.json);
+    let by_helper = send(
+        &app,
+        Method::POST,
+        &format!("/api/trash/{batch}/restore"),
+        Some(&helper),
+        None,
+    )
+    .await;
+    assert_eq!(
+        by_helper.status,
+        StatusCode::NO_CONTENT,
+        "{:?}",
+        by_helper.json
+    );
+}
+
 /// 감사 C22: 개인 노트 휴지통(`GET /api/me/trash`, `POST /api/me/trash/purge-expired`)에는 시험이 없었다. 개인 노트는
 /// 워크스페이스 관리자에게도 비공개다(AGENTS.md). 목록과 만료 비우기는 노트 주인의 것만 보고 지운다.
 #[tokio::test]

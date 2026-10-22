@@ -12,7 +12,13 @@
   import { api, ApiError, fileContentUrl, NetworkError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { RetryKey } from '$lib/api/retry-key';
+  import {
+    accountSwitching,
+    reportSessionExpired,
+    switchAccount,
+  } from '$lib/features/feedback/feedback.svelte';
   import { uploadFile } from '$lib/features/files/upload';
+  import { me as currentUser } from '$lib/me.svelte';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { m } from '$lib/paraglide/messages.js';
   import { router, standalonePath } from '$lib/router.svelte';
@@ -31,7 +37,9 @@
     loadOffers,
     plainText,
     removeOffer,
+    sameContent,
     storeDraft,
+    takeOrReserve,
   } from './drafts';
   import { contentIssues } from './paste-guard';
   import TiptapEditor from './TiptapEditor.svelte';
@@ -50,7 +58,10 @@
 
   /** 본문에 넣을 파일: 이 문서의 첨부로 올리고 그 버전의 주소를 돌려준다(D-27 이미지·첨부). */
   async function insertFile(file: File): Promise<{ href: string; name: string; image: boolean }> {
-    const done = await uploadFile(file, { target: { kind: 'document', id: server.id } });
+    const done = await uploadFile(file, {
+      expectedUser: editingUser,
+      target: { kind: 'document', id: server.id },
+    });
     if (done.file_id === null) throw new Error(done.failure ?? m.documents_upload_failed());
     const image = INLINE_IMAGES.includes(file.type);
     return {
@@ -65,6 +76,9 @@
   // 서버가 확인한 최신 상태. 편집 내용은 따로 둔다.
   // 부모가 문서마다 {#key}로 새로 만들므로 처음 값만 읽는다.
   const start = untrack(() => initial);
+  // 이 편집을 시작한 사용자. 저장 요청마다 그대로 보내 서버가 세션의 사용자와 비교한다(#60). 보내기 직전에 지금
+  // 로그인한 사용자로 다시 채우지 않는다(그사이 다른 탭에서 계정을 바꿨으면 그 계정으로 조용히 바뀐다).
+  const editingUser = untrack(() => currentUser.userId);
   let server = $state<DocumentView>(start);
   let title = $state(start.title);
   let body = $state<DocNode>(start.body);
@@ -80,34 +94,52 @@
   let conflict = $state<DocumentView | undefined>(undefined);
   // 저장하는 사이 실시간 공동 편집이 켜져 본문을 여기서 저장할 수 없다.
   let realtimeOn = $state(false);
-  // 고르게 할 초안이 실시간 편집기가 남긴 줄의 것인지. 그렇다면 고르기 전까지 줄에 그대로 두고(이 편집기의 입력이
-  // 덮지 않게), 되살리거나 버릴 때만 줄에서 뺀다.
+  // 고르게 할 초안이 줄에 있는지(실시간 편집기가 남겼거나, 열 때 이 탭의 지난 초안을 옮겼다). 그렇다면 고르기 전까지
+  // 줄에 그대로 두고(이 편집기의 입력이 덮지 않게), 되살리거나 버릴 때만 줄에서 뺀다.
   let restorableQueued = false;
-  // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다. 이 편집기의 초안이 없으면 실시간 편집기가
-  // 남긴 줄의 첫 초안을 고르게 한다.
-  function pendingDraft(): ReturnType<typeof loadDraft> {
-    const isServer = (d: Draft): boolean =>
-      canonicalJson({ title: d.title.trim(), body: d.body }) ===
-      canonicalJson({ title: start.title, body: start.body });
+  // 고르게 할 초안이 줄로 옮기지 못한(저장소 가득 참) 이 탭의 지난 초안인지. 그렇다면 고를 때까지 이 탭의 초안 키에
+  // 새 편집을 쓰거나 지우지 않는다(덮거나 지워 사라지지 않게).
+  let reservedDraft = false;
+  // 보관된 초안이 서버 내용과 같으면(이미 저장됨) 지우고 안내하지 않는다.
+  const isServer = (d: Draft): boolean =>
+    canonicalJson({ title: d.title.trim(), body: d.body }) ===
+    canonicalJson({ title: start.title, body: start.body });
+  // 이 탭의 지난 초안(새로고침·앱 안에서 다시 열기)은 이 편집기의 입력이 쓰는 키와 같은 키에 있다. 그대로 두고 고르게
+  // 하면 고르기 전의 입력이 덮고 저장 뒤 지운다. 그래서 먼저 고르게 할 줄로 옮긴 뒤 고르게 한다.
+  function takeTabDraft(): Draft | undefined {
     const draft = loadDraft(start.id);
-    if (draft !== undefined) {
-      if (!isServer(draft)) return draft;
+    if (draft === undefined) return undefined;
+    if (isServer(draft)) {
       clearDraft(start.id);
+      return undefined;
     }
+    const { reserved } = takeOrReserve(start.id);
+    if (reserved !== undefined) {
+      reservedDraft = true;
+      return reserved;
+    }
+    restorableQueued = true;
+    return draft;
+  }
+  // 고르게 할 줄(실시간 편집기·닫힌 탭이 남긴 것)의 첫 초안. `except`(방금 고른 초안)는 줄에서 빼지 못해 남았어도
+  // 다시 내놓지 않는다.
+  function nextOffer(except?: Draft): Draft | undefined {
     for (const queued of loadOffers(start.id)) {
       if (isServer(queued)) {
         removeOffer(start.id, queued);
         continue;
       }
+      if (except?.savedAt === queued.savedAt && sameContent(queued, except)) continue;
       restorableQueued = true;
       return queued;
     }
     return undefined;
   }
-  let restorable = $state(pendingDraft());
+  let restorable = $state(takeTabDraft() ?? nextOffer());
   // 닫힌 탭이 남긴 이 문서의 초안을 줄로 넘겨받는다(살아 있는 탭의 것은 두고). 고를 것이 없으면 그것을 고르게 한다.
+  // 이 탭의 초안 키는 보지 않는다(그사이의 입력을 지난 초안으로 내놓지 않게).
   void adoptOrphans(start.id).then((adopted) => {
-    if (adopted > 0 && restorable === undefined) restorable = pendingDraft();
+    if (adopted > 0 && restorable === undefined) restorable = nextOffer();
   });
   let confirmOverwrite = $state(false);
   let editorVersion = $state(0);
@@ -118,6 +150,9 @@
   let representationRetried = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let destroyed = false;
+  // 이 창을 연 계정이 아닌 계정으로 바뀐 것을 알았다(보내기 전 확인 또는 서버의 409 `account_changed`). 이 창은 그
+  // 계정으로 다시 읽히는 중이다: 더 보내지 않고(예약·재시도·직접 저장 모두) 편집은 앞 계정의 초안으로만 남긴다.
+  let accountChanged = false;
 
   const AUTOSAVE_DELAY_MS = 1500;
   const RETRY_DELAY_MS = 5000;
@@ -139,33 +174,55 @@
     }, delay);
   }
 
+  // 이 탭의 초안 키에 지금 편집을 남기거나 지운다. 줄로 옮기지 못한 지난 초안을 고르게 하는 동안은 그 키를 건드리지 않는다.
+  function keepDraft(): void {
+    if (reservedDraft) return;
+    storeDraft(server.id, {
+      baseRevision: server.revision,
+      title,
+      body,
+      savedAt: new Date().toISOString(),
+    });
+  }
+
+  function dropDraft(): void {
+    if (!reservedDraft) clearDraft(server.id);
+  }
+
   function edited(): void {
-    if (!server.can_edit || status === 'conflict') return;
+    if (!server.can_edit) return;
+    if (status === 'conflict') {
+      // 충돌 화면을 보며 고친 내용도 초안에 남긴다(떠나거나 새로고침해도 남게). 상태와 저장은 사용자가 고를 때까지 둔다.
+      keepDraft();
+      return;
+    }
     const signedOut = status === 'signed-out';
     status = isDirty() ? 'dirty' : 'saved';
     if (status === 'dirty') {
-      storeDraft(server.id, {
-        baseRevision: server.revision,
-        title,
-        body,
-        savedAt: new Date().toISOString(),
-      });
-      schedule(AUTOSAVE_DELAY_MS);
+      keepDraft();
+      if (!accountChanged) schedule(AUTOSAVE_DELAY_MS);
     } else {
       // 서버 내용과 같아졌으면(문제 내용을 지우는 등) 지난 저장 안내는 더 필요 없다(로그아웃 안내는 남긴다).
-      // 복원 제안 중인 초안은 사용자가 고를 때까지 남긴다.
+      // 복원 제안 중인 초안은 사용자가 고를 때까지 남긴다(줄에 있거나, 옮기지 못했으면 dropDraft가 두고 간다).
       // 실시간이 켜져 여기서 저장할 수 없다는 안내(사본 단추)는 남긴다.
       if (!signedOut && !realtimeOn) message = undefined;
-      if (restorable === undefined) clearDraft(server.id);
+      dropDraft();
     }
   }
 
   async function save(): Promise<void> {
-    if (!server.can_edit || status === 'saving' || status === 'conflict' || realtimeOn) return;
+    if (
+      !server.can_edit ||
+      status === 'saving' ||
+      status === 'conflict' ||
+      realtimeOn ||
+      accountChanged
+    )
+      return;
     if (!isDirty()) {
       if (status !== 'signed-out') message = undefined;
       status = 'saved';
-      if (restorable === undefined) clearDraft(server.id);
+      dropDraft();
       return;
     }
     if (title.trim() === '') {
@@ -181,6 +238,33 @@
       message = blocked;
       return;
     }
+    // 보내기 전에 이 창을 연 계정이 아직 로그인돼 있는지 본다. 다른 탭에서 다른 계정으로 로그인하면 쿠키가 바뀌어,
+    // 이 창이 돌아오기(focus) 전에 나가는 예약·재시도 저장이 앞 계정의 편집을 새 계정의 이름으로 남긴다. 직접 누른
+    // 저장도 화면은 앞 계정의 것이라 같게 본다. 확인하지 못하면 보내지 않는다. 요청 id·보낼 내용은 확인 뒤에 정한다.
+    // 확인과 전송 사이에 바뀐 경우는 서버가 막는다(요청의 기대 사용자, 아래 409 `account_changed`). 이 확인은 그
+    // 전에 이미 보이는 전환에서 본문을 아예 보내지 않게 하는 앞단 방어로 남긴다.
+    status = 'saving';
+    const who = await signedInAs();
+    if (who === 'gone') return;
+    if (who === 'other') {
+      // 입력은 앞 계정의 초안(사용자별 키)으로 이미 남아 있다(edited()).
+      status = 'dirty';
+      stopSending();
+      switchAccount();
+      return;
+    }
+    if (who === 'signed-out') {
+      status = 'signed-out';
+      message = m.documents_signed_out();
+      reportSessionExpired();
+      return;
+    }
+    if (who === 'unknown') {
+      status = 'retrying';
+      message = m.documents_save_retrying();
+      schedule(RETRY_DELAY_MS);
+      return;
+    }
     const snap = snapshot();
     if (attempt?.snapshot !== snap) attempt = { requestId: newRequestId(), snapshot: snap };
     const { requestId } = attempt;
@@ -188,6 +272,7 @@
     message = undefined;
     try {
       const result = await api.saveDocument(server.id, {
+        expectedUser: editingUser,
         requestId,
         baseRevision: server.revision,
         title: title.trim(),
@@ -220,7 +305,7 @@
         schedule(AUTOSAVE_DELAY_MS);
       } else {
         status = 'saved';
-        clearDraft(server.id);
+        dropDraft();
       }
     } catch (error: unknown) {
       if (destroyed) return;
@@ -231,6 +316,13 @@
       } else if (error instanceof ApiError && error.status === 401) {
         status = 'signed-out';
         message = m.documents_signed_out();
+      } else if (error instanceof ApiError && error.code === 'account_changed') {
+        // 이 편집을 시작한 계정이 아닌 세션으로 나갔다. 서버는 아무것도 바꾸지 않았다. 다시 보내지 않는다(예약도
+        // 걸지 않는다). 입력은 앞 계정의 초안(사용자별 키, edited())에 남아 있고, 계정 전환 처리(다시 읽기)는
+        // client.ts가 이미 시작했다.
+        status = 'dirty';
+        message = m.documents_account_changed();
+        stopSending();
       } else if (
         error instanceof ApiError &&
         error.code === 'invalid_state' &&
@@ -245,6 +337,31 @@
         message = errorText(error, m.documents_save_failed());
       }
     }
+  }
+
+  /** 다른 계정으로 바뀐 것을 알았다: 걸어 둔 예약·재시도를 거두고 이 편집기에서 더 보내지 않는다. */
+  function stopSending(): void {
+    accountChanged = true;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  }
+
+  /**
+   * 지금 로그인한 계정이 이 창을 연 계정인지. 묻지 못했거나(연결 오류 등) 이 창의 계정을 모르면 `unknown`, 묻는 사이
+   * 편집기가 사라졌으면 `gone`.
+   */
+  async function signedInAs(): Promise<'same' | 'other' | 'signed-out' | 'unknown' | 'gone'> {
+    const mine = editingUser;
+    if (mine === '') return 'unknown';
+    let now: Awaited<ReturnType<typeof api.me>>;
+    try {
+      now = await api.me();
+    } catch {
+      return destroyed ? 'gone' : 'unknown';
+    }
+    if (destroyed) return 'gone';
+    if (now === undefined) return 'signed-out';
+    return now.id === mine ? 'same' : 'other';
   }
 
   /** 저장이 409(상태)로 거절됐을 때 그사이 실시간이 켜졌는지. 확인하지 못하면 아니라고 본다. */
@@ -264,7 +381,7 @@
     editorVersion += 1;
     conflict = undefined;
     attempt = undefined;
-    clearDraft(server.id);
+    dropDraft();
     status = 'saved';
     message = undefined;
   }
@@ -297,9 +414,10 @@
       // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다. 응답을 잃고 다시 눌러도
       // 같은 내용이면 같은 노트가 된다.
       const noteRequest = copyNoteKey.for({ copyTitle });
-      const created = await api.createNote(noteRequest, copyTitle);
+      const created = await api.createNote(editingUser, noteRequest, copyTitle);
       const saveRequest = copySaveKey.for({ note: created.id, copyTitle, body });
       const saved = await api.saveDocument(created.id, {
+        expectedUser: editingUser,
         requestId: saveRequest,
         baseRevision: created.revision,
         title: copyTitle,
@@ -308,7 +426,7 @@
       if (saved.kind === 'conflict') throw new Error('copy conflicted');
       copyNoteKey.done(noteRequest);
       copySaveKey.done(saveRequest);
-      clearDraft(server.id);
+      dropDraft();
       router.guard = undefined;
       router.navigate(standalonePath(created.id));
     } catch (error: unknown) {
@@ -318,11 +436,14 @@
 
   function restoreDraft(): void {
     if (restorable === undefined) return;
+    const done = restorable;
     // 줄의 초안이면 이 편집기의 초안으로 먼저 옮겨 둔 뒤에 줄에서 뺀다(옮기지 못하면 줄에 남긴다).
     if (restorableQueued && storeDraft(server.id, restorable)) {
       removeOffer(server.id, restorable);
       restorableQueued = false;
     }
+    // 옮기지 못한 지난 초안이었으면 이제 그것이 지금 편집이다(아래 edited()가 같은 키에 남긴다).
+    reservedDraft = false;
     title = restorable.title;
     body = restorable.body;
     editorVersion += 1;
@@ -330,13 +451,24 @@
     server = { ...server, revision: restorable.baseRevision };
     restorable = undefined;
     edited();
+    // 줄에 다음 초안이 있으면 이어 고르게 한다(다시 열 때까지 숨지 않게).
+    restorableQueued = false;
+    restorable = nextOffer(done);
   }
 
   function discardDraft(): void {
+    const done = restorable;
+    // 줄의 초안이면 줄에서만 뺀다(이 탭의 초안 키에는 그사이의 입력이 있다).
     if (restorable !== undefined && restorableQueued) removeOffer(server.id, restorable);
-    else clearDraft(server.id);
+    else {
+      // 옮기지 못해 이 탭의 키에 둔 지난 초안을 지우고, 고르는 동안 남기지 않았던 지금 편집을 그 자리에 남긴다.
+      clearDraft(server.id);
+      reservedDraft = false;
+      if (isDirty()) keepDraft();
+    }
+    // 줄에 다음 초안이 있으면 이어 고르게 한다(다시 열 때까지 숨지 않게).
     restorableQueued = false;
-    restorable = undefined;
+    restorable = nextOffer(done);
   }
 
   function statusText(s: Status): string {
@@ -360,7 +492,18 @@
 
   onMount(() => {
     const beforeUnload = (event: BeforeUnloadEvent): void => {
-      if (isDirty()) event.preventDefault();
+      if (!isDirty()) return;
+      // 다른 계정으로 바뀌어 다시 읽을 때는 지금 입력을 앞 계정의 초안으로 남길 수 있으면 막지 않는다. 남기지
+      // 못하면(저장소를 쓸 수 없음) 보통 떠나기처럼 경고한다(남아도 저장은 계정 확인에서 막힌다).
+      const kept =
+        accountSwitching() &&
+        storeDraft(server.id, {
+          baseRevision: server.revision,
+          title,
+          body,
+          savedAt: new Date().toISOString(),
+        });
+      if (!kept) event.preventDefault();
     };
     window.addEventListener('beforeunload', beforeUnload);
     router.guard = () => !isDirty() || window.confirm(m.documents_leave_confirm());
