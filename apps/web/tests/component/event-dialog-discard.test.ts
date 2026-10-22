@@ -313,6 +313,24 @@ describe('closing the event dialog with unsaved input', () => {
     late.resolve({ kind: 'updated', event: ev('A', { title: '새 회의' }, 6) });
   });
 
+  // CodeRabbit(9e226e0): 저장하는 동안 칸을 고칠 수 있었는데, 저장되면 입력 양식을 저장된 일정으로 다시 그려 그사이 친
+  // 글이 말없이 사라졌다. 보내는 동안은 칸을 잠근다.
+  it('locks the fields while saving so a late result cannot drop what I type meanwhile', async () => {
+    vi.spyOn(api, 'event').mockResolvedValue(ev('A'));
+    const late = deferred<UpdateResult>();
+    vi.spyOn(api, 'updateEvent').mockReturnValue(late.promise);
+    await open();
+    await typeTitle('새 회의');
+    await fireEvent.submit(eventForm());
+    expect(field(m.events_title()).matches(':disabled')).toBe(true);
+    expect(field(m.events_description()).matches(':disabled')).toBe(true);
+    late.resolve({ kind: 'updated', event: ev('A', { title: '새 회의' }, 6) });
+    await waitFor(() => {
+      expect(field(m.events_title()).matches(':disabled')).toBe(false);
+    });
+    expect(field(m.events_title()).value).toBe('새 회의');
+  });
+
   it('keeps the conflict notice and my input when I keep editing after a conflict', async () => {
     stub({ kind: 'conflict', current: ev('A', { description: '다른 사람' }, 6) });
     const onclose = vi.fn();

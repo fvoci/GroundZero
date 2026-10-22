@@ -56,7 +56,7 @@
   // 바꾼다(반복 규칙 저장은 입력을 다시 그리지 않으므로 그대로 둔다).
   let formBase = $state.raw<EventView | undefined>(undefined);
   // 일정 입력을 감싼 요소. 다시 저장은 이 안의 입력 양식을 제출해 지금 입력(알림 뒤에 고친 것 포함)을 받는다.
-  let formWrap = $state<HTMLDivElement | undefined>(undefined);
+  let formWrap = $state<HTMLFieldSetElement | undefined>(undefined);
   let clashBox = $state<HTMLDivElement | undefined>(undefined);
   let saveMineButton = $state<HTMLButtonElement | null>(null);
   let heading = $state<HTMLElement | null>(null);
@@ -460,9 +460,10 @@
         </div>
       {/if}
       {#if canEdit}
-        <!-- 입력 양식을 감싼다(다시 저장이 이 안의 양식을 제출한다). 배치에는 끼지 않는다. 입력은 그것을 만든 일정에서
-             시작한다(반복 규칙 저장으로 `event`가 바뀌어도 손대지 않은 시각은 그 일정의 값으로 보낸다). -->
-        <div class="contents" bind:this={formWrap}>
+        <!-- 입력 양식을 감싼다(다시 저장이 이 안의 양식을 제출한다). 입력은 그것을 만든 일정에서 시작한다(반복 규칙
+             저장으로 `event`가 바뀌어도 손대지 않은 시각은 그 일정의 값으로 보낸다). 보내는 동안은 칸을 잠근다: 저장되면
+             양식을 저장된 일정으로 다시 그리므로 그사이 친 글이 말없이 사라졌다(CodeRabbit). -->
+        <fieldset class="min-w-0" disabled={busy} bind:this={formWrap}>
           {#key epoch}
             <EventForm
               idPrefix="event-edit"
@@ -474,7 +475,7 @@
               }}
             />
           {/key}
-        </div>
+        </fieldset>
         {#key ruleEpoch}
           <RecurrenceEditor
             idPrefix="event-recurrence"
