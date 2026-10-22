@@ -1,0 +1,47 @@
+{
+  "roles": [],
+  "ledger": null,
+  "schema": null,
+  "languages": [
+    {
+      "acl": null,
+      "name": "plpgsql",
+      "trusted": true
+    },
+    {
+      "acl": null,
+      "name": "sql",
+      "trusted": true
+    }
+  ],
+  "relations": [],
+  "memberships": [
+    {
+      "set": true,
+      "role": "pg_read_all_settings",
+      "admin": false,
+      "member": "pg_monitor",
+      "grantor": "fvoci",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_read_all_stats",
+      "admin": false,
+      "member": "pg_monitor",
+      "grantor": "fvoci",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_stat_scan_tables",
+      "admin": false,
+      "member": "pg_monitor",
+      "grantor": "fvoci",
+      "inherit": true
+    }
+  ],
+  "database_acl": null,
+  "uuid_function": null,
+  "server_version_num": 160013
+}

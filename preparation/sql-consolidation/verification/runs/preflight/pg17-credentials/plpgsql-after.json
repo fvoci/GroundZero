@@ -1,0 +1,85 @@
+{
+  "roles": [
+    {
+      "oid": "16386",
+      "rolname": "fvoci_app",
+      "rolsuper": false,
+      "rolconfig": ["search_path=fvoci"],
+      "rolinherit": true,
+      "rolcanlogin": true,
+      "rolcreatedb": false,
+      "rolpassword": "********",
+      "rolbypassrls": false,
+      "rolconnlimit": -1,
+      "rolcreaterole": false,
+      "rolvaliduntil": null,
+      "rolreplication": false
+    },
+    {
+      "oid": "16385",
+      "rolname": "fvoci_migrator",
+      "rolsuper": false,
+      "rolconfig": ["search_path=fvoci"],
+      "rolinherit": true,
+      "rolcanlogin": true,
+      "rolcreatedb": false,
+      "rolpassword": "********",
+      "rolbypassrls": false,
+      "rolconnlimit": -1,
+      "rolcreaterole": false,
+      "rolvaliduntil": null,
+      "rolreplication": false
+    }
+  ],
+  "ledger": null,
+  "schema": {
+    "owner": "fvoci_migrator",
+    "nspacl": null,
+    "nspname": "fvoci"
+  },
+  "languages": [
+    {
+      "acl": ["fvoci=U/fvoci"],
+      "name": "plpgsql",
+      "trusted": true
+    },
+    {
+      "acl": ["fvoci=U/fvoci", "=U/fvoci"],
+      "name": "sql",
+      "trusted": true
+    }
+  ],
+  "relations": [],
+  "memberships": [
+    {
+      "set": true,
+      "role": "pg_read_all_settings",
+      "admin": false,
+      "member": "pg_monitor",
+      "grantor": "fvoci",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_read_all_stats",
+      "admin": false,
+      "member": "pg_monitor",
+      "grantor": "fvoci",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_stat_scan_tables",
+      "admin": false,
+      "member": "pg_monitor",
+      "grantor": "fvoci",
+      "inherit": true
+    }
+  ],
+  "database_acl": ["=Tc/fvoci", "fvoci=CTc/fvoci", "fvoci_migrator=c/fvoci", "fvoci_app=c/fvoci"],
+  "uuid_function": {
+    "acl": null,
+    "name": "uuid_extract_version(uuid)"
+  },
+  "server_version_num": 170009
+}

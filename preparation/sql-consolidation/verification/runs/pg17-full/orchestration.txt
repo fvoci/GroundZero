@@ -1,0 +1,172 @@
+cluster: sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a --file deploy/compose.test.yaml up --detach --wait --remove-orphans postgres
+ Image postgres:17.9-bookworm@sha256:47f917f7409eacd22fc5dfb1dee634e1b55cf0c01d1a7eb701be2227a03e0641 Pulling
+ 9b02e9fcb401 Pulling fs layer 0B
+ 25cb8cfd32fb Pulling fs layer 0B
+ b402a08ab1f1 Pulling fs layer 0B
+ 632702611019 Pulling fs layer 0B
+ 0ac04d834031 Pulling fs layer 0B
+ d67c4f15e9dd Pulling fs layer 0B
+ 2e2d52334eb1 Pulling fs layer 0B
+ dc02b033c46a Pulling fs layer 0B
+ bd77bf55e3a1 Pulling fs layer 0B
+ a1ad95e548cd Pulling fs layer 0B
+ 3352e0f4343b Pulling fs layer 0B
+ fd73b50ab94b Pulling fs layer 0B
+ acfc54558111 Pulling fs layer 0B
+ 42925d59e920 Pulling fs layer 0B
+ 9b02e9fcb401 Already exists 0B
+ 2e2d52334eb1 Download complete 0B
+ 632702611019 Download complete 0B
+ 632702611019 Pull complete 0B
+ 0ac04d834031 Downloading 1.049MB
+ b402a08ab1f1 Download complete 0B
+ 0ac04d834031 Downloading 3.146MB
+ 25cb8cfd32fb Downloading 1.049MB
+ 0ac04d834031 Download complete 0B
+ 25cb8cfd32fb Downloading 2.097MB
+ 0ac04d834031 Extracting 1B
+ 25cb8cfd32fb Downloading 4.194MB
+ 2e2d52334eb1 Pull complete 0B
+ 0ac04d834031 Pull complete 0B
+ 25cb8cfd32fb Downloading 8.066MB
+ 25cb8cfd32fb Download complete 0B
+ dc02b033c46a Download complete 0B
+ d67c4f15e9dd Download complete 0B
+ 25cb8cfd32fb Extracting 1B
+ 25cb8cfd32fb Extracting 1B
+ bd77bf55e3a1 Download complete 0B
+ acfc54558111 Download complete 0B
+ 25cb8cfd32fb Pull complete 0B
+ d67c4f15e9dd Pull complete 0B
+ bd77bf55e3a1 Pull complete 0B
+ a1ad95e548cd Download complete 0B
+ fd73b50ab94b Download complete 0B
+ 3352e0f4343b Downloading 2.097MB
+ 3352e0f4343b Downloading 4.194MB
+ 42925d59e920 Download complete 0B
+ 42925d59e920 Pull complete 0B
+ 3352e0f4343b Downloading 6.291MB
+ 3352e0f4343b Downloading 8.389MB
+ 3352e0f4343b Downloading 8.389MB
+ 3352e0f4343b Downloading 9.437MB
+ 3352e0f4343b Downloading 10.49MB
+ 0a9a45c6ccc8 Downloading 3.146MB
+ 0a9a45c6ccc8 Download complete 0B
+ 3352e0f4343b Downloading 10.49MB
+ 3352e0f4343b Downloading 17.83MB
+ 3352e0f4343b Downloading 18.87MB
+ 1c8ca97f06d8 Download complete 0B
+ 3352e0f4343b Downloading 20.97MB
+ 3352e0f4343b Downloading 23.07MB
+ 3352e0f4343b Downloading 28.31MB
+ 3352e0f4343b Downloading 30.41MB
+ 3352e0f4343b Downloading 33.55MB
+ 3352e0f4343b Downloading 36.7MB
+ 3352e0f4343b Downloading 39.85MB
+ 3352e0f4343b Downloading 42.99MB
+ 3352e0f4343b Downloading 46.14MB
+ 3352e0f4343b Downloading 49.28MB
+ 3352e0f4343b Downloading 51.38MB
+ 3352e0f4343b Downloading 56.62MB
+ 3352e0f4343b Downloading 59.77MB
+ 3352e0f4343b Downloading 62.91MB
+ 3352e0f4343b Downloading 66.06MB
+ 3352e0f4343b Downloading 69.21MB
+ 3352e0f4343b Downloading 69.21MB
+ 3352e0f4343b Downloading 77.59MB
+ 3352e0f4343b Downloading 80.74MB
+ 3352e0f4343b Downloading 81.79MB
+ 3352e0f4343b Downloading 88.08MB
+ 3352e0f4343b Downloading 93.32MB
+ 3352e0f4343b Downloading 97.52MB
+ 3352e0f4343b Downloading 101.7MB
+ 3352e0f4343b Downloading 104.9MB
+ 3352e0f4343b Downloading 111.1MB
+ 3352e0f4343b Download complete 0B
+ 3352e0f4343b Extracting 1B
+ 3352e0f4343b Extracting 1B
+ 3352e0f4343b Extracting 1B
+ 3352e0f4343b Extracting 1B
+ 3352e0f4343b Extracting 1B
+ 3352e0f4343b Extracting 1B
+ 3352e0f4343b Extracting 1B
+ 3352e0f4343b Extracting 1B
+ 3352e0f4343b Extracting 1B
+ 3352e0f4343b Extracting 1B
+ 3352e0f4343b Extracting 1B
+ 3352e0f4343b Extracting 2B
+ 3352e0f4343b Extracting 2B
+ 3352e0f4343b Extracting 2B
+ 3352e0f4343b Extracting 2B
+ 3352e0f4343b Extracting 2B
+ 3352e0f4343b Extracting 2B
+ 3352e0f4343b Extracting 2B
+ 3352e0f4343b Extracting 2B
+ b402a08ab1f1 Pull complete 0B
+ dc02b033c46a Pull complete 0B
+ acfc54558111 Pull complete 0B
+ a1ad95e548cd Pull complete 0B
+ fd73b50ab94b Pull complete 0B
+ 3352e0f4343b Pull complete 0B
+ Image postgres:17.9-bookworm@sha256:47f917f7409eacd22fc5dfb1dee634e1b55cf0c01d1a7eb701be2227a03e0641 Pulled
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a_default Creating
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a_default Creating
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a_default Created
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a_default Created
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a-postgres-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a-postgres-1 Created
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a-postgres-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a-postgres-1 Started
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a-postgres-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a-postgres-1 Healthy
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+$ cargo run --quiet --package fvoci-server --locked -- db migrate
+cluster: sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b --file deploy/compose.test.yaml up --detach --wait --remove-orphans postgres
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b_default Creating
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b_default Creating
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b_default Created
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b_default Created
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b-postgres-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b-postgres-1 Created
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b-postgres-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b-postgres-1 Started
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b-postgres-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b-postgres-1 Healthy
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+PASS: catalog, required initial rows and schema dump objects are equal
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services --file deploy/compose.test.yaml up --detach --wait --remove-orphans meilisearch seaweedfs
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services_default Creating
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services_default Creating
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services_default Created
+ Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services_default Created
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-seaweedfs-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-meilisearch-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-meilisearch-1 Created
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-seaweedfs-1 Created
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-seaweedfs-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-meilisearch-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-seaweedfs-1 Started
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-meilisearch-1 Started
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-meilisearch-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-seaweedfs-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-seaweedfs-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-meilisearch-1 Healthy
+==> app-role behavior direct, /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/sql-compare-pg17-full/a
+NOT RUN: OIDC integration tests (oidc_*). Use `cargo xtask test --oidc`.
+NOT RUN: self-hosted Supabase tests (supabase_*). Use `cargo xtask test --supabase`.
+==> app-role behavior direct, /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/sql-compare-pg17-full/b
+NOT RUN: OIDC integration tests (oidc_*). Use `cargo xtask test --oidc`.
+NOT RUN: self-hosted Supabase tests (supabase_*). Use `cargo xtask test --supabase`.
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services --file deploy/compose.test.yaml stop
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-seaweedfs-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-meilisearch-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-meilisearch-1 Stopped
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-seaweedfs-1 Stopped
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b --file deploy/compose.test.yaml stop
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b-postgres-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b-postgres-1 Stopped
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a --file deploy/compose.test.yaml stop
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a-postgres-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a-postgres-1 Stopped

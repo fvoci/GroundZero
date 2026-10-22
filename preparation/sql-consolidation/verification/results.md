@@ -1,17 +1,17 @@
 # SQL 통합 준비 검증 결과
 
-2026-10-22에 누적 마이그레이션 A와 새 설치 후보 B를 서로 다른 빈 DB에 적용했다. PostgreSQL 18.3과 Supabase PostgreSQL 17.6의 객체 비교 및 양쪽 행동 시험은 모두 PASS다. Supabase는 direct와 session pooler 경로를 각각 확인했다. 이는 새 설치 동등성 근거이며 실제 마이그레이션 파일·제품 설치 경로를 바꾸지 않는다.
+2026-10-22에 누적 마이그레이션 A와 새 설치 후보 B를 서로 다른 빈 DB에 적용했다. PostgreSQL 17.9·18.3과 Supabase PostgreSQL 17.6의 객체 비교 및 양쪽 행동 시험은 모두 PASS다. Supabase는 direct와 session pooler 경로를 각각 확인했다. 표준 17·18에서는 별도로 제한 설치 관리자와 앱 역할의 핵심 행동도 확인했다. 이는 새 설치 동등성 근거이며 실제 마이그레이션 SQL은 바꾸지 않았다. 후속 최소 버전·권한 사전 검사와 PostgreSQL 16 거부 결과는 아래에 구분했다.
 
 ## 입력과 재현 명령
 
-| 입력                                | 값                                                                    |
-| ----------------------------------- | --------------------------------------------------------------------- |
-| 누적 마이그레이션 기준              | `cb65cc31156c0fd8d28cf856bc132d4a506c8885`, 93개 파일, 마지막 버전 94 |
-| 최종 A/B 실행의 도구 소스           | `efdaa5a7ffa1248ed3587b46bcbe8f8927606bd7`                            |
-| `sql_compare.rs` SHA-256            | `aafcc111df3f62792abf6faa2f4570e9a25d3bd8ae8aa9fd7034ed996444330b`    |
-| `catalog.sql` SHA-256               | `e0f8ee937a1e12fbf2d87ccd53a4bb2ae132eb7e7b3ba2bdecfc7ce110f26c3e`    |
-| 후보 `0001_final_state.sql` SHA-256 | `b8172cfb85f20145e5a9dd2fb65d473d47195549a21024de1ec8c11af2c55725`    |
-| 셀프호스트 Supabase 고정 revision   | `bc27d2661edd09a5d0b8d76ce33da6d4071a756e`                            |
+| 입력                                  | 값                                                                    |
+| ------------------------------------- | --------------------------------------------------------------------- |
+| 누적 마이그레이션 기준                | `cb65cc31156c0fd8d28cf856bc132d4a506c8885`, 93개 파일, 마지막 버전 94 |
+| 초기 18/Supabase A/B 실행의 도구 소스 | `efdaa5a7ffa1248ed3587b46bcbe8f8927606bd7`                            |
+| `sql_compare.rs` SHA-256              | `aafcc111df3f62792abf6faa2f4570e9a25d3bd8ae8aa9fd7034ed996444330b`    |
+| `catalog.sql` SHA-256                 | `e0f8ee937a1e12fbf2d87ccd53a4bb2ae132eb7e7b3ba2bdecfc7ce110f26c3e`    |
+| 후보 `0001_final_state.sql` SHA-256   | `b8172cfb85f20145e5a9dd2fb65d473d47195549a21024de1ec8c11af2c55725`    |
+| 셀프호스트 Supabase 고정 revision     | `bc27d2661edd09a5d0b8d76ce33da6d4071a756e`                            |
 
 실제 작업 디렉터리는 `/home/kinesis/orca/workspaces/GroundZero/sql-prep-b`였다. 실행한 명령은 다음과 같다. 재실행 시 `--output`은 아직 존재하지 않는 경로로 바꾼다. 합친 체크아웃에서는 `--candidate preparation/sql-consolidation/candidate`를 사용하면 된다.
 
@@ -126,6 +126,42 @@ A와 B 각각에서 금지 명령 20개가 기대 SQLSTATE `42501`로 거절됐�
 
 이 증거는 한 공통 SQL을 제한 권한으로 설치할 수 있음을 보여 주며 실제 Cloud 프로젝트에 연결·변경한 결과는 아니다. 이 프로필의 `session_replication_role` 거부는 **이 프로필로 현재 복구 요구를 충족하지 못한다**는 뜻이다. 앞선 셀프호스트 Supabase 백업/복구 시험은 PASS였고 실제 Cloud의 SET LOCAL·복구는 NOT RUN이다. 복구 기능을 제외하기로 결정한 것이 아니다.
 
+## 최소 PostgreSQL 17 검증과 CI 분담
+
+표준 PostgreSQL 17.9에서도 동일한 누적 SQL 93개와 동일한 후보 `b8172cf…55725`를 적용했다. 이미지가 보고한 실제 버전은 [A](runs/pg17-full/a-environment.json)·[B](runs/pg17-full/b-environment.json)에 있다. 고정 이미지는 `postgres:17.9-bookworm@sha256:47f917f7409eacd22fc5dfb1dee634e1b55cf0c01d1a7eb701be2227a03e0641`이다. `uuid_extract_version(uuid)`는 이 표준 이미지의 `pg_catalog`, `LANGUAGE internal` 함수이며 별도 확장·adapter를 설치하지 않았다.
+
+| 17.9 실행        | 소스 SHA                                   | A와 B 각각의 행동 결과                            | 객체·권한·정지 |
+| ---------------- | ------------------------------------------ | ------------------------------------------------- | -------------- |
+| 전체 direct      | `e3d3e8ddd19045c11282d796354bef48dae73eb3` | 47그룹, 358 passed, 0 failed/ignored, 17 filtered | 모두 PASS      |
+| 제한 관리자 core | `9c122173e4c6ec5d33c6be261975f68753008015` | 7그룹, 60 passed, 0 failed/ignored/filtered       | 모두 PASS      |
+
+두 실행에는 서버 사전 검사 커밋 `c41d58949c465564b65b624e0ac4c770a081362f`와 같은 변경이 포함된다. 두 소스 사이에는 CLI 설명·거부 시험 fixture만 추가됐다. 358은 단위·통합·문서 시험 합계로, 이전 18 실행의 353과 실행 시점의 단위 시험 수가 다르다. OIDC 6건·Supabase 전용 11건은 전체 17 실행에서 NOT RUN이다. 전체 시험의 FreshDb·백업 경로에는 fixture 관리자를 사용한다. 제한 core의 60건과 합쳐 모든 경로가 제한 권한으로 실행됐다고 해석하지 않는다.
+
+```sh
+cargo xtask sql-compare --postgres-major 17 \
+  --candidate /home/kinesis/orca/workspaces/GroundZero/sql-prep-a/preparation/sql-consolidation/candidate \
+  --output target/sql-compare-pg17-full --behavior
+
+cargo xtask sql-compare --postgres-major 17 \
+  --candidate /home/kinesis/orca/workspaces/GroundZero/sql-prep-a/preparation/sql-consolidation/candidate \
+  --output target/sql-compare-pg17-restricted \
+  --restricted-admin --behavior --behavior-scope core
+```
+
+두 실행 모두 카탈로그·정규 덤프 차이 0, 정책·권한·함수·CHECK 변조 4/4 검출·원복, 설치·정지 PASS다. 제한 실행은 각 DB에서 20개 기대 SQLSTATE `42501` 거부, bootstrap·SQLx 재실행 동일성, 역할 속성·멤버십·자격 증명 보존도 통과했다. [전체 결과](runs/pg17-full/result.json)와 [제한 결과](runs/pg17-restricted/result.json), 각 디렉터리의 `inputs.json`, `self-test.json`, `a-direct.txt`·`b-direct.txt`, `*-test-summary.json`, `*-capabilities.json`이 근거다. 원본 전체 카탈로그·덤프·이력은 로컬 `target/sql-compare-pg17-{full,restricted}/{a,b}/`에만 있으며 커밋한 `local-artifacts.sha256`이 식별한다.
+
+CI job 수는 늘리지 않았다. 기존 `integration`과 기본 `compose.test.yaml`은 최소 17, 기존 OIDC·S3 job은 `compose.test.pg18.yaml` override로 18을 검증한다. 개발·셀프호스트의 기존 18 볼륨 구성은 유지한다. 이 문서 앞부분의 18 실행 명령은 당시 기본값 18에서 실행한 원문이다. 현재 도구로 그 환경을 재현하려면 `--postgres-major 18`을 추가한다. 기존 18·Supabase 전체 행렬을 이번 변경으로 다시 실행하지 않았다. 원격 CI의 최종 실행 상태는 PR에서 확인한다.
+
+## 버전·필수 권한의 실제 사전 거부
+
+전용 tmpfs fixture에서 기존 서버 CLI를 직접 실행했다. PostgreSQL 16.13은 지원 목록에 넣지 않았으며 [시험용 override](fixtures/compose.pg16.yaml)로만 기동했다. bootstrap과 migrate는 모두 `PostgreSQL 17 or later is required (server_version_num=160013)`로 exit 1을 반환했다. [before](runs/preflight/pg16/before.json)와 두 after JSON이 완전히 같고 제품 역할·스키마·SQLx 원장은 생성되지 않았다. [결과](runs/preflight/pg16/result.txt)와 원래 오류 로그를 보존했다.
+
+PostgreSQL 17.9에서는 `sql`·`plpgsql`의 PUBLIC USAGE와 UUID 추출 함수의 PUBLIC EXECUTE를 각각 전용 fixture에서 철회했다. 각 권한마다 새 역할을 만드는 bootstrap, 기존 역할 bootstrap, migrate를 호출한 **9개 경로 모두** 해당 권한이 필요하다는 Config 오류로 exit 1을 반환했다. 각 전후 [카탈로그](runs/preflight/pg17-acl/)가 동일했고 기존 역할·스키마·ACL이 보존됐으며 원장은 생기지 않았다. 권한을 되돌린 뒤 정상 bootstrap과 93개 마이그레이션(최대 버전 94)이 통과했다. 이는 SQLSTATE 거부 목록과 별개의 제품 사전 검사 결과다.
+
+첫 ACL 진단의 localhost 연결은 이미지의 trust 인증 규칙을 사용하므로 **비밀번호 보존 근거로 채택하지 않았다**. 그 실행에서는 카탈로그 무변경 결과만 보존하고 `catalog-result.txt`에서 인증 주장 줄을 제외했다. 원본 로컬 파일 해시는 함께 남겼다. 별도 fixture에서 Compose DNS `postgres`로 SCRAM 경로를 사용했고, 잘못된 app·migrator 비밀번호가 각각 거부되는 음성 대조를 먼저 확인했다. 이후 세 권한 부족 bootstrap에서 기존과 다른 비밀번호를 요청해 실패시킨 뒤 원래 app·migrator 자격 증명으로 새 연결 6회가 성공했다. [인증 규칙](runs/preflight/pg17-credentials/auth-rules.json), [음성·양성 결과](runs/preflight/pg17-credentials/result.txt)와 전후 카탈로그가 이 원복 증거다.
+
+거부 fixture의 소스는 `9c122173e4c6ec5d33c6be261975f68753008015`이며 [재현 절차](fixtures/README.md)에 사용한 기존 Compose·CLI·psql 명령을 기록했다. 새 서비스·제품 SQL 변형·권한 우회는 없다. 이 세 fixture의 관리자는 시험 준비·권한 철회용 superuser이고 제한 설치 관리자 증명은 위의 별도 core 실행이다. Cloud 연결·변경은 하지 않았다.
+
 ## 실행 자원과 보존
 
 첫 A/A 진단에는 보존 요청과 어긋난 정리 명령이 한 번 실행됐다. 수정 전 바이너리가 다음 전용 프로젝트의 B PostgreSQL 컨테이너와 네트워크를 삭제했다.
@@ -136,7 +172,7 @@ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c1920
 
 [원본 전체 로그](diagnostics/initial-control-cleanup.txt) 31행이 명령이며 34–37행이 이 컨테이너와 네트워크의 제거 기록이다. 이 로그의 생성 시각은 `2026-10-22T22:16:22.128483746+09:00`, 마지막 수정 시각은 `2026-10-22T22:16:46.428293994+09:00`이다. 로그에 행별 시각이 없고 Docker event가 남아 있지 않아 이 범위보다 정확한 제거 시각은 확인하지 못했다. [유효 Compose 저장소 구성](diagnostics/initial-control-postgres-storage.json)은 `volumes: null`, `tmpfs: ["/var/lib/postgresql"]`이다. 이 프로젝트에는 이름 붙은 DB 볼륨이 없었으며 공유 컨테이너·DB·볼륨은 대상이 아니었다.
 
-이후 도구는 해당 실행 프로젝트에 `stop`만 사용하도록 수정했다. 첫 전체 행렬 종료 시 남은 전용 컨테이너는 37개였고, 후속 A/A·제한 권한 진단 및 검증을 포함한 48개 모두 exited다. 이름 붙은 볼륨 5개는 남아 있다. 자원 상태와 로그 감사 결과는 [컨테이너 처리 기록](container-disposition.txt)에 있다. 공유 개발 자원에는 정리 명령을 내리지 않았다. 중지한 DB의 tmpfs 내용은 사라지므로 DB 자체를 보존했다고 주장하지 않는다.
+이후 도구는 해당 실행 프로젝트에 `stop`만 사용하도록 수정했다. 첫 전체 행렬 종료 시 남은 전용 컨테이너는 37개였고, 후속 A/A·제한 권한·17 전체/제한·사전 거부 검증을 포함한 59개 모두 exited다. 이름 붙은 볼륨 5개는 남아 있다. 이번 17/16 시험의 추가 컨테이너 11개에는 이름 붙은 볼륨이나 익명 볼륨이 없으며 [실제 저장소·정지 상태](runs/preflight/storage-and-stops.json)도 보존했다. 자원 상태와 로그 감사 결과는 [컨테이너 처리 기록](container-disposition.txt)에 있다. 공유 개발 자원에는 정리 명령을 내리지 않았다. 중지한 DB의 tmpfs 내용은 사라지므로 DB 자체를 보존했다고 주장하지 않는다.
 
 PR에 보존한 것은 입력 해시, 결과·차이·변조 JSON, 환경 카탈로그, 전체 행동 로그, 각 실행의 `orchestration.txt` 및 위 진단 증거다. 텍스트 로그는 줄 끝 공백과 마지막 빈 줄만 정리했으며 내용과 명령은 보존했다. 가공 전 로컬 실행 로그 해시는 [원본 로그 해시](diagnostics/original-orchestration-logs.sha256)에 있다. 중복된 전체 원본 카탈로그·덤프·이력은 이 작업 공간의 `target/sql-compare-postgres-final/{a,b}/`, `target/sql-compare-supabase-final/{a,b}/`에만 남겼다. 경로와 SHA-256은 각 실행의 `local-artifacts.sha256`에 있으며 **이 로컬 파일 자체는 PR에 포함되지 않는다**. 최초 baseline export는 로컬 `target/sql-compare-baseline-export/`에 있다.
 

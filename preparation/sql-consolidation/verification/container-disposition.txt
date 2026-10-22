@@ -135,3 +135,35 @@ target/sql-compare-restricted-final.log:64:$ docker compose --project-name sqlpr
 target/sql-compare-restricted-verified.log:56:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-services --file deploy/compose.test.yaml stop
 target/sql-compare-restricted-verified.log:61:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-b --file deploy/compose.test.yaml stop
 target/sql-compare-restricted-verified.log:64:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-a --file deploy/compose.test.yaml stop
+
+PostgreSQL 17 full/restricted and preflight rejection follow-up
+Captured UTC: 2026-10-22T14:04:57Z
+Task-owned container total=59
+exited=59
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight-auth-3c36446d-84ec-49a9-b366-2ccd75827ead-postgres-1	exited
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163ea64ce72a09dbe9f893faf31e7-services-seaweedfs-1	exited
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163ea64ce72a09dbe9f893faf31e7-services-meilisearch-1	exited
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163ea64ce72a09dbe9f893faf31e7-b-postgres-1	exited
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163ea64ce72a09dbe9f893faf31e7-a-postgres-1	exited
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight17-f8469903-1f32-42f8-97a1-50b9469ceba8-postgres-1	exited
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight16-8bf4ed6b-aed5-4d94-a276-b5ea425f160b-postgres-1	exited
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-meilisearch-1	exited
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services-seaweedfs-1	exited
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b-postgres-1	exited
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a-postgres-1	exited
+Retained task-owned named volumes=5
+target/sql-compare-pg17-restricted.log:56:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163ea64ce72a09dbe9f893faf31e7-services --file deploy/compose.test.yaml stop
+target/sql-compare-pg17-restricted.log:61:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163ea64ce72a09dbe9f893faf31e7-b --file deploy/compose.test.yaml stop
+target/sql-compare-pg17-restricted.log:64:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163ea64ce72a09dbe9f893faf31e7-a --file deploy/compose.test.yaml stop
+target/sql-compare-pg17-full.log:162:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-services --file deploy/compose.test.yaml stop
+target/sql-compare-pg17-full.log:167:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-b --file deploy/compose.test.yaml stop
+target/sql-compare-pg17-full.log:170:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163e53e4a7342aa89971e204d575b-a --file deploy/compose.test.yaml stop
+pg16: stop-only trap completed; exact project sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight16-8bf4ed6b-aed5-4d94-a276-b5ea425f160b
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight16-8bf4ed6b-aed5-4d94-a276-b5ea425f160b-postgres-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight16-8bf4ed6b-aed5-4d94-a276-b5ea425f160b-postgres-1 Stopped
+pg17-acl: stop-only trap completed; exact project sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight17-f8469903-1f32-42f8-97a1-50b9469ceba8
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight17-f8469903-1f32-42f8-97a1-50b9469ceba8-postgres-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight17-f8469903-1f32-42f8-97a1-50b9469ceba8-postgres-1 Stopped
+pg17-credentials: stop-only trap completed; exact project sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight-auth-3c36446d-84ec-49a9-b366-2ccd75827ead
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight-auth-3c36446d-84ec-49a9-b366-2ccd75827ead-postgres-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-preflight-auth-3c36446d-84ec-49a9-b366-2ccd75827ead-postgres-1 Stopped

@@ -1,0 +1,5 @@
+fvoci_app incorrect password denied PASS (exit=2)
+fvoci_migrator incorrect password denied PASS (exit=2)
+sql bootstrap expected denial, unchanged catalog, original authenticated credentials PASS
+plpgsql bootstrap expected denial, unchanged catalog, original authenticated credentials PASS
+uuid bootstrap expected denial, unchanged catalog, original authenticated credentials PASS

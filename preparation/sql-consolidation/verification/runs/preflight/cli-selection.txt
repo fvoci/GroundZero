@@ -1,0 +1,21 @@
+sql-compare --postgres-major 16 --output target/sql-compare-pg17-full
+error: invalid value '16' for '--postgres-major <POSTGRES_MAJOR>'
+  [possible values: 17, 18]
+
+For more information, try '--help'.
+exit=2
+
+sql-compare --postgres-major 18 --supabase --output target/sql-compare-pg17-full
+error: the argument '--postgres-major <POSTGRES_MAJOR>' cannot be used with '--supabase'
+
+Usage: xtask sql-compare --output <OUTPUT> --postgres-major <POSTGRES_MAJOR>
+
+For more information, try '--help'.
+exit=2
+
+sql-compare --supabase --output target/sql-compare-pg17-full
+Error: could not claim evidence directory target/sql-compare-pg17-full (must not already exist)
+
+Caused by:
+    File exists (os error 17)
+exit=1
