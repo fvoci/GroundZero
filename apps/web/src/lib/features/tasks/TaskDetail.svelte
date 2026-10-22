@@ -48,7 +48,15 @@
 
   import ClashConfirm from './ClashConfirm.svelte';
   import type { MergeUnit } from './form';
-  import { estimateOf, formOf, mergeEstimate, mergeForm, scheduleOf, trimLikeServer } from './form';
+  import {
+    edited,
+    estimateOf,
+    formOf,
+    mergeEstimate,
+    mergeForm,
+    scheduleOf,
+    trimLikeServer,
+  } from './form';
   import type { ClashRow } from './labels';
   import {
     LINK_KIND_LABEL,
@@ -69,9 +77,11 @@
     workspaces: Workspace[];
     onchanged: () => void;
     onopen: (taskId: string) => void;
+    /** 기준과 다르게 고친 칸이 있는지 바뀔 때마다 알린다(대화상자가 닫기 전에 묻는다). */
+    onunsaved?: ((unsaved: boolean) => void) | undefined;
   }
 
-  const { taskId, tasks, workspaces, onchanged, onopen }: Props = $props();
+  const { taskId, tasks, workspaces, onchanged, onopen, onunsaved }: Props = $props();
 
   const subtasks = $derived(tasks.filter((t) => t.parent_id === taskId));
   const byId = $derived(new Map(tasks.map((t) => [t.id, t])));
@@ -150,8 +160,9 @@
   );
 
   // 다시 채울 때 비교할 기준(마지막으로 다 불러온 판의 값, 사용자가 바꾸지 않은 칸만 새 값으로 옮긴다)과, 같은 칸을
-  // 양쪽에서 바꿔 충돌이 있었는지(다음 저장·불러오기까지 지킨다), 그때 남겨 둘 옛 판 번호.
-  let baseline: TaskInput | undefined;
+  // 양쪽에서 바꿔 충돌이 있었는지(다음 저장·불러오기까지 지킨다), 그때 남겨 둘 옛 판 번호. 기준은 저장하지 않은 입력이
+  // 있는지(`unsaved`)도 정하므로 상태로 둔다.
+  let baseline = $state.raw<TaskInput | undefined>(undefined);
   let baseVersion = 0;
   let clashed = false;
 
@@ -382,6 +393,24 @@
       ],
     };
   }
+
+  // 기준과 다르게 고친 칸이 있는지(업무 대화상자가 닫기 전에 버릴지 묻는다). 병합과 같은 판정이다: 저장될 모양으로
+  // 견주고(제목·설명은 서버처럼 앞뒤 공백을 떼고 태그는 서버처럼 정리), 예상 시간은 입력한 글자의 값으로 본다(잘못된
+  // 글자는 고친 것이다).
+  const unsaved = $derived.by(() => {
+    const mine = currentInput();
+    if (!canEdit || mine === undefined || baseline === undefined) return false;
+    return (
+      estimateOf(estimateText) !== baseline.estimate_minutes ||
+      edited(baseline, { ...mine, estimate_minutes: baseline.estimate_minutes })
+    );
+  });
+  $effect(() => {
+    onunsaved?.(unsaved);
+    return () => {
+      onunsaved?.(false);
+    };
+  });
 
   /** 저장: 서버 기준 내용과 날짜가 다르면 먼저 후속 업무 영향을 미리 보고, 옮길 것이 있으면 사용자에게 묻는다. */
   async function submit(base: TaskDetailView): Promise<void> {

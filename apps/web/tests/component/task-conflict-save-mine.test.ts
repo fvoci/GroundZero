@@ -526,7 +526,9 @@ describe('the overwrite question after a task conflict', () => {
     const ask = await screen.findByRole('alertdialog');
     expect(sides(ask, 'description')).toEqual({ server: theirs, mine });
     // 줄바꿈을 지켜 보이고, 길면 칸 안에서 스크롤한다.
-    const box = ask.querySelector('[data-clash-field="description"] [data-clash-side="server"]');
+    const box = ask.querySelector(
+      '[data-clash-field="description"] [data-clash-side="server"] > [data-clash-value]',
+    );
     expect(box?.className).toContain('whitespace-pre-wrap');
     expect(box?.className).toContain('overflow-auto');
   });
@@ -998,5 +1000,49 @@ describe('a late response while the overwrite question is open', () => {
     });
     expect(field('task-title').value).toBe('내 제목');
     expect(update).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 사용자 결정 B(2026-10-22): 값 상자는 길면 상자 안에서 스크롤하는데, Safari는 스크롤되는 영역에 키보드 초점을 주지
+// 않아(Chrome·Firefox는 줌) 넘친 글을 키보드로 읽을 수 없었다. 넘치는 상자만 이름 있는 영역으로 탭 순서에 들고(초점을
+// 받으면 화살표·Page 키로 스크롤), 짧은 상자는 역할·탭 정지를 더하지 않는다. jsdom은 크기를 재지 않으므로 서버 쪽 상자만
+// 넘친다고 둔다(실제 Safari 확인은 이 환경에 없다).
+describe('long values in the overwrite question', () => {
+  it('lets the keyboard reach a value box that scrolls, and leaves short ones alone', async () => {
+    await setLocale('ko', { reload: false });
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(function scrollHeight(
+      this: Element,
+    ) {
+      return this.closest('[data-clash-side="server"]') === null ? 0 : 900;
+    });
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(240);
+    mount();
+    const long = Array.from({ length: 80 }, (_, i) => `${String(i + 1)}번째 줄`).join('\n');
+    vi.spyOn(api, 'updateTask').mockResolvedValueOnce({
+      kind: 'conflict',
+      current: { ...v2, version: 3, description: long },
+    });
+    await screen.findByLabelText('설명');
+    await type('task-description', '내 설명');
+    await saveIntoConflict();
+    await fireEvent.click(saveMineButton());
+    const ask = await screen.findByRole('alertdialog', { name: '다른 사람도 바꾼 칸이 있습니다' });
+
+    const region = await within(ask).findByRole('region', { name: '설명 서버의 지금 값' });
+    expect(region.tabIndex).toBe(0);
+    expect(region.textContent).toBe(long);
+    // 짧은 내 값은 영역도 탭 정지도 아니다.
+    expect(within(ask).getAllByRole('region')).toHaveLength(1);
+    const mine = ask.querySelector('[data-clash-side="mine"]');
+    expect(mine?.querySelector('[tabindex]') ?? null).toBeNull();
+    expect(mine?.textContent).toBe('내 설명');
+
+    // 영역에서 Esc는 확인만 거둔다.
+    region.focus();
+    await fireEvent.keyDown(region, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+    expect(field('task-description').value).toBe('내 설명');
   });
 });

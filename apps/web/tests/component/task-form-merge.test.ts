@@ -322,6 +322,26 @@ describe('clashRows', () => {
     expect(row?.mine).toBe(`시작일 ${formatDay('2026-10-01')}, 마감일 ${formatDay('2026-10-03')}`);
   });
 
+  // 예상 시간은 업무 폼의 칸과 같은 글(`String`)로 보인다. 전에는 언어별 숫자 표기(`formatNumber`, "1,500")였는데,
+  // 그 함수는 쓰는 곳이 없어 #62(D-92 정리)가 지웠고 폼 칸("1500")과도 달랐다.
+  it('shows the estimate the way the form field shows it', async () => {
+    await setLocale('ko', { reload: false });
+    const [row] = clashRows(
+      ['estimate_minutes'],
+      { ...base, estimate_minutes: 1500 },
+      { ...base, estimate_minutes: null },
+      new Map(),
+    );
+    expect(row?.server).toBe('1500');
+    expect(row?.mine).toBe('(비어 있음)');
+    await setLocale('en', { reload: false });
+    expect(
+      clashRows(['estimate_minutes'], { ...base, estimate_minutes: 12345 }, base, new Map())[0]
+        ?.server,
+    ).toBe('12345');
+    await setLocale('ko', { reload: false });
+  });
+
   // 2차 검증: 서로 다른 값이 똑같아 보이는 쌍은 그렇다고 알린다(`looksSame`).
   it('marks pairs that look the same', async () => {
     await setLocale('ko', { reload: false });

@@ -1,6 +1,6 @@
 // 업무 상태·우선순위의 표시 이름. 값은 읽을 때 지금 언어로 만든다(언어는 실행 중에 바뀔 수 있다, D-81).
 import type { AssigneeView, LinkKind, TaskInput, TaskPriority, TaskStatus } from '$lib/api/client';
-import { formatDay, formatNumber } from '$lib/display';
+import { formatDay } from '$lib/display';
 import { shortId } from '$lib/features/workspaces/badge';
 import { m } from '$lib/paraglide/messages.js';
 
@@ -176,9 +176,10 @@ function fieldText(unit: MergeUnit, input: TaskInput, names: ReadonlyMap<string,
         : m.tasks_clash_schedule_dates({ start: dayText(s.start_date), due: dayText(s.due_date) });
     }
     case 'estimate_minutes':
+      // 폼의 예상 시간 칸과 같은 글(`String`)이라 확인의 값을 칸에서 그대로 찾을 수 있다.
       return input.estimate_minutes === null
         ? m.tasks_clash_empty()
-        : formatNumber(input.estimate_minutes);
+        : String(input.estimate_minutes);
     case 'tags':
       return input.tags.length === 0 ? m.tasks_clash_empty() : input.tags.join(', ');
     case 'assignee_ids':

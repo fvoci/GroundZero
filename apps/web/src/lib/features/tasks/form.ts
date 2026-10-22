@@ -87,6 +87,19 @@ function stored(unit: MergeUnit, input: TaskInput): unknown {
   }
 }
 
+/** 그 단위가 저장될 모양으로 같은지. */
+function same(unit: MergeUnit, a: TaskInput, b: TaskInput): boolean {
+  return canonicalJson(stored(unit, a)) === canonicalJson(stored(unit, b));
+}
+
+/**
+ * 기준 값(`before`)에서 고친 단위가 있는지(`mergeForm`과 같은 판정: 앞뒤 공백만 친 글은 고친 것이 아니다). 업무
+ * 대화상자가 닫기 전에 저장하지 않은 입력을 버릴지 물을 때 쓴다.
+ */
+export function edited(before: TaskInput, mine: TaskInput): boolean {
+  return MERGE_UNITS.some((unit) => !same(unit, mine, before));
+}
+
 /** 단위마다 고른 쪽(`from`)의 값으로 폼 값을 만든다. 일정은 세 칸을 한쪽에서 함께 가져온다. */
 function assemble(from: (unit: MergeUnit) => TaskInput): TaskInput {
   return {
@@ -114,8 +127,6 @@ export function mergeForm(
   mine: TaskInput,
   fresh: TaskInput,
 ): { form: TaskInput; baseline: TaskInput; clash: boolean; clashes: MergeUnit[] } {
-  const same = (unit: MergeUnit, a: TaskInput, b: TaskInput): boolean =>
-    canonicalJson(stored(unit, a)) === canonicalJson(stored(unit, b));
   // 고치지 않았거나(앞뒤 공백만 친 글 포함, 2차 검증) 서버의 새 값과 같아진 단위는 새 값을 따르고, 기준도 새 값으로
   // 옮긴다(그 뒤 사용자가 다시 고쳐도 옛 기준과 비교해 충돌로 보지 않게).
   const takesFresh = (unit: MergeUnit): boolean =>
