@@ -13,6 +13,16 @@ use common::{TestUser, add_member, create_workspace, login, new_request_id, send
 use serde_json::{Value, json};
 use time::Date;
 
+/// 열을 쥔 채 DB 전체의 반복 회차 맞추기를 돌리는 시험끼리는 차례로 돈다. 함께 돌면 한쪽 작업이 앞 항목들의 열을 쥐고
+/// 다른 쪽이 쥔 열에서 기다리고, 다른 쪽 작업(잠금 시간 300ms)은 그 항목마다 시간 초과를 기다려 반복이 쌓일수록
+/// 길어졌다(W9: 항목 58개에서 17초). 그동안 열 순서 시험은 자기 열에서 기다리는 작업을 보지 못하고 실패했다.
+static LANE_TICK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// 상한(`app_system_recurrence_tick_ids`)을 본 뒤 다른 시험이 반복을 만들거나 회차를 지우면 뒤 반복의 몫이 모자라
+/// 그 반복이 FV001 경고로 건너뛴다(작업 프로세스는 다음 주기에 다시 한다, D-88). 시험은 회차 맞추기를 한 번만 부르므로
+/// id를 넉넉히 준다(남는 id는 버린다). 한 반복이 한 번에 쓰는 몫은 회차 50개 × 3 = 150개다(체크리스트 줄 없음).
+const SPARE_TICK_IDS: usize = 10_000;
+
 async fn module_item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> Value {
     let m = send(
         app,
@@ -681,6 +691,7 @@ async fn weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_o
 /// 주기까지 빠졌다. 작업은 이제 항목의 세 열을 같은 순서로 먼저 잡는다.
 #[tokio::test]
 async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves() {
+    let _serial = LANE_TICK.lock().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -795,6 +806,7 @@ async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves()
 /// 반복만 경고하고 건너뛴다.
 #[tokio::test]
 async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
+    let _serial = LANE_TICK.lock().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -836,14 +848,14 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
         .execute(&mut *tx)
         .await
         .unwrap();
-    // id는 작업 프로세스처럼 서버가 만든다(Supabase의 Postgres에는 `uuidv7()`이 없다).
+    // id는 작업 프로세스처럼 서버가 만든다(Supabase의 Postgres에는 `uuidv7()`이 없다). 상한 뒤의 경합에 대비해 넉넉히.
     let need: i32 = sqlx::query_scalar("SELECT fvoci.app_system_recurrence_tick_ids()")
         .fetch_one(&mut *tx)
         .await
         .unwrap();
     let ticked = sqlx::query_scalar::<_, i32>("SELECT fvoci.app_system_recurrence_tick($1)")
         .bind(fvoci_server::db::new_ids(
-            usize::try_from(need).unwrap_or_default(),
+            usize::try_from(need).unwrap_or_default() + SPARE_TICK_IDS,
         ))
         .fetch_one(&mut *tx)
         .await;
