@@ -2700,9 +2700,10 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   | 38  | #89  | `2518724` Minor: CPU 2개를 최소 조건으로 쓰지 말라                             | REJECTED                             | Docker는 호스트 CPU보다 큰 한도의 컨테이너 생성을 거부함(재현), CodeRabbit이 철회                                                                       | https://github.com/fvoci/GroundZero/pull/89#discussion_r4344280105       |
   | 39  | #64  | `be7ef22` 인라인 Minor: 제목만 고친 편집을 실시간 끝에 남기지 않음             | OPEN(병합 뒤 발견, W20 PR)           | 타당(코드 확인): `LiveDocumentEditor.svelte:121`이 `hasPending()` 대신 `watch?.dirty`를 봄. W20 PR에서 처리(PR·SHA 추후)                                | https://github.com/fvoci/GroundZero/pull/64#discussion_r4346901085       |
   | 40  | #82  | `217c6c5` 인라인 Minor: 상세 안의 다른 업무 열기가 닫기 확인을 건너뜀          | OPEN(병합 뒤 발견, W20 PR)           | 타당(코드 확인): `TaskBoard.svelte:1692`의 `onopen={open}`이 D-97 확인을 거치지 않음. W20 PR에서 처리(PR·SHA 추후)                                      | https://github.com/fvoci/GroundZero/pull/82#discussion_r4347201952       |
+  | 41  | #69  | `5e5e9da` 인라인 Minor: 표 뒤 빈 줄(markdownlint MD058)                        | REJECTED                             | 저장소 형식 검사(prettier, `cargo xtask check`)가 목록 안 표 뒤 빈 줄을 지움(넣으면 `--check` 실패), 답글 r4347534519                                   | https://github.com/fvoci/GroundZero/pull/69#discussion_r4347518864       |
 
   인계 장부의 OPEN 26건(실질 17 + 정보성 9)과 #82 추가 2건은 위 1~20에서 모두 처리 상태가 정해졌다. 그 뒤 새로 온 지적 가운데 OPEN은 25(#60, 배포·
-  되돌리기 절차 문서)와 39(#64)·40(#82)이다. 24는 `a811f92`, 36은 실제 브라우저로 정리했다. #69 자체의 이 갱신 push 뒤 CodeRabbit 결과는 PR 대화에서 확인한다.
+  되돌리기 절차 문서)와 39(#64)·40(#82)이다. 24는 `a811f92`, 36은 실제 브라우저로 정리했다. #69의 95차 push(`5e5e9da`) 뒤 지적은 41이다.
   - 39·40은 최종 갱신 커밋(`be7ef22`·`217c6c5`)에 병합 직전 게시됐다(#64 리뷰 2026-10-22T09:52:28Z·병합 09:58:56Z, #82 리뷰 10:25:16Z·병합
     10:26:23Z). 수정 없이 병합되어 병합 뒤에 발견했다(Minor 둘, 편집을 확인 없이 잃는 경로, 스레드 풀리지 않음). W20이 새 PR
     `fix/audit-unsaved-followups`에서 재현·수정 중이고, #69는 그 PR 다음에 병합한다. PR 번호·수정 SHA: 추후 기록.
