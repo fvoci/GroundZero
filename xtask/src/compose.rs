@@ -59,6 +59,13 @@ pub struct Compose {
 }
 
 impl Compose {
+    /// A distinct, run-specific project for SQL comparison; never reuses dev/test resources.
+    pub fn for_comparison(root: &Path, run: &str) -> Self {
+        let mut compose = Self::new(root, Env::Test);
+        compose.project = format!("sqlprep-b-{}-{run}", project_name(root, Env::Test));
+        compose
+    }
+
     pub fn new(root: &Path, env: Env) -> Self {
         Self {
             root: root.to_path_buf(),
@@ -118,6 +125,13 @@ impl Compose {
     pub fn down(&self, sh: &Shell) -> Result<()> {
         let args = self.base_args();
         cmd!(sh, "docker {args...} down --volumes --remove-orphans").run()?;
+        Ok(())
+    }
+
+    /// Stop only this project's containers; preserve containers and volumes for inspection.
+    pub fn stop(&self, sh: &Shell) -> Result<()> {
+        let args = self.base_args();
+        cmd!(sh, "docker {args...} stop").run()?;
         Ok(())
     }
 

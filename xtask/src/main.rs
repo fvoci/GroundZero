@@ -8,6 +8,7 @@ mod licenses;
 mod notices;
 mod openapi;
 mod rhwp;
+mod sql_compare;
 mod supabase;
 mod supabase_cloud_precheck;
 mod test;
@@ -27,6 +28,21 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Compare fresh cumulative migrations with a proposed SQL baseline in isolated Compose projects.
+    SqlCompare {
+        /// Directory containing ordered, plain SQL candidate files. Omit for A/A control.
+        #[arg(long)]
+        candidate: Option<PathBuf>,
+        /// Evidence directory (must not already exist).
+        #[arg(long)]
+        output: PathBuf,
+        /// Also run the existing integration suite against both databases.
+        #[arg(long)]
+        behavior: bool,
+        /// Use the pinned self-hosted Supabase PostgreSQL and session pooler.
+        #[arg(long)]
+        supabase: bool,
+    },
     /// 전용 Supabase Cloud 대상의 읽기 전용 사전 점검. 기본값은 연결하지 않는다.
     SupabaseCloudPrecheck {
         /// 승인된 대상에 한 번 연결한다. 수동 workflow는 검토된 main에서만 실행한다.
@@ -121,6 +137,12 @@ fn main() -> Result<()> {
     });
     let root = repo_root()?;
     match cli.command {
+        Command::SqlCompare {
+            candidate,
+            output,
+            behavior,
+            supabase,
+        } => sql_compare::run(&root, candidate.as_deref(), &output, behavior, supabase),
         Command::SupabaseCloudPrecheck { connect } => {
             std::process::exit(supabase_cloud_precheck::run(connect))
         }
