@@ -676,6 +676,102 @@ async fn weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_o
     );
 }
 
+/// 감사 S18: 반복 일정의 시작을 규칙의 끝(`until`) 뒤로 옮기면 회차가 하나도 없어 달력에서 사라졌다. 규칙을 정할 때와
+/// 같이 400으로 받지 않는다. 시간대만 바꿔 첫 회차 날짜가 밀리는 경우도 같다.
+#[tokio::test]
+async fn moving_a_repeating_event_past_its_until_is_refused() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "반복 끝").await;
+    let item = module_item(&app, &admin, &ws, "EVU").await;
+    let create = |body: Value| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let uri = format!("/api/items/{}/events", item["id"].as_str().unwrap());
+        async move {
+            let mut body = body;
+            body["request_id"] = json!(new_request_id());
+            let r = send(&app, Method::POST, &uri, Some(&admin), Some(body)).await;
+            assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+            r.json
+        }
+    };
+    let set_rule = |event: &Value, until: &str| {
+        let app = app.clone();
+        let admin = admin.clone();
+        let uri = format!("/api/events/{}/recurrence", event["id"].as_str().unwrap());
+        let rule = json!({ "rule": {"freq":"weekly","interval":1,"weekdays":[],"until":until,"count":null} });
+        async move {
+            let r = send(&app, Method::PUT, &uri, Some(&admin), Some(rule)).await;
+            assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+            r.json
+        }
+    };
+
+    // 종일 일정: 11-02부터 매주, 11-30까지. 시작을 12-07로 옮기면 400이고 일정은 그대로 달력에 남는다.
+    let all_day = create(
+        json!({ "kind": "meeting", "title": "주간 점검", "description": "", "all_day": true,
+        "start_date": "2026-11-02", "end_date": "2026-11-02", "starts_at": null, "ends_at": null,
+        "timezone": "Asia/Seoul" }),
+    )
+    .await;
+    let all_day = set_rule(&all_day, "2026-11-30").await;
+    let moved = send(&app, Method::PUT, &format!("/api/events/{}", all_day["id"].as_str().unwrap()), Some(&admin),
+        Some(json!({ "base_version": all_day["version"], "kind": "meeting", "title": "주간 점검", "description": "",
+            "all_day": true, "start_date": "2026-12-07", "end_date": "2026-12-07", "starts_at": null,
+            "ends_at": null, "timezone": "Asia/Seoul" }))).await;
+    assert_eq!(moved.status, StatusCode::BAD_REQUEST, "{:?}", moved.json);
+    let cal = send(
+        &app,
+        Method::GET,
+        &format!("/api/workspaces/{ws}/calendar?from=2026-11-01&to=2026-11-30&tz=Asia/Seoul"),
+        Some(&admin),
+        None,
+    )
+    .await
+    .json;
+    let dates: Vec<&str> = cal["occurrences"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|o| o["event_id"] == all_day["id"])
+        .map(|o| o["start_date"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        dates,
+        [
+            "2026-11-02",
+            "2026-11-09",
+            "2026-11-16",
+            "2026-11-23",
+            "2026-11-30"
+        ]
+    );
+
+    // 시각 일정: 서울 11-02 23:30에 한 번(끝 = 첫 회차 날짜). 시각은 두고 시간대만 키리티마티(UTC+14)로 바꾸면 그곳의
+    // 날짜는 11-03이라 끝보다 뒤다.
+    let timed = create(
+        json!({ "kind": "meeting", "title": "늦은 통화", "description": "", "all_day": false,
+        "start_date": null, "end_date": null, "starts_at": "2026-11-02T23:30:00+09:00",
+        "ends_at": "2026-11-03T00:00:00+09:00", "timezone": "Asia/Seoul" }),
+    )
+    .await;
+    let timed = set_rule(&timed, "2026-11-02").await;
+    let zone = send(&app, Method::PUT, &format!("/api/events/{}", timed["id"].as_str().unwrap()), Some(&admin),
+        Some(json!({ "base_version": timed["version"], "kind": "meeting", "title": "늦은 통화", "description": "",
+            "all_day": false, "start_date": null, "end_date": null, "starts_at": "2026-11-02T23:30:00+09:00",
+            "ends_at": "2026-11-03T00:00:00+09:00", "timezone": "Pacific/Kiritimati" }))).await;
+    assert_eq!(zone.status, StatusCode::BAD_REQUEST, "{:?}", zone.json);
+
+    // 끝 안에서 옮기는 것은 그대로 된다.
+    let inside = send(&app, Method::PUT, &format!("/api/events/{}", all_day["id"].as_str().unwrap()), Some(&admin),
+        Some(json!({ "base_version": all_day["version"], "kind": "meeting", "title": "주간 점검", "description": "",
+            "all_day": true, "start_date": "2026-11-03", "end_date": "2026-11-03", "starts_at": null,
+            "ends_at": null, "timezone": "Asia/Seoul" }))).await;
+    assert_eq!(inside.status, StatusCode::OK, "{:?}", inside.json);
+}
+
 /// 감사 W21: 일정 반복 정하기가 기준 없이 저장해, 화면을 연 뒤 다른 사람이 바꾼 규칙(수요일 추가)을 옛 규칙으로 말없이
 /// 덮었다. 편집을 시작한 규칙(`base`)이 지금 규칙과 다르면 409 `rule_conflict`(최신 일정)이고 아무것도 바꾸지 않는다.
 /// 규칙만 보므로 그사이 제목만 바뀐 것은 충돌이 아니고, 이미 보낸 규칙과 같으면 같은 요청의 재시도다.

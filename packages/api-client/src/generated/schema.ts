@@ -1769,9 +1769,9 @@ export interface paths {
         get?: never;
         /**
          * 선행 업무 추가·설정(후속 업무 쓰기 권한). 같은 항목만, 자기 자신·순환·잘못된 종류나 지연일은 400.
-         * @description 본문이 없으면 옛 동작이다: 없을 때 종료 후 시작·지연 0으로 만들고, 이미 있으면 종류·지연일을 그대로 둔다.
-         *     본문(`SetPredecessor`)이 있으면 그 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다. 승인 목록의
-         *     기준 버전이 지났거나 지금 다시 계산한 계획과 다르면 아무것도 바꾸지 않고 409 `shift_conflict`.
+         * @description 본문(`SetPredecessor`)의 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다. 편집을 시작한 관계(`base`)가
+         *     지금과 다르면 409 `link_conflict`, 승인 목록의 기준 버전이 지났거나 지금 다시 계산한 계획과 다르면 409
+         *     `shift_conflict`(둘 다 아무것도 바꾸지 않음).
          */
         put: operations["add_predecessor"];
         post?: never;
@@ -2640,8 +2640,9 @@ export interface components {
             author_name?: string | null;
             body: string;
             can_delete: boolean;
+            /** @description 쓴 사람이 고칠 수 있는지(지운 댓글이나 보관된 항목의 댓글은 아님). */
             can_edit: boolean;
-            /** @description 스레드를 해결·해제할 수 있는지(첫 댓글에서만). */
+            /** @description 스레드를 해결·해제할 수 있는지(첫 댓글에서만, 보관된 항목에서는 아님). */
             can_resolve: boolean;
             /** Format: date-time */
             created_at: string;
@@ -2885,11 +2886,14 @@ export interface components {
          * @description 문서 내부 ID. CRDT 도입 후에도 유지된다 (D-62).
          */
         DocumentId: string;
-        /** @description 문서 설정 변경 요청. */
+        /**
+         * @description 문서 설정 변경 요청. 바꾸는 칸만 보낸다. 없거나 null인 칸은 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
+         *     비공개·복제 금지를 다른 칸만 바꾼 요청이 되돌리지 않게, 감사 W6).
+         */
         DocumentSettings: {
-            allow_copy: boolean;
+            allow_copy?: boolean | null;
             /** @description `workspace` 또는 `private`. */
-            visibility: string;
+            visibility?: string | null;
         };
         /** @description 문서 목록 항목. */
         DocumentSummary: {
@@ -3289,6 +3293,12 @@ export interface components {
              */
             shared_seconds: number;
         };
+        /** @description 관계 편집을 시작한 때의 종류·지연일(관계 설정의 기준 조건). */
+        LinkBase: {
+            kind: components["schemas"]["LinkKind"];
+            /** Format: int32 */
+            lag_days: number;
+        };
         /** @description 관계 미리보기·설정 입력. */
         LinkInput: {
             kind: components["schemas"]["LinkKind"];
@@ -3653,9 +3663,9 @@ export interface components {
         };
         /**
          * @description 관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
-         *     - `TaskConflict`(`error: "shift_conflict"`, `current`): 승인한 재배치가 그사이 맞지 않게 됨(본문 있는 요청만).
+         *     - `TaskConflict`(`error: "shift_conflict"` 또는 `"link_conflict"`, `current`): 승인한 재배치가 그사이 맞지 않게
+         *       됨, 또는 편집을 시작한 관계(`base`)가 그사이 바뀌거나 생기거나 지워짐.
          *     - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 보관된 항목, 동시 변경 재시도(40001·40P01), 새 id 부족(FV001).
-         *       본문 없는 옛 요청의 409도 이 모양이다.
          */
         PredecessorConflict: components["schemas"]["TaskConflict"] | components["schemas"]["ErrorBody"];
         /** @description 아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다. */
@@ -3988,9 +3998,11 @@ export interface components {
         };
         /**
          * @description 관계 설정. 종류·지연일이 바뀌어 후속 업무를 옮겨야 하면 미리보기에서 승인한 목록을 함께 보낸다(같은 트랜잭션).
-         *     비우면 관계만 바꾼다.
+         *     비우면 관계만 바꾼다. `base`는 화면이 편집을 시작한 관계의 종류·지연일이다(새 관계면 `null`). 지금 관계와 다르면
+         *     아무것도 바꾸지 않고 409 `link_conflict`(최신본 포함)다. 다른 사람이 그사이 바꾼 종류·지연일을 말없이 덮지 않는다.
          */
         SetPredecessor: {
+            base?: null | components["schemas"]["LinkBase"];
             kind: components["schemas"]["LinkKind"];
             /** Format: int32 */
             lag_days: number;
@@ -4490,8 +4502,11 @@ export interface components {
         UpdateItem: {
             description: string;
             title: string;
-            /** @description `workspace` 또는 `private`. */
-            visibility: string;
+            /**
+             * @description `workspace` 또는 `private`. 바꿀 때만 보낸다. 없거나 null이면 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
+             *     공개 범위를 설명만 고친 저장이 되돌리지 않게, 감사 W13).
+             */
+            visibility?: string | null;
         };
         /** @description 모듈 이름·키 변경 요청(관리자). */
         UpdateModule: {
@@ -4844,6 +4859,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     delete_comment: {
@@ -4919,6 +4942,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5712,6 +5743,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6584,6 +6623,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     accept_invitation: {
@@ -7040,6 +7087,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Participant"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {
@@ -7628,6 +7683,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudyParticipant"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {
@@ -9812,8 +9875,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        /** @description 없으면 옛 동작(없을 때 FS·0으로 추가, 있으면 그대로) */
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": components["schemas"]["SetPredecessor"];
             };
@@ -9851,7 +9913,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description `shift_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`) */
+            /** @description `shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`) */
             409: {
                 headers: {
                     [name: string]: unknown;
