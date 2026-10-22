@@ -3091,7 +3091,7 @@ async fn a_move_without_a_room_saves_a_live_state_left_pending() {
     .unwrap();
     let refused = move_to(&common::app(&strict), &admin, &left_id, &to).await;
     assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
-    assert_eq!(refused.json["error"], "conflict", "{:?}", refused.json);
+    assert_eq!(refused.json["error"], "invalid_state", "{:?}", refused.json);
     assert_eq!(
         get_doc(&app, &admin, &left_id).await["workspace_id"],
         from.as_str(),
