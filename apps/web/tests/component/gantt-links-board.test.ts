@@ -236,6 +236,8 @@ describe('gantt dependency lines on the board', () => {
     // 막대는 마지막 열에서 끝나게 그린다(표 밖으로 넘치지 않음): 열 6~7.
     expect(bar.style.left).toBe(`calc(${String(6 * 1.75 + 0.125)}rem)`);
     expect(bar.style.width).toBe(`calc(${String(2 * 1.75 - 0.25)}rem)`);
+    // 일부(열 6~7)는 기간 안이므로 숨기지 않는다.
+    expect(bar.hasAttribute('data-gantt-offchart')).toBe(false);
     await fireEvent.keyDown(window, { key: 'Escape' });
     await fireEvent.pointerUp(bar, { pointerId: 4, clientX: 100 + 6 * px });
     expectLineOnBars(gantt);
@@ -252,9 +254,77 @@ describe('gantt dependency lines on the board', () => {
     await fireEvent.pointerMove(bar, { pointerId: 5, buttons: 1, clientX: 400 - 7 * px });
     expect(bar.style.left).toBe('calc(0.125rem)');
     expect(bar.style.width).toBe(`calc(${String(1.75 - 0.25)}rem)`);
+    expect(bar.hasAttribute('data-gantt-offchart')).toBe(false);
     expect(gantt.querySelector('[data-gantt-link]')).toBeNull();
     await fireEvent.keyDown(window, { key: 'Escape' });
     await fireEvent.pointerUp(bar, { pointerId: 5, clientX: 400 - 7 * px });
+  });
+
+  it('hides a bar whose preview left the chart entirely instead of drawing it on the edge column', async () => {
+    // 표는 10-20~10-27의 8열이다. b(열 5~7)를 아홉 칸 앞으로 끌면 미리 보기는 열 -4~-2(10-16~10-18)라 보이는 열이 없다.
+    // 첫 열에 하루짜리 막대로 그리면 실제와 다른 날짜(10-20 하루)를 보이므로 숨긴다. 요소는 남아 끌기가 이어진다.
+    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    const update = vi.spyOn(api, 'updateTask');
+    const gantt = await mount();
+    const bar = q(gantt, '[data-gantt-bar="b"]');
+    const px =
+      1.75 * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
+    await fireEvent.pointerDown(bar, { pointerId: 6, button: 0, buttons: 1, clientX: 400 });
+    await fireEvent.pointerMove(bar, { pointerId: 6, buttons: 1, clientX: 400 - 9 * px });
+    expect(bar.getAttribute('data-gantt-offchart')).toBe('true');
+    expect(bar.classList.contains('invisible')).toBe(true);
+    expect(screen.getByTestId('gantt-links-hidden').textContent).toContain('관계 1개는');
+    // 같은 끌기로 다시 표 안(-2~0)으로 오면 같은 막대가 다시 보인다(요소를 빼지 않아 포인터를 놓치지 않음).
+    await fireEvent.pointerMove(bar, { pointerId: 6, buttons: 1, clientX: 400 - 7 * px });
+    expect(q(gantt, '[data-gantt-bar="b"]')).toBe(bar);
+    expect(bar.hasAttribute('data-gantt-offchart')).toBe(false);
+    expect(bar.classList.contains('invisible')).toBe(false);
+    expect(bar.style.left).toBe('calc(0.125rem)');
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await fireEvent.pointerUp(bar, { pointerId: 6, clientX: 400 - 7 * px });
+    expect(bar.hasAttribute('data-gantt-offchart')).toBe(false);
+    expectLineOnBars(gantt);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('hides a bar dragged entirely past the last column', async () => {
+    // a(열 0~2)를 여덟 칸 뒤로: 미리 보기 열 8~10은 마지막 열(7) 뒤라 마지막 열에 한 칸짜리로 그리지 않는다.
+    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    const update = vi.spyOn(api, 'updateTask');
+    const gantt = await mount();
+    const bar = q(gantt, '[data-gantt-bar="a"]');
+    const px =
+      1.75 * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
+    await fireEvent.pointerDown(bar, { pointerId: 7, button: 0, buttons: 1, clientX: 100 });
+    await fireEvent.pointerMove(bar, { pointerId: 7, buttons: 1, clientX: 100 + 8 * px });
+    expect(bar.getAttribute('data-gantt-offchart')).toBe('true');
+    expect(bar.classList.contains('invisible')).toBe(true);
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await fireEvent.pointerUp(bar, { pointerId: 7, clientX: 100 + 8 * px });
+    expect(bar.hasAttribute('data-gantt-offchart')).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('hides a milestone dragged past the last column instead of leaving it on that column', async () => {
+    // 마일스톤 m(마감 10-27)은 마지막 열 7의 ◆다. 한 칸 뒤로 끌면 10-28이라 표 밖인데, 전에는 ◆가 그 자리에 그대로 남아
+    // 아무것도 움직이지 않은 것처럼 보였다(후속이 없으면 놓자마자 묻지 않고 저장된다).
+    const release = { ...task('m', '출시', null, '2026-10-27'), milestone: true };
+    vi.spyOn(api, 'tasks').mockResolvedValue([design, release]);
+    const update = vi.spyOn(api, 'updateTask');
+    const gantt = await mount();
+    const diamond = q(gantt, '[data-gantt-bar="m"]');
+    expect(diamond.hasAttribute('data-gantt-offchart')).toBe(false);
+    const px =
+      1.75 * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
+    await fireEvent.pointerDown(diamond, { pointerId: 8, button: 0, buttons: 1, clientX: 400 });
+    await fireEvent.pointerMove(diamond, { pointerId: 8, buttons: 1, clientX: 400 + px });
+    expect(diamond.getAttribute('data-gantt-offchart')).toBe('true');
+    expect(diamond.classList.contains('invisible')).toBe(true);
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await fireEvent.pointerUp(diamond, { pointerId: 8, clientX: 400 + px });
+    expect(diamond.hasAttribute('data-gantt-offchart')).toBe(false);
+    expect(diamond.classList.contains('invisible')).toBe(false);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('matches the bars after an approved preview, a cancelled one, and a failed save', async () => {
