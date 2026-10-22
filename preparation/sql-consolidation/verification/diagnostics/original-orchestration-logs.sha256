@@ -1,0 +1,4 @@
+e70460723177d5d9a06130e32dca168ad758d426893086a067cae10fabf64d67  target/sql-compare-aa.log
+03f8d85399fb125e77ac055b7a3cafd5bc1646b5fa945fc181766bdb30c5cd3f  target/sql-compare-aa-final.log
+5ceacfbf17f724f4bb99388bf752d40066d1b6353940ce11150114462392f0b0  target/sql-compare-postgres-final.log
+3b3aaa31c5d237677295565bc6441b04ad499ef176639bcb0e4fb3c2dc4e9d75  target/sql-compare-supabase-final.log

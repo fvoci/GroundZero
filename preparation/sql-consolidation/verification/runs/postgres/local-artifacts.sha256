@@ -1,0 +1,6 @@
+48fa64f1cec364a3a7d3d02d425c371e4a442087854ea4f0fb05414e6b0c3524  target/sql-compare-postgres-final/a/catalog.json
+48fa64f1cec364a3a7d3d02d425c371e4a442087854ea4f0fb05414e6b0c3524  target/sql-compare-postgres-final/b/catalog.json
+d4de79cbf5a69624323e9bfeea442c282f10ec24fdc3e76c7f2b2b6b8b1808b0  target/sql-compare-postgres-final/a/schema.sql
+14b8258421815d5fcfe7e72a41663a74d7af3bfb4ba2d20cd62de65cd2c8429b  target/sql-compare-postgres-final/b/schema.sql
+df49de4ba71a2f48b7750142a21509b6ae45d71cffd4a6389a06d6fd10763490  target/sql-compare-postgres-final/a/migration-ledger.json
+c2fdbfa64bbe51d53814d9b0346704c3aed6129c6a6fbee0dd1a01057329435e  target/sql-compare-postgres-final/b/migration-ledger.json

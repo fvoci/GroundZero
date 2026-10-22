@@ -1,0 +1,20 @@
+{
+  "behavior": {
+    "a_direct": "PASS: existing workspace suite; OIDC not run\n",
+    "a_session": "NOT RUN\n",
+    "b_direct": "PASS: existing workspace suite; OIDC not run\n",
+    "b_session": "NOT RUN\n"
+  },
+  "behavior_requested": true,
+  "candidate": "/home/kinesis/orca/workspaces/GroundZero/sql-prep-a/preparation/sql-consolidation/candidate",
+  "passed": true,
+  "phases": {
+    "a_install": "PASS",
+    "a_snapshot": "PASS",
+    "b_install": "PASS",
+    "b_snapshot": "PASS",
+    "objects": "PASS",
+    "self_test": "PASS"
+  },
+  "supabase": false
+}

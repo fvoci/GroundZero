@@ -21,6 +21,8 @@ cargo xtask sql-compare \
 
 Compose 파일·이미지·테스트 자격 증명은 기존 설정을 재사용한다. 프로젝트 이름은 체크아웃 해시와 실행 UUID를 포함하며 A/B/검색·S3가 서로 다르다. 호스트 포트는 동적 루프백 포트다. 종료 시 생성한 프로젝트만 `stop`한다. 컨테이너·이름 붙은 볼륨은 보존하고 `down`·`prune`을 호출하지 않는다. 기존 Compose DB는 tmpfs이므로 **컨테이너를 정지하면 DB의 tmpfs 데이터 자체는 사라진다**. 그 전에 카탈로그·덤프·로그를 출력 경로에 저장한다. 개인 개발 DB 또는 Cloud DB 주소는 받지 않는다.
 
+과거 실행에는 예외가 있다. 2026-10-22 첫 A/A 진단에서 수정 전 바이너리가 해당 실행 B 프로젝트에 `down --volumes --remove-orphans`를 호출해 전용 PostgreSQL 컨테이너와 네트워크를 삭제했다. 이 DB는 tmpfs였고 이름 붙은 볼륨은 없었다. 공유 컨테이너·볼륨은 대상이 아니었다. 이후 실행은 위의 `stop` 방식으로 수정했다. 정확한 명령과 삭제 로그는 [원본 진단 로그](diagnostics/initial-control-cleanup.txt), 구성 증거는 [저장소 구성](diagnostics/initial-control-postgres-storage.json), 실행별 처리는 [결과 보고서](results.md)에 남겼다.
+
 ## 객체 비교
 
 행동 테스트가 fixture를 만들기 전에 양쪽 카탈로그·초기 행·덤프를 읽는다. `catalog.sql`이 다음을 이름 기반 키로 비교한다.

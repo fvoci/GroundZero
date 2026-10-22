@@ -1,0 +1,10 @@
+{
+  "catalog": [],
+  "dump": [
+    {
+      "a": "--\n\nCREATE TABLE fvoci.files (\n    id uuid NOT NULL,\n    workspace_id uuid,\n    owner_user_id uuid,\n    document_id uuid,\n    item_id uuid,\n    name text NOT NULL,\n    current_version integer DEFAULT 0 NOT NULL,\n    created_by uuid NOT NULL,\n    created_at timestamp with time zone DEFAULT now() NOT NULL,\n    updated_at timestamp with time zone DEFAULT now() NOT NULL,\n    deleted_at timestamp with time zone,\n    trash_batch_id uuid,\n    CONSTRAINT files_id_uuidv7 CHECK ((uuid_extract_version(id) = 7)),\n    CONSTRAINT files_name_check CHECK ((((length(btrim(name)) >= 1) AND (length(btrim(name)) <= 255)) AND (name !~ '[\\x00-\\x1f/\\\\]'::text))),\n    CONSTRAINT files_place CHECK (((workspace_id IS NULL) <> (owner_user_id IS NULL))),\n    CONSTRAINT files_target CHECK (((document_id IS NULL) <> (item_id IS NULL)))\n);\n\n\nALTER TABLE fvoci.files OWNER TO fvoci_migrator;",
+      "b": "--\n\nCREATE TABLE fvoci.files (\n    id uuid NOT NULL,\n    workspace_id uuid,\n    owner_user_id uuid,\n    document_id uuid,\n    item_id uuid,\n    name text NOT NULL,\n    current_version integer DEFAULT 0 NOT NULL,\n    created_by uuid NOT NULL,\n    created_at timestamp with time zone DEFAULT now() NOT NULL,\n    updated_at timestamp with time zone DEFAULT now() NOT NULL,\n    deleted_at timestamp with time zone,\n    trash_batch_id uuid,\n    CONSTRAINT files_id_uuidv7 CHECK ((uuid_extract_version(id) = 7)),\n    CONSTRAINT files_name_check CHECK (((length(btrim(name)) >= 1) AND (length(btrim(name)) <= 255) AND (name !~ '[\\x00-\\x1f/\\\\]'::text))),\n    CONSTRAINT files_place CHECK (((workspace_id IS NULL) <> (owner_user_id IS NULL))),\n    CONSTRAINT files_target CHECK (((document_id IS NULL) <> (item_id IS NULL)))\n);\n\n\nALTER TABLE fvoci.files OWNER TO fvoci_migrator;",
+      "object": "-- Name: files; Type: TABLE; Schema: fvoci; Owner: fvoci_migrator"
+    }
+  ]
+}

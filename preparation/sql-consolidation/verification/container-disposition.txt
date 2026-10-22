@@ -1,0 +1,105 @@
+Scope: only this task's Docker Compose projects with the sqlprep-b- prefix.
+
+Historical exception: the first diagnostic A/A binary called
+docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c19209705884cf864b2cc4d6f8-b --file deploy/compose.test.yaml down --volumes --remove-orphans
+Its B postgres container and network were removed (initial-control-cleanup.txt lines 31,34-37).
+The postgres service had tmpfs /var/lib/postgresql and no named volume.
+The log bounds are 2026-10-22T22:16:22.128483746+09:00 to 2026-10-22T22:16:46.428293994+09:00.
+The exact event time is unavailable: the log has no per-line timestamps and Docker events were no longer retained.
+No shared project or named volume was targeted by that command.
+
+Subsequent comparator binaries stop only their exact A/B/services projects.
+The manual baseline export project sqlprep-b-cb65cc31 and the remaining first-A/A A container were also stopped explicitly.
+Stopping a tmpfs database discards its database data; the exported evidence remains on disk.
+The diagnostic runs and final runs below were not pruned or removed.
+
+Local diagnostic outputs (paths are relative to sql-prep-b, not included wholesale in the PR):
+target/sql-compare-aa: first A/A; object comparison passed; interrupted before a final manifest; cleanup exception above.
+target/sql-compare-aa2: A/A passed before adding the fourth CHECK self-test.
+target/sql-compare-aa-final: selected A/A object/self-test evidence, no behavior requested.
+target/sql-compare-pg: candidate SQLx search_path install failure, preserved diagnostic result.
+target/sql-compare-pg2: only files_name_check dump representation differed, preserved diagnostic result and diff.
+target/sql-compare-pg3: passed before final ordinary-service environment isolation; superseded.
+target/sql-compare-supabase: migrator socket peer-auth snapshot failure, preserved diagnostic result.
+target/sql-compare-supabase2: passed before final ordinary-service environment isolation; superseded.
+target/sql-compare-postgres-final: selected final PostgreSQL object/behavior evidence.
+target/sql-compare-supabase-final: selected final Supabase object/direct/session evidence.
+
+The following read-only snapshots and cleanup-command audit were captured after all runs completed.
+Captured UTC: 2026-10-22T13:31:36Z
+
+Containers: name, state, compose project
+sqlprep-b-cb65cc31-postgres-1	exited	sqlprep-b-cb65cc31
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c2e20871f0bb8f3ce7a259af3c-a-db-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c2e20871f0bb8f3ce7a259af3c-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c2e20871f0bb8f3ce7a259af3c-a-rest-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c2e20871f0bb8f3ce7a259af3c-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c2e20871f0bb8f3ce7a259af3c-a-supavisor-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c2e20871f0bb8f3ce7a259af3c-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-a-db-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-a-rest-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-a-supavisor-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-b-db-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-b-rest-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-b-supavisor-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-a-db-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-a-rest-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-a-supavisor-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-b-db-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-b-rest-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-b-supavisor-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c19209705884cf864b2cc4d6f8-a-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c19209705884cf864b2cc4d6f8-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c209aa7737a489fb162a682f5d-a-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c209aa7737a489fb162a682f5d-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c209aa7737a489fb162a682f5d-b-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c209aa7737a489fb162a682f5d-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2776b71f0ab086ac28fd114d2-a-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2776b71f0ab086ac28fd114d2-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2776b71f0ab086ac28fd114d2-b-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2776b71f0ab086ac28fd114d2-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2cc1f70438a6966914c719f82-a-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2cc1f70438a6966914c719f82-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2cc1f70438a6966914c719f82-b-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2cc1f70438a6966914c719f82-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c35d927184b40fecb6d1d6db28-a-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c35d927184b40fecb6d1d6db28-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c35d927184b40fecb6d1d6db28-b-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c35d927184b40fecb6d1d6db28-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c35d927184b40fecb6d1d6db28-services-meilisearch-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c35d927184b40fecb6d1d6db28-services
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c35d927184b40fecb6d1d6db28-services-seaweedfs-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c35d927184b40fecb6d1d6db28-services
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c85b733ab740df1bbf5f7a8e-services-meilisearch-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c85b733ab740df1bbf5f7a8e-services
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c85b733ab740df1bbf5f7a8e-services-seaweedfs-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c85b733ab740df1bbf5f7a8e-services
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c86274a2912d96ffe4aa22eb-a-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c86274a2912d96ffe4aa22eb-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c86274a2912d96ffe4aa22eb-b-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c86274a2912d96ffe4aa22eb-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c6315e707fb332243e75b42974-a-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c6315e707fb332243e75b42974-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c6315e707fb332243e75b42974-b-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c6315e707fb332243e75b42974-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c6315e707fb332243e75b42974-services-meilisearch-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c6315e707fb332243e75b42974-services
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c6315e707fb332243e75b42974-services-seaweedfs-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c6315e707fb332243e75b42974-services
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c63225762fa14cc975ed55bcc8-services-meilisearch-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c63225762fa14cc975ed55bcc8-services
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c63225762fa14cc975ed55bcc8-services-seaweedfs-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c63225762fa14cc975ed55bcc8-services
+
+Retained named volumes: name, compose project
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c2e20871f0bb8f3ce7a259af3c-a_db-config	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c2e20871f0bb8f3ce7a259af3c-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-a_db-config	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-b_db-config	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-a_db-config	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-b_db-config	sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-b
+
+Cleanup audit command: rg -n down/Removing/Removed/prune target/sql-compare*.log
+target/sql-compare-aa.log:31:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c19209705884cf864b2cc4d6f8-b --file deploy/compose.test.yaml down --volumes --remove-orphans
+target/sql-compare-aa.log:34: Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c19209705884cf864b2cc4d6f8-b-postgres-1 Removing
+target/sql-compare-aa.log:35: Container sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c19209705884cf864b2cc4d6f8-b-postgres-1 Removed
+target/sql-compare-aa.log:36: Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c19209705884cf864b2cc4d6f8-b_default Removing
+target/sql-compare-aa.log:37: Network sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c19209705884cf864b2cc4d6f8-b_default Removed
+
+Stop commands in all comparison logs:
+target/sql-compare-supabase2.log:192:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c85b733ab740df1bbf5f7a8e-services --file deploy/compose.test.yaml stop
+target/sql-compare-supabase2.log:197:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-b --project-directory /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/deploy/supabase/compose.test.yaml stop
+target/sql-compare-supabase2.log:253:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c4c85b733ab740df1bbf5f7a8e-a --project-directory /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/deploy/supabase/compose.test.yaml stop
+target/sql-compare-supabase-final.log:192:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c63225762fa14cc975ed55bcc8-services --file deploy/compose.test.yaml stop
+target/sql-compare-supabase-final.log:197:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-b --project-directory /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/deploy/supabase/compose.test.yaml stop
+target/sql-compare-supabase-final.log:253:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c63225762fa14cc975ed55bcc8-a --project-directory /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/deploy/supabase/compose.test.yaml stop
+target/sql-compare-supabase.log:91:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-supabase-01a163c2e20871f0bb8f3ce7a259af3c-a --project-directory /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-b/deploy/supabase/compose.test.yaml stop
+target/sql-compare-postgres-final.log:52:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c6315e707fb332243e75b42974-services --file deploy/compose.test.yaml stop
+target/sql-compare-postgres-final.log:57:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c6315e707fb332243e75b42974-b --file deploy/compose.test.yaml stop
+target/sql-compare-postgres-final.log:60:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c6315e707fb332243e75b42974-a --file deploy/compose.test.yaml stop
+target/sql-compare-pg2.log:28:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2cc1f70438a6966914c719f82-b --file deploy/compose.test.yaml stop
+target/sql-compare-pg2.log:31:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2cc1f70438a6966914c719f82-a --file deploy/compose.test.yaml stop
+target/sql-compare-pg3.log:52:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c35d927184b40fecb6d1d6db28-services --file deploy/compose.test.yaml stop
+target/sql-compare-pg3.log:57:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c35d927184b40fecb6d1d6db28-b --file deploy/compose.test.yaml stop
+target/sql-compare-pg3.log:60:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c35d927184b40fecb6d1d6db28-a --file deploy/compose.test.yaml stop
+target/sql-compare-pg.log:28:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2776b71f0ab086ac28fd114d2-b --file deploy/compose.test.yaml stop
+target/sql-compare-pg.log:31:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c2776b71f0ab086ac28fd114d2-a --file deploy/compose.test.yaml stop
+target/sql-compare-aa2.log:31:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c209aa7737a489fb162a682f5d-b --file deploy/compose.test.yaml stop
+target/sql-compare-aa2.log:34:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c209aa7737a489fb162a682f5d-a --file deploy/compose.test.yaml stop
+target/sql-compare-aa-final.log:31:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c86274a2912d96ffe4aa22eb-b --file deploy/compose.test.yaml stop
+target/sql-compare-aa-final.log:34:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c86274a2912d96ffe4aa22eb-a --file deploy/compose.test.yaml stop
