@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::db::{UserTx, new_ids};
 use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
+use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::http::AppState;
 use crate::ids::{DocumentId, FileId, ItemId, UploadId, UserId};
 use crate::storage::{Part, sha256_hex};
@@ -200,12 +200,18 @@ async fn view(tx: &mut UserTx, row: UploadRow) -> Result<UploadView, AppError> {
 }
 
 /// 업로드 시작(같은 요청 id면 같은 업로드). 쓸 수 있는 문서·항목·파일에만. 크기·저장량 한도를 넘으면 400·409.
+///
+/// 기대 사용자 머리가 필요하다(`ExpectedUser`). 웹은 만료된 업로드를 스스로 다시 시작하므로, 그사이 다른 탭에서 계정을
+/// 바꿨으면 새 계정의 업로드를 만들지 않고 409 `account_changed`.
 #[utoipa::path(post, path = "/api/uploads", operation_id = "create_upload", request_body = CreateUpload,
+    params(("x-fvoci-expected-user" = String, Header, format = Uuid, description = crate::features::documents::EXPECTED_USER_DOC)),
     responses((status = 201, body = UploadView), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "files")]
+              (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody, description = "저장량 한도 초과(`invalid_state`) 또는 `account_changed`(기대 사용자가 세션의 사용자와 다름, 아무것도 만들지 않음)")),
+    tag = "files")]
 pub async fn create_upload(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Json(input): Json<CreateUpload>,
 ) -> Result<(StatusCode, Json<UploadView>), AppError> {
     let limits = state.config.files;

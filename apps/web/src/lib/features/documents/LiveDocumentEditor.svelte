@@ -77,12 +77,15 @@
   let keepingFound = $state(false);
   let foundRequest: { note: string; save: string } | undefined;
   let keepTimer: ReturnType<typeof setTimeout> | undefined;
+  // 다른 계정으로 바뀌어 연결이 거절됐는데(4412) 확인받지 못한 편집을 이 브라우저에 남기지 못했다. 다시 읽지 않고 알린다.
+  let accountUnsavedLost = $state(false);
 
-  function keepDraft(): void {
+  /** 남겼으면 참. 고를 때까지 자리를 비워 둔 지난 초안이 있거나(`reserved`) 저장소가 가득 차면 남기지 못한다. */
+  function keepDraft(): boolean {
     if (keepTimer !== undefined) clearTimeout(keepTimer);
     keepTimer = undefined;
-    if (latest === undefined || reserved !== undefined) return;
-    storeDraft(start.id, {
+    if (latest === undefined || reserved !== undefined) return false;
+    return storeDraft(start.id, {
       baseRevision: start.revision,
       title,
       body: latest,
@@ -176,9 +179,13 @@
         onrealtimeoff?.();
       } else {
         stopped = stop;
-        // 이 편집기를 연 계정이 아닌 세션으로 다시 붙었다(4412). 방에 들어가지 않았다. 확인받지 못한 편집은 위에서 앞
-        // 계정의 초안으로 남겼고, 이 창은 지금 계정으로 다시 읽는다.
-        if (stop === 'account') switchAccount();
+        // 이 편집기를 연 계정이 아닌 세션으로 다시 붙었다(4412). 방에 들어가지 않았다. 확인받지 못한 편집을 앞 계정의
+        // 초안으로 남겼으면 이 창을 지금 계정으로 다시 읽는다. 남기지 못했으면(저장소 가득 참 등) 다시 읽으면 사라지므로
+        // 화면에 두고 알린다(사람이 옮겨 둔 뒤 새로 고친다).
+        if (stop === 'account') {
+          if (watch?.dirty !== true || keepDraft()) switchAccount();
+          else accountUnsavedLost = true;
+        }
       }
     });
     session = next;
@@ -267,7 +274,10 @@
 
   /** 본문 첨부로 올리고 넣을 주소를 돌려준다(일반 편집과 같다). */
   async function insertFile(file: File): Promise<{ href: string; name: string; image: boolean }> {
-    const done = await uploadFile(file, { target: { kind: 'document', id: start.id } });
+    const done = await uploadFile(file, {
+      expectedUser: editingUser,
+      target: { kind: 'document', id: start.id },
+    });
     if (done.file_id === null) throw new Error(done.failure ?? m.documents_upload_failed());
     const image = INLINE_IMAGES.includes(file.type);
     return {
@@ -333,7 +343,9 @@
       case 'off':
         return m.documents_live_off();
       case 'account':
-        return m.documents_live_account_changed();
+        return accountUnsavedLost
+          ? m.documents_live_account_stopped()
+          : m.documents_live_account_changed();
     }
   }
 </script>
@@ -390,6 +402,9 @@
     {#if foundMessage !== undefined}<p role="alert" class="text-sm text-destructive">
         {foundMessage}
       </p>{/if}
+  {/if}
+  {#if accountUnsavedLost}
+    <p role="alert" class="text-sm text-destructive">{m.documents_live_account_changed_lost()}</p>
   {/if}
   {#if titleMessage !== undefined}<p role="alert" class="text-sm text-destructive">
       {titleMessage}

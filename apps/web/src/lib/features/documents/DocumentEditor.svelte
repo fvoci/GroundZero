@@ -56,7 +56,10 @@
 
   /** 본문에 넣을 파일: 이 문서의 첨부로 올리고 그 버전의 주소를 돌려준다(D-27 이미지·첨부). */
   async function insertFile(file: File): Promise<{ href: string; name: string; image: boolean }> {
-    const done = await uploadFile(file, { target: { kind: 'document', id: server.id } });
+    const done = await uploadFile(file, {
+      expectedUser: editingUser,
+      target: { kind: 'document', id: server.id },
+    });
     if (done.file_id === null) throw new Error(done.failure ?? m.documents_upload_failed());
     const image = INLINE_IMAGES.includes(file.type);
     return {

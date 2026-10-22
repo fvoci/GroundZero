@@ -1,10 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { DocumentView } from '$lib/api/client';
+import type { DocumentView, UploadView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import DocumentEditor from '$lib/features/documents/DocumentEditor.svelte';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
+import { uploadFile } from '$lib/features/files/upload';
 import { auth, connection } from '$lib/features/feedback/feedback.svelte';
 import { me as currentUser } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -193,5 +194,40 @@ describe('requests that carry the expected user', () => {
     expect(seen).toEqual(['u1']);
     expect(failed instanceof ApiError && failed.code).toBe('account_changed');
     expect(reload).toHaveBeenCalledOnce();
+  });
+});
+
+describe('an upload restarted on its own', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+  });
+
+  // CodeRabbit(#60): 만료된 업로드는 `uploadFile`이 스스로 다시 시작한다. 그 요청도 올리기를 시작한 사용자를 그대로
+  // 보내 서버가 비교한다(다른 탭에서 바꾼 계정으로 새 업로드를 만들지 않게).
+  it('sends the same expected user when it starts an expired upload again', async () => {
+    const expired: UploadView = {
+      id: 'up-old',
+      state: 'uploading',
+      name: 'a.txt',
+      size: 3,
+      chunk_bytes: 1024,
+      parts_total: 1,
+      received: [],
+      expires_at: '2000-01-01T00:00:00Z',
+      file_id: null,
+      version: null,
+      failure: null,
+    };
+    const create = vi
+      .spyOn(api, 'createUpload')
+      .mockResolvedValueOnce(expired)
+      .mockRejectedValueOnce(new ApiError(409, 'account_changed', 'changed'));
+    const failed: unknown = await uploadFile(new File(['abc'], 'a.txt'), {
+      expectedUser: 'u1',
+      fileId: 'f1',
+    }).catch((e: unknown) => e);
+    expect(create.mock.calls.map(([input]) => input.expectedUser)).toEqual(['u1', 'u1']);
+    expect(failed instanceof ApiError && failed.code).toBe('account_changed');
   });
 });

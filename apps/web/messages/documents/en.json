@@ -55,6 +55,8 @@
   "documents_live_reload": "The document changed. Reopening.",
   "documents_live_off": "Live editing was turned off.",
   "documents_live_account_changed": "Live editing stopped because a different account is now signed in. Edits not saved on the server are kept in this browser as a draft of the account that opened this window; reloading for the current account.",
+  "documents_live_account_changed_lost": "Edits not saved on the server could not be kept in this browser either (for example, storage is full). Copy the content somewhere else, then reload; the page will open for the current account.",
+  "documents_live_account_stopped": "Live editing stopped because a different account is now signed in.",
   "documents_live_label": "Live co-editing",
   "documents_live_reconnect": "Reconnect",
   "documents_title_label": "Title",

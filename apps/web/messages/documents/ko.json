@@ -55,6 +55,8 @@
   "documents_live_reload": "문서가 바뀌어 다시 엽니다.",
   "documents_live_off": "실시간 편집이 꺼졌습니다.",
   "documents_live_account_changed": "다른 계정으로 로그인돼 실시간 연결을 멈췄습니다. 서버에 저장되지 않은 편집은 이 창을 연 계정의 초안으로 이 브라우저에 남았고, 지금 계정으로 다시 읽습니다.",
+  "documents_live_account_changed_lost": "서버에 저장되지 않은 편집을 이 브라우저에도 남기지 못했습니다(저장 공간 부족 등). 화면의 내용을 다른 곳에 옮겨 둔 뒤 새로 고치세요. 새로 고치면 지금 계정으로 열립니다.",
+  "documents_live_account_stopped": "다른 계정으로 로그인돼 실시간 연결을 멈췄습니다.",
   "documents_live_label": "실시간 공동 편집",
   "documents_live_reconnect": "다시 연결",
   "documents_title_label": "제목",

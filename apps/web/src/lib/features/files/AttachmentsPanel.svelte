@@ -1,10 +1,13 @@
 <script lang="ts">
   // 문서·항목의 첨부 파일(D-06, D-35). 조각 업로드(끊기면 같은 파일을 다시 고르면 이어짐), 새 버전, 이전 버전
   // 내려받기, 이름 바꾸기, 휴지통. 권한은 서버가 판단하고 화면은 가능한 동작만 보인다.
+  import { untrack } from 'svelte';
+
   import type { FileTarget, FileVersionView, FileView } from '$lib/api/client';
   import { api, fileContentUrl } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { formatInstant } from '$lib/display';
+  import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
@@ -21,6 +24,9 @@
   }
 
   const { target, canWrite }: Props = $props();
+  // 올리기를 시작한 화면의 사용자(서버가 세션과 비교한다, #60). 만료된 업로드를 스스로 다시 시작할 때 다른 탭에서 바꾼
+  // 계정으로 만들지 않게 한다.
+  const uploader = untrack(() => me.userId);
 
   const INLINE = new Set([
     'image/png',
@@ -76,6 +82,7 @@
       progress = { name: file.name, percent: 0 };
       try {
         const done = await uploadFile(file, {
+          expectedUser: uploader,
           ...(fileId === undefined ? { target } : { fileId }),
           signal: cancel.signal,
           onProgress: (p) => {

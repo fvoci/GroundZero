@@ -1970,7 +1970,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 업로드 시작(같은 요청 id면 같은 업로드). 쓸 수 있는 문서·항목·파일에만. 크기·저장량 한도를 넘으면 400·409. */
+        /**
+         * 업로드 시작(같은 요청 id면 같은 업로드). 쓸 수 있는 문서·항목·파일에만. 크기·저장량 한도를 넘으면 400·409.
+         * @description 기대 사용자 머리가 필요하다(`ExpectedUser`). 웹은 만료된 업로드를 스스로 다시 시작하므로, 그사이 다른 탭에서 계정을
+         *     바꿨으면 새 계정의 업로드를 만들지 않고 409 `account_changed`.
+         */
         post: operations["create_upload"];
         delete?: never;
         options?: never;
@@ -5046,7 +5050,7 @@ export interface operations {
             header: {
                 /** @description 단건 조회의 강한 ETag. 다르면 412 */
                 "If-Match"?: string | null;
-                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`)와 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
                 "x-fvoci-expected-user": string;
             };
             path: {
@@ -8324,7 +8328,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`)와 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
                 "x-fvoci-expected-user": string;
             };
             path?: never;
@@ -10357,7 +10361,10 @@ export interface operations {
     create_upload: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                "x-fvoci-expected-user": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10399,6 +10406,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description 저장량 한도 초과(`invalid_state`) 또는 `account_changed`(기대 사용자가 세션의 사용자와 다름, 아무것도 만들지 않음) */
             409: {
                 headers: {
                     [name: string]: unknown;

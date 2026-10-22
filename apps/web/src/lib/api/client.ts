@@ -2347,8 +2347,12 @@ export const api = {
   deleteFileVersion: (id: string, version: number) =>
     expectOk('DELETE', `/api/files/${encodeURIComponent(id)}/versions/${String(version)}`, none),
   trashFile: (id: string) => expectOk('DELETE', `/api/files/${encodeURIComponent(id)}`, parseBatch),
-  /** 업로드 시작. 같은 requestId면 같은 업로드(이어 올리기). */
-  createUpload: (input: {
+  /**
+   * 업로드 시작. 같은 requestId면 같은 업로드(이어 올리기). `expectedUser`는 올리기를 시작한 화면의 사용자 id(서버가
+   * 세션과 다르면 409 `account_changed`, 만료된 업로드를 스스로 다시 시작할 때 새 계정의 업로드를 만들지 않게).
+   */
+  async createUpload(input: {
+    expectedUser: string;
     requestId: string;
     target?: FileTarget;
     fileId?: string;
@@ -2356,16 +2360,24 @@ export const api = {
     note: string;
     contentType: string;
     size: number;
-  }) =>
-    expectOk('POST', '/api/uploads', parseUpload, {
-      request_id: input.requestId,
-      target: input.target ?? null,
-      file_id: input.fileId ?? null,
-      name: input.name,
-      note: input.note,
-      content_type: input.contentType,
-      size: input.size,
-    }),
+  }): Promise<UploadView> {
+    const { status, json } = await request(
+      'POST',
+      '/api/uploads',
+      {
+        request_id: input.requestId,
+        target: input.target ?? null,
+        file_id: input.fileId ?? null,
+        name: input.name,
+        note: input.note,
+        content_type: input.contentType,
+        size: input.size,
+      },
+      { [EXPECTED_USER]: input.expectedUser },
+    );
+    if (status < 200 || status >= 300) fail(status, json);
+    return parseUpload(json);
+  },
   upload: (id: string) => expectOk('GET', `/api/uploads/${encodeURIComponent(id)}`, parseUpload),
   putUploadPart: putPart,
   completeUpload: (id: string) =>

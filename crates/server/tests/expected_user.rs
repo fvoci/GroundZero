@@ -275,3 +275,51 @@ async fn a_note_is_created_only_for_the_user_who_started_the_edit() {
     assert_eq!(status, StatusCode::CREATED, "{json:?}");
     assert_eq!(notes(alice).await, before + 1);
 }
+
+/// 업로드 시작도 같다(웹은 만료된 업로드를 스스로 다시 시작한다, CodeRabbit #60 지적). 다른 사용자면 새 계정의 업로드를
+/// 만들지 않는다: 같은 요청 id로 맞는 사용자가 시작하면 처음 만드는 업로드다.
+#[tokio::test]
+async fn an_upload_starts_only_for_the_user_who_started_it() {
+    let state = common::state();
+    let app = common::app(&state);
+    let alice = login(&state, "alice").await;
+    let ws = create_workspace(&app, &alice, "업로드 기대 사용자").await;
+    let doc = create_doc(&app, &alice, &ws, "첨부 문서").await;
+    let (bob, _) = add_member(&app, &state, &alice, &ws, "bob", "writer").await;
+    let body = json!({ "request_id": new_request_id(),
+                       "target": { "kind": "document", "id": doc["id"] },
+                       "name": "a.txt", "content_type": "text/plain", "size": 3 });
+
+    // bob의 세션으로 alice의 화면이 다시 시작한 업로드: 거절. 이름을 달리해 두면 무엇이 만들어졌는지 보인다(같은 요청
+    // id면 서버는 처음 만든 업로드를 돌려준다).
+    let mut rejected = body.clone();
+    rejected["name"] = json!("rejected.txt");
+    let alice_id = alice.id.0.to_string();
+    let (status, json) = raw(
+        &app,
+        Method::POST,
+        "/api/uploads",
+        Some(&bob),
+        &[&alice_id],
+        &rejected,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{json:?}");
+    assert_eq!(json["error"], "account_changed");
+    let (status, _) = raw(&app, Method::POST, "/api/uploads", Some(&bob), &[], &body).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // 같은 요청 id로 bob 자신이 시작하면 처음 만든다(앞의 거절이 아무것도 만들지 않았다).
+    let bob_id = bob.id.0.to_string();
+    let (status, first) = raw(
+        &app,
+        Method::POST,
+        "/api/uploads",
+        Some(&bob),
+        &[&bob_id],
+        &body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{first:?}");
+    assert_eq!(first["name"], "a.txt", "{first:?}");
+}

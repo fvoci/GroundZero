@@ -159,14 +159,15 @@ pub async fn send_with_origin(
     Reply { status, json }
 }
 
-/// 기대 사용자 머리가 필요한 요청(문서 저장 `PUT /api/documents/{id}`, 내 노트 만들기 `POST /api/me/notes`).
+/// 기대 사용자 머리가 필요한 요청(문서 저장 `PUT /api/documents/{id}`, 내 노트 만들기 `POST /api/me/notes`, 업로드 시작
+/// `POST /api/uploads`).
 fn expects_user(method: &Method, uri: &str) -> bool {
     let path = uri.split('?').next().unwrap_or_default();
     match *method {
         Method::PUT => path
             .strip_prefix("/api/documents/")
             .is_some_and(|rest| !rest.is_empty() && !rest.contains('/')),
-        Method::POST => path == "/api/me/notes",
+        Method::POST => path == "/api/me/notes" || path == "/api/uploads",
         _ => false,
     }
 }

@@ -151,3 +151,36 @@ describe('a live connection refused because the account changed', () => {
     expect(screen.queryByRole('button', { name: '다시 연결' })).toBeNull();
   });
 });
+
+// CodeRabbit(#60 요약의 남은 우려): 남기지 못한 편집은 다시 읽으면 사라진다. 그때는 다시 읽지 않고 화면에 둔 채 알린다.
+describe('a live connection refused because the account changed, when the draft cannot be kept', () => {
+  it('does not reload and says the edits were not kept', async () => {
+    me.userId = 'user-a';
+    const reload = vi.fn();
+    render(FeedbackHost, { props: { reload } });
+    render(LiveDocumentEditor, { props: { initial: doc } });
+    await fireEvent.click(screen.getByRole('button', { name: 'stub-type' }));
+    const last = opened.at(-1);
+    if (last === undefined) throw new Error('no connection');
+    last.session.document.getText('t').insert(0, '확인받지 못한 문장');
+    // 저장 공간이 가득 찼다.
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+
+    last.session.provider.emit('connection-close', [
+      new CloseEvent('close', { code: 4412 }),
+      last.session.provider,
+    ]);
+
+    expect(last.session.provider.shouldConnect).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+    expect((await screen.findByRole('alert')).textContent).toMatch(
+      /이 브라우저에도 남기지 못했습니다/,
+    );
+    expect(screen.queryByText(/초안으로 이 브라우저에 남았고/)).toBeNull();
+    // 내용은 화면에 남는다(편집기를 바꾸지 않음).
+    expect(screen.getByRole('button', { name: 'stub-type' })).toBeTruthy();
+    expect(opened).toHaveLength(1);
+  });
+});

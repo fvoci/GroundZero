@@ -1248,7 +1248,11 @@ mod tests {
                 "#/components/schemas/ErrorBody"
             ]
         );
-        for operation in [save, &doc["paths"]["/api/me/notes"]["post"]] {
+        for operation in [
+            save,
+            &doc["paths"]["/api/me/notes"]["post"],
+            &doc["paths"]["/api/uploads"]["post"],
+        ] {
             let header = operation["parameters"]
                 .as_array()
                 .and_then(|ps| {
