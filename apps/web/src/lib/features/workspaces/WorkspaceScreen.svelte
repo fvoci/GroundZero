@@ -19,9 +19,11 @@
 
   interface Props {
     workspace: Workspace;
+    /** 실시간 공동 편집을 켜거나 껐다. 앱이 워크스페이스 목록을 고쳐 다시 들어와도 그 값을 보이게 한다. */
+    onrealtimechanged?: (workspaceId: string, enabled: boolean) => void;
   }
 
-  const { workspace }: Props = $props();
+  const { workspace, onrealtimechanged }: Props = $props();
 
   // 위키 문서 목록은 사이드바와 같이 쓴다(한 번만 받는다).
   $effect(() => {
@@ -52,17 +54,34 @@
   // 실시간 공동 편집(D-27, D-70). 관리자만 켜고 끈다. 끄면 열린 편집은 리비전을 남기고 닫힌다.
   let realtime = $state(false);
   let realtimeMessage = $state('');
+  // 안내가 어느 워크스페이스의 것인지. 같은 워크스페이스의 새 값(바꾼 뒤 앱이 목록을 고침)으로는 안내를 지우지 않는다.
+  let messageFor = '';
   $effect(() => {
     realtime = workspace.realtime_enabled;
-    realtimeMessage = '';
+    if (workspace.id !== messageFor) realtimeMessage = '';
   });
+  // 바꾸는 요청이 진행 중인지. 겹쳐 보내면 늦게 온 앞 요청의 응답이 마지막 선택과 다른 값을 앱의 목록과 안내에 남긴다.
+  let realtimeBusy = $state(false);
   async function setRealtime(on: boolean): Promise<void> {
+    if (realtimeBusy) return;
+    realtimeBusy = true;
+    const id = workspace.id;
+    const before = realtime;
+    // 칸은 누른 대로 바뀌어 있다. 실패하면 이전 값으로 되돌려야 칸도 다시 그려진다.
+    realtime = on;
     try {
-      await api.setWorkspaceRealtime(workspace.id, on);
-      realtime = on;
+      await api.setWorkspaceRealtime(id, on);
+      onrealtimechanged?.(id, on);
+      if (workspace.id !== id) return;
+      messageFor = id;
       realtimeMessage = on ? m.workspaces_realtime_on() : m.workspaces_realtime_off();
     } catch (e: unknown) {
+      if (workspace.id !== id) return;
+      realtime = before;
+      messageFor = id;
       realtimeMessage = errorText(e, m.workspaces_realtime_failed());
+    } finally {
+      realtimeBusy = false;
     }
   }
 </script>
@@ -79,6 +98,7 @@
       <label class="flex items-center gap-2">
         <input
           type="checkbox"
+          disabled={realtimeBusy}
           checked={realtime}
           onchange={(e: Event) => {
             if (e.currentTarget instanceof HTMLInputElement)

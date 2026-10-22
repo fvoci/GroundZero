@@ -1605,6 +1605,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -11635,17 +11645,19 @@
       },
       "DocumentSettings": {
         "type": "object",
-        "description": "문서 설정 변경 요청.",
-        "required": [
-          "visibility",
-          "allow_copy"
-        ],
+        "description": "문서 설정 변경 요청. 바꾸는 칸만 보낸다. 없거나 null인 칸은 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼\n비공개·복제 금지를 다른 칸만 바꾼 요청이 되돌리지 않게, 감사 W6).",
         "properties": {
           "allow_copy": {
-            "type": "boolean"
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "visibility": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "`workspace` 또는 `private`."
           }
         }
