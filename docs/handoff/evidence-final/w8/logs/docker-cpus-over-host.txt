@@ -1,0 +1,5 @@
+# CodeRabbit 4344280105 기각 근거: CPU 한도가 호스트 CPU 수보다 크면 Docker가 기동을 거부한다(32 CPU 호스트, Docker 29.9.2)
+$ docker run --rm --cpus 64 <meilisearch 같은 digest> true
+docker: Error response from daemon: range of CPUs is from 0.01 to 32.00, as there are only 32 CPUs available
+$ docker compose -p w8-meili-cpuprobe up   # services.m.deploy.resources.limits.cpus: '64'
+ service:m:1 Error response from daemon: range of CPUs is from 0.01 to 32.00, as there are only 32 CPUs available

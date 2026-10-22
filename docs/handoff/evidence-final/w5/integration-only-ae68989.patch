@@ -1,0 +1,76 @@
+commit ae68989ea03a416cf300bafd88e743b1ea8be3fd
+Author: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date:   Thu Oct 22 11:17:00 2026 +0900
+
+    test(web): adapt to merged types and keep formatNumber (integration only)
+    
+    Dry-run integration fixes, not for any PR branch as-is:
+    - #61 added HomeView.up_next_counts: #59's home-week-dates fixture needs it.
+    - #62 removed TaskView.predecessor_ids: fixtures in #58 (item-screen-form),
+      #56 (task-csv-import) and #82 (task-conflict-save-mine) must drop it.
+    - #62 removed display.formatNumber as unused, but #82's tasks/labels.ts now
+      calls it for the estimate value; restore it (same body as on main).
+    
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+diff --git a/apps/web/src/lib/display.ts b/apps/web/src/lib/display.ts
+index dba6105..b156ae9 100644
+--- a/apps/web/src/lib/display.ts
++++ b/apps/web/src/lib/display.ts
+@@ -120,3 +120,8 @@ export function formatInstant(
+ export function formatClock(iso: string, settings: DisplaySettings = displaySettings()): string {
+   return formatInstant(iso, { hour: 'numeric', minute: '2-digit' }, settings);
+ }
++
++/** 숫자(천 단위 구분 등). */
++export function formatNumber(value: number, settings: DisplaySettings = displaySettings()): string {
++  return new Intl.NumberFormat(localeTag(settings)).format(value);
++}
+diff --git a/apps/web/tests/component/home-week-dates.test.ts b/apps/web/tests/component/home-week-dates.test.ts
+index b3ad169..56bddc9 100644
+--- a/apps/web/tests/component/home-week-dates.test.ts
++++ b/apps/web/tests/component/home-week-dates.test.ts
+@@ -24,6 +24,7 @@ const home: HomeView = {
+   // 수요일. 주 시작(기본 일요일) 기준 이번 주는 2026-10-18 ~ 2026-10-24.
+   today: '2026-10-21',
+   up_next: [],
++  up_next_counts: { overdue: 0, today: 0, upcoming: 0 },
+   recent_tasks: [],
+   recent_documents: [],
+   active_items: [],
+diff --git a/apps/web/tests/component/item-screen-form.test.ts b/apps/web/tests/component/item-screen-form.test.ts
+index 7962fad..90a4686 100644
+--- a/apps/web/tests/component/item-screen-form.test.ts
++++ b/apps/web/tests/component/item-screen-form.test.ts
+@@ -270,7 +270,6 @@ function task(id: string, title: string): TaskView {
+     estimate_minutes: null,
+     tags: [],
+     milestone: false,
+-    predecessor_ids: [],
+     predecessors: [],
+     series: null,
+     occurrence_date: null,
+diff --git a/apps/web/tests/component/task-conflict-save-mine.test.ts b/apps/web/tests/component/task-conflict-save-mine.test.ts
+index 3b20778..ab0dea7 100644
+--- a/apps/web/tests/component/task-conflict-save-mine.test.ts
++++ b/apps/web/tests/component/task-conflict-save-mine.test.ts
+@@ -38,7 +38,6 @@ const v2: TaskDetailView = {
+   estimate_minutes: null,
+   tags: [],
+   milestone: false,
+-  predecessor_ids: [],
+   predecessors: [],
+   series: null,
+   occurrence_date: null,
+diff --git a/apps/web/tests/component/task-csv-import.test.ts b/apps/web/tests/component/task-csv-import.test.ts
+index d1da4e5..5ef795f 100644
+--- a/apps/web/tests/component/task-csv-import.test.ts
++++ b/apps/web/tests/component/task-csv-import.test.ts
+@@ -27,7 +27,6 @@ function detail(id: string, title: string, version: number): TaskDetailView {
+     estimate_minutes: null,
+     tags: [],
+     milestone: false,
+-    predecessor_ids: [],
+     predecessors: [],
+     series: null,
+     occurrence_date: null,

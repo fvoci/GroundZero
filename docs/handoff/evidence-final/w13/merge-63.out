@@ -1,0 +1,6 @@
+Auto-merging crates/server/src/features/records.rs
+CONFLICT (content): Merge conflict in crates/server/src/features/records.rs
+Auto-merging crates/server/tests/item_profile.rs
+Auto-merging crates/server/tests/records.rs
+CONFLICT (content): Merge conflict in crates/server/tests/records.rs
+Automatic merge failed; fix conflicts and then commit the result.

@@ -1,0 +1,33 @@
+From 242754402dde70d3841b19e0388369a5b5057e80 Mon Sep 17 00:00:00 2001
+From: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 13:10:17 +0900
+Subject: [PATCH] test(web): give the compare race revisions an edited_by_names
+
+For the #64 update commit (after #57 is merged). NEW in W13, not a
+pre-check item: #64's D-95 change (0446746) makes RevisionView carry
+edited_by_names, which #57's revision-compare-race fixture lacks
+(svelte-check: property 'edited_by_names' is missing; vitest: 3 failures,
+'Cannot read properties of undefined (reading length)'). Use null, a
+plain revision, as #64's own revision-restore-conflict fixture does.
+Integration rehearsal W13; not pushed to any PR branch.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ apps/web/tests/component/revision-compare-race.test.ts | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/apps/web/tests/component/revision-compare-race.test.ts b/apps/web/tests/component/revision-compare-race.test.ts
+index 4063caf..9b06d79 100644
+--- a/apps/web/tests/component/revision-compare-race.test.ts
++++ b/apps/web/tests/component/revision-compare-race.test.ts
+@@ -29,6 +29,7 @@ function revisionAt(revision: number): RevisionView {
+     author_name: '나',
+     created_at: '2026-10-19T00:00:00Z',
+     restored_from: null,
++    edited_by_names: null,
+     body: paragraph(TEXT[revision] ?? ''),
+     schema_version: 1,
+   };
+-- 
+2.53.0
+

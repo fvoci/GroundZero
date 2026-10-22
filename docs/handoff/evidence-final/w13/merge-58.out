@@ -1,0 +1,53 @@
+Auto-merging apps/web/src/lib/api/client.ts
+Auto-merging contracts/openapi.json
+Auto-merging docs/development.md
+Auto-merging packages/api-client/src/generated/schema.ts
+Merge made by the 'ort' strategy.
+ apps/web/messages/courses/en.json                  |   1 +
+ apps/web/messages/courses/ko.json                  |   1 +
+ apps/web/messages/records/en.json                  |   3 +
+ apps/web/messages/records/ko.json                  |   3 +
+ apps/web/messages/study/en.json                    |   2 +
+ apps/web/messages/study/ko.json                    |   2 +
+ apps/web/src/lib/api/client.ts                     |   3 +-
+ .../src/lib/features/courses/CoursePanel.svelte    | 117 ++++++--
+ .../lib/features/documents/TemplatePicker.svelte   |   9 +-
+ .../web/src/lib/features/modules/ItemScreen.svelte | 119 ++++++--
+ .../src/lib/features/modules/ModuleScreen.svelte   |  36 ++-
+ .../src/lib/features/records/RecordEditor.svelte   |  13 +
+ .../src/lib/features/records/RecordsPanel.svelte   | 114 +++++++-
+ apps/web/src/lib/features/study/StudyPanel.svelte  |  59 +++-
+ .../lib/features/workspaces/WorkspaceScreen.svelte |   8 +
+ .../tests/component/course-details-save.test.ts    | 141 +++++++++
+ .../component/document-template-switch.test.ts     | 175 +++++++++++
+ apps/web/tests/component/item-screen-form.test.ts  | 318 ++++++++++++++++++++
+ .../web/tests/component/item-screen-switch.test.ts | 324 +++++++++++++++++++++
+ .../component/item-visibility-on-change.test.ts    | 110 +++++++
+ .../component/module-settings-partial.test.ts      | 142 +++++++++
+ .../tests/component/module-template-switch.test.ts | 115 ++++++++
+ .../component/module-template-vanished.test.ts     |  93 ++++++
+ .../component/record-editor-unknown-people.test.ts |  45 +++
+ apps/web/tests/component/records-edit-base.test.ts | 240 +++++++++++++++
+ .../tests/component/unit-delete-confirm.test.ts    | 169 +++++++++++
+ contracts/openapi.json                             |  10 +-
+ .../migrations/0084_item_visibility_on_change.sql  |  56 ++++
+ crates/server/src/features/modules.rs              |   6 +-
+ crates/server/src/features/records.rs              |  50 +++-
+ crates/server/src/features/zotero.rs               |   3 +-
+ crates/server/tests/modules.rs                     |  68 +++++
+ crates/server/tests/records.rs                     | 180 ++++++++++++
+ docs/development.md                                |   4 +-
+ packages/api-client/src/generated/schema.ts        |   7 +-
+ 35 files changed, 2659 insertions(+), 87 deletions(-)
+ create mode 100644 apps/web/tests/component/course-details-save.test.ts
+ create mode 100644 apps/web/tests/component/document-template-switch.test.ts
+ create mode 100644 apps/web/tests/component/item-screen-form.test.ts
+ create mode 100644 apps/web/tests/component/item-screen-switch.test.ts
+ create mode 100644 apps/web/tests/component/item-visibility-on-change.test.ts
+ create mode 100644 apps/web/tests/component/module-settings-partial.test.ts
+ create mode 100644 apps/web/tests/component/module-template-switch.test.ts
+ create mode 100644 apps/web/tests/component/module-template-vanished.test.ts
+ create mode 100644 apps/web/tests/component/record-editor-unknown-people.test.ts
+ create mode 100644 apps/web/tests/component/records-edit-base.test.ts
+ create mode 100644 apps/web/tests/component/unit-delete-confirm.test.ts
+ create mode 100644 crates/server/migrations/0084_item_visibility_on_change.sql

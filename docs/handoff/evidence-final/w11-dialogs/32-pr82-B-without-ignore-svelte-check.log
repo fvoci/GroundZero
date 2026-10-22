@@ -1,0 +1,3 @@
+1792643155694 START "<worktree>/apps/web"
+1792643155703 WARNING "src/lib/features/tasks/ClashConfirm.svelte" 90:3 "noninteractive element cannot have nonnegative tabIndex value\nhttps://svelte.dev/e/a11y_no_noninteractive_tabindex"
+1792643155704 COMPLETED 3128 FILES 0 ERRORS 1 WARNINGS 1 FILES_WITH_PROBLEMS

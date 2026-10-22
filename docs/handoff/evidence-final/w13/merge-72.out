@@ -1,0 +1,19 @@
+Auto-merging apps/web/messages/events/en.json
+Auto-merging apps/web/messages/events/ko.json
+Auto-merging apps/web/src/lib/features/events/EventForm.svelte
+Auto-merging apps/web/src/lib/features/events/time.ts
+Merge made by the 'ort' strategy.
+ apps/web/messages/events/en.json                   |   4 +
+ apps/web/messages/events/ko.json                   |   4 +
+ apps/web/src/lib/features/events/EventForm.svelte  | 180 +++++++++++--
+ .../lib/features/events/RepeatedTimeChoice.svelte  |  55 ++++
+ apps/web/src/lib/features/events/repeated.ts       |  63 +++++
+ apps/web/src/lib/features/events/time.ts           |  45 +++-
+ .../src/lib/features/time/TimeEntryDialog.svelte   | 127 ++++++++--
+ apps/web/src/lib/features/time/TimeScreen.svelte   |  26 +-
+ apps/web/tests/component/calendar.test.ts          |  23 +-
+ .../component/event-form-keeps-instants.test.ts    | 280 +++++++++++++++++++--
+ apps/web/tests/component/time-dst-input.test.ts    | 270 ++++++++++++++++++++
+ 11 files changed, 993 insertions(+), 84 deletions(-)
+ create mode 100644 apps/web/src/lib/features/events/RepeatedTimeChoice.svelte
+ create mode 100644 apps/web/src/lib/features/events/repeated.ts

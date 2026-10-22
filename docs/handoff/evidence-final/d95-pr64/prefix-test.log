@@ -1,0 +1,303 @@
+==> compose up (fvoci-d95-pr64-50fb65-test)
+$ docker compose --project-name fvoci-d95-pr64-50fb65-test --file deploy/compose.test.yaml up --detach --wait --remove-orphans
+ Network fvoci-d95-pr64-50fb65-test_default Creating 
+ Network fvoci-d95-pr64-50fb65-test_default Creating 
+ Network fvoci-d95-pr64-50fb65-test_default Created 
+ Network fvoci-d95-pr64-50fb65-test_default Created 
+ Container fvoci-d95-pr64-50fb65-test-seaweedfs-1 Creating 
+ Container fvoci-d95-pr64-50fb65-test-postgres-1 Creating 
+ Container fvoci-d95-pr64-50fb65-test-meilisearch-1 Creating 
+ Container fvoci-d95-pr64-50fb65-test-seaweedfs-1 Created 
+ Container fvoci-d95-pr64-50fb65-test-meilisearch-1 Created 
+ Container fvoci-d95-pr64-50fb65-test-postgres-1 Created 
+ Container fvoci-d95-pr64-50fb65-test-seaweedfs-1 Starting 
+ Container fvoci-d95-pr64-50fb65-test-postgres-1 Starting 
+ Container fvoci-d95-pr64-50fb65-test-meilisearch-1 Starting 
+ Container fvoci-d95-pr64-50fb65-test-seaweedfs-1 Started 
+ Container fvoci-d95-pr64-50fb65-test-postgres-1 Started 
+ Container fvoci-d95-pr64-50fb65-test-meilisearch-1 Started 
+ Container fvoci-d95-pr64-50fb65-test-postgres-1 Waiting 
+ Container fvoci-d95-pr64-50fb65-test-meilisearch-1 Waiting 
+ Container fvoci-d95-pr64-50fb65-test-seaweedfs-1 Waiting 
+ Container fvoci-d95-pr64-50fb65-test-seaweedfs-1 Healthy 
+ Container fvoci-d95-pr64-50fb65-test-postgres-1 Healthy 
+ Container fvoci-d95-pr64-50fb65-test-meilisearch-1 Healthy 
+==> postgres on 127.0.0.1:54199
+==> db bootstrap / db migrate
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+$ cargo run --quiet --package fvoci-server --locked -- db migrate
+==> meilisearch on 127.0.0.1:54200
+==> seaweedfs s3 on 127.0.0.1:54198
+$ cargo test --workspace --locked -- --skip oidc_ --skip supabase_
+   Compiling fvoci-server v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/crates/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 47.56s
+     Running unittests src/lib.rs (target/debug/deps/fvoci_server-46bf3b3cd98551d3)
+
+running 77 tests
+test backup::tests::restore_parts_stay_within_the_storage_limit ... ok
+test build_info::tests::release_versions_and_shas_are_checked ... ok
+test config::tests::defaults_and_redaction ... ok
+test collab::convert::tests::position_migration_metadata_is_allowed_but_other_roots_are_not ... ok
+test config::tests::issuer_requires_client_settings ... ok
+test config::tests::https_public_url_enables_secure_cookies ... ok
+test config::tests::rejects_depth_outside_range ... ok
+test config::tests::rejects_invalid_limit ... ok
+test config::tests::requires_database_url ... ok
+test features::accounts::tests::duplicate_cookies_are_rejected ... ok
+test features::accounts::tests::return_to_accepts_only_same_origin_paths ... ok
+test features::documents::tests::access_parsing ... ok
+test features::documents::tests::body_must_be_doc_object ... ok
+test features::documents::tests::body_size_is_limited ... ok
+test features::documents::tests::reference_nodes_are_checked_and_limited ... ok
+test features::documents::tests::title_validation ... ok
+test collab::convert::tests::reads_what_the_browser_writes ... ok
+test features::documents::tests::images_and_links_must_stay_inside_the_service ... ok
+test features::export::tests::names_inside_the_archive_stay_inside ... ok
+test features::file_text::tests::skips_unsupported_and_broken_files ... ok
+test features::files::tests::content_types_are_cleaned ... ok
+test features::files::tests::counts_parts ... ok
+test features::file_text::tests::reads_plain_text_and_office_xml ... ok
+test features::files::tests::dispositions_quote_names_safely ... ok
+test features::item_profile::tests::details_follow_the_module_kind ... ok
+test features::members::tests::email_validation ... ok
+test features::modules::tests::description_allows_newlines_only ... ok
+test features::modules::tests::keys_are_normalized_to_uppercase ... ok
+test features::modules::tests::keys_reject_bad_shapes ... ok
+test features::modules::tests::module_kind_round_trip ... ok
+test features::records::tests::fields_are_checked_against_the_kind ... ok
+test features::records::tests::kinds_are_unique_and_choices_are_set ... ok
+test features::references::tests::like_patterns_escape_wildcards ... ok
+test features::file_text::tests::reads_pdf_text ... ok
+test features::references::tests::public_bodies_drop_reference_ids ... ok
+test features::references::tests::reference_queries_are_parsed_case_insensitively ... ok
+test features::schedule::tests::a_join_waits_for_every_predecessor_across_kinds ... ok
+test collab::convert::tests::writes_what_the_browser_reads ... ok
+test features::schedule::tests::a_link_that_is_already_satisfied_moves_nothing ... ok
+test features::schedule::tests::a_new_link_to_an_undated_successor_is_reported_not_invented ... ok
+test features::schedule::tests::a_task_with_two_moved_predecessors_takes_the_later_one ... ok
+test features::schedule::tests::changing_a_link_pushes_only_what_the_change_adds ... ok
+test features::schedule::tests::each_kind_anchors_the_right_ends_with_and_without_lag ... ok
+test features::schedule::tests::existing_overlaps_and_done_tasks_are_left_alone ... ok
+test features::schedule::tests::forks_and_mixed_chains_follow_each_kind ... ok
+test features::schedule::tests::link_kinds_round_trip_their_codes ... ok
+test features::schedule::tests::milestones_and_one_sided_dates_use_the_date_they_have ... ok
+test features::schedule::tests::proposed_dates_outside_the_saveable_years_block_the_plan ... ok
+test features::schedule::tests::pulling_earlier_or_undated_tasks_proposes_nothing ... ok
+test features::schedule::tests::pushes_successors_by_the_minimum_and_keeps_their_length ... ok
+test features::schedule::tests::the_approved_list_must_match_the_plan_exactly ... ok
+test features::search_text::tests::keeps_text_checklists_and_reference_shortcodes ... ok
+test features::tasks::tests::dates_are_plain_calendar_dates ... ok
+test features::tasks::tests::status_and_priority_round_trip ... ok
+test features::tasks::tests::tags_are_trimmed_deduplicated_and_limited ... ok
+test features::zotero::tests::library_input_is_checked ... ok
+test features::zotero::tests::zotero_items_become_reference_fields ... ok
+test http::cache::tests::etags_depend_on_bytes_and_user ... ok
+test http::cache::tests::if_match_uses_strong_comparison ... ok
+test http::cache::tests::if_none_match_uses_weak_comparison ... ok
+test http::cache::tests::scopes_follow_the_path ... ok
+test http::cache::tests::cdn_examples_match_the_scopes ... ok
+test logging::tests::external_error_text_is_not_logged ... ok
+test logging::tests::request_ids_from_outside_are_checked ... ok
+test logging::tests::settings_default_to_info_json_and_reject_bad_values ... ok
+test search::tests::uids_use_only_allowed_characters ... ok
+test storage::tests::keys_must_be_server_made ... ok
+test storage::s3::tests::encodes_like_aws ... ok
+test storage::s3::tests::reads_parts_from_xml ... ok
+test storage::s3::tests::derives_the_documented_signing_key ... ok
+test features::search_text::tests::ignores_unknown_shapes_and_caps_length ... ok
+test http::tests::operation_ids_are_unique ... ok
+test http::tests::the_link_conflict_is_task_conflict_or_error_body ... ok
+test http::tests::the_link_body_is_optional_but_not_nullable ... ok
+test http::tests::the_move_conflict_is_a_preview_or_error_body ... ok
+test features::schedule::tests::the_shift_limit_matches_approval_at_499_500_and_501 ... ok
+test features::file_text::tests::pdf_flate_bombs_are_not_parsed ... ok
+
+test result: ok. 77 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.19s
+
+     Running unittests src/main.rs (target/debug/deps/fvoci_server-fb3ca6f19a2bdcd1)
+
+running 2 tests
+test tests::help_is_a_separate_command_from_database_work ... ok
+test tests::migration_history_errors_require_preservation_before_retry ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/audit.rs (target/debug/deps/audit-10a6797e3b653ba2)
+
+running 1 test
+test workspace_audit_is_for_admins_and_personal_audit_is_private ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/backup.rs (target/debug/deps/backup-80589d26f184c5a2)
+
+running 2 tests
+test borrowing_the_migrator_leaves_the_admins_memberships_as_they_were ... ok
+test backup_restores_documents_tasks_and_files_into_a_fresh_install ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.15s
+
+     Running tests/cache.rs (target/debug/deps/cache-2f66d4efd4233748)
+
+running 3 tests
+test cache_scopes_keep_sensitive_responses_out_of_shared_caches ... ok
+test document_reads_revalidate_only_after_checking_access ... ok
+test saves_with_if_match_are_atomic_and_idempotent ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/collab.rs (target/debug/deps/collab-d6abfe1ef31f6782)
+
+running 34 tests
+test live_ref_store_and_old_version_cleanup_do_not_race ... ok
+test a_move_closes_the_room_after_saving_its_edits ... ok
+test a_restore_from_outside_the_room_still_conflicts_with_live_edits ... ok
+test a_move_without_permission_leaves_the_room_alone ... ok
+test a_checkpoint_that_finds_the_body_changed_stops_the_restore ... ok
+test a_failed_checkpoint_stops_the_restore ... ok
+test an_edit_sent_after_the_session_ended_during_a_move_is_dropped ... FAILED
+test moving_a_live_document_into_a_realtime_off_workspace_keeps_the_live_edits ... ok
+test no_room_opens_while_a_document_moves ... ok
+test restoring_during_live_editing_keeps_the_live_edits_in_history ... ok
+test an_editor_who_lost_write_access_before_a_move_cannot_edit_during_it ... FAILED
+test a_reader_cannot_make_rooms_persist_through_version_delete ... ok
+test a_moved_room_follows_its_document_to_the_new_workspace ... ok
+test deleting_a_version_right_after_a_live_reference_is_refused ... ok
+test workspace_export_includes_live_edits ... ok
+test file_refs_lock_versions_before_they_are_written ... ok
+test a_connected_writer_saving_for_an_editor_is_recorded_as_a_stand_in ... ok
+test edits_held_by_a_move_that_does_not_happen_are_accepted ... ok
+test rooms_acknowledge_persisted_state_with_a_snapshot ... ok
+test a_restore_without_a_room_saves_a_live_state_left_pending_first ... FAILED
+test live_editing_guards ... ok
+test live_body_pins_the_file_versions_it_points_to ... ok
+test edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledged ... ok
+test turning_realtime_off_keeps_live_edits ... ok
+test a_failed_checkpoint_stops_the_move ... ok
+test a_checkpoint_that_times_out_stops_the_restore ... ok
+test a_move_without_a_room_saves_a_live_state_left_pending ... ok
+test trashed_document_keeps_live_file_pins ... ok
+test edits_during_a_restore_are_not_acknowledged_then_dropped ... ok
+test reconnecting_without_changes_is_not_an_edit ... ok
+test a_move_dropped_before_the_room_handles_it_changes_nothing ... ok
+test live_editing_end_to_end ... ok
+test a_move_without_a_room_held_past_the_lock_limit_is_refused ... FAILED
+test a_move_held_past_the_lock_limit_is_refused_and_the_room_carries_on ... FAILED
+
+failures:
+
+---- an_edit_sent_after_the_session_ended_during_a_move_is_dropped stdout ----
+2026-10-22T02:26:23.316167Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5593-71a3-a214-135eba32cd72 method=POST route="/api/workspaces" status_code=201 duration_ms=65.019
+2026-10-22T02:26:23.326004Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-55d4-73c5-871b-8ebe50e5462c method=POST route="/api/workspaces" status_code=201 duration_ms=9.554
+2026-10-22T02:26:23.336159Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-55de-7224-b499-9547a64d7ba5 method=PUT route="/api/workspaces/{workspace_id}/realtime" status_code=204 duration_ms=9.995
+2026-10-22T02:26:23.358986Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-55f1-7209-95c3-8926595d54e2 method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=13.582
+2026-10-22T02:26:23.368468Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-55ff-7538-a148-a550fc8c4a61 method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=9.34
+2026-10-22T02:26:23.385106Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-560c-7789-9bb7-bb14ad06bd83 method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=12.753
+2026-10-22T02:26:23.394287Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5619-7503-a42b-22c8841ca252 method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=9.0
+2026-10-22T02:26:23.425173Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5622-7167-b671-040e8c6c280b method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=30.607
+2026-10-22T02:26:23.437162Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5643-735e-9ad2-12d4ea55af60 method=GET route="/api/documents/{document_id}/collab" status_code=101 duration_ms=9.872
+2026-10-22T02:26:23.510587Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-568d-742b-bffe-b79af75d0f21 method=GET route="/api/documents/{document_id}/collab" status_code=101 duration_ms=8.792
+2026-10-22T02:26:23.650703Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-56ed-73b3-9157-b3987110a333 method=POST route="/api/documents/{document_id}/move/preview" status_code=200 duration_ms=53.277
+2026-10-22T02:26:23.719069Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5763-7125-8053-3704bb9dd28f method=POST route="/auth/logout" status_code=200 duration_ms=3.884
+2026-10-22T02:26:23.773147Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5722-763a-9bd2-ad5b50095a9d method=POST route="/api/documents/{document_id}/move" status_code=200 duration_ms=122.218
+
+thread 'an_edit_sent_after_the_session_ended_during_a_move_is_dropped' (157671) panicked at crates/server/tests/collab.rs:3330:5:
+assertion `left == right` failed: the connection whose session ended was not closed for lost access
+  left: Some(4409)
+ right: Some(4403)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- an_editor_who_lost_write_access_before_a_move_cannot_edit_during_it stdout ----
+2026-10-22T02:26:23.422223Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-560b-7683-bf88-f060e4ff16a8 method=POST route="/api/workspaces" status_code=201 duration_ms=50.764
+2026-10-22T02:26:23.431349Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-563e-76d5-9d61-380d1b7a275b method=POST route="/api/workspaces" status_code=201 duration_ms=8.876
+2026-10-22T02:26:23.439978Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5647-72df-a6c0-1695cf4d19c0 method=PUT route="/api/workspaces/{workspace_id}/realtime" status_code=204 duration_ms=8.436
+2026-10-22T02:26:23.462343Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5658-7405-9db4-1554b5117ea3 method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=13.842
+2026-10-22T02:26:23.470210Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5666-779f-8d01-bef928d07448 method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=7.74
+2026-10-22T02:26:23.487451Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5671-75f5-ae7e-65d40fc0e15c method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=13.748
+2026-10-22T02:26:23.497761Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-567f-7051-b280-9d05e60b2d25 method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=10.02
+2026-10-22T02:26:23.523220Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5689-71d4-becd-918b322422b4 method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=25.295
+2026-10-22T02:26:23.535891Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-56a5-721b-aa65-e76754b1b0f4 method=GET route="/api/documents/{document_id}/collab" status_code=101 duration_ms=10.67
+2026-10-22T02:26:23.608506Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-56ed-73b3-9157-b39a1c969771 method=GET route="/api/documents/{document_id}/collab" status_code=101 duration_ms=10.568
+2026-10-22T02:26:23.661527Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5722-763a-9bd2-ad5c1a492ed9 method=PUT route="/api/workspaces/{workspace_id}/members/{user_id}" status_code=204 duration_ms=10.534
+2026-10-22T02:26:23.748874Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5758-7030-983a-a868ffbfa104 method=POST route="/api/documents/{document_id}/move/preview" status_code=200 duration_ms=44.594
+2026-10-22T02:26:23.850882Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5784-73ed-b7f8-240d6dffd862 method=POST route="/api/documents/{document_id}/move" status_code=200 duration_ms=101.884
+
+thread 'an_editor_who_lost_write_access_before_a_move_cannot_edit_during_it' (157672) panicked at crates/server/tests/collab.rs:3385:5:
+assertion `left == right` failed: the demoted editor's connection stayed open
+  left: Some(4409)
+ right: Some(4403)
+
+---- a_restore_without_a_room_saves_a_live_state_left_pending_first stdout ----
+2026-10-22T02:26:23.488480Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5646-77d4-9ace-36757dce35b2 method=POST route="/api/workspaces" status_code=201 duration_ms=58.462
+2026-10-22T02:26:23.514129Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-568a-70d3-addb-4f2539ffd9ad method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=15.423
+2026-10-22T02:26:23.522016Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-569a-7160-86eb-2048d2845f2b method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=7.755
+2026-10-22T02:26:23.588787Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-56cc-72ea-b4f7-886fe3e18126 method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=24.717
+2026-10-22T02:26:23.620228Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-56e4-7797-901a-28bc5a480d6a method=PUT route="/api/documents/{document_id}" status_code=200 duration_ms=31.265
+2026-10-22T02:26:23.634936Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5707-735a-98dd-2ecf1e8e8e65 method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=11.533
+2026-10-22T02:26:23.653377Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5713-7382-8a11-e83789b491a0 method=PUT route="/api/documents/{document_id}" status_code=200 duration_ms=18.159
+2026-10-22T02:26:23.662475Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5727-76fa-9be2-98e15bf794ec method=PUT route="/api/workspaces/{workspace_id}/realtime" status_code=204 duration_ms=7.309
+2026-10-22T02:26:23.674093Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5730-7089-a319-25116a36b1c2 method=GET route="/api/documents/{document_id}/collab" status_code=101 duration_ms=9.608
+2026-10-22T02:26:26.688671Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-62f8-70ec-b869-db2d596e6910 method=PUT route="/api/workspaces/{workspace_id}/members/{user_id}" status_code=204 duration_ms=8.053
+2026-10-22T02:26:26.691789Z  WARN fvoci_server::collab::room: no editor can save the live document; keeping the live state event="collab.no_editor" document=01a1616e-56d1-7118-9c95-3bc980a43d86
+2026-10-22T02:26:26.759819Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-6336-749e-95dd-d9b723c2242b method=POST route="/api/documents/{document_id}/revisions/{revision}/restore" status_code=200 duration_ms=17.298
+
+thread 'a_restore_without_a_room_saves_a_live_state_left_pending_first' (157669) panicked at crates/server/tests/collab.rs:3490:5:
+assertion `left == right` failed: Object {"access": String("owner"), "allow_copy": Bool(false), "body": Object {"content": Array [Object {"type": String("paragraph")}], "type": String("doc")}, "can_delete": Bool(true), "can_edit": Bool(true), "can_export": Bool(true), "can_manage": Bool(true), "id": String("01a1616e-56d1-7118-9c95-3bc980a43d86"), "is_template": Bool(false), "item_id": Null, "parent_id": Null, "placement": String("wiki"), "realtime": Bool(true), "reference": String("WIKI-1"), "revision": Number(3), "schema_version": Number(1), "title": String("방 없는 복원"), "updated_at": String("2026-10-22T02:26:26.747406Z"), "visibility": String("workspace"), "workspace_id": String("01a1616e-5679-7373-ad2b-64999e6733b6")}
+  left: 200
+ right: 409
+
+---- a_move_without_a_room_held_past_the_lock_limit_is_refused stdout ----
+2026-10-22T02:26:23.198240Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5534-7400-b0f8-e8b18eed51a1 method=POST route="/api/workspaces" status_code=201 duration_ms=41.72
+2026-10-22T02:26:23.205937Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-555e-7767-a57c-43b63ede19c1 method=POST route="/api/workspaces" status_code=201 duration_ms=7.509
+2026-10-22T02:26:23.213473Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5566-74d3-b907-ff93ca85fde6 method=PUT route="/api/workspaces/{workspace_id}/realtime" status_code=204 duration_ms=7.388
+2026-10-22T02:26:23.235048Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-556d-7696-b01e-e3d083212fd3 method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=21.472
+2026-10-22T02:26:23.324597Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-55ad-73dd-abac-cb7994ef9d16 method=POST route="/api/documents/{document_id}/move/preview" status_code=200 duration_ms=46.576
+
+thread 'a_move_without_a_room_held_past_the_lock_limit_is_refused' (157659) panicked at crates/server/tests/collab.rs:3294:5:
+the move kept waiting on the lock past the limit
+
+---- a_move_held_past_the_lock_limit_is_refused_and_the_room_carries_on stdout ----
+2026-10-22T02:26:23.256846Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-555b-74ac-9d66-4d88800d82a6 method=POST route="/api/workspaces" status_code=201 duration_ms=61.121
+2026-10-22T02:26:23.265643Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5598-70f5-ba61-7307334b9c8e method=POST route="/api/workspaces" status_code=201 duration_ms=8.633
+2026-10-22T02:26:23.273984Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-55a1-72e1-aafb-d583d3ebf476 method=PUT route="/api/workspaces/{workspace_id}/realtime" status_code=204 duration_ms=8.17
+2026-10-22T02:26:23.296693Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-55b2-72df-8e45-859c0b92f696 method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=14.648
+2026-10-22T02:26:23.306091Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-55c0-774c-be79-a67ea2f60935 method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=9.267
+2026-10-22T02:26:23.323378Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-55ce-753d-9bca-6a220adc9750 method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=13.246
+2026-10-22T02:26:23.335478Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-55db-708a-9777-8234ec49980d method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=11.829
+2026-10-22T02:26:23.364582Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-55e7-72fa-aeeb-5c375ca7a16c method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=28.96
+2026-10-22T02:26:23.376544Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5606-737f-a6b3-b8c122ad9d25 method=GET route="/api/documents/{document_id}/collab" status_code=101 duration_ms=9.634
+2026-10-22T02:26:23.485096Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-5674-7755-89a8-5c9fbb78503f method=GET route="/api/documents/{document_id}/collab" status_code=101 duration_ms=8.283
+2026-10-22T02:26:23.601759Z  INFO fvoci_server::http: request event="http.request" request_id=01a1616e-56b7-74c3-92cf-ddd13f296af9 method=POST route="/api/documents/{document_id}/move/preview" status_code=200 duration_ms=58.133
+
+thread 'a_move_held_past_the_lock_limit_is_refused_and_the_room_carries_on' (157658) panicked at crates/server/tests/collab.rs:3208:5:
+the move kept waiting on the lock past the limit (the room was stuck)
+
+
+failures:
+    a_move_held_past_the_lock_limit_is_refused_and_the_room_carries_on
+    a_move_without_a_room_held_past_the_lock_limit_is_refused
+    a_restore_without_a_room_saves_a_live_state_left_pending_first
+    an_edit_sent_after_the_session_ended_during_a_move_is_dropped
+    an_editor_who_lost_write_access_before_a_move_cannot_edit_during_it
+
+test result: FAILED. 29 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 30.63s
+
+error: test failed, to rerun pass `-p fvoci-server --test collab`
+==> compose down
+$ docker compose --project-name fvoci-d95-pr64-50fb65-test --file deploy/compose.test.yaml down --volumes --remove-orphans
+ Container fvoci-d95-pr64-50fb65-test-seaweedfs-1 Stopping 
+ Container fvoci-d95-pr64-50fb65-test-postgres-1 Stopping 
+ Container fvoci-d95-pr64-50fb65-test-meilisearch-1 Stopping 
+ Container fvoci-d95-pr64-50fb65-test-meilisearch-1 Stopped 
+ Container fvoci-d95-pr64-50fb65-test-meilisearch-1 Removing 
+ Container fvoci-d95-pr64-50fb65-test-meilisearch-1 Removed 
+ Container fvoci-d95-pr64-50fb65-test-postgres-1 Stopped 
+ Container fvoci-d95-pr64-50fb65-test-postgres-1 Removing 
+ Container fvoci-d95-pr64-50fb65-test-postgres-1 Removed 
+ Container fvoci-d95-pr64-50fb65-test-seaweedfs-1 Stopped 
+ Container fvoci-d95-pr64-50fb65-test-seaweedfs-1 Removing 
+ Container fvoci-d95-pr64-50fb65-test-seaweedfs-1 Removed 
+ Network fvoci-d95-pr64-50fb65-test_default Removing 
+ Network fvoci-d95-pr64-50fb65-test_default Removed 
+Error: command exited with non-zero code `cargo test --workspace --locked -- --skip oidc_ --skip supabase_`: 101
+EXIT=1

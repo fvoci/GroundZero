@@ -1,0 +1,30 @@
+From bdb35e3a2f3cf766763a44fdff3d1724550210c9 Mon Sep 17 00:00:00 2001
+From: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 13:01:33 +0900
+Subject: [PATCH] test(web): drop predecessor_ids from the item screen task
+ fixture
+
+For the #62 update commit (after #58 is merged): #62 (D-92) removes
+TaskView.predecessor_ids, so #58's item-screen-form fixture must drop it.
+Integration rehearsal W13; not pushed to any PR branch.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ apps/web/tests/component/item-screen-form.test.ts | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/apps/web/tests/component/item-screen-form.test.ts b/apps/web/tests/component/item-screen-form.test.ts
+index 7962fad..90a4686 100644
+--- a/apps/web/tests/component/item-screen-form.test.ts
++++ b/apps/web/tests/component/item-screen-form.test.ts
+@@ -270,7 +270,6 @@ function task(id: string, title: string): TaskView {
+     estimate_minutes: null,
+     tags: [],
+     milestone: false,
+-    predecessor_ids: [],
+     predecessors: [],
+     series: null,
+     occurrence_date: null,
+-- 
+2.53.0
+

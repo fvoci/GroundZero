@@ -1,0 +1,7 @@
+
+<worktree>/apps/web/src/lib/features/tasks/labels.ts
+  159:7   error  Unsafe return of a value of type error            @typescript-eslint/no-unsafe-return
+  161:11  error  Unsafe call of a type that could not be resolved  @typescript-eslint/no-unsafe-call
+
+✖ 2 problems (2 errors, 0 warnings)
+

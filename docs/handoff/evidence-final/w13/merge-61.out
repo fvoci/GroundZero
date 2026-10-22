@@ -1,0 +1,20 @@
+Auto-merging apps/web/src/lib/api/client.ts
+Auto-merging apps/web/src/lib/features/home/HomeDashboard.svelte
+Auto-merging contracts/openapi.json
+Auto-merging crates/server/src/http/mod.rs
+Auto-merging docs/development.md
+Auto-merging packages/api-client/src/generated/schema.ts
+Merge made by the 'ort' strategy.
+ apps/web/messages/home/en.json                     |  1 +
+ apps/web/messages/home/ko.json                     |  1 +
+ apps/web/src/lib/api/client.ts                     |  8 ++
+ .../web/src/lib/features/home/HomeDashboard.svelte | 10 ++-
+ .../tests/component/home-up-next-counts.test.ts    | 73 ++++++++++++++++++
+ contracts/openapi.json                             | 31 +++++++-
+ crates/server/src/features/home.rs                 | 64 +++++++++++++---
+ crates/server/src/http/mod.rs                      |  1 +
+ crates/server/tests/home.rs                        | 89 ++++++++++++++++++++++
+ docs/development.md                                |  2 +-
+ packages/api-client/src/generated/schema.ts        | 12 +++
+ 11 files changed, 277 insertions(+), 15 deletions(-)
+ create mode 100644 apps/web/tests/component/home-up-next-counts.test.ts

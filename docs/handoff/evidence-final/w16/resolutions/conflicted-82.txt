@@ -1,0 +1,2 @@
+apps/web/messages/common/en.json
+apps/web/messages/common/ko.json

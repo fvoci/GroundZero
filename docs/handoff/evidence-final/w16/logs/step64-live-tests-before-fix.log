@@ -1,0 +1,40 @@
+
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w13-int6/apps/web
+
+ ❯ tests/component/live-account-changed.test.ts (5 tests | 1 failed) 190ms
+   ❯ a live connection refused because the account changed, when the draft cannot be kept (1)
+     × does not reload and says the edits were not kept 22ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/live-account-changed.test.ts > a live connection refused because the account changed, when the draft cannot be kept > does not reload and says the edits were not kept
+AssertionError: expected <span role="status" …(2)></span> to be null
+
+- Expected:
+null
+
++ Received:
+<span
+  aria-live="polite"
+  class="text-muted-foreground"
+  role="status"
+>
+  다른 계정으로 로그인돼 실시간 연결을 멈췄습니다. 서버에 저장되지 않은 편집은 이 창을 연 계정의 초안으로 이 브라우저에 남았고, 지금 계정으로 다시 읽습니다.
+</span>
+
+ ❯ tests/component/live-account-changed.test.ts:181:52
+    179|       /이 브라우저에도 남기지 못했습니다/,
+    180|     );
+    181|     expect(screen.queryByText(/초안으로 이 브라우저에 남았고/)).toBeNull();
+       |                                                    ^
+    182|     // 내용은 화면에 남는다(편집기를 바꾸지 않음).
+    183|     expect(screen.getByRole('button', { name: 'stub-type' })).toBeTrut…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 8 passed (9)
+   Start at  15:46:36
+   Duration  4.12s (transform 60%, import 21%, environment 11%, tests 5%, setup 2%)
+

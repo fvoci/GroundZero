@@ -1,0 +1,6 @@
+Auto-merging docs/decisions.md
+Auto-merging docs/development.md
+Merge made by the 'ort' strategy.
+ docs/decisions.md   |  51 ++++++++++---
+ docs/development.md | 202 +++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 240 insertions(+), 13 deletions(-)

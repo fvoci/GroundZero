@@ -1,0 +1,517 @@
+2026-10-22T05:56:33.697670943Z Setting RLIMIT_NOFILE to 100000
+2026-10-22T05:56:34.906314430Z 05:56:34.902 [info] == Running 20230125140723 Supavisor.Repo.Migrations.CreateTenants.change/0 forward
+2026-10-22T05:56:34.906635434Z 05:56:34.906 [info] create table _supavisor.tenants
+2026-10-22T05:56:34.908659873Z 05:56:34.908 [info] create index _supavisor.tenants_external_id_index
+2026-10-22T05:56:34.912032098Z 05:56:34.911 [info] == Migrated 20230125140723 in 0.0s
+2026-10-22T05:56:34.953648266Z 05:56:34.953 [info] == Running 20230418151441 Supavisor.Repo.Migrations.CreateUsers.change/0 forward
+2026-10-22T05:56:34.953834639Z 05:56:34.953 [info] create table _supavisor.users
+2026-10-22T05:56:34.955858995Z 05:56:34.955 [info] create index _supavisor.users_db_user_alias_tenant_external_id_mode_type_index
+2026-10-22T05:56:34.956689077Z 05:56:34.956 [info] == Migrated 20230418151441 in 0.0s
+2026-10-22T05:56:34.958398320Z 05:56:34.958 [info] == Running 20230502101623 Supavisor.Repo.Migrations.AddTimeoutToUsers.up/0 forward
+2026-10-22T05:56:34.958407180Z 05:56:34.958 [info] alter table _supavisor.users
+2026-10-22T05:56:34.959189021Z 05:56:34.958 [info] == Migrated 20230502101623 in 0.0s
+2026-10-22T05:56:34.960551298Z 05:56:34.960 [info] == Running 20230601125553 Supavisor.Repo.Migrations.AddTenantDefaultPS.up/0 forward
+2026-10-22T05:56:34.960576718Z 05:56:34.960 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.961058291Z 05:56:34.960 [info] == Migrated 20230601125553 in 0.0s
+2026-10-22T05:56:34.962565416Z 05:56:34.962 [info] == Running 20230619091028 Supavisor.Repo.Migrations.AddTenantIpVersion.up/0 forward
+2026-10-22T05:56:34.962577067Z 05:56:34.962 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.963120824Z 05:56:34.962 [info] create check constraint ip_version_values on table _supavisor.tenants
+2026-10-22T05:56:34.963893844Z 05:56:34.963 [info] == Migrated 20230619091028 in 0.0s
+2026-10-22T05:56:34.965295762Z 05:56:34.965 [info] == Running 20230705154938 Supavisor.Repo.Migrations.AddUpstreamSslOpts.up/0 forward
+2026-10-22T05:56:34.965473225Z 05:56:34.965 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.966119474Z 05:56:34.965 [info] create check constraint upstream_verify_values on table _supavisor.tenants
+2026-10-22T05:56:34.966732061Z 05:56:34.966 [info] create check constraint upstream_constraints on table _supavisor.tenants
+2026-10-22T05:56:34.967249718Z 05:56:34.966 [info] == Migrated 20230705154938 in 0.0s
+2026-10-22T05:56:34.968491086Z 05:56:34.968 [info] == Running 20230711142028 Supavisor.Repo.Migrations.AddEnforceSsl.up/0 forward
+2026-10-22T05:56:34.968515536Z 05:56:34.968 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.969232816Z 05:56:34.968 [info] == Migrated 20230711142028 in 0.0s
+2026-10-22T05:56:34.970592344Z 05:56:34.970 [info] == Running 20230714153019 Supavisor.Repo.Migrations.AddAuthQuery.up/0 forward
+2026-10-22T05:56:34.970627825Z 05:56:34.970 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.971370353Z 05:56:34.971 [info] create check constraint auth_query_constraints on table _supavisor.tenants
+2026-10-22T05:56:34.971832731Z 05:56:34.971 [info] == Migrated 20230714153019 in 0.0s
+2026-10-22T05:56:34.973082506Z 05:56:34.972 [info] == Running 20230718175315 Supavisor.Repo.Migrations.AddSniHost.change/0 forward
+2026-10-22T05:56:34.973132217Z 05:56:34.972 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.973652015Z 05:56:34.973 [info] == Migrated 20230718175315 in 0.0s
+2026-10-22T05:56:34.975044994Z 05:56:34.974 [info] == Running 20230801090256 Supavisor.Repo.Migrations.AddUserMaxClients.change/0 forward
+2026-10-22T05:56:34.975101416Z 05:56:34.974 [info] alter table _supavisor.users
+2026-10-22T05:56:34.975603571Z 05:56:34.975 [info] == Migrated 20230801090256 in 0.0s
+2026-10-22T05:56:34.976870829Z 05:56:34.976 [info] == Running 20230801090942 Supavisor.Repo.Migrations.AddTenantDefMaxClients.change/0 forward
+2026-10-22T05:56:34.976943710Z 05:56:34.976 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.977492936Z 05:56:34.977 [info] == Migrated 20230801090942 in 0.0s
+2026-10-22T05:56:34.978801875Z 05:56:34.978 [info] == Running 20230914102712 Supavisor.Repo.Migrations.AddClientIdleTimeout.change/0 forward
+2026-10-22T05:56:34.978837126Z 05:56:34.978 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.979451013Z 05:56:34.979 [info] == Migrated 20230914102712 in 0.0s
+2026-10-22T05:56:34.980736389Z 05:56:34.980 [info] == Running 20230919091334 Supavisor.Repo.Migrations.CreateClusters.change/0 forward
+2026-10-22T05:56:34.980853248Z 05:56:34.980 [info] create table _supavisor.clusters
+2026-10-22T05:56:34.981886897Z 05:56:34.981 [info] create index _supavisor.clusters_alias_index
+2026-10-22T05:56:34.982559935Z 05:56:34.982 [info] == Migrated 20230919091334 in 0.0s
+2026-10-22T05:56:34.983885823Z 05:56:34.983 [info] == Running 20230919100141 Supavisor.Repo.Migrations.CreateClusterTenants.change/0 forward
+2026-10-22T05:56:34.984103406Z 05:56:34.983 [info] create table _supavisor.cluster_tenants
+2026-10-22T05:56:34.985617245Z 05:56:34.985 [info] create check constraint type on table _supavisor.cluster_tenants
+2026-10-22T05:56:34.986044112Z 05:56:34.985 [info] create index _supavisor.cluster_tenants_tenant_external_id_index
+2026-10-22T05:56:34.986624728Z 05:56:34.986 [info] == Migrated 20230919100141 in 0.0s
+2026-10-22T05:56:34.987983598Z 05:56:34.987 [info] == Running 20231004133121 Supavisor.Repo.Migrations.AddDefaultPoolStrategy.change/0 forward
+2026-10-22T05:56:34.988068739Z 05:56:34.987 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.988770199Z 05:56:34.988 [info] create check constraint default_pool_strategy_values on table _supavisor.tenants
+2026-10-22T05:56:34.989391735Z 05:56:34.989 [info] == Migrated 20231004133121 in 0.0s
+2026-10-22T05:56:34.990780305Z 05:56:34.990 [info] == Running 20231214120555 Supavisor.Repo.Migrations.AddHeartbeatInterval.change/0 forward
+2026-10-22T05:56:34.990822270Z 05:56:34.990 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.991528924Z 05:56:34.991 [info] == Migrated 20231214120555 in 0.0s
+2026-10-22T05:56:34.992759151Z 05:56:34.992 [info] == Running 20231229010413 Supavisor.Repo.Migrations.AddTenantAllowList.change/0 forward
+2026-10-22T05:56:34.992819283Z 05:56:34.992 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.993619572Z 05:56:34.993 [info] == Migrated 20231229010413 in 0.0s
+2026-10-22T05:56:34.994947222Z 05:56:34.994 [info] == Running 20240822132419 Supavisor.Repo.Migrations.AddAwsZone.change/0 forward
+2026-10-22T05:56:34.994957222Z 05:56:34.994 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.995527549Z 05:56:34.995 [info] == Migrated 20240822132419 in 0.0s
+2026-10-22T05:56:34.996718379Z 05:56:34.996 [info] == Running 20250811122429 Supavisor.Repo.Migrations.AddJitConfig.change/0 forward
+2026-10-22T05:56:34.996809457Z 05:56:34.996 [info] alter table _supavisor.tenants
+2026-10-22T05:56:34.997501635Z 05:56:34.997 [info] == Migrated 20250811122429 in 0.0s
+2026-10-22T05:56:34.998707100Z 05:56:34.998 [info] == Running 20250812153752 Supavisor.Repo.Migrations.AddFeatureFlagsToTenants.change/0 forward
+2026-10-22T05:56:34.998748111Z 05:56:34.998 [info] alter table _supavisor.tenants
+2026-10-22T05:56:35.006809149Z 05:56:35.006 [info] == Migrated 20250812153752 in 0.0s
+2026-10-22T05:56:35.007615531Z 05:56:35.007 [info] == Running 20260307125522 Supavisor.Repo.Migrations.AddUsersTenantExternalIdIndex.change/0 forward
+2026-10-22T05:56:35.007741677Z 05:56:35.007 [info] create index if not exists _supavisor.users_tenant_external_id_index
+2026-10-22T05:56:35.008610915Z 05:56:35.008 [info] == Migrated 20260307125522 in 0.0s
+2026-10-22T05:56:35.009828529Z 05:56:35.009 [info] == Running 20260323000000 Supavisor.Repo.Migrations.AddTenantBanFields.change/0 forward
+2026-10-22T05:56:35.009854581Z 05:56:35.009 [info] alter table _supavisor.tenants
+2026-10-22T05:56:35.010656382Z 05:56:35.010 [info] == Migrated 20260323000000 in 0.0s
+2026-10-22T05:56:35.890708955Z 05:56:35.867 [notice]     :alarm_handler: {:set, {:system_memory_high_watermark, []}}
+2026-10-22T05:56:35.977835185Z 05:56:35.977 region=local [info] Elixir.Supavisor.SignalHandler is being initialized...
+2026-10-22T05:56:35.987408009Z 05:56:35.984 region=local [notice] SYN[nonode@nohost] Adding node to scope <tenants>
+2026-10-22T05:56:35.989702154Z 05:56:35.989 region=local [notice] SYN[nonode@nohost] Creating tables for scope <tenants>
+2026-10-22T05:56:35.994672910Z 05:56:35.994 region=local [notice] SYN[nonode@nohost|registry<tenants>] Discovering the cluster
+2026-10-22T05:56:35.997619200Z 05:56:35.997 region=local [notice] SYN[nonode@nohost|pg<tenants>] Discovering the cluster
+2026-10-22T05:56:35.997626080Z 05:56:35.997 region=local [notice] SYN[nonode@nohost] Adding node to scope <availability_zone>
+2026-10-22T05:56:35.997628760Z 05:56:35.997 region=local [notice] SYN[nonode@nohost] Creating tables for scope <availability_zone>
+2026-10-22T05:56:35.997771422Z 05:56:35.997 region=local [notice] SYN[nonode@nohost|registry<availability_zone>] Discovering the cluster
+2026-10-22T05:56:35.997938674Z 05:56:35.997 region=local [notice] SYN[nonode@nohost|pg<availability_zone>] Discovering the cluster
+2026-10-22T05:56:36.003375664Z 05:56:36.003 region=local [warning] metrics_disabled is false
+2026-10-22T05:56:36.222034613Z 05:56:36.221 region=local [info] [libcluster:postgres] Connected to Postgres database
+2026-10-22T05:56:36.234434209Z 05:56:36.234 region=local [info] Running SupavisorWeb.Endpoint with cowboy 2.13.0 at 0.0.0.0:4000 (http)
+2026-10-22T05:56:36.236929253Z 05:56:36.236 region=local [info] Access SupavisorWeb.Endpoint at http://localhost:4000
+2026-10-22T05:56:36.423744200Z 05:56:36.423 region=local [info] Starting MetricsCleaner
+2026-10-22T05:56:36.538901316Z 05:56:36.538 region=local [info] Deleting all dist cache for tenant fvoci-test
+2026-10-22T05:56:36.538938936Z 05:56:36.538 region=local [info] Deleting all cache for tenant fvoci-test
+2026-10-22T05:56:36.543406465Z 05:56:36.543 region=local [info] Delete cache dist on create fvoci-test: [%{"nonode@nohost" => []}]
+2026-10-22T05:56:36.544028034Z [os_mon] memory supervisor port (memsup): Erlang has closed
+2026-10-22T05:56:36.544036434Z [os_mon] cpu supervisor port (cpu_sup): Erlang has closed
+2026-10-22T05:56:37.568705167Z 05:56:37.568 [notice]     :alarm_handler: {:set, {:system_memory_high_watermark, []}}
+2026-10-22T05:56:37.572988526Z 05:56:37.571 region=local [info] Elixir.Supavisor.SignalHandler is being initialized...
+2026-10-22T05:56:37.574330683Z 05:56:37.572 region=local [notice] SYN[supavisor@6c3fe861a2a2] Adding node to scope <tenants>
+2026-10-22T05:56:37.574408044Z 05:56:37.573 region=local [notice] SYN[supavisor@6c3fe861a2a2] Creating tables for scope <tenants>
+2026-10-22T05:56:37.574414974Z 05:56:37.574 region=local [notice] SYN[supavisor@6c3fe861a2a2|registry<tenants>] Discovering the cluster
+2026-10-22T05:56:37.574417594Z 05:56:37.574 region=local [notice] SYN[supavisor@6c3fe861a2a2|pg<tenants>] Discovering the cluster
+2026-10-22T05:56:37.574419614Z 05:56:37.574 region=local [notice] SYN[supavisor@6c3fe861a2a2] Adding node to scope <availability_zone>
+2026-10-22T05:56:37.574421684Z 05:56:37.574 region=local [notice] SYN[supavisor@6c3fe861a2a2] Creating tables for scope <availability_zone>
+2026-10-22T05:56:37.574543576Z 05:56:37.574 region=local [notice] SYN[supavisor@6c3fe861a2a2|registry<availability_zone>] Discovering the cluster
+2026-10-22T05:56:37.574549576Z 05:56:37.574 region=local [notice] SYN[supavisor@6c3fe861a2a2|pg<availability_zone>] Discovering the cluster
+2026-10-22T05:56:37.574957980Z 05:56:37.574 region=local [warning] metrics_disabled is false
+2026-10-22T05:56:37.602296048Z 05:56:37.601 region=local [info] Running SupavisorWeb.Endpoint with cowboy 2.13.0 at 0.0.0.0:4000 (http)
+2026-10-22T05:56:37.604707041Z 05:56:37.604 region=local [info] Access SupavisorWeb.Endpoint at http://localhost:4000
+2026-10-22T05:56:37.612055770Z 05:56:37.611 region=local [info] [libcluster:postgres] Connected to Postgres database
+2026-10-22T05:56:37.718300112Z 05:56:37.717 region=local [info] Starting MetricsCleaner
+2026-10-22T05:56:38.731386795Z 05:56:38.731 request_id=GODEZxZ2hl2L6kkAADiB region=local [info] HEAD /api/health
+2026-10-22T05:56:38.732470809Z 05:56:38.732 request_id=GODEZxZ2hl2L6kkAADiB region=local [info] Sent 204 in 1ms
+2026-10-22T05:56:48.772098826Z 05:56:48.771 request_id=GODEaWzvaw1qw-cAADkB region=local [info] HEAD /api/health
+2026-10-22T05:56:48.773287042Z 05:56:48.772 request_id=GODEaWzvaw1qw-cAADkB region=local [info] Sent 204 in 1ms
+2026-10-22T05:56:58.809204384Z 05:56:58.808 request_id=GODEa8MyIHiJLlYAADmB region=local [info] HEAD /api/health
+2026-10-22T05:56:58.810302138Z 05:56:58.810 request_id=GODEa8MyIHiJLlYAADmB region=local [info] Sent 204 in 1ms
+2026-10-22T05:57:08.845883331Z 05:57:08.845 request_id=GODEbhlstBa8_8QAADoB region=local [info] HEAD /api/health
+2026-10-22T05:57:08.847047065Z 05:57:08.846 request_id=GODEbhlstBa8_8QAADoB region=local [info] Sent 204 in 1ms
+2026-10-22T05:57:18.887033453Z 05:57:18.886 request_id=GODEcG_srBCSBFwAADqB region=local [info] HEAD /api/health
+2026-10-22T05:57:18.888160156Z 05:57:18.887 request_id=GODEcG_srBCSBFwAADqB region=local [info] Sent 204 in 1ms
+2026-10-22T05:57:28.925686951Z 05:57:28.925 request_id=GODEcsZGP7cw9T0AADsB region=local [info] HEAD /api/health
+2026-10-22T05:57:28.926250069Z 05:57:28.926 request_id=GODEcsZGP7cw9T0AADsB region=local [info] Sent 204 in 769µs
+2026-10-22T05:57:38.961501049Z 05:57:38.961 request_id=GODEdRx1swVzjBQAADuB region=local [info] HEAD /api/health
+2026-10-22T05:57:38.962259610Z 05:57:38.962 request_id=GODEdRx1swVzjBQAADuB region=local [info] Sent 204 in 858µs
+2026-10-22T05:57:49.000915389Z 05:57:49.000 request_id=GODEd3LZx4Z9RqIAADwB region=local [info] HEAD /api/health
+2026-10-22T05:57:49.001672987Z 05:57:49.001 request_id=GODEd3LZx4Z9RqIAADwB region=local [info] Sent 204 in 896µs
+2026-10-22T05:57:57.507882083Z 05:57:57.507 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:57:57.512242972Z 05:57:57.511 project=fvoci-test user=fvoci_app region=local [info] SecretChecker not started, using a one-off auth_query connection
+2026-10-22T05:57:57.551805864Z 05:57:57.551 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:57:57.551834175Z 05:57:57.551 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] Starting pool(s) for Supavisor.id(type: :single, tenant: "fvoci-test", mode: :session, user: "fvoci_app", db: "postgres")
+2026-10-22T05:57:57.562249269Z 05:57:57.561 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1046
+2026-10-22T05:57:57.570618766Z 05:57:57.570 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:57:57.594582627Z 05:57:57.594 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:57:57.599751348Z 05:57:57.599 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1048
+2026-10-22T05:57:57.730500081Z 05:57:57.730 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:57:57.730517762Z 05:57:57.730 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:57:59.039117810Z 05:57:59.038 request_id=GODEecktX4y_d5gAAEQB region=local [info] HEAD /api/health
+2026-10-22T05:57:59.039970862Z 05:57:59.039 request_id=GODEecktX4y_d5gAAEQB region=local [info] Sent 204 in 875µs
+2026-10-22T05:57:59.853536149Z 05:57:59.853 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:57:59.853556979Z 05:57:59.853 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:57:59.857521290Z 05:57:59.857 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:57:59.879138781Z 05:57:59.878 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:57:59.879175842Z 05:57:59.878 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:57:59.881879048Z 05:57:59.881 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:57:59.886211661Z 05:57:59.885 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:57:59.886225772Z 05:57:59.885 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:57:59.886496841Z 05:57:59.886 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1072
+2026-10-22T05:57:59.894922844Z 05:57:59.894 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:57:59.911577137Z 05:57:59.911 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:57:59.911628958Z 05:57:59.911 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:57:59.916220980Z 05:57:59.915 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1074
+2026-10-22T05:57:59.916256590Z 05:57:59.915 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1073
+2026-10-22T05:57:59.919526814Z 05:57:59.919 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:57:59.923640579Z 05:57:59.923 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1075
+2026-10-22T05:57:59.957547205Z 05:57:59.957 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:57:59.982981716Z 05:57:59.982 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:57:59.988077093Z 05:57:59.987 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1076
+2026-10-22T05:58:00.046912834Z 05:58:00.046 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.046951305Z 05:58:00.046 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.085384660Z 05:58:00.085 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.085433751Z 05:58:00.085 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.085496741Z 05:58:00.085 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.093571921Z 05:58:00.093 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.093606731Z 05:58:00.093 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.160637782Z 05:58:00.160 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.160787634Z 05:58:00.160 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.160794994Z 05:58:00.160 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.160798494Z 05:58:00.160 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.164635099Z 05:58:00.164 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.166532145Z 05:58:00.166 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.176914308Z 05:58:00.176 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.186572560Z 05:58:00.186 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.187507583Z 05:58:00.187 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.187663390Z 05:58:00.187 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.188144871Z 05:58:00.187 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.189867724Z 05:58:00.189 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.191373372Z 05:58:00.190 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.223249866Z 05:58:00.222 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.223390642Z 05:58:00.222 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.223553676Z 05:58:00.222 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.223564706Z 05:58:00.222 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.223568106Z 05:58:00.222 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.223665887Z 05:58:00.223 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.223674507Z 05:58:00.223 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.223677897Z 05:58:00.223 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.223898365Z 05:58:00.223 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.223906765Z 05:58:00.223 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.223918245Z 05:58:00.223 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.228522391Z 05:58:00.228 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.229958241Z 05:58:00.229 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.239093864Z 05:58:00.238 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.249895439Z 05:58:00.249 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.249911340Z 05:58:00.249 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.249914200Z 05:58:00.249 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.250176343Z 05:58:00.249 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.250185593Z 05:58:00.249 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.251667643Z 05:58:00.251 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.255177880Z 05:58:00.254 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1078
+2026-10-22T05:58:00.255405944Z 05:58:00.254 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1077
+2026-10-22T05:58:00.255456595Z 05:58:00.254 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.255846179Z 05:58:00.255 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1079
+2026-10-22T05:58:00.255930129Z 05:58:00.255 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1080
+2026-10-22T05:58:00.256824067Z 05:58:00.256 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1081
+2026-10-22T05:58:00.256833047Z 05:58:00.256 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.257352599Z 05:58:00.257 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1082
+2026-10-22T05:58:00.260070137Z 05:58:00.259 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1083
+2026-10-22T05:58:00.261425793Z 05:58:00.261 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1084
+2026-10-22T05:58:00.263793687Z 05:58:00.263 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.263854588Z 05:58:00.263 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.264253333Z 05:58:00.263 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.264263013Z 05:58:00.263 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.266232210Z 05:58:00.265 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.269188039Z 05:58:00.268 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1086
+2026-10-22T05:58:00.269210019Z 05:58:00.268 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1085
+2026-10-22T05:58:00.269731255Z 05:58:00.269 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1087
+2026-10-22T05:58:00.270519217Z 05:58:00.270 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1088
+2026-10-22T05:58:00.270532217Z 05:58:00.270 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1089
+2026-10-22T05:58:00.279446267Z 05:58:00.278 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.279486508Z 05:58:00.279 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.279492428Z 05:58:00.279 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.279788651Z 05:58:00.279 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.279801041Z 05:58:00.279 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.279803991Z 05:58:00.279 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.279806301Z 05:58:00.279 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.279808381Z 05:58:00.279 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.280077694Z 05:58:00.279 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.281289703Z 05:58:00.280 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.291451279Z 05:58:00.291 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.301969061Z 05:58:00.301 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.309477106Z 05:58:00.309 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.311284585Z 05:58:00.310 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.312608482Z 05:58:00.312 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.316043964Z 05:58:00.315 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.316984922Z 05:58:00.316 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1090
+2026-10-22T05:58:00.317372293Z 05:58:00.317 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.318099487Z 05:58:00.317 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.318893577Z 05:58:00.318 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1091
+2026-10-22T05:58:00.319338643Z 05:58:00.318 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.319641188Z 05:58:00.319 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.321215959Z 05:58:00.320 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.321267445Z 05:58:00.321 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.322102954Z 05:58:00.321 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1092
+2026-10-22T05:58:00.322437735Z 05:58:00.322 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.323367378Z 05:58:00.322 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.323375668Z 05:58:00.323 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.324022544Z 05:58:00.323 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1093
+2026-10-22T05:58:00.325970061Z 05:58:00.325 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1095
+2026-10-22T05:58:00.325979121Z 05:58:00.325 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1094
+2026-10-22T05:58:00.326678741Z 05:58:00.326 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1096
+2026-10-22T05:58:00.326693321Z 05:58:00.326 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1097
+2026-10-22T05:58:00.328737689Z 05:58:00.328 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.328935391Z 05:58:00.328 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1099
+2026-10-22T05:58:00.329423178Z 05:58:00.329 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1098
+2026-10-22T05:58:00.330023992Z 05:58:00.329 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1100
+2026-10-22T05:58:00.334521526Z 05:58:00.334 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.335709781Z 05:58:00.335 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.337768530Z 05:58:00.337 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.338290967Z 05:58:00.338 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.342332073Z 05:58:00.341 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.343166293Z 05:58:00.342 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.344647523Z 05:58:00.344 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1102
+2026-10-22T05:58:00.347956528Z 05:58:00.347 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.372797291Z 05:58:00.372 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.373136995Z 05:58:00.372 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.373144035Z 05:58:00.372 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.373146775Z 05:58:00.372 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.373230714Z 05:58:00.372 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.377767881Z 05:58:00.377 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.378427666Z 05:58:00.377 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.379014293Z 05:58:00.378 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.409446113Z 05:58:00.379 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1103
+2026-10-22T05:58:00.409490593Z 05:58:00.379 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1104
+2026-10-22T05:58:00.409506683Z 05:58:00.380 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1105
+2026-10-22T05:58:00.409516584Z 05:58:00.380 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1106
+2026-10-22T05:58:00.409554379Z 05:58:00.382 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1107
+2026-10-22T05:58:00.409986273Z 05:58:00.408 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.410017984Z 05:58:00.408 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.410083029Z 05:58:00.408 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.410104070Z 05:58:00.408 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.410113050Z 05:58:00.408 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.410120460Z 05:58:00.408 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.410128310Z 05:58:00.408 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.413049261Z 05:58:00.412 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.417270356Z 05:58:00.416 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1108
+2026-10-22T05:58:00.419852133Z 05:58:00.418 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1109
+2026-10-22T05:58:00.420393729Z 05:58:00.420 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.421187139Z 05:58:00.420 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1111
+2026-10-22T05:58:00.422667479Z 05:58:00.422 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1110
+2026-10-22T05:58:00.428082293Z 05:58:00.427 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.430339759Z 05:58:00.429 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.434008378Z 05:58:00.433 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.437711802Z 05:58:00.437 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.440767698Z 05:58:00.439 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.460210374Z 05:58:00.459 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.462028878Z 05:58:00.461 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.462795299Z 05:58:00.462 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.462969841Z 05:58:00.462 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.463312365Z 05:58:00.463 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.469207644Z 05:58:00.468 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1112
+2026-10-22T05:58:00.470387551Z 05:58:00.470 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1113
+2026-10-22T05:58:00.470693314Z 05:58:00.470 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.471438514Z 05:58:00.471 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1114
+2026-10-22T05:58:00.471734832Z 05:58:00.471 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.471946495Z 05:58:00.471 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1115
+2026-10-22T05:58:00.472112553Z 05:58:00.471 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1116
+2026-10-22T05:58:00.475137943Z 05:58:00.474 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.478662319Z 05:58:00.478 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1117
+2026-10-22T05:58:00.478707760Z 05:58:00.478 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1118
+2026-10-22T05:58:00.479677924Z 05:58:00.479 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.479766475Z 05:58:00.479 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.481680431Z 05:58:00.481 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1119
+2026-10-22T05:58:00.483149785Z 05:58:00.482 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.486286352Z 05:58:00.485 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.486313692Z 05:58:00.485 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.486868309Z 05:58:00.486 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.487145055Z 05:58:00.486 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1120
+2026-10-22T05:58:00.488135686Z 05:58:00.487 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.488146926Z 05:58:00.487 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1121
+2026-10-22T05:58:00.488357691Z 05:58:00.488 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.490426048Z 05:58:00.489 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1122
+2026-10-22T05:58:00.493761893Z 05:58:00.493 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.493779623Z 05:58:00.493 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.495616339Z 05:58:00.495 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.495833322Z 05:58:00.495 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1123
+2026-10-22T05:58:00.500011977Z 05:58:00.499 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.501449447Z 05:58:00.501 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1124
+2026-10-22T05:58:00.503744648Z 05:58:00.503 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.522865584Z 05:58:00.522 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.531173267Z 05:58:00.530 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1126
+2026-10-22T05:58:00.535469154Z 05:58:00.535 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.540786235Z 05:58:00.540 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.540834786Z 05:58:00.540 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.544326723Z 05:58:00.543 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.545323921Z 05:58:00.543 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1127
+2026-10-22T05:58:00.546980139Z 05:58:00.546 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1128
+2026-10-22T05:58:00.547125221Z 05:58:00.546 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.548773022Z 05:58:00.548 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1129
+2026-10-22T05:58:00.551395554Z 05:58:00.550 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.551592781Z 05:58:00.551 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.554079790Z 05:58:00.553 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1130
+2026-10-22T05:58:00.554322561Z 05:58:00.554 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1131
+2026-10-22T05:58:00.559641009Z 05:58:00.559 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1132
+2026-10-22T05:58:00.559706340Z 05:58:00.559 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1133
+2026-10-22T05:58:00.739649634Z 05:58:00.739 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.740354347Z 05:58:00.739 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.750476211Z 05:58:00.749 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.780612564Z 05:58:00.779 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.788253067Z 05:58:00.787 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.811389348Z 05:58:00.810 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.811445399Z 05:58:00.810 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.820082454Z 05:58:00.819 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.826066085Z 05:58:00.825 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.828089461Z 05:58:00.827 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.828206920Z 05:58:00.828 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.837690451Z 05:58:00.837 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.840427538Z 05:58:00.840 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.840520529Z 05:58:00.840 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.845784849Z 05:58:00.845 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.847662745Z 05:58:00.847 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.850286861Z 05:58:00.849 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.857027352Z 05:58:00.856 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.872327477Z 05:58:00.872 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.877456456Z 05:58:00.877 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.880097611Z 05:58:00.879 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.881839803Z 05:58:00.881 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.884655163Z 05:58:00.884 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.887780234Z 05:58:00.887 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.919864844Z 05:58:00.919 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.922648668Z 05:58:00.922 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.928660728Z 05:58:00.928 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1158
+2026-10-22T05:58:00.934711446Z 05:58:00.934 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.953069151Z 05:58:00.952 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.953534708Z 05:58:00.953 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.961630497Z 05:58:00.961 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.971628630Z 05:58:00.971 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.992346020Z 05:58:00.991 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:00.993134660Z 05:58:00.992 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.993171411Z 05:58:00.992 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:00.999076629Z 05:58:00.998 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:00.999217177Z 05:58:00.998 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:01.020630400Z 05:58:01.020 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.020678211Z 05:58:01.020 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.027189563Z 05:58:01.026 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:01.028054560Z 05:58:01.027 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:01.029772847Z 05:58:01.029 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:01.035303876Z 05:58:01.034 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:01.054750918Z 05:58:01.054 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:01.057404244Z 05:58:01.057 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.058149758Z 05:58:01.057 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.059714415Z 05:58:01.059 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:01.061746822Z 05:58:01.061 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:01.062909208Z 05:58:01.062 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:01.064473358Z 05:58:01.064 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:01.087939144Z 05:58:01.087 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:01.089065828Z 05:58:01.088 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:01.090438547Z 05:58:01.090 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:01.091830366Z 05:58:01.091 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:01.096893503Z 05:58:01.096 project=fvoci-test user=fvoci_app region=local mode=session [info] DbHandler: Backend authenticated, backend_pid: 1163
+2026-10-22T05:58:01.105962545Z 05:58:01.105 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:01.106717536Z 05:58:01.106 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [error] ClientHandler: (EMAXCONNSESSION) max clients reached in session mode - max clients are limited to pool_size: 64
+2026-10-22T05:58:01.111014644Z 05:58:01.110 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.111054675Z 05:58:01.110 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.116913183Z 05:58:01.116 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:01.124107599Z 05:58:01.123 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:01.147054122Z 05:58:01.146 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:01.153705657Z 05:58:01.153 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:01.154373325Z 05:58:01.154 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [error] ClientHandler: (EMAXCONNSESSION) max clients reached in session mode - max clients are limited to pool_size: 64
+2026-10-22T05:58:01.183012900Z 05:58:01.182 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.183041990Z 05:58:01.182 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.203442845Z 05:58:01.202 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [error] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was busy (session)
+2026-10-22T05:58:01.203765000Z 05:58:01.203 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.288573239Z 05:58:01.288 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.288587699Z 05:58:01.288 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.288742491Z 05:58:01.288 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.454031043Z 05:58:01.453 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.454076443Z 05:58:01.453 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.609127805Z 05:58:01.608 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:01.657057921Z 05:58:01.656 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:02.857824468Z 05:58:02.857 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:02.882126882Z 05:58:02.881 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:03.369244928Z 05:58:03.368 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:03.369261208Z 05:58:03.368 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:03.684613621Z 05:58:03.684 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:03.711500462Z 05:58:03.711 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:03.712537506Z 05:58:03.712 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:03.727807413Z 05:58:03.727 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:03.728383509Z 05:58:03.728 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:03.739877523Z 05:58:03.739 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:03.743937068Z 05:58:03.743 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:03.743983738Z 05:58:03.743 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:03.767562555Z 05:58:03.767 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:03.816845561Z 05:58:03.816 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:03.827895330Z 05:58:03.827 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:03.842731474Z 05:58:03.842 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:03.842751945Z 05:58:03.842 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:03.854205038Z 05:58:03.853 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:03.875533662Z 05:58:03.875 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:03.883551003Z 05:58:03.883 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:03.902497237Z 05:58:03.901 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:03.909970827Z 05:58:03.909 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:03.931542046Z 05:58:03.931 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:03.931835539Z 05:58:03.931 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:03.931868279Z 05:58:03.931 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.054135648Z 05:58:04.053 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.054178658Z 05:58:04.053 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.070809828Z 05:58:04.070 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.070849478Z 05:58:04.070 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.070856828Z 05:58:04.070 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.200503085Z 05:58:04.200 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.200542066Z 05:58:04.200 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.921154222Z 05:58:04.920 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.921192822Z 05:58:04.920 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.921198492Z 05:58:04.920 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.946198454Z 05:58:04.945 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.946245844Z 05:58:04.946 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:04.946251904Z 05:58:04.946 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:05.042806104Z 05:58:05.042 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [error] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was busy (session)
+2026-10-22T05:58:05.043388200Z 05:58:05.043 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:05.162533212Z 05:58:05.162 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:05.187498068Z 05:58:05.187 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:05.211231935Z 05:58:05.210 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:05.211244235Z 05:58:05.210 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:05.224810137Z 05:58:05.224 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:05.249565719Z 05:58:05.249 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:05.393657237Z 05:58:05.393 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:05.393668557Z 05:58:05.393 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:05.393672947Z 05:58:05.393 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:05.393675097Z 05:58:05.393 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:05.813055201Z 05:58:05.812 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:05.813091021Z 05:58:05.812 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:06.018305516Z 05:58:06.017 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:06.018318196Z 05:58:06.017 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:06.479731493Z 05:58:06.479 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:06.503682725Z 05:58:06.503 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:06.780454493Z 05:58:06.780 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:06.804468665Z 05:58:06.804 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:06.809097421Z 05:58:06.808 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:06.834068423Z 05:58:06.833 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:07.101246272Z 05:58:07.100 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:07.101331293Z 05:58:07.100 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:07.101487745Z 05:58:07.101 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:07.101496925Z 05:58:07.101 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:07.101761659Z 05:58:07.101 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:07.623727939Z 05:58:07.623 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:07.623779069Z 05:58:07.623 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:07.623786619Z 05:58:07.623 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:07.821281790Z 05:58:07.820 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:07.821318290Z 05:58:07.821 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:08.030871545Z 05:58:08.030 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:08.030888435Z 05:58:08.030 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:08.416092838Z 05:58:08.415 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:08.416108728Z 05:58:08.415 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:08.416112318Z 05:58:08.415 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:09.074651004Z 05:58:09.074 request_id=GODEfB9W3YoB24QAAHEB region=local [info] HEAD /api/health
+2026-10-22T05:58:09.075345548Z 05:58:09.075 request_id=GODEfB9W3YoB24QAAHEB region=local [info] Sent 204 in 911µs
+2026-10-22T05:58:09.485752376Z 05:58:09.485 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:09.485785246Z 05:58:09.485 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:09.485790816Z 05:58:09.485 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:09.931369965Z 05:58:09.930 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:09.931390815Z 05:58:09.931 region=local peer_ip=10.200.2.1 [warning] ClientHandler: User requested SSL connection but no downstream cert/key found
+2026-10-22T05:58:09.955975593Z 05:58:09.955 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:09.977707606Z 05:58:09.977 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: Connection authenticated
+2026-10-22T05:58:09.989981299Z 05:58:09.989 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:09.991136396Z 05:58:09.990 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:09.991188812Z 05:58:09.991 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:10.296294993Z 05:58:10.295 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:10.296312853Z 05:58:10.296 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:10.296315643Z 05:58:10.296 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:10.296358331Z 05:58:10.296 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:10.824958231Z 05:58:10.824 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:10.824995601Z 05:58:10.824 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:10.825001301Z 05:58:10.824 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:10.825003911Z 05:58:10.824 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:11.027419128Z 05:58:11.026 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)
+2026-10-22T05:58:11.027709102Z 05:58:11.027 project=fvoci-test user=fvoci_app region=local mode=session type=single app_name=Supavisor peer_ip=10.200.2.1 [info] ClientHandler: (ECLIENTSOCKETCLOSED) Client socket closed while state was idle (session)

@@ -1,0 +1,40 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running tests/recurrence.rs (target/debug/deps/recurrence-9f8d851d1e21ae5d)
+
+running 8 tests
+test rules_expand_with_skips_counts_and_limits ... ok
+test repeating_events_keep_their_wall_clock_across_daylight_saving ... ok
+test catch_up_is_capped_per_request_and_archived_items_refuse ... ok
+test weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_ones ... ok
+test changing_a_rule_applies_from_today_and_the_template_stays_top_level ... ok
+test repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule ... ok
+test the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves ... FAILED
+test a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick ... ok
+
+failures:
+
+---- the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves stdout ----
+2026-10-22T02:49:02.076002Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-1150-7448-8106-4839b25f7da4 method=POST route="/api/workspaces" status_code=201 duration_ms=43.038
+2026-10-22T02:49:02.089102Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-117c-756b-99bb-0d5268f9fec9 method=POST route="/api/workspaces/{workspace_id}/modules" status_code=201 duration_ms=12.917
+2026-10-22T02:49:02.101154Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-1189-7197-a8e7-e303a5b909a5 method=POST route="/api/modules/{module_id}/items" status_code=201 duration_ms=11.874
+2026-10-22T02:49:02.113274Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-1195-743d-af31-3ea9ab800965 method=PUT route="/api/items/{item_id}" status_code=200 duration_ms=11.906
+2026-10-22T02:49:02.145849Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-11a6-77cb-9f5f-ec9ca5d97af2 method=POST route="/api/items/{item_id}/tasks" status_code=201 duration_ms=26.934
+2026-10-22T02:49:02.161409Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-11c2-7341-ad35-cd5a4e0537c8 method=PUT route="/api/tasks/{task_id}" status_code=200 duration_ms=15.329
+2026-10-22T02:49:02.229431Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-11d1-7681-94ed-5ab8c0ba21f2 method=PUT route="/api/tasks/{task_id}/recurrence" status_code=200 duration_ms=67.747
+2026-10-22T02:49:02.240292Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-1215-70eb-b3c3-e3abd6fe985c method=POST route="/api/items/{item_id}/tasks" status_code=201 duration_ms=10.641
+2026-10-22T02:49:02.251443Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-1220-771a-9b3e-3ef5a226d178 method=PUT route="/api/tasks/{task_id}" status_code=200 duration_ms=10.985
+2026-10-22T02:49:02.309663Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-122b-773c-bb87-022edf19b804 method=PUT route="/api/tasks/{task_id}/recurrence" status_code=200 duration_ms=58.045
+2026-10-22T02:49:02.317045Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-1265-73ae-8ace-cf8d6755ab05 method=GET route="/api/tasks/{task_id}" status_code=200 duration_ms=7.188
+2026-10-22T02:49:02.335065Z  INFO fvoci_server::http: request event="http.request" request_id=01a16183-126d-7395-9266-05407613d5b3 method=PUT route="/api/tasks/{task_id}" status_code=200 duration_ms=17.828
+
+thread 'the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves' (413595) panicked at crates/server/tests/recurrence.rs:761:5:
+the tick never waited on the done lane
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves
+
+test result: FAILED. 7 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.34s
+
+error: test failed, to rerun pass `-p fvoci-server --test recurrence`

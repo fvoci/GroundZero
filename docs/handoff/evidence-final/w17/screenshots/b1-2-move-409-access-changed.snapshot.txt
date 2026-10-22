@@ -1,0 +1,187 @@
+# b1-2-move-409-access-changed  2026-10-22T07:56:44Z  url=http://127.0.0.1:5173/w/01a16272-b6a3-72e7-b8df-7f4f4e911512/wiki/01a1629b-333b-7765-b592-50c73f6d3618
+# viewport={
+  "result": "1280x800",
+  "origin": "http://127.0.0.1:5173/w/01a16272-b6a3-72e7-b8df-7f4f4e911512/wiki/01a1629b-333b-7765-b592-50c73f6d3618"
+}
+- generic
+  - generic
+    - region "알림 alt+T" [ref=e1]
+    - StaticText "fvoci"
+    - list
+      - listitem [level=1]
+        - button "검색 Ctrl/⌘ K" [ref=e19]
+          - StaticText "검색"
+          - StaticText "Ctrl/⌘ K"
+    - generic
+      - generic
+        - StaticText "개인"
+        - list
+          - listitem [level=1]
+            - link "홈" [ref=e47]
+              - StaticText "홈"
+          - listitem [level=1]
+            - link "알림 · 읽지 않은 알림 2개" [ref=e48]
+              - StaticText "알림"
+          - listitem [level=1]
+            - link "내 노트" [ref=e49]
+              - StaticText "내 노트"
+          - listitem [level=1]
+            - link "공유받은 문서" [ref=e50]
+              - StaticText "공유받은 문서"
+          - listitem [level=1]
+            - link "내 시간" [ref=e51]
+              - StaticText "내 시간"
+          - listitem [level=1]
+            - link "내 노트 휴지통" [ref=e52]
+              - StaticText "내 노트 휴지통"
+          - listitem [level=1]
+            - link "내 활동 기록" [ref=e53]
+              - StaticText "내 활동 기록"
+      - separator
+      - generic
+        - StaticText "워크스페이스"
+        - list
+          - listitem [level=1]
+            - button "워크스페이스 바꾸기: 개발" [expanded=false, ref=e54]
+              - StaticText "개발"
+        - list
+          - listitem [level=1]
+            - link "위키" [ref=e55]
+              - StaticText "위키"
+            - button "위키 하위 문서 접기" [expanded=true, ref=e56]
+        - navigation "위키" [ref=e33]
+          - list
+            - listitem [level=1]
+              - link "공동 편집 연습" [ref=e62]
+                - StaticText "공동 편집 연습"
+            - listitem [level=1]
+              - link "W17 이동 문서 1 (합성)" [ref=e63]
+                - StaticText "W17 이동 문서 1 (합성)"
+            - listitem [level=1]
+              - link "W17 이동 문서 2 (합성)" [ref=e64]
+                - StaticText "W17 이동 문서 2 (합성)"
+            - listitem [level=1]
+              - link "W17 이동 문서 3 (합성)" [ref=e65]
+                - StaticText "W17 이동 문서 3 (합성)"
+        - list
+          - listitem [level=1]
+            - link "달력" [ref=e57]
+              - StaticText "달력"
+          - listitem [level=1]
+            - link "멤버" [ref=e58]
+              - StaticText "멤버"
+          - listitem [level=1]
+            - link "휴지통" [ref=e59]
+              - StaticText "휴지통"
+          - listitem [level=1]
+            - link "감사 기록" [ref=e60]
+              - StaticText "감사 기록"
+      - generic
+        - StaticText "모듈"
+        - paragraph
+          - StaticText "아직 모듈이 없습니다."
+    - list
+      - listitem [level=1]
+        - button "계정 메뉴: Test User" [expanded=false, ref=e20]
+          - StaticText "Test User"
+    - button "사이드바 열고 닫기" [ref=e9]
+    - main
+      - sectionheader
+        - button "사이드바 열고 닫기" [ref=e10]
+          - StaticText "사이드바 열고 닫기"
+        - StaticText "개발"
+        - group "타이머"
+          - StaticText "작업"
+          - button "일시정지" [ref=e21]
+          - button "종료" [ref=e22]
+      - main
+        - navigation "경로" [ref=e11]
+          - link "개발 위키" [ref=e23]
+            - StaticText "개발 위키"
+        - toolbar "문서 동작"
+          - button "공유·설정" [ref=e24]
+          - button "복제" [ref=e25]
+          - button "이동" [ref=e26]
+        - button "기록" [ref=e12]
+        - button "내보내기" [ref=e13]
+        - group "홈에 표시"
+          - button "홈에 고정" [ref=e27]
+          - button "즐겨찾기" [ref=e28]
+        - button "문서 지우기" [ref=e14]
+        - status
+        - region "실시간 공동 편집" [ref=e15]
+          - StaticText "WIKI-4"
+          - status
+            - StaticText "실시간 연결됨"
+          - form
+            - LabelText
+              - StaticText "제목"
+            - textbox "제목" [ref=e34]: W17 이동 문서 3 (합성)
+              - StaticText "W17 이동 문서 3 (합성)"
+            - button "제목 저장" [disabled, ref=e35]
+          - group "편집 방식"
+          - toolbar "서식"
+            - button "굵게" [ref=e36]
+            - button "기울임" [ref=e37]
+            - button "제목" [ref=e38]
+            - button "목록" [ref=e39]
+            - button "체크리스트" [ref=e40]
+            - button "코드" [ref=e41]
+            - button "표" [ref=e42]
+            - button "수식" [ref=e43]
+            - button "파일·이미지" [ref=e44]
+          - generic
+            - textbox "본문" [ref=e45]: B가 실시간으로 쓴 첫 문단 (취소 전) / 취소 뒤 이어 쓴 글
+Second User
+
+
+              - paragraph
+                - StaticText "B가 실시간으로 쓴 첫 문단 (취소 전) / 취소 뒤 이어 쓴 글"
+                - StaticText "Second User"
+                - LineBreak "\n"
+            - paragraph
+              - StaticText "Alt+Shift+↑↓ 옮기기 · Ctrl/⌘+Shift+D 복제 · Ctrl/⌘+/ 이 메뉴"
+          - paragraph
+            - StaticText "여럿이 함께 고치는 문서입니다. 내용은 바로 나누고, 잠시 조용해지거나 모두 나가면 리비전으로 남습니다."
+        - complementary
+        - region "이곳을 가리키는 문서" [ref=e16]
+          - heading "이곳을 가리키는 문서" [level=2, ref=e29]
+          - paragraph
+            - StaticText "없습니다."
+        - region "첨부 파일" [ref=e17]
+          - heading "첨부 파일" [level=2, ref=e30]
+          - button "파일 올리기" [ref=e31]
+          - paragraph
+          - paragraph
+            - StaticText "첨부 파일이 없습니다."
+        - region "댓글" [ref=e18]
+          - heading "댓글" [level=2, ref=e32]
+          - paragraph
+          - list
+            - listitem [level=1]
+              - StaticText "댓글이 없습니다."
+          - form
+            - textbox "새 댓글(Ctrl·⌘+Enter로 달기)" [ref=e46]
+            - button "댓글 달기" [disabled, ref=e61]
+  - dialog "문서 이동"
+    - heading "문서 이동" [level=2, ref=e2]
+    - StaticText "위키나 모듈 항목으로 옮깁니다. 이동하면 대상의 번호가 새로 붙습니다(위키는 WIKI, 항목은 모듈 키). 기존 링크는 문서 ID로 연결되어 계속 열립니다."
+    - StaticText "대상"
+    - button "대상" [expanded=false, ref=e3]
+      - StaticText "W17 이동 대상 (합성) 위키"
+    - heading "새로 볼 수 있게 되는 사람" [level=3, ref=e4]
+    - paragraph
+      - StaticText "없음"
+    - heading "더 이상 볼 수 없게 되는 사람" [level=3, ref=e5]
+    - paragraph
+      - StaticText "없음"
+    - paragraph
+      - StaticText "이전 리비전 기록도 함께 옮겨져, 새로 볼 수 있게 되는 사람에게 보입니다."
+    - paragraph
+      - StaticText "대상에서 번호가 새로 붙습니다."
+    - button "취소" [ref=e6]
+    - button "이동" [ref=e7]
+    - alert
+      - StaticText "그사이 접근할 수 있는 사람이 바뀌었습니다. 다시 확인하세요."
+    - button "닫기" [ref=e8]
+      - StaticText "닫기"

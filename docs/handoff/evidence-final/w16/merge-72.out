@@ -1,0 +1,5 @@
+Auto-merging apps/web/messages/events/en.json
+Auto-merging apps/web/messages/events/ko.json
+Auto-merging apps/web/src/lib/features/events/EventForm.svelte
+Auto-merging apps/web/src/lib/features/events/time.ts
+Automatic merge went well; stopped before committing as requested

@@ -1,0 +1,102 @@
+diff --git a/crates/server/tests/recurrence.rs b/crates/server/tests/recurrence.rs
+index 696fdb6..a134808 100644
+--- a/crates/server/tests/recurrence.rs
++++ b/crates/server/tests/recurrence.rs
+@@ -890,3 +890,82 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
+     assert_eq!(skipped, 0, "the locked item was synced");
+     assert!(synced >= 1, "the other item lost its occurrences");
+ }
++
++/// W9 임시 탐침(커밋하지 않음): 상한을 본 뒤, 회차 맞추기 전에 앞 항목(더 작은 id)에 회차가 많이 빠진 반복이 생기면
++/// 뒤 항목의 몫이 밀려 FV001로 건너뛴다.
++#[tokio::test]
++async fn w9_probe_bound_growth_between_ids_and_tick() {
++    let state = common::state();
++    let app = common::app(&state);
++    let admin = login(&state, "admin").await;
++    let ws = create_workspace(&app, &admin, "탐침").await;
++    let today = seoul_today(&state, &admin).await;
++    let daily = json!({"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null});
++    // 가장 앞 항목: 반복은 상한을 본 뒤에 만든다.
++    let early = module_item(&app, &admin, &ws, "PR0").await;
++    let early_root = dated_task(&app, &admin, &early, "따라잡기", &day(today - time::Duration::days(119))).await;
++    let mut series = Vec::new();
++    let mut items = Vec::new();
++    for key in ["PRA", "PRB"] {
++        let item = module_item(&app, &admin, &ws, key).await;
++        let root = dated_task(&app, &admin, &item, "매일", &day(today)).await;
++        let (status, rule) = repeat(&app, &admin, &root, daily.clone()).await;
++        assert_eq!(status, StatusCode::OK, "{rule:?}");
++        series.push(rule["series"]["id"].as_str().unwrap().to_owned());
++        items.push(item["id"].as_str().unwrap().to_owned());
++    }
++    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
++    let owner = sqlx::PgPool::connect(&url).await.unwrap();
++    let mut holder = owner.acquire().await.unwrap();
++    sqlx::query("SELECT pg_advisory_lock(hashtextextended('fvoci-lane:' || $1 || ':done', 0))")
++        .bind(&items[0])
++        .execute(&mut *holder)
++        .await
++        .unwrap();
++    for id in &series {
++        common::fixture_sql(
++            "DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
++            id,
++        )
++        .await;
++    }
++    let mut tx = owner.begin().await.unwrap();
++    sqlx::query("SET LOCAL lock_timeout = '300ms'")
++        .execute(&mut *tx)
++        .await
++        .unwrap();
++    let need: i32 = sqlx::query_scalar("SELECT fvoci.app_system_recurrence_tick_ids()")
++        .fetch_one(&mut *tx)
++        .await
++        .unwrap();
++    let (status, _) = repeat(&app, &admin, &early_root, daily.clone()).await;
++    assert_eq!(status, StatusCode::OK);
++    let spare: usize = std::env::var("W9_PROBE_SPARE").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
++    let ticked = sqlx::query_scalar::<_, i32>("SELECT fvoci.app_system_recurrence_tick($1)")
++        .bind(fvoci_server::db::new_ids(
++            usize::try_from(need).unwrap_or_default() + spare,
++        ))
++        .fetch_one(&mut *tx)
++        .await;
++    if ticked.is_ok() {
++        tx.commit().await.unwrap();
++    }
++    let synced: i64 = sqlx::query_scalar(
++        "SELECT count(*) FROM fvoci.tasks WHERE series_id = $1::uuid AND deleted_at IS NULL
++           AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
++    )
++    .bind(&series[1])
++    .fetch_one(&owner)
++    .await
++    .unwrap();
++    sqlx::query("SELECT pg_advisory_unlock(hashtextextended('fvoci-lane:' || $1 || ':done', 0))")
++        .bind(&items[0])
++        .execute(&mut *holder)
++        .await
++        .unwrap();
++    drop(holder);
++    owner.close().await;
++    eprintln!("W9DIAG probe need={need} spare={spare} ticked={ticked:?} synced={synced}");
++    assert!(ticked.is_ok(), "{ticked:?}");
++    assert!(synced >= 1, "the other item lost its occurrences");
++}
+diff --git a/xtask/src/test.rs b/xtask/src/test.rs
+index 30b7183..6bb03dd 100644
+--- a/xtask/src/test.rs
++++ b/xtask/src/test.rs
+@@ -13,6 +13,10 @@ use crate::compose::{self, Compose, DbUrls, Env};
+ use crate::supabase::Supabase;
+ 
+ fn run_tests(sh: &Shell, oidc: bool, s3: bool, supabase: bool) -> Result<()> {
++    if let Ok(script) = std::env::var("W9_REPEAT_SCRIPT") {
++        cmd!(sh, "bash {script}").run()?;
++        return Ok(());
++    }
+     let mut skip: Vec<&str> = Vec::new();
+     if !oidc {
+         skip.extend(["--skip", "oidc_"]);

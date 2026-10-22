@@ -1,0 +1,7 @@
+1792642430 die fvoci-d95-pr64-50fb65-test-meilisearch-1 exit=143
+1792642430 die fvoci-d95-pr64-50fb65-test-postgres-1 exit=0
+1792642430 die fvoci-d95-pr64-50fb65-test-seaweedfs-1 exit=0
+1792642521 die fvoci-w13-int6-207f0e-test-meilisearch-1 exit=143
+1792642522 die fvoci-w13-int6-207f0e-test-postgres-1 exit=0
+1792642522 die fvoci-w13-int6-207f0e-test-keycloak-1 exit=143
+1792642523 die fvoci-w13-int6-207f0e-test-seaweedfs-1 exit=0

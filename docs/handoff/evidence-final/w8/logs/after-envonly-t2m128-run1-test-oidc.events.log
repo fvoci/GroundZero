@@ -1,0 +1,7 @@
+1792637615 create fvoci-w8-meili-caea67-test-meilisearch-1 exitCode=<no value>
+1792637618 start fvoci-w8-meili-caea67-test-meilisearch-1 exitCode=<no value>
+1792637620 health_status: healthy fvoci-w8-meili-caea67-test-meilisearch-1 exitCode=<no value>
+1792637720 kill fvoci-w8-meili-caea67-test-meilisearch-1 exitCode=<no value>
+1792637720 stop fvoci-w8-meili-caea67-test-meilisearch-1 exitCode=<no value>
+1792637720 die fvoci-w8-meili-caea67-test-meilisearch-1 exitCode=143
+1792637720 destroy fvoci-w8-meili-caea67-test-meilisearch-1 exitCode=<no value>

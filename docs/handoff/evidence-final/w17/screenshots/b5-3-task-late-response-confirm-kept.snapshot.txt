@@ -1,0 +1,691 @@
+# b5-3-task-late-response-confirm-kept  2026-10-22T07:49:36Z  url=http://127.0.0.1:5173/w/01a16272-b731-71ab-a8b5-752c77728e6f/i/01a16272-b731-71ab-a8b5-75358179c7fd/t/01a16272-b731-71ab-a8b5-7642a43c4b51
+# viewport={
+  "result": "1280x770",
+  "origin": "http://127.0.0.1:5173/w/01a16272-b731-71ab-a8b5-752c77728e6f/i/01a16272-b731-71ab-a8b5-75358179c7fd/t/01a16272-b731-71ab-a8b5-7642a43c4b51"
+}
+- generic
+  - generic
+    - region "Notifications alt+T" [ref=e1]
+    - StaticText "fvoci"
+    - list
+      - listitem [level=1]
+        - button "Search Ctrl/⌘ K" [ref=e13]
+          - StaticText "Search"
+          - StaticText "Ctrl/⌘ K"
+    - generic
+      - generic
+        - StaticText "Personal"
+        - list
+          - listitem [level=1]
+            - link "Home" [ref=e59]
+              - StaticText "Home"
+          - listitem [level=1]
+            - link "Notifications" [ref=e60]
+              - StaticText "Notifications"
+          - listitem [level=1]
+            - link "My notes" [ref=e61]
+              - StaticText "My notes"
+          - listitem [level=1]
+            - link "Shared with me" [ref=e62]
+              - StaticText "Shared with me"
+          - listitem [level=1]
+            - link "My time" [ref=e63]
+              - StaticText "My time"
+          - listitem [level=1]
+            - link "My notes trash" [ref=e64]
+              - StaticText "My notes trash"
+          - listitem [level=1]
+            - link "My activity" [ref=e65]
+              - StaticText "My activity"
+      - separator
+      - generic
+        - StaticText "Workspaces"
+        - list
+          - listitem [level=1]
+            - button "Switch workspace: 모듈 예제 (합성 데이터)" [expanded=false, ref=e66]
+              - StaticText "모듈 예제 (합성 데이터)"
+        - list
+          - listitem [level=1]
+            - link "Wiki" [ref=e67]
+              - StaticText "Wiki"
+            - button "Expand Wiki" [expanded=false, ref=e68]
+        - list
+          - listitem [level=1]
+            - link "Calendar" [ref=e69]
+              - StaticText "Calendar"
+          - listitem [level=1]
+            - link "Members" [ref=e70]
+              - StaticText "Members"
+          - listitem [level=1]
+            - link "Trash" [ref=e71]
+              - StaticText "Trash"
+      - generic
+        - StaticText "Modules"
+        - list
+          - listitem [level=1]
+            - link "프로젝트 예제 DEVP" [ref=e72]
+              - StaticText "프로젝트 예제"
+              - StaticText "DEVP"
+          - listitem [level=1]
+            - link "연구 예제 DEVR" [ref=e73]
+              - StaticText "연구 예제"
+              - StaticText "DEVR"
+          - listitem [level=1]
+            - link "스터디 예제 DEVS" [ref=e74]
+              - StaticText "스터디 예제"
+              - StaticText "DEVS"
+          - listitem [level=1]
+            - link "강의 예제 DEVC" [ref=e75]
+              - StaticText "강의 예제"
+              - StaticText "DEVC"
+          - listitem [level=1]
+            - link "취미 예제 DEVH" [ref=e76]
+              - StaticText "취미 예제"
+              - StaticText "DEVH"
+    - list
+      - listitem [level=1]
+        - button "Account menu: Second User" [expanded=false, ref=e14]
+          - StaticText "Second User"
+    - button "Toggle sidebar" [ref=e6]
+    - main
+      - sectionheader
+        - button "Toggle sidebar" [ref=e10]
+          - StaticText "Toggle sidebar"
+        - StaticText "모듈 예제 (합성 데이터)"
+        - group "Timer"
+          - button "Start timer" [ref=e15]
+      - main
+        - navigation "Breadcrumb" [ref=e11]
+          - list
+            - listitem [level=1]
+              - link "모듈 예제 (합성 데이터)" [ref=e77]
+            - listitem [level=1]
+              - link "프로젝트 예제 · DEVP" [ref=e78]
+        - region "작은 출시 준비" [ref=e12]
+          - StaticText "DEVP-1"
+          - heading "작은 출시 준비" [level=1, ref=e16]
+          - StaticText "Private"
+          - group "Show on home"
+            - button "Pin to home" [ref=e28]
+            - button "Favorite" [ref=e29]
+          - navigation "Jump to a section of this item" [ref=e17]
+            - link "Tasks" [ref=e30]
+            - link "Details" [ref=e31]
+            - link "Records" [ref=e32]
+            - link "Time" [ref=e33]
+            - link "Attachments" [ref=e34]
+            - link "Documents" [ref=e35]
+            - link "Events" [ref=e36]
+          - form "Item details"
+            - LabelText
+              - StaticText "Title"
+            - textbox "Title" [ref=e37]: 작은 출시 준비
+              - StaticText "작은 출시 준비"
+            - LabelText
+              - StaticText "Description"
+            - textbox "Description" [ref=e38]: 수정·저장·새로고침 후 재조회하는 개발 예제
+              - StaticText "수정·저장·새로고침 후 재조회하는 개발 예제"
+            - button "Save" [ref=e39]
+          - region "Details" [ref=e18]
+            - heading "Details" [level=2, ref=e40]
+            - button "Edit" [ref=e41]
+            - paragraph
+            - DescriptionList
+              - term "Status"
+              - definition
+                - StaticText "Active"
+              - term "Period"
+              - definition
+                - StaticText "Oct 15, 2026 – Nov 5, 2026"
+              - term "Leader"
+              - definition
+                - StaticText "Test User"
+              - term "Goal"
+              - definition
+                - StaticText "대표 사용자 흐름을 점검한다"
+              - term "Scope"
+              - definition
+                - StaticText "모듈 연결과 저장 동작 확인"
+            - StaticText "Members"
+            - paragraph
+              - StaticText "Private items are visible only to the creator, admins, and the people and groups here (writers can edit, readers can view)."
+            - list "Members"
+              - listitem [level=1]
+                - StaticText "Second User"
+          - region "Records" [ref=e19]
+            - heading "Records" [level=2, ref=e42]
+            - group "Record types"
+              - button "Deliverable 1" [ref=e79]
+              - button "Risk 1" [ref=e80]
+              - button "Issue 1" [ref=e81]
+              - button "Retrospective 1" [ref=e82]
+            - paragraph
+            - button "New Deliverable" [ref=e83]
+            - list
+              - listitem [level=1]
+                - StaticText "검토 보고서"
+                - StaticText "Due date Oct 25, 2026"
+                - StaticText "Test User"
+                - DescriptionList
+                  - term "Status"
+                  - definition
+                    - StaticText "In progress"
+                  - term "Owner"
+                  - definition
+                    - StaticText "Test User"
+                  - term "Completion criteria"
+                  - definition
+                    - StaticText "대표 흐름 다섯 개를 재조회한다"
+                - paragraph
+                  - StaticText "개발용 합성 기록. 실제 자료가 아닙니다."
+                - button "Edit" [ref=e104]
+          - button "Copy" [ref=e43]
+          - button "Mark as template" [ref=e20]
+          - region "Time" [ref=e21]
+            - heading "Time" [level=2, ref=e44]
+            - paragraph
+              - StaticText "Task estimate 1 h 45 min · My total 0 min"
+            - paragraph
+              - StaticText "No time recorded for this item yet."
+            - button "Track time on this item (Work)" [ref=e45]
+          - region "Attachments" [ref=e22]
+            - heading "Attachments" [level=2, ref=e46]
+            - button "Upload files" [ref=e47]
+            - paragraph
+            - paragraph
+              - StaticText "No attachments."
+          - region "Documents" [ref=e23]
+            - heading "Documents" [level=2, ref=e48]
+            - tree "작은 출시 준비 documents"
+              - treeitem "DEVP-3 공동 작업 노트" [level=1, selected, ref=e84]
+                - link "DEVP-3 공동 작업 노트" [ref=e105]
+                  - StaticText "DEVP-3"
+                  - StaticText "공동 작업 노트"
+                - button "Actions for 공동 작업 노트" [expanded=false, ref=e106]
+                  - StaticText "⋯"
+            - paragraph
+              - StaticText "Keyboard: Alt+Up/Down to reorder, Alt+Right/Left to indent or outdent, Alt+Enter for a subdocument, Alt+M to search and move."
+            - paragraph
+            - form
+              - LabelText
+                - StaticText "New document title"
+              - textbox "New document title" [ref=e85]
+              - button "Create document" [ref=e86]
+          - region "Tasks" [ref=e24]
+            - heading "Tasks" [level=2, ref=e49]
+            - group "View"
+              - button "Board" [ref=e87]
+              - button "List" [ref=e88]
+              - button "Gantt" [ref=e89]
+              - button "Calendar" [ref=e90]
+            - search "Filter tasks"
+              - LabelText
+                - StaticText "Find"
+                - searchbox "Find" [ref=e107]
+              - LabelText
+                - StaticText "Status"
+                - combobox "Filter by status" [expanded=false, ref=e108]: All
+                  - MenuListPopup
+                    - option "All" [selected, ref=e242]
+                    - option "To do" [ref=e243]
+                    - option "In progress" [ref=e244]
+                    - option "Done" [ref=e245]
+              - LabelText
+                - StaticText "Assignee"
+                - combobox "Filter by assignee" [expanded=false, ref=e109]: All
+                  - MenuListPopup
+                    - option "All" [selected, ref=e246]
+                    - option "Assigned to me" [ref=e247]
+                    - option "Unassigned" [ref=e248]
+                    - option "Second User" [ref=e249]
+                    - option "Test User" [ref=e250]
+              - LabelText
+                - StaticText "Priority"
+                - combobox "Filter by priority" [expanded=false, ref=e110]: All
+                  - MenuListPopup
+                    - option "All" [selected, ref=e251]
+                    - option "Urgent" [ref=e252]
+                    - option "High" [ref=e253]
+                    - option "Medium" [ref=e254]
+                    - option "Low" [ref=e255]
+                    - option "None" [ref=e256]
+              - LabelText
+                - StaticText "Tag"
+                - textbox "Filter by tag" [ref=e111]
+              - LabelText
+                - StaticText "Due from"
+                - Date "Due date from"
+                  - generic
+                    - spinbutton "Month Month" [ref=e257]: 0
+                      - StaticText "mm"
+                    - StaticText "/"
+                    - spinbutton "Day Day" [ref=e258]: 0
+                      - StaticText "dd"
+                    - StaticText "/"
+                    - spinbutton "Year Year" [ref=e259]: 0
+                      - StaticText "yyyy"
+                  - button "Show date picker" [ref=e158]
+              - LabelText
+                - StaticText "To"
+                - Date "Due date to"
+                  - generic
+                    - spinbutton "Month Month" [ref=e260]: 0
+                      - StaticText "mm"
+                    - StaticText "/"
+                    - spinbutton "Day Day" [ref=e261]: 0
+                      - StaticText "dd"
+                    - StaticText "/"
+                    - spinbutton "Year Year" [ref=e262]: 0
+                      - StaticText "yyyy"
+                  - button "Show date picker" [ref=e159]
+              - LabelText
+                - StaticText "Sort"
+                - combobox "Sort" [expanded=false, ref=e112]: Default order
+                  - MenuListPopup
+                    - option "Default order" [selected, ref=e263]
+                    - option "Due date" [ref=e264]
+                    - option "Priority" [ref=e265]
+                    - option "Title" [ref=e266]
+                    - option "Recently updated" [ref=e267]
+            - LabelText
+              - StaticText "Saved views"
+              - combobox "Saved views" [expanded=false, ref=e91]: Choose
+                - MenuListPopup
+                  - option "Choose" [selected, ref=e160]
+            - LabelText
+              - StaticText "Name"
+              - textbox "View name" [ref=e92]
+            - button "Save current view" [ref=e50]
+            - paragraph
+              - StaticText "Column estimates add up the estimated time on the cards (subtask cards are added separately; time actually spent is not included)."
+            - region "To do column" [ref=e51]
+              - heading "To do 6" [level=3, ref=e93]
+                - StaticText "To do"
+                - StaticText "6"
+              - paragraph
+                - StaticText "Estimate 45 min · 5 without an estimate"
+              - list
+                - listitem [level=1]
+                  - button "DEVP-5 마일스톤: 검토 완료" [ref=e161]
+                    - StaticText "DEVP-5"
+                    - StaticText "마일스톤: 검토 완료"
+                  - button "Move 마일스톤: 검토 완료" [expanded=false, ref=e162]
+                    - StaticText "⋯"
+                  - StaticText "High"
+                  - StaticText "Due 2026-10-25"
+                  - StaticText "Test User"
+                - listitem [level=1]
+                  - button "DEVP-6 관계 예제: 하루 뒤 함께 시작" [ref=e163]
+                    - StaticText "DEVP-6"
+                    - StaticText "관계 예제: 하루 뒤 함께 시작"
+                  - button "Move 관계 예제: 하루 뒤 함께 시작" [expanded=false, ref=e164]
+                    - StaticText "⋯"
+                  - StaticText "Medium"
+                  - StaticText "Due 2026-10-25"
+                  - StaticText "Test User"
+                - listitem [level=1]
+                  - button "DEVP-7 관계 예제: 함께 마무리" [ref=e165]
+                    - StaticText "DEVP-7"
+                    - StaticText "관계 예제: 함께 마무리"
+                  - button "Move 관계 예제: 함께 마무리" [expanded=false, ref=e166]
+                    - StaticText "⋯"
+                  - StaticText "Low"
+                  - StaticText "Due 2026-10-24"
+                  - StaticText "Test User"
+                - listitem [level=1]
+                  - button "DEVP-8 관계 예제: 시작 전에 준비 끝" [ref=e167]
+                    - StaticText "DEVP-8"
+                    - StaticText "관계 예제: 시작 전에 준비 끝"
+                  - button "Move 관계 예제: 시작 전에 준비 끝" [expanded=false, ref=e168]
+                    - StaticText "⋯"
+                  - StaticText "Low"
+                  - StaticText "Due 2026-10-22"
+                  - StaticText "Test User"
+                - listitem [level=1]
+                  - button "DEVP-9 API 연결 점검 (A가 고친 제목)" [ref=e169]
+                    - StaticText "DEVP-9"
+                    - StaticText "API 연결 점검 (A가 고친 제목)"
+                  - button "Move API 연결 점검 (A가 고친 제목)" [expanded=false, ref=e170]
+                    - StaticText "⋯"
+                  - StaticText "High"
+                  - StaticText "Due 2026-10-26"
+                  - StaticText "☑ 1/1"
+                  - StaticText "Second User"
+                - listitem [level=1]
+                  - button "DEVP-10 문서 초안 검토" [ref=e171]
+                    - StaticText "DEVP-10"
+                    - StaticText "문서 초안 검토"
+                  - button "Move 문서 초안 검토" [expanded=false, ref=e172]
+                    - StaticText "⋯"
+                  - StaticText "Low"
+                  - StaticText "Due 2026-10-28"
+                  - StaticText "Test User"
+              - button "Add task" [ref=e94]
+            - region "In progress column" [ref=e52]
+              - heading "In progress 2" [level=3, ref=e95]
+                - StaticText "In progress"
+                - StaticText "2"
+              - paragraph
+                - StaticText "Estimate 45 min · 1 without an estimate"
+              - list
+                - listitem [level=1]
+                  - button "DEVP-2 대표 업무: 준비 사항 확인" [ref=e173]
+                    - StaticText "DEVP-2"
+                    - StaticText "대표 업무: 준비 사항 확인"
+                  - button "Move 대표 업무: 준비 사항 확인" [expanded=false, ref=e174]
+                    - StaticText "⋯"
+                  - StaticText "Medium"
+                  - StaticText "Due 2026-10-24"
+                  - StaticText "☑ 1/2"
+                  - StaticText "Second User, Test User"
+                - listitem [level=1]
+                  - button "DEVP-11 배포 체크리스트 확인" [ref=e175]
+                    - StaticText "DEVP-11"
+                    - StaticText "배포 체크리스트 확인"
+                  - button "Move 배포 체크리스트 확인" [expanded=false, ref=e176]
+                    - StaticText "⋯"
+                  - StaticText "Urgent"
+                  - StaticText "Due 2026-10-23"
+                  - StaticText "Test User"
+              - button "Add task" [ref=e96]
+            - region "Done column" [ref=e53]
+              - heading "Done 2" [level=3, ref=e97]
+                - StaticText "Done"
+                - StaticText "2"
+              - paragraph
+                - StaticText "Estimate 15 min · 1 without an estimate"
+              - list
+                - listitem [level=1]
+                  - button "DEVP-4 하위 업무: 검토 목록 작성" [ref=e177]
+                    - StaticText "DEVP-4"
+                    - StaticText "하위 업무: 검토 목록 작성"
+                  - button "Move 하위 업무: 검토 목록 작성" [expanded=false, ref=e178]
+                    - StaticText "⋯"
+                  - StaticText "↳ 대표 업무: 준비 사항 확인"
+                  - StaticText "Low"
+                  - StaticText "Due 2026-10-22"
+                  - StaticText "Test User"
+                - listitem [level=1]
+                  - button "DEVP-12 회고 일정 잡기" [ref=e179]
+                    - StaticText "DEVP-12"
+                    - StaticText "회고 일정 잡기"
+                  - button "Move 회고 일정 잡기" [expanded=false, ref=e180]
+                    - StaticText "⋯"
+                  - StaticText "Test User"
+              - button "Add task" [ref=e98]
+            - paragraph
+              - StaticText "Drag a card to change its column or order (on touch screens, drag the ⠿ handle). On a card, press Enter to open it, Alt+Left/Right to change its column and Alt+Up/Down to reorder it."
+            - form
+              - LabelText
+                - StaticText "New task title"
+              - textbox "New task title" [ref=e99]
+              - button "Create task" [ref=e100]
+            - group
+              - DisclosureTriangle "Import tasks from CSV" [expanded=false]
+                - StaticText "Import tasks from CSV"
+            - paragraph
+          - region "Events" [ref=e25]
+            - heading "Events" [level=2, ref=e54]
+            - button "Add event" [ref=e55]
+            - list
+              - listitem [level=1]
+                - button "Meeting 예제 점검 모임 Oct 23, 2026, all day" [ref=e113]
+                  - StaticText "Meeting"
+                  - StaticText "예제 점검 모임"
+                  - StaticText "Oct 23, 2026, all day"
+              - listitem [level=1]
+                - button "Meeting W17 DST 일정 (A 제목) Nov 1, 2026 2:20 PM–3:30 PM (Nov 1, 2026 1:20 AM in America/New_York)" [ref=e114]
+                  - StaticText "Meeting"
+                  - StaticText "W17 DST 일정 (A 제목)"
+                  - StaticText "Nov 1, 2026 2:20 PM–3:30 PM (Nov 1, 2026 1:20 AM in America/New_York)"
+          - region "Calendar · October 2026" [ref=e26]
+            - heading "Calendar · October 2026" [level=2, ref=e56]
+            - button "New task" [ref=e57]
+            - group "Month navigation"
+              - button "← Previous" [ref=e101]
+              - button "This month" [ref=e102]
+              - button "Next →" [ref=e103]
+            - paragraph
+              - StaticText "Shows due dates of tasks you can see (◆ milestones), events, watch and study plan dates, submission and due dates. \"(my plan)\" dates are only visible to you. Times are in Asia/Seoul."
+            - table "October 2026 calendar"
+              - caption
+                - StaticText "October 2026 calendar"
+              - rowgroup
+                - row
+                  - columnheader "Sun" [ref=e181]
+                  - columnheader "Mon" [ref=e182]
+                  - columnheader "Tue" [ref=e183]
+                  - columnheader "Wed" [ref=e184]
+                  - columnheader "Thu" [ref=e185]
+                  - columnheader "Fri" [ref=e186]
+                  - columnheader "Sat" [ref=e187]
+              - row
+                - cell "Sep 27, 2026 New task on Sep 27, 2026" [ref=e115]
+                  - StaticText "Sep 27, 2026"
+                  - button "New task on Sep 27, 2026" [ref=e188]
+                    - StaticText "+"
+                - cell "Sep 28, 2026 New task on Sep 28, 2026" [ref=e116]
+                  - StaticText "Sep 28, 2026"
+                  - button "New task on Sep 28, 2026" [ref=e189]
+                    - StaticText "+"
+                - cell "Sep 29, 2026 New task on Sep 29, 2026" [ref=e117]
+                  - StaticText "Sep 29, 2026"
+                  - button "New task on Sep 29, 2026" [ref=e190]
+                    - StaticText "+"
+                - cell "Sep 30, 2026 New task on Sep 30, 2026" [ref=e118]
+                  - StaticText "Sep 30, 2026"
+                  - button "New task on Sep 30, 2026" [ref=e191]
+                    - StaticText "+"
+                - cell "Oct 1, 2026 New task on Oct 1, 2026" [ref=e119]
+                  - StaticText "Oct 1, 2026"
+                  - button "New task on Oct 1, 2026" [ref=e192]
+                    - StaticText "+"
+                - cell "Oct 2, 2026 New task on Oct 2, 2026" [ref=e120]
+                  - StaticText "Oct 2, 2026"
+                  - button "New task on Oct 2, 2026" [ref=e193]
+                    - StaticText "+"
+                - cell "Oct 3, 2026 New task on Oct 3, 2026" [ref=e121]
+                  - StaticText "Oct 3, 2026"
+                  - button "New task on Oct 3, 2026" [ref=e194]
+                    - StaticText "+"
+              - row
+                - cell "Oct 4, 2026 New task on Oct 4, 2026" [ref=e122]
+                  - StaticText "Oct 4, 2026"
+                  - button "New task on Oct 4, 2026" [ref=e195]
+                    - StaticText "+"
+                - cell "Oct 5, 2026 New task on Oct 5, 2026" [ref=e123]
+                  - StaticText "Oct 5, 2026"
+                  - button "New task on Oct 5, 2026" [ref=e196]
+                    - StaticText "+"
+                - cell "Oct 6, 2026 New task on Oct 6, 2026" [ref=e124]
+                  - StaticText "Oct 6, 2026"
+                  - button "New task on Oct 6, 2026" [ref=e197]
+                    - StaticText "+"
+                - cell "Oct 7, 2026 New task on Oct 7, 2026" [ref=e125]
+                  - StaticText "Oct 7, 2026"
+                  - button "New task on Oct 7, 2026" [ref=e198]
+                    - StaticText "+"
+                - cell "Oct 8, 2026 New task on Oct 8, 2026" [ref=e126]
+                  - StaticText "Oct 8, 2026"
+                  - button "New task on Oct 8, 2026" [ref=e199]
+                    - StaticText "+"
+                - cell "Oct 9, 2026 New task on Oct 9, 2026" [ref=e127]
+                  - StaticText "Oct 9, 2026"
+                  - button "New task on Oct 9, 2026" [ref=e200]
+                    - StaticText "+"
+                - cell "Oct 10, 2026 New task on Oct 10, 2026" [ref=e128]
+                  - StaticText "Oct 10, 2026"
+                  - button "New task on Oct 10, 2026" [ref=e201]
+                    - StaticText "+"
+              - row
+                - cell "Oct 11, 2026 New task on Oct 11, 2026" [ref=e129]
+                  - StaticText "Oct 11, 2026"
+                  - button "New task on Oct 11, 2026" [ref=e202]
+                    - StaticText "+"
+                - cell "Oct 12, 2026 New task on Oct 12, 2026" [ref=e130]
+                  - StaticText "Oct 12, 2026"
+                  - button "New task on Oct 12, 2026" [ref=e203]
+                    - StaticText "+"
+                - cell "Oct 13, 2026 New task on Oct 13, 2026" [ref=e131]
+                  - StaticText "Oct 13, 2026"
+                  - button "New task on Oct 13, 2026" [ref=e204]
+                    - StaticText "+"
+                - cell "Oct 14, 2026 New task on Oct 14, 2026" [ref=e132]
+                  - StaticText "Oct 14, 2026"
+                  - button "New task on Oct 14, 2026" [ref=e205]
+                    - StaticText "+"
+                - cell "Oct 15, 2026 New task on Oct 15, 2026" [ref=e133]
+                  - StaticText "Oct 15, 2026"
+                  - button "New task on Oct 15, 2026" [ref=e206]
+                    - StaticText "+"
+                - cell "Oct 16, 2026 New task on Oct 16, 2026" [ref=e134]
+                  - StaticText "Oct 16, 2026"
+                  - button "New task on Oct 16, 2026" [ref=e207]
+                    - StaticText "+"
+                - cell "Oct 17, 2026 New task on Oct 17, 2026" [ref=e135]
+                  - StaticText "Oct 17, 2026"
+                  - button "New task on Oct 17, 2026" [ref=e208]
+                    - StaticText "+"
+              - row
+                - cell "Oct 18, 2026 New task on Oct 18, 2026" [ref=e136]
+                  - StaticText "Oct 18, 2026"
+                  - button "New task on Oct 18, 2026" [ref=e209]
+                    - StaticText "+"
+                - cell "Oct 19, 2026 New task on Oct 19, 2026" [ref=e137]
+                  - StaticText "Oct 19, 2026"
+                  - button "New task on Oct 19, 2026" [ref=e210]
+                    - StaticText "+"
+                - cell "Oct 20, 2026 New task on Oct 20, 2026" [ref=e138]
+                  - StaticText "Oct 20, 2026"
+                  - button "New task on Oct 20, 2026" [ref=e211]
+                    - StaticText "+"
+                - cell "Oct 21, 2026 New task on Oct 21, 2026" [ref=e139]
+                  - StaticText "Oct 21, 2026"
+                  - button "New task on Oct 21, 2026" [ref=e212]
+                    - StaticText "+"
+                - cell "Oct 22, 2026 (today) New task on Oct 22, 2026 Due DEVP-8 관계 예제: 시작 전에 준비 끝, 작은 출시 준비 Due DEVP-4 하위 업무: 검토 목록 작성, 작은 출시 준비, done" [ref=e140]
+                  - StaticText "Oct 22, 2026 (today)"
+                  - button "New task on Oct 22, 2026" [ref=e213]
+                    - StaticText "+"
+                  - button "Due DEVP-8 관계 예제: 시작 전에 준비 끝, 작은 출시 준비" [ref=e214]
+                    - StaticText "Due DEVP-8 관계 예제: 시작 전에 준비 끝"
+                  - button "Due DEVP-4 하위 업무: 검토 목록 작성, 작은 출시 준비, done" [ref=e215]
+                    - StaticText "Due DEVP-4 하위 업무: 검토 목록 작성"
+                - cell "Oct 23, 2026 New task on Oct 23, 2026 All day 예제 점검 모임, 작은 출시 준비 Due DEVP-11 배포 체크리스트 확인, 작은 출시 준비" [ref=e141]
+                  - StaticText "Oct 23, 2026"
+                  - button "New task on Oct 23, 2026" [ref=e216]
+                    - StaticText "+"
+                  - button "All day 예제 점검 모임, 작은 출시 준비" [ref=e217]
+                    - StaticText "All day 예제 점검 모임"
+                  - button "Due DEVP-11 배포 체크리스트 확인, 작은 출시 준비" [ref=e218]
+                    - StaticText "Due DEVP-11 배포 체크리스트 확인"
+                - cell "Oct 24, 2026 New task on Oct 24, 2026 Due DEVP-2 대표 업무: 준비 사항 확인, 작은 출시 준비 Due DEVP-7 관계 예제: 함께 마무리, 작은 출시 준비" [ref=e142]
+                  - StaticText "Oct 24, 2026"
+                  - button "New task on Oct 24, 2026" [ref=e219]
+                    - StaticText "+"
+                  - button "Due DEVP-2 대표 업무: 준비 사항 확인, 작은 출시 준비" [ref=e220]
+                    - StaticText "Due DEVP-2 대표 업무: 준비 사항 확인"
+                  - button "Due DEVP-7 관계 예제: 함께 마무리, 작은 출시 준비" [ref=e221]
+                    - StaticText "Due DEVP-7 관계 예제: 함께 마무리"
+              - row
+                - cell "Oct 25, 2026 New task on Oct 25, 2026 Due DEVP-6 관계 예제: 하루 뒤 함께 시작, 작은 출시 준비 ◆ DEVP-5 마일스톤: 검토 완료, 작은 출시 준비 Deliverable due 검토 보고서, 작은 출시 준비" [ref=e143]
+                  - StaticText "Oct 25, 2026"
+                  - button "New task on Oct 25, 2026" [ref=e222]
+                    - StaticText "+"
+                  - button "Due DEVP-6 관계 예제: 하루 뒤 함께 시작, 작은 출시 준비" [ref=e223]
+                    - StaticText "Due DEVP-6 관계 예제: 하루 뒤 함께 시작"
+                  - button "◆ DEVP-5 마일스톤: 검토 완료, 작은 출시 준비" [ref=e224]
+                    - StaticText "◆ DEVP-5 마일스톤: 검토 완료"
+                  - button "Deliverable due 검토 보고서, 작은 출시 준비" [ref=e225]
+                    - StaticText "Deliverable due 검토 보고서"
+                - cell "Oct 26, 2026 New task on Oct 26, 2026 Due DEVP-9 API 연결 점검 (A가 고친 제목), 작은 출시 준비" [ref=e144]
+                  - StaticText "Oct 26, 2026"
+                  - button "New task on Oct 26, 2026" [ref=e226]
+                    - StaticText "+"
+                  - button "Due DEVP-9 API 연결 점검 (A가 고친 제목), 작은 출시 준비" [ref=e227]
+                    - StaticText "Due DEVP-9 API 연결 점검 (A가 고친 제목)"
+                - cell "Oct 27, 2026 New task on Oct 27, 2026" [ref=e145]
+                  - StaticText "Oct 27, 2026"
+                  - button "New task on Oct 27, 2026" [ref=e228]
+                    - StaticText "+"
+                - cell "Oct 28, 2026 New task on Oct 28, 2026 Due DEVP-10 문서 초안 검토, 작은 출시 준비" [ref=e146]
+                  - StaticText "Oct 28, 2026"
+                  - button "New task on Oct 28, 2026" [ref=e229]
+                    - StaticText "+"
+                  - button "Due DEVP-10 문서 초안 검토, 작은 출시 준비" [ref=e230]
+                    - StaticText "Due DEVP-10 문서 초안 검토"
+                - cell "Oct 29, 2026 New task on Oct 29, 2026" [ref=e147]
+                  - StaticText "Oct 29, 2026"
+                  - button "New task on Oct 29, 2026" [ref=e231]
+                    - StaticText "+"
+                - cell "Oct 30, 2026 New task on Oct 30, 2026" [ref=e148]
+                  - StaticText "Oct 30, 2026"
+                  - button "New task on Oct 30, 2026" [ref=e232]
+                    - StaticText "+"
+                - cell "Oct 31, 2026 New task on Oct 31, 2026" [ref=e149]
+                  - StaticText "Oct 31, 2026"
+                  - button "New task on Oct 31, 2026" [ref=e233]
+                    - StaticText "+"
+              - row
+                - cell "Nov 1, 2026 New task on Nov 1, 2026 2:20 PM W17 DST 일정 (A 제목), 작은 출시 준비" [ref=e150]
+                  - StaticText "Nov 1, 2026"
+                  - button "New task on Nov 1, 2026" [ref=e234]
+                    - StaticText "+"
+                  - button "2:20 PM W17 DST 일정 (A 제목), 작은 출시 준비" [ref=e235]
+                    - StaticText "2:20 PM W17 DST 일정 (A 제목)"
+                - cell "Nov 2, 2026 New task on Nov 2, 2026" [ref=e151]
+                  - StaticText "Nov 2, 2026"
+                  - button "New task on Nov 2, 2026" [ref=e236]
+                    - StaticText "+"
+                - cell "Nov 3, 2026 New task on Nov 3, 2026" [ref=e152]
+                  - StaticText "Nov 3, 2026"
+                  - button "New task on Nov 3, 2026" [ref=e237]
+                    - StaticText "+"
+                - cell "Nov 4, 2026 New task on Nov 4, 2026" [ref=e153]
+                  - StaticText "Nov 4, 2026"
+                  - button "New task on Nov 4, 2026" [ref=e238]
+                    - StaticText "+"
+                - cell "Nov 5, 2026 New task on Nov 5, 2026" [ref=e154]
+                  - StaticText "Nov 5, 2026"
+                  - button "New task on Nov 5, 2026" [ref=e239]
+                    - StaticText "+"
+                - cell "Nov 6, 2026 New task on Nov 6, 2026" [ref=e155]
+                  - StaticText "Nov 6, 2026"
+                  - button "New task on Nov 6, 2026" [ref=e240]
+                    - StaticText "+"
+                - cell "Nov 7, 2026 New task on Nov 7, 2026" [ref=e156]
+                  - StaticText "Nov 7, 2026"
+                  - button "New task on Nov 7, 2026" [ref=e241]
+                    - StaticText "+"
+          - region "Documents linking here" [ref=e27]
+            - heading "Documents linking here" [level=2, ref=e58]
+            - list
+              - listitem [level=1]
+                - link "WIKI-2 설치" [ref=e157]
+                  - StaticText "WIKI-2"
+                  - StaticText "설치"
+  - dialog "API 연결 점검 (A가 고친 제목)"
+    - heading "API 연결 점검 (A가 고친 제목)" [level=2, ref=e2]
+    - StaticText "Edit the task's status, assignees, dates and checklist."
+    - alert
+      - StaticText "Someone else changed this task in the meantime (now titled “API 연결 점검 (A가 고친 제목)”, status: To do). Your input is kept."
+    - button "Load their version" [ref=e3]
+    - button "Save mine again" [disabled, ref=e4]
+    - alertdialog "Someone else also changed some of these fields"
+      - heading "Someone else also changed some of these fields" [level=3, ref=e7]
+      - paragraph
+        - StaticText "You and someone else changed the fields below to different values (start date, due date and milestone count as one schedule). Overwriting saves your value in these fields; fields you did not edit keep the latest server values."
+      - list
+        - listitem [level=1]
+          - StaticText "Description"
+          - DescriptionList
+            - term "Server now"
+            - definition
+              - StaticText "A 늦은 응답 설명 2"
+            - term "Yours"
+            - definition
+              - StaticText "B 늦은 응답 설명"
+      - button "Overwrite with mine and save" [ref=e8]
+      - button "Cancel" [ref=e9]
+    - button "Close" [ref=e5]
+      - StaticText "Close"

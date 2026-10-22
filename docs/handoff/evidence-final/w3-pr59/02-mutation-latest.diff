@@ -1,0 +1,7 @@
+diff --git a/apps/web/src/lib/features/events/EventDialog.svelte b/apps/web/src/lib/features/events/EventDialog.svelte
+index 859a463..9b66456 100644
+--- a/apps/web/src/lib/features/events/EventDialog.svelte
++++ b/apps/web/src/lib/features/events/EventDialog.svelte
+@@ -104 +104 @@
+-      : event !== undefined && event.version > conflict.current.version
++      : event !== undefined && event.version > conflict.current.version && false

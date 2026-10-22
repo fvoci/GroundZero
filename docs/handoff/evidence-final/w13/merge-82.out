@@ -1,0 +1,15 @@
+Auto-merging apps/web/messages/tasks/en.json
+Auto-merging apps/web/messages/tasks/ko.json
+Auto-merging apps/web/src/lib/features/tasks/TaskDetail.svelte
+Merge made by the 'ort' strategy.
+ apps/web/messages/tasks/en.json                    |   11 +
+ apps/web/messages/tasks/ko.json                    |   11 +
+ .../web/src/lib/features/tasks/ClashConfirm.svelte |  102 ++
+ apps/web/src/lib/features/tasks/TaskDetail.svelte  | 1061 ++++++++++++--------
+ apps/web/src/lib/features/tasks/form.ts            |  156 ++-
+ apps/web/src/lib/features/tasks/labels.ts          |  125 ++-
+ .../component/task-conflict-save-mine.test.ts      | 1002 ++++++++++++++++++
+ apps/web/tests/component/task-form-merge.test.ts   |  270 +++++
+ 8 files changed, 2249 insertions(+), 489 deletions(-)
+ create mode 100644 apps/web/src/lib/features/tasks/ClashConfirm.svelte
+ create mode 100644 apps/web/tests/component/task-conflict-save-mine.test.ts

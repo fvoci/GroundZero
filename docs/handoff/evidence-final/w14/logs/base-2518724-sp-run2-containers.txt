@@ -1,0 +1,1 @@
+db=fvoci-w14-base-48f16f-supabase-db-1 supavisor=fvoci-w14-base-48f16f-supabase-supavisor-1

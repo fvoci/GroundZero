@@ -1,0 +1,3 @@
+apps/web/messages/common/en.json cb9b13dde473e4eb0241e34ab98ab6adc2cda9af c034c5c7642efe0109d8a62a4a7f055b332c0cf1
+apps/web/messages/common/ko.json a037159c02ebbb4079da5494879a5f3b91292482 cdd69ad65e0c2a4d9635c7797f13ba5c9a32097a
+apps/web/src/lib/features/documents/DocumentEditor.svelte 65ecd2dd5d43b894adca1474ecd9332155e1b933 8c94bfc80dbdfd54d01f8e5ff494138aa90db961

@@ -1,0 +1,6 @@
+1792642852 die fvoci-w13-int6-207f0e-supabase-rest-1 exit=255
+1792642853 die fvoci-w13-int6-207f0e-supabase-supavisor-1 exit=143
+1792642854 die fvoci-w13-int6-207f0e-supabase-db-1 exit=0
+1792642855 die fvoci-w13-int6-207f0e-test-meilisearch-1 exit=143
+1792642855 die fvoci-w13-int6-207f0e-test-keycloak-1 exit=143
+1792642857 die fvoci-w13-int6-207f0e-test-seaweedfs-1 exit=0

@@ -1,0 +1,30 @@
+From 5e188f935c0ea85130f2b5bc71c0f5fee54bdd7a Mon Sep 17 00:00:00 2001
+From: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 13:01:33 +0900
+Subject: [PATCH] test(web): drop predecessor_ids from the CSV import task
+ fixture
+
+For the #56 update commit (after #62 is merged): #62 (D-92) removes
+TaskDetailView.predecessor_ids.
+Integration rehearsal W13; not pushed to any PR branch.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ apps/web/tests/component/task-csv-import.test.ts | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/apps/web/tests/component/task-csv-import.test.ts b/apps/web/tests/component/task-csv-import.test.ts
+index d1da4e5..5ef795f 100644
+--- a/apps/web/tests/component/task-csv-import.test.ts
++++ b/apps/web/tests/component/task-csv-import.test.ts
+@@ -27,7 +27,6 @@ function detail(id: string, title: string, version: number): TaskDetailView {
+     estimate_minutes: null,
+     tags: [],
+     milestone: false,
+-    predecessor_ids: [],
+     predecessors: [],
+     series: null,
+     occurrence_date: null,
+-- 
+2.53.0
+

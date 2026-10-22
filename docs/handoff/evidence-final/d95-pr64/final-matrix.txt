@@ -1,0 +1,3 @@
+--oidc EXIT=1
+--supabase --oidc EXIT=1
+--supabase --session-pooler --oidc EXIT=1

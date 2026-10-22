@@ -1,0 +1,46 @@
+Auto-merging apps/web/src/lib/api/client.ts
+Auto-merging apps/web/tests/component/calendar-task-create.test.ts
+Auto-merging contracts/openapi.json
+Auto-merging docs/development.md
+Auto-merging packages/api-client/src/generated/schema.ts
+Merge made by the 'ort' strategy.
+ .agents/skills/svelte-ui/SKILL.md                  |  2 +-
+ .env.example                                       |  2 +-
+ apps/web/messages/app/en.json                      |  4 --
+ apps/web/messages/app/ko.json                      |  4 --
+ apps/web/src/lib/api/client.ts                     | 12 +---
+ apps/web/src/lib/display.ts                        |  5 --
+ .../src/lib/features/health/HealthStatus.svelte    | 44 -------------
+ apps/web/src/lib/features/tasks/TaskDetail.svelte  |  4 +-
+ apps/web/src/lib/features/tasks/gantt.ts           | 11 ++--
+ .../tests/component/calendar-task-create.test.ts   |  1 -
+ apps/web/tests/component/gantt-clipped-end.test.ts |  1 -
+ apps/web/tests/component/gantt-links-board.test.ts |  1 -
+ apps/web/tests/component/gantt-links.test.ts       | 28 +++++----
+ apps/web/tests/component/gantt-reschedule.test.ts  |  1 -
+ apps/web/tests/component/gantt-weeks.test.ts       |  1 -
+ .../{HealthStatus.test.ts => health.test.ts}       | 27 +-------
+ apps/web/tests/component/link-conflict.test.ts     |  1 -
+ apps/web/tests/component/task-detail-links.test.ts |  2 -
+ .../tests/component/task-dialog-history.test.ts    |  1 -
+ apps/web/tests/component/task-filters.test.ts      |  1 -
+ .../web/tests/component/task-lane-estimate.test.ts |  1 -
+ apps/web/tests/component/task-move-menu.test.ts    |  1 -
+ apps/web/tests/component/task-move-sync.test.ts    |  1 -
+ apps/web/tests/component/task-move-undo.test.ts    |  1 -
+ contracts/openapi.json                             | 73 ----------------------
+ .../0087_drop_replaced_time_zone_setter.sql        |  6 ++
+ crates/server/src/features/schedule.rs             | 15 -----
+ crates/server/src/features/tasks.rs                |  4 --
+ crates/server/src/http/mod.rs                      |  2 -
+ crates/server/src/logging.rs                       | 17 ++---
+ crates/server/tests/item_profile.rs                |  4 +-
+ crates/server/tests/schedule.rs                    | 19 +++---
+ docs/decisions.md                                  |  6 +-
+ docs/development.md                                |  6 +-
+ packages/api-client/src/generated/schema.ts        | 63 -------------------
+ packages/api-client/src/index.ts                   |  7 ---
+ 36 files changed, 59 insertions(+), 320 deletions(-)
+ delete mode 100644 apps/web/src/lib/features/health/HealthStatus.svelte
+ rename apps/web/tests/component/{HealthStatus.test.ts => health.test.ts} (69%)
+ create mode 100644 crates/server/migrations/0087_drop_replaced_time_zone_setter.sql

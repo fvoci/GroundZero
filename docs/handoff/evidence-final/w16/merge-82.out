@@ -1,0 +1,9 @@
+Auto-merging apps/web/messages/common/en.json
+CONFLICT (content): Merge conflict in apps/web/messages/common/en.json
+Auto-merging apps/web/messages/common/ko.json
+CONFLICT (content): Merge conflict in apps/web/messages/common/ko.json
+Auto-merging apps/web/messages/tasks/en.json
+Auto-merging apps/web/messages/tasks/ko.json
+Auto-merging apps/web/src/lib/features/tasks/TaskBoard.svelte
+Auto-merging apps/web/src/lib/features/tasks/TaskDetail.svelte
+Automatic merge failed; fix conflicts and then commit the result.

@@ -1,0 +1,15 @@
+
+ RUN  v5.0.5 <worktree>/apps/web
+
+Not implemented: Window's scrollBy() method
+Not implemented: Window's scrollBy() method
+Not implemented: Window's scrollBy() method
+
+ Test Files  86 passed (86)
+      Tests  453 passed (453)
+   Start at  14:43:53
+   Duration  21.75s (transform 60%, import 15%, environment 14%, tests 8%, setup 2%)
+
+    Isolate  86 workers spawned · ~1.14s startup each (spawn + environment, per file)
+             at least ~2.02s faster with isolate: false — reuses workers across files instead of one per file
+

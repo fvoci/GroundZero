@@ -1,0 +1,7 @@
+hint: clicked at 633 344 | focus-after-click: active=DIV "Someone else also changed some of these fields | after Esc: taskDialogOpen=true confirmOpen=false desc=B 설명 focus=task-save-mine
+label: clicked at 633 397 | focus-after-click: active=DIV "Someone else also changed some of these fields | after Esc: taskDialogOpen=true confirmOpen=false desc=B 설명 focus=task-save-mine
+term: clicked at 463 424 | focus-after-click: active=DIV "Someone else also changed some of these fields | after Esc: taskDialogOpen=true confirmOpen=false desc=B 설명 focus=task-save-mine
+valuebox-server: clicked at 463 452 | focus-after-click: active=DIV "Someone else also changed some of these fields | after Esc: taskDialogOpen=true confirmOpen=false desc=B 설명 focus=task-save-mine
+valuebox-mine: clicked at 802 452 | focus-after-click: active=DIV "Someone else also changed some of these fields | after Esc: taskDialogOpen=true confirmOpen=false desc=B 설명 focus=task-save-mine
+
+[exited with code 0]

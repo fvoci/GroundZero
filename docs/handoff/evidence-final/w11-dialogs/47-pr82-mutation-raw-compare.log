@@ -1,0 +1,62 @@
+
+ RUN  v5.0.5 <worktree>/apps/web
+
+stderr | tests/component/task-dialog-discard.test.ts
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+stderr | tests/component/task-dialog-discard.test.ts
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+stderr | tests/component/task-dialog-discard.test.ts
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+stderr | tests/component/task-dialog-discard.test.ts
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+stderr | tests/component/task-dialog-discard.test.ts
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+stderr | tests/component/task-dialog-discard.test.ts
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+stderr | tests/component/task-dialog-discard.test.ts
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+ ❯ tests/component/task-dialog-discard.test.ts (13 tests | 1 failed) 2033ms
+   ❯ closing the task dialog with unsaved input (13)
+     × does not count what the server would store the same as a change 151ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/task-dialog-discard.test.ts > closing the task dialog with unsaved input > does not count what the server would store the same as a change
+AssertionError: expected "back" to be called 1 times, but got 0 times
+ ❯ tests/component/task-dialog-discard.test.ts:171:18
+    169|     field('task-title').focus();
+    170|     await escape();
+    171|     expect(back).toHaveBeenCalledTimes(1);
+       |                  ^
+    172|   });
+    173|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 passed (13)
+   Start at  13:29:43
+   Duration  6.59s (transform 44%, tests 31%, import 16%, environment 8%, setup 1%)
+

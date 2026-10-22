@@ -1,0 +1,15 @@
+Auto-merging apps/web/messages/documents/en.json
+Auto-merging apps/web/messages/documents/ko.json
+Auto-merging apps/web/src/lib/api/client.ts
+Auto-merging apps/web/src/lib/features/documents/LiveDocumentEditor.svelte
+CONFLICT (content): Merge conflict in apps/web/src/lib/features/documents/LiveDocumentEditor.svelte
+Auto-merging apps/web/src/lib/features/documents/RevisionHistory.svelte
+Auto-merging contracts/openapi.json
+Auto-merging crates/server/src/collab/room.rs
+Auto-merging crates/server/src/features/documents.rs
+Auto-merging crates/server/src/http/mod.rs
+CONFLICT (content): Merge conflict in crates/server/src/http/mod.rs
+Auto-merging crates/server/tests/collab.rs
+Auto-merging docs/development.md
+Auto-merging packages/api-client/src/generated/schema.ts
+Automatic merge failed; fix conflicts and then commit the result.

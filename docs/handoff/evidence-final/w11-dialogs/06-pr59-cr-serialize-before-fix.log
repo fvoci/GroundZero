@@ -1,0 +1,34 @@
+
+ RUN  v5.0.5 <worktree>/apps/web
+
+ ❯ tests/component/event-dialog-discard.test.ts (16 tests | 1 failed | 15 skipped) 235ms
+   ❯ closing the event dialog with unsaved input (16)
+     × locks the rule editor while the event saves and the event fields while the rule saves 233ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > locks the rule editor while the event saves and the event fields while the rule saves
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/component/event-dialog-discard.test.ts:353:46
+    351|     await typeTitle('새 회의');
+    352|     await fireEvent.submit(eventForm());
+    353|     expect(frequency().matches(':disabled')).toBe(true);
+       |                                              ^
+    354|     expect(ruleSave().matches(':disabled')).toBe(true);
+    355|     lateEvent.resolve({ kind: 'updated', event: ev('A', { title: '새 회의…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 skipped (16)
+   Start at  14:18:57
+   Duration  4.93s (transform 61%, import 21%, environment 11%, tests 5%, setup 2%)
+

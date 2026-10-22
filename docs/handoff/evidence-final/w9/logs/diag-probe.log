@@ -1,0 +1,48 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running tests/recurrence.rs (target/debug/deps/recurrence-9f8d851d1e21ae5d)
+
+running 1 test
+test w9_probe_bound_growth_between_ids_and_tick ... FAILED
+
+successes:
+
+successes:
+
+failures:
+
+---- w9_probe_bound_growth_between_ids_and_tick stdout ----
+2026-10-22T03:05:14.292113Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e70e-7227-9b93-d64d4a2fcf7a method=POST route="/api/workspaces" status_code=201 duration_ms=37.511
+2026-10-22T03:05:14.309021Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e737-727f-a6a2-cb60c2669b85 method=POST route="/api/workspaces/{workspace_id}/modules" status_code=201 duration_ms=13.2
+2026-10-22T03:05:14.319229Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e745-75b0-a7fb-4870acaed498 method=POST route="/api/modules/{module_id}/items" status_code=201 duration_ms=9.979
+2026-10-22T03:05:14.329693Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e74f-76e6-874b-b12009bbadde method=PUT route="/api/items/{item_id}" status_code=200 duration_ms=10.268
+2026-10-22T03:05:14.345167Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e759-75d0-abe4-63b36b44d9c9 method=POST route="/api/items/{item_id}/tasks" status_code=201 duration_ms=15.246
+2026-10-22T03:05:14.358376Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e769-70de-82e1-757899622960 method=PUT route="/api/tasks/{task_id}" status_code=200 duration_ms=12.971
+2026-10-22T03:05:14.364787Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e776-712e-8731-e4c312d42796 method=POST route="/api/workspaces/{workspace_id}/modules" status_code=201 duration_ms=6.185
+2026-10-22T03:05:14.371493Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e77c-7668-be6e-e020e1af7bcb method=POST route="/api/modules/{module_id}/items" status_code=201 duration_ms=6.51
+2026-10-22T03:05:14.378529Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e783-76b6-8706-8b54c00d467b method=PUT route="/api/items/{item_id}" status_code=200 duration_ms=6.844
+2026-10-22T03:05:14.387553Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e78a-7043-bcd6-37406f9a4039 method=POST route="/api/items/{item_id}/tasks" status_code=201 duration_ms=8.838
+2026-10-22T03:05:14.397329Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e793-77c9-805b-7349aa7ef1e3 method=PUT route="/api/tasks/{task_id}" status_code=200 duration_ms=9.507
+2026-10-22T03:05:14.463400Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e79d-7326-abc8-687f0a6ef695 method=PUT route="/api/tasks/{task_id}/recurrence" status_code=200 duration_ms=65.774
+2026-10-22T03:05:14.470493Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e7df-73fa-805e-deedf0ef048a method=POST route="/api/workspaces/{workspace_id}/modules" status_code=201 duration_ms=6.819
+2026-10-22T03:05:14.477363Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e7e6-7687-94c8-8c302d84b276 method=POST route="/api/modules/{module_id}/items" status_code=201 duration_ms=6.666
+2026-10-22T03:05:14.484739Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e7ed-77d7-b416-f5371ac4be45 method=PUT route="/api/items/{item_id}" status_code=200 duration_ms=7.17
+2026-10-22T03:05:14.493329Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e7f4-7223-92a2-ef7d51cb43f4 method=POST route="/api/items/{item_id}/tasks" status_code=201 duration_ms=8.389
+2026-10-22T03:05:14.502523Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e7fd-74ff-b957-fe2b5d726495 method=PUT route="/api/tasks/{task_id}" status_code=200 duration_ms=8.97
+2026-10-22T03:05:14.554369Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e806-75da-9cc6-1d2c8449eee7 method=PUT route="/api/tasks/{task_id}/recurrence" status_code=200 duration_ms=51.604
+2026-10-22T03:05:14.783306Z  INFO fvoci_server::http: request event="http.request" request_id=01a16191-e8c9-775c-975f-613add06907d method=PUT route="/api/tasks/{task_id}/recurrence" status_code=200 duration_ms=85.862
+2026-10-22T03:05:14.795125Z  WARN sqlx::postgres::notice: recurrence sync of series 01a16191-e8ce-77de-a932-52672cd76a24 failed with SQLSTATE FV001
+2026-10-22T03:05:15.095496Z  WARN sqlx::postgres::notice: recurrence lane locks of item 01a16191-e780-77d4-866f-b4288e42c5ba failed with SQLSTATE 55P03
+2026-10-22T03:05:15.099574Z  WARN sqlx::postgres::notice: recurrence sync of series 01a16191-e80a-7748-8190-72cc4f65de36 failed with SQLSTATE FV001
+W9DIAG probe need=6 spare=0 ticked=Ok(0) synced=0
+
+thread 'w9_probe_bound_growth_between_ids_and_tick' (583719) panicked at crates/server/tests/recurrence.rs:986:5:
+the other item lost its occurrences
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    w9_probe_bound_growth_between_ids_and_tick
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.92s
+
+error: test failed, to rerun pass `-p fvoci-server --test recurrence`

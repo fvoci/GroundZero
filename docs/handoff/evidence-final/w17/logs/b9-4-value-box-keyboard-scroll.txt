@@ -1,0 +1,19 @@
+start: H3#task-clash-heading role=null name= outline=none/3px boxShadow=false focusVisible=false regionScrollTop=0
+Tab1: DIV role=region name=task-clash-description-label task-clash-description-server outline=none/1px boxShadow=true focusVisible=true regionScrollTop=0
+Tab2: BUTTON role=null name= outline=none/3px boxShadow=true focusVisible=true regionScrollTop=0
+Tab3: BUTTON role=null name= outline=none/3px boxShadow=true focusVisible=true regionScrollTop=0
+ArrowDown: BUTTON role=null name= outline=none/1px boxShadow=true focusVisible=true regionScrollTop=0
+ArrowDown: BUTTON role=null name= outline=none/1px boxShadow=true focusVisible=true regionScrollTop=0
+ArrowDown: BUTTON role=null name= outline=none/1px boxShadow=true focusVisible=true regionScrollTop=0
+PageDown: BUTTON role=null name= outline=none/1px boxShadow=true focusVisible=true regionScrollTop=0
+End: BUTTON role=null name= outline=none/1px boxShadow=true focusVisible=true regionScrollTop=0
+Home: BUTTON role=null name= outline=none/1px boxShadow=true focusVisible=true regionScrollTop=0
+Shift+Tab1: BUTTON role=null focusVisible=true regionScrollTop=0/1118
+Shift+Tab2: DIV role=region focusVisible=true regionScrollTop=0/1118
+ArrowDown: DIV role=region focusVisible=true regionScrollTop=40/1118
+ArrowDown: DIV role=region focusVisible=true regionScrollTop=80/1118
+ArrowDown: DIV role=region focusVisible=true regionScrollTop=120/1118
+PageDown: DIV role=region focusVisible=true regionScrollTop=330/1118
+End: DIV role=region focusVisible=true regionScrollTop=1118/1118
+Home: DIV role=region focusVisible=true regionScrollTop=0/1118
+PageDown: DIV role=region focusVisible=true regionScrollTop=210/1118

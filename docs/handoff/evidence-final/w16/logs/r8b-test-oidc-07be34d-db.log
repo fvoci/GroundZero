@@ -1,0 +1,1515 @@
+2026-10-22T06:55:30.294056054Z The files belonging to this database system will be owned by user "postgres".
+2026-10-22T06:55:30.294089605Z This user must also own the server process.
+2026-10-22T06:55:30.294092695Z 
+2026-10-22T06:55:30.294896436Z The database cluster will be initialized with locale "en_US.utf8".
+2026-10-22T06:55:30.294908976Z The default database encoding has accordingly been set to "UTF8".
+2026-10-22T06:55:30.294911696Z The default text search configuration will be set to "english".
+2026-10-22T06:55:30.294913806Z 
+2026-10-22T06:55:30.294915826Z Data page checksums are enabled.
+2026-10-22T06:55:30.294917926Z 
+2026-10-22T06:55:30.294919756Z fixing permissions on existing directory /var/lib/postgresql/18/docker ... ok
+2026-10-22T06:55:30.295054693Z creating subdirectories ... ok
+2026-10-22T06:55:30.295063473Z selecting dynamic shared memory implementation ... posix
+2026-10-22T06:55:30.315562778Z selecting default "max_connections" ... 100
+2026-10-22T06:55:30.341537157Z selecting default "shared_buffers" ... 128MB
+2026-10-22T06:55:30.365252351Z selecting default time zone ... Etc/UTC
+2026-10-22T06:55:30.365611114Z creating configuration files ... ok
+2026-10-22T06:55:30.468743028Z running bootstrap script ... ok
+2026-10-22T06:55:30.715513925Z performing post-bootstrap initialization ... ok
+2026-10-22T06:55:30.724639154Z initdb: warning: enabling "trust" authentication for local connections
+2026-10-22T06:55:30.724653214Z initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+2026-10-22T06:55:30.724644292Z syncing data to disk ... ok
+2026-10-22T06:55:30.724661044Z 
+2026-10-22T06:55:30.724663994Z 
+2026-10-22T06:55:30.724666244Z Success. You can now start the database server using:
+2026-10-22T06:55:30.724668614Z 
+2026-10-22T06:55:30.724670824Z     pg_ctl -D /var/lib/postgresql/18/docker -l logfile start
+2026-10-22T06:55:30.724673174Z 
+2026-10-22T06:55:30.765334729Z waiting for server to start....2026-10-22 06:55:30.765 UTC [53] LOG:  starting PostgreSQL 18.3 (Debian 18.3-1.pgdg12+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit
+2026-10-22T06:55:30.781306793Z 2026-10-22 06:55:30.781 UTC [53] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-22T06:55:30.784053770Z 2026-10-22 06:55:30.783 UTC [59] LOG:  database system was shut down at 2026-10-22 06:55:30 UTC
+2026-10-22T06:55:30.786312010Z 2026-10-22 06:55:30.786 UTC [53] LOG:  database system is ready to accept connections
+2026-10-22T06:55:30.845774408Z  done
+2026-10-22T06:55:30.845795768Z server started
+2026-10-22T06:55:30.950333111Z CREATE DATABASE
+2026-10-22T06:55:30.951118452Z 
+2026-10-22T06:55:30.951176743Z 
+2026-10-22T06:55:30.951184613Z /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+2026-10-22T06:55:30.951187823Z 
+2026-10-22T06:55:30.952269977Z waiting for server to shut down...2026-10-22 06:55:30.952 UTC [53] LOG:  received fast shutdown request
+2026-10-22T06:55:30.952277697Z .2026-10-22 06:55:30.952 UTC [53] LOG:  aborting any active transactions
+2026-10-22T06:55:30.953864150Z 2026-10-22 06:55:30.953 UTC [53] LOG:  background worker "logical replication launcher" (PID 62) exited with exit code 1
+2026-10-22T06:55:30.954477107Z 2026-10-22 06:55:30.954 UTC [57] LOG:  shutting down
+2026-10-22T06:55:30.954489507Z 2026-10-22 06:55:30.954 UTC [57] LOG:  checkpoint starting: shutdown immediate
+2026-10-22T06:55:30.961696145Z 2026-10-22 06:55:30.961 UTC [57] LOG:  checkpoint complete: wrote 941 buffers (5.7%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.007 s, sync=0.001 s, total=0.008 s; sync files=303, longest=0.001 s, average=0.000 s; distance=4334 kB, estimate=4334 kB; lsn=0/1B92F28, redo lsn=0/1B92F28
+2026-10-22T06:55:30.972163964Z 2026-10-22 06:55:30.971 UTC [53] LOG:  database system is shut down
+2026-10-22T06:55:31.052508424Z  done
+2026-10-22T06:55:31.052533844Z server stopped
+2026-10-22T06:55:31.053926224Z 
+2026-10-22T06:55:31.053941924Z PostgreSQL init process complete; ready for start up.
+2026-10-22T06:55:31.053944704Z 
+2026-10-22T06:55:31.075494171Z 2026-10-22 06:55:31.075 UTC [1] LOG:  starting PostgreSQL 18.3 (Debian 18.3-1.pgdg12+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit
+2026-10-22T06:55:31.077139224Z 2026-10-22 06:55:31.076 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-10-22T06:55:31.087452392Z 2026-10-22 06:55:31.087 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-10-22T06:55:31.097872766Z 2026-10-22 06:55:31.097 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-22T06:55:31.100838313Z 2026-10-22 06:55:31.100 UTC [75] LOG:  database system was shut down at 2026-10-22 06:55:30 UTC
+2026-10-22T06:55:31.103183288Z 2026-10-22 06:55:31.103 UTC [1] LOG:  database system is ready to accept connections
+2026-10-22T06:56:10.838497570Z 2026-10-22 06:56:10.838 UTC [264] FATAL:  terminating connection due to administrator command
+2026-10-22T06:56:12.734696679Z 2026-10-22 06:56:12.734 UTC [289] FATAL:  terminating connection due to administrator command
+2026-10-22T06:56:12.734745929Z 2026-10-22 06:56:12.734 UTC [291] FATAL:  terminating connection due to administrator command
+2026-10-22T06:56:12.836075611Z 2026-10-22 06:56:12.835 UTC [73] LOG:  checkpoint starting: immediate force wait
+2026-10-22T06:56:12.851163152Z 2026-10-22 06:56:12.851 UTC [73] LOG:  checkpoint complete: wrote 2083 buffers (12.7%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 2 recycled; write=0.013 s, sync=0.003 s, total=0.016 s; sync files=1026, longest=0.001 s, average=0.001 s; distance=25223 kB, estimate=25223 kB; lsn=0/3434EB8, redo lsn=0/3434E60
+2026-10-22T06:56:12.857554318Z 2026-10-22 06:56:12.857 UTC [73] LOG:  checkpoint starting: immediate force wait
+2026-10-22T06:56:12.857844431Z 2026-10-22 06:56:12.857 UTC [73] LOG:  checkpoint complete: wrote 16 buffers (0.1%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.001 s; sync files=4, longest=0.001 s, average=0.000 s; distance=139 kB, estimate=22715 kB; lsn=0/3457CD8, redo lsn=0/3457C80
+2026-10-22T06:56:13.592043406Z 2026-10-22 06:56:13.591 UTC [335] ERROR:  insufficient permission
+2026-10-22T06:56:13.592093237Z 2026-10-22 06:56:13.591 UTC [335] CONTEXT:  PL/pgSQL function app_require_document(uuid,text) line 10 at RAISE
+2026-10-22T06:56:13.592101787Z 	SQL statement "SELECT app_require_document(p_doc, 'owner')"
+2026-10-22T06:56:13.592105027Z 	PL/pgSQL function app_check_move(uuid,uuid,uuid) line 6 at PERFORM
+2026-10-22T06:56:13.592107257Z 	PL/pgSQL function app_move_preview(uuid,uuid,uuid) line 3 during statement block local variable initialization
+2026-10-22T06:56:13.592109317Z 2026-10-22 06:56:13.591 UTC [335] STATEMENT:  SELECT change, display_name FROM app_move_preview($1, $2, $3)
+2026-10-22T06:56:13.635216751Z 2026-10-22 06:56:13.635 UTC [348] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:13.635249161Z 2026-10-22 06:56:13.635 UTC [348] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:13.635253241Z 2026-10-22 06:56:13.635 UTC [348] STATEMENT:  SELECT app_collab_access($1)
+2026-10-22T06:56:13.641610392Z 2026-10-22 06:56:13.641 UTC [348] ERROR:  only an admin can change realtime editing
+2026-10-22T06:56:13.641650352Z 2026-10-22 06:56:13.641 UTC [348] CONTEXT:  PL/pgSQL function app_set_workspace_realtime(uuid,boolean,uuid[]) line 9 at RAISE
+2026-10-22T06:56:13.641656143Z 2026-10-22 06:56:13.641 UTC [348] STATEMENT:  SELECT app_set_workspace_realtime($1, $2, $3)
+2026-10-22T06:56:13.663642168Z 2026-10-22 06:56:13.663 UTC [348] ERROR:  document not found
+2026-10-22T06:56:13.663695538Z 2026-10-22 06:56:13.663 UTC [348] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 6 at RAISE
+2026-10-22T06:56:13.663702338Z 2026-10-22 06:56:13.663 UTC [348] STATEMENT:  SELECT app_collab_access($1)
+2026-10-22T06:56:13.974872564Z 2026-10-22 06:56:13.974 UTC [400] ERROR:  document not found
+2026-10-22T06:56:13.986961948Z 2026-10-22 06:56:13.974 UTC [400] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 6 at RAISE
+2026-10-22T06:56:13.986978508Z 2026-10-22 06:56:13.974 UTC [400] STATEMENT:  SELECT app_collab_access($1)
+2026-10-22T06:56:14.012427138Z 2026-10-22 06:56:14.012 UTC [378] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:14.012467519Z 2026-10-22 06:56:14.012 UTC [378] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:14.012473239Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:14.012476149Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:14.012478249Z 2026-10-22 06:56:14.012 UTC [378] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:14.341166860Z 2026-10-22 06:56:14.340 UTC [395] ERROR:  document not found
+2026-10-22T06:56:14.341207800Z 2026-10-22 06:56:14.340 UTC [395] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 6 at RAISE
+2026-10-22T06:56:14.341213600Z 2026-10-22 06:56:14.340 UTC [395] STATEMENT:  SELECT app_collab_access($1)
+2026-10-22T06:56:14.641360244Z 2026-10-22 06:56:14.641 UTC [364] ERROR:  this version is referenced by a record or a document revision
+2026-10-22T06:56:14.641419615Z 2026-10-22 06:56:14.641 UTC [364] CONTEXT:  PL/pgSQL function app_guard_pinned_version() line 7 at RAISE
+2026-10-22T06:56:14.641425295Z 	SQL statement "DELETE FROM file_versions WHERE id = v_id"
+2026-10-22T06:56:14.641428215Z 	PL/pgSQL function app_delete_file_version(uuid,integer,uuid[]) line 26 at SQL statement
+2026-10-22T06:56:14.641430315Z 2026-10-22 06:56:14.641 UTC [364] STATEMENT:  SELECT app_delete_file_version($1, $2, $3)
+2026-10-22T06:56:14.668361446Z 2026-10-22 06:56:14.668 UTC [351] ERROR:  read-only access
+2026-10-22T06:56:14.668390967Z 2026-10-22 06:56:14.668 UTC [351] CONTEXT:  PL/pgSQL function app_delete_file_version(uuid,integer,uuid[]) line 11 at RAISE
+2026-10-22T06:56:14.668394277Z 2026-10-22 06:56:14.668 UTC [351] STATEMENT:  SELECT app_delete_file_version($1, $2, $3)
+2026-10-22T06:56:18.370535800Z 2026-10-22 06:56:18.370 UTC [354] ERROR:  this version is referenced by a record or a document revision
+2026-10-22T06:56:18.370581721Z 2026-10-22 06:56:18.370 UTC [354] CONTEXT:  PL/pgSQL function app_guard_pinned_version() line 7 at RAISE
+2026-10-22T06:56:18.370588211Z 	SQL statement "DELETE FROM file_versions WHERE id = v_id"
+2026-10-22T06:56:18.370591711Z 	PL/pgSQL function app_delete_file_version(uuid,integer,uuid[]) line 26 at SQL statement
+2026-10-22T06:56:18.370594201Z 2026-10-22 06:56:18.370 UTC [354] STATEMENT:  SELECT app_delete_file_version($1, $2, $3)
+2026-10-22T06:56:18.425150853Z 2026-10-22 06:56:18.424 UTC [344] ERROR:  this version is referenced by a record or a document revision
+2026-10-22T06:56:18.425197734Z 2026-10-22 06:56:18.424 UTC [344] CONTEXT:  PL/pgSQL function app_guard_pinned_version() line 7 at RAISE
+2026-10-22T06:56:18.425204284Z 	SQL statement "DELETE FROM file_versions WHERE id = v_id"
+2026-10-22T06:56:18.425207624Z 	PL/pgSQL function app_delete_file_version(uuid,integer,uuid[]) line 26 at SQL statement
+2026-10-22T06:56:18.425210154Z 2026-10-22 06:56:18.424 UTC [344] STATEMENT:  SELECT app_delete_file_version($1, $2, $3)
+2026-10-22T06:56:19.103199094Z 2026-10-22 06:56:19.103 UTC [348] ERROR:  document not found
+2026-10-22T06:56:19.103243884Z 2026-10-22 06:56:19.103 UTC [348] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 6 at RAISE
+2026-10-22T06:56:19.103249345Z 2026-10-22 06:56:19.103 UTC [348] STATEMENT:  SELECT app_collab_access($1)
+2026-10-22T06:56:20.276253220Z 2026-10-22 06:56:20.276 UTC [399] ERROR:  document not found
+2026-10-22T06:56:20.276277780Z 2026-10-22 06:56:20.276 UTC [399] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 6 at RAISE
+2026-10-22T06:56:20.276288650Z 2026-10-22 06:56:20.276 UTC [399] STATEMENT:  SELECT app_collab_access($1)
+2026-10-22T06:56:22.814376697Z 2026-10-22 06:56:22.814 UTC [428] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:22.814396858Z 2026-10-22 06:56:22.814 UTC [428] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:22.814402708Z 2026-10-22 06:56:22.814 UTC [428] STATEMENT:  SELECT app_collab_access($1)
+2026-10-22T06:56:23.393016465Z 2026-10-22 06:56:23.392 UTC [300] ERROR:  canceling statement due to lock timeout
+2026-10-22T06:56:23.393046585Z 2026-10-22 06:56:23.392 UTC [300] CONTEXT:  while locking tuple (0,12) in relation "documents"
+2026-10-22T06:56:23.393050705Z 2026-10-22 06:56:23.392 UTC [300] STATEMENT:  SELECT 1 FROM documents WHERE id = $1 FOR UPDATE
+2026-10-22T06:56:23.576607534Z 2026-10-22 06:56:23.576 UTC [332] ERROR:  canceling statement due to lock timeout
+2026-10-22T06:56:23.576636284Z 2026-10-22 06:56:23.576 UTC [332] CONTEXT:  while locking tuple (0,23) in relation "documents"
+2026-10-22T06:56:23.576639684Z 	SQL statement "SELECT *            FROM documents WHERE id = p_doc FOR UPDATE"
+2026-10-22T06:56:23.576642494Z 	PL/pgSQL function app_restore_document_revision(uuid,integer,uuid,integer,integer,uuid[]) line 10 at SQL statement
+2026-10-22T06:56:23.576644964Z 2026-10-22 06:56:23.576 UTC [332] STATEMENT:  SELECT app_restore_document_revision($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:23.702226246Z 2026-10-22 06:56:23.702 UTC [321] ERROR:  canceling statement due to lock timeout
+2026-10-22T06:56:23.702302007Z 2026-10-22 06:56:23.702 UTC [321] CONTEXT:  SQL function "app_lock_tree" statement 1
+2026-10-22T06:56:23.702311287Z 	SQL statement "SELECT app_lock_tree(p_target, p_item, NULL)"
+2026-10-22T06:56:23.702314697Z 	PL/pgSQL function app_lock_move(uuid,uuid,uuid) line 16 at PERFORM
+2026-10-22T06:56:23.702317837Z 2026-10-22 06:56:23.702 UTC [321] STATEMENT:  SELECT app_lock_move($1, $2, $3)
+2026-10-22T06:56:23.980198808Z 2026-10-22 06:56:23.980 UTC [511] ERROR:  target not found
+2026-10-22T06:56:23.980245568Z 2026-10-22 06:56:23.980 UTC [511] CONTEXT:  PL/pgSQL function app_add_comment(uuid,uuid,uuid,uuid,text,uuid[]) line 19 at RAISE
+2026-10-22T06:56:23.980251469Z 2026-10-22 06:56:23.980 UTC [511] STATEMENT:  SELECT app_add_comment($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:23.985656071Z 2026-10-22 06:56:23.985 UTC [511] ERROR:  a comment needs 1 to 10000 characters
+2026-10-22T06:56:23.985695312Z 2026-10-22 06:56:23.985 UTC [511] CONTEXT:  PL/pgSQL function app_add_comment(uuid,uuid,uuid,uuid,text,uuid[]) line 25 at RAISE
+2026-10-22T06:56:23.985701042Z 2026-10-22 06:56:23.985 UTC [511] STATEMENT:  SELECT app_add_comment($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:23.993415795Z 2026-10-22 06:56:23.993 UTC [513] ERROR:  the item is archived
+2026-10-22T06:56:23.993460406Z 2026-10-22 06:56:23.993 UTC [513] CONTEXT:  PL/pgSQL function app_edit_comment(uuid,text) line 14 at RAISE
+2026-10-22T06:56:23.993465926Z 2026-10-22 06:56:23.993 UTC [513] STATEMENT:  SELECT app_edit_comment($1, $2)
+2026-10-22T06:56:23.998606445Z 2026-10-22 06:56:23.998 UTC [513] ERROR:  the item is archived
+2026-10-22T06:56:23.998649405Z 2026-10-22 06:56:23.998 UTC [513] CONTEXT:  PL/pgSQL function app_resolve_comment(uuid,boolean) line 18 at RAISE
+2026-10-22T06:56:23.998656985Z 2026-10-22 06:56:23.998 UTC [513] STATEMENT:  SELECT app_resolve_comment($1, $2)
+2026-10-22T06:56:24.015060597Z 2026-10-22 06:56:24.014 UTC [511] ERROR:  reply to the first comment of the thread
+2026-10-22T06:56:24.015103657Z 2026-10-22 06:56:24.014 UTC [511] CONTEXT:  PL/pgSQL function app_add_comment(uuid,uuid,uuid,uuid,text,uuid[]) line 35 at RAISE
+2026-10-22T06:56:24.015110878Z 2026-10-22 06:56:24.014 UTC [511] STATEMENT:  SELECT app_add_comment($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:24.015114128Z 2026-10-22 06:56:24.014 UTC [507] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:24.015117048Z 2026-10-22 06:56:24.014 UTC [507] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:24.015120028Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:24.015123168Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:24.015125728Z 2026-10-22 06:56:24.014 UTC [507] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:24.033722957Z 2026-10-22 06:56:24.033 UTC [507] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:24.033735877Z 2026-10-22 06:56:24.033 UTC [507] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:24.033739617Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:24.033742617Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:24.033745217Z 2026-10-22 06:56:24.033 UTC [507] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:24.039878958Z 2026-10-22 06:56:24.039 UTC [511] ERROR:  only the author can edit a comment
+2026-10-22T06:56:24.039920938Z 2026-10-22 06:56:24.039 UTC [511] CONTEXT:  PL/pgSQL function app_edit_comment(uuid,text) line 11 at RAISE
+2026-10-22T06:56:24.039926758Z 2026-10-22 06:56:24.039 UTC [511] STATEMENT:  SELECT app_edit_comment($1, $2)
+2026-10-22T06:56:24.061326656Z 2026-10-22 06:56:24.061 UTC [511] ERROR:  only the author or the owner can delete a comment
+2026-10-22T06:56:24.061366406Z 2026-10-22 06:56:24.061 UTC [511] CONTEXT:  PL/pgSQL function app_delete_comment(uuid,uuid[]) line 14 at RAISE
+2026-10-22T06:56:24.061371886Z 2026-10-22 06:56:24.061 UTC [511] STATEMENT:  SELECT app_delete_comment($1, $2)
+2026-10-22T06:56:24.209443996Z 2026-10-22 06:56:24.209 UTC [511] ERROR:  the item is archived
+2026-10-22T06:56:24.209487326Z 2026-10-22 06:56:24.209 UTC [511] CONTEXT:  PL/pgSQL function app_add_comment(uuid,uuid,uuid,uuid,text,uuid[]) line 22 at RAISE
+2026-10-22T06:56:24.209492606Z 2026-10-22 06:56:24.209 UTC [511] STATEMENT:  SELECT app_add_comment($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:24.356894025Z 2026-10-22 06:56:24.356 UTC [515] ERROR:  the item is archived
+2026-10-22T06:56:24.356952866Z 2026-10-22 06:56:24.356 UTC [515] CONTEXT:  PL/pgSQL function app_require_course_write(uuid) line 7 at RAISE
+2026-10-22T06:56:24.356958376Z 	SQL statement "SELECT app_require_course_write(p_item)"
+2026-10-22T06:56:24.356961386Z 	PL/pgSQL function app_set_course_details(uuid,text,text,text,text,text,date,date,date,uuid[]) line 3 at PERFORM
+2026-10-22T06:56:24.356963546Z 2026-10-22 06:56:24.356 UTC [515] STATEMENT:  SELECT app_set_course_details($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+2026-10-22T06:56:24.367628338Z 2026-10-22 06:56:24.367 UTC [519] ERROR:  the link must start with http:// or https://
+2026-10-22T06:56:24.367670118Z 2026-10-22 06:56:24.367 UTC [519] CONTEXT:  PL/pgSQL function app_set_course_details(uuid,text,text,text,text,text,date,date,date,uuid[]) line 9 at RAISE
+2026-10-22T06:56:24.367675829Z 2026-10-22 06:56:24.367 UTC [519] STATEMENT:  SELECT app_set_course_details($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+2026-10-22T06:56:24.373727081Z 2026-10-22 06:56:24.373 UTC [519] ERROR:  invalid episode: new row for relation "course_episodes" violates check constraint "course_episodes_url"
+2026-10-22T06:56:24.373743901Z 2026-10-22 06:56:24.373 UTC [519] CONTEXT:  PL/pgSQL function app_add_episodes(uuid,jsonb,uuid[]) line 40 at RAISE
+2026-10-22T06:56:24.373746501Z 2026-10-22 06:56:24.373 UTC [519] STATEMENT:  SELECT app_add_episodes($1, $2, $3)
+2026-10-22T06:56:24.385632531Z 2026-10-22 06:56:24.385 UTC [521] ERROR:  read-only access
+2026-10-22T06:56:24.385671602Z 2026-10-22 06:56:24.385 UTC [521] CONTEXT:  PL/pgSQL function app_require_course_write(uuid) line 4 at RAISE
+2026-10-22T06:56:24.385677482Z 	SQL statement "SELECT app_require_course_write(p_item)"
+2026-10-22T06:56:24.385680512Z 	PL/pgSQL function app_set_course_details(uuid,text,text,text,text,text,date,date,date,uuid[]) line 3 at PERFORM
+2026-10-22T06:56:24.385682682Z 2026-10-22 06:56:24.385 UTC [521] STATEMENT:  SELECT app_set_course_details($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+2026-10-22T06:56:24.389126368Z 2026-10-22 06:56:24.388 UTC [520] ERROR:  the episode changed; reload it
+2026-10-22T06:56:24.389136878Z 2026-10-22 06:56:24.388 UTC [520] CONTEXT:  PL/pgSQL function app_update_episode(uuid,integer,integer,text,text,integer,text,text,date) line 16 at RAISE
+2026-10-22T06:56:24.389139469Z 2026-10-22 06:56:24.388 UTC [520] STATEMENT:  SELECT app_update_episode($1, $2, $3, $4, $5, $6, $7, $8, $9)
+2026-10-22T06:56:24.393609827Z 2026-10-22 06:56:24.393 UTC [519] ERROR:  today is too far from the server date
+2026-10-22T06:56:24.393622108Z 2026-10-22 06:56:24.393 UTC [519] CONTEXT:  PL/pgSQL function app_set_episode_progress(uuid,text,date,integer,text,date) line 16 at RAISE
+2026-10-22T06:56:24.393625978Z 2026-10-22 06:56:24.393 UTC [519] STATEMENT:  SELECT app_set_episode_progress($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:24.395756967Z 2026-10-22 06:56:24.395 UTC [521] ERROR:  course not found
+2026-10-22T06:56:24.395767487Z 2026-10-22 06:56:24.395 UTC [521] CONTEXT:  PL/pgSQL function app_course_access(uuid) line 7 at RAISE
+2026-10-22T06:56:24.395770087Z 2026-10-22 06:56:24.395 UTC [521] STATEMENT:  SELECT app_course_access($1)
+2026-10-22T06:56:24.411828773Z 2026-10-22 06:56:24.411 UTC [521] ERROR:  every episode needs a title (1-300 characters)
+2026-10-22T06:56:24.411871033Z 2026-10-22 06:56:24.411 UTC [521] CONTEXT:  PL/pgSQL function app_add_episodes(uuid,jsonb,uuid[]) line 17 at RAISE
+2026-10-22T06:56:24.411876563Z 2026-10-22 06:56:24.411 UTC [521] STATEMENT:  SELECT app_add_episodes($1, $2, $3)
+2026-10-22T06:56:24.415759975Z 2026-10-22 06:56:24.415 UTC [521] ERROR:  read-only access
+2026-10-22T06:56:24.415792006Z 2026-10-22 06:56:24.415 UTC [521] CONTEXT:  PL/pgSQL function app_require_course_write(uuid) line 4 at RAISE
+2026-10-22T06:56:24.415797486Z 	SQL statement "SELECT app_require_course_write(p_item)"
+2026-10-22T06:56:24.415800316Z 	PL/pgSQL function app_add_episodes(uuid,jsonb,uuid[]) line 9 at PERFORM
+2026-10-22T06:56:24.415802346Z 2026-10-22 06:56:24.415 UTC [521] STATEMENT:  SELECT app_add_episodes($1, $2, $3)
+2026-10-22T06:56:24.443613400Z 2026-10-22 06:56:24.443 UTC [518] ERROR:  the episode changed; reload it
+2026-10-22T06:56:24.443656550Z 2026-10-22 06:56:24.443 UTC [518] CONTEXT:  PL/pgSQL function app_update_episode(uuid,integer,integer,text,text,integer,text,text,date) line 16 at RAISE
+2026-10-22T06:56:24.443662070Z 2026-10-22 06:56:24.443 UTC [518] STATEMENT:  SELECT app_update_episode($1, $2, $3, $4, $5, $6, $7, $8, $9)
+2026-10-22T06:56:24.445929811Z 2026-10-22 06:56:24.445 UTC [521] ERROR:  episode not found
+2026-10-22T06:56:24.445960131Z 2026-10-22 06:56:24.445 UTC [521] CONTEXT:  PL/pgSQL function app_set_episode_progress(uuid,text,date,integer,text,date) line 7 at RAISE
+2026-10-22T06:56:24.445966351Z 2026-10-22 06:56:24.445 UTC [521] STATEMENT:  SELECT app_set_episode_progress($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:24.449961036Z 2026-10-22 06:56:24.449 UTC [521] ERROR:  invalid status
+2026-10-22T06:56:24.449997356Z 2026-10-22 06:56:24.449 UTC [521] CONTEXT:  PL/pgSQL function app_set_episode_progress(uuid,text,date,integer,text,date) line 10 at RAISE
+2026-10-22T06:56:24.450004466Z 2026-10-22 06:56:24.449 UTC [521] STATEMENT:  SELECT app_set_episode_progress($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:24.473301438Z 2026-10-22 06:56:24.473 UTC [521] ERROR:  today is too far from the server date
+2026-10-22T06:56:24.473341819Z 2026-10-22 06:56:24.473 UTC [521] CONTEXT:  PL/pgSQL function app_course_participants(uuid,date) line 5 at RAISE
+2026-10-22T06:56:24.473347179Z 2026-10-22 06:56:24.473 UTC [521] STATEMENT:  SELECT user_id, display_name, done, in_progress, overdue, done_seconds
+2026-10-22T06:56:24.473349629Z 	         FROM app_course_participants($1, $2)
+2026-10-22T06:56:24.477088279Z 2026-10-22 06:56:24.476 UTC [521] ERROR:  today is too far from the server date
+2026-10-22T06:56:24.477100689Z 2026-10-22 06:56:24.476 UTC [521] CONTEXT:  PL/pgSQL function app_course_participants(uuid,date) line 5 at RAISE
+2026-10-22T06:56:24.477103860Z 2026-10-22 06:56:24.476 UTC [521] STATEMENT:  SELECT user_id, display_name, done, in_progress, overdue, done_seconds
+2026-10-22T06:56:24.477106460Z 	         FROM app_course_participants($1, $2)
+2026-10-22T06:56:24.495312084Z 2026-10-22 06:56:24.495 UTC [521] ERROR:  read-only access
+2026-10-22T06:56:24.495358815Z 2026-10-22 06:56:24.495 UTC [521] CONTEXT:  PL/pgSQL function app_require_course_write(uuid) line 4 at RAISE
+2026-10-22T06:56:24.495364425Z 	SQL statement "SELECT app_require_course_write(v_ep.item_id)"
+2026-10-22T06:56:24.495367315Z 	PL/pgSQL function app_delete_episode(uuid,uuid[]) line 9 at PERFORM
+2026-10-22T06:56:24.495369375Z 2026-10-22 06:56:24.495 UTC [521] STATEMENT:  SELECT app_delete_episode($1, $2)
+2026-10-22T06:56:24.520857215Z 2026-10-22 06:56:24.520 UTC [521] ERROR:  course not found
+2026-10-22T06:56:24.520900476Z 2026-10-22 06:56:24.520 UTC [521] CONTEXT:  PL/pgSQL function app_course_access(uuid) line 7 at RAISE
+2026-10-22T06:56:24.520906416Z 2026-10-22 06:56:24.520 UTC [521] STATEMENT:  SELECT app_course_access($1)
+2026-10-22T06:56:24.852665350Z 2026-10-22 06:56:24.852 UTC [535] ERROR:  raised 22023
+2026-10-22T06:56:24.852703561Z 2026-10-22 06:56:24.852 UTC [535] CONTEXT:  PL/pgSQL function inline_code_block line 1 at RAISE
+2026-10-22T06:56:24.852708891Z 2026-10-22 06:56:24.852 UTC [535] STATEMENT:  DO $$ BEGIN RAISE EXCEPTION 'raised 22023' USING ERRCODE = '22023'; END $$
+2026-10-22T06:56:24.855696201Z 2026-10-22 06:56:24.855 UTC [534] ERROR:  raised 55000
+2026-10-22T06:56:24.855733742Z 2026-10-22 06:56:24.855 UTC [534] CONTEXT:  PL/pgSQL function inline_code_block line 1 at RAISE
+2026-10-22T06:56:24.855740222Z 2026-10-22 06:56:24.855 UTC [534] STATEMENT:  DO $$ BEGIN RAISE EXCEPTION 'raised 55000' USING ERRCODE = '55000'; END $$
+2026-10-22T06:56:24.857852851Z 2026-10-22 06:56:24.857 UTC [535] ERROR:  raised P0002
+2026-10-22T06:56:24.857875971Z 2026-10-22 06:56:24.857 UTC [535] CONTEXT:  PL/pgSQL function inline_code_block line 1 at RAISE
+2026-10-22T06:56:24.857881121Z 2026-10-22 06:56:24.857 UTC [535] STATEMENT:  DO $$ BEGIN RAISE EXCEPTION 'raised P0002' USING ERRCODE = 'P0002'; END $$
+2026-10-22T06:56:24.859982670Z 2026-10-22 06:56:24.859 UTC [534] ERROR:  raised 42501
+2026-10-22T06:56:24.859993330Z 2026-10-22 06:56:24.859 UTC [534] CONTEXT:  PL/pgSQL function inline_code_block line 1 at RAISE
+2026-10-22T06:56:24.859995470Z 2026-10-22 06:56:24.859 UTC [534] STATEMENT:  DO $$ BEGIN RAISE EXCEPTION 'raised 42501' USING ERRCODE = '42501'; END $$
+2026-10-22T06:56:24.862102248Z 2026-10-22 06:56:24.861 UTC [535] ERROR:  raised 40001
+2026-10-22T06:56:24.862129409Z 2026-10-22 06:56:24.861 UTC [535] CONTEXT:  PL/pgSQL function inline_code_block line 1 at RAISE
+2026-10-22T06:56:24.862135829Z 2026-10-22 06:56:24.861 UTC [535] STATEMENT:  DO $$ BEGIN RAISE EXCEPTION 'raised 40001' USING ERRCODE = '40001'; END $$
+2026-10-22T06:56:24.864193386Z 2026-10-22 06:56:24.864 UTC [534] ERROR:  raised 40P01
+2026-10-22T06:56:24.864236207Z 2026-10-22 06:56:24.864 UTC [534] CONTEXT:  PL/pgSQL function inline_code_block line 1 at RAISE
+2026-10-22T06:56:24.864242707Z 2026-10-22 06:56:24.864 UTC [534] STATEMENT:  DO $$ BEGIN RAISE EXCEPTION 'raised 40P01' USING ERRCODE = '40P01'; END $$
+2026-10-22T06:56:24.866316215Z 2026-10-22 06:56:24.866 UTC [535] ERROR:  raised 23514
+2026-10-22T06:56:24.866326875Z 2026-10-22 06:56:24.866 UTC [535] CONTEXT:  PL/pgSQL function inline_code_block line 1 at RAISE
+2026-10-22T06:56:24.866329955Z 2026-10-22 06:56:24.866 UTC [535] STATEMENT:  DO $$ BEGIN RAISE EXCEPTION 'raised 23514' USING ERRCODE = '23514'; END $$
+2026-10-22T06:56:25.098213248Z 2026-10-22 06:56:25.098 UTC [536] ERROR:  unknown time zone
+2026-10-22T06:56:25.098243669Z 2026-10-22 06:56:25.098 UTC [536] CONTEXT:  PL/pgSQL function app_check_timezone(text) line 5 at RAISE
+2026-10-22T06:56:25.098248019Z 	SQL statement "SELECT app_check_timezone(p_timezone)"
+2026-10-22T06:56:25.098251249Z 	PL/pgSQL function app_create_event(uuid,uuid,text,text,text,boolean,date,date,timestamp with time zone,timestamp with time zone,text,uuid[]) line 18 at PERFORM
+2026-10-22T06:56:25.098253409Z 2026-10-22 06:56:25.098 UTC [536] STATEMENT:  SELECT app_create_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+2026-10-22T06:56:25.147021642Z 2026-10-22 06:56:25.146 UTC [540] ERROR:  write access is required
+2026-10-22T06:56:25.147062432Z 2026-10-22 06:56:25.146 UTC [540] CONTEXT:  PL/pgSQL function app_create_event(uuid,uuid,text,text,text,boolean,date,date,timestamp with time zone,timestamp with time zone,text,uuid[]) line 12 at RAISE
+2026-10-22T06:56:25.147067852Z 2026-10-22 06:56:25.146 UTC [540] STATEMENT:  SELECT app_create_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+2026-10-22T06:56:25.202629700Z 2026-10-22 06:56:25.202 UTC [540] ERROR:  write access is required
+2026-10-22T06:56:25.202675530Z 2026-10-22 06:56:25.202 UTC [540] CONTEXT:  PL/pgSQL function app_require_event_write(uuid) line 14 at RAISE
+2026-10-22T06:56:25.202682650Z 	SQL statement "SELECT app_require_event_write(p_event)"
+2026-10-22T06:56:25.202686470Z 	PL/pgSQL function app_delete_event(uuid,uuid[]) line 6 at PERFORM
+2026-10-22T06:56:25.202689210Z 2026-10-22 06:56:25.202 UTC [540] STATEMENT:  SELECT app_delete_event($1, $2)
+2026-10-22T06:56:25.215710194Z 2026-10-22 06:56:25.215 UTC [540] ERROR:  event not found
+2026-10-22T06:56:25.215749044Z 2026-10-22 06:56:25.215 UTC [540] CONTEXT:  PL/pgSQL function app_require_event_write(uuid) line 7 at RAISE
+2026-10-22T06:56:25.215754194Z 	SQL statement "SELECT app_require_event_write(p_event)"
+2026-10-22T06:56:25.215756974Z 	PL/pgSQL function app_delete_event(uuid,uuid[]) line 6 at PERFORM
+2026-10-22T06:56:25.215759034Z 2026-10-22 06:56:25.215 UTC [540] STATEMENT:  SELECT app_delete_event($1, $2)
+2026-10-22T06:56:25.219490355Z 2026-10-22 06:56:25.219 UTC [536] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:25.388252761Z 2026-10-22 06:56:25.388 UTC [539] ERROR:  unknown time zone
+2026-10-22T06:56:25.388298561Z 2026-10-22 06:56:25.388 UTC [539] CONTEXT:  PL/pgSQL function app_check_timezone(text) line 5 at RAISE
+2026-10-22T06:56:25.388303991Z 2026-10-22 06:56:25.388 UTC [539] STATEMENT:  SELECT app_check_timezone($1)
+2026-10-22T06:56:25.394445555Z 2026-10-22 06:56:25.394 UTC [539] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:25.402533272Z 2026-10-22 06:56:25.402 UTC [541] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:26.048820740Z 2026-10-22 06:56:26.048 UTC [560] ERROR:  the file is larger than the limit (6000000 bytes)
+2026-10-22T06:56:26.048872841Z 2026-10-22 06:56:26.048 UTC [560] CONTEXT:  PL/pgSQL function app_create_upload(uuid,uuid,text,uuid,text,text,text,bigint,bigint,integer,bigint,bigint,uuid[]) line 22 at RAISE
+2026-10-22T06:56:26.048879861Z 2026-10-22 06:56:26.048 UTC [560] STATEMENT:  SELECT app_create_upload($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+2026-10-22T06:56:26.053919789Z 2026-10-22 06:56:26.053 UTC [560] ERROR:  empty files cannot be uploaded
+2026-10-22T06:56:26.053940770Z 2026-10-22 06:56:26.053 UTC [560] CONTEXT:  PL/pgSQL function app_create_upload(uuid,uuid,text,uuid,text,text,text,bigint,bigint,integer,bigint,bigint,uuid[]) line 19 at RAISE
+2026-10-22T06:56:26.053943690Z 2026-10-22 06:56:26.053 UTC [560] STATEMENT:  SELECT app_create_upload($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+2026-10-22T06:56:26.080503725Z 2026-10-22 06:56:26.080 UTC [560] ERROR:  not enough storage left (limit 7000000 bytes)
+2026-10-22T06:56:26.080526516Z 2026-10-22 06:56:26.080 UTC [560] CONTEXT:  PL/pgSQL function app_create_upload(uuid,uuid,text,uuid,text,text,text,bigint,bigint,integer,bigint,bigint,uuid[]) line 42 at RAISE
+2026-10-22T06:56:26.080529316Z 2026-10-22 06:56:26.080 UTC [560] STATEMENT:  SELECT app_create_upload($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+2026-10-22T06:56:26.128225666Z 2026-10-22 06:56:26.128 UTC [559] ERROR:  the upload is being completed; try again shortly
+2026-10-22T06:56:26.128271947Z 2026-10-22 06:56:26.128 UTC [559] CONTEXT:  PL/pgSQL function app_begin_complete(uuid) line 15 at RAISE
+2026-10-22T06:56:26.128279217Z 2026-10-22 06:56:26.128 UTC [559] STATEMENT:  SELECT id, name, size, chunk_bytes, storage_key, storage_upload_id, state, failure, version_id, expires_at, state_changed_at FROM app_begin_complete($1)
+2026-10-22T06:56:26.147887850Z 2026-10-22 06:56:26.147 UTC [563] ERROR:  read-only access
+2026-10-22T06:56:26.147902031Z 2026-10-22 06:56:26.147 UTC [563] CONTEXT:  PL/pgSQL function app_file_place(text,uuid) line 20 at RAISE
+2026-10-22T06:56:26.147904941Z 	SQL statement "SELECT *              FROM app_file_place(v_kind, v_tgt)"
+2026-10-22T06:56:26.147907481Z 	PL/pgSQL function app_create_upload(uuid,uuid,text,uuid,text,text,text,bigint,bigint,integer,bigint,bigint,uuid[]) line 35 at SQL statement
+2026-10-22T06:56:26.147910011Z 2026-10-22 06:56:26.147 UTC [563] STATEMENT:  SELECT app_create_upload($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+2026-10-22T06:56:26.153199717Z 2026-10-22 06:56:26.153 UTC [563] ERROR:  target not found
+2026-10-22T06:56:26.153211667Z 2026-10-22 06:56:26.153 UTC [563] CONTEXT:  PL/pgSQL function app_file_place(text,uuid) line 17 at RAISE
+2026-10-22T06:56:26.153214787Z 	SQL statement "SELECT *              FROM app_file_place(v_kind, v_tgt)"
+2026-10-22T06:56:26.153217187Z 	PL/pgSQL function app_create_upload(uuid,uuid,text,uuid,text,text,text,bigint,bigint,integer,bigint,bigint,uuid[]) line 35 at SQL statement
+2026-10-22T06:56:26.153226437Z 2026-10-22 06:56:26.153 UTC [563] STATEMENT:  SELECT app_create_upload($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+2026-10-22T06:56:26.153389726Z 2026-10-22 06:56:26.153 UTC [553] ERROR:  test deadlock
+2026-10-22T06:56:26.153400246Z 2026-10-22 06:56:26.153 UTC [553] CONTEXT:  PL/pgSQL function test_deadlock_01a1626591fc74f093d1e96f43f2fd91() line 2 at RAISE
+2026-10-22T06:56:26.153439836Z 	SQL statement "INSERT INTO file_versions (id, file_id, version, size, sha256, content_type, storage_key, note, uploaded_by)
+2026-10-22T06:56:26.153446946Z 	    VALUES (app_id(p_ids, 2), v_file, v_version, v_up.size, p_sha256, v_up.content_type, v_up.storage_key, v_up.note,
+2026-10-22T06:56:26.153450556Z 	            v_up.user_id)
+2026-10-22T06:56:26.153453606Z 	    RETURNING id"
+2026-10-22T06:56:26.153456526Z 	PL/pgSQL function app_finish_upload(uuid,text,bigint,uuid[]) line 45 at SQL statement
+2026-10-22T06:56:26.153459456Z 2026-10-22 06:56:26.153 UTC [553] STATEMENT:  SELECT app_finish_upload($1, $2, $3, $4)
+2026-10-22T06:56:26.170455233Z 2026-10-22 06:56:26.170 UTC [556] ERROR:  test deadlock
+2026-10-22T06:56:26.170471223Z 2026-10-22 06:56:26.170 UTC [556] CONTEXT:  PL/pgSQL function test_stall_01a1626591fd76309de2fbae0e1b3f2a() line 4 at RAISE
+2026-10-22T06:56:26.170474033Z 	SQL statement "INSERT INTO file_versions (id, file_id, version, size, sha256, content_type, storage_key, note, uploaded_by)
+2026-10-22T06:56:26.170476703Z 	    VALUES (app_id(p_ids, 2), v_file, v_version, v_up.size, p_sha256, v_up.content_type, v_up.storage_key, v_up.note,
+2026-10-22T06:56:26.170478823Z 	            v_up.user_id)
+2026-10-22T06:56:26.170480943Z 	    RETURNING id"
+2026-10-22T06:56:26.170482823Z 	PL/pgSQL function app_finish_upload(uuid,text,bigint,uuid[]) line 45 at SQL statement
+2026-10-22T06:56:26.170484693Z 2026-10-22 06:56:26.170 UTC [556] STATEMENT:  SELECT app_finish_upload($1, $2, $3, $4)
+2026-10-22T06:56:26.207286268Z 2026-10-22 06:56:26.207 UTC [563] ERROR:  upload not found
+2026-10-22T06:56:26.207326988Z 2026-10-22 06:56:26.207 UTC [563] CONTEXT:  PL/pgSQL function app_my_upload(uuid) line 7 at RAISE
+2026-10-22T06:56:26.207332719Z 2026-10-22 06:56:26.207 UTC [563] STATEMENT:  SELECT id, name, size, chunk_bytes, storage_key, storage_upload_id, state, failure, version_id, expires_at, state_changed_at FROM app_my_upload($1)
+2026-10-22T06:56:26.213084905Z 2026-10-22 06:56:26.212 UTC [563] ERROR:  some parts are missing
+2026-10-22T06:56:26.213114716Z 2026-10-22 06:56:26.212 UTC [563] CONTEXT:  PL/pgSQL function app_begin_complete(uuid) line 24 at RAISE
+2026-10-22T06:56:26.213117526Z 2026-10-22 06:56:26.212 UTC [563] STATEMENT:  SELECT id, name, size, chunk_bytes, storage_key, storage_upload_id, state, failure, version_id, expires_at, state_changed_at FROM app_begin_complete($1)
+2026-10-22T06:56:26.256894328Z 2026-10-22 06:56:26.256 UTC [566] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:26.256949899Z 2026-10-22 06:56:26.256 UTC [566] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:26.256955389Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:26.256958169Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:26.256960209Z 2026-10-22 06:56:26.256 UTC [566] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:26.262408678Z 2026-10-22 06:56:26.262 UTC [571] ERROR:  read-only access
+2026-10-22T06:56:26.262447518Z 2026-10-22 06:56:26.262 UTC [571] CONTEXT:  PL/pgSQL function app_delete_file_version(uuid,integer,uuid[]) line 11 at RAISE
+2026-10-22T06:56:26.262453308Z 2026-10-22 06:56:26.262 UTC [571] STATEMENT:  SELECT app_delete_file_version($1, $2, $3)
+2026-10-22T06:56:26.271755442Z 2026-10-22 06:56:26.271 UTC [571] ERROR:  the current version cannot be deleted; upload a new one or delete the file
+2026-10-22T06:56:26.271795092Z 2026-10-22 06:56:26.271 UTC [571] CONTEXT:  PL/pgSQL function app_delete_file_version(uuid,integer,uuid[]) line 18 at RAISE
+2026-10-22T06:56:26.271803143Z 2026-10-22 06:56:26.271 UTC [571] STATEMENT:  SELECT app_delete_file_version($1, $2, $3)
+2026-10-22T06:56:26.278928370Z 2026-10-22 06:56:26.278 UTC [566] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:26.278968481Z 2026-10-22 06:56:26.278 UTC [566] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:26.278973921Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:26.278976861Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:26.278978951Z 2026-10-22 06:56:26.278 UTC [566] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:26.279450237Z 2026-10-22 06:56:26.279 UTC [571] ERROR:  version not found
+2026-10-22T06:56:26.279459367Z 2026-10-22 06:56:26.279 UTC [571] CONTEXT:  PL/pgSQL function app_delete_file_version(uuid,integer,uuid[]) line 23 at RAISE
+2026-10-22T06:56:26.279462887Z 2026-10-22 06:56:26.279 UTC [571] STATEMENT:  SELECT app_delete_file_version($1, $2, $3)
+2026-10-22T06:56:26.350152896Z 2026-10-22 06:56:26.349 UTC [557] ERROR:  trash entry not found
+2026-10-22T06:56:26.350215287Z 2026-10-22 06:56:26.349 UTC [557] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 11 at RAISE
+2026-10-22T06:56:26.350221137Z 2026-10-22 06:56:26.349 UTC [557] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:56:26.355569698Z 2026-10-22 06:56:26.355 UTC [557] ERROR:  trash entry not found
+2026-10-22T06:56:26.355586699Z 2026-10-22 06:56:26.355 UTC [557] CONTEXT:  PL/pgSQL function app_purge_batch_as(uuid,boolean,uuid[]) line 11 at RAISE
+2026-10-22T06:56:26.355589459Z 	SQL function "app_purge_batch" statement 1
+2026-10-22T06:56:26.355591869Z 2026-10-22 06:56:26.355 UTC [557] STATEMENT:  SELECT app_purge_batch($1, $2)
+2026-10-22T06:56:26.372993977Z 2026-10-22 06:56:26.372 UTC [557] ERROR:  trash entry not found
+2026-10-22T06:56:26.373036517Z 2026-10-22 06:56:26.372 UTC [557] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 11 at RAISE
+2026-10-22T06:56:26.373051637Z 2026-10-22 06:56:26.372 UTC [557] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:56:26.377860778Z 2026-10-22 06:56:26.377 UTC [557] ERROR:  trash entry not found
+2026-10-22T06:56:26.377896258Z 2026-10-22 06:56:26.377 UTC [557] CONTEXT:  PL/pgSQL function app_purge_batch_as(uuid,boolean,uuid[]) line 11 at RAISE
+2026-10-22T06:56:26.377901908Z 	SQL function "app_purge_batch" statement 1
+2026-10-22T06:56:26.377904898Z 2026-10-22 06:56:26.377 UTC [557] STATEMENT:  SELECT app_purge_batch($1, $2)
+2026-10-22T06:56:26.386606896Z 2026-10-22 06:56:26.386 UTC [560] ERROR:  target not found
+2026-10-22T06:56:26.386650226Z 2026-10-22 06:56:26.386 UTC [560] CONTEXT:  PL/pgSQL function app_file_place(text,uuid) line 17 at RAISE
+2026-10-22T06:56:26.386656226Z 	SQL statement "SELECT *              FROM app_file_place(v_kind, v_tgt)"
+2026-10-22T06:56:26.386659346Z 	PL/pgSQL function app_create_upload(uuid,uuid,text,uuid,text,text,text,bigint,bigint,integer,bigint,bigint,uuid[]) line 35 at SQL statement
+2026-10-22T06:56:26.386661646Z 2026-10-22 06:56:26.386 UTC [560] STATEMENT:  SELECT app_create_upload($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+2026-10-22T06:56:27.364231209Z 2026-10-22 06:56:27.364 UTC [563] ERROR:  read-only access
+2026-10-22T06:56:27.364273120Z 2026-10-22 06:56:27.364 UTC [563] CONTEXT:  PL/pgSQL function app_file_place(text,uuid) line 20 at RAISE
+2026-10-22T06:56:27.364278470Z 	SQL statement "SELECT *              FROM app_file_place(v_kind, v_tgt)"
+2026-10-22T06:56:27.364281440Z 	PL/pgSQL function app_create_upload(uuid,uuid,text,uuid,text,text,text,bigint,bigint,integer,bigint,bigint,uuid[]) line 35 at SQL statement
+2026-10-22T06:56:27.364283520Z 2026-10-22 06:56:27.364 UTC [563] STATEMENT:  SELECT app_create_upload($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+2026-10-22T06:56:27.631033203Z 2026-10-22 06:56:27.630 UTC [558] ERROR:  read-only access
+2026-10-22T06:56:27.631079344Z 2026-10-22 06:56:27.630 UTC [558] CONTEXT:  PL/pgSQL function app_rename_file(uuid,text,uuid[]) line 11 at RAISE
+2026-10-22T06:56:27.631084764Z 2026-10-22 06:56:27.630 UTC [558] STATEMENT:  SELECT app_rename_file($1, $2, $3)
+2026-10-22T06:56:27.634836944Z 2026-10-22 06:56:27.634 UTC [558] ERROR:  invalid file name
+2026-10-22T06:56:27.634847254Z 2026-10-22 06:56:27.634 UTC [558] CONTEXT:  PL/pgSQL function app_rename_file(uuid,text,uuid[]) line 14 at RAISE
+2026-10-22T06:56:27.634849824Z 2026-10-22 06:56:27.634 UTC [558] STATEMENT:  SELECT app_rename_file($1, $2, $3)
+2026-10-22T06:56:27.645409666Z 2026-10-22 06:56:27.645 UTC [558] ERROR:  read-only access
+2026-10-22T06:56:27.645439236Z 2026-10-22 06:56:27.645 UTC [558] CONTEXT:  PL/pgSQL function app_trash_file(uuid,uuid[]) line 11 at RAISE
+2026-10-22T06:56:27.645445616Z 2026-10-22 06:56:27.645 UTC [558] STATEMENT:  SELECT app_trash_file($1, $2)
+2026-10-22T06:56:27.763191967Z 2026-10-22 06:56:27.762 UTC [563] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:27.899288945Z 2026-10-22 06:56:27.899 UTC [603] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:27.945159180Z 2026-10-22 06:56:27.944 UTC [614] ERROR:  permission denied for table sessions
+2026-10-22T06:56:27.945200511Z 2026-10-22 06:56:27.944 UTC [614] STATEMENT:  SELECT * FROM sessions
+2026-10-22T06:56:27.977642166Z 2026-10-22 06:56:27.977 UTC [617] ERROR:  permission denied for table oidc_login_states
+2026-10-22T06:56:27.977679867Z 2026-10-22 06:56:27.977 UTC [617] STATEMENT:  SELECT * FROM oidc_login_states
+2026-10-22T06:56:28.007431246Z 2026-10-22 06:56:28.007 UTC [619] ERROR:  permission denied for table reference_counters
+2026-10-22T06:56:28.007452216Z 2026-10-22 06:56:28.007 UTC [619] STATEMENT:  UPDATE reference_counters SET next_number = 1
+2026-10-22T06:56:28.037095734Z 2026-10-22 06:56:28.036 UTC [621] ERROR:  permission denied for table audit_log
+2026-10-22T06:56:28.037137305Z 2026-10-22 06:56:28.036 UTC [621] STATEMENT:  INSERT INTO audit_log (workspace_id, actor, action, target_type, target_id) VALUES ($1, app_user_id(), 'x', 'y', app_user_id())
+2026-10-22T06:56:28.059157431Z 2026-10-22 06:56:28.058 UTC [615] ERROR:  permission denied for table documents
+2026-10-22T06:56:28.059171591Z 2026-10-22 06:56:28.058 UTC [615] STATEMENT:  DELETE FROM documents WHERE id = $1
+2026-10-22T06:56:28.067639125Z 2026-10-22 06:56:28.067 UTC [623] ERROR:  permission denied for table documents
+2026-10-22T06:56:28.067677245Z 2026-10-22 06:56:28.067 UTC [623] STATEMENT:  INSERT INTO documents (workspace_id, placement, scope, number, title, schema_version, body, revision, created_by, updated_by, request_id) VALUES ($1, 'wiki', 'WIKI', 99, 't', 1, '{}', 1, app_user_id(), app_user_id(), $1)
+2026-10-22T06:56:28.100282593Z 2026-10-22 06:56:28.100 UTC [624] ERROR:  revision changes only with content
+2026-10-22T06:56:28.100299723Z 2026-10-22 06:56:28.100 UTC [624] CONTEXT:  PL/pgSQL function documents_revision_step() line 13 at RAISE
+2026-10-22T06:56:28.100302673Z 2026-10-22 06:56:28.100 UTC [624] STATEMENT:  UPDATE documents SET revision = revision - 1 WHERE id = $1
+2026-10-22T06:56:34.626580885Z 2026-10-22 06:56:34.626 UTC [656] ERROR:  target not found
+2026-10-22T06:56:34.626608665Z 2026-10-22 06:56:34.626 UTC [656] CONTEXT:  PL/pgSQL function app_set_mark(text,text,uuid,boolean) line 16 at RAISE
+2026-10-22T06:56:34.626611945Z 2026-10-22 06:56:34.626 UTC [656] STATEMENT:  SELECT app_set_mark($1, $2, $3, $4)
+2026-10-22T06:56:34.793841689Z 2026-10-22 06:56:34.793 UTC [652] ERROR:  target not found
+2026-10-22T06:56:34.793902330Z 2026-10-22 06:56:34.793 UTC [652] CONTEXT:  PL/pgSQL function app_set_mark(text,text,uuid,boolean) line 16 at RAISE
+2026-10-22T06:56:34.793909240Z 2026-10-22 06:56:34.793 UTC [652] STATEMENT:  SELECT app_set_mark($1, $2, $3, $4)
+2026-10-22T06:56:34.981499241Z 2026-10-22 06:56:34.981 UTC [652] ERROR:  unknown time zone
+2026-10-22T06:56:34.981550842Z 2026-10-22 06:56:34.981 UTC [652] CONTEXT:  PL/pgSQL function app_check_timezone(text) line 5 at RAISE
+2026-10-22T06:56:34.981557562Z 2026-10-22 06:56:34.981 UTC [652] STATEMENT:  SELECT app_check_timezone($1)
+2026-10-22T06:56:35.560855750Z 2026-10-22 06:56:35.560 UTC [665] ERROR:  null value in column "id" of relation "users" violates not-null constraint
+2026-10-22T06:56:35.560900011Z 2026-10-22 06:56:35.560 UTC [665] DETAIL:  Failing row contains (null, https://ids.test, ids-01a16265-b6e7-70b5-98e4-8e9a3e62db28, null, ids, 2026-10-22 06:56:35.559587+00, 2026-10-22 06:56:35.559587+00, f).
+2026-10-22T06:56:35.560907441Z 2026-10-22 06:56:35.560 UTC [665] STATEMENT:  INSERT INTO fvoci.users (issuer, subject, display_name) VALUES ('https://ids.test', $1, 'ids')
+2026-10-22T06:56:35.562608992Z 2026-10-22 06:56:35.562 UTC [665] ERROR:  new row for relation "users" violates check constraint "users_id_uuidv7"
+2026-10-22T06:56:35.562641182Z 2026-10-22 06:56:35.562 UTC [665] DETAIL:  Failing row contains (4b1e8f6c-1d2a-4c3b-9a8e-0f1e2d3c4b5a, https://ids.test, ids-01a16265-b6e7-70b5-98e4-8e9a3e62db28, null, ids, 2026-10-22 06:56:35.5616+00, 2026-10-22 06:56:35.5616+00, f).
+2026-10-22T06:56:35.562647562Z 2026-10-22 06:56:35.562 UTC [665] STATEMENT:  INSERT INTO fvoci.users (id, issuer, subject, display_name) VALUES ($1, 'https://ids.test', $2, 'ids')
+2026-10-22T06:56:35.573587671Z 2026-10-22 06:56:35.573 UTC [669] ERROR:  new id #1 was not supplied by the application
+2026-10-22T06:56:35.573608161Z 2026-10-22 06:56:35.573 UTC [669] CONTEXT:  PL/pgSQL function app_id(uuid[],integer) line 7 at RAISE
+2026-10-22T06:56:35.573610821Z 	SQL statement "INSERT INTO workspaces (id, name, created_by, owner_id, request_id)
+2026-10-22T06:56:35.573613511Z 	    VALUES (app_id(p_ids, 1), btrim(p_name), v_user, v_user, p_request_id)
+2026-10-22T06:56:35.573615411Z 	    ON CONFLICT ON CONSTRAINT workspaces_request DO NOTHING
+2026-10-22T06:56:35.573617241Z 	    RETURNING id"
+2026-10-22T06:56:35.573619191Z 	PL/pgSQL function app_create_workspace(uuid,text,uuid[]) line 10 at SQL statement
+2026-10-22T06:56:35.573621141Z 2026-10-22 06:56:35.573 UTC [669] STATEMENT:  SELECT app_create_workspace($1, 'ids', $2)
+2026-10-22T06:56:35.577695250Z 2026-10-22 06:56:35.577 UTC [666] ERROR:  new id #2 was not supplied by the application
+2026-10-22T06:56:35.577707160Z 2026-10-22 06:56:35.577 UTC [666] CONTEXT:  PL/pgSQL function app_id(uuid[],integer) line 7 at RAISE
+2026-10-22T06:56:35.577710970Z 	SQL statement "INSERT INTO audit_log (id, workspace_id, actor, action, target_type, target_id, detail)
+2026-10-22T06:56:35.577714490Z 	    VALUES (app_id(p_ids, 2), v_id, v_user, 'create', 'workspace', v_id, jsonb_build_object('name', btrim(p_name)))"
+2026-10-22T06:56:35.577717670Z 	PL/pgSQL function app_create_workspace(uuid,text,uuid[]) line 21 at SQL statement
+2026-10-22T06:56:35.577720640Z 2026-10-22 06:56:35.577 UTC [666] STATEMENT:  SELECT app_create_workspace($1, 'ids', $2)
+2026-10-22T06:56:35.578043949Z 2026-10-22 06:56:35.577 UTC [667] ERROR:  group not found
+2026-10-22T06:56:35.578050849Z 2026-10-22 06:56:35.577 UTC [667] CONTEXT:  PL/pgSQL function app_delete_group(uuid,uuid[]) line 8 at RAISE
+2026-10-22T06:56:35.578053369Z 2026-10-22 06:56:35.577 UTC [667] STATEMENT:  SELECT app_delete_group($1, $2)
+2026-10-22T06:56:35.579635911Z 2026-10-22 06:56:35.579 UTC [669] ERROR:  new ids must be UUIDv7
+2026-10-22T06:56:35.579647451Z 2026-10-22 06:56:35.579 UTC [669] CONTEXT:  PL/pgSQL function app_id(uuid[],integer) line 10 at RAISE
+2026-10-22T06:56:35.579650121Z 	SQL statement "INSERT INTO workspaces (id, name, created_by, owner_id, request_id)
+2026-10-22T06:56:35.579652281Z 	    VALUES (app_id(p_ids, 1), btrim(p_name), v_user, v_user, p_request_id)
+2026-10-22T06:56:35.579654211Z 	    ON CONFLICT ON CONSTRAINT workspaces_request DO NOTHING
+2026-10-22T06:56:35.579656031Z 	    RETURNING id"
+2026-10-22T06:56:35.579657881Z 	PL/pgSQL function app_create_workspace(uuid,text,uuid[]) line 10 at SQL statement
+2026-10-22T06:56:35.579659801Z 2026-10-22 06:56:35.579 UTC [669] STATEMENT:  SELECT app_create_workspace($1, 'ids', $2)
+2026-10-22T06:56:35.584083131Z 2026-10-22 06:56:35.583 UTC [667] ERROR:  group not found
+2026-10-22T06:56:35.584093821Z 2026-10-22 06:56:35.583 UTC [667] CONTEXT:  PL/pgSQL function app_set_group_member(uuid,uuid,boolean,uuid[]) line 8 at RAISE
+2026-10-22T06:56:35.584096601Z 2026-10-22 06:56:35.583 UTC [667] STATEMENT:  SELECT app_set_group_member($1, $2, false, $3)
+2026-10-22T06:56:35.650078746Z 2026-10-22 06:56:35.649 UTC [671] ERROR:  new id #1 was not supplied by the application
+2026-10-22T06:56:35.650118317Z 2026-10-22 06:56:35.649 UTC [671] CONTEXT:  PL/pgSQL function app_id(uuid[],integer) line 7 at RAISE
+2026-10-22T06:56:35.650124797Z 	SQL statement "SELECT app_notify(app_id(p_ids, v_at), v_uid, 'due', NULL, v_task.id, NULL, NULL,
+2026-10-22T06:56:35.650128217Z 	                           jsonb_build_object('date', p_today, 'due_date', v_task.due_date,
+2026-10-22T06:56:35.650130697Z 	                                              'title', v_task.title))"
+2026-10-22T06:56:35.650133467Z 	PL/pgSQL function app_system_due_notifications(date,uuid[]) line 24 at PERFORM
+2026-10-22T06:56:35.650135807Z 2026-10-22 06:56:35.649 UTC [671] STATEMENT:  SELECT app_system_due_notifications(current_date, $1)
+2026-10-22T06:56:35.653973240Z 2026-10-22 06:56:35.653 UTC [668] ERROR:  new id #1 was not supplied by the application
+2026-10-22T06:56:35.654003101Z 2026-10-22 06:56:35.653 UTC [668] CONTEXT:  PL/pgSQL function app_id(uuid[],integer) line 7 at RAISE
+2026-10-22T06:56:35.654009361Z 	SQL statement "SELECT app_notify(app_id(p_ids, v_at), v_uid, 'due', NULL, v_task.id, NULL, NULL,
+2026-10-22T06:56:35.654011971Z 	                           jsonb_build_object('date', p_today, 'due_date', v_task.due_date,
+2026-10-22T06:56:35.654014361Z 	                                              'title', v_task.title))"
+2026-10-22T06:56:35.654016671Z 	PL/pgSQL function app_system_due_notifications(date,uuid[]) line 24 at PERFORM
+2026-10-22T06:56:35.654018881Z 2026-10-22 06:56:35.653 UTC [668] STATEMENT:  SELECT app_system_due_notifications(current_date, $1)
+2026-10-22T06:56:35.656320860Z 2026-10-22 06:56:35.656 UTC [671] ERROR:  new id #1 was not supplied by the application
+2026-10-22T06:56:35.656368691Z 2026-10-22 06:56:35.656 UTC [671] CONTEXT:  PL/pgSQL function app_id(uuid[],integer) line 7 at RAISE
+2026-10-22T06:56:35.656375101Z 	SQL statement "SELECT app_notify(app_id(p_ids, v_at), v_uid, 'due', NULL, v_task.id, NULL, NULL,
+2026-10-22T06:56:35.656377731Z 	                           jsonb_build_object('date', p_today, 'due_date', v_task.due_date,
+2026-10-22T06:56:35.656380061Z 	                                              'title', v_task.title))"
+2026-10-22T06:56:35.656382361Z 	PL/pgSQL function app_system_due_notifications(date,uuid[]) line 24 at PERFORM
+2026-10-22T06:56:35.656384631Z 2026-10-22 06:56:35.656 UTC [671] STATEMENT:  SELECT app_system_due_notifications(current_date, $1)
+2026-10-22T06:56:35.677189962Z 2026-10-22 06:56:35.677 UTC [668] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:35.852807878Z 2026-10-22 06:56:35.852 UTC [674] ERROR:  invalid status
+2026-10-22T06:56:35.852833849Z 2026-10-22 06:56:35.852 UTC [674] CONTEXT:  PL/pgSQL function app_set_item_profile(uuid,uuid,text,text,date,date,text,jsonb,uuid[]) line 23 at RAISE
+2026-10-22T06:56:35.852837019Z 2026-10-22 06:56:35.852 UTC [674] STATEMENT:  SELECT app_set_item_profile($1, $2, $3, $4, $5, $6, $7, $8, $9)
+2026-10-22T06:56:35.858467716Z 2026-10-22 06:56:35.858 UTC [674] ERROR:  the period ends before it starts
+2026-10-22T06:56:35.858484266Z 2026-10-22 06:56:35.858 UTC [674] CONTEXT:  PL/pgSQL function app_set_item_profile(uuid,uuid,text,text,date,date,text,jsonb,uuid[]) line 26 at RAISE
+2026-10-22T06:56:35.858487806Z 2026-10-22 06:56:35.858 UTC [674] STATEMENT:  SELECT app_set_item_profile($1, $2, $3, $4, $5, $6, $7, $8, $9)
+2026-10-22T06:56:35.864485307Z 2026-10-22 06:56:35.864 UTC [679] ERROR:  item not found
+2026-10-22T06:56:35.864516877Z 2026-10-22 06:56:35.864 UTC [679] CONTEXT:  PL/pgSQL function app_set_item_members(uuid,uuid[],uuid[],uuid[]) line 21 at RAISE
+2026-10-22T06:56:35.864522417Z 2026-10-22 06:56:35.864 UTC [679] STATEMENT:  SELECT app_set_item_members($1, $2, $3, $4)
+2026-10-22T06:56:35.870159322Z 2026-10-22 06:56:35.869 UTC [679] ERROR:  members must belong to the workspace
+2026-10-22T06:56:35.870172233Z 2026-10-22 06:56:35.869 UTC [679] CONTEXT:  PL/pgSQL function app_set_item_members(uuid,uuid[],uuid[],uuid[]) line 35 at RAISE
+2026-10-22T06:56:35.870174623Z 2026-10-22 06:56:35.869 UTC [679] STATEMENT:  SELECT app_set_item_members($1, $2, $3, $4)
+2026-10-22T06:56:35.871512481Z 2026-10-22 06:56:35.871 UTC [674] ERROR:  admin role required
+2026-10-22T06:56:35.871540711Z 2026-10-22 06:56:35.871 UTC [674] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 10 at RAISE
+2026-10-22T06:56:35.871546291Z 	SQL statement "SELECT app_require_admin(v_ws)"
+2026-10-22T06:56:35.871549491Z 	PL/pgSQL function app_set_module_icon(uuid,text) line 8 at PERFORM
+2026-10-22T06:56:35.871551531Z 2026-10-22 06:56:35.871 UTC [674] STATEMENT:  SELECT app_set_module_icon($1, $2)
+2026-10-22T06:56:35.896691540Z 2026-10-22 06:56:35.896 UTC [684] ERROR:  duplicate key value violates unique constraint "items_request"
+2026-10-22T06:56:35.896753780Z 2026-10-22 06:56:35.896 UTC [684] DETAIL:  Key (module_id, created_by, request_id)=(01a16265-b7bd-701f-928f-2a5f0fc989e2, 01a16265-b784-76c8-9280-303ef521c41e, 01a16265-b7d9-77f3-b137-65b0a89dd6cb) already exists.
+2026-10-22T06:56:35.896761321Z 2026-10-22 06:56:35.896 UTC [684] CONTEXT:  SQL statement "INSERT INTO items (id, workspace_id, module_id, title, description, created_by, updated_by, request_id)
+2026-10-22T06:56:35.896764781Z 	    VALUES (v_id, v_mod.workspace_id, p_module, btrim(p_title), coalesce(p_description, ''),
+2026-10-22T06:56:35.896767841Z 	            v_user, v_user, p_request_id)"
+2026-10-22T06:56:35.896770371Z 	PL/pgSQL function app_create_item(uuid,uuid,text,text,uuid[]) line 25 at SQL statement
+2026-10-22T06:56:35.896773021Z 	PL/pgSQL function app_copy_item(uuid,uuid,uuid,text,boolean,uuid[]) line 31 at assignment
+2026-10-22T06:56:35.896775431Z 2026-10-22 06:56:35.896 UTC [684] STATEMENT:  SELECT copied_item, skipped_count FROM app_copy_item($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:35.899729500Z 2026-10-22 06:56:35.899 UTC [679] ERROR:  write access is required
+2026-10-22T06:56:35.899762030Z 2026-10-22 06:56:35.899 UTC [679] CONTEXT:  PL/pgSQL function app_create_task(uuid,uuid,text,uuid,uuid[]) line 13 at RAISE
+2026-10-22T06:56:35.899767560Z 2026-10-22 06:56:35.899 UTC [679] STATEMENT:  SELECT app_create_task($1, $2, $3, $4, $5)
+2026-10-22T06:56:35.908627640Z 2026-10-22 06:56:35.908 UTC [679] ERROR:  only the item owner can choose members
+2026-10-22T06:56:35.908638520Z 2026-10-22 06:56:35.908 UTC [679] CONTEXT:  PL/pgSQL function app_set_item_members(uuid,uuid[],uuid[],uuid[]) line 24 at RAISE
+2026-10-22T06:56:35.908641100Z 2026-10-22 06:56:35.908 UTC [679] STATEMENT:  SELECT app_set_item_members($1, $2, $3, $4)
+2026-10-22T06:56:35.914546968Z 2026-10-22 06:56:35.914 UTC [679] ERROR:  the leader must be able to see the item
+2026-10-22T06:56:35.914584419Z 2026-10-22 06:56:35.914 UTC [679] CONTEXT:  PL/pgSQL function app_set_item_profile(uuid,uuid,text,text,date,date,text,jsonb,uuid[]) line 34 at RAISE
+2026-10-22T06:56:35.914589919Z 2026-10-22 06:56:35.914 UTC [679] STATEMENT:  SELECT app_set_item_profile($1, $2, $3, $4, $5, $6, $7, $8, $9)
+2026-10-22T06:56:35.957532174Z 2026-10-22 06:56:35.957 UTC [682] ERROR:  copy into a module of the same kind in the same workspace
+2026-10-22T06:56:35.957579825Z 2026-10-22 06:56:35.957 UTC [682] CONTEXT:  PL/pgSQL function app_copy_item(uuid,uuid,uuid,text,boolean,uuid[]) line 27 at RAISE
+2026-10-22T06:56:35.957586855Z 2026-10-22 06:56:35.957 UTC [682] STATEMENT:  SELECT copied_item, skipped_count FROM app_copy_item($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:35.962885398Z 2026-10-22 06:56:35.962 UTC [682] ERROR:  write access is required
+2026-10-22T06:56:35.962896928Z 2026-10-22 06:56:35.962 UTC [682] CONTEXT:  PL/pgSQL function app_create_item(uuid,uuid,text,text,uuid[]) line 14 at RAISE
+2026-10-22T06:56:35.962899548Z 	PL/pgSQL function app_copy_item(uuid,uuid,uuid,text,boolean,uuid[]) line 31 at assignment
+2026-10-22T06:56:35.962901908Z 2026-10-22 06:56:35.962 UTC [682] STATEMENT:  SELECT copied_item, skipped_count FROM app_copy_item($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:35.997052407Z 2026-10-22 06:56:35.996 UTC [679] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:36.024476135Z 2026-10-22 06:56:36.024 UTC [682] ERROR:  write access is required
+2026-10-22T06:56:36.024518015Z 2026-10-22 06:56:36.024 UTC [682] CONTEXT:  PL/pgSQL function app_record_write_check(uuid) line 9 at RAISE
+2026-10-22T06:56:36.024523355Z 	SQL statement "SELECT app_record_write_check(p_item)"
+2026-10-22T06:56:36.024526225Z 	PL/pgSQL function app_set_item_template(uuid,boolean,uuid[]) line 6 at PERFORM
+2026-10-22T06:56:36.024528235Z 2026-10-22 06:56:36.024 UTC [682] STATEMENT:  SELECT app_set_item_template($1, $2, $3)
+2026-10-22T06:56:41.264892209Z 2026-10-22 06:56:41.264 UTC [736] ERROR:  invitation not found
+2026-10-22T06:56:41.264954210Z 2026-10-22 06:56:41.264 UTC [736] CONTEXT:  PL/pgSQL function app_respond_invitation(uuid,boolean,uuid[]) line 13 at RAISE
+2026-10-22T06:56:41.264963760Z 2026-10-22 06:56:41.264 UTC [736] STATEMENT:  SELECT app_respond_invitation($1, $2, $3)
+2026-10-22T06:56:41.267657685Z 2026-10-22 06:56:41.267 UTC [754] ERROR:  the owner cannot leave or be removed; transfer ownership first
+2026-10-22T06:56:41.267700895Z 2026-10-22 06:56:41.267 UTC [754] CONTEXT:  PL/pgSQL function app_remove_member_internal(uuid,uuid,text,uuid[]) line 10 at RAISE
+2026-10-22T06:56:41.267709645Z 	SQL statement "SELECT app_remove_member_internal(p_workspace, app_user_id(), 'leave', p_ids)"
+2026-10-22T06:56:41.267713615Z 	PL/pgSQL function app_leave_workspace(uuid,uuid[]) line 6 at PERFORM
+2026-10-22T06:56:41.267716775Z 2026-10-22 06:56:41.267 UTC [754] STATEMENT:  SELECT app_leave_workspace($1, $2)
+2026-10-22T06:56:41.270966209Z 2026-10-22 06:56:41.270 UTC [756] ERROR:  only the owner can cancel
+2026-10-22T06:56:41.271018000Z 2026-10-22 06:56:41.270 UTC [756] CONTEXT:  PL/pgSQL function app_cancel_ownership_offer(uuid,uuid[]) line 6 at RAISE
+2026-10-22T06:56:41.271026260Z 2026-10-22 06:56:41.270 UTC [756] STATEMENT:  SELECT app_cancel_ownership_offer($1, $2)
+2026-10-22T06:56:41.273814319Z 2026-10-22 06:56:41.273 UTC [739] ERROR:  a group with this name exists
+2026-10-22T06:56:41.273856229Z 2026-10-22 06:56:41.273 UTC [739] CONTEXT:  PL/pgSQL function app_create_group(uuid,text,uuid[]) line 11 at RAISE
+2026-10-22T06:56:41.273866159Z 2026-10-22 06:56:41.273 UTC [739] STATEMENT:  SELECT app_create_group($1, $2, $3)
+2026-10-22T06:56:41.277090364Z 2026-10-22 06:56:41.276 UTC [736] ERROR:  invitation not found
+2026-10-22T06:56:41.277134075Z 2026-10-22 06:56:41.276 UTC [736] CONTEXT:  PL/pgSQL function app_respond_invitation(uuid,boolean,uuid[]) line 13 at RAISE
+2026-10-22T06:56:41.277141705Z 2026-10-22 06:56:41.276 UTC [736] STATEMENT:  SELECT app_respond_invitation($1, $2, $3)
+2026-10-22T06:56:41.277664791Z 2026-10-22 06:56:41.277 UTC [754] ERROR:  the owner cannot leave or be removed; transfer ownership first
+2026-10-22T06:56:41.277678931Z 2026-10-22 06:56:41.277 UTC [754] CONTEXT:  PL/pgSQL function app_remove_member_internal(uuid,uuid,text,uuid[]) line 10 at RAISE
+2026-10-22T06:56:41.277698611Z 	SQL statement "SELECT app_remove_member_internal(p_workspace, p_member, 'remove', p_ids)"
+2026-10-22T06:56:41.277710981Z 	PL/pgSQL function app_remove_member(uuid,uuid,uuid[]) line 8 at PERFORM
+2026-10-22T06:56:41.277714581Z 2026-10-22 06:56:41.277 UTC [754] STATEMENT:  SELECT app_remove_member($1, $2, $3)
+2026-10-22T06:56:41.278170533Z 2026-10-22 06:56:41.278 UTC [763] ERROR:  invitation is no longer open
+2026-10-22T06:56:41.278177513Z 2026-10-22 06:56:41.278 UTC [763] CONTEXT:  PL/pgSQL function app_respond_invitation(uuid,boolean,uuid[]) line 16 at RAISE
+2026-10-22T06:56:41.278180373Z 2026-10-22 06:56:41.278 UTC [763] STATEMENT:  SELECT app_respond_invitation($1, $2, $3)
+2026-10-22T06:56:41.284540781Z 2026-10-22 06:56:41.284 UTC [742] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:41.285904030Z 2026-10-22 06:56:41.285 UTC [754] ERROR:  the owner must stay an admin
+2026-10-22T06:56:41.285944970Z 2026-10-22 06:56:41.285 UTC [754] CONTEXT:  PL/pgSQL function app_set_member_role(uuid,uuid,text,uuid[]) line 17 at RAISE
+2026-10-22T06:56:41.285955071Z 2026-10-22 06:56:41.285 UTC [754] STATEMENT:  SELECT app_set_member_role($1, $2, $3, $4)
+2026-10-22T06:56:41.288479446Z 2026-10-22 06:56:41.288 UTC [739] ERROR:  only workspace members can join a group
+2026-10-22T06:56:41.288515847Z 2026-10-22 06:56:41.288 UTC [739] CONTEXT:  PL/pgSQL function app_set_group_member(uuid,uuid,boolean,uuid[]) line 18 at RAISE
+2026-10-22T06:56:41.288521677Z 2026-10-22 06:56:41.288 UTC [739] STATEMENT:  SELECT app_set_group_member($1, $2, true, $3)
+2026-10-22T06:56:41.293025476Z 2026-10-22 06:56:41.292 UTC [754] ERROR:  only the owner can transfer ownership
+2026-10-22T06:56:41.293061367Z 2026-10-22 06:56:41.292 UTC [754] CONTEXT:  PL/pgSQL function app_offer_ownership(uuid,uuid,uuid[]) line 7 at RAISE
+2026-10-22T06:56:41.293067357Z 2026-10-22 06:56:41.292 UTC [754] STATEMENT:  SELECT app_offer_ownership($1, $2, $3)
+2026-10-22T06:56:41.294132660Z 2026-10-22 06:56:41.293 UTC [739] ERROR:  admin role required
+2026-10-22T06:56:41.294159111Z 2026-10-22 06:56:41.293 UTC [739] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 10 at RAISE
+2026-10-22T06:56:41.294165131Z 	SQL statement "SELECT app_require_admin(v_ws)"
+2026-10-22T06:56:41.294168961Z 	PL/pgSQL function app_set_group_member(uuid,uuid,boolean,uuid[]) line 10 at PERFORM
+2026-10-22T06:56:41.294172331Z 2026-10-22 06:56:41.293 UTC [739] STATEMENT:  SELECT app_set_group_member($1, $2, true, $3)
+2026-10-22T06:56:41.294175461Z 2026-10-22 06:56:41.293 UTC [746] ERROR:  admin role required
+2026-10-22T06:56:41.294178641Z 2026-10-22 06:56:41.293 UTC [746] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 10 at RAISE
+2026-10-22T06:56:41.294181591Z 	SQL statement "SELECT app_require_admin(p_workspace)"
+2026-10-22T06:56:41.294184721Z 	PL/pgSQL function app_set_member_role(uuid,uuid,text,uuid[]) line 8 at PERFORM
+2026-10-22T06:56:41.294187981Z 2026-10-22 06:56:41.293 UTC [746] STATEMENT:  SELECT app_set_member_role($1, $2, $3, $4)
+2026-10-22T06:56:41.296195110Z 2026-10-22 06:56:41.296 UTC [756] ERROR:  no pending offer
+2026-10-22T06:56:41.296207490Z 2026-10-22 06:56:41.296 UTC [756] CONTEXT:  PL/pgSQL function app_cancel_ownership_offer(uuid,uuid[]) line 10 at RAISE
+2026-10-22T06:56:41.296210150Z 2026-10-22 06:56:41.296 UTC [756] STATEMENT:  SELECT app_cancel_ownership_offer($1, $2)
+2026-10-22T06:56:41.301071689Z 2026-10-22 06:56:41.300 UTC [746] ERROR:  workspace not found
+2026-10-22T06:56:41.301113349Z 2026-10-22 06:56:41.300 UTC [746] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 7 at RAISE
+2026-10-22T06:56:41.301120739Z 	SQL statement "SELECT app_require_admin(p_workspace)"
+2026-10-22T06:56:41.301124689Z 	PL/pgSQL function app_set_member_role(uuid,uuid,text,uuid[]) line 8 at PERFORM
+2026-10-22T06:56:41.301127879Z 2026-10-22 06:56:41.300 UTC [746] STATEMENT:  SELECT app_set_member_role($1, $2, $3, $4)
+2026-10-22T06:56:41.303123462Z 2026-10-22 06:56:41.302 UTC [756] ERROR:  no offer for you
+2026-10-22T06:56:41.303142392Z 2026-10-22 06:56:41.302 UTC [756] CONTEXT:  PL/pgSQL function app_accept_ownership(uuid,uuid[]) line 10 at RAISE
+2026-10-22T06:56:41.303145342Z 2026-10-22 06:56:41.302 UTC [756] STATEMENT:  SELECT app_accept_ownership($1, $2)
+2026-10-22T06:56:41.305194810Z 2026-10-22 06:56:41.305 UTC [751] ERROR:  invitation is no longer open
+2026-10-22T06:56:41.305207650Z 2026-10-22 06:56:41.305 UTC [751] CONTEXT:  PL/pgSQL function app_respond_invitation(uuid,boolean,uuid[]) line 16 at RAISE
+2026-10-22T06:56:41.305211460Z 2026-10-22 06:56:41.305 UTC [751] STATEMENT:  SELECT app_respond_invitation($1, $2, $3)
+2026-10-22T06:56:41.307748324Z 2026-10-22 06:56:41.307 UTC [746] ERROR:  admin role required
+2026-10-22T06:56:41.307762585Z 2026-10-22 06:56:41.307 UTC [746] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 10 at RAISE
+2026-10-22T06:56:41.307765485Z 	PL/pgSQL function app_invite(uuid,text,text,integer,uuid[]) line 3 during statement block local variable initialization
+2026-10-22T06:56:41.307768665Z 2026-10-22 06:56:41.307 UTC [746] STATEMENT:  SELECT app_invite($1, $2, $3, $4, $5)
+2026-10-22T06:56:41.308144518Z 2026-10-22 06:56:41.307 UTC [744] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:41.308584144Z 2026-10-22 06:56:41.308 UTC [763] ERROR:  invitation is no longer open
+2026-10-22T06:56:41.308628095Z 2026-10-22 06:56:41.308 UTC [763] CONTEXT:  PL/pgSQL function app_respond_invitation(uuid,boolean,uuid[]) line 16 at RAISE
+2026-10-22T06:56:41.308638675Z 2026-10-22 06:56:41.308 UTC [763] STATEMENT:  SELECT app_respond_invitation($1, $2, $3)
+2026-10-22T06:56:41.318698450Z 2026-10-22 06:56:41.318 UTC [754] ERROR:  no offer for you
+2026-10-22T06:56:41.318717840Z 2026-10-22 06:56:41.318 UTC [754] CONTEXT:  PL/pgSQL function app_accept_ownership(uuid,uuid[]) line 10 at RAISE
+2026-10-22T06:56:41.318720950Z 2026-10-22 06:56:41.318 UTC [754] STATEMENT:  SELECT app_accept_ownership($1, $2)
+2026-10-22T06:56:41.342826465Z 2026-10-22 06:56:41.342 UTC [754] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:41.363269000Z 2026-10-22 06:56:41.363 UTC [766] ERROR:  invitation is no longer open
+2026-10-22T06:56:41.363294750Z 2026-10-22 06:56:41.363 UTC [766] CONTEXT:  PL/pgSQL function app_revoke_invitation(uuid,uuid[]) line 17 at RAISE
+2026-10-22T06:56:41.363297580Z 2026-10-22 06:56:41.363 UTC [766] STATEMENT:  SELECT app_revoke_invitation($1, $2)
+2026-10-22T06:56:41.368726624Z 2026-10-22 06:56:41.368 UTC [768] ERROR:  admin role required
+2026-10-22T06:56:41.368764175Z 2026-10-22 06:56:41.368 UTC [768] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 10 at RAISE
+2026-10-22T06:56:41.368771195Z 	SQL statement "SELECT app_require_admin(v_ws)"
+2026-10-22T06:56:41.368774745Z 	PL/pgSQL function app_revoke_invitation(uuid,uuid[]) line 14 at PERFORM
+2026-10-22T06:56:41.368777505Z 2026-10-22 06:56:41.368 UTC [768] STATEMENT:  SELECT app_revoke_invitation($1, $2)
+2026-10-22T06:56:41.380983892Z 2026-10-22 06:56:41.380 UTC [771] ERROR:  workspace not found
+2026-10-22T06:56:41.380996882Z 2026-10-22 06:56:41.380 UTC [771] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 7 at RAISE
+2026-10-22T06:56:41.381001742Z 	SQL statement "SELECT app_require_admin(p_workspace)"
+2026-10-22T06:56:41.381006262Z 	PL/pgSQL function app_remove_member(uuid,uuid,uuid[]) line 7 at PERFORM
+2026-10-22T06:56:41.381010143Z 2026-10-22 06:56:41.380 UTC [771] STATEMENT:  SELECT app_remove_member($1, $2, $3)
+2026-10-22T06:56:41.388824552Z 2026-10-22 06:56:41.388 UTC [773] ERROR:  the owner cannot leave or be removed; transfer ownership first
+2026-10-22T06:56:41.388835412Z 2026-10-22 06:56:41.388 UTC [773] CONTEXT:  PL/pgSQL function app_remove_member_internal(uuid,uuid,text,uuid[]) line 10 at RAISE
+2026-10-22T06:56:41.388838713Z 	SQL statement "SELECT app_remove_member_internal(p_workspace, p_member, 'remove', p_ids)"
+2026-10-22T06:56:41.388841553Z 	PL/pgSQL function app_remove_member(uuid,uuid,uuid[]) line 8 at PERFORM
+2026-10-22T06:56:41.388843983Z 2026-10-22 06:56:41.388 UTC [773] STATEMENT:  SELECT app_remove_member($1, $2, $3)
+2026-10-22T06:56:41.399558556Z 2026-10-22 06:56:41.399 UTC [775] ERROR:  admin role required
+2026-10-22T06:56:41.399571416Z 2026-10-22 06:56:41.399 UTC [775] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 10 at RAISE
+2026-10-22T06:56:41.399574866Z 	SQL statement "SELECT app_require_admin(v_ws)"
+2026-10-22T06:56:41.399578046Z 	PL/pgSQL function app_set_group_member(uuid,uuid,boolean,uuid[]) line 15 at PERFORM
+2026-10-22T06:56:41.399580596Z 2026-10-22 06:56:41.399 UTC [775] STATEMENT:  SELECT app_set_group_member($1, $2, true, $3)
+2026-10-22T06:56:41.415154816Z 2026-10-22 06:56:41.414 UTC [778] ERROR:  members must belong to the workspace
+2026-10-22T06:56:41.415201357Z 2026-10-22 06:56:41.414 UTC [778] CONTEXT:  PL/pgSQL function app_set_item_members(uuid,uuid[],uuid[],uuid[]) line 35 at RAISE
+2026-10-22T06:56:41.415207067Z 2026-10-22 06:56:41.414 UTC [778] STATEMENT:  SELECT app_set_item_members($1, $2, $3, $4)
+2026-10-22T06:56:41.509891048Z 2026-10-22 06:56:41.509 UTC [764] ERROR:  only workspace members can join a group
+2026-10-22T06:56:41.509933098Z 2026-10-22 06:56:41.509 UTC [764] CONTEXT:  PL/pgSQL function app_set_group_member(uuid,uuid,boolean,uuid[]) line 18 at RAISE
+2026-10-22T06:56:41.509939758Z 2026-10-22 06:56:41.509 UTC [764] STATEMENT:  SELECT app_set_group_member($1, $2, true, $3)
+2026-10-22T06:56:41.680262055Z 2026-10-22 06:56:41.680 UTC [792] ERROR:  this key is in use or was used before
+2026-10-22T06:56:41.680314846Z 2026-10-22 06:56:41.680 UTC [792] CONTEXT:  PL/pgSQL function app_create_module(uuid,uuid,text,text,text,uuid[]) line 16 at RAISE
+2026-10-22T06:56:41.680320916Z 2026-10-22 06:56:41.680 UTC [792] STATEMENT:  SELECT app_create_module($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:41.693884608Z 2026-10-22 06:56:41.693 UTC [800] ERROR:  admin role required
+2026-10-22T06:56:41.693935018Z 2026-10-22 06:56:41.693 UTC [800] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 10 at RAISE
+2026-10-22T06:56:41.693941899Z 	PL/pgSQL function app_create_module(uuid,uuid,text,text,text,uuid[]) line 3 during statement block local variable initialization
+2026-10-22T06:56:41.693945499Z 2026-10-22 06:56:41.693 UTC [800] STATEMENT:  SELECT app_create_module($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:41.698384057Z 2026-10-22 06:56:41.698 UTC [800] ERROR:  workspace not found
+2026-10-22T06:56:41.698432288Z 2026-10-22 06:56:41.698 UTC [800] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 7 at RAISE
+2026-10-22T06:56:41.698438078Z 	PL/pgSQL function app_create_module(uuid,uuid,text,text,text,uuid[]) line 3 during statement block local variable initialization
+2026-10-22T06:56:41.698440998Z 2026-10-22 06:56:41.698 UTC [800] STATEMENT:  SELECT app_create_module($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:41.705674127Z 2026-10-22 06:56:41.705 UTC [790] ERROR:  this key is in use or was used before
+2026-10-22T06:56:41.705703477Z 2026-10-22 06:56:41.705 UTC [790] CONTEXT:  PL/pgSQL function app_update_module(uuid,text,text,uuid[]) line 25 at RAISE
+2026-10-22T06:56:41.705707717Z 2026-10-22 06:56:41.705 UTC [790] STATEMENT:  SELECT app_update_module($1, $2, $3, $4)
+2026-10-22T06:56:41.711148136Z 2026-10-22 06:56:41.710 UTC [790] ERROR:  this key is in use or was used before
+2026-10-22T06:56:41.711201446Z 2026-10-22 06:56:41.710 UTC [790] CONTEXT:  PL/pgSQL function app_create_module(uuid,uuid,text,text,text,uuid[]) line 16 at RAISE
+2026-10-22T06:56:41.711208497Z 2026-10-22 06:56:41.710 UTC [790] STATEMENT:  SELECT app_create_module($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:41.732711239Z 2026-10-22 06:56:41.732 UTC [801] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:41.735202673Z 2026-10-22 06:56:41.735 UTC [798] ERROR:  the item is archived
+2026-10-22T06:56:41.735214213Z 2026-10-22 06:56:41.735 UTC [798] CONTEXT:  PL/pgSQL function app_create_module_document(uuid,uuid,text,integer,jsonb,uuid,integer,uuid[]) line 34 at RAISE
+2026-10-22T06:56:41.735217583Z 2026-10-22 06:56:41.735 UTC [798] STATEMENT:  SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:41.739857921Z 2026-10-22 06:56:41.739 UTC [795] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:41.739871261Z 2026-10-22 06:56:41.739 UTC [795] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:41.739874841Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:41.739877861Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:41.739880801Z 2026-10-22 06:56:41.739 UTC [795] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:41.740871955Z 2026-10-22 06:56:41.740 UTC [798] ERROR:  the item is archived
+2026-10-22T06:56:41.740878935Z 2026-10-22 06:56:41.740 UTC [798] CONTEXT:  PL/pgSQL function app_update_item(uuid,text,text,text,uuid[]) line 16 at RAISE
+2026-10-22T06:56:41.740881635Z 2026-10-22 06:56:41.740 UTC [798] STATEMENT:  SELECT app_update_item($1, $2, $3, $4, $5)
+2026-10-22T06:56:41.741237814Z 2026-10-22 06:56:41.741 UTC [802] ERROR:  archived documents can only be restricted
+2026-10-22T06:56:41.741274724Z 2026-10-22 06:56:41.741 UTC [802] CONTEXT:  PL/pgSQL function app_set_document_settings(uuid,text,boolean,uuid[]) line 22 at RAISE
+2026-10-22T06:56:41.741281914Z 2026-10-22 06:56:41.741 UTC [802] STATEMENT:  SELECT app_set_document_settings($1, $2, $3, $4)
+2026-10-22T06:56:41.746052263Z 2026-10-22 06:56:41.745 UTC [787] ERROR:  only the item owner can change visibility
+2026-10-22T06:56:41.746063803Z 2026-10-22 06:56:41.745 UTC [787] CONTEXT:  PL/pgSQL function app_update_item(uuid,text,text,text,uuid[]) line 24 at RAISE
+2026-10-22T06:56:41.746066583Z 2026-10-22 06:56:41.745 UTC [787] STATEMENT:  SELECT app_update_item($1, $2, $3, $4, $5)
+2026-10-22T06:56:41.755189470Z 2026-10-22 06:56:41.754 UTC [797] ERROR:  item not found
+2026-10-22T06:56:41.755245851Z 2026-10-22 06:56:41.754 UTC [797] CONTEXT:  PL/pgSQL function app_create_module_document(uuid,uuid,text,integer,jsonb,uuid,integer,uuid[]) line 12 at RAISE
+2026-10-22T06:56:41.755255171Z 2026-10-22 06:56:41.754 UTC [797] STATEMENT:  SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:41.760303688Z 2026-10-22 06:56:41.760 UTC [794] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:41.760340429Z 2026-10-22 06:56:41.760 UTC [794] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:41.760346029Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:41.760349279Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:41.760351419Z 2026-10-22 06:56:41.760 UTC [794] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:41.763826486Z 2026-10-22 06:56:41.763 UTC [795] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:41.763839306Z 2026-10-22 06:56:41.763 UTC [795] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:41.763841916Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:41.763844306Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:41.763854986Z 2026-10-22 06:56:41.763 UTC [795] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:41.773777260Z 2026-10-22 06:56:41.773 UTC [797] ERROR:  item not found
+2026-10-22T06:56:41.773814700Z 2026-10-22 06:56:41.773 UTC [797] CONTEXT:  PL/pgSQL function app_create_module_document(uuid,uuid,text,integer,jsonb,uuid,integer,uuid[]) line 12 at RAISE
+2026-10-22T06:56:41.773820410Z 2026-10-22 06:56:41.773 UTC [797] STATEMENT:  SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:41.775200360Z 2026-10-22 06:56:41.775 UTC [798] ERROR:  admin role required
+2026-10-22T06:56:41.775212530Z 2026-10-22 06:56:41.775 UTC [798] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 10 at RAISE
+2026-10-22T06:56:41.775215590Z 	SQL statement "SELECT app_require_admin(v_mod.workspace_id)"
+2026-10-22T06:56:41.775217960Z 	PL/pgSQL function app_archive_module(uuid,boolean,uuid[]) line 9 at PERFORM
+2026-10-22T06:56:41.775220000Z 2026-10-22 06:56:41.775 UTC [798] STATEMENT:  SELECT app_archive_module($1, $2, $3)
+2026-10-22T06:56:41.783449831Z 2026-10-22 06:56:41.783 UTC [794] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:41.783485581Z 2026-10-22 06:56:41.783 UTC [794] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:41.783491141Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:41.783494031Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:41.783496091Z 2026-10-22 06:56:41.783 UTC [794] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:41.784393222Z 2026-10-22 06:56:41.784 UTC [802] ERROR:  insufficient permission
+2026-10-22T06:56:41.784400272Z 2026-10-22 06:56:41.784 UTC [802] CONTEXT:  PL/pgSQL function app_require_document(uuid,text) line 10 at RAISE
+2026-10-22T06:56:41.784402932Z 	SQL statement "SELECT app_require_document(p_doc, 'owner')"
+2026-10-22T06:56:41.784405262Z 	PL/pgSQL function app_share_document(uuid,text,text,uuid[]) line 7 at PERFORM
+2026-10-22T06:56:41.784407462Z 2026-10-22 06:56:41.784 UTC [802] STATEMENT:  SELECT app_share_document($1, $2, $3, $4)
+2026-10-22T06:56:41.787975051Z 2026-10-22 06:56:41.787 UTC [789] ERROR:  permission denied for table numbered_targets
+2026-10-22T06:56:41.788007042Z 2026-10-22 06:56:41.787 UTC [789] STATEMENT:  INSERT INTO numbered_targets (workspace_id, scope_id, number, target_kind, target_id)
+2026-10-22T06:56:41.788013062Z 	         VALUES ($1::uuid, $2::uuid, 999, 'item', $3)
+2026-10-22T06:56:41.791720340Z 2026-10-22 06:56:41.791 UTC [803] ERROR:  the document is already there
+2026-10-22T06:56:41.791751561Z 2026-10-22 06:56:41.791 UTC [803] CONTEXT:  PL/pgSQL function app_check_move(uuid,uuid,uuid) line 12 at RAISE
+2026-10-22T06:56:41.791757151Z 	PL/pgSQL function app_move_preview(uuid,uuid,uuid) line 3 during statement block local variable initialization
+2026-10-22T06:56:41.791760481Z 2026-10-22 06:56:41.791 UTC [803] STATEMENT:  SELECT change, display_name FROM app_move_preview($1, $2, $3)
+2026-10-22T06:56:41.792290238Z 2026-10-22 06:56:41.792 UTC [798] ERROR:  the module is archived
+2026-10-22T06:56:41.792298518Z 2026-10-22 06:56:41.792 UTC [798] CONTEXT:  PL/pgSQL function app_create_item(uuid,uuid,text,text,uuid[]) line 17 at RAISE
+2026-10-22T06:56:41.792302348Z 2026-10-22 06:56:41.792 UTC [798] STATEMENT:  SELECT app_create_item($1, $2, $3, $4, $5)
+2026-10-22T06:56:41.794367955Z 2026-10-22 06:56:41.794 UTC [789] ERROR:  item not found
+2026-10-22T06:56:41.794401366Z 2026-10-22 06:56:41.794 UTC [789] CONTEXT:  PL/pgSQL function app_update_item(uuid,text,text,text,uuid[]) line 10 at RAISE
+2026-10-22T06:56:41.794407576Z 2026-10-22 06:56:41.794 UTC [789] STATEMENT:  SELECT app_update_item($1, $2, $3, $4, $5)
+2026-10-22T06:56:41.802474937Z 2026-10-22 06:56:41.802 UTC [795] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:41.802489108Z 2026-10-22 06:56:41.802 UTC [795] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:41.802492908Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:41.802495958Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:41.802498838Z 2026-10-22 06:56:41.802 UTC [795] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:41.818919445Z 2026-10-22 06:56:41.818 UTC [795] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:41.818958836Z 2026-10-22 06:56:41.818 UTC [795] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:41.818964246Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:41.818967096Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:41.818969106Z 2026-10-22 06:56:41.818 UTC [795] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:41.821689684Z 2026-10-22 06:56:41.821 UTC [804] ERROR:  request_id was already used for another document
+2026-10-22T06:56:41.821701414Z 2026-10-22 06:56:41.821 UTC [804] CONTEXT:  PL/pgSQL function app_create_module_document(uuid,uuid,text,integer,jsonb,uuid,integer,uuid[]) line 22 at RAISE
+2026-10-22T06:56:41.821705474Z 2026-10-22 06:56:41.821 UTC [804] STATEMENT:  SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:41.829597645Z 2026-10-22 06:56:41.829 UTC [789] ERROR:  only the item owner can change visibility
+2026-10-22T06:56:41.829610305Z 2026-10-22 06:56:41.829 UTC [789] CONTEXT:  PL/pgSQL function app_update_item(uuid,text,text,text,uuid[]) line 24 at RAISE
+2026-10-22T06:56:41.829614295Z 2026-10-22 06:56:41.829 UTC [789] STATEMENT:  SELECT app_update_item($1, $2, $3, $4, $5)
+2026-10-22T06:56:41.841393057Z 2026-10-22 06:56:41.841 UTC [804] ERROR:  request_id was already used for another document
+2026-10-22T06:56:41.841446958Z 2026-10-22 06:56:41.841 UTC [804] CONTEXT:  PL/pgSQL function app_create_module_document(uuid,uuid,text,integer,jsonb,uuid,integer,uuid[]) line 22 at RAISE
+2026-10-22T06:56:41.841453918Z 2026-10-22 06:56:41.841 UTC [804] STATEMENT:  SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:41.841821853Z 2026-10-22 06:56:41.841 UTC [803] ERROR:  target item not found
+2026-10-22T06:56:41.841850473Z 2026-10-22 06:56:41.841 UTC [803] CONTEXT:  PL/pgSQL function app_check_move(uuid,uuid,uuid) line 23 at RAISE
+2026-10-22T06:56:41.841856883Z 	PL/pgSQL function app_move_preview(uuid,uuid,uuid) line 3 during statement block local variable initialization
+2026-10-22T06:56:41.841859893Z 2026-10-22 06:56:41.841 UTC [803] STATEMENT:  SELECT change, display_name FROM app_move_preview($1, $2, $3)
+2026-10-22T06:56:41.853294057Z 2026-10-22 06:56:41.853 UTC [803] ERROR:  insufficient permission
+2026-10-22T06:56:41.853324198Z 2026-10-22 06:56:41.853 UTC [803] CONTEXT:  PL/pgSQL function app_require_document(uuid,text) line 10 at RAISE
+2026-10-22T06:56:41.853329528Z 	SQL statement "SELECT app_require_document(p_doc, 'owner')"
+2026-10-22T06:56:41.853332338Z 	PL/pgSQL function app_check_move(uuid,uuid,uuid) line 6 at PERFORM
+2026-10-22T06:56:41.853336978Z 	PL/pgSQL function app_move_preview(uuid,uuid,uuid) line 3 during statement block local variable initialization
+2026-10-22T06:56:41.853338948Z 2026-10-22 06:56:41.853 UTC [803] STATEMENT:  SELECT change, display_name FROM app_move_preview($1, $2, $3)
+2026-10-22T06:56:41.860478394Z 2026-10-22 06:56:41.860 UTC [789] ERROR:  write access is required
+2026-10-22T06:56:41.860514684Z 2026-10-22 06:56:41.860 UTC [789] CONTEXT:  PL/pgSQL function app_create_item(uuid,uuid,text,text,uuid[]) line 14 at RAISE
+2026-10-22T06:56:41.860521624Z 2026-10-22 06:56:41.860 UTC [789] STATEMENT:  SELECT app_create_item($1, $2, $3, $4, $5)
+2026-10-22T06:56:41.863553715Z 2026-10-22 06:56:41.863 UTC [803] ERROR:  target item not found
+2026-10-22T06:56:41.863563135Z 2026-10-22 06:56:41.863 UTC [803] CONTEXT:  PL/pgSQL function app_check_move(uuid,uuid,uuid) line 23 at RAISE
+2026-10-22T06:56:41.863565365Z 	PL/pgSQL function app_move_preview(uuid,uuid,uuid) line 3 during statement block local variable initialization
+2026-10-22T06:56:41.863567595Z 2026-10-22 06:56:41.863 UTC [803] STATEMENT:  SELECT change, display_name FROM app_move_preview($1, $2, $3)
+2026-10-22T06:56:41.864948263Z 2026-10-22 06:56:41.864 UTC [789] ERROR:  write access is required
+2026-10-22T06:56:41.864956884Z 2026-10-22 06:56:41.864 UTC [789] CONTEXT:  PL/pgSQL function app_create_module_document(uuid,uuid,text,integer,jsonb,uuid,integer,uuid[]) line 15 at RAISE
+2026-10-22T06:56:41.864960254Z 2026-10-22 06:56:41.864 UTC [789] STATEMENT:  SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:42.880365227Z 2026-10-22 06:56:42.880 UTC [811] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:44.380014530Z 2026-10-22 06:56:44.379 UTC [825] ERROR:  document not found
+2026-10-22T06:56:44.380063350Z 2026-10-22 06:56:44.379 UTC [825] CONTEXT:  PL/pgSQL function app_require_document(uuid,text) line 6 at RAISE
+2026-10-22T06:56:44.380069230Z 	SQL statement "SELECT app_require_document(p_doc, 'owner')"
+2026-10-22T06:56:44.380072440Z 	PL/pgSQL function app_create_public_link(uuid,bytea,timestamp with time zone,uuid[]) line 6 at PERFORM
+2026-10-22T06:56:44.380084061Z 2026-10-22 06:56:44.379 UTC [825] STATEMENT:  SELECT app_create_public_link($1, $2, $3, $4)
+2026-10-22T06:56:44.393146084Z 2026-10-22 06:56:44.392 UTC [825] ERROR:  link not found
+2026-10-22T06:56:44.393160915Z 2026-10-22 06:56:44.392 UTC [825] CONTEXT:  PL/pgSQL function app_revoke_public_link(uuid,uuid[]) line 7 at RAISE
+2026-10-22T06:56:44.393164115Z 2026-10-22 06:56:44.392 UTC [825] STATEMENT:  SELECT app_revoke_public_link($1, $2)
+2026-10-22T06:56:44.428148451Z 2026-10-22 06:56:44.427 UTC [824] ERROR:  expiry must be in the future
+2026-10-22T06:56:44.428168492Z 2026-10-22 06:56:44.427 UTC [824] CONTEXT:  PL/pgSQL function app_create_public_link(uuid,bytea,timestamp with time zone,uuid[]) line 8 at RAISE
+2026-10-22T06:56:44.428171092Z 2026-10-22 06:56:44.427 UTC [824] STATEMENT:  SELECT app_create_public_link($1, $2, $3, $4)
+2026-10-22T06:56:46.186229149Z 2026-10-22 06:56:46.186 UTC [859] ERROR:  duplicate key value violates unique constraint "item_records_request"
+2026-10-22T06:56:46.186250119Z 2026-10-22 06:56:46.186 UTC [859] DETAIL:  Key (item_id, created_by, request_id)=(01a16265-dff0-7013-85f4-29a0295c5989, 01a16265-df9f-7098-8b51-bd48c3ced52c, 01a16265-e004-7365-8e0d-1275bf1dfae8) already exists.
+2026-10-22T06:56:46.186252879Z 2026-10-22 06:56:46.186 UTC [859] CONTEXT:  SQL statement "INSERT INTO item_records (id, item_id, workspace_id, kind, title, occurred_on, body, fields, created_by, request_id)
+2026-10-22T06:56:46.186255099Z 	    VALUES (app_id(p_ids, 1), p_item, v_ws, p_kind, btrim(p_title), p_occurred, coalesce(p_body, ''),
+2026-10-22T06:56:46.186258009Z 	            coalesce(p_fields, '{}'), app_user_id(), p_request)
+2026-10-22T06:56:46.186277099Z 	    RETURNING id"
+2026-10-22T06:56:46.186279219Z 	PL/pgSQL function app_create_record(uuid,uuid,text,text,date,text,jsonb,jsonb,uuid[]) line 13 at SQL statement
+2026-10-22T06:56:46.186281229Z 2026-10-22 06:56:46.186 UTC [859] STATEMENT:  SELECT app_create_record($1, $2, $3, $4, $5, $6, $7, $8, $9)
+2026-10-22T06:56:48.010912656Z 2026-10-22 06:56:48.010 UTC [853] ERROR:  the item is archived
+2026-10-22T06:56:48.010955556Z 2026-10-22 06:56:48.010 UTC [853] CONTEXT:  PL/pgSQL function app_rename_file(uuid,text,uuid[]) line 18 at RAISE
+2026-10-22T06:56:48.010962296Z 2026-10-22 06:56:48.010 UTC [853] STATEMENT:  SELECT app_rename_file($1, $2, $3)
+2026-10-22T06:56:48.246792630Z 2026-10-22 06:56:48.246 UTC [855] ERROR:  this version is referenced by a record or a document revision
+2026-10-22T06:56:48.246837240Z 2026-10-22 06:56:48.246 UTC [855] CONTEXT:  PL/pgSQL function app_guard_pinned_version() line 7 at RAISE
+2026-10-22T06:56:48.246844080Z 	SQL statement "DELETE FROM file_versions WHERE id = v_id"
+2026-10-22T06:56:48.246848900Z 	PL/pgSQL function app_delete_file_version(uuid,integer,uuid[]) line 26 at SQL statement
+2026-10-22T06:56:48.246852161Z 2026-10-22 06:56:48.246 UTC [855] STATEMENT:  SELECT app_delete_file_version($1, $2, $3)
+2026-10-22T06:56:48.252435484Z 2026-10-22 06:56:48.252 UTC [855] ERROR:  write access is required
+2026-10-22T06:56:48.252485515Z 2026-10-22 06:56:48.252 UTC [855] CONTEXT:  PL/pgSQL function app_record_write_check(uuid) line 9 at RAISE
+2026-10-22T06:56:48.252491335Z 	SQL statement "SELECT app_record_write_check(p_item)"
+2026-10-22T06:56:48.252494275Z 	PL/pgSQL function app_create_record(uuid,uuid,text,text,date,text,jsonb,jsonb,uuid[]) line 12 at PERFORM
+2026-10-22T06:56:48.252496445Z 2026-10-22 06:56:48.252 UTC [855] STATEMENT:  SELECT app_create_record($1, $2, $3, $4, $5, $6, $7, $8, $9)
+2026-10-22T06:56:48.269090646Z 2026-10-22 06:56:48.268 UTC [842] ERROR:  this version is referenced by a record or a document revision
+2026-10-22T06:56:48.269133327Z 2026-10-22 06:56:48.268 UTC [842] CONTEXT:  PL/pgSQL function app_guard_pinned_version() line 7 at RAISE
+2026-10-22T06:56:48.269138917Z 	SQL statement "DELETE FROM file_versions WHERE id = v_id"
+2026-10-22T06:56:48.269141877Z 	PL/pgSQL function app_delete_file_version(uuid,integer,uuid[]) line 26 at SQL statement
+2026-10-22T06:56:48.269143957Z 2026-10-22 06:56:48.268 UTC [842] STATEMENT:  SELECT app_delete_file_version($1, $2, $3)
+2026-10-22T06:56:48.274302115Z 2026-10-22 06:56:48.274 UTC [842] ERROR:  only an admin can change version retention
+2026-10-22T06:56:48.274337446Z 2026-10-22 06:56:48.274 UTC [842] CONTEXT:  PL/pgSQL function app_set_version_retention(uuid,integer,uuid[]) line 9 at RAISE
+2026-10-22T06:56:48.274343096Z 2026-10-22 06:56:48.274 UTC [842] STATEMENT:  SELECT app_set_version_retention($1, $2, $3)
+2026-10-22T06:56:48.278480121Z 2026-10-22 06:56:48.278 UTC [842] ERROR:  retention must be 1 to 3650 days
+2026-10-22T06:56:48.278523101Z 2026-10-22 06:56:48.278 UTC [842] CONTEXT:  PL/pgSQL function app_set_version_retention(uuid,integer,uuid[]) line 12 at RAISE
+2026-10-22T06:56:48.278528681Z 2026-10-22 06:56:48.278 UTC [842] STATEMENT:  SELECT app_set_version_retention($1, $2, $3)
+2026-10-22T06:56:48.282422874Z 2026-10-22 06:56:48.282 UTC [855] ERROR:  linked files must be attachments of this item
+2026-10-22T06:56:48.282465474Z 2026-10-22 06:56:48.282 UTC [855] CONTEXT:  PL/pgSQL function app_set_record_files(uuid,uuid,jsonb) line 36 at RAISE
+2026-10-22T06:56:48.282471374Z 	SQL statement "SELECT app_set_record_files(v_id, p_item, p_files)"
+2026-10-22T06:56:48.282474394Z 	PL/pgSQL function app_create_record(uuid,uuid,text,text,date,text,jsonb,jsonb,uuid[]) line 17 at PERFORM
+2026-10-22T06:56:48.282476604Z 2026-10-22 06:56:48.282 UTC [855] STATEMENT:  SELECT app_create_record($1, $2, $3, $4, $5, $6, $7, $8, $9)
+2026-10-22T06:56:48.321257288Z 2026-10-22 06:56:48.321 UTC [839] ERROR:  only the author or the item owner can delete a record
+2026-10-22T06:56:48.321296209Z 2026-10-22 06:56:48.321 UTC [839] CONTEXT:  PL/pgSQL function app_delete_record(uuid,uuid[]) line 13 at RAISE
+2026-10-22T06:56:48.321301719Z 2026-10-22 06:56:48.321 UTC [839] STATEMENT:  SELECT app_delete_record($1, $2)
+2026-10-22T06:56:48.335049843Z 2026-10-22 06:56:48.334 UTC [844] ERROR:  the retention period has passed
+2026-10-22T06:56:48.335068273Z 2026-10-22 06:56:48.334 UTC [844] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 14 at RAISE
+2026-10-22T06:56:48.335104554Z 2026-10-22 06:56:48.334 UTC [844] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:56:48.458108140Z 2026-10-22 06:56:48.457 UTC [854] WARNING:  purge of trash batch 01a16265-e85e-7076-a2a5-c43e968a16f1 failed with SQLSTATE P0002
+2026-10-22T06:56:48.458137931Z 2026-10-22 06:56:48.457 UTC [854] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.458162840Z 2026-10-22 06:56:48.458 UTC [854] WARNING:  purge of trash batch 01a16265-e866-7585-b6be-20bf2451847e failed with SQLSTATE P0002
+2026-10-22T06:56:48.458171220Z 2026-10-22 06:56:48.458 UTC [854] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.579813834Z 2026-10-22 06:56:48.579 UTC [849] WARNING:  purge of trash batch 01a16265-e85e-7076-a2a5-c43e968a16f1 failed with SQLSTATE P0002
+2026-10-22T06:56:48.579862014Z 2026-10-22 06:56:48.579 UTC [849] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.579929591Z 2026-10-22 06:56:48.579 UTC [849] WARNING:  purge of trash batch 01a16265-e866-7585-b6be-20bf2451847e failed with SQLSTATE P0002
+2026-10-22T06:56:48.579937551Z 2026-10-22 06:56:48.579 UTC [849] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.621064958Z 2026-10-22 06:56:48.620 UTC [849] WARNING:  purge of trash batch 01a16265-e87f-708e-9e90-d546214f7db4 failed with SQLSTATE P0002
+2026-10-22T06:56:48.621106708Z 2026-10-22 06:56:48.620 UTC [849] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.654832378Z 2026-10-22 06:56:48.654 UTC [851] WARNING:  purge of trash batch 01a16265-e85e-7076-a2a5-c43e968a16f1 failed with SQLSTATE P0002
+2026-10-22T06:56:48.654858388Z 2026-10-22 06:56:48.654 UTC [851] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.654861438Z 2026-10-22 06:56:48.654 UTC [851] WARNING:  purge of trash batch 01a16265-e866-7585-b6be-20bf2451847e failed with SQLSTATE P0002
+2026-10-22T06:56:48.654863968Z 2026-10-22 06:56:48.654 UTC [851] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.697026193Z 2026-10-22 06:56:48.696 UTC [851] WARNING:  purge of trash batch 01a16265-e87f-708e-9e90-d546214f7db4 failed with SQLSTATE P0002
+2026-10-22T06:56:48.697073693Z 2026-10-22 06:56:48.696 UTC [851] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.742179348Z 2026-10-22 06:56:48.741 UTC [851] ERROR:  trash entry not found
+2026-10-22T06:56:48.742222758Z 2026-10-22 06:56:48.741 UTC [851] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 11 at RAISE
+2026-10-22T06:56:48.742229508Z 2026-10-22 06:56:48.741 UTC [851] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:56:48.746184111Z 2026-10-22 06:56:48.746 UTC [851] ERROR:  trash entry not found
+2026-10-22T06:56:48.746213332Z 2026-10-22 06:56:48.746 UTC [851] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 11 at RAISE
+2026-10-22T06:56:48.746219032Z 2026-10-22 06:56:48.746 UTC [851] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:56:48.752454776Z 2026-10-22 06:56:48.752 UTC [843] WARNING:  purge of trash batch 01a16265-e85e-7076-a2a5-c43e968a16f1 failed with SQLSTATE P0002
+2026-10-22T06:56:48.752491216Z 2026-10-22 06:56:48.752 UTC [843] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.752629478Z 2026-10-22 06:56:48.752 UTC [843] WARNING:  purge of trash batch 01a16265-e866-7585-b6be-20bf2451847e failed with SQLSTATE P0002
+2026-10-22T06:56:48.752638489Z 2026-10-22 06:56:48.752 UTC [843] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.787215669Z 2026-10-22 06:56:48.787 UTC [843] WARNING:  purge of trash batch 01a16265-e877-7462-8c2f-97cf008d3cd1 failed with SQLSTATE P0002
+2026-10-22T06:56:48.787257029Z 2026-10-22 06:56:48.787 UTC [843] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.787320200Z 2026-10-22 06:56:48.787 UTC [843] WARNING:  purge of trash batch 01a16265-e87f-708e-9e90-d546214f7db4 failed with SQLSTATE P0002
+2026-10-22T06:56:48.787329730Z 2026-10-22 06:56:48.787 UTC [843] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.787430682Z 2026-10-22 06:56:48.787 UTC [843] WARNING:  purge of trash batch 01a16265-e8ea-72f1-8741-07e2d7d36e10 failed with SQLSTATE P0002
+2026-10-22T06:56:48.787435232Z 2026-10-22 06:56:48.787 UTC [843] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:48.975614384Z 2026-10-22 06:56:48.975 UTC [837] WARNING:  purge of trash batch 01a16265-e877-7462-8c2f-97cf008d3cd1 failed with SQLSTATE P0002
+2026-10-22T06:56:48.975660274Z 2026-10-22 06:56:48.975 UTC [837] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:49.021001647Z 2026-10-22 06:56:49.020 UTC [837] WARNING:  purge of trash batch 01a16265-e905-7488-98d0-c6f501385b5e failed with SQLSTATE P0002
+2026-10-22T06:56:49.021026278Z 2026-10-22 06:56:49.020 UTC [837] CONTEXT:  PL/pgSQL function app_system_purge_expired(uuid[]) line 36 at RAISE
+2026-10-22T06:56:49.475645858Z 2026-10-22 06:56:49.475 UTC [900] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:49.603624425Z 2026-10-22 06:56:49.603 UTC [896] ERROR:  until must not be before the first occurrence
+2026-10-22T06:56:49.603673456Z 2026-10-22 06:56:49.603 UTC [896] CONTEXT:  PL/pgSQL function app_update_event(uuid,integer,text,text,text,boolean,date,date,timestamp with time zone,timestamp with time zone,text,uuid[]) line 16 at RAISE
+2026-10-22T06:56:49.603681296Z 2026-10-22 06:56:49.603 UTC [896] STATEMENT:  SELECT app_update_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+2026-10-22T06:56:49.716087145Z 2026-10-22 06:56:49.715 UTC [906] ERROR:  a repeating task cannot become a subtask
+2026-10-22T06:56:49.716129326Z 2026-10-22 06:56:49.715 UTC [906] CONTEXT:  PL/pgSQL function app_guard_series_root() line 5 at RAISE
+2026-10-22T06:56:49.716135756Z 	SQL statement "UPDATE tasks SET parent_id = p_parent, updated_by = app_user_id(), updated_at = now() WHERE id = p_task"
+2026-10-22T06:56:49.716150926Z 	PL/pgSQL function app_set_task_parent(uuid,uuid,uuid[]) line 17 at SQL statement
+2026-10-22T06:56:49.716154626Z 2026-10-22 06:56:49.715 UTC [906] STATEMENT:  SELECT app_set_task_parent($1, $2, $3)
+2026-10-22T06:56:49.721541828Z 2026-10-22 06:56:49.721 UTC [909] ERROR:  write access is required
+2026-10-22T06:56:49.721555968Z 2026-10-22 06:56:49.721 UTC [909] CONTEXT:  PL/pgSQL function app_sync_item_series(uuid,uuid[]) line 13 at RAISE
+2026-10-22T06:56:49.721558738Z 2026-10-22 06:56:49.721 UTC [909] STATEMENT:  SELECT app_sync_item_series($1, $2)
+2026-10-22T06:56:49.728491859Z 2026-10-22 06:56:49.728 UTC [906] ERROR:  a repeating task needs a date
+2026-10-22T06:56:49.728525919Z 2026-10-22 06:56:49.728 UTC [906] CONTEXT:  PL/pgSQL function app_guard_series_root() line 8 at RAISE
+2026-10-22T06:56:49.728532009Z 	SQL statement "UPDATE tasks SET
+2026-10-22T06:56:49.728534879Z 	      title = btrim(p_title), description = coalesce(p_description, ''), status = p_status,
+2026-10-22T06:56:49.728536999Z 	      priority = p_priority, start_date = p_start, due_date = p_due, estimate_minutes = p_estimate,
+2026-10-22T06:56:49.728538959Z 	      tags = coalesce(p_tags, '{}'), milestone = p_milestone, version = version + 1, updated_by = v_user,
+2026-10-22T06:56:49.728540939Z 	      updated_at = now(),
+2026-10-22T06:56:49.728542969Z 	      completed_at = CASE WHEN p_status = 'done' AND v_task.status <> 'done' THEN now()
+2026-10-22T06:56:49.728544969Z 	                          WHEN p_status <> 'done' THEN NULL ELSE completed_at END,
+2026-10-22T06:56:49.728546939Z 	      position = CASE WHEN p_status <> v_task.status THEN app_task_lane_end(v_task.item_id, p_status)
+2026-10-22T06:56:49.728548859Z 	                      ELSE position END
+2026-10-22T06:56:49.728550659Z 	    WHERE id = p_task"
+2026-10-22T06:56:49.728552519Z 	PL/pgSQL function app_update_task(uuid,integer,text,text,text,text,date,date,integer,text[],uuid[],boolean,jsonb,uuid[]) line 90 at SQL statement
+2026-10-22T06:56:49.728554469Z 2026-10-22 06:56:49.728 UTC [906] STATEMENT:  SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+2026-10-22T06:56:49.732292562Z 2026-10-22 06:56:49.732 UTC [894] ERROR:  the item is archived
+2026-10-22T06:56:49.732305912Z 2026-10-22 06:56:49.732 UTC [894] CONTEXT:  PL/pgSQL function app_sync_item_series(uuid,uuid[]) line 16 at RAISE
+2026-10-22T06:56:49.732308672Z 2026-10-22 06:56:49.732 UTC [894] STATEMENT:  SELECT app_sync_item_series($1, $2)
+2026-10-22T06:56:49.745069292Z 2026-10-22 06:56:49.744 UTC [896] ERROR:  until must not be before the first occurrence
+2026-10-22T06:56:49.745083042Z 2026-10-22 06:56:49.744 UTC [896] CONTEXT:  PL/pgSQL function app_update_event(uuid,integer,text,text,text,boolean,date,date,timestamp with time zone,timestamp with time zone,text,uuid[]) line 16 at RAISE
+2026-10-22T06:56:49.745086492Z 2026-10-22 06:56:49.744 UTC [896] STATEMENT:  SELECT app_update_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+2026-10-22T06:56:49.766768809Z 2026-10-22 06:56:49.766 UTC [906] ERROR:  until must not be before the first occurrence
+2026-10-22T06:56:49.766809780Z 2026-10-22 06:56:49.766 UTC [906] CONTEXT:  PL/pgSQL function app_set_task_recurrence(uuid,jsonb,text,uuid[]) line 24 at RAISE
+2026-10-22T06:56:49.766815320Z 2026-10-22 06:56:49.766 UTC [906] STATEMENT:  SELECT app_set_task_recurrence($1, $2, $3, $4)
+2026-10-22T06:56:50.157580208Z 2026-10-22 06:56:50.157 UTC [913] WARNING:  recurrence lane locks of item 01a16265-ed5f-7399-b36d-f0a64e0f907f failed with SQLSTATE 55P03
+2026-10-22T06:56:50.157623409Z 2026-10-22 06:56:50.157 UTC [913] CONTEXT:  PL/pgSQL function app_system_recurrence_tick(uuid[]) line 30 at RAISE
+2026-10-22T06:56:50.997085796Z 2026-10-22 06:56:50.996 UTC [922] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:51.855130099Z 2026-10-22 06:56:51.854 UTC [947] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:51.855176150Z 2026-10-22 06:56:51.854 UTC [947] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:51.855181680Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:51.855184800Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:51.855186840Z 2026-10-22 06:56:51.854 UTC [947] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:51.859737350Z 2026-10-22 06:56:51.859 UTC [944] ERROR:  revision not found
+2026-10-22T06:56:51.859768211Z 2026-10-22 06:56:51.859 UTC [944] CONTEXT:  PL/pgSQL function app_restore_document_revision(uuid,integer,uuid,integer,integer,uuid[]) line 29 at RAISE
+2026-10-22T06:56:51.859773911Z 2026-10-22 06:56:51.859 UTC [944] STATEMENT:  SELECT app_restore_document_revision($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:51.866367199Z 2026-10-22 06:56:51.866 UTC [947] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:51.866401329Z 2026-10-22 06:56:51.866 UTC [947] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:51.866409340Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:51.866413860Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:51.866416790Z 2026-10-22 06:56:51.866 UTC [947] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:51.880410897Z 2026-10-22 06:56:51.880 UTC [948] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:51.880453308Z 2026-10-22 06:56:51.880 UTC [948] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:51.880458868Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:51.880461738Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:51.880463828Z 2026-10-22 06:56:51.880 UTC [948] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:51.884721183Z 2026-10-22 06:56:51.884 UTC [944] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:51.884745933Z 2026-10-22 06:56:51.884 UTC [944] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:51.884759234Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:51.884761924Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:51.884763944Z 2026-10-22 06:56:51.884 UTC [944] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:51.908028924Z 2026-10-22 06:56:51.907 UTC [943] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:51.908072624Z 2026-10-22 06:56:51.907 UTC [943] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:51.908079465Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:51.908084595Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:51.908087155Z 2026-10-22 06:56:51.907 UTC [943] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:51.918093009Z 2026-10-22 06:56:51.917 UTC [945] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:51.918124749Z 2026-10-22 06:56:51.917 UTC [945] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:51.918130109Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:51.918132789Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:51.918134899Z 2026-10-22 06:56:51.917 UTC [945] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:51.918239170Z 2026-10-22 06:56:51.918 UTC [947] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:51.918245630Z 2026-10-22 06:56:51.918 UTC [947] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:51.918248090Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:51.918250190Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:51.918252160Z 2026-10-22 06:56:51.918 UTC [947] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:51.922922264Z 2026-10-22 06:56:51.922 UTC [948] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:51.922932404Z 2026-10-22 06:56:51.922 UTC [948] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:51.922935114Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:51.922937284Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:51.922939224Z 2026-10-22 06:56:51.922 UTC [948] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:51.923085096Z 2026-10-22 06:56:51.922 UTC [946] ERROR:  request_id was already used for another change
+2026-10-22T06:56:51.923092166Z 2026-10-22 06:56:51.922 UTC [946] CONTEXT:  PL/pgSQL function app_restore_document_revision(uuid,integer,uuid,integer,integer,uuid[]) line 19 at RAISE
+2026-10-22T06:56:51.923094526Z 2026-10-22 06:56:51.922 UTC [946] STATEMENT:  SELECT app_restore_document_revision($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:51.929322238Z 2026-10-22 06:56:51.929 UTC [945] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:51.929359749Z 2026-10-22 06:56:51.929 UTC [945] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:51.929365319Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:51.929368109Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:51.929370189Z 2026-10-22 06:56:51.929 UTC [945] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:51.933768939Z 2026-10-22 06:56:51.933 UTC [943] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:51.951208963Z 2026-10-22 06:56:51.951 UTC [946] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:51.951247334Z 2026-10-22 06:56:51.951 UTC [946] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:51.951253694Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:51.951257524Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:51.951260044Z 2026-10-22 06:56:51.951 UTC [946] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:51.955674632Z 2026-10-22 06:56:51.955 UTC [945] ERROR:  request_id was already used for another change
+2026-10-22T06:56:51.955713853Z 2026-10-22 06:56:51.955 UTC [945] CONTEXT:  PL/pgSQL function app_restore_document_revision(uuid,integer,uuid,integer,integer,uuid[]) line 19 at RAISE
+2026-10-22T06:56:51.955757603Z 2026-10-22 06:56:51.955 UTC [945] STATEMENT:  SELECT app_restore_document_revision($1, $2, $3, $4, $5, $6)
+2026-10-22T06:56:52.006844165Z 2026-10-22 06:56:52.006 UTC [946] ERROR:  realtime editing is off for this document
+2026-10-22T06:56:52.006889965Z 2026-10-22 06:56:52.006 UTC [946] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:56:52.006897035Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:56:52.006900535Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:56:52.006903455Z 2026-10-22 06:56:52.006 UTC [946] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:56:52.246534467Z 2026-10-22 06:56:52.246 UTC [954] ERROR:  unknown time zone
+2026-10-22T06:56:52.246556637Z 2026-10-22 06:56:52.246 UTC [954] CONTEXT:  PL/pgSQL function app_set_display_settings(text,text,text,text) line 9 at RAISE
+2026-10-22T06:56:52.246559367Z 2026-10-22 06:56:52.246 UTC [954] STATEMENT:  SELECT app_set_display_settings($1, $2, $3, $4)
+2026-10-22T06:56:52.246561367Z 2026-10-22 06:56:52.246 UTC [951] ERROR:  view not found
+2026-10-22T06:56:52.246563277Z 2026-10-22 06:56:52.246 UTC [951] CONTEXT:  PL/pgSQL function app_delete_view(uuid) line 5 at RAISE
+2026-10-22T06:56:52.246565197Z 2026-10-22 06:56:52.246 UTC [951] STATEMENT:  SELECT app_delete_view($1)
+2026-10-22T06:56:52.260491394Z 2026-10-22 06:56:52.260 UTC [953] ERROR:  unknown language
+2026-10-22T06:56:52.260527954Z 2026-10-22 06:56:52.260 UTC [953] CONTEXT:  PL/pgSQL function app_set_display_settings(text,text,text,text) line 12 at RAISE
+2026-10-22T06:56:52.260533665Z 2026-10-22 06:56:52.260 UTC [953] STATEMENT:  SELECT app_set_display_settings($1, $2, $3, $4)
+2026-10-22T06:56:52.264562234Z 2026-10-22 06:56:52.264 UTC [953] ERROR:  unknown week start
+2026-10-22T06:56:52.264591845Z 2026-10-22 06:56:52.264 UTC [953] CONTEXT:  PL/pgSQL function app_set_display_settings(text,text,text,text) line 15 at RAISE
+2026-10-22T06:56:52.264597665Z 2026-10-22 06:56:52.264 UTC [953] STATEMENT:  SELECT app_set_display_settings($1, $2, $3, $4)
+2026-10-22T06:56:52.268453602Z 2026-10-22 06:56:52.268 UTC [953] ERROR:  unknown hour cycle
+2026-10-22T06:56:52.268479782Z 2026-10-22 06:56:52.268 UTC [953] CONTEXT:  PL/pgSQL function app_set_display_settings(text,text,text,text) line 18 at RAISE
+2026-10-22T06:56:52.268485262Z 2026-10-22 06:56:52.268 UTC [953] STATEMENT:  SELECT app_set_display_settings($1, $2, $3, $4)
+2026-10-22T06:56:52.304450836Z 2026-10-22 06:56:52.304 UTC [953] ERROR:  unknown time zone
+2026-10-22T06:56:52.304495496Z 2026-10-22 06:56:52.304 UTC [953] CONTEXT:  PL/pgSQL function app_set_display_settings(text,text,text,text) line 9 at RAISE
+2026-10-22T06:56:52.304502086Z 2026-10-22 06:56:52.304 UTC [953] STATEMENT:  SELECT app_set_display_settings($1, $2, $3, $4)
+2026-10-22T06:56:52.956549660Z 2026-10-22 06:56:52.956 UTC [960] ERROR:  a milestone has only a due date
+2026-10-22T06:56:52.956609531Z 2026-10-22 06:56:52.956 UTC [960] CONTEXT:  PL/pgSQL function app_update_task(uuid,integer,text,text,text,text,date,date,integer,text[],uuid[],boolean,jsonb,uuid[]) line 52 at RAISE
+2026-10-22T06:56:52.956617331Z 2026-10-22 06:56:52.956 UTC [960] STATEMENT:  SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+2026-10-22T06:56:53.028495825Z 2026-10-22 06:56:53.028 UTC [984] ERROR:  each shifted task must appear once
+2026-10-22T06:56:53.028576396Z 2026-10-22 06:56:53.028 UTC [984] CONTEXT:  PL/pgSQL function app_update_task(uuid,integer,text,text,text,text,date,date,integer,text[],uuid[],boolean,jsonb,uuid[]) line 23 at RAISE
+2026-10-22T06:56:53.028583446Z 2026-10-22 06:56:53.028 UTC [984] STATEMENT:  SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+2026-10-22T06:56:53.105599561Z 2026-10-22 06:56:53.105 UTC [962] ERROR:  the dependency would create a cycle
+2026-10-22T06:56:53.105621461Z 2026-10-22 06:56:53.105 UTC [962] CONTEXT:  PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 69 at RAISE
+2026-10-22T06:56:53.105625841Z 2026-10-22 06:56:53.105 UTC [962] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.112138718Z 2026-10-22 06:56:53.111 UTC [962] ERROR:  a task cannot depend on itself
+2026-10-22T06:56:53.112194389Z 2026-10-22 06:56:53.111 UTC [962] CONTEXT:  PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 36 at RAISE
+2026-10-22T06:56:53.112201819Z 2026-10-22 06:56:53.111 UTC [962] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.118550546Z 2026-10-22 06:56:53.118 UTC [962] ERROR:  dependencies must stay within one item
+2026-10-22T06:56:53.118590346Z 2026-10-22 06:56:53.118 UTC [962] CONTEXT:  PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 33 at RAISE
+2026-10-22T06:56:53.118605116Z 2026-10-22 06:56:53.118 UTC [962] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.124690387Z 2026-10-22 06:56:53.124 UTC [962] ERROR:  write access is required
+2026-10-22T06:56:53.124737018Z 2026-10-22 06:56:53.124 UTC [962] CONTEXT:  PL/pgSQL function app_require_task_write(uuid) line 14 at RAISE
+2026-10-22T06:56:53.124743948Z 	SQL statement "SELECT app_require_task_write(p_successor)"
+2026-10-22T06:56:53.124747848Z 	PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 26 at PERFORM
+2026-10-22T06:56:53.124750958Z 2026-10-22 06:56:53.124 UTC [962] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.130672647Z 2026-10-22 06:56:53.130 UTC [962] ERROR:  task not found
+2026-10-22T06:56:53.130712247Z 2026-10-22 06:56:53.130 UTC [962] CONTEXT:  PL/pgSQL function app_require_task_write(uuid) line 7 at RAISE
+2026-10-22T06:56:53.130718657Z 	SQL statement "SELECT app_require_task_write(p_successor)"
+2026-10-22T06:56:53.130722627Z 	PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 26 at PERFORM
+2026-10-22T06:56:53.130726137Z 2026-10-22 06:56:53.130 UTC [962] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.142795221Z 2026-10-22 06:56:53.142 UTC [968] ERROR:  the item is archived
+2026-10-22T06:56:53.142841872Z 2026-10-22 06:56:53.142 UTC [968] CONTEXT:  PL/pgSQL function app_require_task_write(uuid) line 12 at RAISE
+2026-10-22T06:56:53.142848372Z 	SQL statement "SELECT app_require_task_write(p_successor)"
+2026-10-22T06:56:53.142851682Z 	PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 26 at PERFORM
+2026-10-22T06:56:53.142853932Z 2026-10-22 06:56:53.142 UTC [968] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.144833927Z 2026-10-22 06:56:53.144 UTC [985] ERROR:  a task cannot depend on itself
+2026-10-22T06:56:53.144885918Z 2026-10-22 06:56:53.144 UTC [985] CONTEXT:  PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 36 at RAISE
+2026-10-22T06:56:53.144898648Z 2026-10-22 06:56:53.144 UTC [985] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.145913853Z 2026-10-22 06:56:53.145 UTC [996] ERROR:  the edited task cannot also be a shifted successor
+2026-10-22T06:56:53.145924853Z 2026-10-22 06:56:53.145 UTC [996] CONTEXT:  PL/pgSQL function app_update_task(uuid,integer,text,text,text,text,date,date,integer,text[],uuid[],boolean,jsonb,uuid[]) line 26 at RAISE
+2026-10-22T06:56:53.145927563Z 2026-10-22 06:56:53.145 UTC [996] STATEMENT:  SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+2026-10-22T06:56:53.172264556Z 2026-10-22 06:56:53.171 UTC [985] ERROR:  the dependency would create a cycle
+2026-10-22T06:56:53.172308076Z 2026-10-22 06:56:53.171 UTC [985] CONTEXT:  PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 69 at RAISE
+2026-10-22T06:56:53.172311426Z 2026-10-22 06:56:53.171 UTC [985] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.193427020Z 2026-10-22 06:56:53.193 UTC [985] ERROR:  write access is required
+2026-10-22T06:56:53.193449011Z 2026-10-22 06:56:53.193 UTC [985] CONTEXT:  PL/pgSQL function app_require_task_write(uuid) line 14 at RAISE
+2026-10-22T06:56:53.193451851Z 	SQL statement "SELECT app_require_task_write(p_successor)"
+2026-10-22T06:56:53.193454221Z 	PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 26 at PERFORM
+2026-10-22T06:56:53.193456641Z 2026-10-22 06:56:53.193 UTC [985] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.203061429Z 2026-10-22 06:56:53.202 UTC [985] ERROR:  task not found
+2026-10-22T06:56:53.203104230Z 2026-10-22 06:56:53.202 UTC [985] CONTEXT:  PL/pgSQL function app_require_task_write(uuid) line 7 at RAISE
+2026-10-22T06:56:53.203109900Z 	SQL statement "SELECT app_require_task_write(p_successor)"
+2026-10-22T06:56:53.203112790Z 	PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 26 at PERFORM
+2026-10-22T06:56:53.203114990Z 2026-10-22 06:56:53.202 UTC [985] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.219256147Z 2026-10-22 06:56:53.219 UTC [972] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:53.252014456Z 2026-10-22 06:56:53.251 UTC [980] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:53.253948012Z 2026-10-22 06:56:53.253 UTC [962] ERROR:  the dependency would create a cycle
+2026-10-22T06:56:53.253955662Z 2026-10-22 06:56:53.253 UTC [962] CONTEXT:  PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 69 at RAISE
+2026-10-22T06:56:53.253958292Z 2026-10-22 06:56:53.253 UTC [962] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.304963657Z 2026-10-22 06:56:53.304 UTC [982] ERROR:  a shifted task must be a successor of the edited task
+2026-10-22T06:56:53.304983927Z 2026-10-22 06:56:53.304 UTC [982] CONTEXT:  PL/pgSQL function app_update_task(uuid,integer,text,text,text,text,date,date,integer,text[],uuid[],boolean,jsonb,uuid[]) line 62 at RAISE
+2026-10-22T06:56:53.304986817Z 2026-10-22 06:56:53.304 UTC [982] STATEMENT:  SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+2026-10-22T06:56:53.323997044Z 2026-10-22 06:56:53.323 UTC [993] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:56:53.324215487Z 2026-10-22 06:56:53.324 UTC [1009] ERROR:  the dependency would create a cycle
+2026-10-22T06:56:53.324229827Z 2026-10-22 06:56:53.324 UTC [1009] CONTEXT:  PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 69 at RAISE
+2026-10-22T06:56:53.324245117Z 2026-10-22 06:56:53.324 UTC [1009] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.356557679Z 2026-10-22 06:56:53.356 UTC [1008] ERROR:  the dependency would create a cycle
+2026-10-22T06:56:53.356598899Z 2026-10-22 06:56:53.356 UTC [1008] CONTEXT:  PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 69 at RAISE
+2026-10-22T06:56:53.356604699Z 2026-10-22 06:56:53.356 UTC [1008] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.382131432Z 2026-10-22 06:56:53.381 UTC [1009] ERROR:  the dependency would create a cycle
+2026-10-22T06:56:53.382167223Z 2026-10-22 06:56:53.381 UTC [1009] CONTEXT:  PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 69 at RAISE
+2026-10-22T06:56:53.382172613Z 2026-10-22 06:56:53.381 UTC [1009] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.406850424Z 2026-10-22 06:56:53.406 UTC [1009] ERROR:  the dependency would create a cycle
+2026-10-22T06:56:53.406893245Z 2026-10-22 06:56:53.406 UTC [1009] CONTEXT:  PL/pgSQL function app_set_task_dependency(uuid,uuid,text,integer,text,integer,jsonb,uuid[]) line 69 at RAISE
+2026-10-22T06:56:53.406899295Z 2026-10-22 06:56:53.406 UTC [1009] STATEMENT:  SELECT * FROM app_set_task_dependency($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:56:53.408105203Z 2026-10-22 06:56:53.407 UTC [990] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:05.869058059Z 2026-10-22 06:57:05.868 UTC [1100] FATAL:  terminating connection due to administrator command
+2026-10-22T06:57:05.970769463Z 2026-10-22 06:57:05.970 UTC [73] LOG:  checkpoint starting: immediate force wait
+2026-10-22T06:57:06.010036870Z 2026-10-22 06:57:06.009 UTC [73] LOG:  checkpoint complete: wrote 5779 buffers (35.3%), wrote 6 SLRU buffers; 0 WAL file(s) added, 0 removed, 3 recycled; write=0.033 s, sync=0.007 s, total=0.040 s; sync files=2154, longest=0.001 s, average=0.001 s; distance=51372 kB, estimate=51372 kB; lsn=0/6683C10, redo lsn=0/6682D80
+2026-10-22T06:57:15.761518518Z 2026-10-22 06:57:15.761 UTC [73] LOG:  checkpoint starting: immediate force wait
+2026-10-22T06:57:15.761999748Z 2026-10-22 06:57:15.761 UTC [73] LOG:  checkpoint complete: wrote 48 buffers (0.3%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.001 s; sync files=10, longest=0.001 s, average=0.000 s; distance=2699 kB, estimate=46504 kB; lsn=0/6925A18, redo lsn=0/69259C0
+2026-10-22T06:57:16.893425838Z 2026-10-22 06:57:16.893 UTC [1157] ERROR:  personal notes are always private
+2026-10-22T06:57:16.893454949Z 2026-10-22 06:57:16.893 UTC [1157] CONTEXT:  PL/pgSQL function app_set_document_settings(uuid,text,boolean,uuid[]) line 17 at RAISE
+2026-10-22T06:57:16.893459129Z 2026-10-22 06:57:16.893 UTC [1157] STATEMENT:  SELECT app_set_document_settings($1, $2, $3, $4)
+2026-10-22T06:57:16.908491911Z 2026-10-22 06:57:16.908 UTC [1164] ERROR:  copying is not allowed for this document
+2026-10-22T06:57:16.908539712Z 2026-10-22 06:57:16.908 UTC [1164] CONTEXT:  PL/pgSQL function app_copy_document(uuid,uuid,uuid,text,uuid[]) line 12 at RAISE
+2026-10-22T06:57:16.908558282Z 2026-10-22 06:57:16.908 UTC [1164] STATEMENT:  SELECT app_copy_document($1, $2, $3, $4, $5)
+2026-10-22T06:57:16.918992461Z 2026-10-22 06:57:16.918 UTC [1172] ERROR:  revision changes only with content
+2026-10-22T06:57:16.919036922Z 2026-10-22 06:57:16.918 UTC [1172] CONTEXT:  PL/pgSQL function documents_revision_step() line 13 at RAISE
+2026-10-22T06:57:16.919042762Z 2026-10-22 06:57:16.918 UTC [1172] STATEMENT:  UPDATE documents SET revision = revision + 1, updated_by = app_user_id() WHERE id = $1::uuid
+2026-10-22T06:57:16.934018984Z 2026-10-22 06:57:16.933 UTC [1173] ERROR:  permission denied for table documents
+2026-10-22T06:57:16.934067945Z 2026-10-22 06:57:16.933 UTC [1173] STATEMENT:  UPDATE documents SET visibility = 'private' WHERE id = $1::uuid
+2026-10-22T06:57:16.939042246Z 2026-10-22 06:57:16.938 UTC [1162] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:16.939056536Z 2026-10-22 06:57:16.938 UTC [1162] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:16.939059236Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:16.939061626Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:16.939064156Z 2026-10-22 06:57:16.938 UTC [1162] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:16.946206628Z 2026-10-22 06:57:16.946 UTC [1159] ERROR:  insufficient permission
+2026-10-22T06:57:16.946242499Z 2026-10-22 06:57:16.946 UTC [1159] CONTEXT:  PL/pgSQL function app_require_document_manager(uuid) line 9 at RAISE
+2026-10-22T06:57:16.946248169Z 	SQL statement "SELECT app_require_document_manager(p_doc)"
+2026-10-22T06:57:16.946251059Z 	PL/pgSQL function app_set_document_settings(uuid,text,boolean,uuid[]) line 9 at PERFORM
+2026-10-22T06:57:16.946253429Z 2026-10-22 06:57:16.946 UTC [1159] STATEMENT:  SELECT app_set_document_settings($1, $2, $3, $4)
+2026-10-22T06:57:16.949138222Z 2026-10-22 06:57:16.948 UTC [1170] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:16.956020458Z 2026-10-22 06:57:16.955 UTC [1163] ERROR:  personal notes are always private
+2026-10-22T06:57:16.956066729Z 2026-10-22 06:57:16.955 UTC [1163] CONTEXT:  PL/pgSQL function app_set_document_settings(uuid,text,boolean,uuid[]) line 17 at RAISE
+2026-10-22T06:57:16.956072689Z 2026-10-22 06:57:16.955 UTC [1163] STATEMENT:  SELECT app_set_document_settings($1, $2, $3, $4)
+2026-10-22T06:57:16.962143601Z 2026-10-22 06:57:16.961 UTC [1166] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:16.962187262Z 2026-10-22 06:57:16.961 UTC [1166] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:16.962193922Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:16.962197802Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:16.962200882Z 2026-10-22 06:57:16.961 UTC [1166] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:16.964121718Z 2026-10-22 06:57:16.963 UTC [1162] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:16.964150178Z 2026-10-22 06:57:16.963 UTC [1162] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:16.964153078Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:16.964155658Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:16.964157718Z 2026-10-22 06:57:16.963 UTC [1162] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:16.969029074Z 2026-10-22 06:57:16.968 UTC [1164] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:16.978328959Z 2026-10-22 06:57:16.978 UTC [1174] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:16.982941660Z 2026-10-22 06:57:16.982 UTC [1168] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:16.982975420Z 2026-10-22 06:57:16.982 UTC [1168] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:16.982981040Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:16.982983950Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:16.982985980Z 2026-10-22 06:57:16.982 UTC [1168] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:16.983131292Z 2026-10-22 06:57:16.983 UTC [1162] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:16.983138402Z 2026-10-22 06:57:16.983 UTC [1162] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:16.983140972Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:16.983143232Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:16.983145142Z 2026-10-22 06:57:16.983 UTC [1162] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:16.985294241Z 2026-10-22 06:57:16.985 UTC [1155] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:16.986770387Z 2026-10-22 06:57:16.986 UTC [1166] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:16.986783687Z 2026-10-22 06:57:16.986 UTC [1166] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:16.986786587Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:16.986788957Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:16.986790887Z 2026-10-22 06:57:16.986 UTC [1166] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:17.004780924Z 2026-10-22 06:57:17.004 UTC [1168] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:17.004817864Z 2026-10-22 06:57:17.004 UTC [1168] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:17.004823325Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:17.004826145Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:17.004828605Z 2026-10-22 06:57:17.004 UTC [1168] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:17.005418021Z 2026-10-22 06:57:17.005 UTC [1169] ERROR:  exporting this document is not allowed
+2026-10-22T06:57:17.005426691Z 2026-10-22 06:57:17.005 UTC [1169] CONTEXT:  PL/pgSQL function app_audit_document_export(uuid,integer,text,uuid[]) line 10 at RAISE
+2026-10-22T06:57:17.005430381Z 2026-10-22 06:57:17.005 UTC [1169] STATEMENT:  SELECT app_audit_document_export($1, $2, $3, $4)
+2026-10-22T06:57:17.010044075Z 2026-10-22 06:57:17.009 UTC [1166] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:17.010084215Z 2026-10-22 06:57:17.009 UTC [1166] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:17.010090945Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:17.010094436Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:17.010097086Z 2026-10-22 06:57:17.009 UTC [1166] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:17.013555811Z 2026-10-22 06:57:17.013 UTC [1149] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:17.026711169Z 2026-10-22 06:57:17.026 UTC [1166] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:17.026749369Z 2026-10-22 06:57:17.026 UTC [1166] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:17.026754819Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:17.026759989Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:17.026762229Z 2026-10-22 06:57:17.026 UTC [1166] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:17.030723852Z 2026-10-22 06:57:17.030 UTC [1158] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:17.055548105Z 2026-10-22 06:57:17.055 UTC [1154] ERROR:  team documents stay in the workspace; make a copy instead
+2026-10-22T06:57:17.055588635Z 2026-10-22 06:57:17.055 UTC [1154] CONTEXT:  PL/pgSQL function app_check_move(uuid,uuid,uuid) line 9 at RAISE
+2026-10-22T06:57:17.055594055Z 	PL/pgSQL function app_move_preview(uuid,uuid,uuid) line 3 during statement block local variable initialization
+2026-10-22T06:57:17.055596835Z 2026-10-22 06:57:17.055 UTC [1154] STATEMENT:  SELECT change, display_name FROM app_move_preview($1, $2, $3)
+2026-10-22T06:57:17.064431955Z 2026-10-22 06:57:17.064 UTC [1169] ERROR:  exporting this document is not allowed
+2026-10-22T06:57:17.064461496Z 2026-10-22 06:57:17.064 UTC [1169] CONTEXT:  PL/pgSQL function app_audit_document_export(uuid,integer,text,uuid[]) line 10 at RAISE
+2026-10-22T06:57:17.064466846Z 2026-10-22 06:57:17.064 UTC [1169] STATEMENT:  SELECT app_audit_document_export($1, $2, $3, $4)
+2026-10-22T06:57:17.066916877Z 2026-10-22 06:57:17.066 UTC [1154] ERROR:  write access to the target workspace is required
+2026-10-22T06:57:17.066926157Z 2026-10-22 06:57:17.066 UTC [1154] CONTEXT:  PL/pgSQL function app_check_move(uuid,uuid,uuid) line 18 at RAISE
+2026-10-22T06:57:17.066928717Z 	PL/pgSQL function app_move_preview(uuid,uuid,uuid) line 3 during statement block local variable initialization
+2026-10-22T06:57:17.066939238Z 2026-10-22 06:57:17.066 UTC [1154] STATEMENT:  SELECT change, display_name FROM app_move_preview($1, $2, $3)
+2026-10-22T06:57:18.622973968Z 2026-10-22 06:57:18.622 UTC [1191] ERROR:  the unit changed; reload it
+2026-10-22T06:57:18.623019878Z 2026-10-22 06:57:18.622 UTC [1191] CONTEXT:  PL/pgSQL function app_update_study_unit(uuid,integer,integer,text,text,text,integer,date) line 15 at RAISE
+2026-10-22T06:57:18.623025858Z 2026-10-22 06:57:18.622 UTC [1191] STATEMENT:  SELECT app_update_study_unit($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:57:18.649449552Z 2026-10-22 06:57:18.649 UTC [1192] ERROR:  invalid unit: new row for relation "study_units" violates check constraint "study_units_unit_check"
+2026-10-22T06:57:18.649509123Z 2026-10-22 06:57:18.649 UTC [1192] CONTEXT:  PL/pgSQL function app_add_study_units(uuid,jsonb,uuid[]) line 37 at RAISE
+2026-10-22T06:57:18.649517933Z 2026-10-22 06:57:18.649 UTC [1192] STATEMENT:  SELECT app_add_study_units($1, $2, $3)
+2026-10-22T06:57:18.653874793Z 2026-10-22 06:57:18.653 UTC [1192] ERROR:  read-only access
+2026-10-22T06:57:18.653891443Z 2026-10-22 06:57:18.653 UTC [1192] CONTEXT:  PL/pgSQL function app_require_study_write(uuid) line 4 at RAISE
+2026-10-22T06:57:18.653893983Z 	SQL statement "SELECT app_require_study_write(p_item)"
+2026-10-22T06:57:18.653896693Z 	PL/pgSQL function app_add_study_units(uuid,jsonb,uuid[]) line 9 at PERFORM
+2026-10-22T06:57:18.653898603Z 2026-10-22 06:57:18.653 UTC [1192] STATEMENT:  SELECT app_add_study_units($1, $2, $3)
+2026-10-22T06:57:18.658155541Z 2026-10-22 06:57:18.657 UTC [1192] ERROR:  study not found
+2026-10-22T06:57:18.658189781Z 2026-10-22 06:57:18.657 UTC [1192] CONTEXT:  PL/pgSQL function app_study_access(uuid) line 7 at RAISE
+2026-10-22T06:57:18.658195181Z 2026-10-22 06:57:18.657 UTC [1192] STATEMENT:  SELECT app_study_access($1)
+2026-10-22T06:57:18.662537439Z 2026-10-22 06:57:18.662 UTC [1192] ERROR:  study not found
+2026-10-22T06:57:18.662574250Z 2026-10-22 06:57:18.662 UTC [1192] CONTEXT:  PL/pgSQL function app_study_access(uuid) line 7 at RAISE
+2026-10-22T06:57:18.662579830Z 2026-10-22 06:57:18.662 UTC [1192] STATEMENT:  SELECT app_study_access($1)
+2026-10-22T06:57:18.678095496Z 2026-10-22 06:57:18.677 UTC [1190] ERROR:  the unit changed; reload it
+2026-10-22T06:57:18.678152707Z 2026-10-22 06:57:18.677 UTC [1190] CONTEXT:  PL/pgSQL function app_update_study_unit(uuid,integer,integer,text,text,text,integer,date) line 15 at RAISE
+2026-10-22T06:57:18.678160237Z 2026-10-22 06:57:18.677 UTC [1190] STATEMENT:  SELECT app_update_study_unit($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:57:18.705005718Z 2026-10-22 06:57:18.704 UTC [1192] ERROR:  study not found
+2026-10-22T06:57:18.705052319Z 2026-10-22 06:57:18.704 UTC [1192] CONTEXT:  PL/pgSQL function app_study_access(uuid) line 7 at RAISE
+2026-10-22T06:57:18.705057959Z 	SQL statement "SELECT app_study_access(p_item)"
+2026-10-22T06:57:18.705060889Z 	PL/pgSQL function app_plan_units(uuid,jsonb) line 6 at PERFORM
+2026-10-22T06:57:18.705074449Z 2026-10-22 06:57:18.704 UTC [1192] STATEMENT:  SELECT app_plan_units($1, $2)
+2026-10-22T06:57:18.715708602Z 2026-10-22 06:57:18.715 UTC [1192] ERROR:  today is too far from the server date
+2026-10-22T06:57:18.715737672Z 2026-10-22 06:57:18.715 UTC [1192] CONTEXT:  PL/pgSQL function app_study_participants(uuid,date) line 5 at RAISE
+2026-10-22T06:57:18.715740052Z 2026-10-22 06:57:18.715 UTC [1192] STATEMENT:  SELECT user_id, display_name, done, in_progress, overdue, done_amount
+2026-10-22T06:57:18.715742032Z 	         FROM app_study_participants($1, $2)
+2026-10-22T06:57:18.719351201Z 2026-10-22 06:57:18.719 UTC [1192] ERROR:  today is too far from the server date
+2026-10-22T06:57:18.719388802Z 2026-10-22 06:57:18.719 UTC [1192] CONTEXT:  PL/pgSQL function app_study_participants(uuid,date) line 5 at RAISE
+2026-10-22T06:57:18.719395362Z 2026-10-22 06:57:18.719 UTC [1192] STATEMENT:  SELECT user_id, display_name, done, in_progress, overdue, done_amount
+2026-10-22T06:57:18.719398442Z 	         FROM app_study_participants($1, $2)
+2026-10-22T06:57:18.744609180Z 2026-10-22 06:57:18.744 UTC [1192] ERROR:  target not found
+2026-10-22T06:57:18.744657461Z 2026-10-22 06:57:18.744 UTC [1192] CONTEXT:  PL/pgSQL function app_time_target_workspace(text,uuid) line 19 at RAISE
+2026-10-22T06:57:18.744664221Z 	PL/pgSQL function app_start_timer(uuid,text,text,text,uuid,uuid[]) line 14 at assignment
+2026-10-22T06:57:18.744667521Z 2026-10-22 06:57:18.744 UTC [1192] STATEMENT:  SELECT app_start_timer($1, $2, $3, $4, $5, $6)
+2026-10-22T06:57:18.953824672Z 2026-10-22 06:57:18.953 UTC [1209] ERROR:  an assignee cannot see this item
+2026-10-22T06:57:18.953870232Z 2026-10-22 06:57:18.953 UTC [1209] CONTEXT:  PL/pgSQL function app_check_assignee(uuid,uuid,uuid) line 5 at RAISE
+2026-10-22T06:57:18.953875872Z 	SQL statement "SELECT app_check_assignee(v_task.workspace_id, v_task.item_id, v_uid)"
+2026-10-22T06:57:18.953878892Z 	PL/pgSQL function app_update_task(uuid,integer,text,text,text,text,date,date,integer,text[],uuid[],boolean,jsonb,uuid[]) line 87 at PERFORM
+2026-10-22T06:57:18.953881152Z 2026-10-22 06:57:18.953 UTC [1209] STATEMENT:  SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+2026-10-22T06:57:18.954366018Z 2026-10-22 06:57:18.954 UTC [1204] ERROR:  write access is required
+2026-10-22T06:57:18.954376068Z 2026-10-22 06:57:18.954 UTC [1204] CONTEXT:  PL/pgSQL function app_require_task_write(uuid) line 14 at RAISE
+2026-10-22T06:57:18.954378308Z 	SQL statement "SELECT app_require_task_write(v_task)"
+2026-10-22T06:57:18.954380498Z 	PL/pgSQL function app_update_checklist_item(uuid,text,boolean) line 9 at PERFORM
+2026-10-22T06:57:18.954382548Z 2026-10-22 06:57:18.954 UTC [1204] STATEMENT:  SELECT app_update_checklist_item($1, $2, $3)
+2026-10-22T06:57:18.960774894Z 2026-10-22 06:57:18.960 UTC [1209] ERROR:  an assignee cannot see this item
+2026-10-22T06:57:18.960821725Z 2026-10-22 06:57:18.960 UTC [1209] CONTEXT:  PL/pgSQL function app_check_assignee(uuid,uuid,uuid) line 5 at RAISE
+2026-10-22T06:57:18.960841415Z 	SQL statement "SELECT app_check_assignee(v_task.workspace_id, v_task.item_id, v_uid)"
+2026-10-22T06:57:18.960845995Z 	PL/pgSQL function app_update_task(uuid,integer,text,text,text,text,date,date,integer,text[],uuid[],boolean,jsonb,uuid[]) line 87 at PERFORM
+2026-10-22T06:57:18.960849475Z 2026-10-22 06:57:18.960 UTC [1209] STATEMENT:  SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+2026-10-22T06:57:18.969077785Z 2026-10-22 06:57:18.968 UTC [1203] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:18.973956216Z 2026-10-22 06:57:18.973 UTC [1204] ERROR:  write access is required
+2026-10-22T06:57:18.973997536Z 2026-10-22 06:57:18.973 UTC [1204] CONTEXT:  PL/pgSQL function app_require_task_write(uuid) line 14 at RAISE
+2026-10-22T06:57:18.974003336Z 	SQL statement "SELECT app_require_task_write(v_task)"
+2026-10-22T06:57:18.974006766Z 	PL/pgSQL function app_delete_checklist_item(uuid) line 9 at PERFORM
+2026-10-22T06:57:18.974008826Z 2026-10-22 06:57:18.973 UTC [1204] STATEMENT:  SELECT app_delete_checklist_item($1)
+2026-10-22T06:57:18.974010756Z 2026-10-22 06:57:18.973 UTC [1205] ERROR:  subtasks can only be one level deep
+2026-10-22T06:57:18.974012616Z 2026-10-22 06:57:18.973 UTC [1205] CONTEXT:  PL/pgSQL function app_check_task_parent(uuid,uuid,uuid) line 30 at RAISE
+2026-10-22T06:57:18.974014706Z 	SQL statement "SELECT app_check_task_parent(NULL, p_parent, p_item)"
+2026-10-22T06:57:18.974016706Z 	PL/pgSQL function app_create_task(uuid,uuid,text,uuid,uuid[]) line 20 at PERFORM
+2026-10-22T06:57:18.974018616Z 2026-10-22 06:57:18.973 UTC [1205] STATEMENT:  SELECT app_create_task($1, $2, $3, $4, $5)
+2026-10-22T06:57:18.976425025Z 2026-10-22 06:57:18.976 UTC [1208] ERROR:  the task moved since it was read
+2026-10-22T06:57:18.976445675Z 2026-10-22 06:57:18.976 UTC [1208] CONTEXT:  PL/pgSQL function app_move_task(uuid,text,uuid,integer) line 17 at RAISE
+2026-10-22T06:57:18.976449915Z 2026-10-22 06:57:18.976 UTC [1208] STATEMENT:  SELECT app_move_task($1, $2, $3, $4)
+2026-10-22T06:57:18.992805714Z 2026-10-22 06:57:18.992 UTC [1205] ERROR:  the parent task must be in the same item
+2026-10-22T06:57:18.992850275Z 2026-10-22 06:57:18.992 UTC [1205] CONTEXT:  PL/pgSQL function app_check_task_parent(uuid,uuid,uuid) line 27 at RAISE
+2026-10-22T06:57:18.992855895Z 	SQL statement "SELECT app_check_task_parent(NULL, p_parent, p_item)"
+2026-10-22T06:57:18.992859235Z 	PL/pgSQL function app_create_task(uuid,uuid,text,uuid,uuid[]) line 20 at PERFORM
+2026-10-22T06:57:18.992861305Z 2026-10-22 06:57:18.992 UTC [1205] STATEMENT:  SELECT app_create_task($1, $2, $3, $4, $5)
+2026-10-22T06:57:19.025210799Z 2026-10-22 06:57:19.025 UTC [1195] ERROR:  the task moved since it was read
+2026-10-22T06:57:19.025254680Z 2026-10-22 06:57:19.025 UTC [1195] CONTEXT:  PL/pgSQL function app_move_task(uuid,text,uuid,integer) line 17 at RAISE
+2026-10-22T06:57:19.025260210Z 2026-10-22 06:57:19.025 UTC [1195] STATEMENT:  SELECT app_move_task($1, $2, $3, $4)
+2026-10-22T06:57:19.026374076Z 2026-10-22 06:57:19.026 UTC [1210] ERROR:  subtasks can only be one level deep
+2026-10-22T06:57:19.026416696Z 2026-10-22 06:57:19.026 UTC [1210] CONTEXT:  PL/pgSQL function app_check_task_parent(uuid,uuid,uuid) line 30 at RAISE
+2026-10-22T06:57:19.026423396Z 	SQL statement "SELECT app_check_task_parent(p_task, p_parent, v_task.item_id)"
+2026-10-22T06:57:19.026427026Z 	PL/pgSQL function app_set_task_parent(uuid,uuid,uuid[]) line 7 at PERFORM
+2026-10-22T06:57:19.026430066Z 2026-10-22 06:57:19.026 UTC [1210] STATEMENT:  SELECT app_set_task_parent($1, $2, $3)
+2026-10-22T06:57:19.038153464Z 2026-10-22 06:57:19.037 UTC [1205] ERROR:  write access is required
+2026-10-22T06:57:19.038189375Z 2026-10-22 06:57:19.037 UTC [1205] CONTEXT:  PL/pgSQL function app_require_task_write(uuid) line 14 at RAISE
+2026-10-22T06:57:19.038195165Z 	SQL statement "SELECT app_require_task_write(p_task)"
+2026-10-22T06:57:19.038198155Z 	PL/pgSQL function app_update_task(uuid,integer,text,text,text,text,date,date,integer,text[],uuid[],boolean,jsonb,uuid[]) line 20 at PERFORM
+2026-10-22T06:57:19.038200405Z 2026-10-22 06:57:19.037 UTC [1205] STATEMENT:  SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+2026-10-22T06:57:19.048162049Z 2026-10-22 06:57:19.047 UTC [1199] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:19.063225731Z 2026-10-22 06:57:19.063 UTC [1205] ERROR:  the start date must not be after the due date
+2026-10-22T06:57:19.063237361Z 2026-10-22 06:57:19.063 UTC [1205] CONTEXT:  PL/pgSQL function app_update_task(uuid,integer,text,text,text,text,date,date,integer,text[],uuid[],boolean,jsonb,uuid[]) line 49 at RAISE
+2026-10-22T06:57:19.063240951Z 2026-10-22 06:57:19.063 UTC [1205] STATEMENT:  SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+2026-10-22T06:57:19.065774074Z 2026-10-22 06:57:19.065 UTC [1208] ERROR:  the task moved since it was read
+2026-10-22T06:57:19.065805595Z 2026-10-22 06:57:19.065 UTC [1208] CONTEXT:  PL/pgSQL function app_move_task(uuid,text,uuid,integer) line 17 at RAISE
+2026-10-22T06:57:19.065811025Z 2026-10-22 06:57:19.065 UTC [1208] STATEMENT:  SELECT app_move_task($1, $2, $3, $4)
+2026-10-22T06:57:19.079148213Z 2026-10-22 06:57:19.078 UTC [1205] ERROR:  the item is archived
+2026-10-22T06:57:19.079160643Z 2026-10-22 06:57:19.078 UTC [1205] CONTEXT:  PL/pgSQL function app_require_task_write(uuid) line 12 at RAISE
+2026-10-22T06:57:19.079163293Z 	SQL statement "SELECT app_require_task_write(p_task)"
+2026-10-22T06:57:19.079165833Z 	PL/pgSQL function app_update_task(uuid,integer,text,text,text,text,date,date,integer,text[],uuid[],boolean,jsonb,uuid[]) line 20 at PERFORM
+2026-10-22T06:57:19.079167843Z 2026-10-22 06:57:19.078 UTC [1205] STATEMENT:  SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+2026-10-22T06:57:19.090055290Z 2026-10-22 06:57:19.089 UTC [1195] ERROR:  the task moved since it was read
+2026-10-22T06:57:19.090098211Z 2026-10-22 06:57:19.089 UTC [1195] CONTEXT:  PL/pgSQL function app_move_task(uuid,text,uuid,integer) line 17 at RAISE
+2026-10-22T06:57:19.090113591Z 2026-10-22 06:57:19.089 UTC [1195] STATEMENT:  SELECT app_move_task($1, $2, $3, $4)
+2026-10-22T06:57:19.097795359Z 2026-10-22 06:57:19.097 UTC [1217] ERROR:  subtasks can only be one level deep
+2026-10-22T06:57:19.097843830Z 2026-10-22 06:57:19.097 UTC [1217] CONTEXT:  PL/pgSQL function app_check_task_parent(uuid,uuid,uuid) line 30 at RAISE
+2026-10-22T06:57:19.097861560Z 	SQL statement "SELECT app_check_task_parent(p_task, p_parent, v_task.item_id)"
+2026-10-22T06:57:19.097866440Z 	PL/pgSQL function app_set_task_parent(uuid,uuid,uuid[]) line 7 at PERFORM
+2026-10-22T06:57:19.097869030Z 2026-10-22 06:57:19.097 UTC [1217] STATEMENT:  SELECT app_set_task_parent($1, $2, $3)
+2026-10-22T06:57:19.115386830Z 2026-10-22 06:57:19.115 UTC [1208] ERROR:  the task moved since it was read
+2026-10-22T06:57:19.115436090Z 2026-10-22 06:57:19.115 UTC [1208] CONTEXT:  PL/pgSQL function app_move_task(uuid,text,uuid,integer) line 17 at RAISE
+2026-10-22T06:57:19.115441730Z 2026-10-22 06:57:19.115 UTC [1208] STATEMENT:  SELECT app_move_task($1, $2, $3, $4)
+2026-10-22T06:57:19.132138645Z 2026-10-22 06:57:19.131 UTC [1215] ERROR:  subtasks can only be one level deep
+2026-10-22T06:57:19.132187006Z 2026-10-22 06:57:19.131 UTC [1215] CONTEXT:  PL/pgSQL function app_check_task_parent(uuid,uuid,uuid) line 30 at RAISE
+2026-10-22T06:57:19.132193886Z 	SQL statement "SELECT app_check_task_parent(p_task, p_parent, v_task.item_id)"
+2026-10-22T06:57:19.132197286Z 	PL/pgSQL function app_set_task_parent(uuid,uuid,uuid[]) line 7 at PERFORM
+2026-10-22T06:57:19.132199826Z 2026-10-22 06:57:19.131 UTC [1215] STATEMENT:  SELECT app_set_task_parent($1, $2, $3)
+2026-10-22T06:57:19.156014408Z 2026-10-22 06:57:19.155 UTC [1208] ERROR:  the task moved since it was read
+2026-10-22T06:57:19.156054468Z 2026-10-22 06:57:19.155 UTC [1208] CONTEXT:  PL/pgSQL function app_move_task(uuid,text,uuid,integer) line 17 at RAISE
+2026-10-22T06:57:19.156065398Z 2026-10-22 06:57:19.155 UTC [1208] STATEMENT:  SELECT app_move_task($1, $2, $3, $4)
+2026-10-22T06:57:19.161685483Z 2026-10-22 06:57:19.161 UTC [1215] ERROR:  subtasks can only be one level deep
+2026-10-22T06:57:19.161725974Z 2026-10-22 06:57:19.161 UTC [1215] CONTEXT:  PL/pgSQL function app_check_task_parent(uuid,uuid,uuid) line 30 at RAISE
+2026-10-22T06:57:19.161731734Z 	SQL statement "SELECT app_check_task_parent(p_task, p_parent, v_task.item_id)"
+2026-10-22T06:57:19.161734844Z 	PL/pgSQL function app_set_task_parent(uuid,uuid,uuid[]) line 7 at PERFORM
+2026-10-22T06:57:19.161737024Z 2026-10-22 06:57:19.161 UTC [1215] STATEMENT:  SELECT app_set_task_parent($1, $2, $3)
+2026-10-22T06:57:19.187283296Z 2026-10-22 06:57:19.187 UTC [1217] ERROR:  subtasks can only be one level deep
+2026-10-22T06:57:19.187332786Z 2026-10-22 06:57:19.187 UTC [1217] CONTEXT:  PL/pgSQL function app_check_task_parent(uuid,uuid,uuid) line 30 at RAISE
+2026-10-22T06:57:19.187339826Z 	SQL statement "SELECT app_check_task_parent(p_task, p_parent, v_task.item_id)"
+2026-10-22T06:57:19.187342966Z 	PL/pgSQL function app_set_task_parent(uuid,uuid,uuid[]) line 7 at PERFORM
+2026-10-22T06:57:19.187359817Z 2026-10-22 06:57:19.187 UTC [1217] STATEMENT:  SELECT app_set_task_parent($1, $2, $3)
+2026-10-22T06:57:19.344500959Z 2026-10-22 06:57:19.344 UTC [1220] ERROR:  only the owner can mark a template
+2026-10-22T06:57:19.344540849Z 2026-10-22 06:57:19.344 UTC [1220] CONTEXT:  PL/pgSQL function app_set_document_template(uuid,boolean,uuid[]) line 11 at RAISE
+2026-10-22T06:57:19.344546259Z 2026-10-22 06:57:19.344 UTC [1220] STATEMENT:  SELECT app_set_document_template($1, $2, $3)
+2026-10-22T06:57:19.401886509Z 2026-10-22 06:57:19.401 UTC [1223] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:19.401928460Z 2026-10-22 06:57:19.401 UTC [1223] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:19.401934230Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:19.401937070Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:19.401939120Z 2026-10-22 06:57:19.401 UTC [1223] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:19.573554466Z 2026-10-22 06:57:19.573 UTC [1235] ERROR:  a timer is already running
+2026-10-22T06:57:19.573576896Z 2026-10-22 06:57:19.573 UTC [1235] CONTEXT:  PL/pgSQL function app_start_timer(uuid,text,text,text,uuid,uuid[]) line 22 at RAISE
+2026-10-22T06:57:19.573580066Z 2026-10-22 06:57:19.573 UTC [1235] STATEMENT:  SELECT app_start_timer($1, $2, $3, $4, $5, $6)
+2026-10-22T06:57:19.584710824Z 2026-10-22 06:57:19.584 UTC [1229] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:19.613781204Z 2026-10-22 06:57:19.613 UTC [1235] ERROR:  the timer has stopped
+2026-10-22T06:57:19.613808745Z 2026-10-22 06:57:19.613 UTC [1235] CONTEXT:  PL/pgSQL function app_timer_action(uuid,text) line 9 at RAISE
+2026-10-22T06:57:19.613811675Z 2026-10-22 06:57:19.613 UTC [1235] STATEMENT:  SELECT app_timer_action($1, $2)
+2026-10-22T06:57:19.615234974Z 2026-10-22 06:57:19.615 UTC [1236] ERROR:  the start leaves less time than the timer was paused
+2026-10-22T06:57:19.615280085Z 2026-10-22 06:57:19.615 UTC [1236] CONTEXT:  PL/pgSQL function app_update_time_entry(uuid,integer,timestamp with time zone,timestamp with time zone,integer,text,text,text,uuid,uuid[]) line 16 at RAISE
+2026-10-22T06:57:19.615287265Z 2026-10-22 06:57:19.615 UTC [1236] STATEMENT:  SELECT app_update_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+2026-10-22T06:57:19.618294935Z 2026-10-22 06:57:19.618 UTC [1235] ERROR:  time entry not found
+2026-10-22T06:57:19.618310055Z 2026-10-22 06:57:19.618 UTC [1235] CONTEXT:  PL/pgSQL function app_lock_own_entry(uuid) line 8 at RAISE
+2026-10-22T06:57:19.618314735Z 	PL/pgSQL function app_timer_action(uuid,text) line 3 during statement block local variable initialization
+2026-10-22T06:57:19.618317405Z 2026-10-22 06:57:19.618 UTC [1235] STATEMENT:  SELECT app_timer_action($1, $2)
+2026-10-22T06:57:19.626233231Z 2026-10-22 06:57:19.626 UTC [1238] ERROR:  invalid time range
+2026-10-22T06:57:19.626291042Z 2026-10-22 06:57:19.626 UTC [1238] CONTEXT:  PL/pgSQL function app_add_time_entry(uuid,timestamp with time zone,timestamp with time zone,integer,text,text,text,uuid,uuid[]) line 15 at RAISE
+2026-10-22T06:57:19.626312492Z 2026-10-22 06:57:19.626 UTC [1238] STATEMENT:  SELECT app_add_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9)
+2026-10-22T06:57:19.632242953Z 2026-10-22 06:57:19.632 UTC [1236] ERROR:  the start leaves less time than the timer was paused
+2026-10-22T06:57:19.632258683Z 2026-10-22 06:57:19.632 UTC [1236] CONTEXT:  PL/pgSQL function app_update_time_entry(uuid,integer,timestamp with time zone,timestamp with time zone,integer,text,text,text,uuid,uuid[]) line 16 at RAISE
+2026-10-22T06:57:19.632261533Z 2026-10-22 06:57:19.632 UTC [1236] STATEMENT:  SELECT app_update_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+2026-10-22T06:57:19.644451896Z 2026-10-22 06:57:19.644 UTC [1238] ERROR:  target not found
+2026-10-22T06:57:19.644490936Z 2026-10-22 06:57:19.644 UTC [1238] CONTEXT:  PL/pgSQL function app_time_target_workspace(text,uuid) line 19 at RAISE
+2026-10-22T06:57:19.644496496Z 	PL/pgSQL function app_add_time_entry(uuid,timestamp with time zone,timestamp with time zone,integer,text,text,text,uuid,uuid[]) line 17 at assignment
+2026-10-22T06:57:19.644499486Z 2026-10-22 06:57:19.644 UTC [1238] STATEMENT:  SELECT app_add_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9)
+2026-10-22T06:57:19.658948327Z 2026-10-22 06:57:19.658 UTC [1234] ERROR:  task not found
+2026-10-22T06:57:19.658963637Z 2026-10-22 06:57:19.658 UTC [1234] CONTEXT:  PL/pgSQL function app_task_time(uuid) line 6 at RAISE
+2026-10-22T06:57:19.658966427Z 2026-10-22 06:57:19.658 UTC [1234] STATEMENT:  SELECT * FROM app_task_time($1)
+2026-10-22T06:57:19.662663741Z 2026-10-22 06:57:19.662 UTC [1235] ERROR:  a timer is already running
+2026-10-22T06:57:19.662673451Z 2026-10-22 06:57:19.662 UTC [1235] CONTEXT:  PL/pgSQL function app_start_timer(uuid,text,text,text,uuid,uuid[]) line 22 at RAISE
+2026-10-22T06:57:19.662676211Z 2026-10-22 06:57:19.662 UTC [1235] STATEMENT:  SELECT app_start_timer($1, $2, $3, $4, $5, $6)
+2026-10-22T06:57:19.677552830Z 2026-10-22 06:57:19.677 UTC [1237] ERROR:  item not found
+2026-10-22T06:57:19.677593031Z 2026-10-22 06:57:19.677 UTC [1237] CONTEXT:  PL/pgSQL function app_item_time(uuid) line 6 at RAISE
+2026-10-22T06:57:19.677598751Z 2026-10-22 06:57:19.677 UTC [1237] STATEMENT:  SELECT * FROM app_item_time($1)
+2026-10-22T06:57:19.686607534Z 2026-10-22 06:57:19.686 UTC [1234] ERROR:  workspace not found
+2026-10-22T06:57:19.686644464Z 2026-10-22 06:57:19.686 UTC [1234] CONTEXT:  PL/pgSQL function app_set_time_sharing(uuid,boolean) line 4 at RAISE
+2026-10-22T06:57:19.686649904Z 2026-10-22 06:57:19.686 UTC [1234] STATEMENT:  SELECT app_set_time_sharing($1, $2)
+2026-10-22T06:57:19.692351770Z 2026-10-22 06:57:19.692 UTC [1236] ERROR:  invalid time range
+2026-10-22T06:57:19.692386011Z 2026-10-22 06:57:19.692 UTC [1236] CONTEXT:  PL/pgSQL function app_update_time_entry(uuid,integer,timestamp with time zone,timestamp with time zone,integer,text,text,text,uuid,uuid[]) line 22 at RAISE
+2026-10-22T06:57:19.692392781Z 2026-10-22 06:57:19.692 UTC [1236] STATEMENT:  SELECT app_update_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+2026-10-22T06:57:19.702150511Z 2026-10-22 06:57:19.701 UTC [1226] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:19.704369997Z 2026-10-22 06:57:19.704 UTC [1238] ERROR:  time entry not found
+2026-10-22T06:57:19.704382577Z 2026-10-22 06:57:19.704 UTC [1238] CONTEXT:  PL/pgSQL function app_lock_own_entry(uuid) line 8 at RAISE
+2026-10-22T06:57:19.704385637Z 	PL/pgSQL function app_delete_time_entry(uuid) line 3 during statement block local variable initialization
+2026-10-22T06:57:19.704389147Z 2026-10-22 06:57:19.704 UTC [1238] STATEMENT:  SELECT app_delete_time_entry($1)
+2026-10-22T06:57:19.742067648Z 2026-10-22 06:57:19.741 UTC [1236] ERROR:  the start leaves less time than the timer was paused
+2026-10-22T06:57:19.742081428Z 2026-10-22 06:57:19.741 UTC [1236] CONTEXT:  PL/pgSQL function app_update_time_entry(uuid,integer,timestamp with time zone,timestamp with time zone,integer,text,text,text,uuid,uuid[]) line 16 at RAISE
+2026-10-22T06:57:19.742084848Z 2026-10-22 06:57:19.741 UTC [1236] STATEMENT:  SELECT app_update_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+2026-10-22T06:57:19.870614495Z 2026-10-22 06:57:19.870 UTC [1244] ERROR:  module not found
+2026-10-22T06:57:19.870694546Z 2026-10-22 06:57:19.870 UTC [1244] CONTEXT:  PL/pgSQL function app_create_item(uuid,uuid,text,text,uuid[]) line 11 at RAISE
+2026-10-22T06:57:19.870700717Z 2026-10-22 06:57:19.870 UTC [1244] STATEMENT:  SELECT app_create_item($1, $2, $3, $4, $5)
+2026-10-22T06:57:19.913148175Z 2026-10-22 06:57:19.912 UTC [1244] ERROR:  module not found
+2026-10-22T06:57:19.913191716Z 2026-10-22 06:57:19.912 UTC [1244] CONTEXT:  PL/pgSQL function app_create_item(uuid,uuid,text,text,uuid[]) line 11 at RAISE
+2026-10-22T06:57:19.913198336Z 	PL/pgSQL function app_copy_item(uuid,uuid,uuid,text,boolean,uuid[]) line 31 at assignment
+2026-10-22T06:57:19.913201416Z 2026-10-22 06:57:19.912 UTC [1244] STATEMENT:  SELECT copied_item, skipped_count FROM app_copy_item($1, $2, $3, $4, $5, $6)
+2026-10-22T06:57:19.936312156Z 2026-10-22 06:57:19.936 UTC [1256] ERROR:  this key is in use or was used before
+2026-10-22T06:57:19.936360057Z 2026-10-22 06:57:19.936 UTC [1256] CONTEXT:  PL/pgSQL function app_create_module(uuid,uuid,text,text,text,uuid[]) line 16 at RAISE
+2026-10-22T06:57:19.936367487Z 2026-10-22 06:57:19.936 UTC [1256] STATEMENT:  SELECT app_create_module($1, $2, $3, $4, $5, $6)
+2026-10-22T06:57:19.941570017Z 2026-10-22 06:57:19.941 UTC [1256] ERROR:  this key is in use or was used before
+2026-10-22T06:57:19.941613038Z 2026-10-22 06:57:19.941 UTC [1256] CONTEXT:  PL/pgSQL function app_create_module(uuid,uuid,text,text,text,uuid[]) line 16 at RAISE
+2026-10-22T06:57:19.941618838Z 2026-10-22 06:57:19.941 UTC [1256] STATEMENT:  SELECT app_create_module($1, $2, $3, $4, $5, $6)
+2026-10-22T06:57:19.953650629Z 2026-10-22 06:57:19.953 UTC [1256] ERROR:  this key is in use or was used before
+2026-10-22T06:57:19.953694430Z 2026-10-22 06:57:19.953 UTC [1256] CONTEXT:  PL/pgSQL function app_update_module(uuid,text,text,uuid[]) line 25 at RAISE
+2026-10-22T06:57:19.953700210Z 2026-10-22 06:57:19.953 UTC [1256] STATEMENT:  SELECT app_update_module($1, $2, $3, $4)
+2026-10-22T06:57:19.958926106Z 2026-10-22 06:57:19.958 UTC [1256] ERROR:  this key is in use or was used before
+2026-10-22T06:57:19.958962836Z 2026-10-22 06:57:19.958 UTC [1256] CONTEXT:  PL/pgSQL function app_update_module(uuid,text,text,uuid[]) line 25 at RAISE
+2026-10-22T06:57:19.958969466Z 2026-10-22 06:57:19.958 UTC [1256] STATEMENT:  SELECT app_update_module($1, $2, $3, $4)
+2026-10-22T06:57:19.977648081Z 2026-10-22 06:57:19.977 UTC [1250] ERROR:  admin role required
+2026-10-22T06:57:19.977696031Z 2026-10-22 06:57:19.977 UTC [1250] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 10 at RAISE
+2026-10-22T06:57:19.977703771Z 	SQL statement "SELECT app_require_admin(v_ws)"
+2026-10-22T06:57:19.977708101Z 	PL/pgSQL function app_set_module_description(uuid,text) line 8 at PERFORM
+2026-10-22T06:57:19.977710941Z 2026-10-22 06:57:19.977 UTC [1250] STATEMENT:  SELECT app_set_module_description($1, $2)
+2026-10-22T06:57:19.990730127Z 2026-10-22 06:57:19.990 UTC [1267] ERROR:  only the item owner can delete it
+2026-10-22T06:57:19.990784608Z 2026-10-22 06:57:19.990 UTC [1267] CONTEXT:  PL/pgSQL function app_trash_item(uuid,uuid[]) line 10 at RAISE
+2026-10-22T06:57:19.990792198Z 2026-10-22 06:57:19.990 UTC [1267] STATEMENT:  SELECT app_trash_item($1, $2)
+2026-10-22T06:57:20.000134024Z 2026-10-22 06:57:19.999 UTC [1270] ERROR:  only the owner or the author can delete this document
+2026-10-22T06:57:20.000158284Z 2026-10-22 06:57:19.999 UTC [1270] CONTEXT:  PL/pgSQL function app_trash_document(uuid,uuid[]) line 20 at RAISE
+2026-10-22T06:57:20.000161364Z 2026-10-22 06:57:19.999 UTC [1270] STATEMENT:  SELECT app_trash_document($1, $2)
+2026-10-22T06:57:20.005009699Z 2026-10-22 06:57:20.004 UTC [1270] ERROR:  only the owner or the author can delete this document
+2026-10-22T06:57:20.005021969Z 2026-10-22 06:57:20.004 UTC [1270] CONTEXT:  PL/pgSQL function app_trash_document(uuid,uuid[]) line 20 at RAISE
+2026-10-22T06:57:20.005024719Z 2026-10-22 06:57:20.004 UTC [1270] STATEMENT:  SELECT app_trash_document($1, $2)
+2026-10-22T06:57:20.009748743Z 2026-10-22 06:57:20.009 UTC [1249] ERROR:  trash entry not found
+2026-10-22T06:57:20.009787854Z 2026-10-22 06:57:20.009 UTC [1249] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 81 at RAISE
+2026-10-22T06:57:20.009793634Z 2026-10-22 06:57:20.009 UTC [1249] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:57:20.012390737Z 2026-10-22 06:57:20.012 UTC [1267] ERROR:  only an admin can change the retention period
+2026-10-22T06:57:20.012481628Z 2026-10-22 06:57:20.012 UTC [1267] CONTEXT:  PL/pgSQL function app_set_trash_retention(uuid,integer,uuid[]) line 9 at RAISE
+2026-10-22T06:57:20.012489499Z 2026-10-22 06:57:20.012 UTC [1267] STATEMENT:  SELECT app_set_trash_retention($1, $2, $3)
+2026-10-22T06:57:20.017198663Z 2026-10-22 06:57:20.017 UTC [1267] ERROR:  retention must be 1 to 3650 days
+2026-10-22T06:57:20.017218833Z 2026-10-22 06:57:20.017 UTC [1267] CONTEXT:  PL/pgSQL function app_set_trash_retention(uuid,integer,uuid[]) line 12 at RAISE
+2026-10-22T06:57:20.017231033Z 2026-10-22 06:57:20.017 UTC [1267] STATEMENT:  SELECT app_set_trash_retention($1, $2, $3)
+2026-10-22T06:57:20.053124171Z 2026-10-22 06:57:20.052 UTC [1243] ERROR:  admin role required
+2026-10-22T06:57:20.053167491Z 2026-10-22 06:57:20.052 UTC [1243] CONTEXT:  PL/pgSQL function app_require_admin(uuid) line 10 at RAISE
+2026-10-22T06:57:20.053173231Z 	SQL statement "SELECT app_require_admin(v_module.workspace_id)"
+2026-10-22T06:57:20.053177131Z 	PL/pgSQL function app_trash_module(uuid,uuid[]) line 11 at PERFORM
+2026-10-22T06:57:20.053180991Z 2026-10-22 06:57:20.052 UTC [1243] STATEMENT:  SELECT app_trash_module($1, $2)
+2026-10-22T06:57:20.055229794Z 2026-10-22 06:57:20.054 UTC [1270] ERROR:  trash entry not found
+2026-10-22T06:57:20.055247814Z 2026-10-22 06:57:20.054 UTC [1270] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 11 at RAISE
+2026-10-22T06:57:20.055252164Z 2026-10-22 06:57:20.054 UTC [1270] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:57:20.070945385Z 2026-10-22 06:57:20.070 UTC [1282] ERROR:  the document was moved; reload and try again
+2026-10-22T06:57:20.070964795Z 2026-10-22 06:57:20.070 UTC [1282] CONTEXT:  PL/pgSQL function app_trash_document(uuid,uuid[]) line 32 at RAISE
+2026-10-22T06:57:20.070968155Z 2026-10-22 06:57:20.070 UTC [1282] STATEMENT:  SELECT app_trash_document($1, $2)
+2026-10-22T06:57:20.073484969Z 2026-10-22 06:57:20.073 UTC [1270] ERROR:  trash entry not found
+2026-10-22T06:57:20.073491599Z 2026-10-22 06:57:20.073 UTC [1270] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 11 at RAISE
+2026-10-22T06:57:20.073494209Z 2026-10-22 06:57:20.073 UTC [1270] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:57:20.078768045Z 2026-10-22 06:57:20.078 UTC [1260] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:20.125000512Z 2026-10-22 06:57:20.124 UTC [1267] ERROR:  the retention period has passed
+2026-10-22T06:57:20.125019112Z 2026-10-22 06:57:20.124 UTC [1267] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 14 at RAISE
+2026-10-22T06:57:20.125021802Z 2026-10-22 06:57:20.124 UTC [1267] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:57:20.133653109Z 2026-10-22 06:57:20.133 UTC [1250] ERROR:  restore the module first
+2026-10-22T06:57:20.133666099Z 2026-10-22 06:57:20.133 UTC [1250] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 55 at RAISE
+2026-10-22T06:57:20.133668989Z 2026-10-22 06:57:20.133 UTC [1250] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:57:20.138418050Z 2026-10-22 06:57:20.138 UTC [1250] ERROR:  trash entry not found
+2026-10-22T06:57:20.138458801Z 2026-10-22 06:57:20.138 UTC [1250] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 11 at RAISE
+2026-10-22T06:57:20.138464551Z 2026-10-22 06:57:20.138 UTC [1250] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:57:20.145527456Z 2026-10-22 06:57:20.145 UTC [1268] ERROR:  restore the item first
+2026-10-22T06:57:20.145570326Z 2026-10-22 06:57:20.145 UTC [1268] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 66 at RAISE
+2026-10-22T06:57:20.145575896Z 2026-10-22 06:57:20.145 UTC [1268] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:57:20.156718512Z 2026-10-22 06:57:20.156 UTC [1245] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:20.172740561Z 2026-10-22 06:57:20.172 UTC [1275] ERROR:  trash entry not found
+2026-10-22T06:57:20.172782032Z 2026-10-22 06:57:20.172 UTC [1275] CONTEXT:  PL/pgSQL function app_restore_batch(uuid,uuid[]) line 11 at RAISE
+2026-10-22T06:57:20.172787742Z 2026-10-22 06:57:20.172 UTC [1275] STATEMENT:  SELECT app_restore_batch($1, $2)
+2026-10-22T06:57:20.217899578Z 2026-10-22 06:57:20.217 UTC [1243] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:20.473150212Z 2026-10-22 06:57:20.472 UTC [1297] ERROR:  the tree would be deeper than 3 levels
+2026-10-22T06:57:20.473218083Z 2026-10-22 06:57:20.472 UTC [1297] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 30 at RAISE
+2026-10-22T06:57:20.473225243Z 	SQL statement "SELECT app_place_document(v_id, p_parent, NULL, p_max_depth, app_ids_from(p_ids, 3))"
+2026-10-22T06:57:20.473229093Z 	PL/pgSQL function app_create_wiki_document(uuid,uuid,text,integer,jsonb,uuid,integer,uuid[]) line 33 at PERFORM
+2026-10-22T06:57:20.473232023Z 2026-10-22 06:57:20.472 UTC [1297] STATEMENT:  SELECT app_create_wiki_document($1, $2, $3, $4, $5, $6, $7, $8)
+2026-10-22T06:57:20.489642658Z 2026-10-22 06:57:20.489 UTC [1300] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.489667028Z 2026-10-22 06:57:20.489 UTC [1300] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.489670348Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.489673748Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.489677178Z 2026-10-22 06:57:20.489 UTC [1300] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:20.494669055Z 2026-10-22 06:57:20.494 UTC [1302] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.494696326Z 2026-10-22 06:57:20.494 UTC [1302] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.494699516Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.494702076Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.494704066Z 2026-10-22 06:57:20.494 UTC [1302] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:20.499090664Z 2026-10-22 06:57:20.498 UTC [1297] ERROR:  the tree would be deeper than 3 levels
+2026-10-22T06:57:20.499105024Z 2026-10-22 06:57:20.498 UTC [1297] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 30 at RAISE
+2026-10-22T06:57:20.499107644Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.499110104Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.499120734Z 2026-10-22 06:57:20.498 UTC [1297] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.511103496Z 2026-10-22 06:57:20.510 UTC [1300] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.511122846Z 2026-10-22 06:57:20.510 UTC [1300] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.511125496Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.511128007Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.511130517Z 2026-10-22 06:57:20.510 UTC [1300] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:20.511258509Z 2026-10-22 06:57:20.511 UTC [1293] ERROR:  the parent must be in the same place
+2026-10-22T06:57:20.511269089Z 2026-10-22 06:57:20.511 UTC [1293] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 19 at RAISE
+2026-10-22T06:57:20.511273149Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.511276329Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.511278929Z 2026-10-22 06:57:20.511 UTC [1293] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.516255381Z 2026-10-22 06:57:20.516 UTC [1293] ERROR:  the parent must be in the same place
+2026-10-22T06:57:20.516266241Z 2026-10-22 06:57:20.516 UTC [1293] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 19 at RAISE
+2026-10-22T06:57:20.516269011Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.516271381Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.516273451Z 2026-10-22 06:57:20.516 UTC [1293] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.532750618Z 2026-10-22 06:57:20.532 UTC [1303] ERROR:  a document cannot be placed under itself
+2026-10-22T06:57:20.532763598Z 2026-10-22 06:57:20.532 UTC [1303] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 25 at RAISE
+2026-10-22T06:57:20.532766408Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.532768818Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.532770858Z 2026-10-22 06:57:20.532 UTC [1303] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.537595052Z 2026-10-22 06:57:20.537 UTC [1303] ERROR:  a document cannot be placed under itself
+2026-10-22T06:57:20.537616483Z 2026-10-22 06:57:20.537 UTC [1303] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 25 at RAISE
+2026-10-22T06:57:20.537619503Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.537630443Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.537632563Z 2026-10-22 06:57:20.537 UTC [1303] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.542396406Z 2026-10-22 06:57:20.542 UTC [1303] ERROR:  before must be a sibling under the new parent
+2026-10-22T06:57:20.542411476Z 2026-10-22 06:57:20.542 UTC [1303] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 43 at RAISE
+2026-10-22T06:57:20.542415196Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.542418466Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.542421357Z 2026-10-22 06:57:20.542 UTC [1303] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.546715295Z 2026-10-22 06:57:20.546 UTC [1303] ERROR:  insufficient permission
+2026-10-22T06:57:20.546726245Z 2026-10-22 06:57:20.546 UTC [1303] CONTEXT:  PL/pgSQL function app_require_document(uuid,text) line 10 at RAISE
+2026-10-22T06:57:20.546729085Z 	SQL statement "SELECT app_require_document(p_doc, 'write')"
+2026-10-22T06:57:20.546731805Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 7 at PERFORM
+2026-10-22T06:57:20.546733865Z 2026-10-22 06:57:20.546 UTC [1303] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.551672921Z 2026-10-22 06:57:20.551 UTC [1298] ERROR:  parent not found
+2026-10-22T06:57:20.551705741Z 2026-10-22 06:57:20.551 UTC [1298] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 13 at RAISE
+2026-10-22T06:57:20.551711501Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.551714341Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.551716491Z 2026-10-22 06:57:20.551 UTC [1298] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.563358098Z 2026-10-22 06:57:20.563 UTC [1302] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.563376738Z 2026-10-22 06:57:20.563 UTC [1302] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.563379498Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.563381848Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.563383828Z 2026-10-22 06:57:20.563 UTC [1302] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:20.564932009Z 2026-10-22 06:57:20.564 UTC [1296] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:20.571697551Z 2026-10-22 06:57:20.571 UTC [1299] ERROR:  a document cannot be placed under itself
+2026-10-22T06:57:20.571740272Z 2026-10-22 06:57:20.571 UTC [1299] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 25 at RAISE
+2026-10-22T06:57:20.571756072Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.571759152Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.571761322Z 2026-10-22 06:57:20.571 UTC [1299] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.660249780Z 2026-10-22 06:57:20.660 UTC [1308] ERROR:  a document cannot be placed under itself
+2026-10-22T06:57:20.660326241Z 2026-10-22 06:57:20.660 UTC [1308] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 25 at RAISE
+2026-10-22T06:57:20.660335321Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.660339021Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.660342251Z 2026-10-22 06:57:20.660 UTC [1308] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.687466170Z 2026-10-22 06:57:20.687 UTC [1304] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.687505820Z 2026-10-22 06:57:20.687 UTC [1304] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.687511891Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.687514681Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.687516701Z 2026-10-22 06:57:20.687 UTC [1304] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:20.709746314Z 2026-10-22 06:57:20.709 UTC [1308] ERROR:  a document cannot be placed under itself
+2026-10-22T06:57:20.709788654Z 2026-10-22 06:57:20.709 UTC [1308] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 25 at RAISE
+2026-10-22T06:57:20.709795545Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.709799095Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.709801745Z 2026-10-22 06:57:20.709 UTC [1308] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.730605565Z 2026-10-22 06:57:20.730 UTC [1302] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.730643935Z 2026-10-22 06:57:20.730 UTC [1302] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.730649425Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.730652245Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.730654445Z 2026-10-22 06:57:20.730 UTC [1302] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:20.757019968Z 2026-10-22 06:57:20.756 UTC [1308] ERROR:  a document cannot be placed under itself
+2026-10-22T06:57:20.757061859Z 2026-10-22 06:57:20.756 UTC [1308] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 25 at RAISE
+2026-10-22T06:57:20.757068709Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.757082139Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.757085889Z 2026-10-22 06:57:20.756 UTC [1308] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.805632912Z 2026-10-22 06:57:20.805 UTC [1304] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.805676302Z 2026-10-22 06:57:20.805 UTC [1304] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.805681722Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.805684662Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.805686702Z 2026-10-22 06:57:20.805 UTC [1304] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:20.813459768Z 2026-10-22 06:57:20.813 UTC [1306] ERROR:  a document cannot be placed under itself
+2026-10-22T06:57:20.813500188Z 2026-10-22 06:57:20.813 UTC [1306] CONTEXT:  PL/pgSQL function app_place_document(uuid,uuid,uuid,integer,uuid[]) line 25 at RAISE
+2026-10-22T06:57:20.813507398Z 	SQL statement "SELECT app_place_document(p_doc, p_parent, p_before, p_max_depth, p_ids)"
+2026-10-22T06:57:20.813510918Z 	PL/pgSQL function app_set_document_parent(uuid,uuid,uuid,integer,uuid[]) line 18 at PERFORM
+2026-10-22T06:57:20.813513659Z 2026-10-22 06:57:20.813 UTC [1306] STATEMENT:  SELECT app_set_document_parent($1, $2, $3, $4, $5)
+2026-10-22T06:57:20.828996857Z 2026-10-22 06:57:20.828 UTC [1309] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.829006747Z 2026-10-22 06:57:20.828 UTC [1309] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.829009297Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.829011467Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.829013407Z 2026-10-22 06:57:20.828 UTC [1309] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:20.838928289Z 2026-10-22 06:57:20.838 UTC [1299] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:57:20.877182242Z 2026-10-22 06:57:20.877 UTC [1304] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.877227333Z 2026-10-22 06:57:20.877 UTC [1304] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.877233753Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.877236573Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.877238633Z 2026-10-22 06:57:20.877 UTC [1304] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:20.899522008Z 2026-10-22 06:57:20.899 UTC [1292] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.899567908Z 2026-10-22 06:57:20.899 UTC [1292] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.899574759Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.899587299Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.899590019Z 2026-10-22 06:57:20.899 UTC [1292] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:20.946790559Z 2026-10-22 06:57:20.946 UTC [1304] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.946834379Z 2026-10-22 06:57:20.946 UTC [1304] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.946840819Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.946844299Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.946846899Z 2026-10-22 06:57:20.946 UTC [1304] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:20.963369210Z 2026-10-22 06:57:20.963 UTC [1292] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:20.963402211Z 2026-10-22 06:57:20.963 UTC [1292] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:20.963407711Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:20.963410511Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:20.963412641Z 2026-10-22 06:57:20.963 UTC [1292] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:21.498094634Z 2026-10-22 06:57:21.497 UTC [1301] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:21.498111394Z 2026-10-22 06:57:21.497 UTC [1301] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:21.498114714Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:21.498118004Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:21.498120524Z 2026-10-22 06:57:21.497 UTC [1301] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:21.515630798Z 2026-10-22 06:57:21.515 UTC [1301] ERROR:  realtime editing is off for this document
+2026-10-22T06:57:21.515666608Z 2026-10-22 06:57:21.515 UTC [1301] CONTEXT:  PL/pgSQL function app_collab_access(uuid) line 9 at RAISE
+2026-10-22T06:57:21.515671898Z 	SQL statement "SELECT app_collab_access(p_doc)"
+2026-10-22T06:57:21.515674638Z 	PL/pgSQL function app_collab_load(uuid) line 3 at PERFORM
+2026-10-22T06:57:21.515676698Z 2026-10-22 06:57:21.515 UTC [1301] STATEMENT:  SELECT * FROM app_collab_load($1)
+2026-10-22T06:57:22.411777745Z 2026-10-22 06:57:22.411 UTC [1333] ERROR:  only the owner can delete the workspace
+2026-10-22T06:57:22.411818935Z 2026-10-22 06:57:22.411 UTC [1333] CONTEXT:  PL/pgSQL function app_delete_workspace(uuid,text,uuid[]) line 12 at RAISE
+2026-10-22T06:57:22.411824215Z 2026-10-22 06:57:22.411 UTC [1333] STATEMENT:  SELECT app_delete_workspace($1, $2, $3)
+2026-10-22T06:57:22.415666811Z 2026-10-22 06:57:22.415 UTC [1333] ERROR:  workspace not found
+2026-10-22T06:57:22.415698752Z 2026-10-22 06:57:22.415 UTC [1333] CONTEXT:  PL/pgSQL function app_delete_workspace(uuid,text,uuid[]) line 9 at RAISE
+2026-10-22T06:57:22.415713792Z 2026-10-22 06:57:22.415 UTC [1333] STATEMENT:  SELECT app_delete_workspace($1, $2, $3)
+2026-10-22T06:57:22.419485023Z 2026-10-22 06:57:22.419 UTC [1333] ERROR:  type the workspace name to confirm
+2026-10-22T06:57:22.419516023Z 2026-10-22 06:57:22.419 UTC [1333] CONTEXT:  PL/pgSQL function app_delete_workspace(uuid,text,uuid[]) line 15 at RAISE
+2026-10-22T06:57:22.419522413Z 2026-10-22 06:57:22.419 UTC [1333] STATEMENT:  SELECT app_delete_workspace($1, $2, $3)
+2026-10-22T06:57:22.463765102Z 2026-10-22 06:57:22.463 UTC [1338] ERROR:  workspace not found
+2026-10-22T06:57:22.463804353Z 2026-10-22 06:57:22.463 UTC [1338] CONTEXT:  PL/pgSQL function app_lock_live_workspace(uuid) line 5 at RAISE
+2026-10-22T06:57:22.463810303Z 	SQL statement "SELECT app_lock_live_workspace((SELECT workspace_id FROM invitations WHERE id = p_invitation))"
+2026-10-22T06:57:22.463813233Z 	PL/pgSQL function app_respond_invitation(uuid,boolean,uuid[]) line 8 at PERFORM
+2026-10-22T06:57:22.463815313Z 2026-10-22 06:57:22.463 UTC [1338] STATEMENT:  SELECT app_respond_invitation($1, $2, $3)
+2026-10-22T06:57:22.481780539Z 2026-10-22 06:57:22.481 UTC [1336] ERROR:  deleted workspace not found
+2026-10-22T06:57:22.481825760Z 2026-10-22 06:57:22.481 UTC [1336] CONTEXT:  PL/pgSQL function app_purge_workspace_as(uuid,boolean,uuid[]) line 10 at RAISE
+2026-10-22T06:57:22.481832590Z 	SQL function "app_purge_workspace" statement 1
+2026-10-22T06:57:22.481836060Z 2026-10-22 06:57:22.481 UTC [1336] STATEMENT:  SELECT app_purge_workspace($1, $2)
+2026-10-22T06:57:22.507099455Z 2026-10-22 06:57:22.506 UTC [1336] ERROR:  deleted workspace not found
+2026-10-22T06:57:22.507137506Z 2026-10-22 06:57:22.506 UTC [1336] CONTEXT:  PL/pgSQL function app_restore_workspace(uuid,uuid[]) line 7 at RAISE
+2026-10-22T06:57:22.507144306Z 2026-10-22 06:57:22.506 UTC [1336] STATEMENT:  SELECT app_restore_workspace($1, $2)
+2026-10-22T06:57:22.551355618Z 2026-10-22 06:57:22.551 UTC [1338] ERROR:  deleted workspace not found
+2026-10-22T06:57:22.551395999Z 2026-10-22 06:57:22.551 UTC [1338] CONTEXT:  PL/pgSQL function app_restore_workspace(uuid,uuid[]) line 7 at RAISE
+2026-10-22T06:57:22.551402509Z 2026-10-22 06:57:22.551 UTC [1338] STATEMENT:  SELECT app_restore_workspace($1, $2)
+2026-10-22T06:57:22.595481271Z 2026-10-22 06:57:22.595 UTC [1338] ERROR:  cancel the ownership transfer first
+2026-10-22T06:57:22.595523002Z 2026-10-22 06:57:22.595 UTC [1338] CONTEXT:  PL/pgSQL function app_delete_workspace(uuid,text,uuid[]) line 18 at RAISE
+2026-10-22T06:57:22.595529602Z 2026-10-22 06:57:22.595 UTC [1338] STATEMENT:  SELECT app_delete_workspace($1, $2, $3)
+2026-10-22T06:57:22.648438604Z 2026-10-22 06:57:22.648 UTC [1336] ERROR:  the retention period has passed
+2026-10-22T06:57:22.648482464Z 2026-10-22 06:57:22.648 UTC [1336] CONTEXT:  PL/pgSQL function app_restore_workspace(uuid,uuid[]) line 10 at RAISE
+2026-10-22T06:57:22.648488954Z 2026-10-22 06:57:22.648 UTC [1336] STATEMENT:  SELECT app_restore_workspace($1, $2)
+2026-10-22T06:57:24.693813768Z 2026-10-22 06:57:24.693 UTC [1] LOG:  received fast shutdown request
+2026-10-22T06:57:24.693856438Z 2026-10-22 06:57:24.693 UTC [1] LOG:  aborting any active transactions
+2026-10-22T06:57:24.693925678Z 2026-10-22 06:57:24.693 UTC [106] FATAL:  terminating connection due to administrator command
+2026-10-22T06:57:24.696851698Z 2026-10-22 06:57:24.696 UTC [1] LOG:  background worker "logical replication launcher" (PID 78) exited with exit code 1
+2026-10-22T06:57:24.698040005Z 2026-10-22 06:57:24.697 UTC [73] LOG:  shutting down
+2026-10-22T06:57:24.698047715Z 2026-10-22 06:57:24.697 UTC [73] LOG:  checkpoint starting: shutdown immediate
+2026-10-22T06:57:24.721252496Z 2026-10-22 06:57:24.721 UTC [73] LOG:  checkpoint complete: wrote 3262 buffers (19.9%), wrote 5 SLRU buffers; 0 WAL file(s) added, 0 removed, 1 recycled; write=0.020 s, sync=0.004 s, total=0.024 s; sync files=1433, longest=0.001 s, average=0.001 s; distance=22498 kB, estimate=44104 kB; lsn=0/7F1E458, redo lsn=0/7F1E458
+2026-10-22T06:57:24.746185303Z 2026-10-22 06:57:24.746 UTC [1] LOG:  database system is shut down

@@ -1,0 +1,16 @@
+
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w2-pr82/apps/web
+
+Not implemented: Window's scrollBy() method
+Not implemented: Window's scrollBy() method
+Not implemented: Window's scrollBy() method
+
+ Test Files  77 passed (77)
+      Tests  430 passed (430)
+   Start at  11:31:14
+   Duration  19.99s (transform 60%, import 16%, environment 14%, tests 8%, setup 2%)
+
+    Isolate  77 workers spawned · ~1.16s startup each (spawn + environment, per file)
+             at least ~1.72s faster with isolate: false — reuses workers across files instead of one per file
+
+exit=0

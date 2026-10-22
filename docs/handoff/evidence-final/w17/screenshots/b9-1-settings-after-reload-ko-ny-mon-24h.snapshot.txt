@@ -1,0 +1,746 @@
+# b9-1-settings-after-reload-ko-ny-mon-24h  2026-10-22T07:19:39Z  url=http://127.0.0.1:5173/
+# viewport={
+  "result": "1280x800",
+  "origin": "http://127.0.0.1:5173/"
+}
+- generic
+  - generic
+    - region "알림 alt+T" [ref=e1]
+    - StaticText "fvoci"
+    - list
+      - listitem [level=1]
+        - button "검색 Ctrl/⌘ K" [ref=e18]
+          - StaticText "검색"
+          - StaticText "Ctrl/⌘ K"
+    - generic
+      - StaticText "개인"
+      - list
+        - listitem [level=1]
+          - link "홈" [ref=e457]
+            - StaticText "홈"
+        - listitem [level=1]
+          - link "알림 · 읽지 않은 알림 2개" [ref=e458]
+            - StaticText "알림"
+        - listitem [level=1]
+          - link "내 노트" [ref=e459]
+            - StaticText "내 노트"
+        - listitem [level=1]
+          - link "공유받은 문서" [ref=e460]
+            - StaticText "공유받은 문서"
+        - listitem [level=1]
+          - link "내 시간" [ref=e461]
+            - StaticText "내 시간"
+        - listitem [level=1]
+          - link "내 노트 휴지통" [ref=e462]
+            - StaticText "내 노트 휴지통"
+        - listitem [level=1]
+          - link "내 활동 기록" [ref=e463]
+            - StaticText "내 활동 기록"
+    - separator
+    - generic
+      - StaticText "워크스페이스"
+      - list
+        - listitem [level=1]
+          - button "워크스페이스 바꾸기: 워크스페이스 고르기" [expanded=false, ref=e464]
+            - StaticText "워크스페이스 고르기"
+    - list
+      - listitem [level=1]
+        - button "계정 메뉴: Test User" [expanded=false, ref=e19]
+          - StaticText "Test User"
+    - button "사이드바 열고 닫기" [ref=e6]
+    - main
+      - sectionheader
+        - button "사이드바 열고 닫기" [ref=e15]
+          - StaticText "사이드바 열고 닫기"
+        - StaticText "홈"
+        - group "타이머"
+          - button "타이머 시작" [ref=e20]
+      - main
+        - region "오늘" [ref=e16]
+          - heading "오늘" [level=1, ref=e21]
+          - StaticText "2026년 10월 22일 목요일"
+          - form "빠른 추가"
+            - StaticText "빠른 추가"
+            - button "빠른 추가" [expanded=false, ref=e465]
+              - StaticText "메모"
+            - LabelText
+              - StaticText "제목"
+            - textbox "제목" [ref=e466]
+            - button "추가" [ref=e467]
+          - paragraph
+          - region "다음 할 일" [ref=e22]
+            - heading "다음 할 일" [level=2, ref=e468]
+            - heading "오늘 1" [level=3, ref=e469]
+            - list
+              - listitem [level=1]
+                - button "DEVP-8 관계 예제: 시작 전에 준비 끝 2026. 10. 22." [ref=e503]
+                  - StaticText "DEVP-8"
+                  - StaticText "관계 예제: 시작 전에 준비 끝"
+                  - StaticText "2026. 10. 22."
+            - heading "다가오는 일 15" [level=3, ref=e470]
+            - list
+              - listitem [level=1]
+                - button "DEVP-11 배포 체크리스트 확인 2026. 10. 23." [ref=e504]
+                  - StaticText "DEVP-11"
+                  - StaticText "배포 체크리스트 확인"
+                  - StaticText "2026. 10. 23."
+              - listitem [level=1]
+                - button "DEVP-2 대표 업무: 준비 사항 확인 2026. 10. 24." [ref=e505]
+                  - StaticText "DEVP-2"
+                  - StaticText "대표 업무: 준비 사항 확인"
+                  - StaticText "2026. 10. 24."
+              - listitem [level=1]
+                - button "DEVR-2 대표 업무: 준비 사항 확인 2026. 10. 24." [ref=e506]
+                  - StaticText "DEVR-2"
+                  - StaticText "대표 업무: 준비 사항 확인"
+                  - StaticText "2026. 10. 24."
+              - listitem [level=1]
+                - button "DEVS-2 대표 업무: 준비 사항 확인 2026. 10. 24." [ref=e507]
+                  - StaticText "DEVS-2"
+                  - StaticText "대표 업무: 준비 사항 확인"
+                  - StaticText "2026. 10. 24."
+              - listitem [level=1]
+                - button "DEVC-2 대표 업무: 준비 사항 확인 2026. 10. 24." [ref=e508]
+                  - StaticText "DEVC-2"
+                  - StaticText "대표 업무: 준비 사항 확인"
+                  - StaticText "2026. 10. 24."
+              - listitem [level=1]
+                - button "DEVH-2 대표 업무: 준비 사항 확인 2026. 10. 24." [ref=e509]
+                  - StaticText "DEVH-2"
+                  - StaticText "대표 업무: 준비 사항 확인"
+                  - StaticText "2026. 10. 24."
+              - listitem [level=1]
+                - button "DEVP-7 관계 예제: 함께 마무리 2026. 10. 24." [ref=e510]
+                  - StaticText "DEVP-7"
+                  - StaticText "관계 예제: 함께 마무리"
+                  - StaticText "2026. 10. 24."
+              - listitem [level=1]
+                - button "DEVH-4 자료 정리 2026. 10. 25." [ref=e511]
+                  - StaticText "DEVH-4"
+                  - StaticText "자료 정리"
+                  - StaticText "2026. 10. 25."
+              - listitem [level=1]
+                - button "DEVS-4 자료 정리 2026. 10. 25." [ref=e512]
+                  - StaticText "DEVS-4"
+                  - StaticText "자료 정리"
+                  - StaticText "2026. 10. 25."
+              - listitem [level=1]
+                - button "DEVC-4 자료 정리 2026. 10. 25." [ref=e513]
+                  - StaticText "DEVC-4"
+                  - StaticText "자료 정리"
+                  - StaticText "2026. 10. 25."
+              - listitem [level=1]
+                - button "DEVR-4 자료 정리 2026. 10. 25." [ref=e514]
+                  - StaticText "DEVR-4"
+                  - StaticText "자료 정리"
+                  - StaticText "2026. 10. 25."
+              - listitem [level=1]
+                - button "DEVP-5 마일스톤: 검토 완료 2026. 10. 25." [ref=e515]
+                  - StaticText "DEVP-5"
+                  - StaticText "마일스톤: 검토 완료"
+                  - StaticText "2026. 10. 25."
+              - listitem [level=1]
+                - button "DEVP-6 관계 예제: 하루 뒤 함께 시작 2026. 10. 25." [ref=e516]
+                  - StaticText "DEVP-6"
+                  - StaticText "관계 예제: 하루 뒤 함께 시작"
+                  - StaticText "2026. 10. 25."
+              - listitem [level=1]
+                - button "DEVP-9 API 연결 점검 2026. 10. 26." [ref=e517]
+                  - StaticText "DEVP-9"
+                  - StaticText "API 연결 점검"
+                  - StaticText "2026. 10. 26."
+              - listitem [level=1]
+                - button "DEVP-10 문서 초안 검토 2026. 10. 28." [ref=e518]
+                  - StaticText "DEVP-10"
+                  - StaticText "문서 초안 검토"
+                  - StaticText "2026. 10. 28."
+          - region "이번 주" [ref=e23]
+            - heading "이번 주" [level=2, ref=e471]
+            - list
+              - listitem [level=1]
+                - StaticText "월 19"
+                - StaticText "—"
+              - listitem [level=1]
+                - StaticText "화 20"
+                - StaticText "—"
+              - listitem [level=1]
+                - StaticText "수 21"
+                - StaticText "수강 1. 데이터와 표 · 공부 1. 1장 읽기"
+              - listitem [level=1]
+                - StaticText "목 22"
+                - StaticText "마감 DEVP-8 관계 예제: 시작 전에 준비 끝 · 마감 DEVP-4 하위 업무: 검토 목록 작성 · 수강 2. 질문 만들기 · 공부 2. 연습 문제"
+              - listitem [level=1]
+                - StaticText "금 23"
+                - StaticText "종일 예제 점검 모임 · 종일 예제 점검 모임 · 종일 예제 점검 모임 · 종일 예제 점검 모임 · 종일 예제 점검 모임 · 마감 DEVP-11 배포 체크리스트 확인 · 수강 3. 결과 읽기 · 공부 3. 개념 복습"
+              - listitem [level=1]
+                - StaticText "토 24"
+                - StaticText "마감 DEVR-2 대표 업무: 준비 사항 확인 · 마감 DEVS-2 대표 업무: 준비 사항 확인 · 마감 DEVC-2 대표 업무: 준비 사항 확인 · 마감 DEVP-2 대표 업무: 준비 사항 확인 · 마감 DEVH-2 대표 업무: 준비 사항 확인 · 마감 DEVP-7 관계 예제: 함께 마무리"
+              - listitem [level=1]
+                - StaticText "일 25"
+                - StaticText "마감 DEVP-6 관계 예제: 하루 뒤 함께 시작 · 마감 DEVH-4 자료 정리 · 마감 DEVS-4 자료 정리 · 마감 DEVC-4 자료 정리 · 마감 DEVR-4 자료 정리 · ◆ DEVP-5 마일스톤: 검토 완료 · 산출물 마감 검토 보고서"
+          - region "고정" [ref=e24]
+            - heading "고정" [level=2, ref=e472]
+            - paragraph
+              - StaticText "항목·문서·업무 화면의 “홈에 고정”으로 더할 수 있습니다."
+          - region "즐겨찾기" [ref=e25]
+            - heading "즐겨찾기" [level=2, ref=e473]
+            - paragraph
+              - StaticText "항목·문서·업무 화면의 “즐겨찾기”로 더할 수 있습니다."
+          - region "진행 중인 항목" [ref=e26]
+            - heading "진행 중인 항목" [level=2, ref=e474]
+            - button "DEVP-1 작은 출시 준비 · 모듈 예제 (합성 데이터) 업무 2/10 완료" [ref=e475]
+              - StaticText "DEVP-1 작은 출시 준비 "
+              - StaticText "· 모듈 예제 (합성 데이터)"
+              - StaticText "업무 2/10 완료"
+            - button "DEVR-1 학습 습관 합성 연구 · 모듈 예제 (합성 데이터) 업무 1/3 완료" [ref=e476]
+              - StaticText "DEVR-1 학습 습관 합성 연구 "
+              - StaticText "· 모듈 예제 (합성 데이터)"
+              - StaticText "업무 1/3 완료"
+            - button "DEVS-1 SQL 기초 함께 읽기 · 모듈 예제 (합성 데이터) 업무 1/3 완료" [ref=e477]
+              - StaticText "DEVS-1 SQL 기초 함께 읽기 "
+              - StaticText "· 모듈 예제 (합성 데이터)"
+              - StaticText "업무 1/3 완료"
+            - button "DEVC-1 데이터 입문 강좌 · 모듈 예제 (합성 데이터) 업무 1/3 완료" [ref=e478]
+              - StaticText "DEVC-1 데이터 입문 강좌 "
+              - StaticText "· 모듈 예제 (합성 데이터)"
+              - StaticText "업무 1/3 완료"
+            - button "DEVH-1 주말 수채화 · 모듈 예제 (합성 데이터) 업무 1/3 완료" [ref=e479]
+              - StaticText "DEVH-1 주말 수채화 "
+              - StaticText "· 모듈 예제 (합성 데이터)"
+              - StaticText "업무 1/3 완료"
+          - region "최근 작업" [ref=e27]
+            - heading "최근 작업" [level=2, ref=e480]
+            - button "WIKI-1 운영 안내 (합성)" [ref=e481]
+              - StaticText "WIKI-1"
+              - StaticText "운영 안내 (합성)"
+            - button "WIKI-2 설치" [ref=e482]
+              - StaticText "WIKI-2"
+              - StaticText "설치"
+            - button "WIKI-3 백업" [ref=e483]
+              - StaticText "WIKI-3"
+              - StaticText "백업"
+            - button "WIKI-4 점검 기록" [ref=e484]
+              - StaticText "WIKI-4"
+              - StaticText "점검 기록"
+            - button "DEVP-3 공동 작업 노트" [ref=e485]
+              - StaticText "DEVP-3"
+              - StaticText "공동 작업 노트"
+            - button "DEVR-3 공동 작업 노트" [ref=e486]
+              - StaticText "DEVR-3"
+              - StaticText "공동 작업 노트"
+            - button "DEVS-3 공동 작업 노트" [ref=e487]
+              - StaticText "DEVS-3"
+              - StaticText "공동 작업 노트"
+            - button "DEVC-3 공동 작업 노트" [ref=e488]
+              - StaticText "DEVC-3"
+              - StaticText "공동 작업 노트"
+            - button "DEVH-4 자료 정리" [ref=e489]
+              - StaticText "DEVH-4"
+              - StaticText "자료 정리"
+            - button "DEVH-5 지난 활동 돌아보기" [ref=e490]
+              - StaticText "DEVH-5"
+              - StaticText "지난 활동 돌아보기"
+            - button "DEVS-4 자료 정리" [ref=e491]
+              - StaticText "DEVS-4"
+              - StaticText "자료 정리"
+            - button "DEVS-5 지난 활동 돌아보기" [ref=e492]
+              - StaticText "DEVS-5"
+              - StaticText "지난 활동 돌아보기"
+            - button "DEVC-4 자료 정리" [ref=e493]
+              - StaticText "DEVC-4"
+              - StaticText "자료 정리"
+            - button "DEVC-5 지난 활동 돌아보기" [ref=e494]
+              - StaticText "DEVC-5"
+              - StaticText "지난 활동 돌아보기"
+            - button "DEVP-9 API 연결 점검" [ref=e495]
+              - StaticText "DEVP-9"
+              - StaticText "API 연결 점검"
+            - button "DEVP-10 문서 초안 검토" [ref=e496]
+              - StaticText "DEVP-10"
+              - StaticText "문서 초안 검토"
+          - region "알림" [ref=e28]
+            - heading "알림" [level=2, ref=e497]
+            - paragraph
+              - StaticText "DEVP-8 관계 예제: 시작 전에 준비 끝의 기한이 2026. 10. 22.입니다"
+            - paragraph
+              - StaticText "DEVP-11 배포 체크리스트 확인의 기한이 2026. 10. 23.입니다"
+            - link "알림 모두 보기" [ref=e498]
+        - region "워크스페이스" [ref=e17]
+          - heading "워크스페이스" [level=2, ref=e29]
+          - list
+            - listitem [level=1]
+              - link "개발 (관리자)" [ref=e501]
+                - StaticText "개발"
+                - StaticText "(관리자)"
+            - listitem [level=1]
+              - link "모듈 예제 (합성 데이터) (관리자)" [ref=e502]
+                - StaticText "모듈 예제 (합성 데이터)"
+                - StaticText "(관리자)"
+          - form
+            - LabelText
+              - StaticText "새 워크스페이스 이름"
+            - textbox "새 워크스페이스 이름" [ref=e499]
+            - button "만들기" [ref=e500]
+  - dialog "표시 설정"
+    - heading "표시 설정" [level=2, ref=e2]
+    - StaticText "언어·시간대·한 주 시작·시각 표시를 고릅니다. 표시만 바뀌고 저장된 일정의 시각과 날짜는 그대로입니다. 다른 사람에게는 보이지 않습니다."
+    - LabelText
+      - StaticText "언어"
+      - combobox "언어" [expanded=false, ref=e7]: 한국어
+        - MenuListPopup
+          - option "한국어" [selected, ref=e30]
+          - option "English" [ref=e31]
+    - LabelText
+      - StaticText "시간대"
+      - combobox "시간대" [expanded=false, ref=e8]: America/New_York
+        - MenuListPopup
+          - option "브라우저 시간대 사용(Asia/Seoul)" [ref=e32]
+          - option "Africa/Abidjan" [ref=e33]
+          - option "Africa/Accra" [ref=e34]
+          - option "Africa/Addis_Ababa" [ref=e35]
+          - option "Africa/Algiers" [ref=e36]
+          - option "Africa/Asmera" [ref=e37]
+          - option "Africa/Bamako" [ref=e38]
+          - option "Africa/Bangui" [ref=e39]
+          - option "Africa/Banjul" [ref=e40]
+          - option "Africa/Bissau" [ref=e41]
+          - option "Africa/Blantyre" [ref=e42]
+          - option "Africa/Brazzaville" [ref=e43]
+          - option "Africa/Bujumbura" [ref=e44]
+          - option "Africa/Cairo" [ref=e45]
+          - option "Africa/Casablanca" [ref=e46]
+          - option "Africa/Ceuta" [ref=e47]
+          - option "Africa/Conakry" [ref=e48]
+          - option "Africa/Dakar" [ref=e49]
+          - option "Africa/Dar_es_Salaam" [ref=e50]
+          - option "Africa/Djibouti" [ref=e51]
+          - option "Africa/Douala" [ref=e52]
+          - option "Africa/El_Aaiun" [ref=e53]
+          - option "Africa/Freetown" [ref=e54]
+          - option "Africa/Gaborone" [ref=e55]
+          - option "Africa/Harare" [ref=e56]
+          - option "Africa/Johannesburg" [ref=e57]
+          - option "Africa/Juba" [ref=e58]
+          - option "Africa/Kampala" [ref=e59]
+          - option "Africa/Khartoum" [ref=e60]
+          - option "Africa/Kigali" [ref=e61]
+          - option "Africa/Kinshasa" [ref=e62]
+          - option "Africa/Lagos" [ref=e63]
+          - option "Africa/Libreville" [ref=e64]
+          - option "Africa/Lome" [ref=e65]
+          - option "Africa/Luanda" [ref=e66]
+          - option "Africa/Lubumbashi" [ref=e67]
+          - option "Africa/Lusaka" [ref=e68]
+          - option "Africa/Malabo" [ref=e69]
+          - option "Africa/Maputo" [ref=e70]
+          - option "Africa/Maseru" [ref=e71]
+          - option "Africa/Mbabane" [ref=e72]
+          - option "Africa/Mogadishu" [ref=e73]
+          - option "Africa/Monrovia" [ref=e74]
+          - option "Africa/Nairobi" [ref=e75]
+          - option "Africa/Ndjamena" [ref=e76]
+          - option "Africa/Niamey" [ref=e77]
+          - option "Africa/Nouakchott" [ref=e78]
+          - option "Africa/Ouagadougou" [ref=e79]
+          - option "Africa/Porto-Novo" [ref=e80]
+          - option "Africa/Sao_Tome" [ref=e81]
+          - option "Africa/Tripoli" [ref=e82]
+          - option "Africa/Tunis" [ref=e83]
+          - option "Africa/Windhoek" [ref=e84]
+          - option "America/Adak" [ref=e85]
+          - option "America/Anchorage" [ref=e86]
+          - option "America/Anguilla" [ref=e87]
+          - option "America/Antigua" [ref=e88]
+          - option "America/Araguaina" [ref=e89]
+          - option "America/Argentina/La_Rioja" [ref=e90]
+          - option "America/Argentina/Rio_Gallegos" [ref=e91]
+          - option "America/Argentina/Salta" [ref=e92]
+          - option "America/Argentina/San_Juan" [ref=e93]
+          - option "America/Argentina/San_Luis" [ref=e94]
+          - option "America/Argentina/Tucuman" [ref=e95]
+          - option "America/Argentina/Ushuaia" [ref=e96]
+          - option "America/Aruba" [ref=e97]
+          - option "America/Asuncion" [ref=e98]
+          - option "America/Bahia" [ref=e99]
+          - option "America/Bahia_Banderas" [ref=e100]
+          - option "America/Barbados" [ref=e101]
+          - option "America/Belem" [ref=e102]
+          - option "America/Belize" [ref=e103]
+          - option "America/Blanc-Sablon" [ref=e104]
+          - option "America/Boa_Vista" [ref=e105]
+          - option "America/Bogota" [ref=e106]
+          - option "America/Boise" [ref=e107]
+          - option "America/Buenos_Aires" [ref=e108]
+          - option "America/Cambridge_Bay" [ref=e109]
+          - option "America/Campo_Grande" [ref=e110]
+          - option "America/Cancun" [ref=e111]
+          - option "America/Caracas" [ref=e112]
+          - option "America/Catamarca" [ref=e113]
+          - option "America/Cayenne" [ref=e114]
+          - option "America/Cayman" [ref=e115]
+          - option "America/Chicago" [ref=e116]
+          - option "America/Chihuahua" [ref=e117]
+          - option "America/Ciudad_Juarez" [ref=e118]
+          - option "America/Coral_Harbour" [ref=e119]
+          - option "America/Cordoba" [ref=e120]
+          - option "America/Costa_Rica" [ref=e121]
+          - option "America/Coyhaique" [ref=e122]
+          - option "America/Creston" [ref=e123]
+          - option "America/Cuiaba" [ref=e124]
+          - option "America/Curacao" [ref=e125]
+          - option "America/Danmarkshavn" [ref=e126]
+          - option "America/Dawson" [ref=e127]
+          - option "America/Dawson_Creek" [ref=e128]
+          - option "America/Denver" [ref=e129]
+          - option "America/Detroit" [ref=e130]
+          - option "America/Dominica" [ref=e131]
+          - option "America/Edmonton" [ref=e132]
+          - option "America/Eirunepe" [ref=e133]
+          - option "America/El_Salvador" [ref=e134]
+          - option "America/Fort_Nelson" [ref=e135]
+          - option "America/Fortaleza" [ref=e136]
+          - option "America/Glace_Bay" [ref=e137]
+          - option "America/Godthab" [ref=e138]
+          - option "America/Goose_Bay" [ref=e139]
+          - option "America/Grand_Turk" [ref=e140]
+          - option "America/Grenada" [ref=e141]
+          - option "America/Guadeloupe" [ref=e142]
+          - option "America/Guatemala" [ref=e143]
+          - option "America/Guayaquil" [ref=e144]
+          - option "America/Guyana" [ref=e145]
+          - option "America/Halifax" [ref=e146]
+          - option "America/Havana" [ref=e147]
+          - option "America/Hermosillo" [ref=e148]
+          - option "America/Indiana/Knox" [ref=e149]
+          - option "America/Indiana/Marengo" [ref=e150]
+          - option "America/Indiana/Petersburg" [ref=e151]
+          - option "America/Indiana/Tell_City" [ref=e152]
+          - option "America/Indiana/Vevay" [ref=e153]
+          - option "America/Indiana/Vincennes" [ref=e154]
+          - option "America/Indiana/Winamac" [ref=e155]
+          - option "America/Indianapolis" [ref=e156]
+          - option "America/Inuvik" [ref=e157]
+          - option "America/Iqaluit" [ref=e158]
+          - option "America/Jamaica" [ref=e159]
+          - option "America/Jujuy" [ref=e160]
+          - option "America/Juneau" [ref=e161]
+          - option "America/Kentucky/Monticello" [ref=e162]
+          - option "America/Kralendijk" [ref=e163]
+          - option "America/La_Paz" [ref=e164]
+          - option "America/Lima" [ref=e165]
+          - option "America/Los_Angeles" [ref=e166]
+          - option "America/Louisville" [ref=e167]
+          - option "America/Lower_Princes" [ref=e168]
+          - option "America/Maceio" [ref=e169]
+          - option "America/Managua" [ref=e170]
+          - option "America/Manaus" [ref=e171]
+          - option "America/Marigot" [ref=e172]
+          - option "America/Martinique" [ref=e173]
+          - option "America/Matamoros" [ref=e174]
+          - option "America/Mazatlan" [ref=e175]
+          - option "America/Mendoza" [ref=e176]
+          - option "America/Menominee" [ref=e177]
+          - option "America/Merida" [ref=e178]
+          - option "America/Metlakatla" [ref=e179]
+          - option "America/Mexico_City" [ref=e180]
+          - option "America/Miquelon" [ref=e181]
+          - option "America/Moncton" [ref=e182]
+          - option "America/Monterrey" [ref=e183]
+          - option "America/Montevideo" [ref=e184]
+          - option "America/Montserrat" [ref=e185]
+          - option "America/Nassau" [ref=e186]
+          - option "America/New_York" [selected, ref=e187]
+          - option "America/Nome" [ref=e188]
+          - option "America/Noronha" [ref=e189]
+          - option "America/North_Dakota/Beulah" [ref=e190]
+          - option "America/North_Dakota/Center" [ref=e191]
+          - option "America/North_Dakota/New_Salem" [ref=e192]
+          - option "America/Ojinaga" [ref=e193]
+          - option "America/Panama" [ref=e194]
+          - option "America/Paramaribo" [ref=e195]
+          - option "America/Phoenix" [ref=e196]
+          - option "America/Port-au-Prince" [ref=e197]
+          - option "America/Port_of_Spain" [ref=e198]
+          - option "America/Porto_Velho" [ref=e199]
+          - option "America/Puerto_Rico" [ref=e200]
+          - option "America/Punta_Arenas" [ref=e201]
+          - option "America/Rankin_Inlet" [ref=e202]
+          - option "America/Recife" [ref=e203]
+          - option "America/Regina" [ref=e204]
+          - option "America/Resolute" [ref=e205]
+          - option "America/Rio_Branco" [ref=e206]
+          - option "America/Santarem" [ref=e207]
+          - option "America/Santiago" [ref=e208]
+          - option "America/Santo_Domingo" [ref=e209]
+          - option "America/Sao_Paulo" [ref=e210]
+          - option "America/Scoresbysund" [ref=e211]
+          - option "America/Sitka" [ref=e212]
+          - option "America/St_Barthelemy" [ref=e213]
+          - option "America/St_Johns" [ref=e214]
+          - option "America/St_Kitts" [ref=e215]
+          - option "America/St_Lucia" [ref=e216]
+          - option "America/St_Thomas" [ref=e217]
+          - option "America/St_Vincent" [ref=e218]
+          - option "America/Swift_Current" [ref=e219]
+          - option "America/Tegucigalpa" [ref=e220]
+          - option "America/Thule" [ref=e221]
+          - option "America/Tijuana" [ref=e222]
+          - option "America/Toronto" [ref=e223]
+          - option "America/Tortola" [ref=e224]
+          - option "America/Vancouver" [ref=e225]
+          - option "America/Whitehorse" [ref=e226]
+          - option "America/Winnipeg" [ref=e227]
+          - option "America/Yakutat" [ref=e228]
+          - option "Antarctica/Casey" [ref=e229]
+          - option "Antarctica/Davis" [ref=e230]
+          - option "Antarctica/DumontDUrville" [ref=e231]
+          - option "Antarctica/Macquarie" [ref=e232]
+          - option "Antarctica/Mawson" [ref=e233]
+          - option "Antarctica/McMurdo" [ref=e234]
+          - option "Antarctica/Palmer" [ref=e235]
+          - option "Antarctica/Rothera" [ref=e236]
+          - option "Antarctica/Syowa" [ref=e237]
+          - option "Antarctica/Troll" [ref=e238]
+          - option "Antarctica/Vostok" [ref=e239]
+          - option "Arctic/Longyearbyen" [ref=e240]
+          - option "Asia/Aden" [ref=e241]
+          - option "Asia/Almaty" [ref=e242]
+          - option "Asia/Amman" [ref=e243]
+          - option "Asia/Anadyr" [ref=e244]
+          - option "Asia/Aqtau" [ref=e245]
+          - option "Asia/Aqtobe" [ref=e246]
+          - option "Asia/Ashgabat" [ref=e247]
+          - option "Asia/Atyrau" [ref=e248]
+          - option "Asia/Baghdad" [ref=e249]
+          - option "Asia/Bahrain" [ref=e250]
+          - option "Asia/Baku" [ref=e251]
+          - option "Asia/Bangkok" [ref=e252]
+          - option "Asia/Barnaul" [ref=e253]
+          - option "Asia/Beirut" [ref=e254]
+          - option "Asia/Bishkek" [ref=e255]
+          - option "Asia/Brunei" [ref=e256]
+          - option "Asia/Calcutta" [ref=e257]
+          - option "Asia/Chita" [ref=e258]
+          - option "Asia/Colombo" [ref=e259]
+          - option "Asia/Damascus" [ref=e260]
+          - option "Asia/Dhaka" [ref=e261]
+          - option "Asia/Dili" [ref=e262]
+          - option "Asia/Dubai" [ref=e263]
+          - option "Asia/Dushanbe" [ref=e264]
+          - option "Asia/Famagusta" [ref=e265]
+          - option "Asia/Gaza" [ref=e266]
+          - option "Asia/Hebron" [ref=e267]
+          - option "Asia/Hong_Kong" [ref=e268]
+          - option "Asia/Hovd" [ref=e269]
+          - option "Asia/Irkutsk" [ref=e270]
+          - option "Asia/Jakarta" [ref=e271]
+          - option "Asia/Jayapura" [ref=e272]
+          - option "Asia/Jerusalem" [ref=e273]
+          - option "Asia/Kabul" [ref=e274]
+          - option "Asia/Kamchatka" [ref=e275]
+          - option "Asia/Karachi" [ref=e276]
+          - option "Asia/Katmandu" [ref=e277]
+          - option "Asia/Khandyga" [ref=e278]
+          - option "Asia/Krasnoyarsk" [ref=e279]
+          - option "Asia/Kuala_Lumpur" [ref=e280]
+          - option "Asia/Kuching" [ref=e281]
+          - option "Asia/Kuwait" [ref=e282]
+          - option "Asia/Macau" [ref=e283]
+          - option "Asia/Magadan" [ref=e284]
+          - option "Asia/Makassar" [ref=e285]
+          - option "Asia/Manila" [ref=e286]
+          - option "Asia/Muscat" [ref=e287]
+          - option "Asia/Nicosia" [ref=e288]
+          - option "Asia/Novokuznetsk" [ref=e289]
+          - option "Asia/Novosibirsk" [ref=e290]
+          - option "Asia/Omsk" [ref=e291]
+          - option "Asia/Oral" [ref=e292]
+          - option "Asia/Phnom_Penh" [ref=e293]
+          - option "Asia/Pontianak" [ref=e294]
+          - option "Asia/Pyongyang" [ref=e295]
+          - option "Asia/Qatar" [ref=e296]
+          - option "Asia/Qostanay" [ref=e297]
+          - option "Asia/Qyzylorda" [ref=e298]
+          - option "Asia/Rangoon" [ref=e299]
+          - option "Asia/Riyadh" [ref=e300]
+          - option "Asia/Saigon" [ref=e301]
+          - option "Asia/Sakhalin" [ref=e302]
+          - option "Asia/Samarkand" [ref=e303]
+          - option "Asia/Seoul" [ref=e304]
+          - option "Asia/Shanghai" [ref=e305]
+          - option "Asia/Singapore" [ref=e306]
+          - option "Asia/Srednekolymsk" [ref=e307]
+          - option "Asia/Taipei" [ref=e308]
+          - option "Asia/Tashkent" [ref=e309]
+          - option "Asia/Tbilisi" [ref=e310]
+          - option "Asia/Tehran" [ref=e311]
+          - option "Asia/Thimphu" [ref=e312]
+          - option "Asia/Tokyo" [ref=e313]
+          - option "Asia/Tomsk" [ref=e314]
+          - option "Asia/Ulaanbaatar" [ref=e315]
+          - option "Asia/Urumqi" [ref=e316]
+          - option "Asia/Ust-Nera" [ref=e317]
+          - option "Asia/Vientiane" [ref=e318]
+          - option "Asia/Vladivostok" [ref=e319]
+          - option "Asia/Yakutsk" [ref=e320]
+          - option "Asia/Yekaterinburg" [ref=e321]
+          - option "Asia/Yerevan" [ref=e322]
+          - option "Atlantic/Azores" [ref=e323]
+          - option "Atlantic/Bermuda" [ref=e324]
+          - option "Atlantic/Canary" [ref=e325]
+          - option "Atlantic/Cape_Verde" [ref=e326]
+          - option "Atlantic/Faeroe" [ref=e327]
+          - option "Atlantic/Madeira" [ref=e328]
+          - option "Atlantic/Reykjavik" [ref=e329]
+          - option "Atlantic/South_Georgia" [ref=e330]
+          - option "Atlantic/St_Helena" [ref=e331]
+          - option "Atlantic/Stanley" [ref=e332]
+          - option "Australia/Adelaide" [ref=e333]
+          - option "Australia/Brisbane" [ref=e334]
+          - option "Australia/Broken_Hill" [ref=e335]
+          - option "Australia/Darwin" [ref=e336]
+          - option "Australia/Eucla" [ref=e337]
+          - option "Australia/Hobart" [ref=e338]
+          - option "Australia/Lindeman" [ref=e339]
+          - option "Australia/Lord_Howe" [ref=e340]
+          - option "Australia/Melbourne" [ref=e341]
+          - option "Australia/Perth" [ref=e342]
+          - option "Australia/Sydney" [ref=e343]
+          - option "Europe/Amsterdam" [ref=e344]
+          - option "Europe/Andorra" [ref=e345]
+          - option "Europe/Astrakhan" [ref=e346]
+          - option "Europe/Athens" [ref=e347]
+          - option "Europe/Belgrade" [ref=e348]
+          - option "Europe/Berlin" [ref=e349]
+          - option "Europe/Bratislava" [ref=e350]
+          - option "Europe/Brussels" [ref=e351]
+          - option "Europe/Bucharest" [ref=e352]
+          - option "Europe/Budapest" [ref=e353]
+          - option "Europe/Busingen" [ref=e354]
+          - option "Europe/Chisinau" [ref=e355]
+          - option "Europe/Copenhagen" [ref=e356]
+          - option "Europe/Dublin" [ref=e357]
+          - option "Europe/Gibraltar" [ref=e358]
+          - option "Europe/Guernsey" [ref=e359]
+          - option "Europe/Helsinki" [ref=e360]
+          - option "Europe/Isle_of_Man" [ref=e361]
+          - option "Europe/Istanbul" [ref=e362]
+          - option "Europe/Jersey" [ref=e363]
+          - option "Europe/Kaliningrad" [ref=e364]
+          - option "Europe/Kiev" [ref=e365]
+          - option "Europe/Kirov" [ref=e366]
+          - option "Europe/Lisbon" [ref=e367]
+          - option "Europe/Ljubljana" [ref=e368]
+          - option "Europe/London" [ref=e369]
+          - option "Europe/Luxembourg" [ref=e370]
+          - option "Europe/Madrid" [ref=e371]
+          - option "Europe/Malta" [ref=e372]
+          - option "Europe/Mariehamn" [ref=e373]
+          - option "Europe/Minsk" [ref=e374]
+          - option "Europe/Monaco" [ref=e375]
+          - option "Europe/Moscow" [ref=e376]
+          - option "Europe/Oslo" [ref=e377]
+          - option "Europe/Paris" [ref=e378]
+          - option "Europe/Podgorica" [ref=e379]
+          - option "Europe/Prague" [ref=e380]
+          - option "Europe/Riga" [ref=e381]
+          - option "Europe/Rome" [ref=e382]
+          - option "Europe/Samara" [ref=e383]
+          - option "Europe/San_Marino" [ref=e384]
+          - option "Europe/Sarajevo" [ref=e385]
+          - option "Europe/Saratov" [ref=e386]
+          - option "Europe/Simferopol" [ref=e387]
+          - option "Europe/Skopje" [ref=e388]
+          - option "Europe/Sofia" [ref=e389]
+          - option "Europe/Stockholm" [ref=e390]
+          - option "Europe/Tallinn" [ref=e391]
+          - option "Europe/Tirane" [ref=e392]
+          - option "Europe/Ulyanovsk" [ref=e393]
+          - option "Europe/Vaduz" [ref=e394]
+          - option "Europe/Vatican" [ref=e395]
+          - option "Europe/Vienna" [ref=e396]
+          - option "Europe/Vilnius" [ref=e397]
+          - option "Europe/Volgograd" [ref=e398]
+          - option "Europe/Warsaw" [ref=e399]
+          - option "Europe/Zagreb" [ref=e400]
+          - option "Europe/Zurich" [ref=e401]
+          - option "Indian/Antananarivo" [ref=e402]
+          - option "Indian/Chagos" [ref=e403]
+          - option "Indian/Christmas" [ref=e404]
+          - option "Indian/Cocos" [ref=e405]
+          - option "Indian/Comoro" [ref=e406]
+          - option "Indian/Kerguelen" [ref=e407]
+          - option "Indian/Mahe" [ref=e408]
+          - option "Indian/Maldives" [ref=e409]
+          - option "Indian/Mauritius" [ref=e410]
+          - option "Indian/Mayotte" [ref=e411]
+          - option "Indian/Reunion" [ref=e412]
+          - option "Pacific/Apia" [ref=e413]
+          - option "Pacific/Auckland" [ref=e414]
+          - option "Pacific/Bougainville" [ref=e415]
+          - option "Pacific/Chatham" [ref=e416]
+          - option "Pacific/Easter" [ref=e417]
+          - option "Pacific/Efate" [ref=e418]
+          - option "Pacific/Enderbury" [ref=e419]
+          - option "Pacific/Fakaofo" [ref=e420]
+          - option "Pacific/Fiji" [ref=e421]
+          - option "Pacific/Funafuti" [ref=e422]
+          - option "Pacific/Galapagos" [ref=e423]
+          - option "Pacific/Gambier" [ref=e424]
+          - option "Pacific/Guadalcanal" [ref=e425]
+          - option "Pacific/Guam" [ref=e426]
+          - option "Pacific/Honolulu" [ref=e427]
+          - option "Pacific/Kiritimati" [ref=e428]
+          - option "Pacific/Kosrae" [ref=e429]
+          - option "Pacific/Kwajalein" [ref=e430]
+          - option "Pacific/Majuro" [ref=e431]
+          - option "Pacific/Marquesas" [ref=e432]
+          - option "Pacific/Midway" [ref=e433]
+          - option "Pacific/Nauru" [ref=e434]
+          - option "Pacific/Niue" [ref=e435]
+          - option "Pacific/Norfolk" [ref=e436]
+          - option "Pacific/Noumea" [ref=e437]
+          - option "Pacific/Pago_Pago" [ref=e438]
+          - option "Pacific/Palau" [ref=e439]
+          - option "Pacific/Pitcairn" [ref=e440]
+          - option "Pacific/Ponape" [ref=e441]
+          - option "Pacific/Port_Moresby" [ref=e442]
+          - option "Pacific/Rarotonga" [ref=e443]
+          - option "Pacific/Saipan" [ref=e444]
+          - option "Pacific/Tahiti" [ref=e445]
+          - option "Pacific/Tarawa" [ref=e446]
+          - option "Pacific/Tongatapu" [ref=e447]
+          - option "Pacific/Truk" [ref=e448]
+          - option "Pacific/Wake" [ref=e449]
+          - option "Pacific/Wallis" [ref=e450]
+    - LabelText
+      - StaticText "한 주 시작"
+      - combobox "한 주 시작" [expanded=false, ref=e9]: 월요일
+        - MenuListPopup
+          - option "월요일" [selected, ref=e451]
+          - option "일요일" [ref=e452]
+    - LabelText
+      - StaticText "시각 표시"
+      - combobox "시각 표시 예: 15:05" [expanded=false, ref=e10]: 24시간
+        - MenuListPopup
+          - option "12시간(오전·오후)" [ref=e453]
+          - option "24시간" [selected, ref=e454]
+      - StaticText "예: 15:05"
+    - LabelText
+      - StaticText "문서 본문 서체"
+      - combobox "문서 본문 서체 이 브라우저에만 적용됩니다. 명조는 고른 뒤 문서를 열 때 서체를 한 번 받습니다." [expanded=false, ref=e11]: 고딕(Noto Sans KR)
+        - MenuListPopup
+          - option "고딕(Noto Sans KR)" [selected, ref=e455]
+          - option "명조(Noto Serif KR)" [ref=e456]
+      - StaticText "이 브라우저에만 적용됩니다. 명조는 고른 뒤 문서를 열 때 서체를 한 번 받습니다."
+    - button "취소" [ref=e3]
+    - button "저장" [ref=e4]
+    - button "닫기" [ref=e5]
+      - StaticText "닫기"
+  - menu
+    - menuitem "표시 설정" [ref=e12]
+    - menuitem "내 자료 내려받기 (ZIP)" [ref=e13]
+    - separator
+    - menuitem "로그아웃" [ref=e14]
+    - separator
+    - StaticText "fvoci 개발 빌드(dev)"

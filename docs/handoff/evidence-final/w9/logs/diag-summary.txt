@@ -1,0 +1,16 @@
+diag probe FAIL
+diag 1 PASS W9DIAG lock-failure tick took 386.657836ms, need=168, items_with_series=8 finished in 0.97s
+diag 2 PASS W9DIAG lock-failure tick took 3.664220693s, need=12, items_with_series=13 finished in 4.39s
+diag 3 PASS W9DIAG lock-failure tick took 5.17175371s, need=12, items_with_series=18 finished in 5.68s
+diag 4 PASS W9DIAG lock-failure tick took 6.678485682s, need=12, items_with_series=23 finished in 7.25s
+diag 5 PASS W9DIAG lock-failure tick took 8.185194836s, need=12, items_with_series=28 finished in 8.70s
+diag 6 PASS W9DIAG lock-failure tick took 9.693682375s, need=12, items_with_series=33 finished in 10.21s
+diag 7 PASS W9DIAG lock-failure tick took 11.209320595s, need=12, items_with_series=38 finished in 11.74s
+diag 8 PASS W9DIAG lock-failure tick took 456.535546ms, need=12, items_with_series=43 finished in 1.13s
+diag 9 PASS W9DIAG lock-failure tick took 14.220344048s, need=12, items_with_series=48 finished in 14.82s
+diag 10 PASS W9DIAG lock-failure tick took 501.617881ms, need=12, items_with_series=53 finished in 1.23s
+diag 11 PASS W9DIAG lock-failure tick took 17.245245665s, need=12, items_with_series=58 finished in 17.85s
+diag 12 PASS W9DIAG lock-failure tick took 18.729952292s, need=12, items_with_series=63 finished in 19.32s
+diag 13 PASS W9DIAG lock-failure tick took 20.245311684s, need=12, items_with_series=68 finished in 20.83s
+diag 14 PASS W9DIAG lock-failure tick took 21.74510122s, need=12, items_with_series=73 finished in 22.37s
+diag 15 PASS W9DIAG lock-failure tick took 23.256844517s, need=12, items_with_series=78 finished in 23.86s

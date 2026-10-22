@@ -1,0 +1,22 @@
+Auto-merging contracts/openapi.json
+Auto-merging docs/development.md
+Auto-merging packages/api-client/src/generated/schema.ts
+Merge made by the 'ort' strategy.
+ apps/web/messages/tasks/en.json                    |   2 +
+ apps/web/messages/tasks/ko.json                    |   2 +
+ apps/web/src/lib/api/client.ts                     |  34 ++-
+ apps/web/src/lib/features/tasks/TaskDetail.svelte  |  52 +++-
+ apps/web/tests/component/link-conflict.test.ts     |  11 +-
+ apps/web/tests/component/task-detail-links.test.ts |  48 ++-
+ contracts/openapi.json                             |  38 ++-
+ crates/server/migrations/0082_shift_plan_links.sql | 331 +++++++++++++++++++++
+ crates/server/src/features/schedule.rs             |  68 +++--
+ crates/server/src/http/mod.rs                      |  38 +--
+ crates/server/tests/item_profile.rs                |   2 +-
+ crates/server/tests/schedule.rs                    | 255 ++++++++++++++--
+ deploy/postgres/dev-module-seed.sql                |   8 +-
+ docs/decisions.md                                  |   2 +-
+ docs/development.md                                |   7 +-
+ packages/api-client/src/generated/schema.ts        |  25 +-
+ 16 files changed, 801 insertions(+), 122 deletions(-)
+ create mode 100644 crates/server/migrations/0082_shift_plan_links.sql

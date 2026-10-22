@@ -1,0 +1,17 @@
+Auto-merging contracts/openapi.json
+Auto-merging docs/development.md
+Auto-merging packages/api-client/src/generated/schema.ts
+Merge made by the 'ort' strategy.
+ contracts/openapi.json                             |  45 +++-
+ .../server/migrations/0083_missing_rule_checks.sql | 259 +++++++++++++++++++++
+ crates/server/src/features/comments.rs             |  25 +-
+ crates/server/src/features/courses.rs              |   4 +-
+ crates/server/src/features/study.rs                |   2 +-
+ crates/server/tests/comments.rs                    | 146 ++++++++++++
+ crates/server/tests/courses.rs                     |  28 ++-
+ crates/server/tests/recurrence.rs                  |  96 ++++++++
+ crates/server/tests/study.rs                       |  30 ++-
+ docs/development.md                                |  10 +-
+ packages/api-client/src/generated/schema.ts        |  35 ++-
+ 11 files changed, 651 insertions(+), 29 deletions(-)
+ create mode 100644 crates/server/migrations/0083_missing_rule_checks.sql

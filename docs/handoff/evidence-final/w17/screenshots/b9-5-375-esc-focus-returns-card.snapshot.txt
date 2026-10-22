@@ -1,0 +1,334 @@
+# b9-5-375-esc-focus-returns-card  2026-10-22T07:54:11Z  url=http://127.0.0.1:5173/w/01a16272-b731-71ab-a8b5-752c77728e6f/i/01a16272-b731-71ab-a8b5-75358179c7fd
+# viewport={
+  "result": "375x812",
+  "origin": "http://127.0.0.1:5173/w/01a16272-b731-71ab-a8b5-752c77728e6f/i/01a16272-b731-71ab-a8b5-75358179c7fd"
+}
+- generic
+  - region "알림 alt+T" [ref=e1]
+  - main
+    - sectionheader
+      - button "사이드바 열고 닫기" [ref=e2]
+        - StaticText "사이드바 열고 닫기"
+      - StaticText "모듈 예제 (합성 데이터)"
+      - group "타이머"
+        - button "타이머 시작" [ref=e5]
+    - main
+      - navigation "경로" [ref=e3]
+        - list
+          - listitem [level=1]
+            - link "모듈 예제 (합성 데이터)" [ref=e50]
+          - listitem [level=1]
+            - link "프로젝트 예제 · DEVP" [ref=e51]
+      - region "작은 출시 준비" [ref=e4]
+        - StaticText "DEVP-1"
+        - heading "작은 출시 준비" [level=1, ref=e6]
+        - StaticText "비공개"
+        - group "홈에 표시"
+          - button "홈에 고정" [ref=e19]
+          - button "즐겨찾기" [ref=e20]
+        - button "항목 지우기" [ref=e7]
+        - navigation "이 항목에서 바로 가기" [ref=e8]
+          - link "업무" [ref=e21]
+          - link "정보" [ref=e22]
+          - link "기록" [ref=e23]
+          - link "시간" [ref=e24]
+          - link "첨부 파일" [ref=e25]
+          - link "문서" [ref=e26]
+          - link "일정" [ref=e27]
+        - form "항목 정보"
+          - LabelText
+            - StaticText "제목"
+          - textbox "제목" [ref=e28]: 작은 출시 준비
+            - StaticText "작은 출시 준비"
+          - LabelText
+            - StaticText "설명"
+          - textbox "설명" [ref=e29]: 수정·저장·새로고침 후 재조회하는 개발 예제
+            - StaticText "수정·저장·새로고침 후 재조회하는 개발 예제"
+          - checkbox "워크스페이스 멤버에게 공개(독자는 읽기, 작성자는 고치기)" [checked=false, ref=e30]
+          - LabelText
+            - StaticText "워크스페이스 멤버에게 공개(독자는 읽기, 작성자는 고치기)"
+          - button "저장" [ref=e31]
+          - button "보관" [ref=e32]
+        - region "정보" [ref=e9]
+          - heading "정보" [level=2, ref=e33]
+          - button "고치기" [ref=e34]
+          - paragraph
+          - DescriptionList
+            - term "상태"
+            - definition
+              - StaticText "진행"
+            - term "기간"
+            - definition
+              - StaticText "2026. 10. 15. ~ 2026. 11. 5."
+            - term "리더"
+            - definition
+              - StaticText "Test User"
+            - term "목표"
+            - definition
+              - StaticText "대표 사용자 흐름을 점검한다"
+            - term "범위"
+            - definition
+              - StaticText "모듈 연결과 저장 동작 확인"
+          - StaticText "멤버"
+          - button "정하기" [ref=e35]
+          - paragraph
+            - StaticText "비공개 항목은 만든 사람·관리자와 여기의 사람·그룹만 봅니다(작성자는 고치고 독자는 읽기)."
+          - list "멤버"
+            - listitem [level=1]
+              - StaticText "Second User"
+        - region "기록" [ref=e10]
+          - heading "기록" [level=2, ref=e36]
+          - group "기록 종류"
+            - button "산출물 1" [ref=e52]
+            - button "위험 1" [ref=e53]
+            - button "문제 1" [ref=e54]
+            - button "회고 1" [ref=e55]
+          - paragraph
+          - button "새 산출물" [ref=e56]
+          - list
+            - listitem [level=1]
+              - StaticText "검토 보고서"
+              - StaticText "마감일 2026. 10. 25."
+              - StaticText "Test User"
+              - DescriptionList
+                - term "상태"
+                - definition
+                  - StaticText "진행 중"
+                - term "담당"
+                - definition
+                  - StaticText "Test User"
+                - term "완료 기준"
+                - definition
+                  - StaticText "대표 흐름 다섯 개를 재조회한다"
+              - paragraph
+                - StaticText "개발용 합성 기록. 실제 자료가 아닙니다."
+              - button "고치기" [ref=e74]
+              - button "지우기" [ref=e75]
+        - button "복제" [ref=e37]
+        - button "템플릿으로 표시" [ref=e11]
+        - region "시간" [ref=e12]
+          - heading "시간" [level=2, ref=e38]
+          - paragraph
+            - StaticText "업무 예상 1시간 45분 · 내 시간 합계 30분"
+          - table
+            - rowgroup
+              - row
+                - columnheader "종류" [ref=e115]
+                - columnheader "내 시간" [ref=e116]
+                - columnheader "공유된 합계" [ref=e117]
+            - row
+              - cell "작업" [ref=e76]
+              - cell "30분" [ref=e77]
+              - cell "—" [ref=e78]
+          - button "이 항목 시간 재기(작업)" [ref=e39]
+        - region "첨부 파일" [ref=e13]
+          - heading "첨부 파일" [level=2, ref=e40]
+          - button "파일 올리기" [ref=e41]
+          - paragraph
+          - paragraph
+            - StaticText "첨부 파일이 없습니다."
+        - region "문서" [ref=e14]
+          - heading "문서" [level=2, ref=e42]
+          - tree "작은 출시 준비 문서"
+            - treeitem "DEVP-3 공동 작업 노트" [level=1, selected, ref=e57]
+              - link "DEVP-3 공동 작업 노트" [ref=e79]
+                - StaticText "DEVP-3"
+                - StaticText "공동 작업 노트"
+              - button "공동 작업 노트 문서 동작" [expanded=false, ref=e80]
+                - StaticText "⋯"
+          - paragraph
+            - StaticText "키보드: Alt+위·아래 순서, Alt+오른쪽·왼쪽 들여쓰기·내어쓰기, Alt+Enter 하위 문서, Alt+M 검색해서 옮기기."
+          - paragraph
+          - form
+            - LabelText
+              - StaticText "새 문서 제목"
+            - textbox "새 문서 제목" [ref=e58]
+            - button "문서 만들기" [ref=e59]
+        - region "업무" [ref=e15]
+          - heading "업무" [level=2, ref=e43]
+          - group "보기"
+            - button "칸반" [ref=e60]
+            - button "목록" [ref=e61]
+            - button "간트" [ref=e62]
+            - button "달력" [ref=e63]
+          - search "업무 거르기"
+            - LabelText
+              - StaticText "찾기"
+              - searchbox "찾기" [ref=e81]
+            - LabelText
+              - StaticText "상태"
+              - combobox "상태로 거르기" [expanded=false, ref=e82]: 전체
+                - MenuListPopup
+                  - option "전체" [selected, ref=e121]
+                  - option "할 일" [ref=e122]
+                  - option "진행 중" [ref=e123]
+                  - option "완료" [ref=e124]
+            - LabelText
+              - StaticText "담당"
+              - combobox "담당으로 거르기" [expanded=false, ref=e83]: 전체
+                - MenuListPopup
+                  - option "전체" [selected, ref=e125]
+                  - option "내 담당" [ref=e126]
+                  - option "담당 없음" [ref=e127]
+                  - option "Second User" [ref=e128]
+                  - option "Test User" [ref=e129]
+            - LabelText
+              - StaticText "우선순위"
+              - combobox "우선순위로 거르기" [expanded=false, ref=e84]: 전체
+                - MenuListPopup
+                  - option "전체" [selected, ref=e130]
+                  - option "긴급" [ref=e131]
+                  - option "높음" [ref=e132]
+                  - option "보통" [ref=e133]
+                  - option "낮음" [ref=e134]
+                  - option "없음" [ref=e135]
+            - LabelText
+              - StaticText "태그"
+              - textbox "태그로 거르기" [ref=e85]
+            - LabelText
+              - StaticText "마감부터"
+              - Date "마감 시작일"
+                - generic
+                  - spinbutton "Month Month" [ref=e136]: 0
+                    - StaticText "mm"
+                  - StaticText "/"
+                  - spinbutton "Day Day" [ref=e137]: 0
+                    - StaticText "dd"
+                  - StaticText "/"
+                  - spinbutton "Year Year" [ref=e138]: 0
+                    - StaticText "yyyy"
+                - button "Show date picker" [ref=e118]
+            - LabelText
+              - StaticText "까지"
+              - Date "마감 끝일"
+                - generic
+                  - spinbutton "Month Month" [ref=e139]: 0
+                    - StaticText "mm"
+                  - StaticText "/"
+                  - spinbutton "Day Day" [ref=e140]: 0
+                    - StaticText "dd"
+                  - StaticText "/"
+                  - spinbutton "Year Year" [ref=e141]: 0
+                    - StaticText "yyyy"
+                - button "Show date picker" [ref=e119]
+            - LabelText
+              - StaticText "정렬"
+              - combobox "정렬" [expanded=false, ref=e86]: 기본 순서
+                - MenuListPopup
+                  - option "기본 순서" [selected, ref=e142]
+                  - option "마감일" [ref=e143]
+                  - option "우선순위" [ref=e144]
+                  - option "제목" [ref=e145]
+                  - option "최근 고침" [ref=e146]
+          - LabelText
+            - StaticText "저장한 보기"
+            - combobox "저장한 보기" [expanded=false, ref=e64]: 선택
+              - MenuListPopup
+                - option "선택" [selected, ref=e120]
+          - LabelText
+            - StaticText "이름"
+            - textbox "보기 이름" [ref=e65]
+          - button "지금 보기 저장" [ref=e44]
+          - group "간트 기간 이동"
+            - button "← 2주 앞" [ref=e66]
+            - button "오늘" [ref=e67]
+            - button "2주 뒤 →" [ref=e68]
+          - StaticText "업무"
+          - StaticText "2026년 43주(ISO 주차, 월요일 시작): 2026년 10월 19일부터 2026년 10월 25일까지"
+          - StaticText "2026년 44주(ISO 주차, 월요일 시작): 2026년 10월 26일부터 2026년 11월 1일까지"
+          - button "DEVP-5 마일스톤: 검토 완료, 마일스톤 2026-10-25, 할 일, 선행 DEVP-2 종료 후 시작 (FS)" [ref=e87]
+            - StaticText "DEVP-5 마일스톤: 검토 완료"
+          - button "DEVP-6 관계 예제: 하루 뒤 함께 시작, 2026-10-23 ~ 2026-10-25, 할 일, 선행 DEVP-2 시작 후 시작 (SS), 1일 뒤, 후속 DEVP-8 시작 후 종료 (SF)" [ref=e88]
+            - StaticText "DEVP-6 관계 예제: 하루 뒤 함께 시작"
+          - button "DEVP-7 관계 예제: 함께 마무리, 2026-10-23 ~ 2026-10-24, 할 일, 선행 DEVP-2 종료 후 종료 (FF)" [ref=e89]
+            - StaticText "DEVP-7 관계 예제: 함께 마무리"
+          - button "DEVP-8 관계 예제: 시작 전에 준비 끝, 2026-10-21 ~ 2026-10-22, 할 일, 선행 DEVP-6 시작 후 종료 (SF)" [ref=e90]
+            - StaticText "DEVP-8 관계 예제: 시작 전에 준비 끝"
+          - button "DEVP-9 API 연결 점검 (A가 고친 제목), 2026-10-28, 할 일" [ref=e91]
+            - StaticText "DEVP-9 API 연결 점검 (A가 고친 제목)"
+          - button "DEVP-10 문서 초안 검토, 2026-10-28, 할 일" [ref=e92]
+            - StaticText "DEVP-10 문서 초안 검토"
+          - button "DEVP-2 대표 업무: 준비 사항 확인, 2026-10-22 ~ 2026-10-24, 진행 중, 후속 DEVP-5 종료 후 시작 (FS), DEVP-6 시작 후 시작 (SS), 1일 뒤, DEVP-7 종료 후 종료 (FF)" [ref=e93]
+            - StaticText "DEVP-2 대표 업무: 준비 사항 확인"
+          - button "DEVP-4 하위 업무: 검토 목록 작성, 2026-10-22, 완료" [ref=e94]
+            - StaticText "↳DEVP-4 하위 업무: 검토 목록 작성"
+          - button "DEVP-11 배포 체크리스트 확인, 2026-10-23, 진행 중" [ref=e95]
+            - StaticText "DEVP-11 배포 체크리스트 확인"
+          - paragraph
+            - StaticText "선은 관계 종류에 따라 선행 업무의 시작 또는 끝에서 후속 업무의 시작 또는 끝으로 이어지고, 화살표가 후속 업무 쪽입니다. 줄 이름을 가리키거나 초점을 두면 그 업무의 선이 굵어지고 관계가 아래에 글로 나옵니다."
+          - paragraph
+            - StaticText "막대를 끌어 일정을 옮기고, 양 끝을 끌어 시작일·마감일을 바꿉니다. 키보드: 업무 이름에서 Alt+←·→ 하루 옮기기, Alt+Shift+←·→ 마감 하루 당기기·늦추기(시작일만 바꾸기는 업무 상세에서). 후속 업무에 영향이 있으면 저장 전에 묻습니다. 표시 기간 끝에서 잘린 막대의 끝은 끌 수 없고, 마감은 Alt+Shift+←·→나 업무 상세에서 바꿉니다."
+          - paragraph
+            - StaticText "날짜 없는 업무 1개는 목록 보기에서 볼 수 있습니다."
+          - form
+            - LabelText
+              - StaticText "새 업무 제목"
+            - textbox "새 업무 제목" [ref=e69]
+            - button "업무 만들기" [ref=e70]
+          - group
+            - DisclosureTriangle "CSV로 여러 업무 등록" [expanded=false]
+              - StaticText "CSV로 여러 업무 등록"
+          - paragraph
+        - region "일정" [ref=e16]
+          - heading "일정" [level=2, ref=e45]
+          - button "일정 추가" [ref=e46]
+          - list
+            - listitem [level=1]
+              - button "회의 예제 점검 모임 2026. 10. 23. 종일" [ref=e96]
+                - StaticText "회의"
+                - StaticText "예제 점검 모임"
+                - StaticText "2026. 10. 23. 종일"
+            - listitem [level=1]
+              - button "회의 W17 DST 일정 (A 제목) 2026. 11. 1. 01:20–01:30" [ref=e97]
+                - StaticText "회의"
+                - StaticText "W17 DST 일정 (A 제목)"
+                - StaticText "2026. 11. 1. 01:20–01:30"
+        - region "달력 · 2026년 10월" [ref=e17]
+          - heading "달력 · 2026년 10월" [level=2, ref=e47]
+          - button "업무 만들기" [ref=e48]
+          - group "달 이동"
+            - button "← 이전 달" [ref=e71]
+            - button "이번 달" [ref=e72]
+            - button "다음 달 →" [ref=e73]
+          - paragraph
+            - StaticText "볼 수 있는 업무의 마감일(◆ 마일스톤)·일정·수강·공부 계획일·제출·마감일을 보입니다. \"(내 계획)\"은 나만 보는 날짜입니다. 시각은 America/New_York 기준입니다."
+          - list
+            - listitem [level=1]
+              - heading "2026. 10. 22. (오늘)" [level=2, ref=e98]
+              - button "마감 DEVP-8 관계 예제: 시작 전에 준비 끝, 작은 출시 준비" [ref=e99]
+                - StaticText "마감 DEVP-8 관계 예제: 시작 전에 준비 끝"
+              - button "마감 DEVP-4 하위 업무: 검토 목록 작성, 작은 출시 준비, 완료" [ref=e100]
+                - StaticText "마감 DEVP-4 하위 업무: 검토 목록 작성"
+            - listitem [level=1]
+              - heading "2026. 10. 23." [level=2, ref=e101]
+              - button "종일 예제 점검 모임, 작은 출시 준비" [ref=e102]
+                - StaticText "종일 예제 점검 모임"
+              - button "마감 DEVP-11 배포 체크리스트 확인, 작은 출시 준비" [ref=e103]
+                - StaticText "마감 DEVP-11 배포 체크리스트 확인"
+            - listitem [level=1]
+              - heading "2026. 10. 24." [level=2, ref=e104]
+              - button "마감 DEVP-2 대표 업무: 준비 사항 확인, 작은 출시 준비" [ref=e105]
+                - StaticText "마감 DEVP-2 대표 업무: 준비 사항 확인"
+              - button "마감 DEVP-7 관계 예제: 함께 마무리, 작은 출시 준비" [ref=e106]
+                - StaticText "마감 DEVP-7 관계 예제: 함께 마무리"
+            - listitem [level=1]
+              - heading "2026. 10. 25." [level=2, ref=e107]
+              - button "마감 DEVP-6 관계 예제: 하루 뒤 함께 시작, 작은 출시 준비" [ref=e108]
+                - StaticText "마감 DEVP-6 관계 예제: 하루 뒤 함께 시작"
+              - button "◆ DEVP-5 마일스톤: 검토 완료, 작은 출시 준비" [ref=e109]
+                - StaticText "◆ DEVP-5 마일스톤: 검토 완료"
+              - button "산출물 마감 검토 보고서, 작은 출시 준비" [ref=e110]
+                - StaticText "산출물 마감 검토 보고서"
+            - listitem [level=1]
+              - heading "2026. 10. 28." [level=2, ref=e111]
+              - button "마감 DEVP-9 API 연결 점검 (A가 고친 제목), 작은 출시 준비" [ref=e112]
+                - StaticText "마감 DEVP-9 API 연결 점검 (A가 고친 제목)"
+              - button "마감 DEVP-10 문서 초안 검토, 작은 출시 준비" [ref=e113]
+                - StaticText "마감 DEVP-10 문서 초안 검토"
+        - region "이곳을 가리키는 문서" [ref=e18]
+          - heading "이곳을 가리키는 문서" [level=2, ref=e49]
+          - list
+            - listitem [level=1]
+              - link "WIKI-2 설치" [ref=e114]
+                - StaticText "WIKI-2"
+                - StaticText "설치"

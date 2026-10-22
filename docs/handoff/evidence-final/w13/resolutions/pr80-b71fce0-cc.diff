@@ -1,0 +1,41 @@
+commit b71fce05206fece712a955f7bae303a7746229c8
+Merge: 8d5436b 48c0087
+Author: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date:   Thu Oct 22 13:00:59 2026 +0900
+
+    Merge #80 (fix/audit-display-settings-reset) in merge order
+    
+    # Conflicts:
+    #       apps/web/src/lib/features/settings/DisplaySettingsDialog.svelte
+
+diff --cc apps/web/src/lib/features/settings/DisplaySettingsDialog.svelte
+index 4d5cd9f,2c102ec..ad5e547
+--- a/apps/web/src/lib/features/settings/DisplaySettingsDialog.svelte
++++ b/apps/web/src/lib/features/settings/DisplaySettingsDialog.svelte
+@@@ -2,8 -2,9 +2,10 @@@
+    // 표시 설정(D-50 시간대, D-81 언어·주 시작·시각 표시). 칸마다 따로 고르고 계정에 저장해 기기 사이에 같다. 아직
+    // 고르지 않은 칸은 브라우저 언어·시간대와 그 언어의 관례로 제안한다(저장하기 전까지는 제안만 쓴다). 표시만 바꾸며
+    // 저장된 일정 시각·날짜는 그대로다.
++   import { untrack } from 'svelte';
++ 
+ -  import { api, ApiError } from '$lib/api/client';
+ +  import { api } from '$lib/api/client';
+ +  import { errorText } from '$lib/api/errors';
+    import type { DisplayLocale, HourCycle, WeekStart } from '$lib/display';
+    import {
+      asHourCycle,
+@@@ -51,12 -50,10 +56,12 @@@
+        zone = me.timeZone;
+        weekStart = asWeekStart(me.weekStart) ?? conventionalWeekStart(locale);
+        hourCycle = asHourCycle(me.hourCycle) ?? conventionalHourCycle(locale);
+ -      docFont = storedDocFont();
+ +      // 저장한 값이 아니라 지금 적용된 서체(저장소를 쓸 수 없으면 이 화면에만 적용돼 있다). 저장한 값을 보이면
+ +      // 다른 칸을 바꿔 저장할 때 적용된 서체를 되돌린다.
+ +      docFont = appliedDocFont();
+        opened = accountFields();
+        error = undefined;
+-     }
++     });
+    });
+  
+    /** 언어를 바꾸면, 아직 저장한 적 없는 주 시작·시각 표시는 그 언어의 관례로 다시 제안한다. */

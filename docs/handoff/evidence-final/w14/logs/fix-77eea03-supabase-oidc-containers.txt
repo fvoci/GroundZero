@@ -1,0 +1,1 @@
+db=fvoci-w14-pooler-64d974-supabase-db-1 supavisor=fvoci-w14-pooler-64d974-supabase-supavisor-1

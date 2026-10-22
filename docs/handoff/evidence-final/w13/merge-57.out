@@ -1,0 +1,35 @@
+Auto-merging apps/web/src/lib/api/client.ts
+Auto-merging apps/web/src/lib/features/workspaces/WorkspaceScreen.svelte
+Auto-merging contracts/openapi.json
+Auto-merging docs/development.md
+Auto-merging packages/api-client/src/generated/schema.ts
+Merge made by the 'ort' strategy.
+ apps/web/src/app/App.svelte                        |  31 ++-
+ apps/web/src/lib/api/client.ts                     |  10 +-
+ .../lib/features/documents/DocumentActions.svelte  |  77 +++++-
+ .../lib/features/documents/DocumentEditor.svelte   | 103 +++++---
+ .../lib/features/documents/DocumentScreen.svelte   |  21 +-
+ .../lib/features/documents/RevisionHistory.svelte  |  33 ++-
+ .../lib/features/workspaces/WorkspaceScreen.svelte |  28 ++-
+ .../component/app-workspaces-reload-race.test.ts   | 135 +++++++++++
+ .../component/document-draft-conflict.test.ts      |  88 +++++++
+ .../tests/component/document-draft-offer.test.ts   | 200 +++++++++++++++
+ .../component/document-screen-stale-save.test.ts   | 191 +++++++++++++++
+ .../component/document-settings-fresh.test.ts      | 270 +++++++++++++++++++++
+ .../tests/component/revision-compare-race.test.ts  | 180 ++++++++++++++
+ .../component/workspace-realtime-toggle.test.ts    | 125 ++++++++++
+ contracts/openapi.json                             |  26 +-
+ .../0085_document_settings_on_change.sql           |  47 ++++
+ crates/server/src/features/documents.rs            |  12 +-
+ crates/server/tests/sharing.rs                     |  64 +++++
+ docs/development.md                                |   2 +-
+ packages/api-client/src/generated/schema.ts        |  17 +-
+ 20 files changed, 1591 insertions(+), 69 deletions(-)
+ create mode 100644 apps/web/tests/component/app-workspaces-reload-race.test.ts
+ create mode 100644 apps/web/tests/component/document-draft-conflict.test.ts
+ create mode 100644 apps/web/tests/component/document-draft-offer.test.ts
+ create mode 100644 apps/web/tests/component/document-screen-stale-save.test.ts
+ create mode 100644 apps/web/tests/component/document-settings-fresh.test.ts
+ create mode 100644 apps/web/tests/component/revision-compare-race.test.ts
+ create mode 100644 apps/web/tests/component/workspace-realtime-toggle.test.ts
+ create mode 100644 crates/server/migrations/0085_document_settings_on_change.sql

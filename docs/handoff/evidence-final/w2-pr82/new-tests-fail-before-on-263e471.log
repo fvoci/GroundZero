@@ -1,0 +1,906 @@
+
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w2-pr82/apps/web
+
+ ❯ tests/component/task-form-merge.test.ts (28 tests | 3 failed) 27ms
+   ❯ mergeForm compares text the way the server trims it (2)
+     × takes the server value when I only added surrounding spaces 5ms
+     × trims the same characters as the server 1ms
+   ❯ estimateOf range (1)
+     × rejects numbers the server cannot store 1ms
+ ❯ tests/component/task-conflict-save-mine.test.ts (22 tests | 7 failed) 6527ms
+   ❯ the overwrite question after the second review (8)
+     × tells apart people with the same name 1011ms
+     × reads tags the way the server stores them, without repeats 1050ms
+     × shows and saves my tags without repeats 49ms
+     × does not treat surrounding spaces as an edit 1048ms
+     × says so when the two values look the same 45ms
+     × leaves focus on the form save button when saving the form conflicts again 73ms
+     × keeps my input and lets me ask again when overwriting fails 1155ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > the overwrite question after the second review > tells apart people with the same name
+TestingLibraryElementError: Unable to find role="checkbox" and name "Alex #a1a1"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+     
+     
+    <div
+      class="flex flex-col gap-4"
+    >
+      <div
+        class="flex flex-wrap items-baseline gap-2"
+      >
+        <span
+          class="font-mono text-sm text-muted-foreground"
+        >
+          KED-1
+        </span>
+         
+         
+        <div
+          class="ml-auto flex flex-wrap items-center gap-1"
+        >
+          
+           
+          <span
+            class="flex flex-wrap items-center gap-1"
+          >
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              type="button"
+            >
+              업무 지우기
+            </button>
+            
+             
+          </span>
+        </div>
+      </div>
+       
+       
+      <div
+        class="flex flex-col gap-4"
+      >
+        <form
+          class="grid grid-cols-2 gap-3"
+        >
+          <div
+            class="col-span-2 flex flex-col gap-1"
+          >
+            <label
+              class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+              data-label-root=""
+              data-slot="label"
+              for="task-title"
+              id="bits-c237"
+            >
+              제목
+            </label>
+            
+            
+             
+            <input
+              class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+              data-slot="input"
+              id="task-title"
+              maxlength="200"
+            />
+            
+          </div>
+           
+          <div
+            class="flex min-w-0 flex-col gap-1"
+          >
+            <span
+              class="text-sm font-medium"
+              id="task-status-label"
+            >
+              상태
+            </span>
+             
+            <button
+              aria-expanded="false"
+              aria-haspopup="listbox"
+              aria-labelledby="task-status-label"
+              class="border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"
+              data-select-trigger=""
+              data-size="default"
+              data-slot="select-trigger"
+              data-state="closed"
+              id="bits-c238"
+              type="button"
+            >
+              할 일
+               
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                >
+                  
+                </path>
+                
+              </svg>
+            </button>
+            
+            
+            
+            
+             
+            
+            
+    ...
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+     
+     
+    <div
+      class="flex flex-col gap-4"
+    >
+      <div
+        class="flex flex-wrap items-baseline gap-2"
+      >
+        <span
+          class="font-mono text-sm text-muted-foreground"
+        >
+          KED-1
+        </span>
+         
+         
+        <div
+          class="ml-auto flex flex-wrap items-center gap-1"
+        >
+          
+           
+          <span
+            class="flex flex-wrap items-center gap-1"
+          >
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              type="button"
+            >
+              업무 지우기
+            </button>
+            
+             
+          </span>
+        </div>
+      </div>
+       
+       
+      <div
+        class="flex flex-col gap-4"
+      >
+        <form
+          class="grid grid-cols-2 gap-3"
+        >
+          <div
+            class="col-span-2 flex flex-col gap-1"
+          >
+            <label
+              class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+              data-label-root=""
+              data-slot="label"
+              for="task-title"
+              id="bits-c237"
+            >
+              제목
+            </label>
+            
+            
+             
+            <input
+              class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+              data-slot="input"
+              id="task-title"
+              maxlength="200"
+            />
+            
+          </div>
+           
+          <div
+            class="flex min-w-0 flex-col gap-1"
+          >
+            <span
+              class="text-sm font-medium"
+              id="task-status-label"
+            >
+              상태
+            </span>
+             
+            <button
+              aria-expanded="false"
+              aria-haspopup="listbox"
+              aria-labelledby="task-status-label"
+              class="border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"
+              data-select-trigger=""
+              data-size="default"
+              data-slot="select-trigger"
+              data-state="closed"
+              id="bits-c238"
+              type="button"
+            >
+              할 일
+               
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down lucide-icon text-muted-foreground size-4 pointer-events-none"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                >
+                  
+                </path>
+                
+              </svg>
+            </button>
+            
+            
+            
+            
+             
+            
+            
+    ...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/component/task-conflict-save-mine.test.ts:717:40
+    715|       current: { ...v2, version: 3, assignees: [alexB] },
+    716|     });
+    717|     await fireEvent.click(await screen.findByRole('checkbox', { name: …
+       |                                        ^
+    718|     // 이름이 겹치지 않는 사람은 이름만 보인다.
+    719|     expect(screen.getByRole('checkbox', { name: '보라' })).toBeTruthy();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > the overwrite question after the second review > reads tags the way the server stores them, without repeats
+AssertionError: expected "updateTask" to be called 2 times, but got 1 times
+
+Ignored nodes: comments, script, style
+<html>
+  <head />
+  <body>
+    <div>
+       
+       
+      <div
+        class="flex flex-col gap-4"
+      >
+        <div
+          class="flex flex-wrap items-baseline gap-2"
+        >
+          <span
+            class="font-mono text-sm text-muted-foreground"
+          >
+            KED-1
+          </span>
+           
+           
+          <div
+            class="ml-auto flex flex-wrap items-center gap-1"
+          >
+            
+             
+            <span
+              class="flex flex-wrap items-center gap-1"
+            >
+              <button
+                class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+                data-slot="button"
+                type="button"
+              >
+                업무 지우기
+              </button>
+              
+               
+            </span>
+          </div>
+        </div>
+         
+        <div
+          class="rounded-md border border-amber-500/50 p-3 text-sm"
+        >
+          <p
+            role="alert"
+          >
+            그사이 다른 사람이 이 업무를 바꿨습니다(지금 제목: “옛 제목”, 상태: 할 일). 내 입력은 그대로 있습니다.
+          </p>
+           
+          <div
+            class="mt-2 flex gap-2"
+          >
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              type="button"
+            >
+              서버 내용 불러오기
+            </button>
+            
+             
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              disabled=""
+              id="task-save-mine"
+              type="button"
+            >
+              내 입력으로 다시 저장
+            </button>
+            
+          </div>
+           
+          <div
+            aria-describedby="task-clash-hint"
+            aria-labelledby="task-clash-heading"
+            class="mt-3 flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 outline-none"
+            role="alertdialog"
+            tabindex="-1"
+          >
+            <h3
+              class="font-semibold"
+              id="task-clash-heading"
+              tabindex="-1"
+            >
+              다른 사람도 바꾼 칸이 있습니다
+            </h3>
+             
+            <p
+              class="text-muted-foreground"
+              id="task-clash-hint"
+            >
+              아래 칸은 나와 다른 사람이 서로 다른 값으로 바꿨습니다(시작일·마감일·마일스톤은 한 묶음으로 봅니다). 덮어쓰면 이 칸은 내 값으로 저장하고, 내가 고치지 않은 칸은 서버의 최신 값을 그대로 둡니다.
+            </p>
+             
+            <ul
+              class="flex flex-col gap-3"
+            >
+              <li
+                class="flex flex-col gap-1"
+                data-clash-field="tags"
+              >
+                <span
+                  class="font-medium"
+                >
+                  태그(쉼표로 구분)
+                </span>
+                 
+                <dl
+                  class="grid gap-2 sm:grid-cols-2"
+                >
+                  <div
+                    class="flex min-w-0 flex-col gap-0.5"
+                  >
+                    <dt
+                      class="text-muted-foreground"...
+ ❯ tests/component/task-conflict-save-mine.test.ts:740:22
+    738|     await fireEvent.click(saveMineButton());
+    739|     await waitFor(() => {
+    740|       expect(update).toHaveBeenCalledTimes(2);
+       |                      ^
+    741|     });
+    742|     expect(screen.queryByRole('alertdialog')).toBeNull();
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > the overwrite question after the second review > shows and saves my tags without repeats
+AssertionError: expected { server: 'x', mine: 'b, a, b' } to deeply equal { server: 'x', mine: 'b, a' }
+
+- Expected
++ Received
+
+  {
+-   "mine": "b, a",
++   "mine": "b, a, b",
+    "server": "x",
+  }
+
+ ❯ tests/component/task-conflict-save-mine.test.ts:758:32
+    756|     await fireEvent.click(saveMineButton());
+    757|     const ask = await screen.findByRole('alertdialog');
+    758|     expect(sides(ask, 'tags')).toEqual({ server: 'x', mine: 'b, a' });
+       |                                ^
+    759|     await fireEvent.click(within(ask).getByRole('button', { name: '내 값…
+    760|     await waitFor(() => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > the overwrite question after the second review > does not treat surrounding spaces as an edit
+AssertionError: expected "updateTask" to be called 2 times, but got 1 times
+
+Ignored nodes: comments, script, style
+<html>
+  <head />
+  <body>
+    <div>
+       
+       
+      <div
+        class="flex flex-col gap-4"
+      >
+        <div
+          class="flex flex-wrap items-baseline gap-2"
+        >
+          <span
+            class="font-mono text-sm text-muted-foreground"
+          >
+            KED-1
+          </span>
+           
+           
+          <div
+            class="ml-auto flex flex-wrap items-center gap-1"
+          >
+            
+             
+            <span
+              class="flex flex-wrap items-center gap-1"
+            >
+              <button
+                class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+                data-slot="button"
+                type="button"
+              >
+                업무 지우기
+              </button>
+              
+               
+            </span>
+          </div>
+        </div>
+         
+        <div
+          class="rounded-md border border-amber-500/50 p-3 text-sm"
+        >
+          <p
+            role="alert"
+          >
+            그사이 다른 사람이 이 업무를 바꿨습니다(지금 제목: “남의 제목”, 상태: 할 일). 내 입력은 그대로 있습니다.
+          </p>
+           
+          <div
+            class="mt-2 flex gap-2"
+          >
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              type="button"
+            >
+              서버 내용 불러오기
+            </button>
+            
+             
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              disabled=""
+              id="task-save-mine"
+              type="button"
+            >
+              내 입력으로 다시 저장
+            </button>
+            
+          </div>
+           
+          <div
+            aria-describedby="task-clash-hint"
+            aria-labelledby="task-clash-heading"
+            class="mt-3 flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 outline-none"
+            role="alertdialog"
+            tabindex="-1"
+          >
+            <h3
+              class="font-semibold"
+              id="task-clash-heading"
+              tabindex="-1"
+            >
+              다른 사람도 바꾼 칸이 있습니다
+            </h3>
+             
+            <p
+              class="text-muted-foreground"
+              id="task-clash-hint"
+            >
+              아래 칸은 나와 다른 사람이 서로 다른 값으로 바꿨습니다(시작일·마감일·마일스톤은 한 묶음으로 봅니다). 덮어쓰면 이 칸은 내 값으로 저장하고, 내가 고치지 않은 칸은 서버의 최신 값을 그대로 둡니다.
+            </p>
+             
+            <ul
+              class="flex flex-col gap-3"
+            >
+              <li
+                class="flex flex-col gap-1"
+                data-clash-field="title"
+              >
+                <span
+                  class="font-medium"
+                >
+                  제목
+                </span>
+                 
+                <dl
+                  class="grid gap-2 sm:grid-cols-2"
+                >
+                  <div
+                    class="flex min-w-0 flex-col gap-0.5"
+                  >
+                    <dt
+                      class="text-muted-foreground"
+    ...
+ ❯ tests/component/task-conflict-save-mine.test.ts:779:22
+    777|     await fireEvent.click(saveMineButton());
+    778|     await waitFor(() => {
+    779|       expect(update).toHaveBeenCalledTimes(2);
+       |                      ^
+    780|     });
+    781|     expect(screen.queryByRole('alertdialog')).toBeNull();
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > the overwrite question after the second review > says so when the two values look the same
+AssertionError: expected '설명 서버의 지금 값 가 \n나 내 값 가\n나' to contain '같아 보이지만'
+
+- Expected
++ Received
+
+- 같아 보이지만
++ 설명 서버의 지금 값 가 
++ 나 내 값 가
++ 나
+
+ ❯ tests/component/task-conflict-save-mine.test.ts:799:30
+    797|     const ask = await screen.findByRole('alertdialog');
+    798|     const row = ask.querySelector('[data-clash-field="description"]');
+    799|     expect(row?.textContent).toContain('같아 보이지만');
+       |                              ^
+    800|     // 다르게 보이는 값에는 붙지 않는다.
+    801|     expect(ask.querySelectorAll('[data-clash-looks-same]')).toHaveLeng…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > the overwrite question after the second review > leaves focus on the form save button when saving the form conflicts again
+AssertionError: expected 'task-save-mine' to be 'task-save' // Object.is equality
+
+Expected: "task-save"
+Received: "task-save-mine"
+
+ ❯ tests/component/task-conflict-save-mine.test.ts:825:40
+    823|     await new Promise((resolve) => requestAnimationFrame(resolve));
+    824|     await new Promise((resolve) => requestAnimationFrame(resolve));
+    825|     expect(document.activeElement?.id).toBe('task-save');
+       |                                        ^
+    826|   });
+    827|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > the overwrite question after the second review > keeps my input and lets me ask again when overwriting fails
+TestingLibraryElementError: Unable to find role="alertdialog"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <p
+      class="text-sm text-destructive"
+      role="alert"
+    >
+      저장하지 못했습니다. 서버에 닿지 않았습니다. 연결을 확인하고 다시 시도해 주세요.
+    </p>
+     
+     
+    <div
+      class="flex flex-col gap-4"
+    >
+      <div
+        class="flex flex-wrap items-baseline gap-2"
+      >
+        <span
+          class="font-mono text-sm text-muted-foreground"
+        >
+          KED-1
+        </span>
+         
+         
+        <div
+          class="ml-auto flex flex-wrap items-center gap-1"
+        >
+          
+           
+          <span
+            class="flex flex-wrap items-center gap-1"
+          >
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              type="button"
+            >
+              업무 지우기
+            </button>
+            
+             
+          </span>
+        </div>
+      </div>
+       
+      <div
+        class="rounded-md border border-amber-500/50 p-3 text-sm"
+      >
+        <p
+          role="alert"
+        >
+          그사이 다른 사람이 이 업무를 바꿨습니다(지금 제목: “남의 제목”, 상태: 할 일). 내 입력은 그대로 있습니다.
+        </p>
+         
+        <div
+          class="mt-2 flex gap-2"
+        >
+          <button
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            서버 내용 불러오기
+          </button>
+          
+           
+          <button
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            id="task-save-mine"
+            type="button"
+          >
+            내 입력으로 다시 저장
+          </button>
+          
+        </div>
+         
+      </div>
+       
+      <div
+        class="flex flex-col gap-4"
+      >
+        <form
+          class="grid grid-cols-2 gap-3"
+        >
+          <div
+            class="col-span-2 flex flex-col gap-1"
+          >
+            <label
+              class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+              data-label-root=""
+              data-slot="label"
+              for="task-title"
+              id="bits-c341"
+            >
+              제목
+            </label>
+            
+            
+             
+            <input
+              class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+              data-slot="input"
+              id="task-title"
+              maxlength="200"
+            />
+            
+          </div>
+         ...
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <p
+      class="text-sm text-destructive"
+      role="alert"
+    >
+      저장하지 못했습니다. 서버에 닿지 않았습니다. 연결을 확인하고 다시 시도해 주세요.
+    </p>
+     
+     
+    <div
+      class="flex flex-col gap-4"
+    >
+      <div
+        class="flex flex-wrap items-baseline gap-2"
+      >
+        <span
+          class="font-mono text-sm text-muted-foreground"
+        >
+          KED-1
+        </span>
+         
+         
+        <div
+          class="ml-auto flex flex-wrap items-center gap-1"
+        >
+          
+           
+          <span
+            class="flex flex-wrap items-center gap-1"
+          >
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              type="button"
+            >
+              업무 지우기
+            </button>
+            
+             
+          </span>
+        </div>
+      </div>
+       
+      <div
+        class="rounded-md border border-amber-500/50 p-3 text-sm"
+      >
+        <p
+          role="alert"
+        >
+          그사이 다른 사람이 이 업무를 바꿨습니다(지금 제목: “남의 제목”, 상태: 할 일). 내 입력은 그대로 있습니다.
+        </p>
+         
+        <div
+          class="mt-2 flex gap-2"
+        >
+          <button
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            서버 내용 불러오기
+          </button>
+          
+           
+          <button
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            id="task-save-mine"
+            type="button"
+          >
+            내 입력으로 다시 저장
+          </button>
+          
+        </div>
+         
+      </div>
+       
+      <div
+        class="flex flex-col gap-4"
+      >
+        <form
+          class="grid grid-cols-2 gap-3"
+        >
+          <div
+            class="col-span-2 flex flex-col gap-1"
+          >
+            <label
+              class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+              data-label-root=""
+              data-slot="label"
+              for="task-title"
+              id="bits-c341"
+            >
+              제목
+            </label>
+            
+            
+             
+            <input
+              class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+              data-slot="input"
+              id="task-title"
+              maxlength="200"
+            />
+            
+          </div>
+         ...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/component/task-conflict-save-mine.test.ts:872:32
+    870|     });
+    871|     await fireEvent.click(saveMineButton());
+    872|     const again = await screen.findByRole('alertdialog');
+       |                                ^
+    873|     expect(sides(again, 'title')).toEqual({ server: '남의 제목', mine: '내 …
+    874|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  tests/component/task-form-merge.test.ts > mergeForm compares text the way the server trims it > takes the server value when I only added surrounding spaces
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/component/task-form-merge.test.ts:335:26
+    333|       { ...base, title: '남의 제목' },
+    334|     );
+    335|     expect(merged.clash).toBe(false);
+       |                          ^
+    336|     expect(merged.form.title).toBe('남의 제목');
+    337|     expect(merged.baseline.title).toBe('남의 제목');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  tests/component/task-form-merge.test.ts > mergeForm compares text the way the server trims it > trims the same characters as the server
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/component/task-form-merge.test.ts:344:72
+    342|     expect(mergeForm(base, { ...base, title: '남의 제목　' }, fresh).clash)…
+    343|     // JS `trim`은 U+FEFF를 떼지만 서버는 그대로 저장한다: 서버 값과 다른 값이다.
+    344|     expect(mergeForm(base, { ...base, title: '﻿남의 제목' }, fresh).clash)…
+       |                                                                        ^
+    345|   });
+    346| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  tests/component/task-form-merge.test.ts > estimateOf range > rejects numbers the server cannot store
+AssertionError: expected Infinity to be 'invalid' // Object.is equality
+
+- Expected:
+"invalid"
+
++ Received:
+Infinity
+
+ ❯ tests/component/task-form-merge.test.ts:352:41
+    350| describe('estimateOf range', () => {
+    351|   it('rejects numbers the server cannot store', () => {
+    352|     expect(estimateOf('9'.repeat(309))).toBe('invalid');
+       |                                         ^
+    353|     expect(estimateOf('2147483648')).toBe('invalid');
+    354|     expect(estimateOf('2147483647')).toBe(2147483647);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  10 failed | 40 passed (50)
+   Start at  11:14:20
+   Duration  24.06s (transform 69%, tests 18%, import 8%, environment 4%, setup 1%)
+

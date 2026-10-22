@@ -1,0 +1,1324 @@
+==> compose up (fvoci-w7-pr65-32a136-test)
+$ docker compose --project-name fvoci-w7-pr65-32a136-test --file deploy/compose.test.yaml --profile oidc up --detach --wait --remove-orphans
+ Network fvoci-w7-pr65-32a136-test_default Creating 
+ Network fvoci-w7-pr65-32a136-test_default Creating 
+ Network fvoci-w7-pr65-32a136-test_default Created 
+ Network fvoci-w7-pr65-32a136-test_default Created 
+ Container fvoci-w7-pr65-32a136-test-seaweedfs-1 Creating 
+ Container fvoci-w7-pr65-32a136-test-keycloak-1 Creating 
+ Container fvoci-w7-pr65-32a136-test-postgres-1 Creating 
+ Container fvoci-w7-pr65-32a136-test-meilisearch-1 Creating 
+ Container fvoci-w7-pr65-32a136-test-postgres-1 Created 
+ Container fvoci-w7-pr65-32a136-test-meilisearch-1 Created 
+ Container fvoci-w7-pr65-32a136-test-keycloak-1 Created 
+ Container fvoci-w7-pr65-32a136-test-seaweedfs-1 Created 
+ Container fvoci-w7-pr65-32a136-test-meilisearch-1 Starting 
+ Container fvoci-w7-pr65-32a136-test-keycloak-1 Starting 
+ Container fvoci-w7-pr65-32a136-test-postgres-1 Starting 
+ Container fvoci-w7-pr65-32a136-test-seaweedfs-1 Starting 
+ Container fvoci-w7-pr65-32a136-test-meilisearch-1 Started 
+ Container fvoci-w7-pr65-32a136-test-keycloak-1 Started 
+ Container fvoci-w7-pr65-32a136-test-postgres-1 Started 
+ Container fvoci-w7-pr65-32a136-test-seaweedfs-1 Started 
+ Container fvoci-w7-pr65-32a136-test-postgres-1 Waiting 
+ Container fvoci-w7-pr65-32a136-test-meilisearch-1 Waiting 
+ Container fvoci-w7-pr65-32a136-test-seaweedfs-1 Waiting 
+ Container fvoci-w7-pr65-32a136-test-keycloak-1 Waiting 
+ Container fvoci-w7-pr65-32a136-test-meilisearch-1 Healthy 
+ Container fvoci-w7-pr65-32a136-test-postgres-1 Healthy 
+ Container fvoci-w7-pr65-32a136-test-seaweedfs-1 Healthy 
+ Container fvoci-w7-pr65-32a136-test-keycloak-1 Healthy 
+==> postgres on 127.0.0.1:54259
+==> db bootstrap / db migrate
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+$ cargo run --quiet --package fvoci-server --locked -- db migrate
+==> meilisearch on 127.0.0.1:54257
+==> seaweedfs s3 on 127.0.0.1:54260
+==> keycloak on 127.0.0.1:54258
+$ cargo test --workspace --locked -- --skip supabase_
+   Compiling fvoci-server v0.1.0 (<worktree>/crates/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 49.63s
+     Running unittests src/lib.rs (target/debug/deps/fvoci_server-46bf3b3cd98551d3)
+
+running 76 tests
+test backup::tests::restore_parts_stay_within_the_storage_limit ... ok
+test build_info::tests::release_versions_and_shas_are_checked ... ok
+test collab::convert::tests::position_migration_metadata_is_allowed_but_other_roots_are_not ... ok
+test config::tests::https_public_url_enables_secure_cookies ... ok
+test config::tests::defaults_and_redaction ... ok
+test config::tests::issuer_requires_client_settings ... ok
+test config::tests::rejects_invalid_limit ... ok
+test config::tests::rejects_depth_outside_range ... ok
+test config::tests::requires_database_url ... ok
+test features::accounts::tests::return_to_accepts_only_same_origin_paths ... ok
+test features::documents::tests::access_parsing ... ok
+test features::accounts::tests::duplicate_cookies_are_rejected ... ok
+test features::documents::tests::body_must_be_doc_object ... ok
+test features::documents::tests::body_size_is_limited ... ok
+test features::documents::tests::title_validation ... ok
+test features::documents::tests::reference_nodes_are_checked_and_limited ... ok
+test collab::convert::tests::reads_what_the_browser_writes ... ok
+test features::export::tests::names_inside_the_archive_stay_inside ... ok
+test features::documents::tests::images_and_links_must_stay_inside_the_service ... ok
+test features::files::tests::content_types_are_cleaned ... ok
+test features::files::tests::counts_parts ... ok
+test features::file_text::tests::skips_unsupported_and_broken_files ... ok
+test features::files::tests::dispositions_quote_names_safely ... ok
+test features::item_profile::tests::details_follow_the_module_kind ... ok
+test features::file_text::tests::reads_plain_text_and_office_xml ... ok
+test features::members::tests::email_validation ... ok
+test features::modules::tests::description_allows_newlines_only ... ok
+test features::modules::tests::keys_are_normalized_to_uppercase ... ok
+test features::modules::tests::keys_reject_bad_shapes ... ok
+test features::file_text::tests::reads_pdf_text ... ok
+test features::modules::tests::module_kind_round_trip ... ok
+test features::records::tests::fields_are_checked_against_the_kind ... ok
+test features::records::tests::kinds_are_unique_and_choices_are_set ... ok
+test features::references::tests::like_patterns_escape_wildcards ... ok
+test features::references::tests::public_bodies_drop_reference_ids ... ok
+test features::references::tests::reference_queries_are_parsed_case_insensitively ... ok
+test features::schedule::tests::a_link_that_is_already_satisfied_moves_nothing ... ok
+test features::schedule::tests::a_join_waits_for_every_predecessor_across_kinds ... ok
+test features::schedule::tests::a_new_link_to_an_undated_successor_is_reported_not_invented ... ok
+test features::schedule::tests::a_task_with_two_moved_predecessors_takes_the_later_one ... ok
+test features::schedule::tests::changing_a_link_pushes_only_what_the_change_adds ... ok
+test features::schedule::tests::each_kind_anchors_the_right_ends_with_and_without_lag ... ok
+test features::schedule::tests::forks_and_mixed_chains_follow_each_kind ... ok
+test features::schedule::tests::link_kinds_round_trip_their_codes ... ok
+test features::schedule::tests::milestones_and_one_sided_dates_use_the_date_they_have ... ok
+test features::schedule::tests::existing_overlaps_and_done_tasks_are_left_alone ... ok
+test features::schedule::tests::proposed_dates_outside_the_saveable_years_block_the_plan ... ok
+test collab::convert::tests::writes_what_the_browser_reads ... ok
+test features::schedule::tests::pulling_earlier_or_undated_tasks_proposes_nothing ... ok
+test features::schedule::tests::pushes_successors_by_the_minimum_and_keeps_their_length ... ok
+test features::schedule::tests::the_approved_list_must_match_the_plan_exactly ... ok
+test features::search_text::tests::keeps_text_checklists_and_reference_shortcodes ... ok
+test features::tasks::tests::dates_are_plain_calendar_dates ... ok
+test features::tasks::tests::status_and_priority_round_trip ... ok
+test features::tasks::tests::tags_are_trimmed_deduplicated_and_limited ... ok
+test features::zotero::tests::library_input_is_checked ... ok
+test features::zotero::tests::zotero_items_become_reference_fields ... ok
+test http::cache::tests::etags_depend_on_bytes_and_user ... ok
+test http::cache::tests::if_match_uses_strong_comparison ... ok
+test http::cache::tests::if_none_match_uses_weak_comparison ... ok
+test http::cache::tests::cdn_examples_match_the_scopes ... ok
+test http::cache::tests::scopes_follow_the_path ... ok
+test logging::tests::external_error_text_is_not_logged ... ok
+test logging::tests::request_ids_from_outside_are_checked ... ok
+test search::tests::uids_use_only_allowed_characters ... ok
+test logging::tests::settings_default_to_info_json_and_reject_bad_values ... ok
+test storage::s3::tests::encodes_like_aws ... ok
+test storage::s3::tests::derives_the_documented_signing_key ... ok
+test storage::tests::keys_must_be_server_made ... ok
+test storage::s3::tests::reads_parts_from_xml ... ok
+test features::search_text::tests::ignores_unknown_shapes_and_caps_length ... ok
+test http::tests::operation_ids_are_unique ... ok
+test http::tests::the_link_body_is_optional_but_not_nullable ... ok
+test http::tests::the_link_conflict_is_task_conflict_or_error_body ... ok
+test features::schedule::tests::the_shift_limit_matches_approval_at_499_500_and_501 ... ok
+test features::file_text::tests::pdf_flate_bombs_are_not_parsed ... ok
+
+test result: ok. 76 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.22s
+
+     Running unittests src/main.rs (target/debug/deps/fvoci_server-fb3ca6f19a2bdcd1)
+
+running 2 tests
+test tests::help_is_a_separate_command_from_database_work ... ok
+test tests::migration_history_errors_require_preservation_before_retry ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/audit.rs (target/debug/deps/audit-10a6797e3b653ba2)
+
+running 1 test
+test workspace_audit_is_for_admins_and_personal_audit_is_private ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/backup.rs (target/debug/deps/backup-80589d26f184c5a2)
+
+running 2 tests
+test borrowing_the_migrator_leaves_the_admins_memberships_as_they_were ... ok
+test backup_restores_documents_tasks_and_files_into_a_fresh_install ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.22s
+
+     Running tests/cache.rs (target/debug/deps/cache-2f66d4efd4233748)
+
+running 3 tests
+test cache_scopes_keep_sensitive_responses_out_of_shared_caches ... ok
+test saves_with_if_match_are_atomic_and_idempotent ... ok
+test document_reads_revalidate_only_after_checking_access ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/collab.rs (target/debug/deps/collab-d6abfe1ef31f6782)
+
+running 19 tests
+test a_moved_room_follows_its_document_to_the_new_workspace ... ok
+test a_failed_checkpoint_stops_the_restore ... ok
+test a_checkpoint_that_finds_the_body_changed_stops_the_restore ... ok
+test a_restore_from_outside_the_room_still_conflicts_with_live_edits ... ok
+test restoring_during_live_editing_keeps_the_live_edits_in_history ... ok
+test workspace_export_includes_live_edits ... ok
+test rooms_acknowledge_persisted_state_with_a_snapshot ... ok
+test live_editing_guards ... ok
+test turning_realtime_off_keeps_live_edits ... ok
+test deleting_a_version_right_after_a_live_reference_is_refused ... ok
+test a_reader_cannot_make_rooms_persist_through_version_delete ... ok
+test a_checkpoint_that_times_out_stops_the_restore ... ok
+test file_refs_lock_versions_before_they_are_written ... ok
+test live_ref_store_and_old_version_cleanup_do_not_race ... ok
+test edits_during_a_restore_are_not_acknowledged_then_dropped ... ok
+test reconnecting_without_changes_is_not_an_edit ... ok
+test live_body_pins_the_file_versions_it_points_to ... ok
+test live_editing_end_to_end ... ok
+test trashed_document_keeps_live_file_pins ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.87s
+
+     Running tests/comments.rs (target/debug/deps/comments-0a1786ae0d8a7208)
+
+running 2 tests
+test moved_documents_live_excerpts_and_single_notifications ... ok
+test comments_threads_and_notifications_follow_access ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+     Running tests/courses.rs (target/debug/deps/courses-aa30c142dfabd6ef)
+
+running 4 tests
+test archiving_the_course_module_makes_the_course_read_only ... ok
+test completion_dates_links_and_participant_visibility ... ok
+test two_writers_on_the_same_episode_version_do_not_overwrite ... ok
+test course_episodes_and_personal_progress ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/db_context.rs (target/debug/deps/db_context-9993286800071954)
+
+running 1 test
+test user_context_does_not_outlive_commit_or_rollback ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/events.rs (target/debug/deps/events-0d9572f79a441860)
+
+running 3 tests
+test events_follow_item_access_keep_their_zone_and_guard_versions ... ok
+test calendar_scopes_and_date_sources_follow_item_access ... ok
+test the_calendar_shows_visible_tasks_and_events_by_the_viewers_days ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s
+
+     Running tests/export.rs (target/debug/deps/export-f5ad08fe8108c4fb)
+
+running 1 test
+test workspace_and_personal_exports_contain_only_what_the_person_can_see ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.07s
+
+     Running tests/files.rs (target/debug/deps/files-ac60103c4f4fbc7a)
+
+running 9 tests
+test a_late_attempt_leaves_a_claim_taken_over_by_another_alone ... ok
+test a_transient_failure_while_finishing_lets_the_next_complete_go_through ... ok
+test a_dropped_complete_request_still_releases_a_stalled_claim ... ok
+test a_late_attempt_cannot_overwrite_what_the_take_over_stored ... ok
+test moving_a_document_takes_its_attachments_along ... ok
+test concurrent_starts_and_old_version_cleanup ... ok
+test limits_abort_expiry_and_private_notes ... ok
+test s3_files_round_trip_and_purge_with_the_document ... ok
+test chunked_upload_resumes_checks_integrity_and_keeps_versions ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.79s
+
+     Running tests/first_flow.rs (target/debug/deps/first_flow-836a30fb2645d974)
+
+running 11 tests
+test workspace_create_is_idempotent_and_listed ... ok
+test duplicate_session_cookies_are_rejected ... ok
+test audit_records_creation_and_rename_without_body ... ok
+test replay_after_a_newer_save_reports_conflict ... ok
+test document_write_save_reopen_with_revisions ... ok
+test other_user_cannot_see_or_change_documents ... ok
+test save_retry_is_idempotent_and_stale_save_conflicts ... ok
+test data_and_session_survive_fresh_state ... ok
+test rls_hides_rows_from_other_users_under_app_role ... ok
+test app_role_cannot_touch_internal_tables_or_rewind_revisions ... ok
+test input_validation_and_origin_and_session_failures ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.13s
+
+     Running tests/health.rs (target/debug/deps/health-75b05158895f8f8f)
+
+running 4 tests
+test rhwp_wasm_is_served_compressed_and_cached ... ok
+test assets_are_served_precompressed_when_available ... ok
+test healthz_reports_ok_with_database ... ok
+test healthz_reports_degraded_without_database ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.02s
+
+     Running tests/home.rs (target/debug/deps/home-eb377b210ab8992c)
+
+running 1 test
+test home_collects_my_upcoming_work_and_marks_only_what_i_can_see ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+
+     Running tests/ids.rs (target/debug/deps/ids-7f9110f4838f98ab)
+
+running 4 tests
+test tables_have_no_id_default_and_accept_only_uuidv7 ... ok
+test functions_use_the_ids_the_server_passes_and_never_fill_in_missing_ones ... ok
+test missing_targets_are_404_not_500 ... ok
+test worker_retries_the_whole_job_and_leaves_nothing_on_short_ids ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/item_profile.rs (target/debug/deps/item_profile-82ea2d7c8cdefcc0)
+
+running 4 tests
+test profile_fields_follow_the_module_kind ... ok
+test private_items_open_to_their_members_only ... ok
+test items_copy_with_fresh_numbers_and_templates ... ok
+test group_changes_and_leaving_end_item_roles ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+     Running tests/logging.rs (target/debug/deps/logging-5fe38c0bb7e415bd)
+
+running 7 tests
+test pretty_output_has_the_same_event_and_fields_on_one_line ... ok
+test malformed_bodies_get_the_json_error_shape_with_the_request_id ... ok
+test filters_apply_by_level_and_module ... ok
+test fake_secrets_never_reach_the_log_even_at_trace ... ok
+test audit_events_stay_when_the_log_level_is_lowered ... ok
+test every_line_is_json_even_with_concurrent_requests ... ok
+test errors_carry_the_request_id_into_the_log_and_the_response ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.05s
+
+     Running tests/members.rs (target/debug/deps/members-cc1137f6b61dc092)
+
+running 7 tests
+test membership_changes_are_audited ... ok
+test decline_and_revoke_close_invitations ... ok
+test removed_member_loses_access_and_team_documents_remain ... ok
+test groups_hold_only_workspace_members ... ok
+test invitation_requires_the_verified_invited_email ... ok
+test owner_is_protected_and_ownership_transfer_needs_acceptance ... ok
+test roles_are_enforced_and_only_admins_manage_members ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/modules.rs (target/debug/deps/modules-0c0b76f1f64d3cfc)
+
+running 8 tests
+test key_change_keeps_numbers_and_retired_keys_stay_reserved ... ok
+test module_keys_are_admin_managed_unique_and_case_insensitive ... ok
+test items_documents_share_one_sequence_per_module ... ok
+test archived_documents_can_still_be_restricted_by_their_owner ... ok
+test archived_items_and_modules_are_read_only_but_visible ... ok
+test copies_moves_and_retries_respect_item_boundaries ... ok
+test documents_move_between_wiki_and_items ... ok
+test private_items_hide_their_documents_and_numbers ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+     Running tests/oidc.rs (target/debug/deps/oidc-bb756479bbee829f)
+
+running 5 tests
+test oidc_callback_rejects_forged_state ... ok
+test oidc_login_identifies_by_issuer_and_subject_then_logout_ends_both_sessions ... ok
+test oidc_second_user_is_denied_first_users_documents ... ok
+test oidc_login_survives_a_signing_key_rotation ... ok
+test oidc_session_expires ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.63s
+
+     Running tests/public_links.rs (target/debug/deps/public_links-e3d5d21ed3f0068a)
+
+running 2 tests
+test only_owner_level_can_manage_public_links ... ok
+test owner_creates_expires_and_revokes_public_links ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.69s
+
+     Running tests/records.rs (target/debug/deps/records-d32f93109ea50378)
+
+running 9 tests
+test study_materials_link_courses_and_kinds_are_published ... ok
+test item_files_are_read_only_while_the_item_or_its_module_is_archived ... ok
+test analysis_records_pin_file_versions_and_follow_item_access ... ok
+test trash_expiry_and_a_new_reference_race_safely ... ok
+test trash_expiry_of_documents_honours_live_references_and_breaks_cycles ... ok
+test old_versions_expire_unless_something_refers_to_them ... ok
+test kept_expired_bundles_restore_with_existing_permissions ... ok
+test version_retention_counts_from_replacement_and_ignores_foreign_pins ... ok
+test trash_expiry_keeps_files_with_referenced_versions ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.73s
+
+     Running tests/recurrence.rs (target/debug/deps/recurrence-cf6023c2fb50f1b0)
+
+running 6 tests
+test rules_expand_with_skips_counts_and_limits ... ok
+test repeating_events_keep_their_wall_clock_across_daylight_saving ... ok
+test catch_up_is_capped_per_request_and_archived_items_refuse ... ok
+test weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_ones ... ok
+test changing_a_rule_applies_from_today_and_the_template_stays_top_level ... ok
+test repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+     Running tests/references.rs (target/debug/deps/references-72b7ec71b0a90c3e)
+
+running 6 tests
+test hidden_targets_look_exactly_like_missing_ones ... ok
+test backlinks_follow_access_to_the_source_document ... ok
+test candidates_find_visible_people_items_and_documents_by_title_or_reference ... ok
+test same_named_workspaces_are_searched_together_and_links_survive_renames ... ok
+test copying_and_editing_does_not_resend_existing_mentions ... ok
+test mentions_notify_once_only_people_who_can_read_and_never_grant_access ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/reminders.rs (target/debug/deps/reminders-6bb001994f230866)
+
+running 1 test
+test item_reminders_reach_people_who_can_see_the_item_once_a_day ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s
+
+     Running tests/revisions.rs (target/debug/deps/revisions-fe9f8c1f9ba757d9)
+
+running 3 tests
+test restore_follows_save_conflict_and_permission_rules ... ok
+test history_is_listed_and_restore_adds_a_revision_without_erasing_history ... ok
+test restore_is_denied_without_write_access_and_request_ids_do_not_cross ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.45s
+
+     Running tests/saved_views.rs (target/debug/deps/saved_views-9c8d361a1aa5c063)
+
+running 4 tests
+test time_zone_is_a_personal_setting ... ok
+test saved_views_are_personal_and_follow_item_access ... ok
+test display_settings_are_personal_and_kept_independently ... ok
+test the_designated_initial_admin_gets_the_first_workspace_once ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
+
+     Running tests/schedule.rs (target/debug/deps/schedule-2e3204533ff784e2)
+
+running 14 tests
+test copying_an_item_keeps_link_kinds_and_lags ... ok
+test milestones_have_a_single_date ... ok
+test malformed_reschedules_are_rejected ... ok
+test each_kind_and_lag_reaches_the_api_and_undated_followers_are_reported ... ok
+test link_conflicts_come_back_as_task_conflict_or_error_body ... ok
+test plans_with_dates_outside_the_saveable_range_are_blocked ... ok
+test approved_date_moves_are_recomputed_against_the_links_at_save_time ... ok
+test existing_links_are_finish_to_start_and_old_requests_keep_kinds ... ok
+test two_approvals_of_the_same_preview_save_once ... ok
+test moving_a_predecessor_previews_impact_and_shifts_only_approved_successors ... ok
+test changing_a_link_previews_causes_and_moves_approved_tasks_in_one_transaction ... ok
+test a_plan_made_stale_by_a_removed_link_is_a_conflict_not_a_bad_request ... ok
+test dependencies_stay_in_one_item_reject_cycles_and_follow_access ... ok
+test plans_over_the_shift_limit_are_blocked_before_approval ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.87s
+
+     Running tests/search.rs (target/debug/deps/search-21a19d8834b56de1)
+
+running 8 tests
+test filters_narrow_results_and_attachment_text_is_searchable ... FAILED
+test search_returns_only_what_each_person_can_see ... FAILED
+test trashed_content_leaves_the_index_and_returns_on_restore ... FAILED
+test author_and_title_only_narrow_results_without_widening_access ... FAILED
+test item_records_are_searchable_by_people_who_see_the_item ... FAILED
+test file_names_are_searchable_by_people_who_can_see_the_file ... FAILED
+test pending_index_tasks_are_tracked_until_they_succeed ... ok
+test an_unreachable_search_service_falls_back_to_titles ... ok
+
+failures:
+
+---- filters_narrow_results_and_attachment_text_is_searchable stdout ----
+2026-10-22T02:47:21.000996Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-8680-73e7-9f26-271ddc7a274b method=POST route="/api/workspaces" status_code=201 duration_ms=40.354
+2026-10-22T02:47:21.012467Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86a9-766e-a616-e01c2bdcab82 method=POST route="/api/workspaces/{workspace_id}/modules" status_code=201 duration_ms=11.333
+2026-10-22T02:47:21.022339Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86b4-7331-8cf3-66e4d41c1334 method=POST route="/api/modules/{module_id}/items" status_code=201 duration_ms=9.731
+2026-10-22T02:47:21.037976Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86be-745d-95ce-b93444c14e13 method=POST route="/api/items/{item_id}/tasks" status_code=201 duration_ms=15.481
+2026-10-22T02:47:21.047709Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86ce-714c-bafb-f317ad27750f method=POST route="/api/items/{item_id}/tasks" status_code=201 duration_ms=9.59
+2026-10-22T02:47:21.062002Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86d7-70a3-852e-27b59f1fa385 method=PUT route="/api/tasks/{task_id}" status_code=200 duration_ms=14.122
+2026-10-22T02:47:21.079257Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86e6-7621-83f2-f7a94526d2db method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=17.101
+2026-10-22T02:47:21.102172Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86f7-72c4-8739-a80eac65d175 method=POST route="/api/uploads" status_code=201 duration_ms=22.208
+2026-10-22T02:47:21.114968Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-870e-77c7-8c80-89c27da2392c method=PUT route="/api/uploads/{upload_id}/parts/{number}" status_code=204 duration_ms=12.516
+2026-10-22T02:47:21.143011Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-871b-708f-9c18-5bbb35c27311 method=POST route="/api/uploads/{upload_id}/complete" status_code=200 duration_ms=27.895
+2026-10-22T02:47:22.624498Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16181872a7154bb28fd11ae85d68b error_code="internal" detail="search service request"
+
+thread 'filters_narrow_results_and_attachment_text_is_searchable' (392277) panicked at crates/server/tests/search.rs:79:14:
+called `Result::unwrap()` on an `Err` value: Config("search indexing made no progress; will retry later")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- search_returns_only_what_each_person_can_see stdout ----
+2026-10-22T02:47:21.001057Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-8680-73e7-9f26-271b63534666 method=POST route="/api/workspaces" status_code=201 duration_ms=40.51
+2026-10-22T02:47:21.017522Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86af-7594-8e18-426cfe95f6d1 method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=10.091
+2026-10-22T02:47:21.023818Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86b9-72c5-a333-a2f2c213a1e9 method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=6.181
+2026-10-22T02:47:21.033087Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86c2-70c1-a33f-3a40dccd3592 method=POST route="/api/workspaces" status_code=201 duration_ms=6.088
+2026-10-22T02:47:21.051071Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86c9-732f-8896-74eb6b3dc578 method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=17.88
+2026-10-22T02:47:21.073681Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86db-76c9-a583-687823efcaa8 method=PUT route="/api/documents/{document_id}" status_code=200 duration_ms=22.466
+2026-10-22T02:47:21.083489Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86f1-749f-819a-b364caacc0ff method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=9.662
+2026-10-22T02:47:21.093298Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86fb-73e3-983b-0cdbbb004928 method=POST route="/api/workspaces/{workspace_id}/modules" status_code=201 duration_ms=9.616
+2026-10-22T02:47:21.102331Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-8705-7651-bfcb-e35f268ff420 method=POST route="/api/modules/{module_id}/items" status_code=201 duration_ms=8.856
+2026-10-22T02:47:21.117269Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-870e-77c7-8c80-89c3130d0bc7 method=POST route="/api/items/{item_id}/tasks" status_code=201 duration_ms=14.758
+2026-10-22T02:47:21.126202Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-871d-7066-aba1-b870e70ff3f9 method=POST route="/api/me/notes" status_code=201 duration_ms=8.712
+2026-10-22T02:47:22.624529Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181810872afa71a6f50fc7ebfe8 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.625416Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181812272d08588517c15645a93 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.626597Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181813b768c824c723427679111 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.627653Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181815277088188806031c3b565 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.628650Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161818169701380502480e09868a8 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.629561Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181818074139c9d7ea95649516f error_code="internal" detail="search service request"
+2026-10-22T02:47:22.630622Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161818196729cb7d17ac372b3e287 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.631677Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618181ac7649ab9a8ca3e967ce90 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.632725Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618181c3767db1e144507bae8ed8 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.633850Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618181d9700d96f3b31729d792a5 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.634868Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618181f075488de7c7dbe890cd4e error_code="internal" detail="search service request"
+2026-10-22T02:47:22.635951Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161818206703d8ecbacddb8b8de66 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.636974Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181821c7530bbeae662b6b4f4ec error_code="internal" detail="search service request"
+2026-10-22T02:47:22.638018Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161818232726cbbe512784ead6edf error_code="internal" detail="search service request"
+2026-10-22T02:47:22.639125Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181824770cd90416d34b1890a18 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.640231Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181825c7534880be99977892231 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.641476Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161818273731f8c638e76e9e60828 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.642611Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181828873e3b17b769f3e0fe39b error_code="internal" detail="search service request"
+2026-10-22T02:47:22.643607Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181829d767699a95370e9e836e0 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.644692Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618182b4753086f3b54aabbdefab error_code="internal" detail="search service request"
+2026-10-22T02:47:22.645799Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618182ca75a5bf4aba02b591f5d2 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.646859Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618182e0702fa3a993034e951e8a error_code="internal" detail="search service request"
+2026-10-22T02:47:22.647913Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618182f571329057e842f5032371 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.649006Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181830b7587a552f180b4975385 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.649869Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181832273c69a14d930a6993012 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.651080Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181833a7192a9bc94bde12cbc89 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.652134Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181835275628ad425c2bda82e20 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.653147Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181836b74b6871161709de4bfd1 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.654249Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618186d175428c5ffa7a8fe5fb15 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.655334Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618186c270c1a33f3a3d15cce70d error_code="internal" detail="search service request"
+2026-10-22T02:47:22.656316Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181871270ae94ba636fb8cc9319 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.657334Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814276779a974d06c715c36630 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.658291Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d4f6722d84b15c0bbbc17ba3 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.659398Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618186cd72d8b50e1fa237c30cce error_code="internal" detail="search service request"
+2026-10-22T02:47:22.660471Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=record_01a16180d8007012b3d2a153e79ea6b3 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.661445Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161812fef7258a2cf36664ff49ed1 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.662498Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181544c7695a0ad46e0d775a172 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.663490Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16181430a76c6aec472c758740619 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.664560Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a1618142997720ac4912642cc7d52f error_code="internal" detail="search service request"
+2026-10-22T02:47:22.665451Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181303e757784e94e17e053cf2c error_code="internal" detail="search service request"
+2026-10-22T02:47:22.666420Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618116ce7446853b77d1a483d971 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.667519Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181305d767da801233b8edb498d error_code="internal" detail="search service request"
+2026-10-22T02:47:22.668491Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814251715ca4315be712f43f56 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.669163Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=record_01a16181426a7336a2e0f4192c99689b error_code="internal" detail="search service request"
+2026-10-22T02:47:22.669713Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181301471b3a26aedf49a1cc13c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.670235Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=event_01a16180d7f875888c1029ee86bcf34b error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.670865Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=event_01a16181490d70aebd1c0b9836479073 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.671438Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=event_01a16180d7c57285b4d2519b192f3f35 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.671888Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814251715ca4315be51380c0e5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.672416Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161813064730f874c5556b30f99d6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.672871Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618130117459a262f324b08d0b02 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.673374Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=event_01a16181490e7765be7e1cec6fcb6419 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.673874Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=event_01a16180d80c75bd96768028141a45e3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.674385Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d7cd7135a5b4083ad6f2ad08 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.674861Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618148f87153a8cd8857d3cbc667 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.675309Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180e1e2748b85fd551705fd5d7f error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.675765Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814251715ca4315be9dc1477ea error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.676216Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814b69737b8d9e6a0ca82abad9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.676660Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618119e5745d98f2f8de2be5cf2c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.677177Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a161814372766982516bcf8a1b3964 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.677665Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181423976f09a989ab7b4cc55e5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.678194Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618119df70dab6ca123204c4aec8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.678876Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=record_01a161814d2072bf9be8a695641e6ded error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.679455Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180e1b674d2a67aafa4b910bab4 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.679962Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181427b729c9d600da94c3b450c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.680565Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618118e67626bc9a0154c6477dae error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.681127Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618119eb7701bcc77ed7a12f23c5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.681711Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618142567688a54bbded59d22b09 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.682198Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d78773a6b0ae886f42d89ef5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.682821Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618186b87282bee2df41edec69e0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.683419Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d50e70feb7ad7e35a0d72a57 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.683915Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180b6a6741dbeace73b60abc7dc error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.684406Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814b60736b8c89c7bff2ea78eb error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.684927Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d78773a6b0ae886e2462db78 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.685390Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618116a97125aa47db98971aead5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.685856Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814b60736b8c89c7bc71fd80af error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.686393Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16181429d7059b78987c25d527ef7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.686851Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180b6a77273a4973bdaf25b2d08 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.687259Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d4047456b712bc2651968f3e error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.687769Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d5d3764996755c9b0b9d828c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.688308Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618154217099a9a7ab982ec788f2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.688804Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180dd7877f4a4534969656a7ce4 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.689303Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180e2007121aa9b8cbe196c56f0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.689777Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618154017104b8b010c0c3250875 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.690325Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161811ac47226ba9aaaaf480447d3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.690802Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d3e9718f95c1023e29093d54 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.691253Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181307273d49580dbe663af8ddd error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.691716Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181505675c9ab05601dbb65a6e2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.692242Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a1618186eb74cca98682a6dd57f6df error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.692703Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618148f77601a4391e36e4b98796 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.693167Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a1618186b777089ad44706a14aa840 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.693633Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=record_01a16181427c704d95b75a439afeaed9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.694184Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814b4e761c88f4d7c6d0a84b61 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.694726Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d50e70feb7ad7e33f32e2e04 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.695223Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814d0c727c872945d393ae0419 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.695686Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161812ffb732a8f2132e7f7181825 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.696226Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=record_01a1618186d971058a079d9045829458 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.696688Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16181430973cabf509c003ad30909 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.697251Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d7a1716a86c3a9c3d74d3899 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.697695Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a1618186f670debf33cd96f00e0b9b error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.698143Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d52574b2b45ff1cb10349306 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.698630Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181545373d78504b78de24cbfac error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.699021Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618148f9769e8b4447d432cee040 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.699489Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181543e7720bd0d3e8f161250b8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.699883Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814b947035a68b56de64a9ec90 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.700352Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180bd5e762e8e62f369af04d97b error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.700837Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618154247514980a29363d553953 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.701317Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181545c7175abc55928592397db error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.701718Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a1618186b972c5a333a2ee10a2f811 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.702159Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=event_01a16181494774bbb0f46d5045a39fc8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.702748Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a1618142bc7365a4ff832b8a1d662a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.703222Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814b7c7027b9d83b8b241d53ba error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.718723Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d78b71d89b03ba06dff33882 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.719325Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181870972ffae7902f993d92a7b error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.719792Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=record_01a16181430871aba6dc8e3d1d922ad5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.720333Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161815467766eb35bb73a9686eae6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.720841Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618142597034bb18ae30ae9ddf52 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.721432Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d7b8725fb03dee6e4f990a34 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.721971Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a161814288763b94aab22304016a5e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.722463Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181544170ac95f6c99f5216907a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.722966Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161811a0a757a8f2e68662380f739 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.723476Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181300977acaf42640619ee1601 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.724027Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618154807585800c5bf4cf0022a3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.724515Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181543877bd9b5bf2f58c587216 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.725047Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181306b75e8b682ba3e7146fbac error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.725494Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180c25b72fb95432a056ade6aa1 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.725987Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181423f73509d0587d57e172f11 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.726495Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618148f77601a4391e38d959668e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.727081Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181302270e799f532e517a495a4 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.727571Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a1618186cd72d8b50e1fa49f2e3f2c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.728072Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181429176c99e57b38adb0b10a0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.728567Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618153fc72908b5776dc2a9d8bd3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.729037Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a1618186f772c48739a80a7bbc8ff6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.729576Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180e1fb72aa9a882dc8de11328b error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.730064Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161814ccc770fb1be6a4065cd551e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.730519Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161811a0475a18032e7d4697ed233 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.731023Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618154357268ad2878fde7ae366e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.731479Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180b1c272ac9c50bfd47321e1bf error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.731942Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=record_01a161814d2a7021b70b09cb77b0fcd1 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.732375Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161811a947770994ce65a35703297 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.732859Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a16181872171228fff08ffa81acba3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.733361Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16181433c76db8a3738f080372ee9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.733849Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161812ff776d4a9b4800138c0ecee error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.734346Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180e1fd7129b2664126378ccfd1 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.734886Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181304f75238980f2c5a212ee63 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.735380Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618154377025993fe8fcc9cc12e2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.735839Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=record_01a161814345700bada9bfa91526a35e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.736348Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181304675b3b052f07f1b6b4813 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.736844Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180e49272dc872793ebfe5b22fd error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.737259Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a161815451748e8735d3b23a017fd0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.737723Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181511072c195456f6feeeea63d error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.738237Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181542b741db0134aff759389bf error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.738850Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180a90977ad8acee8d3c8b81c81 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.739329Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a1618186c5756c89ce99d81ddb8879 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.739796Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181305670989e35ff50cd63ba0e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.740279Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181302f7054ab765af4cd18a648 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.740790Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a1618186f670debf33cd938593bc9d error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.741331Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180b6a6741dbeace7380efdd127 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.741822Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16180d7a37641a031e64a011b730e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.742379Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=record_01a16180d80f71e29a13a214d6ec9314 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.742951Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181491070a8aea63ea7a1d4bcb8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.743427Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181545a719ba17161fd066a3599 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.743972Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a16181301b77dcaaa458fa5faa6f69 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.744536Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=item_01a1618130087142a63d286647651038 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.745064Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a1618186ee7136875988093e6741f4 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.745620Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=file_01a16180de3b721fac6f1a445aba618c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.746093Z  WARN fvoci_server::search: search delete failed event="search.delete_failed" error_code="internal" detail="search service connect"
+
+thread 'search_returns_only_what_each_person_can_see' (392280) panicked at crates/server/tests/search.rs:79:14:
+called `Result::unwrap()` on an `Err` value: Config("search indexing made no progress; will retry later")
+
+---- trashed_content_leaves_the_index_and_returns_on_restore stdout ----
+2026-10-22T02:47:20.961802Z  INFO fvoci_server::search: search index created; queued everything for indexing event="search.index_created" queued=927
+2026-10-22T02:47:21.011858Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86a9-766e-a616-e0186f3772cf method=POST route="/api/workspaces" status_code=201 duration_ms=10.812
+2026-10-22T02:47:21.030525Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86b4-7331-8cf3-66def82c7c8d method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=18.503
+2026-10-22T02:47:22.623341Z  WARN fvoci_server::search: search delete failed event="search.delete_failed" error_code="internal" detail="search service request"
+2026-10-22T02:47:22.650019Z  WARN fvoci_server::features::search_api: search service unavailable; using title search event="search.unavailable" error_code="internal" detail="search service request"
+2026-10-22T02:47:22.720917Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-8d0a-76d4-b5d8-c7891e670858 method=GET route="/api/search" status_code=200 duration_ms=86.863
+
+thread 'trashed_content_leaves_the_index_and_returns_on_restore' (392281) panicked at crates/server/tests/search.rs:105:14:
+called `Result::unwrap()` on an `Err` value: Config("search service connect")
+
+---- author_and_title_only_narrow_results_without_widening_access stdout ----
+2026-10-22T02:47:21.001086Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-8682-774f-a289-4e20d02f9414 method=POST route="/api/workspaces" status_code=201 duration_ms=38.109
+2026-10-22T02:47:21.017882Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86af-7594-8e18-426d06a060b0 method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=10.439
+2026-10-22T02:47:21.024032Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86b9-72c5-a333-a2f3736de128 method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=6.061
+2026-10-22T02:47:21.043662Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86c0-725b-985b-59ab4a65ddfa method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=19.467
+2026-10-22T02:47:21.066588Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86d3-704a-9aff-c0bea904f9f1 method=PUT route="/api/documents/{document_id}" status_code=200 duration_ms=22.694
+2026-10-22T02:47:21.076031Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86ea-7528-8a6d-71ff1b64ebda method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=9.272
+2026-10-22T02:47:21.085421Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86f4-7025-8fe4-010341be01da method=POST route="/api/me/notes" status_code=201 duration_ms=9.205
+2026-10-22T02:47:22.624492Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816d5f758bad6ee41e08d80599 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.625794Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816d447312bdb1f82526ae4eea error_code="internal" detail="search service request"
+2026-10-22T02:47:22.626725Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816d2a77aeb3671451137cf2bb error_code="internal" detail="search service request"
+2026-10-22T02:47:22.627701Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816d1374688e83426418a6e09c error_code="internal" detail="search service request"
+2026-10-22T02:47:22.628666Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816cfd769a95bf67dd36de87e3 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.629552Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816ce7772cba240177aa8ecd56 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.630628Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816cd07769aadb36e59680d2aa error_code="internal" detail="search service request"
+2026-10-22T02:47:22.631639Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816cba7734862f9362895b8848 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.632676Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816ca577e1a989329d583367c3 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.633833Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816c8e71e8a52f988d94bcbd12 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.634948Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816c7775c9b4c8927eb2d6b0d5 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.635951Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816c60758aa8702c087549e25b error_code="internal" detail="search service request"
+2026-10-22T02:47:22.637076Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816c4b74a18cdf0f18e607e5aa error_code="internal" detail="search service request"
+2026-10-22T02:47:22.638168Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816c1b720e818442183f838117 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.639139Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816c037410a94008d388f38677 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.640192Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816bec717bb7a217a8c8b8cc0a error_code="internal" detail="search service request"
+2026-10-22T02:47:22.641471Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816bd672a6b99993cb7913971f error_code="internal" detail="search service request"
+2026-10-22T02:47:22.642519Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816bc17110963615cfe282ab27 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.643563Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816baa71a7aa1c52e69315c870 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.644567Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816b9372f0b4336565a238f72e error_code="internal" detail="search service request"
+2026-10-22T02:47:22.645718Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816b7d717682dbf11c664697de error_code="internal" detail="search service request"
+2026-10-22T02:47:22.646840Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816b6674a09e4da8202d0e621b error_code="internal" detail="search service request"
+2026-10-22T02:47:22.647791Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816b50740ca017dee4caff0805 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.648895Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816b39765c8569c8ca46f95d1a error_code="internal" detail="search service request"
+2026-10-22T02:47:22.649913Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816b23725c93fea1f0ae184b2e error_code="internal" detail="search service request"
+2026-10-22T02:47:22.650963Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816b0d75e28ff9da98236d9cad error_code="internal" detail="search service request"
+2026-10-22T02:47:22.652155Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816af872db8eaa86cfb82a03c5 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.653151Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816ae1702cafc4f0c950724094 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.654196Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816acb727dbd1a8b2468f0c549 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.655474Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816ab673a29df37d362f57bca3 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.656409Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816a9f71b9abe8d5c0aa9d1a69 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.657286Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816a897695ab0448274eb5123a error_code="internal" detail="search service request"
+2026-10-22T02:47:22.658204Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816a7377f98f96342b26da9515 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.659395Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816a5d719cb1208db9e35e414c error_code="internal" detail="search service request"
+2026-10-22T02:47:22.660400Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816a4772beaba1df3509ac7d64 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.661471Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816a3174a0a03aa32dd42e457d error_code="internal" detail="search service request"
+2026-10-22T02:47:22.662500Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816a1b77108414e359ac6a6466 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.663506Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816a06746a9190f26d69eaf7a2 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.664413Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618169f0701fbced4033eb9e8334 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.665507Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618169da720e9991fe7a5b6956d1 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.666557Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618169c57581a68a34549be2fc7c error_code="internal" detail="search service request"
+2026-10-22T02:47:22.667538Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618169af70f1b081866c320c582c error_code="internal" detail="search service request"
+2026-10-22T02:47:22.668506Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181699877f6bc8e65337f2b4c42 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.669269Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181698170df98477c947d7affbb error_code="internal" detail="search service request"
+2026-10-22T02:47:22.669817Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181696b7051805aa1e1d70234fe error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.670280Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618169537135b4122304f3b1cb11 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.670830Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181693974d9ba1074722015dd41 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.671320Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181691f75a5858ef81f18dd99a7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.671834Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618169077699bb6f2b69dbbcccca error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.672350Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618168ee700d919cb35593f8a9f0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.672834Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618168d577e6b711b268f8bb6570 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.673343Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618168bc726ead32c63d3d7d9d0a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.673761Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618168a5778984ea38b68d7eb873 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.674294Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181688e775b9a0a4551feac32ba error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.674777Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618168787408b2fd334dc384a6b1 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.675269Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181686372248cdefc4fbc59c6bb error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.675780Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181684e730c9b41e722f3a84310 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.676254Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181683974539a4af24a566686c3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.676656Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816823752fbf658a62db1905fe error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.677165Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181680d7572bde72f52a53a4ca7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.677654Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618167f87433a9040288ce4916e0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.678083Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618167e37444b5b2b32fc986c641 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.678596Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618167cd7410831c9819830afab8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.679030Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618167b675048b7ed9f9ae1913e5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.679505Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181679f714097de17163445da82 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.679962Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816788778d9e3aa35dcc5c1e34 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.680563Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181677175d89b979e6df9074520 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.681168Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181675a73d6b40e98c556ec894c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.681718Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816742738a8e1464c79a1ee343 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.682195Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181672b7458b1b3483e669b825c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.682843Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181671572f1a44d7adb78f1365a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.683420Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618167007570b5f62db613ed1870 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.683918Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618166ea71b19e6be73b79aa163c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.684374Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618166d571c8bbe1529a57441b5f error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.684940Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618166bf779e933c22dae81eb2b6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.685414Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618166a9762b9bf10c29fa161d65 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.685894Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816693771fb7f30633dc64018b error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.686453Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181667d776fb3d288a1d2c6fe82 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.687098Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816668778a81e089ca1383f17d error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.687538Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181665277aab78ae2b8ca60052f error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.687936Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181663b70f0900996d612e4d06f error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.688409Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816622703db8e7616011bf6645 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.688835Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181660a70fe865639ee4f186865 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.689295Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618165f2715fbeb1c24ced7285be error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.689806Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618165db73368d010e01727fc229 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.690239Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618165c577488b8ee8cde8339b08 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.690813Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618165ae71fd89c477f6fbbe8a78 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.691277Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816598720f813c3d2772721500 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.691723Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816583770885bcb782a0b2f885 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.692100Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181656b76e8a68c1f1a79e7bfa9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.692575Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618165547206b3d77384e22f6b1c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.693042Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181653d73ba94784e0c044b5884 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.693504Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181652677639137132f0824cca8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.694030Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181650e719c8c7341e4f2431e7f error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.694475Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618164f774f6bc18b1becedab57b error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.694944Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618164e0736f94c753dc32559c43 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.695456Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618164c870d5934153acd0a1c83a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.695944Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618164af73b2a676153f274e6cfb error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.696478Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618164957454a8a3efa4ccce53e7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.696915Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181647b70f68eab2ae48b4d6b15 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.697356Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181646375c5b35c46416d3560d8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.697829Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181644b744d90c85a518088168a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.698358Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181643270cc8b319ba44ff79f1c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.698856Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181641975f2a5343345999bacd8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.699387Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181640171538cfae57a0fa01401 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.699840Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618163ea7423b63fcbd6ba63f08e error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.700322Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618163d2724c8e06785d68697144 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.700789Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618163bc7626b20bc70be922b6ea error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.701247Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618163a677fb9b22c59c9c5d1f15 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.701708Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181638f71b8b50bc24dcbe32300 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.702172Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816374734b975379311044d585 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.702738Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181635d77cbb2685526e49f9088 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.703237Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618163477393beb84cb36b3480ec error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.718733Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181633175b992adac3596243bcc error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.719344Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181631b73878a04401b63e2cb49 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.719867Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181630476c79839d717c4fb0311 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.720352Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618162ee7623a48c24773a0e0e81 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.720849Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618162d8772c83fdd4409df54298 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.721340Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618162c1714f9191a3f279cf919e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.721794Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618162a8704faf2371908dbc8d15 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.722328Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618162917188b486a9cdd06936ac error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.722818Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181627b713cbc64906accfc614f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.723323Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618162667326944045b394b539d8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.723777Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816250730a86ae98cdd35cc5b6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.724227Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816223779c984863b159ac1309 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.724679Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181620c7697bc72e6637542b890 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.725137Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618161f4760f821e54dd5590767d error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.725589Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618161db7482971aa5988f0eb4a8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.726004Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618161c370399798cb610729c9cd error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.726555Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618161aa77dfbf075edd34783da2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.727075Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181618f706f82bc8065e966fb61 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.727563Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618161747236bad2142b73c74288 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.728065Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618161557651a3dac8455498e65f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.728546Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181613476438e16f7c2ae177e1f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.729030Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181611974ffa621fba5175c53bb error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.729555Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618160fd75739834bf1cdac4bdff error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.730062Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618160e173639cb870b83fbf4042 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.730625Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618160c7715dae208b9949641d3c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.731121Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618160ad7670a68bc30bf984ac2f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.731617Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816095742c99015753833c3d77 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.732118Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181607c752bbda694f4d5714e36 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.732657Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618160647541bcb0a18760abc6e2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.733135Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181604d737991488e7f8708b0e4 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.733738Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618160347178b23ade1b2ee41170 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.734243Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181601e76a0b44774ee44f0da5d error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.734885Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816005752a92c0da103379c919 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.735353Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815fec76b4aeffe22137a8d17f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.735832Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815fd1760caf0959bf702bf552 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.736308Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815fb876de84a912a19d64e429 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.736804Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815f9f750b9add83f67fcb94a5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.737270Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815f8873d48d95735ec89ef9f6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.737743Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815f7071dbb84e5675798c8406 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.738245Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815f587065979568c0f8f5fec0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.738781Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815f41729582ce6b76ab98cac2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.739300Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815f2a7491a71d9f256d4aff01 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.739845Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815f1477eb8d49e9b7f7230232 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.740334Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815efc7331956efea8a23a99bc error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.740841Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815ee5746f90b69b044dd960c7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.741302Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815ecf71a1947acb1670332049 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.741806Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815eba72af828f7769cc7f866c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.742307Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815ea4759183da492538117d21 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.742755Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815e8f76b3a7a9133ffca80b26 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.743230Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815e7876d091fa30dca677bba7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.743747Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815e6170219797edbe5209908e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.744293Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815e4970fea1612c6b2106e277 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.744790Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815e3175f386829a856b9ac22e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.745281Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815e19733cbf3364a29d492160 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.745874Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815e01767d88af1f59e58dc18c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.746351Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815de670acb31604ffe22c41e0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.746895Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815dcb73dcb0a82db04d184cd9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.747392Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815db27441bd6b32320eb9f3a8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.747871Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815d9a708fa728e4dea6d79cb8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.748386Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815d827694ab32027ba6cbb8b4 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.748860Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815d67708fbaa25eade4e66ad7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.749358Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815d49727ab0405a49a7341d5f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.749814Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815d3074d28dc39cd92f189ad5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.750332Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815d1874788fd9ff56b76eec3f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.750882Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815d0277ddb5105ce4acdd4374 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.751358Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815ce97324ba978150a6f7d35a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.751901Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815cd175389066e3a602093fad error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.752382Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815cb7766a8cc0c13fe27ee0c9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.752825Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815c9d700a986593d3da0785a9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.753313Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815c8473429e0f4b58d635e22e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.753753Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815c6b71ae814b9e64f44298ef error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.754224Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815c50705d89bf0d5fdbe65935 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.754756Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815c33758ebe67962dfd12b1cf error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.755242Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815c16755b906c6769dcc1a7f0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.755701Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815bfa73f4ac99a05c33fb7dd7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.756183Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815bdf7108a32666d8a98a35c8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.756711Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815bc170c28c28955fcee64f01 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.757236Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815ba375a9b8cddedc56557215 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.757771Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815b857141b9c3127153677eef error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.758236Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815b667457bdd75238369fff10 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.758768Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815b3b733a9a81985a8200f745 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.759311Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815ae975e582d392cfdac60e2c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.759801Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815acc73a2a499598f4414c96c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.760283Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815ab173cc93c4dd68fba300e0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.760720Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815a97744ea96c0c99ab76dddd error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.761267Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815a7b76b8bd2932b6e61f08e0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.761748Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815a5f7565b753c72e5c8b7ae4 error_code="internal" detail="search service connect"
+
+thread 'author_and_title_only_narrow_results_without_widening_access' (392275) panicked at crates/server/tests/search.rs:79:14:
+called `Result::unwrap()` on an `Err` value: Config("search indexing made no progress; will retry later")
+
+---- item_records_are_searchable_by_people_who_see_the_item stdout ----
+2026-10-22T02:47:21.000163Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-8680-73e7-9f26-2719f47ed86b method=POST route="/api/workspaces" status_code=201 duration_ms=40.086
+2026-10-22T02:47:21.017522Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86ae-7432-bf39-2c5f8e211a89 method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=10.874
+2026-10-22T02:47:21.023763Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86b9-72c5-a333-a2f114cc7dc3 method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=6.125
+2026-10-22T02:47:21.033478Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86bf-7632-b22b-b7f1dd420e82 method=POST route="/api/workspaces/{workspace_id}/modules" status_code=201 duration_ms=9.605
+2026-10-22T02:47:21.044163Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86c9-732f-8896-74ed1db9edc8 method=POST route="/api/modules/{module_id}/items" status_code=201 duration_ms=10.577
+2026-10-22T02:47:21.054753Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86d4-7402-92c5-5c8cb85d91af method=POST route="/api/items/{item_id}/records" status_code=201 duration_ms=10.465
+2026-10-22T02:47:22.624492Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815a44770f937c219a96112400 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.625528Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815a2775279a42e42ff159e973 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.626567Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815a0c72d59e0f364581418c31 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.627678Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618159f07605bf723f48bdaaabdd error_code="internal" detail="search service request"
+2026-10-22T02:47:22.628602Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618159d476608e7e568c725e3e56 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.629614Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618159b77123b14c4cef1cafeb78 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.630625Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618159997567a41859fdff53977c error_code="internal" detail="search service request"
+2026-10-22T02:47:22.631736Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181597a701292b130892481105f error_code="internal" detail="search service request"
+2026-10-22T02:47:22.632836Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181595b75488b6fa9783b310728 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.633823Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815939775d8f67fa09e89cd9a8 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.635019Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181591870cea125c7b73fc956fe error_code="internal" detail="search service request"
+2026-10-22T02:47:22.636000Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618158fc74239f2e43eb573d47b3 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.637035Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618158df72c2926ad40b5568f163 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.637995Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618158c576c3a9f530cfba8cf2af error_code="internal" detail="search service request"
+2026-10-22T02:47:22.639040Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618158aa714db124d2f6861ce0d6 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.640056Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181588d71cd80516ccacd894549 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.641467Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815873706398fe81c48dc6f708 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.642465Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181585a7098ab4109df6a48b539 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.643723Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618158407454b0c280e92bb06c4d error_code="internal" detail="search service request"
+2026-10-22T02:47:22.644792Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618158257384b8c5b9274d94dd3a error_code="internal" detail="search service request"
+2026-10-22T02:47:22.645840Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181580974c6adfe7a47da078920 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.647010Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618157ed76e1aa01da29fdf1a4ea error_code="internal" detail="search service request"
+2026-10-22T02:47:22.648285Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618157cf74eeb3c74a0f5efea7ab error_code="internal" detail="search service request"
+2026-10-22T02:47:22.649233Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618183b577dab04e404a4116e206 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.650316Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181803a76d1b42b89212831809b error_code="internal" detail="search service request"
+2026-10-22T02:47:22.651339Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618180227484b97cb748e2089680 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.652330Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181800776b588260fde4d332bc2 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.653413Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817fed7618bacc6206b2901f2d error_code="internal" detail="search service request"
+2026-10-22T02:47:22.654622Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817fd4713690c4bedd90bccf03 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.655700Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817fb973eebb4203becc961bee error_code="internal" detail="search service request"
+2026-10-22T02:47:22.656633Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817f9c72ac9de714dd5e1310e6 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.657519Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817f80750f959d786ed2ec2ddc error_code="internal" detail="search service request"
+2026-10-22T02:47:22.658442Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817f6377b4b9c9fa900d7c1ed2 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.659422Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817f4476deb769f986127bf1a8 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.660453Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817f277702a785bb984e21323a error_code="internal" detail="search service request"
+2026-10-22T02:47:22.661517Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817f0b77dcbd049f26b1a71f03 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.662444Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817ef1716eb153105d47cebd0a error_code="internal" detail="search service request"
+2026-10-22T02:47:22.663466Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181564476fe888f6b8be9a292f1 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.664537Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815639709fb6cf0e64f31d877b error_code="internal" detail="search service request"
+2026-10-22T02:47:22.665383Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181561c732f8d87bb058772dd48 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.666435Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181561275488057e04f350ccedf error_code="internal" detail="search service request"
+2026-10-22T02:47:22.667371Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618155da775b891753ba83de7640 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.668440Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618155af746c9297deee52550e27 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.669272Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618155a571b9899f6de54f6a6472 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.669763Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181556c74fe870102f5c8717974 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.670327Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181555376a8bfde0d465d234c31 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.670836Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181543f7024abf104964fff685e error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.671313Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181547f714e9bdcc886e24e36e4 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.671850Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181546474f692690c3e3ebcb9f3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.672361Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154bd71998754ff0a420dc84e error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.672817Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154c875069b0e5403680f0e5c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.673311Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154ad7589b7bea125249ccaf9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.673783Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154d67194ac28d6eb927e7077 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.674298Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154bb773da95510ec92702d81 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.674792Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618155d0723495118654a951b157 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.675304Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154c1749c8778b5102210d46b error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.675791Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154b473c781f5700a822df05f error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.676247Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181545373d78504b7894a6b9c46 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.676728Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154a07490a57dc85a5d2f8cfc error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.677203Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181547a7201a62fa311d7832b5e error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.677701Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815493753da90d3a9d2d893f74 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.678234Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181549f749ba810e501ccdb6e51 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.678768Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181543e7720bd0d3e8b471ab9ed error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.679270Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181545373d78504b78b229250e3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.679725Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154a870af93903efb0bcce15b error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.680243Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154997151bd3617dde4d1ad29 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.680756Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181549573868adc294caa15e90e error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.681246Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181547970e68f14008625937038 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.681774Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181547a7201a62fa30f101d426f error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.682288Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154887442803f6502fbe82000 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.682872Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618154787393bb43340a41b9e7b0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.683443Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181546e72cbab9ec718327fda3a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.683911Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181546e72cbab9ec71673549de3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.684374Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181547b72389a4892284387709c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.684859Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181545b72de8e07aa9249f613bd error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.685373Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181546376c6872df2d11692e122 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.685898Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815452738daf2b942fc45d132c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.686453Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815468726aa4f27ab1332ebbf0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.687035Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815446700d94161503130009c7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.687471Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815451748e8735d3b6d23e7c66 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.687968Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815451748e8735d3b413ada523 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.688415Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181543f7024abf1049848449df9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.688859Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161815415727a8adb9be5c20936c5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.689301Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181543177abbe84c23ac032bb4d error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.689796Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181541b726eba9001aa169c5970 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.690295Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149cd77b19f8fe1210af119be error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.690802Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb568cd7fdce error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.691263Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb53232f6d6b error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.691722Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb50f968c0f1 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.692173Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb4da5f6207b error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.692606Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb4a4ebc1f40 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.693117Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb47ba985d21 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.693610Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb441f3771fd error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.694083Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb414ebe8434 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.694683Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb3ec10422f9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.695195Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb3b31d662a0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.695696Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb38d8611fe3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.696197Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb35acd8c765 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.696597Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb327ed35745 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.697029Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb2f0166af43 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.697497Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb2c37e4811d error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.697936Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb290ac4738f error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.698466Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb26d9e12974 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.698903Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb230ddf4b22 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.699367Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb20b21bd737 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.699886Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb1dd789f0a6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.700346Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb1acce17d1f error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.700849Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb17c11fb6b6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.701282Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb14cd0d3c19 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.701716Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb11d12e841e error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.702166Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb0e97e81277 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.702701Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb0b309f8c2e error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.703190Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181492a73b2950bc7ffd1323b40 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.718763Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181498b719384f0823f0140aa69 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.719364Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181498b719384f082483b4c7e64 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.719894Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181498b719384f0824590c2b20c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.720432Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181498b719384f08242f25287a2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.720953Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146585a886dcb84 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.721383Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146585716de1bc5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.721897Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b721481465854512c973a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.722390Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146585136c916d1 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.722923Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146584e55daaa61 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.723405Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146584b6978487a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.723901Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814658484ae65f6b error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.724536Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146584545ef033a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.725054Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814658422c83e4ff error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.725528Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146583f478d9aad error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.726047Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146583c9fffc669 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.726560Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b721481465839f5334438 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.727083Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149b575cead4eec32568c2acc error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.727565Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496a7546b0ceb40131371383 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.728071Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814658363aff3987 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.728579Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814658330043144d error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.729046Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814658305194c9f1 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.729515Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146582d343f3cb2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.730216Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146582abad72a2f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.730952Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814658276b0b56a4 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.731455Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b721481465824b5e1de06 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.731933Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146582172917961 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.732375Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146581e156f9e51 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.732802Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146581b07d0c8a3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.733325Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b721481465818ad70caaf error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.733869Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b721481465815224062bc error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.734361Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b721481465812d33b243a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.734892Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146580f868893a3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.735416Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b72148146580c87167a6b error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.735901Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b721481465809c34a5eb2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.736438Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b721481465806a1e16e43 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.736931Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814658038cc06828 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.737477Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b721481465800d73891e5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.737983Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657fdc5d51b15 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.738479Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657fa95d00305 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.738930Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657f7caa5df5a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.739409Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657f42b44b8d9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.739892Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657f15a543a5f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.740358Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657ee1cdad1b7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.740814Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657eb07e25c5f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.741294Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657e8af7d00cb error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.741726Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657e55c364987 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.742229Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657e2e088cbd1 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.742720Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657df9fe8e637 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.743309Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657dc9c960503 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.743776Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657d9de284548 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.744285Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657d64236018b error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.744781Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181496b7214814657d3b7f8d2dd error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.745384Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618149ae76889d1bdb085b5050f8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.745921Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161811ac47226ba9aaab931b047d1 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.746347Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161811ac47226ba9aaab389a8b67a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.746848Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161811ac47226ba9aaab197c8757a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.747337Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618119f1771a9d1a8ff2cf7d332a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.747799Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161811a947770994ce664686d8eb3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.748391Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161811a947770994ce65e059f9d50 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.748827Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161811a947770994ce65cde0df02b error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.749223Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161811a3b7065958811eaa9fceaa2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.749696Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161811a1a732c884ff69a372262fa error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.750140Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161811a3373b0b4c13d2ca2c4c447 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.750676Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161811a2976c087ec59c7ee047d6f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.751138Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618118f17459a8e256943632a204 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.751630Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181176671f39b00514595416624 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.752297Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618117517032816994ad874a2850 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.752824Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181173b74128b08063ee949fb61 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.753293Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181172571b980f9766b5d5cb63c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.753749Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161811710774da2e46b2a62ea66d3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.754246Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618116f97719859b9aa95744cce8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.754760Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618116d7736990ba3c10eea361a1 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.755261Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16180d7a874c39ce421120a1e3d78 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.755755Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16180d418761a863ead5aac4900be error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.756229Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16180d3fd7061b4365d3beeac04c6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.756719Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a16181863c70afb332981ff492bcdc error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.757215Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a16181443e74c7986c26511c82520d error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.757700Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a16181431373b3b6ad5aa6238f1f33 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.758182Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a16181428a74c29445009ee92066cd error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.758711Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a161813b8971f8aa78e906a572c395 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.759196Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a161813b8e75a6aeb2e77a87de35c1 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.759652Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a16181361074b784a945a41524d74d error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.760112Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a16181303a76899f992b24c453512b error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.760639Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a1618130b8765ca93bc54b10c64c4f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.761174Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a1618130a976c79e36c6ee0e146803 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.761661Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a1618130a273b69d161ae31067a455 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.762183Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=document_01a16181309977a192aaddc46c291034 error_code="internal" detail="search service connect"
+
+thread 'item_records_are_searchable_by_people_who_see_the_item' (392278) panicked at crates/server/tests/search.rs:79:14:
+called `Result::unwrap()` on an `Err` value: Config("search indexing made no progress; will retry later")
+
+---- file_names_are_searchable_by_people_who_can_see_the_file stdout ----
+2026-10-22T02:47:21.003197Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-8684-7677-93b2-5b3939dc2f53 method=POST route="/api/workspaces" status_code=201 duration_ms=38.906
+2026-10-22T02:47:21.030604Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86b1-766b-9a6b-d45e3c6c6f29 method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=21.466
+2026-10-22T02:47:21.049719Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86c6-7131-ad36-5651fc1142c8 method=POST route="/api/uploads" status_code=201 duration_ms=18.982
+2026-10-22T02:47:21.062126Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86d9-7105-8a07-9d92b94c2533 method=PUT route="/api/uploads/{upload_id}/parts/{number}" status_code=204 duration_ms=12.258
+2026-10-22T02:47:21.090853Z  INFO fvoci_server::http: request event="http.request" request_id=01a16181-86e6-7621-83f2-f7aa48269b1c method=POST route="/api/uploads/{upload_id}/complete" status_code=200 duration_ms=28.506
+2026-10-22T02:47:22.624496Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618180f0735ca2a2a2a4ff9e7e74 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.625727Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618180d971c4adfc4d506e8efd6a error_code="internal" detail="search service request"
+2026-10-22T02:47:22.626727Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618180c2774aac646476f3937d25 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.627707Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618180ab700c8eb2910a92cfe94f error_code="internal" detail="search service request"
+2026-10-22T02:47:22.628826Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618180957183b8080a483f9277bc error_code="internal" detail="search service request"
+2026-10-22T02:47:22.629749Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181807f703e9a21c9af737dd216 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.630809Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618180687729b6772409b7df4bd8 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.631750Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181805177af9eaad91d9df5a2fd error_code="internal" detail="search service request"
+2026-10-22T02:47:22.632869Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817ed772558a058ea28956e838 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.633871Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817ebd7584b2c1a423ba214be2 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.634993Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817ea3752fb8fb8b778a840896 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.635989Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817e897087b66b77575301d686 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.637084Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817e6c739db558a039617130fd error_code="internal" detail="search service request"
+2026-10-22T02:47:22.638177Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817e4f715cb4585ff62ec721df error_code="internal" detail="search service request"
+2026-10-22T02:47:22.639069Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817e3171a6bec2435da99393f2 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.640186Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817e15717a9d35b82a7d52e70c error_code="internal" detail="search service request"
+2026-10-22T02:47:22.641326Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817dfb7619b38f856ab9a8b837 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.642500Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817de275139f4649eac94d7562 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.643647Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817dc87315b6fd74ca42647ea2 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.644779Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817daf704594586fa6e2e37d0d error_code="internal" detail="search service request"
+2026-10-22T02:47:22.645723Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817d9671f0a98dd0ee947413fd error_code="internal" detail="search service request"
+2026-10-22T02:47:22.646822Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817d7e72d5af43d152ab67a2c7 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.647896Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817d65774aa64752bf87f88791 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.648867Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817d4c72e081877c612e9ba678 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.650006Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817d317487bdd019f78ed64676 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.651079Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817d1771408bd859e8d09706b0 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.652051Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817cfd77babfd857765f2e4bda error_code="internal" detail="search service request"
+2026-10-22T02:47:22.653084Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817ce57269ace8d3c6392e7387 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.654334Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817ccd771e8159a62eced0805e error_code="internal" detail="search service request"
+2026-10-22T02:47:22.655319Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817cb7761a8aa8ff39d696dabb error_code="internal" detail="search service request"
+2026-10-22T02:47:22.656183Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817ca0766e818622ea7235758c error_code="internal" detail="search service request"
+2026-10-22T02:47:22.657238Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817c89745eb551966afd1b8741 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.658240Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817c7272219654b3f942d26c93 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.659387Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817c59745384db134db4f65a3f error_code="internal" detail="search service request"
+2026-10-22T02:47:22.660447Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817c4177fb86f4dc7ef4ccc4bb error_code="internal" detail="search service request"
+2026-10-22T02:47:22.661517Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817c287005891fde1ca1f19fff error_code="internal" detail="search service request"
+2026-10-22T02:47:22.662468Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817c1077618f8d4fc5eda94628 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.663512Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817bf97440bdf9b16ed53e37f9 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.664419Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817be47392837b47c37a9b130c error_code="internal" detail="search service request"
+2026-10-22T02:47:22.665476Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817bcd702cbe0e19094d4d6508 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.666402Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817bb67595b0d2c16c4458ca2e error_code="internal" detail="search service request"
+2026-10-22T02:47:22.667503Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817ba0722b8711d39b7a00c112 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.668480Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817b8a72a78378a20e6147c1f2 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.669206Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817b757273a362b6e75391e974 error_code="internal" detail="search service request"
+2026-10-22T02:47:22.669773Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817b5e744992257c120a68b981 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.670229Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817b47758bb6b0294ff881897e error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.670824Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817b2f77cfb49d16a872ceae47 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.671347Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817b197287b9b96d30b94317a2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.671851Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817b03773089a953dc8b69948e error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.672376Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817aea74f4ad5b88505ab681bb error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.672883Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817ad276fb8789ebe30b5c72ba error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.673318Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817aba77e2af8de0470d863682 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.673836Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817aa273d2a5fdc50ee56422e8 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.674391Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817a8a76628ac8c00d18d6361a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.674861Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817a757182836bb26472e38590 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.675287Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817a5e7281b9fd648eebdb661a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.675836Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817a497269b2c28da9db72a0e6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.676479Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817a33725a90fa3e86fa4c4b60 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.676917Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817a1d73f2b6b3e8e2c3c15f3f error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.677429Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817a077408bfaf34533d3bd3e9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.677898Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618179f2776aa145ffb674a94120 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.678403Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618179dd72968f9247a2aadbd6e9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.678911Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618179c67028b873cfdb8bf83bf2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.679370Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618179b173a9910d0556dc5b530a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.679910Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181799c7500bee5575e66966ce5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.680373Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817985778085d55442d722061a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.680813Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181796f72bcb850c4e9fb02db89 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.681291Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181795974fbb62f294aa87f592b error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.681781Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817942752882e10867c1a57094 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.682340Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181792872bfa65f026c4401fe27 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.682858Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181790d7634857c934f93f82ca7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.683470Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618178f5752b80b74018baa7c9cf error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.683975Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618178df70c195e2cbacfa260f85 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.684409Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618178c87567823673a0c2dec0a2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.684909Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618178b274c39d47f0d86000eabb error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.685400Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181789b722da21f2e807d0415f7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.685867Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181788572028df2bba29f93ad37 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.686880Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817870774bb37d7a91ca24c9bf error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.687353Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817858776db4bdf9d4a30c16c4 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.687846Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181784073f49737deb2fd98c094 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.688291Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181782772a0a8e7dff5a5fae490 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.688786Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181780f76f7bba15c4ec80172fa error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.689285Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618177f870a09e1d701390cb3d9a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.689792Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618177e071cf91c99bfcd514282c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.690299Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618177ca73f392ecaa7852554e8a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.690786Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618177b377878f41a0a15336d154 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.691260Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181779c7595a6990619f20366c0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.691697Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618177857096b75d84a59a9ab207 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.692183Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181776f764985ba7811150c7873 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.692635Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618177597750944514944a98817e error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.693117Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181774277bca846c25dc1d08c9a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.693626Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181772b70f391319d33590db29d error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.694083Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817715758b99df7d4e7c3c817a error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.694683Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618176ff7196b8ba3ab67fbb6ab9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.695228Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618176e9700c91729c8f7f3999c2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.695789Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618176d375f7b4419ea11c77d492 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.696234Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618176be721e90b35a6ff34a55ec error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.696665Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618176a8768ea80411ea282cc8e3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.697115Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181769272edb01e26d59869be91 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.697607Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181767b70e380c667e36b667415 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.698083Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618176657773b9fcc2c5c85a1b81 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.698523Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181764c735a821c57d6fc040df6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.698962Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618176187530bdd7954ad3a980e2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.699472Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181760171f1ae8ba78a75026518 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.699938Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618175ec7102aba68e43b8ff308c error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.700413Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618175d674baa4afdbb4188c3504 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.700854Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618175c1778b89964b7c9166c0ae error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.701252Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618175ab7770a41f082c47029e51 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.701750Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817595777b836a5d6c103fd4a5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.702188Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181757f770ca03c62e535176fc0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.702793Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618175697174af8a22b3743d1794 error_code="internal" detail="search service connect"
+2026-10-22T02:47:22.703237Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618175517713918000230eb8343e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.718723Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181753872edbc0435ac56d3b6c2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.719349Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181752276c9944d2e17a9f81231 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.719876Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181750b724f9ae5fa32aa1fd9f5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.720429Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618174f577eb9c5668a0dd2e2a31 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.720933Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618174df702a81ee48ad81f16305 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.721481Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618174c87719bed5ea4655135e87 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.722002Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618174b1773286f03287d66a8c85 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.722466Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181749c773397a955ce223daa1b error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.722971Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618174867307b000c820ff50cac0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.723433Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181746e77a38cfd1c28b73e5261 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.723901Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181745876a39aeb43c1b0571f72 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.724544Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618174407280b6cf8ccb023975b3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.725066Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181742875b388effe1dece5f62f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.725584Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181741077e2886a808f6fcd6f9e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.726011Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618173f87765b8a7d423bae00a07 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.726536Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618173e277cbad68cb6e271b3fed error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.727035Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618173cc72eeab2393f2271320d3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.727564Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618173b77560b83ed6583d8b465e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.728071Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618173a176d2916dfd2435cb8f89 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.728519Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181738b7662ae99fc3fb5ee0db7 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.729013Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618173757339a71c4387cff8536c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.729515Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181735f750db5718d87de643ec2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.730153Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181734977dcba4f2e93483ebb1e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.730689Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181733476f5bab9bb8f7dc0c5b6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.731182Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181731e74e5931ce01af4a96134 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.731735Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181730875349506ca6aa3100250 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.732223Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618172f374f397b4e2cdc147f507 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.732724Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618172dc75869144ac820cd1a67c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.733225Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618172c7767f8bac4ebec6fd9bed error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.733827Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618172b170779877dcfe5cbb861c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.734416Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181729a7203a618f259a24f467a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.734948Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817283732b858781eee0949c08 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.735410Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181726d74d2a3be708d3729b8dc error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.735922Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817257755d8e6cf06a71061405 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.736437Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817241712994a8ab8d304a1bc3 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.736980Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181722b7655b00b35a55a9aa7a6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.737520Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817213713fba165c0123fc8332 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.738030Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618171fb7778a4c6939fef48a330 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.738523Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618171e47370a64243c0191d7085 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.738979Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618171cb70dc8b44db8cf06a34bc error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.739478Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618171b275dd98efc236924ed322 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.739959Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181719975cd925cf10cccf4421c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.740415Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181718271f29aff91187e2b0454 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.740906Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817168771eb0ec5357eebda567 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.741337Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181715072cc9ea7d4e8e5e9f95c error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.741813Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817136749db4b59a6ce0f7065d error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.742360Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181711b77099968f2c0d9623692 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.742871Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817103706db0caaddab6604493 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.743284Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618170ea746db23c17b68d8896c2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.743775Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618170d075fd8eefe2aa48bcd4eb error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.744273Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618170b877e3bb3aa32e8c73b33d error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.744750Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618170a272fd9f8acdf9d43b0840 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.745229Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181708c7547b707be91cab86ae2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.745662Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618170757220b9553ae9cb09a44f error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.746149Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a16181705e729ebf3626a78a117a01 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.746741Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a1618170477659ad39cf248bae48ca error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.747201Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817031753a82aaca8a45de6035 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.747684Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817019744e9c3e8381bb55c268 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.748148Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161817000752094cec606f74479b0 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.748707Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816fe9716caf7f10b432c38c60 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.749200Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816fd37546a2087c3f13caa3b2 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.749626Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816fbd77cc8f779fadc7e52321 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.750085Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816fa777b7906d2ed8d3acc6da error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.750528Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816f91727f99309b2e56ff3bb5 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.750966Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816f7b763491cbc431a95038be error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.751555Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816f65725eb6183474e7d3242b error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.752048Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816f5077d3ba3ff997c2e4e50e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.752503Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816f3a75829e155b275eb90bc9 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.753048Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816f2472ee87abbdd48c6873fa error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.753563Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816f0e74848d3ec0a7bba4199e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.754072Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816ef873c7bf21f74f084e9b9e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.754657Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816ee277318fa40aa2761ae896 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.755188Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816ecd73d1b005b5ad11220a41 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.755745Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816eb7747488cecf0ba791ae8d error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.756275Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816ea175b59bfd0570103cdfc4 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.756770Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816e8b72c0b0c11d9372759439 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.757247Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816e7574e98175f6c982bb3440 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.757745Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816e5f752ab7dfd6325c00da16 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.758193Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816e487070aa8efa9c1a84e941 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.758704Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816e3173c38986b6ef7b799ad4 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.759187Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816e187453a1ba8a133485d238 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.759626Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816e027299bd2484a1b3975a79 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.760139Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816deb72018d912b009878031b error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.760651Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816dd475de8048d6c2c9db784e error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.761180Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816dbe72d59c4caf974451430a error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.761692Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816da676ecb2e1a6ec5eb49136 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.762185Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816d907450b80e0c22c81f5aa6 error_code="internal" detail="search service connect"
+2026-10-22T02:47:23.762691Z  WARN fvoci_server::search: search upsert failed event="search.upsert_failed" uid=task_01a161816d787788a9d3668353b298f5 error_code="internal" detail="search service connect"
+
+thread 'file_names_are_searchable_by_people_who_can_see_the_file' (392276) panicked at crates/server/tests/search.rs:79:14:
+called `Result::unwrap()` on an `Err` value: Config("search indexing made no progress; will retry later")
+
+
+failures:
+    author_and_title_only_narrow_results_without_widening_access
+    file_names_are_searchable_by_people_who_can_see_the_file
+    filters_narrow_results_and_attachment_text_is_searchable
+    item_records_are_searchable_by_people_who_see_the_item
+    search_returns_only_what_each_person_can_see
+    trashed_content_leaves_the_index_and_returns_on_restore
+
+test result: FAILED. 2 passed; 6 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.44s
+
+error: test failed, to rerun pass `-p fvoci-server --test search`
+==> compose down
+$ docker compose --project-name fvoci-w7-pr65-32a136-test --file deploy/compose.test.yaml --profile oidc down --volumes --remove-orphans
+ Container fvoci-w7-pr65-32a136-test-keycloak-1 Stopping 
+ Container fvoci-w7-pr65-32a136-test-postgres-1 Stopping 
+ Container fvoci-w7-pr65-32a136-test-meilisearch-1 Stopping 
+ Container fvoci-w7-pr65-32a136-test-seaweedfs-1 Stopping 
+ Container fvoci-w7-pr65-32a136-test-meilisearch-1 Stopped 
+ Container fvoci-w7-pr65-32a136-test-meilisearch-1 Removing 
+ Container fvoci-w7-pr65-32a136-test-meilisearch-1 Removed 
+ Container fvoci-w7-pr65-32a136-test-postgres-1 Stopped 
+ Container fvoci-w7-pr65-32a136-test-postgres-1 Removing 
+ Container fvoci-w7-pr65-32a136-test-postgres-1 Removed 
+ Container fvoci-w7-pr65-32a136-test-keycloak-1 Stopped 
+ Container fvoci-w7-pr65-32a136-test-keycloak-1 Removing 
+ Container fvoci-w7-pr65-32a136-test-keycloak-1 Removed 
+ Container fvoci-w7-pr65-32a136-test-seaweedfs-1 Stopped 
+ Container fvoci-w7-pr65-32a136-test-seaweedfs-1 Removing 
+ Container fvoci-w7-pr65-32a136-test-seaweedfs-1 Removed 
+ Network fvoci-w7-pr65-32a136-test_default Removing 
+ Network fvoci-w7-pr65-32a136-test_default Removed 
+Error: command exited with non-zero code `cargo test --workspace --locked -- --skip supabase_`: 101

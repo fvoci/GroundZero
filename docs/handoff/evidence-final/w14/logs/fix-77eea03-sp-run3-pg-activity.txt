@@ -1,0 +1,3696 @@
+Thu 22 Oct 2026 06:08:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:03.389 2 0 0 0 0 2 0 0 0
+Thu 22 Oct 2026 06:08:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:03.637 2 0 0 0 0 2 0 0 0
+Thu 22 Oct 2026 06:08:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:03.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:04.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:04.387 2 0 0 0 0 2 0 0 0
+Thu 22 Oct 2026 06:08:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:04.637 2 0 0 0 0 2 0 0 0
+Thu 22 Oct 2026 06:08:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:04.887 2 0 0 0 0 2 0 0 0
+Thu 22 Oct 2026 06:08:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:05.137 2 0 0 0 0 2 0 0 0
+Thu 22 Oct 2026 06:08:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:05.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:05.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:05.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:06.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:06.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:06.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:06.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:07.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:07.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:07.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:07.887 10 0 0 0 0 10 0 0 0
+Thu 22 Oct 2026 06:08:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:08.137 10 0 0 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:08.387 10 0 0 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:08.637 10 0 0 0 0 10 0 0 0
+Thu 22 Oct 2026 06:08:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:08.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:09.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:09.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:09.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:09.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:10.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:10.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:10.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:10.887 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:11.137 11 0 0 1 1 9 0 0 0
+Thu 22 Oct 2026 06:08:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:11.387 11 0 0 1 1 9 0 0 0
+Thu 22 Oct 2026 06:08:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:11.637 13 2 2 1 1 9 0 0 0
+Thu 22 Oct 2026 06:08:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:11.887 13 2 2 1 1 9 0 0 0
+Thu 22 Oct 2026 06:08:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:12.137 13 2 2 1 1 9 0 0 0
+Thu 22 Oct 2026 06:08:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:12.387 12 2 2 0 1 9 0 0 0
+Thu 22 Oct 2026 06:08:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:12.637 13 2 2 0 2 9 0 0 0
+Thu 22 Oct 2026 06:08:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:12.887 13 3 3 0 1 9 0 0 0
+Thu 22 Oct 2026 06:08:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:13.137 16 7 7 0 0 9 2 2 0
+Thu 22 Oct 2026 06:08:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:13.387 17 8 8 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:13.637 19 8 8 1 1 9 1 0 1
+Thu 22 Oct 2026 06:08:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:13.887 21 8 8 2 2 9 3 0 2
+Thu 22 Oct 2026 06:08:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:14.137 21 8 8 2 2 9 2 0 2
+Thu 22 Oct 2026 06:08:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:14.387 20 7 7 2 2 9 2 0 2
+Thu 22 Oct 2026 06:08:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:14.637 21 8 8 2 2 9 2 0 2
+Thu 22 Oct 2026 06:08:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:14.887 21 8 8 2 2 9 3 0 2
+Thu 22 Oct 2026 06:08:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:15.137 21 8 8 2 2 9 2 0 2
+Thu 22 Oct 2026 06:08:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:15.387 21 8 8 2 2 9 2 0 2
+Thu 22 Oct 2026 06:08:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:15.637 21 8 8 2 2 9 2 0 2
+Thu 22 Oct 2026 06:08:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:15.887 21 8 8 2 2 9 2 0 2
+Thu 22 Oct 2026 06:08:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:16.137 21 8 8 2 2 9 2 0 2
+Thu 22 Oct 2026 06:08:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:16.387 21 8 8 2 2 9 3 0 2
+Thu 22 Oct 2026 06:08:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:16.637 21 8 8 2 2 9 3 0 2
+Thu 22 Oct 2026 06:08:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:16.887 22 8 8 3 2 9 3 0 3
+Thu 22 Oct 2026 06:08:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:17.137 22 8 8 3 2 9 3 0 3
+Thu 22 Oct 2026 06:08:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:17.387 22 8 8 3 2 9 3 0 3
+Thu 22 Oct 2026 06:08:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:17.637 22 8 8 3 2 9 3 0 3
+Thu 22 Oct 2026 06:08:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:17.887 22 8 8 3 2 9 3 0 3
+Thu 22 Oct 2026 06:08:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:18.137 25 8 8 5 3 9 3 0 3
+Thu 22 Oct 2026 06:08:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:18.387 25 8 8 5 3 9 3 0 3
+Thu 22 Oct 2026 06:08:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:18.637 21 6 6 4 2 9 2 0 2
+Thu 22 Oct 2026 06:08:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:18.887 22 8 8 4 1 9 2 0 2
+Thu 22 Oct 2026 06:08:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:19.137 23 8 8 5 1 9 2 0 2
+Thu 22 Oct 2026 06:08:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:19.387 23 8 8 5 1 9 2 0 2
+Thu 22 Oct 2026 06:08:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:19.637 23 8 8 5 1 9 2 0 2
+Thu 22 Oct 2026 06:08:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:19.887 23 8 8 5 1 9 2 0 2
+Thu 22 Oct 2026 06:08:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:20.137 23 8 8 5 1 9 2 0 2
+Thu 22 Oct 2026 06:08:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:20.387 23 8 8 5 1 9 2 0 2
+Thu 22 Oct 2026 06:08:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:20.637 23 8 8 5 1 9 2 0 2
+Thu 22 Oct 2026 06:08:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:20.887 23 8 8 5 1 9 2 0 2
+Thu 22 Oct 2026 06:08:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:21.137 23 9 9 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:21.388 23 9 9 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:21.637 23 9 9 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:21.887 23 9 9 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:22.137 24 10 10 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:22.387 24 10 10 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:22.637 24 10 10 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:22.887 24 10 10 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:23.137 24 10 10 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:23.387 24 10 10 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:23.637 24 10 10 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:23.887 24 10 10 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:24.137 21 9 9 3 0 9 2 0 2
+Thu 22 Oct 2026 06:08:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:24.387 21 9 9 3 0 9 3 0 2
+Thu 22 Oct 2026 06:08:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:24.637 19 7 7 3 0 9 2 0 2
+Thu 22 Oct 2026 06:08:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:24.887 22 9 9 4 0 9 2 0 2
+Thu 22 Oct 2026 06:08:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:25.137 22 9 9 4 0 9 2 0 2
+Thu 22 Oct 2026 06:08:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:25.387 24 11 11 4 0 9 2 0 2
+Thu 22 Oct 2026 06:08:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:25.637 20 8 8 3 0 9 2 1 2
+Thu 22 Oct 2026 06:08:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:25.887 20 8 8 3 0 9 3 0 3
+Thu 22 Oct 2026 06:08:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:26.137 21 8 8 4 0 9 3 0 3
+Thu 22 Oct 2026 06:08:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:26.387 21 8 8 4 0 9 3 0 3
+Thu 22 Oct 2026 06:08:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:26.637 21 8 8 4 0 9 3 0 3
+Thu 22 Oct 2026 06:08:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:26.887 21 8 8 4 0 9 2 0 2
+Thu 22 Oct 2026 06:08:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:27.137 21 8 8 4 0 9 2 0 2
+Thu 22 Oct 2026 06:08:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:27.387 21 8 8 4 0 9 2 0 2
+Thu 22 Oct 2026 06:08:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:27.637 21 8 8 4 0 9 2 0 2
+Thu 22 Oct 2026 06:08:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:27.887 21 8 8 4 0 9 2 0 2
+Thu 22 Oct 2026 06:08:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:28.137 21 8 8 4 0 9 2 0 2
+Thu 22 Oct 2026 06:08:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:28.387 21 8 8 4 0 9 2 0 2
+Thu 22 Oct 2026 06:08:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:28.637 21 8 8 4 0 9 2 1 2
+Thu 22 Oct 2026 06:08:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:28.887 20 8 8 3 0 9 1 1 1
+Thu 22 Oct 2026 06:08:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:29.137 22 9 9 4 0 9 2 0 2
+Thu 22 Oct 2026 06:08:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:29.387 22 9 9 4 0 9 1 0 1
+Thu 22 Oct 2026 06:08:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:29.637 22 9 9 4 0 9 1 0 1
+Thu 22 Oct 2026 06:08:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:29.887 22 9 9 4 0 9 1 0 1
+Thu 22 Oct 2026 06:08:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:30.137 22 9 9 4 0 9 1 0 1
+Thu 22 Oct 2026 06:08:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:30.387 22 9 9 4 0 9 1 0 1
+Thu 22 Oct 2026 06:08:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:30.637 22 9 9 4 0 9 1 0 1
+Thu 22 Oct 2026 06:08:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:30.887 22 9 9 4 0 9 1 0 1
+Thu 22 Oct 2026 06:08:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:31.138 22 9 9 4 0 9 1 0 1
+Thu 22 Oct 2026 06:08:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:31.387 22 9 9 4 0 9 1 0 1
+Thu 22 Oct 2026 06:08:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:31.637 22 9 9 4 0 9 1 0 1
+Thu 22 Oct 2026 06:08:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:31.887 22 9 9 4 0 9 1 0 1
+Thu 22 Oct 2026 06:08:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:32.137 19 7 7 3 0 9 1 0 1
+Thu 22 Oct 2026 06:08:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:32.387 21 9 9 3 0 9 2 0 1
+Thu 22 Oct 2026 06:08:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:32.637 21 9 9 3 0 9 2 0 2
+Thu 22 Oct 2026 06:08:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:32.887 19 8 8 2 0 9 1 1 1
+Thu 22 Oct 2026 06:08:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:33.137 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:33.387 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:33.637 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:33.887 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:34.138 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:34.387 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:34.637 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:34.887 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:35.137 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:35.387 20 8 8 3 0 9 1 1 1
+Thu 22 Oct 2026 06:08:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:35.637 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:35.887 18 8 8 1 0 9 0 1 0
+Thu 22 Oct 2026 06:08:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:36.137 16 6 6 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:36.387 18 8 8 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:36.637 18 8 8 1 0 9 1 0 0
+Thu 22 Oct 2026 06:08:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:36.887 18 8 8 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:37.137 16 6 6 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:37.387 18 8 8 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:37.637 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:37.887 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:38.137 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:38.387 22 10 10 3 0 9 1 1 1
+Thu 22 Oct 2026 06:08:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:38.637 20 8 8 2 1 9 1 1 1
+Thu 22 Oct 2026 06:08:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:38.887 21 9 9 3 0 9 3 0 3
+Thu 22 Oct 2026 06:08:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:39.137 24 10 10 5 0 9 4 0 4
+Thu 22 Oct 2026 06:08:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:39.387 24 10 10 5 0 9 4 0 4
+Thu 22 Oct 2026 06:08:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:39.637 24 10 10 5 0 9 4 0 4
+Thu 22 Oct 2026 06:08:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:39.887 22 9 9 4 0 9 4 0 3
+Thu 22 Oct 2026 06:08:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:40.137 19 7 7 3 0 9 2 0 2
+Thu 22 Oct 2026 06:08:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:40.387 23 8 8 5 0 10 2 0 2
+Thu 22 Oct 2026 06:08:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:40.637 22 8 8 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:40.887 22 8 8 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:41.137 22 8 8 5 0 9 2 0 2
+Thu 22 Oct 2026 06:08:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:41.387 23 8 8 5 0 10 3 0 2
+Thu 22 Oct 2026 06:08:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:41.637 22 8 8 5 0 9 2 0 1
+Thu 22 Oct 2026 06:08:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:41.887 21 8 8 4 0 9 3 0 1
+Thu 22 Oct 2026 06:08:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:42.137 21 8 8 4 0 9 2 0 1
+Thu 22 Oct 2026 06:08:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:42.387 21 8 8 4 0 9 2 0 1
+Thu 22 Oct 2026 06:08:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:42.637 19 8 8 2 0 9 2 0 1
+Thu 22 Oct 2026 06:08:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:42.887 19 8 8 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:43.137 18 8 8 1 0 9 1 0 1
+Thu 22 Oct 2026 06:08:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:43.387 18 8 8 1 0 9 1 0 1
+Thu 22 Oct 2026 06:08:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:43.637 18 8 8 1 0 9 1 0 1
+Thu 22 Oct 2026 06:08:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:43.887 18 8 8 1 0 9 1 0 1
+Thu 22 Oct 2026 06:08:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:44.137 18 8 8 1 0 9 1 0 1
+Thu 22 Oct 2026 06:08:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:44.387 18 8 8 1 0 9 1 0 1
+Thu 22 Oct 2026 06:08:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:44.637 18 8 8 1 0 9 1 0 1
+Thu 22 Oct 2026 06:08:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:44.887 19 9 9 1 0 9 1 0 1
+Thu 22 Oct 2026 06:08:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:45.137 20 9 9 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:45.387 20 9 9 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:45.637 20 9 9 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:45.887 20 9 9 2 0 9 1 0 1
+Thu 22 Oct 2026 06:08:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:46.137 19 9 9 1 0 9 1 0 0
+Thu 22 Oct 2026 06:08:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:46.387 19 8 8 2 0 9 0 0 0
+Thu 22 Oct 2026 06:08:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:46.637 18 8 8 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:46.887 20 10 10 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:47.137 20 10 10 1 0 9 0 1 0
+Thu 22 Oct 2026 06:08:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:47.387 20 10 10 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:47.637 20 10 10 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:47.887 20 10 10 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:48.137 20 10 10 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:48.388 20 10 10 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:48.637 20 10 10 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:48.887 20 10 10 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:49.137 20 10 10 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:49.387 20 10 10 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:49.637 20 10 10 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:49.887 19 9 9 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:50.137 21 10 10 2 0 9 0 1 0
+Thu 22 Oct 2026 06:08:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:50.387 21 10 10 2 0 9 0 0 0
+Thu 22 Oct 2026 06:08:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:50.637 21 10 10 2 0 9 0 0 0
+Thu 22 Oct 2026 06:08:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:50.887 21 10 10 2 0 9 0 0 0
+Thu 22 Oct 2026 06:08:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:51.137 21 10 10 2 0 9 0 0 0
+Thu 22 Oct 2026 06:08:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:51.387 21 10 10 2 0 9 0 0 0
+Thu 22 Oct 2026 06:08:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:51.637 21 10 10 2 0 9 0 0 0
+Thu 22 Oct 2026 06:08:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:51.887 18 8 8 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:52.137 19 9 9 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:52.387 17 7 7 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:52.637 19 9 9 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:52.887 19 9 9 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:53.137 19 9 9 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:53.387 19 9 9 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:53.637 19 9 9 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:53.887 17 7 7 1 0 9 0 0 0
+Thu 22 Oct 2026 06:08:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:54.137 17 6 6 2 0 9 1 0 0
+Thu 22 Oct 2026 06:08:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:54.387 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:54.637 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:54.887 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:55.137 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:55.387 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:55.637 13 2 2 1 1 9 1 0 1
+Thu 22 Oct 2026 06:08:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:55.887 13 4 4 0 0 9 1 1 0
+Thu 22 Oct 2026 06:08:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:56.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:56.387 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:08:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:56.637 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:08:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:56.887 15 6 6 0 0 9 2 1 0
+Thu 22 Oct 2026 06:08:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:57.137 13 4 4 0 0 9 2 0 0
+Thu 22 Oct 2026 06:08:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:57.387 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:08:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:57.637 13 4 4 0 0 9 0 4 0
+Thu 22 Oct 2026 06:08:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:57.887 18 9 9 0 0 9 0 1 0
+Thu 22 Oct 2026 06:08:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:58.137 13 2 2 1 1 9 0 0 0
+Thu 22 Oct 2026 06:08:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:58.387 13 2 2 1 1 9 0 0 0
+Thu 22 Oct 2026 06:08:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:58.637 13 3 3 0 1 9 0 0 0
+Thu 22 Oct 2026 06:08:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:58.887 14 4 4 0 1 9 0 0 0
+Thu 22 Oct 2026 06:08:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:59.137 14 4 4 0 1 9 0 0 0
+Thu 22 Oct 2026 06:08:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:59.387 14 4 4 0 1 9 0 0 0
+Thu 22 Oct 2026 06:08:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:59.637 13 4 4 0 0 9 0 0 0
+Thu 22 Oct 2026 06:08:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:08:59.887 17 8 8 0 0 9 2 0 0
+Thu 22 Oct 2026 06:09:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:00.137 15 6 6 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:00.387 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:00.638 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:00.887 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:01.137 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:01.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:01.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:01.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:02.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:02.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:02.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:02.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:03.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:03.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:03.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:03.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:04.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:04.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:04.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:04.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:05.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:05.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:05.638 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:05.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:06.138 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:06.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:06.637 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:06.887 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:07.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:07.387 15 6 6 0 0 9 1 1 0
+Thu 22 Oct 2026 06:09:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:07.637 20 11 11 0 0 9 1 3 0
+Thu 22 Oct 2026 06:09:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:07.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:08.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:08.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:08.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:08.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:09.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:09.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:09.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:09.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:10.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:10.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:10.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:10.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:11.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:11.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:11.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:11.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:12.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:12.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:12.637 17 8 8 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:12.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:13.137 13 4 4 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:13.387 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:13.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:13.887 12 3 3 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:14.137 12 3 3 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:14.387 12 3 3 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:14.637 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:14.887 13 4 4 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:15.137 13 4 4 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:15.387 13 4 4 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:15.637 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:15.887 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:16.137 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:16.387 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:16.637 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:16.887 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:17.137 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:17.387 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:17.637 13 4 4 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:17.887 16 7 7 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:18.137 17 6 6 2 0 9 1 1 0
+Thu 22 Oct 2026 06:09:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:18.387 19 8 8 2 0 9 0 3 0
+Thu 22 Oct 2026 06:09:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:18.637 21 8 8 4 0 9 2 0 1
+Thu 22 Oct 2026 06:09:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:18.887 19 6 6 4 0 9 3 0 2
+Thu 22 Oct 2026 06:09:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:19.137 16 4 4 3 0 9 2 0 0
+Thu 22 Oct 2026 06:09:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:19.387 17 4 4 4 0 9 2 0 0
+Thu 22 Oct 2026 06:09:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:19.637 17 8 8 0 0 9 1 2 0
+Thu 22 Oct 2026 06:09:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:19.887 17 8 8 0 0 9 2 0 0
+Thu 22 Oct 2026 06:09:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:20.137 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:20.387 17 8 8 0 0 9 1 1 0
+Thu 22 Oct 2026 06:09:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:20.637 13 4 4 0 0 9 1 1 0
+Thu 22 Oct 2026 06:09:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:20.887 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:21.137 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:21.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:21.637 15 6 6 0 0 9 2 0 0
+Thu 22 Oct 2026 06:09:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:21.887 13 3 3 0 1 9 0 0 0
+Thu 22 Oct 2026 06:09:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:22.137 11 0 0 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:22.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:22.637 17 8 8 0 0 9 2 1 0
+Thu 22 Oct 2026 06:09:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:22.887 16 7 7 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:23.137 14 5 5 0 0 9 0 2 0
+Thu 22 Oct 2026 06:09:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:23.387 15 6 6 0 0 9 3 0 0
+Thu 22 Oct 2026 06:09:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:23.637 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:23.887 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:24.137 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:24.387 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:24.637 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:24.887 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:25.137 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:25.387 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:25.637 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:25.887 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:26.137 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:26.387 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:26.637 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:26.887 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:27.137 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:27.387 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:27.637 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:27.887 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:28.137 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:28.387 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:28.637 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:28.887 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:29.137 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:29.387 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:29.637 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:29.887 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:30.137 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:30.387 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:30.637 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:30.887 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:31.137 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:31.387 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:31.637 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:31.887 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:32.137 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:32.387 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:32.637 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:32.887 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:33.137 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:33.387 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:33.637 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:33.887 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:34.137 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:34.387 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:34.637 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:34.887 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:35.137 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:35.387 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:35.637 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:35.887 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:36.137 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:36.387 11 2 2 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:36.637 17 8 8 0 0 9 1 2 0
+Thu 22 Oct 2026 06:09:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:36.887 17 8 8 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:37.137 17 8 8 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:37.387 16 7 7 0 0 9 1 1 0
+Thu 22 Oct 2026 06:09:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:37.637 19 8 8 1 1 9 1 0 0
+Thu 22 Oct 2026 06:09:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:37.887 17 6 6 1 1 9 0 1 0
+Thu 22 Oct 2026 06:09:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:38.137 18 7 7 1 1 9 1 0 0
+Thu 22 Oct 2026 06:09:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:38.387 21 10 10 1 1 9 1 0 0
+Thu 22 Oct 2026 06:09:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:38.637 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:38.887 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:39.137 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:39.387 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:39.637 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:39.887 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:40.137 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:40.387 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:40.637 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:40.887 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:41.137 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:41.387 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:41.637 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:41.888 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:42.137 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:42.387 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:42.637 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:42.887 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:43.137 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:43.387 15 4 4 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:43.637 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:43.887 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:44.137 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:44.387 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:44.637 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:44.887 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:45.137 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:45.387 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:45.637 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:45.887 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:46.137 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:46.387 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:46.637 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:46.887 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:47.137 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:47.387 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:47.637 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:47.887 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:48.137 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:48.387 16 4 4 2 1 9 0 0 0
+Thu 22 Oct 2026 06:09:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:48.637 16 4 4 2 1 9 0 1 0
+Thu 22 Oct 2026 06:09:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:48.887 13 4 4 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:49.137 16 7 7 0 0 9 0 2 0
+Thu 22 Oct 2026 06:09:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:49.387 13 4 4 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:49.637 11 0 0 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:49.887 11 0 0 1 1 9 0 0 0
+Thu 22 Oct 2026 06:09:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:50.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:50.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:50.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:50.887 13 4 4 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:51.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:51.387 14 5 5 0 0 9 1 1 0
+Thu 22 Oct 2026 06:09:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:51.637 18 9 9 0 0 9 1 3 0
+Thu 22 Oct 2026 06:09:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:51.887 15 6 6 0 0 9 2 1 0
+Thu 22 Oct 2026 06:09:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:52.137 17 8 8 0 0 9 4 0 0
+Thu 22 Oct 2026 06:09:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:52.387 17 8 8 0 0 9 0 4 0
+Thu 22 Oct 2026 06:09:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:52.637 14 5 5 0 0 9 2 0 0
+Thu 22 Oct 2026 06:09:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:52.887 14 5 5 0 0 9 2 1 1
+Thu 22 Oct 2026 06:09:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:53.137 12 3 3 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:53.387 16 7 7 0 0 9 0 2 0
+Thu 22 Oct 2026 06:09:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:53.637 23 14 14 0 0 9 1 1 0
+Thu 22 Oct 2026 06:09:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:53.887 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:54.137 11 2 2 0 0 9 0 1 0
+Thu 22 Oct 2026 06:09:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:54.387 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:54.637 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:54.887 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:55.137 13 2 2 1 1 9 1 0 0
+Thu 22 Oct 2026 06:09:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:55.387 13 2 2 1 1 9 1 0 0
+Thu 22 Oct 2026 06:09:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:55.637 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:55.887 13 4 4 0 0 9 1 1 0
+Thu 22 Oct 2026 06:09:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:56.137 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:56.387 11 2 2 0 0 9 1 0 0
+Thu 22 Oct 2026 06:09:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:56.637 12 2 2 1 0 9 0 0 0
+Thu 22 Oct 2026 06:09:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:56.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:57.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:57.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:57.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:57.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:58.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:58.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:58.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:58.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:59.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:59.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:59.637 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:09:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:09:59.887 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:10:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:00.137 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:10:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:00.387 9 0 0 0 0 9 0 0 0
+Thu 22 Oct 2026 06:10:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:00.637 15 2 2 0 2 11 0 0 0
+Thu 22 Oct 2026 06:10:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:00.887 14 2 2 1 1 10 0 0 0
+Thu 22 Oct 2026 06:10:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:01.137 13 2 2 0 1 10 0 0 0
+Thu 22 Oct 2026 06:10:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:01.387 16 4 4 1 1 10 0 0 0
+Thu 22 Oct 2026 06:10:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:01.637 16 4 4 1 1 10 0 0 0
+Thu 22 Oct 2026 06:10:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:01.887 16 4 4 1 1 10 0 0 0
+Thu 22 Oct 2026 06:10:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:02.137 16 4 4 0 2 10 0 0 0
+Thu 22 Oct 2026 06:10:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:02.387 16 4 4 0 2 10 0 0 0
+Thu 22 Oct 2026 06:10:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:02.637 13 2 2 0 1 10 0 0 0
+Thu 22 Oct 2026 06:10:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:02.887 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:03.137 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:03.387 20 8 8 1 1 10 1 0 1
+Thu 22 Oct 2026 06:10:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:03.637 22 8 8 2 2 10 2 0 2
+Thu 22 Oct 2026 06:10:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:03.887 22 8 8 2 2 10 2 0 2
+Thu 22 Oct 2026 06:10:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:04.137 22 8 8 2 2 10 2 0 2
+Thu 22 Oct 2026 06:10:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:04.387 22 8 8 2 2 10 2 0 2
+Thu 22 Oct 2026 06:10:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:04.637 22 8 8 2 2 10 2 1 2
+Thu 22 Oct 2026 06:10:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:04.887 22 8 8 2 2 10 2 0 2
+Thu 22 Oct 2026 06:10:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:05.137 22 8 8 2 2 10 2 0 2
+Thu 22 Oct 2026 06:10:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:05.387 22 8 8 2 2 10 2 0 2
+Thu 22 Oct 2026 06:10:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:05.637 22 8 8 2 2 10 2 0 2
+Thu 22 Oct 2026 06:10:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:05.887 22 8 8 2 2 10 2 0 2
+Thu 22 Oct 2026 06:10:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:06.137 22 8 8 2 2 10 3 0 2
+Thu 22 Oct 2026 06:10:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:06.387 22 8 8 2 2 10 2 0 2
+Thu 22 Oct 2026 06:10:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:06.637 23 8 8 3 2 10 3 0 3
+Thu 22 Oct 2026 06:10:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:06.887 23 8 8 3 2 10 3 0 3
+Thu 22 Oct 2026 06:10:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:07.137 23 8 8 3 2 10 3 0 3
+Thu 22 Oct 2026 06:10:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:07.387 23 8 8 3 2 10 3 0 3
+Thu 22 Oct 2026 06:10:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:07.637 23 8 8 3 2 10 3 0 3
+Thu 22 Oct 2026 06:10:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:07.887 26 8 8 5 3 10 3 0 3
+Thu 22 Oct 2026 06:10:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:08.137 26 8 8 5 3 10 3 0 3
+Thu 22 Oct 2026 06:10:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:08.387 25 8 8 5 2 10 3 0 2
+Thu 22 Oct 2026 06:10:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:08.637 23 8 8 4 1 10 2 1 2
+Thu 22 Oct 2026 06:10:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:08.887 24 8 8 5 1 10 2 0 2
+Thu 22 Oct 2026 06:10:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:09.137 24 8 8 5 1 10 2 0 2
+Thu 22 Oct 2026 06:10:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:09.387 24 8 8 5 1 10 2 0 2
+Thu 22 Oct 2026 06:10:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:09.637 24 8 8 5 1 10 2 0 2
+Thu 22 Oct 2026 06:10:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:09.887 24 8 8 5 1 10 2 0 2
+Thu 22 Oct 2026 06:10:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:10.137 24 8 8 5 1 10 2 0 2
+Thu 22 Oct 2026 06:10:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:10.387 24 8 8 5 1 10 2 0 2
+Thu 22 Oct 2026 06:10:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:10.637 24 8 8 5 1 10 2 0 2
+Thu 22 Oct 2026 06:10:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:10.887 24 9 9 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:11.137 24 9 9 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:11.387 24 9 9 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:11.637 24 9 9 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:11.887 25 10 10 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:12.137 25 10 10 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:12.388 25 10 10 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:12.637 25 10 10 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:12.887 25 10 10 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:13.137 25 10 10 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:13.387 25 10 10 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:13.637 25 10 10 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:13.887 23 10 10 3 0 10 2 0 2
+Thu 22 Oct 2026 06:10:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:14.137 23 10 10 3 0 10 2 0 2
+Thu 22 Oct 2026 06:10:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:14.387 23 10 10 3 0 10 2 1 2
+Thu 22 Oct 2026 06:10:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:14.637 24 10 10 4 0 10 2 0 2
+Thu 22 Oct 2026 06:10:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:14.887 24 10 10 4 0 10 2 0 2
+Thu 22 Oct 2026 06:10:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:15.137 25 11 11 4 0 10 2 0 2
+Thu 22 Oct 2026 06:10:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:15.387 24 11 11 3 0 10 2 0 2
+Thu 22 Oct 2026 06:10:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:15.637 25 11 11 4 0 10 3 0 3
+Thu 22 Oct 2026 06:10:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:15.887 25 11 11 4 0 10 3 0 3
+Thu 22 Oct 2026 06:10:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:16.137 25 11 11 4 0 10 3 0 3
+Thu 22 Oct 2026 06:10:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:16.387 25 11 11 4 0 10 3 0 3
+Thu 22 Oct 2026 06:10:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:16.637 25 11 11 4 0 10 2 0 2
+Thu 22 Oct 2026 06:10:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:16.887 25 11 11 4 0 10 2 1 2
+Thu 22 Oct 2026 06:10:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:17.137 25 11 11 4 0 10 2 0 2
+Thu 22 Oct 2026 06:10:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:17.387 25 11 11 4 0 10 2 0 2
+Thu 22 Oct 2026 06:10:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:17.637 25 11 11 4 0 10 2 0 2
+Thu 22 Oct 2026 06:10:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:17.887 25 11 11 4 0 10 2 0 2
+Thu 22 Oct 2026 06:10:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:18.137 25 11 11 4 0 10 2 0 2
+Thu 22 Oct 2026 06:10:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:18.387 25 11 11 4 0 10 2 0 2
+Thu 22 Oct 2026 06:10:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:18.637 25 11 11 4 0 10 1 1 1
+Thu 22 Oct 2026 06:10:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:18.887 25 11 11 4 0 10 2 1 2
+Thu 22 Oct 2026 06:10:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:19.137 25 11 11 4 0 10 1 0 1
+Thu 22 Oct 2026 06:10:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:19.387 25 11 11 4 0 10 1 0 1
+Thu 22 Oct 2026 06:10:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:19.637 25 11 11 4 0 10 1 0 1
+Thu 22 Oct 2026 06:10:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:19.887 25 11 11 4 0 10 1 0 1
+Thu 22 Oct 2026 06:10:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:20.137 26 11 11 5 0 10 1 0 1
+Thu 22 Oct 2026 06:10:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:20.387 24 11 11 3 0 10 1 0 1
+Thu 22 Oct 2026 06:10:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:20.637 24 11 11 3 0 10 1 0 1
+Thu 22 Oct 2026 06:10:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:20.887 24 11 11 3 0 10 1 0 1
+Thu 22 Oct 2026 06:10:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:21.137 24 11 11 3 0 10 1 0 1
+Thu 22 Oct 2026 06:10:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:21.387 24 11 11 3 0 10 1 0 1
+Thu 22 Oct 2026 06:10:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:21.637 24 11 11 3 0 10 1 0 1
+Thu 22 Oct 2026 06:10:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:21.887 24 11 11 3 0 10 1 0 1
+Thu 22 Oct 2026 06:10:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:22.137 24 11 11 3 0 10 2 0 2
+Thu 22 Oct 2026 06:10:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:22.387 24 11 11 3 0 10 2 0 2
+Thu 22 Oct 2026 06:10:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:22.637 23 11 11 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:22.887 23 11 11 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:23.137 23 11 11 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:23.387 25 11 11 3 1 10 1 1 1
+Thu 22 Oct 2026 06:10:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:23.637 23 11 11 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:23.887 23 11 11 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:24.137 23 11 11 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:24.387 23 11 11 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:24.637 23 11 11 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:24.887 23 11 11 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:25.137 23 11 11 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:25.387 23 11 11 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:25.637 22 11 11 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:25.887 22 11 11 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:26.137 22 11 11 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:26.387 22 11 11 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:26.637 22 11 11 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:26.887 22 10 10 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:27.137 22 10 10 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:27.387 23 10 10 3 0 10 2 0 2
+Thu 22 Oct 2026 06:10:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:27.637 23 10 10 3 0 10 2 0 2
+Thu 22 Oct 2026 06:10:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:27.887 22 10 10 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:28.137 23 10 10 3 0 10 1 1 1
+Thu 22 Oct 2026 06:10:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:28.387 22 10 10 2 0 10 2 1 2
+Thu 22 Oct 2026 06:10:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:28.637 24 10 10 3 1 10 2 1 2
+Thu 22 Oct 2026 06:10:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:28.887 25 10 10 5 0 10 3 0 3
+Thu 22 Oct 2026 06:10:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:29.137 25 10 10 5 0 10 3 0 3
+Thu 22 Oct 2026 06:10:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:29.387 25 10 10 5 0 10 3 0 3
+Thu 22 Oct 2026 06:10:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:29.637 25 10 10 5 0 10 3 0 3
+Thu 22 Oct 2026 06:10:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:29.887 23 10 10 3 0 10 2 0 2
+Thu 22 Oct 2026 06:10:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:30.137 26 10 10 5 0 11 2 0 2
+Thu 22 Oct 2026 06:10:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:30.387 25 10 10 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:30.637 25 10 10 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:30.887 25 10 10 5 0 10 2 0 2
+Thu 22 Oct 2026 06:10:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:31.137 26 10 10 5 0 11 2 0 2
+Thu 22 Oct 2026 06:10:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:31.387 25 10 10 5 0 10 2 0 1
+Thu 22 Oct 2026 06:10:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:31.637 23 10 10 3 0 10 2 0 1
+Thu 22 Oct 2026 06:10:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:31.887 23 10 10 3 0 10 2 0 1
+Thu 22 Oct 2026 06:10:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:32.137 23 10 10 3 0 10 2 0 1
+Thu 22 Oct 2026 06:10:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:32.387 21 10 10 1 0 10 1 0 1
+Thu 22 Oct 2026 06:10:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:32.637 21 10 10 1 0 10 1 0 1
+Thu 22 Oct 2026 06:10:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:32.887 21 10 10 1 0 10 1 0 1
+Thu 22 Oct 2026 06:10:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:33.137 21 10 10 1 0 10 1 0 1
+Thu 22 Oct 2026 06:10:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:33.387 21 10 10 1 0 10 1 0 1
+Thu 22 Oct 2026 06:10:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:33.637 21 10 10 1 0 10 1 0 1
+Thu 22 Oct 2026 06:10:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:33.887 21 10 10 1 0 10 1 0 1
+Thu 22 Oct 2026 06:10:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:34.137 22 10 10 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:34.387 22 10 10 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:34.637 22 10 10 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:34.887 22 10 10 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:35.137 22 10 10 2 0 10 1 0 1
+Thu 22 Oct 2026 06:10:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:35.387 20 9 9 1 0 10 0 1 0
+Thu 22 Oct 2026 06:10:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:35.637 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:35.887 21 9 9 2 0 10 0 2 0
+Thu 22 Oct 2026 06:10:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:36.137 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:36.387 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:36.637 21 10 10 1 0 10 0 1 0
+Thu 22 Oct 2026 06:10:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:36.887 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:37.137 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:37.387 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:37.637 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:37.887 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:38.137 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:38.387 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:38.637 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:38.887 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:39.137 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:39.387 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:39.637 22 10 10 2 0 10 0 0 0
+Thu 22 Oct 2026 06:10:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:39.887 22 10 10 2 0 10 0 0 0
+Thu 22 Oct 2026 06:10:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:40.137 22 10 10 2 0 10 0 0 0
+Thu 22 Oct 2026 06:10:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:40.387 22 10 10 2 0 10 0 0 0
+Thu 22 Oct 2026 06:10:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:40.637 22 10 10 2 0 10 0 0 0
+Thu 22 Oct 2026 06:10:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:40.887 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:41.137 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:41.387 21 10 10 1 0 10 0 1 0
+Thu 22 Oct 2026 06:10:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:41.637 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:41.887 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:42.137 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:42.387 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:42.637 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:42.887 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:43.137 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:43.387 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:43.637 20 10 10 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:43.887 20 10 10 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:44.137 20 10 10 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:44.387 20 10 10 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:44.637 21 10 10 1 0 10 0 0 0
+Thu 22 Oct 2026 06:10:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:44.887 20 10 10 0 0 10 0 2 0
+Thu 22 Oct 2026 06:10:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:45.137 20 10 10 0 0 10 0 2 0
+Thu 22 Oct 2026 06:10:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:45.387 20 10 10 0 0 10 2 0 0
+Thu 22 Oct 2026 06:10:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:45.637 20 10 10 0 0 10 1 0 0
+Thu 22 Oct 2026 06:10:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:45.887 20 10 10 0 0 10 1 2 0
+Thu 22 Oct 2026 06:10:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:46.137 19 9 9 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:46.387 19 9 9 0 0 10 0 1 0
+Thu 22 Oct 2026 06:10:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:46.637 19 9 9 0 0 10 1 2 0
+Thu 22 Oct 2026 06:10:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:46.887 19 9 9 0 0 10 1 1 0
+Thu 22 Oct 2026 06:10:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:47.137 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:10:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:47.387 16 6 6 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:47.637 19 9 9 0 0 10 0 2 0
+Thu 22 Oct 2026 06:10:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:47.887 20 9 9 1 0 10 1 0 0
+Thu 22 Oct 2026 06:10:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:48.137 21 9 9 1 1 10 0 0 0
+Thu 22 Oct 2026 06:10:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:48.387 21 9 9 1 1 10 0 0 0
+Thu 22 Oct 2026 06:10:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:48.637 22 11 11 0 1 10 0 0 0
+Thu 22 Oct 2026 06:10:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:48.887 22 11 11 0 1 10 0 0 0
+Thu 22 Oct 2026 06:10:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:49.138 22 11 11 0 1 10 0 0 0
+Thu 22 Oct 2026 06:10:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:49.387 20 9 9 1 0 10 1 0 0
+Thu 22 Oct 2026 06:10:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:49.637 18 8 8 0 0 10 1 1 0
+Thu 22 Oct 2026 06:10:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:49.887 18 8 8 0 0 10 1 1 0
+Thu 22 Oct 2026 06:10:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:50.137 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:50.387 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:50.637 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:50.887 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:51.137 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:51.387 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:51.637 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:51.887 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:52.137 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:52.387 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:52.637 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:52.887 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:53.137 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:53.387 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:53.637 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:53.887 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:54.137 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:54.387 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:54.637 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:54.887 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:55.137 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:55.387 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:55.637 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:55 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:55.887 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:56.137 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:56.387 18 8 8 0 0 10 0 1 0
+Thu 22 Oct 2026 06:10:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:56.637 18 8 8 0 0 10 1 0 0
+Thu 22 Oct 2026 06:10:56 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:56.887 18 8 8 0 0 10 1 0 0
+Thu 22 Oct 2026 06:10:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:57.137 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:10:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:57.387 18 8 8 0 0 10 1 3 0
+Thu 22 Oct 2026 06:10:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:57.637 18 8 8 0 0 10 0 1 0
+Thu 22 Oct 2026 06:10:57 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:57.887 27 17 17 0 0 10 0 1 0
+Thu 22 Oct 2026 06:10:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:58.137 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:58.387 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:58.637 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:58 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:58.887 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:59.137 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:59.387 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:59.637 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:10:59 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:10:59.887 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:00.137 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:00.387 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:00.637 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:00 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:00.887 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:01.137 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:01.387 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:01.637 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:01 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:01.887 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:02.137 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:02.387 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:02.637 27 17 17 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:02 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:02.887 26 16 16 0 0 10 1 1 0
+Thu 22 Oct 2026 06:11:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:03.137 24 14 14 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:03.387 23 13 13 0 0 10 2 0 0
+Thu 22 Oct 2026 06:11:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:03.637 20 10 10 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:03 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:03.887 19 9 9 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:04.137 19 9 9 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:04.387 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:04.637 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:04 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:04.887 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:05.137 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:05.387 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:05.637 18 8 8 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:05 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:05.887 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:06.137 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:06.387 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:06.637 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:06 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:06.887 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:07.137 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:07.387 18 8 8 0 0 10 2 2 0
+Thu 22 Oct 2026 06:11:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:07.637 18 8 8 0 0 10 0 4 0
+Thu 22 Oct 2026 06:11:07 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:07.887 21 8 8 3 0 10 4 0 1
+Thu 22 Oct 2026 06:11:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:08.137 22 8 8 4 0 10 3 1 0
+Thu 22 Oct 2026 06:11:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:08.387 20 8 8 2 0 10 1 3 0
+Thu 22 Oct 2026 06:11:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:08.637 23 8 8 4 1 10 4 0 1
+Thu 22 Oct 2026 06:11:08 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:08.887 20 8 8 2 0 10 2 0 1
+Thu 22 Oct 2026 06:11:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:09.137 21 8 8 3 0 10 2 0 1
+Thu 22 Oct 2026 06:11:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:09.387 22 8 8 4 0 10 2 0 0
+Thu 22 Oct 2026 06:11:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:09.637 20 8 8 2 0 10 1 0 0
+Thu 22 Oct 2026 06:11:09 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:09.887 18 8 8 0 0 10 2 1 0
+Thu 22 Oct 2026 06:11:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:10.137 17 7 7 0 0 10 2 0 0
+Thu 22 Oct 2026 06:11:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:10.387 17 7 7 0 0 10 2 0 0
+Thu 22 Oct 2026 06:11:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:10.637 18 8 8 0 0 10 1 1 0
+Thu 22 Oct 2026 06:11:10 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:10.887 17 7 7 0 0 10 2 0 0
+Thu 22 Oct 2026 06:11:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:11.137 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:11.387 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:11.637 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:11 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:11.887 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:12.137 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:12.387 17 7 7 0 0 10 1 2 0
+Thu 22 Oct 2026 06:11:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:12.637 16 6 6 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:12 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:12.887 17 6 6 0 1 10 1 0 0
+Thu 22 Oct 2026 06:11:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:13.137 18 6 6 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:13.387 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:13.637 18 8 8 0 0 10 2 1 0
+Thu 22 Oct 2026 06:11:13 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:13.887 17 7 7 0 0 10 2 1 0
+Thu 22 Oct 2026 06:11:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:14.137 21 11 11 0 0 10 2 2 0
+Thu 22 Oct 2026 06:11:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:14.387 18 8 8 0 0 10 2 0 0
+Thu 22 Oct 2026 06:11:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:14.637 18 8 8 0 0 10 2 0 0
+Thu 22 Oct 2026 06:11:14 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:14.887 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:15.137 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:15.387 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:15.637 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:15 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:15.887 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:16.137 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:16.387 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:16.637 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:16 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:16.887 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:17.137 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:17.387 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:17.637 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:17 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:17.887 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:18.137 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:18.387 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:18.637 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:18 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:18.887 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:19.137 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:19.387 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:19.637 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:19 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:19.887 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:20.137 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:20.387 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:20.637 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:20 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:20.887 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:21.137 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:21.387 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:21.637 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:21 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:21.887 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:22.137 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:22.387 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:22.637 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:22 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:22.887 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:23.137 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:23.387 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:23.637 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:23 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:23.887 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:24.137 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:24.387 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:24.637 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:24 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:24.887 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:25.137 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:25.387 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:25.637 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:25 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:25.887 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:26.137 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:26.387 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:26.637 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:26 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:26.887 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:27.137 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:27.387 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:27.637 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:27 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:27.887 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:28.137 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:28.387 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:28.637 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:28 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:28.887 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:29.137 17 7 7 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:29.387 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:29.637 17 7 7 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:29 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:29.887 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:30.137 17 7 7 0 0 10 1 1 0
+Thu 22 Oct 2026 06:11:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:30.387 18 8 8 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:30.637 18 8 8 0 0 10 2 1 0
+Thu 22 Oct 2026 06:11:30 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:30.887 20 10 10 0 0 10 1 1 0
+Thu 22 Oct 2026 06:11:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:31.137 22 10 10 1 1 10 0 1 0
+Thu 22 Oct 2026 06:11:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:31.387 22 10 10 1 1 10 1 1 0
+Thu 22 Oct 2026 06:11:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:31.637 24 12 12 1 1 10 1 0 0
+Thu 22 Oct 2026 06:11:31 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:31.887 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:32.137 24 12 12 1 1 10 1 0 0
+Thu 22 Oct 2026 06:11:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:32.387 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:32.637 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:32 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:32.887 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:33.137 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:33.387 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:33.637 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:33 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:33.887 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:34.137 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:34.387 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:34.637 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:34 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:34.887 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:35.137 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:35.387 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:35.637 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:35 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:35.887 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:36.137 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:36.387 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:36.637 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:36 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:36.887 24 12 12 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:37.137 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:37.387 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:37.637 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:37 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:37.887 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:38.137 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:38.387 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:38.637 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:38 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:38.887 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:39.137 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:39.387 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:39.637 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:39 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:39.887 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:40.137 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:40.387 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:40.637 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:40 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:40.887 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:41.137 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:41.387 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:41.637 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:41 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:41.887 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:42.137 25 12 12 2 1 10 0 0 0
+Thu 22 Oct 2026 06:11:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:42.387 20 10 10 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:42.637 19 9 9 0 0 10 1 2 0
+Thu 22 Oct 2026 06:11:42 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:42.887 17 7 7 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:43.137 15 3 3 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:43.387 15 3 3 1 1 10 0 0 0
+Thu 22 Oct 2026 06:11:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:43.637 15 5 5 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:43 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:43.887 13 3 3 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:44.137 13 3 3 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:44.387 13 3 3 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:44.637 15 5 5 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:44 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:44.887 18 8 8 0 0 10 2 1 0
+Thu 22 Oct 2026 06:11:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:45.137 18 8 8 0 0 10 1 2 0
+Thu 22 Oct 2026 06:11:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:45.387 20 10 10 0 0 10 2 0 0
+Thu 22 Oct 2026 06:11:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:45.637 18 8 8 0 0 10 0 2 0
+Thu 22 Oct 2026 06:11:45 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:45.887 18 8 8 0 0 10 0 4 0
+Thu 22 Oct 2026 06:11:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:46.137 16 6 6 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:46.387 18 8 8 0 0 10 1 1 0
+Thu 22 Oct 2026 06:11:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:46.637 17 7 7 0 0 10 2 1 0
+Thu 22 Oct 2026 06:11:46 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:46.887 17 7 7 0 0 10 1 1 1
+Thu 22 Oct 2026 06:11:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:47.137 18 8 8 0 0 10 1 3 0
+Thu 22 Oct 2026 06:11:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:47.387 21 11 11 0 0 10 0 2 0
+Thu 22 Oct 2026 06:11:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:47.637 24 14 14 0 0 10 2 0 0
+Thu 22 Oct 2026 06:11:47 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:47.887 23 13 13 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:48.137 23 13 13 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:48.387 23 13 13 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:48.637 23 13 13 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:48 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:48.887 23 13 13 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:49.137 23 13 13 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:49.387 25 13 13 1 1 10 1 0 0
+Thu 22 Oct 2026 06:11:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:49.637 25 13 13 1 1 10 1 0 0
+Thu 22 Oct 2026 06:11:49 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:49.887 23 13 13 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:50.137 23 13 13 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:50.387 23 13 13 0 0 10 1 1 0
+Thu 22 Oct 2026 06:11:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:50.637 23 13 13 0 0 10 0 1 0
+Thu 22 Oct 2026 06:11:50 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:50.887 22 12 12 0 0 10 1 0 0
+Thu 22 Oct 2026 06:11:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:51.137 22 12 12 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:51.387 22 12 12 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:51.637 22 12 12 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:51 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:51.887 22 12 12 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:52.137 22 12 12 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:52.387 22 12 12 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:52.637 22 12 12 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:52 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:52.887 22 12 12 0 0 10 0 0 0
+Thu 22 Oct 2026 06:11:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:53.137 1 0 0 0 0 1 0 0 0
+Thu 22 Oct 2026 06:11:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:53.387 1 0 0 0 0 1 0 0 0
+Thu 22 Oct 2026 06:11:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:53.637 1 0 0 0 0 1 0 0 0
+Thu 22 Oct 2026 06:11:53 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:53.887 1 0 0 0 0 1 0 0 0
+Thu 22 Oct 2026 06:11:54 AM UTC (every 0.25s)
+
+t total app app_direct owner pg_admin other app_active app_idle_tx app_lock_wait
+06:11:54.137 1 0 0 0 0 1 0 0 0

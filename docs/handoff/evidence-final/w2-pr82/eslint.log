@@ -1,0 +1,9 @@
+
+<home>/orca/workspaces/GroundZero/w2-pr82/apps/web/tests/component/task-conflict-save-mine.test.ts
+  936:13  error  Unsafe object destructuring of a property with an `any` value  @typescript-eslint/no-unsafe-assignment
+  961:13  error  Unsafe object destructuring of a property with an `any` value  @typescript-eslint/no-unsafe-assignment
+  984:13  error  Unsafe object destructuring of a property with an `any` value  @typescript-eslint/no-unsafe-assignment
+
+✖ 3 problems (3 errors, 0 warnings)
+
+exit=1

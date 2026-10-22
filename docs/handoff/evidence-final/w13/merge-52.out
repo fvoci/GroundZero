@@ -1,0 +1,10 @@
+Auto-merging contracts/openapi.json
+Auto-merging packages/api-client/src/generated/schema.ts
+Merge made by the 'ort' strategy.
+ contracts/openapi.json                             |  10 +
+ crates/server/migrations/0081_membership_locks.sql | 286 +++++++++++
+ crates/server/src/features/members.rs              |   3 +-
+ crates/server/tests/members.rs                     | 523 +++++++++++++++++++++
+ packages/api-client/src/generated/schema.ts        |   8 +
+ 5 files changed, 829 insertions(+), 1 deletion(-)
+ create mode 100644 crates/server/migrations/0081_membership_locks.sql

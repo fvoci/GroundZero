@@ -1,0 +1,5 @@
+close 01a162a5-f03 code=1006 reason= @08:15:00.593
+close 01a162a5-f03 code=4412 reason=signed-in account changed @08:15:00.838
+|| inMemory: reloaded
+now: Second User
+editor: Second User 실시간 글 (확인됨) / Test User 실시간 글 (확인됨) / 4412 직전 미확인 글 / 4412 직전 Test User 미확인 글 || status: Live || draft region: Edits to this document that never reached the server are sti || keys: 9221:706e:ffer:6900 -> 4412 직전 미확인 글 ; 9221:706e:ffer:447d -> 전환 전 미확인 실시간 글 ; a6e2:706e:ffer:6b07 -> 전환 전 Test User 미확인 글 ; a6e2:706e:tab:40e4 -> 4412 직전 미확인 글+4412 직전 Test User 미확인 글

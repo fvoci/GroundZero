@@ -1,0 +1,31 @@
+Auto-merging apps/web/src/lib/api/client.ts
+Auto-merging apps/web/src/lib/features/documents/RevisionHistory.svelte
+Auto-merging contracts/openapi.json
+Auto-merging crates/server/src/features/documents.rs
+Auto-merging crates/server/src/http/mod.rs
+Auto-merging docs/development.md
+Auto-merging packages/api-client/src/generated/schema.ts
+Merge made by the 'ort' strategy.
+ apps/web/messages/documents/en.json                |    2 +
+ apps/web/messages/documents/ko.json                |    2 +
+ apps/web/src/lib/api/client.ts                     |   17 +
+ .../src/lib/features/documents/ExportDialog.svelte |    8 +-
+ .../lib/features/documents/RevisionHistory.svelte  |    3 +-
+ .../src/lib/features/documents/revision-author.ts  |   15 +
+ .../tests/component/document-move-conflict.test.ts |  146 ++
+ .../component/revision-restore-conflict.test.ts    |    1 +
+ apps/web/tests/component/revision-stand-in.test.ts |  142 ++
+ contracts/openapi.json                             |   58 +-
+ .../migrations/0094_collab_stand_in_editors.sql    |   96 ++
+ crates/server/src/collab/room.rs                   |  683 +++++++--
+ crates/server/src/features/documents.rs            |  177 ++-
+ crates/server/src/features/revisions.rs            |  155 +-
+ crates/server/src/http/mod.rs                      |   50 +
+ crates/server/tests/collab.rs                      | 1622 +++++++++++++++++++-
+ docs/development.md                                |  114 +-
+ packages/api-client/src/generated/schema.ts        |   42 +-
+ 18 files changed, 3136 insertions(+), 197 deletions(-)
+ create mode 100644 apps/web/src/lib/features/documents/revision-author.ts
+ create mode 100644 apps/web/tests/component/document-move-conflict.test.ts
+ create mode 100644 apps/web/tests/component/revision-stand-in.test.ts
+ create mode 100644 crates/server/migrations/0094_collab_stand_in_editors.sql

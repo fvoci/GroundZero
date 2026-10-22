@@ -1,0 +1,131 @@
+# b2-4-b-reopen-draft-offer  2026-10-22T08:03:15Z  url=http://127.0.0.1:5173/w/01a16272-b6a3-72e7-b8df-7f4f4e911512/wiki/01a162a1-a700-747e-ae4e-01baaec05abe
+# viewport={
+  "result": "1280x770",
+  "origin": "http://127.0.0.1:5173/w/01a16272-b6a3-72e7-b8df-7f4f4e911512/wiki/01a162a1-a700-747e-ae4e-01baaec05abe"
+}
+- generic
+  - region "Notifications alt+T" [ref=e1]
+  - StaticText "fvoci"
+  - list
+    - listitem [level=1]
+      - button "Search Ctrl/⌘ K" [ref=e10]
+        - StaticText "Search"
+        - StaticText "Ctrl/⌘ K"
+  - generic
+    - generic
+      - StaticText "Personal"
+      - list
+        - listitem [level=1]
+          - link "Home" [ref=e26]
+            - StaticText "Home"
+        - listitem [level=1]
+          - link "Notifications" [ref=e27]
+            - StaticText "Notifications"
+        - listitem [level=1]
+          - link "My notes" [ref=e28]
+            - StaticText "My notes"
+        - listitem [level=1]
+          - link "Shared with me" [ref=e29]
+            - StaticText "Shared with me"
+        - listitem [level=1]
+          - link "My time" [ref=e30]
+            - StaticText "My time"
+        - listitem [level=1]
+          - link "My notes trash" [ref=e31]
+            - StaticText "My notes trash"
+        - listitem [level=1]
+          - link "My activity" [ref=e32]
+            - StaticText "My activity"
+    - separator
+    - generic
+      - StaticText "Workspaces"
+      - list
+        - listitem [level=1]
+          - button "Switch workspace: 개발" [expanded=false, ref=e33]
+            - StaticText "개발"
+      - list
+        - listitem [level=1]
+          - link "Wiki" [ref=e34]
+            - StaticText "Wiki"
+          - button "Collapse Wiki" [expanded=true, ref=e35]
+      - navigation "Wiki" [ref=e20]
+        - list
+          - listitem [level=1]
+            - link "공동 편집 연습" [ref=e40]
+              - StaticText "공동 편집 연습"
+          - listitem [level=1]
+            - link "W17 이동 문서 4 (합성, 4403)" [ref=e41]
+              - StaticText "W17 이동 문서 4 (합성, 4403)"
+      - list
+        - listitem [level=1]
+          - link "Calendar" [ref=e36]
+            - StaticText "Calendar"
+        - listitem [level=1]
+          - link "Members" [ref=e37]
+            - StaticText "Members"
+        - listitem [level=1]
+          - link "Trash" [ref=e38]
+            - StaticText "Trash"
+    - generic
+      - StaticText "Modules"
+      - paragraph
+        - StaticText "No modules yet."
+  - list
+    - listitem [level=1]
+      - button "Account menu: Second User" [expanded=false, ref=e11]
+        - StaticText "Second User"
+  - button "Toggle sidebar" [ref=e2]
+  - main
+    - sectionheader
+      - button "Toggle sidebar" [ref=e3]
+        - StaticText "Toggle sidebar"
+      - StaticText "개발"
+      - group "Timer"
+        - button "Start timer" [ref=e12]
+    - main
+      - navigation "Breadcrumb" [ref=e4]
+        - link "개발 wiki" [ref=e13]
+          - StaticText "개발 wiki"
+      - toolbar "Document actions"
+      - button "History" [ref=e5]
+      - group "Show on home"
+        - button "Pin to home" [ref=e14]
+        - button "Favorite" [ref=e15]
+      - status
+      - region "Live co-editing" [ref=e6]
+        - StaticText "WIKI-5"
+        - status
+          - StaticText "Live"
+        - form
+          - LabelText
+            - StaticText "Title"
+          - textbox "Title" [ref=e21]: W17 이동 문서 4 (합성, 4403)
+            - StaticText "W17 이동 문서 4 (합성, 4403)"
+        - region "Saved draft" [ref=e16]
+          - StaticText "Edits to this document that never reached the server are still in this browser (Oct 22, 2026, 5:03 PM). They won't be merged into the live document. Keep them as a note or discard them."
+          - button "Keep my draft as a note" [ref=e22]
+          - button "Discard draft" [ref=e23]
+        - textbox "Body" [ref=e24]: 온라인에서 쓴 글
+          - paragraph
+            - StaticText "온라인에서 쓴 글"
+        - paragraph
+          - StaticText "Several people edit this document together. Changes are shared right away and kept as a revision after a quiet moment or when everyone leaves."
+      - complementary
+      - region "Documents linking here" [ref=e7]
+        - heading "Documents linking here" [level=2, ref=e17]
+        - paragraph
+          - StaticText "None."
+      - region "Attachments" [ref=e8]
+        - heading "Attachments" [level=2, ref=e18]
+        - paragraph
+        - paragraph
+          - StaticText "No attachments."
+      - region "Comments" [ref=e9]
+        - heading "Comments" [level=2, ref=e19]
+        - paragraph
+        - list
+          - listitem [level=1]
+            - StaticText "No comments yet."
+        - form
+          - textbox "New comment (Ctrl/⌘+Enter to post)" [ref=e25]
+          - button "Post comment" [disabled, ref=e39]

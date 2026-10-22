@@ -1,0 +1,178 @@
+
+ RUN  v5.0.5 <repo>/apps/web
+
+ ❯ tests/component/event-save-mine.test.ts (17 tests | 2 failed) 2722ms
+   ❯ saving my input after an event conflict (D-94) (17)
+     × overwrites onto the newer version a rule save returned after the question, without asking again 1086ms
+     × shows a description of only spaces as empty in the question 48ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/event-save-mine.test.ts > saving my input after an event conflict (D-94) > overwrites onto the newer version a rule save returned after the question, without asking again
+AssertionError: expected "updateEvent" to be called 2 times, but got 1 times
+
+Ignored nodes: comments, script, style
+<html>
+  <head />
+  <body
+    style="--scrollbar-width: 1024px; overflow: hidden; pointer-events: none; padding-right: 11264px; margin-right: 0px;"
+  >
+    <div>
+      
+      
+      
+      
+      
+      
+      
+    </div>
+    <div
+      class="data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate z-50"
+      data-dialog-overlay=""
+      data-slot="dialog-overlay"
+      data-state="open"
+      id="bits-c256"
+      style="pointer-events: auto; --bits-dialog-depth: 0; --bits-dialog-nested-count: 0;"
+    />
+    
+    
+    
+     
+     
+    <div
+      aria-describedby="bits-c259"
+      aria-labelledby="bits-c258"
+      aria-modal="true"
+      class="bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%_-_2rem)] gap-4 rounded-xl p-4 text-sm ring-1 duration-100 fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+      data-dialog-content=""
+      data-slot="dialog-content"
+      data-state="open"
+      escapekeydownbehavior="close"
+      id="bits-c257"
+      interactoutsidebehavior="close"
+      role="dialog"
+      style="pointer-events: auto; --bits-dialog-depth: 0; --bits-dialog-nested-count: 0; contain: layout style;"
+      tabindex="-1"
+    >
+      <div
+        class="gap-2 flex flex-col"
+        data-slot="dialog-header"
+      >
+        <div
+          aria-level="2"
+          class="text-base leading-none font-medium"
+          data-dialog-title=""
+          data-slot="dialog-title"
+          data-state="open"
+          id="bits-c258"
+          role="heading"
+          tabindex="-1"
+        >
+          규칙 뒤 제목
+        </div>
+        
+        
+         
+        <div
+          class="text-muted-foreground *:[a]:hover:text-foreground text-sm *:[a]:underline *:[a]:underline-offset-3"
+          data-dialog-description=""
+          data-slot="dialog-description"
+          data-state="open"
+          id="bits-c259"
+        >
+          회의 · Oct 20, 2026 2:00 PM–3:00 PM
+          
+        </div>
+        
+        
+      </div>
+       
+       
+      <div
+        class="rounded-md border border-amber-500/50 p-3 text-sm"
+      >
+        <div
+          role="alert"
+        >
+          <p>
+            그사이 다른 사람이 이 일정을 바꿨습니다(지금: “규칙 뒤 제목”, Oct 20, 2026 2:00 PM–3:00 PM). 내 입력은 그대로 있습니다.
+          </p>
+           
+          <div
+            class="mt-2 flex gap-2"
+          >
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              type="button"
+            >
+              서버 내용 불러오기
+            </button>
+            
+             
+            <button
+              class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+              data-slot="button"
+              type="button"
+            >
+              내 입력으로 다시 저장
+            </button>
+            
+          </div>
+        </div>
+         
+        <div
+          aria-describedby="event-clash-list"
+          aria-labelledby="event-clash-question"
+          class="mt-3 flex flex-col gap-2 border-t border-amber-500/50 pt-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          role="alertdialog"
+          tabindex="-1"
+        >
+          <p
+            class="font-medium"
+            id="event-clash-question"
+          >
+            아래 칸은 다른 사람도 바꿨습니다. 내 입력으로 덮어쓸까요?
+          </p>
+           
+          <dl
+            class=...
+ ❯ tests/component/event-save-mine.test.ts:434:22
+    432|     await overwrite();
+    433|     await waitFor(() => {
+    434|       expect(update).toHaveBeenCalledTimes(2);
+       |                      ^
+    435|     });
+    436|     expect(update.mock.calls[1]).toEqual(['A', 7, sent({ title: '규칙 뒤 …
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/component/event-save-mine.test.ts > saving my input after an event conflict (D-94) > shows a description of only spaces as empty in the question
+AssertionError: expected '아래 칸은 다른 사람도 바꿨습니다. 내 입력으로 덮어쓸까요? 설명 …' to contain '내 입력: (비어 있음)'
+
+- Expected
++ Received
+
+- 내 입력: (비어 있음)
++ 아래 칸은 다른 사람도 바꿨습니다. 내 입력으로 덮어쓸까요? 설명 지금 서버: 남의 설명 내 입력:   
++   내 입력으로 덮어쓰고 저장 취소
+
+ ❯ tests/component/event-save-mine.test.ts:573:29
+    571|     const box = await screen.findByRole('alertdialog', { name: m.event…
+    572|     expect(box.textContent).toContain(m.events_clash_server({ value: '…
+    573|     expect(box.textContent).toContain(m.events_clash_mine({ value: m.e…
+       |                             ^
+    574|   });
+    575|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 15 passed (17)
+   Start at  11:12:12
+   Duration  6.87s (tests 40%, transform 39%, import 13%, environment 7%, setup 1%)
+

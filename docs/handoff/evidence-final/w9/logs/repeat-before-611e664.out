@@ -1,0 +1,88 @@
+==> compose up (fvoci-w9-pr66-10bc16-test)
+$ docker compose --project-name fvoci-w9-pr66-10bc16-test --file deploy/compose.test.yaml up --detach --wait --remove-orphans
+ Network fvoci-w9-pr66-10bc16-test_default Creating 
+ Network fvoci-w9-pr66-10bc16-test_default Creating 
+ Network fvoci-w9-pr66-10bc16-test_default Created 
+ Network fvoci-w9-pr66-10bc16-test_default Created 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Creating 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Creating 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Creating 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Created 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Created 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Created 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Starting 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Starting 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Starting 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Started 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Started 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Started 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Waiting 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Waiting 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Waiting 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Healthy 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Healthy 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Healthy 
+==> postgres on 127.0.0.1:54261
+==> db bootstrap / db migrate
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+$ cargo run --quiet --package fvoci-server --locked -- db migrate
+==> meilisearch on 127.0.0.1:54262
+==> seaweedfs s3 on 127.0.0.1:54263
+$ bash <scratchpad>/repeat.sh
+before 1 PASS
+before 2 PASS
+before 3 PASS
+before 4 PASS
+before 5 PASS
+before 6 PASS
+before 7 PASS
+before 8 PASS
+before 9 PASS
+before 10 PASS
+before 11 FAIL (0 FV001 warnings) panicked at crates/server/tests/recurrence.rs:761:5:
+before 12 PASS
+before 13 PASS
+before 14 PASS
+before 15 PASS
+before 16 PASS
+before 17 PASS
+before 18 PASS
+before 19 PASS
+before 20 PASS
+before 21 PASS
+before 22 PASS
+before 23 PASS
+before 24 PASS
+before 25 PASS
+before 26 PASS
+before 27 PASS
+before 28 PASS
+before 29 PASS
+before 30 PASS
+before 31 PASS
+before 32 PASS
+before 33 PASS
+before 34 PASS
+before 35 PASS
+before 36 PASS
+before 37 PASS
+before 38 PASS
+before 39 PASS
+before 40 PASS
+before SUMMARY: 1/40 failed
+==> compose down
+$ docker compose --project-name fvoci-w9-pr66-10bc16-test --file deploy/compose.test.yaml down --volumes --remove-orphans
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Stopping 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Stopping 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Stopping 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Stopped 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Removing 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Removed 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Stopped 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Removing 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Removed 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Stopped 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Removing 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Removed 
+ Network fvoci-w9-pr66-10bc16-test_default Removing 
+ Network fvoci-w9-pr66-10bc16-test_default Removed 

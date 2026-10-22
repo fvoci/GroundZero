@@ -1,0 +1,2282 @@
+
+ RUN  v5.0.5 <worktree>/apps/web
+
+ ❯ tests/component/task-form-merge.test.ts (31 tests | 1 failed) 34ms
+   ❯ clashRows (6)
+     × shows the estimate the way the form field shows it 9ms
+ ❯ tests/component/task-conflict-save-mine.test.ts (26 tests | 1 failed) 3316ms
+   ❯ long values in the overwrite question (1)
+     × lets the keyboard reach a value box that scrolls, and leaves short ones alone 1042ms
+ ❯ tests/component/task-dialog-discard.test.ts (13 tests | 9 failed) 10487ms
+   ❯ closing the task dialog with unsaved input (13)
+     × asks before Escape drops a changed title, and Escape on the question keeps the input and focus 1097ms
+     × asks for an estimate that is not a number 1087ms
+     × keeps editing from the close button and returns focus inside the dialog 1097ms
+     × asks on an outside click with a changed field, and a click outside the question changes nothing 1114ms
+     × closes only after I choose to discard 1075ms
+     × asks after clicking the description, a label or the dialog body and pressing Escape 1071ms
+     × asks while a save is still on its way and keeps the dialog when I keep editing 1067ms
+     × keeps the overwrite question and my input when I keep editing from the close button 1089ms
+     × drops the question when another task opens, and does not close or carry over to it 1082ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > long values in the overwrite question > lets the keyboard reach a value box that scrolls, and leaves short ones alone
+TestingLibraryElementError: Unable to find role="region" and name "설명 서버의 지금 값"
+
+Ignored nodes: comments, script, style
+<div
+  aria-describedby="task-clash-hint"
+  aria-labelledby="task-clash-heading"
+  class="mt-3 flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 outline-none"
+  role="alertdialog"
+  tabindex="-1"
+>
+  <h3
+    class="font-semibold"
+    id="task-clash-heading"
+    tabindex="-1"
+  >
+    다른 사람도 바꾼 칸이 있습니다
+  </h3>
+   
+  <p
+    class="text-muted-foreground"
+    id="task-clash-hint"
+  >
+    아래 칸은 나와 다른 사람이 서로 다른 값으로 바꿨습니다(시작일·마감일·마일스톤은 한 묶음으로 봅니다). 덮어쓰면 이 칸은 내 값으로 저장하고, 내가 고치지 않은 칸은 서버의 최신 값을 그대로 둡니다.
+  </p>
+   
+  <ul
+    class="flex flex-col gap-3"
+  >
+    <li
+      class="flex flex-col gap-1"
+      data-clash-field="description"
+    >
+      <span
+        class="font-medium"
+      >
+        설명
+      </span>
+       
+      <dl
+        class="grid gap-2 sm:grid-cols-2"
+      >
+        <div
+          class="flex min-w-0 flex-col gap-0.5"
+        >
+          <dt
+            class="text-muted-foreground"
+          >
+            서버의 지금 값
+          </dt>
+           
+          <dd
+            class="max-h-60 overflow-auto rounded bg-muted px-2 py-1 break-words whitespace-pre-wrap"
+            data-clash-side="server"
+          >
+            1번째 줄
+2번째 줄
+3번째 줄
+4번째 줄
+5번째 줄
+6번째 줄
+7번째 줄
+8번째 줄
+9번째 줄
+10번째 줄
+11번째 줄
+12번째 줄
+13번째 줄
+14번째 줄
+15번째 줄
+16번째 줄
+17번째 줄
+18번째 줄
+19번째 줄
+20번째 줄
+21번째 줄
+22번째 줄
+23번째 줄
+24번째 줄
+25번째 줄
+26번째 줄
+27번째 줄
+28번째 줄
+29번째 줄
+30번째 줄
+31번째 줄
+32번째 줄
+33번째 줄
+34번째 줄
+35번째 줄
+36번째 줄
+37번째 줄
+38번째 줄
+39번째 줄
+40번째 줄
+41번째 줄
+42번째 줄
+43번째 줄
+44번째 줄
+45번째 줄
+46번째 줄
+47번째 줄
+48번째 줄
+49번째 줄
+50번째 줄
+51번째 줄
+52번째 줄
+53번째 줄
+54번째 줄
+55번째 줄
+56번째 줄
+57번째 줄
+58번째 줄
+59번째 줄
+60번째 줄
+61번째 줄
+62번째 줄
+63번째 줄
+64번째 줄
+65번째 줄
+66번째 줄
+67번째 줄
+68번째 줄
+69번째 줄
+70번째 줄
+71번째 줄
+72번째 줄
+73번째 줄
+74번째 줄
+75번째 줄
+76번째 줄
+77번째 줄
+78번째 줄
+79번째 줄
+80번째 줄
+          </dd>
+        </div>
+         
+        <div
+          class="flex min-w-0 flex-col gap-0.5"
+        >
+          <dt
+            class="text-muted-foreground"
+          >
+            내 값
+          </dt>
+           
+          <dd
+            class="max-h-60 overflow-auto rounded bg-muted px-2 py-1 break-words whitespace-pre-wrap"
+            data-clash-side="mine"
+          >
+            내 설명
+          </dd>
+        </div>
+      </dl>
+       
+    </li>
+    
+  </ul>
+   
+  <div
+    class="flex flex-wrap gap-2"
+  >
+    <button
+      class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+      data-slot="button"
+      type="button"
+    >
+      내 값으로 덮어쓰고 저장
+    </button>
+    
+     
+    <button
+      class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+      data-slot="button"
+      type="button"
+    >
+      취소
+    </button>
+    
+  </div>
+</div>
+
+Ignored nodes: comments, script, style
+<div
+  aria-describedby="task-clash-hint"
+  aria-labelledby="task-clash-heading"
+  class="mt-3 flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 outline-none"
+  role="alertdialog"
+  tabindex="-1"
+>
+  <h3
+    class="font-semibold"
+    id="task-clash-heading"
+    tabindex="-1"
+  >
+    다른 사람도 바꾼 칸이 있습니다
+  </h3>
+   
+  <p
+    class="text-muted-foreground"
+    id="task-clash-hint"
+  >
+    아래 칸은 나와 다른 사람이 서로 다른 값으로 바꿨습니다(시작일·마감일·마일스톤은 한 묶음으로 봅니다). 덮어쓰면 이 칸은 내 값으로 저장하고, 내가 고치지 않은 칸은 서버의 최신 값을 그대로 둡니다.
+  </p>
+   
+  <ul
+    class="flex flex-col gap-3"
+  >
+    <li
+      class="flex flex-col gap-1"
+      data-clash-field="description"
+    >
+      <span
+        class="font-medium"
+      >
+        설명
+      </span>
+       
+      <dl
+        class="grid gap-2 sm:grid-cols-2"
+      >
+        <div
+          class="flex min-w-0 flex-col gap-0.5"
+        >
+          <dt
+            class="text-muted-foreground"
+          >
+            서버의 지금 값
+          </dt>
+           
+          <dd
+            class="max-h-60 overflow-auto rounded bg-muted px-2 py-1 break-words whitespace-pre-wrap"
+            data-clash-side="server"
+          >
+            1번째 줄
+2번째 줄
+3번째 줄
+4번째 줄
+5번째 줄
+6번째 줄
+7번째 줄
+8번째 줄
+9번째 줄
+10번째 줄
+11번째 줄
+12번째 줄
+13번째 줄
+14번째 줄
+15번째 줄
+16번째 줄
+17번째 줄
+18번째 줄
+19번째 줄
+20번째 줄
+21번째 줄
+22번째 줄
+23번째 줄
+24번째 줄
+25번째 줄
+26번째 줄
+27번째 줄
+28번째 줄
+29번째 줄
+30번째 줄
+31번째 줄
+32번째 줄
+33번째 줄
+34번째 줄
+35번째 줄
+36번째 줄
+37번째 줄
+38번째 줄
+39번째 줄
+40번째 줄
+41번째 줄
+42번째 줄
+43번째 줄
+44번째 줄
+45번째 줄
+46번째 줄
+47번째 줄
+48번째 줄
+49번째 줄
+50번째 줄
+51번째 줄
+52번째 줄
+53번째 줄
+54번째 줄
+55번째 줄
+56번째 줄
+57번째 줄
+58번째 줄
+59번째 줄
+60번째 줄
+61번째 줄
+62번째 줄
+63번째 줄
+64번째 줄
+65번째 줄
+66번째 줄
+67번째 줄
+68번째 줄
+69번째 줄
+70번째 줄
+71번째 줄
+72번째 줄
+73번째 줄
+74번째 줄
+75번째 줄
+76번째 줄
+77번째 줄
+78번째 줄
+79번째 줄
+80번째 줄
+          </dd>
+        </div>
+         
+        <div
+          class="flex min-w-0 flex-col gap-0.5"
+        >
+          <dt
+            class="text-muted-foreground"
+          >
+            내 값
+          </dt>
+           
+          <dd
+            class="max-h-60 overflow-auto rounded bg-muted px-2 py-1 break-words whitespace-pre-wrap"
+            data-clash-side="mine"
+          >
+            내 설명
+          </dd>
+        </div>
+      </dl>
+       
+    </li>
+    
+  </ul>
+   
+  <div
+    class="flex flex-wrap gap-2"
+  >
+    <button
+      class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+      data-slot="button"
+      type="button"
+    >
+      내 값으로 덮어쓰고 저장
+    </button>
+    
+     
+    <button
+      class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+      data-slot="button"
+      type="button"
+    >
+      취소
+    </button>
+    
+  </div>
+</div>
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/component/task-conflict-save-mine.test.ts:1029:38
+    1027|     const ask = await screen.findByRole('alertdialog', { name: '다른 사람도…
+    1028|
+    1029|     const region = await within(ask).findByRole('region', { name: '설명 …
+       |                                      ^
+    1030|     expect(region.tabIndex).toBe(0);
+    1031|     expect(region.textContent).toBe(long);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  tests/component/task-dialog-discard.test.ts > closing the task dialog with unsaved input > asks before Escape drops a changed title, and Escape on the question keeps the input and focus
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/task-dialog-discard.test.ts:105:17
+    103|
+    104| async function findConfirm(): Promise<HTMLElement> {
+    105|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+    106| }
+    107|
+ ❯ tests/component/task-dialog-discard.test.ts:180:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  tests/component/task-dialog-discard.test.ts > closing the task dialog with unsaved input > asks for an estimate that is not a number
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/task-dialog-discard.test.ts:105:17
+    103|
+    104| async function findConfirm(): Promise<HTMLElement> {
+    105|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+    106| }
+    107|
+ ❯ tests/component/task-dialog-discard.test.ts:201:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  tests/component/task-dialog-discard.test.ts > closing the task dialog with unsaved input > keeps editing from the close button and returns focus inside the dialog
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/task-dialog-discard.test.ts:105:17
+    103|
+    104| async function findConfirm(): Promise<HTMLElement> {
+    105|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+    106| }
+    107|
+ ❯ tests/component/task-dialog-discard.test.ts:211:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  tests/component/task-dialog-discard.test.ts > closing the task dialog with unsaved input > asks on an outside click with a changed field, and a click outside the question changes nothing
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/task-dialog-discard.test.ts:105:17
+    103|
+    104| async function findConfirm(): Promise<HTMLElement> {
+    105|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+    106| }
+    107|
+ ❯ tests/component/task-dialog-discard.test.ts:235:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  tests/component/task-dialog-discard.test.ts > closing the task dialog with unsaved input > closes only after I choose to discard
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/task-dialog-discard.test.ts:105:17
+    103|
+    104| async function findConfirm(): Promise<HTMLElement> {
+    105|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+    106| }
+    107|
+ ❯ tests/component/task-dialog-discard.test.ts:249:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  tests/component/task-dialog-discard.test.ts > closing the task dialog with unsaved input > asks after clicking the description, a label or the dialog body and pressing Escape
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/task-dialog-discard.test.ts:105:17
+    103|
+    104| async function findConfirm(): Promise<HTMLElement> {
+    105|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+    106| }
+    107|
+ ❯ tests/component/task-dialog-discard.test.ts:263:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  tests/component/task-dialog-discard.test.ts > closing the task dialog with unsaved input > asks while a save is still on its way and keeps the dialog when I keep editing
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/task-dialog-discard.test.ts:105:17
+    103|
+    104| async function findConfirm(): Promise<HTMLElement> {
+    105|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+    106| }
+    107|
+ ❯ tests/component/task-dialog-discard.test.ts:318:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  tests/component/task-dialog-discard.test.ts > closing the task dialog with unsaved input > keeps the overwrite question and my input when I keep editing from the close button
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/task-dialog-discard.test.ts:105:17
+    103|
+    104| async function findConfirm(): Promise<HTMLElement> {
+    105|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+    106| }
+    107|
+ ❯ tests/component/task-dialog-discard.test.ts:344:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  tests/component/task-dialog-discard.test.ts > closing the task dialog with unsaved input > drops the question when another task opens, and does not close or carry over to it
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-labelledby="tasks-heading"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2"
+      >
+        <h2
+          class="text-lg font-semibold"
+          id="tasks-heading"
+        >
+          업무
+        </h2>
+         
+        <div
+          aria-label="보기"
+          class="ml-auto flex gap-1"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            칸반
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            목록
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            간트
+          </button>
+          
+          <button
+            aria-pressed="false"
+            class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+            data-slot="button"
+            type="button"
+          >
+            달력
+          </button>
+          
+          
+        </div>
+      </div>
+       
+      <div
+        aria-label="업무 거르기"
+        class="flex flex-wrap items-end gap-2 text-sm"
+        role="search"
+      >
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            찾기
+          </span>
+           
+          <input
+            class="w-40 h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            placeholder="제목·번호"
+            type="search"
+          />
+        </label>
+         
+        <label
+          class="flex flex-col gap-0.5"
+        >
+          <span
+            class="text-xs text-muted-foreground"
+          >
+            상태
+          </span>
+           
+          <select
+            aria-label="상태로 거르기"
+            class="h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outl...
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/task-dialog-discard.test.ts:105:17
+    103|
+    104| async function findConfirm(): Promise<HTMLElement> {
+    105|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+    106| }
+    107|
+ ❯ tests/component/task-dialog-discard.test.ts:361:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  tests/component/task-form-merge.test.ts > clashRows > shows the estimate the way the form field shows it
+AssertionError: expected '1,500' to be '1500' // Object.is equality
+
+Expected: "1500"
+Received: "1,500"
+
+ ❯ tests/component/task-form-merge.test.ts:335:25
+    333|       new Map(),
+    334|     );
+    335|     expect(row?.server).toBe('1500');
+       |                         ^
+    336|     expect(row?.mine).toBe('(비어 있음)');
+    337|     await setLocale('en', { reload: false });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  11 failed | 59 passed (70)
+   Start at  13:23:37
+   Duration  15.38s (tests 51%, transform 33%, import 9%, environment 6%, setup 1%)
+

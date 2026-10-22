@@ -1,0 +1,139 @@
+2026-10-22T06:14:22.594789520Z Setting RLIMIT_NOFILE to 100000
+2026-10-22T06:14:23.827939329Z 06:14:23.824 [info] == Running 20230125140723 Supavisor.Repo.Migrations.CreateTenants.change/0 forward
+2026-10-22T06:14:23.828101152Z 06:14:23.827 [info] create table _supavisor.tenants
+2026-10-22T06:14:23.830009128Z 06:14:23.829 [info] create index _supavisor.tenants_external_id_index
+2026-10-22T06:14:23.832910396Z 06:14:23.832 [info] == Migrated 20230125140723 in 0.0s
+2026-10-22T06:14:23.872027346Z 06:14:23.871 [info] == Running 20230418151441 Supavisor.Repo.Migrations.CreateUsers.change/0 forward
+2026-10-22T06:14:23.872201144Z 06:14:23.871 [info] create table _supavisor.users
+2026-10-22T06:14:23.873983958Z 06:14:23.873 [info] create index _supavisor.users_db_user_alias_tenant_external_id_mode_type_index
+2026-10-22T06:14:23.874738597Z 06:14:23.874 [info] == Migrated 20230418151441 in 0.0s
+2026-10-22T06:14:23.876130097Z 06:14:23.875 [info] == Running 20230502101623 Supavisor.Repo.Migrations.AddTimeoutToUsers.up/0 forward
+2026-10-22T06:14:23.876283149Z 06:14:23.876 [info] alter table _supavisor.users
+2026-10-22T06:14:23.876889157Z 06:14:23.876 [info] == Migrated 20230502101623 in 0.0s
+2026-10-22T06:14:23.878025903Z 06:14:23.877 [info] == Running 20230601125553 Supavisor.Repo.Migrations.AddTenantDefaultPS.up/0 forward
+2026-10-22T06:14:23.878095634Z 06:14:23.877 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.878653821Z 06:14:23.878 [info] == Migrated 20230601125553 in 0.0s
+2026-10-22T06:14:23.879822067Z 06:14:23.879 [info] == Running 20230619091028 Supavisor.Repo.Migrations.AddTenantIpVersion.up/0 forward
+2026-10-22T06:14:23.879918280Z 06:14:23.879 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.880479746Z 06:14:23.880 [info] create check constraint ip_version_values on table _supavisor.tenants
+2026-10-22T06:14:23.881175465Z 06:14:23.880 [info] == Migrated 20230619091028 in 0.0s
+2026-10-22T06:14:23.882327831Z 06:14:23.882 [info] == Running 20230705154938 Supavisor.Repo.Migrations.AddUpstreamSslOpts.up/0 forward
+2026-10-22T06:14:23.882434502Z 06:14:23.882 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.883170462Z 06:14:23.882 [info] create check constraint upstream_verify_values on table _supavisor.tenants
+2026-10-22T06:14:23.883659567Z 06:14:23.883 [info] create check constraint upstream_constraints on table _supavisor.tenants
+2026-10-22T06:14:23.884145544Z 06:14:23.883 [info] == Migrated 20230705154938 in 0.0s
+2026-10-22T06:14:23.885319995Z 06:14:23.885 [info] == Running 20230711142028 Supavisor.Repo.Migrations.AddEnforceSsl.up/0 forward
+2026-10-22T06:14:23.885380996Z 06:14:23.885 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.886039799Z 06:14:23.885 [info] == Migrated 20230711142028 in 0.0s
+2026-10-22T06:14:23.887259651Z 06:14:23.887 [info] == Running 20230714153019 Supavisor.Repo.Migrations.AddAuthQuery.up/0 forward
+2026-10-22T06:14:23.887297157Z 06:14:23.887 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.887967055Z 06:14:23.887 [info] create check constraint auth_query_constraints on table _supavisor.tenants
+2026-10-22T06:14:23.888446307Z 06:14:23.888 [info] == Migrated 20230714153019 in 0.0s
+2026-10-22T06:14:23.889541332Z 06:14:23.889 [info] == Running 20230718175315 Supavisor.Repo.Migrations.AddSniHost.change/0 forward
+2026-10-22T06:14:23.889628579Z 06:14:23.889 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.890084064Z 06:14:23.889 [info] == Migrated 20230718175315 in 0.0s
+2026-10-22T06:14:23.891230154Z 06:14:23.891 [info] == Running 20230801090256 Supavisor.Repo.Migrations.AddUserMaxClients.change/0 forward
+2026-10-22T06:14:23.891266075Z 06:14:23.891 [info] alter table _supavisor.users
+2026-10-22T06:14:23.891726417Z 06:14:23.891 [info] == Migrated 20230801090256 in 0.0s
+2026-10-22T06:14:23.892846292Z 06:14:23.892 [info] == Running 20230801090942 Supavisor.Repo.Migrations.AddTenantDefMaxClients.change/0 forward
+2026-10-22T06:14:23.892916853Z 06:14:23.892 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.893454240Z 06:14:23.893 [info] == Migrated 20230801090942 in 0.0s
+2026-10-22T06:14:23.894632394Z 06:14:23.894 [info] == Running 20230914102712 Supavisor.Repo.Migrations.AddClientIdleTimeout.change/0 forward
+2026-10-22T06:14:23.894642405Z 06:14:23.894 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.895181373Z 06:14:23.894 [info] == Migrated 20230914102712 in 0.0s
+2026-10-22T06:14:23.896400050Z 06:14:23.896 [info] == Running 20230919091334 Supavisor.Repo.Migrations.CreateClusters.change/0 forward
+2026-10-22T06:14:23.896564062Z 06:14:23.896 [info] create table _supavisor.clusters
+2026-10-22T06:14:23.897386462Z 06:14:23.897 [info] create index _supavisor.clusters_alias_index
+2026-10-22T06:14:23.897943765Z 06:14:23.897 [info] == Migrated 20230919091334 in 0.0s
+2026-10-22T06:14:23.899194947Z 06:14:23.898 [info] == Running 20230919100141 Supavisor.Repo.Migrations.CreateClusterTenants.change/0 forward
+2026-10-22T06:14:23.899345789Z 06:14:23.899 [info] create table _supavisor.cluster_tenants
+2026-10-22T06:14:23.900689257Z 06:14:23.900 [info] create check constraint type on table _supavisor.cluster_tenants
+2026-10-22T06:14:23.901059172Z 06:14:23.900 [info] create index _supavisor.cluster_tenants_tenant_external_id_index
+2026-10-22T06:14:23.901693095Z 06:14:23.901 [info] == Migrated 20230919100141 in 0.0s
+2026-10-22T06:14:23.902953791Z 06:14:23.902 [info] == Running 20231004133121 Supavisor.Repo.Migrations.AddDefaultPoolStrategy.change/0 forward
+2026-10-22T06:14:23.902997892Z 06:14:23.902 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.903558690Z 06:14:23.903 [info] create check constraint default_pool_strategy_values on table _supavisor.tenants
+2026-10-22T06:14:23.903998610Z 06:14:23.903 [info] == Migrated 20231004133121 in 0.0s
+2026-10-22T06:14:23.905154101Z 06:14:23.904 [info] == Running 20231214120555 Supavisor.Repo.Migrations.AddHeartbeatInterval.change/0 forward
+2026-10-22T06:14:23.905189402Z 06:14:23.905 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.905880851Z 06:14:23.905 [info] == Migrated 20231214120555 in 0.0s
+2026-10-22T06:14:23.907056087Z 06:14:23.906 [info] == Running 20231229010413 Supavisor.Repo.Migrations.AddTenantAllowList.change/0 forward
+2026-10-22T06:14:23.907099887Z 06:14:23.906 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.907668570Z 06:14:23.907 [info] == Migrated 20231229010413 in 0.0s
+2026-10-22T06:14:23.908820720Z 06:14:23.908 [info] == Running 20240822132419 Supavisor.Repo.Migrations.AddAwsZone.change/0 forward
+2026-10-22T06:14:23.908862191Z 06:14:23.908 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.909347602Z 06:14:23.909 [info] == Migrated 20240822132419 in 0.0s
+2026-10-22T06:14:23.910525653Z 06:14:23.910 [info] == Running 20250811122429 Supavisor.Repo.Migrations.AddJitConfig.change/0 forward
+2026-10-22T06:14:23.910569474Z 06:14:23.910 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.911212097Z 06:14:23.910 [info] == Migrated 20250811122429 in 0.0s
+2026-10-22T06:14:23.912389998Z 06:14:23.912 [info] == Running 20250812153752 Supavisor.Repo.Migrations.AddFeatureFlagsToTenants.change/0 forward
+2026-10-22T06:14:23.912396888Z 06:14:23.912 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.919126033Z 06:14:23.918 [info] == Migrated 20250812153752 in 0.0s
+2026-10-22T06:14:23.919804253Z 06:14:23.919 [info] == Running 20260307125522 Supavisor.Repo.Migrations.AddUsersTenantExternalIdIndex.change/0 forward
+2026-10-22T06:14:23.919950224Z 06:14:23.919 [info] create index if not exists _supavisor.users_tenant_external_id_index
+2026-10-22T06:14:23.920631384Z 06:14:23.920 [info] == Migrated 20260307125522 in 0.0s
+2026-10-22T06:14:23.921619552Z 06:14:23.921 [info] == Running 20260323000000 Supavisor.Repo.Migrations.AddTenantBanFields.change/0 forward
+2026-10-22T06:14:23.921689578Z 06:14:23.921 [info] alter table _supavisor.tenants
+2026-10-22T06:14:23.922295467Z 06:14:23.921 [info] == Migrated 20260323000000 in 0.0s
+2026-10-22T06:14:24.821007063Z 06:14:24.806 [notice]     :alarm_handler: {:set, {:system_memory_high_watermark, []}}
+2026-10-22T06:14:24.912914021Z 06:14:24.912 region=local [info] Elixir.Supavisor.SignalHandler is being initialized...
+2026-10-22T06:14:24.922946336Z 06:14:24.920 region=local [notice] SYN[nonode@nohost] Adding node to scope <tenants>
+2026-10-22T06:14:24.925226706Z 06:14:24.924 region=local [notice] SYN[nonode@nohost] Creating tables for scope <tenants>
+2026-10-22T06:14:24.930643569Z 06:14:24.930 region=local [notice] SYN[nonode@nohost|registry<tenants>] Discovering the cluster
+2026-10-22T06:14:24.933707770Z 06:14:24.933 region=local [notice] SYN[nonode@nohost|pg<tenants>] Discovering the cluster
+2026-10-22T06:14:24.933944713Z 06:14:24.933 region=local [notice] SYN[nonode@nohost] Adding node to scope <availability_zone>
+2026-10-22T06:14:24.933951373Z 06:14:24.933 region=local [notice] SYN[nonode@nohost] Creating tables for scope <availability_zone>
+2026-10-22T06:14:24.933981133Z 06:14:24.933 region=local [notice] SYN[nonode@nohost|registry<availability_zone>] Discovering the cluster
+2026-10-22T06:14:24.933987343Z 06:14:24.933 region=local [notice] SYN[nonode@nohost|pg<availability_zone>] Discovering the cluster
+2026-10-22T06:14:24.938715327Z 06:14:24.938 region=local [warning] metrics_disabled is false
+2026-10-22T06:14:25.155055082Z 06:14:25.153 region=local [info] [libcluster:postgres] Connected to Postgres database
+2026-10-22T06:14:25.164794474Z 06:14:25.164 region=local [info] Running SupavisorWeb.Endpoint with cowboy 2.13.0 at 0.0.0.0:4000 (http)
+2026-10-22T06:14:25.167053344Z 06:14:25.166 region=local [info] Access SupavisorWeb.Endpoint at http://localhost:4000
+2026-10-22T06:14:25.355708237Z 06:14:25.354 region=local [info] Starting MetricsCleaner
+2026-10-22T06:14:25.467904125Z 06:14:25.467 region=local [info] Deleting all dist cache for tenant fvoci-test
+2026-10-22T06:14:25.467941225Z 06:14:25.467 region=local [info] Deleting all cache for tenant fvoci-test
+2026-10-22T06:14:25.472776950Z 06:14:25.472 region=local [info] Delete cache dist on create fvoci-test: [%{"nonode@nohost" => []}]
+2026-10-22T06:14:25.473452089Z [os_mon] memory supervisor port (memsup): Erlang has closed
+2026-10-22T06:14:25.473458409Z [os_mon] cpu supervisor port (cpu_sup): Erlang has closed
+2026-10-22T06:14:26.475737058Z 06:14:26.475 [notice]     :alarm_handler: {:set, {:system_memory_high_watermark, []}}
+2026-10-22T06:14:26.477001966Z 06:14:26.475 region=local [info] Elixir.Supavisor.SignalHandler is being initialized...
+2026-10-22T06:14:26.477042916Z 06:14:26.476 region=local [notice] SYN[supavisor@7284a03a6a40] Adding node to scope <tenants>
+2026-10-22T06:14:26.477193122Z 06:14:26.476 region=local [notice] SYN[supavisor@7284a03a6a40] Creating tables for scope <tenants>
+2026-10-22T06:14:26.477269469Z 06:14:26.476 region=local [notice] SYN[supavisor@7284a03a6a40|registry<tenants>] Discovering the cluster
+2026-10-22T06:14:26.477298389Z 06:14:26.477 region=local [notice] SYN[supavisor@7284a03a6a40|pg<tenants>] Discovering the cluster
+2026-10-22T06:14:26.477304949Z 06:14:26.477 region=local [notice] SYN[supavisor@7284a03a6a40] Adding node to scope <availability_zone>
+2026-10-22T06:14:26.477308659Z 06:14:26.477 region=local [notice] SYN[supavisor@7284a03a6a40] Creating tables for scope <availability_zone>
+2026-10-22T06:14:26.477461022Z 06:14:26.477 region=local [notice] SYN[supavisor@7284a03a6a40|registry<availability_zone>] Discovering the cluster
+2026-10-22T06:14:26.477627604Z 06:14:26.477 region=local [notice] SYN[supavisor@7284a03a6a40|pg<availability_zone>] Discovering the cluster
+2026-10-22T06:14:26.478756049Z 06:14:26.478 region=local [warning] metrics_disabled is false
+2026-10-22T06:14:26.499664650Z 06:14:26.499 region=local [info] Running SupavisorWeb.Endpoint with cowboy 2.13.0 at 0.0.0.0:4000 (http)
+2026-10-22T06:14:26.502022241Z 06:14:26.501 region=local [info] Access SupavisorWeb.Endpoint at http://localhost:4000
+2026-10-22T06:14:26.509228038Z 06:14:26.509 region=local [info] [libcluster:postgres] Connected to Postgres database
+2026-10-22T06:14:26.609234447Z 06:14:26.608 region=local [info] Starting MetricsCleaner
+2026-10-22T06:14:27.630370063Z 06:14:27.630 request_id=GODFX_XOx9YbiIEAAAAC region=local [info] HEAD /api/health
+2026-10-22T06:14:27.631555380Z 06:14:27.631 request_id=GODFX_XOx9YbiIEAAAAC region=local [info] Sent 204 in 1ms
+2026-10-22T06:14:37.667919809Z 06:14:37.667 request_id=GODFYkwYnyvqCtAAAAIC region=local [info] HEAD /api/health
+2026-10-22T06:14:37.669011394Z 06:14:37.668 request_id=GODFYkwYnyvqCtAAAAIC region=local [info] Sent 204 in 1ms
+2026-10-22T06:14:47.703546769Z 06:14:47.703 request_id=GODFZKJCo2Mur0AAAAKC region=local [info] HEAD /api/health
+2026-10-22T06:14:47.704234538Z 06:14:47.704 request_id=GODFZKJCo2Mur0AAAAKC region=local [info] Sent 204 in 868µs
+2026-10-22T06:14:57.742314503Z 06:14:57.741 request_id=GODFZvicWIqxJyEAAA2B region=local [info] HEAD /api/health
+2026-10-22T06:14:57.743317593Z 06:14:57.743 request_id=GODFZvicWIqxJyEAAA2B region=local [info] Sent 204 in 1ms
+2026-10-22T06:15:07.782417471Z 06:15:07.782 request_id=GODFaU8NwHIIguYAAAMC region=local [info] HEAD /api/health
+2026-10-22T06:15:07.783443218Z 06:15:07.783 request_id=GODFaU8NwHIIguYAAAMC region=local [info] Sent 204 in 1ms
+2026-10-22T06:15:17.820496348Z 06:15:17.820 request_id=GODFa6VfOj8V-nkAAAOC region=local [info] HEAD /api/health
+2026-10-22T06:15:17.821418371Z 06:15:17.821 request_id=GODFa6VfOj8V-nkAAAOC region=local [info] Sent 204 in 1ms
+2026-10-22T06:15:27.861309155Z 06:15:27.860 request_id=GODFbfvZqAvfoFcAAAQC region=local [info] HEAD /api/health
+2026-10-22T06:15:27.861984846Z 06:15:27.861 request_id=GODFbfvZqAvfoFcAAAQC region=local [info] Sent 204 in 785µs
+2026-10-22T06:15:37.897962265Z 06:15:37.897 request_id=GODFcFIVVgbmHdEAAASC region=local [info] HEAD /api/health
+2026-10-22T06:15:37.898720955Z 06:15:37.898 request_id=GODFcFIVVgbmHdEAAASC region=local [info] Sent 204 in 814µs
+2026-10-22T06:15:47.936151724Z 06:15:47.935 request_id=GODFcqhoLdbfak8AAAUC region=local [info] HEAD /api/health
+2026-10-22T06:15:47.936859432Z 06:15:47.936 request_id=GODFcqhoLdbfak8AAAUC region=local [info] Sent 204 in 742µs
+2026-10-22T06:15:57.974402068Z 06:15:57.973 request_id=GODFdP66Zdzsy8AAAAWC region=local [info] HEAD /api/health
+2026-10-22T06:15:57.975157138Z 06:15:57.974 request_id=GODFdP66Zdzsy8AAAAWC region=local [info] Sent 204 in 863µs
+2026-10-22T06:16:08.012705147Z 06:16:08.012 request_id=GODFd1UQbU1ZbEsAAAYC region=local [info] HEAD /api/health
+2026-10-22T06:16:08.013488037Z 06:16:08.013 request_id=GODFd1UQbU1ZbEsAAAYC region=local [info] Sent 204 in 836µs
+2026-10-22T06:16:18.050602930Z 06:16:18.050 request_id=GODFeatdINwry0cAAAaC region=local [info] HEAD /api/health
+2026-10-22T06:16:18.051388219Z 06:16:18.051 request_id=GODFeatdINwry0cAAAaC region=local [info] Sent 204 in 965µs
+2026-10-22T06:16:19.265108752Z 06:16:19.264 region=local [warning] Elixir.Supavisor.SignalHandler: :sigterm received
+2026-10-22T06:16:19.265131692Z 06:16:19.264 region=local [notice] SIGTERM received - shutting down
+2026-10-22T06:16:19.265134992Z 

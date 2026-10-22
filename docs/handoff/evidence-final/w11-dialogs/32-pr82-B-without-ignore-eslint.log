@@ -1,0 +1,7 @@
+
+<worktree>/apps/web/src/lib/features/tasks/ClashConfirm.svelte
+  127:51  error  Placing a void expression inside another expression is forbidden. Move it to its own statement instead  @typescript-eslint/no-confusing-void-expression
+  133:49  error  Placing a void expression inside another expression is forbidden. Move it to its own statement instead  @typescript-eslint/no-confusing-void-expression
+
+✖ 2 problems (2 errors, 0 warnings)
+

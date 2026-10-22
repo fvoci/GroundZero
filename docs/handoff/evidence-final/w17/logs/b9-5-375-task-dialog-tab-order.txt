@@ -1,0 +1,5 @@
+steps=37 outside=0 noFocusVisible=0 noRing=
+order: ☆
+즐겨찾기 > 업무 지우기 > task-title > bits-c36 > bits-c37 > task-start > task-due > task-description > task-estimate > task-tags > task-milestone > assignee-01a16272-b6a3-72e7-b8 > assignee-01a16272-b6a3-72e7-b8 > task-save > bits-c57 > new-subtask > 하위 업무 추가 > bits-c58 > bits-c59 > link-lag > bits-c46 > 반복 저장 > task-01a16272-b731-71ab-a8b5-7 > W17 늦은 응답 확인 항목 고치기 > W17 늦은 응답 확인 항목 삭제 > task-01a16272-b731-71ab-a8b5-7 > Markdown 붙여넣기 > 이 업무 시간 재기 > 새 댓글(Ctrl·⌘+Enter로 달기) > bits-c22 > 홈에 고정 > ☆
+즐겨찾기 > 업무 지우기 > task-title > bits-c36 > bits-c37 > task-start
+dialogs=[] active=BUTTON "DEVP-9 API 연결 점검 (A가 고친 제목), 2026-10-28, 할 일"

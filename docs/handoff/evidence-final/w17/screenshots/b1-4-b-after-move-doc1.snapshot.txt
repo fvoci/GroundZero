@@ -1,0 +1,151 @@
+# b1-4-b-after-move-doc1  2026-10-22T07:58:43Z  url=http://127.0.0.1:5173/w/01a16272-b6a3-72e7-b8df-7f4f4e911512/wiki/01a1629b-320e-7214-ac3c-39692368c4b7
+# viewport={
+  "result": "1280x770",
+  "origin": "http://127.0.0.1:5173/w/01a16272-b6a3-72e7-b8df-7f4f4e911512/wiki/01a1629b-320e-7214-ac3c-39692368c4b7"
+}
+- generic
+  - region "Notifications alt+T" [ref=e1]
+  - StaticText "fvoci"
+  - list
+    - listitem [level=1]
+      - button "Search Ctrl/⌘ K" [ref=e11]
+        - StaticText "Search"
+        - StaticText "Ctrl/⌘ K"
+  - generic
+    - generic
+      - StaticText "Personal"
+      - list
+        - listitem [level=1]
+          - link "Home" [ref=e38]
+            - StaticText "Home"
+        - listitem [level=1]
+          - link "Notifications" [ref=e39]
+            - StaticText "Notifications"
+        - listitem [level=1]
+          - link "My notes" [ref=e40]
+            - StaticText "My notes"
+        - listitem [level=1]
+          - link "Shared with me" [ref=e41]
+            - StaticText "Shared with me"
+        - listitem [level=1]
+          - link "My time" [ref=e42]
+            - StaticText "My time"
+        - listitem [level=1]
+          - link "My notes trash" [ref=e43]
+            - StaticText "My notes trash"
+        - listitem [level=1]
+          - link "My activity" [ref=e44]
+            - StaticText "My activity"
+    - separator
+    - generic
+      - StaticText "Workspaces"
+      - list
+        - listitem [level=1]
+          - button "Switch workspace: 개발" [expanded=false, ref=e45]
+            - StaticText "개발"
+      - list
+        - listitem [level=1]
+          - link "Wiki" [ref=e46]
+            - StaticText "Wiki"
+          - button "Collapse Wiki" [expanded=true, ref=e47]
+      - navigation "Wiki" [ref=e23]
+        - list
+          - listitem [level=1]
+            - link "공동 편집 연습" [ref=e52]
+              - StaticText "공동 편집 연습"
+          - listitem [level=1]
+            - link "W17 이동 문서 1 (합성)" [ref=e53]
+              - StaticText "W17 이동 문서 1 (합성)"
+          - listitem [level=1]
+            - link "W17 이동 문서 2 (합성)" [ref=e54]
+              - StaticText "W17 이동 문서 2 (합성)"
+          - listitem [level=1]
+            - link "W17 이동 문서 3 (합성)" [ref=e55]
+              - StaticText "W17 이동 문서 3 (합성)"
+      - list
+        - listitem [level=1]
+          - link "Calendar" [ref=e48]
+            - StaticText "Calendar"
+        - listitem [level=1]
+          - link "Members" [ref=e49]
+            - StaticText "Members"
+        - listitem [level=1]
+          - link "Trash" [ref=e50]
+            - StaticText "Trash"
+    - generic
+      - StaticText "Modules"
+      - paragraph
+        - StaticText "No modules yet."
+  - list
+    - listitem [level=1]
+      - button "Account menu: Second User" [expanded=false, ref=e12]
+        - StaticText "Second User"
+  - button "Toggle sidebar" [ref=e2]
+  - main
+    - sectionheader
+      - button "Toggle sidebar" [ref=e3]
+        - StaticText "Toggle sidebar"
+      - StaticText "개발"
+      - group "Timer"
+        - button "Start timer" [ref=e13]
+    - main
+      - navigation "Breadcrumb" [ref=e4]
+        - link "개발 wiki" [ref=e14]
+          - StaticText "개발 wiki"
+      - toolbar "Document actions"
+      - button "History" [ref=e5]
+      - button "Export" [ref=e6]
+      - group "Show on home"
+        - button "Pin to home" [ref=e15]
+        - button "Favorite" [ref=e16]
+      - status
+      - article "Title" [ref=e7]
+        - StaticText "WIKI-1"
+        - StaticText "Revision 2"
+        - status
+          - StaticText "Saved"
+        - button "Save" [ref=e17]
+        - LabelText
+          - StaticText "Title"
+        - textbox "Title" [ref=e18]: W17 이동 문서 1 (합성)
+          - StaticText "W17 이동 문서 1 (합성)"
+        - group "Editing mode"
+          - button "Rich text" [ref=e24]
+          - button "Markdown" [ref=e25]
+          - button "Preview" [ref=e26]
+        - toolbar "Formatting"
+          - button "Bold" [ref=e27]
+          - button "Italic" [ref=e28]
+          - button "Heading" [ref=e29]
+          - button "List" [ref=e30]
+          - button "Checklist" [ref=e31]
+          - button "Code" [ref=e32]
+          - button "Table" [ref=e33]
+          - button "Math" [ref=e34]
+          - button "File or image" [ref=e35]
+        - generic
+          - textbox "Body" [ref=e36]: 이동 전 B 문단 타1 타2 타3 타4 타5 타6 타7 타8 타9 타10 타11 타12 타13 타14
+            - paragraph
+              - StaticText "이동 전 B 문단 타1 타2 타3 타4 타5 타6 타7 타8 타9 타10 타11 타12 타13 타14"
+          - paragraph
+            - StaticText "Alt+Shift+↑↓ move · Ctrl/⌘+Shift+D duplicate · Ctrl/⌘+/ this menu"
+      - complementary
+      - region "Documents linking here" [ref=e8]
+        - heading "Documents linking here" [level=2, ref=e19]
+        - paragraph
+          - StaticText "None."
+      - region "Attachments" [ref=e9]
+        - heading "Attachments" [level=2, ref=e20]
+        - button "Upload files" [ref=e21]
+        - paragraph
+        - paragraph
+          - StaticText "No attachments."
+      - region "Comments" [ref=e10]
+        - heading "Comments" [level=2, ref=e22]
+        - paragraph
+        - list
+          - listitem [level=1]
+            - StaticText "No comments yet."
+        - form
+          - textbox "New comment (Ctrl/⌘+Enter to post)" [ref=e37]
+          - button "Post comment" [disabled, ref=e51]

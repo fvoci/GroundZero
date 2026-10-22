@@ -1,0 +1,12 @@
+diff --git a/apps/web/tests/component/item-screen-form.test.ts b/apps/web/tests/component/item-screen-form.test.ts
+index 7962fad..90a4686 100644
+--- a/apps/web/tests/component/item-screen-form.test.ts
++++ b/apps/web/tests/component/item-screen-form.test.ts
+@@ -270,7 +270,6 @@ function task(id: string, title: string): TaskView {
+     estimate_minutes: null,
+     tags: [],
+     milestone: false,
+-    predecessor_ids: [],
+     predecessors: [],
+     series: null,
+     occurrence_date: null,

@@ -1,0 +1,29 @@
+From 548e5ab52a06f6b18cf58cb4072e7c014b998903 Mon Sep 17 00:00:00 2001
+From: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 13:01:33 +0900
+Subject: [PATCH] test(web): give the home week fixture the up-next counts
+
+For the #61 update commit (after #59 is merged): #61 adds
+HomeView.up_next_counts, so #59's home-week-dates fixture needs it.
+Integration rehearsal W13; not pushed to any PR branch.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ apps/web/tests/component/home-week-dates.test.ts | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/apps/web/tests/component/home-week-dates.test.ts b/apps/web/tests/component/home-week-dates.test.ts
+index b3ad169..56bddc9 100644
+--- a/apps/web/tests/component/home-week-dates.test.ts
++++ b/apps/web/tests/component/home-week-dates.test.ts
+@@ -24,6 +24,7 @@ const home: HomeView = {
+   // 수요일. 주 시작(기본 일요일) 기준 이번 주는 2026-10-18 ~ 2026-10-24.
+   today: '2026-10-21',
+   up_next: [],
++  up_next_counts: { overdue: 0, today: 0, upcoming: 0 },
+   recent_tasks: [],
+   recent_documents: [],
+   active_items: [],
+-- 
+2.53.0
+

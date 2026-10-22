@@ -1,0 +1,30 @@
+From fca9be6c1d60b2792b2ee0d3e4a58c264581337f Mon Sep 17 00:00:00 2001
+From: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 13:01:33 +0900
+Subject: [PATCH] test(web): drop predecessor_ids from the task conflict
+ fixture
+
+For the #82 update commit (after #62 is merged): #62 (D-92) removes
+TaskDetailView.predecessor_ids.
+Integration rehearsal W13; not pushed to any PR branch.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ apps/web/tests/component/task-conflict-save-mine.test.ts | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/apps/web/tests/component/task-conflict-save-mine.test.ts b/apps/web/tests/component/task-conflict-save-mine.test.ts
+index 908779c..ebd1683 100644
+--- a/apps/web/tests/component/task-conflict-save-mine.test.ts
++++ b/apps/web/tests/component/task-conflict-save-mine.test.ts
+@@ -39,7 +39,6 @@ const v2: TaskDetailView = {
+   estimate_minutes: null,
+   tags: [],
+   milestone: false,
+-  predecessor_ids: [],
+   predecessors: [],
+   series: null,
+   occurrence_date: null,
+-- 
+2.53.0
+

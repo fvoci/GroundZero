@@ -1,0 +1,19 @@
+$ paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy globalVariable baseLocale --emit-ts-declarations --silent
+1792642966913 START "~/orca/workspaces/GroundZero/w10-pr60/apps/web"
+1792642966924 COMPLETED 3121 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+
+ RUN  v5.0.5 ~/orca/workspaces/GroundZero/w10-pr60/apps/web
+
+Not implemented: Window's scrollBy() method
+Not implemented: Window's scrollBy() method
+Not implemented: Window's scrollBy() method
+
+ Test Files  88 passed (88)
+      Tests  424 passed (424)
+   Start at  13:22:48
+   Duration  25.45s (transform 61%, import 17%, environment 13%, tests 7%, setup 2%)
+
+    Isolate  88 workers spawned · ~1.27s startup each (spawn + environment, per file)
+             at least ~2.33s faster with isolate: false — reuses workers across files instead of one per file
+
+exit=0

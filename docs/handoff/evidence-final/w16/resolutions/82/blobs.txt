@@ -1,0 +1,2 @@
+apps/web/messages/common/en.json 1e6a076ba612b95c53abae57258ac57a54ec72f3 cb9b13dde473e4eb0241e34ab98ab6adc2cda9af
+apps/web/messages/common/ko.json 4b270c6e7806c9b2d734a163baba970641913fd8 a037159c02ebbb4079da5494879a5f3b91292482

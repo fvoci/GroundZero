@@ -1,0 +1,10 @@
+Auto-merging docs/development.md
+Merge made by the 'ort' strategy.
+ .../migrations/0090_search_claim_recheck.sql       |  47 ++++++++
+ crates/server/src/search.rs                        |  43 +++++++-
+ crates/server/tests/common/mod.rs                  |   4 +
+ crates/server/tests/search.rs                      | 113 +++++++++++++++++++
+ crates/server/tests/worker.rs                      | 119 +++++++++++++++++++++
+ docs/development.md                                |   5 +
+ 6 files changed, 330 insertions(+), 1 deletion(-)
+ create mode 100644 crates/server/migrations/0090_search_claim_recheck.sql

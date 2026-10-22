@@ -1,0 +1,50 @@
+Auto-merging apps/web/messages/app/en.json
+Auto-merging apps/web/messages/app/ko.json
+Auto-merging apps/web/src/app/App.svelte
+Auto-merging apps/web/src/lib/api/client.ts
+Auto-merging apps/web/src/lib/features/documents/DocumentEditor.svelte
+Auto-merging apps/web/src/lib/features/settings/DisplaySettingsDialog.svelte
+Auto-merging docs/development.md
+Merge made by the 'ort' strategy.
+ apps/web/messages/app/en.json                      |   1 +
+ apps/web/messages/app/ko.json                      |   1 +
+ apps/web/messages/audit/en.json                    |   7 +
+ apps/web/messages/audit/ko.json                    |   7 +
+ apps/web/messages/common/en.json                   |   5 +-
+ apps/web/messages/common/ko.json                   |   5 +-
+ apps/web/src/app/App.svelte                        |  29 +++-
+ apps/web/src/lib/api/client.ts                     |  20 ++-
+ apps/web/src/lib/api/errors.ts                     |   5 +
+ apps/web/src/lib/features/audit/AuditScreen.svelte |   5 +-
+ apps/web/src/lib/features/audit/labels.ts          |  52 +++++-
+ .../lib/features/documents/DocumentEditor.svelte   |  61 ++++++-
+ .../src/lib/features/feedback/FeedbackHost.svelte  |  71 ++++++++-
+ .../src/lib/features/feedback/feedback.svelte.ts   |  57 ++++++-
+ .../src/lib/features/files/AttachmentsPanel.svelte |  75 +++++++--
+ .../src/lib/features/members/MembersScreen.svelte  |  74 +++++++--
+ apps/web/src/lib/features/tasks/TaskBoard.svelte   |   9 +-
+ apps/web/src/lib/features/trash/TrashScreen.svelte |  46 +++++-
+ .../tests/component/account-switch-unload.test.ts  | 153 ++++++++++++++++++
+ apps/web/tests/component/app-start-error.test.ts   |  68 ++++++++
+ apps/web/tests/component/audit-codes.test.ts       |  91 +++++++++++
+ .../tests/component/document-save-account.test.ts  | 157 ++++++++++++++++++
+ apps/web/tests/component/error-text-paths.test.ts  |  49 ++++++
+ apps/web/tests/component/file-rename.test.ts       | 176 +++++++++++++++++++++
+ .../component/members-conflict-reload.test.ts      |  92 +++++++++++
+ .../web/tests/component/members-input-kept.test.ts | 118 ++++++++++++++
+ apps/web/tests/component/saved-view-delete.test.ts |  75 +++++++++
+ apps/web/tests/component/session-expired.test.ts   | 160 +++++++++++++++++++
+ .../tests/component/trash-retention-field.test.ts  | 134 ++++++++++++++++
+ docs/development.md                                |   2 +-
+ 30 files changed, 1754 insertions(+), 51 deletions(-)
+ create mode 100644 apps/web/tests/component/account-switch-unload.test.ts
+ create mode 100644 apps/web/tests/component/app-start-error.test.ts
+ create mode 100644 apps/web/tests/component/audit-codes.test.ts
+ create mode 100644 apps/web/tests/component/document-save-account.test.ts
+ create mode 100644 apps/web/tests/component/error-text-paths.test.ts
+ create mode 100644 apps/web/tests/component/file-rename.test.ts
+ create mode 100644 apps/web/tests/component/members-conflict-reload.test.ts
+ create mode 100644 apps/web/tests/component/members-input-kept.test.ts
+ create mode 100644 apps/web/tests/component/saved-view-delete.test.ts
+ create mode 100644 apps/web/tests/component/session-expired.test.ts
+ create mode 100644 apps/web/tests/component/trash-retention-field.test.ts

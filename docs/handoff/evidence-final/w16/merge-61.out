@@ -1,0 +1,7 @@
+Auto-merging apps/web/src/lib/api/client.ts
+Auto-merging apps/web/src/lib/features/home/HomeDashboard.svelte
+Auto-merging contracts/openapi.json
+Auto-merging crates/server/src/http/mod.rs
+Auto-merging docs/development.md
+Auto-merging packages/api-client/src/generated/schema.ts
+Automatic merge went well; stopped before committing as requested

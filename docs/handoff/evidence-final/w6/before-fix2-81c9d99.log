@@ -1,0 +1,34 @@
+
+ RUN  v5.0.5 ~/orca/workspaces/GroundZero/w4-ledger/apps/web
+
+ ❯ tests/component/account-switch-unload.test.ts (2 tests | 1 failed) 1252ms
+   ❯ account switch reload and the unsaved-edit warning (2)
+     × still warns when the edit could not be kept as a draft for the first account 1044ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/account-switch-unload.test.ts > account switch reload and the unsaved-edit warning > still warns when the edit could not be kept as a draft for the first account
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/component/account-switch-unload.test.ts:150:31
+    148|
+    149|     await vi.waitFor(() => {
+    150|       expect(blockedOnReload).toBe(true);
+       |                               ^
+    151|     });
+    152|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  11:49:17
+   Duration  6.13s (transform 50%, tests 21%, import 19%, environment 9%, setup 2%)
+

@@ -1,0 +1,12 @@
+diff --git a/apps/web/tests/component/home-week-dates.test.ts b/apps/web/tests/component/home-week-dates.test.ts
+index b3ad169..56bddc9 100644
+--- a/apps/web/tests/component/home-week-dates.test.ts
++++ b/apps/web/tests/component/home-week-dates.test.ts
+@@ -24,6 +24,7 @@ const home: HomeView = {
+   // 수요일. 주 시작(기본 일요일) 기준 이번 주는 2026-10-18 ~ 2026-10-24.
+   today: '2026-10-21',
+   up_next: [],
++  up_next_counts: { overdue: 0, today: 0, upcoming: 0 },
+   recent_tasks: [],
+   recent_documents: [],
+   active_items: [],

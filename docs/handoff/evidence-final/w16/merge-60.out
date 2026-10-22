@@ -1,0 +1,20 @@
+Auto-merging apps/web/messages/app/en.json
+Auto-merging apps/web/messages/app/ko.json
+Auto-merging apps/web/messages/common/en.json
+CONFLICT (content): Merge conflict in apps/web/messages/common/en.json
+Auto-merging apps/web/messages/common/ko.json
+CONFLICT (content): Merge conflict in apps/web/messages/common/ko.json
+Auto-merging apps/web/src/app/App.svelte
+Auto-merging apps/web/src/lib/api/client.ts
+Auto-merging apps/web/src/lib/features/documents/DocumentEditor.svelte
+CONFLICT (content): Merge conflict in apps/web/src/lib/features/documents/DocumentEditor.svelte
+Auto-merging apps/web/src/lib/features/home/HomeDashboard.svelte
+Auto-merging apps/web/src/lib/features/settings/DisplaySettingsDialog.svelte
+Auto-merging contracts/openapi.json
+Auto-merging crates/server/src/features/documents.rs
+Auto-merging crates/server/src/features/files.rs
+Auto-merging crates/server/src/http/mod.rs
+Auto-merging crates/server/tests/common/mod.rs
+Auto-merging docs/development.md
+Auto-merging packages/api-client/src/generated/schema.ts
+Automatic merge failed; fix conflicts and then commit the result.

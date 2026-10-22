@@ -1,0 +1,6 @@
+diff --git a/apps/web/src/lib/features/events/EventDialog.svelte b/apps/web/src/lib/features/events/EventDialog.svelte
+index 859a463..1675afb 100644
+--- a/apps/web/src/lib/features/events/EventDialog.svelte
++++ b/apps/web/src/lib/features/events/EventDialog.svelte
+@@ -73 +72,0 @@
+-    conflict = undefined;

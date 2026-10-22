@@ -1,0 +1,450 @@
+2026-10-22T05:50:41.714306745Z The files belonging to this database system will be owned by user "postgres".
+2026-10-22T05:50:41.714338466Z This user must also own the server process.
+2026-10-22T05:50:41.714341246Z 
+2026-10-22T05:50:41.714660820Z Using language tag "en-US" for ICU locale "en_US.UTF-8".
+2026-10-22T05:50:41.714737911Z The database cluster will be initialized with this locale configuration:
+2026-10-22T05:50:41.714743331Z   locale provider:   icu
+2026-10-22T05:50:41.714745291Z   default collation: en-US
+2026-10-22T05:50:41.714747041Z   LC_COLLATE:  en_US.UTF-8
+2026-10-22T05:50:41.714748731Z   LC_CTYPE:    en_US.UTF-8
+2026-10-22T05:50:41.714750501Z   LC_MESSAGES: en_US.UTF-8
+2026-10-22T05:50:41.714752161Z   LC_MONETARY: en_US.UTF-8
+2026-10-22T05:50:41.714753841Z   LC_NUMERIC:  en_US.UTF-8
+2026-10-22T05:50:41.714755622Z   LC_TIME:     en_US.UTF-8
+2026-10-22T05:50:41.714757412Z The default text search configuration will be set to "english".
+2026-10-22T05:50:41.714759302Z 
+2026-10-22T05:50:41.714761032Z Data page checksums are disabled.
+2026-10-22T05:50:41.714813922Z 
+2026-10-22T05:50:41.714819602Z fixing permissions on existing directory /var/lib/postgresql/data ... ok
+2026-10-22T05:50:41.715011125Z creating subdirectories ... ok
+2026-10-22T05:50:41.715020305Z selecting dynamic shared memory implementation ... posix
+2026-10-22T05:50:41.727759316Z selecting default "max_connections" ... 100
+2026-10-22T05:50:41.745904340Z selecting default "shared_buffers" ... 128MB
+2026-10-22T05:50:41.954368370Z selecting default time zone ... UTC
+2026-10-22T05:50:41.954738624Z creating configuration files ... ok
+2026-10-22T05:50:42.046345236Z running bootstrap script ... ok
+2026-10-22T05:50:42.266886678Z performing post-bootstrap initialization ... ok
+2026-10-22T05:50:42.275281990Z syncing data to disk ... ok
+2026-10-22T05:50:42.275294950Z 
+2026-10-22T05:50:42.275297810Z 
+2026-10-22T05:50:42.275300060Z Success. You can now start the database server using:
+2026-10-22T05:50:42.275302350Z 
+2026-10-22T05:50:42.275304460Z     /nix/var/nix/profiles/default/bin/pg_ctl -D /var/lib/postgresql/data -l logfile start
+2026-10-22T05:50:42.275306760Z 
+2026-10-22T05:50:42.275322762Z initdb: warning: enabling "trust" authentication for local connections
+2026-10-22T05:50:42.275329962Z initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+2026-10-22T05:50:42.394821497Z waiting for server to start.... done
+2026-10-22T05:50:42.394843857Z server started
+2026-10-22T05:50:42.403671426Z 
+2026-10-22T05:50:42.403688696Z /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/init-scripts
+2026-10-22T05:50:42.403701716Z 
+2026-10-22T05:50:42.403704196Z /usr/local/bin/docker-entrypoint.sh: running /docker-entrypoint-initdb.d/migrate.sh
+2026-10-22T05:50:42.414106736Z DO
+2026-10-22T05:50:42.414598633Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/init-scripts/00-schema.sql
+2026-10-22T05:50:42.419729251Z CREATE ROLE
+2026-10-22T05:50:42.420016814Z REVOKE
+2026-10-22T05:50:42.420370870Z CREATE SCHEMA
+2026-10-22T05:50:42.421159121Z CREATE FUNCTION
+2026-10-22T05:50:42.421366494Z REVOKE
+2026-10-22T05:50:42.421557376Z GRANT
+2026-10-22T05:50:42.422033192Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/init-scripts/00000000000000-initial-schema.sql
+2026-10-22T05:50:42.427776070Z CREATE PUBLICATION
+2026-10-22T05:50:42.427949342Z ALTER ROLE
+2026-10-22T05:50:42.428101893Z CREATE ROLE
+2026-10-22T05:50:42.428281336Z CREATE ROLE
+2026-10-22T05:50:42.428629871Z GRANT ROLE
+2026-10-22T05:50:42.428792793Z GRANT
+2026-10-22T05:50:42.428888074Z CREATE ROLE
+2026-10-22T05:50:42.429065286Z GRANT ROLE
+2026-10-22T05:50:42.429243970Z CREATE SCHEMA
+2026-10-22T05:50:42.431641122Z CREATE EXTENSION
+2026-10-22T05:50:42.434688613Z CREATE EXTENSION
+2026-10-22T05:50:42.434833229Z CREATE ROLE
+2026-10-22T05:50:42.434996257Z CREATE ROLE
+2026-10-22T05:50:42.435155449Z CREATE ROLE
+2026-10-22T05:50:42.435320401Z CREATE ROLE
+2026-10-22T05:50:42.435495543Z GRANT ROLE
+2026-10-22T05:50:42.435664136Z GRANT ROLE
+2026-10-22T05:50:42.435825468Z GRANT ROLE
+2026-10-22T05:50:42.435966990Z GRANT ROLE
+2026-10-22T05:50:42.436130342Z GRANT
+2026-10-22T05:50:42.436392205Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.436551241Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.436745660Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.436902992Z GRANT
+2026-10-22T05:50:42.437121965Z ALTER ROLE
+2026-10-22T05:50:42.437288977Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.437446269Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.437610112Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.437737002Z ALTER ROLE
+2026-10-22T05:50:42.437855805Z ALTER ROLE
+2026-10-22T05:50:42.438235860Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/init-scripts/00000000000001-auth-schema.sql
+2026-10-22T05:50:42.443641963Z CREATE SCHEMA
+2026-10-22T05:50:42.445902853Z CREATE TABLE
+2026-10-22T05:50:42.446229357Z CREATE INDEX
+2026-10-22T05:50:42.446568932Z CREATE INDEX
+2026-10-22T05:50:42.446764544Z COMMENT
+2026-10-22T05:50:42.447826629Z CREATE TABLE
+2026-10-22T05:50:42.448080052Z CREATE INDEX
+2026-10-22T05:50:42.448374736Z CREATE INDEX
+2026-10-22T05:50:42.448613829Z CREATE INDEX
+2026-10-22T05:50:42.448758421Z COMMENT
+2026-10-22T05:50:42.449552332Z CREATE TABLE
+2026-10-22T05:50:42.449701424Z COMMENT
+2026-10-22T05:50:42.450299212Z CREATE TABLE
+2026-10-22T05:50:42.450582306Z CREATE INDEX
+2026-10-22T05:50:42.450729178Z COMMENT
+2026-10-22T05:50:42.451097683Z CREATE TABLE
+2026-10-22T05:50:42.451238105Z COMMENT
+2026-10-22T05:50:42.451626160Z INSERT 0 7
+2026-10-22T05:50:42.451883653Z CREATE FUNCTION
+2026-10-22T05:50:42.452057056Z CREATE FUNCTION
+2026-10-22T05:50:42.452245098Z CREATE FUNCTION
+2026-10-22T05:50:42.452397770Z GRANT
+2026-10-22T05:50:42.452563813Z CREATE ROLE
+2026-10-22T05:50:42.452712413Z GRANT
+2026-10-22T05:50:42.452958288Z GRANT
+2026-10-22T05:50:42.453132731Z GRANT
+2026-10-22T05:50:42.453270422Z ALTER ROLE
+2026-10-22T05:50:42.453585166Z ALTER TABLE
+2026-10-22T05:50:42.453887151Z ALTER TABLE
+2026-10-22T05:50:42.454131364Z ALTER TABLE
+2026-10-22T05:50:42.454378227Z ALTER TABLE
+2026-10-22T05:50:42.454572730Z ALTER TABLE
+2026-10-22T05:50:42.454971195Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/init-scripts/00000000000002-storage-schema.sql
+2026-10-22T05:50:42.460701752Z CREATE SCHEMA
+2026-10-22T05:50:42.460843594Z CREATE ROLE
+2026-10-22T05:50:42.461060307Z ALTER ROLE
+2026-10-22T05:50:42.461270880Z GRANT
+2026-10-22T05:50:42.462254073Z DO
+2026-10-22T05:50:42.462636436Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/init-scripts/00000000000003-post-setup.sql
+2026-10-22T05:50:42.467789217Z ALTER ROLE
+2026-10-22T05:50:42.467951099Z ALTER ROLE
+2026-10-22T05:50:42.468586836Z CREATE FUNCTION
+2026-10-22T05:50:42.468905582Z CREATE EVENT TRIGGER
+2026-10-22T05:50:42.469087244Z COMMENT
+2026-10-22T05:50:42.469418999Z CREATE FUNCTION
+2026-10-22T05:50:42.469573121Z COMMENT
+2026-10-22T05:50:42.470126928Z DO
+2026-10-22T05:50:42.470298921Z CREATE ROLE
+2026-10-22T05:50:42.470496584Z GRANT
+2026-10-22T05:50:42.470638264Z GRANT
+2026-10-22T05:50:42.470774097Z GRANT
+2026-10-22T05:50:42.471053701Z GRANT
+2026-10-22T05:50:42.471217053Z GRANT
+2026-10-22T05:50:42.471366915Z GRANT
+2026-10-22T05:50:42.471495595Z GRANT
+2026-10-22T05:50:42.472252517Z GRANT
+2026-10-22T05:50:42.473483223Z GRANT
+2026-10-22T05:50:42.473917650Z DO
+2026-10-22T05:50:42.474364445Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql
+2026-10-22T05:50:42.479339762Z BEGIN
+2026-10-22T05:50:42.484734815Z CREATE EXTENSION
+2026-10-22T05:50:42.485413244Z CREATE SCHEMA
+2026-10-22T05:50:42.485634077Z GRANT
+2026-10-22T05:50:42.485822359Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.485995235Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.486148703Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.487079866Z CREATE TABLE
+2026-10-22T05:50:42.487291787Z INSERT 0 1
+2026-10-22T05:50:42.488123660Z CREATE TABLE
+2026-10-22T05:50:42.488369553Z CREATE INDEX
+2026-10-22T05:50:42.488656266Z CREATE INDEX
+2026-10-22T05:50:42.488765569Z COMMENT
+2026-10-22T05:50:42.489148574Z CREATE FUNCTION
+2026-10-22T05:50:42.489666221Z DO
+2026-10-22T05:50:42.489826323Z GRANT
+2026-10-22T05:50:42.490028456Z GRANT
+2026-10-22T05:50:42.490179978Z GRANT
+2026-10-22T05:50:42.490344920Z ALTER ROLE
+2026-10-22T05:50:42.490544953Z ALTER TABLE
+2026-10-22T05:50:42.490799045Z ALTER TABLE
+2026-10-22T05:50:42.490944018Z ALTER FUNCTION
+2026-10-22T05:50:42.491153581Z GRANT ROLE
+2026-10-22T05:50:42.491295321Z GRANT
+2026-10-22T05:50:42.491535006Z DO
+2026-10-22T05:50:42.492231535Z DO
+2026-10-22T05:50:42.492490499Z CREATE FUNCTION
+2026-10-22T05:50:42.492572940Z COMMENT
+2026-10-22T05:50:42.492870114Z DO
+2026-10-22T05:50:42.493019546Z INSERT 0 1
+2026-10-22T05:50:42.493155898Z ALTER FUNCTION
+2026-10-22T05:50:42.493330190Z ALTER FUNCTION
+2026-10-22T05:50:42.493432762Z REVOKE
+2026-10-22T05:50:42.493607654Z GRANT
+2026-10-22T05:50:42.493812496Z COMMIT
+2026-10-22T05:50:42.494216672Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/init-scripts/99-jwt.sql
+2026-10-22T05:50:42.500598788Z ALTER DATABASE
+2026-10-22T05:50:42.500912182Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/init-scripts/99-roles.sql
+2026-10-22T05:50:42.509036621Z ALTER ROLE
+2026-10-22T05:50:42.511384073Z ALTER ROLE
+2026-10-22T05:50:42.513561792Z ALTER ROLE
+2026-10-22T05:50:42.516047645Z ALTER ROLE
+2026-10-22T05:50:42.518498098Z ALTER ROLE
+2026-10-22T05:50:42.527092134Z ALTER ROLE
+2026-10-22T05:50:42.527591870Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/00-extension.sql
+2026-10-22T05:50:42.532926772Z psql:/docker-entrypoint-initdb.d/migrations/00-extension.sql:1: NOTICE:  schema "extensions" already exists, skipping
+2026-10-22T05:50:42.533128285Z CREATE SCHEMA
+2026-10-22T05:50:42.542458630Z CREATE EXTENSION
+2026-10-22T05:50:42.543015136Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/10000000000000_demote-postgres.sql
+2026-10-22T05:50:42.549001758Z GRANT
+2026-10-22T05:50:42.549297492Z GRANT
+2026-10-22T05:50:42.549464744Z GRANT
+2026-10-22T05:50:42.549841070Z GRANT
+2026-10-22T05:50:42.550058223Z GRANT
+2026-10-22T05:50:42.550201233Z GRANT
+2026-10-22T05:50:42.550350766Z GRANT
+2026-10-22T05:50:42.550804542Z GRANT
+2026-10-22T05:50:42.551761075Z GRANT
+2026-10-22T05:50:42.552457364Z DO
+2026-10-22T05:50:42.552601256Z ALTER ROLE
+2026-10-22T05:50:42.553041762Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20211115181400_update-auth-permissions.sql
+2026-10-22T05:50:42.558559177Z GRANT
+2026-10-22T05:50:42.558803400Z GRANT
+2026-10-22T05:50:42.558955402Z GRANT
+2026-10-22T05:50:42.559133314Z ALTER TABLE
+2026-10-22T05:50:42.559341997Z ALTER TABLE
+2026-10-22T05:50:42.559506179Z ALTER TABLE
+2026-10-22T05:50:42.559645280Z ALTER TABLE
+2026-10-22T05:50:42.559792343Z ALTER TABLE
+2026-10-22T05:50:42.559933605Z GRANT
+2026-10-22T05:50:42.560180908Z GRANT
+2026-10-22T05:50:42.560330830Z GRANT
+2026-10-22T05:50:42.560705645Z GRANT
+2026-10-22T05:50:42.561016100Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.561165451Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.561326314Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.561677118Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20211118015519_create-realtime-schema.sql
+2026-10-22T05:50:42.567322404Z CREATE SCHEMA
+2026-10-22T05:50:42.567710409Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20211122051245_update-realtime-permissions.sql
+2026-10-22T05:50:42.572865309Z GRANT
+2026-10-22T05:50:42.573045280Z GRANT
+2026-10-22T05:50:42.573164012Z GRANT
+2026-10-22T05:50:42.573508497Z GRANT
+2026-10-22T05:50:42.573822771Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20211124212715_update-auth-owner.sql
+2026-10-22T05:50:42.579339196Z DO
+2026-10-22T05:50:42.579569349Z DO
+2026-10-22T05:50:42.579788690Z DO
+2026-10-22T05:50:42.580147036Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20211130151719_update-realtime-permissions.sql
+2026-10-22T05:50:42.585611760Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.585758352Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.585978519Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.586626008Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20220118070449_enable-safeupdate-postgrest.sql
+2026-10-22T05:50:42.591822743Z ALTER ROLE
+2026-10-22T05:50:42.592232189Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20220126121436_finer-postgrest-triggers.sql
+2026-10-22T05:50:42.597245326Z psql:/docker-entrypoint-initdb.d/migrations/20220126121436_finer-postgrest-triggers.sql:3: NOTICE:  event trigger "api_restart" does not exist, skipping
+2026-10-22T05:50:42.597259026Z DROP EVENT TRIGGER
+2026-10-22T05:50:42.597431338Z psql:/docker-entrypoint-initdb.d/migrations/20220126121436_finer-postgrest-triggers.sql:4: NOTICE:  function extensions.notify_api_restart() does not exist, skipping
+2026-10-22T05:50:42.597442908Z DROP FUNCTION
+2026-10-22T05:50:42.598047955Z CREATE FUNCTION
+2026-10-22T05:50:42.598287318Z CREATE FUNCTION
+2026-10-22T05:50:42.598430242Z psql:/docker-entrypoint-initdb.d/migrations/20220126121436_finer-postgrest-triggers.sql:59: NOTICE:  event trigger "pgrst_ddl_watch" does not exist, skipping
+2026-10-22T05:50:42.598447726Z DROP EVENT TRIGGER
+2026-10-22T05:50:42.598672085Z CREATE EVENT TRIGGER
+2026-10-22T05:50:42.598759836Z psql:/docker-entrypoint-initdb.d/migrations/20220126121436_finer-postgrest-triggers.sql:64: NOTICE:  event trigger "pgrst_drop_watch" does not exist, skipping
+2026-10-22T05:50:42.598762435Z DROP EVENT TRIGGER
+2026-10-22T05:50:42.598952039Z CREATE EVENT TRIGGER
+2026-10-22T05:50:42.599279913Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20220224211803_fix-postgrest-supautils.sql
+2026-10-22T05:50:42.609637642Z DO
+2026-10-22T05:50:42.610002027Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20220317095840_pg_graphql.sql
+2026-10-22T05:50:42.615906717Z CREATE SCHEMA
+2026-10-22T05:50:42.616081409Z psql:/docker-entrypoint-initdb.d/migrations/20220317095840_pg_graphql.sql:5: NOTICE:  function graphql_public.graphql(text,text,jsonb) does not exist, skipping
+2026-10-22T05:50:42.616095069Z DROP FUNCTION
+2026-10-22T05:50:42.616722017Z CREATE FUNCTION
+2026-10-22T05:50:42.617052410Z GRANT
+2026-10-22T05:50:42.617334575Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.617528247Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.617703200Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.617887772Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.618064714Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.618241387Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.618628073Z CREATE FUNCTION
+2026-10-22T05:50:42.618720184Z DROP EVENT TRIGGER
+2026-10-22T05:50:42.618724213Z psql:/docker-entrypoint-initdb.d/migrations/20220317095840_pg_graphql.sql:90: NOTICE:  event trigger "issue_pg_graphql_access" does not exist, skipping
+2026-10-22T05:50:42.618973798Z CREATE EVENT TRIGGER
+2026-10-22T05:50:42.619197891Z COMMENT
+2026-10-22T05:50:42.620438367Z CREATE FUNCTION
+2026-10-22T05:50:42.620585820Z DROP EVENT TRIGGER
+2026-10-22T05:50:42.620597530Z psql:/docker-entrypoint-initdb.d/migrations/20220317095840_pg_graphql.sql:143: NOTICE:  event trigger "issue_graphql_placeholder" does not exist, skipping
+2026-10-22T05:50:42.620724390Z CREATE EVENT TRIGGER
+2026-10-22T05:50:42.620907782Z COMMENT
+2026-10-22T05:50:42.621389960Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20220321174452_fix-postgrest-alter-type-event-trigger.sql
+2026-10-22T05:50:42.627075936Z psql:/docker-entrypoint-initdb.d/migrations/20220321174452_fix-postgrest-alter-type-event-trigger.sql:3: NOTICE:  event trigger "api_restart" does not exist, skipping
+2026-10-22T05:50:42.627125986Z DROP EVENT TRIGGER
+2026-10-22T05:50:42.627264230Z psql:/docker-entrypoint-initdb.d/migrations/20220321174452_fix-postgrest-alter-type-event-trigger.sql:4: NOTICE:  function extensions.notify_api_restart() does not exist, skipping
+2026-10-22T05:50:42.627798087Z DROP FUNCTION
+2026-10-22T05:50:42.629289116Z CREATE FUNCTION
+2026-10-22T05:50:42.629930255Z CREATE FUNCTION
+2026-10-22T05:50:42.630235439Z DROP EVENT TRIGGER
+2026-10-22T05:50:42.630480972Z CREATE EVENT TRIGGER
+2026-10-22T05:50:42.630639103Z DROP EVENT TRIGGER
+2026-10-22T05:50:42.630795477Z CREATE EVENT TRIGGER
+2026-10-22T05:50:42.631220071Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20220322085208_gotrue-session-limit.sql
+2026-10-22T05:50:42.636958169Z ALTER ROLE
+2026-10-22T05:50:42.637367693Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20220404205710_pg_graphql-on-by-default.sql
+2026-10-22T05:50:42.644327637Z CREATE FUNCTION
+2026-10-22T05:50:42.644898075Z CREATE FUNCTION
+2026-10-22T05:50:42.645593945Z CREATE FUNCTION
+2026-10-22T05:50:42.645692666Z psql:/docker-entrypoint-initdb.d/migrations/20220404205710_pg_graphql-on-by-default.sql:142: NOTICE:  extension "pg_graphql" does not exist, skipping
+2026-10-22T05:50:42.645726045Z DROP EXTENSION
+2026-10-22T05:50:42.654063269Z DO
+2026-10-22T05:50:42.654518066Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20220609081115_grant-supabase-auth-admin-and-supabase-storage-admin-to-postgres.sql
+2026-10-22T05:50:42.660048580Z GRANT ROLE
+2026-10-22T05:50:42.660384544Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20220613123923_pg_graphql-pg-dump-perms.sql
+2026-10-22T05:50:42.668003276Z CREATE FUNCTION
+2026-10-22T05:50:42.669845322Z DROP EXTENSION
+2026-10-22T05:50:42.678845452Z DO
+2026-10-22T05:50:42.679452619Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20220713082019_pg_cron-pg_net-temp-perms-fix.sql
+2026-10-22T05:50:42.689435044Z DO
+2026-10-22T05:50:42.694253267Z DO
+2026-10-22T05:50:42.694762175Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20221028101028_set_authenticator_timeout.sql
+2026-10-22T05:50:42.700952119Z ALTER ROLE
+2026-10-22T05:50:42.701536097Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20221103090837_revoke_admin.sql
+2026-10-22T05:50:42.708409479Z REVOKE ROLE
+2026-10-22T05:50:42.708883367Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20221207154255_create_pgsodium_and_vault.sql
+2026-10-22T05:50:42.727422125Z DO
+2026-10-22T05:50:42.727912491Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20230201083204_grant_auth_roles_to_postgres.sql
+2026-10-22T05:50:42.733746279Z GRANT ROLE
+2026-10-22T05:50:42.734090014Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20230224042246_grant_extensions_perms_for_postgres.sql
+2026-10-22T05:50:42.740533750Z GRANT
+2026-10-22T05:50:42.741873948Z GRANT
+2026-10-22T05:50:42.742072691Z GRANT
+2026-10-22T05:50:42.742434747Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.742515757Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.742760130Z ALTER DEFAULT PRIVILEGES
+2026-10-22T05:50:42.743092703Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20230306081037_grant_pg_monitor_to_postgres.sql
+2026-10-22T05:50:42.748534487Z GRANT ROLE
+2026-10-22T05:50:42.748921343Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20230327032006_grant_auth_roles_to_supabase_storage_admin.sql
+2026-10-22T05:50:42.754443148Z GRANT ROLE
+2026-10-22T05:50:42.754822503Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20230529180330_alter_api_roles_for_inherit.sql
+2026-10-22T05:50:42.759930710Z ALTER ROLE
+2026-10-22T05:50:42.760072802Z ALTER ROLE
+2026-10-22T05:50:42.760215255Z ALTER ROLE
+2026-10-22T05:50:42.761137787Z DO
+2026-10-22T05:50:42.761488452Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20231013070755_grant_authenticator_to_supabase_storage_admin.sql
+2026-10-22T05:50:42.767209459Z GRANT ROLE
+2026-10-22T05:50:42.767419472Z REVOKE ROLE
+2026-10-22T05:50:42.767764176Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20231017062225_grant_pg_graphql_permissions_for_custom_roles.sql
+2026-10-22T05:50:42.775160546Z CREATE FUNCTION
+2026-10-22T05:50:42.776932240Z DROP EXTENSION
+2026-10-22T05:50:42.785604605Z DO
+2026-10-22T05:50:42.786193874Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20231020085357_revoke_writes_on_cron_job_from_postgres.sql
+2026-10-22T05:50:42.792422158Z DO
+2026-10-22T05:50:42.794194341Z CREATE FUNCTION
+2026-10-22T05:50:42.794602727Z DROP EVENT TRIGGER
+2026-10-22T05:50:42.794812770Z ALTER FUNCTION
+2026-10-22T05:50:42.795000902Z CREATE EVENT TRIGGER
+2026-10-22T05:50:42.795375437Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20231130133139_set_lock_timeout_to_authenticator_role.sql
+2026-10-22T05:50:42.801063054Z ALTER ROLE
+2026-10-22T05:50:42.801467749Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20240124080435_alter_lo_export_lo_import_owner.sql
+2026-10-22T05:50:42.807373358Z ALTER FUNCTION
+2026-10-22T05:50:42.807541790Z ALTER FUNCTION
+2026-10-22T05:50:42.807768834Z ALTER FUNCTION
+2026-10-22T05:50:42.808090618Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20240606060239_grant_predefined_roles_to_postgres.sql
+2026-10-22T05:50:42.813382399Z GRANT ROLE
+2026-10-22T05:50:42.813796584Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20241031003909_create_orioledb.sql
+2026-10-22T05:50:42.822661304Z DO
+2026-10-22T05:50:42.823023339Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20241215003910_backfill_pgmq_metadata.sql
+2026-10-22T05:50:42.829783360Z DO
+2026-10-22T05:50:42.830160835Z DO
+2026-10-22T05:50:42.830709372Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250205060043_disable_log_statement_on_internal_roles.sql
+2026-10-22T05:50:42.836360038Z ALTER ROLE
+2026-10-22T05:50:42.836501859Z ALTER ROLE
+2026-10-22T05:50:42.836656302Z ALTER ROLE
+2026-10-22T05:50:42.837010225Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250205144616_move_orioledb_to_extensions_schema.sql
+2026-10-22T05:50:42.843140759Z DO
+2026-10-22T05:50:42.843466433Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250218031949_pgsodium_mask_role.sql
+2026-10-22T05:50:42.849083069Z DO
+2026-10-22T05:50:42.849397113Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250220051611_pg_net_perms_fix.sql
+2026-10-22T05:50:42.856479657Z CREATE FUNCTION
+2026-10-22T05:50:42.857453701Z DO
+2026-10-22T05:50:42.857846317Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250312095419_pgbouncer_ownership.sql
+2026-10-22T05:50:42.863854546Z ALTER FUNCTION
+2026-10-22T05:50:42.864114221Z GRANT
+2026-10-22T05:50:42.864516336Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250402065937_alter_internal_event_triggers_owner_to_supabase_admin.sql
+2026-10-22T05:50:42.869463363Z DROP EVENT TRIGGER
+2026-10-22T05:50:42.870491546Z ALTER FUNCTION
+2026-10-22T05:50:42.870712829Z CREATE EVENT TRIGGER
+2026-10-22T05:50:42.871032852Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250402093753_grant_subscription_to_postgres_16_and_above.sql
+2026-10-22T05:50:42.876437676Z DO
+2026-10-22T05:50:42.876801231Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250417190610_update_pgbouncer_get_auth.sql
+2026-10-22T05:50:42.883766145Z CREATE FUNCTION
+2026-10-22T05:50:42.883991538Z GRANT
+2026-10-22T05:50:42.884453693Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250421084701_revoke_admin_roles_from_postgres.sql
+2026-10-22T05:50:42.889464861Z REVOKE ROLE
+2026-10-22T05:50:42.890515436Z DO
+2026-10-22T05:50:42.890974911Z DO
+2026-10-22T05:50:42.891146284Z REVOKE ROLE
+2026-10-22T05:50:42.891388387Z REVOKE
+2026-10-22T05:50:42.891951295Z DO
+2026-10-22T05:50:42.892288718Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250605172253_grant_with_admin_to_postgres_16_and_above.sql
+2026-10-22T05:50:42.897918625Z DO
+2026-10-22T05:50:42.898341059Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250623125453_tmp_grant_storage_tables_to_postgres_with_grant_option.sql
+2026-10-22T05:50:42.904541482Z DO
+2026-10-22T05:50:42.904950009Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250709135250_grant_storage_schema_to_postgres_with_grant_option.sql
+2026-10-22T05:50:42.911218993Z DO
+2026-10-22T05:50:42.911534696Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20250710151649_supabase_read_only_user_default_transaction_read_only.sql
+2026-10-22T05:50:42.916901880Z ALTER ROLE
+2026-10-22T05:50:42.917281335Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20251001204436_predefined_role_grants.sql
+2026-10-22T05:50:42.922334873Z GRANT ROLE
+2026-10-22T05:50:42.922935821Z DO
+2026-10-22T05:50:42.923260654Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20251105172723_grant_pg_reload_conf_to_postgres.sql
+2026-10-22T05:50:42.928907231Z GRANT
+2026-10-22T05:50:42.929225656Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20251121132723_correct_search_path_pgbouncer.sql
+2026-10-22T05:50:42.935998356Z CREATE FUNCTION
+2026-10-22T05:50:42.936212428Z REVOKE
+2026-10-22T05:50:42.936471213Z REVOKE
+2026-10-22T05:50:42.936676386Z GRANT
+2026-10-22T05:50:42.937036090Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20260211120934_supabase_privileged_role.sql
+2026-10-22T05:50:42.943035141Z DO
+2026-10-22T05:50:42.943368525Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20260413000000_fix-authenticator-session-preload-libraries.sql
+2026-10-22T05:50:42.948020488Z ALTER ROLE
+2026-10-22T05:50:42.948332272Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20260421000000_pg_graphql-off-by-default.sql
+2026-10-22T05:50:42.956148387Z DROP EXTENSION
+2026-10-22T05:50:42.956539422Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/20260421000001_rescope_pg_graphql_access_trigger.sql
+2026-10-22T05:50:42.962888137Z CREATE FUNCTION
+2026-10-22T05:50:42.963179911Z DROP EVENT TRIGGER
+2026-10-22T05:50:42.963388095Z CREATE EVENT TRIGGER
+2026-10-22T05:50:42.963763259Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/97-_supabase.sql
+2026-10-22T05:50:42.991615543Z CREATE DATABASE
+2026-10-22T05:50:42.992164021Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/99-logs.sql
+2026-10-22T05:50:43.002220936Z You are now connected to database "_supabase" as user "supabase_admin".
+2026-10-22T05:50:43.002703682Z CREATE SCHEMA
+2026-10-22T05:50:43.002843584Z ALTER SCHEMA
+2026-10-22T05:50:43.005055814Z You are now connected to database "postgres" as user "supabase_admin".
+2026-10-22T05:50:43.005488849Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/99-pooler.sql
+2026-10-22T05:50:43.013439057Z You are now connected to database "_supabase" as user "supabase_admin".
+2026-10-22T05:50:43.013833712Z CREATE SCHEMA
+2026-10-22T05:50:43.013996134Z ALTER SCHEMA
+2026-10-22T05:50:43.016189224Z You are now connected to database "postgres" as user "supabase_admin".
+2026-10-22T05:50:43.016505438Z /docker-entrypoint-initdb.d/migrate.sh: running /docker-entrypoint-initdb.d/migrations/99-realtime.sql
+2026-10-22T05:50:43.023474621Z CREATE SCHEMA
+2026-10-22T05:50:43.023688443Z ALTER SCHEMA
+2026-10-22T05:50:43.029540083Z    pg_stat_statements_reset    
+2026-10-22T05:50:43.029549963Z -------------------------------
+2026-10-22T05:50:43.029552963Z  2026-10-22 05:50:43.029124+00
+2026-10-22T05:50:43.029555423Z (1 row)
+2026-10-22T05:50:43.029557733Z 
+2026-10-22T05:50:43.029560283Z  pg_stat_reset 
+2026-10-22T05:50:43.029562473Z ---------------
+2026-10-22T05:50:43.029564583Z  
+2026-10-22T05:50:43.029566713Z (1 row)
+2026-10-22T05:50:43.029568853Z 
+2026-10-22T05:50:43.030061149Z 
+2026-10-22T05:50:43.030068059Z /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/migrations
+2026-10-22T05:50:43.030070589Z 
+2026-10-22T05:50:43.031123184Z waiting for server to shut down.... 2026-10-22 05:50:43.031 UTC [56] LOG:  pg_cron scheduler shutting down
+2026-10-22T05:50:43.131254729Z  done
+2026-10-22T05:50:43.131272250Z server stopped
+2026-10-22T05:50:43.132326204Z 
+2026-10-22T05:50:43.132334174Z PostgreSQL init process complete; ready for start up.
+2026-10-22T05:50:43.132336954Z 
+2026-10-22T05:50:58.732994805Z 10.200.2.1 2026-10-22 05:50:58.732 UTC [302] fvoci_borrow_01a16229a458708fa931f3bb06d3d8cd@postgres FATAL:  terminating connection due to administrator command
+2026-10-22T05:52:14.005823073Z 10.200.2.1 2026-10-22 05:52:14.005 UTC [1050] fvoci_borrow_01a1622aca5d766598ee51eba3181177@postgres FATAL:  terminating connection due to administrator command
+2026-10-22T05:52:20.015583511Z 10.200.2.1 2026-10-22 05:52:20.015 UTC [1189] postgres@postgres FATAL:  remaining connection slots are reserved for roles with the SUPERUSER attribute
+2026-10-22T05:52:20.055575976Z 10.200.2.1 2026-10-22 05:52:20.055 UTC [1192] postgres@postgres FATAL:  remaining connection slots are reserved for roles with the SUPERUSER attribute
+2026-10-22T05:52:20.063347281Z 10.200.2.1 2026-10-22 05:52:20.063 UTC [1193] postgres@postgres FATAL:  remaining connection slots are reserved for roles with the SUPERUSER attribute
+2026-10-22T05:52:20.099301604Z 10.200.2.1 2026-10-22 05:52:20.099 UTC [1194] fvoci_migrator@postgres FATAL:  remaining connection slots are reserved for roles with the SUPERUSER attribute
+2026-10-22T05:52:20.172581357Z 10.200.2.1 2026-10-22 05:52:20.172 UTC [1199] postgres@postgres FATAL:  remaining connection slots are reserved for roles with the SUPERUSER attribute
+2026-10-22T05:52:28.772504434Z [local] 2026-10-22 05:52:28.772 UTC [262] supabase_admin@postgres FATAL:  terminating connection due to administrator command
+2026-10-22T05:52:28.772544605Z  2026-10-22 05:52:28.772 UTC [222] LOG:  pg_cron scheduler shutting down

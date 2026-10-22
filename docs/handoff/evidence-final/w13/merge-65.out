@@ -1,0 +1,11 @@
+Auto-merging docs/development.md
+Merge made by the 'ort' strategy.
+ .../migrations/0088_upload_claim_release.sql       |  36 ++
+ crates/server/src/features/files.rs                | 131 ++++++-
+ crates/server/src/storage/local.rs                 | 107 ++++--
+ crates/server/src/storage/mod.rs                   |  97 +++++-
+ crates/server/tests/files.rs                       | 381 +++++++++++++++++++++
+ crates/server/tests/storage.rs                     | 123 +++++++
+ docs/development.md                                |   2 +-
+ 7 files changed, 821 insertions(+), 56 deletions(-)
+ create mode 100644 crates/server/migrations/0088_upload_claim_release.sql

@@ -1,0 +1,41 @@
+From 17df95376f4f09a9a817680896db16eebab3dbc7 Mon Sep 17 00:00:00 2001
+From: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 13:01:48 +0900
+Subject: [PATCH] fix(web): show the estimate as the plain number in the
+ overwrite question
+
+For the #82 update commit. SIMULATED here: W11 is changing #82 to use
+String(estimate_minutes) instead of display.formatNumber, which #62 (D-92)
+deletes as unused; that change was not on #82's head 1640dbc yet, so this
+commit stands in for it in the integration rehearsal W13.
+Not pushed to any PR branch.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ apps/web/src/lib/features/tasks/labels.ts | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/apps/web/src/lib/features/tasks/labels.ts b/apps/web/src/lib/features/tasks/labels.ts
+index 6f4c14c..f745221 100644
+--- a/apps/web/src/lib/features/tasks/labels.ts
++++ b/apps/web/src/lib/features/tasks/labels.ts
+@@ -1,6 +1,6 @@
+ // 업무 상태·우선순위의 표시 이름. 값은 읽을 때 지금 언어로 만든다(언어는 실행 중에 바뀔 수 있다, D-81).
+ import type { AssigneeView, LinkKind, TaskInput, TaskPriority, TaskStatus } from '$lib/api/client';
+-import { formatDay, formatNumber } from '$lib/display';
++import { formatDay } from '$lib/display';
+ import { shortId } from '$lib/features/workspaces/badge';
+ import { m } from '$lib/paraglide/messages.js';
+ 
+@@ -178,7 +178,7 @@ function fieldText(unit: MergeUnit, input: TaskInput, names: ReadonlyMap<string,
+     case 'estimate_minutes':
+       return input.estimate_minutes === null
+         ? m.tasks_clash_empty()
+-        : formatNumber(input.estimate_minutes);
++        : String(input.estimate_minutes);
+     case 'tags':
+       return input.tags.length === 0 ? m.tasks_clash_empty() : input.tags.join(', ');
+     case 'assignee_ids':
+-- 
+2.53.0
+

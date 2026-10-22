@@ -1,0 +1,147 @@
+
+ RUN  v5.0.5 <worktree>/apps/web
+
+ ❯ tests/component/task-dialog-discard.test.ts (14 tests | 1 failed | 13 skipped) 425ms
+   ❯ closing the task dialog with unsaved input (14)
+     × neither asks nor closes while the form saves 424ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/task-dialog-discard.test.ts > closing the task dialog with unsaved input > neither asks nor closes while the form saves
+AssertionError: expected <div …(13)>…(2)</div> to be null
+
+- Expected:
+null
+
++ Received:
+<div
+  aria-describedby="bits-c31"
+  aria-labelledby="bits-c30"
+  aria-modal="true"
+  class="data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-popover text-popover-foreground ring-foreground/10 gap-4 rounded-xl p-4 ring-1 duration-100 data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 outline-none"
+  data-alert-dialog-content=""
+  data-nested=""
+  data-size="default"
+  data-slot="alert-dialog-content"
+  data-state="open"
+  id="bits-c15"
+  role="alertdialog"
+  style="pointer-events: auto; outline: none; --bits-dialog-depth: 1; --bits-dialog-nested-count: 0; contain: layout style;"
+  tabindex="-1"
+>
+  <!---->
+  <div
+    class="grid grid-rows-[auto_1fr] place-items-center gap-1.5 text-center has-data-[slot=alert-dialog-media]:grid-rows-[auto_auto_1fr] has-data-[slot=alert-dialog-media]:gap-x-4 sm:group-data-[size=default]/alert-dialog-content:place-items-start sm:group-data-[size=default]/alert-dialog-content:text-left sm:group-data-[size=default]/alert-dialog-content:has-data-[slot=alert-dialog-media]:grid-rows-[auto_1fr]"
+    data-slot="alert-dialog-header"
+  >
+    <!---->
+    <!---->
+    <!---->
+    <div
+      aria-level="2"
+      class="text-base font-medium sm:group-data-[size=default]/alert-dialog-content:group-has-data-[slot=alert-dialog-media]/alert-dialog-content:col-start-2"
+      data-alert-dialog-title=""
+      data-slot="alert-dialog-title"
+      data-state="open"
+      id="bits-c30"
+      role="heading"
+    >
+      저장하지 않은 변경이 있습니다
+      <!---->
+    </div>
+    
+    
+    <!---->
+     
+    <!---->
+    <!---->
+    <div
+      class="text-muted-foreground *:[a]:hover:text-foreground text-sm text-balance md:text-pretty *:[a]:underline *:[a]:underline-offset-3"
+      data-alert-dialog-description=""
+      data-slot="alert-dialog-description"
+      data-state="open"
+      id="bits-c31"
+    >
+      닫으면 이 창에서 고친 내용이 사라집니다.
+      <!---->
+    </div>
+    
+    
+    <!---->
+    <!---->
+  </div>
+  <!---->
+   
+  <div
+    class="bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t p-4 flex flex-col-reverse gap-2 group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2 sm:flex-row sm:justify-end"
+    data-slot="alert-dialog-footer"
+  >
+    <!---->
+    <!---->
+    <!---->
+    <!---->
+    <!---->
+    <button
+      class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"
+      data-alert-dialog-cancel=""
+      data-slot="alert-dialog-cancel"
+      data-state="open"
+      id="bits-c32"
+      tabindex="0"
+      type="button"
+    >
+      <!---->
+      계속 편집
+      
+      <!---->
+    </button>
+    
+    
+    
+    
+    <!---->
+     
+    <!---->
+    <!---->
+    <!---->
+    <!---->
+    <button
+      class="aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive focus-visible:border-destructive/40 dark:hover:bg-destructive/30 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"
+      data-alert-dialog-action=""
+      data-slot="alert-dialog-action"
+      data-state="open"
+      id="bits-c33"
+      type="button"
+    >
+      <!---->
+      변경 버리고 닫기
+      
+      <!---->
+    </button>
+    
+    
+    
+    
+    <!---->
+    <!---->
+  </div>
+  <!---->
+  <!---->
+</div>
+
+ ❯ tests/component/task-dialog-discard.test.ts:349:26
+    347|     await clickOutside();
+    348|     await flush();
+    349|     expect(confirmBox()).toBeNull();
+       |                          ^
+    350|     expect(back).not.toHaveBeenCalled();
+    351|     expect(within(content()).queryByRole('button', { name: m.common_cl…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 skipped (14)
+   Start at  14:21:35
+   Duration  4.72s (transform 59%, import 21%, environment 10%, tests 9%, setup 2%)
+

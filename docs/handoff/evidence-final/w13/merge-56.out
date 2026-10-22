@@ -1,0 +1,13 @@
+Auto-merging apps/web/messages/tasks/en.json
+Auto-merging apps/web/messages/tasks/ko.json
+Merge made by the 'ort' strategy.
+ apps/web/messages/tasks/en.json                    |  34 +-
+ apps/web/messages/tasks/ko.json                    |  32 +-
+ .../src/lib/features/tasks/TaskCsvImport.svelte    | 144 ++++--
+ apps/web/src/lib/features/tasks/csv-import.ts      | 117 +++++
+ apps/web/src/lib/features/tasks/csv.ts             |  85 +++-
+ apps/web/tests/component/task-csv-import.test.ts   | 563 +++++++++++++++++++++
+ apps/web/tests/component/tasks-csv.test.ts         |  52 ++
+ 7 files changed, 973 insertions(+), 54 deletions(-)
+ create mode 100644 apps/web/src/lib/features/tasks/csv-import.ts
+ create mode 100644 apps/web/tests/component/task-csv-import.test.ts

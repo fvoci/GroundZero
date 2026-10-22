@@ -1,0 +1,90 @@
+==> compose up (fvoci-w9-pr66-10bc16-test)
+$ docker compose --project-name fvoci-w9-pr66-10bc16-test --file deploy/compose.test.yaml up --detach --wait --remove-orphans
+ Network fvoci-w9-pr66-10bc16-test_default Creating 
+ Network fvoci-w9-pr66-10bc16-test_default Creating 
+ Network fvoci-w9-pr66-10bc16-test_default Created 
+ Network fvoci-w9-pr66-10bc16-test_default Created 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Creating 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Creating 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Creating 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Created 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Created 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Created 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Starting 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Starting 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Starting 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Started 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Started 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Started 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Waiting 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Waiting 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Waiting 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Healthy 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Healthy 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Healthy 
+==> postgres on 127.0.0.1:54367
+==> db bootstrap / db migrate
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+$ cargo run --quiet --package fvoci-server --locked -- db migrate
+==> meilisearch on 127.0.0.1:54368
+==> seaweedfs s3 on 127.0.0.1:54366
+$ bash <scratchpad>/repeat.sh
+after probe PASS
+W9DIAG probe need=6 spare=10000 ticked=Ok(51) synced=1
+after 1 PASS  finished in 1.28s
+after 2 PASS  finished in 1.32s
+after 3 PASS  finished in 1.34s
+after 4 PASS  finished in 1.44s
+after 5 PASS  finished in 1.45s
+after 6 PASS  finished in 1.48s
+after 7 PASS  finished in 1.62s
+after 8 PASS  finished in 1.55s
+after 9 PASS  finished in 1.60s
+after 10 PASS  finished in 1.61s
+after 11 PASS  finished in 1.66s
+after 12 PASS  finished in 1.69s
+after 13 PASS  finished in 1.77s
+after 14 PASS  finished in 1.84s
+after 15 PASS  finished in 1.80s
+after 16 PASS  finished in 1.84s
+after 17 PASS  finished in 1.88s
+after 18 PASS  finished in 1.99s
+after 19 PASS  finished in 1.93s
+after 20 PASS  finished in 1.97s
+after 21 PASS  finished in 2.18s
+after 22 PASS  finished in 2.09s
+after 23 PASS  finished in 2.30s
+after 24 PASS  finished in 2.33s
+after 25 PASS  finished in 2.24s
+after 26 PASS  finished in 2.29s
+after 27 PASS  finished in 2.35s
+after 28 PASS  finished in 2.39s
+after 29 PASS  finished in 2.53s
+after 30 PASS  finished in 2.41s
+after 31 PASS  finished in 2.50s
+after 32 PASS  finished in 2.72s
+after 33 PASS  finished in 2.51s
+after 34 PASS  finished in 2.67s
+after 35 PASS  finished in 2.77s
+after 36 PASS  finished in 2.73s
+after 37 PASS  finished in 2.74s
+after 38 PASS  finished in 2.75s
+after 39 PASS  finished in 2.76s
+after 40 PASS  finished in 2.70s
+after SUMMARY: 0/40 failed
+==> compose down
+$ docker compose --project-name fvoci-w9-pr66-10bc16-test --file deploy/compose.test.yaml down --volumes --remove-orphans
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Stopping 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Stopping 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Stopping 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Stopped 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Removing 
+ Container fvoci-w9-pr66-10bc16-test-meilisearch-1 Removed 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Stopped 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Removing 
+ Container fvoci-w9-pr66-10bc16-test-postgres-1 Removed 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Stopped 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Removing 
+ Container fvoci-w9-pr66-10bc16-test-seaweedfs-1 Removed 
+ Network fvoci-w9-pr66-10bc16-test_default Removing 
+ Network fvoci-w9-pr66-10bc16-test_default Removed 

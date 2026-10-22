@@ -1,0 +1,186 @@
+# b1-7-export-stand-in-label  2026-10-22T08:01:43Z  url=http://127.0.0.1:5173/w/01a1629b-3179-7706-8265-d5bec72d0201/wiki/01a1629b-32a0-77de-825e-f4c928ec2de0
+# viewport={
+  "result": "1280x800",
+  "origin": "http://127.0.0.1:5173/w/01a1629b-3179-7706-8265-d5bec72d0201/wiki/01a1629b-32a0-77de-825e-f4c928ec2de0"
+}
+- generic
+  - generic
+    - region "알림 alt+T" [ref=e1]
+    - StaticText "fvoci"
+    - list
+      - listitem [level=1]
+        - button "검색 Ctrl/⌘ K" [ref=e22]
+          - StaticText "검색"
+          - StaticText "Ctrl/⌘ K"
+    - generic
+      - generic
+        - StaticText "개인"
+        - list
+          - listitem [level=1]
+            - link "홈" [ref=e53]
+              - StaticText "홈"
+          - listitem [level=1]
+            - link "알림 · 읽지 않은 알림 2개" [ref=e54]
+              - StaticText "알림"
+          - listitem [level=1]
+            - link "내 노트" [ref=e55]
+              - StaticText "내 노트"
+          - listitem [level=1]
+            - link "공유받은 문서" [ref=e56]
+              - StaticText "공유받은 문서"
+          - listitem [level=1]
+            - link "내 시간" [ref=e57]
+              - StaticText "내 시간"
+          - listitem [level=1]
+            - link "내 노트 휴지통" [ref=e58]
+              - StaticText "내 노트 휴지통"
+          - listitem [level=1]
+            - link "내 활동 기록" [ref=e59]
+              - StaticText "내 활동 기록"
+      - separator
+      - generic
+        - StaticText "워크스페이스"
+        - list
+          - listitem [level=1]
+            - button "워크스페이스 바꾸기: W17 이동 대상 (합성)" [expanded=false, ref=e60]
+              - StaticText "W17 이동 대상 (합성)"
+        - list
+          - listitem [level=1]
+            - link "위키" [ref=e61]
+              - StaticText "위키"
+            - button "위키 하위 문서 접기" [expanded=true, ref=e62]
+        - navigation "위키" [ref=e38]
+          - list
+            - listitem [level=1]
+              - link "W17 이동 문서 1 (합성)" [ref=e68]
+                - StaticText "W17 이동 문서 1 (합성)"
+            - listitem [level=1]
+              - link "W17 이동 문서 3 (합성)" [ref=e69]
+                - StaticText "W17 이동 문서 3 (합성)"
+            - listitem [level=1]
+              - link "W17 이동 문서 2 (합성)" [ref=e70]
+                - StaticText "W17 이동 문서 2 (합성)"
+        - list
+          - listitem [level=1]
+            - link "달력" [ref=e63]
+              - StaticText "달력"
+          - listitem [level=1]
+            - link "멤버" [ref=e64]
+              - StaticText "멤버"
+          - listitem [level=1]
+            - link "휴지통" [ref=e65]
+              - StaticText "휴지통"
+          - listitem [level=1]
+            - link "감사 기록" [ref=e66]
+              - StaticText "감사 기록"
+      - generic
+        - StaticText "모듈"
+        - paragraph
+          - StaticText "아직 모듈이 없습니다."
+    - list
+      - listitem [level=1]
+        - button "계정 메뉴: Test User" [expanded=false, ref=e23]
+          - StaticText "Test User"
+    - button "사이드바 열고 닫기" [ref=e7]
+    - main
+      - sectionheader
+        - button "사이드바 열고 닫기" [ref=e8]
+          - StaticText "사이드바 열고 닫기"
+        - StaticText "W17 이동 대상 (합성)"
+        - group "타이머"
+          - StaticText "작업"
+          - button "일시정지" [ref=e24]
+          - button "종료" [ref=e25]
+      - main
+        - navigation "경로" [ref=e9]
+          - link "W17 이동 대상 (합성) 위키" [ref=e26]
+            - StaticText "W17 이동 대상 (합성) 위키"
+        - toolbar "문서 동작"
+          - button "공유·설정" [ref=e27]
+          - button "복제" [ref=e28]
+          - button "이동" [ref=e29]
+        - button "기록" [ref=e10]
+        - button "내보내기" [ref=e11]
+        - group "홈에 표시"
+          - button "홈에 고정" [ref=e30]
+          - button "즐겨찾기" [ref=e31]
+        - button "문서 지우기" [ref=e12]
+        - status
+        - article "제목" [ref=e13]
+          - StaticText "WIKI-3"
+          - StaticText "리비전 2"
+          - status
+            - StaticText "저장됨"
+          - button "저장" [ref=e32]
+          - LabelText
+            - StaticText "제목"
+          - textbox "제목" [ref=e33]: W17 이동 문서 2 (합성)
+            - StaticText "W17 이동 문서 2 (합성)"
+          - group "편집 방식"
+            - button "서식 편집" [ref=e39]
+            - button "Markdown" [ref=e40]
+            - button "미리보기" [ref=e41]
+          - toolbar "서식"
+            - button "굵게" [ref=e42]
+            - button "기울임" [ref=e43]
+            - button "제목" [ref=e44]
+            - button "목록" [ref=e45]
+            - button "체크리스트" [ref=e46]
+            - button "코드" [ref=e47]
+            - button "표" [ref=e48]
+            - button "수식" [ref=e49]
+            - button "파일·이미지" [ref=e50]
+          - generic
+            - textbox "본문" [ref=e51]: B가 쓴 글 (방 없이 남을 저장 대기 편집) 강1 강2 강3 강4 강5 강6 강7 강8 강9 강10 강11 강12 강13 강14 강15 강16 강17 강18 강19 강20 강21 강22 강23 강24 강25 강26 강27 강28 강29 강30 강31 강32 강33 강34 강35 강36 강37 강38 강39 강40 강41 강42 강43 강44 강45 강46 강47 강48 강49 강50 강51 강52
+              - paragraph
+                - StaticText "B가 쓴 글 (방 없이 남을 저장 대기 편집) 강1 강2 강3 강4 강5 강6 강7 강8 강9 강10 강11 강12 강13 강14 강15 강16 강17 강18 강19 강20 강21 강22 강23 강24 강25 강26 강27 강28 강29 강30 강31 강32 강33 강34 강35 강36 강37 강38 강39 강40 강41 강42 강43 강44 강45 강46 강47 강48 강49 강50 강51 강52"
+            - paragraph
+              - StaticText "Alt+Shift+↑↓ 옮기기 · Ctrl/⌘+Shift+D 복제 · Ctrl/⌘+/ 이 메뉴"
+        - complementary
+        - region "이곳을 가리키는 문서" [ref=e14]
+          - heading "이곳을 가리키는 문서" [level=2, ref=e34]
+          - paragraph
+            - StaticText "없습니다."
+        - region "첨부 파일" [ref=e15]
+          - heading "첨부 파일" [level=2, ref=e35]
+          - button "파일 올리기" [ref=e36]
+          - paragraph
+          - paragraph
+            - StaticText "첨부 파일이 없습니다."
+        - region "댓글" [ref=e16]
+          - heading "댓글" [level=2, ref=e37]
+          - paragraph
+          - list
+            - listitem [level=1]
+              - StaticText "댓글이 없습니다."
+          - form
+            - textbox "새 댓글(Ctrl·⌘+Enter로 달기)" [ref=e52]
+            - button "댓글 달기" [disabled, ref=e67]
+  - dialog "내보내기"
+    - heading "내보내기" [level=2, ref=e2]
+    - StaticText "저장된 리비전 하나를 파일로 내보냅니다."
+    - LabelText
+      - StaticText "리비전"
+    - combobox "리비전" [expanded=false, ref=e3]: 리비전 2 (최신) · 2026. 10. 22. 04:00 · 편집: Second User · 대신 저장: Test User
+      - MenuListPopup
+        - option "리비전 2 (최신) · 2026. 10. 22. 04:00 · 편집: Second User · 대신 저장: Test User" [selected, ref=e17]
+        - option "리비전 1 · 2026. 10. 22. 03:55 · Test User" [ref=e18]
+    - group "형식"
+      - Legend
+        - StaticText "형식"
+      - LabelText
+        - radio "Markdown (.md) 그림·첨부는 fvoci 주소로 연결됩니다." [checked=true, ref=e19]
+        - StaticText "Markdown (.md)"
+        - StaticText "그림·첨부는 fvoci 주소로 연결됩니다."
+      - LabelText
+        - radio "Markdown + 그림·첨부 (.zip) 내려받을 수 있는 그림·첨부를 함께 담고 상대 경로로 잇습니다." [checked=false, ref=e20]
+        - StaticText "Markdown + 그림·첨부 (.zip)"
+        - StaticText "내려받을 수 있는 그림·첨부를 함께 담고 상대 경로로 잇습니다."
+      - LabelText
+        - radio "PDF (인쇄) 인쇄 창에서 “PDF로 저장”을 고르세요. 이 기기의 글꼴로 만듭니다." [checked=false, ref=e21]
+        - StaticText "PDF (인쇄)"
+        - StaticText "인쇄 창에서 “PDF로 저장”을 고르세요. 이 기기의 글꼴로 만듭니다."
+    - button "닫기" [ref=e4]
+    - button "내보내기" [ref=e5]
+    - button "닫기" [ref=e6]
+      - StaticText "닫기"

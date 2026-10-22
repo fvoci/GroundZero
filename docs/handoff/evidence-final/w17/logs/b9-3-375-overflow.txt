@@ -1,0 +1,6 @@
+# viewport 375x812 DPR2 (set viewport 375 812 2) + iPhone 15 UA (set device)
+/: 375x812 dpr2 docScrollW=360 mobileUA=true
+/w/01a16272-b731-71ab-a8b5-752c77728e6f/i/01a16272-b731-71ab-a8b5-75358179c7fd: 375x812 dpr2 docScrollW=360 mobileUA=true
+/w/01a16272-b731-71ab-a8b5-752c77728e6f/calendar: 375x812 dpr2 docScrollW=360 mobileUA=true
+/w/01a16272-b731-71ab-a8b5-752c77728e6f/i/01a16272-b731-71ab-a8b5-75358179c7fd/t/01a16272-b731-71ab-a8b5-7642a43c4b51: 375x812 dpr2 docScrollW=375 mobileUA=true
+gantt scrollW=448 clientW=326 doc scrollW=360 innerW=375

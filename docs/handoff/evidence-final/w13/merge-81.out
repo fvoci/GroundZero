@@ -1,0 +1,12 @@
+Auto-merging crates/server/tests/courses.rs
+Auto-merging crates/server/tests/records.rs
+Auto-merging crates/server/tests/study.rs
+Merge made by the 'ort' strategy.
+ .../migrations/0093_stale_version_reload.sql       | 103 +++++++++++++++++++++
+ crates/server/tests/courses.rs                     |   3 +
+ crates/server/tests/db_errors.rs                   |  90 ++++++++++++++++++
+ crates/server/tests/records.rs                     |  11 +--
+ crates/server/tests/study.rs                       |   3 +
+ 5 files changed, 204 insertions(+), 6 deletions(-)
+ create mode 100644 crates/server/migrations/0093_stale_version_reload.sql
+ create mode 100644 crates/server/tests/db_errors.rs

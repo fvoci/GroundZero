@@ -1,0 +1,131 @@
+# b2-2-b-4403-unsaved-kept-notice  2026-10-22T08:00:32Z  url=http://127.0.0.1:5173/w/01a16272-b6a3-72e7-b8df-7f4f4e911512/wiki/01a1629b-32a0-77de-825e-f4c928ec2de0
+# viewport={
+  "result": "1280x770",
+  "origin": "http://127.0.0.1:5173/w/01a16272-b6a3-72e7-b8df-7f4f4e911512/wiki/01a1629b-32a0-77de-825e-f4c928ec2de0"
+}
+- generic
+  - region "Notifications alt+T" [ref=e1]
+  - StaticText "fvoci"
+  - list
+    - listitem [level=1]
+      - button "Search Ctrl/⌘ K" [ref=e11]
+        - StaticText "Search"
+        - StaticText "Ctrl/⌘ K"
+  - generic
+    - generic
+      - StaticText "Personal"
+      - list
+        - listitem [level=1]
+          - link "Home" [ref=e27]
+            - StaticText "Home"
+        - listitem [level=1]
+          - link "Notifications" [ref=e28]
+            - StaticText "Notifications"
+        - listitem [level=1]
+          - link "My notes" [ref=e29]
+            - StaticText "My notes"
+        - listitem [level=1]
+          - link "Shared with me" [ref=e30]
+            - StaticText "Shared with me"
+        - listitem [level=1]
+          - link "My time" [ref=e31]
+            - StaticText "My time"
+        - listitem [level=1]
+          - link "My notes trash" [ref=e32]
+            - StaticText "My notes trash"
+        - listitem [level=1]
+          - link "My activity" [ref=e33]
+            - StaticText "My activity"
+    - separator
+    - generic
+      - StaticText "Workspaces"
+      - list
+        - listitem [level=1]
+          - button "Switch workspace: 개발" [expanded=false, ref=e34]
+            - StaticText "개발"
+      - list
+        - listitem [level=1]
+          - link "Wiki" [ref=e35]
+            - StaticText "Wiki"
+          - button "Collapse Wiki" [expanded=true, ref=e36]
+      - navigation "Wiki" [ref=e22]
+        - list
+          - listitem [level=1]
+            - link "공동 편집 연습" [ref=e41]
+              - StaticText "공동 편집 연습"
+          - listitem [level=1]
+            - link "W17 이동 문서 2 (합성)" [ref=e42]
+              - StaticText "W17 이동 문서 2 (합성)"
+      - list
+        - listitem [level=1]
+          - link "Calendar" [ref=e37]
+            - StaticText "Calendar"
+        - listitem [level=1]
+          - link "Members" [ref=e38]
+            - StaticText "Members"
+        - listitem [level=1]
+          - link "Trash" [ref=e39]
+            - StaticText "Trash"
+    - generic
+      - StaticText "Modules"
+      - paragraph
+        - StaticText "No modules yet."
+  - list
+    - listitem [level=1]
+      - button "Account menu: Second User" [expanded=false, ref=e12]
+        - StaticText "Second User"
+  - button "Toggle sidebar" [ref=e2]
+  - main
+    - sectionheader
+      - button "Toggle sidebar" [ref=e3]
+        - StaticText "Toggle sidebar"
+      - StaticText "개발"
+      - group "Timer"
+        - button "Start timer" [ref=e13]
+    - main
+      - navigation "Breadcrumb" [ref=e4]
+        - link "개발 wiki" [ref=e14]
+          - StaticText "개발 wiki"
+      - toolbar "Document actions"
+      - button "History" [ref=e5]
+      - button "Export" [ref=e6]
+      - group "Show on home"
+        - button "Pin to home" [ref=e15]
+        - button "Favorite" [ref=e16]
+      - status
+      - region "Live co-editing" [ref=e7]
+        - StaticText "WIKI-3"
+        - status
+          - StaticText "Your access to this document changed, so the connection was closed. Reconnect to open it with your current access."
+        - button "Reconnect" [ref=e17]
+        - form
+          - LabelText
+            - StaticText "Title"
+          - textbox "Title" [ref=e23]: W17 이동 문서 2 (합성)
+            - StaticText "W17 이동 문서 2 (합성)"
+          - button "Save title" [disabled, ref=e24]
+        - textbox "Body" [ref=e25]: B가 쓴 글 (방 없이 남을 저장 대기 편집) 강1 강2 강3 강4 강5 강6 강7 강8 강9 강10 강11 강12 강13 강14 강15 강16 강17 강18 강19 강20 강21 강22 강23 강24 강25 강26 강27 강28 강29 강30 강31 강32 강33 강34 강35 강36 강37 강38 강39 강40 강41 강42 강43 강44 강45 강46 강47 강48 강49 강50 강51 강52
+          - paragraph
+            - StaticText "B가 쓴 글 (방 없이 남을 저장 대기 편집) 강1 강2 강3 강4 강5 강6 강7 강8 강9 강10 강11 강12 강13 강14 강15 강16 강17 강18 강19 강20 강21 강22 강23 강24 강25 강26 강27 강28 강29 강30 강31 강32 강33 강34 강35 강36 강37 강38 강39 강40 강41 강42 강43 강44 강45 강46 강47 강48 강49 강50 강51 강52"
+        - paragraph
+          - StaticText "Several people edit this document together. Changes are shared right away and kept as a revision after a quiet moment or when everyone leaves."
+      - complementary
+      - region "Documents linking here" [ref=e8]
+        - heading "Documents linking here" [level=2, ref=e18]
+        - paragraph
+          - StaticText "None."
+      - region "Attachments" [ref=e9]
+        - heading "Attachments" [level=2, ref=e19]
+        - button "Upload files" [ref=e20]
+        - paragraph
+        - paragraph
+          - StaticText "No attachments."
+      - region "Comments" [ref=e10]
+        - heading "Comments" [level=2, ref=e21]
+        - paragraph
+        - list
+          - listitem [level=1]
+            - StaticText "No comments yet."
+        - form
+          - textbox "New comment (Ctrl/⌘+Enter to post)" [ref=e26]
+          - button "Post comment" [disabled, ref=e40]

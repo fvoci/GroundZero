@@ -1,0 +1,40 @@
+
+ RUN  v5.0.5 ~/orca/workspaces/GroundZero/w4-ledger/apps/web
+
+ ❯ tests/component/document-save-account.test.ts (3 tests | 2 failed) 282ms
+   ❯ a background save checks who is signed in before it goes out (3)
+     × does not send a waiting retry once another account signed in, and reloads for that account 171ms
+     × keeps the retry waiting without sending when it cannot check who is signed in 62ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/document-save-account.test.ts > a background save checks who is signed in before it goes out > does not send a waiting retry once another account signed in, and reloads for that account
+AssertionError: expected "saveDocument" to be called 1 times, but got 2 times
+ ❯ tests/component/document-save-account.test.ts:109:18
+    107|     await vi.advanceTimersByTimeAsync(RETRY_MS);
+    108|
+    109|     expect(save).toHaveBeenCalledTimes(1);
+       |                  ^
+    110|     expect(reload).toHaveBeenCalledOnce();
+    111|     // 앞 계정의 편집은 앞 계정의 초안(사용자별 키)으로 남는다.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/component/document-save-account.test.ts > a background save checks who is signed in before it goes out > keeps the retry waiting without sending when it cannot check who is signed in
+AssertionError: expected "saveDocument" to be called 1 times, but got 2 times
+ ❯ tests/component/document-save-account.test.ts:125:18
+    123|     signedIn = 'offline';
+    124|     await vi.advanceTimersByTimeAsync(RETRY_MS);
+    125|     expect(save).toHaveBeenCalledTimes(1);
+       |                  ^
+    126|     expect(reload).not.toHaveBeenCalled();
+    127|     expect(screen.getByTestId('save-status')).toHaveTextContent('재시도 대…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  11:34:26
+   Duration  4.74s (transform 59%, import 22%, environment 11%, tests 6%, setup 2%)
+

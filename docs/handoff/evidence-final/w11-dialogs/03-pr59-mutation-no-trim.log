@@ -1,0 +1,42 @@
+
+ RUN  v5.0.5 <worktree>/apps/web
+
+stderr | tests/component/event-dialog-discard.test.ts
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+stderr | tests/component/event-dialog-discard.test.ts
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+stderr | tests/component/event-dialog-discard.test.ts
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+ ❯ tests/component/event-dialog-discard.test.ts (14 tests | 1 failed) 1098ms
+   ❯ closing the event dialog with unsaved input (14)
+     × does not count spaces the server trims as a change 63ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > does not count spaces the server trims as a change
+AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times
+ ❯ tests/component/event-dialog-discard.test.ts:159:21
+    157|     field(m.events_title()).focus();
+    158|     await escape();
+    159|     expect(onclose).toHaveBeenCalledTimes(1);
+       |                     ^
+    160|   });
+    161|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  13:10:55
+   Duration  5.35s (transform 51%, tests 21%, import 17%, environment 9%, setup 1%)
+

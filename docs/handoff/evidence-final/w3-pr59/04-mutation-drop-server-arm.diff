@@ -1,0 +1,6 @@
+diff --git a/apps/web/src/lib/features/events/EventDialog.svelte b/apps/web/src/lib/features/events/EventDialog.svelte
+index 859a463..7a76f17 100644
+--- a/apps/web/src/lib/features/events/EventDialog.svelte
++++ b/apps/web/src/lib/features/events/EventDialog.svelte
+@@ -216 +215,0 @@
+-          sameUnit(u, current, asked.current) &&

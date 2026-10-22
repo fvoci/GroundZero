@@ -1,0 +1,7 @@
+- #59 41fae73fef46: recurrence.rs 재사용(W5 e7a5cfb, 양쪽 blob 같음). development.md 재사용+재기반(W5 e7a5cfb 결과에 #89 한 줄; 3-way merge-file 깨끗). 검산: git diff e7a5cfb -- 두 파일 = #89 59줄 한 줄만
+- #66 03fbde7bf491: recurrence.rs 재사용+재기반(W5 5e0a679 결과에 #66 새 커밋 5142fb0의 변경(+14/−2)만 3-way로 얹음, 충돌 없음). 검산: git diff 5e0a679 -- recurrence.rs = git diff 611e664 5142fb0 -- recurrence.rs와 같은 덩어리
+- #74 1783e046597b: search.rs 재사용(W5 634e207, 양쪽 blob 같음)
+- #55 e17565c20641: time_tracking.rs 재사용(W5 1698b45, 양쪽 blob 같음)
+- #63 b52b08971172: src/features/records.rs·tests/records.rs 재사용(W5 22e7601, 양쪽 blob 같음; 인계 5절 1번)
+- #68 66e131fc6841: tests/comments.rs·home.rs·members.rs·time_tracking.rs·trash.rs 재사용(W5 510b380, 양쪽 blob 같음). development.md 재사용+재기반(W5 510b380 결과 위에 우리 쪽의 새 변경(#89 한 줄, #64 5edd8f4→0446746의 collab 절)을 3-way로 얹음, 충돌 없음). 검산: git diff 510b380 -- development.md의 바뀐 줄 = git diff 6940547 <우리 #64 단계> -- development.md의 바뀐 줄
+- #80 b71fce05206f: DisplaySettingsDialog.svelte 재사용(W5 0ecbad8, 양쪽 blob 같음; 인계 5절 3번)

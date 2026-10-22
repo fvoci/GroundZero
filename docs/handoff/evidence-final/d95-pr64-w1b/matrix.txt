@@ -1,0 +1,5 @@
+prerevert EXIT=1
+--oidc EXIT=0
+--supabase --oidc EXIT=0
+--supabase --session-pooler --oidc EXIT=0
+END

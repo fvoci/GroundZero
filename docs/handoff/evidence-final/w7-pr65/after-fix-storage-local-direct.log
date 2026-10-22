@@ -1,0 +1,11 @@
+   Compiling fvoci-server v0.1.0 (<worktree>/crates/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.65s
+     Running tests/storage.rs (target/debug/deps/storage-6d7a23ee0b4b3921)
+
+running 3 tests
+test local_complete_failure_leaves_no_temp_file ... ok
+test local_staging_leaves_the_object_alone_until_published ... ok
+test local_storage_round_trip ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.61s
+

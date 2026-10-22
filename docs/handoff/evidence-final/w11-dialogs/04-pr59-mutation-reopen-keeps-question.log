@@ -1,0 +1,274 @@
+
+ RUN  v5.0.5 <worktree>/apps/web
+
+stderr | tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > drops the question when another event opens, and does not close or carry over to it
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+stderr | tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > drops the question when another event opens, and does not close or carry over to it
+[svelte] derived_inert
+Reading a derived belonging to a now-destroyed effect may result in stale values
+https://svelte.dev/e/derived_inert
+
+ ❯ tests/component/event-dialog-discard.test.ts (14 tests | 1 failed) 2056ms
+   ❯ closing the event dialog with unsaved input (14)
+     × drops the question when another event opens, and does not close or carry over to it 1077ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > drops the question when another event opens, and does not close or carry over to it
+AssertionError: expected <div …(13)>…(2)</div> to be null
+
+Ignored nodes: comments, script, style
+<html>
+  <head />
+  <body
+    style="--scrollbar-width: 1024px; overflow: hidden; pointer-events: none; padding-right: 32768px; margin-right: 0px;"
+  >
+    <div>
+      
+      
+      
+      
+      
+      
+      
+    </div>
+    <div
+      class="data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate z-50"
+      data-dialog-overlay=""
+      data-nested-open=""
+      data-slot="dialog-overlay"
+      data-state="open"
+      id="bits-c293"
+      style="pointer-events: auto; --bits-dialog-depth: 0; --bits-dialog-nested-count: 1;"
+    />
+    
+    
+    
+     
+     
+    <div
+      aria-describedby="bits-c296"
+      aria-labelledby="bits-c295"
+      aria-modal="true"
+      class="bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%_-_2rem)] gap-4 rounded-xl p-4 text-sm ring-1 duration-100 fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+      data-dialog-content=""
+      data-nested-open=""
+      data-slot="dialog-content"
+      data-state="open"
+      escapekeydownbehavior="ignore"
+      id="bits-c294"
+      interactoutsidebehavior="ignore"
+      role="dialog"
+      style="pointer-events: auto; --bits-dialog-depth: 0; --bits-dialog-nested-count: 1; contain: layout style;"
+      tabindex="-1"
+    >
+      <div
+        class="gap-2 flex flex-col"
+        data-slot="dialog-header"
+      >
+        <div
+          aria-level="2"
+          class="text-base leading-none font-medium"
+          data-dialog-title=""
+          data-slot="dialog-title"
+          data-state="open"
+          id="bits-c295"
+          role="heading"
+          tabindex="-1"
+        >
+          다른 회의
+        </div>
+        
+        
+         
+        <div
+          class="text-muted-foreground *:[a]:hover:text-foreground text-sm *:[a]:underline *:[a]:underline-offset-3"
+          data-dialog-description=""
+          data-slot="dialog-description"
+          data-state="open"
+          id="bits-c296"
+        >
+          회의 · Oct 20, 2026 10:00 AM–11:00 AM
+          
+        </div>
+        
+        
+      </div>
+       
+       
+       
+      <div
+        class="contents"
+      >
+        <form
+          class="grid gap-3 md:grid-cols-2"
+        >
+          <div
+            class="flex flex-col gap-1 md:col-span-2"
+          >
+            <label
+              class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+              data-label-root=""
+              data-slot="label"
+              for="event-edit-title"
+              id="bits-c315"
+            >
+              제목
+            </label>
+            
+            
+             
+            <input
+              class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+              data-slot="input"
+              id="event-edit-title"
+              maxlength="200"
+              required=""
+            />
+            
+          </div>
+           
+          <div
+            class="flex flex-col gap-1"
+          >
+            <span
+              class="text-sm font-medium"
+              id="event-edit-kind-label"
+            >
+              종류
+            </span>
+             
+            <button
+              aria-expanded="false"
+              aria-haspopup="listbox"
+              aria-labelledby="event-edit-kind-label"
+              class="border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-lg border bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors select-none focus-visible:ring-3 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0"
+              data-select-trigger=""...
+
+- Expected:
+null
+
++ Received:
+<div
+  aria-describedby="bits-c312"
+  aria-labelledby="bits-c311"
+  aria-modal="true"
+  class="data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-popover text-popover-foreground ring-foreground/10 gap-4 rounded-xl p-4 ring-1 duration-100 data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 outline-none"
+  data-alert-dialog-content=""
+  data-nested=""
+  data-size="default"
+  data-slot="alert-dialog-content"
+  data-state="open"
+  id="bits-c299"
+  role="alertdialog"
+  style="pointer-events: auto; outline: none; --bits-dialog-depth: 1; --bits-dialog-nested-count: 0; contain: layout style;"
+  tabindex="-1"
+>
+  <!---->
+  <div
+    class="grid grid-rows-[auto_1fr] place-items-center gap-1.5 text-center has-data-[slot=alert-dialog-media]:grid-rows-[auto_auto_1fr] has-data-[slot=alert-dialog-media]:gap-x-4 sm:group-data-[size=default]/alert-dialog-content:place-items-start sm:group-data-[size=default]/alert-dialog-content:text-left sm:group-data-[size=default]/alert-dialog-content:has-data-[slot=alert-dialog-media]:grid-rows-[auto_1fr]"
+    data-slot="alert-dialog-header"
+  >
+    <!---->
+    <!---->
+    <!---->
+    <div
+      aria-level="2"
+      class="text-base font-medium sm:group-data-[size=default]/alert-dialog-content:group-has-data-[slot=alert-dialog-media]/alert-dialog-content:col-start-2"
+      data-alert-dialog-title=""
+      data-slot="alert-dialog-title"
+      data-state="open"
+      id="bits-c311"
+      role="heading"
+    >
+      저장하지 않은 변경이 있습니다
+      <!---->
+    </div>
+    
+    
+    <!---->
+     
+    <!---->
+    <!---->
+    <div
+      class="text-muted-foreground *:[a]:hover:text-foreground text-sm text-balance md:text-pretty *:[a]:underline *:[a]:underline-offset-3"
+      data-alert-dialog-description=""
+      data-slot="alert-dialog-description"
+      data-state="open"
+      id="bits-c312"
+    >
+      닫으면 이 창에서 고친 내용이 사라집니다.
+      <!---->
+    </div>
+    
+    
+    <!---->
+    <!---->
+  </div>
+  <!---->
+   
+  <div
+    class="bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t p-4 flex flex-col-reverse gap-2 group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2 sm:flex-row sm:justify-end"
+    data-slot="alert-dialog-footer"
+  >
+    <!---->
+    <!---->
+    <!---->
+    <button
+      class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"
+      data-alert-dialog-cancel=""
+      data-slot="alert-dialog-cancel"
+      data-state="open"
+      id="bits-c313"
+      tabindex="0"
+    >
+      계속 편집
+      <!---->
+    </button>
+    
+    
+    <!---->
+     
+    <!---->
+    <!---->
+    <button
+      class="aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive focus-visible:border-destructive/40 dark:hover:bg-destructive/30 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"
+      data-alert-dialog-action=""
+      data-slot="alert-dialog-action"
+      data-state="open"
+      id="bits-c314"
+    >
+      변경 버리고 닫기
+      <!---->
+    </button>
+    
+    
+    <!---->
+    <!---->
+  </div>
+  <!---->
+  <!---->
+</div>
+
+ ❯ tests/component/event-dialog-discard.test.ts:367:28
+    365|     await screen.findByDisplayValue('다른 회의');
+    366|     await waitFor(() => {
+    367|       expect(confirmBox()).toBeNull();
+       |                            ^
+    368|     });
+    369|     expect(onclose).not.toHaveBeenCalled();
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  13:11:01
+   Duration  6.23s (transform 44%, tests 33%, import 14%, environment 7%, setup 1%)
+

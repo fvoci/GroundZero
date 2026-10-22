@@ -1,0 +1,24 @@
+diff --git a/apps/web/tests/component/task-conflict-save-mine.test.ts b/apps/web/tests/component/task-conflict-save-mine.test.ts
+index 0d2051d..d8c5b6f 100644
+--- a/apps/web/tests/component/task-conflict-save-mine.test.ts
++++ b/apps/web/tests/component/task-conflict-save-mine.test.ts
+@@ -39,7 +39,6 @@ const v2: TaskDetailView = {
+   estimate_minutes: null,
+   tags: [],
+   milestone: false,
+-  predecessor_ids: [],
+   predecessors: [],
+   series: null,
+   occurrence_date: null,
+diff --git a/apps/web/tests/component/task-dialog-discard.test.ts b/apps/web/tests/component/task-dialog-discard.test.ts
+index 062038a..ad88b2c 100644
+--- a/apps/web/tests/component/task-dialog-discard.test.ts
++++ b/apps/web/tests/component/task-dialog-discard.test.ts
+@@ -34,7 +34,6 @@ function task(id: string, fields: Partial<TaskDetailView> = {}): TaskDetailView
+     estimate_minutes: 30,
+     tags: ['가', '나'],
+     milestone: false,
+-    predecessor_ids: [],
+     predecessors: [],
+     series: null,
+     occurrence_date: null,

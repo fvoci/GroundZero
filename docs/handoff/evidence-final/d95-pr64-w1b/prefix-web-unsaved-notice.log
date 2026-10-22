@@ -1,0 +1,388 @@
+
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/d95-pr64/apps/web
+
+ ❯ tests/component/live-unsaved-close.test.ts (2 tests | 2 failed) 2162ms
+   ❯ live editor closed by the server with unconfirmed edits (2)
+     × keeps them as this user's draft, says so, and offers them again (4403) 1144ms
+     × keeps them as this user's draft, says so, and offers them again (4409) 1017ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/live-unsaved-close.test.ts > live editor closed by the server with unconfirmed edits > keeps them as this user's draft, says so, and offers them again (4403)
+TestingLibraryElementError: Unable to find an element with the text: /서버에 저장되지 않은 편집이 있어/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-label="실시간 공동 편집"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2 text-sm"
+      >
+        <span
+          class="rounded bg-muted px-2 py-0.5 font-mono"
+        >
+          WIKI-1
+        </span>
+         
+        <span
+          aria-live="polite"
+          class="text-muted-foreground"
+          role="status"
+        >
+          이 문서의 권한이 바뀌어 연결을 닫았습니다. 다시 연결하면 지금 권한으로 엽니다.
+        </span>
+         
+        <button
+          class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+          data-slot="button"
+          type="button"
+        >
+          다시 연결
+        </button>
+        
+      </div>
+       
+      <form
+        class="flex flex-wrap items-end gap-2"
+      >
+        <div
+          class="flex min-w-0 flex-1 flex-col gap-1"
+        >
+          <label
+            class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+            data-label-root=""
+            data-slot="label"
+            for="live-title"
+            id="bits-c1"
+          >
+            제목
+          </label>
+          
+          
+           
+          <input
+            class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+            data-slot="input"
+            id="live-title"
+          />
+          
+        </div>
+         
+        <button
+          class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+          data-slot="button"
+          disabled=""
+          type="submit"
+        >
+          제목 저장
+        </button>
+        
+      </form>
+       
+       
+       
+      <button
+        type="button"
+      >
+        stub-type
+      </button>
+      
+       
+      <p
+        class="text-xs text-muted-foreground"
+      >
+        여럿이 함께 고치는 문서입니다. 내용은 바로 나누고, 잠시 조용해지거나 모두 나가면 리비전으로 남습니다.
+      </p>
+    </section>
+    
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-label="실시간 공동 편집"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2 text-sm"
+      >
+        <span
+          class="rounded bg-muted px-2 py-0.5 font-mono"
+        >
+          WIKI-1
+        </span>
+         
+        <span
+          aria-live="polite"
+          class="text-muted-foreground"
+          role="status"
+        >
+          이 문서의 권한이 바뀌어 연결을 닫았습니다. 다시 연결하면 지금 권한으로 엽니다.
+        </span>
+         
+        <button
+          class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+          data-slot="button"
+          type="button"
+        >
+          다시 연결
+        </button>
+        
+      </div>
+       
+      <form
+        class="flex flex-wrap items-end gap-2"
+      >
+        <div
+          class="flex min-w-0 flex-1 flex-col gap-1"
+        >
+          <label
+            class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+            data-label-root=""
+            data-slot="label"
+            for="live-title"
+            id="bits-c1"
+          >
+            제목
+          </label>
+          
+          
+           
+          <input
+            class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+            data-slot="input"
+            id="live-title"
+          />
+          
+        </div>
+         
+        <button
+          class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+          data-slot="button"
+          disabled=""
+          type="submit"
+        >
+          제목 저장
+        </button>
+        
+      </form>
+       
+       
+       
+      <button
+        type="button"
+      >
+        stub-type
+      </button>
+      
+       
+      <p
+        class="text-xs text-muted-foreground"
+      >
+        여럿이 함께 고치는 문서입니다. 내용은 바로 나누고, 잠시 조용해지거나 모두 나가면 리비전으로 남습니다.
+      </p>
+    </section>
+    
+  </div>
+</body>
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/component/live-unsaved-close.test.ts:95:35
+     93|       closeWith(code);
+     94|
+     95|       const notice = await screen.findByText(/서버에 저장되지 않은 편집이 있어/);
+       |                                   ^
+     96|       expect(notice.closest('[aria-live]')).not.toBeNull();
+     97|       if (code === 4403) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/component/live-unsaved-close.test.ts > live editor closed by the server with unconfirmed edits > keeps them as this user's draft, says so, and offers them again (4409)
+TestingLibraryElementError: Unable to find an element with the text: /서버에 저장되지 않은 편집이 있어/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-label="실시간 공동 편집"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2 text-sm"
+      >
+        <span
+          class="rounded bg-muted px-2 py-0.5 font-mono"
+        >
+          WIKI-1
+        </span>
+         
+        <span
+          aria-live="polite"
+          class="text-muted-foreground"
+          role="status"
+        >
+          연결 중…
+        </span>
+         
+      </div>
+       
+      <form
+        class="flex flex-wrap items-end gap-2"
+      >
+        <div
+          class="flex min-w-0 flex-1 flex-col gap-1"
+        >
+          <label
+            class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+            data-label-root=""
+            data-slot="label"
+            for="live-title"
+            id="bits-c2"
+          >
+            제목
+          </label>
+          
+          
+           
+          <input
+            class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+            data-slot="input"
+            id="live-title"
+          />
+          
+        </div>
+         
+        <button
+          class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+          data-slot="button"
+          disabled=""
+          type="submit"
+        >
+          제목 저장
+        </button>
+        
+      </form>
+       
+       
+       
+      <button
+        type="button"
+      >
+        stub-type
+      </button>
+      
+       
+      <p
+        class="text-xs text-muted-foreground"
+      >
+        여럿이 함께 고치는 문서입니다. 내용은 바로 나누고, 잠시 조용해지거나 모두 나가면 리비전으로 남습니다.
+      </p>
+    </section>
+    
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-label="실시간 공동 편집"
+      class="flex flex-col gap-3"
+    >
+      <div
+        class="flex flex-wrap items-center gap-2 text-sm"
+      >
+        <span
+          class="rounded bg-muted px-2 py-0.5 font-mono"
+        >
+          WIKI-1
+        </span>
+         
+        <span
+          aria-live="polite"
+          class="text-muted-foreground"
+          role="status"
+        >
+          연결 중…
+        </span>
+         
+      </div>
+       
+      <form
+        class="flex flex-wrap items-end gap-2"
+      >
+        <div
+          class="flex min-w-0 flex-1 flex-col gap-1"
+        >
+          <label
+            class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+            data-label-root=""
+            data-slot="label"
+            for="live-title"
+            id="bits-c2"
+          >
+            제목
+          </label>
+          
+          
+           
+          <input
+            class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+            data-slot="input"
+            id="live-title"
+          />
+          
+        </div>
+         
+        <button
+          class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+          data-slot="button"
+          disabled=""
+          type="submit"
+        >
+          제목 저장
+        </button>
+        
+      </form>
+       
+       
+       
+      <button
+        type="button"
+      >
+        stub-type
+      </button>
+      
+       
+      <p
+        class="text-xs text-muted-foreground"
+      >
+        여럿이 함께 고치는 문서입니다. 내용은 바로 나누고, 잠시 조용해지거나 모두 나가면 리비전으로 남습니다.
+      </p>
+    </section>
+    
+  </div>
+</body>
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/component/live-unsaved-close.test.ts:95:35
+     93|       closeWith(code);
+     94|
+     95|       const notice = await screen.findByText(/서버에 저장되지 않은 편집이 있어/);
+       |                                   ^
+     96|       expect(notice.closest('[aria-live]')).not.toBeNull();
+     97|       if (code === 4403) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  13:21:33
+   Duration  7.24s (transform 44%, tests 30%, import 17%, environment 8%, setup 1%)
+

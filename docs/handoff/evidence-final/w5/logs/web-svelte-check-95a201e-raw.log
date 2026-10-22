@@ -1,0 +1,7 @@
+1792635348682 START "<worktree>/apps/web"
+1792635348691 ERROR "src/lib/features/tasks/labels.ts" 3:21 "Module '\"$lib/display\"' has no exported member 'formatNumber'."
+1792635348692 ERROR "tests/component/home-week-dates.test.ts" 23:7 "Property 'up_next_counts' is missing in type '{ today: string; up_next: never[]; recent_tasks: never[]; recent_documents: never[]; active_items: never[]; pins: never[]; favorites: never[]; }' but required in type 'HomeView'."
+1792635348692 ERROR "tests/component/item-screen-form.test.ts" 273:5 "Object literal may only specify known properties, but 'predecessor_ids' does not exist in type 'TaskView'. Did you mean to write 'predecessors'?"
+1792635348692 ERROR "tests/component/task-conflict-save-mine.test.ts" 41:3 "Object literal may only specify known properties, but 'predecessor_ids' does not exist in type 'TaskDetailView'. Did you mean to write 'predecessors'?"
+1792635348692 ERROR "tests/component/task-csv-import.test.ts" 30:5 "Object literal may only specify known properties, but 'predecessor_ids' does not exist in type 'TaskDetailView'. Did you mean to write 'predecessors'?"
+1792635348692 COMPLETED 3195 FILES 5 ERRORS 0 WARNINGS 5 FILES_WITH_PROBLEMS

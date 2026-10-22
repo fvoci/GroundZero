@@ -1,0 +1,12 @@
+==> cargo deny check licenses
+$ cargo deny --locked check licenses
+licenses ok
+==> pnpm licenses
+  note: exception not encountered: lightningcss-darwin-arm64@1.32.0 (MPL-2.0)
+  note: exception not encountered: lightningcss-darwin-arm64@1.33.0 (MPL-2.0)
+  note: exception not encountered: lightningcss-linux-arm64-gnu@1.32.0 (MPL-2.0)
+  note: exception not encountered: lightningcss-linux-arm64-gnu@1.33.0 (MPL-2.0)
+  note: exception not encountered: @bytecodealliance/jco-node-fs-darwin-arm64@0.3.2 ((Apache-2.0 WITH LLVM-exception))
+  note: exception not encountered: @bytecodealliance/jco-node-fs-linux-arm64-gnu@0.3.2 ((Apache-2.0 WITH LLVM-exception))
+pnpm licenses: all within allow list
+exit=0

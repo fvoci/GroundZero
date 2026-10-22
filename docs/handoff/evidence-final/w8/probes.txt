@@ -1,0 +1,29 @@
+# 단독 Meilisearch v1.37.0(같은 digest), -m 512m, tmpfs /meili_data. 호스트: WSL2, cgroup v2, 32 CPU, 73 GiB.
+# memory.peak = 컨테이너 cgroup 최고 사용량(MB). events max = memory.events의 max(한도에 닿은 횟수).
+
+## 기본값 확인
+meilisearch --help (한도 없음)      : max-indexing-memory default "48.86 GiB" (호스트 73 GiB의 2/3)
+meilisearch --help (-m 512m)        : max-indexing-memory default "341.33 MiB" (한도 512m의 2/3 → cgroup을 따름)
+nproc / /proc/meminfo (-m 512m --cpus 4): 32 / 76850848 kB (컨테이너 안에서도 호스트 값)
+기동 로그 (기본)                    : actix "starting 32 workers"
+기동 로그 (--cpus 4)                : actix "starting 4 workers" (Rust available_parallelism이 cgroup CPU 할당량을 따름)
+
+## probe.sh: 작은 문서 6건 동시 추가 (가벼운 부하, --memory-swap 지정 없음)
+default32  idle_anon_mb=132 peak_mb=512
+cpus4(cpuset 0-3) idle_anon_mb=34 peak_mb=279
+t2   (MAX_INDEXING_THREADS=2)            idle 113 peak 337
+t4   (MAX_INDEXING_THREADS=4)            idle 120 peak 351
+m128 (MAX_INDEXING_MEMORY=128Mb)         idle 132 peak 512
+t2m128                                   idle 136 peak 274
+t2m192 (2회)                             peak 372, 383
+default (2회 더)                         peak 512, 512
+
+## probe2.sh: search.rs 흉내(설정 PATCH 8건·문서 추가 8건·필터 검색 8건 동시 ×3회), --memory-swap 512m(스왑 없음)
+default                 OOM killed (exited, OOMKilled=true)
+t2m128 (THREADS=2, MEMORY=128MiB)  peak 511, events max 2 (가까스로 생존)
+t1m64  (THREADS=1, MEMORY=64MiB)   peak 379
+cpuset 0-3              peak 337
+--cpus 4                peak 337, 344 (2회)
+--cpus 4 + t2m128       peak 326
+--cpus 2                peak 195
+(모든 경우 49개 작업 succeeded, 첫 시도의 실패 24건은 probe의 문서 id 오류였고 고친 뒤 결과만 위에 적음)

@@ -1,0 +1,8 @@
+Auto-merging apps/web/tests/component/gantt-links-board.test.ts
+Merge made by the 'ort' strategy.
+ .../src/lib/features/search/SearchDialog.svelte    | 14 ++++-
+ apps/web/src/lib/features/tasks/GanttChart.svelte  | 19 ++++--
+ apps/web/tests/component/gantt-links-board.test.ts | 70 +++++++++++++++++++++
+ .../tests/component/search-author-title.test.ts    | 72 ++++++++++++++++++++++
+ .../tests/component/search-module-filter.test.ts   | 59 ++++++++++++++++++
+ 5 files changed, 228 insertions(+), 6 deletions(-)

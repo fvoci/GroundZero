@@ -1,0 +1,2005 @@
+# 17df95376f4f cargo xtask check start 2026-10-22T04:03:52Z
+==> cargo fmt --check
+$ cargo fmt --all --check
+PASS cargo fmt --check
+==> cargo clippy
+$ cargo clippy --workspace --all-targets --locked -- -D warnings
+    Checking cfg-if v1.0.5
+   Compiling serde_core v1.0.229
+    Checking zeroize v1.9.1
+    Checking typenum v1.20.1
+    Checking const-oid v0.9.6
+    Checking subtle v2.6.1
+    Checking itoa v1.0.18
+    Checking pin-project-lite v0.2.17
+    Checking bytes v1.12.1
+    Checking futures-core v0.3.34
+    Checking memchr v2.8.3
+    Checking stable_deref_trait v1.2.1
+    Checking log v0.4.34
+    Checking cpufeatures v0.2.17
+   Compiling generic-array v0.14.7
+    Checking futures-sink v0.3.34
+   Compiling libm v0.2.16
+   Compiling num-traits v0.2.19
+   Compiling num-conv v0.2.2
+    Checking libc v0.2.190
+    Checking zerocopy v0.8.63
+    Checking writeable v0.6.4
+   Compiling time-core v0.1.9
+    Checking litemap v0.8.3
+    Checking once_cell v1.21.4
+    Checking percent-encoding v2.3.2
+    Checking utf8_iter v1.0.4
+   Compiling syn v3.0.9
+    Checking futures-io v0.3.34
+    Checking slab v0.4.12
+    Checking futures-task v0.3.34
+    Checking icu_properties_data v2.3.0
+    Checking icu_normalizer_data v2.3.0
+    Checking bitflags v2.13.2
+    Checking base64ct v1.8.3
+    Checking zmij v1.0.23
+   Compiling httparse v1.10.1
+    Checking form_urlencoded v1.2.2
+    Checking foreign-types-shared v0.1.1
+    Checking scopeguard v1.2.0
+    Checking tracing-core v0.1.36
+   Compiling time-macros v0.2.32
+    Checking foreign-types v0.3.2
+    Checking equivalent v1.0.3
+    Checking powerfmt v0.2.1
+    Checking futures-channel v0.3.34
+    Checking openssl-probe v0.2.1
+    Checking rand_core v0.10.1
+   Compiling getrandom v0.4.3
+    Checking pem-rfc7468 v0.7.0
+   Compiling getrandom v0.3.4
+    Checking tower-service v0.3.3
+    Checking futures-util v0.3.34
+    Checking hashbrown v0.17.1
+   Compiling rustversion v1.0.23
+    Checking http v1.5.0
+    Checking base64 v0.22.1
+   Compiling crossbeam-utils v0.8.23
+    Checking lock_api v0.4.14
+   Compiling foldhash v0.1.5
+   Compiling allocator-api2 v0.2.21
+    Checking der v0.7.10
+    Checking try-lock v0.2.5
+    Checking httpdate v1.0.3
+    Checking tracing v0.1.44
+    Checking parking v2.2.1
+    Checking want v0.3.2
+    Checking sync_wrapper v1.0.2
+    Checking event-listener v5.4.2
+    Checking mime v0.3.17
+    Checking tinyvec v1.13.3
+    Checking tower-layer v0.3.3
+   Compiling deranged v0.5.9
+   Compiling crc-catalog v2.5.0
+   Compiling hashbrown v0.15.5
+    Checking atomic-waker v1.1.2
+   Compiling crc v3.4.0
+   Compiling cookie v0.18.2
+   Compiling unicase v2.10.0
+    Checking unicode-properties v0.1.4
+   Compiling crossbeam-queue v0.3.14
+    Checking unicode-normalization v0.1.25
+    Checking base16ct v0.2.0
+    Checking http-body v1.1.0
+    Checking ipnet v2.12.2
+    Checking unicode-bidi v0.3.18
+   Compiling mio v1.2.4
+   Compiling getrandom v0.2.17
+    Checking errno v0.3.14
+    Checking socket2 v0.6.5
+    Checking openssl-sys v0.9.117
+    Checking signal-hook-registry v1.4.8
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking rand_core v0.6.4
+    Checking http-body-util v0.1.5
+    Checking rand_core v0.9.5
+   Compiling hashlink v0.10.0
+    Checking digest v0.10.7
+    Checking spki v0.7.3
+    Checking block-padding v0.3.3
+    Checking ff v0.13.1
+    Checking base64 v0.23.1
+    Checking stringprep v0.1.5
+    Checking crypto-bigint v0.5.5
+   Compiling mime_guess v2.0.5
+   Compiling indexmap v2.14.2
+    Checking pkcs8 v0.10.2
+    Checking inout v0.1.4
+    Checking group v0.13.0
+    Checking hmac v0.12.1
+    Checking sha2 v0.10.9
+    Checking signature v2.2.0
+    Checking sha1 v0.10.7
+    Checking sec1 v0.7.3
+    Checking md-5 v0.10.6
+   Compiling tokio v1.53.3
+   Compiling atoi v2.0.0
+    Checking hkdf v0.12.4
+   Compiling hex v0.4.3
+    Checking spin v0.9.9
+   Compiling byteorder v1.5.0
+   Compiling whoami v1.6.1
+   Compiling home v0.5.12
+   Compiling strsim v0.11.1
+    Checking ryu v1.0.23
+    Checking data-encoding v2.11.1
+   Compiling crc32fast v1.5.2
+   Compiling ident_case v1.0.1
+   Compiling semver v1.0.28
+   Compiling dotenvy v0.15.7
+    Checking lazy_static v1.5.1
+    Checking cipher v0.4.4
+    Checking openssl v0.10.81
+   Compiling litrs v1.0.0
+    Checking simd-adler32 v0.3.10
+    Checking psl-types v2.0.11
+   Compiling time v0.3.55
+    Checking adler2 v2.0.1
+    Checking num-integer v0.1.47
+   Compiling rustc_version v0.4.1
+    Checking miniz_oxide v0.9.1
+    Checking rfc6979 v0.4.0
+   Compiling encoding_rs v0.8.42
+   Compiling aho-corasick v1.1.5
+    Checking cpufeatures v0.3.1
+   Compiling regex-syntax v0.8.11
+    Checking http-range-header v0.4.2
+   Compiling num-bigint-dig v0.8.6
+   Compiling thiserror v1.0.69
+    Checking chacha20 v0.10.2
+   Compiling thiserror-impl v1.0.69
+   Compiling curve25519-dalek-derive v0.1.1
+    Checking rustls-pki-types v1.15.1
+   Compiling multiversion_no_op v1.0.0
+    Checking num-iter v0.1.46
+    Checking serde_json v1.0.154
+    Checking uuid v1.28.0
+   Compiling curve25519-dalek v4.1.3
+    Checking serde_path_to_error v0.1.20
+    Checking iana-time-zone v0.1.65
+    Checking pom v1.1.0
+    Checking simdutf8 v0.1.5
+    Checking core_detect v1.0.0
+    Checking rand v0.10.3
+   Compiling document-features v0.2.12
+    Checking flate2 v1.1.10
+    Checking ecb v0.1.2
+    Checking aes v0.8.4
+    Checking cbc v0.1.2
+    Checking ordered-float v2.10.1
+    Checking ed25519 v2.2.3
+    Checking pkcs1 v0.7.5
+    Checking axum-core v0.5.6
+    Checking elliptic-curve v0.13.8
+    Checking event-listener-strategy v0.5.4
+    Checking nom v8.0.0
+    Checking weezl v0.1.12
+    Checking hashbrown v0.14.5
+    Checking matchit v0.8.4
+    Checking rangemap v1.8.0
+    Checking ttf-parser v0.25.1
+    Checking async-lock v3.4.2
+    Checking adobe-cmap-parser v0.4.1
+    Checking type1-encoding-parser v0.1.1
+    Checking sharded-slab v0.1.7
+    Checking euclid v0.20.14
+    Checking primeorder v0.13.6
+    Checking ecdsa v0.16.9
+    Checking arc-swap v1.9.2
+    Checking tracing-log v0.2.0
+    Checking thread_local v1.1.10
+    Checking fastrand v2.5.0
+    Checking dyn-clone v1.0.20
+   Compiling fvoci-server v0.1.0 (<worktree>/crates/server)
+    Checking postscript v0.14.1
+    Checking typed-path v0.12.3
+    Checking base64 v0.21.7
+    Checking cff-parser v0.2.0
+    Checking nu-ansi-term v0.50.3
+    Checking utf-8 v0.7.6
+    Checking utf8parse v0.2.2
+    Checking regex-automata v0.4.18
+    Checking colorchoice v1.0.5
+    Checking anstyle v1.0.14
+    Checking anstyle-parse v1.0.0
+    Checking anstyle-query v1.1.5
+    Checking is_terminal_polyfill v1.70.2
+    Checking clap_lex v1.1.1
+    Checking p256 v0.13.2
+    Checking p384 v0.13.1
+    Checking xshell v0.2.7
+    Checking anyhow v1.0.104
+    Checking anstream v1.0.0
+    Checking clap_builder v4.6.7
+    Checking ed25519-dalek v2.2.0
+    Checking zip v9.0.4
+   Compiling synstructure v0.14.0
+   Compiling darling_core v0.24.1
+    Checking ppv-lite86 v0.2.21
+   Compiling serde_derive v1.0.229
+   Compiling zerofrom-derive v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling zerovec-derive v0.11.6
+   Compiling displaydoc v0.2.7
+   Compiling tokio-macros v2.7.2
+   Compiling thiserror-impl v2.0.21
+   Compiling async-trait v0.1.92
+   Compiling clap_derive v4.6.7
+    Checking rand_chacha v0.3.1
+    Checking rand_chacha v0.9.0
+    Checking matchers v0.2.0
+    Checking rand v0.9.5
+    Checking rand v0.8.8
+    Checking native-tls v0.2.18
+    Checking zerofrom v0.1.8
+   Compiling yoke v0.8.3
+    Checking thiserror v2.0.21
+    Checking tungstenite v0.29.0
+    Checking lopdf v0.42.0
+    Checking tungstenite v0.28.0
+   Compiling zerovec v0.11.8
+   Compiling zerotrie v0.2.5
+    Checking tinystr v0.8.4
+    Checking potential_utf v0.1.6
+    Checking clap v4.6.7
+   Compiling tokio-stream v0.1.19
+    Checking icu_collections v2.3.0
+    Checking icu_locale_core v2.3.0
+   Compiling darling_macro v0.24.1
+   Compiling regex v1.13.1
+   Compiling darling v0.24.1
+   Compiling serde_with_macros v3.24.0
+    Checking icu_provider v2.3.1
+   Compiling utoipa-gen v5.5.0
+    Checking serde v1.0.229
+    Checking icu_properties v2.3.0
+    Checking serde_with v3.24.0
+    Checking smallvec v1.16.3
+    Checking either v1.19.0
+    Checking serde_urlencoded v0.7.1
+    Checking chrono v0.4.45
+    Checking serde-value v0.7.0
+    Checking serde_plain v1.0.2
+    Checking icu_normalizer v2.3.0
+    Checking parking_lot_core v0.9.12
+    Checking smallstr v0.3.1
+    Checking tracing-subscriber v0.3.23
+    Checking spdx v0.13.6
+    Checking itertools v0.10.5
+    Checking parking_lot v0.12.5
+    Checking dashmap v6.2.1
+    Checking futures-intrusive v0.5.0
+    Checking yrs v0.28.0
+    Checking idna_adapter v1.2.2
+    Checking idna v1.1.0
+    Checking url v2.5.8
+    Checking publicsuffix v2.3.0
+    Checking rsa v0.9.10
+    Checking pdf-extract v0.12.1
+    Checking cookie_store v0.22.1
+   Compiling sqlx-core v0.8.6
+    Checking hyper v1.12.0
+    Checking tower v0.5.3
+    Checking tokio-util v0.7.20
+    Checking tokio-native-tls v0.3.1
+    Checking tokio-tungstenite v0.29.0
+    Checking tokio-tungstenite v0.28.0
+    Checking tower-http v0.6.11
+    Checking hyper-util v0.1.21
+    Checking hyper-tls v0.6.0
+    Checking axum v0.8.9
+    Checking reqwest v0.12.28
+    Checking sqlx-postgres v0.8.6
+    Checking utoipa v5.5.0
+    Checking oauth2 v5.0.0
+    Checking openidconnect v4.0.1
+    Checking axum-extra v0.10.3
+   Compiling sqlx-macros-core v0.8.6
+   Compiling sqlx-macros v0.8.6
+    Checking sqlx v0.8.6
+    Checking xtask v0.1.0 (<worktree>/xtask)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 24.86s
+PASS cargo clippy
+==> cargo test (unit)
+$ cargo test --workspace --lib --bins --locked
+   Compiling zeroize v1.9.1
+   Compiling const-oid v0.9.6
+   Compiling subtle v2.6.1
+   Compiling log v0.4.34
+   Compiling futures-sink v0.3.34
+   Compiling serde_core v1.0.229
+   Compiling time-macros v0.2.32
+   Compiling http v1.5.0
+   Compiling base64ct v1.8.3
+   Compiling tracing-core v0.1.36
+   Compiling libm v0.2.16
+   Compiling form_urlencoded v1.2.2
+   Compiling rand_core v0.10.1
+   Compiling tower-service v0.3.3
+   Compiling generic-array v0.14.7
+   Compiling tokio v1.53.3
+   Compiling thiserror v2.0.21
+   Compiling serde v1.0.229
+   Compiling httparse v1.10.1
+   Compiling getrandom v0.3.4
+   Compiling httpdate v1.0.3
+   Compiling try-lock v0.2.5
+   Compiling base64 v0.22.1
+   Compiling zerofrom v0.1.8
+   Compiling futures-util v0.3.34
+   Compiling futures-channel v0.3.34
+   Compiling native-tls v0.2.18
+   Compiling want v0.3.2
+   Compiling getrandom v0.4.3
+   Compiling sync_wrapper v1.0.2
+   Compiling tower-layer v0.3.3
+   Compiling atomic-waker v1.1.2
+   Compiling mime v0.3.17
+   Compiling crossbeam-utils v0.8.23
+   Compiling ff v0.13.1
+   Compiling rand v0.8.8
+   Compiling rand_core v0.9.5
+   Compiling ipnet v2.12.2
+   Compiling base64 v0.23.1
+   Compiling yoke v0.8.3
+   Compiling pem-rfc7468 v0.7.0
+   Compiling unicase v2.10.0
+   Compiling base16ct v0.2.0
+   Compiling group v0.13.0
+   Compiling crossbeam-queue v0.3.14
+   Compiling serde_json v1.0.154
+   Compiling rand_chacha v0.9.0
+   Compiling indexmap v2.14.2
+   Compiling ryu v1.0.23
+   Compiling data-encoding v2.11.1
+   Compiling spin v0.9.9
+   Compiling zerovec v0.11.8
+   Compiling zerotrie v0.2.5
+   Compiling der v0.7.10
+   Compiling tracing v0.1.44
+   Compiling mime_guess v2.0.5
+   Compiling darling_core v0.24.1
+   Compiling lazy_static v1.5.1
+   Compiling atoi v2.0.0
+   Compiling rand v0.9.5
+   Compiling smallvec v1.16.3
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling either v1.19.0
+   Compiling psl-types v2.0.11
+   Compiling digest v0.10.7
+   Compiling adler2 v2.0.1
+   Compiling parking_lot_core v0.9.12
+   Compiling block-padding v0.3.3
+   Compiling crypto-bigint v0.5.5
+   Compiling simd-adler32 v0.3.10
+   Compiling http-body v1.1.0
+   Compiling crc32fast v1.5.2
+   Compiling aho-corasick v1.1.5
+   Compiling http-range-header v0.4.2
+   Compiling cpufeatures v0.3.1
+   Compiling inout v0.1.4
+   Compiling rustls-pki-types v1.15.1
+   Compiling sha2 v0.10.9
+   Compiling hmac v0.12.1
+   Compiling http-body-util v0.1.5
+   Compiling md-5 v0.10.6
+   Compiling miniz_oxide v0.9.1
+   Compiling parking_lot v0.12.5
+   Compiling cipher v0.4.4
+   Compiling hkdf v0.12.4
+   Compiling chacha20 v0.10.2
+   Compiling simdutf8 v0.1.5
+   Compiling core_detect v1.0.0
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.6
+   Compiling num-traits v0.2.19
+   Compiling signature v2.2.0
+   Compiling sha1 v0.10.7
+   Compiling icu_collections v2.3.0
+   Compiling icu_locale_core v2.3.0
+   Compiling futures-intrusive v0.5.0
+   Compiling rfc6979 v0.4.0
+   Compiling regex-syntax v0.8.11
+   Compiling iana-time-zone v0.1.65
+   Compiling pom v1.1.0
+   Compiling tungstenite v0.29.0
+   Compiling rand v0.10.3
+   Compiling encoding_rs v0.8.42
+   Compiling aes v0.8.4
+   Compiling cbc v0.1.2
+   Compiling ecb v0.1.2
+   Compiling axum-core v0.5.6
+   Compiling curve25519-dalek v4.1.3
+   Compiling thiserror v1.0.69
+   Compiling event-listener-strategy v0.5.4
+   Compiling flate2 v1.1.10
+   Compiling nom v8.0.0
+   Compiling hashbrown v0.14.5
+   Compiling rangemap v1.8.0
+   Compiling weezl v0.1.12
+   Compiling matchit v0.8.4
+   Compiling ttf-parser v0.25.1
+   Compiling adobe-cmap-parser v0.4.1
+   Compiling type1-encoding-parser v0.1.1
+   Compiling async-lock v3.4.2
+   Compiling spki v0.7.3
+   Compiling sharded-slab v0.1.7
+   Compiling tracing-log v0.2.0
+   Compiling arc-swap v1.9.2
+   Compiling pkcs8 v0.10.2
+   Compiling time v0.3.55
+   Compiling thread_local v1.1.10
+   Compiling nu-ansi-term v0.50.3
+   Compiling num-integer v0.1.47
+   Compiling ordered-float v2.10.1
+   Compiling sec1 v0.7.3
+   Compiling regex-automata v0.4.18
+   Compiling pkcs1 v0.7.5
+   Compiling ed25519 v2.2.3
+   Compiling euclid v0.20.14
+   Compiling fastrand v2.5.0
+   Compiling utf-8 v0.7.6
+   Compiling dyn-clone v1.0.20
+   Compiling typed-path v0.12.3
+   Compiling icu_provider v2.3.1
+   Compiling elliptic-curve v0.13.8
+   Compiling num-iter v0.1.46
+   Compiling base64 v0.21.7
+   Compiling postscript v0.14.1
+   Compiling fvoci-server v0.1.0 (<worktree>/crates/server)
+   Compiling cff-parser v0.2.0
+   Compiling tungstenite v0.28.0
+   Compiling clap v4.6.7
+   Compiling ed25519-dalek v2.2.0
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling deranged v0.5.9
+   Compiling uuid v1.28.0
+   Compiling serde_path_to_error v0.1.20
+   Compiling primeorder v0.13.6
+   Compiling ecdsa v0.16.9
+   Compiling p256 v0.13.2
+   Compiling p384 v0.13.1
+   Compiling darling_macro v0.24.1
+   Compiling serde_urlencoded v0.7.1
+   Compiling chrono v0.4.45
+   Compiling serde_plain v1.0.2
+   Compiling serde-value v0.7.0
+   Compiling num-bigint-dig v0.8.6
+   Compiling smallstr v0.3.1
+   Compiling spdx v0.13.6
+   Compiling darling v0.24.1
+   Compiling itertools v0.10.5
+   Compiling zip v9.0.4
+   Compiling serde_with_macros v3.24.0
+   Compiling dashmap v6.2.1
+   Compiling yrs v0.28.0
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling serde_with v3.24.0
+   Compiling url v2.5.8
+   Compiling publicsuffix v2.3.0
+   Compiling rsa v0.9.10
+   Compiling lopdf v0.42.0
+   Compiling regex v1.13.1
+   Compiling sqlx-core v0.8.6
+   Compiling matchers v0.2.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling utoipa-gen v5.5.0
+   Compiling hyper v1.12.0
+   Compiling tower v0.5.3
+   Compiling tokio-stream v0.1.19
+   Compiling tokio-native-tls v0.3.1
+   Compiling tokio-util v0.7.20
+   Compiling tokio-tungstenite v0.29.0
+   Compiling tokio-tungstenite v0.28.0
+   Compiling tower-http v0.6.11
+   Compiling hyper-util v0.1.21
+   Compiling cookie v0.18.2
+   Compiling cookie_store v0.22.1
+   Compiling sqlx-postgres v0.8.6
+   Compiling hyper-tls v0.6.0
+   Compiling axum v0.8.9
+   Compiling reqwest v0.12.28
+   Compiling oauth2 v5.0.0
+   Compiling utoipa v5.5.0
+   Compiling pdf-extract v0.12.1
+   Compiling openidconnect v4.0.1
+   Compiling axum-extra v0.10.3
+   Compiling sqlx-macros-core v0.8.6
+   Compiling sqlx-macros v0.8.6
+   Compiling sqlx v0.8.6
+   Compiling xtask v0.1.0 (<worktree>/xtask)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 42.34s
+     Running unittests src/lib.rs (target/debug/deps/fvoci_server-46bf3b3cd98551d3)
+
+running 78 tests
+test backup::tests::restore_parts_stay_within_the_storage_limit ... ok
+test build_info::tests::release_versions_and_shas_are_checked ... ok
+test config::tests::defaults_and_redaction ... ok
+test config::tests::https_public_url_enables_secure_cookies ... ok
+test collab::convert::tests::position_migration_metadata_is_allowed_but_other_roots_are_not ... ok
+test config::tests::issuer_requires_client_settings ... ok
+test config::tests::rejects_depth_outside_range ... ok
+test config::tests::rejects_invalid_limit ... ok
+test config::tests::requires_database_url ... ok
+test features::accounts::tests::return_to_accepts_only_same_origin_paths ... ok
+test features::accounts::tests::duplicate_cookies_are_rejected ... ok
+test features::documents::tests::access_parsing ... ok
+test collab::convert::tests::reads_what_the_browser_writes ... ok
+test features::documents::tests::body_must_be_doc_object ... ok
+test features::documents::tests::body_size_is_limited ... ok
+test features::documents::tests::title_validation ... ok
+test features::documents::tests::reference_nodes_are_checked_and_limited ... ok
+test features::export::tests::names_inside_the_archive_stay_inside ... ok
+test features::documents::tests::images_and_links_must_stay_inside_the_service ... ok
+test features::file_text::tests::skips_unsupported_and_broken_files ... ok
+test features::files::tests::content_types_are_cleaned ... ok
+test features::files::tests::counts_parts ... ok
+test features::file_text::tests::reads_plain_text_and_office_xml ... ok
+test features::files::tests::dispositions_quote_names_safely ... ok
+test features::item_profile::tests::details_follow_the_module_kind ... ok
+test features::members::tests::email_validation ... ok
+test features::modules::tests::description_allows_newlines_only ... ok
+test features::modules::tests::keys_are_normalized_to_uppercase ... ok
+test features::modules::tests::keys_reject_bad_shapes ... ok
+test features::modules::tests::module_kind_round_trip ... ok
+test features::file_text::tests::reads_pdf_text ... ok
+test features::records::tests::fields_are_checked_against_the_kind ... ok
+test features::records::tests::kinds_are_unique_and_choices_are_set ... ok
+test features::references::tests::like_patterns_escape_wildcards ... ok
+test features::references::tests::reference_queries_are_parsed_case_insensitively ... ok
+test features::references::tests::public_bodies_drop_reference_ids ... ok
+test features::schedule::tests::a_new_link_to_an_undated_successor_is_reported_not_invented ... ok
+test features::schedule::tests::a_join_waits_for_every_predecessor_across_kinds ... ok
+test features::schedule::tests::changing_a_link_pushes_only_what_the_change_adds ... ok
+test features::schedule::tests::a_link_that_is_already_satisfied_moves_nothing ... ok
+test features::schedule::tests::a_task_with_two_moved_predecessors_takes_the_later_one ... ok
+test features::schedule::tests::each_kind_anchors_the_right_ends_with_and_without_lag ... ok
+test collab::convert::tests::writes_what_the_browser_reads ... ok
+test features::schedule::tests::link_kinds_round_trip_their_codes ... ok
+test features::schedule::tests::milestones_and_one_sided_dates_use_the_date_they_have ... ok
+test features::schedule::tests::forks_and_mixed_chains_follow_each_kind ... ok
+test features::schedule::tests::pulling_earlier_or_undated_tasks_proposes_nothing ... ok
+test features::schedule::tests::pushes_successors_by_the_minimum_and_keeps_their_length ... ok
+test features::schedule::tests::existing_overlaps_and_done_tasks_are_left_alone ... ok
+test features::schedule::tests::the_approved_list_must_match_the_plan_exactly ... ok
+test features::schedule::tests::proposed_dates_outside_the_saveable_years_block_the_plan ... ok
+test features::tasks::tests::dates_are_plain_calendar_dates ... ok
+test features::tasks::tests::status_and_priority_round_trip ... ok
+test features::tasks::tests::tags_are_trimmed_deduplicated_and_limited ... ok
+test features::search_text::tests::keeps_text_checklists_and_reference_shortcodes ... ok
+test features::zotero::tests::library_input_is_checked ... ok
+test features::zotero::tests::zotero_items_become_reference_fields ... ok
+test http::cache::tests::etags_depend_on_bytes_and_user ... ok
+test http::cache::tests::if_match_uses_strong_comparison ... ok
+test http::cache::tests::cdn_examples_match_the_scopes ... ok
+test http::cache::tests::scopes_follow_the_path ... ok
+test http::cache::tests::if_none_match_uses_weak_comparison ... ok
+test logging::tests::external_error_text_is_not_logged ... ok
+test logging::tests::request_ids_from_outside_are_checked ... ok
+test search::tests::uids_use_only_allowed_characters ... ok
+test logging::tests::settings_default_to_info_json_and_reject_bad_values ... ok
+test storage::s3::tests::encodes_like_aws ... ok
+test storage::s3::tests::derives_the_documented_signing_key ... ok
+test storage::s3::tests::reads_parts_from_xml ... ok
+test storage::tests::keys_must_be_server_made ... ok
+test features::search_text::tests::ignores_unknown_shapes_and_caps_length ... ok
+test http::tests::operation_ids_are_unique ... ok
+test http::tests::the_move_conflict_is_a_preview_or_error_body ... ok
+test http::tests::the_link_body_is_required ... ok
+test http::tests::the_restore_conflict_is_a_stale_base_or_error_body ... ok
+test http::tests::the_link_conflict_is_task_conflict_or_error_body ... ok
+test features::schedule::tests::the_shift_limit_matches_approval_at_499_500_and_501 ... ok
+test features::file_text::tests::pdf_flate_bombs_are_not_parsed ... ok
+
+test result: ok. 78 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.87s
+
+     Running unittests src/main.rs (target/debug/deps/fvoci_server-fb3ca6f19a2bdcd1)
+
+running 2 tests
+test tests::help_is_a_separate_command_from_database_work ... ok
+test tests::migration_history_errors_require_preservation_before_retry ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/xtask-c9b2cc54a05bed14)
+
+running 12 tests
+test licenses::tests::npm_exceptions_match_name_version_and_license ... ok
+test licenses::tests::compound_expressions_keep_grouping_and_precedence ... ok
+test licenses::tests::spdx_or_and ... ok
+test notices::tests::source_archives_point_at_the_exact_version ... ok
+test supabase_cloud_precheck::tests::approved_main_only_workflow_builds_before_credentials ... ok
+test supabase_cloud_precheck::tests::absent_connect_missing_settings_or_ambient_overrides_never_start_client ... ok
+test supabase_cloud_precheck::tests::connection_errors_use_only_types_and_sqlstate_class_without_exposing_details ... ok
+test supabase_cloud_precheck::tests::split_settings_preserve_raw_password_and_reject_non_session_targets ... ok
+test supabase_cloud_precheck::tests::one_connection_runs_only_read_only_select_one_then_rolls_back ... ok
+test supabase_cloud_precheck::tests::connection_query_cleanup_failures_and_wrong_answer_are_sanitized ... ok
+test supabase_cloud_precheck::tests::missing_or_invalid_ca_never_starts_client_and_exposes_only_fixed_codes ... ok
+test supabase_cloud_precheck::tests::deadlines_bound_connection_query_cleanup_and_total_without_retry ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+PASS cargo test (unit)
+==> cargo deny (advisories, bans, sources)
+$ cargo deny --locked check advisories bans sources
+warning[duplicate]: found 3 duplicate entries for crate 'base64'
+   ┌─ <worktree>/Cargo.lock:21:1
+   │  
+21 │ ╭ base64 0.21.7 registry+https://github.com/rust-lang/crates.io-index
+22 │ │ base64 0.22.1 registry+https://github.com/rust-lang/crates.io-index
+23 │ │ base64 0.23.1 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰───────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ base64 v0.21.7
+     └── openidconnect v4.0.1
+         └── fvoci-server v0.1.0
+   ├ base64 v0.22.1
+     ├── axum v0.8.9
+     │   ├── axum-extra v0.10.3
+     │   │   └── fvoci-server v0.1.0
+     │   └── fvoci-server v0.1.0 (*)
+     ├── fvoci-server v0.1.0 (*)
+     ├── oauth2 v5.0.0
+     │   └── openidconnect v4.0.1
+     │       └── fvoci-server v0.1.0 (*)
+     ├── reqwest v0.12.28
+     │   ├── fvoci-server v0.1.0 (*)
+     │   └── oauth2 v5.0.0 (*)
+     ├── sqlx-core v0.8.6
+     │   ├── sqlx v0.8.6
+     │   │   ├── fvoci-server v0.1.0 (*)
+     │   │   └── xtask v0.1.0
+     │   ├── sqlx-macros v0.8.6
+     │   │   └── sqlx v0.8.6 (*)
+     │   ├── sqlx-macros-core v0.8.6
+     │   │   └── sqlx-macros v0.8.6 (*)
+     │   └── sqlx-postgres v0.8.6
+     │       ├── sqlx v0.8.6 (*)
+     │       └── sqlx-macros-core v0.8.6 (*)
+     └── sqlx-postgres v0.8.6 (*)
+   ├ base64 v0.23.1
+     └── hyper-util v0.1.21
+         ├── axum v0.8.9
+         │   ├── axum-extra v0.10.3
+         │   │   └── fvoci-server v0.1.0
+         │   └── fvoci-server v0.1.0 (*)
+         ├── hyper-tls v0.6.0
+         │   └── reqwest v0.12.28
+         │       ├── fvoci-server v0.1.0 (*)
+         │       └── oauth2 v5.0.0
+         │           └── openidconnect v4.0.1
+         │               └── fvoci-server v0.1.0 (*)
+         └── reqwest v0.12.28 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
+   ┌─ <worktree>/Cargo.lock:49:1
+   │  
+49 │ ╭ cpufeatures 0.2.17 registry+https://github.com/rust-lang/crates.io-index
+50 │ │ cpufeatures 0.3.1 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰───────────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ cpufeatures v0.2.17
+     ├── aes v0.8.4
+     │   └── lopdf v0.42.0
+     │       └── pdf-extract v0.12.1
+     │           └── fvoci-server v0.1.0
+     ├── curve25519-dalek v4.1.3
+     │   └── ed25519-dalek v2.2.0
+     │       └── openidconnect v4.0.1
+     │           └── fvoci-server v0.1.0 (*)
+     ├── sha1 v0.10.7
+     │   ├── axum v0.8.9
+     │   │   ├── axum-extra v0.10.3
+     │   │   │   └── fvoci-server v0.1.0 (*)
+     │   │   └── fvoci-server v0.1.0 (*)
+     │   ├── tungstenite v0.28.0
+     │   │   └── tokio-tungstenite v0.28.0
+     │   │       └── (dev) fvoci-server v0.1.0 (*)
+     │   └── tungstenite v0.29.0
+     │       └── tokio-tungstenite v0.29.0
+     │           └── axum v0.8.9 (*)
+     └── sha2 v0.10.9
+         ├── ed25519-dalek v2.2.0 (*)
+         ├── fvoci-server v0.1.0 (*)
+         ├── lopdf v0.42.0 (*)
+         ├── oauth2 v5.0.0
+         │   └── openidconnect v4.0.1 (*)
+         ├── openidconnect v4.0.1 (*)
+         ├── p256 v0.13.2
+         │   └── openidconnect v4.0.1 (*)
+         ├── p384 v0.13.1
+         │   └── openidconnect v4.0.1 (*)
+         ├── sqlx-core v0.8.6
+         │   ├── sqlx v0.8.6
+         │   │   ├── fvoci-server v0.1.0 (*)
+         │   │   └── xtask v0.1.0
+         │   ├── sqlx-macros v0.8.6
+         │   │   └── sqlx v0.8.6 (*)
+         │   ├── sqlx-macros-core v0.8.6
+         │   │   └── sqlx-macros v0.8.6 (*)
+         │   └── sqlx-postgres v0.8.6
+         │       ├── sqlx v0.8.6 (*)
+         │       └── sqlx-macros-core v0.8.6 (*)
+         ├── sqlx-macros-core v0.8.6 (*)
+         ├── sqlx-postgres v0.8.6 (*)
+         └── xtask v0.1.0 (*)
+   ├ cpufeatures v0.3.1
+     └── chacha20 v0.10.2
+         └── rand v0.10.3
+             └── lopdf v0.42.0
+                 └── pdf-extract v0.12.1
+                     └── fvoci-server v0.1.0
+
+warning[duplicate]: found 3 duplicate entries for crate 'getrandom'
+    ┌─ <worktree>/Cargo.lock:101:1
+    │  
+101 │ ╭ getrandom 0.2.17 registry+https://github.com/rust-lang/crates.io-index
+102 │ │ getrandom 0.3.4 registry+https://github.com/rust-lang/crates.io-index
+103 │ │ getrandom 0.4.3 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰─────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ getrandom v0.2.17
+      └── rand_core v0.6.4
+          ├── crypto-bigint v0.5.5
+          │   └── elliptic-curve v0.13.8
+          │       ├── ecdsa v0.16.9
+          │       │   ├── p256 v0.13.2
+          │       │   │   └── openidconnect v4.0.1
+          │       │   │       └── fvoci-server v0.1.0
+          │       │   └── p384 v0.13.1
+          │       │       └── openidconnect v4.0.1 (*)
+          │       ├── p256 v0.13.2 (*)
+          │       ├── p384 v0.13.1 (*)
+          │       └── primeorder v0.13.6
+          │           ├── p256 v0.13.2 (*)
+          │           └── p384 v0.13.1 (*)
+          ├── elliptic-curve v0.13.8 (*)
+          ├── ff v0.13.1
+          │   ├── elliptic-curve v0.13.8 (*)
+          │   └── group v0.13.0
+          │       └── elliptic-curve v0.13.8 (*)
+          ├── group v0.13.0 (*)
+          ├── rand v0.8.8
+          │   ├── num-bigint-dig v0.8.6
+          │   │   └── rsa v0.9.10
+          │   │       └── openidconnect v4.0.1 (*)
+          │   ├── oauth2 v5.0.0
+          │   │   └── openidconnect v4.0.1 (*)
+          │   ├── openidconnect v4.0.1 (*)
+          │   └── sqlx-postgres v0.8.6
+          │       ├── sqlx v0.8.6
+          │       │   ├── fvoci-server v0.1.0 (*)
+          │       │   └── xtask v0.1.0
+          │       └── sqlx-macros-core v0.8.6
+          │           └── sqlx-macros v0.8.6
+          │               └── sqlx v0.8.6 (*)
+          ├── rand_chacha v0.3.1
+          │   └── rand v0.8.8 (*)
+          ├── rsa v0.9.10 (*)
+          └── signature v2.2.0
+              ├── ecdsa v0.16.9 (*)
+              ├── ed25519 v2.2.3
+              │   └── ed25519-dalek v2.2.0
+              │       └── openidconnect v4.0.1 (*)
+              └── rsa v0.9.10 (*)
+    ├ getrandom v0.3.4
+      └── rand_core v0.9.5
+          ├── rand v0.9.5
+          │   ├── fvoci-server v0.1.0
+          │   ├── tungstenite v0.28.0
+          │   │   └── tokio-tungstenite v0.28.0
+          │   │       └── (dev) fvoci-server v0.1.0 (*)
+          │   └── tungstenite v0.29.0
+          │       └── tokio-tungstenite v0.29.0
+          │           └── axum v0.8.9
+          │               ├── axum-extra v0.10.3
+          │               │   └── fvoci-server v0.1.0 (*)
+          │               └── fvoci-server v0.1.0 (*)
+          └── rand_chacha v0.9.0
+              └── rand v0.9.5 (*)
+    ├ getrandom v0.4.3
+      ├── lopdf v0.42.0
+      │   └── pdf-extract v0.12.1
+      │       └── fvoci-server v0.1.0
+      ├── rand v0.10.3
+      │   └── lopdf v0.42.0 (*)
+      ├── tempfile v3.27.0
+      │   └── native-tls v0.2.18
+      │       ├── hyper-tls v0.6.0
+      │       │   └── reqwest v0.12.28
+      │       │       ├── fvoci-server v0.1.0 (*)
+      │       │       └── oauth2 v5.0.0
+      │       │           └── openidconnect v4.0.1
+      │       │               └── fvoci-server v0.1.0 (*)
+      │       ├── reqwest v0.12.28 (*)
+      │       ├── sqlx-core v0.8.6
+      │       │   ├── sqlx v0.8.6
+      │       │   │   ├── fvoci-server v0.1.0 (*)
+      │       │   │   └── xtask v0.1.0
+      │       │   ├── sqlx-macros v0.8.6
+      │       │   │   └── sqlx v0.8.6 (*)
+      │       │   ├── sqlx-macros-core v0.8.6
+      │       │   │   └── sqlx-macros v0.8.6 (*)
+      │       │   └── sqlx-postgres v0.8.6
+      │       │       ├── sqlx v0.8.6 (*)
+      │       │       └── sqlx-macros-core v0.8.6 (*)
+      │       ├── tokio-native-tls v0.3.1
+      │       │   ├── hyper-tls v0.6.0 (*)
+      │       │   └── reqwest v0.12.28 (*)
+      │       └── xtask v0.1.0 (*)
+      └── uuid v1.28.0
+          ├── fvoci-server v0.1.0 (*)
+          ├── sqlx-core v0.8.6 (*)
+          ├── sqlx-postgres v0.8.6 (*)
+          ├── utoipa-gen v5.5.0
+          │   └── utoipa v5.5.0
+          │       └── fvoci-server v0.1.0 (*)
+          └── xtask v0.1.0 (*)
+
+warning[duplicate]: found 3 duplicate entries for crate 'hashbrown'
+    ┌─ <worktree>/Cargo.lock:105:1
+    │  
+105 │ ╭ hashbrown 0.14.5 registry+https://github.com/rust-lang/crates.io-index
+106 │ │ hashbrown 0.15.5 registry+https://github.com/rust-lang/crates.io-index
+107 │ │ hashbrown 0.17.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ hashbrown v0.14.5
+      └── dashmap v6.2.1
+          └── yrs v0.28.0
+              └── fvoci-server v0.1.0
+    ├ hashbrown v0.15.5
+      ├── hashlink v0.10.0
+      │   └── sqlx-core v0.8.6
+      │       ├── sqlx v0.8.6
+      │       │   ├── fvoci-server v0.1.0
+      │       │   └── xtask v0.1.0
+      │       ├── sqlx-macros v0.8.6
+      │       │   └── sqlx v0.8.6 (*)
+      │       ├── sqlx-macros-core v0.8.6
+      │       │   └── sqlx-macros v0.8.6 (*)
+      │       └── sqlx-postgres v0.8.6
+      │           ├── sqlx v0.8.6 (*)
+      │           └── sqlx-macros-core v0.8.6 (*)
+      └── sqlx-core v0.8.6 (*)
+    ├ hashbrown v0.17.1
+      └── indexmap v2.14.2
+          ├── lopdf v0.42.0
+          │   └── pdf-extract v0.12.1
+          │       └── fvoci-server v0.1.0
+          ├── sqlx-core v0.8.6
+          │   ├── sqlx v0.8.6
+          │   │   ├── fvoci-server v0.1.0 (*)
+          │   │   └── xtask v0.1.0
+          │   ├── sqlx-macros v0.8.6
+          │   │   └── sqlx v0.8.6 (*)
+          │   ├── sqlx-macros-core v0.8.6
+          │   │   └── sqlx-macros v0.8.6 (*)
+          │   └── sqlx-postgres v0.8.6
+          │       ├── sqlx v0.8.6 (*)
+          │       └── sqlx-macros-core v0.8.6 (*)
+          ├── utoipa v5.5.0
+          │   └── fvoci-server v0.1.0 (*)
+          └── zip v9.0.4
+              └── fvoci-server v0.1.0 (*)
+
+warning[duplicate]: found 3 duplicate entries for crate 'rand'
+    ┌─ <worktree>/Cargo.lock:197:1
+    │  
+197 │ ╭ rand 0.8.8 registry+https://github.com/rust-lang/crates.io-index
+198 │ │ rand 0.9.5 registry+https://github.com/rust-lang/crates.io-index
+199 │ │ rand 0.10.3 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰─────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ rand v0.8.8
+      ├── num-bigint-dig v0.8.6
+      │   └── rsa v0.9.10
+      │       └── openidconnect v4.0.1
+      │           └── fvoci-server v0.1.0
+      ├── oauth2 v5.0.0
+      │   └── openidconnect v4.0.1 (*)
+      ├── openidconnect v4.0.1 (*)
+      └── sqlx-postgres v0.8.6
+          ├── sqlx v0.8.6
+          │   ├── fvoci-server v0.1.0 (*)
+          │   └── xtask v0.1.0
+          └── sqlx-macros-core v0.8.6
+              └── sqlx-macros v0.8.6
+                  └── sqlx v0.8.6 (*)
+    ├ rand v0.9.5
+      ├── fvoci-server v0.1.0
+      ├── tungstenite v0.28.0
+      │   └── tokio-tungstenite v0.28.0
+      │       └── (dev) fvoci-server v0.1.0 (*)
+      └── tungstenite v0.29.0
+          └── tokio-tungstenite v0.29.0
+              └── axum v0.8.9
+                  ├── axum-extra v0.10.3
+                  │   └── fvoci-server v0.1.0 (*)
+                  └── fvoci-server v0.1.0 (*)
+    ├ rand v0.10.3
+      └── lopdf v0.42.0
+          └── pdf-extract v0.12.1
+              └── fvoci-server v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'rand_chacha'
+    ┌─ <worktree>/Cargo.lock:200:1
+    │  
+200 │ ╭ rand_chacha 0.3.1 registry+https://github.com/rust-lang/crates.io-index
+201 │ │ rand_chacha 0.9.0 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ rand_chacha v0.3.1
+      └── rand v0.8.8
+          ├── num-bigint-dig v0.8.6
+          │   └── rsa v0.9.10
+          │       └── openidconnect v4.0.1
+          │           └── fvoci-server v0.1.0
+          ├── oauth2 v5.0.0
+          │   └── openidconnect v4.0.1 (*)
+          ├── openidconnect v4.0.1 (*)
+          └── sqlx-postgres v0.8.6
+              ├── sqlx v0.8.6
+              │   ├── fvoci-server v0.1.0 (*)
+              │   └── xtask v0.1.0
+              └── sqlx-macros-core v0.8.6
+                  └── sqlx-macros v0.8.6
+                      └── sqlx v0.8.6 (*)
+    ├ rand_chacha v0.9.0
+      └── rand v0.9.5
+          ├── fvoci-server v0.1.0
+          ├── tungstenite v0.28.0
+          │   └── tokio-tungstenite v0.28.0
+          │       └── (dev) fvoci-server v0.1.0 (*)
+          └── tungstenite v0.29.0
+              └── tokio-tungstenite v0.29.0
+                  └── axum v0.8.9
+                      ├── axum-extra v0.10.3
+                      │   └── fvoci-server v0.1.0 (*)
+                      └── fvoci-server v0.1.0 (*)
+
+warning[duplicate]: found 3 duplicate entries for crate 'rand_core'
+    ┌─ <worktree>/Cargo.lock:202:1
+    │  
+202 │ ╭ rand_core 0.6.4 registry+https://github.com/rust-lang/crates.io-index
+203 │ │ rand_core 0.9.5 registry+https://github.com/rust-lang/crates.io-index
+204 │ │ rand_core 0.10.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ rand_core v0.6.4
+      ├── crypto-bigint v0.5.5
+      │   └── elliptic-curve v0.13.8
+      │       ├── ecdsa v0.16.9
+      │       │   ├── p256 v0.13.2
+      │       │   │   └── openidconnect v4.0.1
+      │       │   │       └── fvoci-server v0.1.0
+      │       │   └── p384 v0.13.1
+      │       │       └── openidconnect v4.0.1 (*)
+      │       ├── p256 v0.13.2 (*)
+      │       ├── p384 v0.13.1 (*)
+      │       └── primeorder v0.13.6
+      │           ├── p256 v0.13.2 (*)
+      │           └── p384 v0.13.1 (*)
+      ├── elliptic-curve v0.13.8 (*)
+      ├── ff v0.13.1
+      │   ├── elliptic-curve v0.13.8 (*)
+      │   └── group v0.13.0
+      │       └── elliptic-curve v0.13.8 (*)
+      ├── group v0.13.0 (*)
+      ├── rand v0.8.8
+      │   ├── num-bigint-dig v0.8.6
+      │   │   └── rsa v0.9.10
+      │   │       └── openidconnect v4.0.1 (*)
+      │   ├── oauth2 v5.0.0
+      │   │   └── openidconnect v4.0.1 (*)
+      │   ├── openidconnect v4.0.1 (*)
+      │   └── sqlx-postgres v0.8.6
+      │       ├── sqlx v0.8.6
+      │       │   ├── fvoci-server v0.1.0 (*)
+      │       │   └── xtask v0.1.0
+      │       └── sqlx-macros-core v0.8.6
+      │           └── sqlx-macros v0.8.6
+      │               └── sqlx v0.8.6 (*)
+      ├── rand_chacha v0.3.1
+      │   └── rand v0.8.8 (*)
+      ├── rsa v0.9.10 (*)
+      └── signature v2.2.0
+          ├── ecdsa v0.16.9 (*)
+          ├── ed25519 v2.2.3
+          │   └── ed25519-dalek v2.2.0
+          │       └── openidconnect v4.0.1 (*)
+          └── rsa v0.9.10 (*)
+    ├ rand_core v0.9.5
+      ├── rand v0.9.5
+      │   ├── fvoci-server v0.1.0
+      │   ├── tungstenite v0.28.0
+      │   │   └── tokio-tungstenite v0.28.0
+      │   │       └── (dev) fvoci-server v0.1.0 (*)
+      │   └── tungstenite v0.29.0
+      │       └── tokio-tungstenite v0.29.0
+      │           └── axum v0.8.9
+      │               ├── axum-extra v0.10.3
+      │               │   └── fvoci-server v0.1.0 (*)
+      │               └── fvoci-server v0.1.0 (*)
+      └── rand_chacha v0.9.0
+          └── rand v0.9.5 (*)
+    ├ rand_core v0.10.1
+      ├── chacha20 v0.10.2
+      │   └── rand v0.10.3
+      │       └── lopdf v0.42.0
+      │           └── pdf-extract v0.12.1
+      │               └── fvoci-server v0.1.0
+      ├── getrandom v0.4.3
+      │   ├── lopdf v0.42.0 (*)
+      │   ├── rand v0.10.3 (*)
+      │   ├── tempfile v3.27.0
+      │   │   └── native-tls v0.2.18
+      │   │       ├── hyper-tls v0.6.0
+      │   │       │   └── reqwest v0.12.28
+      │   │       │       ├── fvoci-server v0.1.0 (*)
+      │   │       │       └── oauth2 v5.0.0
+      │   │       │           └── openidconnect v4.0.1
+      │   │       │               └── fvoci-server v0.1.0 (*)
+      │   │       ├── reqwest v0.12.28 (*)
+      │   │       ├── sqlx-core v0.8.6
+      │   │       │   ├── sqlx v0.8.6
+      │   │       │   │   ├── fvoci-server v0.1.0 (*)
+      │   │       │   │   └── xtask v0.1.0
+      │   │       │   ├── sqlx-macros v0.8.6
+      │   │       │   │   └── sqlx v0.8.6 (*)
+      │   │       │   ├── sqlx-macros-core v0.8.6
+      │   │       │   │   └── sqlx-macros v0.8.6 (*)
+      │   │       │   └── sqlx-postgres v0.8.6
+      │   │       │       ├── sqlx v0.8.6 (*)
+      │   │       │       └── sqlx-macros-core v0.8.6 (*)
+      │   │       ├── tokio-native-tls v0.3.1
+      │   │       │   ├── hyper-tls v0.6.0 (*)
+      │   │       │   └── reqwest v0.12.28 (*)
+      │   │       └── xtask v0.1.0 (*)
+      │   └── uuid v1.28.0
+      │       ├── fvoci-server v0.1.0 (*)
+      │       ├── sqlx-core v0.8.6 (*)
+      │       ├── sqlx-postgres v0.8.6 (*)
+      │       ├── utoipa-gen v5.5.0
+      │       │   └── utoipa v5.5.0
+      │       │       └── fvoci-server v0.1.0 (*)
+      │       └── xtask v0.1.0 (*)
+      └── rand v0.10.3 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'syn'
+    ┌─ <worktree>/Cargo.lock:256:1
+    │  
+256 │ ╭ syn 2.0.119 registry+https://github.com/rust-lang/crates.io-index
+257 │ │ syn 3.0.9 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ syn v2.0.119
+      ├── curve25519-dalek-derive v0.1.1
+      │   └── curve25519-dalek v4.1.3
+      │       └── ed25519-dalek v2.2.0
+      │           └── openidconnect v4.0.1
+      │               └── fvoci-server v0.1.0
+      ├── openssl-macros v0.1.1
+      │   └── openssl v0.10.81
+      │       └── native-tls v0.2.18
+      │           ├── hyper-tls v0.6.0
+      │           │   └── reqwest v0.12.28
+      │           │       ├── fvoci-server v0.1.0 (*)
+      │           │       └── oauth2 v5.0.0
+      │           │           └── openidconnect v4.0.1 (*)
+      │           ├── reqwest v0.12.28 (*)
+      │           ├── sqlx-core v0.8.6
+      │           │   ├── sqlx v0.8.6
+      │           │   │   ├── fvoci-server v0.1.0 (*)
+      │           │   │   └── xtask v0.1.0
+      │           │   ├── sqlx-macros v0.8.6
+      │           │   │   └── sqlx v0.8.6 (*)
+      │           │   ├── sqlx-macros-core v0.8.6
+      │           │   │   └── sqlx-macros v0.8.6 (*)
+      │           │   └── sqlx-postgres v0.8.6
+      │           │       ├── sqlx v0.8.6 (*)
+      │           │       └── sqlx-macros-core v0.8.6 (*)
+      │           ├── tokio-native-tls v0.3.1
+      │           │   ├── hyper-tls v0.6.0 (*)
+      │           │   └── reqwest v0.12.28 (*)
+      │           └── xtask v0.1.0 (*)
+      ├── sqlx-macros v0.8.6 (*)
+      ├── sqlx-macros-core v0.8.6 (*)
+      ├── thiserror-impl v1.0.69
+      │   └── thiserror v1.0.69
+      │       ├── oauth2 v5.0.0 (*)
+      │       └── openidconnect v4.0.1 (*)
+      ├── tracing-attributes v0.1.31
+      │   └── tracing v0.1.44
+      │       ├── fvoci-server v0.1.0 (*)
+      │       ├── hyper-util v0.1.21
+      │       │   ├── axum v0.8.9
+      │       │   │   ├── axum-extra v0.10.3
+      │       │   │   │   └── fvoci-server v0.1.0 (*)
+      │       │   │   └── fvoci-server v0.1.0 (*)
+      │       │   ├── hyper-tls v0.6.0 (*)
+      │       │   └── reqwest v0.12.28 (*)
+      │       ├── sqlx-core v0.8.6 (*)
+      │       ├── sqlx-postgres v0.8.6 (*)
+      │       ├── tracing-subscriber v0.3.23
+      │       │   └── fvoci-server v0.1.0 (*)
+      │       └── xtask v0.1.0 (*)
+      └── utoipa-gen v5.5.0
+          └── utoipa v5.5.0
+              └── fvoci-server v0.1.0 (*)
+    ├ syn v3.0.9
+      ├── async-trait v0.1.92
+      │   └── yrs v0.28.0
+      │       └── fvoci-server v0.1.0
+      ├── clap_derive v4.6.7
+      │   └── clap v4.6.7
+      │       └── xtask v0.1.0
+      ├── darling_core v0.24.1
+      │   ├── darling v0.24.1
+      │   │   └── serde_with_macros v3.24.0
+      │   │       └── serde_with v3.24.0
+      │   │           └── openidconnect v4.0.1
+      │   │               └── fvoci-server v0.1.0 (*)
+      │   └── darling_macro v0.24.1
+      │       └── darling v0.24.1 (*)
+      ├── darling_macro v0.24.1 (*)
+      ├── displaydoc v0.2.7
+      │   ├── icu_collections v2.3.0
+      │   │   ├── icu_normalizer v2.3.0
+      │   │   │   └── idna_adapter v1.2.2
+      │   │   │       └── idna v1.1.0
+      │   │   │           ├── cookie_store v0.22.1
+      │   │   │           │   └── reqwest v0.12.28
+      │   │   │           │       ├── fvoci-server v0.1.0 (*)
+      │   │   │           │       └── oauth2 v5.0.0
+      │   │   │           │           └── openidconnect v4.0.1 (*)
+      │   │   │           ├── publicsuffix v2.3.0
+      │   │   │           │   └── cookie_store v0.22.1 (*)
+      │   │   │           └── url v2.5.8
+      │   │   │               ├── cookie_store v0.22.1 (*)
+      │   │   │               ├── fvoci-server v0.1.0 (*)
+      │   │   │               ├── oauth2 v5.0.0 (*)
+      │   │   │               ├── openidconnect v4.0.1 (*)
+      │   │   │               ├── reqwest v0.12.28 (*)
+      │   │   │               ├── sqlx-core v0.8.6
+      │   │   │               │   ├── sqlx v0.8.6
+      │   │   │               │   │   ├── fvoci-server v0.1.0 (*)
+      │   │   │               │   │   └── xtask v0.1.0 (*)
+      │   │   │               │   ├── sqlx-macros v0.8.6
+      │   │   │               │   │   └── sqlx v0.8.6 (*)
+      │   │   │               │   ├── sqlx-macros-core v0.8.6
+      │   │   │               │   │   └── sqlx-macros v0.8.6 (*)
+      │   │   │               │   └── sqlx-postgres v0.8.6
+      │   │   │               │       ├── sqlx v0.8.6 (*)
+      │   │   │               │       └── sqlx-macros-core v0.8.6 (*)
+      │   │   │               ├── sqlx-macros-core v0.8.6 (*)
+      │   │   │               └── tower-http v0.6.11
+      │   │   │                   ├── fvoci-server v0.1.0 (*)
+      │   │   │                   └── reqwest v0.12.28 (*)
+      │   │   └── icu_properties v2.3.0
+      │   │       └── idna_adapter v1.2.2 (*)
+      │   ├── icu_locale_core v2.3.0
+      │   │   ├── icu_properties v2.3.0 (*)
+      │   │   └── icu_provider v2.3.1
+      │   │       ├── icu_normalizer v2.3.0 (*)
+      │   │       └── icu_properties v2.3.0 (*)
+      │   ├── icu_properties v2.3.0 (*)
+      │   ├── icu_provider v2.3.1 (*)
+      │   ├── tinystr v0.8.4
+      │   │   └── icu_locale_core v2.3.0 (*)
+      │   └── zerotrie v0.2.5
+      │       ├── icu_properties v2.3.0 (*)
+      │       └── icu_provider v2.3.1 (*)
+      ├── serde_derive v1.0.229
+      │   ├── cookie_store v0.22.1 (*)
+      │   ├── serde v1.0.229
+      │   │   ├── chrono v0.4.45
+      │   │   │   ├── oauth2 v5.0.0 (*)
+      │   │   │   └── openidconnect v4.0.1 (*)
+      │   │   ├── cookie_store v0.22.1 (*)
+      │   │   ├── either v1.19.0
+      │   │   │   ├── itertools v0.10.5
+      │   │   │   │   └── openidconnect v4.0.1 (*)
+      │   │   │   ├── sqlx-core v0.8.6 (*)
+      │   │   │   └── sqlx-macros-core v0.8.6 (*)
+      │   │   ├── fvoci-server v0.1.0 (*)
+      │   │   ├── oauth2 v5.0.0 (*)
+      │   │   ├── openidconnect v4.0.1 (*)
+      │   │   ├── reqwest v0.12.28 (*)
+      │   │   ├── serde-value v0.7.0
+      │   │   │   └── openidconnect v4.0.1 (*)
+      │   │   ├── serde_plain v1.0.2
+      │   │   │   └── openidconnect v4.0.1 (*)
+      │   │   ├── serde_urlencoded v0.7.1
+      │   │   │   ├── axum v0.8.9
+      │   │   │   │   ├── axum-extra v0.10.3
+      │   │   │   │   │   └── fvoci-server v0.1.0 (*)
+      │   │   │   │   └── fvoci-server v0.1.0 (*)
+      │   │   │   └── reqwest v0.12.28 (*)
+      │   │   ├── smallvec v1.16.3
+      │   │   │   ├── hyper v1.12.0
+      │   │   │   │   ├── axum v0.8.9 (*)
+      │   │   │   │   ├── hyper-tls v0.6.0
+      │   │   │   │   │   └── reqwest v0.12.28 (*)
+      │   │   │   │   ├── hyper-util v0.1.21
+      │   │   │   │   │   ├── axum v0.8.9 (*)
+      │   │   │   │   │   ├── hyper-tls v0.6.0 (*)
+      │   │   │   │   │   └── reqwest v0.12.28 (*)
+      │   │   │   │   └── reqwest v0.12.28 (*)
+      │   │   │   ├── icu_normalizer v2.3.0 (*)
+      │   │   │   ├── idna v1.1.0 (*)
+      │   │   │   ├── num-bigint-dig v0.8.6
+      │   │   │   │   └── rsa v0.9.10
+      │   │   │   │       └── openidconnect v4.0.1 (*)
+      │   │   │   ├── parking_lot_core v0.9.12
+      │   │   │   │   ├── dashmap v6.2.1
+      │   │   │   │   │   └── yrs v0.28.0 (*)
+      │   │   │   │   └── parking_lot v0.12.5
+      │   │   │   │       └── futures-intrusive v0.5.0
+      │   │   │   │           └── sqlx-core v0.8.6 (*)
+      │   │   │   ├── smallstr v0.3.1
+      │   │   │   │   └── yrs v0.28.0 (*)
+      │   │   │   ├── spdx v0.13.6
+      │   │   │   │   └── xtask v0.1.0 (*)
+      │   │   │   ├── sqlx-core v0.8.6 (*)
+      │   │   │   ├── sqlx-postgres v0.8.6 (*)
+      │   │   │   ├── tracing-subscriber v0.3.23
+      │   │   │   │   └── fvoci-server v0.1.0 (*)
+      │   │   │   └── yrs v0.28.0 (*)
+      │   │   ├── sqlx-core v0.8.6 (*)
+      │   │   ├── sqlx-macros-core v0.8.6 (*)
+      │   │   ├── sqlx-postgres v0.8.6 (*)
+      │   │   ├── url v2.5.8 (*)
+      │   │   ├── utoipa v5.5.0
+      │   │   │   └── fvoci-server v0.1.0 (*)
+      │   │   └── yrs v0.28.0 (*)
+      │   └── url v2.5.8 (*)
+      ├── serde_with_macros v3.24.0 (*)
+      ├── synstructure v0.14.0
+      │   ├── yoke-derive v0.8.4
+      │   │   └── yoke v0.8.3
+      │   │       ├── icu_collections v2.3.0 (*)
+      │   │       ├── icu_provider v2.3.1 (*)
+      │   │       ├── zerotrie v0.2.5 (*)
+      │   │       └── zerovec v0.11.8
+      │   │           ├── icu_collections v2.3.0 (*)
+      │   │           ├── icu_locale_core v2.3.0 (*)
+      │   │           ├── icu_normalizer v2.3.0 (*)
+      │   │           ├── icu_properties v2.3.0 (*)
+      │   │           ├── icu_provider v2.3.1 (*)
+      │   │           ├── potential_utf v0.1.6
+      │   │           │   └── icu_collections v2.3.0 (*)
+      │   │           └── tinystr v0.8.4 (*)
+      │   └── zerofrom-derive v0.1.8
+      │       └── zerofrom v0.1.8
+      │           ├── icu_collections v2.3.0 (*)
+      │           ├── icu_provider v2.3.1 (*)
+      │           ├── yoke v0.8.3 (*)
+      │           ├── zerotrie v0.2.5 (*)
+      │           └── zerovec v0.11.8 (*)
+      ├── thiserror-impl v2.0.21
+      │   └── thiserror v2.0.21
+      │       ├── fvoci-server v0.1.0 (*)
+      │       ├── lopdf v0.42.0
+      │       │   └── pdf-extract v0.12.1
+      │       │       └── fvoci-server v0.1.0 (*)
+      │       ├── sqlx-core v0.8.6 (*)
+      │       ├── sqlx-postgres v0.8.6 (*)
+      │       ├── tungstenite v0.28.0
+      │       │   └── tokio-tungstenite v0.28.0
+      │       │       └── (dev) fvoci-server v0.1.0 (*)
+      │       ├── tungstenite v0.29.0
+      │       │   └── tokio-tungstenite v0.29.0
+      │       │       └── axum v0.8.9 (*)
+      │       └── yrs v0.28.0 (*)
+      ├── tokio-macros v2.7.2
+      │   └── tokio v1.53.3
+      │       ├── axum v0.8.9 (*)
+      │       ├── fvoci-server v0.1.0 (*)
+      │       ├── hyper v1.12.0 (*)
+      │       ├── hyper-tls v0.6.0 (*)
+      │       ├── hyper-util v0.1.21 (*)
+      │       ├── reqwest v0.12.28 (*)
+      │       ├── sqlx-core v0.8.6 (*)
+      │       ├── sqlx-macros-core v0.8.6 (*)
+      │       ├── tokio-native-tls v0.3.1
+      │       │   ├── hyper-tls v0.6.0 (*)
+      │       │   └── reqwest v0.12.28 (*)
+      │       ├── tokio-stream v0.1.19
+      │       │   └── sqlx-core v0.8.6 (*)
+      │       ├── tokio-tungstenite v0.28.0 (*)
+      │       ├── tokio-tungstenite v0.29.0 (*)
+      │       ├── tokio-util v0.7.20
+      │       │   ├── fvoci-server v0.1.0 (*)
+      │       │   ├── reqwest v0.12.28 (*)
+      │       │   └── tower-http v0.6.11 (*)
+      │       ├── tower v0.5.3
+      │       │   ├── axum v0.8.9 (*)
+      │       │   ├── (dev) fvoci-server v0.1.0 (*)
+      │       │   ├── reqwest v0.12.28 (*)
+      │       │   └── tower-http v0.6.11 (*)
+      │       ├── tower-http v0.6.11 (*)
+      │       └── xtask v0.1.0 (*)
+      ├── yoke-derive v0.8.4 (*)
+      ├── zerofrom-derive v0.1.8 (*)
+      └── zerovec-derive v0.11.6
+          └── zerovec v0.11.8 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
+    ┌─ <worktree>/Cargo.lock:261:1
+    │  
+261 │ ╭ thiserror 1.0.69 registry+https://github.com/rust-lang/crates.io-index
+262 │ │ thiserror 2.0.21 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ thiserror v1.0.69
+      ├── oauth2 v5.0.0
+      │   └── openidconnect v4.0.1
+      │       └── fvoci-server v0.1.0
+      └── openidconnect v4.0.1 (*)
+    ├ thiserror v2.0.21
+      ├── fvoci-server v0.1.0
+      ├── lopdf v0.42.0
+      │   └── pdf-extract v0.12.1
+      │       └── fvoci-server v0.1.0 (*)
+      ├── sqlx-core v0.8.6
+      │   ├── sqlx v0.8.6
+      │   │   ├── fvoci-server v0.1.0 (*)
+      │   │   └── xtask v0.1.0
+      │   ├── sqlx-macros v0.8.6
+      │   │   └── sqlx v0.8.6 (*)
+      │   ├── sqlx-macros-core v0.8.6
+      │   │   └── sqlx-macros v0.8.6 (*)
+      │   └── sqlx-postgres v0.8.6
+      │       ├── sqlx v0.8.6 (*)
+      │       └── sqlx-macros-core v0.8.6 (*)
+      ├── sqlx-postgres v0.8.6 (*)
+      ├── tungstenite v0.28.0
+      │   └── tokio-tungstenite v0.28.0
+      │       └── (dev) fvoci-server v0.1.0 (*)
+      ├── tungstenite v0.29.0
+      │   └── tokio-tungstenite v0.29.0
+      │       └── axum v0.8.9
+      │           ├── axum-extra v0.10.3
+      │           │   └── fvoci-server v0.1.0 (*)
+      │           └── fvoci-server v0.1.0 (*)
+      └── yrs v0.28.0
+          └── fvoci-server v0.1.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'thiserror-impl'
+    ┌─ <worktree>/Cargo.lock:263:1
+    │  
+263 │ ╭ thiserror-impl 1.0.69 registry+https://github.com/rust-lang/crates.io-index
+264 │ │ thiserror-impl 2.0.21 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ thiserror-impl v1.0.69
+      └── thiserror v1.0.69
+          ├── oauth2 v5.0.0
+          │   └── openidconnect v4.0.1
+          │       └── fvoci-server v0.1.0
+          └── openidconnect v4.0.1 (*)
+    ├ thiserror-impl v2.0.21
+      └── thiserror v2.0.21
+          ├── fvoci-server v0.1.0
+          ├── lopdf v0.42.0
+          │   └── pdf-extract v0.12.1
+          │       └── fvoci-server v0.1.0 (*)
+          ├── sqlx-core v0.8.6
+          │   ├── sqlx v0.8.6
+          │   │   ├── fvoci-server v0.1.0 (*)
+          │   │   └── xtask v0.1.0
+          │   ├── sqlx-macros v0.8.6
+          │   │   └── sqlx v0.8.6 (*)
+          │   ├── sqlx-macros-core v0.8.6
+          │   │   └── sqlx-macros v0.8.6 (*)
+          │   └── sqlx-postgres v0.8.6
+          │       ├── sqlx v0.8.6 (*)
+          │       └── sqlx-macros-core v0.8.6 (*)
+          ├── sqlx-postgres v0.8.6 (*)
+          ├── tungstenite v0.28.0
+          │   └── tokio-tungstenite v0.28.0
+          │       └── (dev) fvoci-server v0.1.0 (*)
+          ├── tungstenite v0.29.0
+          │   └── tokio-tungstenite v0.29.0
+          │       └── axum v0.8.9
+          │           ├── axum-extra v0.10.3
+          │           │   └── fvoci-server v0.1.0 (*)
+          │           └── fvoci-server v0.1.0 (*)
+          └── yrs v0.28.0
+              └── fvoci-server v0.1.0 (*)
+
+advisories ok, bans ok, sources ok
+PASS cargo deny (advisories, bans, sources)
+==> openapi.json and api-client schema.ts up to date
+contracts/openapi.json is up to date
+✨ openapi-typescript 7.13.0
+🚀 ../../contracts/openapi.json → <worktree>/target/api-client-check/schema.ts [200.8ms]
+packages/api-client/src/generated/schema.ts matches contracts/openapi.json
+PASS openapi.json and api-client schema.ts up to date
+==> pnpm format:check
+$ pnpm run format:check
+$ prettier --check .
+Checking formatting...
+All matched files use Prettier code style!
+PASS pnpm format:check
+==> pnpm lint
+$ pnpm run lint
+$ pnpm --filter @fvoci/web run i18n && eslint .
+$ paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy globalVariable baseLocale --emit-ts-declarations --silent
+PASS pnpm lint
+==> pnpm check (svelte-check/tsc)
+$ pnpm run check
+$ pnpm --recursive --filter './apps/*' --filter './packages/*' run check
+Scope: 2 of 3 workspace projects
+packages/api-client check$ tsc --noEmit -p tsconfig.json
+packages/api-client check: Done
+apps/web check$ pnpm run i18n && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings
+apps/web check: $ paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy globalVariable baseLocale --emit-ts-declarations --silent
+apps/web check: 1792642044092 START "<worktree>/apps/web"
+apps/web check: 1792642044103 ERROR "tests/component/revision-compare-race.test.ts" 26:3 "Property 'edited_by_names' is missing in type '{ revision: number; title: string; author_name: string; created_at: string; restored_from: null; body: DocNode; schema_version: number; }' but required in type 'RevisionView'."
+apps/web check: 1792642044103 COMPLETED 3201 FILES 1 ERRORS 0 WARNINGS 1 FILES_WITH_PROBLEMS
+apps/web check: Failed
+<worktree>/apps/web:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @fvoci/web@ check: `pnpm run i18n && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings`
+Exit status 1
+[ELIFECYCLE] Command failed with exit code 1.
+FAIL pnpm check (svelte-check/tsc): command exited with non-zero code `pnpm run check`: 1
+==> i18n messages (both languages, same keys, compiled)
+1840 message keys in 23 areas, 2 languages
+PASS i18n messages (both languages, same keys, compiled)
+==> rhwp WASM notices match deploy/rhwp inputs
+PASS rhwp WASM notices match deploy/rhwp inputs
+==> third-party notices up to date
+THIRD_PARTY_NOTICES.txt up to date
+PASS third-party notices up to date
+==> pnpm test
+$ pnpm run test
+$ pnpm --recursive --filter './apps/*' --filter './packages/*' run test
+Scope: 2 of 3 workspace projects
+packages/api-client test$ echo "no tests in @fvoci/api-client"
+packages/api-client test: no tests in @fvoci/api-client
+packages/api-client test: Done
+apps/web test$ pnpm run i18n && vitest run
+apps/web test: $ paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy globalVariable baseLocale --emit-ts-declarations --silent
+apps/web test:  RUN  v5.0.5 <worktree>/apps/web
+apps/web test: Not implemented: Window's scrollBy() method
+apps/web test: Not implemented: Window's scrollBy() method
+apps/web test: Not implemented: Window's scrollBy() method
+apps/web test:  ❯ tests/component/document-draft-offer.test.ts (6 tests | 2 failed) 3458ms
+apps/web test:    ❯ typing before answering the draft offer (3)
+apps/web test:      × keeps the offered draft through a successful save and offers it again on reopen 1640ms
+apps/web test:      × leaves the draft in place when it cannot be queued (storage full) 1189ms
+apps/web test:  ❯ tests/component/revision-compare-race.test.ts (3 tests | 3 failed) 398ms
+apps/web test:    ❯ compare with previous (3)
+apps/web test:      × does not diff against the earlier selection’s previous revision while the new one loads 299ms
+apps/web test:      × keeps only the last click when the earlier responses arrive later 49ms
+apps/web test:      × stops saying loading when the previous revision fails to load 48ms
+apps/web test:  ❯ tests/component/document-draft-conflict.test.ts (1 test | 1 failed) 1435ms
+apps/web test:    ❯ editing while the conflict panel is open (1)
+apps/web test:      × keeps writing the local draft after a 409 1433ms
+apps/web test: ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+apps/web test:  FAIL  tests/component/document-draft-conflict.test.ts > editing while the conflict panel is open > keeps writing the local draft after a 409
+apps/web test: TestingLibraryElementError: Unable to find role="heading" and name "다른 곳에서 먼저 저장됐습니다"
+apps/web test: Ignored nodes: comments, script, style
+apps/web test: <body>
+apps/web test:   <div>
+apps/web test:     <article
+apps/web test:       aria-labelledby="doc-title-label"
+apps/web test:       class="flex flex-col gap-4"
+apps/web test:     >
+apps/web test:       <div
+apps/web test:         class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+apps/web test:       >
+apps/web test:         <span
+apps/web test:           class="rounded border px-1.5 font-mono"
+apps/web test:           title="문서 참조"
+apps/web test:         >
+apps/web test:           WIKI-1
+apps/web test:         </span>
+apps/web test:          
+apps/web test:         <span>
+apps/web test:           리비전 5
+apps/web test:         </span>
+apps/web test:          
+apps/web test:         <span
+apps/web test:           aria-live="polite"
+apps/web test:           class="ml-auto"
+apps/web test:           data-testid="save-status"
+apps/web test:           role="status"
+apps/web test:         >
+apps/web test:           재시도 대기
+apps/web test:         </span>
+apps/web test:          
+apps/web test:         <button
+apps/web test:           class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:           data-slot="button"
+apps/web test:           type="button"
+apps/web test:         >
+apps/web test:           저장
+apps/web test:         </button>
+apps/web test:         
+apps/web test:       </div>
+apps/web test:        
+apps/web test:       <p
+apps/web test:         class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm"
+apps/web test:         role="alert"
+apps/web test:       >
+apps/web test:         서버에 연결할 수 없어 다시 시도합니다. 편집 내용은 이 브라우저에 보관됩니다. 
+apps/web test:          
+apps/web test:       </p>
+apps/web test:        
+apps/web test:        
+apps/web test:        
+apps/web test:       <div
+apps/web test:         class="flex flex-col gap-1"
+apps/web test:       >
+apps/web test:         <label
+apps/web test:           class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+apps/web test:           data-label-root=""
+apps/web test:           data-slot="label"
+apps/web test:           for="doc-title"
+apps/web test:           id="doc-title-label"
+apps/web test:         >
+apps/web test:           제목
+apps/web test:         </label>
+apps/web test:         
+apps/web test:         
+apps/web test:          
+apps/web test:         <input
+apps/web test:           class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 text-lg font-semibold"
+apps/web test:           data-slot="input"
+apps/web test:           id="doc-title"
+apps/web test:           maxlength="200"
+apps/web test:         />
+apps/web test:         
+apps/web test:       </div>
+apps/web test:        
+apps/web test:       <div
+apps/web test:         class="flex flex-wrap items-center gap-1 border-b pb-2"
+apps/web test:       >
+apps/web test:         <div
+apps/web test:           aria-label="편집 방식"
+apps/web test:           class="flex gap-1"
+apps/web test:           role="group"
+apps/web test:         >
+apps/web test:           <button
+apps/web test:             aria-pressed="true"
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:             data-slot="button"
+apps/web test:             type="button"
+apps/web test:           >
+apps/web test:             서식 편집
+apps/web test:           </button>
+apps/web test:           
+apps/web test:           <button
+apps/web test:             aria-pressed="false"
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:             data-slot="button"
+apps/web test:             type="button"
+apps/web test:           >
+apps/web test:             Markdown
+apps/web test:           </button>
+apps/web test:           
+apps/web test:           <button
+apps/web test:             aria-pressed="false"
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destr...
+apps/web test: Ignored nodes: comments, script, style
+apps/web test: <body>
+apps/web test:   <div>
+apps/web test:     <article
+apps/web test:       aria-labelledby="doc-title-label"
+apps/web test:       class="flex flex-col gap-4"
+apps/web test:     >
+apps/web test:       <div
+apps/web test:         class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+apps/web test:       >
+apps/web test:         <span
+apps/web test:           class="rounded border px-1.5 font-mono"
+apps/web test:           title="문서 참조"
+apps/web test:         >
+apps/web test:           WIKI-1
+apps/web test:         </span>
+apps/web test:          
+apps/web test:         <span>
+apps/web test:           리비전 5
+apps/web test:         </span>
+apps/web test:          
+apps/web test:         <span
+apps/web test:           aria-live="polite"
+apps/web test:           class="ml-auto"
+apps/web test:           data-testid="save-status"
+apps/web test:           role="status"
+apps/web test:         >
+apps/web test:           재시도 대기
+apps/web test:         </span>
+apps/web test:          
+apps/web test:         <button
+apps/web test:           class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:           data-slot="button"
+apps/web test:           type="button"
+apps/web test:         >
+apps/web test:           저장
+apps/web test:         </button>
+apps/web test:         
+apps/web test:       </div>
+apps/web test:        
+apps/web test:       <p
+apps/web test:         class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm"
+apps/web test:         role="alert"
+apps/web test:       >
+apps/web test:         서버에 연결할 수 없어 다시 시도합니다. 편집 내용은 이 브라우저에 보관됩니다. 
+apps/web test:          
+apps/web test:       </p>
+apps/web test:        
+apps/web test:        
+apps/web test:        
+apps/web test:       <div
+apps/web test:         class="flex flex-col gap-1"
+apps/web test:       >
+apps/web test:         <label
+apps/web test:           class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+apps/web test:           data-label-root=""
+apps/web test:           data-slot="label"
+apps/web test:           for="doc-title"
+apps/web test:           id="doc-title-label"
+apps/web test:         >
+apps/web test:           제목
+apps/web test:         </label>
+apps/web test:         
+apps/web test:         
+apps/web test:          
+apps/web test:         <input
+apps/web test:           class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 text-lg font-semibold"
+apps/web test:           data-slot="input"
+apps/web test:           id="doc-title"
+apps/web test:           maxlength="200"
+apps/web test:         />
+apps/web test:         
+apps/web test:       </div>
+apps/web test:        
+apps/web test:       <div
+apps/web test:         class="flex flex-wrap items-center gap-1 border-b pb-2"
+apps/web test:       >
+apps/web test:         <div
+apps/web test:           aria-label="편집 방식"
+apps/web test:           class="flex gap-1"
+apps/web test:           role="group"
+apps/web test:         >
+apps/web test:           <button
+apps/web test:             aria-pressed="true"
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:             data-slot="button"
+apps/web test:             type="button"
+apps/web test:           >
+apps/web test:             서식 편집
+apps/web test:           </button>
+apps/web test:           
+apps/web test:           <button
+apps/web test:             aria-pressed="false"
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:             data-slot="button"
+apps/web test:             type="button"
+apps/web test:           >
+apps/web test:             Markdown
+apps/web test:           </button>
+apps/web test:           
+apps/web test:           <button
+apps/web test:             aria-pressed="false"
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destr...
+apps/web test:  ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+apps/web test:  ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+apps/web test:  ❯ tests/component/document-draft-conflict.test.ts:76:18
+apps/web test:      74|     await fireEvent.input(titleInput(), { target: { value: '충돌 전 제목' }…
+apps/web test:      75|     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+apps/web test:      76|     await screen.findByRole('heading', { name: '다른 곳에서 먼저 저장됐습니다' });
+apps/web test:        |                  ^
+apps/web test:      77|     expect(loadDraft('doc-1')?.title).toBe('충돌 전 제목');
+apps/web test:      78|
+apps/web test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+apps/web test:  FAIL  tests/component/document-draft-offer.test.ts > typing before answering the draft offer > keeps the offered draft through a successful save and offers it again on reopen
+apps/web test: AssertionError: expected '재시도 대기' to be '저장됨' // Object.is equality
+apps/web test: Ignored nodes: comments, script, style
+apps/web test: <html>
+apps/web test:   <head />
+apps/web test:   <body>
+apps/web test:     <div>
+apps/web test:       <article
+apps/web test:         aria-labelledby="doc-title-label"
+apps/web test:         class="flex flex-col gap-4"
+apps/web test:       >
+apps/web test:         <div
+apps/web test:           class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+apps/web test:         >
+apps/web test:           <span
+apps/web test:             class="rounded border px-1.5 font-mono"
+apps/web test:             title="문서 참조"
+apps/web test:           >
+apps/web test:             WIKI-1
+apps/web test:           </span>
+apps/web test:            
+apps/web test:           <span>
+apps/web test:             리비전 5
+apps/web test:           </span>
+apps/web test:            
+apps/web test:           <span
+apps/web test:             aria-live="polite"
+apps/web test:             class="ml-auto"
+apps/web test:             data-testid="save-status"
+apps/web test:             role="status"
+apps/web test:           >
+apps/web test:             재시도 대기
+apps/web test:           </span>
+apps/web test:            
+apps/web test:           <button
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:             data-slot="button"
+apps/web test:             type="button"
+apps/web test:           >
+apps/web test:             저장
+apps/web test:           </button>
+apps/web test:           
+apps/web test:         </div>
+apps/web test:          
+apps/web test:         <p
+apps/web test:           class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm"
+apps/web test:           role="alert"
+apps/web test:         >
+apps/web test:           서버에 연결할 수 없어 다시 시도합니다. 편집 내용은 이 브라우저에 보관됩니다. 
+apps/web test:            
+apps/web test:         </p>
+apps/web test:          
+apps/web test:         <div
+apps/web test:           aria-label="보관된 초안"
+apps/web test:           class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
+apps/web test:           role="region"
+apps/web test:         >
+apps/web test:           <span>
+apps/web test:             이 브라우저에 저장하지 않은 초안이 있습니다 (Oct 19, 2026, 10:00 AM).
+apps/web test:           </span>
+apps/web test:            
+apps/web test:           <button
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:             data-slot="button"
+apps/web test:             type="button"
+apps/web test:           >
+apps/web test:             초안 복원
+apps/web test:           </button>
+apps/web test:           
+apps/web test:            
+apps/web test:           <button
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:             data-slot="button"
+apps/web test:             type="button"
+apps/web test:           >
+apps/web test:             초안 버리기
+apps/web test:           </button>
+apps/web test:           
+apps/web test:         </div>
+apps/web test:          
+apps/web test:          
+apps/web test:         <div
+apps/web test:           class="flex flex-col gap-1"
+apps/web test:         >
+apps/web test:           <label
+apps/web test:             class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+apps/web test:             data-label-root=""
+apps/web test:             data-slot="label"
+apps/web test:             for="doc-title"
+apps/web test:             id="doc-title-label"
+apps/web test:           >
+apps/web test:             제목
+apps/web test:           </label>
+apps/web test:           
+apps/web test:           
+apps/web test:            
+apps/web test:           <input
+apps/web test:             class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 text-lg font-semibold"
+apps/web test:             data-slot="input"
+apps/web test:             id="doc-title"
+apps/web test:             maxlength="200"
+apps/web test:           />
+apps/web test:           
+apps/web test:         </div>
+apps/web test:          
+apps/web test:         <div
+apps/web test:           class...
+apps/web test: Expected: "저장됨"
+apps/web test: Received: "재시도 대기"
+apps/web test:  ❯ tests/component/document-draft-offer.test.ts:97:61
+apps/web test:      95|     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+apps/web test:      96|     await waitFor(() => {
+apps/web test:      97|       expect(screen.getByTestId('save-status').textContent).toBe('저장됨'…
+apps/web test:        |                                                             ^
+apps/web test:      98|     });
+apps/web test:      99|     expect(save).toHaveBeenCalledTimes(1);
+apps/web test:  ❯ runWithExpensiveErrorDiagnosticsDisabled ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:47:12
+apps/web test:  ❯ checkCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+apps/web test:  ❯ Timeout.checkRealTimersCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+apps/web test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+apps/web test:  FAIL  tests/component/document-draft-offer.test.ts > typing before answering the draft offer > leaves the draft in place when it cannot be queued (storage full)
+apps/web test: AssertionError: expected '재시도 대기' to be '저장됨' // Object.is equality
+apps/web test: Ignored nodes: comments, script, style
+apps/web test: <html>
+apps/web test:   <head />
+apps/web test:   <body>
+apps/web test:     <div>
+apps/web test:       <article
+apps/web test:         aria-labelledby="doc-title-label"
+apps/web test:         class="flex flex-col gap-4"
+apps/web test:       >
+apps/web test:         <div
+apps/web test:           class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+apps/web test:         >
+apps/web test:           <span
+apps/web test:             class="rounded border px-1.5 font-mono"
+apps/web test:             title="문서 참조"
+apps/web test:           >
+apps/web test:             WIKI-1
+apps/web test:           </span>
+apps/web test:            
+apps/web test:           <span>
+apps/web test:             리비전 5
+apps/web test:           </span>
+apps/web test:            
+apps/web test:           <span
+apps/web test:             aria-live="polite"
+apps/web test:             class="ml-auto"
+apps/web test:             data-testid="save-status"
+apps/web test:             role="status"
+apps/web test:           >
+apps/web test:             재시도 대기
+apps/web test:           </span>
+apps/web test:            
+apps/web test:           <button
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:             data-slot="button"
+apps/web test:             type="button"
+apps/web test:           >
+apps/web test:             저장
+apps/web test:           </button>
+apps/web test:           
+apps/web test:         </div>
+apps/web test:          
+apps/web test:         <p
+apps/web test:           class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm"
+apps/web test:           role="alert"
+apps/web test:         >
+apps/web test:           서버에 연결할 수 없어 다시 시도합니다. 편집 내용은 이 브라우저에 보관됩니다. 
+apps/web test:            
+apps/web test:         </p>
+apps/web test:          
+apps/web test:         <div
+apps/web test:           aria-label="보관된 초안"
+apps/web test:           class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
+apps/web test:           role="region"
+apps/web test:         >
+apps/web test:           <span>
+apps/web test:             이 브라우저에 저장하지 않은 초안이 있습니다 (Oct 19, 2026, 10:00 AM).
+apps/web test:           </span>
+apps/web test:            
+apps/web test:           <button
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:             data-slot="button"
+apps/web test:             type="button"
+apps/web test:           >
+apps/web test:             초안 복원
+apps/web test:           </button>
+apps/web test:           
+apps/web test:            
+apps/web test:           <button
+apps/web test:             class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+apps/web test:             data-slot="button"
+apps/web test:             type="button"
+apps/web test:           >
+apps/web test:             초안 버리기
+apps/web test:           </button>
+apps/web test:           
+apps/web test:         </div>
+apps/web test:          
+apps/web test:          
+apps/web test:         <div
+apps/web test:           class="flex flex-col gap-1"
+apps/web test:         >
+apps/web test:           <label
+apps/web test:             class="gap-2 text-sm leading-none font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed"
+apps/web test:             data-label-root=""
+apps/web test:             data-slot="label"
+apps/web test:             for="doc-title"
+apps/web test:             id="doc-title-label"
+apps/web test:           >
+apps/web test:             제목
+apps/web test:           </label>
+apps/web test:           
+apps/web test:           
+apps/web test:            
+apps/web test:           <input
+apps/web test:             class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-8 rounded-lg border bg-transparent px-2.5 py-1 transition-colors file:h-6 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 text-lg font-semibold"
+apps/web test:             data-slot="input"
+apps/web test:             id="doc-title"
+apps/web test:             maxlength="200"
+apps/web test:           />
+apps/web test:           
+apps/web test:         </div>
+apps/web test:          
+apps/web test:         <div
+apps/web test:           class...
+apps/web test: Expected: "저장됨"
+apps/web test: Received: "재시도 대기"
+apps/web test:  ❯ tests/component/document-draft-offer.test.ts:138:61
+apps/web test:     136|     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+apps/web test:     137|     await waitFor(() => {
+apps/web test:     138|       expect(screen.getByTestId('save-status').textContent).toBe('저장됨'…
+apps/web test:        |                                                             ^
+apps/web test:     139|     });
+apps/web test:     140|     expect(keptTitles()).toEqual(['지난번 초안']);
+apps/web test:  ❯ runWithExpensiveErrorDiagnosticsDisabled ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:47:12
+apps/web test:  ❯ checkCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+apps/web test:  ❯ Timeout.checkRealTimersCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+apps/web test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+apps/web test:  FAIL  tests/component/revision-compare-race.test.ts > compare with previous > does not diff against the earlier selection’s previous revision while the new one loads
+apps/web test:  FAIL  tests/component/revision-compare-race.test.ts > compare with previous > keeps only the last click when the earlier responses arrive later
+apps/web test:  FAIL  tests/component/revision-compare-race.test.ts > compare with previous > stops saying loading when the previous revision fails to load
+apps/web test: TypeError: Cannot read properties of undefined (reading 'length')
+apps/web test: 	in <unknown>
+apps/web test: 	in text-selection-layer.svelte
+apps/web test: 	in dismissible-layer.svelte
+apps/web test: 	in escape-layer.svelte
+apps/web test: 	in focus-scope.svelte
+apps/web test: 	in dialog-content.svelte
+apps/web test: 	in portal-consumer.svelte
+apps/web test: 	in undefined
+apps/web test: 	in portal.svelte
+apps/web test: 	in dialog-portal.svelte
+apps/web test: 	in dialog-content.svelte
+apps/web test: 	in dialog.svelte
+apps/web test: 	in dialog.svelte
+apps/web test: 	in RevisionHistory.svelte
+apps/web test: 	in undefined
+apps/web test:  ❯ standInLabel src/lib/features/documents/revision-author.ts:12:13
+apps/web test:      10|   if (names === null) return undefined;
+apps/web test:      11|   const author = rev.author_name ?? m.documents_unknown_author();
+apps/web test:      12|   if (names.length === 0) return m.documents_saved_for_unknown({ autho…
+apps/web test:        |             ^
+apps/web test:      13|   const editors = names.map((name) => name ?? m.documents_unknown_auth…
+apps/web test:      14|   return m.documents_saved_for_editors({ editors, author });
+apps/web test:  ❯ src/lib/features/documents/RevisionHistory.svelte:165:17
+apps/web test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+apps/web test:  Test Files  3 failed | 120 passed (123)
+apps/web test:       Tests  6 failed | 664 passed (670)
+apps/web test:    Start at  13:07:43
+apps/web test:    Duration  46.66s (transform 71%, import 13%, environment 8%, tests 6%, setup 1%)
+apps/web test:     Isolate  123 workers spawned · ~1.07s startup each (spawn + environment, per file)
+apps/web test:              at least ~3.18s faster with isolate: false — reuses workers across files instead of one per file
+apps/web test: Failed
+<worktree>/apps/web:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @fvoci/web@ test: `pnpm run i18n && vitest run`
+Exit status 1
+[ELIFECYCLE] Test failed. See above for more details.
+FAIL pnpm test: command exited with non-zero code `pnpm run test`: 1
+==> licenses (cargo deny, pnpm)
+==> cargo deny check licenses
+$ cargo deny --locked check licenses
+licenses ok
+==> pnpm licenses
+  note: exception not encountered: lightningcss-darwin-arm64@1.32.0 (MPL-2.0)
+  note: exception not encountered: lightningcss-darwin-arm64@1.33.0 (MPL-2.0)
+  note: exception not encountered: lightningcss-linux-arm64-gnu@1.32.0 (MPL-2.0)
+  note: exception not encountered: lightningcss-linux-arm64-gnu@1.33.0 (MPL-2.0)
+  note: exception not encountered: @bytecodealliance/jco-node-fs-darwin-arm64@0.3.2 ((Apache-2.0 WITH LLVM-exception))
+  note: exception not encountered: @bytecodealliance/jco-node-fs-linux-arm64-gnu@0.3.2 ((Apache-2.0 WITH LLVM-exception))
+pnpm licenses: all within allow list
+PASS licenses (cargo deny, pnpm)
+Error: failed checks: pnpm check (svelte-check/tsc), pnpm test
+# rc=1 end 2026-10-22T04:08:32Z

@@ -1,0 +1,406 @@
+
+ RUN  v5.0.5 <worktree>/apps/web
+
+ ❯ tests/component/event-dialog-discard.test.ts (12 tests | 7 failed) 8982ms
+   ❯ closing the event dialog with unsaved input (12)
+     × asks before Escape drops a changed title, and Escape on the question keeps the input and focus 1080ms
+     × keeps editing from the close button and returns focus inside the dialog 1059ms
+     × closes only after I choose to discard 1037ms
+     × asks after clicking the description, a label or the dialog body and pressing Escape 1041ms
+     × keeps the conflict notice and my input when I keep editing after a conflict 1226ms
+     × keeps the overwrite question when I keep editing from the close button 1221ms
+     × drops the question when another event opens, and does not close or carry over to it 1271ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > asks before Escape drops a changed title, and Escape on the question keeps the input and focus
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/event-dialog-discard.test.ts:80:17
+     78|
+     79| async function findConfirm(): Promise<HTMLElement> {
+     80|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+     81| }
+     82|
+ ❯ tests/component/event-dialog-discard.test.ts:157:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > keeps editing from the close button and returns focus inside the dialog
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/event-dialog-discard.test.ts:80:17
+     78|
+     79| async function findConfirm(): Promise<HTMLElement> {
+     80|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+     81| }
+     82|
+ ❯ tests/component/event-dialog-discard.test.ts:182:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > closes only after I choose to discard
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/event-dialog-discard.test.ts:80:17
+     78|
+     79| async function findConfirm(): Promise<HTMLElement> {
+     80|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+     81| }
+     82|
+ ❯ tests/component/event-dialog-discard.test.ts:201:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > asks after clicking the description, a label or the dialog body and pressing Escape
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/event-dialog-discard.test.ts:80:17
+     78|
+     79| async function findConfirm(): Promise<HTMLElement> {
+     80|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+     81| }
+     82|
+ ❯ tests/component/event-dialog-discard.test.ts:217:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > keeps the conflict notice and my input when I keep editing after a conflict
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/event-dialog-discard.test.ts:80:17
+     78|
+     79| async function findConfirm(): Promise<HTMLElement> {
+     80|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+     81| }
+     82|
+ ❯ tests/component/event-dialog-discard.test.ts:283:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > keeps the overwrite question when I keep editing from the close button
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/event-dialog-discard.test.ts:80:17
+     78|
+     79| async function findConfirm(): Promise<HTMLElement> {
+     80|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+     81| }
+     82|
+ ❯ tests/component/event-dialog-discard.test.ts:304:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/component/event-dialog-discard.test.ts > closing the event dialog with unsaved input > drops the question when another event opens, and does not close or carry over to it
+TestingLibraryElementError: Unable to find role="alertdialog" and name "저장하지 않은 변경이 있습니다"
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    
+    
+    
+    
+    
+    
+    
+  </div>
+  
+  
+   
+  
+  
+  
+  
+</body>
+ ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ findConfirm tests/component/event-dialog-discard.test.ts:80:17
+     78|
+     79| async function findConfirm(): Promise<HTMLElement> {
+     80|   return screen.findByRole('alertdialog', { name: m.common_discard_tit…
+       |                 ^
+     81| }
+     82|
+ ❯ tests/component/event-dialog-discard.test.ts:323:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 5 passed (12)
+   Start at  13:08:06
+   Duration  30.81s (transform 61%, tests 29%, import 6%, environment 3%)
+

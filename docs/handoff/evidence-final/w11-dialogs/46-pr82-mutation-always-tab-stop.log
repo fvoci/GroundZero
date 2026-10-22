@@ -1,0 +1,34 @@
+
+ RUN  v5.0.5 <worktree>/apps/web
+
+ ❯ tests/component/task-conflict-save-mine.test.ts (26 tests | 1 failed) 2594ms
+   ❯ long values in the overwrite question (1)
+     × lets the keyboard reach a value box that scrolls, and leaves short ones alone 48ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > long values in the overwrite question > lets the keyboard reach a value box that scrolls, and leaves short ones alone
+AssertionError: expected [ …(2) ] to have a length of 1 but got 2
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ tests/component/task-conflict-save-mine.test.ts:1035:48
+    1033|     expect(region.textContent).toBe(long);
+    1034|     // 짧은 내 값은 영역도 탭 정지도 아니다.
+    1035|     expect(within(ask).getAllByRole('region')).toHaveLength(1);
+       |                                                ^
+    1036|     const mine = ask.querySelector('[data-clash-side="mine"]');
+    1037|     expect(mine?.querySelector('[tabindex]') ?? null).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 25 passed (26)
+   Start at  13:29:34
+   Duration  8.27s (transform 45%, tests 32%, import 16%, environment 6%, setup 1%)
+

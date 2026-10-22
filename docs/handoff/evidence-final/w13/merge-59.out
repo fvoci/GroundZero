@@ -1,0 +1,8 @@
+Auto-merging apps/web/src/lib/api/client.ts
+Auto-merging contracts/openapi.json
+Auto-merging crates/server/tests/recurrence.rs
+CONFLICT (content): Merge conflict in crates/server/tests/recurrence.rs
+Auto-merging docs/development.md
+CONFLICT (content): Merge conflict in docs/development.md
+Auto-merging packages/api-client/src/generated/schema.ts
+Automatic merge failed; fix conflicts and then commit the result.

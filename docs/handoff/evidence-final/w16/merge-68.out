@@ -1,0 +1,16 @@
+Auto-merging .env.example
+Auto-merging crates/server/tests/comments.rs
+CONFLICT (content): Merge conflict in crates/server/tests/comments.rs
+Auto-merging crates/server/tests/home.rs
+CONFLICT (content): Merge conflict in crates/server/tests/home.rs
+Auto-merging crates/server/tests/members.rs
+CONFLICT (content): Merge conflict in crates/server/tests/members.rs
+Auto-merging crates/server/tests/time_tracking.rs
+CONFLICT (content): Merge conflict in crates/server/tests/time_tracking.rs
+Auto-merging crates/server/tests/trash.rs
+CONFLICT (content): Merge conflict in crates/server/tests/trash.rs
+Auto-merging crates/server/tests/worker.rs
+Auto-merging docs/development.md
+CONFLICT (content): Merge conflict in docs/development.md
+Auto-merging xtask/src/test.rs
+Automatic merge failed; fix conflicts and then commit the result.

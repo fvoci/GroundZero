@@ -1,0 +1,256 @@
+==> compose up (fvoci-w10-pr60-f9af71-test)
+$ docker compose --project-name fvoci-w10-pr60-f9af71-test --file deploy/compose.test.yaml up --detach --wait --remove-orphans
+ Network fvoci-w10-pr60-f9af71-test_default Creating 
+ Network fvoci-w10-pr60-f9af71-test_default Creating 
+ Network fvoci-w10-pr60-f9af71-test_default Created 
+ Network fvoci-w10-pr60-f9af71-test_default Created 
+ Container fvoci-w10-pr60-f9af71-test-seaweedfs-1 Creating 
+ Container fvoci-w10-pr60-f9af71-test-postgres-1 Creating 
+ Container fvoci-w10-pr60-f9af71-test-meilisearch-1 Creating 
+ Container fvoci-w10-pr60-f9af71-test-meilisearch-1 Created 
+ Container fvoci-w10-pr60-f9af71-test-seaweedfs-1 Created 
+ Container fvoci-w10-pr60-f9af71-test-postgres-1 Created 
+ Container fvoci-w10-pr60-f9af71-test-postgres-1 Starting 
+ Container fvoci-w10-pr60-f9af71-test-meilisearch-1 Starting 
+ Container fvoci-w10-pr60-f9af71-test-seaweedfs-1 Starting 
+ Container fvoci-w10-pr60-f9af71-test-postgres-1 Started 
+ Container fvoci-w10-pr60-f9af71-test-meilisearch-1 Started 
+ Container fvoci-w10-pr60-f9af71-test-seaweedfs-1 Started 
+ Container fvoci-w10-pr60-f9af71-test-meilisearch-1 Waiting 
+ Container fvoci-w10-pr60-f9af71-test-seaweedfs-1 Waiting 
+ Container fvoci-w10-pr60-f9af71-test-postgres-1 Waiting 
+ Container fvoci-w10-pr60-f9af71-test-postgres-1 Healthy 
+ Container fvoci-w10-pr60-f9af71-test-meilisearch-1 Healthy 
+ Container fvoci-w10-pr60-f9af71-test-seaweedfs-1 Healthy 
+==> postgres on 127.0.0.1:54612
+==> db bootstrap / db migrate
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+$ cargo run --quiet --package fvoci-server --locked -- db migrate
+==> meilisearch on 127.0.0.1:54614
+==> seaweedfs s3 on 127.0.0.1:54615
+$ cargo test --workspace --locked -- --skip oidc_ --skip supabase_
+   Compiling fvoci-server v0.1.0 (~/orca/workspaces/GroundZero/w10-pr60/crates/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 32.58s
+     Running unittests src/lib.rs (target/debug/deps/fvoci_server-46bf3b3cd98551d3)
+
+running 77 tests
+test backup::tests::restore_parts_stay_within_the_storage_limit ... ok
+test build_info::tests::release_versions_and_shas_are_checked ... ok
+test config::tests::issuer_requires_client_settings ... ok
+test config::tests::https_public_url_enables_secure_cookies ... ok
+test config::tests::defaults_and_redaction ... ok
+test collab::convert::tests::position_migration_metadata_is_allowed_but_other_roots_are_not ... ok
+test config::tests::rejects_invalid_limit ... ok
+test config::tests::rejects_depth_outside_range ... ok
+test features::accounts::tests::duplicate_cookies_are_rejected ... ok
+test features::accounts::tests::return_to_accepts_only_same_origin_paths ... ok
+test config::tests::requires_database_url ... ok
+test features::documents::tests::access_parsing ... ok
+test features::documents::tests::body_must_be_doc_object ... ok
+test features::documents::tests::body_size_is_limited ... ok
+test collab::convert::tests::reads_what_the_browser_writes ... ok
+test features::documents::tests::title_validation ... ok
+test features::export::tests::names_inside_the_archive_stay_inside ... ok
+test features::documents::tests::reference_nodes_are_checked_and_limited ... ok
+test features::documents::tests::images_and_links_must_stay_inside_the_service ... ok
+test features::files::tests::content_types_are_cleaned ... ok
+test features::file_text::tests::skips_unsupported_and_broken_files ... ok
+test features::files::tests::counts_parts ... ok
+test features::files::tests::dispositions_quote_names_safely ... ok
+test features::file_text::tests::reads_plain_text_and_office_xml ... ok
+test features::item_profile::tests::details_follow_the_module_kind ... ok
+test features::members::tests::email_validation ... ok
+test features::modules::tests::description_allows_newlines_only ... ok
+test features::modules::tests::keys_are_normalized_to_uppercase ... ok
+test features::modules::tests::keys_reject_bad_shapes ... ok
+test features::modules::tests::module_kind_round_trip ... ok
+test features::records::tests::fields_are_checked_against_the_kind ... ok
+test features::records::tests::kinds_are_unique_and_choices_are_set ... ok
+test features::references::tests::like_patterns_escape_wildcards ... ok
+test features::file_text::tests::reads_pdf_text ... ok
+test features::references::tests::public_bodies_drop_reference_ids ... ok
+test features::references::tests::reference_queries_are_parsed_case_insensitively ... ok
+test features::schedule::tests::a_join_waits_for_every_predecessor_across_kinds ... ok
+test features::schedule::tests::a_link_that_is_already_satisfied_moves_nothing ... ok
+test features::schedule::tests::a_new_link_to_an_undated_successor_is_reported_not_invented ... ok
+test features::schedule::tests::a_task_with_two_moved_predecessors_takes_the_later_one ... ok
+test features::schedule::tests::changing_a_link_pushes_only_what_the_change_adds ... ok
+test features::schedule::tests::each_kind_anchors_the_right_ends_with_and_without_lag ... ok
+test features::schedule::tests::existing_overlaps_and_done_tasks_are_left_alone ... ok
+test features::schedule::tests::forks_and_mixed_chains_follow_each_kind ... ok
+test features::schedule::tests::link_kinds_round_trip_their_codes ... ok
+test features::schedule::tests::milestones_and_one_sided_dates_use_the_date_they_have ... ok
+test features::schedule::tests::proposed_dates_outside_the_saveable_years_block_the_plan ... ok
+test features::schedule::tests::pulling_earlier_or_undated_tasks_proposes_nothing ... ok
+test features::schedule::tests::pushes_successors_by_the_minimum_and_keeps_their_length ... ok
+test features::schedule::tests::the_approved_list_must_match_the_plan_exactly ... ok
+test collab::convert::tests::writes_what_the_browser_reads ... ok
+test features::search_text::tests::keeps_text_checklists_and_reference_shortcodes ... ok
+test features::tasks::tests::status_and_priority_round_trip ... ok
+test features::tasks::tests::dates_are_plain_calendar_dates ... ok
+test features::tasks::tests::tags_are_trimmed_deduplicated_and_limited ... ok
+test features::zotero::tests::library_input_is_checked ... ok
+test features::zotero::tests::zotero_items_become_reference_fields ... ok
+test http::cache::tests::etags_depend_on_bytes_and_user ... ok
+test http::cache::tests::if_match_uses_strong_comparison ... ok
+test http::cache::tests::if_none_match_uses_weak_comparison ... ok
+test http::cache::tests::scopes_follow_the_path ... ok
+test http::cache::tests::cdn_examples_match_the_scopes ... ok
+test logging::tests::external_error_text_is_not_logged ... ok
+test logging::tests::request_ids_from_outside_are_checked ... ok
+test logging::tests::settings_default_to_info_json_and_reject_bad_values ... ok
+test search::tests::uids_use_only_allowed_characters ... ok
+test storage::s3::tests::reads_parts_from_xml ... ok
+test storage::tests::keys_must_be_server_made ... ok
+test storage::s3::tests::derives_the_documented_signing_key ... ok
+test storage::s3::tests::encodes_like_aws ... ok
+test features::search_text::tests::ignores_unknown_shapes_and_caps_length ... ok
+test http::tests::operation_ids_are_unique ... ok
+test http::tests::the_link_conflict_is_task_conflict_or_error_body ... ok
+test http::tests::the_link_body_is_optional_but_not_nullable ... ok
+test http::tests::the_save_conflict_and_the_expected_user_header_are_in_the_contract ... ok
+test features::schedule::tests::the_shift_limit_matches_approval_at_499_500_and_501 ... ok
+test features::file_text::tests::pdf_flate_bombs_are_not_parsed ... ok
+
+test result: ok. 77 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.94s
+
+     Running unittests src/main.rs (target/debug/deps/fvoci_server-fb3ca6f19a2bdcd1)
+
+running 2 tests
+test tests::help_is_a_separate_command_from_database_work ... ok
+test tests::migration_history_errors_require_preservation_before_retry ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/audit.rs (target/debug/deps/audit-10a6797e3b653ba2)
+
+running 1 test
+test workspace_audit_is_for_admins_and_personal_audit_is_private ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/backup.rs (target/debug/deps/backup-80589d26f184c5a2)
+
+running 2 tests
+test borrowing_the_migrator_leaves_the_admins_memberships_as_they_were ... ok
+test backup_restores_documents_tasks_and_files_into_a_fresh_install ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.99s
+
+     Running tests/cache.rs (target/debug/deps/cache-2f66d4efd4233748)
+
+running 3 tests
+test cache_scopes_keep_sensitive_responses_out_of_shared_caches ... ok
+test document_reads_revalidate_only_after_checking_access ... ok
+test saves_with_if_match_are_atomic_and_idempotent ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+     Running tests/collab.rs (target/debug/deps/collab-d6abfe1ef31f6782)
+
+running 20 tests
+test a_moved_room_follows_its_document_to_the_new_workspace ... ok
+test restoring_during_live_editing_keeps_the_live_edits_in_history ... ok
+test a_failed_checkpoint_stops_the_restore ... ok
+test a_restore_from_outside_the_room_still_conflicts_with_live_edits ... ok
+test a_checkpoint_that_finds_the_body_changed_stops_the_restore ... ok
+test workspace_export_includes_live_edits ... ok
+test deleting_a_version_right_after_a_live_reference_is_refused ... ok
+test a_reader_cannot_make_rooms_persist_through_version_delete ... ok
+test the_live_connection_carries_the_expected_user ... ok
+test file_refs_lock_versions_before_they_are_written ... ok
+test live_ref_store_and_old_version_cleanup_do_not_race ... ok
+test live_editing_guards ... ok
+test rooms_acknowledge_persisted_state_with_a_snapshot ... ok
+test live_body_pins_the_file_versions_it_points_to ... ok
+test turning_realtime_off_keeps_live_edits ... ok
+test a_checkpoint_that_times_out_stops_the_restore ... ok
+test trashed_document_keeps_live_file_pins ... ok
+test edits_during_a_restore_are_not_acknowledged_then_dropped ... ok
+test reconnecting_without_changes_is_not_an_edit ... ok
+test live_editing_end_to_end ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.46s
+
+     Running tests/comments.rs (target/debug/deps/comments-0a1786ae0d8a7208)
+
+running 2 tests
+test moved_documents_live_excerpts_and_single_notifications ... ok
+test comments_threads_and_notifications_follow_access ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/courses.rs (target/debug/deps/courses-aa30c142dfabd6ef)
+
+running 4 tests
+test archiving_the_course_module_makes_the_course_read_only ... ok
+test completion_dates_links_and_participant_visibility ... ok
+test two_writers_on_the_same_episode_version_do_not_overwrite ... ok
+test course_episodes_and_personal_progress ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running tests/db_context.rs (target/debug/deps/db_context-9993286800071954)
+
+running 1 test
+test user_context_does_not_outlive_commit_or_rollback ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/events.rs (target/debug/deps/events-0d9572f79a441860)
+
+running 3 tests
+test events_follow_item_access_keep_their_zone_and_guard_versions ... ok
+test the_calendar_shows_visible_tasks_and_events_by_the_viewers_days ... ok
+test calendar_scopes_and_date_sources_follow_item_access ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+     Running tests/expected_user.rs (target/debug/deps/expected_user-09d6d5ce1083ec37)
+
+running 4 tests
+test a_note_is_created_only_for_the_user_who_started_the_edit ... ok
+test an_upload_starts_only_for_the_user_who_started_it ... FAILED
+test the_expected_user_grants_nothing ... ok
+test a_save_goes_through_only_for_the_user_who_started_the_edit ... ok
+
+failures:
+
+---- an_upload_starts_only_for_the_user_who_started_it stdout ----
+2026-10-22T05:32:32.887000Z  INFO fvoci_server::http: request event="http.request" request_id=01a16218-c4d1-736a-839c-555fb763937d method=POST route="/api/workspaces" status_code=201 duration_ms=37.297
+2026-10-22T05:32:32.904857Z  INFO fvoci_server::http: request event="http.request" request_id=01a16218-c4f7-718b-b03c-80c6f37f6e27 method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=17.707
+2026-10-22T05:32:32.921012Z  INFO fvoci_server::http: request event="http.request" request_id=01a16218-c50e-716f-9b47-00df8f146925 method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=10.218
+2026-10-22T05:32:32.927173Z  INFO fvoci_server::http: request event="http.request" request_id=01a16218-c519-717a-84d4-cb8dda598b4f method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=6.058
+2026-10-22T05:32:32.947177Z  INFO fvoci_server::http: request event="http.request" request_id=01a16218-c51f-71b4-9d9c-d3a93b9a5b4c method=POST route="/api/uploads" status_code=201 duration_ms=19.889
+
+thread 'an_upload_starts_only_for_the_user_who_started_it' (1492896) panicked at crates/server/tests/expected_user.rs:307:5:
+assertion `left == right` failed: Object {"chunk_bytes": Number(8388608), "expires_at": String("2026-10-23T05:32:32.930249Z"), "failure": Null, "file_id": Null, "id": String("01a16218-c523-7038-bab0-7767db43b51a"), "name": String("rejected.txt"), "parts_total": Number(1), "received": Array [], "size": Number(3), "state": String("uploading"), "version": Null}
+  left: 201
+ right: 409
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    an_upload_starts_only_for_the_user_who_started_it
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+error: test failed, to rerun pass `-p fvoci-server --test expected_user`
+==> compose down
+$ docker compose --project-name fvoci-w10-pr60-f9af71-test --file deploy/compose.test.yaml down --volumes --remove-orphans
+ Container fvoci-w10-pr60-f9af71-test-meilisearch-1 Stopping 
+ Container fvoci-w10-pr60-f9af71-test-postgres-1 Stopping 
+ Container fvoci-w10-pr60-f9af71-test-seaweedfs-1 Stopping 
+ Container fvoci-w10-pr60-f9af71-test-meilisearch-1 Stopped 
+ Container fvoci-w10-pr60-f9af71-test-meilisearch-1 Removing 
+ Container fvoci-w10-pr60-f9af71-test-meilisearch-1 Removed 
+ Container fvoci-w10-pr60-f9af71-test-postgres-1 Stopped 
+ Container fvoci-w10-pr60-f9af71-test-postgres-1 Removing 
+ Container fvoci-w10-pr60-f9af71-test-postgres-1 Removed 
+ Container fvoci-w10-pr60-f9af71-test-seaweedfs-1 Stopped 
+ Container fvoci-w10-pr60-f9af71-test-seaweedfs-1 Removing 
+ Container fvoci-w10-pr60-f9af71-test-seaweedfs-1 Removed 
+ Network fvoci-w10-pr60-f9af71-test_default Removing 
+ Network fvoci-w10-pr60-f9af71-test_default Removed 
+Error: command exited with non-zero code `cargo test --workspace --locked -- --skip oidc_ --skip supabase_`: 101
+exit=1

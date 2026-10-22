@@ -1,0 +1,452 @@
+# b8-3-saved-second-start-seconds-kept  2026-10-22T07:21:43Z  url=http://127.0.0.1:5173/w/01a16272-b731-71ab-a8b5-752c77728e6f/calendar
+# viewport={
+  "result": "1280x800",
+  "origin": "http://127.0.0.1:5173/w/01a16272-b731-71ab-a8b5-752c77728e6f/calendar"
+}
+- generic
+  - generic
+    - region "알림 alt+T" [ref=e1]
+    - StaticText "fvoci"
+    - list
+      - listitem [level=1]
+        - button "검색 Ctrl/⌘ K" [ref=e17]
+          - StaticText "검색"
+          - StaticText "Ctrl/⌘ K"
+    - generic
+      - generic
+        - StaticText "개인"
+        - list
+          - listitem [level=1]
+            - link "홈" [ref=e42]
+              - StaticText "홈"
+          - listitem [level=1]
+            - link "알림 · 읽지 않은 알림 2개" [ref=e43]
+              - StaticText "알림"
+          - listitem [level=1]
+            - link "내 노트" [ref=e44]
+              - StaticText "내 노트"
+          - listitem [level=1]
+            - link "공유받은 문서" [ref=e45]
+              - StaticText "공유받은 문서"
+          - listitem [level=1]
+            - link "내 시간" [ref=e46]
+              - StaticText "내 시간"
+          - listitem [level=1]
+            - link "내 노트 휴지통" [ref=e47]
+              - StaticText "내 노트 휴지통"
+          - listitem [level=1]
+            - link "내 활동 기록" [ref=e48]
+              - StaticText "내 활동 기록"
+      - separator
+      - generic
+        - StaticText "워크스페이스"
+        - list
+          - listitem [level=1]
+            - button "워크스페이스 바꾸기: 모듈 예제 (합성 데이터)" [expanded=false, ref=e49]
+              - StaticText "모듈 예제 (합성 데이터)"
+        - list
+          - listitem [level=1]
+            - link "위키" [ref=e50]
+              - StaticText "위키"
+            - button "위키 하위 문서 펼치기" [expanded=false, ref=e51]
+        - list
+          - listitem [level=1]
+            - link "달력" [ref=e52]
+              - StaticText "달력"
+          - listitem [level=1]
+            - link "멤버" [ref=e53]
+              - StaticText "멤버"
+          - listitem [level=1]
+            - link "휴지통" [ref=e54]
+              - StaticText "휴지통"
+          - listitem [level=1]
+            - link "감사 기록" [ref=e55]
+              - StaticText "감사 기록"
+      - generic
+        - StaticText "모듈"
+        - list
+          - listitem [level=1]
+            - link "프로젝트 예제 DEVP" [ref=e56]
+              - StaticText "프로젝트 예제"
+              - StaticText "DEVP"
+          - listitem [level=1]
+            - link "연구 예제 DEVR" [ref=e57]
+              - StaticText "연구 예제"
+              - StaticText "DEVR"
+          - listitem [level=1]
+            - link "스터디 예제 DEVS" [ref=e58]
+              - StaticText "스터디 예제"
+              - StaticText "DEVS"
+          - listitem [level=1]
+            - link "강의 예제 DEVC" [ref=e59]
+              - StaticText "강의 예제"
+              - StaticText "DEVC"
+          - listitem [level=1]
+            - link "취미 예제 DEVH" [ref=e60]
+              - StaticText "취미 예제"
+              - StaticText "DEVH"
+    - list
+      - listitem [level=1]
+        - button "계정 메뉴: Test User" [expanded=false, ref=e18]
+          - StaticText "Test User"
+    - button "사이드바 열고 닫기" [ref=e5]
+    - main
+      - sectionheader
+        - button "사이드바 열고 닫기" [ref=e7]
+          - StaticText "사이드바 열고 닫기"
+        - StaticText "모듈 예제 (합성 데이터)"
+        - group "타이머"
+          - button "타이머 시작" [ref=e19]
+      - main
+        - navigation "경로" [ref=e8]
+          - link "모듈 예제 (합성 데이터)" [ref=e20]
+            - StaticText "모듈 예제 (합성 데이터)"
+        - region "2026년 10월" [ref=e9]
+          - heading "2026년 10월" [level=1, ref=e21]
+          - button "업무 만들기" [ref=e22]
+          - group "달 이동"
+            - button "← 이전 달" [ref=e27]
+            - button "이번 달" [ref=e28]
+            - button "다음 달 →" [ref=e29]
+          - group "달력 범위"
+            - LabelText
+              - StaticText "모듈"
+              - combobox "모듈" [expanded=false, ref=e61]: 전체
+                - MenuListPopup
+                  - option "전체" [selected, ref=e184]
+                  - option "프로젝트 예제 (DEVP)" [ref=e185]
+                  - option "연구 예제 (DEVR)" [ref=e186]
+                  - option "스터디 예제 (DEVS)" [ref=e187]
+                  - option "강의 예제 (DEVC)" [ref=e188]
+                  - option "취미 예제 (DEVH)" [ref=e189]
+          - paragraph
+            - StaticText "볼 수 있는 업무의 마감일(◆ 마일스톤)·일정·수강·공부 계획일·제출·마감일을 보입니다. \"(내 계획)\"은 나만 보는 날짜입니다. 시각은 America/New_York 기준입니다."
+          - table "2026년 10월 달력"
+            - caption
+              - StaticText "2026년 10월 달력"
+            - rowgroup
+              - row
+                - columnheader "월" [ref=e104]
+                - columnheader "화" [ref=e105]
+                - columnheader "수" [ref=e106]
+                - columnheader "목" [ref=e107]
+                - columnheader "금" [ref=e108]
+                - columnheader "토" [ref=e109]
+                - columnheader "일" [ref=e110]
+            - row
+              - cell "2026. 9. 28. 2026. 9. 28.에 업무 만들기" [ref=e62]
+                - StaticText "2026. 9. 28."
+                - button "2026. 9. 28.에 업무 만들기" [ref=e111]
+                  - StaticText "+"
+              - cell "2026. 9. 29. 2026. 9. 29.에 업무 만들기" [ref=e63]
+                - StaticText "2026. 9. 29."
+                - button "2026. 9. 29.에 업무 만들기" [ref=e112]
+                  - StaticText "+"
+              - cell "2026. 9. 30. 2026. 9. 30.에 업무 만들기" [ref=e64]
+                - StaticText "2026. 9. 30."
+                - button "2026. 9. 30.에 업무 만들기" [ref=e113]
+                  - StaticText "+"
+              - cell "2026. 10. 1. 2026. 10. 1.에 업무 만들기" [ref=e65]
+                - StaticText "2026. 10. 1."
+                - button "2026. 10. 1.에 업무 만들기" [ref=e114]
+                  - StaticText "+"
+              - cell "2026. 10. 2. 2026. 10. 2.에 업무 만들기" [ref=e66]
+                - StaticText "2026. 10. 2."
+                - button "2026. 10. 2.에 업무 만들기" [ref=e115]
+                  - StaticText "+"
+              - cell "2026. 10. 3. 2026. 10. 3.에 업무 만들기" [ref=e67]
+                - StaticText "2026. 10. 3."
+                - button "2026. 10. 3.에 업무 만들기" [ref=e116]
+                  - StaticText "+"
+              - cell "2026. 10. 4. 2026. 10. 4.에 업무 만들기" [ref=e68]
+                - StaticText "2026. 10. 4."
+                - button "2026. 10. 4.에 업무 만들기" [ref=e117]
+                  - StaticText "+"
+            - row
+              - cell "2026. 10. 5. 2026. 10. 5.에 업무 만들기" [ref=e69]
+                - StaticText "2026. 10. 5."
+                - button "2026. 10. 5.에 업무 만들기" [ref=e118]
+                  - StaticText "+"
+              - cell "2026. 10. 6. 2026. 10. 6.에 업무 만들기" [ref=e70]
+                - StaticText "2026. 10. 6."
+                - button "2026. 10. 6.에 업무 만들기" [ref=e119]
+                  - StaticText "+"
+              - cell "2026. 10. 7. 2026. 10. 7.에 업무 만들기" [ref=e71]
+                - StaticText "2026. 10. 7."
+                - button "2026. 10. 7.에 업무 만들기" [ref=e120]
+                  - StaticText "+"
+              - cell "2026. 10. 8. 2026. 10. 8.에 업무 만들기" [ref=e72]
+                - StaticText "2026. 10. 8."
+                - button "2026. 10. 8.에 업무 만들기" [ref=e121]
+                  - StaticText "+"
+              - cell "2026. 10. 9. 2026. 10. 9.에 업무 만들기" [ref=e73]
+                - StaticText "2026. 10. 9."
+                - button "2026. 10. 9.에 업무 만들기" [ref=e122]
+                  - StaticText "+"
+              - cell "2026. 10. 10. 2026. 10. 10.에 업무 만들기" [ref=e74]
+                - StaticText "2026. 10. 10."
+                - button "2026. 10. 10.에 업무 만들기" [ref=e123]
+                  - StaticText "+"
+              - cell "2026. 10. 11. 2026. 10. 11.에 업무 만들기" [ref=e75]
+                - StaticText "2026. 10. 11."
+                - button "2026. 10. 11.에 업무 만들기" [ref=e124]
+                  - StaticText "+"
+            - row
+              - cell "2026. 10. 12. 2026. 10. 12.에 업무 만들기" [ref=e76]
+                - StaticText "2026. 10. 12."
+                - button "2026. 10. 12.에 업무 만들기" [ref=e125]
+                  - StaticText "+"
+              - cell "2026. 10. 13. 2026. 10. 13.에 업무 만들기" [ref=e77]
+                - StaticText "2026. 10. 13."
+                - button "2026. 10. 13.에 업무 만들기" [ref=e126]
+                  - StaticText "+"
+              - cell "2026. 10. 14. 2026. 10. 14.에 업무 만들기" [ref=e78]
+                - StaticText "2026. 10. 14."
+                - button "2026. 10. 14.에 업무 만들기" [ref=e127]
+                  - StaticText "+"
+              - cell "2026. 10. 15. 2026. 10. 15.에 업무 만들기" [ref=e79]
+                - StaticText "2026. 10. 15."
+                - button "2026. 10. 15.에 업무 만들기" [ref=e128]
+                  - StaticText "+"
+              - cell "2026. 10. 16. 2026. 10. 16.에 업무 만들기" [ref=e80]
+                - StaticText "2026. 10. 16."
+                - button "2026. 10. 16.에 업무 만들기" [ref=e129]
+                  - StaticText "+"
+              - cell "2026. 10. 17. 2026. 10. 17.에 업무 만들기" [ref=e81]
+                - StaticText "2026. 10. 17."
+                - button "2026. 10. 17.에 업무 만들기" [ref=e130]
+                  - StaticText "+"
+              - cell "2026. 10. 18. 2026. 10. 18.에 업무 만들기" [ref=e82]
+                - StaticText "2026. 10. 18."
+                - button "2026. 10. 18.에 업무 만들기" [ref=e131]
+                  - StaticText "+"
+            - row
+              - cell "2026. 10. 19. 2026. 10. 19.에 업무 만들기" [ref=e83]
+                - StaticText "2026. 10. 19."
+                - button "2026. 10. 19.에 업무 만들기" [ref=e132]
+                  - StaticText "+"
+              - cell "2026. 10. 20. 2026. 10. 20.에 업무 만들기" [ref=e84]
+                - StaticText "2026. 10. 20."
+                - button "2026. 10. 20.에 업무 만들기" [ref=e133]
+                  - StaticText "+"
+              - cell "2026. 10. 21. 2026. 10. 21.에 업무 만들기 수강 1. 데이터와 표, 데이터 입문 강좌, 완료 공부 1. 1장 읽기, SQL 기초 함께 읽기, 완료" [ref=e85]
+                - StaticText "2026. 10. 21."
+                - button "2026. 10. 21.에 업무 만들기" [ref=e134]
+                  - StaticText "+"
+                - button "수강 1. 데이터와 표, 데이터 입문 강좌, 완료" [ref=e135]
+                  - StaticText "수강 1. 데이터와 표"
+                - button "공부 1. 1장 읽기, SQL 기초 함께 읽기, 완료" [ref=e136]
+                  - StaticText "공부 1. 1장 읽기"
+              - cell "2026. 10. 22. (오늘) 2026. 10. 22.에 업무 만들기 마감 DEVP-8 관계 예제: 시작 전에 준비 끝, 작은 출시 준비 마감 DEVP-4 하위 업무: 검토 목록 작성, 작은 출시 준비, 완료 수강 2. 질문 만들기, 데이터 입문 강좌 공부 2. 연습 문제, SQL 기초 함께 읽기" [ref=e86]
+                - StaticText "2026. 10. 22. (오늘)"
+                - button "2026. 10. 22.에 업무 만들기" [ref=e137]
+                  - StaticText "+"
+                - button "마감 DEVP-8 관계 예제: 시작 전에 준비 끝, 작은 출시 준비" [ref=e138]
+                  - StaticText "마감 DEVP-8 관계 예제: 시작 전에 준비 끝"
+                - button "마감 DEVP-4 하위 업무: 검토 목록 작성, 작은 출시 준비, 완료" [ref=e139]
+                  - StaticText "마감 DEVP-4 하위 업무: 검토 목록 작성"
+                - button "수강 2. 질문 만들기, 데이터 입문 강좌" [ref=e140]
+                  - StaticText "수강 2. 질문 만들기"
+                - button "공부 2. 연습 문제, SQL 기초 함께 읽기" [ref=e141]
+                  - StaticText "공부 2. 연습 문제"
+              - cell "2026. 10. 23. 2026. 10. 23.에 업무 만들기 종일 예제 점검 모임, 작은 출시 준비 종일 예제 점검 모임, 학습 습관 합성 연구 종일 예제 점검 모임, SQL 기초 함께 읽기 종일 예제 점검 모임, 데이터 입문 강좌 종일 예제 점검 모임, 주말 수채화 마감 DEVP-11 배포 체크리스트 확인, 작은 출시 준비 수강 3. 결과 읽기, 데이터 입문 강좌 공부 3. 개념 복습, SQL 기초 함께 읽기" [ref=e87]
+                - StaticText "2026. 10. 23."
+                - button "2026. 10. 23.에 업무 만들기" [ref=e142]
+                  - StaticText "+"
+                - button "종일 예제 점검 모임, 작은 출시 준비" [ref=e143]
+                  - StaticText "종일 예제 점검 모임"
+                - button "종일 예제 점검 모임, 학습 습관 합성 연구" [ref=e144]
+                  - StaticText "종일 예제 점검 모임"
+                - button "종일 예제 점검 모임, SQL 기초 함께 읽기" [ref=e145]
+                  - StaticText "종일 예제 점검 모임"
+                - button "종일 예제 점검 모임, 데이터 입문 강좌" [ref=e146]
+                  - StaticText "종일 예제 점검 모임"
+                - button "종일 예제 점검 모임, 주말 수채화" [ref=e147]
+                  - StaticText "종일 예제 점검 모임"
+                - button "마감 DEVP-11 배포 체크리스트 확인, 작은 출시 준비" [ref=e148]
+                  - StaticText "마감 DEVP-11 배포 체크리스트 확인"
+                - button "수강 3. 결과 읽기, 데이터 입문 강좌" [ref=e149]
+                  - StaticText "수강 3. 결과 읽기"
+                - button "공부 3. 개념 복습, SQL 기초 함께 읽기" [ref=e150]
+                  - StaticText "공부 3. 개념 복습"
+              - cell "2026. 10. 24. 2026. 10. 24.에 업무 만들기 마감 DEVP-2 대표 업무: 준비 사항 확인, 작은 출시 준비 마감 DEVH-2 대표 업무: 준비 사항 확인, 주말 수채화 마감 DEVC-2 대표 업무: 준비 사항 확인, 데이터 입문 강좌 마감 DEVS-2 대표 업무: 준비 사항 확인, SQL 기초 함께 읽기 마감 DEVR-2 대표 업무: 준비 사항 확인, 학습 습관 합성 연구 마감 DEVP-7 관계 예제: 함께 마무리, 작은 출시 준비" [ref=e88]
+                - StaticText "2026. 10. 24."
+                - button "2026. 10. 24.에 업무 만들기" [ref=e151]
+                  - StaticText "+"
+                - button "마감 DEVP-2 대표 업무: 준비 사항 확인, 작은 출시 준비" [ref=e152]
+                  - StaticText "마감 DEVP-2 대표 업무: 준비 사항 확인"
+                - button "마감 DEVH-2 대표 업무: 준비 사항 확인, 주말 수채화" [ref=e153]
+                  - StaticText "마감 DEVH-2 대표 업무: 준비 사항 확인"
+                - button "마감 DEVC-2 대표 업무: 준비 사항 확인, 데이터 입문 강좌" [ref=e154]
+                  - StaticText "마감 DEVC-2 대표 업무: 준비 사항 확인"
+                - button "마감 DEVS-2 대표 업무: 준비 사항 확인, SQL 기초 함께 읽기" [ref=e155]
+                  - StaticText "마감 DEVS-2 대표 업무: 준비 사항 확인"
+                - button "마감 DEVR-2 대표 업무: 준비 사항 확인, 학습 습관 합성 연구" [ref=e156]
+                  - StaticText "마감 DEVR-2 대표 업무: 준비 사항 확인"
+                - button "마감 DEVP-7 관계 예제: 함께 마무리, 작은 출시 준비" [ref=e157]
+                  - StaticText "마감 DEVP-7 관계 예제: 함께 마무리"
+              - cell "2026. 10. 25. 2026. 10. 25.에 업무 만들기 마감 DEVP-6 관계 예제: 하루 뒤 함께 시작, 작은 출시 준비 마감 DEVS-4 자료 정리, SQL 기초 함께 읽기 마감 DEVH-4 자료 정리, 주말 수채화 마감 DEVC-4 자료 정리, 데이터 입문 강좌 마감 DEVR-4 자료 정리, 학습 습관 합성 연구 ◆ DEVP-5 마일스톤: 검토 완료, 작은 출시 준비 산출물 마감 검토 보고서, 작은 출시 준비" [ref=e89]
+                - StaticText "2026. 10. 25."
+                - button "2026. 10. 25.에 업무 만들기" [ref=e158]
+                  - StaticText "+"
+                - button "마감 DEVP-6 관계 예제: 하루 뒤 함께 시작, 작은 출시 준비" [ref=e159]
+                  - StaticText "마감 DEVP-6 관계 예제: 하루 뒤 함께 시작"
+                - button "마감 DEVS-4 자료 정리, SQL 기초 함께 읽기" [ref=e160]
+                  - StaticText "마감 DEVS-4 자료 정리"
+                - button "마감 DEVH-4 자료 정리, 주말 수채화" [ref=e161]
+                  - StaticText "마감 DEVH-4 자료 정리"
+                - button "마감 DEVC-4 자료 정리, 데이터 입문 강좌" [ref=e162]
+                  - StaticText "마감 DEVC-4 자료 정리"
+                - button "마감 DEVR-4 자료 정리, 학습 습관 합성 연구" [ref=e163]
+                  - StaticText "마감 DEVR-4 자료 정리"
+                - button "◆ DEVP-5 마일스톤: 검토 완료, 작은 출시 준비" [ref=e164]
+                  - StaticText "◆ DEVP-5 마일스톤: 검토 완료"
+                - button "산출물 마감 검토 보고서, 작은 출시 준비" [ref=e165]
+                  - StaticText "산출물 마감 검토 보고서"
+            - row
+              - cell "2026. 10. 26. 2026. 10. 26.에 업무 만들기 마감 DEVP-9 API 연결 점검, 작은 출시 준비" [ref=e90]
+                - StaticText "2026. 10. 26."
+                - button "2026. 10. 26.에 업무 만들기" [ref=e166]
+                  - StaticText "+"
+                - button "마감 DEVP-9 API 연결 점검, 작은 출시 준비" [ref=e167]
+                  - StaticText "마감 DEVP-9 API 연결 점검"
+              - cell "2026. 10. 27. 2026. 10. 27.에 업무 만들기" [ref=e91]
+                - StaticText "2026. 10. 27."
+                - button "2026. 10. 27.에 업무 만들기" [ref=e168]
+                  - StaticText "+"
+              - cell "2026. 10. 28. 2026. 10. 28.에 업무 만들기 마감 DEVP-10 문서 초안 검토, 작은 출시 준비" [ref=e92]
+                - StaticText "2026. 10. 28."
+                - button "2026. 10. 28.에 업무 만들기" [ref=e169]
+                  - StaticText "+"
+                - button "마감 DEVP-10 문서 초안 검토, 작은 출시 준비" [ref=e170]
+                  - StaticText "마감 DEVP-10 문서 초안 검토"
+              - cell "2026. 10. 29. 2026. 10. 29.에 업무 만들기 제출 예정 가상 초록 제출, 학습 습관 합성 연구" [ref=e93]
+                - StaticText "2026. 10. 29."
+                - button "2026. 10. 29.에 업무 만들기" [ref=e171]
+                  - StaticText "+"
+                - button "제출 예정 가상 초록 제출, 학습 습관 합성 연구" [ref=e172]
+                  - StaticText "제출 예정 가상 초록 제출"
+              - cell "2026. 10. 30. 2026. 10. 30.에 업무 만들기" [ref=e94]
+                - StaticText "2026. 10. 30."
+                - button "2026. 10. 30.에 업무 만들기" [ref=e173]
+                  - StaticText "+"
+              - cell "2026. 10. 31. 2026. 10. 31.에 업무 만들기" [ref=e95]
+                - StaticText "2026. 10. 31."
+                - button "2026. 10. 31.에 업무 만들기" [ref=e174]
+                  - StaticText "+"
+              - cell "2026. 11. 1. 2026. 11. 1.에 업무 만들기 01:10 W17 DST 합성 일정, 작은 출시 준비" [ref=e96]
+                - StaticText "2026. 11. 1."
+                - button "2026. 11. 1.에 업무 만들기" [ref=e175]
+                  - StaticText "+"
+                - button "01:10 W17 DST 합성 일정, 작은 출시 준비" [ref=e176]
+                  - StaticText "01:10 W17 DST 합성 일정"
+            - row
+              - cell "2026. 11. 2. 2026. 11. 2.에 업무 만들기" [ref=e97]
+                - StaticText "2026. 11. 2."
+                - button "2026. 11. 2.에 업무 만들기" [ref=e177]
+                  - StaticText "+"
+              - cell "2026. 11. 3. 2026. 11. 3.에 업무 만들기" [ref=e98]
+                - StaticText "2026. 11. 3."
+                - button "2026. 11. 3.에 업무 만들기" [ref=e178]
+                  - StaticText "+"
+              - cell "2026. 11. 4. 2026. 11. 4.에 업무 만들기" [ref=e99]
+                - StaticText "2026. 11. 4."
+                - button "2026. 11. 4.에 업무 만들기" [ref=e179]
+                  - StaticText "+"
+              - cell "2026. 11. 5. 2026. 11. 5.에 업무 만들기" [ref=e100]
+                - StaticText "2026. 11. 5."
+                - button "2026. 11. 5.에 업무 만들기" [ref=e180]
+                  - StaticText "+"
+              - cell "2026. 11. 6. 2026. 11. 6.에 업무 만들기" [ref=e101]
+                - StaticText "2026. 11. 6."
+                - button "2026. 11. 6.에 업무 만들기" [ref=e181]
+                  - StaticText "+"
+              - cell "2026. 11. 7. 2026. 11. 7.에 업무 만들기" [ref=e102]
+                - StaticText "2026. 11. 7."
+                - button "2026. 11. 7.에 업무 만들기" [ref=e182]
+                  - StaticText "+"
+              - cell "2026. 11. 8. 2026. 11. 8.에 업무 만들기" [ref=e103]
+                - StaticText "2026. 11. 8."
+                - button "2026. 11. 8.에 업무 만들기" [ref=e183]
+                  - StaticText "+"
+  - dialog "W17 DST 합성 일정"
+    - heading "W17 DST 합성 일정" [level=2, ref=e2]
+    - StaticText "회의 · 2026. 11. 1. 01:10–01:30"
+    - group
+      - form
+        - LabelText
+          - StaticText "제목"
+        - textbox "제목" [required, ref=e10]: W17 DST 합성 일정
+          - StaticText "W17 DST 합성 일정"
+        - StaticText "종류"
+        - button "종류" [expanded=false, ref=e11]
+          - StaticText "회의"
+        - checkbox "종일" [checked=false, ref=e12]
+        - LabelText
+          - StaticText "종일"
+        - LabelText
+          - StaticText "시작"
+        - DateTime "시작": 2026-11-01T01:10
+          - generic
+            - spinbutton "Month Month" [ref=e30]: 11
+              - StaticText "11"
+            - StaticText "/"
+            - spinbutton "Day Day" [ref=e31]: 1
+              - StaticText "01"
+            - StaticText "/"
+            - spinbutton "Year Year" [ref=e32]: 2026
+              - StaticText "2026"
+            - StaticText ", "
+            - spinbutton "Hours Hours" [ref=e33]: 1
+              - StaticText "01"
+            - StaticText ":"
+            - spinbutton "Minutes Minutes" [ref=e34]: 10
+              - StaticText "10"
+            - StaticText " "
+            - spinbutton "AM/PM AM/PM" [ref=e35]: 1
+              - StaticText "AM"
+          - button "Show local date and time picker" [ref=e23]
+        - LabelText
+          - StaticText "종료"
+        - DateTime "종료": 2026-11-01T01:30
+          - generic
+            - spinbutton "Month Month" [ref=e36]: 11
+              - StaticText "11"
+            - StaticText "/"
+            - spinbutton "Day Day" [ref=e37]: 1
+              - StaticText "01"
+            - StaticText "/"
+            - spinbutton "Year Year" [ref=e38]: 2026
+              - StaticText "2026"
+            - StaticText ", "
+            - spinbutton "Hours Hours" [ref=e39]: 1
+              - StaticText "01"
+            - StaticText ":"
+            - spinbutton "Minutes Minutes" [ref=e40]: 30
+              - StaticText "30"
+            - StaticText " "
+            - spinbutton "AM/PM AM/PM" [ref=e41]: 1
+              - StaticText "AM"
+          - button "Show local date and time picker" [ref=e24]
+        - LabelText
+          - StaticText "시간대 (시작·종료 시각의 기준)"
+        - textbox "시간대 (시작·종료 시각의 기준)" [required, ref=e13]: America/New_York
+          - StaticText "America/New_York"
+        - LabelText
+          - StaticText "설명"
+        - textbox "설명" [ref=e14]: 합성 데이터
+          - StaticText "합성 데이터"
+        - button "저장" [ref=e15]
+    - group
+      - region "반복" [ref=e6]
+        - heading "반복" [level=3, ref=e16]
+        - paragraph
+          - StaticText "반복하지 않습니다. (America/New_York 기준)"
+        - form
+          - StaticText "주기"
+          - button "주기" [expanded=false, ref=e25]
+            - StaticText "반복 안 함"
+          - button "반복 저장" [ref=e26]
+    - button "일정 지우기" [ref=e3]
+    - button "닫기" [ref=e4]
+      - StaticText "닫기"
