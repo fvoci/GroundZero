@@ -2698,19 +2698,22 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   | 36  | #82  | 요약 Merge Risk Moderate: 확인 내용을 누른 뒤 초점이 밖이면 Esc가 닫을 수 있음 | REJECTED(실제 브라우저 PASS)         | `07be34d` Chromium: 확인 내용을 실제 마우스로 누른 뒤 Esc도 확인만 닫음(W17 `b5-1`). Safari NOT RUN                                                     | https://github.com/fvoci/GroundZero/pull/82#issuecomment-6329814237      |
   | 37  | #89  | `7d9529c` Minor: CPU 2개 미만 호스트                                           | FIXED                                | W8 `2518724`(최소 요구 문서화)                                                                                                                          | https://github.com/fvoci/GroundZero/pull/89#discussion_r4344246865       |
   | 38  | #89  | `2518724` Minor: CPU 2개를 최소 조건으로 쓰지 말라                             | REJECTED                             | Docker는 호스트 CPU보다 큰 한도의 컨테이너 생성을 거부함(재현), CodeRabbit이 철회                                                                       | https://github.com/fvoci/GroundZero/pull/89#discussion_r4344280105       |
-  | 39  | #64  | `be7ef22` 인라인 Minor: 제목만 고친 편집을 실시간 끝에 남기지 않음             | OPEN(병합 뒤 발견, W20 PR)           | 타당(코드 확인): `LiveDocumentEditor.svelte:121`이 `hasPending()` 대신 `watch?.dirty`를 봄. W20 PR에서 처리(PR·SHA 추후)                                | https://github.com/fvoci/GroundZero/pull/64#discussion_r4346901085       |
-  | 40  | #82  | `217c6c5` 인라인 Minor: 상세 안의 다른 업무 열기가 닫기 확인을 건너뜀          | OPEN(병합 뒤 발견, W20 PR)           | 타당(코드 확인): `TaskBoard.svelte:1692`의 `onopen={open}`이 D-97 확인을 거치지 않음. W20 PR에서 처리(PR·SHA 추후)                                      | https://github.com/fvoci/GroundZero/pull/82#discussion_r4347201952       |
+  | 39  | #64  | `be7ef22` 인라인 Minor: 제목만 고친 편집을 실시간 끝에 남기지 않음             | FIXED(#91, 병합 뒤 발견)             | #91 `abd7210`(`hasPending()` 기준, `live-unsaved-title.test.ts`)·`b89390e`·`f36e15d`, 답글 r4347584199                                                  | https://github.com/fvoci/GroundZero/pull/64#discussion_r4346901085       |
+  | 40  | #82  | `217c6c5` 인라인 Minor: 상세 안의 다른 업무 열기가 닫기 확인을 건너뜀          | FIXED(#91, 병합 뒤 발견)             | #91 `abd7210`(`TaskBoard` `requestOpen`, `task-dialog-discard.test.ts`), 답글 r4347584536                                                               | https://github.com/fvoci/GroundZero/pull/82#discussion_r4347201952       |
   | 41  | #69  | `5e5e9da` 인라인 Minor: 표 뒤 빈 줄(markdownlint MD058)                        | REJECTED                             | 저장소 형식 검사(prettier, `cargo xtask check`)가 목록 안 표 뒤 빈 줄을 지움(넣으면 `--check` 실패), 답글 r4347534519                                   | https://github.com/fvoci/GroundZero/pull/69#discussion_r4347518864       |
 
   인계 장부의 OPEN 26건(실질 17 + 정보성 9)과 #82 추가 2건은 위 1~20에서 모두 처리 상태가 정해졌다. 그 뒤 새로 온 지적 가운데 OPEN은 25(#60, 배포·
-  되돌리기 절차 문서)와 39(#64)·40(#82)이다. 24는 `a811f92`, 36은 실제 브라우저로 정리했다. #69의 95차 push(`5e5e9da`) 뒤 지적은 41이다.
+  되돌리기 절차 문서)뿐이다. 39(#64)·40(#82)은 병합 뒤에 발견해 #91로 고쳤다. 24는 `a811f92`, 36은 실제 브라우저로 정리했다. #69의 95차 push
+  (`5e5e9da`) 뒤 지적은 41이다.
   - 39·40은 최종 갱신 커밋(`be7ef22`·`217c6c5`)에 병합 직전 게시됐다(#64 리뷰 2026-10-22T09:52:28Z·병합 09:58:56Z, #82 리뷰 10:25:16Z·병합
-    10:26:23Z). 수정 없이 병합되어 병합 뒤에 발견했다(Minor 둘, 편집을 확인 없이 잃는 경로, 스레드 풀리지 않음). W20이 새 PR
-    `fix/audit-unsaved-followups`에서 재현·수정 중이고, #69는 그 PR 다음에 병합한다. PR 번호·수정 SHA: 추후 기록.
+    10:26:23Z). 수정 없이 병합되어 병합 뒤에 발견했다(Minor 둘, 편집을 확인 없이 잃는 경로). #91(`fix/audit-unsaved-followups`)에서 고쳤다
+    (아래 「#91(병합 뒤 후속)」).
   - 절차 결함: coordinator의 병합 스크립트는 CodeRabbit을 커밋 상태로만 보고, 게시된 리뷰의 인라인 지적을 읽지 않았다(#60·#64 단계만 상태를
     기다렸고 나머지 단계는 저장소 CI만 기다림). 또 상태의 success만 보고 '완료'로 여겨, #60 `6b7fd14`의 "Review skipped"(검토 안 함)를 완료로
     잘못 적었다(아래 「CodeRabbit(최종 갱신 커밋)」의 #60). 그래서 #64의 완료 상태와 함께 온 Actionable 지적과, 기다리지 않은 #82 단계의 리뷰 지적이
     병합을 막지 못했다.
+    보완: #91은 리뷰 본문·인라인·diff 밖 지적·풀리지 않은 스레드를 직접 읽은 뒤 병합했다. 검토를 건너뛴 커밋은 '검토 완료'로 적지 않는다(아래
+    「CodeRabbit(최종 갱신 커밋)」의 갱신 커밋별 상태 표).
 
 - **델타 감사(`07a9ab5..a5cda4e`)**: 바뀐 24개 파일을 서버·웹으로 나눠 다시 찾고 반박 검증했다. 남은 12건(WD1~WD6, SD1~SD5, SD8. SD6·SD7은 반박됨)을 다음처럼 처리했다.
   - 웹 WD1~WD4 → #72, WD5·WD6 → #73.
@@ -2821,14 +2824,41 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
     | #73 | `067ef36`   | `0766796`    | 2026-10-22T10:08:32Z              |
     | #80 | `48b9644`   | `3518ddc`    | 2026-10-22T10:16:57Z              |
     | #82 | `217c6c5`   | `cb1d32d`    | 2026-10-22T10:26:23Z              |
+    | #91 | `f36e15d`   | `cb65cc3`    | 2026-10-22T13:01:03Z              |
     | #69 | 이 PR       | 이 PR        | 마지막                            |
 
     merge commit의 커미터 시각(`git log`)은 몇 줄에서 `mergedAt`과 1초 다르다. 표는 `gh pr view --json mergedAt`(2026-10-22T10:3xZ 조회)과 같다.
 
-  - 확인(이 기록): main 첫 부모의 merge 커밋 26개의 tree가 모두 `final-steps.tsv`의 같은 단계 tree와 같다. `git diff 07be34d origin/main --stat`
-    (main `cb1d32d`)은 `docs/decisions.md`·`docs/development.md` 두 파일뿐이다(= #69 단계가 더한 문서). 이 PR은 `origin/main`을 합친 커밋
-    (tree `ff5db09`, 단계 27 tree와 같음) 위에 이 기록만 더하므로, 병합 뒤 main은 검증한 `07be34d`와 이 두 문서만 다르다. 병합 뒤 main CI는
-    PR #69 댓글 참조.
+  - 확인(이 기록): main 첫 부모의 merge 커밋 26개(`a5cda4e..cb1d32d`)의 tree가 모두 `final-steps.tsv`의 같은 단계 tree와 같다.
+    `git diff 07be34d cb1d32d --stat`은 `docs/decisions.md`·`docs/development.md` 두 파일뿐이다(= #69 단계가 더한 문서). 그 뒤 병합 뒤 후속 #91이
+    들어갔다. 최종 main과의 관계는 아래 「검증 범위」.
+- **#91(병합 뒤 후속, `fix/audit-unsaved-followups`, 병합 `cb65cc3` 2026-10-22T13:01:03Z)**: 장부 39·40을 고친 웹만의 PR
+  (https://github.com/fvoci/GroundZero/pull/91).
+  - `abd7210`: 지적 A(장부 39) `keepUnsaved`·`keepIfDirty`를 `hasPending()` 기준으로 하고 4410·`checkRefusal`·4403 경로를 고침(4409·4412는
+    기각 근거를 남김). 지적 B(장부 40) `TaskBoard`의 `requestOpen`으로 대화상자 안 업무 이동도 미저장 확인을 거침. 일정 대화상자에는 같은 경로가
+    없다(`EventDialog.svelte:23-33`).
+  - `b89390e`: 넘긴(인계한) 초안을 `onDestroy`가 다시 저장해, 버린 초안이 새로고침 뒤 되살아나던 것(실제 브라우저에서 발견).
+  - `f36e15d`: #91에 온 CodeRabbit Major 2건. r4347643282 인계 중 편집 잠금. r4347643286 초안 저장이 실패하면 다시 연결이 진행하지 않고 lost
+    안내를 보이며, 안내 뒤 다시 누르면 먼저 다시 저장을 시도하고 실패해도 명시적으로 진행한다(D-97의 "명시적 선택에서만 버림"과 같은 성격이고
+    main의 기존 lost 흐름을 따름. coordinator 결정이며 새 정책이 아니다).
+  - 답글: #64 r4347584199, #82 r4347584536, #91 r4347952384·r4347952653. CodeRabbit 확인 답글 r4348024843·r4348039678.
+  - 회귀 시험(수정 전 실패 확인): `live-unsaved-title.test.ts`·`task-dialog-discard.test.ts`(`cb1d32d` 소스에서 6 실패·16 통과),
+    `live-handoff.test.ts`(`b89390e` 소스에서 7개 모두 실패: 제목만·본문만·둘 다 인계 잠금, 부모가 실패하면 초안이 남음, 쓰기 실패·재시도, 예약 초안을
+    덮어쓰지 않음). `f36e15d`에서 관련 9파일 66/66.
+  - 검사: `f36e15d`에서 `cargo xtask check`(licenses 포함) PASS(웹 131파일·734개). CI 6/6 success(run 39772750680). CodeRabbit은 `b89390e` 리뷰
+    Actionable 2(위 Major), `f36e15d` 리뷰 지적 없음, 풀리지 않은 스레드 0.
+  - 실제 브라우저(Orca 내장 Chromium만, `b89390e`·`f36e15d`, 그 worktree의 `cargo xtask dev --oidc`): 실시간 꺼짐 뒤 제목 초안 제안·복원, 버린 초안이
+    새로고침 뒤 다시 나오지 않음, 문서 GET 25초 지연 중 편집 잠금, 다시 읽기 503이면 오류 화면·초안 남음, 4403 뒤 초안 쓰기 실패면 다시 연결 1회는
+    진행하지 않고 lost 안내 → 쓰기 복구 뒤 kept, 업무 대화상자 이동 확인(계속 편집 시 초점 복귀·버리고 열기·Esc·변경 없으면 바로 이동·저장 중
+    차단) 모두 PASS. 증거는 접근성 snapshot 텍스트·페이지 상태 JSON·요청 기록(페이지 안 `fetch` 감싸기의 지연·실패 기록)이다. PNG 3장은 빈
+    화면(단색·1×1)이라 증거로 쓰지 않았고, 인쇄 PDF 2개는 내용을 눈으로 확인하지 못했다(NOT VERIFIED). Safari·실제 기기 NOT RUN. 예약 초안 거절은
+    jsdom 시험으로만 봤다(브라우저는 쓰기 실패 경로). 증거는 W20 worktree의 `target/audit-evidence/w20/INDEX.md`(Git 밖).
+- **검증 범위**:
+  - (a) R8(`cargo xtask check`와 DB 세 환경 통합 시험)은 `07be34d`에서만 돌았다. `07be34d`의 코드는 main `cb1d32d`와 같다(차이는 #69 문서뿐).
+  - (b) #91 뒤(`f36e15d`)는 check·CI 6개·관련 vitest·Chromium 확인까지다. R8은 다시 돌리지 않았다. #91의 diff는 `apps/web`뿐이다(서버·SQL·시험
+    스택 변경 없음).
+  - (c) 최종 main 코드 = `cb1d32d` + #91(웹만) + #69 문서. 근거: 이 PR 머리에서 `git diff 07be34d HEAD --stat`이 #91의 `apps/web` 11개 파일과
+    `docs/` 두 파일뿐이고, `docs/`를 뺀 차이의 파일 목록이 `git diff cb1d32d cb65cc3`과 같다. 병합 뒤 main CI는 PR #69 댓글 참조.
 - **R8(`07be34d`)**: WSL2 Linux 32코어, 같은 체크아웃에서 차례로(동시 실행 없음), 명령마다 1회. 로그 첫 줄에 SHA·명령·시작, 끝 줄에 rc·끝(UTC).
   "결과 줄"은 `test result:` 줄 수(시험 바이너리 46 + doc 1).
 
@@ -2978,13 +3008,14 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
     결정이 아니라 구현자·coordinator 판단이다(`docs/decisions.md` D-95 아래, `w16/README.md` 2절).
   - 사용자 결정이 남은 것: 미승인 제안 P-24~P-33·P-35·P-36(P-34는 D-95로 채택).
   - 남은 위험(병합 뒤 main):
-    - 장부 39(#64: 본문은 그대로이고 제목만 고친 채 실시간이 꺼지면 제목을 잃음)·40(#82: 업무 상세 안의 다른 업무 열기가 D-97 확인을 건너뜀).
-      둘 다 Minor이고 병합 뒤에 발견했다. W20 PR(`fix/audit-unsaved-followups`, PR 번호·SHA 추후)이 고치며, #69는 그 다음에 병합한다.
+    - 장부 39(#64: 제목만 고친 채 실시간이 꺼지면 제목을 잃음)·40(#82: 업무 상세 안의 다른 업무 열기가 D-97 확인을 건너뜀)은 병합 뒤에 발견해
+      #91로 고쳤다. #91 뒤 코드에는 R8을 다시 돌리지 않았다(위 「검증 범위」 (b)).
     - 기본 `--oidc` 시험 스택의 연결 최고 85/97(R8 (b), fvoci/GroundZero#90). 시험이 늘면 넘을 수 있다.
     - D-96의 남는 창(계정을 바꾸기 전에 열린 실시간 연결은 다음 재확인까지 앞 계정으로 쓸 수 있음, 실제 브라우저에서 관찰)과 위 「남는 위험(기록)」.
     - 장부 OPEN 25(#60 배포·되돌리기 절차 문서)와 열린 후속 이슈 #50·#70·#76·#79·#83~#88·#90.
-  - NOT RUN(모음): 위 「NOT RUN」, 「실제 브라우저」의 NOT RUN, R8 반복 실행(각 1회), 단계별 전체 검사(R8은 최종 SHA에서만), 병합 뒤 main에서의 R8
-    재실행(main은 `07be34d`와 문서 두 파일만 다름), 갱신 커밋 10개의 CodeRabbit 검토(위 「CodeRabbit(최종 갱신 커밋)」), 태그·배포.
+  - NOT RUN(모음): 위 「NOT RUN」, 「실제 브라우저」의 NOT RUN, #91의 Safari·실제 기기와 예약 초안 거절의 브라우저 확인, R8 반복 실행(각 1회),
+    단계별 전체 검사(R8은 최종 통합 SHA에서만), #91 뒤 R8 재실행(#91은 웹만), 갱신 커밋 10개의 CodeRabbit 검토(위 「CodeRabbit(최종 갱신 커밋)」),
+    태그·배포.
   - SQL 정리(말아올리기) 전 차단 사항. 위 「SQL 통합 전 반드시 해결할 것」의 지금 상태다.
     1. 0080~0094는 번호 순서로 main에 들어갔다(앞 네 자리 중복 없음, `w16/migrations-0079-0094.txt`). 정리본은 각 함수의 마지막 정의를 기준으로 하고,
        지운 함수는 넣지 않는다.
