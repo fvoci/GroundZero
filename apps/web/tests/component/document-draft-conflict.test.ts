@@ -52,6 +52,15 @@ beforeEach(async () => {
   Range.prototype.getClientRects = (): DOMRectList => none;
   Element.prototype.scrollIntoView = (): void => undefined;
   me.userId = 'user-a';
+  // 저장은 보내기 전에 이 창의 계정이 아직 로그인돼 있는지 묻는다.
+  vi.spyOn(api, 'me').mockResolvedValue({
+    id: 'user-a',
+    display_name: '나',
+    hour_cycle: '',
+    locale: 'ko',
+    time_zone: '',
+    week_start: '',
+  });
 });
 
 afterEach(() => {

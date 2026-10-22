@@ -61,6 +61,15 @@ beforeEach(async () => {
   Range.prototype.getClientRects = (): DOMRectList => none;
   Element.prototype.scrollIntoView = (): void => undefined;
   me.userId = 'user-a';
+  // 저장은 보내기 전에 이 창의 계정이 아직 로그인돼 있는지 묻는다.
+  vi.spyOn(api, 'me').mockResolvedValue({
+    id: 'user-a',
+    display_name: '나',
+    hour_cycle: '',
+    locale: 'ko',
+    time_zone: '',
+    week_start: '',
+  });
   // 같은 탭에서 다시 열었다(새로고침·앱 안 이동): 지난번 편집이 이 탭의 초안으로 남아 있다.
   storeDraft('doc-1', {
     baseRevision: 5,

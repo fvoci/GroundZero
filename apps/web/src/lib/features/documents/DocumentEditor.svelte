@@ -12,7 +12,13 @@
   import { api, ApiError, fileContentUrl, NetworkError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { RetryKey } from '$lib/api/retry-key';
+  import {
+    accountSwitching,
+    reportSessionExpired,
+    switchAccount,
+  } from '$lib/features/feedback/feedback.svelte';
   import { uploadFile } from '$lib/features/files/upload';
+  import { me as currentUser } from '$lib/me.svelte';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { m } from '$lib/paraglide/messages.js';
   import { router, standalonePath } from '$lib/router.svelte';
@@ -52,7 +58,10 @@
 
   /** 본문에 넣을 파일: 이 문서의 첨부로 올리고 그 버전의 주소를 돌려준다(D-27 이미지·첨부). */
   async function insertFile(file: File): Promise<{ href: string; name: string; image: boolean }> {
-    const done = await uploadFile(file, { target: { kind: 'document', id: server.id } });
+    const done = await uploadFile(file, {
+      expectedUser: editingUser,
+      target: { kind: 'document', id: server.id },
+    });
     if (done.file_id === null) throw new Error(done.failure ?? m.documents_upload_failed());
     const image = INLINE_IMAGES.includes(file.type);
     return {
@@ -67,6 +76,9 @@
   // 서버가 확인한 최신 상태. 편집 내용은 따로 둔다.
   // 부모가 문서마다 {#key}로 새로 만들므로 처음 값만 읽는다.
   const start = untrack(() => initial);
+  // 이 편집을 시작한 사용자. 저장 요청마다 그대로 보내 서버가 세션의 사용자와 비교한다(#60). 보내기 직전에 지금
+  // 로그인한 사용자로 다시 채우지 않는다(그사이 다른 탭에서 계정을 바꿨으면 그 계정으로 조용히 바뀐다).
+  const editingUser = untrack(() => currentUser.userId);
   let server = $state<DocumentView>(start);
   let title = $state(start.title);
   let body = $state<DocNode>(start.body);
@@ -138,6 +150,9 @@
   let representationRetried = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let destroyed = false;
+  // 이 창을 연 계정이 아닌 계정으로 바뀐 것을 알았다(보내기 전 확인 또는 서버의 409 `account_changed`). 이 창은 그
+  // 계정으로 다시 읽히는 중이다: 더 보내지 않고(예약·재시도·직접 저장 모두) 편집은 앞 계정의 초안으로만 남긴다.
+  let accountChanged = false;
 
   const AUTOSAVE_DELAY_MS = 1500;
   const RETRY_DELAY_MS = 5000;
@@ -185,7 +200,7 @@
     status = isDirty() ? 'dirty' : 'saved';
     if (status === 'dirty') {
       keepDraft();
-      schedule(AUTOSAVE_DELAY_MS);
+      if (!accountChanged) schedule(AUTOSAVE_DELAY_MS);
     } else {
       // 서버 내용과 같아졌으면(문제 내용을 지우는 등) 지난 저장 안내는 더 필요 없다(로그아웃 안내는 남긴다).
       // 복원 제안 중인 초안은 사용자가 고를 때까지 남긴다(줄에 있거나, 옮기지 못했으면 dropDraft가 두고 간다).
@@ -196,7 +211,14 @@
   }
 
   async function save(): Promise<void> {
-    if (!server.can_edit || status === 'saving' || status === 'conflict' || realtimeOn) return;
+    if (
+      !server.can_edit ||
+      status === 'saving' ||
+      status === 'conflict' ||
+      realtimeOn ||
+      accountChanged
+    )
+      return;
     if (!isDirty()) {
       if (status !== 'signed-out') message = undefined;
       status = 'saved';
@@ -216,6 +238,33 @@
       message = blocked;
       return;
     }
+    // 보내기 전에 이 창을 연 계정이 아직 로그인돼 있는지 본다. 다른 탭에서 다른 계정으로 로그인하면 쿠키가 바뀌어,
+    // 이 창이 돌아오기(focus) 전에 나가는 예약·재시도 저장이 앞 계정의 편집을 새 계정의 이름으로 남긴다. 직접 누른
+    // 저장도 화면은 앞 계정의 것이라 같게 본다. 확인하지 못하면 보내지 않는다. 요청 id·보낼 내용은 확인 뒤에 정한다.
+    // 확인과 전송 사이에 바뀐 경우는 서버가 막는다(요청의 기대 사용자, 아래 409 `account_changed`). 이 확인은 그
+    // 전에 이미 보이는 전환에서 본문을 아예 보내지 않게 하는 앞단 방어로 남긴다.
+    status = 'saving';
+    const who = await signedInAs();
+    if (who === 'gone') return;
+    if (who === 'other') {
+      // 입력은 앞 계정의 초안(사용자별 키)으로 이미 남아 있다(edited()).
+      status = 'dirty';
+      stopSending();
+      switchAccount();
+      return;
+    }
+    if (who === 'signed-out') {
+      status = 'signed-out';
+      message = m.documents_signed_out();
+      reportSessionExpired();
+      return;
+    }
+    if (who === 'unknown') {
+      status = 'retrying';
+      message = m.documents_save_retrying();
+      schedule(RETRY_DELAY_MS);
+      return;
+    }
     const snap = snapshot();
     if (attempt?.snapshot !== snap) attempt = { requestId: newRequestId(), snapshot: snap };
     const { requestId } = attempt;
@@ -223,6 +272,7 @@
     message = undefined;
     try {
       const result = await api.saveDocument(server.id, {
+        expectedUser: editingUser,
         requestId,
         baseRevision: server.revision,
         title: title.trim(),
@@ -266,6 +316,13 @@
       } else if (error instanceof ApiError && error.status === 401) {
         status = 'signed-out';
         message = m.documents_signed_out();
+      } else if (error instanceof ApiError && error.code === 'account_changed') {
+        // 이 편집을 시작한 계정이 아닌 세션으로 나갔다. 서버는 아무것도 바꾸지 않았다. 다시 보내지 않는다(예약도
+        // 걸지 않는다). 입력은 앞 계정의 초안(사용자별 키, edited())에 남아 있고, 계정 전환 처리(다시 읽기)는
+        // client.ts가 이미 시작했다.
+        status = 'dirty';
+        message = m.documents_account_changed();
+        stopSending();
       } else if (
         error instanceof ApiError &&
         error.code === 'invalid_state' &&
@@ -280,6 +337,31 @@
         message = errorText(error, m.documents_save_failed());
       }
     }
+  }
+
+  /** 다른 계정으로 바뀐 것을 알았다: 걸어 둔 예약·재시도를 거두고 이 편집기에서 더 보내지 않는다. */
+  function stopSending(): void {
+    accountChanged = true;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  }
+
+  /**
+   * 지금 로그인한 계정이 이 창을 연 계정인지. 묻지 못했거나(연결 오류 등) 이 창의 계정을 모르면 `unknown`, 묻는 사이
+   * 편집기가 사라졌으면 `gone`.
+   */
+  async function signedInAs(): Promise<'same' | 'other' | 'signed-out' | 'unknown' | 'gone'> {
+    const mine = editingUser;
+    if (mine === '') return 'unknown';
+    let now: Awaited<ReturnType<typeof api.me>>;
+    try {
+      now = await api.me();
+    } catch {
+      return destroyed ? 'gone' : 'unknown';
+    }
+    if (destroyed) return 'gone';
+    if (now === undefined) return 'signed-out';
+    return now.id === mine ? 'same' : 'other';
   }
 
   /** 저장이 409(상태)로 거절됐을 때 그사이 실시간이 켜졌는지. 확인하지 못하면 아니라고 본다. */
@@ -332,9 +414,10 @@
       // 어디에 있는 문서든(공유받은 문서 포함) 항상 만들 수 있는 내 노트에 보존한다. 응답을 잃고 다시 눌러도
       // 같은 내용이면 같은 노트가 된다.
       const noteRequest = copyNoteKey.for({ copyTitle });
-      const created = await api.createNote(noteRequest, copyTitle);
+      const created = await api.createNote(editingUser, noteRequest, copyTitle);
       const saveRequest = copySaveKey.for({ note: created.id, copyTitle, body });
       const saved = await api.saveDocument(created.id, {
+        expectedUser: editingUser,
         requestId: saveRequest,
         baseRevision: created.revision,
         title: copyTitle,
@@ -409,7 +492,18 @@
 
   onMount(() => {
     const beforeUnload = (event: BeforeUnloadEvent): void => {
-      if (isDirty()) event.preventDefault();
+      if (!isDirty()) return;
+      // 다른 계정으로 바뀌어 다시 읽을 때는 지금 입력을 앞 계정의 초안으로 남길 수 있으면 막지 않는다. 남기지
+      // 못하면(저장소를 쓸 수 없음) 보통 떠나기처럼 경고한다(남아도 저장은 계정 확인에서 막힌다).
+      const kept =
+        accountSwitching() &&
+        storeDraft(server.id, {
+          baseRevision: server.revision,
+          title,
+          body,
+          savedAt: new Date().toISOString(),
+        });
+      if (!kept) event.preventDefault();
     };
     window.addEventListener('beforeunload', beforeUnload);
     router.guard = () => !isDirty() || window.confirm(m.documents_leave_confirm());

@@ -145,6 +145,8 @@ export interface paths {
          * @description 순서: 권한 확인 → 행 잠금 → 재시도 판단 → `If-Match`(있으면) → 리비전 비교 → 내용 동일 판단 → 갱신·리비전 기록.
          *     행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다. `If-Match`는 잠근 행으로 만든 지금
          *     표현의 ETag와 강하게 비교한다(D-77). 같은 요청의 재시도는 `If-Match`보다 먼저 판단해 멱등 응답을 지킨다.
+         *
+         *     권한 확인보다 먼저 기대 사용자를 비교한다(`ExpectedUser`): 다르면 문서를 읽거나 잠그지 않고 409 `account_changed`.
          */
         put: operations["save"];
         post?: never;
@@ -1236,7 +1238,10 @@ export interface paths {
         /** 내 개인 노트 목록. 워크스페이스 관리자에게도 보이지 않는다 (D-22, D-49). */
         get: operations["my_notes"];
         put?: never;
-        /** 개인 노트 생성. */
+        /**
+         * 개인 노트 생성.
+         * @description 기대 사용자 머리가 필요하다(초안을 내 노트로 보존하는 길이 이 요청으로 시작한다, `ExpectedUser`).
+         */
         post: operations["create_note"];
         delete?: never;
         options?: never;
@@ -1948,7 +1953,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 업로드 시작(같은 요청 id면 같은 업로드). 쓸 수 있는 문서·항목·파일에만. 크기·저장량 한도를 넘으면 400·409. */
+        /**
+         * 업로드 시작(같은 요청 id면 같은 업로드). 쓸 수 있는 문서·항목·파일에만. 크기·저장량 한도를 넘으면 400·409.
+         * @description 기대 사용자 머리가 필요하다(`ExpectedUser`). 웹은 만료된 업로드를 스스로 다시 시작하므로, 그사이 다른 탭에서 계정을
+         *     바꿨으면 새 계정의 업로드를 만들지 않고 409 `account_changed`.
+         */
         post: operations["create_upload"];
         delete?: never;
         options?: never;
@@ -3866,6 +3875,13 @@ export interface components {
          * @enum {string}
          */
         Role: "admin" | "writer" | "reader";
+        /**
+         * @description 문서 저장의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+         *     - `ConflictBody`(`error: "conflict"`, `current`): `base_revision`이 지남.
+         *     - `ErrorBody`(`current` 없음): `account_changed`(기대 사용자가 세션의 사용자와 다름), `invalid_state`(실시간 편집
+         *       중 본문 변경, 동시 변경 재시도 등).
+         */
+        SaveConflict: components["schemas"]["ConflictBody"] | components["schemas"]["ErrorBody"];
         /** @description 문서 저장 요청. */
         SaveDocument: {
             /**
@@ -5047,9 +5063,11 @@ export interface operations {
     save: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description 단건 조회의 강한 ETag. 다르면 412 */
                 "If-Match"?: string | null;
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                "x-fvoci-expected-user": string;
             };
             path: {
                 document_id: string;
@@ -5096,12 +5114,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description `conflict`면 ConflictBody(서버 최신본 포함). `account_changed`(기대 사용자가 세션의 사용자와 다름)·`invalid_state`(실시간 편집 중 본문 변경 등)면 ErrorBody. 어느 쪽도 아무것도 바꾸지 않았다 */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConflictBody"];
+                    "application/json": components["schemas"]["SaveConflict"];
                 };
             };
             412: {
@@ -8356,7 +8375,10 @@ export interface operations {
     create_note: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                "x-fvoci-expected-user": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8383,6 +8405,15 @@ export interface operations {
                 };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `account_changed`: 기대 사용자가 세션의 사용자와 다름(아무것도 만들지 않음) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10336,7 +10367,10 @@ export interface operations {
     create_upload: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                "x-fvoci-expected-user": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10378,6 +10412,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description 저장량 한도 초과(`invalid_state`) 또는 `account_changed`(기대 사용자가 세션의 사용자와 다름, 아무것도 만들지 않음) */
             409: {
                 headers: {
                     [name: string]: unknown;

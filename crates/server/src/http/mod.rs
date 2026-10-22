@@ -457,6 +457,7 @@ async fn api_not_found() -> AppError {
         documents::CreateDocument,
         documents::SaveDocument,
         documents::ConflictBody,
+        documents::SaveConflict,
         documents::Access,
         documents::SharedDocument,
         documents::DocumentSettings,
@@ -1192,5 +1193,44 @@ mod tests {
         assert!(required("TaskConflict").iter().any(|k| k == "current"));
         assert!(!required("ErrorBody").iter().any(|k| k == "current"));
         assert!(required("ErrorBody").iter().any(|k| k == "message"));
+    }
+
+    /// 문서 저장의 409는 두 모양이다(#60): 리비전 충돌이면 `ConflictBody`, `account_changed`·`invalid_state`면
+    /// `ErrorBody`. 기대 사용자 머리는 적용 경로(문서 저장·내 노트 만들기)에서 필수다.
+    #[test]
+    fn the_save_conflict_and_the_expected_user_header_are_in_the_contract() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
+        let save = &doc["paths"]["/api/documents/{document_id}"]["put"];
+        assert_eq!(
+            save["responses"]["409"]["content"]["application/json"]["schema"],
+            serde_json::json!({ "$ref": "#/components/schemas/SaveConflict" })
+        );
+        let one_of: Vec<&str> = doc["components"]["schemas"]["SaveConflict"]["oneOf"]
+            .as_array()
+            .map(|v| v.iter().filter_map(|s| s["$ref"].as_str()).collect())
+            .unwrap_or_default();
+        assert_eq!(
+            one_of,
+            [
+                "#/components/schemas/ConflictBody",
+                "#/components/schemas/ErrorBody"
+            ]
+        );
+        for operation in [
+            save,
+            &doc["paths"]["/api/me/notes"]["post"],
+            &doc["paths"]["/api/uploads"]["post"],
+        ] {
+            let header = operation["parameters"]
+                .as_array()
+                .and_then(|ps| {
+                    ps.iter()
+                        .find(|p| p["name"] == crate::features::accounts::EXPECTED_USER_HEADER)
+                })
+                .cloned()
+                .unwrap_or_default();
+            assert_eq!(header["in"], "header", "{operation}");
+            assert_eq!(header["required"], true, "{operation}");
+        }
     }
 }

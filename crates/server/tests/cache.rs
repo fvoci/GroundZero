@@ -11,6 +11,7 @@ use axum::Router;
 use axum::http::{HeaderMap, Method, StatusCode};
 use common::{TestUser, add_member, create_doc, create_workspace, doc_body, login, new_request_id};
 use fvoci_server::app::build_state;
+use fvoci_server::features::accounts::EXPECTED_USER_HEADER;
 use serde_json::{Value, json};
 
 fn header(h: &HeaderMap, name: &str) -> Option<String> {
@@ -33,6 +34,13 @@ async fn call(
     body: Option<Value>,
 ) -> Got {
     let mut headers: Vec<(&str, &str)> = extra.to_vec();
+    // 문서 저장은 기대 사용자를 함께 보낸다(웹과 같게 세션의 사용자, `expected_user.rs`).
+    let expected = user.map(|u| u.id.0.to_string());
+    if method == Method::PUT
+        && let Some(id) = expected.as_deref()
+    {
+        headers.push((EXPECTED_USER_HEADER, id));
+    }
     if body.is_some() {
         headers.push(("content-type", "application/json"));
     }

@@ -66,7 +66,7 @@ describe('document ETag and If-Match (D-77)', () => {
   });
 
   it('sends If-Match only for a strong ETag and keeps the new one after saving', async () => {
-    const input = { requestId: 'r', baseRevision: 2, title: '회의록', body };
+    const input = { expectedUser: 'u1', requestId: 'r', baseRevision: 2, title: '회의록', body };
     let seen = stub(200, doc(3), '"e3"');
     const saved = await api.saveDocument(id, { ...input, etag: '"e2"' });
     expect(seen[0]).toEqual({ method: 'PUT', ifMatch: '"e2"' });
@@ -82,6 +82,7 @@ describe('document ETag and If-Match (D-77)', () => {
   it('treats 412 like a conflict and carries the current ETag', async () => {
     stub(412, { error: 'precondition_failed', current: doc(3), etag: '"e3"' });
     const r = await api.saveDocument(id, {
+      expectedUser: 'u1',
       requestId: 'r',
       baseRevision: 2,
       title: '회의록',
@@ -97,7 +98,13 @@ describe('document ETag and If-Match (D-77)', () => {
 
   it('keeps the 409 conflict path and its ETag', async () => {
     stub(409, { error: 'conflict', current: doc(4), etag: '"e4"' });
-    const r = await api.saveDocument(id, { requestId: 'r', baseRevision: 2, title: 't', body });
+    const r = await api.saveDocument(id, {
+      expectedUser: 'u1',
+      requestId: 'r',
+      baseRevision: 2,
+      title: 't',
+      body,
+    });
     expect(r.kind === 'conflict' && r.current.etag).toBe('"e4"');
   });
 });

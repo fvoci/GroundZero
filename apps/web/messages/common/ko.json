@@ -12,6 +12,8 @@
     }
   ],
   "common_connection_lost": "서버에 연결할 수 없습니다. 다시 연결되는지 확인하는 중입니다. 입력한 내용은 지우지 않습니다.",
+  "common_session_expired": "로그인이 끝났습니다. 입력한 내용은 이 창에 그대로 있습니다. 새 탭에서 다시 로그인한 뒤 이 창으로 돌아와 다시 시도하세요.",
+  "common_session_sign_in": "새 탭에서 로그인",
   "common_notifications_region": "알림",
   "common_saved": "저장했습니다.",
   "common_moved_to_trash": "휴지통으로 옮겼습니다.",
@@ -25,10 +27,12 @@
   "common_error_not_found": "없거나 볼 수 없는 대상입니다.",
   "common_error_bad_request": "입력한 값을 확인해 주세요.",
   "common_error_invalid_state": "지금 상태에서는 할 수 없습니다. 새로고침한 뒤 다시 시도해 주세요.",
+  "common_error_account_changed": "이 창을 연 계정이 아닌 다른 계정으로 로그인돼 있어 서버가 받지 않았습니다. 지금 계정으로 다시 읽습니다.",
   "common_close": "닫기",
   "common_error_unexpected": "예상하지 못한 응답을 받았습니다({status}).",
   "common_discard_title": "저장하지 않은 변경이 있습니다",
   "common_discard_description": "닫으면 이 창에서 고친 내용이 사라집니다.",
   "common_discard_keep": "계속 편집",
-  "common_discard_confirm": "변경 버리고 닫기"
+  "common_discard_confirm": "변경 버리고 닫기",
+  "common_error_too_large": "보내는 내용이 너무 큽니다. 줄인 뒤 다시 시도해 주세요."
 }

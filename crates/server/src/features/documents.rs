@@ -23,7 +23,7 @@ use uuid::Uuid;
 use crate::config::Limits;
 use crate::db::{UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
+use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::workspaces::{member_role, validate_title};
 use crate::http::AppState;
 use crate::http::cache;
@@ -168,6 +168,24 @@ pub struct ConflictBody {
     /// `current`를 이 사람이 단건 조회했을 때의 ETag(D-77). 서버 최신본을 받아들인 뒤 `If-Match`로 쓴다.
     pub etag: String,
 }
+
+/// 문서 저장의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+/// - `ConflictBody`(`error: "conflict"`, `current`): `base_revision`이 지남.
+/// - `ErrorBody`(`current` 없음): `account_changed`(기대 사용자가 세션의 사용자와 다름), `invalid_state`(실시간 편집
+///   중 본문 변경, 동시 변경 재시도 등).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum SaveConflict {
+    Stale(Box<ConflictBody>),
+    State(ErrorBody),
+}
+
+/// 기대 사용자 머리의 계약 설명(OpenAPI).
+pub(crate) const EXPECTED_USER_DOC: &str = "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 \
+    아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 \
+    아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, \
+    `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 \
+    이 값을 읽지 않는다";
 
 pub(crate) fn empty_body() -> Value {
     serde_json::json!({ "type": "doc", "content": [{ "type": "paragraph" }] })
@@ -571,12 +589,17 @@ pub async fn my_notes(
 }
 
 /// 개인 노트 생성.
+///
+/// 기대 사용자 머리가 필요하다(초안을 내 노트로 보존하는 길이 이 요청으로 시작한다, `ExpectedUser`).
 #[utoipa::path(post, path = "/api/me/notes", request_body = CreateDocument,
+    params(("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_USER_DOC)),
     responses((status = 201, body = Document), (status = 400, body = ErrorBody),
-              (status = 401, body = ErrorBody)), tag = "documents")]
+              (status = 401, body = ErrorBody),
+              (status = 409, body = ErrorBody, description = "`account_changed`: 기대 사용자가 세션의 사용자와 다름(아무것도 만들지 않음)")),
+    tag = "documents")]
 pub async fn create_note(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Json(input): Json<CreateDocument>,
 ) -> Result<(StatusCode, Json<Document>), AppError> {
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
@@ -747,17 +770,22 @@ pub(crate) fn conflict(user: UserId, current: Document) -> Result<Response, AppE
 /// 순서: 권한 확인 → 행 잠금 → 재시도 판단 → `If-Match`(있으면) → 리비전 비교 → 내용 동일 판단 → 갱신·리비전 기록.
 /// 행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다. `If-Match`는 잠근 행으로 만든 지금
 /// 표현의 ETag와 강하게 비교한다(D-77). 같은 요청의 재시도는 `If-Match`보다 먼저 판단해 멱등 응답을 지킨다.
+///
+/// 권한 확인보다 먼저 기대 사용자를 비교한다(`ExpectedUser`): 다르면 문서를 읽거나 잠그지 않고 409 `account_changed`.
 #[utoipa::path(put, path = "/api/documents/{document_id}",
     params(("document_id" = String, Path, format = Uuid),
-           ("If-Match" = Option<String>, Header, description = "단건 조회의 강한 ETag. 다르면 412")),
+           ("If-Match" = Option<String>, Header, description = "단건 조회의 강한 ETag. 다르면 412"),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_USER_DOC)),
     request_body = SaveDocument,
     responses((status = 200, body = Document, headers(("ETag" = String, description = "저장 뒤 표현의 ETag"))),
               (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 409, body = ConflictBody), (status = 412, body = ConflictBody)), tag = "documents")]
+              (status = 409, body = SaveConflict,
+               description = "`conflict`면 ConflictBody(서버 최신본 포함). `account_changed`(기대 사용자가 세션의 사용자와 다름)·`invalid_state`(실시간 편집 중 본문 변경 등)면 ErrorBody. 어느 쪽도 아무것도 바꾸지 않았다"),
+              (status = 412, body = ConflictBody)), tag = "documents")]
 pub async fn save(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path(id): Path<DocumentId>,
     headers: HeaderMap,
     Json(input): Json<SaveDocument>,

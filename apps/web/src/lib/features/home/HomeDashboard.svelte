@@ -15,6 +15,7 @@
   import { api } from '$lib/api/client';
   import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
+  import { me } from '$lib/me.svelte';
   import type { CalendarEntry } from '$lib/features/events/calendar';
   import { entriesByDay, startOfWeek } from '$lib/features/events/calendar';
   import { displaySettings, formatDay, weekdays } from '$lib/display';
@@ -150,7 +151,8 @@
     const requestId = quickKey.for(send);
     try {
       if (send.what === 'memo') {
-        const note = await api.createNote(requestId, title);
+        // 이 창을 연 사용자. 다른 탭에서 계정을 바꿨으면 서버가 409 account_changed로 막는다(#60).
+        const note = await api.createNote(me.userId, requestId, title);
         quickStatus = m.home_memo_created({ title: note.title });
       } else if (send.what === 'task') {
         await api.createTask(send.item, requestId, title);
