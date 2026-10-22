@@ -22,6 +22,7 @@ import {
   reportConnectionLost,
   reportSessionExpired,
   sessionExpiries,
+  switchAccount,
 } from '$lib/features/feedback/feedback.svelte';
 import { m } from '$lib/paraglide/messages.js';
 
@@ -2157,6 +2158,12 @@ export interface MoveTargetInput {
 
 const none = (): undefined => undefined;
 
+/**
+ * 편집·초안을 시작한 사용자 id를 서버에 알리는 머리(문서 저장·내 노트 만들기). 서버는 세션의 사용자와 비교만 하고
+ * 권한은 세션으로만 정한다.
+ */
+const EXPECTED_USER = 'x-fvoci-expected-user';
+
 async function request(
   method: string,
   path: string,
@@ -2208,6 +2215,9 @@ function needsSession(path: string): boolean {
 function fail(status: number, json: Json): never {
   // 쓰는 중에 세션이 끝났다(로그인 확인 `api.me()`의 401은 여기 오지 않는다). 앱 전체 배너로 새 탭 로그인을 권한다.
   if (status === 401) reportSessionExpired();
+  // 이 창의 편집을 시작한 계정이 아닌 계정의 세션으로 보냈다(다른 탭에서 계정을 바꿈). 서버는 아무것도 바꾸지
+  // 않았다. 이 창은 앞 계정의 것이라 남기지 않고 계정 전환 처리(다시 읽기)로 넘긴다. 화면은 다시 보내지 않는다.
+  if (status === 409 && isRecord(json) && json.error === 'account_changed') switchAccount();
   if (isRecord(json) && typeof json.error === 'string') {
     let message = typeof json.message === 'string' ? json.message : json.error;
     const requestId = typeof json.request_id === 'string' ? json.request_id : undefined;
@@ -2542,18 +2552,23 @@ export const api = {
       none,
     ),
   myNotes: () => expectOk('GET', '/api/me/notes', (v) => parseList(v, parseSummary)),
-  createNote: (
+  /** 내 노트 만들기. `expectedUser`는 이 만들기를 시작한 화면의 사용자 id(서버가 세션과 다르면 409 `account_changed`). */
+  async createNote(
+    expectedUser: string,
     requestId: string,
     title: string,
     parentId: string | null = null,
     templateId: string | null = null,
-  ) =>
-    expectOk('POST', '/api/me/notes', parseDocument, {
-      request_id: requestId,
-      title,
-      parent_id: parentId,
-      template_id: templateId,
-    }),
+  ): Promise<DocumentView> {
+    const { status, json } = await request(
+      'POST',
+      '/api/me/notes',
+      { request_id: requestId, title, parent_id: parentId, template_id: templateId },
+      { [EXPECTED_USER]: expectedUser },
+    );
+    if (status < 200 || status >= 300) fail(status, json);
+    return parseDocument(json);
+  },
   sharedWithMe: () => expectOk('GET', '/api/me/shared', (v) => parseList(v, parseSharedView)),
   setSettings: (id: string, visibility: 'workspace' | 'private', allowCopy: boolean) =>
     expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, {
@@ -3232,10 +3247,13 @@ export const api = {
   /**
    * 저장. 충돌(409 기준 리비전이 지남, 412 `If-Match`가 맞지 않음)이면 `{ kind: 'conflict', current }`.
    * `etag`가 강한 값일 때만 `If-Match`로 보낸다(D-77). 없거나 약하면 `base_revision`만으로 판단한다.
+   * `expectedUser`는 이 편집을 시작한 사용자 id다(편집기를 열 때 고정한 값, 보내기 직전에 다시 채우지 않는다).
+   * 서버가 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 `account_changed`(`ApiError`)를 돌려준다.
    */
   async saveDocument(
     id: string,
     input: {
+      expectedUser: string;
       requestId: string;
       baseRevision: number;
       title: string;
@@ -3254,7 +3272,9 @@ export const api = {
         title: input.title,
         body: input.body,
       },
-      isStrongEtag(input.etag) ? { 'If-Match': input.etag } : {},
+      isStrongEtag(input.etag)
+        ? { [EXPECTED_USER]: input.expectedUser, 'If-Match': input.etag }
+        : { [EXPECTED_USER]: input.expectedUser },
     );
     const current = conflictCurrent(status, json);
     if (current !== undefined) return { kind: 'conflict', current };

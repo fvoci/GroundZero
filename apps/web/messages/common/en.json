@@ -28,6 +28,7 @@
   "common_error_not_found": "It doesn't exist or you can't see it.",
   "common_error_bad_request": "Check what you entered.",
   "common_error_invalid_state": "This can't be done right now. Reload and try again.",
+  "common_error_account_changed": "Not applied: you are now signed in with a different account than the one this window was opened with. Reloading for that account.",
   "common_close": "Close",
   "common_error_unexpected": "Got an unexpected response ({status}).",
   "common_error_too_large": "What you sent is too large. Make it smaller and try again."

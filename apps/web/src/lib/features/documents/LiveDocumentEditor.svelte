@@ -44,6 +44,9 @@
 
   const { initial, references, onsaved, onrealtimeoff, onreload }: Props = $props();
   const start = untrack(() => initial);
+  // 이 화면을 연 사용자. 제목 저장·초안 보존(저장 API)에 그대로 보내 서버가 세션의 사용자와 비교한다(#60).
+  // 실시간 연결(본문)은 이 값을 쓰지 않는다: 연결을 열 때의 세션으로 묶인다(docs/development.md 96절).
+  const editingUser = untrack(() => me.userId);
   const INLINE_IMAGES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
   let session = $state<LiveSession | undefined>(undefined);
@@ -235,8 +238,9 @@
       title: draft.title.trim() === '' ? start.title : draft.title.trim(),
     });
     try {
-      const created = await api.createNote(foundRequest.note, copyTitle);
+      const created = await api.createNote(editingUser, foundRequest.note, copyTitle);
       const saved = await api.saveDocument(created.id, {
+        expectedUser: editingUser,
         requestId: foundRequest.save,
         baseRevision: created.revision,
         title: copyTitle,
@@ -282,6 +286,7 @@
       for (let tries = 0; tries < 2; tries += 1) {
         const current = await api.document(start.id);
         const result = await api.saveDocument(start.id, {
+          expectedUser: editingUser,
           requestId: newRequestId(),
           baseRevision: current.revision,
           title: next,
