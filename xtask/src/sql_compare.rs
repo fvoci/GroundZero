@@ -20,17 +20,24 @@ enum Cluster {
 }
 
 impl Cluster {
-    fn start(root: &Path, sh: &Shell, run: &str, supabase: bool) -> Result<Self> {
+    fn new(root: &Path, run: &str, supabase: bool) -> Result<Self> {
         if supabase {
-            let cluster = Supabase::for_comparison(root, run)?;
-            println!("cluster: {}", cluster.project());
-            cluster.up(sh)?;
-            Ok(Self::Supabase(cluster))
+            Ok(Self::Supabase(Supabase::for_comparison(root, run)?))
         } else {
-            let cluster = Compose::for_comparison(root, run);
-            println!("cluster: {}", cluster.project());
-            cluster.up_services(sh, &["postgres"])?;
-            Ok(Self::Postgres(cluster))
+            Ok(Self::Postgres(Compose::for_comparison(root, run)))
+        }
+    }
+
+    fn start(&self, sh: &Shell) -> Result<()> {
+        match self {
+            Self::Postgres(cluster) => {
+                println!("cluster: {}", cluster.project());
+                cluster.up_services(sh, &["postgres"])
+            }
+            Self::Supabase(cluster) => {
+                println!("cluster: {}", cluster.project());
+                cluster.up(sh)
+            }
         }
     }
 
@@ -124,15 +131,18 @@ pub fn run(
         .enable_all()
         .build()?;
     let mut clusters = Vec::new();
+    let mut services = Vec::new();
     let result = (|| {
         let mut snapshots = Vec::new();
         let mut dump_snapshots = Vec::new();
         let mut urls = Vec::new();
         for (side, source) in [("a", None), ("b", candidate.as_deref())] {
             phases.insert(format!("{side}_install"), "FAIL");
-            let cluster = Cluster::start(root, &sh, &format!("{run}-{side}"), supabase)?;
-            clusters.push(cluster);
-            let cluster = clusters.last().context("cluster missing")?;
+            let cluster = register_and_start(
+                &mut clusters,
+                Cluster::new(root, &format!("{run}-{side}"), supabase)?,
+                |cluster| cluster.start(&sh),
+            )?;
             let connection = cluster.urls(&sh)?;
             bootstrap(&sh, &connection)?;
             if let Some(path) = source {
@@ -180,57 +190,94 @@ pub fn run(
         println!("PASS: catalog, required initial rows and schema dump objects are equal");
         phases.insert("objects".to_owned(), "PASS");
         if behavior {
-            let services = Compose::for_comparison(root, &format!("{run}-services"));
-            services.up_services(&sh, &["meilisearch", "seaweedfs"])?;
-            let tested = (|| {
-                for (index, side) in ["a", "b"].iter().enumerate() {
-                    let source = if index == 1 {
-                        candidate.as_deref()
-                    } else {
-                        None
-                    };
-                    run_behavior(
-                        root,
-                        &sh,
-                        &services,
-                        &clusters[index],
-                        &urls[index],
-                        source,
-                        &output.join(side),
-                    )?;
-                }
-                Ok::<_, anyhow::Error>(())
-            })();
-            let cleanup = services.stop(&sh);
-            tested?;
-            cleanup?;
+            let services = register_and_start(
+                &mut services,
+                Compose::for_comparison(root, &format!("{run}-services")),
+                |services| services.up_services(&sh, &["meilisearch", "seaweedfs"]),
+            )?;
+            for (index, side) in ["a", "b"].iter().enumerate() {
+                let source = if index == 1 {
+                    candidate.as_deref()
+                } else {
+                    None
+                };
+                run_behavior(
+                    root,
+                    &sh,
+                    services,
+                    &clusters[index],
+                    &urls[index],
+                    source,
+                    &output.join(side),
+                )?;
+            }
         } else {
             println!("NOT RUN: app-role behavioral suite (add --behavior)");
         }
         Ok::<_, anyhow::Error>(())
     })();
-    for cluster in clusters.iter().rev() {
-        if let Err(err) = cluster.stop(&sh) {
-            eprintln!("comparison cluster cleanup failed: {err:#}");
-            if result.is_ok() {
-                return Err(err);
+    finish_run(
+        result,
+        services
+            .iter()
+            .rev()
+            .map(|service| service.stop(&sh))
+            .chain(clusters.iter().rev().map(|cluster| cluster.stop(&sh))),
+        |passed, cleanup_passed| {
+            phases.insert(
+                "cleanup".to_owned(),
+                if cleanup_passed { "PASS" } else { "FAIL" },
+            );
+            let mut behavior_results = BTreeMap::new();
+            for side in ["a", "b"] {
+                for route in ["direct", "session"] {
+                    let status = std::fs::read_to_string(
+                        output.join(side).join(format!("behavior-{route}.txt")),
+                    )
+                    .unwrap_or_else(|_| "NOT RUN\n".to_owned());
+                    behavior_results.insert(format!("{side}_{route}"), status);
+                }
+            }
+            write_json(
+                &output.join("result.json"),
+                &json!({"passed":passed,"candidate":candidate,"supabase":supabase,"behavior_requested":behavior,"phases":phases,"behavior":behavior_results}),
+            )
+        },
+    )
+}
+
+// Register before starting: a failed Compose up can still have created containers.
+fn register_and_start<T>(
+    resources: &mut Vec<T>,
+    resource: T,
+    start: impl FnOnce(&T) -> Result<()>,
+) -> Result<&T> {
+    resources.push(resource);
+    let resource = resources.last().context("registered resource missing")?;
+    start(resource)?;
+    Ok(resource)
+}
+
+// Consume every stop attempt and always attempt the final record. Retain the original
+// operation error, otherwise the first stop error, otherwise a recording error.
+fn finish_run(
+    result: Result<()>,
+    stops: impl IntoIterator<Item = Result<()>>,
+    record: impl FnOnce(bool, bool) -> Result<()>,
+) -> Result<()> {
+    let mut cleanup = Ok(());
+    for stop in stops {
+        if let Err(error) = stop {
+            eprintln!("comparison resource cleanup failed: {error:#}");
+            if cleanup.is_ok() {
+                cleanup = Err(error);
             }
         }
     }
-    let mut behavior_results = BTreeMap::new();
-    for side in ["a", "b"] {
-        for route in ["direct", "session"] {
-            let status =
-                std::fs::read_to_string(output.join(side).join(format!("behavior-{route}.txt")))
-                    .unwrap_or_else(|_| "NOT RUN\n".to_owned());
-            behavior_results.insert(format!("{side}_{route}"), status);
-        }
-    }
-    write_json(
-        &output.join("result.json"),
-        &json!({"passed":result.is_ok(),"candidate":candidate,"supabase":supabase,"behavior_requested":behavior,"phases":phases,"behavior":behavior_results}),
-    )?;
-    result
+    let cleanup_passed = cleanup.is_ok();
+    let result = result.and(cleanup);
+    let recorded = record(result.is_ok(), cleanup_passed);
+    result.and(recorded)
 }
 
 fn sql_hashes(dir: &Path) -> Result<BTreeMap<String, String>> {
@@ -539,4 +586,86 @@ fn run_behavior(
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failed_database_and_service_starts_remain_registered_for_stop() {
+        for resource in ["database", "services"] {
+            let mut registered = Vec::new();
+            let started = register_and_start(&mut registered, resource, |_| {
+                anyhow::bail!("partial startup failed")
+            })
+            .map(|_| ());
+            let mut stopped = Vec::new();
+            let mut recorded = false;
+            let result = finish_run(
+                started,
+                registered.iter().rev().map(|resource| {
+                    stopped.push(*resource);
+                    Ok(())
+                }),
+                |passed, cleanup_passed| {
+                    assert!(!passed);
+                    assert!(cleanup_passed);
+                    recorded = true;
+                    Ok(())
+                },
+            );
+            assert_eq!(result.unwrap_err().to_string(), "partial startup failed");
+            assert_eq!(stopped, [resource]);
+            assert!(recorded);
+        }
+    }
+
+    #[test]
+    fn stop_failures_attempt_all_resources_and_write_failed_result() -> Result<()> {
+        let output = std::env::temp_dir().join(format!("sql-compare-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir(&output)?;
+        let mut attempted = Vec::new();
+        let result = finish_run(
+            Ok(()),
+            ["services", "b", "a"].into_iter().map(|resource| {
+                attempted.push(resource);
+                match resource {
+                    "services" => anyhow::bail!("first stop failed"),
+                    "b" => anyhow::bail!("second stop failed"),
+                    _ => Ok(()),
+                }
+            }),
+            |passed, cleanup_passed| {
+                write_json(
+                    &output.join("result.json"),
+                    &json!({"passed":passed,"cleanup_passed":cleanup_passed}),
+                )
+            },
+        );
+        let recorded: Value = serde_json::from_slice(&std::fs::read(output.join("result.json"))?)?;
+        std::fs::remove_file(output.join("result.json"))?;
+        std::fs::remove_dir(output)?;
+        assert_eq!(result.unwrap_err().to_string(), "first stop failed");
+        assert_eq!(attempted, ["services", "b", "a"]);
+        assert_eq!(recorded, json!({"passed":false,"cleanup_passed":false}));
+        Ok(())
+    }
+
+    #[test]
+    fn original_failure_survives_cleanup_and_recording_failures() {
+        let mut recorded = false;
+        let result = finish_run(
+            Err(anyhow::anyhow!("comparison failed")),
+            [Err(anyhow::anyhow!("stop failed"))],
+            |passed, cleanup_passed| {
+                assert!(!passed);
+                assert!(!cleanup_passed);
+                recorded = true;
+                anyhow::bail!("record failed")
+            },
+        );
+        assert_eq!(result.unwrap_err().to_string(), "comparison failed");
+        assert!(recorded);
+    }
 }
