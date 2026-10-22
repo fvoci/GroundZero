@@ -54,4 +54,13 @@ DB·Docker 실행은 B가 전담한다. 이 작업용으로 새로 만든 프로
 6. 별도 구현에서만 실제 마이그레이션 교체를 검토한다. 본 PR은 그 전 단계다.
 
 객체 차이와 동작 시험 결과는 서로 대체하지 않는다. 실행하지 않은 환경·경로는 `NOT RUN`,
-비교 실패는 `FAIL`로 기록한다. 최종 판단과 실행 근거는 작업자 결과를 모은 뒤 갱신한다.
+비교 실패는 `FAIL`로 기록한다.
+
+## 검토 자료
+
+- [최종 객체·제거/유지 근거](analysis-a.md), [객체와 호출 목록](inventory/README.md)
+- [후보 SQL과 적용 조건](candidate/README.md)
+- [비교 명령·정규화·검증 한계](verification/README.md)
+- [설치·역할·환경](environment.md), [session 상태](environment/session-state.md), [Cloud 후속 계획](environment/cloud-plan.md)
+- [종합 판단·실제 시험 대응·전환 순서](synthesis.md)
+- 검토용 Draft PR: [#92](https://github.com/fvoci/GroundZero/pull/92)

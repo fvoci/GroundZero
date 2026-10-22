@@ -1,0 +1,53 @@
+# 종합 판단과 전환 조건
+
+현재 결론은 **먼저 해결할 항목 있음**이다. 공통 조사 기준은
+`cb65cc31156c0fd8d28cf856bc132d4a506c8885`이며, 후보 검증과 최종 main 확정은 별개의 조건이다.
+실제 SQL 교체·삭제·번호 재정리, 기존 DB 이력 변경, main 병합·태그·배포는 수행하지 않는다.
+
+## 채택한 설계와 보류한 제안
+
+| 검토 항목                                | 종합 판단                                                                                                                                                                  |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 누적 SQL의 단순 연결 대 최종 정의 재구성 | 실제 적용된 카탈로그의 최종 정의를 채택했다. 표·함수는 마지막 형태로 한 번 만들고, 객체 의존 순서를 보존한다. 93개 적용 이력은 원본 경로에 그대로 남긴다.                  |
+| 과거 데이터 보정 SQL                     | 빈 설치에 불필요한 과거 행 UPDATE·전환용 DROP을 후보에 재생하지 않는다. 그 의미인 현재 CHECK·FK·번호·권한·검색 갱신 동작은 유지한다. 기존 데이터 이관으로 해석하지 않는다. |
+| UUIDv7와 환경 지원                       | 앱이 UUIDv7을 제공한다. PostgreSQL/Supabase의 제공 기능과 bootstrap 역할 어댑터를 유지하고 DB UUID 생성 fallback을 추가하지 않는다.                                        |
+| SQLx 이력                                | 후보 자체의 진짜 이력을 만든다. 누적 이력 행과 다름을 명시하며 이력 테이블 구조는 비교한다. 기존 백업의 다른 버전 복구를 자동 허용하지 않는다.                             |
+| 객체 비교 대 앱 시험                     | 각각 통과해야 한다. 앱 시험 성공으로 카탈로그 차이를 덮지 않으며, 카탈로그 일치로 권한·경합 동작을 추정하지 않는다.                                                        |
+| 설치 역할 guard(E1–E3)                   | 기존 구성의 별도 개선 제안이다. 후보가 기존보다 권한을 넓히는 회귀와 구분하며 이 준비에서 제품 동작을 바꾸지 않는다.                                                       |
+| P-24/25/26/28/29/30/31/35                | 미승인 정책은 현재 의미를 보존한다. 제안을 승인된 새 요구로 올리지 않는다. 향후 채택 시 영향을 받은 SQL과 시험을 추가 갱신해야 한다.                                       |
+| Cloud                                    | 기존 TLS/읽기 전용 성공과 제품 설치·RLS 검증을 분리한다. 원격 DB 변경은 실행하지 않는다.                                                                                   |
+
+권한·업무 규칙·경합/409·데이터 정합성의 최종 판단은 기존 서버와 DB에 남는다.
+이번 변경은 프런트엔드를 수정하지 않으며, 화면 좌표·미리보기·입력 안내를 서버로 옮기는 변경도 없다.
+
+## 실제 앱 역할 시험과 요구사항 대응
+
+아래는 비교 도구가 양쪽에 실행하는 기존 Rust 시험의 대표 경로다. 별도 모의 구현으로 대체하지 않는다.
+전체 실행 여부·통과 수는 실행 결과에 따르며 이 표 자체는 성공 증거가 아니다.
+
+| 요구                          | 기존 시험 경로와 대표 시험                                                                                                                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 생성·저장·재열기·멱등성       | `first_flow.rs`: `document_write_save_reopen_with_revisions`, `workspace_create_is_idempotent_and_listed`                                                                                                            |
+| 워크스페이스/사용자 격리      | `first_flow.rs`: `other_user_cannot_see_or_change_documents`, `rls_hides_rows_from_other_users_under_app_role`                                                                                                       |
+| 개인 문서와 관리자 경계       | `sharing.rs`: `shared_personal_note_does_not_reach_the_grantees_workspace_admin`, `private_team_document_is_visible_to_creator_admin_and_shares_only`                                                                |
+| 즉시 권한 철회·멤버 제거 경합 | `sharing.rs`: `share_permissions_and_revocation_take_effect_immediately`; `members.rs`: `removed_member_loses_access_and_team_documents_remain`, `adding_a_member_who_is_being_removed_does_not_survive_the_removal` |
+| 오래된 수정·승인과 409        | `first_flow.rs`: `save_retry_is_idempotent_and_stale_save_conflicts`; `schedule.rs`: `two_approvals_of_the_same_preview_save_once`, `link_edits_from_a_stale_view_conflict_instead_of_overwriting`; `db_errors.rs`   |
+| 반복 일정·업무·잠금 순서      | `recurrence.rs`: `event_rule_saves_from_a_stale_rule_conflict`, `the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves`, DST 회차 시험                                                               |
+| 개인 시간 기록·범위 검증      | `time_tracking.rs`: `one_timer_per_user_survives_pause_and_stays_private`, `a_running_timer_keeps_its_pauses_inside_its_span`                                                                                        |
+| 검색 색인·권한 재검사         | `search.rs`의 실제 DB·Meilisearch 경로 및 `worker.rs`                                                                                                                                                                |
+| UUID 공급 계약                | `ids.rs`: `functions_use_the_ids_the_server_passes_and_never_fill_in_missing_ones`, `tables_have_no_id_default_and_accept_only_uuidv7`                                                                               |
+| 연결 반환 뒤 사용자 문맥      | `db_context.rs`: `user_context_does_not_outlive_commit_or_rollback`; Supabase session 단계의 일반 앱 URL로 실행                                                                                                      |
+| 백업·복구와 새 DB             | `backup.rs` 및 `common::fresh_database`: 후보도 동일 후보 SQLx 이력으로 준비. session 단계에서도 새 DB는 직접 연결이라는 한계를 표시                                                                                 |
+
+파일 위치는 모두 기준 SHA의 `crates/server/tests/`다. OIDC·Cloud·브라우저 검증 범위는
+각 실행 기록의 NOT RUN 항목을 따른다. session 풀 반환 시 임의 세션 상태 전체가 자동 초기화된다고 주장하지 않는다.
+
+## 실제 전환 순서
+
+1. #69와 D-99/W21 후속의 완료를 확인하고 최종 main SHA를 기록한다. 공통 조사 기준과의 델타만 다시 검토한다.
+2. SQL·호출자·seed·설치·권한 계약에 영향이 있으면 후보와 대응 시험을 갱신한다. 웹 문구만 바뀌었으면 그 근거를 기록한다.
+3. 최종 후보의 PostgreSQL·셀프호스트 Supabase 직접/session 결과, 객체 차이 0건, 검사 변조 탐지, 필수 검사를 확인한다.
+4. 새 설치 후보의 검증과 별개로 기존 개발 데이터 보존·이관 및 백업/SQLx 이력 전환 방식을 결정한다. 기존 DB를 자동 초기화하지 않는다.
+5. 별도 구현 PR에서만 실제 마이그레이션 경로 교체와 설치 문서 전환을 검토한다. 이 Draft의 병합·태그·배포는 이번 작업에 포함하지 않는다.
+
+실행 결과와 CodeRabbit 처리 상태는 Draft PR 및 `verification/` 근거에 갱신한다.
