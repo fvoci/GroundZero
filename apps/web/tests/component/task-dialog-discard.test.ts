@@ -305,6 +305,26 @@ describe('closing the task dialog with unsaved input', () => {
     expect(back).toHaveBeenCalledTimes(1);
   });
 
+  // 저장하는 동안 칸을 고칠 수 있었는데, 저장되면 폼을 저장된 판으로 다시 채워(`fill`) 그사이 친 글이 말없이 사라졌다
+  // (일정 대화상자의 같은 지적, CodeRabbit #59). 보내는 동안은 폼 칸을 잠근다.
+  it('locks the fields while saving so a late result cannot drop what I type meanwhile', async () => {
+    await openBoard();
+    const late = deferred<{ kind: 'updated'; task: TaskDetailView }>();
+    vi.spyOn(api, 'updateTask').mockReturnValue(late.promise);
+    await type('task-title', '새 제목');
+    const save = document.getElementById('task-save');
+    if (save === null) throw new Error('task-save');
+    await fireEvent.click(save);
+    for (const id of ['task-title', 'task-description', 'task-estimate', 'task-tags'])
+      expect(field(id).disabled).toBe(true);
+    late.resolve({ kind: 'updated', task: task('t1', { title: '새 제목', version: 3 }) });
+    await screen.findByText('저장했습니다.');
+    await waitFor(() => {
+      expect(field('task-title').disabled).toBe(false);
+    });
+    expect(field('task-title').value).toBe('새 제목');
+  });
+
   it('asks while a save is still on its way and keeps the dialog when I keep editing', async () => {
     const { back } = await openBoard();
     const late = deferred<{ kind: 'updated'; task: TaskDetailView }>();

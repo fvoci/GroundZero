@@ -372,6 +372,8 @@
   });
 
   const canEdit = $derived(task !== undefined && task.access !== 'read');
+  // 보내는 동안은 폼 칸을 잠근다: 저장되면 폼을 저장된 판으로 다시 채우므로(`fill`) 그사이 친 글이 말없이 사라졌다.
+  const locked = $derived(!canEdit || busy);
 
   function currentInput(): TaskInput | undefined {
     if (form === undefined) return undefined;
@@ -798,14 +800,14 @@
       >
         <div class="col-span-2 flex flex-col gap-1">
           <Label for="task-title">{m.tasks_title()}</Label>
-          <Input id="task-title" bind:value={f.title} disabled={!canEdit} maxlength={200} />
+          <Input id="task-title" bind:value={f.title} disabled={locked} maxlength={200} />
         </div>
         <div class="flex min-w-0 flex-col gap-1">
           <span class="text-sm font-medium" id="task-status-label">{m.tasks_status()}</span>
           <Select.Root
             type="single"
             value={f.status}
-            disabled={!canEdit}
+            disabled={locked}
             onValueChange={(v: string) => {
               const s = TASK_STATUSES.find((x) => x === v);
               if (s !== undefined) f.status = s satisfies TaskStatus;
@@ -826,7 +828,7 @@
           <Select.Root
             type="single"
             value={f.priority}
-            disabled={!canEdit}
+            disabled={locked}
             onValueChange={(v: string) => {
               const p = TASK_PRIORITIES.find((x) => x === v);
               if (p !== undefined) f.priority = p satisfies TaskPriority;
@@ -853,14 +855,14 @@
         </div>
         <div class="flex min-w-0 flex-col gap-1">
           <Label for="task-due">{m.tasks_due_date()}</Label>
-          <Input id="task-due" type="date" bind:value={f.due_date} disabled={!canEdit} />
+          <Input id="task-due" type="date" bind:value={f.due_date} disabled={locked} />
         </div>
         <div class="col-span-2 flex flex-col gap-1">
           <Label for="task-description">{m.tasks_description()}</Label>
           <textarea
             id="task-description"
             bind:value={f.description}
-            disabled={!canEdit}
+            disabled={locked}
             rows={3}
             class="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           ></textarea>
@@ -871,18 +873,18 @@
             id="task-estimate"
             inputmode="numeric"
             bind:value={estimateText}
-            disabled={!canEdit}
+            disabled={locked}
           />
         </div>
         <div class="flex min-w-0 flex-col gap-1">
           <Label for="task-tags">{m.tasks_tags()}</Label>
-          <Input id="task-tags" bind:value={tagsText} disabled={!canEdit} />
+          <Input id="task-tags" bind:value={tagsText} disabled={locked} />
         </div>
         <div class="col-span-2 flex items-center gap-2">
           <Checkbox
             id="task-milestone"
             checked={f.milestone}
-            disabled={!canEdit}
+            disabled={locked}
             onCheckedChange={(v) => {
               f.milestone = v === true;
               if (f.milestone) f.start_date = null;
@@ -903,7 +905,7 @@
                   <Checkbox
                     id={`assignee-${person.user_id}`}
                     checked={f.assignee_ids.includes(person.user_id)}
-                    disabled={!canEdit}
+                    disabled={locked}
                     onCheckedChange={(v) => {
                       toggleAssignee(person.user_id, v === true);
                     }}
