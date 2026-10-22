@@ -78,6 +78,14 @@ CHECK (length(btrim(name)) >= 1 AND length(btrim(name)) <= 255 AND name !~ '[\x0
 
 4. 일반 저장소·검색 환경 변수가 외부에서 상속될 여지를 검토 후 고정했다. 이전 실행의 실제 관련 환경 변수는 [값 없이 기록한 점검](diagnostics/inherited-environment.txt)에서 모두 unset이었다. 최종 A/B는 수정한 도구로 다시 실행했으며 기본 저장소 local, 검색·S3는 이 실행의 격리 서비스였다. 이전 실행의 성공을 최종 행위 근거로 재사용하지 않았다.
 
+## 후속 정리 실패 경로 검증
+
+코드 검토 후 정리 전용 수정 `60e56dbbff9c13e1935b0ee47692fc5214171ca5`를 추가했다. DB·서비스를 시작 전에 등록해 부분 시작 실패도 정지 대상으로 유지한다. 정지 실패가 생겨도 나머지 자원을 모두 시도하고 `result.json`에 `cleanup: FAIL`, `passed: false`를 기록한다. 원래 작업 오류가 있으면 보존하며, 없으면 첫 정지 오류를 반환한다.
+
+`cargo test -p xtask sql_compare::tests --locked`는 3/3 PASS다. DB·서비스 시작 실패의 등록 유지, 연속된 두 정지 실패 후 나머지 자원 시도와 실패 결과 파일 기록, 작업·정지·기록이 함께 실패했을 때 원래 오류 보존을 확인했다. `cargo clippy -p xtask --all-targets --locked -- -D warnings`도 PASS다.
+
+수정한 소스로 `cargo xtask sql-compare --output target/sql-compare-cleanup-aa`를 실행해 A/A 객체 차이 0, 변조 검출·원복 4/4, `cleanup: PASS`를 확인했다. [실행 입력](runs/cleanup-control/inputs.json), [결과](runs/cleanup-control/result.json), [정지 로그](runs/cleanup-control/orchestration.txt)를 보존했다. 위의 여섯 행동 경로는 표에 명시한 기존 소스의 결과이며, 자원 수명 관리만 바꾼 이 수정 후 다시 실행하지 않았다.
+
 ## 실행 자원과 보존
 
 첫 A/A 진단에는 보존 요청과 어긋난 정리 명령이 한 번 실행됐다. 수정 전 바이너리가 다음 전용 프로젝트의 B PostgreSQL 컨테이너와 네트워크를 삭제했다.
@@ -88,7 +96,7 @@ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c1920
 
 [원본 전체 로그](diagnostics/initial-control-cleanup.txt) 31행이 명령이며 34–37행이 이 컨테이너와 네트워크의 제거 기록이다. 이 로그의 생성 시각은 `2026-10-22T22:16:22.128483746+09:00`, 마지막 수정 시각은 `2026-10-22T22:16:46.428293994+09:00`이다. 로그에 행별 시각이 없고 Docker event가 남아 있지 않아 이 범위보다 정확한 제거 시각은 확인하지 못했다. [유효 Compose 저장소 구성](diagnostics/initial-control-postgres-storage.json)은 `volumes: null`, `tmpfs: ["/var/lib/postgresql"]`이다. 이 프로젝트에는 이름 붙은 DB 볼륨이 없었으며 공유 컨테이너·DB·볼륨은 대상이 아니었다.
 
-이후 도구는 해당 실행 프로젝트에 `stop`만 사용하도록 수정했다. 진단 실행·수동 baseline export·최종 실행의 남은 전용 컨테이너 37개는 모두 exited이며 이름 붙은 볼륨 5개는 남아 있다. 자원 상태와 로그 감사 결과는 [컨테이너 처리 기록](container-disposition.txt)에 있다. 공유 개발 자원에는 정리 명령을 내리지 않았다. 중지한 DB의 tmpfs 내용은 사라지므로 DB 자체를 보존했다고 주장하지 않는다.
+이후 도구는 해당 실행 프로젝트에 `stop`만 사용하도록 수정했다. 진단 실행·수동 baseline export·최종 실행 종료 시 남은 전용 컨테이너는 37개였고, 후속 A/A를 포함한 39개 모두 exited다. 이름 붙은 볼륨 5개는 남아 있다. 자원 상태와 로그 감사 결과는 [컨테이너 처리 기록](container-disposition.txt)에 있다. 공유 개발 자원에는 정리 명령을 내리지 않았다. 중지한 DB의 tmpfs 내용은 사라지므로 DB 자체를 보존했다고 주장하지 않는다.
 
 PR에 보존한 것은 입력 해시, 결과·차이·변조 JSON, 환경 카탈로그, 전체 행동 로그, 각 실행의 `orchestration.txt` 및 위 진단 증거다. 텍스트 로그는 줄 끝 공백과 마지막 빈 줄만 정리했으며 내용과 명령은 보존했다. 가공 전 로컬 실행 로그 해시는 [원본 로그 해시](diagnostics/original-orchestration-logs.sha256)에 있다. 중복된 전체 원본 카탈로그·덤프·이력은 이 작업 공간의 `target/sql-compare-postgres-final/{a,b}/`, `target/sql-compare-supabase-final/{a,b}/`에만 남겼다. 경로와 SHA-256은 각 실행의 `local-artifacts.sha256`에 있으며 **이 로컬 파일 자체는 PR에 포함되지 않는다**. 최초 baseline export는 로컬 `target/sql-compare-baseline-export/`에 있다.
 

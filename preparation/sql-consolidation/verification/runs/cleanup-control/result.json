@@ -1,0 +1,21 @@
+{
+  "behavior": {
+    "a_direct": "NOT RUN\n",
+    "a_session": "NOT RUN\n",
+    "b_direct": "NOT RUN\n",
+    "b_session": "NOT RUN\n"
+  },
+  "behavior_requested": false,
+  "candidate": null,
+  "passed": true,
+  "phases": {
+    "a_install": "PASS",
+    "a_snapshot": "PASS",
+    "b_install": "PASS",
+    "b_snapshot": "PASS",
+    "cleanup": "PASS",
+    "objects": "PASS",
+    "self_test": "PASS"
+  },
+  "supabase": false
+}

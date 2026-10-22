@@ -103,3 +103,13 @@ target/sql-compare-aa2.log:31:$ docker compose --project-name sqlprep-b-fvoci-sq
 target/sql-compare-aa2.log:34:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c209aa7737a489fb162a682f5d-a --file deploy/compose.test.yaml stop
 target/sql-compare-aa-final.log:31:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c86274a2912d96ffe4aa22eb-b --file deploy/compose.test.yaml stop
 target/sql-compare-aa-final.log:34:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c4c86274a2912d96ffe4aa22eb-a --file deploy/compose.test.yaml stop
+
+Cleanup-only review follow-up: target/sql-compare-cleanup-aa, source 60e56dbbff9c13e1935b0ee47692fc5214171ca5
+Captured UTC: 2026-10-22T13:33:21Z
+Task-owned container total=39
+exited=39
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d055d27304872ef1b1ef5dc54f-a-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d055d27304872ef1b1ef5dc54f-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d055d27304872ef1b1ef5dc54f-b-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d055d27304872ef1b1ef5dc54f-b
+Retained task-owned named volumes=5
+31:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d055d27304872ef1b1ef5dc54f-b --file deploy/compose.test.yaml stop
+34:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d055d27304872ef1b1ef5dc54f-a --file deploy/compose.test.yaml stop

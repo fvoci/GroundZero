@@ -19,7 +19,7 @@ cargo xtask sql-compare \
 
 출력 디렉터리는 새 경로여야 한다. 후보는 SQLx 규칙의 `번호_설명.sql` 파일로 구성한다. 양쪽 모두 기존 `db bootstrap`을 실행한다. A에는 기존 `db migrate`, B에는 후보 디렉터리를 읽은 실제 SQLx `Migrator`를 적용한다. B에 누적 이력을 복사하거나 과거 SQL을 재실행하지 않는다. 후보는 SQLx가 같은 트랜잭션에서 `_sqlx_migrations`를 기록할 수 있게 마지막에 `SET LOCAL search_path = fvoci`를 둔다.
 
-Compose 파일·이미지·테스트 자격 증명은 기존 설정을 재사용한다. 프로젝트 이름은 체크아웃 해시와 실행 UUID를 포함하며 A/B/검색·S3가 서로 다르다. 호스트 포트는 동적 루프백 포트다. 종료 시 생성한 프로젝트만 `stop`한다. 컨테이너·이름 붙은 볼륨은 보존하고 `down`·`prune`을 호출하지 않는다. 기존 Compose DB는 tmpfs이므로 **컨테이너를 정지하면 DB의 tmpfs 데이터 자체는 사라진다**. 그 전에 카탈로그·덤프·로그를 출력 경로에 저장한다. 개인 개발 DB 또는 Cloud DB 주소는 받지 않는다.
+Compose 파일·이미지·테스트 자격 증명은 기존 설정을 재사용한다. 프로젝트 이름은 체크아웃 해시와 실행 UUID를 포함하며 A/B/검색·S3가 서로 다르다. 호스트 포트는 동적 루프백 포트다. 종료 시 생성한 프로젝트만 `stop`한다. 시작 전에 정지 대상을 등록해 부분 시작 실패도 처리하며, 한 정지가 실패해도 나머지 정지와 `result.json` 기록을 시도한다. 정지 실패는 `cleanup: FAIL`과 `passed: false`로 남긴다. 컨테이너·이름 붙은 볼륨은 보존하고 `down`·`prune`을 호출하지 않는다. 기존 Compose DB는 tmpfs이므로 **컨테이너를 정지하면 DB의 tmpfs 데이터 자체는 사라진다**. 그 전에 카탈로그·덤프·로그를 출력 경로에 저장한다. 개인 개발 DB 또는 Cloud DB 주소는 받지 않는다.
 
 과거 실행에는 예외가 있다. 2026-10-22 첫 A/A 진단에서 수정 전 바이너리가 해당 실행 B 프로젝트에 `down --volumes --remove-orphans`를 호출해 전용 PostgreSQL 컨테이너와 네트워크를 삭제했다. 이 DB는 tmpfs였고 이름 붙은 볼륨은 없었다. 공유 컨테이너·볼륨은 대상이 아니었다. 이후 실행은 위의 `stop` 방식으로 수정했다. 정확한 명령과 삭제 로그는 [원본 진단 로그](diagnostics/initial-control-cleanup.txt), 구성 증거는 [저장소 구성](diagnostics/initial-control-postgres-storage.json), 실행별 처리는 [결과 보고서](results.md)에 남겼다.
 
