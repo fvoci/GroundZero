@@ -1,6 +1,12 @@
 # SQL 통합 준비: 설치·DB 역할·연결 환경
 
-상태: 준비 문서. 제품 코드·SQL·설치 계약 변경 없음. 작성일 2026-10-22.
+상태: 준비 문서. 제품 코드·SQL 변경 없음. 작성일 2026-10-22.
+
+사용자의 추가 지시에 따라 **Supabase Cloud의 권한 제약에서도 동작하는 표준 PostgreSQL 공통 구현**을
+설계·검증 대상으로 삼는다. 일반 PostgreSQL과 Supabase의 제품 SQL을 따로 유지하지 않고, 불가피한 차이는
+초기 DB 준비와 접속 설정으로 제한한다. Supabase Auth·Storage·Realtime·Data API를 제품 의존성으로 추가하지
+않는다. 이 방향은 승인되었지만 실제 Cloud DB의 변경·역할/비밀번호 조작은 계속 금지되어 있다.
+정확한 공통 권한 조건과 로컬 재현의 한계는 [공통 PostgreSQL 계약](environment/common-postgres.md)에 있다.
 
 기준은 `cb65cc31156c0fd8d28cf856bc132d4a506c8885`이다. 아래 저장소 파일의 행 번호는 모두 이 SHA의
 행 번호다. 작업 브랜치는 `fvoci/sql-prep-c`이며, #91은 기준에 포함되어 있다. #69의
@@ -20,11 +26,15 @@ RLS 정책·정의자 함수·역할 멤버십을 직접 편집하는 설치 절
 | 기본 자체 PostgreSQL                 | 기본 Compose와 비밀 값. Compose가 PG18.3·`fvoci` DB를 만든다                                 | 관리자 `fvoci`, DB `fvoci`; `fvoci_migrator`·`fvoci_app`은 bootstrap 생성                   | 관리자는 초기 이미지의 관리자, migrate는 `fvoci_migrator`. 세 URL을 Compose가 조합                                                             | `fvoci_app` 직접 연결. 기존 지원 경로; 통합 후보의 새 설치는 B의 격리 시험에서 다시 확인                                   |
 | 기존 자체 PostgreSQL에 바이너리 설치 | 미리 존재하는 대상 DB, 접근 가능한 관리자, TLS/네트워크. bootstrap은 DB 자체를 만들지 않는다 | 관리자 이름·DB 이름은 URL에서 지정 가능. 앱·migrator 역할과 `fvoci` 스키마 이름은 고정      | 새 역할을 만들 수 있는 관리자와 대상 DB의 스키마 생성·CONNECT 부여 권한. 기존 역할은 ADMIN OPTION 또는 superuser 필요. migrate는 스키마 소유자 | `DATABASE_URL`로 `fvoci_app` 직접 연결. 임의 DB 이름은 코드가 수용하지만 새 통합본으로 별도 설치 시험 필요                 |
 | 셀프호스트 Supabase                  | D-88에서 고정한 공식 구성(PG17.6), DB 네트워크. GroundZero 전용 Supabase Compose는 아직 없음 | 관리자 `postgres`는 비-superuser; 기본 DB `postgres`. 역할은 동일                           | 현 지원 계약은 관리자·migrator 모두 직접 연결. 기존 역할의 ADMIN OPTION과 DB 권한을 확인                                                       | 앱 직접 연결 또는 Supavisor session. 공식 시험 테넌트는 `postgres` 한 DB만 라우팅. 앱 사용자 표기는 `fvoci_app.<tenant>`   |
-| Supabase Cloud                       | 승인된 전용 시험 프로젝트·대상 연결·TLS CA·필요 역할 권한을 먼저 확인하는 후속 계획          | 기존 읽기 시험은 `postgres` DB와 Dashboard의 session 사용자. 앱·migrator 접속 성공은 미확인 | bootstrap·마이그레이션·역할/비밀번호 변경 모두 NOT RUN. D-88의 제품 지원 밖                                                                    | session 연결·TLS·읽기 전용 `SELECT 1`만 기존 성공. Cloud 앱·RLS·풀 재사용은 미확인. [후속 계획](environment/cloud-plan.md) |
+| Supabase Cloud                       | 공통 구현의 설계 대상. 전용 시험 프로젝트·대상 연결·TLS CA·실제 역할 권한을 확인할 후속 계획 | 기존 읽기 시험은 `postgres` DB와 Dashboard의 session 사용자. 앱·migrator 접속 성공은 미확인 | 같은 bootstrap·제품 SQL이 목표. 실제 bootstrap·마이그레이션·역할/비밀번호 변경은 모두 NOT RUN                                                  | session 연결·TLS·읽기 전용 `SELECT 1`만 기존 성공. Cloud 앱·RLS·풀 재사용은 미확인. [후속 계획](environment/cloud-plan.md) |
 
 근거: `deploy/compose.selfhost.yaml:20–45`, `docs/self-hosting-supabase.md:11–22,38–72`,
 `crates/server/src/db/admin.rs:244–281,285–340`, `xtask/src/compose.rs:189–220`.
 PG17/18이 현재 검증 대상이며, 더 낮은 버전 지원을 일반적인 PostgreSQL 지원 문구로 추론하지 않는다.
+여기서 PG17은 기존 셀프호스트 Supabase 대상을 가리킨다. 공통 기본 함수의 PG17 제공 근거가 일반 PG17 전체 지원을
+추가하는 것은 아니다. 기존 환경별 등가성 결과는 검토한 통합 작업 `a32d8bf`의
+`preparation/sql-consolidation/verification/results.md`에 있으며, 제한된 설치 관리자 시험과 실제 Cloud 시험을
+대신하지 않는다.
 
 ## 2. 역할과 기존 설정 계약
 
@@ -84,10 +94,10 @@ Cloud에서도 같다고 가정하지 않는다.
 | E4  | 통합 후보 검증에 DB 이름 `fvoci`/`postgres` 밖의 이름, 실제 앱 로그인 역할, 소유권·ACL·RLS·정의자 설정, 한 연결 강제 재사용을 추가                                        | B의 격리 검증과 협의. 새 테스트 DB만 사용하며 공유 DB reset 없음. [세션 검증 범위](environment/session-state.md)                                                                                           |
 
 E1–E4는 D-08/D-88의 기존 분리를 실제로 확인하거나 실패 설명을 개선하는 기술 제안이다. 스키마 통합 승인이나
-Cloud 제품 지원을 선행하지 않는다. E1–E3은 기존 구현의 보완 후보이며, 통합 후보 때문에 생긴 회귀가 입증되지
+실제 Cloud 동작의 입증을 대신하지 않는다. E1–E3은 기존 구현의 보완 후보이며, 통합 후보 때문에 생긴 회귀가 입증되지
 않은 상태에서 SQL 통합의 새 차단 조건으로 삼지 않는다. 후보 검증은 현재 지원하는 역할·환경 계약을 보존하는 데
-초점을 둔다. 임의 역할 이름 지원, 독립 설치를 위한 역할 네임스페이스, Cloud 지원 확대,
-transaction pooler 지원, 기존 데이터 삭제·이전, 플랫폼 권한 변경은 별도 범위/정책 판단이다.
+더해 승인된 Cloud 고려 공통 설계의 제한권한 조건을 검증한다. 임의 역할 이름 지원, 독립 설치를 위한 역할
+네임스페이스, transaction pooler 지원, 기존 데이터 삭제·이전, 플랫폼 권한 변경은 별도 범위/정책 판단이다.
 
 ## 5. 관리형 객체 보호와 증거 경계
 
@@ -107,5 +117,7 @@ C 작업자가 확인한 것은 기준 소스, 기존 문서 기록, 공식 상�
 C는 DB 연결·새 통합본 설치·역할 변경·컨테이너 실행·Cloud dispatch를 수행하지 않았다. 이 NOT RUN 표기는
 C 자신의 실행 범위이며, B가 별도로 진행하는 후보 설치·등가성 검증의 실행 상태를 뜻하지 않는다. 후보 검증의
 최종 상태는 B의 대상 SHA·실행 결과로 판정한다. Cloud 변경 시험은 계속 PLAN ONLY다.
+로컬 제한권한 시험이 통과해도 Cloud의 관리 확장·이벤트 트리거·네트워크·인증·pooler 버전을 재현했다고 해석하지
+않는다. 공통 복구의 `session_replication_role` 요구는 별도로 확인할 권한·시험 항목이며 기능을 제외하는 결정이 아니다.
 구체적인 연결 반환 동작은 [세션 상태 문서](environment/session-state.md),
 Cloud의 관측/미확인 항목과 실행 승인 전 계획은 [Cloud 계획](environment/cloud-plan.md)에 있다.
