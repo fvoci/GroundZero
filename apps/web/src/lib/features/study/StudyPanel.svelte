@@ -1,6 +1,8 @@
 <script lang="ts">
   // 스터디 계획(D-36): 계획 단위(교육과정·챕터·단계, 쪽·문제·분 분량, 공통 계획일)와 내 진행, 계획 대비 진행·남은
   // 분량, 밀린 단위 재배치(내가 고른 시작일·하루 단위 수), 함께 하는 사람의 진행 집계.
+  import { tick } from 'svelte';
+
   import type {
     EpisodeStatus,
     StudyParticipantView,
@@ -76,6 +78,25 @@
   });
   /** 공통 정보를 고치는 단위와, 고치기를 열 때(또는 마지막으로 확인할 때) 읽은 그 단위. */
   let editingUnit = $state<StudyUnitView | undefined>(undefined);
+  /**
+   * 지우기를 한 번 더 묻는 단위. 단위를 지우면 서버가 모든 참여자의 그 단위 진행과 개인 메모(본인만 읽는다)까지
+   * 지우고 되돌릴 수 없어, 한 번에 지우지 않고 그 영향을 알린 뒤 지운다.
+   */
+  let confirmingDelete = $state<string | undefined>(undefined);
+  let confirmDeleteButton = $state<HTMLButtonElement | null>(null);
+
+  async function askDelete(id: string): Promise<void> {
+    confirmingDelete = id;
+    await tick();
+    confirmDeleteButton?.focus();
+  }
+
+  /** 지우기를 그만둔다. 묻는 칸이 초점과 함께 사라지므로 그 단위의 지우기 단추로 초점을 돌려준다. */
+  async function cancelDelete(id: string): Promise<void> {
+    confirmingDelete = undefined;
+    await tick();
+    document.getElementById(`unit-delete-${id}`)?.focus();
+  }
   let shared = $state<UnitDraft & { number: number | null }>({
     number: null,
     title: '',
@@ -417,13 +438,37 @@
                   editUnit(u);
                 }}>{m.study_edit()}</Button
               >
-              <Button
-                size="sm"
-                variant="ghost"
-                onclick={() =>
-                  void run(() => api.deleteStudyUnit(u.id), m.study_deleted({ title: u.title }))}
-                >{m.study_delete()}</Button
-              >
+              {#if confirmingDelete !== u.id}
+                <Button
+                  id={`unit-delete-${u.id}`}
+                  size="sm"
+                  variant="ghost"
+                  aria-label={m.study_delete_aria({ title: u.title })}
+                  onclick={() => void askDelete(u.id)}>{m.study_delete()}</Button
+                >
+              {:else}
+                <span class="flex flex-wrap items-center gap-1 text-sm">
+                  <span id={`unit-delete-warning-${u.id}`}>{m.study_delete_confirm()}</span>
+                  <!-- 초점을 받는 확인 단추가 어느 단위를 지우는지 말하게 한다(회차 지우기와 같다). -->
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    bind:ref={confirmDeleteButton}
+                    aria-label={m.study_delete_aria({ title: u.title })}
+                    aria-describedby={`unit-delete-warning-${u.id}`}
+                    onclick={() => {
+                      confirmingDelete = undefined;
+                      void run(
+                        () => api.deleteStudyUnit(u.id),
+                        m.study_deleted({ title: u.title }),
+                      );
+                    }}>{m.study_delete()}</Button
+                  >
+                  <Button size="sm" variant="ghost" onclick={() => void cancelDelete(u.id)}
+                    >{m.common_cancel()}</Button
+                  >
+                </span>
+              {/if}
             {/if}
           </div>
           {#if editingUnit?.id === u.id}

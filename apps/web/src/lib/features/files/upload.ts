@@ -155,6 +155,8 @@ async function withRetry(send: () => Promise<void>, signal?: AbortSignal): Promi
 export async function uploadFile(
   file: File,
   opts: {
+    /** 올리기를 시작한 화면의 사용자 id(서버가 세션과 비교한다. 만료된 업로드를 다시 시작할 때도 같은 값). */
+    expectedUser: string;
     target?: FileTarget;
     fileId?: string;
     note?: string;
@@ -167,6 +169,7 @@ export async function uploadFile(
   const key = `${where}|${file.name}|${String(file.size)}|${String(file.lastModified)}`;
   const start = (): Promise<UploadView> =>
     api.createUpload({
+      expectedUser: opts.expectedUser,
       requestId: remember(key),
       ...(opts.target === undefined ? {} : { target: opts.target }),
       ...(opts.fileId === undefined ? {} : { fileId: opts.fileId }),

@@ -20,6 +20,13 @@ function reason(error: ApiError): string {
       return getLocale() === 'en' ? error.message : m.common_error_bad_request();
     case 'invalid_state':
       return getLocale() === 'en' ? error.message : m.common_error_invalid_state();
+    case 'account_changed':
+      return m.common_error_account_changed();
+    case 'too_large':
+      return m.common_error_too_large();
+    case 'unexpected':
+      // 앱의 오류 본문이 아닌 응답(예: 앞단 프록시의 HTML 413): client.ts가 번역한 문구와 상태.
+      return error.message;
     default:
       return '';
   }

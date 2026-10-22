@@ -7,11 +7,18 @@ import { ganttLayout, ganttLinks, MAX_GANTT_DAYS } from '$lib/features/tasks/gan
 const G = { col: 2, row: 1.75, days: 12 };
 
 interface Row {
-  task: { id: string; milestone: boolean; predecessor_ids: string[] };
+  task: {
+    id: string;
+    milestone: boolean;
+    predecessors: { task_id: string; kind: 'FS'; lag_days: number }[];
+  };
   from: number;
   to: number;
   clippedEnd?: boolean;
 }
+/** 끝나야 시작·지연 0인 선행 관계. */
+const fs = (task_id: string) => ({ task_id, kind: 'FS' as const, lag_days: 0 });
+
 const row = (
   id: string,
   from: number,
@@ -19,7 +26,7 @@ const row = (
   preds: string[] = [],
   milestone = false,
 ): Row => ({
-  task: { id, milestone, predecessor_ids: preds },
+  task: { id, milestone, predecessors: preds.map(fs) },
   from,
   to,
 });
@@ -124,9 +131,9 @@ describe('gantt links', () => {
   it('draws nothing to an end that is not on the chart, and counts it once', () => {
     // 'gone'은 거르기로 사라졌거나 볼 수 없는 업무, 'u'는 날짜 없음(그리지 않은 업무 목록에만 있음).
     const all = [
-      { id: 'a', predecessor_ids: [] },
-      { id: 'b', predecessor_ids: ['a', 'gone'] },
-      { id: 'u', predecessor_ids: ['a'] },
+      { id: 'a', predecessors: [] },
+      { id: 'b', predecessors: [fs('a'), fs('gone')] },
+      { id: 'u', predecessors: [fs('a')] },
     ];
     const { links, hidden } = ganttLinks([row('a', 0, 1), row('b', 4, 5, ['a', 'gone'])], G, all);
     expect(links.map((l) => l.key)).toEqual(['a>b']);
@@ -148,15 +155,15 @@ describe('gantt links', () => {
   it('does not start a line from a bar cut off at the end of the shown period', () => {
     const base = { status: 'todo' as const, parent_id: null, milestone: false };
     const layout = ganttLayout([
-      { ...base, id: 'a', start_date: '2026-01-01', due_date: '2027-06-01', predecessor_ids: [] },
+      { ...base, id: 'a', start_date: '2026-01-01', due_date: '2027-06-01', predecessors: [] },
       {
         ...base,
         id: 'b',
         start_date: '2026-03-01',
         due_date: '2026-03-02',
-        predecessor_ids: ['a'],
+        predecessors: [fs('a')],
       },
-      { ...base, id: 'c', start_date: '2026-01-02', due_date: '2026-01-03', predecessor_ids: [] },
+      { ...base, id: 'c', start_date: '2026-01-02', due_date: '2026-01-03', predecessors: [] },
     ]);
     expect(layout.rows.find((r) => r.task.id === 'a')?.clippedEnd).toBe(true);
     expect(layout.days).toBe(MAX_GANTT_DAYS);
@@ -167,13 +174,13 @@ describe('gantt links', () => {
 
   it('survives odd data: self links, unknown ids, missing lists', () => {
     const odd = {
-      task: { id: 'x', milestone: false, predecessor_ids: ['x', 'nope'] },
+      task: { id: 'x', milestone: false, predecessors: [fs('x'), fs('nope')] },
       from: 0,
       to: 0,
     };
     // 응답에서 목록이 빠진 경우(형식상 있어야 하지만 실제로 없을 때).
     const broken = row('y', 1, 1);
-    Reflect.deleteProperty(broken.task, 'predecessor_ids');
+    Reflect.deleteProperty(broken.task, 'predecessors');
     const { links, hidden } = ganttLinks([odd, broken], G);
     expect(links).toEqual([]);
     expect(hidden).toBe(1);
@@ -205,7 +212,6 @@ describe('gantt links by dependency kind', () => {
     task: {
       id,
       milestone: false,
-      predecessor_ids: [pred],
       predecessors: [{ task_id: pred, kind, lag_days: 0 }],
     },
     from,

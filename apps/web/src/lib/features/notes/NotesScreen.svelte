@@ -3,6 +3,7 @@
   import type { SummaryView } from '$lib/api/client';
   import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { me } from '$lib/me.svelte';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import TemplatePicker from '$lib/features/documents/TemplatePicker.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
@@ -11,6 +12,8 @@
   import { m } from '$lib/paraglide/messages.js';
   import { router, standalonePath } from '$lib/router.svelte';
 
+  // 노트 만들기는 이 창을 연 사용자(`me.userId`)를 기대 사용자로 보낸다. 다른 탭에서 계정을 바꿨으면 서버가
+  // 409 `account_changed`로 막는다(#60).
   let notes = $state<SummaryView[] | undefined>(undefined);
   let templateId = $state('');
   let error = $state<string | undefined>(undefined);
@@ -55,7 +58,12 @@
           },
         )}
       oncreatechild={async (parentId: string) => {
-        const note = await api.createNote(newRequestId(), m.notes_new_note_title(), parentId);
+        const note = await api.createNote(
+          me.userId,
+          newRequestId(),
+          m.notes_new_note_title(),
+          parentId,
+        );
         router.navigate(standalonePath(note.id));
       }}
     />
@@ -68,6 +76,7 @@
     submitLabel={m.notes_create()}
     create={async (requestId: string, title: string) => {
       const note = await api.createNote(
+        me.userId,
         requestId,
         title,
         null,
