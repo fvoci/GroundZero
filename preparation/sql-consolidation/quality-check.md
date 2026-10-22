@@ -74,3 +74,33 @@ A는 새 권한 검증 코드에 한정해 실제 역할 속성·DB 권한 확�
 결과 기록·등록 자원 정지를 교차 검토했고 구체적인 결함을 발견하지 못했다. 이는 실제 DB 시험을 대신하지 않는다.
 종합 담당도 최종 권한 JSON·단계 결과·변조 탐지/원복과 양쪽 로그의 60개 통과 합계를 독립 확인했다.
 두 Rust 모듈·후보의 SHA-256은 실행 입력과 같고, 위 B 실행 커밋과 종합본의 제품/도구 소스 차이는 없다.
+
+## PostgreSQL 17 지원 기준과 초기화 전 검사
+
+종합 커밋 `8c2ae88659e1932fded6e03687e9abcc8b4c147c`에 최소 버전 검사, 기존 Cloud 읽기 전용 경로의
+숫자형 버전 조회, PG17 기본 시험 환경과 PG18 CI 분담을 반영했다. 실제 제품 마이그레이션과 후보 SQL은 바꾸지 않았다.
+
+- `cargo test --workspace --lib --bins --locked`: 80 + 2 + 17 = **99개 PASS**, 실패·무시 0.
+- `cargo clippy --workspace --all-targets --locked -- -D warnings`: PASS.
+- `cargo fmt --all --check`, 변경 문서·Compose·CI의 Prettier, `git diff --check`: PASS.
+- 단위 로그: 로컬 `target/sql-consolidation-check/pg17-unit.log`, SHA-256
+  `b4d3b417b98fb94f8022ed1dffd2413f0bb078bdb31b9af0133768c3e881cd02`.
+- Clippy 로그: 로컬 `target/sql-consolidation-check/pg17-clippy.log`, SHA-256
+  `2b5c793b32ef853492af25baa0ac0f6222df818b641fa3df5121cdce7a19debb`.
+
+A는 B의 PG17/18 Compose 변경에서 데이터 디렉터리·기존 개발 볼륨 보존·CI override·Supabase 옵션을 교차 검토했다.
+C의 버전 조회에서도 단일 읽기 전용 트랜잭션·기한·오류 정리·비밀 보호·관측과 지원 판정의 분리를 확인했고
+구체적인 결함을 발견하지 못했다. 두 검토 모두 실제 DB 실행을 대신하지 않는다.
+PG17 A/B 및 제한 권한, 지원 미달/필수 권한 거부의 실제 결과는 `verification/results.md`에서 별도로 기록한다.
+
+종합 담당은 PG17 전체 실행(`e3d3e8ddd19045c11282d796354bef48dae73eb3`)의 양쪽 로그를 독립 합산해
+각 47개 결과 그룹, 358 passed, 0 failed, 0 ignored, 17 filtered를 확인했다. 제한 권한 실행
+(`9c122173e4c6ec5d33c6be261975f68753008015`)은 양쪽 각 7개 그룹, 60 passed, 실패·무시·필터 0이었다.
+양쪽 역할 속성·기대 거부·반복 설치·멤버십·기존 자격 증명 보존 JSON, 네 변조의 탐지/원복과
+전체 결과/정지 PASS도 확인했다. 두 실행의 비교기·권한 검사·서버 초기화 소스는 종합본과 같다.
+후보는 다른 worktree 경로에서 입력했지만 SHA-256이 종합본의 후보와 일치한다.
+
+초기화 전 검사도 실제 PG16.13의 두 거부 경로와 PG17의 권한 부족 9개 경로에서 전후 JSON을 비교해
+카탈로그 무변경을 확인했다. 비밀번호는 카탈로그에서 추정하지 않았다. 별도 SCRAM 경로에서 두 역할의
+잘못된 비밀번호가 거부되고, 세 bootstrap 실패 후 원래 비밀번호의 로그인 6회가 성공한 증거를 확인했다.
+컨테이너 내부 localhost의 trust 인증은 이 비밀번호 보존 증거로 사용하지 않는다.
