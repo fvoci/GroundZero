@@ -29,3 +29,18 @@ B가 DB 비교를 실행한 로컬 커밋 `efdaa5a7ffa1248ed3587b46bcbe8f8927606
 `crates/`, `xtask/`, `deploy/`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`의 Git 차이는 0이다.
 비교기·카탈로그·후보 SQL의 SHA-256도 실행 입력과 일치함을 확인했다. 따라서 PR 체크아웃에서 같은 내용으로 재현할 수 있으며,
 작업자의 로컬 커밋 SHA만 원격에 존재한다고 가정하지 않는다.
+
+## CodeRabbit 실패 경로 수정 후 확인
+
+종합 커밋 `57667970449d31b4332f2df97d86691f280d08ba`에서 비교기의 기동 등록·정지·결과 기록만 수정했다.
+후보 SQL, 카탈로그 비교, 앱 행동 시험 입력은 바뀌지 않았다. 변경 범위에 맞춰 다음을 다시 확인했다.
+
+- `cargo fmt --all --check`: PASS.
+- `cargo clippy -p xtask --all-targets --locked -- -D warnings`: PASS.
+- `cargo test -p xtask --locked sql_compare::tests`: 새 실패 경로 3개 PASS.
+- `cargo test --workspace --lib --bins --locked`: 79 + 2 + 15 = 96개 PASS, 실패·무시 0.
+- 단위 시험 원본 로그: 로컬 `target/sql-consolidation-check/cleanup-unit.log`.
+- 로그 SHA-256: `9b0ec5289259ef13a562a20bdc5463ffe54ac0286b21c18fe4a331ec36db764d`.
+
+DB 담당자는 같은 수정의 실제 PostgreSQL A/A 실행에서 설치·스냅숏·객체·변조·정지 단계를 재확인했다.
+최종 비교기 소스와 이 후속 실행의 근거는 `verification/results.md`에서 별도로 구분한다.
