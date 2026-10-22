@@ -2698,13 +2698,17 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   | 36  | #82  | 요약 Merge Risk Moderate: 확인 내용을 누른 뒤 초점이 밖이면 Esc가 닫을 수 있음 | REJECTED(실제 브라우저 PASS)         | `07be34d` Chromium: 확인 내용을 실제 마우스로 누른 뒤 Esc도 확인만 닫음(W17 `b5-1`). Safari NOT RUN                                                     | https://github.com/fvoci/GroundZero/pull/82#issuecomment-6329814237      |
   | 37  | #89  | `7d9529c` Minor: CPU 2개 미만 호스트                                           | FIXED                                | W8 `2518724`(최소 요구 문서화)                                                                                                                          | https://github.com/fvoci/GroundZero/pull/89#discussion_r4344246865       |
   | 38  | #89  | `2518724` Minor: CPU 2개를 최소 조건으로 쓰지 말라                             | REJECTED                             | Docker는 호스트 CPU보다 큰 한도의 컨테이너 생성을 거부함(재현), CodeRabbit이 철회                                                                       | https://github.com/fvoci/GroundZero/pull/89#discussion_r4344280105       |
-  | 39  | #64  | `be7ef22` 인라인 Minor: 제목만 고친 편집을 실시간 끝에 남기지 않음             | OPEN(main에 있음)                    | 타당(코드 확인): `LiveDocumentEditor.svelte:121`이 `hasPending()` 대신 `watch?.dirty`를 봄. 수정 PR·이슈 없음                                           | https://github.com/fvoci/GroundZero/pull/64#discussion_r4346901085       |
-  | 40  | #82  | `217c6c5` 인라인 Minor: 상세 안의 다른 업무 열기가 닫기 확인을 건너뜀          | OPEN(main에 있음)                    | 타당(코드 확인): `TaskBoard.svelte:1692`의 `onopen={open}`이 D-97 확인을 거치지 않음. 수정 PR·이슈 없음                                                 | https://github.com/fvoci/GroundZero/pull/82#discussion_r4347201952       |
+  | 39  | #64  | `be7ef22` 인라인 Minor: 제목만 고친 편집을 실시간 끝에 남기지 않음             | OPEN(병합 뒤 발견, W20 PR)           | 타당(코드 확인): `LiveDocumentEditor.svelte:121`이 `hasPending()` 대신 `watch?.dirty`를 봄. W20 PR에서 처리(PR·SHA 추후)                                | https://github.com/fvoci/GroundZero/pull/64#discussion_r4346901085       |
+  | 40  | #82  | `217c6c5` 인라인 Minor: 상세 안의 다른 업무 열기가 닫기 확인을 건너뜀          | OPEN(병합 뒤 발견, W20 PR)           | 타당(코드 확인): `TaskBoard.svelte:1692`의 `onopen={open}`이 D-97 확인을 거치지 않음. W20 PR에서 처리(PR·SHA 추후)                                      | https://github.com/fvoci/GroundZero/pull/82#discussion_r4347201952       |
 
   인계 장부의 OPEN 26건(실질 17 + 정보성 9)과 #82 추가 2건은 위 1~20에서 모두 처리 상태가 정해졌다. 그 뒤 새로 온 지적 가운데 OPEN은 25(#60, 배포·
-  되돌리기 절차 문서)와 최종 갱신 커밋에 온 39(#64)·40(#82)이다. 39·40은 병합 직전에 게시됐고(#64 리뷰 2026-10-22T09:52:28Z·병합 09:58:56Z,
-  #82 리뷰 10:25:16Z·병합 10:26:23Z) 수정 없이 병합되어 스레드가 풀리지 않은 채 main에 남았다(Minor 둘, 편집을 확인 없이 잃는 경로). 24는
-  `a811f92`, 36은 실제 브라우저로 정리했다. #69 자체의 이 갱신 push 뒤 CodeRabbit 결과는 PR 대화에서 확인한다.
+  되돌리기 절차 문서)와 39(#64)·40(#82)이다. 24는 `a811f92`, 36은 실제 브라우저로 정리했다. #69 자체의 이 갱신 push 뒤 CodeRabbit 결과는 PR 대화에서 확인한다.
+  - 39·40은 최종 갱신 커밋(`be7ef22`·`217c6c5`)에 병합 직전 게시됐다(#64 리뷰 2026-10-22T09:52:28Z·병합 09:58:56Z, #82 리뷰 10:25:16Z·병합
+    10:26:23Z). 수정 없이 병합되어 병합 뒤에 발견했다(Minor 둘, 편집을 확인 없이 잃는 경로, 스레드 풀리지 않음). W20이 새 PR
+    `fix/audit-unsaved-followups`에서 재현·수정 중이고, #69는 그 PR 다음에 병합한다. PR 번호·수정 SHA: 추후 기록.
+  - 절차 결함: coordinator의 병합 스크립트는 CodeRabbit을 커밋 상태(완료 여부)로만 보고, 게시된 리뷰의 인라인 지적을 읽지 않았다(#60·#64 단계만
+    완료를 기다렸고 나머지 단계는 저장소 CI만 기다림). 그래서 #64의 완료 상태와 함께 온 Actionable 지적과, 기다리지 않은 #82 단계의 리뷰 지적이
+    병합을 막지 못했다.
 
 - **델타 감사(`07a9ab5..a5cda4e`)**: 바뀐 24개 파일을 서버·웹으로 나눠 다시 찾고 반박 검증했다. 남은 12건(WD1~WD6, SD1~SD5, SD8. SD6·SD7은 반박됨)을 다음처럼 처리했다.
   - 웹 WD1~WD4 → #72, WD5·WD6 → #73.
@@ -2836,12 +2840,16 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
     client backend를 역할별로 센 최댓값이다.
   - (b) 기본 `--oidc` 스택은 libtest 기본 스레드(코어 수)라 한도에 가깝다(여유 12, #89의 4스레드 제한은 Supabase 단계에만). 후속
     fvoci/GroundZero#90.
-  - 로그: 증거 브랜치 `w16/logs/r8{a,b,c,d}-*-07be34d.log`(측정 `-pg-activity.txt`·`-db.log`·`-supavisor.log`), 요약 `w16/README.md` 4절.
+  - 로그: 원격 증거 브랜치 `handoff/audit-final-evidence` `2b0829b`의 `docs/handoff/evidence-final/w16/logs/`에 있다:
+    `r8a-check-07be34d.log`, `r8b-test-oidc-07be34d.log`, `r8c-test-supabase-oidc-07be34d.log`, `r8d-test-supabase-session-pooler-oidc-07be34d.log`
+    (측정 `-pg-activity.txt`·`-max-connections.txt`·`-db.log`, Supabase는 `-supavisor.log`). 요약은 같은 브랜치 `docs/handoff/evidence-final/w16/README.md`
+    4절. 예: `git show 2b0829b:docs/handoff/evidence-final/w16/logs/r8a-check-07be34d.log`.
 
-- **실제 브라우저(`07be34d`)**: 최종 통합 체크아웃(`audit/final`, 작업 트리 깨끗)의 `cargo xtask dev --oidc`(새 볼륨, 합성 시드), 2026-10-22
-  07:58~08:22Z 무렵.
-  Orca 내장 브라우저 Chromium 150.0.7871.250, 기본 1280×800(DPR 1), 좁은 화면은 375×812 DPR 2·iPhone 15 UA 에뮬레이션. 계정 test-user·test-user-2,
-  다른 사용자는 격리 프로필 탭, 계정 전환은 같은 프로필의 탭 둘. 증거 브랜치 `w17/INDEX.md`(항목별 파일·조작·결과).
+- **실제 브라우저(`07be34d`, Chromium만)**: 최종 통합 체크아웃(`audit/final`, 작업 트리 깨끗)의 `cargo xtask dev --oidc`(새 볼륨, 합성 시드),
+  2026-10-22 07:58~08:22Z 무렵.
+  브라우저는 Orca 내장 Chromium 150(150.0.7871.250)만 썼다(다른 엔진은 NOT RUN). 기본 1280×800(DPR 1), 좁은 화면은 375×812 DPR 2·iPhone 15 UA
+  에뮬레이션. 계정 test-user·test-user-2, 다른 사용자는 격리 프로필 탭, 계정 전환은 같은 프로필의 탭 둘. 증거 브랜치
+  `docs/handoff/evidence-final/w17/INDEX.md`(항목별 파일·조작·결과).
 
   | 항목                                                        | 결과                                                                                                     |
   | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -2854,10 +2862,10 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   | 7 계정 전환(D-96)                                           | **PASS**. 서버 409 `account_changed` 2건, 실시간 다시 붙기 4412. 남는 창 관찰(아래)                      |
   | 8 D-93 DST                                                  | **PASS**. 손대지 않은 시작 `05:10:17Z`가 초까지 그대로                                                   |
   | 9 표시 설정·간트·375px·키보드·#82 값 상자(D-98)             | **PASS**(Chromium). Safari NOT RUN                                                                       |
-  - FAIL 0. 스크린숏은 대부분 NOT RUN이다: 데스크톱 창이 그려지지 않아 `orca screenshot`이 빈 PNG를 돌려줬고, 렌더링된 PNG 4장(`b4-2`·`b4-3`·
-    `b4-4b`·`b9-4`)만 남았다. 나머지는 같은 순간의 접근성 snapshot 텍스트, eval로 읽은 DOM 상태, 요청 기록(방법·주소·상태·기대 사용자 머리 유무),
-    서버 접근 로그의 `error_code`가 증거다. 인쇄 렌더링 PDF 14개는 보조 자료다. 증거 브랜치 묶음을 만들 때 PNG·PDF를 하나씩 열어 합성 데이터만인지
-    확인했다(`MANIFEST.md`).
+  - FAIL 0. 화면 증거는 **PNG 스크린숏 4개**(`b4-2`·`b4-3`·`b4-4b`·`b9-4`)와 **인쇄 PDF 14개**(`orca pdf`의 인쇄 렌더링이며 화면 캡처가 아님,
+    보조 자료)로 나뉜다. 나머지 화면의 스크린숏은 NOT RUN이다(데스크톱 창이 그려지지 않아 `orca screenshot`이 빈 PNG를 돌려줌). 대신 같은 순간의
+    접근성 snapshot 텍스트, eval로 읽은 DOM 상태, 요청 기록(방법·주소·상태·기대 사용자 머리 유무), 서버 접근 로그의 `error_code`가 증거다. 증거
+    브랜치 묶음을 만들 때 PNG·PDF를 하나씩 열어 합성 데이터만인지 확인했다(`MANIFEST.md`).
   - 상태를 만들려고 페이지 메모리에만 시험용 훅을 넣었다(코드 변경 아님): 요청을 늦추거나 붙잡기, WebSocket open/close 코드 기록.
   - NOT RUN: 실제 휴대 기기, Safari(WebKit)·Firefox, 화면 낭독기, Safari 값 상자 키보드 스크롤, 방 없이 남은 저장 대기 편집의 **복원**(이동만
     확인), 이동 트랜잭션이 DB 잠금을 기다리는 동안 들어온 편집(브라우저로 잠금 대기를 만들 수 없어 이동 직전·닫히기 직전 편집으로 대신). 뒤의 둘은
@@ -2961,10 +2969,10 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
     편집자 구분, P-34 채택, #64), D-96(저장 요청의 기대 사용자 비교, #60), D-97(닫기 전 확인, #59·#82), D-98(Safari 키보드 접근성, #82).
     D-95 아래의 구현 해석(방 안·방 없는 복원의 작성자, 복원 처리기의 권한 확인, 이동 대기 중 재확인)과 #64 W1b의 대기 중 재확인 방식은 사용자
     결정이 아니라 구현자·coordinator 판단이다(`docs/decisions.md` D-95 아래, `w16/README.md` 2절).
-  - 사용자 결정이 남은 것: 미승인 제안 P-24~P-33·P-35·P-36(P-34는 D-95로 채택). 장부 39·40의 처리(수정 PR이나 후속 이슈)도 정해지지 않았다.
+  - 사용자 결정이 남은 것: 미승인 제안 P-24~P-33·P-35·P-36(P-34는 D-95로 채택).
   - 남은 위험(병합 뒤 main):
     - 장부 39(#64: 본문은 그대로이고 제목만 고친 채 실시간이 꺼지면 제목을 잃음)·40(#82: 업무 상세 안의 다른 업무 열기가 D-97 확인을 건너뜀).
-      둘 다 Minor이고 main에 있으며 수정 PR·이슈가 없다.
+      둘 다 Minor이고 병합 뒤에 발견했다. W20 PR(`fix/audit-unsaved-followups`, PR 번호·SHA 추후)이 고치며, #69는 그 다음에 병합한다.
     - 기본 `--oidc` 시험 스택의 연결 최고 85/97(R8 (b), fvoci/GroundZero#90). 시험이 늘면 넘을 수 있다.
     - D-96의 남는 창(계정을 바꾸기 전에 열린 실시간 연결은 다음 재확인까지 앞 계정으로 쓸 수 있음, 실제 브라우저에서 관찰)과 위 「남는 위험(기록)」.
     - 장부 OPEN 25(#60 배포·되돌리기 절차 문서)와 열린 후속 이슈 #50·#70·#76·#79·#83~#88·#90.
