@@ -259,6 +259,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       },
@@ -359,6 +369,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -1585,6 +1605,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -2197,7 +2227,7 @@
         "tags": [
           "events"
         ],
-        "summary": "일정 반복 정하기·멈추기(쓰기 권한).",
+        "summary": "일정 반복 정하기·멈추기(쓰기 권한). 기준 규칙과 지금 규칙이 다르면 409 `rule_conflict`(감사 W21: 기준 없이 저장해\n그사이 다른 사람이 바꾼 규칙을 옛 규칙으로 말없이 덮었다).",
         "operationId": "set_event_recurrence",
         "parameters": [
           {
@@ -2266,7 +2296,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
+                  "$ref": "#/components/schemas/EventConflict"
                 }
               }
             }
@@ -2797,6 +2827,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -3464,6 +3504,16 @@
                   "items": {
                     "$ref": "#/components/schemas/Participant"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -4314,6 +4364,16 @@
                   "items": {
                     "$ref": "#/components/schemas/StudyParticipant"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -10858,11 +10918,12 @@
             "type": "boolean"
           },
           "can_edit": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "쓴 사람이 고칠 수 있는지(지운 댓글이나 보관된 항목의 댓글은 아님)."
           },
           "can_resolve": {
             "type": "boolean",
-            "description": "스레드를 해결·해제할 수 있는지(첫 댓글에서만)."
+            "description": "스레드를 해결·해제할 수 있는지(첫 댓글에서만, 보관된 항목에서는 아님)."
           },
           "created_at": {
             "type": "string",
@@ -11519,17 +11580,19 @@
       },
       "DocumentSettings": {
         "type": "object",
-        "description": "문서 설정 변경 요청.",
-        "required": [
-          "visibility",
-          "allow_copy"
-        ],
+        "description": "문서 설정 변경 요청. 바꾸는 칸만 보낸다. 없거나 null인 칸은 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼\n비공개·복제 금지를 다른 칸만 바꾼 요청이 되돌리지 않게, 감사 W6).",
         "properties": {
           "allow_copy": {
-            "type": "boolean"
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "visibility": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "`workspace` 또는 `private`."
           }
         }
@@ -14706,8 +14769,18 @@
       },
       "SetEventRecurrence": {
         "type": "object",
-        "description": "일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜.",
+        "description": "일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. `base`는 편집을 시작한\n규칙이다(반복이 없었으면 null). 그사이 규칙이 바뀌었으면 아무것도 바꾸지 않고 409 `rule_conflict`(최신 일정)다.",
         "properties": {
+          "base": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecurrenceRule"
+              }
+            ]
+          },
           "rule": {
             "oneOf": [
               {
@@ -16242,8 +16315,7 @@
         "description": "항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다.",
         "required": [
           "title",
-          "description",
-          "visibility"
+          "description"
         ],
         "properties": {
           "description": {
@@ -16253,8 +16325,11 @@
             "type": "string"
           },
           "visibility": {
-            "type": "string",
-            "description": "`workspace` 또는 `private`."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`workspace` 또는 `private`. 바꿀 때만 보낸다. 없거나 null이면 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼\n공개 범위를 설명만 고친 저장이 되돌리지 않게, 감사 W13)."
           }
         }
       },

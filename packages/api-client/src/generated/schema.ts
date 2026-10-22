@@ -501,7 +501,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 일정 반복 정하기·멈추기(쓰기 권한). */
+        /**
+         * 일정 반복 정하기·멈추기(쓰기 권한). 기준 규칙과 지금 규칙이 다르면 409 `rule_conflict`(감사 W21: 기준 없이 저장해
+         *     그사이 다른 사람이 바꾼 규칙을 옛 규칙으로 말없이 덮었다).
+         */
         put: operations["set_event_recurrence"];
         post?: never;
         delete?: never;
@@ -2617,8 +2620,9 @@ export interface components {
             author_name?: string | null;
             body: string;
             can_delete: boolean;
+            /** @description 쓴 사람이 고칠 수 있는지(지운 댓글이나 보관된 항목의 댓글은 아님). */
             can_edit: boolean;
-            /** @description 스레드를 해결·해제할 수 있는지(첫 댓글에서만). */
+            /** @description 스레드를 해결·해제할 수 있는지(첫 댓글에서만, 보관된 항목에서는 아님). */
             can_resolve: boolean;
             /** Format: date-time */
             created_at: string;
@@ -2862,11 +2866,14 @@ export interface components {
          * @description 문서 내부 ID. CRDT 도입 후에도 유지된다 (D-62).
          */
         DocumentId: string;
-        /** @description 문서 설정 변경 요청. */
+        /**
+         * @description 문서 설정 변경 요청. 바꾸는 칸만 보낸다. 없거나 null인 칸은 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
+         *     비공개·복제 금지를 다른 칸만 바꾼 요청이 되돌리지 않게, 감사 W6).
+         */
         DocumentSettings: {
-            allow_copy: boolean;
+            allow_copy?: boolean | null;
             /** @description `workspace` 또는 `private`. */
-            visibility: string;
+            visibility?: string | null;
         };
         /** @description 문서 목록 항목. */
         DocumentSummary: {
@@ -3924,8 +3931,12 @@ export interface components {
         SetDocumentTemplate: {
             template: boolean;
         };
-        /** @description 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. */
+        /**
+         * @description 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. `base`는 편집을 시작한
+         *     규칙이다(반복이 없었으면 null). 그사이 규칙이 바뀌었으면 아무것도 바꾸지 않고 409 `rule_conflict`(최신 일정)다.
+         */
         SetEventRecurrence: {
+            base?: null | components["schemas"]["RecurrenceRule"];
             rule?: null | components["schemas"]["RecurrenceRule"];
         };
         /** @description 항목 멤버 정하기(항목 소유 권한자). 목록 전체를 보낸다. */
@@ -4469,8 +4480,11 @@ export interface components {
         UpdateItem: {
             description: string;
             title: string;
-            /** @description `workspace` 또는 `private`. */
-            visibility: string;
+            /**
+             * @description `workspace` 또는 `private`. 바꿀 때만 보낸다. 없거나 null이면 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
+             *     공개 범위를 설명만 고친 저장이 되돌리지 않게, 감사 W13).
+             */
+            visibility?: string | null;
         };
         /** @description 모듈 이름·키 변경 요청(관리자). */
         UpdateModule: {
@@ -4823,6 +4837,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     delete_comment: {
@@ -4898,6 +4920,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5698,6 +5728,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     list_shares: {
@@ -6190,7 +6228,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["EventConflict"];
                 };
             };
         };
@@ -6556,6 +6594,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7019,6 +7065,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Participant"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {
@@ -7607,6 +7661,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudyParticipant"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {

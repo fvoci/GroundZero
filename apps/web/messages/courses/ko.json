@@ -84,6 +84,7 @@
   "courses_delete": "지우기",
   "courses_delete_aria": "{number}회 지우기",
   "courses_deleted": "{number}회를 지웠습니다.",
+  "courses_delete_confirm": "{number}회를 지우면 모든 참여자의 이 회차 진도·개인 메모도 함께 지워지고 되돌릴 수 없습니다. 지울까요?",
   "courses_mine_saved": "{number}회 내 메모·날짜를 저장했습니다.",
   "courses_my_planned": "내 계획일",
   "courses_last_position": "마지막 시청 위치(분:초)",

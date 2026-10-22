@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CalendarView, ItemView, TaskDetailView } from '$lib/api/client';
 import { api, NetworkError } from '$lib/api/client';
+import { formatDay } from '$lib/display';
 import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
 import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // 달력의 날짜에서 업무 만들기: 대상(항목)을 분명히 하고, 만들기 뒤 마감일을 넣으며, 날짜만 실패하면 다시 만들지 않는다.
@@ -291,6 +293,9 @@ describe('creating a task from a calendar day', () => {
       expect(document.querySelectorAll('[data-create-day]').length).toBe(42);
     });
     const day = document.querySelector<HTMLElement>('[data-create-day]');
-    expect(day?.getAttribute('aria-label')).toMatch(/^\d{4}-\d{2}-\d{2}에 업무 만들기$/);
+    // 날짜는 표시 언어의 서식으로(감사 W27, D-81).
+    expect(day?.getAttribute('aria-label')).toBe(
+      m.events_task_create_on({ day: formatDay(day?.dataset.createDay ?? '') }),
+    );
   });
 });
