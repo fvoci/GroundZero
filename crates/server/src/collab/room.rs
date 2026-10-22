@@ -447,6 +447,12 @@ impl Rooms {
         .await;
     }
 
+    /// 이 문서의 방이 열려 있는지(방 목록에서 빠지기 전, 닫히며 저장하는 중도 열린 것으로 본다).
+    #[must_use]
+    pub fn has_room(&self, doc: DocumentId) -> bool {
+        self.live_room(doc).is_some()
+    }
+
     /// 문서를 옮긴다(감사 S6, #71). 옮기는 동안 이 문서의 방이 새로 열리지 않게 막는다(들어오는 연결은 4503으로 다시
     /// 붙는다). 열린 방이 있으면 그 방이 자기 명령 안에서 옮긴다(체크포인트 → 이동 → 리비전 → 연결 닫기, `Command::Move`):
     /// 그동안 온 편집은 방의 대기열에서 기다려, 확인받은 편집이 옮긴 곳에서 리비전이 되지 못하는 일이 없다. 방이 없으면
@@ -980,6 +986,11 @@ impl Room {
         if done.is_closed() {
             return true;
         }
+        // 이동 트랜잭션이 잠금을 기다리는 동안 이 방은 주기 재확인을 하지 못한다. 그동안 대기열에 들어와 커밋 전 것으로
+        // 받을 편집은 옛 자리의 권한으로 판단하므로, 바로 앞에서 세션과 옛 자리 권한을 다시 확인해 둔다(#64 리뷰). 남는
+        // 틈은 잠금 대기(`documents::MOVE_LOCK_LIMIT`)뿐이고 평소 재확인 간격보다 짧다. 세션은 `drain_after_move`가 한 번
+        // 더 본다.
+        self.recheck().await;
         let (mut outcome, committed_at) = match documents::move_in_db(
             &self.db,
             request.user,
@@ -1047,12 +1058,17 @@ impl Room {
     /// 동안 쥘 수 없다. 남는 틈에 걸린 것은 확인받지 않은 편집뿐이다: 체크포인트까지의 편집은 이미 리비전이고, 그 뒤의
     /// 편집은 커밋 뒤 리비전을 남겨야 처음 확인을 받는다. 그 리비전을 남기지 못하면 연결을 닫은 뒤 상태만 저장하므로
     /// 브라우저가 그 편집을 초안으로 지닌다.
+    ///
+    /// 커밋 전 편집은 이동 바로 앞의 재확인(`move_document`)에서 본 쓰기 권한으로 받는다. 그 뒤 잠금을 기다리는 동안 세션이
+    /// 끝났거나 끊긴 사람의 편집은 넣기 전에 세션만 다시 보고 버린다(연결을 4403으로 닫는다, #64 리뷰). 세션은 자리와
+    /// 상관없어 옮긴 뒤에도 볼 수 있다. 옛 자리 권한은 커밋 뒤에는 다시 볼 수 없어 이동 앞의 재확인으로 갈음한다.
     async fn drain_after_move(
         &mut self,
         committed_at: Instant,
         rx: &mut mpsc::Receiver<Command>,
     ) -> Vec<oneshot::Sender<bool>> {
         let mut shutdowns = Vec::new();
+        let mut leaving = Vec::new();
         for _ in 0..ROOM_QUEUE {
             match rx.try_recv() {
                 Ok(Command::Incoming {
@@ -1064,10 +1080,8 @@ impl Room {
                         self.incoming(conn, &data);
                     }
                 }
-                Ok(Command::Leave { conn }) => {
-                    self.flush().await;
-                    self.leave(conn);
-                }
+                // 나가기 전에 보낸 편집은 아래에서 넣은 뒤에 나간다(평소의 나가기와 같다).
+                Ok(Command::Leave { conn }) => leaving.push(conn),
                 Ok(Command::Shutdown {
                     saved: Some(saved), ..
                 }) => shutdowns.push(saved),
@@ -1075,8 +1089,32 @@ impl Room {
                 Err(_) => break,
             }
         }
+        self.drop_ended_sessions().await;
         self.flush().await;
+        for conn in leaving {
+            self.leave(conn);
+        }
         shutdowns
+    }
+
+    /// 넣기를 기다리는 편집을 보낸 연결의 세션만 다시 본다. 끝났으면 연결을 닫아(4403) 그 편집을 버린다(`flush`는 닫힌
+    /// 연결의 편집을 넣지 않는다). DB 오류로 알 수 없으면 그대로 둔다(`recheck`와 같다).
+    async fn drop_ended_sessions(&mut self) {
+        let mut checked = HashSet::new();
+        let conns: Vec<u64> = self
+            .pending
+            .iter()
+            .map(|p| p.conn)
+            .filter(|c| checked.insert(*c))
+            .collect();
+        for conn in conns {
+            let Some(peer) = self.conns.get(&conn).map(|c| c.peer.clone()) else {
+                continue;
+            };
+            if session_alive(&self.db, &peer).await == Some(false) {
+                self.close(conn, CloseReason::AccessLost);
+            }
+        }
     }
 
     /// 저장된 Yjs 상태(그 뒤로 본문이 바뀌지 않았을 때) 또는 본문에서 방 문서를 만든다. 들어오는 사람의 권한으로 읽는다.
@@ -1716,8 +1754,8 @@ pub enum PeerAccess {
     Unknown,
 }
 
-/// 세션이 살아 있고 문서를 실시간으로 열 수 있는지.
-pub async fn peer_access(db: &Db, doc: DocumentId, peer: &Peer) -> PeerAccess {
+/// 그 연결의 세션이 아직 그 사람의 것인지. DB 오류로 알 수 없으면 `None`.
+async fn session_alive(db: &Db, peer: &Peer) -> Option<bool> {
     let session = async {
         let mut tx = db.begin_anonymous().await?;
         let user: Option<UserId> = sqlx::query_scalar("SELECT app_session_user($1)")
@@ -1728,10 +1766,15 @@ pub async fn peer_access(db: &Db, doc: DocumentId, peer: &Peer) -> PeerAccess {
         Ok::<Option<UserId>, AppError>(user)
     }
     .await;
-    match session {
-        Ok(user) if user == Some(peer.user) => {}
-        Ok(_) => return PeerAccess::Denied,
-        Err(_) => return PeerAccess::Unknown,
+    session.ok().map(|user| user == Some(peer.user))
+}
+
+/// 세션이 살아 있고 문서를 실시간으로 열 수 있는지.
+pub async fn peer_access(db: &Db, doc: DocumentId, peer: &Peer) -> PeerAccess {
+    match session_alive(db, peer).await {
+        Some(true) => {}
+        Some(false) => return PeerAccess::Denied,
+        None => return PeerAccess::Unknown,
     }
     let access = async {
         let mut tx = db.begin_as(peer.user).await?;

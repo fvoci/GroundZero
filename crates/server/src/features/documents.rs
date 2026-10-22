@@ -1202,8 +1202,10 @@ pub struct MovePreview {
 
 /// 이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
 /// - `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).
-/// - `ErrorBody`(`error: "conflict"`): 실시간 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지
-///   못했다(옮기지 않음, 편집은 남는다, 다시 하면 된다).
+/// - `ErrorBody`(`error: "invalid_state"`): 옮기지 않았다. 실시간 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저
+///   리비전으로 남기지 못했거나(편집은 남는다), 다른 변경이 문서나 그 자리를 잠금 한도보다 오래 쥐었거나, 방이 바쁘거나
+///   닫혔다. `message`가 "try again"으로 끝나면 다시 하면 된다. 그 밖(본문 검사를 통과하지 못하는 편집, 그 사이 다른 길로
+///   바뀐 본문)은 문서를 다시 열어 보고 판단한다.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(untagged)]
 pub enum MoveConflict {
@@ -1286,7 +1288,8 @@ pub async fn move_preview(
 /// 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인
 /// 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문)다. 편집은 그대로
 /// 남고 다시 하면 된다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 경우처럼 다시 해도 남길 수 없을 때도 같은 409로
-/// 옮기지 않는다.
+/// 옮기지 않는다(문구에 "try again"이 없다). 다른 변경이 문서나 그 자리를 잠금 한도(10초)보다 오래 쥐어도 옮기지 않고
+/// 409다(편집은 방에 남는다, 다시 하면 된다).
 #[utoipa::path(post, path = "/api/documents/{document_id}/move",
     params(("document_id" = String, Path, format = Uuid)), request_body = MoveDocument,
     responses((status = 200, body = MoveOutcome), (status = 403, body = ErrorBody),
@@ -1339,8 +1342,27 @@ pub enum MoveReply {
     Changed(MovePreview),
 }
 
+/// 이동 트랜잭션이 잠금 하나를 기다리는 한도. 열린 방은 이동을 자기 명령 안에서 하므로(#71) 그동안 편집과 권한
+/// 재확인이 멈춘다. 끝없이 기다리지 않고 409로 돌려준다(옮기지 않음, 편집은 방에 남는다, #64 리뷰). 잠금마다의 한도라
+/// 가장 오래 기다려도 잠그는 문장 수의 몇 배에서 끝난다. 다른 이동·항목 변경은 보통 이보다 훨씬 짧게 잠근다.
+const MOVE_LOCK_LIMIT: &str = "10s";
+
+/// 이동 트랜잭션의 잠금 대기가 한도를 넘은 것(55P03)은 409(옮기지 않음, 다시 하면 된다). 그 밖은 `from_db_function`.
+fn move_lock_error(err: sqlx::Error) -> AppError {
+    if err
+        .as_database_error()
+        .is_some_and(|db| db.code().as_deref() == Some("55P03"))
+    {
+        return AppError::Conflict(
+            "another change is holding the document or its places; nothing was moved, try again"
+                .into(),
+        );
+    }
+    AppError::from_db_function(err)
+}
+
 /// 이동 트랜잭션(잠금 → 미리보기 다시 계산·확인 → 옮김). 열린 방이 있으면 방이 자기 명령 안에서 부르고, 없으면 요청
-/// 처리기가 방이 새로 열리지 않게 막은 채 부른다(`Rooms::move_document`).
+/// 처리기가 방이 새로 열리지 않게 막은 채 부른다(`Rooms::move_document`). 잠금은 `MOVE_LOCK_LIMIT`까지만 기다린다.
 pub(crate) async fn move_in_db(
     db: &Db,
     user: UserId,
@@ -1348,18 +1370,24 @@ pub(crate) async fn move_in_db(
     input: &MoveDocument,
 ) -> Result<MoveReply, AppError> {
     let mut tx = db.begin_as(user).await?;
+    // 이 트랜잭션에만 건다(세션 풀러의 연결에 남지 않는다).
+    sqlx::query(&format!("SET LOCAL lock_timeout = '{MOVE_LOCK_LIMIT}'"))
+        .execute(tx.conn())
+        .await?;
     // 잠금 순서(자리 → 문서 행 → 항목 → 번호): 원래 자리와 새 자리를 먼저 잠근다.
     sqlx::query("SELECT app_lock_move($1, $2, $3)")
         .bind(id)
         .bind(input.target_workspace_id)
         .bind(input.target_item_id)
         .execute(tx.conn())
-        .await?;
+        .await
+        .map_err(move_lock_error)?;
     // 소유 권한자만 잠글 수 있다(RLS 갱신 정책). 다른 사람에게는 행이 없고, 아래 함수가 권한 오류를 낸다.
     sqlx::query("SELECT 1 FROM documents WHERE id = $1 FOR UPDATE")
         .bind(id)
         .execute(tx.conn())
-        .await?;
+        .await
+        .map_err(move_lock_error)?;
     // 원래 항목과 대상 항목(과 그 모듈)도 잠가, 확인한 접근 변화가 이동 시점과 같게 한다.
     sqlx::query(
         "SELECT app_lock_item((SELECT item_id FROM documents WHERE id = $1)), app_lock_item($2)",
@@ -1367,7 +1395,8 @@ pub(crate) async fn move_in_db(
     .bind(id)
     .bind(input.target_item_id)
     .execute(tx.conn())
-    .await?;
+    .await
+    .map_err(move_lock_error)?;
     // 잠근 뒤 미리보기를 다시 계산해 사용자가 확인한 것과 같을 때만 옮긴다.
     let current = preview(&mut tx, id, input.target_workspace_id, input.target_item_id).await?;
     let confirmed = input.acknowledged.as_ref().is_some_and(|ack| {
@@ -1396,7 +1425,7 @@ pub(crate) async fn move_in_db(
             .bind(ids)
             .fetch_one(tx.conn())
             .await
-            .map_err(AppError::from_db_function)?;
+            .map_err(move_lock_error)?;
     let document = visible_document(&mut tx, id).await?;
     tx.commit().await?;
     Ok(MoveReply::Moved {
