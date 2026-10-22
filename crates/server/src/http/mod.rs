@@ -626,6 +626,7 @@ async fn api_not_found() -> AppError {
         revisions::ExportFormat,
         revisions::ExportRequest,
         revisions::RestoreRevision,
+        revisions::RestoreConflict,
         modules::ModuleKind,
         modules::Module,
         modules::CreateModule,
@@ -1246,6 +1247,30 @@ mod tests {
             one_of,
             [
                 "#/components/schemas/MovePreview",
+                "#/components/schemas/ErrorBody"
+            ]
+        );
+    }
+
+    /// CodeRabbit(`fb3a11e`): 복원의 409도 두 모양이다. 기준이 지났으면 `ConflictBody`(최신본), 실시간 편집을 먼저 남기지
+    /// 못했거나 잠금 한도를 넘었으면 `ErrorBody`. 계약이 둘 다 적는다.
+    #[test]
+    fn the_restore_conflict_is_a_stale_base_or_error_body() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
+        let conflict = &doc["paths"]["/api/documents/{document_id}/revisions/{revision}/restore"]["post"]
+            ["responses"]["409"]["content"]["application/json"]["schema"];
+        assert_eq!(
+            conflict,
+            &serde_json::json!({ "$ref": "#/components/schemas/RestoreConflict" })
+        );
+        let one_of: Vec<&str> = doc["components"]["schemas"]["RestoreConflict"]["oneOf"]
+            .as_array()
+            .map(|v| v.iter().filter_map(|s| s["$ref"].as_str()).collect())
+            .unwrap_or_default();
+        assert_eq!(
+            one_of,
+            [
+                "#/components/schemas/ConflictBody",
                 "#/components/schemas/ErrorBody"
             ]
         );

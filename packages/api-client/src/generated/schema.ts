@@ -3851,6 +3851,13 @@ export interface components {
             visible: boolean;
             workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
+        /**
+         * @description 복원의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+         *     - `ConflictBody`(`current` 포함): 기준 리비전이 지났다(먼저 남긴 실시간 편집의 리비전 때문일 수 있다).
+         *     - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 복원하지 않았다. 실시간 편집을 먼저 리비전으로 남기지 못했거나
+         *       (편집은 남는다), 다른 변경이 문서를 잠금 한도보다 오래 쥐었거나, 방이 바쁘거나 닫혔다.
+         */
+        RestoreConflict: components["schemas"]["ConflictBody"] | components["schemas"]["ErrorBody"];
         /** @description 복원 요청. `base_revision`은 사용자가 보고 있던 현재 리비전이다. */
         RestoreRevision: {
             /** Format: int32 */
@@ -5681,12 +5688,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description 기준이 지났으면 ConflictBody(최신본 포함), 실시간 편집을 먼저 남기지 못했거나 잠금 한도를 넘었으면 ErrorBody(`invalid_state`) */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConflictBody"];
+                    "application/json": components["schemas"]["RestoreConflict"];
                 };
             };
         };

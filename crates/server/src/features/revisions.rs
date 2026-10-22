@@ -252,6 +252,17 @@ pub async fn export(
     Ok(Json(found))
 }
 
+/// 복원의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+/// - `ConflictBody`(`current` 포함): 기준 리비전이 지났다(먼저 남긴 실시간 편집의 리비전 때문일 수 있다).
+/// - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 복원하지 않았다. 실시간 편집을 먼저 리비전으로 남기지 못했거나
+///   (편집은 남는다), 다른 변경이 문서를 잠금 한도보다 오래 쥐었거나, 방이 바쁘거나 닫혔다.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum RestoreConflict {
+    Stale(Box<ConflictBody>),
+    State(ErrorBody),
+}
+
 /// 옛 리비전의 내용으로 새 리비전을 만든다(쓰기 권한). 기준 리비전이 지났으면 409와 서버 최신본. 실시간 편집(열린 방의
 /// 편집이나 방 없이 남은 저장 대기 상태)을 먼저 리비전으로 남기지 못하면 복원하지 않고 409(오류 본문, `invalid_state`)다.
 /// 편집은 남는다. 남겼으면 기준이 지나 최신본과 함께 409다.
@@ -259,7 +270,10 @@ pub async fn export(
     params(("document_id" = String, Path, format = Uuid), ("revision" = i32, Path)),
     request_body = RestoreRevision,
     responses((status = 200, body = Document), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ConflictBody)), tag = "documents")]
+              (status = 404, body = ErrorBody),
+              (status = 409, body = RestoreConflict,
+               description = "기준이 지났으면 ConflictBody(최신본 포함), 실시간 편집을 먼저 남기지 못했거나 잠금 한도를 넘었으면 ErrorBody(`invalid_state`)")),
+    tag = "documents")]
 pub async fn restore(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
