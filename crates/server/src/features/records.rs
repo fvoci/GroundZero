@@ -13,7 +13,7 @@ use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{UserTx, new_ids};
+use crate::db::{UserTx, is_unique_violation, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::modules::ModuleKind;
@@ -972,32 +972,42 @@ pub async fn create(
     Path(item): Path<ItemId>,
     Json(input): Json<NewRecord>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    let (fields, files) = validate(
-        &mut tx,
-        item,
-        &input.kind,
-        &input.title,
-        input.fields,
-        None,
-        &input.files,
-    )
-    .await?;
-    let id: Uuid =
-        sqlx::query_scalar("SELECT app_create_record($1, $2, $3, $4, $5, $6, $7, $8, $9)")
-            .bind(input.request_id)
-            .bind(item)
-            .bind(&input.kind)
-            .bind(input.title.trim())
-            .bind(input.occurred_on)
-            .bind(&input.body)
-            .bind(fields)
-            .bind(files)
-            .bind(new_ids(2))
-            .fetch_one(tx.conn())
-            .await
-            .map_err(AppError::from_db_function)?;
-    tx.commit().await?;
+    let run = || async {
+        let mut tx = state.db.begin_as(user).await?;
+        let (fields, files) = validate(
+            &mut tx,
+            item,
+            &input.kind,
+            &input.title,
+            input.fields.clone(),
+            None,
+            &input.files,
+        )
+        .await?;
+        let id: Uuid =
+            sqlx::query_scalar("SELECT app_create_record($1, $2, $3, $4, $5, $6, $7, $8, $9)")
+                .bind(input.request_id)
+                .bind(item)
+                .bind(&input.kind)
+                .bind(input.title.trim())
+                .bind(input.occurred_on)
+                .bind(&input.body)
+                .bind(fields)
+                .bind(files)
+                .bind(new_ids(2))
+                .fetch_one(tx.conn())
+                .await
+                .map_err(AppError::from_db_function)?;
+        tx.commit().await?;
+        Ok::<Uuid, AppError>(id)
+    };
+    // 같은 요청 id의 앞 요청이 아직 끝나지 않았으면 고유 제약에서 기다린 뒤 23505로 끝난다. 그때는 한 번 더 돌려 앞
+    // 요청이 만든 기록을 돌려준다(감사 S10, 전에는 500).
+    let id = match run().await {
+        Ok(id) => id,
+        Err(AppError::Database(e)) if is_unique_violation(&e) => run().await?,
+        Err(e) => return Err(e),
+    };
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": id }))))
 }
 
