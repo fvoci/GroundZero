@@ -121,11 +121,8 @@ pub(super) async fn verify(
     };
     let rejected = {
         let _admin = sh.push_env("DATABASE_ADMIN_URL", &other.admin);
-        let _migrator = sh.push_env(
-            "FVOCI_DB_MIGRATOR_PASSWORD",
-            compose::TEST_MIGRATOR_PASSWORD,
-        );
-        let _app = sh.push_env("FVOCI_DB_APP_PASSWORD", compose::TEST_APP_PASSWORD);
+        let _migrator = sh.push_env("FVOCI_DB_MIGRATOR_PASSWORD", compose::TEST_APP_PASSWORD);
+        let _app = sh.push_env("FVOCI_DB_APP_PASSWORD", compose::TEST_MIGRATOR_PASSWORD);
         cmd!(
             sh,
             "cargo run --quiet --package fvoci-server --locked -- db bootstrap"
@@ -141,6 +138,33 @@ pub(super) async fn verify(
     let after_rejection = super::catalog(&mut conn).await?;
     conn.close().await?;
     let rejected_unchanged = before == &after_rejection;
+    // The rejected request used different fixed test passwords. Fresh connections with
+    // the original credentials prove that no partial password update survived.
+    let mut credentials_preserved = true;
+    for url in [&urls.migration, &urls.app] {
+        match PgConnection::connect(url).await {
+            Ok(conn) => conn.close().await?,
+            Err(_) => credentials_preserved = false,
+        }
+    }
+
+    let mut admin = PgConnection::connect(&urls.admin).await?;
+    let database: Value = sqlx::query_scalar(
+        "SELECT jsonb_build_object('owner',datdba::regrole::text,
+          'create',has_database_privilege(current_user,oid,'CREATE'),
+          'connect',has_database_privilege(current_user,oid,'CONNECT'),
+          'create_grant_option',has_database_privilege(current_user,oid,'CREATE WITH GRANT OPTION'),
+          'connect_grant_option',has_database_privilege(current_user,oid,'CONNECT WITH GRANT OPTION'),
+          'createrole_self_grant',current_setting('createrole_self_grant'))
+         FROM pg_database WHERE datname=current_database()",
+    ).fetch_one(&mut admin).await?;
+    admin.close().await?;
+    let database_profile_valid = database["owner"] != INSTALLER
+        && database["create"] == true
+        && database["connect"] == true
+        && database["create_grant_option"] == false
+        && database["connect_grant_option"] == true
+        && database["createrole_self_grant"] == "";
 
     let mut probes = Vec::new();
     for (role, url) in [
@@ -254,7 +278,12 @@ pub(super) async fn verify(
             );
         }
         conn.close().await?;
-        probes.push(json!({"role":role,"properties":properties,"denials":denials}));
+        let attributes_valid = ["rolsuper", "rolcreatedb", "rolbypassrls", "rolreplication"]
+            .iter()
+            .all(|name| properties[*name] == false)
+            && properties["rolcanlogin"] == true
+            && properties["rolcreaterole"] == (role == INSTALLER);
+        probes.push(json!({"role":role,"properties":properties,"profile_attributes_valid":attributes_valid,"denials":denials}));
     }
     let all_denied = probes.iter().all(|role| {
         role["denials"]
@@ -265,7 +294,8 @@ pub(super) async fn verify(
         "profile":"restricted-installer-v1","provider_replica":false,
         "fixture_setup":"Local superuser created only two installer roles and granted target database CREATE plus CONNECT WITH GRANT OPTION. Product bootstrap and migration use restricted roles.",
         "repeatability":repeatability,
-        "unrelated_installer_bootstrap":{"status":if rejection_expected {"EXPECTED_DENIAL"}else{"FAIL"},"expected_error":"no ADMIN OPTION","catalog_unchanged":rejected_unchanged},
+        "database":database,"database_profile_valid":database_profile_valid,
+        "unrelated_installer_bootstrap":{"status":if rejection_expected {"EXPECTED_DENIAL"}else{"FAIL"},"expected_error":"no ADMIN OPTION","catalog_unchanged":rejected_unchanged,"different_passwords_requested":true,"original_credentials_preserved":credentials_preserved},
         "roles":probes,
         "restore":{"status":"NOT SUPPORTED by this capability profile","reason":"session_replication_role SET is denied; no grant was added"}
     });
@@ -277,7 +307,12 @@ pub(super) async fn verify(
             && evidence["repeatability"]["sqlx_ledger_equal"] == true
             && rejection_expected
             && rejected_unchanged
-            && all_denied,
+            && all_denied
+            && database_profile_valid
+            && credentials_preserved
+            && probes
+                .iter()
+                .all(|role| role["profile_attributes_valid"] == true),
         "capability verification failed; see {}/capabilities.json",
         dir.display()
     );

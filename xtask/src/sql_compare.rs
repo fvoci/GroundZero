@@ -137,6 +137,7 @@ pub fn run(
             "migrations":sql_hashes(&root.join("crates/server/migrations"))?,
             "candidate":candidate.as_deref().map(sql_hashes).transpose()?,
             "tool_sha256":Sha256::digest(include_bytes!("sql_compare.rs")).iter().map(|b|format!("{b:02x}")).collect::<String>(),
+            "capabilities_sha256":format!("{:x}",Sha256::digest(include_bytes!("sql_compare/capabilities.rs"))),
             "catalog_sha256":format!("{:x}",Sha256::digest(CATALOG.as_bytes())),
             "supabase_upstream":if supabase {Some(crate::supabase::REVISION)}else{None},
             "capability_profile":if restricted_admin {"restricted-installer-v1"}else{"image-default"},
