@@ -48,6 +48,8 @@
   // 보내는 중인 요청 수. 보내는 동안은 닫지 않는다(늦게 온 결과가 다시 연 창에 들어가지 않게, CalendarTaskDialog와 같음).
   let pending = $state(0);
   const busy = $derived(pending > 0);
+  // 그 가운데 일정 저장 수. 저장되면 입력 양식을 저장된 일정으로 다시 그리므로 그동안은 칸을 잠근다(아래 fieldset).
+  let saving = $state(0);
   // 지금 보이는 일정을 연 차례. 요청을 보낸 뒤 다른 일정을 열었으면(또는 닫았다 다시 열었으면) 늦은 결과를 버린다.
   let shown = 0;
   // 일정 입력이 바탕으로 삼은 버전. 반복 규칙 저장은 입력을 다시 그리지 않으므로 `event.version`과 따로 둔다.
@@ -141,7 +143,13 @@
   async function save(input: EventInput, baseVersion: number): Promise<void> {
     if (event === undefined) return;
     const mine = shown;
-    const result = await sending(api.updateEvent(event.id, baseVersion, input));
+    let result: Awaited<ReturnType<typeof api.updateEvent>>;
+    saving += 1;
+    try {
+      result = await sending(api.updateEvent(event.id, baseVersion, input));
+    } finally {
+      saving -= 1;
+    }
     if (mine !== shown) {
       // 그사이 다른 일정을 열었다. 고친 일정은 목록에서 다시 읽게만 한다.
       if (result.kind === 'updated') onchanged();
@@ -461,9 +469,10 @@
       {/if}
       {#if canEdit}
         <!-- 입력 양식을 감싼다(다시 저장이 이 안의 양식을 제출한다). 입력은 그것을 만든 일정에서 시작한다(반복 규칙
-             저장으로 `event`가 바뀌어도 손대지 않은 시각은 그 일정의 값으로 보낸다). 보내는 동안은 칸을 잠근다: 저장되면
-             양식을 저장된 일정으로 다시 그리므로 그사이 친 글이 말없이 사라졌다(CodeRabbit). -->
-        <fieldset class="min-w-0" disabled={busy} bind:this={formWrap}>
+             저장으로 `event`가 바뀌어도 손대지 않은 시각은 그 일정의 값으로 보낸다). 일정을 저장하는 동안은 칸을 잠근다:
+             저장되면 양식을 저장된 일정으로 다시 그리므로 그사이 친 글이 말없이 사라졌다(CodeRabbit). 반복 규칙 저장은
+             양식을 다시 그리지 않으므로 잠그지 않는다. -->
+        <fieldset class="min-w-0" disabled={saving > 0} bind:this={formWrap}>
           {#key epoch}
             <EventForm
               idPrefix="event-edit"
