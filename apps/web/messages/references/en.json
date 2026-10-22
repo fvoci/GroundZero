@@ -14,6 +14,7 @@
   "references_notifications_load_failed": "Couldn't load notifications.",
   "references_notifications_heading": "Notifications",
   "references_notifications_read_all": "Mark all as read",
+  "references_notifications_read_failed": "Couldn't mark notifications as read.",
   "references_notifications_loading": "Loading…",
   "references_notifications_empty": "No notifications.",
   "references_notifications_unread": "Unread",

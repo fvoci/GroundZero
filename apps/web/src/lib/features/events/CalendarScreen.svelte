@@ -111,6 +111,9 @@
   const settings = displaySettings();
   const zone = settings.timeZone;
   const today = dayIn(new Date().toISOString(), zone);
+  /** 날짜 머리말(표시 언어의 날짜 서식, D-81). */
+  const dayHeading = (day: string): string =>
+    day === today ? m.events_day_today({ day: formatDay(day) }) : formatDay(day);
   let month = $state(today.slice(0, 7));
   let data = $state<CalendarView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
@@ -301,14 +304,14 @@
                   ]}
                 >
                   <span aria-hidden="true">{Number(day.slice(8))}</span>
-                  <span class="sr-only">{day === today ? m.events_day_today({ day }) : day}</span>
+                  <span class="sr-only">{dayHeading(day)}</span>
                 </span>
                 {#if canCreate}
                   <button
                     type="button"
                     class="rounded px-1 text-xs text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground focus:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
-                    aria-label={m.events_task_create_on({ day })}
-                    title={m.events_task_create_on({ day })}
+                    aria-label={m.events_task_create_on({ day: formatDay(day) })}
+                    title={m.events_task_create_on({ day: formatDay(day) })}
                     data-create-day={day}
                     onclick={() => (createDay = day)}>+</button
                   >
@@ -336,7 +339,7 @@
   <ol class="flex flex-col gap-2 md:hidden" data-testid="calendar-agenda">
     {#each range.days.filter((d) => d.slice(0, 7) === month && (byDay.get(d)?.length ?? 0) > 0) as day (day)}
       <li class="flex flex-col gap-1">
-        <h2 class="text-sm font-semibold">{day === today ? m.events_day_today({ day }) : day}</h2>
+        <h2 class="text-sm font-semibold">{dayHeading(day)}</h2>
         {#each byDay.get(day) ?? [] as entry (entryKey(day, entry))}
           <CalendarEntryButton
             {entry}
