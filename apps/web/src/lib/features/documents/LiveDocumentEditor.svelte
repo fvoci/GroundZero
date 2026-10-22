@@ -101,9 +101,9 @@
     keepTimer = setTimeout(keepDraft, 300);
   }
 
-  /** 멈추거나 닫기 전에, 서버가 받았다고 확인되지 않은 편집이 있으면 바로 남긴다. */
+  /** 멈추거나 닫기 전에, 서버에 반영되지 않은 편집(저장하지 않은 제목 포함)이 있으면 바로 남긴다. */
   function keepIfDirty(): void {
-    if (watch?.dirty === true) keepDraft();
+    if (hasPending()) keepDraft();
   }
 
   /** 서버에 반영되지 않은 편집이 있는지: 확인받지 못한 본문, 또는 저장하지 않은 제목. */
@@ -116,9 +116,22 @@
   // 알리며 화면을 바꾸지 않아 내용을 옮겨 둘 수 있게 한다.
   let unsaved = $state<'kept' | 'lost' | undefined>(undefined);
 
-  /** 서버가 연결을 닫을 때: 확인받지 못한 편집이 있으면 초안으로 남기고 알린다. 남기지 못했으면 거짓. */
+  // 남긴 초안을 두고 부모에게 다시 열기를 맡겼다. 부모는 새 편집기를 먼저 만들어(그 초안을 고를 줄로 옮김) 이 편집기를
+  // 나중에 없애므로, 없어질 때 다시 남기면 버린 초안이 다시 열 때 또 나온다. 그래서 맡긴 뒤로는 제목·본문을 더 고치지
+  // 못하게 한다(부모가 문서를 다시 읽는 동안 친 글은 남길 곳이 없다). 부모는 이 편집기를 새 편집기나(성공) 오류 화면으로
+  // (실패) 바꾸며, 실패해도 맡긴 초안은 이 브라우저에 남아 다음에 열 때 고르게 한다(CodeRabbit #91).
+  let handedOff = $state(false);
+  function handOff(reopen: () => void): void {
+    handedOff = true;
+    reopen();
+  }
+
+  /**
+   * 서버가 연결을 닫을 때: 반영되지 않은 편집이 있으면 초안으로 남기고 알린다. 남기지 못했으면 거짓. 제목만 고쳤어도
+   * 남긴다(실시간이 꺼지거나 권한이 바뀌어 다시 열면 이 편집기와 함께 사라진다, CodeRabbit #64).
+   */
   function keepUnsaved(): boolean {
-    if (watch?.dirty !== true) return true;
+    if (!hasPending()) return true;
     unsaved = keepDraft() ? 'kept' : 'lost';
     return unsaved === 'kept';
   }
@@ -212,7 +225,7 @@
         // 문서가 다른 길(복원 등)로 바뀌었다. 옛 내용을 섞지 않도록 새 문서로 다시 연다.
         restart();
       } else if (stop === 'off') {
-        onrealtimeoff?.();
+        if (onrealtimeoff !== undefined) handOff(onrealtimeoff);
       } else {
         stopped = stop;
       }
@@ -232,8 +245,8 @@
       if (session?.provider !== current.provider || doc.realtime) return;
       const kept = keepUnsaved();
       current.provider.disconnect();
-      if (kept) onrealtimeoff?.();
-      else stopped = 'off';
+      if (!kept) stopped = 'off';
+      else if (onrealtimeoff !== undefined) handOff(onrealtimeoff);
     } catch (e: unknown) {
       if (session?.provider !== current.provider || !(e instanceof ApiError)) return;
       if (e.status === 401 || e.status === 403 || e.status === 404) {
@@ -247,13 +260,17 @@
   }
 
   function restart(): void {
-    keepIfDirty();
+    // 다시 열면 이 화면의 편집이 바뀌거나(본문) 이 편집기가 없어진다. 반영되지 않은 편집을 먼저 남기고, 남기지 못했는데
+    // 아직 알리지 않았으면 진행하지 않고 알린다(옮겨 둘 수 있게). 알린 뒤 다시 누른 것은 옮겨 둔 뒤의 명시적 진행이다
+    // (그때도 먼저 다시 남겨 본다, CodeRabbit #91).
+    const informed = unsaved === 'lost';
+    if (!keepUnsaved() && !informed) return;
     if (stopped === 'denied' && onreload !== undefined) {
-      onreload();
+      handOff(onreload);
       return;
     }
     if (stopped === 'off' && onrealtimeoff !== undefined) {
-      onrealtimeoff();
+      handOff(onrealtimeoff);
       return;
     }
     // 남기지 못한 편집은 사람이 옮겨 둔 뒤 다시 연결했다(새 내용으로 바뀐다).
@@ -282,7 +299,7 @@
     };
   });
   onDestroy(() => {
-    keepIfDirty();
+    if (!handedOff) keepIfDirty();
     watch?.stop();
     if (session !== undefined) closeLive(session);
   });
@@ -405,7 +422,9 @@
       >{stopped === undefined ? statusText(status) : stopText(stopped)}</span
     >
     {#if stopped !== undefined && stopped !== 'account'}
-      <Button size="sm" variant="outline" onclick={restart}>{m.documents_live_reconnect()}</Button>
+      <Button size="sm" variant="outline" disabled={handedOff} onclick={restart}
+        >{m.documents_live_reconnect()}</Button
+      >
     {/if}
   </div>
   <form
@@ -420,7 +439,7 @@
       <Input
         id="live-title"
         bind:value={title}
-        readonly={!start.can_edit}
+        readonly={!start.can_edit || handedOff}
         onblur={() => void saveTitle()}
       />
     </div>
@@ -429,7 +448,8 @@
         type="submit"
         size="sm"
         variant="outline"
-        disabled={savingTitle || title.trim() === savedTitle}>{m.documents_title_save()}</Button
+        disabled={savingTitle || handedOff || title.trim() === savedTitle}
+        >{m.documents_title_save()}</Button
       >
     {/if}
   </form>
@@ -468,10 +488,10 @@
     {#key epoch}
       <TiptapEditor
         content={start.body}
-        editable={start.can_edit && stopped === undefined}
+        editable={start.can_edit && stopped === undefined && !handedOff}
         label={m.documents_body_label()}
         {references}
-        insertFile={start.can_edit ? insertFile : undefined}
+        insertFile={start.can_edit && !handedOff ? insertFile : undefined}
         collab={session}
         onchange={(body: DocNode) => {
           latest = body;

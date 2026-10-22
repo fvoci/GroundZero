@@ -54,7 +54,7 @@
   "documents_live_denied": "Your access to this document changed, so the connection was closed. Reconnect to open it with your current access.",
   "documents_live_offline_found": "Edits to this document that never reached the server are still in this browser ({time}). They won't be merged into the live document. Keep them as a note or discard them.",
   "documents_live_unsaved_kept": "Some of your edits were not saved on the server. They are kept as a draft in this browser; when the document opens again you can keep them as a note or discard them.",
-  "documents_live_unsaved_lost": "Some of your edits were not saved on the server and could not be kept in this browser either (storage is full or an earlier draft is still waiting for your choice). Copy the content on screen before you reconnect.",
+  "documents_live_unsaved_lost": "Some of your edits were not saved on the server and could not be kept in this browser either (storage is full or an earlier draft is still waiting for your choice). Reconnecting drops these edits from the screen, so copy the content before you reconnect.",
   "documents_live_invalid": "The server rejected a change, so the connection was closed. Please reload.",
   "documents_live_reload": "The document changed. Reconnect to open the new content.",
   "documents_live_off": "Live editing was turned off.",
