@@ -218,3 +218,58 @@ async fn local_staging_leaves_the_object_alone_until_published() {
     ));
     let _ignored = std::fs::remove_dir_all(&dir);
 }
+
+/// #65 리뷰: 잇는 사이 다른 시도가 게시해 조각 폴더를 지우면, 늦은 시도는 조각을 다시 받으라는 실패가 아니라 이미
+/// 게시된 것(`NotFound`)으로 본다. 첫 조각 자리에 둔 FIFO에서 읽다가 멈춘 사이 폴더를 지운다.
+#[cfg(unix)]
+#[tokio::test]
+async fn local_staging_sees_parts_removed_midway_as_already_published() {
+    let dir = std::env::temp_dir().join(format!("fvoci-storage-{}", uuid::Uuid::now_v7().simple()));
+    let storage = Storage::new(&StorageConfig::Local { dir: dir.clone() });
+    let key = format!("test/{}", uuid::Uuid::now_v7().simple());
+    let upload = storage.begin(&key).await.unwrap();
+    let mut parts = Vec::new();
+    for number in 1..=2 {
+        let etag = storage
+            .put_part(&key, &upload, number, Bytes::from_static(b"part"))
+            .await
+            .unwrap();
+        parts.push(Part {
+            number,
+            etag,
+            size: 4,
+        });
+    }
+    let parts_dir = dir.join("uploads").join(&upload);
+    let first = parts_dir.join("00001");
+    std::fs::remove_file(&first).unwrap();
+    let made = std::process::Command::new("mkfifo")
+        .arg(&first)
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let staging = {
+        let (storage, key, upload) = (storage.clone(), key.clone(), upload.clone());
+        tokio::spawn(async move { storage.assemble(&key, &upload, &parts).await })
+    };
+    let mut writer = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        tokio::task::spawn_blocking(move || std::fs::OpenOptions::new().write(true).open(first)),
+    )
+    .await
+    .expect("staging never started reading the parts")
+    .unwrap()
+    .unwrap();
+    std::fs::remove_dir_all(&parts_dir).unwrap();
+    {
+        use std::io::Write as _;
+        writer.write_all(b"part").unwrap();
+    }
+    drop(writer);
+    let staged = tokio::time::timeout(std::time::Duration::from_secs(30), staging)
+        .await
+        .expect("staging never finished")
+        .unwrap();
+    assert!(matches!(staged, Err(AppError::NotFound)), "{staged:?}");
+    let _ignored = std::fs::remove_dir_all(&dir);
+}

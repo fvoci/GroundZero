@@ -166,6 +166,11 @@ impl LocalStore {
             file.sync_all().await
         }
         .await;
+        if joined.is_err() && !tokio::fs::try_exists(&dir).await.unwrap_or(true) {
+            // 잇는 사이 다른 시도가 게시해 조각 폴더를 지웠다(처음부터 폴더가 없을 때와 같게).
+            let _ignored = tokio::fs::remove_file(&path).await;
+            return Err(AppError::NotFound);
+        }
         discard_on_error(&path, joined).await?;
         Ok(Staged { path, file })
     }
