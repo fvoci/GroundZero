@@ -1,0 +1,29 @@
+[2m2026-10-21T22:48:41.548901Z[0m [32m INFO[0m [2mfvoci_server::http[0m[2m:[0m request [3mevent[0m[2m=[0m"http.request" [3mrequest_id[0m[2m=[0m01a160a7-071d-7069-8e5d-a7ac16b6667a [3mmethod[0m[2m=[0mGET [3mroute[0m[2m=[0m"/api/documents/{document_id}/collab" [3mstatus_code[0m[2m=[0m101 [3mduration_ms[0m[2m=[0m47.163
+
+thread 'no_room_opens_while_a_document_moves' (22936533) panicked at crates/server/tests/collab.rs:2759:5:
+assertion `left == right` failed: a live editing room opened while the document was moving
+  left: None
+ right: Some(4503)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- a_move_closes_the_room_after_saving_its_edits stdout ----
+--
+[2m2026-10-21T22:48:41.668468Z[0m [32m INFO[0m [2mfvoci_server::http[0m[2m:[0m request [3mevent[0m[2m=[0m"http.request" [3mrequest_id[0m[2m=[0m01a160a7-079e-7658-bdac-cbf8a44d3ae6 [3mmethod[0m[2m=[0mPOST [3mroute[0m[2m=[0m"/api/documents/{document_id}/move" [3mstatus_code[0m[2m=[0m200 [3mduration_ms[0m[2m=[0m38.109
+
+thread 'a_move_closes_the_room_after_saving_its_edits' (22936530) panicked at crates/server/tests/collab.rs:2707:5:
+assertion `left == right` failed: the editor's connection stayed open after the move
+  left: None
+ right: Some(4409)
+
+---- edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledged stdout ----
+[2m2026-10-21T22:48:41.332849Z[0m [32m INFO[0m [2mfvoci_server::http[0m[2m:[0m request [3mevent[0m[2m=[0m"http.request" [3mrequest_id[0m[2m=[0m01a160a7-0640-75d0-a7ab-3d46ea278e91 [3mmethod[0m[2m=[0mPOST [3mroute[0m[2m=[0m"/api/workspaces" [3mstatus_code[0m[2m=[0m201 [3mduration_ms[0m[2m=[0m52.729
+--
+[2m2026-10-21T22:49:06.000350Z[0m [32m INFO[0m [2mfvoci_server::http[0m[2m:[0m request [3mevent[0m[2m=[0m"http.request" [3mrequest_id[0m[2m=[0m01a160a7-66c8-7044-83c8-518a06aabe33 [3mmethod[0m[2m=[0mGET [3mroute[0m[2m=[0m"/api/documents/{document_id}" [3mstatus_code[0m[2m=[0m200 [3mduration_ms[0m[2m=[0m8.248
+
+thread 'edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledged' (22936531) panicked at crates/server/tests/collab.rs:2609:5:
+the edit made after the checkpoint was acknowledged but is not in the moved document: {"access":"owner","allow_copy":false,"body":{"content":[{"type":"paragraph"},{"content":[{"text":"체크포인트 전 문단","type":"text"}],"type":"paragraph"}],"type":"doc"},"can_delete":true,"can_edit":true,"can_export":true,"can_manage":true,"id":"01a160a7-06b2-77af-abef-6b5e970e973b","is_template":false,"it
+
+
+failures:
+    a_move_closes_the_room_after_saving_its_edits
+    edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledged

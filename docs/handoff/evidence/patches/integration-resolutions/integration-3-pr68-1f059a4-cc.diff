@@ -1,0 +1,1787 @@
+commit 1f059a45007cf50711ba4235a890d5a8f70e806f
+parents 29d377deb5268a17da835ce419b53485c9a7898f cd2c1bddaf769b395d3352cd4499d682c50c9f85
+subject Merge #68 (fix/audit-test-gaps) into the final integration check
+
+
+diff --cc crates/server/tests/comments.rs
+index f7b8398,6d0e14a..cb588fd
+--- a/crates/server/tests/comments.rs
++++ b/crates/server/tests/comments.rs
+@@@ -501,148 -501,89 +501,235 @@@ async fn moved_documents_live_excerpts_
+      assert_eq!(on_task, 1);
+  }
+  
+ +/// 항목 하나와 업무 하나(워크스페이스 공개). 업무 응답을 돌려준다.
+ +async fn item_task(app: &Router, admin: &TestUser, ws: &str, key: &str) -> (Value, Value, Value) {
+ +    let m = send(
+ +        app,
+ +        Method::POST,
+ +        &format!("/api/workspaces/{ws}/modules"),
+ +        Some(admin),
+ +        Some(json!({ "request_id": new_request_id(), "kind": "project", "name": key, "key": key })),
+ +    )
+ +    .await
+ +    .json;
+ +    let item = send(
+ +        app,
+ +        Method::POST,
+ +        &format!("/api/modules/{}/items", m["id"].as_str().unwrap()),
+ +        Some(admin),
+ +        Some(json!({ "request_id": new_request_id(), "title": "항목" })),
+ +    )
+ +    .await
+ +    .json;
+ +    let open = send(
+ +        app,
+ +        Method::PUT,
+ +        &format!("/api/items/{}", item["id"].as_str().unwrap()),
+ +        Some(admin),
+ +        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+ +    )
+ +    .await;
+ +    assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
+ +    let task = send(
+ +        app,
+ +        Method::POST,
+ +        &format!("/api/items/{}/tasks", item["id"].as_str().unwrap()),
+ +        Some(admin),
+ +        Some(json!({ "request_id": new_request_id(), "title": "보고서" })),
+ +    )
+ +    .await
+ +    .json;
+ +    (m, item, task)
+ +}
+ +
+ +/// 감사 W11: 보관된 항목에는 새 댓글을 달 수 없는데 쓴 사람의 고치기와 스레드 해결은 통과했다. 둘 다 409이고,
+ +/// 목록의 고치기·해결 표시도 꺼진다.
+ +#[tokio::test]
+ +async fn comments_in_an_archived_item_are_not_edited_or_resolved() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let admin = login(&state, "admin").await;
+ +    let ws = create_workspace(&app, &admin, "보관 댓글").await;
+ +    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+ +    let (_, item, task) = item_task(&app, &admin, &ws, "ARC").await;
+ +    let (status, created) = comment(
+ +        &app,
+ +        &writer,
+ +        json!({ "task_id": task["id"], "body": "초안 올렸어요" }),
+ +    )
+ +    .await;
+ +    assert_eq!(status, StatusCode::CREATED, "{created:?}");
+ +    let uri = format!("/api/comments/{}", created["id"].as_str().unwrap());
+ +    let list_uri = format!("/api/tasks/{}/comments", task["id"].as_str().unwrap());
+ +    let list = send(&app, Method::GET, &list_uri, Some(&writer), None)
+ +        .await
+ +        .json;
+ +    assert_eq!(list[0]["can_edit"], true, "{list:?}");
+ +    assert_eq!(list[0]["can_resolve"], true, "{list:?}");
+ +
+ +    let archived = send(
+ +        &app,
+ +        Method::PUT,
+ +        &format!("/api/items/{}/archived", item["id"].as_str().unwrap()),
+ +        Some(&admin),
+ +        Some(json!({ "archived": true })),
+ +    )
+ +    .await;
+ +    assert_eq!(archived.status, StatusCode::OK, "{:?}", archived.json);
+ +    let edit = send(
+ +        &app,
+ +        Method::PUT,
+ +        &uri,
+ +        Some(&writer),
+ +        Some(json!({ "body": "보관 뒤에 고침" })),
+ +    )
+ +    .await;
+ +    assert_eq!(edit.status, StatusCode::CONFLICT, "{:?}", edit.json);
+ +    let resolve = send(
+ +        &app,
+ +        Method::POST,
+ +        &format!("{uri}/resolve"),
+ +        Some(&writer),
+ +        Some(json!({ "resolved": true })),
+ +    )
+ +    .await;
+ +    assert_eq!(resolve.status, StatusCode::CONFLICT, "{:?}", resolve.json);
+ +    let list = send(&app, Method::GET, &list_uri, Some(&writer), None)
+ +        .await
+ +        .json;
+ +    assert_eq!(list[0]["body"], "초안 올렸어요");
+ +    assert_eq!(list[0]["resolved"], false);
+ +    assert_eq!(list[0]["can_edit"], false, "{list:?}");
+ +    assert_eq!(list[0]["can_resolve"], false, "{list:?}");
+ +}
+ +
+ +/// 감사 S19: 모듈을 보관하면 그 아래 업무는 읽기 전용인데 마감 알림은 계속 나갔다(항목 알림·홈은 보관된 모듈을 뺀다).
+ +/// 보관된 모듈의 업무는 마감일이 다가와도 알리지 않는다.
+ +#[tokio::test]
+ +async fn due_notices_skip_tasks_in_an_archived_module() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let admin = login(&state, "admin").await;
+ +    let ws = create_workspace(&app, &admin, "보관 모듈 기한").await;
+ +    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+ +    let (m, _, task) = item_task(&app, &admin, &ws, "DUE").await;
+ +    let task_id = task["id"].as_str().unwrap().to_owned();
+ +    // 마감은 아직 멀다(다른 시험의 작업 실행이 먼저 알리지 않게).
+ +    let later = time::OffsetDateTime::now_utc().date() + time::Duration::days(20);
+ +    let updated = send(&app, Method::PUT, &format!("/api/tasks/{task_id}"), Some(&admin), Some(json!({
+ +        "base_version": task["version"], "title": "보고서", "description": "", "status": "todo",
+ +        "priority": task["priority"], "start_date": null, "due_date": later.to_string(), "estimate_minutes": null,
+ +        "tags": [], "milestone": false, "assignee_ids": [writer.id.0] }))).await;
+ +    assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
+ +    let archived = send(
+ +        &app,
+ +        Method::PUT,
+ +        &format!("/api/modules/{}/archived", m["id"].as_str().unwrap()),
+ +        Some(&admin),
+ +        Some(json!({ "archived": true })),
+ +    )
+ +    .await;
+ +    assert!(archived.status.is_success(), "{:?}", archived.json);
+ +    // 날이 지나 마감이 내일이 된다.
+ +    common::fixture_sql(
+ +        "UPDATE fvoci.tasks SET due_date = current_date + 1 WHERE id = $1::uuid",
+ +        &task_id,
+ +    )
+ +    .await;
+ +    fvoci_server::worker::run_all_now(&state.db, None, None)
+ +        .await
+ +        .unwrap();
+ +    let due: Vec<Value> = notes(&app, &writer)
+ +        .await
+ +        .into_iter()
+ +        .filter(|x| x["kind"] == "due" && x["task_id"] == task["id"])
+ +        .collect();
+ +    assert!(due.is_empty(), "{due:?}");
+ +}
+++
++ /// 감사 C24: 업무 댓글 목록(`GET /api/tasks/{id}/comments`)을 읽는 시험이 없었다. 업무를 볼 수 있는 사람만 읽고(비공개
++ /// 항목의 멤버가 아니면 404), 스레드 순서와 권한 표시는 문서 댓글과 같다.
++ #[tokio::test]
++ async fn task_comments_follow_the_item_access() {
++     let state = common::state();
++     let app = common::app(&state);
++     let admin = login(&state, "admin").await;
++     let ws = create_workspace(&app, &admin, "업무 댓글").await;
++     let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
++     let m = send(
++         &app,
++         Method::POST,
++         &format!("/api/workspaces/{ws}/modules"),
++         Some(&admin),
++         Some(
++             json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "TCM" }),
++         ),
++     )
++     .await
++     .json;
++     // 새 항목은 비공개다(D-20).
++     let item = send(
++         &app,
++         Method::POST,
++         &format!("/api/modules/{}/items", m["id"].as_str().unwrap()),
++         Some(&admin),
++         Some(json!({ "request_id": new_request_id(), "title": "비공개 항목" })),
++     )
++     .await
++     .json;
++     let task = send(
++         &app,
++         Method::POST,
++         &format!("/api/items/{}/tasks", item["id"].as_str().unwrap()),
++         Some(&admin),
++         Some(json!({ "request_id": new_request_id(), "title": "검토" })),
++     )
++     .await
++     .json;
++     let (status, first) = comment(
++         &app,
++         &admin,
++         json!({ "task_id": task["id"], "body": "첫 의견" }),
++     )
++     .await;
++     assert_eq!(status, StatusCode::CREATED, "{first:?}");
++     let (status, reply) = comment(
++         &app,
++         &admin,
++         json!({ "task_id": task["id"], "parent_id": first["id"], "body": "답글" }),
++     )
++     .await;
++     assert_eq!(status, StatusCode::CREATED, "{reply:?}");
++     let uri = format!("/api/tasks/{}/comments", task["id"].as_str().unwrap());
++ 
++     let hidden = send(&app, Method::GET, &uri, Some(&writer), None).await;
++     assert_eq!(hidden.status, StatusCode::NOT_FOUND, "{:?}", hidden.json);
++     let list = send(&app, Method::GET, &uri, Some(&admin), None).await;
++     assert_eq!(list.status, StatusCode::OK, "{:?}", list.json);
++     let bodies: Vec<&str> = list
++         .json
++         .as_array()
++         .unwrap()
++         .iter()
++         .map(|c| c["body"].as_str().unwrap())
++         .collect();
++     assert_eq!(bodies, ["첫 의견", "답글"]);
++     assert_eq!(list.json[0]["can_edit"], true);
++     assert_eq!(list.json[0]["can_resolve"], true);
++     assert_eq!(list.json[1]["can_resolve"], false);
++ 
++     // 항목을 공개하면 작성자도 읽는다(남의 댓글은 고치지 못한다).
++     let open = send(
++         &app,
++         Method::PUT,
++         &format!("/api/items/{}", item["id"].as_str().unwrap()),
++         Some(&admin),
++         Some(json!({ "title": "비공개 항목", "description": "", "visibility": "workspace" })),
++     )
++     .await;
++     assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
++     let seen = send(&app, Method::GET, &uri, Some(&writer), None).await;
++     assert_eq!(seen.status, StatusCode::OK, "{:?}", seen.json);
++     assert_eq!(seen.json.as_array().unwrap().len(), 2);
++     assert_eq!(seen.json[0]["can_edit"], false);
++ }
+diff --cc crates/server/tests/home.rs
+index 48dd559,ccfd3e5..6ab771f
+--- a/crates/server/tests/home.rs
++++ b/crates/server/tests/home.rs
+@@@ -286,87 -282,49 +286,134 @@@ async fn home_collects_my_upcoming_work
+      );
+  }
+  
+ +/// 감사 W23: Up Next를 한 번에 50개로 잘라, 밀린 업무가 50개를 넘으면 오늘·다가오는 일이 빠지고 "기한 지남 50"이
+ +/// 정확한 수처럼 보였다. 묶음마다 50개까지 보이고 묶음별 전체 수를 함께 준다.
+ +#[tokio::test]
+ +async fn up_next_keeps_today_and_upcoming_behind_a_long_overdue_backlog() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let admin = login(&state, "admin").await;
+ +    let ws = create_workspace(&app, &admin, "밀린 일").await;
+ +    let (me, _) = add_member(&app, &state, &admin, &ws, "me", "writer").await;
+ +    let shared = item(&app, &admin, &ws, "BKL", true).await;
+ +    let today: Date = {
+ +        let mut tx = state.db.begin_as(me.id).await.unwrap();
+ +        sqlx::query_scalar("SELECT (now() AT TIME ZONE 'Asia/Seoul')::date")
+ +            .fetch_one(tx.conn())
+ +            .await
+ +            .unwrap()
+ +    };
+ +    for n in 0..55 {
+ +        let due = today - Duration::days(1 + n % 20);
+ +        task(
+ +            &app,
+ +            &me,
+ +            &shared,
+ +            &format!("밀린 {n}"),
+ +            Some(day(due)),
+ +            vec![],
+ +            "todo",
+ +        )
+ +        .await;
+ +    }
+ +    for n in 0..3 {
+ +        task(
+ +            &app,
+ +            &me,
+ +            &shared,
+ +            &format!("오늘 {n}"),
+ +            Some(day(today)),
+ +            vec![],
+ +            "todo",
+ +        )
+ +        .await;
+ +    }
+ +    task(
+ +        &app,
+ +        &me,
+ +        &shared,
+ +        "내일",
+ +        Some(day(today + Duration::days(1))),
+ +        vec![],
+ +        "todo",
+ +    )
+ +    .await;
+ +
+ +    let home = send(
+ +        &app,
+ +        Method::GET,
+ +        "/api/me/home?tz=Asia/Seoul",
+ +        Some(&me),
+ +        None,
+ +    )
+ +    .await;
+ +    assert_eq!(home.status, StatusCode::OK, "{:?}", home.json);
+ +    let buckets: Vec<&str> = home.json["up_next"]
+ +        .as_array()
+ +        .unwrap()
+ +        .iter()
+ +        .map(|t| t["bucket"].as_str().unwrap())
+ +        .collect();
+ +    let count = |b: &str| buckets.iter().filter(|x| **x == b).count();
+ +    assert_eq!(
+ +        (count("overdue"), count("today"), count("upcoming")),
+ +        (50, 3, 1),
+ +        "{buckets:?}"
+ +    );
+ +    assert_eq!(
+ +        home.json["up_next_counts"],
+ +        json!({ "overdue": 55, "today": 3, "upcoming": 1 })
+ +    );
+ +    // 기한 지남은 마감이 이른 것부터 50개(가장 늦게 밀린 5개 중 일부는 빠진다).
+ +    assert_eq!(
+ +        home.json["up_next"][0]["due_date"],
+ +        day(today - Duration::days(20))
+ +    );
+ +}
+++
++ /// 감사 C33: 고정·즐겨찾기 상태를 읽는 `GET /api/me/marks/{kind}/{id}`에는 시험이 없었다. 본인 표시만 보이고, 볼 수
++ /// 없는 대상은 모르는 id와 같이 둘 다 꺼짐이다(있는지 드러내지 않는다). 그런 대상에 켜기는 404다.
++ #[tokio::test]
++ async fn marks_read_back_only_for_their_owner() {
++     let state = common::state();
++     let app = common::app(&state);
++     let admin = login(&state, "admin").await;
++     let ws = create_workspace(&app, &admin, "표시 읽기").await;
++     let (me, _) = add_member(&app, &state, &admin, &ws, "me", "writer").await;
++     let shared = item(&app, &admin, &ws, "MRK", true).await;
++     let private = item(&app, &admin, &ws, "MRP", false).await;
++     let uri = |target: &Value| format!("/api/me/marks/item/{}", target["id"].as_str().unwrap());
++     let set = send(
++         &app,
++         Method::PUT,
++         &uri(&shared),
++         Some(&me),
++         Some(json!({ "mark": "favorite", "on": true })),
++     )
++     .await;
++     assert_eq!(set.status, StatusCode::OK, "{:?}", set.json);
++     let mine = send(&app, Method::GET, &uri(&shared), Some(&me), None).await;
++     assert_eq!(mine.status, StatusCode::OK, "{:?}", mine.json);
++     assert_eq!(mine.json, json!({ "pin": false, "favorite": true }));
++     let theirs = send(&app, Method::GET, &uri(&shared), Some(&admin), None).await;
++     assert_eq!(theirs.json, json!({ "pin": false, "favorite": false }));
++     let hidden = send(&app, Method::GET, &uri(&private), Some(&me), None).await;
++     assert_eq!(hidden.status, StatusCode::OK, "{:?}", hidden.json);
++     assert_eq!(hidden.json, json!({ "pin": false, "favorite": false }));
++     let unknown = format!("/api/me/marks/item/{}", uuid::Uuid::now_v7());
++     assert_eq!(
++         send(&app, Method::GET, &unknown, Some(&me), None)
++             .await
++             .json,
++         hidden.json
++     );
++     let refused = send(
++         &app,
++         Method::PUT,
++         &uri(&private),
++         Some(&me),
++         Some(json!({ "mark": "pin", "on": true })),
++     )
++     .await;
++     assert_eq!(refused.status, StatusCode::NOT_FOUND, "{:?}", refused.json);
++ }
+diff --cc crates/server/tests/members.rs
+index 0762ccb,b136827..5b18e36
+--- a/crates/server/tests/members.rs
++++ b/crates/server/tests/members.rs
+@@@ -535,525 -535,68 +535,591 @@@ async fn membership_changes_are_audited
+      );
+  }
+  
+ +/// 테이블 소유 역할 연결(시험 확인용).
+ +async fn owner_pool() -> sqlx::PgPool {
+ +    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+ +    sqlx::PgPool::connect(&url).await.unwrap()
+ +}
+ +
+ +/// 트랜잭션 하나를 열어 둔 채 다른 요청을 보내고, 그 요청이 이 트랜잭션의 잠금을 실제로 기다리게 된 뒤 트랜잭션을
+ +/// 마친 다음 그 요청의 결과를 돌려준다. 고정 시간만 기다리면 느린 환경에서 요청이 잠금에 닿기 전에 커밋해, 경합을
+ +/// 재현하지 못한 채 통과하거나 엉뚱한 이유로 실패한다. 끝내 기다리지 않으면 시험을 멈춘다.
+ +async fn while_open<F>(mut tx: fvoci_server::db::UserTx, request: F) -> common::Reply
+ +where
+ +    F: std::future::Future<Output = common::Reply> + Send + 'static,
+ +{
+ +    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+ +        .fetch_one(tx.conn())
+ +        .await
+ +        .unwrap();
+ +    let pending = tokio::spawn(request);
+ +    let db = owner_pool().await;
+ +    let mut blocked = false;
+ +    for _ in 0..500 {
+ +        blocked = sqlx::query_scalar(
+ +            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+ +        )
+ +        .bind(holder)
+ +        .fetch_one(&db)
+ +        .await
+ +        .unwrap();
+ +        if blocked {
+ +            break;
+ +        }
+ +        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+ +    }
+ +    db.close().await;
+ +    assert!(blocked, "no request waited on the held transaction");
+ +    tx.commit().await.unwrap();
+ +    pending.await.unwrap()
+ +}
+ +
+ +async fn private_item(app: &axum::Router, admin: &TestUser, ws: &str, key: &str) -> String {
+ +    let m = send(
+ +        app,
+ +        Method::POST,
+ +        &format!("/api/workspaces/{ws}/modules"),
+ +        Some(admin),
+ +        Some(json!({ "request_id": new_request_id(), "kind": "project", "name": key, "key": key })),
+ +    )
+ +    .await;
+ +    assert_eq!(m.status, StatusCode::CREATED, "{:?}", m.json);
+ +    let i = send(
+ +        app,
+ +        Method::POST,
+ +        &format!("/api/modules/{}/items", m.json["id"].as_str().unwrap()),
+ +        Some(admin),
+ +        Some(json!({ "request_id": new_request_id(), "title": "비공개 항목" })),
+ +    )
+ +    .await;
+ +    assert_eq!(i.status, StatusCode::CREATED, "{:?}", i.json);
+ +    let id = i.json["id"].as_str().unwrap().to_owned();
+ +    let private = send(
+ +        app,
+ +        Method::PUT,
+ +        &format!("/api/items/{id}"),
+ +        Some(admin),
+ +        Some(json!({ "title": "비공개 항목", "description": "", "visibility": "private" })),
+ +    )
+ +    .await;
+ +    assert!(private.status.is_success(), "{:?}", private.json);
+ +    id
+ +}
+ +
+ +/// 감사 S14: 소유권 인계를 수락하는 사이 그 사람을 내보내면, 내보내기가 옛 소유자를 보고 통과해 소유자가 멤버가 아닌
+ +/// 워크스페이스가 남았다. 내보내기는 워크스페이스 행을 먼저 잠그고(수락과 같은 순서) 소유자를 다시 본다.
+ +#[tokio::test]
+ +async fn removing_a_member_who_is_accepting_ownership_meanwhile_conflicts() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let owner = login(&state, "owner").await;
+ +    let ws = create_workspace(&app, &owner, "인계 경합").await;
+ +    let heir = add_member(&app, &state, &owner, &ws, "heir", "admin").await;
+ +    let other = add_member(&app, &state, &owner, &ws, "other-admin", "admin").await;
+ +    let offered = send(
+ +        &app,
+ +        Method::POST,
+ +        &format!("/api/workspaces/{ws}/ownership"),
+ +        Some(&owner),
+ +        Some(json!({ "to_user": heir.id.0 })),
+ +    )
+ +    .await;
+ +    assert!(offered.status.is_success(), "{:?}", offered.json);
+ +    let ws_id: uuid::Uuid = ws.parse().unwrap();
+ +
+ +    let mut t1 = state.db.begin_as(heir.id).await.unwrap();
+ +    sqlx::query("SELECT app_accept_ownership($1, $2)")
+ +        .bind(ws_id)
+ +        .bind(fvoci_server::db::new_ids(1))
+ +        .execute(t1.conn())
+ +        .await
+ +        .unwrap();
+ +    let uri = format!("/api/workspaces/{ws}/members/{}", heir.id.0);
+ +    let removal = while_open(t1, {
+ +        let app = app.clone();
+ +        let other = other.clone();
+ +        async move { send(&app, Method::DELETE, &uri, Some(&other), None).await }
+ +    })
+ +    .await;
+ +    assert_eq!(removal.status, StatusCode::CONFLICT, "{:?}", removal.json);
+ +
+ +    let db = owner_pool().await;
+ +    let member: bool = sqlx::query_scalar(
+ +        "SELECT EXISTS (SELECT 1 FROM fvoci.workspaces w JOIN fvoci.workspace_members m
+ +                        ON m.workspace_id = w.id AND m.user_id = w.owner_id WHERE w.id = $1)",
+ +    )
+ +    .bind(ws_id)
+ +    .fetch_one(&db)
+ +    .await
+ +    .unwrap();
+ +    assert!(member, "the workspace owner is not a member");
+ +    db.close().await;
+ +}
+ +
+ +/// 감사 S15·S8: 멤버를 내보내는 사이 그 사람을 비공개 항목 멤버나 그룹에 넣으면, 넣기는 아직 커밋되지 않은 내보내기를
+ +/// 보지 못해 통과했고 내보내기는 그 행을 보지 못해 지우지 않았다(다시 초대되면 비공개 항목이 저절로 열림). 넣는 쪽은
+ +/// 대상의 멤버 행을 잠근 뒤 확인하고, 내보내기는 멤버 행을 먼저 잠근다.
+ +#[tokio::test]
+ +async fn adding_a_member_who_is_being_removed_does_not_survive_the_removal() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let admin = login(&state, "admin").await;
+ +    let ws = create_workspace(&app, &admin, "내보내기 경합").await;
+ +    let leaving = add_member(&app, &state, &admin, &ws, "leaving", "writer").await;
+ +    let item = private_item(&app, &admin, &ws, "PRV").await;
+ +    let group = send(
+ +        &app,
+ +        Method::POST,
+ +        &format!("/api/workspaces/{ws}/groups"),
+ +        Some(&admin),
+ +        Some(json!({ "name": "팀" })),
+ +    )
+ +    .await;
+ +    assert_eq!(group.status, StatusCode::CREATED, "{:?}", group.json);
+ +    let group_id = group.json["id"].as_str().unwrap().to_owned();
+ +    let ws_id: uuid::Uuid = ws.parse().unwrap();
+ +
+ +    for target in ["item", "group"] {
+ +        // 매번 다시 넣고 시작한다.
+ +        if target == "group" {
+ +            let again = add_member(&app, &state, &admin, &ws, "leaving-again", "writer").await;
+ +            run_removal_race(
+ +                &app, &state, &admin, ws_id, &again, target, &item, &group_id,
+ +            )
+ +            .await;
+ +        } else {
+ +            run_removal_race(
+ +                &app, &state, &admin, ws_id, &leaving, target, &item, &group_id,
+ +            )
+ +            .await;
+ +        }
+ +    }
+ +}
+ +
+ +#[expect(
+ +    clippy::too_many_arguments,
+ +    reason = "test helper with the race's inputs"
+ +)]
+ +async fn run_removal_race(
+ +    app: &axum::Router,
+ +    state: &fvoci_server::http::AppState,
+ +    admin: &TestUser,
+ +    ws_id: uuid::Uuid,
+ +    member: &TestUser,
+ +    target: &str,
+ +    item: &str,
+ +    group: &str,
+ +) {
+ +    // 리뷰: 경합 대상이 아닌 쪽의 멤버십을 미리 만들어, 내보내기가 이미 있던 행도 지우는지 함께 본다.
+ +    let existing = if target == "item" {
+ +        send(
+ +            app,
+ +            Method::PUT,
+ +            &format!("/api/groups/{group}/members/{}", member.id.0),
+ +            Some(admin),
+ +            None,
+ +        )
+ +        .await
+ +    } else {
+ +        send(
+ +            app,
+ +            Method::PUT,
+ +            &format!("/api/items/{item}/members"),
+ +            Some(admin),
+ +            Some(json!({ "user_ids": [member.id.0], "group_ids": [] })),
+ +        )
+ +        .await
+ +    };
+ +    assert!(
+ +        existing.status.is_success(),
+ +        "{target}: {:?}",
+ +        existing.json
+ +    );
+ +    let n: i32 = {
+ +        let mut tx = state.db.begin_as(admin.id).await.unwrap();
+ +        let n = sqlx::query_scalar("SELECT app_remove_member_ids($1, $2)")
+ +            .bind(ws_id)
+ +            .bind(member.id)
+ +            .fetch_one(tx.conn())
+ +            .await
+ +            .unwrap();
+ +        tx.commit().await.unwrap();
+ +        n
+ +    };
+ +    let mut t1 = state.db.begin_as(admin.id).await.unwrap();
+ +    sqlx::query("SELECT app_remove_member($1, $2, $3)")
+ +        .bind(ws_id)
+ +        .bind(member.id)
+ +        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+ +        .execute(t1.conn())
+ +        .await
+ +        .unwrap();
+ +    let (method, uri, body) = if target == "item" {
+ +        (
+ +            Method::PUT,
+ +            format!("/api/items/{item}/members"),
+ +            Some(json!({ "user_ids": [member.id.0], "group_ids": [] })),
+ +        )
+ +    } else {
+ +        (
+ +            Method::PUT,
+ +            format!("/api/groups/{group}/members/{}", member.id.0),
+ +            None,
+ +        )
+ +    };
+ +    let added = while_open(t1, {
+ +        let app = app.clone();
+ +        let admin = admin.clone();
+ +        async move { send(&app, method, &uri, Some(&admin), body).await }
+ +    })
+ +    .await;
+ +    assert_eq!(
+ +        added.status,
+ +        StatusCode::BAD_REQUEST,
+ +        "{target}: {:?}",
+ +        added.json
+ +    );
+ +    let db = owner_pool().await;
+ +    let left: i64 = sqlx::query_scalar(
+ +        "SELECT (SELECT count(*) FROM fvoci.item_members WHERE user_id = $1)
+ +              + (SELECT count(*) FROM fvoci.group_members WHERE user_id = $1)",
+ +    )
+ +    .bind(member.id)
+ +    .fetch_one(&db)
+ +    .await
+ +    .unwrap();
+ +    assert_eq!(left, 0, "{target}: a removed member kept a membership row");
+ +    db.close().await;
+ +}
+ +
+ +/// 감사 S16: 초대를 수락하는 사이 철회하면, 철회가 수락된 초대를 '철회됨'으로 덮어썼다(이미 멤버인데). 철회는 수락과
+ +/// 같은 순서로 잠근 뒤 아직 열려 있는지 다시 본다.
+ +#[tokio::test]
+ +async fn revoking_an_invitation_being_accepted_does_not_overwrite_the_acceptance() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let admin = login(&state, "admin").await;
+ +    let ws = create_workspace(&app, &admin, "철회 경합").await;
+ +    let email = unique_email("invitee");
+ +    let invitee = login_with_email(&state, "invitee", &email, true).await;
+ +    let inv = invite(&app, &admin, &ws, &email, "writer").await;
+ +    let inv_id: uuid::Uuid = inv["id"].as_str().unwrap().parse().unwrap();
+ +
+ +    let mut t1 = state.db.begin_as(invitee.id).await.unwrap();
+ +    sqlx::query("SELECT app_respond_invitation($1, true, $2)")
+ +        .bind(inv_id)
+ +        .bind(fvoci_server::db::new_ids(1))
+ +        .execute(t1.conn())
+ +        .await
+ +        .unwrap();
+ +    let uri = format!("/api/invitations/{inv_id}");
+ +    let revoked = while_open(t1, {
+ +        let app = app.clone();
+ +        let admin = admin.clone();
+ +        async move { send(&app, Method::DELETE, &uri, Some(&admin), None).await }
+ +    })
+ +    .await;
+ +    assert_eq!(revoked.status, StatusCode::CONFLICT, "{:?}", revoked.json);
+ +    let db = owner_pool().await;
+ +    let reason: Option<String> =
+ +        sqlx::query_scalar("SELECT close_reason FROM fvoci.invitations WHERE id = $1")
+ +            .bind(inv_id)
+ +            .fetch_one(&db)
+ +            .await
+ +            .unwrap();
+ +    assert_eq!(reason.as_deref(), Some("accepted"));
+ +    db.close().await;
+ +}
+ +
+ +/// 감사 S17: 소유자가 아닌 관리자 둘이 동시에 서로를 내보내면 둘 다 통과해 둘 다 빠졌다. 내보내기는 두 사람의 멤버 행을
+ +/// id 순서로 잠근 뒤 관리자인지 본다(먼저 끝난 쪽만 통과).
+ +#[tokio::test]
+ +async fn two_admins_removing_each_other_at_once_leave_one_of_them() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let owner = login(&state, "owner").await;
+ +    let ws = create_workspace(&app, &owner, "관리자 경합").await;
+ +    let a = add_member(&app, &state, &owner, &ws, "admin-a", "admin").await;
+ +    let b = add_member(&app, &state, &owner, &ws, "admin-b", "admin").await;
+ +    let ws_id: uuid::Uuid = ws.parse().unwrap();
+ +    let n: i32 = {
+ +        let mut tx = state.db.begin_as(a.id).await.unwrap();
+ +        let n = sqlx::query_scalar("SELECT app_remove_member_ids($1, $2)")
+ +            .bind(ws_id)
+ +            .bind(b.id)
+ +            .fetch_one(tx.conn())
+ +            .await
+ +            .unwrap();
+ +        tx.commit().await.unwrap();
+ +        n
+ +    };
+ +    let mut t1 = state.db.begin_as(a.id).await.unwrap();
+ +    sqlx::query("SELECT app_remove_member($1, $2, $3)")
+ +        .bind(ws_id)
+ +        .bind(b.id)
+ +        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+ +        .execute(t1.conn())
+ +        .await
+ +        .unwrap();
+ +    let uri = format!("/api/workspaces/{ws}/members/{}", a.id.0);
+ +    let second = while_open(t1, {
+ +        let app = app.clone();
+ +        let b = b.clone();
+ +        async move { send(&app, Method::DELETE, &uri, Some(&b), None).await }
+ +    })
+ +    .await;
+ +    assert_ne!(second.status, StatusCode::NO_CONTENT, "{:?}", second.json);
+ +    let db = owner_pool().await;
+ +    let admins: i64 = sqlx::query_scalar(
+ +        "SELECT count(*) FROM fvoci.workspace_members WHERE workspace_id = $1 AND user_id = ANY ($2)",
+ +    )
+ +    .bind(ws_id)
+ +    .bind(vec![a.id.0, b.id.0])
+ +    .fetch_one(&db)
+ +    .await
+ +    .unwrap();
+ +    assert_eq!(admins, 1, "both admins removed each other");
+ +    db.close().await;
+ +}
+ +
+ +/// 소유자가 관리자 `admin`을 작성자로 내리는 트랜잭션을 열어 둔다(커밋 전). 역할 바꾸기는 두 사람의 멤버 행을 잠근다.
+ +async fn demoting(
+ +    state: &fvoci_server::http::AppState,
+ +    owner: &TestUser,
+ +    ws_id: uuid::Uuid,
+ +    admin: &TestUser,
+ +) -> fvoci_server::db::UserTx {
+ +    let n: i32 = {
+ +        let mut tx = state.db.begin_as(owner.id).await.unwrap();
+ +        let n = sqlx::query_scalar("SELECT app_set_member_role_ids($1, $2)")
+ +            .bind(ws_id)
+ +            .bind(admin.id)
+ +            .fetch_one(tx.conn())
+ +            .await
+ +            .unwrap();
+ +        tx.commit().await.unwrap();
+ +        n
+ +    };
+ +    let mut t1 = state.db.begin_as(owner.id).await.unwrap();
+ +    sqlx::query("SELECT app_set_member_role($1, $2, 'writer', $3)")
+ +        .bind(ws_id)
+ +        .bind(admin.id)
+ +        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+ +        .execute(t1.conn())
+ +        .await
+ +        .unwrap();
+ +    t1
+ +}
+ +
+ +/// 리뷰(감사 S17 후속): 그룹에 사람을 넣는 관리자 확인이 호출한 사람의 멤버 행을 잠그지 않아, 그 관리자가 동시에 작성자로
+ +/// 내려져도(먼저 커밋) 넣기가 통과했다. 호출한 사람과 대상의 멤버 행을 잠근 뒤 관리자인지 다시 본다.
+ +#[tokio::test]
+ +async fn an_admin_demoted_meanwhile_cannot_add_to_a_group() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let owner = login(&state, "owner").await;
+ +    let ws = create_workspace(&app, &owner, "강등 중 그룹").await;
+ +    let admin = add_member(&app, &state, &owner, &ws, "admin", "admin").await;
+ +    let member = add_member(&app, &state, &owner, &ws, "member", "writer").await;
+ +    let group = send(
+ +        &app,
+ +        Method::POST,
+ +        &format!("/api/workspaces/{ws}/groups"),
+ +        Some(&owner),
+ +        Some(json!({ "name": "팀" })),
+ +    )
+ +    .await;
+ +    assert_eq!(group.status, StatusCode::CREATED, "{:?}", group.json);
+ +    let gid = group.json["id"].as_str().unwrap().to_owned();
+ +    let ws_id: uuid::Uuid = ws.parse().unwrap();
+ +
+ +    let t1 = demoting(&state, &owner, ws_id, &admin).await;
+ +    let uri = format!("/api/groups/{gid}/members/{}", member.id.0);
+ +    let added = while_open(t1, {
+ +        let app = app.clone();
+ +        let admin = admin.clone();
+ +        async move { send(&app, Method::PUT, &uri, Some(&admin), None).await }
+ +    })
+ +    .await;
+ +    assert_eq!(added.status, StatusCode::FORBIDDEN, "{:?}", added.json);
+ +    let db = owner_pool().await;
+ +    let rows: i64 =
+ +        sqlx::query_scalar("SELECT count(*) FROM fvoci.group_members WHERE user_id = $1")
+ +            .bind(member.id)
+ +            .fetch_one(&db)
+ +            .await
+ +            .unwrap();
+ +    assert_eq!(rows, 0, "a demoted admin added a group member");
+ +    db.close().await;
+ +}
+ +
+ +/// 리뷰(감사 S16 후속): 초대 철회의 관리자 확인이 잠그기 전에 한 번뿐이라, 그 관리자가 동시에 작성자로 내려져도(먼저
+ +/// 커밋) 철회가 통과했다. 워크스페이스와 호출한 사람의 멤버 행을 잠근 뒤 관리자인지 다시 본다.
+ +#[tokio::test]
+ +async fn an_admin_demoted_meanwhile_cannot_revoke_an_invitation() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let owner = login(&state, "owner").await;
+ +    let ws = create_workspace(&app, &owner, "강등 중 철회").await;
+ +    let admin = add_member(&app, &state, &owner, &ws, "admin", "admin").await;
+ +    let inv = invite(&app, &owner, &ws, &unique_email("invitee"), "writer").await;
+ +    let inv_id = inv["id"].as_str().unwrap().to_owned();
+ +    let ws_id: uuid::Uuid = ws.parse().unwrap();
+ +
+ +    let t1 = demoting(&state, &owner, ws_id, &admin).await;
+ +    let uri = format!("/api/invitations/{inv_id}");
+ +    let revoked = while_open(t1, {
+ +        let app = app.clone();
+ +        let admin = admin.clone();
+ +        async move { send(&app, Method::DELETE, &uri, Some(&admin), None).await }
+ +    })
+ +    .await;
+ +    assert_eq!(revoked.status, StatusCode::FORBIDDEN, "{:?}", revoked.json);
+ +    let db = owner_pool().await;
+ +    let closed: Option<String> =
+ +        sqlx::query_scalar("SELECT close_reason FROM fvoci.invitations WHERE id = $1::uuid")
+ +            .bind(&inv_id)
+ +            .fetch_one(&db)
+ +            .await
+ +            .unwrap();
+ +    assert_eq!(closed, None, "a demoted admin revoked the invitation");
+ +    db.close().await;
+ +}
+ +
+ +/// 리뷰(감사 S15 후속): 항목 멤버 정하기가 항목 행을 잡은 뒤에 담당자·리더 정리의 워크스페이스 잠금을 기다려, 그 잠금을
+ +/// 먼저 쥐고 항목 행을 기다리는 역할 바꾸기(그 항목의 리더)와 교착했다. 이제 그 잠금을 항목 행보다 먼저 잡는다. 여기서는
+ +/// 역할 바꾸기 쪽을 직접 흉내 낸다: 워크스페이스 잠금을 쥔 채 항목 멤버 정하기가 기다리게 한 뒤 항목 행을 잠근다.
+ +#[tokio::test]
+ +async fn setting_item_members_does_not_deadlock_with_the_workspace_assignee_lock() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let owner = login(&state, "owner").await;
+ +    let ws = create_workspace(&app, &owner, "항목 멤버 잠금 순서").await;
+ +    let member = add_member(&app, &state, &owner, &ws, "member", "writer").await;
+ +    let item = private_item(&app, &owner, &ws, "LKM").await;
+ +
+ +    let db = owner_pool().await;
+ +    let mut hold = db.begin().await.unwrap();
+ +    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+ +        .fetch_one(&mut *hold)
+ +        .await
+ +        .unwrap();
+ +    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('fvoci-assignees:' || $1, 0))")
+ +        .bind(&ws)
+ +        .execute(&mut *hold)
+ +        .await
+ +        .unwrap();
+ +    let request = tokio::spawn({
+ +        let (app, owner, uri, user) = (
+ +            app.clone(),
+ +            owner.clone(),
+ +            format!("/api/items/{item}/members"),
+ +            member.id.0,
+ +        );
+ +        async move {
+ +            send(
+ +                &app,
+ +                Method::PUT,
+ +                &uri,
+ +                Some(&owner),
+ +                Some(json!({ "user_ids": [user], "group_ids": [] })),
+ +            )
+ +            .await
+ +        }
+ +    });
+ +    let mut blocked = false;
+ +    for _ in 0..500 {
+ +        blocked = sqlx::query_scalar(
+ +            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+ +        )
+ +        .bind(holder)
+ +        .fetch_one(&db)
+ +        .await
+ +        .unwrap();
+ +        if blocked {
+ +            break;
+ +        }
+ +        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+ +    }
+ +    assert!(blocked, "setting item members never waited on the lock");
+ +    // 역할 바꾸기처럼 그 잠금을 쥔 채 항목 행을 잠근다. 고치기 전에는 요청이 항목 행을 쥐고 있어 교착(40P01)이었다.
+ +    let locked = tokio::time::timeout(
+ +        std::time::Duration::from_secs(15),
+ +        sqlx::query("SELECT 1 FROM fvoci.items WHERE id = $1::uuid FOR UPDATE")
+ +            .bind(&item)
+ +            .execute(&mut *hold),
+ +    )
+ +    .await
+ +    .expect("locking the item row waited too long");
+ +    assert!(locked.is_ok(), "{locked:?}");
+ +    hold.commit().await.unwrap();
+ +    let set = request.await.unwrap();
+ +    db.close().await;
+ +    assert!(set.status.is_success(), "{:?}", set.json);
+ +}
+++
++ /// 감사 C23: 소유권 인계 제안 취소(`DELETE /api/workspaces/{ws}/ownership`)에는 시험이 없었다. 취소는 소유자만 하고,
++ /// 열린 제안이 없으면 404이며, 감사 기록을 남긴다.
++ #[tokio::test]
++ async fn only_the_owner_cancels_an_ownership_offer() {
++     let state = common::state();
++     let app = common::app(&state);
++     let owner = login(&state, "owner").await;
++     let ws = create_workspace(&app, &owner, "인계 취소").await;
++     let admin2 = add_member(&app, &state, &owner, &ws, "admin2", "admin").await;
++     let path = format!("/api/workspaces/{ws}/ownership");
++     let offered = send(
++         &app,
++         Method::POST,
++         &path,
++         Some(&owner),
++         Some(json!({ "to_user": admin2.id.0 })),
++     )
++     .await;
++     assert_eq!(offered.status, StatusCode::NO_CONTENT, "{:?}", offered.json);
++ 
++     // 소유자가 아닌 관리자(제안받은 사람이어도)는 취소하지 못한다.
++     let denied = send(&app, Method::DELETE, &path, Some(&admin2), None).await;
++     assert_eq!(denied.status, StatusCode::FORBIDDEN, "{:?}", denied.json);
++     let cancelled = send(&app, Method::DELETE, &path, Some(&owner), None).await;
++     assert_eq!(
++         cancelled.status,
++         StatusCode::NO_CONTENT,
++         "{:?}",
++         cancelled.json
++     );
++     let view = send(
++         &app,
++         Method::GET,
++         &format!("/api/workspaces/{ws}/members"),
++         Some(&owner),
++         None,
++     )
++     .await;
++     assert!(view.json["pending_owner"].is_null(), "{:?}", view.json);
++     // 열린 제안이 없으면 404, 취소된 제안은 수락할 수 없다.
++     let again = send(&app, Method::DELETE, &path, Some(&owner), None).await;
++     assert_eq!(again.status, StatusCode::NOT_FOUND, "{:?}", again.json);
++     let accept = send(
++         &app,
++         Method::POST,
++         &format!("{path}/accept"),
++         Some(&admin2),
++         None,
++     )
++     .await;
++     assert_eq!(accept.status, StatusCode::NOT_FOUND, "{:?}", accept.json);
++ 
++     let mut tx = state.db.begin_as(owner.id).await.unwrap();
++     let actions: Vec<String> = sqlx::query_scalar(
++         "SELECT action FROM audit_log WHERE workspace_id = $1::uuid AND target_type = 'workspace' ORDER BY created_at, id",
++     )
++     .bind(&ws)
++     .fetch_all(tx.conn())
++     .await
++     .unwrap();
++     assert!(
++         actions.iter().any(|a| a == "cancel_ownership_offer"),
++         "{actions:?}"
++     );
++ }
+diff --cc crates/server/tests/time_tracking.rs
+index cc37e77,4e18d4a..1b195e1
+--- a/crates/server/tests/time_tracking.rs
++++ b/crates/server/tests/time_tracking.rs
+@@@ -656,192 -656,36 +656,226 @@@ async fn item_totals_group_entries_unde
+      );
+  }
+  
+ +/// 감사 델타 SD3 (P-27): 진행 중 타이머의 시작을 옮겨 누적 멈춤보다 짧은 구간을 만들면 거절한다. 전에는 받아서 길이가 0이
+ +/// 됐고, 그 상태로 멈추면 멈춤이 구간보다 긴 끝난 기록이 남아 메모만 고쳐도 400이 났다. 그렇게 이미 남은 기록도 메모는
+ +/// 고칠 수 있고, 시각·멈춤을 고칠 때는 지금처럼 범위를 본다.
+ +#[tokio::test]
+ +async fn a_running_timer_keeps_its_pauses_inside_its_span() {
+ +    use time::format_description::well_known::Rfc3339;
+ +    use time::{Duration, OffsetDateTime};
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let admin = login(&state, "admin").await;
+ +    let ws = create_workspace(&app, &admin, "멈춤 범위").await;
+ +    let (me, _) = add_member(&app, &state, &admin, &ws, "pauser", "writer").await;
+ +    let body =
+ +        json!({ "request_id": new_request_id(), "kind": "work", "memo": "", "target": null });
+ +    let (status, timer) = start(&app, &me, body).await;
+ +    assert_eq!(status, StatusCode::CREATED, "{timer:?}");
+ +    let id = timer["id"].as_str().unwrap().to_owned();
+ +    // 두 시간 전에 시작해 한 시간을 멈췄다가 다시 시작한 타이머로 만든다.
+ +    act(&app, &me, &timer, "pause").await;
+ +    common::fixture_sql(
+ +        "UPDATE fvoci.time_entries SET started_at = now() - interval '2 hours', paused_at = now() - interval '1 hour'
+ +         WHERE id = $1::uuid",
+ +        &id,
+ +    )
+ +    .await;
+ +    let (_, running) = act(&app, &me, &timer, "resume").await;
+ +    assert!(
+ +        running["paused_seconds"].as_i64().unwrap() >= 3600,
+ +        "{running}"
+ +    );
+ +    let at = |v: &Value| OffsetDateTime::parse(v.as_str().unwrap(), &Rfc3339).unwrap();
+ +    let text = |t: OffsetDateTime| json!(t.format(&Rfc3339).unwrap());
+ +    let uri = format!("/api/time-entries/{id}");
+ +    let put = |cur: &Value, started: Value, memo: &str| {
+ +        let body = json!({ "base_version": cur["version"], "started_at": started, "ended_at": cur["ended_at"],
+ +                           "paused_seconds": cur["paused_seconds"], "kind": "work", "memo": memo, "target": null });
+ +        send(&app, Method::PUT, &uri, Some(&me), Some(body))
+ +    };
+ +
+ +    // 시작을 한 시간 반 뒤로 옮기면 남는 구간(30분)이 멈춤(1시간)보다 짧다.
+ +    let started = at(&running["started_at"]);
+ +    let late = put(&running, text(started + Duration::minutes(90)), "").await;
+ +    assert_eq!(late.status, StatusCode::BAD_REQUEST, "{:?}", late.json);
+ +    // 남는 구간이 멈춤보다 길면 된다.
+ +    let ok = put(&running, text(started + Duration::minutes(30)), "").await;
+ +    assert_eq!(ok.status, StatusCode::OK, "{:?}", ok.json);
+ +    assert!(
+ +        ok.json["seconds"].as_i64().unwrap() >= 29 * 60,
+ +        "{:?}",
+ +        ok.json
+ +    );
+ +
+ +    // 멈춰 있으면 멈춘 때까지의 구간과 비교한다(지금 멈춘 시간은 아직 누적에 없다).
+ +    let (_, paused) = act(&app, &me, &timer, "pause").await;
+ +    let paused_at = at(&paused["paused_at"]);
+ +    let short = put(&paused, text(paused_at - Duration::minutes(50)), "").await;
+ +    assert_eq!(short.status, StatusCode::BAD_REQUEST, "{:?}", short.json);
+ +    let fits = put(&paused, text(paused_at - Duration::minutes(70)), "").await;
+ +    assert_eq!(fits.status, StatusCode::OK, "{:?}", fits.json);
+ +
+ +    // 고치기 전 서버가 받아 이미 저장된, 멈춤이 구간보다 긴 끝난 기록.
+ +    act(&app, &me, &timer, "stop").await;
+ +    common::fixture_sql(
+ +        "UPDATE fvoci.time_entries SET paused_seconds = floor(extract(epoch FROM ended_at - started_at))::integer + 600
+ +         WHERE id = $1::uuid",
+ +        &id,
+ +    )
+ +    .await;
+ +    let (_, stopped) = act(&app, &me, &timer, "stop").await;
+ +    // 시각·멈춤을 그대로 두고 메모만 고치면 된다(데이터는 바꾸지 않는다).
+ +    let memo = put(&stopped, stopped["started_at"].clone(), "메모").await;
+ +    assert_eq!(memo.status, StatusCode::OK, "{:?}", memo.json);
+ +    assert_eq!(memo.json["paused_seconds"], stopped["paused_seconds"]);
+ +    // 시각을 고치면 범위를 본다.
+ +    let moved = put(
+ +        &memo.json,
+ +        text(at(&stopped["started_at"]) + Duration::seconds(1)),
+ +        "메모",
+ +    )
+ +    .await;
+ +    assert_eq!(moved.status, StatusCode::BAD_REQUEST, "{:?}", moved.json);
+ +
+ +    // 고치기 전 서버가 받아 이미 어긋난 진행 중 타이머(10분 전 시작, 멈춤 1시간). 시작을 그대로 두면 메모는 고칠 수 있고,
+ +    // 시작을 옮길 때만 범위를 본다.
+ +    let body =
+ +        json!({ "request_id": new_request_id(), "kind": "work", "memo": "", "target": null });
+ +    let (status, second) = start(&app, &me, body).await;
+ +    assert_eq!(status, StatusCode::CREATED, "{second:?}");
+ +    common::fixture_sql(
+ +        "UPDATE fvoci.time_entries SET started_at = now() - interval '10 minutes', paused_seconds = 3600
+ +         WHERE id = $1::uuid",
+ +        second["id"].as_str().unwrap(),
+ +    )
+ +    .await;
+ +    let running = send(&app, Method::GET, "/api/me/timer", Some(&me), None)
+ +        .await
+ +        .json;
+ +    assert_eq!(running["paused_seconds"], 3600, "{running}");
+ +    let second_uri = format!("/api/time-entries/{}", second["id"].as_str().unwrap());
+ +    let put_second = |cur: &Value, started: Value| {
+ +        let body = json!({ "base_version": cur["version"], "started_at": started, "ended_at": null,
+ +                           "paused_seconds": cur["paused_seconds"], "kind": "work", "memo": "메모", "target": null });
+ +        send(&app, Method::PUT, &second_uri, Some(&me), Some(body))
+ +    };
+ +    let kept = put_second(&running, running["started_at"].clone()).await;
+ +    assert_eq!(kept.status, StatusCode::OK, "{:?}", kept.json);
+ +    let started = at(&running["started_at"]);
+ +    let still_short = put_second(&kept.json, text(started - Duration::minutes(5))).await;
+ +    assert_eq!(
+ +        still_short.status,
+ +        StatusCode::BAD_REQUEST,
+ +        "{:?}",
+ +        still_short.json
+ +    );
+ +    let long_enough = put_second(&kept.json, text(started - Duration::hours(2))).await;
+ +    assert_eq!(long_enough.status, StatusCode::OK, "{:?}", long_enough.json);
+ +}
+ +
+ +/// 감사 S21·S20: 0시가 두 번 오는 날(아바나 2025-11-02, 05:00Z에 01:00 → 00:00)의 앞쪽 0시~1시 기록이 집계에서
+ +/// 빠지거나 줄었고, 목록은 그 기록을 전날에 두었다. 하루는 그날 0시가 처음 오는 시점부터다. 또 아주 긴 기록도 조회
+ +/// 기간의 날만큼만 나눠 같은 값을 낸다.
+ +#[tokio::test]
+ +async fn days_start_at_the_first_midnight_and_long_entries_split_within_the_range() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let user = login(&state, "havana").await;
+ +    let add = |started: &str, ended: &str| {
+ +        let app = app.clone();
+ +        let user = user.clone();
+ +        let body = manual(started, ended, "study", Value::Null);
+ +        async move {
+ +            let r = send(
+ +                &app,
+ +                Method::POST,
+ +                "/api/me/time-entries",
+ +                Some(&user),
+ +                Some(body),
+ +            )
+ +            .await;
+ +            assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+ +            r.json
+ +        }
+ +    };
+ +    let get = |uri: String| {
+ +        let app = app.clone();
+ +        let user = user.clone();
+ +        async move {
+ +            let r = send(&app, Method::GET, &uri, Some(&user), None).await;
+ +            assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+ +            r.json
+ +        }
+ +    };
+ +    let rows = |v: &Value| -> Vec<(String, i64)> {
+ +        v.as_array()
+ +            .unwrap()
+ +            .iter()
+ +            .map(|r| {
+ +                (
+ +                    r["period"].as_str().unwrap().to_owned(),
+ +                    r["seconds"].as_i64().unwrap(),
+ +                )
+ +            })
+ +            .collect()
+ +    };
+ +
+ +    // 앞쪽 00:30~00:50(CDT) 20분과, 앞쪽 00:30부터 뒤쪽 01:00(CST)까지 90분.
+ +    add("2025-11-02T04:30:00Z", "2025-11-02T04:50:00Z").await;
+ +    add("2025-11-02T04:30:00Z", "2025-11-02T06:00:00Z").await;
+ +    let day = get(
+ +        "/api/me/time-summary?from=2025-10-27&to=2025-11-02&tz=America/Havana&group=day".into(),
+ +    )
+ +    .await;
+ +    assert_eq!(rows(&day), [("2025-11-02".to_owned(), 1200 + 5400)]);
+ +    let listed =
+ +        get("/api/me/time-entries?from=2025-11-02&to=2025-11-02&tz=America/Havana".into()).await;
+ +    assert_eq!(listed.as_array().unwrap().len(), 2, "{listed:?}");
+ +    let before =
+ +        get("/api/me/time-entries?from=2025-11-01&to=2025-11-01&tz=America/Havana".into()).await;
+ +    assert!(before.as_array().unwrap().is_empty(), "{before:?}");
+ +
+ +    // 0001년부터 9999년까지의 기록: 어느 기간을 물어도 그 기간의 날만큼(UTC 하루 86400초)만 나눈다.
+ +    add("0001-01-01T00:00:00Z", "9999-12-31T23:59:59Z").await;
+ +    let week =
+ +        get("/api/me/time-summary?from=2026-03-02&to=2026-03-08&tz=UTC&group=day".into()).await;
+ +    let week = rows(&week);
+ +    assert_eq!(week.len(), 7, "{week:?}");
+ +    assert!(week.iter().all(|(_, s)| *s == 86_400), "{week:?}");
+ +    assert_eq!(week[0].0, "2026-03-02");
+ +}
+++
++ /// 감사 C33: 합계 공유 설정을 읽는 `GET /api/workspaces/{ws}/time-sharing`에는 시험이 없었다. 사람마다·워크스페이스마다
++ /// 따로이고, 멤버가 아니면 404다.
++ #[tokio::test]
++ async fn time_sharing_reads_back_per_person_and_workspace() {
++     let state = common::state();
++     let app = common::app(&state);
++     let admin = login(&state, "admin").await;
++     let ws = create_workspace(&app, &admin, "공유 읽기").await;
++     let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
++     let outsider = login(&state, "outsider").await;
++     let uri = format!("/api/workspaces/{ws}/time-sharing");
++     let read = |user: TestUser| {
++         let app = app.clone();
++         let uri = uri.clone();
++         async move { send(&app, Method::GET, &uri, Some(&user), None).await }
++     };
++     let before = read(member.clone()).await;
++     assert_eq!(before.status, StatusCode::OK, "{:?}", before.json);
++     assert_eq!(before.json["enabled"], false);
++     let on = send(
++         &app,
++         Method::PUT,
++         &uri,
++         Some(&member),
++         Some(json!({ "enabled": true })),
++     )
++     .await;
++     assert_eq!(on.status, StatusCode::OK, "{:?}", on.json);
++     assert_eq!(read(member.clone()).await.json["enabled"], true);
++     // 다른 사람의 설정은 그대로다.
++     assert_eq!(read(admin.clone()).await.json["enabled"], false);
++     assert_eq!(read(outsider).await.status, StatusCode::NOT_FOUND);
++ }
+diff --cc crates/server/tests/trash.rs
+index 6c6c504,491574c..a00362a
+--- a/crates/server/tests/trash.rs
++++ b/crates/server/tests/trash.rs
+@@@ -1154,454 -1154,101 +1154,553 @@@ async fn purged_module_keys_stay_reserv
+      assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
+  }
+  
+ +/// 테이블 소유 역할 연결(시험 확인용).
+ +async fn owner_pool() -> sqlx::PgPool {
+ +    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+ +    sqlx::PgPool::connect(&url).await.unwrap()
+ +}
+ +
+ +/// 열어 둔 트랜잭션의 서버 프로세스 번호.
+ +async fn backend_pid(tx: &mut fvoci_server::db::UserTx) -> i32 {
+ +    sqlx::query_scalar("SELECT pg_backend_pid()")
+ +        .fetch_one(tx.conn())
+ +        .await
+ +        .unwrap()
+ +}
+ +
+ +/// 다른 세션이 `holder`의 잠금을 실제로 기다릴 때까지 기다린다. 고정 시간만 기다리면 느린 환경에서 요청이 잠금에
+ +/// 닿기 전에 커밋해, 경합을 재현하지 못한 채 통과하거나 엉뚱한 이유로 실패한다. 끝내 기다리지 않으면 시험을 멈춘다.
+ +async fn wait_until_blocked_by(holder: i32) {
+ +    let db = owner_pool().await;
+ +    let mut blocked = false;
+ +    for _ in 0..500 {
+ +        blocked = sqlx::query_scalar(
+ +            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))",
+ +        )
+ +        .bind(holder)
+ +        .fetch_one(&db)
+ +        .await
+ +        .unwrap();
+ +        if blocked {
+ +            break;
+ +        }
+ +        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+ +    }
+ +    db.close().await;
+ +    assert!(blocked, "no request waited on the held transaction");
+ +}
+ +
+ +async fn new_task(
+ +    app: &Router,
+ +    user: &TestUser,
+ +    item_id: &str,
+ +    title: &str,
+ +    parent: Option<&Value>,
+ +) -> Value {
+ +    let r = send(
+ +        app,
+ +        Method::POST,
+ +        &format!("/api/items/{item_id}/tasks"),
+ +        Some(user),
+ +        Some(json!({ "request_id": new_request_id(), "title": title, "parent_id": parent.map(|p| p["id"].clone()) })),
+ +    )
+ +    .await;
+ +    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+ +    r.json
+ +}
+ +
+ +/// 감사 S1: 상위 업무를 지우는 사이 하위 업무가 떨어져 나가면(다른 상위로 옮기거나 최상위로) 그 업무는 함께 지우지 않는다.
+ +/// 전에는 잠그기 전에 고른 목록을 잠근 뒤에도 그대로 써서, 방금 독립시킨 업무가 상위 업무의 묶음으로 휴지통에 들어갔다.
+ +#[tokio::test]
+ +async fn trashing_a_parent_leaves_a_subtask_detached_while_it_waited() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let admin = login(&state, "admin").await;
+ +    let ws = create_workspace(&app, &admin, "하위 떼기 경합").await;
+ +    let it = item(&app, &admin, &ws, "TRD").await;
+ +    let item_id = it["id"].as_str().unwrap();
+ +    let parent = new_task(&app, &admin, item_id, "상위", None).await;
+ +    let sub = new_task(&app, &admin, item_id, "하위", Some(&parent)).await;
+ +    let sub_id: uuid::Uuid = sub["id"].as_str().unwrap().parse().unwrap();
+ +
+ +    // T1: 하위 업무를 최상위로 뗀다(아직 끝나지 않음, 하위 업무 행을 잡고 있다).
+ +    let mut t1 = state.db.begin_as(admin.id).await.unwrap();
+ +    let holder = backend_pid(&mut t1).await;
+ +    sqlx::query("SELECT app_set_task_parent($1, NULL, $2)")
+ +        .bind(sub_id)
+ +        .bind(fvoci_server::db::new_ids(1))
+ +        .execute(t1.conn())
+ +        .await
+ +        .unwrap();
+ +    // T2: 그동안 상위 업무를 지운다(하위 업무 행을 기다린다).
+ +    let parent_uri = format!("/api/tasks/{}", parent["id"].as_str().unwrap());
+ +    let second = tokio::spawn({
+ +        let app = app.clone();
+ +        let admin = admin.clone();
+ +        async move { send(&app, Method::DELETE, &parent_uri, Some(&admin), None).await }
+ +    });
+ +    wait_until_blocked_by(holder).await;
+ +    t1.commit().await.unwrap();
+ +    let second = second.await.unwrap();
+ +    assert_eq!(second.status, StatusCode::OK, "{:?}", second.json);
+ +
+ +    let owner = owner_pool().await;
+ +    let (deleted, parent_id): (Option<String>, Option<uuid::Uuid>) =
+ +        sqlx::query_as("SELECT deleted_at::text, parent_id FROM fvoci.tasks WHERE id = $1")
+ +            .bind(sub_id)
+ +            .fetch_one(&owner)
+ +            .await
+ +            .unwrap();
+ +    assert_eq!(
+ +        deleted, None,
+ +        "the detached subtask went to the trash with its old parent"
+ +    );
+ +    assert_eq!(parent_id, None);
+ +    let count: i32 =
+ +        sqlx::query_scalar("SELECT member_count FROM fvoci.trash_batches WHERE id = $1::uuid")
+ +            .bind(second.json["batch_id"].as_str().unwrap())
+ +            .fetch_one(&owner)
+ +            .await
+ +            .unwrap();
+ +    assert_eq!(count, 1);
+ +    owner.close().await;
+ +}
+ +
+ +/// 감사 S5: 지우기가 문서 자리 잠금을 기다리는 사이 문서가 다른 워크스페이스로 옮겨지면, 옛 자리(옛 워크스페이스)
+ +/// 기준으로 휴지통 묶음을 만들지 않고 409로 다시 하게 한다(옮기기·자리 바꾸기와 같은 규칙).
+ +#[tokio::test]
+ +async fn trashing_a_document_moved_to_another_workspace_meanwhile_conflicts() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let admin = login(&state, "admin").await;
+ +    let w1 = create_workspace(&app, &admin, "옮기기 전").await;
+ +    let w2 = create_workspace(&app, &admin, "옮긴 뒤").await;
+ +    let (writer, email) = add_member(&app, &state, &admin, &w1, "author", "writer").await;
+ +    // 쓴 사람은 옮겨 갈 워크스페이스에도 있다(읽기만).
+ +    let inv = send(
+ +        &app,
+ +        Method::POST,
+ +        &format!("/api/workspaces/{w2}/invitations"),
+ +        Some(&admin),
+ +        Some(json!({ "email": email, "role": "reader" })),
+ +    )
+ +    .await;
+ +    let accepted = send(
+ +        &app,
+ +        Method::POST,
+ +        &format!(
+ +            "/api/invitations/{}/accept",
+ +            inv.json["id"].as_str().unwrap()
+ +        ),
+ +        Some(&writer),
+ +        None,
+ +    )
+ +    .await;
+ +    assert_eq!(accepted.status, StatusCode::OK, "{:?}", accepted.json);
+ +    let doc = create_doc(&app, &writer, &w1, "옮겨질 문서").await;
+ +    let doc_id: uuid::Uuid = doc["id"].as_str().unwrap().parse().unwrap();
+ +    let w2_id: uuid::Uuid = w2.parse().unwrap();
+ +
+ +    // T1: 관리자가 문서를 w2로 옮긴다(옮기기 처리와 같은 순서, 아직 끝나지 않음).
+ +    let mut t1 = state.db.begin_as(admin.id).await.unwrap();
+ +    let holder = backend_pid(&mut t1).await;
+ +    sqlx::query("SELECT app_lock_move($1, $2, NULL)")
+ +        .bind(doc_id)
+ +        .bind(w2_id)
+ +        .execute(t1.conn())
+ +        .await
+ +        .unwrap();
+ +    let n: i32 = sqlx::query_scalar("SELECT app_move_document_ids($1)")
+ +        .bind(doc_id)
+ +        .fetch_one(t1.conn())
+ +        .await
+ +        .unwrap();
+ +    sqlx::query("SELECT * FROM app_move_document($1, $2, NULL, $3)")
+ +        .bind(doc_id)
+ +        .bind(w2_id)
+ +        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+ +        .execute(t1.conn())
+ +        .await
+ +        .unwrap();
+ +    // T2: 쓴 사람이 그동안 문서를 지운다(옛 자리의 트리 잠금을 기다린다).
+ +    let uri = format!("/api/documents/{doc_id}");
+ +    let second = tokio::spawn({
+ +        let app = app.clone();
+ +        let writer = writer.clone();
+ +        async move { send(&app, Method::DELETE, &uri, Some(&writer), None).await }
+ +    });
+ +    wait_until_blocked_by(holder).await;
+ +    t1.commit().await.unwrap();
+ +    let second = second.await.unwrap();
+ +    assert_eq!(second.status, StatusCode::CONFLICT, "{:?}", second.json);
+ +
+ +    let owner = owner_pool().await;
+ +    let (deleted, ws): (Option<String>, Option<uuid::Uuid>) =
+ +        sqlx::query_as("SELECT deleted_at::text, workspace_id FROM fvoci.documents WHERE id = $1")
+ +            .bind(doc_id)
+ +            .fetch_one(&owner)
+ +            .await
+ +            .unwrap();
+ +    assert_eq!(deleted, None);
+ +    assert_eq!(ws, Some(w2_id));
+ +    let batches: i64 = sqlx::query_scalar(
+ +        "SELECT count(*) FROM fvoci.trash_batches WHERE root_id = $1 AND root_kind = 'document'",
+ +    )
+ +    .bind(doc_id)
+ +    .fetch_one(&owner)
+ +    .await
+ +    .unwrap();
+ +    assert_eq!(batches, 0);
+ +    owner.close().await;
+ +}
+ +
+ +/// 감사 S7: 휴지통에 든 항목의 업무 담당자·리더는 역할이 바뀌거나 그룹이 지워졌다는 이유만으로 빠지지 않는다(휴지통이라
+ +/// 지금 볼 수 없을 뿐 권한을 잃은 것이 아니다). 워크스페이스에서 나간 사람은 휴지통에 있어도 빠진다.
+ +#[tokio::test]
+ +async fn trashed_items_keep_assignees_who_did_not_lose_access() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let admin = login(&state, "admin").await;
+ +    let ws = create_workspace(&app, &admin, "휴지통 담당자").await;
+ +    let (keep, _) = add_member(&app, &state, &admin, &ws, "keeper", "writer").await;
+ +    let (gone, _) = add_member(&app, &state, &admin, &ws, "leaver", "writer").await;
+ +    let it = item(&app, &admin, &ws, "TAS").await;
+ +    let item_id = it["id"].as_str().unwrap();
+ +    let task = new_task(&app, &admin, item_id, "담당 업무", None).await;
+ +    let task_id = task["id"].as_str().unwrap();
+ +    let assigned = send(&app, Method::PUT, &format!("/api/tasks/{task_id}"), Some(&admin), Some(json!({
+ +        "base_version": task["version"], "title": "담당 업무", "description": "", "status": "todo", "priority": "none",
+ +        "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
+ +        "assignee_ids": [keep.id.0, gone.id.0] }))).await;
+ +    assert_eq!(assigned.status, StatusCode::OK, "{:?}", assigned.json);
+ +    let lead = send(&app, Method::PUT, &format!("/api/items/{item_id}/profile"), Some(&admin), Some(json!({
+ +        "leader_id": gone.id.0, "goal": "", "scope": "", "starts_on": null, "ends_on": null, "status": "active",
+ +        "details": {} }))).await;
+ +    assert!(lead.status.is_success(), "{:?}", lead.json);
+ +
+ +    let trashed = send(
+ +        &app,
+ +        Method::DELETE,
+ +        &format!("/api/items/{item_id}"),
+ +        Some(&admin),
+ +        None,
+ +    )
+ +    .await;
+ +    assert_eq!(trashed.status, StatusCode::OK, "{:?}", trashed.json);
+ +    // 휴지통에 든 동안: 남는 사람은 역할만 바뀌고(올림), 떠나는 사람은 워크스페이스에서 나간다.
+ +    let promoted = send(
+ +        &app,
+ +        Method::PUT,
+ +        &format!("/api/workspaces/{ws}/members/{}", keep.id.0),
+ +        Some(&admin),
+ +        Some(json!({ "role": "admin" })),
+ +    )
+ +    .await;
+ +    assert_eq!(
+ +        promoted.status,
+ +        StatusCode::NO_CONTENT,
+ +        "{:?}",
+ +        promoted.json
+ +    );
+ +    let removed = send(
+ +        &app,
+ +        Method::DELETE,
+ +        &format!("/api/workspaces/{ws}/members/{}", gone.id.0),
+ +        Some(&admin),
+ +        None,
+ +    )
+ +    .await;
+ +    assert_eq!(removed.status, StatusCode::NO_CONTENT, "{:?}", removed.json);
+ +
+ +    let restored = send(
+ +        &app,
+ +        Method::POST,
+ +        &format!(
+ +            "/api/trash/{}/restore",
+ +            trashed.json["batch_id"].as_str().unwrap()
+ +        ),
+ +        Some(&admin),
+ +        None,
+ +    )
+ +    .await;
+ +    assert_eq!(
+ +        restored.status,
+ +        StatusCode::NO_CONTENT,
+ +        "{:?}",
+ +        restored.json
+ +    );
+ +    let detail = send(
+ +        &app,
+ +        Method::GET,
+ +        &format!("/api/tasks/{task_id}"),
+ +        Some(&admin),
+ +        None,
+ +    )
+ +    .await;
+ +    let assignees: Vec<String> = detail.json["assignees"]
+ +        .as_array()
+ +        .unwrap()
+ +        .iter()
+ +        .map(|a| a["user_id"].as_str().unwrap().to_owned())
+ +        .collect();
+ +    assert_eq!(
+ +        assignees,
+ +        vec![keep.id.0.to_string()],
+ +        "role change dropped a kept assignee or a leaver stayed"
+ +    );
+ +    let profile = send(
+ +        &app,
+ +        Method::GET,
+ +        &format!("/api/items/{item_id}/profile"),
+ +        Some(&admin),
+ +        None,
+ +    )
+ +    .await;
+ +    assert_eq!(
+ +        profile.json["leader_id"],
+ +        Value::Null,
+ +        "a person who left stayed leader of the restored item"
+ +    );
+ +}
+ +
+ +/// 문서에 파일 하나를 올린다(한 조각). 파일 id를 돌려준다.
+ +async fn attach(app: &Router, user: &TestUser, doc: &Value, name: &str, data: &[u8]) -> String {
+ +    use sha2::{Digest, Sha256};
+ +    let started = send(app, Method::POST, "/api/uploads", Some(user), Some(json!({
+ +        "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] }, "name": name,
+ +        "size": data.len(), "content_type": "text/plain" }))).await;
+ +    assert_eq!(started.status, StatusCode::CREATED, "{:?}", started.json);
+ +    let id = started.json["id"].as_str().unwrap();
+ +    let hash = hex::encode(Sha256::digest(data));
+ +    let (status, _, _) = common::send_raw(
+ +        app,
+ +        Method::PUT,
+ +        &format!("/api/uploads/{id}/parts/1"),
+ +        Some(user),
+ +        &[
+ +            ("x-content-sha256", hash.as_str()),
+ +            ("content-type", "application/octet-stream"),
+ +        ],
+ +        data.to_vec(),
+ +    )
+ +    .await;
+ +    assert_eq!(status, StatusCode::NO_CONTENT);
+ +    let done = send(
+ +        app,
+ +        Method::POST,
+ +        &format!("/api/uploads/{id}/complete"),
+ +        Some(user),
+ +        None,
+ +    )
+ +    .await;
+ +    assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
+ +    done.json["file_id"].as_str().unwrap().to_owned()
+ +}
+ +
+ +/// 감사 S13: 첨부를 휴지통에 넣은 사람은 그 문서에 쓸 수 없게 되면(공유 철회 등) 첨부를 되살리지 못한다. 전에는 항목
+ +/// 권한만 다시 봐서, 항목이 없는 위키 문서의 첨부는 볼 수도 없는 문서에 되살렸다.
+ +#[tokio::test]
+ +async fn restoring_an_attachment_needs_write_access_to_its_document() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let admin = login(&state, "admin").await;
+ +    let ws = create_workspace(&app, &admin, "첨부 되살리기").await;
+ +    // 비공개 설정은 문서 소유 권한자(여기서는 관리자)가 한다.
+ +    let author = admin.clone();
+ +    let (helper, helper_email) =
+ +        add_member(&app, &state, &admin, &ws, "doc-helper", "writer").await;
+ +    let doc = create_doc(&app, &author, &ws, "비공개 문서").await;
+ +    let doc_id = doc["id"].as_str().unwrap();
+ +    let private = send(
+ +        &app,
+ +        Method::PUT,
+ +        &format!("/api/documents/{doc_id}/settings"),
+ +        Some(&author),
+ +        Some(json!({ "visibility": "private", "allow_copy": true })),
+ +    )
+ +    .await;
+ +    assert!(private.status.is_success(), "{:?}", private.json);
+ +    let shared = send(
+ +        &app,
+ +        Method::POST,
+ +        &format!("/api/documents/{doc_id}/shares"),
+ +        Some(&author),
+ +        Some(json!({ "email": helper_email, "permission": "write" })),
+ +    )
+ +    .await;
+ +    assert_eq!(shared.status, StatusCode::CREATED, "{:?}", shared.json);
+ +    let file_id = attach(&app, &author, &doc, "메모.txt", b"note").await;
+ +
+ +    let trashed = send(
+ +        &app,
+ +        Method::DELETE,
+ +        &format!("/api/files/{file_id}"),
+ +        Some(&helper),
+ +        None,
+ +    )
+ +    .await;
+ +    assert_eq!(trashed.status, StatusCode::OK, "{:?}", trashed.json);
+ +    let revoked = send(
+ +        &app,
+ +        Method::DELETE,
+ +        &format!(
+ +            "/api/document-shares/{}",
+ +            shared.json["id"].as_str().unwrap()
+ +        ),
+ +        Some(&author),
+ +        None,
+ +    )
+ +    .await;
+ +    assert!(revoked.status.is_success(), "{:?}", revoked.json);
+ +
+ +    let batch = trashed.json["batch_id"].as_str().unwrap();
+ +    let restored = send(
+ +        &app,
+ +        Method::POST,
+ +        &format!("/api/trash/{batch}/restore"),
+ +        Some(&helper),
+ +        None,
+ +    )
+ +    .await;
+ +    assert_eq!(
+ +        restored.status,
+ +        StatusCode::NOT_FOUND,
+ +        "{:?}",
+ +        restored.json
+ +    );
+ +    let owner = owner_pool().await;
+ +    let deleted: Option<String> =
+ +        sqlx::query_scalar("SELECT deleted_at::text FROM fvoci.files WHERE id = $1::uuid")
+ +            .bind(&file_id)
+ +            .fetch_one(&owner)
+ +            .await
+ +            .unwrap();
+ +    assert!(
+ +        deleted.is_some(),
+ +        "the file was restored into a document the restorer can no longer write"
+ +    );
+ +    owner.close().await;
+ +    // 다시 쓰기 공유를 받은 지운 사람은 되살릴 수 있다(관리자 우회가 아닌 지운 사람의 문서 쓰기 검사).
+ +    let reshared = send(
+ +        &app,
+ +        Method::POST,
+ +        &format!("/api/documents/{doc_id}/shares"),
+ +        Some(&author),
+ +        Some(json!({ "email": helper_email, "permission": "write" })),
+ +    )
+ +    .await;
+ +    assert_eq!(reshared.status, StatusCode::CREATED, "{:?}", reshared.json);
+ +    let by_helper = send(
+ +        &app,
+ +        Method::POST,
+ +        &format!("/api/trash/{batch}/restore"),
+ +        Some(&helper),
+ +        None,
+ +    )
+ +    .await;
+ +    assert_eq!(
+ +        by_helper.status,
+ +        StatusCode::NO_CONTENT,
+ +        "{:?}",
+ +        by_helper.json
+ +    );
+ +}
+++
++ /// 감사 C22: 개인 노트 휴지통(`GET /api/me/trash`, `POST /api/me/trash/purge-expired`)에는 시험이 없었다. 개인 노트는
++ /// 워크스페이스 관리자에게도 비공개다(AGENTS.md). 목록과 만료 비우기는 노트 주인의 것만 보고 지운다.
++ #[tokio::test]
++ async fn personal_trash_lists_and_purges_only_the_owners_notes() {
++     let state = common::state();
++     let app = common::app(&state);
++     let admin = login(&state, "admin").await;
++     let ws = create_workspace(&app, &admin, "개인 휴지통").await;
++     let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
++     let note = |user: &TestUser, title: &str| {
++         let app = app.clone();
++         let user = user.clone();
++         let body = json!({ "request_id": new_request_id(), "title": title });
++         async move {
++             let created = send(&app, Method::POST, "/api/me/notes", Some(&user), Some(body)).await;
++             assert_eq!(created.status, StatusCode::CREATED, "{:?}", created.json);
++             let id = created.json["id"].as_str().unwrap().to_owned();
++             let trashed = send(
++                 &app,
++                 Method::DELETE,
++                 &format!("/api/documents/{id}"),
++                 Some(&user),
++                 None,
++             )
++             .await;
++             assert_eq!(trashed.status, StatusCode::OK, "{:?}", trashed.json);
++             trashed.json["batch_id"].as_str().unwrap().to_owned()
++         }
++     };
++     let mine_old = note(&member, "지난 메모").await;
++     note(&member, "어제 메모").await;
++     let theirs_old = note(&admin, "관리자 메모").await;
++     for batch in [&mine_old, &theirs_old] {
++         fixture_sql(
++             "UPDATE fvoci.trash_batches SET deleted_at = now() - interval '31 days' WHERE id = $1::uuid",
++             batch,
++         )
++         .await;
++     }
++ 
++     // 목록은 내 노트만. 관리자의 노트는 같은 워크스페이스 멤버에게도 보이지 않는다(반대도 같다).
++     let titles = |v: &Value| -> Vec<String> {
++         let mut t: Vec<String> = v["entries"]
++             .as_array()
++             .unwrap()
++             .iter()
++             .map(|e| e["title"].as_str().unwrap().to_owned())
++             .collect();
++         t.sort();
++         t
++     };
++     let mine = send(&app, Method::GET, "/api/me/trash", Some(&member), None).await;
++     assert_eq!(mine.status, StatusCode::OK, "{:?}", mine.json);
++     assert_eq!(titles(&mine.json), ["어제 메모", "지난 메모"]);
++     let admins = send(&app, Method::GET, "/api/me/trash", Some(&admin), None).await;
++     assert_eq!(titles(&admins.json), ["관리자 메모"]);
++     // 워크스페이스 휴지통에는 개인 노트가 없다.
++     let team = send(
++         &app,
++         Method::GET,
++         &format!("/api/workspaces/{ws}/trash"),
++         Some(&admin),
++         None,
++     )
++     .await;
++     assert_eq!(team.status, StatusCode::OK, "{:?}", team.json);
++     assert!(
++         titles(&team.json).iter().all(|t| !t.contains("메모")),
++         "{:?}",
++         team.json
++     );
++ 
++     // 만료 비우기는 내 만료된 노트만 지운다. 관리자의 만료된 노트와 내 새 노트는 남는다.
++     let purged = send(
++         &app,
++         Method::POST,
++         "/api/me/trash/purge-expired",
++         Some(&member),
++         None,
++     )
++     .await;
++     assert_eq!(purged.status, StatusCode::OK, "{:?}", purged.json);
++     assert_eq!(purged.json["purged"], 1);
++     let mine = send(&app, Method::GET, "/api/me/trash", Some(&member), None).await;
++     assert_eq!(titles(&mine.json), ["어제 메모"]);
++     let admins = send(&app, Method::GET, "/api/me/trash", Some(&admin), None).await;
++     assert_eq!(titles(&admins.json), ["관리자 메모"]);
++     // 남의 묶음은 되살리지 못한다(볼 수 없으면 404).
++     let restore = send(
++         &app,
++         Method::POST,
++         &format!("/api/trash/{theirs_old}/restore"),
++         Some(&member),
++         None,
++     )
++     .await;
++     assert_eq!(restore.status, StatusCode::NOT_FOUND, "{:?}", restore.json);
++ }
+diff --cc docs/development.md
+index cde4f36,e5550d8..453fd98
+--- a/docs/development.md
++++ b/docs/development.md
+@@@ -508,9 -517,10 +517,10 @@@ rhwp, Meilisearch 클라이언트 SDK, 
+  
+  ## 27. 백그라운드 작업 (2026-10-17, O-19 해소, 마이그레이션 0021)
+  
+- - **구조(O-19 권장안 채택)**: 한 바이너리가 API와 작업을 함께 갖고 `FVOCI_ROLE`로 나눈다. `all`(기본, 셀프호스트 한 프로세스), `api`(HTTP만), `worker`(작업만, HTTP를 열지 않음). 간격은 `FVOCI_WORKER_INTERVAL_SECS`(기본 60초). 별도 작업 서비스·외부 큐는 들이지 않았다.
++ - **구조(O-19 권장안 채택)**: 한 바이너리가 API와 작업을 함께 갖고 `FVOCI_ROLE`로 나눈다. `all`(기본, 셀프호스트 한 프로세스), `api`(HTTP만, 백그라운드 작업은 하나도 하지 않음), `worker`(작업만, HTTP를 열지 않음). 간격은 `FVOCI_WORKER_INTERVAL_SECS`(기본 60초). 별도 작업 서비스·외부 큐는 들이지 않았다.
+ -- **주기 작업**: 만료된 휴지통 영구 삭제(매시간, D-41), 반복 업무 회차 맞추기(15분마다, D-31). `scheduled_runs` 표와 이름별 잠금(`app_claim_schedule`)으로 여러 프로세스가 떠 있어도 간격마다 한 번만 돈다. 한 묶음·한 반복이 실패해도 나머지는 계속하고 경고만 남긴다.
+ +- **주기 작업**: 만료된 휴지통 영구 삭제(매시간, D-41), 반복 업무 회차 맞추기(15분마다, D-31). 반복 회차 맞추기는 반복을 항목 순으로 돌며 그 항목의 세 열을 칸반 이동·항목 동기화와 같은 순서(완료 → 진행 중 → 할 일)로 먼저 잡는다(0089, 감사 S3: 반복마다 뿌리 열만 잡아 사용자 이동과 교착이 났다). `scheduled_runs` 표와 이름별 잠금(`app_claim_schedule`)으로 여러 프로세스가 떠 있어도 간격마다 한 번만 돈다. 한 묶음·한 반복이 실패해도 나머지는 계속하고 경고만 남긴다.
+- - **권한 경계**: 작업은 사용자 문맥 없이 `app_system_purge_expired`·`app_system_recurrence_tick`만 부른다. 둘 다 정책이 이미 정한 일(만료분만 삭제, 오늘까지와 다음 회차만 생성)만 하고 같은 일을 두 번 해도 결과가 같다. HTTP 경로는 이 함수를 부르지 않는다. 본문은 사용자 경로와 같은 함수(`app_sync_task_series_as`·`app_purge_batch_as`)를 쓰고 권한 확인만 건너뛴다. 작업용 DB 계정을 앱 계정과 나누는 일은 아직 하지 않았다(같은 `fvoci_app`로 실행). 운영에서 분리가 필요하면 다음 조각에서 `db bootstrap`에 작업 역할을 더한다.
++   - 이후 더해진 작업(현재 목록은 `crates/server/src/worker.rs`): 확인 간격마다 저장소 정리(31절)와 검색 색인 반영(28절), 휴지통 만료와 같은 매시간 묶음의 이전 파일 버전 정리(49절, D-56), 매시간 업무 기한 알림(36절)과 항목 알림(44절). 알림·색인·저장소 정리는 요청 처리 경로가 대신하지 않으므로 `api` 역할만 띄우면 하지 않는다.
++ - **권한 경계**: 작업은 사용자 문맥 없이 정책에 묶인 `app_system_*` 함수만 부른다. 이 조각에서는 `app_system_purge_expired`·`app_system_recurrence_tick` 둘이었다. 둘 다 정책이 이미 정한 일(만료분만 삭제, 오늘까지와 다음 회차만 생성)만 하고 같은 일을 두 번 해도 결과가 같다. HTTP 경로는 이 함수를 부르지 않는다. 본문은 사용자 경로와 같은 함수(`app_sync_task_series_as`·`app_purge_batch_as`)를 쓰고 권한 확인만 건너뛴다. 작업용 DB 계정을 앱 계정과 나누는 일은 아직 하지 않았다(같은 `fvoci_app`로 실행). 운영에서 분리가 필요하면 다음 조각에서 `db bootstrap`에 작업 역할을 더한다.
+  - **감사(D-57)**: 작업이 한 일은 주체가 없으므로 `actor`를 비우고 detail에 `system: true`(휴지통은 `reason: retention`)를 남긴다. 반복 회차의 `created_by`는 반복을 정한 사람이다.
+  - **사용자 경로 유지**: 관리자의 만료 비우기와 쓰기 권한으로 항목을 열 때의 회차 동기화는 그대로 둔다(작업 프로세스가 없거나 멈췄을 때 따라잡기).
+  - **검증**: 통합 테스트 1건(만료된 묶음만 영구 삭제하고 system 감사, 지운 다음 회차를 다시 만들고 system 감사, 두 번째 실행은 할 일 없음, 동시에 두 번 돌려도 주기 작업은 한 번).

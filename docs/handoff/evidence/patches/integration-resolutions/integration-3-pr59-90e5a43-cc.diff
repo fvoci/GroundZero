@@ -1,0 +1,202 @@
+commit 90e5a438887db5408910472295d4f454965ab99d
+parents 4084abbd2fcfadfb878afee797a5b876756a6dc7 dbd18619c7f20757df432103a09e87e3caeaf2ac
+subject Merge #59 (fix/audit-web-calendar-home) into the final integration check
+
+
+diff --cc crates/server/tests/recurrence.rs
+index 3dc1851,20f2d5e..12a0b0e
+--- a/crates/server/tests/recurrence.rs
++++ b/crates/server/tests/recurrence.rs
+@@@ -676,98 -676,82 +676,178 @@@ async fn weekly_events_skip_missing_loc
+      );
+  }
+  
+ +/// 감사 S18: 반복 일정의 시작을 규칙의 끝(`until`) 뒤로 옮기면 회차가 하나도 없어 달력에서 사라졌다. 규칙을 정할 때와
+ +/// 같이 400으로 받지 않는다. 시간대만 바꿔 첫 회차 날짜가 밀리는 경우도 같다.
+ +#[tokio::test]
+ +async fn moving_a_repeating_event_past_its_until_is_refused() {
+ +    let state = common::state();
+ +    let app = common::app(&state);
+ +    let admin = login(&state, "admin").await;
+ +    let ws = create_workspace(&app, &admin, "반복 끝").await;
+ +    let item = module_item(&app, &admin, &ws, "EVU").await;
+ +    let create = |body: Value| {
+ +        let app = app.clone();
+ +        let admin = admin.clone();
+ +        let uri = format!("/api/items/{}/events", item["id"].as_str().unwrap());
+ +        async move {
+ +            let mut body = body;
+ +            body["request_id"] = json!(new_request_id());
+ +            let r = send(&app, Method::POST, &uri, Some(&admin), Some(body)).await;
+ +            assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+ +            r.json
+ +        }
+ +    };
+ +    let set_rule = |event: &Value, until: &str| {
+ +        let app = app.clone();
+ +        let admin = admin.clone();
+ +        let uri = format!("/api/events/{}/recurrence", event["id"].as_str().unwrap());
+ +        let rule = json!({ "rule": {"freq":"weekly","interval":1,"weekdays":[],"until":until,"count":null} });
+ +        async move {
+ +            let r = send(&app, Method::PUT, &uri, Some(&admin), Some(rule)).await;
+ +            assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+ +            r.json
+ +        }
+ +    };
+ +
+ +    // 종일 일정: 11-02부터 매주, 11-30까지. 시작을 12-07로 옮기면 400이고 일정은 그대로 달력에 남는다.
+ +    let all_day = create(
+ +        json!({ "kind": "meeting", "title": "주간 점검", "description": "", "all_day": true,
+ +        "start_date": "2026-11-02", "end_date": "2026-11-02", "starts_at": null, "ends_at": null,
+ +        "timezone": "Asia/Seoul" }),
+ +    )
+ +    .await;
+ +    let all_day = set_rule(&all_day, "2026-11-30").await;
+ +    let moved = send(&app, Method::PUT, &format!("/api/events/{}", all_day["id"].as_str().unwrap()), Some(&admin),
+ +        Some(json!({ "base_version": all_day["version"], "kind": "meeting", "title": "주간 점검", "description": "",
+ +            "all_day": true, "start_date": "2026-12-07", "end_date": "2026-12-07", "starts_at": null,
+ +            "ends_at": null, "timezone": "Asia/Seoul" }))).await;
+ +    assert_eq!(moved.status, StatusCode::BAD_REQUEST, "{:?}", moved.json);
+ +    let cal = send(
+ +        &app,
+ +        Method::GET,
+ +        &format!("/api/workspaces/{ws}/calendar?from=2026-11-01&to=2026-11-30&tz=Asia/Seoul"),
+ +        Some(&admin),
+ +        None,
+ +    )
+ +    .await
+ +    .json;
+ +    let dates: Vec<&str> = cal["occurrences"]
+ +        .as_array()
+ +        .unwrap()
+ +        .iter()
+ +        .filter(|o| o["event_id"] == all_day["id"])
+ +        .map(|o| o["start_date"].as_str().unwrap())
+ +        .collect();
+ +    assert_eq!(
+ +        dates,
+ +        [
+ +            "2026-11-02",
+ +            "2026-11-09",
+ +            "2026-11-16",
+ +            "2026-11-23",
+ +            "2026-11-30"
+ +        ]
+ +    );
+ +
+ +    // 시각 일정: 서울 11-02 23:30에 한 번(끝 = 첫 회차 날짜). 시각은 두고 시간대만 키리티마티(UTC+14)로 바꾸면 그곳의
+ +    // 날짜는 11-03이라 끝보다 뒤다.
+ +    let timed = create(
+ +        json!({ "kind": "meeting", "title": "늦은 통화", "description": "", "all_day": false,
+ +        "start_date": null, "end_date": null, "starts_at": "2026-11-02T23:30:00+09:00",
+ +        "ends_at": "2026-11-03T00:00:00+09:00", "timezone": "Asia/Seoul" }),
+ +    )
+ +    .await;
+ +    let timed = set_rule(&timed, "2026-11-02").await;
+ +    let zone = send(&app, Method::PUT, &format!("/api/events/{}", timed["id"].as_str().unwrap()), Some(&admin),
+ +        Some(json!({ "base_version": timed["version"], "kind": "meeting", "title": "늦은 통화", "description": "",
+ +            "all_day": false, "start_date": null, "end_date": null, "starts_at": "2026-11-02T23:30:00+09:00",
+ +            "ends_at": "2026-11-03T00:00:00+09:00", "timezone": "Pacific/Kiritimati" }))).await;
+ +    assert_eq!(zone.status, StatusCode::BAD_REQUEST, "{:?}", zone.json);
+ +
+ +    // 끝 안에서 옮기는 것은 그대로 된다.
+ +    let inside = send(&app, Method::PUT, &format!("/api/events/{}", all_day["id"].as_str().unwrap()), Some(&admin),
+ +        Some(json!({ "base_version": all_day["version"], "kind": "meeting", "title": "주간 점검", "description": "",
+ +            "all_day": true, "start_date": "2026-11-03", "end_date": "2026-11-03", "starts_at": null,
+ +            "ends_at": null, "timezone": "Asia/Seoul" }))).await;
+ +    assert_eq!(inside.status, StatusCode::OK, "{:?}", inside.json);
+ +}
+++
++ /// 감사 W21: 일정 반복 정하기가 기준 없이 저장해, 화면을 연 뒤 다른 사람이 바꾼 규칙(수요일 추가)을 옛 규칙으로 말없이
++ /// 덮었다. 편집을 시작한 규칙(`base`)이 지금 규칙과 다르면 409 `rule_conflict`(최신 일정)이고 아무것도 바꾸지 않는다.
++ /// 규칙만 보므로 그사이 제목만 바뀐 것은 충돌이 아니고, 이미 보낸 규칙과 같으면 같은 요청의 재시도다.
++ #[tokio::test]
++ async fn event_rule_saves_from_a_stale_rule_conflict() {
++     let state = common::state();
++     let app = common::app(&state);
++     let admin = login(&state, "admin").await;
++     let ws = create_workspace(&app, &admin, "규칙 기준").await;
++     let item = module_item(&app, &admin, &ws, "EVB").await;
++     let r = send(&app, Method::POST, &format!("/api/items/{}/events", item["id"].as_str().unwrap()), Some(&admin),
++         Some(json!({ "request_id": new_request_id(), "kind": "meeting", "title": "주간 회의", "description": "",
++                      "all_day": true, "start_date": "2026-11-02", "end_date": "2026-11-02", "starts_at": null,
++                      "ends_at": null, "timezone": "Asia/Seoul" }))).await;
++     assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
++     let uri = format!("/api/events/{}", r.json["id"].as_str().unwrap());
++     let rule_uri = format!("{uri}/recurrence");
++     let monday = json!({"freq":"weekly","interval":1,"weekdays":[1],"until":null,"count":null});
++     let mon_wed = json!({"freq":"weekly","interval":1,"weekdays":[1,3],"until":null,"count":null});
++     let ten_mondays = json!({"freq":"weekly","interval":1,"weekdays":[1],"until":null,"count":10});
++     let put = |rule: Value, base: Value| {
++         let app = app.clone();
++         let admin = admin.clone();
++         let uri = rule_uri.clone();
++         async move {
++             send(
++                 &app,
++                 Method::PUT,
++                 &uri,
++                 Some(&admin),
++                 Some(json!({ "rule": rule, "base": base })),
++             )
++             .await
++         }
++     };
++ 
++     // 반복이 없던 일정에 매주 월요일(기준 없음).
++     let set = put(monday.clone(), Value::Null).await;
++     assert_eq!(set.status, StatusCode::OK, "{:?}", set.json);
++     // 다른 사람이 수요일을 더한다(기준 = 월요일).
++     let other = put(mon_wed.clone(), monday.clone()).await;
++     assert_eq!(other.status, StatusCode::OK, "{:?}", other.json);
++     // 월요일만 보던 화면이 "10회"로 저장하면 충돌이고, 수요일은 남는다.
++     let stale = put(ten_mondays.clone(), monday.clone()).await;
++     assert_eq!(stale.status, StatusCode::CONFLICT, "{:?}", stale.json);
++     assert_eq!(stale.json["error"], "rule_conflict");
++     assert_eq!(
++         stale.json["current"]["recurrence"]["weekdays"],
++         json!([1, 3])
++     );
++     // 반복이 있는데 없던 것으로 알고 보내도 충돌이다.
++     let blind = put(ten_mondays.clone(), Value::Null).await;
++     assert_eq!(blind.status, StatusCode::CONFLICT, "{:?}", blind.json);
++     // 지금 규칙이 이미 보낸 규칙과 같으면(같은 요청 재시도) 성공이다.
++     let retry = put(mon_wed.clone(), monday.clone()).await;
++     assert_eq!(retry.status, StatusCode::OK, "{:?}", retry.json);
++     // 리뷰: 재시도는 바꿀 것이 없어 판을 다시 올리지 않는다(올리면 응답을 잃고 다시 보낸 화면이 판이 두 번 오른 것으로
++     // 보고 일정 입력의 기준을 놓쳐, 제 변경과 부딪히는 409를 받았다).
++     assert_eq!(retry.json["version"], other.json["version"]);
++ 
++     // 제목만 바뀐 것은 규칙 충돌이 아니다.
++     let renamed = send(&app, Method::PUT, &uri, Some(&admin), Some(json!({
++         "base_version": retry.json["version"], "kind": "meeting", "title": "주간 회의(이름 바꿈)", "description": "",
++         "all_day": true, "start_date": "2026-11-02", "end_date": "2026-11-02", "starts_at": null, "ends_at": null,
++         "timezone": "Asia/Seoul" }))).await;
++     assert_eq!(renamed.status, StatusCode::OK, "{:?}", renamed.json);
++     let after_rename = put(ten_mondays.clone(), mon_wed.clone()).await;
++     assert_eq!(
++         after_rename.status,
++         StatusCode::OK,
++         "{:?}",
++         after_rename.json
++     );
++     assert_eq!(after_rename.json["recurrence"]["count"], 10);
++     // 멈추기도 같은 기준을 따른다.
++     let stop = put(Value::Null, ten_mondays.clone()).await;
++     assert_eq!(stop.status, StatusCode::OK, "{:?}", stop.json);
++     assert!(stop.json["recurrence"].is_null());
++ }
+diff --cc docs/development.md
+index 2084a38,062de5e..9375289
+--- a/docs/development.md
++++ b/docs/development.md
+@@@ -469,7 -469,7 +469,7 @@@ rhwp, Meilisearch 클라이언트 SDK, 
+  - **반복 업무 (D-31 "미완료는 남기고 다음 회차는 원래 일정대로")**: 회차마다 실제 업무 행이 있고 완료 상태는 회차별이다. 첫 회차가 틀이며 규칙은 거기서 바꾼다(`PUT /api/tasks/{id}/recurrence`, 버전 없이 마지막 요청 우선, `set_recurrence` 감사). 새 회차는 틀의 지금 내용(제목·설명·우선순위·태그·예상 시간·마일스톤)과 기준일과의 날짜 간격을 따르고, 체크리스트는 체크를 푼 채, 담당자는 지금 그 항목을 볼 수 있는 사람만 옮긴다. 하위 업무·선행 관계는 옮기지 않는다. 이미 만든 회차는 규칙·틀을 바꿔도 그대로이고, 멈추면(규칙 없음) 남은 회차는 그대로 둔다. "오늘"은 규칙에 지정한 시간대 기준이다(D-50).
+  - **회차를 만드는 때**(27절 이후: 작업 프로세스가 15분마다도 맞춘다): 백그라운드 작업 구조가 정해지지 않았으므로 쓰기 요청 안에서만 만든다. 규칙을 정하거나 바꿀 때, 반복 업무를 고친 뒤(별도 트랜잭션), 쓰기 권한이 있는 사람이 항목을 열 때 화면이 보내는 `POST /api/items/{id}/recurrences/sync`. 오늘까지의 회차와 그다음 한 회차를 만들고 한 번에 50개까지(나머지는 다음 요청). 같은 회차는 (반복, 날짜) 고유 제약으로 한 번만 생기고 동시 요청도 첫 회차 행 잠금으로 줄을 선다. 감사 기록의 `create`는 그 요청을 보낸 사람이 주체이고 `reason: recurrence`·반복 id·회차 날짜가 붙는다(정해진 시각에 미리 만드는 일은 O-19 결정 뒤). 독자는 403, 보관 항목은 409.
+  - **예정 회차(읽기)**: 달력은 아직 만들지 않은 회차를 계산해 "예정"(점선)으로 보여 주며 아무것도 만들지 않는다(독자도 같음, 테스트로 행·감사 수 불변 확인). 누르면 틀(첫 회차)을 연다. 칸반·목록·간트에는 실제 회차만 나온다.
+- - **반복 일정**: 행을 만들지 않고 달력에서 펼친다. 시각 있는 일정은 일정 시간대의 같은 벽시계 시각을 UTC로 바꾼다(여름시간이 바뀌어도 09:00은 09:00, 뉴욕 2026-11-01 경계 테스트). 고치기는 반복 전체에 적용되고, 회차 하나 빼기만 지원한다(`excluded_dates`, `exclude_occurrence` 감사). 회차 하나만 고치기는 하지 않는다. 반복의 끝(`until`)이 있으면 일정 수정도 규칙 설정과 같이 첫 회차가 끝보다 뒤가 되는 시작·시간대를 400으로 받지 않는다(0083, 전에는 저장되고 달력에서 사라졌다).
+ -- **반복 일정**: 행을 만들지 않고 달력에서 펼친다. 시각 있는 일정은 일정 시간대의 같은 벽시계 시각을 UTC로 바꾼다(여름시간이 바뀌어도 09:00은 09:00, 뉴욕 2026-11-01 경계 테스트). 고치기는 반복 전체에 적용되고, 회차 하나 빼기만 지원한다(`excluded_dates`, `exclude_occurrence` 감사). 회차 하나만 고치기는 하지 않는다. 일정의 반복 규칙 저장은 편집을 시작한 규칙(`base`)을 함께 보내고, 그사이 규칙이 바뀌었으면 아무것도 바꾸지 않고 409 `rule_conflict`(최신 일정)다. 규칙만 비교하므로 제목만 바뀐 것은 충돌이 아니고, 이미 보낸 규칙과 같으면 재시도로 본다(0086, 감사 W21. 기준 없는 옛 서명은 D-92로 없앰). 화면은 지금 규칙을 요약에 보이고 입력한 칸은 남겨 다시 저장하게 한다.
+++- **반복 일정**: 행을 만들지 않고 달력에서 펼친다. 시각 있는 일정은 일정 시간대의 같은 벽시계 시각을 UTC로 바꾼다(여름시간이 바뀌어도 09:00은 09:00, 뉴욕 2026-11-01 경계 테스트). 고치기는 반복 전체에 적용되고, 회차 하나 빼기만 지원한다(`excluded_dates`, `exclude_occurrence` 감사). 회차 하나만 고치기는 하지 않는다. 일정의 반복 규칙 저장은 편집을 시작한 규칙(`base`)을 함께 보내고, 그사이 규칙이 바뀌었으면 아무것도 바꾸지 않고 409 `rule_conflict`(최신 일정)다. 규칙만 비교하므로 제목만 바뀐 것은 충돌이 아니고, 이미 보낸 규칙과 같으면 재시도로 본다(0086, 감사 W21. 기준 없는 옛 서명은 D-92로 없앰). 화면은 지금 규칙을 요약에 보이고 입력한 칸은 남겨 다시 저장하게 한다. 반복의 끝(`until`)이 있으면 일정 수정도 규칙 설정과 같이 첫 회차가 끝보다 뒤가 되는 시작·시간대를 400으로 받지 않는다(0083, 전에는 저장되고 달력에서 사라졌다).
+  - **일정·달력 리뷰 반영**: 업무 행 잠금은 `FOR NO KEY UPDATE`(외래 키 확인과의 교착 방지), 일정 시간대는 브라우저가 아는 이름만(posix/·right/·Factory 등 거부), 화면은 모르는 시간대를 UTC로 보이고 입력은 거부, 없는 시각(여름시간 시작)은 음의 오프셋 지역에서도 뒤로 민다, 409 중 기준 버전 충돌만 서버 최신본으로 다루고 나머지(보관·다시 시도)는 오류로 보인다(문서 저장·복원도 같이), 자정에 끝나는 일정은 다음 날에 걸치지 않는다, 일정 날짜 변경 감사는 시간대 변경도 남기고 UTC ISO로 적는다, 종일↔시각 전환은 그 일정의 날짜를 쓴다, 지운 뒤 초점은 영역 제목으로. 지우기는 표시만 하고 행을 남기는 것은 D-39(휴지통·복원)에 맞춘 구현 선택이다.
+  - **검증**: 통합 테스트 4건(규칙 펼치기: 31일·2월 29일·격주 요일·횟수·끝 날짜, 반복 업무: 미완료 유지·원래 일정·동시 동기화·독자 403·틀 변경이 기존 회차 불변·읽기는 예정만·멈춤, 따라잡기 50개 상한과 보관 409, 반복 일정의 여름시간·회차 빼기). 웹 테스트(시간대 경계·모르는 시간대·예정·자정 끝). 브라우저: 반복 편집기로 매주 수요일 정하기 → 회차 2개(오늘까지+다음) → 달력의 예정 회차, 일정에 매주 반복 → 달력 3회 → 한 회차 빼기.
+  - **리뷰 반영(마이그레이션 0016)**: 규칙을 바꾸거나 다시 켜면 그날(규칙 시간대)부터만 만들고 보인다(`effective_from`, 지난 날짜를 한꺼번에 채우지 않음, 횟수는 여전히 기준일부터). 펼치기는 하루씩 훑지 않고 회차 단위로 계산하며 날짜는 1900~2200년만 받는다(먼 기간 요청이 커지지 않게). 기준일은 요일이 규칙에 없어도 첫 회차이고, 끝 날짜는 기준일보다 앞설 수 없다. 항목 전체 동기화는 세 열을 먼저 잠근다(교착 방지). 반복이 켜진 첫 회차는 하위 업무가 되거나 날짜를 모두 잃을 수 없다(DB 트리거). 규칙 저장 뒤 회차 맞추기가 실패해도 규칙 저장은 성공으로 두고 다음 요청에서 이어 한다. 반복 아닌 일정은 저장된 시각 그대로(여름시간 끝의 겹친 시각), 일정 날짜를 옮기면 뺀 회차도 옮긴다, 보관 항목의 예정 회차는 숨긴다, 달력의 보는 사람 시간대도 같은 이름 규칙. 화면은 틀린 간격·횟수를 조용히 바꾸지 않고 알리며, 반복 저장 뒤 일정 입력을 지우지 않는다.

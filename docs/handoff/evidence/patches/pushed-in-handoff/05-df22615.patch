@@ -1,0 +1,472 @@
+From df2261597ccc577abbf2b96c8682b5bb7b2f3c72 Mon Sep 17 00:00:00 2001
+From: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 09:18:30 +0900
+Subject: [PATCH] fix(events): Escape cancels the clash prompt and save-mine
+ merges onto the newest version (D-94 review)
+
+Escape on the "overwrite?" prompt reached the dialog and closed it, so
+the unsaved input was lost. While the prompt is shown Escape now only
+withdraws it, like Cancel: nothing is sent, the input stays and focus
+returns to "Save mine again".
+
+When overwrite got another 409 or the save went through, the pressed
+button disappeared and focus fell to the dialog. It now moves, a frame
+later as in TaskDetail, to "Save mine again" of the refreshed notice or
+to the dialog heading (the saved title).
+
+Saving a recurrence rule while the notice is shown returns a newer
+version than the notice held, and save-mine merged onto the older one,
+which the server always refused. The notice, the merge and "Load their
+version" now use whichever of the two is newer. Overwrite goes ahead
+when the asked units and both shown values are unchanged, so a rule
+save in between does not ask again.
+
+Titles and descriptions are compared trimmed, as the server stores
+them, so adding spaces is not an edit that reverts or clashes with
+someone else's change. The clash label names the whole unit including
+all-day. EventForm only gains a comment that onsubmit must run before
+its first await (EventDialog tells a save-mine submit by a flag held
+during requestSubmit()).
+
+Test: event-save-mine (Escape, focus after 409 and save, rule save
+during the notice, validation-blocked save-mine leaves the next save
+plain) and event-conflict-merge (trimmed comparison).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ apps/web/messages/events/en.json              |   2 +-
+ apps/web/messages/events/ko.json              |   2 +-
+ .../lib/features/events/EventDialog.svelte    |  67 ++++++--
+ .../src/lib/features/events/EventForm.svelte  |   2 +
+ apps/web/src/lib/features/events/conflict.ts  |   9 +-
+ .../component/event-conflict-merge.test.ts    |   8 +
+ .../tests/component/event-save-mine.test.ts   | 155 +++++++++++++++++-
+ 7 files changed, 219 insertions(+), 26 deletions(-)
+
+diff --git a/apps/web/messages/events/en.json b/apps/web/messages/events/en.json
+index a86af16..197ec6e 100644
+--- a/apps/web/messages/events/en.json
++++ b/apps/web/messages/events/en.json
+@@ -87,7 +87,7 @@
+   "events_load_server": "Load their version",
+   "events_save_mine": "Save mine again",
+   "events_clash_question": "Someone else also changed the fields below. Overwrite them with your input?",
+-  "events_clash_when": "Date, time and time zone",
++  "events_clash_when": "Date, time, time zone and all-day",
+   "events_clash_server": "Now on the server: {value}",
+   "events_clash_mine": "Your input: {value}",
+   "events_clash_empty": "(empty)",
+diff --git a/apps/web/messages/events/ko.json b/apps/web/messages/events/ko.json
+index cb6bc83..4c43cfc 100644
+--- a/apps/web/messages/events/ko.json
++++ b/apps/web/messages/events/ko.json
+@@ -86,7 +86,7 @@
+   "events_load_server": "서버 내용 불러오기",
+   "events_save_mine": "내 입력으로 다시 저장",
+   "events_clash_question": "아래 칸은 다른 사람도 바꿨습니다. 내 입력으로 덮어쓸까요?",
+-  "events_clash_when": "날짜·시각·시간대",
++  "events_clash_when": "날짜·시각·시간대·종일 여부",
+   "events_clash_server": "지금 서버: {value}",
+   "events_clash_mine": "내 입력: {value}",
+   "events_clash_empty": "(비어 있음)",
+diff --git a/apps/web/src/lib/features/events/EventDialog.svelte b/apps/web/src/lib/features/events/EventDialog.svelte
+index 876edd2..859a463 100644
+--- a/apps/web/src/lib/features/events/EventDialog.svelte
++++ b/apps/web/src/lib/features/events/EventDialog.svelte
+@@ -58,6 +58,7 @@
+   let formWrap = $state<HTMLDivElement | undefined>(undefined);
+   let clashBox = $state<HTMLDivElement | undefined>(undefined);
+   let saveMineButton = $state<HTMLButtonElement | null>(null);
++  let heading = $state<HTMLElement | null>(null);
+   // 지금 입력 양식 제출이 충돌 알림의 단추에서 시작됐는지. 양식은 제출 이벤트 안에서 곧바로(첫 await 전에) onsubmit을
+   // 부르므로 requestSubmit() 동안만 둔다.
+   let submitMode: 'merge' | 'overwrite' | undefined;
+@@ -95,6 +96,15 @@
+   });
+ 
+   const canEdit = $derived(event !== undefined && event.access !== 'read');
++  // 충돌 알림이 보이고 다시 저장이 합칠 서버 일정(D-94). 알림 뒤 반복 규칙을 저장했으면 `event`가 더 새 판이다(옛 판에
++  // 합치면 보내자마자 다시 409이고, "서버 내용 불러오기"가 방금 저장한 규칙을 되돌린다).
++  const latest = $derived(
++    conflict === undefined
++      ? undefined
++      : event !== undefined && event.version > conflict.current.version
++        ? event
++        : conflict.current,
++  );
+ 
+   function sameRule(a: RecurrenceRule | null, b: RecurrenceRule | null): boolean {
+     if (a === null || b === null) return a === b;
+@@ -165,16 +175,28 @@
+   function submitted(input: EventInput): Promise<void> {
+     const mode = submitMode;
+     submitMode = undefined;
+-    if (mode !== undefined && conflict !== undefined && formBase !== undefined)
+-      return saveMine(input, formBase, conflict.current, mode === 'overwrite');
++    if (mode !== undefined && latest !== undefined && formBase !== undefined)
++      return saveMine(input, formBase, latest, mode === 'overwrite');
+     return save(input, formVersion);
+   }
+ 
++  /**
++   * 누른 단추가 사라진 뒤 초점을 옮긴다. 대화상자의 초점 가두기가 먼저 첫 칸으로 옮기므로 그 뒤 프레임에서
++   * 옮긴다(TaskDetail과 같음). 그사이 다른 일정을 열었으면 옮기지 않는다.
++   */
++  async function focusLater(target: () => HTMLElement | null | undefined): Promise<void> {
++    const mine = shown;
++    await tick();
++    requestAnimationFrame(() => {
++      if (mine === shown) target()?.focus();
++    });
++  }
++
+   /**
+    * "내 입력으로 다시 저장"(D-94): 입력을 만든 일정(`base`)과 비교해 내가 고친 칸만 서버 최신 일정에 얹어 최신 판
+    * 번호로 보낸다(그사이 또 바뀌었으면 서버가 다시 409). 같은 칸을 서버도 다른 값으로 바꿨으면 보내지 않고 양쪽 값을
+-   * 보여 덮어쓸지 묻는다. `overwrite`는 물은 뒤 "덮어쓰고 저장"을 누른 경우로, 물은 칸과 그때의 내 값 그대로일 때만
+-   * 덮어쓴다(그사이 입력을 고쳐 겹친 칸이나 값이 달라졌으면 다시 묻는다).
++   * 보여 덮어쓸지 묻는다. `overwrite`는 물은 뒤 "덮어쓰고 저장"을 누른 경우로, 물은 칸과 그때 보인 양쪽 값이 그대로일
++   * 때만 덮어쓴다(그사이 입력을 고쳐 겹친 칸이나 값이 달라졌으면 다시 묻는다).
+    */
+   async function saveMine(
+     input: EventInput,
+@@ -182,20 +204,29 @@
+     current: EventView,
+     overwrite: boolean,
+   ): Promise<void> {
++    const mine = shown;
+     const merged = mergeEventInput(base, input, current);
+     const asked = clash;
+     const confirmed =
+       overwrite &&
+-      asked?.current === current &&
+-      merged.clashes.every((u) => asked.units.includes(u) && sameUnit(u, input, asked.mine));
++      asked !== undefined &&
++      merged.clashes.every(
++        (u) =>
++          asked.units.includes(u) &&
++          sameUnit(u, current, asked.current) &&
++          sameUnit(u, input, asked.mine),
++      );
+     if (merged.clashes.length > 0 && !confirmed) {
+-      const mine = shown;
+       clash = { current, mine: input, units: merged.clashes };
+       await tick();
+       if (mine === shown) clashBox?.focus();
+       return;
+     }
+     await save(merged.input, current.version);
++    if (mine !== shown) return;
++    // 또 바뀌어 다시 409면 덮어쓰기 단추가 사라졌으니 새 알림의 다시 저장 단추로, 저장됐으면 알림이 사라지니
++    // 머리말(저장된 제목)로 초점을 옮긴다.
++    await focusLater(() => (conflict !== undefined ? saveMineButton : heading));
+   }
+ 
+   /** 덮어쓰지 않는다: 아무것도 보내지 않고 알림과 입력을 그대로 둔다. */
+@@ -302,6 +333,12 @@
+     escapeKeydownBehavior={busy ? 'ignore' : 'close'}
+     interactOutsideBehavior={busy ? 'ignore' : 'close'}
+     showCloseButton={!busy}
++    onEscapeKeydown={(e: KeyboardEvent) => {
++      // 덮어쓸지 묻는 중이면 Esc는 그 물음만 거둔다(취소와 같음: 보내지 않고 입력을 두며 대화상자도 닫지 않는다).
++      if (clash === undefined) return;
++      e.preventDefault();
++      void cancelClash();
++    }}
+     onCloseAutoFocus={(e: Event) => {
+       const target = returnFocus?.() ?? null;
+       if (target !== null) {
+@@ -311,7 +348,9 @@
+     }}
+   >
+     <Dialog.Header>
+-      <Dialog.Title>{event?.title ?? m.events_event()}</Dialog.Title>
++      <Dialog.Title bind:ref={heading} tabindex={-1}
++        >{event?.title ?? m.events_event()}</Dialog.Title
++      >
+       <Dialog.Description>
+         {#if event !== undefined}{KIND_LABEL[event.kind]} · {describeWhen(event, zone)}{/if}
+       </Dialog.Description>
+@@ -321,21 +360,21 @@
+     {/if}
+     {#if event !== undefined}
+       {@const current = event}
+-      {#if conflict !== undefined}
+-        {@const c = conflict}
++      {#if latest !== undefined}
++        {@const c = latest}
+         <div class="rounded-md border border-amber-500/50 p-3 text-sm">
+           <div role="alert">
+             <p>
+-              {m.events_conflict({ title: c.current.title, when: describeWhen(c.current, zone) })}
++              {m.events_conflict({ title: c.title, when: describeWhen(c, zone) })}
+             </p>
+             <div class="mt-2 flex gap-2">
+               <Button
+                 size="sm"
+                 variant="outline"
+                 onclick={() => {
+-                  event = c.current;
+-                  formBase = c.current;
+-                  formVersion = c.current.version;
++                  event = c;
++                  formBase = c;
++                  formVersion = c.version;
+                   conflict = undefined;
+                   clash = undefined;
+                   epoch += 1;
+diff --git a/apps/web/src/lib/features/events/EventForm.svelte b/apps/web/src/lib/features/events/EventForm.svelte
+index fa806d1..7106bad 100644
+--- a/apps/web/src/lib/features/events/EventForm.svelte
++++ b/apps/web/src/lib/features/events/EventForm.svelte
+@@ -67,6 +67,8 @@
+   let busy = $state(false);
+   let error = $state<string | undefined>(undefined);
+ 
++  // onsubmit은 제출 이벤트 안에서 곧바로(이 함수의 첫 await 전에) 불러야 한다. EventDialog는 충돌 알림의 단추가
++  // 시작한 제출인지를 requestSubmit() 동안만 두는 표시로 가린다(D-94).
+   async function submit(event: SubmitEvent): Promise<void> {
+     event.preventDefault();
+     if (busy) return;
+diff --git a/apps/web/src/lib/features/events/conflict.ts b/apps/web/src/lib/features/events/conflict.ts
+index 45b9332..24f646f 100644
+--- a/apps/web/src/lib/features/events/conflict.ts
++++ b/apps/web/src/lib/features/events/conflict.ts
+@@ -22,15 +22,18 @@ function sameInstant(a: string | null, b: string | null): boolean {
+   return Number.isNaN(x) || Number.isNaN(y) ? a === b : x === y;
+ }
+ 
+-/** 그 칸의 값이 같은지. */
++/**
++ * 그 칸의 값이 같은지. 제목·설명은 서버가 앞뒤 공백을 지워 저장하므로 지운 값으로 비교한다(공백만 덧붙인 칸을
++ * 내가 고친 칸으로 보아 서버 값을 되돌리거나 겹쳤다고 묻지 않게).
++ */
+ export function sameUnit(unit: EventUnit, a: EventInput, b: EventInput): boolean {
+   switch (unit) {
+     case 'kind':
+       return a.kind === b.kind;
+     case 'title':
+-      return a.title === b.title;
++      return a.title.trim() === b.title.trim();
+     case 'description':
+-      return a.description === b.description;
++      return a.description.trim() === b.description.trim();
+     case 'when':
+       return (
+         a.all_day === b.all_day &&
+diff --git a/apps/web/tests/component/event-conflict-merge.test.ts b/apps/web/tests/component/event-conflict-merge.test.ts
+index e343fdd..c837f84 100644
+--- a/apps/web/tests/component/event-conflict-merge.test.ts
++++ b/apps/web/tests/component/event-conflict-merge.test.ts
+@@ -77,6 +77,14 @@ describe('mergeEventInput', () => {
+     );
+   });
+ 
++  it('treats a title or description that differs only by surrounding spaces as untouched', () => {
++    // 서버는 제목·설명의 앞뒤 공백을 지워 저장한다. 공백만 덧붙였으면 고친 것이 아니니 서버 값을 두고 묻지 않는다.
++    const server = ev({ title: '새 제목', description: '그쪽 설명' }, 6);
++    const merged = mergeEventInput(base, input({ title: ' 회의 ', description: '\n' }), server);
++    expect(merged.clashes).toEqual([]);
++    expect(merged.input).toEqual(input({ title: '새 제목', description: '그쪽 설명' }));
++  });
++
+   it('compares instants by value, not by how they are written', () => {
+     // 서버가 같은 시각을 다른 표기로 돌려줘도 바뀐 것이 아니다. 내 시각도 소수 초 표기로 같으면 고친 것이 아니다.
+     const server = ev(
+diff --git a/apps/web/tests/component/event-save-mine.test.ts b/apps/web/tests/component/event-save-mine.test.ts
+index 23ebd13..af04c41 100644
+--- a/apps/web/tests/component/event-save-mine.test.ts
++++ b/apps/web/tests/component/event-save-mine.test.ts
+@@ -94,9 +94,9 @@ function stub(...results: (UpdateResult | Error)[]) {
+   return update;
+ }
+ 
+-async function open(): Promise<void> {
++async function open(onclose: () => void = () => undefined): Promise<void> {
+   render(EventDialog, {
+-    props: { eventId: 'A', onclose: () => undefined, onchanged: () => undefined },
++    props: { eventId: 'A', onclose, onchanged: () => undefined },
+   });
+   await screen.findByDisplayValue('회의');
+ }
+@@ -108,8 +108,25 @@ async function describeAndConflict(text: string): Promise<void> {
+   await screen.findByRole('button', { name: m.events_save_mine() });
+ }
+ 
++/** 서울 15:00–16:00으로 옮겨 저장하면 다른 사람의 변경(14:00–15:00)과 충돌한다. */
++async function moveAndConflict(): Promise<void> {
++  await fireEvent.input(field(m.events_starts()), { target: { value: '2026-10-20T15:00' } });
++  await fireEvent.input(field(m.events_ends()), { target: { value: '2026-10-20T16:00' } });
++  await fireEvent.submit(eventForm());
++  await screen.findByRole('button', { name: m.events_save_mine() });
++}
++
++function saveMineButton(): HTMLElement {
++  return screen.getByRole('button', { name: m.events_save_mine() });
++}
++
+ async function saveMine(): Promise<void> {
+-  await fireEvent.click(screen.getByRole('button', { name: m.events_save_mine() }));
++  await fireEvent.click(saveMineButton());
++}
++
++async function overwrite(): Promise<void> {
++  const box = await screen.findByRole('alertdialog', { name: m.events_clash_question() });
++  await fireEvent.click(within(box).getByRole('button', { name: m.events_clash_overwrite() }));
+ }
+ 
+ describe('saving my input after an event conflict (D-94)', () => {
+@@ -159,10 +176,7 @@ describe('saving my input after an event conflict (D-94)', () => {
+     const update = stub({ kind: 'conflict', current: theirs });
+     await open();
+     // 나는 서울 15:00–16:00으로 옮겼고, 그사이 다른 사람은 14:00–15:00으로 옮겼다.
+-    await fireEvent.input(field(m.events_starts()), { target: { value: '2026-10-20T15:00' } });
+-    await fireEvent.input(field(m.events_ends()), { target: { value: '2026-10-20T16:00' } });
+-    await fireEvent.submit(eventForm());
+-    await screen.findByRole('button', { name: m.events_save_mine() });
++    await moveAndConflict();
+ 
+     await saveMine();
+     const box = await screen.findByRole('alertdialog', { name: m.events_clash_question() });
+@@ -177,6 +191,8 @@ describe('saving my input after an event conflict (D-94)', () => {
+         .getAllByRole('term')
+         .map((t) => t.textContent),
+     ).toEqual([m.events_clash_when()]);
++    // 일시 묶음의 이름은 종일 여부까지 가리킨다(종일 전환도 이 묶음으로 덮어쓴다).
++    expect(m.events_clash_when()).toContain(m.events_all_day());
+     expect(box.textContent).toContain(m.events_clash_server({ value: describeWhen(theirs, zone) }));
+     expect(box.textContent).toContain(
+       m.events_clash_mine({ value: describeWhen({ ...theirs, ...mineWhen }, zone) }),
+@@ -269,4 +285,129 @@ describe('saving my input after an event conflict (D-94)', () => {
+     });
+     expect(update.mock.calls[2]).toEqual(update.mock.calls[1]);
+   });
++
++  // 리뷰: 덮어쓸지 묻는 칸에서 Esc를 누르면 대화상자 전체가 닫혀 저장 안 한 입력을 잃었다.
++  it('Escape on the overwrite question cancels only the question and keeps the dialog', async () => {
++    const update = stub({ kind: 'conflict', current: theirs });
++    const onclose = vi.fn();
++    await open(onclose);
++    await moveAndConflict();
++    await saveMine();
++    const box = await screen.findByRole('alertdialog', { name: m.events_clash_question() });
++
++    await fireEvent.keyDown(box, { key: 'Escape' });
++    expect(onclose).not.toHaveBeenCalled();
++    expect(screen.queryByRole('alertdialog')).toBeNull();
++    await waitFor(() => {
++      expect(document.activeElement).toBe(saveMineButton());
++    });
++    expect(update).toHaveBeenCalledTimes(1);
++    expect(field(m.events_starts()).value).toBe('2026-10-20T15:00');
++  });
++
++  // 리뷰: 덮어쓰기가 다시 409를 받거나 저장되면 누른 단추가 사라져 초점이 대화상자 바탕으로 떨어졌다.
++  it('focuses "save mine" after a repeated 409 and the heading after the save', async () => {
++    // 그사이 또 제목을 바꿨다(일시는 그대로라 다시 겹친다).
++    const newer = { ...theirs, title: '더 새 제목', version: 7 };
++    const update = stub(
++      { kind: 'conflict', current: theirs },
++      { kind: 'conflict', current: newer },
++    );
++    await open();
++    await moveAndConflict();
++    await saveMine();
++    await overwrite();
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(2);
++    });
++    await waitFor(() => {
++      expect(document.activeElement).toBe(saveMineButton());
++    });
++
++    await saveMine();
++    await overwrite();
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(3);
++    });
++    expect(update.mock.calls[2]?.[1]).toBe(7);
++    await waitFor(() => {
++      expect(document.activeElement).toBe(screen.getByRole('heading', { name: '더 새 제목' }));
++    });
++  });
++
++  /** 알림이 떠 있는 동안 반복 규칙을 저장하면 서버는 더 새 판(7판, 그사이 제목도 바뀜)을 돌려준다. */
++  async function saveRuleDuringNotice(): Promise<EventView> {
++    const afterRule = { ...theirs, title: '규칙 뒤 제목', version: 7 };
++    const setRule = vi.spyOn(api, 'setEventRecurrence').mockResolvedValue(afterRule);
++    const rule = document.querySelector('[aria-labelledby="event-recurrence-heading"] form');
++    if (!(rule instanceof HTMLFormElement)) throw new Error('no recurrence form');
++    await fireEvent.submit(rule);
++    await waitFor(() => {
++      expect(setRule).toHaveBeenCalledTimes(1);
++    });
++    return afterRule;
++  }
++
++  // 리뷰: 알림 뒤 반복 규칙을 저장하면 `event`가 알림의 일정보다 새 판인데, 다시 저장은 옛 판에 합쳐 반드시 다시 409였다.
++  it('merges onto the newer version a rule save returned while the notice was shown', async () => {
++    const update = stub({ kind: 'conflict', current: theirs });
++    await open();
++    await describeAndConflict('내 설명');
++    await saveRuleDuringNotice();
++
++    await saveMine();
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(2);
++    });
++    expect(update.mock.calls[1]).toEqual([
++      'A',
++      7,
++      sent({
++        title: '규칙 뒤 제목',
++        starts_at: '2026-10-20T05:00:00Z',
++        ends_at: '2026-10-20T06:00:00Z',
++        description: '내 설명',
++      }),
++    ]);
++  });
++
++  it('shows the newer version a rule save returned in the notice', async () => {
++    stub({ kind: 'conflict', current: theirs });
++    await open();
++    await describeAndConflict('내 설명');
++    const afterRule = await saveRuleDuringNotice();
++
++    const zone = localTimeZone();
++    expect(
++      await screen.findByText(
++        m.events_conflict({ title: '규칙 뒤 제목', when: describeWhen(afterRule, zone) }),
++      ),
++    ).toBeTruthy();
++  });
++
++  // 다시 저장은 requestSubmit() 동안만 두는 표시로 보통 저장과 가린다. 확인에 걸려 제출되지 않았을 때 그 표시가 남아
++  // 다음 보통 저장을 합치기로 바꾸지 않는지 지킨다.
++  it('a save-mine blocked by validation leaves the next plain save a plain save', async () => {
++    const update = stub({ kind: 'conflict', current: theirs });
++    await open();
++    await describeAndConflict('내 설명');
++
++    // 필수 칸(제목)을 비우면 양식이 제출되지 않는다.
++    await fireEvent.input(field(m.events_title()), { target: { value: '' } });
++    await saveMine();
++    // 양식 자신의 확인(모르는 시간대)에 걸려도 보내지 않는다.
++    await fireEvent.input(field(m.events_title()), { target: { value: '회의' } });
++    await fireEvent.input(field(m.events_time_zone()), { target: { value: 'Nowhere/Zone' } });
++    await saveMine();
++    expect(await screen.findByText(m.events_zone_invalid())).toBeTruthy();
++    expect(update).toHaveBeenCalledTimes(1);
++
++    // 고친 뒤 양식의 저장 단추는 보통 저장이다: 입력을 연 판(5)으로 입력 그대로 보낸다(합치기였다면 6판).
++    await fireEvent.input(field(m.events_time_zone()), { target: { value: 'Asia/Seoul' } });
++    await fireEvent.submit(eventForm());
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(2);
++    });
++    expect(update.mock.calls[1]).toEqual(['A', 5, sent({ description: '내 설명' })]);
++  });
+ });
+-- 
+2.54.0 (Apple Git-157)
+

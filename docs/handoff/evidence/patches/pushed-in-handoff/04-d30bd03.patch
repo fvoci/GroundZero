@@ -1,0 +1,910 @@
+From d30bd03f4f6d6b58f0ec3fa14d3fcbd207f6fca8 Mon Sep 17 00:00:00 2001
+From: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 08:51:09 +0900
+Subject: [PATCH] fix(web): saving my input after an event conflict keeps
+ others' changes and asks about clashes (D-94)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+"Save mine again" on the 409 notice sent the whole input captured when
+the save failed, so fields I never touched reverted someone else's
+change, and anything typed after the notice appeared was dropped. It now
+submits the form as it is (EventForm's own checks run) and merges onto
+the latest event: units I did not edit take the server value, units only
+I changed take mine. Kind, title, description and one "when" unit (all
+day, dates, instants compared by value, time zone) are merged. Units
+both sides changed to different values are listed with both values and
+saved only after "overwrite"; cancel sends nothing and focus returns to
+the button. The save goes out at the latest version, a repeated 409
+shows the newer event and keeps the input, and a failure keeps it too.
+
+Test: event-save-mine (component) and event-conflict-merge (unit). On
+dbd1861 the first case sent title "회의" and 01:00Z instead of the
+latest "새 제목" and 05:00Z.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ apps/web/messages/events/en.json              |   6 +
+ apps/web/messages/events/ko.json              |   6 +
+ .../lib/features/events/EventDialog.svelte    | 226 +++++++++++++--
+ apps/web/src/lib/features/events/conflict.ts  | 100 +++++++
+ .../component/event-conflict-merge.test.ts    | 143 +++++++++
+ .../tests/component/event-save-mine.test.ts   | 272 ++++++++++++++++++
+ 6 files changed, 723 insertions(+), 30 deletions(-)
+ create mode 100644 apps/web/src/lib/features/events/conflict.ts
+ create mode 100644 apps/web/tests/component/event-conflict-merge.test.ts
+ create mode 100644 apps/web/tests/component/event-save-mine.test.ts
+
+diff --git a/apps/web/messages/events/en.json b/apps/web/messages/events/en.json
+index 27d7fad..a86af16 100644
+--- a/apps/web/messages/events/en.json
++++ b/apps/web/messages/events/en.json
+@@ -86,6 +86,12 @@
+   "events_conflict": "Someone else changed this event in the meantime (now: “{title}”, {when}). Your input is kept.",
+   "events_load_server": "Load their version",
+   "events_save_mine": "Save mine again",
++  "events_clash_question": "Someone else also changed the fields below. Overwrite them with your input?",
++  "events_clash_when": "Date, time and time zone",
++  "events_clash_server": "Now on the server: {value}",
++  "events_clash_mine": "Your input: {value}",
++  "events_clash_empty": "(empty)",
++  "events_clash_overwrite": "Overwrite with mine and save",
+   "events_zone_note": "In {zone}",
+   "events_occurrence_only": "Only the {date} occurrence",
+   "events_skip_occurrence": "Skip this occurrence",
+diff --git a/apps/web/messages/events/ko.json b/apps/web/messages/events/ko.json
+index 2f5f8dc..cb6bc83 100644
+--- a/apps/web/messages/events/ko.json
++++ b/apps/web/messages/events/ko.json
+@@ -85,6 +85,12 @@
+   "events_conflict": "그사이 다른 사람이 이 일정을 바꿨습니다(지금: “{title}”, {when}). 내 입력은 그대로 있습니다.",
+   "events_load_server": "서버 내용 불러오기",
+   "events_save_mine": "내 입력으로 다시 저장",
++  "events_clash_question": "아래 칸은 다른 사람도 바꿨습니다. 내 입력으로 덮어쓸까요?",
++  "events_clash_when": "날짜·시각·시간대",
++  "events_clash_server": "지금 서버: {value}",
++  "events_clash_mine": "내 입력: {value}",
++  "events_clash_empty": "(비어 있음)",
++  "events_clash_overwrite": "내 입력으로 덮어쓰고 저장",
+   "events_zone_note": "{zone} 기준",
+   "events_occurrence_only": "{date} 회차만",
+   "events_skip_occurrence": "이 회차 빼기",
+diff --git a/apps/web/src/lib/features/events/EventDialog.svelte b/apps/web/src/lib/features/events/EventDialog.svelte
+index 9074408..876edd2 100644
+--- a/apps/web/src/lib/features/events/EventDialog.svelte
++++ b/apps/web/src/lib/features/events/EventDialog.svelte
+@@ -1,6 +1,9 @@
+ <script lang="ts">
+   // 일정 상세 대화상자: 보기·고치기·지우기. 고치기는 기준 버전으로 충돌을 막고, 충돌하면 입력을 두고 서버 내용을
+-  // 보여 준다(D-53과 같은 원칙). 지우기는 한 번 더 묻는다(행은 남고 휴지통 조각에서 되살린다).
++  // 보여 준다(D-53과 같은 원칙). 충돌 뒤 다시 저장하면 내가 고친 칸만 서버 최신 일정에 얹고, 같은 칸을 다른 사람도
++  // 고쳤으면 양쪽 값을 보여 덮어쓸지 묻는다(D-94). 지우기는 한 번 더 묻는다(행은 남고 휴지통 조각에서 되살린다).
++  import { tick } from 'svelte';
++
+   import type { EventInput, EventView, RecurrenceRule } from '$lib/api/client';
+   import { api, ApiError, RuleConflict } from '$lib/api/client';
+   import { errorText } from '$lib/api/errors';
+@@ -9,6 +12,8 @@
+   import { Button } from '$lib/ui/button';
+   import * as Dialog from '$lib/ui/dialog';
+ 
++  import type { EventUnit } from './conflict';
++  import { mergeEventInput, sameUnit } from './conflict';
+   import EventForm from './EventForm.svelte';
+   import RecurrenceEditor from './RecurrenceEditor.svelte';
+   import { describeRule, describeWhen, KIND_LABEL } from './labels';
+@@ -28,7 +33,11 @@
+ 
+   let event = $state<EventView | undefined>(undefined);
+   let error = $state<string | undefined>(undefined);
+-  let conflict = $state<{ current: EventView; input: EventInput } | undefined>(undefined);
++  let conflict = $state<{ current: EventView } | undefined>(undefined);
++  // 충돌 뒤 다시 저장하려는데 같은 칸을 양쪽이 서로 다른 값으로 고쳤다(D-94). 물은 때의 서버 일정·내 입력·겹친 칸.
++  let clash = $state<{ current: EventView; mine: EventInput; units: EventUnit[] } | undefined>(
++    undefined,
++  );
+   let confirmDelete = $state(false);
+   let epoch = $state(0);
+   // 반복 편집기는 일정 저장 때 다시 그리지 않는다(저장 안 한 규칙 입력을 지우지 않게). 서버 규칙이 화면 규칙과 달라질
+@@ -42,14 +51,26 @@
+   let shown = 0;
+   // 일정 입력이 바탕으로 삼은 버전. 반복 규칙 저장은 입력을 다시 그리지 않으므로 `event.version`과 따로 둔다.
+   let formVersion = 0;
++  // 일정 입력을 만든 일정(D-94). 충돌 뒤 다시 저장할 때 내가 무엇을 고쳤는지 이것과 비교한다. 입력을 다시 그릴 때만
++  // 바꾼다(반복 규칙 저장은 입력을 다시 그리지 않으므로 그대로 둔다).
++  let formBase = $state.raw<EventView | undefined>(undefined);
++  // 일정 입력을 감싼 요소. 다시 저장은 이 안의 입력 양식을 제출해 지금 입력(알림 뒤에 고친 것 포함)을 받는다.
++  let formWrap = $state<HTMLDivElement | undefined>(undefined);
++  let clashBox = $state<HTMLDivElement | undefined>(undefined);
++  let saveMineButton = $state<HTMLButtonElement | null>(null);
++  // 지금 입력 양식 제출이 충돌 알림의 단추에서 시작됐는지. 양식은 제출 이벤트 안에서 곧바로(첫 await 전에) onsubmit을
++  // 부르므로 requestSubmit() 동안만 둔다.
++  let submitMode: 'merge' | 'overwrite' | undefined;
+   const zone = localTimeZone();
+ 
+   $effect(() => {
+     const id = eventId;
+     shown += 1;
+     event = undefined;
++    formBase = undefined;
+     error = undefined;
+     conflict = undefined;
++    clash = undefined;
+     confirmDelete = false;
+     if (id === undefined) return;
+     let cancelled = false;
+@@ -58,6 +79,7 @@
+       .then((e) => {
+         if (cancelled) return;
+         event = e;
++        formBase = e;
+         formVersion = e.version;
+       })
+       .catch((e: unknown) => {
+@@ -106,19 +128,111 @@
+       return;
+     }
+     if (result.kind === 'conflict') {
+-      conflict = { current: result.current, input };
++      // 다시 저장하는 사이 또 바뀌었으면 알림이 더 새 일정을 보인다. 입력과 그 기준(`formBase`)은 그대로 두어 다음
++      // 다시 저장이 가장 새 일정에 합치게 한다(D-94).
++      conflict = { current: result.current };
++      clash = undefined;
+       return;
+     }
+     conflict = undefined;
++    clash = undefined;
+     // 보통 저장은 기준 버전이 맞아야 되므로 규칙이 그대로다. 충돌 뒤 "내 내용으로 저장"이면 저장된 일정에 다른 사람이
+     // 바꾼 규칙이 들어 있으니 반복 편집기도 그 규칙으로 다시 만든다(요약만 바뀌고 칸은 옛 규칙이면 옛 규칙을 다시 보냄).
+     if (!sameRule(result.event.recurrence, event.recurrence)) ruleEpoch += 1;
+     event = result.event;
++    formBase = result.event;
+     formVersion = result.event.version;
+     epoch += 1;
+     onchanged();
+   }
+ 
++  /**
++   * 충돌 알림의 단추로 일정 입력 양식을 제출한다. 양식 자신의 확인(필수 칸·없는 시각·시간대)을 거친 지금 입력이
++   * `submitted`로 온다. 확인에 걸리면 제출되지 않고 아무것도 보내지 않는다.
++   */
++  function submitForm(mode: 'merge' | 'overwrite'): void {
++    const form = formWrap?.querySelector('form');
++    if (!(form instanceof HTMLFormElement)) return;
++    submitMode = mode;
++    try {
++      form.requestSubmit();
++    } finally {
++      submitMode = undefined;
++    }
++  }
++
++  /** 일정 입력 양식의 제출. 충돌 알림의 단추에서 시작됐으면 서버 최신 일정에 합쳐 보낸다. */
++  function submitted(input: EventInput): Promise<void> {
++    const mode = submitMode;
++    submitMode = undefined;
++    if (mode !== undefined && conflict !== undefined && formBase !== undefined)
++      return saveMine(input, formBase, conflict.current, mode === 'overwrite');
++    return save(input, formVersion);
++  }
++
++  /**
++   * "내 입력으로 다시 저장"(D-94): 입력을 만든 일정(`base`)과 비교해 내가 고친 칸만 서버 최신 일정에 얹어 최신 판
++   * 번호로 보낸다(그사이 또 바뀌었으면 서버가 다시 409). 같은 칸을 서버도 다른 값으로 바꿨으면 보내지 않고 양쪽 값을
++   * 보여 덮어쓸지 묻는다. `overwrite`는 물은 뒤 "덮어쓰고 저장"을 누른 경우로, 물은 칸과 그때의 내 값 그대로일 때만
++   * 덮어쓴다(그사이 입력을 고쳐 겹친 칸이나 값이 달라졌으면 다시 묻는다).
++   */
++  async function saveMine(
++    input: EventInput,
++    base: EventView,
++    current: EventView,
++    overwrite: boolean,
++  ): Promise<void> {
++    const merged = mergeEventInput(base, input, current);
++    const asked = clash;
++    const confirmed =
++      overwrite &&
++      asked?.current === current &&
++      merged.clashes.every((u) => asked.units.includes(u) && sameUnit(u, input, asked.mine));
++    if (merged.clashes.length > 0 && !confirmed) {
++      const mine = shown;
++      clash = { current, mine: input, units: merged.clashes };
++      await tick();
++      if (mine === shown) clashBox?.focus();
++      return;
++    }
++    await save(merged.input, current.version);
++  }
++
++  /** 덮어쓰지 않는다: 아무것도 보내지 않고 알림과 입력을 그대로 둔다. */
++  async function cancelClash(): Promise<void> {
++    clash = undefined;
++    await tick();
++    saveMineButton?.focus();
++  }
++
++  /** 겹친 칸의 이름(입력 칸의 이름을 쓴다). */
++  function unitLabel(unit: EventUnit): string {
++    switch (unit) {
++      case 'kind':
++        return m.events_kind();
++      case 'title':
++        return m.events_title();
++      case 'description':
++        return m.events_description();
++      case 'when':
++        return m.events_clash_when();
++    }
++  }
++
++  /** 겹친 칸의 값. 일시는 머리말과 같은 글로 보인다. */
++  function unitText(unit: EventUnit, e: EventView): string {
++    switch (unit) {
++      case 'kind':
++        return KIND_LABEL[e.kind];
++      case 'title':
++        return e.title;
++      case 'description':
++        return e.description === '' ? m.events_clash_empty() : e.description;
++      case 'when':
++        return describeWhen(e, zone);
++    }
++  }
++
+   async function saveRule(rule: RecurrenceRule | null): Promise<void> {
+     if (event === undefined) return;
+     const mine = shown;
+@@ -209,37 +323,89 @@
+       {@const current = event}
+       {#if conflict !== undefined}
+         {@const c = conflict}
+-        <div class="rounded-md border border-amber-500/50 p-3 text-sm" role="alert">
+-          <p>
+-            {m.events_conflict({ title: c.current.title, when: describeWhen(c.current, zone) })}
+-          </p>
+-          <div class="mt-2 flex gap-2">
+-            <Button
+-              size="sm"
+-              variant="outline"
+-              onclick={() => {
+-                event = c.current;
+-                formVersion = c.current.version;
+-                conflict = undefined;
+-                epoch += 1;
+-                ruleEpoch += 1;
+-              }}>{m.events_load_server()}</Button
+-            >
+-            <Button size="sm" onclick={() => void save(c.input, c.current.version)}
+-              >{m.events_save_mine()}</Button
+-            >
++        <div class="rounded-md border border-amber-500/50 p-3 text-sm">
++          <div role="alert">
++            <p>
++              {m.events_conflict({ title: c.current.title, when: describeWhen(c.current, zone) })}
++            </p>
++            <div class="mt-2 flex gap-2">
++              <Button
++                size="sm"
++                variant="outline"
++                onclick={() => {
++                  event = c.current;
++                  formBase = c.current;
++                  formVersion = c.current.version;
++                  conflict = undefined;
++                  clash = undefined;
++                  epoch += 1;
++                  ruleEpoch += 1;
++                }}>{m.events_load_server()}</Button
++              >
++              <Button
++                size="sm"
++                bind:ref={saveMineButton}
++                onclick={() => {
++                  submitForm('merge');
++                }}>{m.events_save_mine()}</Button
++              >
++            </div>
+           </div>
++          {#if clash !== undefined}
++            {@const k = clash}
++            {@const mineView = { ...k.current, ...k.mine }}
++            <!-- 같은 칸을 양쪽이 고쳤다: 서버 값과 내 값을 보이고 덮어쓸지 묻는다(D-94). 취소하면 아무것도 보내지 않는다. -->
++            <div
++              bind:this={clashBox}
++              role="alertdialog"
++              aria-labelledby="event-clash-question"
++              aria-describedby="event-clash-list"
++              tabindex="-1"
++              class="mt-3 flex flex-col gap-2 border-t border-amber-500/50 pt-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
++            >
++              <p id="event-clash-question" class="font-medium">{m.events_clash_question()}</p>
++              <dl id="event-clash-list" class="flex flex-col gap-2">
++                {#each k.units as unit (unit)}
++                  <div>
++                    <dt class="font-medium">{unitLabel(unit)}</dt>
++                    <dd class="break-words whitespace-pre-wrap">
++                      {m.events_clash_server({ value: unitText(unit, k.current) })}
++                    </dd>
++                    <dd class="break-words whitespace-pre-wrap">
++                      {m.events_clash_mine({ value: unitText(unit, mineView) })}
++                    </dd>
++                  </div>
++                {/each}
++              </dl>
++              <div class="flex gap-2">
++                <Button
++                  size="sm"
++                  variant="destructive"
++                  onclick={() => {
++                    submitForm('overwrite');
++                  }}>{m.events_clash_overwrite()}</Button
++                >
++                <Button size="sm" variant="outline" onclick={() => void cancelClash()}
++                  >{m.common_cancel()}</Button
++                >
++              </div>
++            </div>
++          {/if}
+         </div>
+       {/if}
+       {#if canEdit}
+-        {#key epoch}
+-          <EventForm
+-            idPrefix="event-edit"
+-            initial={current}
+-            submitLabel={m.common_save()}
+-            onsubmit={(input: EventInput) => save(input, formVersion)}
+-          />
+-        {/key}
++        <!-- 입력 양식을 감싼다(다시 저장이 이 안의 양식을 제출한다). 배치에는 끼지 않는다. 입력은 그것을 만든 일정에서
++             시작한다(반복 규칙 저장으로 `event`가 바뀌어도 손대지 않은 시각은 그 일정의 값으로 보낸다). -->
++        <div class="contents" bind:this={formWrap}>
++          {#key epoch}
++            <EventForm
++              idPrefix="event-edit"
++              initial={formBase ?? current}
++              submitLabel={m.common_save()}
++              onsubmit={submitted}
++            />
++          {/key}
++        </div>
+         {#key ruleEpoch}
+           <RecurrenceEditor
+             idPrefix="event-recurrence"
+diff --git a/apps/web/src/lib/features/events/conflict.ts b/apps/web/src/lib/features/events/conflict.ts
+new file mode 100644
+index 0000000..45b9332
+--- /dev/null
++++ b/apps/web/src/lib/features/events/conflict.ts
+@@ -0,0 +1,100 @@
++// 일정 충돌 뒤 "내 입력으로 다시 저장"의 합치기(D-94). 입력을 연 때의 일정(`base`)과 비교해 내가 고친 칸만 내 값으로,
++// 나머지는 서버 최신 값으로 보낸다. 같은 칸을 서버에서도 다른 값으로 바꿨으면 겹친 칸으로 돌려주고, 화면이 양쪽 값을
++// 보여 덮어쓸지 묻는다. 날짜·시각·시간대·종일 여부는 한 묶음(`when`)이다(시작만 내 것, 끝은 서버 것처럼 섞이지 않게).
++import type { EventInput } from '$lib/api/client';
++
++/** 합치는 칸. `when`은 종일 여부·날짜·시각·시간대 묶음. */
++export const EVENT_UNITS = ['kind', 'title', 'description', 'when'] as const;
++export type EventUnit = (typeof EVENT_UNITS)[number];
++
++export interface MergedInput {
++  /** 보낼 입력: 내가 고친 칸은 내 값, 나머지는 서버 값. 겹친 칸도 내 값이다(덮어쓰기를 확인받은 뒤에만 보낸다). */
++  input: EventInput;
++  /** 양쪽이 서로 다른 값으로 고친 칸. */
++  clashes: EventUnit[];
++}
++
++/** 같은 시각인지. 서버와 입력의 표기(`Z`·`+09:00`·소수 초)가 달라도 값으로 비교한다. */
++function sameInstant(a: string | null, b: string | null): boolean {
++  if (a === null || b === null) return a === b;
++  const x = Date.parse(a);
++  const y = Date.parse(b);
++  return Number.isNaN(x) || Number.isNaN(y) ? a === b : x === y;
++}
++
++/** 그 칸의 값이 같은지. */
++export function sameUnit(unit: EventUnit, a: EventInput, b: EventInput): boolean {
++  switch (unit) {
++    case 'kind':
++      return a.kind === b.kind;
++    case 'title':
++      return a.title === b.title;
++    case 'description':
++      return a.description === b.description;
++    case 'when':
++      return (
++        a.all_day === b.all_day &&
++        a.start_date === b.start_date &&
++        a.end_date === b.end_date &&
++        sameInstant(a.starts_at, b.starts_at) &&
++        sameInstant(a.ends_at, b.ends_at) &&
++        a.timezone === b.timezone
++      );
++  }
++}
++
++/** 그 칸만 `from`의 값으로 바꾼 입력. */
++function take(unit: EventUnit, into: EventInput, from: EventInput): EventInput {
++  switch (unit) {
++    case 'kind':
++      return { ...into, kind: from.kind };
++    case 'title':
++      return { ...into, title: from.title };
++    case 'description':
++      return { ...into, description: from.description };
++    case 'when':
++      return {
++        ...into,
++        all_day: from.all_day,
++        start_date: from.start_date,
++        end_date: from.end_date,
++        starts_at: from.starts_at,
++        ends_at: from.ends_at,
++        timezone: from.timezone,
++      };
++  }
++}
++
++/** 입력 칸만 옮긴다(서버 일정의 id·버전·권한 같은 칸이 보내는 본문에 섞이지 않게). */
++function inputOf(e: EventInput): EventInput {
++  return {
++    kind: e.kind,
++    title: e.title,
++    description: e.description,
++    all_day: e.all_day,
++    start_date: e.start_date,
++    end_date: e.end_date,
++    starts_at: e.starts_at,
++    ends_at: e.ends_at,
++    timezone: e.timezone,
++  };
++}
++
++/**
++ * 서버 최신 일정(`server`)에 내 입력(`mine`)을 합친다. `base`는 입력을 연 때의 일정이다. 고치지 않은 칸은 서버 값,
++ * 고친 칸은 서버가 그대로 두었거나 같은 값으로 바꿨으면 내 값, 서로 다른 값으로 바꿨으면 겹친 칸이다.
++ */
++export function mergeEventInput(
++  base: EventInput,
++  mine: EventInput,
++  server: EventInput,
++): MergedInput {
++  let input = inputOf(server);
++  const clashes: EventUnit[] = [];
++  for (const unit of EVENT_UNITS) {
++    if (sameUnit(unit, mine, base)) continue;
++    input = take(unit, input, mine);
++    if (!sameUnit(unit, server, base) && !sameUnit(unit, server, mine)) clashes.push(unit);
++  }
++  return { input, clashes };
++}
+diff --git a/apps/web/tests/component/event-conflict-merge.test.ts b/apps/web/tests/component/event-conflict-merge.test.ts
+new file mode 100644
+index 0000000..e343fdd
+--- /dev/null
++++ b/apps/web/tests/component/event-conflict-merge.test.ts
+@@ -0,0 +1,143 @@
++import { describe, expect, it } from 'vitest';
++
++import type { EventInput, EventView } from '$lib/api/client';
++import { mergeEventInput } from '$lib/features/events/conflict';
++
++// D-94: 충돌 뒤 "내 입력으로 다시 저장"은 내가 고친 칸만 서버 최신 값에 얹는다. 같은 칸을 양쪽이 서로 다른 값으로
++// 고쳤으면 겹친 칸으로 돌려준다. 날짜·시각·시간대·종일 여부는 한 묶음이다.
++function ev(fields: Partial<EventInput> = {}, version = 5): EventView {
++  return {
++    id: 'A',
++    item_id: 'i1',
++    workspace_id: 'ws-1',
++    kind: 'meeting',
++    title: '회의',
++    description: '',
++    all_day: false,
++    start_date: null,
++    end_date: null,
++    starts_at: '2026-10-20T01:00:00Z',
++    ends_at: '2026-10-20T02:00:00Z',
++    timezone: 'Asia/Seoul',
++    recurrence: null,
++    excluded_dates: [],
++    version,
++    access: 'write',
++    ...fields,
++  };
++}
++
++/** 폼이 보내는 입력(입력 칸만). */
++function input(fields: Partial<EventInput> = {}): EventInput {
++  const e = ev(fields);
++  return {
++    kind: e.kind,
++    title: e.title,
++    description: e.description,
++    all_day: e.all_day,
++    start_date: e.start_date,
++    end_date: e.end_date,
++    starts_at: e.starts_at,
++    ends_at: e.ends_at,
++    timezone: e.timezone,
++  };
++}
++
++describe('mergeEventInput', () => {
++  const base = ev();
++
++  it('keeps the server value for fields I did not touch and mine for fields only I changed', () => {
++    const server = ev({ title: '새 제목', starts_at: '2026-10-20T05:00:00Z' }, 6);
++    const merged = mergeEventInput(base, input({ description: '내 설명' }), server);
++    expect(merged.clashes).toEqual([]);
++    // 보내는 본문에는 입력 칸만 있다(서버 일정의 id·버전·권한이 섞이지 않음).
++    expect(merged.input).toEqual(
++      input({ title: '새 제목', starts_at: '2026-10-20T05:00:00Z', description: '내 설명' }),
++    );
++  });
++
++  it('takes mine without asking when the server changed the field to the same value', () => {
++    const server = ev({ title: '같은 제목', kind: 'presentation' }, 6);
++    const merged = mergeEventInput(base, input({ title: '같은 제목' }), server);
++    expect(merged.clashes).toEqual([]);
++    expect(merged.input).toEqual(input({ title: '같은 제목', kind: 'presentation' }));
++  });
++
++  it('reports a clash when both changed the same field to different values', () => {
++    const server = ev({ title: '그쪽 제목', description: '그쪽 설명' }, 6);
++    const merged = mergeEventInput(
++      base,
++      input({ title: '내 제목', kind: 'event', description: '' }),
++      server,
++    );
++    expect(merged.clashes).toEqual(['title']);
++    // 겹친 칸도 내 값으로 둔다(덮어쓰기를 확인받은 뒤에만 보냄). 내가 안 고친 설명은 서버 값.
++    expect(merged.input).toEqual(
++      input({ title: '내 제목', kind: 'event', description: '그쪽 설명' }),
++    );
++  });
++
++  it('compares instants by value, not by how they are written', () => {
++    // 서버가 같은 시각을 다른 표기로 돌려줘도 바뀐 것이 아니다. 내 시각도 소수 초 표기로 같으면 고친 것이 아니다.
++    const server = ev(
++      { starts_at: '2026-10-20T10:00:00+09:00', ends_at: '2026-10-20T02:00:00.000Z' },
++      6,
++    );
++    const merged = mergeEventInput(
++      base,
++      input({ starts_at: '2026-10-20T01:00:00.000Z', title: '내 제목' }),
++      server,
++    );
++    expect(merged.clashes).toEqual([]);
++    expect(merged.input.starts_at).toBe('2026-10-20T10:00:00+09:00');
++    expect(merged.input.title).toBe('내 제목');
++  });
++
++  it('treats date, time, time zone and all-day as one unit', () => {
++    // 나는 시작 시각을, 서버는 시간대를 바꿨다: 시작만 내 것, 시간대는 서버 것으로 섞지 않고 겹친 칸으로 묻는다.
++    const server = ev({ timezone: 'Asia/Tokyo' }, 6);
++    const mine = input({ starts_at: '2026-10-20T00:30:00.000Z' });
++    const merged = mergeEventInput(base, mine, server);
++    expect(merged.clashes).toEqual(['when']);
++    expect(merged.input).toEqual(mine);
++  });
++
++  it('carries the whole unit when I switch to an all-day event the server left alone', () => {
++    const server = ev({ title: '새 제목' }, 6);
++    const mine = input({
++      all_day: true,
++      start_date: '2026-10-20',
++      end_date: '2026-10-21',
++      starts_at: null,
++      ends_at: null,
++    });
++    const merged = mergeEventInput(base, mine, server);
++    expect(merged.clashes).toEqual([]);
++    expect(merged.input).toEqual({ ...mine, title: '새 제목' });
++  });
++
++  it('keeps the server unit whole when only the server changed the time', () => {
++    const server = ev(
++      {
++        all_day: true,
++        start_date: '2026-10-22',
++        end_date: '2026-10-22',
++        starts_at: null,
++        ends_at: null,
++      },
++      6,
++    );
++    const merged = mergeEventInput(base, input({ kind: 'event' }), server);
++    expect(merged.clashes).toEqual([]);
++    expect(merged.input).toEqual(
++      input({
++        kind: 'event',
++        all_day: true,
++        start_date: '2026-10-22',
++        end_date: '2026-10-22',
++        starts_at: null,
++        ends_at: null,
++      }),
++    );
++  });
++});
+diff --git a/apps/web/tests/component/event-save-mine.test.ts b/apps/web/tests/component/event-save-mine.test.ts
+new file mode 100644
+index 0000000..23ebd13
+--- /dev/null
++++ b/apps/web/tests/component/event-save-mine.test.ts
+@@ -0,0 +1,272 @@
++import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++
++import type { EventInput, EventView } from '$lib/api/client';
++import { api, NetworkError } from '$lib/api/client';
++import EventDialog from '$lib/features/events/EventDialog.svelte';
++import { describeWhen } from '$lib/features/events/labels';
++import { localTimeZone } from '$lib/features/events/time';
++import { m } from '$lib/paraglide/messages.js';
++import { setLocale } from '$lib/paraglide/runtime.js';
++
++// D-94: 일정 충돌 알림의 "내 입력으로 다시 저장"은 충돌 때 잡아 둔 입력 전체를 보내 다른 사람이 바꾼 칸(내가 손대지
++// 않은 제목·시각)을 되돌렸고, 알림이 뜬 뒤 입력한 글은 빠뜨렸다. 이제 지금 입력에서 내가 고친 칸만 서버 최신 일정에
++// 얹어 최신 판 번호로 보내고, 같은 칸을 양쪽이 고쳤으면 양쪽 값을 보여 덮어쓸지 묻는다. 실패해도 입력은 남는다.
++afterEach(() => {
++  vi.restoreAllMocks();
++});
++beforeEach(async () => {
++  await setLocale('ko', { reload: false });
++});
++
++type UpdateResult =
++  { kind: 'updated'; event: EventView } | { kind: 'conflict'; current: EventView };
++
++/** 서울 10:00–11:00 회의(5판). */
++function ev(fields: Partial<EventInput> = {}, version = 5): EventView {
++  return {
++    id: 'A',
++    item_id: 'i1',
++    workspace_id: 'ws-1',
++    kind: 'meeting',
++    title: '회의',
++    description: '',
++    all_day: false,
++    start_date: null,
++    end_date: null,
++    starts_at: '2026-10-20T01:00:00Z',
++    ends_at: '2026-10-20T02:00:00Z',
++    timezone: 'Asia/Seoul',
++    recurrence: null,
++    excluded_dates: [],
++    version,
++    access: 'write',
++    ...fields,
++  };
++}
++
++/** 보내는 입력(입력 칸만). */
++function sent(fields: Partial<EventInput> = {}): EventInput {
++  const e = ev(fields);
++  return {
++    kind: e.kind,
++    title: e.title,
++    description: e.description,
++    all_day: e.all_day,
++    start_date: e.start_date,
++    end_date: e.end_date,
++    starts_at: e.starts_at,
++    ends_at: e.ends_at,
++    timezone: e.timezone,
++  };
++}
++
++/** 다른 사람이 제목과 시각(서울 14:00–15:00)을 바꾼 6판. */
++const theirs = ev(
++  { title: '새 제목', starts_at: '2026-10-20T05:00:00Z', ends_at: '2026-10-20T06:00:00Z' },
++  6,
++);
++
++function field(label: string): HTMLInputElement | HTMLTextAreaElement {
++  const el = screen.getByLabelText(label);
++  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement))
++    throw new Error(`no field ${label}`);
++  return el;
++}
++
++function eventForm(): HTMLFormElement {
++  const form = field(m.events_title()).closest('form');
++  if (form === null) throw new Error('no event form');
++  return form;
++}
++
++function stub(...results: (UpdateResult | Error)[]) {
++  vi.spyOn(api, 'event').mockResolvedValue(ev());
++  const update = vi.spyOn(api, 'updateEvent');
++  for (const r of results) {
++    if (r instanceof Error) update.mockRejectedValueOnce(r);
++    else update.mockResolvedValueOnce(r);
++  }
++  // 그 밖의 저장은 보낸 내용대로 저장된다.
++  update.mockImplementation((_id: string, base: number, input: EventInput) =>
++    Promise.resolve({ kind: 'updated', event: ev(input, base + 1) }),
++  );
++  return update;
++}
++
++async function open(): Promise<void> {
++  render(EventDialog, {
++    props: { eventId: 'A', onclose: () => undefined, onchanged: () => undefined },
++  });
++  await screen.findByDisplayValue('회의');
++}
++
++/** 설명만 고쳐 저장하면 다른 사람의 변경과 충돌한다. */
++async function describeAndConflict(text: string): Promise<void> {
++  await fireEvent.input(field(m.events_description()), { target: { value: text } });
++  await fireEvent.submit(eventForm());
++  await screen.findByRole('button', { name: m.events_save_mine() });
++}
++
++async function saveMine(): Promise<void> {
++  await fireEvent.click(screen.getByRole('button', { name: m.events_save_mine() }));
++}
++
++describe('saving my input after an event conflict (D-94)', () => {
++  it('sends the latest title and time with only my description, at the latest version', async () => {
++    const update = stub({ kind: 'conflict', current: theirs });
++    await open();
++    await describeAndConflict('내 설명');
++
++    await saveMine();
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(2);
++    });
++    expect(update.mock.calls[1]).toEqual([
++      'A',
++      6,
++      sent({
++        title: '새 제목',
++        starts_at: '2026-10-20T05:00:00Z',
++        ends_at: '2026-10-20T06:00:00Z',
++        description: '내 설명',
++      }),
++    ]);
++    expect(screen.queryByRole('alertdialog')).toBeNull();
++    // 저장된 일정으로 입력을 다시 만든다.
++    expect(await screen.findByDisplayValue('새 제목')).toBeTruthy();
++  });
++
++  it('includes what I typed after the conflict notice appeared', async () => {
++    const update = stub({ kind: 'conflict', current: theirs });
++    await open();
++    await describeAndConflict('내 설명');
++    await fireEvent.input(field(m.events_description()), {
++      target: { value: '내 설명, 알림 뒤에 더 씀' },
++    });
++
++    await saveMine();
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(2);
++    });
++    expect(update.mock.calls[1]?.[2]).toMatchObject({
++      title: '새 제목',
++      description: '내 설명, 알림 뒤에 더 씀',
++    });
++  });
++
++  it('asks before overwriting a time both changed: cancel sends nothing, confirm sends my time', async () => {
++    const update = stub({ kind: 'conflict', current: theirs });
++    await open();
++    // 나는 서울 15:00–16:00으로 옮겼고, 그사이 다른 사람은 14:00–15:00으로 옮겼다.
++    await fireEvent.input(field(m.events_starts()), { target: { value: '2026-10-20T15:00' } });
++    await fireEvent.input(field(m.events_ends()), { target: { value: '2026-10-20T16:00' } });
++    await fireEvent.submit(eventForm());
++    await screen.findByRole('button', { name: m.events_save_mine() });
++
++    await saveMine();
++    const box = await screen.findByRole('alertdialog', { name: m.events_clash_question() });
++    await waitFor(() => {
++      expect(document.activeElement).toBe(box);
++    });
++    const zone = localTimeZone();
++    const mineWhen = { starts_at: '2026-10-20T06:00:00.000Z', ends_at: '2026-10-20T07:00:00.000Z' };
++    // 겹친 칸은 일시 하나(제목은 서버만 바꿨다). 서버 값과 내 값을 함께 보인다.
++    expect(
++      within(box)
++        .getAllByRole('term')
++        .map((t) => t.textContent),
++    ).toEqual([m.events_clash_when()]);
++    expect(box.textContent).toContain(m.events_clash_server({ value: describeWhen(theirs, zone) }));
++    expect(box.textContent).toContain(
++      m.events_clash_mine({ value: describeWhen({ ...theirs, ...mineWhen }, zone) }),
++    );
++    expect(update).toHaveBeenCalledTimes(1);
++
++    // 취소: 아무것도 보내지 않고 알림과 입력을 두며 초점은 다시 저장 단추로.
++    await fireEvent.click(within(box).getByRole('button', { name: m.common_cancel() }));
++    expect(screen.queryByRole('alertdialog')).toBeNull();
++    const again = screen.getByRole('button', { name: m.events_save_mine() });
++    await waitFor(() => {
++      expect(document.activeElement).toBe(again);
++    });
++    expect(update).toHaveBeenCalledTimes(1);
++    expect(field(m.events_starts()).value).toBe('2026-10-20T15:00');
++
++    // 덮어쓰기: 내 일시와 나머지는 서버 최신 값을 최신 판으로.
++    await saveMine();
++    const confirm = await screen.findByRole('alertdialog', { name: m.events_clash_question() });
++    await fireEvent.click(
++      within(confirm).getByRole('button', { name: m.events_clash_overwrite() }),
++    );
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(2);
++    });
++    expect(update.mock.calls[1]).toEqual(['A', 6, sent({ title: '새 제목', ...mineWhen })]);
++    await waitFor(() => {
++      expect(screen.queryByRole('alertdialog')).toBeNull();
++    });
++  });
++
++  it('shows the newer version when it changed again and keeps my input for the next try', async () => {
++    const newer = ev({ title: '더 새 제목' }, 7);
++    const update = stub(
++      { kind: 'conflict', current: ev({ title: '새 제목' }, 6) },
++      { kind: 'conflict', current: newer },
++    );
++    await open();
++    await describeAndConflict('내 설명');
++
++    await saveMine();
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(2);
++    });
++    expect(update.mock.calls[1]).toEqual([
++      'A',
++      6,
++      sent({ title: '새 제목', description: '내 설명' }),
++    ]);
++    const zone = localTimeZone();
++    expect(
++      await screen.findByText(
++        m.events_conflict({ title: '더 새 제목', when: describeWhen(newer, zone) }),
++      ),
++    ).toBeTruthy();
++    expect(field(m.events_description()).value).toBe('내 설명');
++    expect(field(m.events_title()).value).toBe('회의');
++
++    // 다음 다시 저장은 가장 새 일정(7판)에 합친다. 내가 고친 것은 여전히 설명뿐이다.
++    await saveMine();
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(3);
++    });
++    expect(update.mock.calls[2]).toEqual([
++      'A',
++      7,
++      sent({ title: '더 새 제목', description: '내 설명' }),
++    ]);
++  });
++
++  it('keeps my input and the conflict notice when the save fails', async () => {
++    const update = stub({ kind: 'conflict', current: theirs }, new NetworkError('offline'));
++    await open();
++    await describeAndConflict('내 설명');
++
++    await saveMine();
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(2);
++    });
++    expect(
++      await screen.findByText(`${m.events_save_failed()} ${m.common_error_network()}`),
++    ).toBeTruthy();
++    expect(field(m.events_description()).value).toBe('내 설명');
++    expect(screen.getByRole('button', { name: m.events_save_mine() })).toBeTruthy();
++
++    // 다시 누르면 같은 내용을 다시 보낸다.
++    await saveMine();
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(3);
++    });
++    expect(update.mock.calls[2]).toEqual(update.mock.calls[1]);
++  });
++});
+-- 
+2.54.0 (Apple Git-157)
+

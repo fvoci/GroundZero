@@ -1,0 +1,1452 @@
+From ab0ffaf317e5b81f806b1884321a9edfd4339d5a Mon Sep 17 00:00:00 2001
+From: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 09:37:20 +0900
+Subject: [PATCH] =?UTF-8?q?wip(collab):=20D-95=20stand-in=20record=20and?=
+ =?UTF-8?q?=20no-room=20restore=20=E2=80=94=20INCOMPLETE,=20NOT=20VERIFIED?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Handoff snapshot of an implementation that was stopped mid-way for the
+remote handoff (docs/handoff/audit-resume.md). Do not merge as is.
+
+Intended scope (from the stopped task):
+- 0094_collab_stand_in_editors.sql: document_revisions.edited_by uuid[]
+  (actual editors when the author only saved for them),
+  document_collab_states.editors uuid[], new app_system_collab_store
+  signature with editors, app_collab_load returning editors.
+- room code records editors since the last revision and fills edited_by
+  when the author is not among them (mover, realtime-off admin, other
+  connected writer).
+- revisions API/web show the actual editors and who saved for them.
+- a restore with no open room first saves a live state left pending
+  (no stand-in author; 409 if nobody can write it).
+
+State at the snapshot: files were being edited by the task; it was not
+built, not tested, not reviewed. Whether it compiles is checked in the
+handoff document. Base: 5edd8f4 (PR #64 local head, verified #71 + P-34).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ apps/web/messages/documents/en.json           |   2 +
+ apps/web/messages/documents/ko.json           |   2 +
+ apps/web/src/lib/api/client.ts                |  17 ++
+ .../features/documents/ExportDialog.svelte    |   8 +-
+ .../features/documents/RevisionHistory.svelte |   3 +-
+ .../lib/features/documents/revision-author.ts |  15 ++
+ .../revision-restore-conflict.test.ts         |   1 +
+ .../tests/component/revision-stand-in.test.ts | 142 ++++++++++
+ contracts/openapi.json                        |  30 ++-
+ .../0094_collab_stand_in_editors.sql          |  96 +++++++
+ crates/server/src/collab/room.rs              |  90 +++++--
+ crates/server/src/features/documents.rs       |  24 +-
+ crates/server/src/features/revisions.rs       |  81 ++++--
+ crates/server/tests/collab.rs                 | 245 ++++++++++++++++--
+ docs/development.md                           |  35 ++-
+ packages/api-client/src/generated/schema.ts   |  14 +-
+ 16 files changed, 723 insertions(+), 82 deletions(-)
+ create mode 100644 apps/web/src/lib/features/documents/revision-author.ts
+ create mode 100644 apps/web/tests/component/revision-stand-in.test.ts
+ create mode 100644 crates/server/migrations/0094_collab_stand_in_editors.sql
+
+diff --git a/apps/web/messages/documents/en.json b/apps/web/messages/documents/en.json
+index 6e22d2a..00793ea 100644
+--- a/apps/web/messages/documents/en.json
++++ b/apps/web/messages/documents/en.json
+@@ -28,6 +28,8 @@
+   "documents_revisions_label": "Revisions",
+   "documents_unknown_author": "Unknown",
+   "documents_restored_from": "restored from r{revision}",
++  "documents_saved_for_editors": "Edited by {editors} · saved for them by {author}",
++  "documents_saved_for_unknown": "Editors not recorded · saved for them by {author}",
+   "documents_load_more": "Load more",
+   "documents_history_pick": "Choose a revision on the left.",
+   "documents_compare_label": "Compare with",
+diff --git a/apps/web/messages/documents/ko.json b/apps/web/messages/documents/ko.json
+index fee98bd..452ee43 100644
+--- a/apps/web/messages/documents/ko.json
++++ b/apps/web/messages/documents/ko.json
+@@ -28,6 +28,8 @@
+   "documents_revisions_label": "리비전",
+   "documents_unknown_author": "알 수 없음",
+   "documents_restored_from": "r{revision}에서 복원",
++  "documents_saved_for_editors": "편집: {editors} · 대신 저장: {author}",
++  "documents_saved_for_unknown": "편집한 사람 기록 없음 · 대신 저장: {author}",
+   "documents_load_more": "더 보기",
+   "documents_history_pick": "왼쪽에서 리비전을 고르세요.",
+   "documents_compare_label": "비교 대상",
+diff --git a/apps/web/src/lib/api/client.ts b/apps/web/src/lib/api/client.ts
+index b988be9..83266dd 100644
+--- a/apps/web/src/lib/api/client.ts
++++ b/apps/web/src/lib/api/client.ts
+@@ -936,6 +936,11 @@ export interface RevisionSummaryView {
+   author_name: string | null;
+   created_at: string;
+   restored_from: number | null;
++  /**
++   * 저장한 사람이 고친 사람 대신 남긴 리비전(실시간 편집, D-95)이면 실제로 고친 사람. 보통 리비전은 null, 기록이 없으면 빈
++   * 목록. 이름을 볼 수 없는 사람은 null.
++   */
++  edited_by_names: (string | null)[] | null;
+ }
+ 
+ export interface RevisionView extends RevisionSummaryView {
+@@ -951,6 +956,17 @@ function optInt(o: Record<string, unknown>, key: string): number | null {
+   return v;
+ }
+ 
++/** 이름 목록(항목은 이름이나 null). 없으면 null. */
++function optNameList(o: Record<string, unknown>, key: string): (string | null)[] | null {
++  const v = o[key];
++  if (v === null || v === undefined) return null;
++  if (!Array.isArray(v)) throw new TypeError(`expected array or null at ${key}`);
++  return v.map((name: unknown) => {
++    if (name === null || typeof name === 'string') return name;
++    throw new TypeError(`expected string or null in ${key}`);
++  });
++}
++
+ export function parseRevisionSummary(value: Json): RevisionSummaryView {
+   const o = rec(value, 'revision');
+   return {
+@@ -959,6 +975,7 @@ export function parseRevisionSummary(value: Json): RevisionSummaryView {
+     author_name: optStr(o, 'author_name'),
+     created_at: str(o, 'created_at'),
+     restored_from: optInt(o, 'restored_from'),
++    edited_by_names: optNameList(o, 'edited_by_names'),
+   };
+ }
+ 
+diff --git a/apps/web/src/lib/features/documents/ExportDialog.svelte b/apps/web/src/lib/features/documents/ExportDialog.svelte
+index 4e1cf34..05e5bf1 100644
+--- a/apps/web/src/lib/features/documents/ExportDialog.svelte
++++ b/apps/web/src/lib/features/documents/ExportDialog.svelte
+@@ -15,6 +15,7 @@
+   import type { ExportFormat } from './export';
+   import { exportFileName, prepareExport, saveBlob, toMarkdown, toZip } from './export';
+   import { printDocumentHtml, printToPdf } from './export-print';
++  import { standInLabel } from './revision-author';
+ 
+   interface Props {
+     doc: DocumentView;
+@@ -49,6 +50,11 @@
+   ]);
+ 
+   const when = (iso: string): string => formatInstant(iso);
++  /** 리비전을 남긴 사람. 대신 저장한 리비전은 실제 편집자와 함께 보인다(D-95). */
++  function byline(rev: RevisionSummaryView): string {
++    const label = standInLabel(rev) ?? rev.author_name;
++    return label === null ? '' : ` · ${label}`;
++  }
+   const latest = $derived(selected === doc.revision);
+ 
+   function openDialog(): void {
+@@ -143,7 +149,7 @@
+                 ? m.documents_revision_latest({ revision: rev.revision })
+                 : m.documents_revision_n({ revision: rev.revision })} · {when(
+                 rev.created_at,
+-              )}{rev.author_name === null ? '' : ` · ${rev.author_name}`}
++              )}{byline(rev)}
+             </option>
+           {/each}
+         </select>
+diff --git a/apps/web/src/lib/features/documents/RevisionHistory.svelte b/apps/web/src/lib/features/documents/RevisionHistory.svelte
+index ce37d62..17ab148 100644
+--- a/apps/web/src/lib/features/documents/RevisionHistory.svelte
++++ b/apps/web/src/lib/features/documents/RevisionHistory.svelte
+@@ -9,6 +9,7 @@
+   import { Button } from '$lib/ui/button';
+   import * as Dialog from '$lib/ui/dialog';
+ 
++  import { standInLabel } from './revision-author';
+   import type { DiffLine } from './revision-diff';
+   import { diffRevisions } from './revision-diff';
+ 
+@@ -138,7 +139,7 @@
+           >
+             <span class="font-mono">r{rev.revision}</span>
+             <span class="text-muted-foreground"
+-              >{rev.author_name ?? m.documents_unknown_author()}</span
++              >{standInLabel(rev) ?? rev.author_name ?? m.documents_unknown_author()}</span
+             >
+             <span class="block text-xs text-muted-foreground">
+               {when(rev.created_at)}{rev.restored_from === null
+diff --git a/apps/web/src/lib/features/documents/revision-author.ts b/apps/web/src/lib/features/documents/revision-author.ts
+new file mode 100644
+index 0000000..4a8bb76
+--- /dev/null
++++ b/apps/web/src/lib/features/documents/revision-author.ts
+@@ -0,0 +1,15 @@
++// 리비전을 남긴 사람 표시(D-95). 실시간 편집에서 고친 사람이 쓸 수 없어 다른 사람(옮긴 사람·실시간을 끈 관리자·연결된
++// 다른 작성자)이 대신 저장한 리비전은 실제로 고친 사람과 대신 저장한 사람을 함께 보인다. 대신 저장한 사람이 내용을 쓴
++// 것처럼 보이지 않게 한다.
++import type { RevisionSummaryView } from '$lib/api/client';
++import { m } from '$lib/paraglide/messages.js';
++
++/** 대신 저장한 리비전이면 그 표시, 보통 리비전이면 `undefined`. 이름을 볼 수 없는 사람은 "알 수 없음"이다. */
++export function standInLabel(rev: RevisionSummaryView): string | undefined {
++  const names = rev.edited_by_names;
++  if (names === null) return undefined;
++  const author = rev.author_name ?? m.documents_unknown_author();
++  if (names.length === 0) return m.documents_saved_for_unknown({ author });
++  const editors = names.map((name) => name ?? m.documents_unknown_author()).join(', ');
++  return m.documents_saved_for_editors({ editors, author });
++}
+diff --git a/apps/web/tests/component/revision-restore-conflict.test.ts b/apps/web/tests/component/revision-restore-conflict.test.ts
+index 720de5f..9ed816a 100644
+--- a/apps/web/tests/component/revision-restore-conflict.test.ts
++++ b/apps/web/tests/component/revision-restore-conflict.test.ts
+@@ -46,6 +46,7 @@ function revisionAt(revision: number, text: string): RevisionView {
+     author_name: '나',
+     created_at: '2026-10-19T00:00:00Z',
+     restored_from: null,
++    edited_by_names: null,
+     body: paragraph(text),
+     schema_version: 1,
+   };
+diff --git a/apps/web/tests/component/revision-stand-in.test.ts b/apps/web/tests/component/revision-stand-in.test.ts
+new file mode 100644
+index 0000000..6ab9b28
+--- /dev/null
++++ b/apps/web/tests/component/revision-stand-in.test.ts
+@@ -0,0 +1,142 @@
++import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
++import { afterEach, describe, expect, it, vi } from 'vitest';
++
++import type { DocumentView, RevisionSummaryView } from '$lib/api/client';
++import { api, parseRevisionSummary } from '$lib/api/client';
++import ExportDialog from '$lib/features/documents/ExportDialog.svelte';
++import RevisionHistory from '$lib/features/documents/RevisionHistory.svelte';
++import { standInLabel } from '$lib/features/documents/revision-author';
++import { setLocale } from '$lib/paraglide/runtime.js';
++
++// D-95: 실시간 편집에서 고친 사람 대신 다른 사람(옮긴 사람·실시간을 끈 관리자 등)이 저장한 리비전은 실제 편집자와 대신
++// 저장한 사람을 함께 보인다. 대신 저장한 사람이 내용을 쓴 것처럼 보이지 않게 한다.
++
++afterEach(() => {
++  vi.restoreAllMocks();
++});
++
++function summary(
++  revision: number,
++  author: string | null,
++  editedBy: (string | null)[] | null,
++): RevisionSummaryView {
++  return {
++    revision,
++    title: '문서',
++    author_name: author,
++    created_at: '2026-10-22T00:00:00Z',
++    restored_from: null,
++    edited_by_names: editedBy,
++  };
++}
++
++const LIST = [
++  summary(3, '관리자', ['작성자', null]),
++  summary(2, '관리자', []),
++  summary(1, '작성자', null),
++];
++
++function documentAt(revision: number): DocumentView {
++  return {
++    id: 'd1',
++    workspace_id: 'ws-1',
++    placement: 'wiki',
++    item_id: null,
++    parent_id: null,
++    reference: 'WIKI-1',
++    title: '문서',
++    body: { type: 'doc' },
++    schema_version: 1,
++    revision,
++    updated_at: '2026-10-22T00:00:00Z',
++    access: 'owner',
++    can_edit: true,
++    visibility: 'workspace',
++    allow_copy: false,
++    can_manage: true,
++    can_delete: true,
++    is_template: false,
++    realtime: true,
++    can_export: true,
++  };
++}
++
++describe('stand-in revisions (D-95)', () => {
++  it('parses the actual editors, keeping unknown names and the ordinary case apart', () => {
++    const base = {
++      revision: 2,
++      title: 't',
++      author_name: 'x',
++      created_at: '2026-10-22T00:00:00Z',
++      restored_from: null,
++    };
++    expect(parseRevisionSummary(base).edited_by_names).toBeNull();
++    expect(parseRevisionSummary({ ...base, edited_by_names: null }).edited_by_names).toBeNull();
++    expect(parseRevisionSummary({ ...base, edited_by_names: [] }).edited_by_names).toEqual([]);
++    expect(parseRevisionSummary({ ...base, edited_by_names: ['a', null] }).edited_by_names).toEqual(
++      ['a', null],
++    );
++    expect(() => parseRevisionSummary({ ...base, edited_by_names: [1] })).toThrow(TypeError);
++    expect(() => parseRevisionSummary({ ...base, edited_by_names: 'a' })).toThrow(TypeError);
++  });
++
++  it('names the editors and the person who saved for them', async () => {
++    await setLocale('ko', { reload: false });
++    expect(standInLabel(summary(1, '작성자', null))).toBeUndefined();
++    expect(standInLabel(summary(3, '관리자', ['작성자', null]))).toBe(
++      '편집: 작성자, 알 수 없음 · 대신 저장: 관리자',
++    );
++    expect(standInLabel(summary(2, '관리자', []))).toBe(
++      '편집한 사람 기록 없음 · 대신 저장: 관리자',
++    );
++    expect(standInLabel(summary(2, null, ['작성자']))).toBe('편집: 작성자 · 대신 저장: 알 수 없음');
++    await setLocale('en', { reload: false });
++    expect(standInLabel(summary(3, 'Admin', ['Writer', 'Reviewer']))).toBe(
++      'Edited by Writer, Reviewer · saved for them by Admin',
++    );
++    expect(standInLabel(summary(2, 'Admin', []))).toBe(
++      'Editors not recorded · saved for them by Admin',
++    );
++    await setLocale('ko', { reload: false });
++  });
++
++  it('shows the stand-in in the revision history list', async () => {
++    await setLocale('ko', { reload: false });
++    vi.spyOn(api, 'revisions').mockResolvedValue(LIST);
++    render(RevisionHistory, { props: { doc: documentAt(3), onrestored: () => undefined } });
++    await fireEvent.click(screen.getByRole('button', { name: '기록' }));
++    const options = await screen.findAllByRole('option');
++    expect(options.map((o) => o.textContent)).toEqual([
++      expect.stringContaining('편집: 작성자, 알 수 없음 · 대신 저장: 관리자'),
++      expect.stringContaining('편집한 사람 기록 없음 · 대신 저장: 관리자'),
++      expect.stringContaining('작성자'),
++    ]);
++    expect(options[2]?.textContent).not.toContain('대신 저장');
++  });
++
++  it('shows the stand-in in the export revision picker', async () => {
++    await setLocale('ko', { reload: false });
++    vi.spyOn(api, 'revisions').mockResolvedValue(LIST);
++    render(ExportDialog, {
++      props: {
++        doc: documentAt(3),
++        unsaved: false,
++        references: {
++          workspaceId: 'ws-1',
++          describeWorkspace: () => undefined,
++          hrefFor: () => null,
++          navigate: () => undefined,
++        },
++      },
++    });
++    await fireEvent.click(screen.getByRole('button', { name: '내보내기' }));
++    await waitFor(() => {
++      expect(screen.getAllByRole('option')).toHaveLength(3);
++    });
++    const texts = screen.getAllByRole('option').map((o) => o.textContent);
++    expect(texts[0]).toContain('편집: 작성자, 알 수 없음 · 대신 저장: 관리자');
++    expect(texts[1]).toContain('편집한 사람 기록 없음 · 대신 저장: 관리자');
++    expect(texts[2]).toContain(' · 작성자');
++    expect(texts[2]).not.toContain('대신 저장');
++  });
++});
+diff --git a/contracts/openapi.json b/contracts/openapi.json
+index 1dce477..919a882 100644
+--- a/contracts/openapi.json
++++ b/contracts/openapi.json
+@@ -911,7 +911,7 @@
+         "tags": [
+           "documents"
+         ],
+-        "summary": "이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인\n방의 편집을 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문, 다시 하면 된다)다.",
++        "summary": "이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인\n방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문)다. 편집은 그대로\n남고 다시 하면 된다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 경우처럼 다시 해도 남길 수 없을 때도 같은 409로\n옮기지 않는다.",
+         "operationId": "move_document",
+         "parameters": [
+           {
+@@ -13157,7 +13157,7 @@
+             "$ref": "#/components/schemas/ErrorBody"
+           }
+         ],
+-        "description": "이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).\n- `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).\n- `ErrorBody`(`error: \"conflict\"`): 실시간 방의 편집을 먼저 리비전으로 남기지 못했다(옮기지 않음, 다시 하면 된다)."
++        "description": "이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).\n- `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).\n- `ErrorBody`(`error: \"conflict\"`): 실시간 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지\n  못했다(옮기지 않음, 편집은 남는다, 다시 하면 된다)."
+       },
+       "MoveDocument": {
+         "type": "object",
+@@ -14497,6 +14497,19 @@
+             "type": "string",
+             "format": "date-time"
+           },
++          "edited_by_names": {
++            "type": [
++              "array",
++              "null"
++            ],
++            "items": {
++              "type": [
++                "string",
++                "null"
++              ]
++            },
++            "description": "`RevisionSummary::edited_by_names`와 같다."
++          },
+           "restored_from": {
+             "type": [
+               "integer",
+@@ -14537,6 +14550,19 @@
+             "type": "string",
+             "format": "date-time"
+           },
++          "edited_by_names": {
++            "type": [
++              "array",
++              "null"
++            ],
++            "items": {
++              "type": [
++                "string",
++                "null"
++              ]
++            },
++            "description": "저장한 사람이 고친 사람 대신 남긴 리비전(실시간 편집, D-95)이면 실제로 고친 사람(마지막이 앞). 보통 리비전은\n없음, 대신 저장했으나 고친 사람 기록이 없으면 빈 목록. 이름을 볼 수 없는 사람은 `author_name`처럼 null이다."
++          },
+           "restored_from": {
+             "type": [
+               "integer",
+diff --git a/crates/server/migrations/0094_collab_stand_in_editors.sql b/crates/server/migrations/0094_collab_stand_in_editors.sql
+new file mode 100644
+index 0000000..d74ed94
+--- /dev/null
++++ b/crates/server/migrations/0094_collab_stand_in_editors.sql
+@@ -0,0 +1,96 @@
++-- 대신 저장한 리비전의 실제 편집자(D-95, #71 후속, docs/development.md "#71" 항목).
++--
++-- 실시간 방(또는 방 없이 남은 저장 대기 상태의 저장)이 리비전을 남길 때 작성자는 그 트랜잭션을 연 사람이다(작성자 =
++-- `app_user_id()`, `document_revisions_insert` 정책). 마지막 리비전 뒤로 고친 사람이 쓸 수 없으면 옮기는 사람·실시간을
++-- 끄는 관리자·연결된 다른 작성자가 대신 남기는데, 그때 기록은 그 사람이 내용을 쓴 것처럼 보였다.
++--
++-- 1. `document_revisions.edited_by`: 작성자가 마지막 리비전 뒤로 고친 사람에 들지 않을 때만 그 사람들을 적는다(서버의
++--    방 코드만 적는다). NULL은 보통 리비전(작성자가 고친 사람이거나 저장 API·복원 등 방 밖의 길), 빈 배열은 대신
++--    저장했으나 고친 사람 기록이 없음(이 변경 전에 저장된 대기 상태), 그 밖에는 고친 사람(마지막이 앞)이다. 작성자의
++--    의미는 바꾸지 않는다.
++-- 2. `document_collab_states.editors`: 저장 대기 상태에 담긴 편집을 한 사람(마지막 리비전 뒤, 마지막이 앞). 방이 닫힌 뒤
++--    남은 상태를 리비전으로 남길 때(옮기기 전·실시간 끄기 전) 작성자 순서와 1번에 쓴다. Yjs 문서에 두지 않는다(클라이언트가
++--    바꿀 수 있다). 리비전으로 남은 상태(`pending`이 거짓)는 늘 빈 배열이다.
++-- 3. `app_system_collab_store`는 편집자를 받는 서명으로 바꾼다(옛 서명은 지운다, D-92). 본문은 0065와 같고 편집자만 더했다.
++-- 4. `app_collab_load`는 상태와 함께 그 편집자를 돌려준다(반환 모양이 바뀌어 지우고 다시 만든다). 권한 확인과 상태를 쓰는
++--    조건은 0049와 같다.
++
++ALTER TABLE document_revisions ADD COLUMN edited_by uuid[];
++ALTER TABLE document_collab_states ADD COLUMN editors uuid[] NOT NULL DEFAULT '{}';
++
++DROP FUNCTION app_system_collab_store(uuid, integer, bytea, boolean, jsonb);
++CREATE FUNCTION app_system_collab_store(p_doc uuid, p_revision integer, p_state bytea, p_pending boolean,
++                                        p_body jsonb, p_editors uuid[])
++  RETURNS boolean
++  LANGUAGE plpgsql VOLATILE SECURITY DEFINER
++  SET search_path = fvoci, pg_temp
++  AS $$
++  BEGIN
++    IF app_user_id() IS NOT NULL THEN
++      RAISE EXCEPTION 'system function' USING ERRCODE = '42501';
++    END IF;
++    -- 지운(휴지통) 문서는 저장만 하지 않고 참조는 그대로 둔다. 낡은 상태만 참조를 지운다.
++    IF NOT EXISTS (SELECT 1 FROM documents WHERE id = p_doc AND deleted_at IS NULL) THEN
++      RETURN false;
++    END IF;
++    IF NOT app_collab_state_current(p_doc, p_revision) THEN
++      DELETE FROM document_collab_file_refs WHERE document_id = p_doc;
++      RETURN false;
++    END IF;
++    -- 바뀐 곳: 편집자를 함께 적는다. 리비전으로 남은 상태에는 남길 편집이 없으므로 비운다.
++    INSERT INTO document_collab_states (document_id, revision, state, pending, editors, updated_at)
++    VALUES (p_doc, p_revision, p_state, p_pending,
++            CASE WHEN p_pending THEN coalesce(p_editors, '{}') ELSE '{}' END, now())
++    ON CONFLICT (document_id) DO UPDATE
++      SET revision = excluded.revision, state = excluded.state, pending = excluded.pending,
++          editors = excluded.editors, updated_at = now();
++    IF NOT p_pending THEN
++      DELETE FROM document_collab_file_refs WHERE document_id = p_doc;
++    ELSIF p_body IS NOT NULL THEN
++      PERFORM 1 FROM file_versions v
++      JOIN (SELECT DISTINCT r.file_id, r.version FROM app_file_refs(p_body) r) r
++        ON r.file_id = v.file_id AND r.version = v.version
++      ORDER BY v.id
++      FOR KEY SHARE OF v;
++      DELETE FROM document_collab_file_refs WHERE document_id = p_doc;
++      INSERT INTO document_collab_file_refs (document_id, file_id, version)
++      SELECT DISTINCT p_doc, r.file_id, r.version FROM app_file_refs(p_body) r
++      ON CONFLICT DO NOTHING;
++    END IF;
++    RETURN true;
++  END
++  $$;
++
++-- 방을 열 때 읽는 것: 저장된 Yjs 상태(그 뒤로 본문이 바뀌지 않았을 때만)와 그 편집자, 문서 본문·리비전. 볼 수 있는
++-- 사람만.
++DROP FUNCTION app_collab_load(uuid);
++CREATE FUNCTION app_collab_load(p_doc uuid)
++  RETURNS TABLE (doc_revision integer, title text, body jsonb, state bytea, editors uuid[])
++  LANGUAGE plpgsql STABLE SECURITY DEFINER
++  SET search_path = fvoci, pg_temp
++  AS $$
++  BEGIN
++    PERFORM app_collab_access(p_doc);
++    RETURN QUERY
++    SELECT d.revision, d.title, d.body, cs.state, cs.editors
++    FROM documents d
++    -- 상태가 이어받은 리비전 뒤로 본문이 바뀌지 않았으면(제목만 바꾼 저장 등) 그 상태와 편집자를 그대로 쓴다.
++    LEFT JOIN LATERAL (
++      SELECT s.state, s.editors FROM document_collab_states s
++      WHERE s.document_id = d.id
++        AND NOT EXISTS (
++          SELECT 1 FROM document_revisions r
++          WHERE r.document_id = d.id AND r.revision > s.revision
++            AND r.body IS DISTINCT FROM (SELECT b.body FROM document_revisions b
++                                         WHERE b.document_id = d.id AND b.revision = s.revision))
++    ) cs ON true
++    WHERE d.id = p_doc;
++  END
++  $$;
++
++REVOKE ALL ON FUNCTION app_system_collab_store(uuid, integer, bytea, boolean, jsonb, uuid[]) FROM PUBLIC;
++REVOKE ALL ON FUNCTION app_collab_load(uuid) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION
++  app_system_collab_store(uuid, integer, bytea, boolean, jsonb, uuid[]),
++  app_collab_load(uuid)
++TO fvoci_app;
+diff --git a/crates/server/src/collab/room.rs b/crates/server/src/collab/room.rs
+index c35d4af..0368dc5 100644
+--- a/crates/server/src/collab/room.rs
++++ b/crates/server/src/collab/room.rs
+@@ -7,6 +7,8 @@
+ //! - **한도**: 한 프레임의 메시지 수, 연결마다 초당 바이트·메시지 수, Yjs 상태 크기, 참여자 표시 수·크기.
+ //! - **저장**: 몇 초마다 Yjs 상태를 저장하고, 60초 조용하거나 마지막 사람이 나가면 저장 API와 같은 길
+ //!   (`documents::write_revision`)으로 리비전을 만든다. 마지막으로 고친 사람이 쓸 수 없으면 연결된 다른 작성자로 쓴다.
++//!   작성자가 마지막 리비전 뒤로 고친 사람이 아니면(대신 저장) 고친 사람을 리비전에 따로 적는다(D-95, `edited_by`).
++//!   고친 사람은 저장 대기 상태와 함께 저장해 방이 닫힌 뒤에도 잃지 않는다.
+ //!   그 사이 본문이 다른 길(복원)로 바뀌었으면 쓰지 않고 방을 닫는다. 저장 확인(`MSG_PERSISTED`)은 방이 계속 편집을
+ //!   지니고 있을 때나 리비전을 남긴 뒤에만 보낸다: 리비전을 남기지 못한 채 연결을 닫을 때는 닫은 뒤에 상태를 저장한다
+ //!   (확인받지 못한 편집은 브라우저가 초안으로 지닌다).
+@@ -56,7 +58,8 @@ pub struct RestoreRequest {
+ }
+ 
+ /// 문서 옮기기 요청(소유 권한자, 미리보기와 같은 권한 확인을 거친 것). 열린 방이 있으면 방이, 없으면 요청 처리기가 방이
+-/// 새로 열리지 않게 막은 채 `documents::move_in_db`로 한다(`Rooms::move_document`).
++/// 새로 열리지 않게 막은 채 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기고(남기지 못하면 옮기지 않고 409)
++/// `documents::move_in_db`로 한다(`Rooms::move_document`).
+ #[derive(Debug, Clone)]
+ pub struct MoveRequest {
+     pub doc: DocumentId,
+@@ -539,7 +542,9 @@ impl Rooms {
+     }
+ 
+     /// 방 없이 남은 실시간 상태(리비전으로 남지 않은 편집)를 리비전으로 남긴다. 실시간을 끄기 전, 방을 모두 닫은
+-    /// 뒤(`begin_closing` 아래)에 쓴다. 작성자는 실시간을 끄는 관리자. 남겼거나 남길 것이 없으면 참.
++    /// 뒤(`begin_closing` 아래)에 쓴다. 작성자는 그 상태를 고친 사람(`load`가 이어받은 편집자, 마지막이 앞) 가운데 아직 쓸
++    /// 수 있는 사람, 없으면 실시간을 끄는 관리자다(대신 저장, 실제 편집자를 리비전에 따로 적는다, D-95). 남겼거나 남길
++    /// 것이 없으면 참.
+     pub async fn save_pending(
+         &self,
+         db: &Db,
+@@ -569,9 +574,12 @@ impl Rooms {
+ 
+     /// 방 없이 남은 실시간 상태를 옮기기 전에 리비전으로 남긴다(#71 리뷰). 앞선 방이 리비전을 남기지 못하고 닫혔거나(쓸 수
+     /// 있는 사람이 없음) 서버가 주기 저장 뒤 갑자기 멈춘 경우로, 그 편집은 이미 저장 확인을 받았을 수 있다. 실시간이 꺼진
+-    /// 곳으로 옮기면 그곳에서 되살릴 길이 없고 다음 일반 저장이 버린다. 작성자는 `snapshot_with` 순서를 따르고 옮기는 사람이
+-    /// 대신한다(`save_pending`의 관리자, 방 안 체크포인트와 같다). 남길 것이 없으면(저장된 상태가 없음·본문과 같은 내용,
+-    /// 실시간이 꺼짐) 아무것도 하지 않는다. 남기지 못하면 방 안 체크포인트와 같은 409(옮기지 않는다).
++    /// 곳으로 옮기면 그곳에서 되살릴 길이 없고 다음 일반 저장이 버린다. 새로 만든 방이라 연결이 없으므로 작성자 순서는 그
++    /// 상태와 함께 저장된 편집자(마지막 리비전 뒤로 고친 사람, 마지막이 앞) 가운데 아직 쓸 수 있는 사람, 그다음 옮기는
++    /// 사람이다(`save_pending`의 관리자 자리, 방 안 체크포인트와 같다). 옮기는 사람이 대신 남기면 실제 편집자를 리비전에
++    /// 따로 적는다(D-95, 편집자 기록이 없는 옛 상태면 빈 목록). 남길 것이 없으면(저장된 상태가 없음·본문과 같은 내용,
++    /// 실시간이 꺼짐) 아무것도 하지 않는다. 남기지 못하면 방 안 체크포인트와 같은 409로 옮기지 않고 상태는 그대로 둔다
++    /// (본문 검사 실패처럼 다시 해도 남길 수 없는 경우도 같다).
+     async fn save_pending_before_move(
+         &self,
+         db: &Db,
+@@ -692,6 +700,9 @@ struct Pending {
+     update: Vec<u8>,
+ }
+ 
++/// `app_collab_load`의 한 줄: 문서 리비전, 제목, 본문, 저장된 상태와 그 편집자(상태를 쓸 수 없으면 둘 다 없음).
++type LoadRow = (i32, String, Value, Option<Vec<u8>>, Option<Vec<Uuid>>);
++
+ struct Room {
+     doc_id: DocumentId,
+     generation: u64,
+@@ -718,8 +729,11 @@ struct Room {
+     last_change: Instant,
+     /// 마지막으로 DB에 저장한(또는 저장된 것을 불러온) 상태의 스냅숏(v1). 들어오는 연결에 처음 메시지와 함께 보낸다.
+     persisted: Option<Vec<u8>>,
+-    /// 고친 사람(마지막이 앞). 리비전 작성자를 고를 때 쓴다.
++    /// 고친 사람(마지막이 앞, 방이 열린 동안 모두). 리비전 작성자를 고를 때 쓴다.
+     editors: Vec<UserId>,
++    /// 마지막 리비전 뒤로 고친 사람(마지막이 앞). 리비전을 남기면 비운다. 상태와 함께 저장하고(D-95), 작성자가 이 안에
++    /// 없으면(대신 저장) 리비전에 실제 편집자로 적는다(`edited_by`).
++    edited_since: Vec<UserId>,
+     last_recheck: Instant,
+     /// 연결의 세션·권한을 다시 확인하는 간격(`FVOCI_COLLAB_RECHECK_SECS`).
+     recheck_every: Duration,
+@@ -754,6 +768,7 @@ impl Room {
+             last_change: Instant::now(),
+             persisted: None,
+             editors: Vec::new(),
++            edited_since: Vec::new(),
+             last_recheck: Instant::now(),
+             recheck_every,
+         }
+@@ -986,7 +1001,8 @@ impl Room {
+         self.rooms.moved(self.doc_id, outcome.workspace_id.0);
+         let shutdowns = self.drain_after_move(committed_at, rx).await;
+         // 커밋 전에 받은 편집까지 새 자리에서 리비전으로 남긴다. 작성자는 마지막으로 고친 사람·연결된 작성자 가운데 새
+-        // 자리에서 쓸 수 있는 사람, 없으면 옮긴 사람. 남기면 그때 상태를 저장하고 그 편집의 확인을 처음 보낸다.
++        // 자리에서 쓸 수 있는 사람, 없으면 옮긴 사람(대신 저장이면 실제 편집자를 따로 적는다, D-95). 남기면 그때 상태를
++        // 저장하고 그 편집의 확인을 처음 보낸다.
+         let before = self.base_revision;
+         let kept = tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot_with(Some(request.user)))
+             .await
+@@ -1022,6 +1038,15 @@ impl Room {
+     /// 따른다. 다른 명령은 답 없이 버린다: 방이 곧 닫히므로 참여는 새 방에서 새 자리의 권한으로 다시 하고, 다른 요청은
+     /// 방이 닫힌 것으로 본다. 닫기 요청(`Shutdown`)의 답 자리만 돌려준다: 답 없이 버리면 리비전을 남긴 것으로 읽혀
+     /// (`close_all`), 새 자리의 실시간 끄기가 이 방이 리비전이나 상태를 남기기 전에 남은 상태를 찾고 끝낼 수 있다.
++    ///
++    /// 이것은 그 틈을 좁힐 뿐 닫지 않는다. 커밋과 `Rooms::moved` 사이에 새 자리의 실시간 끄기가 방 목록을 모으면 이 방은
++    /// 아직 옛 워크스페이스로 보여 닫기 요청을 받지 않는다. 커밋 전에 대기열에 들어온 닫기 요청(옛 워크스페이스의 실시간
++    /// 끄기, 서버 종료)도 여기서 비워져 옮긴 뒤의 결과로 답을 받는다(남겼으면 참, 못 남겼으면 그 끄기는 409). `moved`를 커밋
++    /// 전에 부를 수는 없다: 옮길지는 이동 트랜잭션이 잠근 뒤 다시 계산해 정하므로, 먼저 새 자리로 적으면 옮기지 않은 방을 새
++    /// 자리의 끄기가 닫을 수 있고(4410, 문서는 옛 자리에서 실시간이 켜진 채), 방 목록 잠금(동기 잠금)은 커밋을 기다리는
++    /// 동안 쥘 수 없다. 남는 틈에 걸린 것은 확인받지 않은 편집뿐이다: 체크포인트까지의 편집은 이미 리비전이고, 그 뒤의
++    /// 편집은 커밋 뒤 리비전을 남겨야 처음 확인을 받는다. 그 리비전을 남기지 못하면 연결을 닫은 뒤 상태만 저장하므로
++    /// 브라우저가 그 편집을 초안으로 지닌다.
+     async fn drain_after_move(
+         &mut self,
+         committed_at: Instant,
+@@ -1055,9 +1080,11 @@ impl Room {
+     }
+ 
+     /// 저장된 Yjs 상태(그 뒤로 본문이 바뀌지 않았을 때) 또는 본문에서 방 문서를 만든다. 들어오는 사람의 권한으로 읽는다.
++    /// 상태를 이어받으면 그 상태의 편집자(마지막 리비전 뒤로 고친 사람)도 이어받는다: 작성자를 고르는 순서의 앞에 두고
++    /// 대신 저장할 때 실제 편집자로 적는다(D-95).
+     async fn load(&mut self, user: UserId) -> Result<Doc, AppError> {
+         let mut tx = self.db.begin_as(user).await?;
+-        let (revision, _title, body, state): (i32, String, Value, Option<Vec<u8>>) =
++        let (revision, _title, body, state, editors): LoadRow =
+             sqlx::query_as("SELECT * FROM app_collab_load($1)")
+                 .bind(self.doc_id)
+                 .fetch_one(tx.conn())
+@@ -1085,6 +1112,13 @@ impl Room {
+         self.lineage = lineage_of(&doc).unwrap_or_default();
+         self.base_revision = revision;
+         self.base_body = body;
++        let editors: Vec<UserId> = editors
++            .unwrap_or_default()
++            .into_iter()
++            .map(UserId)
++            .collect();
++        self.editors.clone_from(&editors);
++        self.edited_since = editors;
+         // 저장된 상태에서 불러왔으니 이 상태는 이미 DB에 있다.
+         self.persisted = Some(doc.transact().snapshot().encode_v1());
+         Ok(doc)
+@@ -1314,8 +1348,10 @@ impl Room {
+             self.dirty_state = true;
+             self.dirty_since_snapshot = true;
+             self.last_change = Instant::now();
+-            self.editors.retain(|u| *u != user);
+-            self.editors.insert(0, user);
++            for list in [&mut self.editors, &mut self.edited_since] {
++                list.retain(|u| *u != user);
++                list.insert(0, user);
++            }
+             let message = Message::Sync(SyncMessage::Update(merged)).encode_v1();
+             self.broadcast(&message, Some(conn));
+         }
+@@ -1412,16 +1448,19 @@ impl Room {
+             let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
+             convert::read_doc(&doc.transact(), &fragment)
+         });
++        let editors: Vec<Uuid> = self.edited_since.iter().map(|u| u.0).collect();
+         let result = async {
+             let mut tx = self.db.begin_anonymous().await?;
+-            // 리비전으로 아직 남지 않은 편집이 있는지도 적는다(실시간을 끄기 전에 남긴다, 마이그레이션 0050).
++            // 리비전으로 아직 남지 않은 편집이 있는지와 그 편집자도 적는다(실시간을 끄기 전·옮기기 전에 남긴다, 마이그레이션
++            // 0050·0094).
+             let stored: bool =
+-                sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3, $4, $5)")
++                sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3, $4, $5, $6)")
+                     .bind(self.doc_id)
+                     .bind(self.base_revision)
+                     .bind(state)
+                     .bind(self.dirty_since_snapshot)
+                     .bind(body)
++                    .bind(editors)
+                     .fetch_one(tx.conn())
+                     .await?;
+             tx.commit().await?;
+@@ -1445,12 +1484,13 @@ impl Room {
+     }
+ 
+     /// 방 문서를 저장 API와 같은 길로 리비전에 남긴다. 작성자는 마지막으로 고친 사람, 그 사람이 쓸 수 없으면
+-    /// 최근에 고친 다른 사람, 그다음은 연결된 작성자 순.
++    /// 최근에 고친 다른 사람, 그다음은 연결된 작성자 순. 작성자가 마지막 리비전 뒤로 고친 사람이 아니면(대신 저장) 고친
++    /// 사람을 리비전에 따로 적는다(D-95, `write_snapshot`).
+     async fn snapshot(&mut self) -> bool {
+         self.snapshot_with(None).await
+     }
+ 
+-    /// `fallback`: 편집한 사람·연결된 작성자 모두 남길 수 없을 때의 작성자(실시간을 끄는 관리자).
++    /// `fallback`: 편집한 사람·연결된 작성자 모두 남길 수 없을 때의 작성자(실시간을 끄는 관리자, 옮기는 사람).
+     async fn snapshot_with(&mut self, fallback: Option<UserId>) -> bool {
+         if !self.dirty_since_snapshot {
+             return true;
+@@ -1479,6 +1519,7 @@ impl Room {
+                     self.base_revision = revision;
+                     self.base_body = body;
+                     self.dirty_since_snapshot = false;
++                    self.edited_since.clear();
+                     self.dirty_state = true;
+                     // 리비전 번호와 상태가 어긋난 채로 멈추지 않도록 바로 저장한다.
+                     self.persist().await;
+@@ -1492,6 +1533,7 @@ impl Room {
+                         let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
+                     }
+                     self.dirty_since_snapshot = false;
++                    self.edited_since.clear();
+                     self.dirty_state = false;
+                     return true;
+                 }
+@@ -1524,9 +1566,12 @@ impl Room {
+         }
+     }
+ 
+-    /// 새 리비전 번호, 또는 본문이 다른 길로 바뀌었으면 `None`.
+-    async fn write_snapshot(&self, editor: UserId, body: &Value) -> Result<Option<i32>, AppError> {
+-        let mut tx = self.db.begin_as(editor).await?;
++    /// 새 리비전 번호, 또는 본문이 다른 길로 바뀌었으면 `None`. 작성자(`author`, 이 트랜잭션을 연 사람)가 마지막 리비전
++    /// 뒤로 고친 사람에 들지 않으면 그 사람들을 리비전의 실제 편집자로 적는다(D-95: 옮긴 사람·관리자·연결된 다른 작성자가
++    /// 대신 저장해도 내용을 쓴 것처럼 보이지 않게). 고친 사람을 모르면(이 기록 전에 저장된 대기 상태) 빈 목록이다.
++    async fn write_snapshot(&self, author: UserId, body: &Value) -> Result<Option<i32>, AppError> {
++        let edited_by = (!self.edited_since.contains(&author)).then_some(&self.edited_since[..]);
++        let mut tx = self.db.begin_as(author).await?;
+         sqlx::query("SELECT app_lock_item((SELECT item_id FROM documents WHERE id = $1))")
+             .bind(self.doc_id)
+             .execute(tx.conn())
+@@ -1549,8 +1594,15 @@ impl Room {
+             return Ok(Some(current.revision));
+         }
+         let title = current.title.clone();
+-        let row =
+-            documents::write_revision(&mut tx, self.doc_id, &title, body, Uuid::now_v7()).await?;
++        let row = documents::write_revision(
++            &mut tx,
++            self.doc_id,
++            &title,
++            body,
++            Uuid::now_v7(),
++            edited_by,
++        )
++        .await?;
+         tx.commit().await?;
+         Ok(Some(row.revision))
+     }
+diff --git a/crates/server/src/features/documents.rs b/crates/server/src/features/documents.rs
+index 8f8c4c9..f36c947 100644
+--- a/crates/server/src/features/documents.rs
++++ b/crates/server/src/features/documents.rs
+@@ -841,19 +841,22 @@ pub async fn save(
+         ));
+     }
+ 
+-    let row = write_revision(&mut tx, id, &title, &input.body, input.request_id).await?;
++    // 저장 API는 늘 저장하는 사람이 쓴 내용이다(대신 저장 기록 없음, D-95).
++    let row = write_revision(&mut tx, id, &title, &input.body, input.request_id, None).await?;
+     tx.commit().await?;
+     document_reply(user, &to_document(row, access))
+ }
+ 
+ /// 저장의 끝부분: 문서 행을 새 리비전으로 바꾸고 리비전·링크·언급을 기록한다. 저장 API와 실시간 편집의
+-/// 리비전(collab)이 같은 길을 쓴다. 호출하는 쪽이 문서 행을 잠그고 쓰기 권한을 확인한다.
++/// 리비전(collab)이 같은 길을 쓴다. 호출하는 쪽이 문서 행을 잠그고 쓰기 권한을 확인한다. `edited_by`: 실시간 방이 고친
++/// 사람 대신 남기는 리비전의 실제 편집자(D-95). 작성자는 늘 이 트랜잭션의 사용자다(`document_revisions_insert`).
+ pub(crate) async fn write_revision(
+     tx: &mut UserTx,
+     id: DocumentId,
+     title: &str,
+     body: &Value,
+     request_id: Uuid,
++    edited_by: Option<&[UserId]>,
+ ) -> Result<DocRow, AppError> {
+     let row: DocRow = sqlx::query_as(&format!(
+         "UPDATE documents
+@@ -870,9 +873,11 @@ pub(crate) async fn write_revision(
+     .await?
+     // 잠금 뒤 권한이 바뀌어 갱신 정책이 행을 거른 경우(예: 그사이 항목 보관): 500이 아니라 403.
+     .ok_or(AppError::Forbidden)?;
++    let edited_by: Option<Vec<Uuid>> = edited_by.map(|users| users.iter().map(|u| u.0).collect());
+     sqlx::query(
+-        "INSERT INTO document_revisions (document_id, revision, title, schema_version, body, author, request_id)
+-         VALUES ($1, $2, $3, $4, $5, app_user_id(), $6)",
++        "INSERT INTO document_revisions (document_id, revision, title, schema_version, body, author, request_id,
++                                         edited_by)
++         VALUES ($1, $2, $3, $4, $5, app_user_id(), $6, $7)",
+     )
+     .bind(id)
+     .bind(row.revision)
+@@ -880,6 +885,7 @@ pub(crate) async fn write_revision(
+     .bind(SCHEMA_VERSION)
+     .bind(body)
+     .bind(request_id)
++    .bind(edited_by)
+     .execute(tx.conn())
+     .await?;
+     // 제목이 바뀌었으면 감사 기록을 남긴다(이전·새 제목은 함수가 두 리비전에서 읽는다, 본문은 남기지 않는다).
+@@ -1196,7 +1202,8 @@ pub struct MovePreview {
+ 
+ /// 이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+ /// - `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).
+-/// - `ErrorBody`(`error: "conflict"`): 실시간 방의 편집을 먼저 리비전으로 남기지 못했다(옮기지 않음, 다시 하면 된다).
++/// - `ErrorBody`(`error: "conflict"`): 실시간 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지
++///   못했다(옮기지 않음, 편집은 남는다, 다시 하면 된다).
+ #[derive(Debug, Serialize, ToSchema)]
+ #[serde(untagged)]
+ pub enum MoveConflict {
+@@ -1277,7 +1284,9 @@ pub async fn move_preview(
+ }
+ 
+ /// 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인
+-/// 방의 편집을 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문, 다시 하면 된다)다.
++/// 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문)다. 편집은 그대로
++/// 남고 다시 하면 된다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 경우처럼 다시 해도 남길 수 없을 때도 같은 409로
++/// 옮기지 않는다.
+ #[utoipa::path(post, path = "/api/documents/{document_id}/move",
+     params(("document_id" = String, Path, format = Uuid)), request_body = MoveDocument,
+     responses((status = 200, body = MoveOutcome), (status = 403, body = ErrorBody),
+@@ -1293,7 +1302,8 @@ pub async fn move_document(
+     // 옮겼으면 그사이 받은 편집까지 리비전으로 남긴 뒤 연결을 닫는다(4409, 새 자리의 권한·설정으로 다시 연다). 방이 이
+     // 명령을 처리하는 동안 들어온 편집은 대기열에서 기다리므로, 확인을 받은 편집이 옮긴 곳에서 리비전이 되지 못하고
+     // 사라지는 일이 없다. 방이 없으면 옮기는 동안 방이 새로 열리지 않게 막고, 방 없이 남은 실시간 상태(앞선 방이 리비전을
+-    // 남기지 못하고 닫힘)를 먼저 리비전으로 남긴 뒤(옮기는 사람이 대신 작성자, 남기지 못하면 409) 옮긴다. 방에는 이
++    // 남기지 못하고 닫힘)를 먼저 리비전으로 남긴 뒤(그 상태를 고친 사람 가운데 아직 쓸 수 있는 사람, 없으면 옮기는 사람이
++    // 대신 작성자이고 실제 편집자를 따로 적는다, D-95. 남기지 못하면 409) 옮긴다. 방에는 이
+     // 이동을 할 수 있는 요청(문서 소유 권한·대상 쓰기 권한, 미리보기와 같은 확인)만 보낸다: 거절될 요청이 다른 사람의 열린
+     // 편집을 리비전으로 남기게 하거나 방을 기다리게 하지 않는다(리뷰). 거절이면 그 오류를 바로 돌려준다. 이동 트랜잭션이
+     // 잠근 뒤 다시 확인하는 것이 그대로 최종이다. 방을 기다리는 동안 DB 연결을 쥐지 않는다.
+diff --git a/crates/server/src/features/revisions.rs b/crates/server/src/features/revisions.rs
+index 0410af1..43c819f 100644
+--- a/crates/server/src/features/revisions.rs
++++ b/crates/server/src/features/revisions.rs
+@@ -43,6 +43,9 @@ pub struct RevisionSummary {
+     pub created_at: OffsetDateTime,
+     /// 복원으로 만든 리비전이면 원본 리비전 번호.
+     pub restored_from: Option<i32>,
++    /// 저장한 사람이 고친 사람 대신 남긴 리비전(실시간 편집, D-95)이면 실제로 고친 사람(마지막이 앞). 보통 리비전은
++    /// 없음, 대신 저장했으나 고친 사람 기록이 없으면 빈 목록. 이름을 볼 수 없는 사람은 `author_name`처럼 null이다.
++    pub edited_by_names: Option<Vec<Option<String>>>,
+ }
+ 
+ /// 리비전 하나(본문 포함).
+@@ -58,8 +61,16 @@ pub struct Revision {
+     #[schema(value_type = String, format = DateTime)]
+     pub created_at: OffsetDateTime,
+     pub restored_from: Option<i32>,
++    /// `RevisionSummary::edited_by_names`와 같다.
++    pub edited_by_names: Option<Vec<Option<String>>>,
+ }
+ 
++/// 대신 저장한 리비전의 실제 편집자 이름(`edited_by` 순서). 보통 리비전은 NULL, 기록이 없으면 빈 배열. 볼 수 없는
++/// 사용자는 작성자 이름과 같이 NULL(사용자 행이 RLS로 걸러진다).
++const EDITED_BY_NAMES: &str = "CASE WHEN r.edited_by IS NULL THEN NULL
++         ELSE ARRAY(SELECT e.display_name FROM unnest(r.edited_by) WITH ORDINALITY AS x(id, n)
++                    LEFT JOIN users e ON e.id = x.id ORDER BY x.n) END";
++
+ /// 목록 범위. `before`보다 작은 리비전을 최신순으로 돌려준다.
+ #[derive(Debug, Deserialize, IntoParams)]
+ pub struct RevisionPage {
+@@ -74,7 +85,14 @@ pub struct RestoreRevision {
+     pub base_revision: i32,
+ }
+ 
+-type SummaryRow = (i32, String, Option<String>, OffsetDateTime, Option<i32>);
++type SummaryRow = (
++    i32,
++    String,
++    Option<String>,
++    OffsetDateTime,
++    Option<i32>,
++    Option<Vec<Option<String>>>,
++);
+ 
+ /// 리비전 목록(최신순, 한 번에 100개). 볼 수 없으면 404.
+ #[utoipa::path(get, path = "/api/documents/{document_id}/revisions", operation_id = "list_revisions",
+@@ -88,12 +106,12 @@ pub async fn list(
+ ) -> Result<Json<Vec<RevisionSummary>>, AppError> {
+     let mut tx = state.db.begin_as(user).await?;
+     access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
+-    let rows: Vec<SummaryRow> = sqlx::query_as(
+-        "SELECT r.revision, r.title, u.display_name, r.created_at, r.restored_from
++    let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
++        "SELECT r.revision, r.title, u.display_name, r.created_at, r.restored_from, {EDITED_BY_NAMES}
+          FROM document_revisions r LEFT JOIN users u ON u.id = r.author
+          WHERE r.document_id = $1 AND ($2::integer IS NULL OR r.revision < $2)
+-         ORDER BY r.revision DESC LIMIT $3",
+-    )
++         ORDER BY r.revision DESC LIMIT $3"
++    ))
+     .bind(id)
+     .bind(page.before)
+     .bind(PAGE)
+@@ -103,12 +121,15 @@ pub async fn list(
+     Ok(Json(
+         rows.into_iter()
+             .map(
+-                |(revision, title, author_name, created_at, restored_from)| RevisionSummary {
+-                    revision,
+-                    title,
+-                    author_name,
+-                    created_at,
+-                    restored_from,
++                |(revision, title, author_name, created_at, restored_from, edited_by_names)| {
++                    RevisionSummary {
++                        revision,
++                        title,
++                        author_name,
++                        created_at,
++                        restored_from,
++                        edited_by_names,
++                    }
+                 },
+             )
+             .collect(),
+@@ -123,6 +144,7 @@ type RevisionRow = (
+     Option<String>,
+     OffsetDateTime,
+     Option<i32>,
++    Option<Vec<Option<String>>>,
+ );
+ 
+ /// 리비전 하나. 문서나 리비전이 없거나 볼 수 없으면 404.
+@@ -146,26 +168,35 @@ async fn fetch_revision(
+     id: DocumentId,
+     revision: i32,
+ ) -> Result<Option<Revision>, AppError> {
+-    let row: Option<RevisionRow> = sqlx::query_as(
+-        "SELECT r.revision, r.title, r.body, r.schema_version, u.display_name, r.created_at, r.restored_from
++    let row: Option<RevisionRow> = sqlx::query_as(&format!(
++        "SELECT r.revision, r.title, r.body, r.schema_version, u.display_name, r.created_at, r.restored_from,
++                {EDITED_BY_NAMES}
+          FROM document_revisions r LEFT JOIN users u ON u.id = r.author
+-         WHERE r.document_id = $1 AND r.revision = $2",
+-    )
++         WHERE r.document_id = $1 AND r.revision = $2"
++    ))
+     .bind(id)
+     .bind(revision)
+     .fetch_optional(tx.conn())
+     .await?;
+     Ok(row.map(
+-        |(revision, title, body, schema_version, author_name, created_at, restored_from)| {
+-            Revision {
+-                revision,
+-                title,
+-                body,
+-                schema_version,
+-                author_name,
+-                created_at,
+-                restored_from,
+-            }
++        |(
++            revision,
++            title,
++            body,
++            schema_version,
++            author_name,
++            created_at,
++            restored_from,
++            edited_by_names,
++        )| Revision {
++            revision,
++            title,
++            body,
++            schema_version,
++            author_name,
++            created_at,
++            restored_from,
++            edited_by_names,
+         },
+     ))
+ }
+diff --git a/crates/server/tests/collab.rs b/crates/server/tests/collab.rs
+index 6ddec48..8a28b7c 100644
+--- a/crates/server/tests/collab.rs
++++ b/crates/server/tests/collab.rs
+@@ -696,7 +696,9 @@ async fn refused_code_with(
+ 
+ /// 실시간 끄기 회귀(사용자 지시 2026-10-17, 리뷰 반영): 끄는 동안 새 방이 열리지 않고(4503), 열린 방과 방 없이 남은
+ /// 실시간 상태의 편집이 모두 리비전으로 남은 뒤에만 꺼진다. 편집한 사람이 더는 쓸 수 없으면 끄는 관리자가 작성자가
+-/// 된다. 같은 워크스페이스를 동시에 끄는 요청이 겹쳐도 편집이 남는다. 끈 뒤 저장 API는 그 리비전 위에서만 성공한다.
++/// 되고 실제 편집자를 리비전에 따로 적는다(D-95). 방 없이 남은 상태도 그 상태와 함께 저장한 편집자가 아직 쓸 수 있으면 그
++/// 사람이 작성자이므로, 여기서 관리자가 작성자인 것은 w1이 그때 독자이기 때문이다. 같은 워크스페이스를 동시에 끄는
++/// 요청이 겹쳐도 편집이 남는다. 끈 뒤 저장 API는 그 리비전 위에서만 성공한다(보통 리비전).
+ #[tokio::test]
+ async fn turning_realtime_off_keeps_live_edits() {
+     let state =
+@@ -812,6 +814,14 @@ async fn turning_realtime_off_keeps_live_edits() {
+         assert_eq!(doc["realtime"], false);
+         assert!(doc["body"].to_string().contains(text), "{doc:?}");
+         assert_eq!(last_author(id.clone()).await, admin.id.0);
++        // D-95: 관리자가 대신 남긴 리비전에는 실제로 고친 사람을 따로 적는다(열린 방은 방이 지닌 편집자, 방 없이 남은
++        // 상태는 상태와 함께 저장한 편집자).
++        let (last, _) = last_revision(&owner, id).await;
++        assert_eq!(
++            revision_authors(&owner, id, last).await.1,
++            Some(vec![w1.id.0]),
++            "{id}"
++        );
+     }
+     let pending: i64 = sqlx::query_scalar(
+         "SELECT count(*) FROM fvoci.document_collab_states WHERE pending AND document_id IN ($1::uuid, $2::uuid)",
+@@ -853,6 +863,10 @@ async fn turning_realtime_off_keeps_live_edits() {
+     )
+     .await;
+     assert_eq!(fresh.status, StatusCode::OK, "{:?}", fresh.json);
++    // 저장 API의 리비전은 늘 보통 리비전이다(대신 저장 기록 없음).
++    let (last, author) = last_revision(&owner, &a_id).await;
++    assert_eq!(author, w1.id.0);
++    assert_eq!(revision_authors(&owner, &a_id, last).await.1, None);
+     owner.close().await;
+ }
+ 
+@@ -1315,7 +1329,7 @@ async fn live_ref_store_and_old_version_cleanup_do_not_race() {
+         "text": format!("/api/files/{file_id}/content?version=1&inline=true") }] }] });
+     let mut t1 = owner.begin().await.unwrap();
+     let stored: bool = sqlx::query_scalar(
+-        "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2)",
++        "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2, '{}'::uuid[])",
+     )
+     .bind(&id)
+     .bind(&body)
+@@ -1696,7 +1710,7 @@ async fn file_refs_lock_versions_before_they_are_written() {
+             let body = body.clone();
+             tokio::spawn(async move {
+                 let stored: bool = sqlx::query_scalar(
+-                    "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2)",
++                    "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2, '{}'::uuid[])",
+                 )
+                 .bind(&id)
+                 .bind(&body)
+@@ -2525,11 +2539,12 @@ fn acked(c: &Client) -> bool {
+ 
+ /// #71 시험 준비: 실시간을 켠 곳(작성자·독자)과 끈 곳, 작성자가 실시간으로 쓴 문단을 독자 연결이 받은 문서. 작성자는 끈
+ /// 곳의 멤버가 아니다. 지켜보는 연결은 독자다: 쓸 수 있는 사람이 연결돼 있으면 방이 닫힐 때 그 사람이 작성자가 되어 잃음이
+-/// 가려진다. 권한 재확인(기본 30초)은 시험 중에 돌지 않게 한다. (앱, 주소, 관리자, 켠 곳, 끈 곳, 문서 id, 작성자 연결,
+-/// 독자 연결).
++/// 가려진다. 권한 재확인(기본 30초)은 시험 중에 돌지 않게 한다. (상태, 앱, 주소, 관리자, 켠 곳, 끈 곳, 문서 id, 작성자
++/// 연결, 독자 연결).
+ async fn live_move_race_setup(
+     label: &str,
+ ) -> (
++    fvoci_server::http::AppState,
+     Router,
+     SocketAddr,
+     TestUser,
+@@ -2564,7 +2579,7 @@ async fn live_move_race_setup(
+     e.paragraph("체크포인트 전 문단").await;
+     let mut r = connect(addr, Some(&reader), &id, true).await.unwrap();
+     assert!(r.until(|c| c.text().contains("체크포인트 전 문단")).await);
+-    (app, addr, admin, from, to, id, e, r)
++    (state, app, addr, admin, from, to, id, e, r)
+ }
+ 
+ /// 이 워크스페이스의 문서 나무 잠금(이동이 새 자리에서 `app_lock_move`로 잡는 것)을 쥔 트랜잭션과 그 연결의 pid.
+@@ -2604,7 +2619,7 @@ async fn get_doc(app: &Router, user: &TestUser, id: &str) -> serde_json::Value {
+ /// 뒤에 붙잡는다.
+ #[tokio::test]
+ async fn edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledged() {
+-    let (app, _addr, admin, _from, to, id, mut e, mut r) =
++    let (_state, app, _addr, admin, _from, to, id, mut e, mut r) =
+         live_move_race_setup("체크포인트 뒤 편집").await;
+     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+@@ -2654,17 +2669,21 @@ async fn edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledge
+     assert!(acked_at_all, "the kept edit was never acknowledged");
+     assert_eq!(writer_closed, Some(4409));
+     assert_eq!(saved["workspace_id"], to.as_str());
+-    let author: uuid::Uuid = sqlx::query_scalar(
+-        "SELECT author FROM fvoci.document_revisions WHERE document_id = $1::uuid ORDER BY revision DESC LIMIT 1",
+-    )
+-    .bind(&id)
+-    .fetch_one(&owner)
+-    .await
+-    .unwrap();
++    let (last, author) = last_revision(&owner, &id).await;
+     assert_eq!(
+         author, admin.id.0,
+         "the mover stands in for an editor who cannot write in the new place"
+     );
++    // D-95: 체크포인트 리비전은 고친 사람(아직 옛 자리에서 쓸 수 있는 작성자)이 남긴 보통 리비전이다. 커밋 뒤 리비전은
++    // 옮기는 사람이 대신 남겼으므로 실제로 고친 사람을 따로 적는다.
++    let (editor, checkpoint_edited_by) = revision_authors(&owner, &id, last - 1).await;
++    assert_ne!(editor, admin.id.0);
++    assert_eq!(checkpoint_edited_by, None, "an editor's own revision");
++    assert_eq!(
++        revision_authors(&owner, &id, last).await.1,
++        Some(vec![editor]),
++        "the stand-in revision does not name the actual editor"
++    );
+     // 이동의 답은 그 리비전까지 담은 문서다(화면이 그 판으로 이어 간다).
+     assert_eq!(moved.json["document"]["revision"], saved["revision"]);
+     assert!(
+@@ -2679,7 +2698,7 @@ async fn edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledge
+ /// 받아 다른 연결에 보내고 저장을 확인한다. 연결은 그대로다.
+ #[tokio::test]
+ async fn edits_held_by_a_move_that_does_not_happen_are_accepted() {
+-    let (app, _addr, admin, from, to, id, mut e, mut r) =
++    let (_state, app, _addr, admin, from, to, id, mut e, mut r) =
+         live_move_race_setup("일어나지 않은 이동").await;
+     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+@@ -2733,12 +2752,104 @@ async fn edits_held_by_a_move_that_does_not_happen_are_accepted() {
+     r.close().await;
+ }
+ 
++/// D-95 조건 4(#71): 이동 요청이 방이 그 명령을 처리하기 전에 끊기면 방은 체크포인트 리비전을 남기지 않고 옮기지도 않는다.
++/// 그 명령 뒤에서 기다린 편집은 평소처럼 받아 확인하고 원래 자리에 남는다. 방은 주기 저장에서 붙잡는다(상태 행을 잠가
++/// 저장이 기다림). 이동은 요청 처리기가 미리보기 확인 뒤 부르는 `Rooms::move_document`를 한 번만 진행해(이동 명령을 방의
++/// 대기열에 넣고 답을 기다리는 자리) 버린다: 요청이 끊기면 axum이 처리기를 그 자리에서 버리는 것과 같다. 시험과 방은 한
++/// 스레드에서 돌므로, 진행한 뒤 버리기까지 방이 그 명령을 처리하지 않는다.
++#[tokio::test]
++async fn a_move_dropped_before_the_room_handles_it_changes_nothing() {
++    let (state, app, _addr, admin, from, to, id, mut e, mut r) =
++        live_move_race_setup("끊긴 이동").await;
++    assert!(
++        e.until(acked).await,
++        "the first edit was never acknowledged"
++    );
++    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
++    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
++    let before = last_revision(&owner, &id).await;
++    let mut hold = owner.begin().await.unwrap();
++    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
++        .fetch_one(&mut *hold)
++        .await
++        .unwrap();
++    sqlx::query(
++        "SELECT 1 FROM fvoci.document_collab_states WHERE document_id = $1::uuid FOR UPDATE",
++    )
++    .bind(&id)
++    .execute(&mut *hold)
++    .await
++    .unwrap();
++    // 다음 편집의 주기 저장이 그 잠금을 기다린다: 방은 그동안 대기열을 읽지 않는다.
++    e.paragraph("붙잡힌 저장의 문단").await;
++    until_waiting_on_lock("app_system_collab_store", holder).await;
++
++    let preview = send(
++        &app,
++        Method::POST,
++        &format!("/api/documents/{id}/move/preview"),
++        Some(&admin),
++        Some(json!({ "target_workspace_id": to, "target_item_id": null })),
++    )
++    .await;
++    assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
++    let request = fvoci_server::collab::room::MoveRequest {
++        doc: fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap()),
++        user: admin.id,
++        input: serde_json::from_value(json!({ "target_workspace_id": to, "target_item_id": null,
++            "acknowledged": { "gains": preview.json["gains"], "loses": preview.json["loses"] } }))
++        .unwrap(),
++    };
++    let mut moving = Box::pin(
++        state
++            .collab
++            .move_document(&state.db, &state.config.limits, request),
++    );
++    let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
++    assert!(
++        moving.as_mut().poll(&mut cx).is_pending(),
++        "the move did not wait for the room"
++    );
++    // 그 뒤에 보낸 편집은 방의 대기열에서 이동 명령 뒤에 기다린다.
++    e.paragraph("끊긴 이동 뒤 문단").await;
++    e.read_by_server().await;
++    // 방이 이동 명령을 처리하기 전에 요청이 끊긴다. 그다음 방을 놓아 준다.
++    drop(moving);
++    hold.rollback().await.unwrap();
++
++    assert!(
++        r.until(|c| c.text().contains("끊긴 이동 뒤 문단")).await,
++        "the held edit did not reach the other connection"
++    );
++    let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
++    let mut closed = None;
++    while !acked(&e) && tokio::time::Instant::now() < deadline {
++        if let Event::Closed(code) = e.next(Duration::from_millis(200)).await {
++            closed = Some(code);
++            break;
++        }
++    }
++    assert_eq!(closed, None, "the connection was closed");
++    assert!(acked(&e), "the held edit was not acknowledged");
++    let doc = get_doc(&app, &admin, &id).await;
++    assert_eq!(doc["workspace_id"], from.as_str(), "the document moved");
++    assert_eq!(
++        last_revision(&owner, &id).await,
++        before,
++        "the dropped move wrote a checkpoint revision"
++    );
++    assert_eq!(collab_states(&owner, &id, true).await, 1);
++    owner.close().await;
++    e.close().await;
++    r.close().await;
++}
++
+ /// #71: 열린 방의 문서를 옮기면, 옮기기 직전에 쓴 편집은 리비전에 남고 연결은 4409로 닫힌다(새 자리의 권한·설정으로 다시
+ /// 연다). 전에는 방이 옛 연결을 그대로 받아, 새 자리에서 권한이 없는 편집자의 편집도 다음 권한 재확인까지 받았다. 옮긴
+ /// 뒤에 보낸 편집은 받지 않으므로 확인도 오지 않는다(브라우저 초안에 남는다).
+ #[tokio::test]
+ async fn a_move_closes_the_room_after_saving_its_edits() {
+-    let (app, _addr, admin, _from, to, id, mut e, mut r) =
++    let (_state, app, _addr, admin, _from, to, id, mut e, mut r) =
+         live_move_race_setup("옮기면 닫히는 방").await;
+     e.paragraph("옮기기 직전 문단").await;
+     assert!(r.until(|c| c.text().contains("옮기기 직전 문단")).await);
+@@ -2840,6 +2951,47 @@ async fn last_revision(owner: &sqlx::PgPool, id: &str) -> (i32, uuid::Uuid) {
+     .unwrap()
+ }
+ 
++/// 그 리비전의 작성자와 실제 편집자(작성자가 고친 사람 대신 남겼을 때만 있다, D-95).
++async fn revision_authors(
++    owner: &sqlx::PgPool,
++    id: &str,
++    revision: i32,
++) -> (uuid::Uuid, Option<Vec<uuid::Uuid>>) {
++    sqlx::query_as(
++        "SELECT author, edited_by FROM fvoci.document_revisions WHERE document_id = $1::uuid AND revision = $2",
++    )
++    .bind(id)
++    .bind(revision)
++    .fetch_one(owner)
++    .await
++    .unwrap()
++}
++
++/// 이 문서의 방이 닫혀 서버의 방 목록에서 빠질 때까지 기다린다. `Rooms::restore`는 열린 방이 없으면 아무것도 하지 않고
++/// `None`이다. 방이 있으면 그 방이 복원을 시도하지만 기준 리비전 0은 늘 지난 것이라 복원하지 않는다(충돌). 그 앞의
++/// 체크포인트가 리비전을 남길 수 있으므로 그 방에 쓸 수 있는 사람이 없을 때만 쓴다.
++async fn until_no_room(state: &fvoci_server::http::AppState, user: &TestUser, id: &str) {
++    let doc = fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(id).unwrap());
++    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
++    loop {
++        let probe = fvoci_server::collab::room::RestoreRequest {
++            doc,
++            user: user.id,
++            revision: 1,
++            request_id: uuid::Uuid::now_v7(),
++            base_revision: 0,
++        };
++        if state.collab.restore(probe).await.is_none() {
++            return;
++        }
++        assert!(
++            tokio::time::Instant::now() < deadline,
++            "the live editing room of {id} stayed open"
++        );
++        tokio::time::sleep(Duration::from_millis(50)).await;
++    }
++}
++
+ /// 실시간 상태 행이 조건에 맞을 때까지 기다린다(방이 닫히며 저장하는 것).
+ async fn until_collab_states(owner: &sqlx::PgPool, id: &str, pending: bool, want: i64) {
+     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+@@ -2855,8 +3007,9 @@ async fn until_collab_states(owner: &sqlx::PgPool, id: &str, pending: bool, want
+ /// #71 리뷰: 열린 방 없이 남은 실시간 상태(앞선 방이 리비전을 남기지 못하고 닫힘: 편집자가 독자가 되어 쓸 수 있는 사람이
+ /// 없었다)는 옮기기 전에 리비전이 되지 않았다. 그 편집은 이미 저장 확인을 받았고(브라우저는 초안을 지운다), 실시간이 꺼진
+ /// 곳으로 옮기면 되살릴 길이 없어 다음 일반 저장이 버렸다. 이제 방이 없으면 옮기기 전에 그 상태를 리비전으로 남긴다(옮기는
+-/// 사람이 대신 작성자). 방을 연 적 없는 문서와 방을 열기만 한 문서(편집기가 저장한 본문의 null 속성은 Yjs에 남지 않는다)는
+-/// 옮겨도 상태 행도 리비전도 새로 생기지 않는다.
++/// 사람이 대신 작성자, 실제 편집자는 리비전에 따로 적는다, D-95). 남기지 못하면 옮기지 않고 409이며 상태는 남는다. 방을 연
++/// 적 없는 문서와 방을 열기만 한 문서(편집기가 저장한 본문의 null 속성은 Yjs에 남지 않는다)는 옮겨도 상태 행도 리비전도
++/// 새로 생기지 않는다.
+ #[tokio::test]
+ async fn a_move_without_a_room_saves_a_live_state_left_pending() {
+     let state =
+@@ -2920,13 +3073,35 @@ async fn a_move_without_a_room_saves_a_live_state_left_pending() {
+     assert!(demoted.status.is_success(), "{:?}", demoted.json);
+     assert_eq!(e.closed().await, Some(4403));
+     until_collab_states(&owner, &left_id, true, 1).await;
++    // 저장 대기 행은 확인을 보낸 주기 저장이 이미 만들었다(방이 닫혔다는 표시가 아니다). 방이 서버의 방 목록에서 빠질
++    // 때까지 기다려, 아래 이동이 방 없는 길을 지나게 한다.
++    until_no_room(&state, &admin, &left_id).await;
+     let before = get_doc(&app, &admin, &left_id).await;
+     assert!(
+         !before["body"].to_string().contains("방 없이 남은 글"),
+         "{before}"
+     );
+ 
+-    // 방 없이 실시간이 꺼진 곳으로 옮긴다: 옮기기 전에 그 상태가 리비전으로 남는다(옮기는 사람이 작성자).
++    // D-95 조건 3: 그 상태를 리비전으로 남기지 못하면(여기서는 본문 한도를 낮춘 서버라 다시 해도 남길 수 없다) 옮기지 않고
++    // 409이며, 저장 대기 상태는 그대로 남는다.
++    let strict = fvoci_server::app::build_state(config_with(&[
++        ("FVOCI_COLLAB_RECHECK_SECS", "1"),
++        ("FVOCI_MAX_DOCUMENT_BYTES", "40"),
++    ]))
++    .unwrap();
++    let refused = move_to(&common::app(&strict), &admin, &left_id, &to).await;
++    assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
++    assert_eq!(refused.json["error"], "conflict", "{:?}", refused.json);
++    assert_eq!(
++        get_doc(&app, &admin, &left_id).await["workspace_id"],
++        from.as_str(),
++        "the document moved"
++    );
++    assert_eq!(last_revision(&owner, &left_id).await.0, before["revision"]);
++    assert_eq!(collab_states(&owner, &left_id, true).await, 1);
++
++    // 방 없이 실시간이 꺼진 곳으로 옮긴다: 옮기기 전에 그 상태가 리비전으로 남는다. 고친 사람은 쓸 수 없어 옮기는 사람이
++    // 대신 작성자가 되고, 실제 편집자를 리비전에 따로 적는다(D-95, 상태와 함께 저장한 편집자).
+     let moved = move_to(&app, &admin, &left_id, &to).await;
+     assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+     let after = get_doc(&app, &admin, &left_id).await;
+@@ -2936,8 +3111,38 @@ async fn a_move_without_a_room_saves_a_live_state_left_pending() {
+         "the acknowledged live edit left without a room is not in the moved document: {after}"
+     );
+     assert_eq!(moved.json["document"]["revision"], after["revision"]);
+-    assert_eq!(last_revision(&owner, &left_id).await.1, admin.id.0);
++    let (saved_at, author) = last_revision(&owner, &left_id).await;
++    assert_eq!(author, admin.id.0);
++    assert_eq!(
++        revision_authors(&owner, &left_id, saved_at).await.1,
++        Some(vec![writer.id.0]),
++        "the mover's stand-in revision does not name the actual editor"
++    );
+     assert_eq!(collab_states(&owner, &left_id, true).await, 0);
++    // 기록 API는 대신 저장한 리비전에 실제 편집자 이름을 함께 보인다. 보통 리비전(문서를 만든 리비전)은 없다.
++    let history = send(
++        &app,
++        Method::GET,
++        &format!("/api/documents/{left_id}/revisions"),
++        Some(&admin),
++        None,
++    )
++    .await
++    .json;
++    assert_eq!(history[0]["revision"], saved_at);
++    assert_eq!(history[0]["author_name"], "admin");
++    assert_eq!(history[0]["edited_by_names"], json!(["writer"]));
++    assert_eq!(history[1]["edited_by_names"], serde_json::Value::Null);
++    let one = send(
++        &app,
++        Method::GET,
++        &format!("/api/documents/{left_id}/revisions/{saved_at}"),
++        Some(&admin),
++        None,
++    )
++    .await
++    .json;
++    assert_eq!(one["edited_by_names"], json!(["writer"]));
+ 
+     // 방을 연 적 없는 문서: 상태 행도 리비전도 생기지 않는다.
+     let never_before = last_revision(&owner, &never_id).await;
+diff --git a/docs/development.md b/docs/development.md
+index 47ba423..a1f7832 100644
+--- a/docs/development.md
++++ b/docs/development.md
+@@ -1513,16 +1513,41 @@ GitHub에서 새로 clone한 main `947b874`에 PR #21(`818b543`, 앞당겨 감
+   `no_room_opens_while_a_document_moves`. 리뷰 뒤: 열린 방 없이 이미 남아 있던 저장 대기 상태(앞선 방이 리비전을 남길 사람
+   없이 닫힘, 주기 저장 뒤 서버가 갑자기 멈춤)는 그 편집이 이미 확인을 받았을 수 있는데 옮기기 전에 리비전이 되지 않아,
+   실시간이 꺼진 곳으로 옮기면 되살릴 길 없이 다음 일반 저장이 버렸다. 이제 방이 없으면 이동 막음 아래에서 그 상태를 먼저
+-  리비전으로 남긴다(옮기는 사람이 대신 작성자, 남기지 못하면 방 안 체크포인트와 같은 409로 옮기지 않는다). 저장된 상태가
++  리비전으로 남긴다(작성자는 그 상태를 고친 사람 가운데 아직 쓸 수 있는 사람, 없으면 옮기는 사람. 남기지 못하면 방 안
++  체크포인트와 같은 409로 옮기지 않고 상태는 그대로 남는다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 것처럼 다시
++  해도 남길 수 없을 때도 같은 "다시 하라"는 409다). 저장된 상태가
+   없거나 본문을 Yjs로 옮긴 모양과 같으면(방을 열기만 함, 편집기가 저장한 본문의 null 속성은 Yjs에 남지 않음) 상태 행도
+   리비전도 만들지 않는다(`a_move_without_a_room_saves_a_live_state_left_pending`). 실시간이 꺼진 문서는 끌 때 이미 남겼으므로
+   그대로 옮긴다. 방 안 이동은 요청이 이미 끊겼으면 체크포인트 리비전도 남기지 않는다. 커밋 뒤 대기열에서 비운 닫기
+   요청(새 자리의 실시간 끄기·서버 종료)은 답 없이 버려 리비전을 남긴 것으로 읽혔고, 새 자리의 실시간 끄기가 이 방이
+   리비전이나 상태를 남기기 전에 남은 상태를 찾고 끝낼 수 있었다. 이제 리비전을 남기고 상태를 저장한 뒤 그 결과로
+-  답한다(남기지 못했으면 끄기는 409, 다시 하면 그 상태를 찾는다). 이 경합은 결정적으로 재현하기 어려워 시험을 두지
+-  않았다. 붙잡힌 편집 시험은 시간 대기 대신 핑을 보내 퐁을 받는 것으로 서버가 그 편집을 방의 대기열에 넣었음을
+-  확인한다. 남은 것: 열린 방의 주기 저장은 방이 편집을 지니는 동안 그 상태를 확인한다(방이 닫힐 때 리비전을 남길 사람이
+-  없으면 그 상태는 실시간을 켠 채 방을 다시 열거나, 끄는 관리자의 저장이나, 옮기기 전 저장으로 되살아난다).
++  답한다(남기지 못했으면 끄기는 409, 다시 하면 그 상태를 찾는다). 이것은 틈을 좁힐 뿐 닫지 않는다: 커밋과 방을 새
++  워크스페이스로 적기(`Rooms::moved`) 사이에 새 자리의 끄기가 방 목록을 모으면 이 방은 닫기 요청을 받지 않고, 커밋 전에
++  대기열에 든 닫기 요청(옛 자리의 끄기·서버 종료)도 옮긴 뒤의 결과로 답을 받는다. 커밋 전에 새 자리로 적을 수는 없다:
++  옮길지는 이동 트랜잭션이 잠근 뒤 다시 계산해 정하므로 옮기지 않은 방을 새 자리의 끄기가 닫을 수 있고(4410), 방 목록
++  잠금은 커밋을 기다리는 동안 쥘 수 없다. 남는 틈에 걸린 것은 확인받지 않은 편집뿐이다(체크포인트 뒤 편집은 커밋 뒤
++  리비전을 남겨야 처음 확인되고, 남기지 못하면 연결을 닫은 뒤 상태만 저장해 브라우저 초안으로 남는다). 이 경합은
++  결정적으로 재현하기 어려워 시험을 두지 않았다. 붙잡힌 편집 시험은 시간 대기 대신 핑을 보내 퐁을 받는 것으로 서버가 그
++  편집을 방의 대기열에 넣었음을 확인한다. 남은 것: 열린 방의 주기 저장은 방이 편집을 지니는 동안 그 상태를 확인한다(방이
++  닫힐 때 리비전을 남길 사람이 없으면 그 상태는 실시간을 켠 채 방을 다시 열거나, 끄는 관리자의 저장이나, 옮기기 전
++  저장으로 되살아난다).
++  D-95(사용자 결정 2026-10-22, 옮긴 사람이 대신 저장): 대신 저장은 이동 권한을 확인한 서버 안의 처리로만 하고 편집자의
++  권한을 늘리지 않는다. 방(또는 방 없이 남은 상태의 저장)이 남기는 리비전의 작성자(그 트랜잭션의 사용자,
++  `document_revisions_insert`)가 마지막 리비전 뒤로 고친 사람에 들지 않으면 고친 사람을 `document_revisions.edited_by`에
++  따로 적는다(NULL은 보통 리비전, 빈 배열은 대신 저장했으나 고친 사람 기록이 없음). 옮긴 사람·실시간을 끄는 관리자·연결된
++  다른 작성자 모두 같은 규칙이다. 방은 방이 열린 동안의 편집자 목록(작성자 순서)과 따로 마지막 리비전 뒤의 편집자를
++  지니고 리비전을 남기면 비운다. 이 목록은 저장 대기 상태와 함께 `document_collab_states.editors`에 저장해(클라이언트가 바꿀
++  수 있는 Yjs 문서에는 두지 않는다) 방이 닫힌 뒤의 저장(옮기기 전·실시간 끄기 전)이 작성자 순서와 실제 편집자에 쓴다.
++  그래서 그 저장의 작성자는 이제 저장된 편집자 가운데 아직 쓸 수 있는 사람이 먼저다. 저장 API와 방 밖의 길(복원·복제
++  등)은 적지 않는다. 기록 API(`RevisionSummary`·`Revision`의 `edited_by_names`)와 기록·내보내기 화면은 "편집: A, B · 대신
++  저장: X"(기록이 없으면 "편집한 사람 기록 없음 · 대신 저장: X")로 보인다. 마이그레이션 0094(두 열,
++  `app_system_collab_store`의 새 서명, 편집자도 돌려주는 `app_collab_load`). 시험: 위 이동 시험과
++  `turning_realtime_off_keeps_live_edits`가 실제 편집자와 보통 리비전(편집자의 리비전·저장 API, NULL)을 확인한다. 방 없는
++  이동 시험은 방이 서버의 방 목록에서 빠진 것을 확인한 뒤 옮기고, 남기지 못하는 경우(낮춘 본문 한도) 409로 상태가 남는
++  것도 본다. `a_move_dropped_before_the_room_handles_it_changes_nothing`: 방이 이동 명령을 처리하기 전에 요청이 끊기면
++  체크포인트 리비전도 이동도 없고 그 뒤에서 기다린 편집은 평소처럼 확인된다. 이동이 일어나지 않는 다른 경로는 미리보기가
++  달라진 409(`edits_held_by_a_move_that_does_not_happen_are_accepted`)와 체크포인트 실패(`a_failed_checkpoint_stops_the_move`)가
++  본다.
+ - 검토 6번(3차 남은 것): "그 방에서 고치고 있는지"는 연결이 아니라 사람으로 본다. 같은 사람이 한 탭(또는 기기)에서 실시간으로
+   고치는 중에 실시간이 아닌 다른 탭에서 복원하면, 그 탭이 보지 못한 다른 사람의 실시간 편집을 충돌 없이 되돌린다(그 편집은 이력에
+   남는다). 연결 단위로 보려면 복원 요청에 연결 id를 더해야 해서(API 계약 변경) 승인 대상으로 둔다.
+diff --git a/packages/api-client/src/generated/schema.ts b/packages/api-client/src/generated/schema.ts
+index 4c867d4..6427306 100644
+--- a/packages/api-client/src/generated/schema.ts
++++ b/packages/api-client/src/generated/schema.ts
+@@ -237,7 +237,9 @@ export interface paths {
+         put?: never;
+         /**
+          * 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인
+-         *     방의 편집을 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문, 다시 하면 된다)다.
++         *     방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문)다. 편집은 그대로
++         *     남고 다시 하면 된다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 경우처럼 다시 해도 남길 수 없을 때도 같은 409로
++         *     옮기지 않는다.
+          */
+         post: operations["move_document"];
+         delete?: never;
+@@ -3397,7 +3399,8 @@ export interface components {
+         /**
+          * @description 이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+          *     - `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).
+-         *     - `ErrorBody`(`error: "conflict"`): 실시간 방의 편집을 먼저 리비전으로 남기지 못했다(옮기지 않음, 다시 하면 된다).
++         *     - `ErrorBody`(`error: "conflict"`): 실시간 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지
++         *       못했다(옮기지 않음, 편집은 남는다, 다시 하면 된다).
+          */
+         MoveConflict: components["schemas"]["MovePreview"] | components["schemas"]["ErrorBody"];
+         /** @description 이동 요청. 미리보기에서 접근 변화를 확인했다는 표시(`acknowledge`)가 있어야 이동한다. */
+@@ -3854,6 +3857,8 @@ export interface components {
+             body: Record<string, never>;
+             /** Format: date-time */
+             created_at: string;
++            /** @description `RevisionSummary::edited_by_names`와 같다. */
++            edited_by_names?: (string | null)[] | null;
+             /** Format: int32 */
+             restored_from?: number | null;
+             /** Format: int32 */
+@@ -3868,6 +3873,11 @@ export interface components {
+             author_name?: string | null;
+             /** Format: date-time */
+             created_at: string;
++            /**
++             * @description 저장한 사람이 고친 사람 대신 남긴 리비전(실시간 편집, D-95)이면 실제로 고친 사람(마지막이 앞). 보통 리비전은
++             *     없음, 대신 저장했으나 고친 사람 기록이 없으면 빈 목록. 이름을 볼 수 없는 사람은 `author_name`처럼 null이다.
++             */
++            edited_by_names?: (string | null)[] | null;
+             /**
+              * Format: int32
+              * @description 복원으로 만든 리비전이면 원본 리비전 번호.
+-- 
+2.54.0 (Apple Git-157)
+

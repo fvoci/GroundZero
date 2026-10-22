@@ -1,0 +1,748 @@
+From 8ba72ad1f44a6662f929b392af043cee91084955 Mon Sep 17 00:00:00 2001
+From: FVOCI <150913557+fvoci@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 08:50:41 +0900
+Subject: [PATCH] fix(web): ask before saving my value over a field someone
+ else changed after a task conflict (D-94)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+"내 입력으로 다시 저장" merged my input onto the latest version but kept
+my value on a field both sides changed without asking. Following D-94,
+mergeForm now names the clashing fields (the estimate text and tags are
+compared the same way refresh() does). With no clash it saves right away
+at the latest version: untouched fields take the latest values, my edits
+stay. With clashes it shows, inside the conflict notice, each field's
+current server value and my value and asks whether to overwrite; cancel
+sends nothing and keeps my input. The save is checked against the latest
+version, so a further change answers 409 again and the notice shows the
+newer version while my input stays; the next try merges onto that
+version. Any failure keeps my input.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ apps/web/messages/tasks/en.json               |   9 +
+ apps/web/messages/tasks/ko.json               |   9 +
+ .../lib/features/tasks/ClashConfirm.svelte    |  50 ++++++
+ .../src/lib/features/tasks/TaskDetail.svelte  | 161 ++++++++++++++----
+ apps/web/src/lib/features/tasks/form.ts       |  14 +-
+ apps/web/src/lib/features/tasks/labels.ts     | 110 +++++++++++-
+ .../component/task-conflict-save-mine.test.ts | 117 ++++++++++++-
+ .../tests/component/task-form-merge.test.ts   |  15 ++
+ 8 files changed, 442 insertions(+), 43 deletions(-)
+ create mode 100644 apps/web/src/lib/features/tasks/ClashConfirm.svelte
+
+diff --git a/apps/web/messages/tasks/en.json b/apps/web/messages/tasks/en.json
+index 6306ab0..b53f789 100644
+--- a/apps/web/messages/tasks/en.json
++++ b/apps/web/messages/tasks/en.json
+@@ -186,6 +186,15 @@
+   "tasks_conflict": "Someone else changed this task in the meantime (now titled “{title}”, status: {status}). Your input is kept.",
+   "tasks_load_server": "Load their version",
+   "tasks_save_mine": "Save mine again",
++  "tasks_clash_heading": "Someone else also changed some of these fields",
++  "tasks_clash_hint": "You and someone else changed the fields below to different values. Overwriting saves your value in these fields; fields you did not edit keep the latest server values.",
++  "tasks_clash_server": "Server now: {value}",
++  "tasks_clash_mine": "Yours: {value}",
++  "tasks_clash_overwrite": "Overwrite with mine and save",
++  "tasks_clash_empty": "(empty)",
++  "tasks_clash_yes": "Yes",
++  "tasks_clash_no": "No",
++  "tasks_clash_unknown_person": "(unknown person)",
+   "tasks_title": "Title",
+   "tasks_description": "Description",
+   "tasks_start_date": "Start date",
+diff --git a/apps/web/messages/tasks/ko.json b/apps/web/messages/tasks/ko.json
+index f1efc82..834a676 100644
+--- a/apps/web/messages/tasks/ko.json
++++ b/apps/web/messages/tasks/ko.json
+@@ -171,6 +171,15 @@
+   "tasks_conflict": "그사이 다른 사람이 이 업무를 바꿨습니다(지금 제목: “{title}”, 상태: {status}). 내 입력은 그대로 있습니다.",
+   "tasks_load_server": "서버 내용 불러오기",
+   "tasks_save_mine": "내 입력으로 다시 저장",
++  "tasks_clash_heading": "다른 사람도 바꾼 칸이 있습니다",
++  "tasks_clash_hint": "아래 칸은 나와 다른 사람이 서로 다른 값으로 바꿨습니다. 덮어쓰면 이 칸은 내 값으로 저장하고, 내가 고치지 않은 칸은 서버의 최신 값을 그대로 둡니다.",
++  "tasks_clash_server": "서버의 지금 값: {value}",
++  "tasks_clash_mine": "내 값: {value}",
++  "tasks_clash_overwrite": "내 값으로 덮어쓰고 저장",
++  "tasks_clash_empty": "(비어 있음)",
++  "tasks_clash_yes": "예",
++  "tasks_clash_no": "아니요",
++  "tasks_clash_unknown_person": "(알 수 없는 사람)",
+   "tasks_title": "제목",
+   "tasks_description": "설명",
+   "tasks_start_date": "시작일",
+diff --git a/apps/web/src/lib/features/tasks/ClashConfirm.svelte b/apps/web/src/lib/features/tasks/ClashConfirm.svelte
+new file mode 100644
+index 0000000..cd331cd
+--- /dev/null
++++ b/apps/web/src/lib/features/tasks/ClashConfirm.svelte
+@@ -0,0 +1,50 @@
++<script lang="ts">
++  // 충돌 화면의 "내 입력으로 다시 저장"에서 나와 다른 사람이 같은 칸을 서로 다르게 바꿨을 때의 확인(D-94). 칸마다
++  // 서버의 지금 값과 내 값을 글로 보이고, 덮어쓸지 묻는다. 취소하면 아무것도 보내지 않는다(입력은 그대로).
++  import { m } from '$lib/paraglide/messages.js';
++  import { Button } from '$lib/ui/button';
++
++  import type { ClashRow } from './labels';
++
++  interface Props {
++    rows: ClashRow[];
++    busy: boolean;
++    onconfirm: () => void;
++    oncancel: () => void;
++  }
++
++  const { rows, busy, onconfirm, oncancel }: Props = $props();
++
++  // 뜨면 제목으로 초점을 옮겨 읽히게 한다(키보드로 바로 단추에 닿는다).
++  let heading = $state<HTMLElement | undefined>(undefined);
++  $effect(() => {
++    heading?.focus();
++  });
++</script>
++
++<div
++  class="mt-3 flex flex-col gap-2 rounded-md border border-amber-500/50 p-3"
++  role="alertdialog"
++  aria-labelledby="task-clash-heading"
++  aria-describedby="task-clash-hint"
++>
++  <h3 id="task-clash-heading" class="font-semibold" tabindex="-1" bind:this={heading}>
++    {m.tasks_clash_heading()}
++  </h3>
++  <p id="task-clash-hint" class="text-muted-foreground">{m.tasks_clash_hint()}</p>
++  <ul class="flex flex-col gap-1.5">
++    {#each rows as row (row.key)}
++      <li data-clash-field={row.key}>
++        <span class="font-medium">{row.label}</span>
++        <span class="block break-words">{m.tasks_clash_server({ value: row.server })}</span>
++        <span class="block break-words">{m.tasks_clash_mine({ value: row.mine })}</span>
++      </li>
++    {/each}
++  </ul>
++  <div class="flex flex-wrap gap-2">
++    <Button size="sm" disabled={busy} onclick={onconfirm}>{m.tasks_clash_overwrite()}</Button>
++    <Button size="sm" variant="outline" disabled={busy} onclick={oncancel}
++      >{m.common_cancel()}</Button
++    >
++  </div>
++</div>
+diff --git a/apps/web/src/lib/features/tasks/TaskDetail.svelte b/apps/web/src/lib/features/tasks/TaskDetail.svelte
+index 03c498b..17d3236 100644
+--- a/apps/web/src/lib/features/tasks/TaskDetail.svelte
++++ b/apps/web/src/lib/features/tasks/TaskDetail.svelte
+@@ -46,12 +46,15 @@
+   import { Label } from '$lib/ui/label';
+   import * as Select from '$lib/ui/select';
+ 
++  import ClashConfirm from './ClashConfirm.svelte';
+   import { estimateOf, formOf, mergeEstimate, mergeForm } from './form';
++  import type { ClashRow } from './labels';
+   import {
+     LINK_KIND_LABEL,
+     LINK_KIND_MEANING,
+     PRIORITY_LABEL,
+     STATUS_LABEL,
++    clashRows,
+     linkText,
+     undatedText,
+   } from './labels';
+@@ -102,6 +105,13 @@
+     retried: boolean;
+   }
+   let pending = $state<Pending | undefined>(undefined);
++  // 충돌 화면의 "내 입력으로 다시 저장"에서 나와 다른 사람이 서로 다르게 바꾼 칸(D-94). 보내기 전에 그 칸의 서버 값과
++  // 내 값을 보이고 덮어쓸지 묻는다. 묻는 동안 폼은 잠가 보인 값 그대로 덮어쓰고, 취소하면 아무것도 보내지 않는다.
++  interface ClashAsk {
++    latest: TaskDetailView;
++    rows: ClashRow[];
++  }
++  let clashAsk = $state<ClashAsk | undefined>(undefined);
+   // 저장했지만 날짜가 없어 옮기지 않은 후속 업무 알림(날짜를 지어내지 않는다).
+   let undatedNotice = $state('');
+   let busy = $state(false);
+@@ -148,24 +158,29 @@
+     baseVersion = next.version;
+     clashed = false;
+     pending = undefined;
++    clashAsk = undefined;
+     tagsText = next.tags.join(', ');
+     estimateText = next.estimate_minutes === null ? '' : String(next.estimate_minutes);
+   }
+ 
++  /** 지금 입력을 기준 판에서 서버의 새 판으로 옮긴 결과(`mergeOnto`). */
++  interface Merge {
++    freshForm: TaskInput;
++    form: TaskInput;
++    baseline: TaskInput;
++    /** 나와 서버가 서로 다른 값으로 바꾼 칸. */
++    clashes: (keyof TaskInput)[];
++    keepTagsText: boolean;
++    keepEstimateText: boolean;
++  }
++
+   /**
+-   * 체크리스트·반복·선행 업무를 바꾼 뒤 서버의 새 판으로 다시 채운다. 고쳤지만 저장하지 않은 칸(태그·예상 시간은
+-   * 저장할 때 보내는 값으로 비교)은 지키고, 그 칸을 서버에서도 누가 바꿨으면 옛 판 번호를 남겨 저장할 때 충돌
+-   * 화면이 고르게 한다.
++   * 내 입력(`mine`)을 기준(`before`)에서 서버의 새 판(`fresh`)으로 옮긴다. 고치지 않은 칸은 새 값, 고친 칸은 내 값이고,
++   * 고친 칸을 서버에서도 다른 값으로 바꿨으면 `clashes`에 든다. 태그는 저장할 때 보내는 값으로 견주고, 예상 시간은
++   * 입력한 글자의 값으로 따로 맞춘다(병합에는 고치지 않은 칸으로 넘긴다). 다시 채우기와 충돌 뒤 저장이 같이 쓴다.
+    */
+-  function refresh(fresh: TaskDetailView): void {
+-    const mine = currentInput();
+-    if (task === undefined || mine === undefined || baseline === undefined) {
+-      fill(fresh);
+-      return;
+-    }
++  function mergeOnto(fresh: TaskDetailView, mine: TaskInput, before: TaskInput): Merge {
+     const freshForm = formOf(fresh);
+-    const before = baseline;
+-    // 예상 시간은 입력한 글자의 값으로 따로 맞춘다(병합에는 고치지 않은 칸으로 넘긴다).
+     const estimate = mergeEstimate(
+       before.estimate_minutes,
+       estimateText,
+@@ -176,35 +191,103 @@
+       { ...mine, estimate_minutes: before.estimate_minutes },
+       freshForm,
+     );
+-    const tagsTouched = canonicalJson(mine.tags) !== canonicalJson(before.tags);
+-    baseline = { ...merged.baseline, estimate_minutes: estimate.baseline };
++    return {
++      freshForm,
++      form: merged.form,
++      baseline: { ...merged.baseline, estimate_minutes: estimate.baseline },
++      clashes: estimate.clash ? [...merged.clashes, 'estimate_minutes'] : merged.clashes,
++      keepTagsText: canonicalJson(mine.tags) !== canonicalJson(before.tags),
++      keepEstimateText: estimate.keepText,
++    };
++  }
++
++  /** 병합한 값을 폼에 옮긴다. 태그·예상 시간 글자는 내가 고치지 않았을 때만 새 값으로 바꾼다. */
++  function applyMerge(merge: Merge): void {
++    form = merge.form;
++    pending = undefined;
++    clashAsk = undefined;
++    if (!merge.keepTagsText) tagsText = merge.freshForm.tags.join(', ');
++    if (!merge.keepEstimateText) {
++      const fresh = merge.freshForm.estimate_minutes;
++      estimateText = fresh === null ? '' : String(fresh);
++    }
++  }
++
++  /**
++   * 체크리스트·반복·선행 업무를 바꾼 뒤 서버의 새 판으로 다시 채운다. 고쳤지만 저장하지 않은 칸(태그·예상 시간은
++   * 저장할 때 보내는 값으로 비교)은 지키고, 그 칸을 서버에서도 누가 바꿨으면 옛 판 번호를 남겨 저장할 때 충돌
++   * 화면이 고르게 한다.
++   */
++  function refresh(fresh: TaskDetailView): void {
++    const mine = currentInput();
++    if (task === undefined || mine === undefined || baseline === undefined) {
++      fill(fresh);
++      return;
++    }
++    const merge = mergeOnto(fresh, mine, baseline);
++    baseline = merge.baseline;
+     // 충돌은 지금의 병합으로 다시 본다. 기준은 사용자가 바꾼 칸을 옛 값으로 지키므로, 서버가 그 칸을 다르게 두는 한 계속
+     // 충돌이고, 사용자가 서버 값으로 맞추면 풀려 최신 판으로 저장한다.
+-    clashed = merged.clash || estimate.clash;
++    clashed = merge.clashes.length > 0;
+     if (!clashed) baseVersion = fresh.version;
+     task = clashed ? { ...fresh, version: baseVersion } : fresh;
+-    form = merged.form;
+-    pending = undefined;
+-    if (!tagsTouched) tagsText = freshForm.tags.join(', ');
+-    if (!estimate.keepText) {
+-      estimateText = freshForm.estimate_minutes === null ? '' : String(freshForm.estimate_minutes);
+-    }
++    applyMerge(merge);
++  }
++
++  // 충돌 확인에 담당자 이름을 보일 때 쓴다(지정할 수 있는 사람과, 지금 판·서버 판에 지정된 사람).
++  function assigneeNames(latest: TaskDetailView): Map<string, string> {
++    const known = [...(task?.assignees ?? []), ...latest.assignees, ...(people ?? [])];
++    return new Map(known.map((p) => [p.user_id, p.display_name]));
+   }
+ 
+   /**
+-   * 충돌 화면의 "내 입력으로 다시 저장": 서버 최신 판(`latest`) 위에 내 입력을 `refresh`와 같은 방식으로 올린 뒤 그
+-   * 판 번호로 저장한다. 내가 고치지 않은 칸은 최신 값을 따르고(전에는 폼 전체를 보내 그사이 다른 사람이 바꾼 제목
+-   * 등을 옛 값으로 되돌렸다), 내가 고친 칸은 서버에서도 바뀌었어도 내 값을 쓴다(사용자가 고른 것). 그래서 충돌로
+-   * 남기지 않고 최신 판을 다음 비교의 기준으로 삼는다.
++   * 충돌 화면의 "내 입력으로 다시 저장"(D-94): 서버 최신 판(`latest`) 위에 내가 고친 칸만 올려 그 판 번호로 저장한다.
++   * 내가 고치지 않은 칸은 최신 값을 따르고(전에는 폼 전체를 보내 그사이 다른 사람이 바꾼 제목 등을 옛 값으로
++   * 되돌렸다), 내가 고친 칸 가운데 서버에서는 그대로이거나 같은 값이 된 칸은 내 값을 쓴다. 양쪽이 서로 다른 값으로
++   * 바꾼 칸이 있으면 보내기 전에 그 칸의 서버 값과 내 값을 보이고 덮어쓸지 묻는다(전에는 묻지 않고 내 값으로 덮었다).
+    */
+   async function saveMine(latest: TaskDetailView): Promise<void> {
+-    if (busy) return;
+-    refresh(latest);
++    const mine = currentInput();
++    if (busy || mine === undefined || baseline === undefined) return;
++    // 잘못된 예상 시간은 병합 전에 막는다(입력을 그대로 두고 알린다).
++    if (estimateOf(estimateText) === 'invalid') {
++      error = m.tasks_estimate_invalid();
++      return;
++    }
++    const merge = mergeOnto(latest, mine, baseline);
++    if (merge.clashes.length > 0) {
++      error = undefined;
++      clashAsk = {
++        latest,
++        rows: clashRows(merge.clashes, merge.freshForm, mine, assigneeNames(latest)),
++      };
++      return;
++    }
++    await saveMerged(latest, merge);
++  }
++
++  /** 덮어쓰기 확인의 승인: 묻는 동안 폼은 잠겨 있으므로 보인 값 그대로다. 양쪽이 바꾼 칸은 병합에서 이미 내 값이다. */
++  async function overwrite(): Promise<void> {
++    const ask = clashAsk;
++    const mine = currentInput();
++    if (ask === undefined || mine === undefined || baseline === undefined || busy) return;
++    await saveMerged(ask.latest, mergeOnto(ask.latest, mine, baseline));
++  }
++
++  /**
++   * 병합한 입력을 최신 판 번호로 저장한다(서버가 그 판으로 검사한다). 최신 판이 다음 비교의 기준이 되므로, 그사이 또
++   * 바뀌어 다시 409가 오면(충돌 화면이 더 새 판을 보인다) 다음 "내 입력으로 다시 저장"은 방금 받은 값을 고치지 않은
++   * 칸으로 보고 더 새 판 위에 다시 올린다. 실패해도 입력은 폼에 그대로 있다.
++   */
++  async function saveMerged(latest: TaskDetailView, merge: Merge): Promise<void> {
++    applyMerge(merge);
+     task = latest;
+     baseline = formOf(latest);
+     baseVersion = latest.version;
+     clashed = false;
+     await submit(latest);
++    // 충돌 화면이 남으면(다시 409·실패) 누른 단추가 사라졌거나 잠겼던 자리이므로 "내 입력으로 다시 저장"으로 돌린다.
++    if (conflict !== undefined && pending === undefined) await focusLater('task-save-mine');
+   }
+ 
+   $effect(() => {
+@@ -212,6 +295,7 @@
+     let cancelled = false;
+     task = undefined;
+     conflict = undefined;
++    clashAsk = undefined;
+     error = undefined;
+     void api
+       .task(id)
+@@ -590,8 +674,9 @@
+ 
+     {#if conflict !== undefined}
+       {@const latest = conflict}
+-      <div class="rounded-md border border-amber-500/50 p-3 text-sm" role="alert">
+-        <p>
++      <!-- 알림은 문장에만 둔다(안의 덮어쓰기 확인이 따로 알리므로 알림 전체를 두 번 읽지 않게). -->
++      <div class="rounded-md border border-amber-500/50 p-3 text-sm">
++        <p role="alert">
+           {m.tasks_conflict({ title: latest.title, status: STATUS_LABEL[latest.status] })}
+         </p>
+         <div class="mt-2 flex gap-2">
+@@ -603,17 +688,31 @@
+               conflict = undefined;
+             }}>{m.tasks_load_server()}</Button
+           >
+-          <Button size="sm" disabled={busy} onclick={() => void saveMine(latest)}
+-            >{m.tasks_save_mine()}</Button
++          <Button
++            id="task-save-mine"
++            size="sm"
++            disabled={busy || clashAsk !== undefined}
++            onclick={() => void saveMine(latest)}>{m.tasks_save_mine()}</Button
+           >
+         </div>
++        {#if clashAsk !== undefined}
++          <ClashConfirm
++            rows={clashAsk.rows}
++            {busy}
++            onconfirm={() => void overwrite()}
++            oncancel={() => {
++              clashAsk = undefined;
++              void focusLater('task-save-mine');
++            }}
++          />
++        {/if}
+       </div>
+     {/if}
+ 
+     <!-- 제목 다음에 상태·우선순위·날짜를 두 칸으로 먼저 보이고(좁은 화면에서도 스크롤 없이), 설명은 그 아래에 둔다. -->
+     <form
+       class="grid grid-cols-2 gap-3"
+-      inert={pending !== undefined}
++      inert={pending !== undefined || clashAsk !== undefined}
+       onsubmit={(e) => {
+         e.preventDefault();
+         void submit(current);
+diff --git a/apps/web/src/lib/features/tasks/form.ts b/apps/web/src/lib/features/tasks/form.ts
+index d8d1c01..8f48716 100644
+--- a/apps/web/src/lib/features/tasks/form.ts
++++ b/apps/web/src/lib/features/tasks/form.ts
+@@ -20,20 +20,22 @@ export function formOf(task: TaskDetailView): TaskInput {
+ 
+ /**
+  * 서버의 새 값(`fresh`)으로 다시 채우되, 기준 값(`before`, 마지막으로 불러온 판)에서 사용자가 바꾼 칸(`mine`)은
+- * 그대로 둔다. 사용자가 바꾼 칸을 서버에서도 누가 바꿨으면 `clash`: 그때는 옛 판 번호로 저장해 충돌 화면(409)이
+- * 고르게 한다. `baseline`은 다음 비교의 기준: 사용자가 바꾸지 않은 칸만 새 값으로 옮긴다.
++ * 그대로 둔다. 사용자가 바꾼 칸을 서버에서도 누가 다른 값으로 바꿨으면 `clash`이고 그 칸들이 `clashes`(폼 순서):
++ * 다시 채울 때는 옛 판 번호로 저장해 충돌 화면(409)이 고르게 하고, 충돌 화면의 "내 입력으로 다시 저장"은 그 칸들을
++ * 보이고 덮어쓸지 묻는다(D-94). `form`의 그 칸은 내 값이다. `baseline`은 다음 비교의 기준: 사용자가 바꾸지 않은 칸만
++ * 새 값으로 옮긴다.
+  */
+ export function mergeForm(
+   before: TaskInput,
+   mine: TaskInput,
+   fresh: TaskInput,
+-): { form: TaskInput; baseline: TaskInput; clash: boolean } {
+-  let clash = false;
++): { form: TaskInput; baseline: TaskInput; clash: boolean; clashes: (keyof TaskInput)[] } {
++  const clashes: (keyof TaskInput)[] = [];
+   const same = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
+   const untouched = (key: keyof TaskInput): boolean => same(mine[key], before[key]);
+   const pick = <K extends keyof TaskInput>(key: K): TaskInput[K] => {
+     if (untouched(key) || same(mine[key], fresh[key])) return fresh[key];
+-    if (!same(fresh[key], before[key])) clash = true;
++    if (!same(fresh[key], before[key])) clashes.push(key);
+     return mine[key];
+   };
+   // 사용자 값이 서버의 새 값과 같아진 칸도 기준을 새 값으로 옮긴다(그 뒤 사용자가 다시 고쳐도 옛 기준과 비교해 충돌로
+@@ -64,7 +66,7 @@ export function mergeForm(
+     assignee_ids: pick('assignee_ids'),
+     milestone: pick('milestone'),
+   };
+-  return { form, baseline, clash };
++  return { form, baseline, clash: clashes.length > 0, clashes };
+ }
+ 
+ /** 예상 시간 입력 글자의 값: 빈칸은 없음, 0 이상의 정수만 값, 그 밖은 잘못된 입력. */
+diff --git a/apps/web/src/lib/features/tasks/labels.ts b/apps/web/src/lib/features/tasks/labels.ts
+index d83de73..e779e99 100644
+--- a/apps/web/src/lib/features/tasks/labels.ts
++++ b/apps/web/src/lib/features/tasks/labels.ts
+@@ -1,5 +1,6 @@
+ // 업무 상태·우선순위의 표시 이름. 값은 읽을 때 지금 언어로 만든다(언어는 실행 중에 바뀔 수 있다, D-81).
+-import type { LinkKind, TaskPriority, TaskStatus } from '$lib/api/client';
++import type { LinkKind, TaskInput, TaskPriority, TaskStatus } from '$lib/api/client';
++import { formatDay, formatNumber } from '$lib/display';
+ import { m } from '$lib/paraglide/messages.js';
+ 
+ export const STATUS_LABEL: Record<TaskStatus, string> = {
+@@ -93,3 +94,110 @@ export function undatedText(
+     ? m.tasks_shift_undated({ tasks: undated.map(taskName).join(', ') })
+     : '';
+ }
++
++/** 충돌 확인에 보이는 칸 하나: 폼의 칸 이름, 서버의 지금 값, 내 값(읽을 수 있는 글로). */
++export interface ClashRow {
++  key: keyof TaskInput;
++  label: string;
++  server: string;
++  mine: string;
++}
++
++// 폼에 놓인 순서(충돌 확인도 이 순서로 보인다).
++const FIELD_ORDER: readonly (keyof TaskInput)[] = [
++  'title',
++  'description',
++  'status',
++  'priority',
++  'start_date',
++  'due_date',
++  'estimate_minutes',
++  'tags',
++  'assignee_ids',
++  'milestone',
++];
++
++/** 폼의 칸 이름(폼의 이름표와 같은 글). */
++function fieldLabel(key: keyof TaskInput): string {
++  switch (key) {
++    case 'title':
++      return m.tasks_title();
++    case 'description':
++      return m.tasks_description();
++    case 'status':
++      return m.tasks_status();
++    case 'priority':
++      return m.tasks_priority();
++    case 'start_date':
++      return m.tasks_start_date();
++    case 'due_date':
++      return m.tasks_due_date();
++    case 'estimate_minutes':
++      return m.tasks_estimate();
++    case 'tags':
++      return m.tasks_tags();
++    case 'assignee_ids':
++      return m.tasks_assignees();
++    case 'milestone':
++      return m.tasks_milestone();
++  }
++}
++
++// 긴 글(설명 등)은 줄바꿈을 한 칸으로 모으고 앞부분만 보인다.
++const SHORT = 80;
++function shorten(text: string): string {
++  const flat = text.replace(/\s+/g, ' ').trim();
++  if (flat === '') return m.tasks_clash_empty();
++  return flat.length > SHORT ? `${flat.slice(0, SHORT)}…` : flat;
++}
++
++/** 칸 값 하나를 읽을 수 있는 글로. 담당자는 `names`(사용자 id → 이름)에서 이름을 찾는다. */
++function fieldText(
++  key: keyof TaskInput,
++  input: TaskInput,
++  names: ReadonlyMap<string, string>,
++): string {
++  switch (key) {
++    case 'title':
++    case 'description':
++      return shorten(input[key]);
++    case 'status':
++      return STATUS_LABEL[input.status];
++    case 'priority':
++      return PRIORITY_LABEL[input.priority];
++    case 'start_date':
++    case 'due_date': {
++      const day = input[key];
++      return day === null || day === '' ? m.tasks_clash_empty() : formatDay(day);
++    }
++    case 'estimate_minutes':
++      return input.estimate_minutes === null
++        ? m.tasks_clash_empty()
++        : formatNumber(input.estimate_minutes);
++    case 'tags':
++      return shorten(input.tags.join(', '));
++    case 'assignee_ids':
++      return input.assignee_ids.length === 0
++        ? m.tasks_clash_empty()
++        : input.assignee_ids
++            .map((id) => names.get(id) ?? m.tasks_clash_unknown_person())
++            .join(', ');
++    case 'milestone':
++      return input.milestone ? m.tasks_clash_yes() : m.tasks_clash_no();
++  }
++}
++
++/** 양쪽이 서로 다르게 바꾼 칸(`keys`)을 폼 순서로, 서버의 지금 값(`server`)과 내 값(`mine`)과 함께. */
++export function clashRows(
++  keys: readonly (keyof TaskInput)[],
++  server: TaskInput,
++  mine: TaskInput,
++  names: ReadonlyMap<string, string>,
++): ClashRow[] {
++  return FIELD_ORDER.filter((key) => keys.includes(key)).map((key) => ({
++    key,
++    label: fieldLabel(key),
++    server: fieldText(key, server, names),
++    mine: fieldText(key, mine, names),
++  }));
++}
+diff --git a/apps/web/tests/component/task-conflict-save-mine.test.ts b/apps/web/tests/component/task-conflict-save-mine.test.ts
+index 4a6264c..3ac3844 100644
+--- a/apps/web/tests/component/task-conflict-save-mine.test.ts
++++ b/apps/web/tests/component/task-conflict-save-mine.test.ts
+@@ -7,7 +7,8 @@ import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
+ import { setLocale } from '$lib/paraglide/runtime.js';
+ 
+ // 업무 저장 충돌(409) 뒤 "내 입력으로 다시 저장"(실제 브라우저 점검에서 찾음): 전에는 내 폼 전체를 새 판 번호로 보내,
+-// 내가 고치지 않은 칸(다른 사람이 바꾼 제목 등)을 옛 값으로 조용히 되돌렸다. 이제 최신 판 위에 내가 고친 칸만 올린다.
++// 내가 고치지 않은 칸(다른 사람이 바꾼 제목 등)을 옛 값으로 조용히 되돌렸다. 이제 최신 판 위에 내가 고친 칸만 올리고,
++// 같은 칸을 다른 사람도 다른 값으로 바꿨으면 양쪽 값을 보이고 덮어쓸지 묻는다(D-94).
+ afterEach(() => {
+   vi.restoreAllMocks();
+ });
+@@ -90,6 +91,10 @@ async function saveIntoConflict(): Promise<void> {
+   await screen.findByRole('button', { name: '내 입력으로 다시 저장' });
+ }
+ 
++function saveMineButton(): HTMLElement {
++  return screen.getByRole('button', { name: '내 입력으로 다시 저장' });
++}
++
+ describe('saving my input after a task conflict', () => {
+   it('keeps the title the other person changed when I only edited the description', async () => {
+     await setLocale('ko', { reload: false });
+@@ -105,10 +110,11 @@ describe('saving my input after a task conflict', () => {
+     await saveIntoConflict();
+     expect(update).toHaveBeenNthCalledWith(1, 't1', 2, { ...unchanged, description: 'B 설명' }, []);
+ 
+-    await fireEvent.click(screen.getByRole('button', { name: '내 입력으로 다시 저장' }));
++    await fireEvent.click(saveMineButton());
+     await waitFor(() => {
+       expect(update).toHaveBeenCalledTimes(2);
+     });
++    // 겹친 칸이 없으므로 묻지 않고 최신 판 번호로 저장한다.
+     expect(update).toHaveBeenNthCalledWith(
+       2,
+       't1',
+@@ -116,6 +122,7 @@ describe('saving my input after a task conflict', () => {
+       { ...unchanged, title: '새 제목', description: 'B 설명' },
+       [],
+     );
++    expect(screen.queryByRole('alertdialog')).toBeNull();
+     // 저장한 판으로 다시 채워 화면이 저장된 내용을 보인다.
+     expect(await screen.findByText('저장했습니다.')).toBeTruthy();
+     expect(field('task-title').value).toBe('새 제목');
+@@ -123,7 +130,7 @@ describe('saving my input after a task conflict', () => {
+     expect(screen.queryByRole('button', { name: '내 입력으로 다시 저장' })).toBeNull();
+   });
+ 
+-  it('sends my value for a field both sides changed and the latest values for the rest', async () => {
++  it('asks before saving my value over fields the other person changed too', async () => {
+     await setLocale('ko', { reload: false });
+     mount();
+     const preview = vi
+@@ -148,11 +155,43 @@ describe('saving my input after a task conflict', () => {
+     await type('task-estimate', '45');
+     await saveIntoConflict();
+ 
+-    await fireEvent.click(screen.getByRole('button', { name: '내 입력으로 다시 저장' }));
++    // 제목·예상 시간은 양쪽에서 서로 다르게 바꿨다: 보내기 전에 칸마다 서버 값과 내 값을 보이고 묻는다.
++    await fireEvent.click(saveMineButton());
++    const ask = await screen.findByRole('alertdialog', { name: '다른 사람도 바꾼 칸이 있습니다' });
++    expect(update).toHaveBeenCalledTimes(1);
++    const title = ask.querySelector('[data-clash-field="title"]');
++    // 칸 이름은 폼의 이름표와 같은 글이다.
++    expect(title?.firstElementChild?.textContent).toBe('제목');
++    expect(title?.textContent).toContain('서버의 지금 값: 남의 제목');
++    expect(title?.textContent).toContain('내 값: 내 제목');
++    const estimate = ask.querySelector('[data-clash-field="estimate_minutes"]');
++    expect(estimate?.firstElementChild?.textContent).toBe('예상 시간(분)');
++    expect(estimate?.textContent).toContain('서버의 지금 값: 30');
++    expect(estimate?.textContent).toContain('내 값: 45');
++    // 내가 고치지 않은 칸은 묻지 않는다.
++    expect(within(ask).getAllByRole('listitem')).toHaveLength(2);
++    await waitFor(() => {
++      expect(document.activeElement?.id).toBe('task-clash-heading');
++    });
++
++    // 취소: 아무것도 보내지 않고 입력을 그대로 둔 채 "내 입력으로 다시 저장"으로 돌아간다.
++    await fireEvent.click(within(ask).getByRole('button', { name: '취소' }));
++    await waitFor(() => {
++      expect(document.activeElement?.id).toBe('task-save-mine');
++    });
++    expect(screen.queryByRole('alertdialog')).toBeNull();
++    expect(update).toHaveBeenCalledTimes(1);
++    expect(field('task-title').value).toBe('내 제목');
++    expect(field('task-estimate').value).toBe('45');
++    expect(field('task-tags').value).toBe('');
++
++    // 다시 눌러 덮어쓰기: 겹친 칸은 내 값, 고치지 않은 우선순위·마감일·태그는 최신 값으로 판 3에 저장한다.
++    await fireEvent.click(saveMineButton());
++    const again = await screen.findByRole('alertdialog');
++    await fireEvent.click(within(again).getByRole('button', { name: '내 값으로 덮어쓰고 저장' }));
+     await waitFor(() => {
+       expect(update).toHaveBeenCalledTimes(2);
+     });
+-    // 제목·예상 시간은 양쪽에서 바꿨지만 사용자가 내 입력을 골랐으므로 내 값, 고치지 않은 우선순위·마감일·태그는 최신 값.
+     expect(update).toHaveBeenNthCalledWith(
+       2,
+       't1',
+@@ -175,6 +214,74 @@ describe('saving my input after a task conflict', () => {
+     expect(field('task-estimate').value).toBe('45');
+   });
+ 
++  it('shows the newer version when it changed again and merges onto it next time', async () => {
++    await setLocale('ko', { reload: false });
++    mount();
++    const v3 = { ...v2, version: 3, title: '새 제목' };
++    // 다시 저장하려는 사이 또 바뀌었다(제목을 한 번 더, 상태도).
++    const v4: TaskDetailView = { ...v3, version: 4, title: '세 번째 제목', status: 'in_progress' };
++    const v5 = { ...v4, version: 5, description: 'B 설명' };
++    const update = vi
++      .spyOn(api, 'updateTask')
++      .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
++      .mockResolvedValueOnce({ kind: 'conflict', current: v4 })
++      .mockResolvedValueOnce({ kind: 'updated', task: v5 });
++    await screen.findByLabelText('설명');
++    await type('task-description', 'B 설명');
++    await saveIntoConflict();
++
++    await fireEvent.click(saveMineButton());
++    // 서버가 판 3으로 검사해 다시 409로 답했다: 충돌 화면이 더 새 판을 보이고 입력은 그대로다.
++    expect(await screen.findByText(/지금 제목: “세 번째 제목”, 상태: 진행 중/)).toBeTruthy();
++    expect(update).toHaveBeenNthCalledWith(
++      2,
++      't1',
++      3,
++      { ...unchanged, title: '새 제목', description: 'B 설명' },
++      [],
++    );
++    expect(field('task-description').value).toBe('B 설명');
++    await waitFor(() => {
++      expect(document.activeElement?.id).toBe('task-save-mine');
++    });
++
++    // 판 3에서 받은 제목은 내가 고친 칸이 아니므로, 판 4의 제목을 묻지 않고 따른다.
++    await fireEvent.click(saveMineButton());
++    await waitFor(() => {
++      expect(update).toHaveBeenCalledTimes(3);
++    });
++    expect(screen.queryByRole('alertdialog')).toBeNull();
++    expect(update).toHaveBeenNthCalledWith(
++      3,
++      't1',
++      4,
++      { ...unchanged, title: '세 번째 제목', status: 'in_progress', description: 'B 설명' },
++      [],
++    );
++    expect(await screen.findByText('저장했습니다.')).toBeTruthy();
++  });
++
++  it('keeps my input when saving again fails', async () => {
++    await setLocale('ko', { reload: false });
++    mount();
++    const v3 = { ...v2, version: 3, title: '새 제목' };
++    const update = vi
++      .spyOn(api, 'updateTask')
++      .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
++      .mockRejectedValueOnce(new Error('boom'));
++    await screen.findByLabelText('설명');
++    await type('task-description', 'B 설명');
++    await saveIntoConflict();
++
++    await fireEvent.click(saveMineButton());
++    expect(await screen.findByText('저장하지 못했습니다.')).toBeTruthy();
++    expect(update).toHaveBeenCalledTimes(2);
++    expect(field('task-description').value).toBe('B 설명');
++    expect(field('task-title').value).toBe('새 제목');
++    // 충돌 화면은 남아 다시 시도할 수 있다.
++    expect(saveMineButton()).toBeTruthy();
++  });
++
+   it('previews follower moves with my new due date on top of the latest version', async () => {
+     await setLocale('ko', { reload: false });
+     const dated = { ...v2, start_date: '2026-10-19', due_date: '2026-10-21' };
+diff --git a/apps/web/tests/component/task-form-merge.test.ts b/apps/web/tests/component/task-form-merge.test.ts
+index b620940..4df7ed8 100644
+--- a/apps/web/tests/component/task-form-merge.test.ts
++++ b/apps/web/tests/component/task-form-merge.test.ts
+@@ -35,6 +35,21 @@ describe('mergeForm', () => {
+       false,
+     );
+   });
++
++  // 충돌 화면에서 덮어쓸지 물을 칸(D-94): 양쪽이 서로 다르게 바꾼 칸만, 폼 순서로.
++  it('names the fields both sides changed to different values', () => {
++    // 마감일은 같은 값으로 바꿨고 마일스톤은 서버에서만 바꿨다.
++    const mine = { ...base, title: '내 제목', due_date: '2026-11-01', tags: ['내 태그'] };
++    const fresh = {
++      ...base,
++      title: '남의 제목',
++      due_date: '2026-11-01',
++      tags: ['서버'],
++      milestone: true,
++    };
++    expect(mergeForm(base, mine, fresh).clashes).toEqual(['title', 'tags']);
++    expect(mergeForm(base, base, fresh).clashes).toEqual([]);
++  });
+ });
+ 
+ describe('mergeForm baseline', () => {
+-- 
+2.54.0 (Apple Git-157)
+

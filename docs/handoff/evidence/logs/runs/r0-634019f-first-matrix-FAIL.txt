@@ -1,0 +1,9 @@
+첫 행렬(통합 상태 634019f, 2026-10-21T17:54:44Z 시작). 명령: cargo xtask test --oidc / --supabase --oidc / --supabase --session-pooler --oidc.
+상태(배경 작업 bqwp3tyy0 출력): pg exit=1 17:55:55Z, supabase exit=1 17:56:50Z, supabase-pooler exit=1 17:57:44Z.
+로그 파일(scratchpad/matrix/pg.log·sb.log·sbp.log)은 다음 행렬(7d6775c)이 같은 이름으로 덮어써 남아 있지 않다.
+세션 기록에 남은 실패 내용(세 환경 모두 같음):
+  test deleting_a_version_right_after_a_live_reference_is_refused ... FAILED  (crates/server/tests/collab.rs:1191, assertion `left == right` failed: Null)
+  test a_restore_from_outside_the_room_still_conflicts_with_live_edits ... FAILED  (collab.rs:1796, current.body에 "다른 사람의 실시간 문단" 없음)
+  test result: FAILED. 20 passed; 2 failed (collab)
+  Error: command exited with non-zero code `cargo test --workspace --locked ...`: 101
+원인: 그때 #64 머리(8f39981)의 새 시험이 트리거를 DROP해 표 잠금을 잡아 같은 바이너리의 다른 방 저장을 늦췄다. #64 c5eca50에서 문서 행 잠금으로 바꿨다.
