@@ -2701,10 +2701,11 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   | 39  | #64  | `be7ef22` 인라인 Minor: 제목만 고친 편집을 실시간 끝에 남기지 않음             | FIXED(#91, 병합 뒤 발견)             | #91 `abd7210`(`hasPending()` 기준, `live-unsaved-title.test.ts`)·`b89390e`·`f36e15d`, 답글 r4347584199                                                  | https://github.com/fvoci/GroundZero/pull/64#discussion_r4346901085       |
   | 40  | #82  | `217c6c5` 인라인 Minor: 상세 안의 다른 업무 열기가 닫기 확인을 건너뜀          | FIXED(#91, 병합 뒤 발견)             | #91 `abd7210`(`TaskBoard` `requestOpen`, `task-dialog-discard.test.ts`), 답글 r4347584536                                                               | https://github.com/fvoci/GroundZero/pull/82#discussion_r4347201952       |
   | 41  | #69  | `5e5e9da` 인라인 Minor: 표 뒤 빈 줄(markdownlint MD058)                        | REJECTED                             | 저장소 형식 검사(prettier, `cargo xtask check`)가 목록 안 표 뒤 빈 줄을 지움(넣으면 `--check` 실패), 답글 r4347534519                                   | https://github.com/fvoci/GroundZero/pull/69#discussion_r4347518864       |
+  | 42  | #69  | `e4cae26` 인라인 Minor: NOT RUN 목록에 PASS 항목이 섞임                        | FIXED                                | NOT RUN 목록에는 실행하지 않은 범위만 남김(PASS는 위 「실제 브라우저」), 이 행을 더한 커밋                                                              | https://github.com/fvoci/GroundZero/pull/69#discussion_r4348758070       |
 
   인계 장부의 OPEN 26건(실질 17 + 정보성 9)과 #82 추가 2건은 위 1~20에서 모두 처리 상태가 정해졌다. 그 뒤 새로 온 지적 가운데 OPEN은 25(#60, 배포·
   되돌리기 절차 문서)뿐이다. 39(#64)·40(#82)은 병합 뒤에 발견해 #91로 고쳤다. 24는 `a811f92`, 36은 실제 브라우저로 정리했다. #69의 95차 push
-  (`5e5e9da`) 뒤 지적은 41이다.
+  (`5e5e9da`) 뒤 지적은 41, `e4cae26` 뒤 지적은 42다.
   - 39·40은 최종 갱신 커밋(`be7ef22`·`217c6c5`)에 병합 직전 게시됐다(#64 리뷰 2026-10-22T09:52:28Z·병합 09:58:56Z, #82 리뷰 10:25:16Z·병합
     10:26:23Z). 수정 없이 병합되어 병합 뒤에 발견했다(Minor 둘, 편집을 확인 없이 잃는 경로). #91(`fix/audit-unsaved-followups`)에서 고쳤다
     (아래 「#91(병합 뒤 후속)」).
@@ -2994,8 +2995,7 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
 - **NOT RUN**:
   - 실제 모바일 기기·다른 브라우저 엔진·화면 낭독기 확인. 좁은 화면·키보드·포커스·끌기는 위 「브라우저 확인」의 범위만 봤다.
   - 실제 Safari에서 충돌 확인 값 상자의 키보드 스크롤(D-98). 이 환경에 Safari가 없다.
-  - D-94 충돌 재저장·D-96 계정 전환·D-97 닫기 확인 화면과 #64의 기록·내보내기 표시("대신 저장")는 `07be34d`의 실제 브라우저(Chromium)에서 PASS다
-    (위 「실제 브라우저」). 그 가운데 방 없이 남은 저장 대기 편집의 복원과 DB 잠금 대기 중 들어온 편집은 브라우저로 NOT RUN(통합 시험까지).
+  - 방 없이 남은 저장 대기 편집의 복원과 이동 트랜잭션이 DB 잠금을 기다리는 동안 들어온 편집의 실제 브라우저 확인(통합 시험 `collab.rs`까지).
   - Supabase Cloud: 읽기 전용 연결 점검(#47 뒤 세 번째 수동 실행 39600271650: 연결·TLS·쿼리 PASS, 변경 NOT RUN, #68에서 문서 정정)만 있다. 이
     결과를 제품 서버·전체 마이그레이션·앱 역할 RLS 검증 성공으로 넓히지 않는다.
   - 작업 프로세스 둘을 실제로 띄운 검색 점유 경합(S12는 `drain` 경로의 시험까지).
