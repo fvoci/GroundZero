@@ -84,11 +84,12 @@
   function keepDraft(): boolean {
     if (keepTimer !== undefined) clearTimeout(keepTimer);
     keepTimer = undefined;
-    if (latest === undefined || reserved !== undefined) return false;
+    if (reserved !== undefined) return false;
     return storeDraft(start.id, {
       baseRevision: start.revision,
       title,
-      body: latest,
+      // 편집기가 아직 본문을 넘기지 않았으면(첫 동기화 전) 연 내용 그대로다(제목만 고친 경우도 남긴다).
+      body: latest ?? start.body,
       savedAt: new Date().toISOString(),
     });
   }
