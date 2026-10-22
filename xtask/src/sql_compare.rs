@@ -11,6 +11,29 @@ use xshell::{Shell, cmd};
 use crate::compose::{self, Compose, DbUrls};
 use crate::supabase::Supabase;
 
+mod capabilities;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum BehaviorScope {
+    Full,
+    Core,
+}
+
+const CORE_TESTS: &[&str] = &[
+    "db_context",
+    "first_flow",
+    "ids",
+    "sharing",
+    "members",
+    "recurrence",
+    "time_tracking",
+];
+
+struct BehaviorRun<'a> {
+    candidate: Option<&'a Path>,
+    scope: BehaviorScope,
+}
+
 const CATALOG: &str = include_str!("../../preparation/sql-consolidation/verification/catalog.sql");
 type Snapshot = BTreeMap<String, Value>;
 
@@ -89,9 +112,18 @@ pub fn run(
     root: &Path,
     candidate: Option<&Path>,
     output: &Path,
-    behavior: bool,
+    behavior: Option<BehaviorScope>,
     supabase: bool,
+    restricted_admin: bool,
 ) -> Result<()> {
+    ensure!(
+        !restricted_admin || !supabase,
+        "restricted admin requires the isolated standard PostgreSQL fixture"
+    );
+    ensure!(
+        !restricted_admin || behavior != Some(BehaviorScope::Full),
+        "restricted admin requires --behavior-scope core; the full suite needs CREATE DATABASE and restore capabilities"
+    );
     let candidate = candidate.map(std::fs::canonicalize).transpose()?;
     let output = claim_output(output)?;
     let sh = Shell::new()?;
@@ -107,6 +139,10 @@ pub fn run(
             "tool_sha256":Sha256::digest(include_bytes!("sql_compare.rs")).iter().map(|b|format!("{b:02x}")).collect::<String>(),
             "catalog_sha256":format!("{:x}",Sha256::digest(CATALOG.as_bytes())),
             "supabase_upstream":if supabase {Some(crate::supabase::REVISION)}else{None},
+            "capability_profile":if restricted_admin {"restricted-installer-v1"}else{"image-default"},
+            "behavior_scope":behavior.map(|scope|format!("{scope:?}").to_lowercase()),
+            "core_tests":if behavior==Some(BehaviorScope::Core) {Some(CORE_TESTS)}else{None},
+            "core_excluded":"All unlisted test binaries, including backup/restore, FreshDb search, OIDC, S3 and Supabase-specific paths; no Cloud execution.",
             "route_note":"Session uses pooler for DATABASE_URL; FreshDb backup/search fixture databases use direct connection. OIDC is not requested."
         }),
     )?;
@@ -137,25 +173,30 @@ pub fn run(
                 Cluster::new(root, &format!("{run}-{side}"), supabase)?,
                 |cluster| cluster.start(&sh),
             )?;
-            let connection = cluster.urls(&sh)?;
-            bootstrap(&sh, &connection)?;
-            if let Some(path) = source {
-                runtime.block_on(install_candidate(&connection.migration, path))?;
-            } else {
-                let _migration = sh.push_env("DATABASE_MIGRATION_URL", &connection.migration);
-                cmd!(
-                    sh,
-                    "cargo run --quiet --package fvoci-server --locked -- db migrate"
-                )
-                .run()?;
-            }
+            let mut connection = cluster.urls(&sh)?;
             let dir = output.join(side);
             std::fs::create_dir(&dir)?;
+            if restricted_admin {
+                runtime.block_on(capabilities::prepare(&mut connection))?;
+            }
+            bootstrap(&sh, &connection)?;
+            runtime.block_on(install_source(&sh, &connection, source))?;
             std::fs::write(dir.join("behavior-direct.txt"), "NOT RUN\n")?;
             std::fs::write(dir.join("behavior-session.txt"), "NOT RUN\n")?;
             phases.insert(format!("{side}_install"), "PASS");
             phases.insert(format!("{side}_snapshot"), "FAIL");
             let snapshot = runtime.block_on(snapshot(&connection.migration, &dir))?;
+            if restricted_admin {
+                phases.insert(format!("{side}_capabilities"), "FAIL");
+                runtime.block_on(capabilities::verify(
+                    &sh,
+                    &connection,
+                    source,
+                    &dir,
+                    &snapshot,
+                ))?;
+                phases.insert(format!("{side}_capabilities"), "PASS");
+            }
             let dump = cluster.dump(&sh)?;
             std::fs::write(dir.join("schema.sql"), &dump)?;
             let normalized = normalize_dump(&dump, &snapshot)?;
@@ -183,7 +224,7 @@ pub fn run(
         );
         println!("PASS: catalog, required initial rows and schema dump objects are equal");
         phases.insert("objects".to_owned(), "PASS");
-        if behavior {
+        if let Some(scope) = behavior {
             let services = register_and_start(
                 &mut services,
                 Compose::for_comparison(root, &format!("{run}-services")),
@@ -201,7 +242,10 @@ pub fn run(
                     services,
                     &clusters[index],
                     &urls[index],
-                    source,
+                    BehaviorRun {
+                        candidate: source,
+                        scope,
+                    },
                     &output.join(side),
                 )?;
             }
@@ -234,7 +278,7 @@ pub fn run(
             }
             write_json(
                 &output.join("result.json"),
-                &json!({"passed":passed,"candidate":candidate,"supabase":supabase,"behavior_requested":behavior,"phases":phases,"behavior":behavior_results}),
+                &json!({"passed":passed,"candidate":candidate,"supabase":supabase,"behavior_requested":behavior.is_some(),"behavior_scope":behavior.map(|scope|format!("{scope:?}").to_lowercase()),"restricted_admin":restricted_admin,"phases":phases,"behavior":behavior_results}),
             )
         },
     )
@@ -330,6 +374,20 @@ async fn install_candidate(url: &str, path: &Path) -> Result<()> {
     migrator.run(&mut conn).await?;
     conn.close().await?;
     Ok(())
+}
+
+async fn install_source(sh: &Shell, urls: &DbUrls, candidate: Option<&Path>) -> Result<()> {
+    if let Some(path) = candidate {
+        install_candidate(&urls.migration, path).await
+    } else {
+        let _migration = sh.push_env("DATABASE_MIGRATION_URL", &urls.migration);
+        cmd!(
+            sh,
+            "cargo run --quiet --package fvoci-server --locked -- db migrate"
+        )
+        .run()?;
+        Ok(())
+    }
 }
 
 async fn catalog(conn: &mut PgConnection) -> Result<Snapshot> {
@@ -509,7 +567,7 @@ fn run_behavior(
     services: &Compose,
     cluster: &Cluster,
     urls: &DbUrls,
-    candidate: Option<&Path>,
+    behavior: BehaviorRun<'_>,
     output: &Path,
 ) -> Result<()> {
     let _app = sh.push_env("DATABASE_URL", &urls.app);
@@ -526,7 +584,7 @@ fn run_behavior(
     let _zotero = sh.push_env("FVOCI_ZOTERO_API_URL", "http://127.0.0.1:9");
     let _candidate = sh.push_env(
         "FVOCI_TEST_CANDIDATE_MIGRATIONS",
-        candidate.unwrap_or(Path::new("")),
+        behavior.candidate.unwrap_or(Path::new("")),
     );
     let search = services.host_port(sh, "meilisearch", 7700)?;
     let s3 = services.host_port(sh, "seaweedfs", 8333)?;
@@ -561,16 +619,15 @@ fn run_behavior(
         output.join("behavior-direct.txt"),
         "FAIL: direct suite started but did not pass\n",
     )?;
-    crate::test::run_tests_with_log(
+    run_behavior_tests(
         sh,
-        false,
-        true,
-        matches!(cluster, Cluster::Supabase(_)),
-        Some(&output.join("behavior-direct.log")),
+        behavior.scope,
+        cluster,
+        &output.join("behavior-direct.log"),
     )?;
     std::fs::write(
         output.join("behavior-direct.txt"),
-        "PASS: existing workspace suite; OIDC not run\n",
+        format!("PASS: existing {:?} suite; OIDC not run\n", behavior.scope),
     )?;
     if let Cluster::Supabase(c) = cluster {
         let port = c.host_port(sh, "supavisor", 5432)?;
@@ -581,19 +638,57 @@ fn run_behavior(
             output.join("behavior-session.txt"),
             "FAIL: session suite started but did not pass\n",
         )?;
-        crate::test::run_tests_with_log(
+        run_behavior_tests(
             sh,
-            false,
-            true,
-            true,
-            Some(&output.join("behavior-session.log")),
+            behavior.scope,
+            cluster,
+            &output.join("behavior-session.log"),
         )?;
         std::fs::write(
             output.join("behavior-session.txt"),
-            "PASS: existing workspace suite; OIDC not run\n",
+            format!("PASS: existing {:?} suite; OIDC not run\n", behavior.scope),
         )?;
     }
     Ok(())
+}
+
+fn run_behavior_tests(
+    sh: &Shell,
+    scope: BehaviorScope,
+    cluster: &Cluster,
+    log: &Path,
+) -> Result<()> {
+    match scope {
+        BehaviorScope::Full => crate::test::run_tests_with_log(
+            sh,
+            false,
+            true,
+            matches!(cluster, Cluster::Supabase(_)),
+            Some(log),
+        ),
+        BehaviorScope::Core => {
+            let args: Vec<_> = CORE_TESTS
+                .iter()
+                .flat_map(|name| ["--test", *name])
+                .collect();
+            println!(
+                "Core tests: {}; all unlisted binaries NOT RUN",
+                CORE_TESTS.join(", ")
+            );
+            let result = cmd!(sh, "cargo test --package fvoci-server --locked {args...}")
+                .ignore_status()
+                .output()?;
+            let mut bytes = result.stdout;
+            bytes.extend_from_slice(&result.stderr);
+            std::fs::write(log, bytes)?;
+            ensure!(
+                result.status.success(),
+                "core app-role suite failed; see {}",
+                log.display()
+            );
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]

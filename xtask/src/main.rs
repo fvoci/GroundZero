@@ -39,6 +39,12 @@ enum Command {
         /// Also run the existing integration suite against both databases.
         #[arg(long)]
         behavior: bool,
+        /// Select all existing tests or only the listed app-role capability tests.
+        #[arg(long, value_enum, requires = "behavior")]
+        behavior_scope: Option<sql_compare::BehaviorScope>,
+        /// Use a local PostgreSQL installer with CREATEROLE and target-DB privileges only.
+        #[arg(long, conflicts_with = "supabase")]
+        restricted_admin: bool,
         /// Use the pinned self-hosted Supabase PostgreSQL and session pooler.
         #[arg(long)]
         supabase: bool,
@@ -141,8 +147,17 @@ fn main() -> Result<()> {
             candidate,
             output,
             behavior,
+            behavior_scope,
+            restricted_admin,
             supabase,
-        } => sql_compare::run(&root, candidate.as_deref(), &output, behavior, supabase),
+        } => sql_compare::run(
+            &root,
+            candidate.as_deref(),
+            &output,
+            behavior.then(|| behavior_scope.unwrap_or(sql_compare::BehaviorScope::Full)),
+            supabase,
+            restricted_admin,
+        ),
         Command::SupabaseCloudPrecheck { connect } => {
             std::process::exit(supabase_cloud_precheck::run(connect))
         }
