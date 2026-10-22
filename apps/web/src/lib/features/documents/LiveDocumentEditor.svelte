@@ -101,9 +101,9 @@
     keepTimer = setTimeout(keepDraft, 300);
   }
 
-  /** 멈추거나 닫기 전에, 서버가 받았다고 확인되지 않은 편집이 있으면 바로 남긴다. */
+  /** 멈추거나 닫기 전에, 서버에 반영되지 않은 편집(저장하지 않은 제목 포함)이 있으면 바로 남긴다. */
   function keepIfDirty(): void {
-    if (watch?.dirty === true) keepDraft();
+    if (hasPending()) keepDraft();
   }
 
   /** 서버에 반영되지 않은 편집이 있는지: 확인받지 못한 본문, 또는 저장하지 않은 제목. */
@@ -116,9 +116,12 @@
   // 알리며 화면을 바꾸지 않아 내용을 옮겨 둘 수 있게 한다.
   let unsaved = $state<'kept' | 'lost' | undefined>(undefined);
 
-  /** 서버가 연결을 닫을 때: 확인받지 못한 편집이 있으면 초안으로 남기고 알린다. 남기지 못했으면 거짓. */
+  /**
+   * 서버가 연결을 닫을 때: 반영되지 않은 편집이 있으면 초안으로 남기고 알린다. 남기지 못했으면 거짓. 제목만 고쳤어도
+   * 남긴다(실시간이 꺼지거나 권한이 바뀌어 다시 열면 이 편집기와 함께 사라진다, CodeRabbit #64).
+   */
   function keepUnsaved(): boolean {
-    if (watch?.dirty !== true) return true;
+    if (!hasPending()) return true;
     unsaved = keepDraft() ? 'kept' : 'lost';
     return unsaved === 'kept';
   }

@@ -496,26 +496,50 @@
   let detailSaving = $state(false);
   let confirmClose = $state(false);
   let askedFor: string | undefined;
+  // 상세 안의 단추(상위·하위·선행·후속·첫 회차)로 다른 업무를 열려다 물었으면 그 업무. 버리기를 고르면 닫지 않고 그것을
+  // 연다. 물을 때마다 정한다(확인이 닫히는 동안 문구가 바뀌지 않게 지우지 않는다).
+  let openNext = $state<string | undefined>(undefined);
   let keepFocus: HTMLElement | null = null;
   let dialogContent = $state<HTMLElement | null>(null);
+
+  /** 버릴지 묻는다. 계속 편집하면 지금 초점이 있던 곳(대화상자 밖이었으면 대화상자)으로 돌아간다. */
+  function ask(taskId: string, next: string | undefined): void {
+    const active = document.activeElement;
+    keepFocus =
+      active instanceof HTMLElement && dialogContent?.contains(active) ? active : dialogContent;
+    askedFor = taskId;
+    openNext = next;
+    confirmClose = true;
+  }
 
   /** Esc·바깥 클릭·닫기 단추. 저장하지 않은 입력이 있으면 닫지 않고 버릴지 묻는다. */
   function requestClose(): void {
     if (confirmClose || detailSaving) return;
     if (detailUnsaved && openTaskId !== undefined) {
-      const active = document.activeElement;
-      keepFocus =
-        active instanceof HTMLElement && dialogContent?.contains(active) ? active : dialogContent;
-      askedFor = openTaskId;
-      confirmClose = true;
+      ask(openTaskId, undefined);
       return;
     }
     close();
   }
 
+  /**
+   * 상세 안에서 다른 업무를 연다. 열면 폼을 새로 그리므로(`{#key openTaskId}`) 닫기와 같이 저장하지 않은 입력이 있으면
+   * 버릴지 묻고, 저장하는 동안은 옮기지 않는다(CodeRabbit #82).
+   */
+  function requestOpen(id: string): void {
+    if (confirmClose || detailSaving) return;
+    if (detailUnsaved && openTaskId !== undefined && id !== openTaskId) {
+      ask(openTaskId, id);
+      return;
+    }
+    open(id);
+  }
+
   function discard(): void {
     confirmClose = false;
-    if (askedFor !== undefined && askedFor === openTaskId && !detailSaving) close();
+    if (askedFor === undefined || askedFor !== openTaskId || detailSaving) return;
+    if (openNext === undefined) close();
+    else open(openNext);
   }
 
   function close(): void {
@@ -1689,7 +1713,7 @@
           {tasks}
           {workspaces}
           onchanged={() => void reload()}
-          onopen={open}
+          onopen={requestOpen}
           onunsaved={(value: boolean) => {
             detailUnsaved = value;
           }}
@@ -1701,6 +1725,8 @@
     {/if}
     <DiscardChangesConfirm
       open={confirmClose}
+      description={openNext === undefined ? undefined : m.tasks_discard_open_description()}
+      confirmLabel={openNext === undefined ? undefined : m.tasks_discard_open_confirm()}
       onkeep={() => {
         confirmClose = false;
       }}
