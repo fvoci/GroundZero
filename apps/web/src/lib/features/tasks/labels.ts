@@ -3,6 +3,9 @@ import type { LinkKind, TaskInput, TaskPriority, TaskStatus } from '$lib/api/cli
 import { formatDay, formatNumber } from '$lib/display';
 import { m } from '$lib/paraglide/messages.js';
 
+import type { MergeUnit } from './form';
+import { MERGE_UNITS, scheduleOf } from './form';
+
 export const STATUS_LABEL: Record<TaskStatus, string> = {
   get todo() {
     return m.tasks_status_todo();
@@ -95,31 +98,17 @@ export function undatedText(
     : '';
 }
 
-/** 충돌 확인에 보이는 칸 하나: 폼의 칸 이름, 서버의 지금 값, 내 값(읽을 수 있는 글로). */
+/** 충돌 확인에 보이는 단위 하나: 폼의 칸 이름, 서버의 지금 값, 내 값(읽을 수 있는 글로). */
 export interface ClashRow {
-  key: keyof TaskInput;
+  key: MergeUnit;
   label: string;
   server: string;
   mine: string;
 }
 
-// 폼에 놓인 순서(충돌 확인도 이 순서로 보인다).
-const FIELD_ORDER: readonly (keyof TaskInput)[] = [
-  'title',
-  'description',
-  'status',
-  'priority',
-  'start_date',
-  'due_date',
-  'estimate_minutes',
-  'tags',
-  'assignee_ids',
-  'milestone',
-];
-
-/** 폼의 칸 이름(폼의 이름표와 같은 글). */
-function fieldLabel(key: keyof TaskInput): string {
-  switch (key) {
+/** 폼의 칸 이름(폼의 이름표와 같은 글). 일정은 시작일·마감일·마일스톤 묶음의 이름이다. */
+function fieldLabel(unit: MergeUnit): string {
+  switch (unit) {
     case 'title':
       return m.tasks_title();
     case 'description':
@@ -128,76 +117,72 @@ function fieldLabel(key: keyof TaskInput): string {
       return m.tasks_status();
     case 'priority':
       return m.tasks_priority();
-    case 'start_date':
-      return m.tasks_start_date();
-    case 'due_date':
-      return m.tasks_due_date();
+    case 'schedule':
+      return m.tasks_clash_schedule();
     case 'estimate_minutes':
       return m.tasks_estimate();
     case 'tags':
       return m.tasks_tags();
     case 'assignee_ids':
       return m.tasks_assignees();
-    case 'milestone':
-      return m.tasks_milestone();
   }
 }
 
-// 긴 글(설명 등)은 줄바꿈을 한 칸으로 모으고 앞부분만 보인다.
-const SHORT = 80;
-function shorten(text: string): string {
-  const flat = text.replace(/\s+/g, ' ').trim();
-  if (flat === '') return m.tasks_clash_empty();
-  return flat.length > SHORT ? `${flat.slice(0, SHORT)}…` : flat;
+// 글은 줄이거나 공백을 모으지 않고 서버가 저장하는 그대로(앞뒤 공백만 뗀다) 보인다. 긴 값이나 줄바꿈·공백만 다른
+// 값도 서로 다르게 보여야 무엇을 덮어쓰는지 알 수 있다(확인 화면이 줄바꿈을 지켜 보이고 길면 스크롤한다).
+function fullText(text: string): string {
+  const stored = text.trim();
+  return stored === '' ? m.tasks_clash_empty() : stored;
 }
 
-/** 칸 값 하나를 읽을 수 있는 글로. 담당자는 `names`(사용자 id → 이름)에서 이름을 찾는다. */
-function fieldText(
-  key: keyof TaskInput,
-  input: TaskInput,
-  names: ReadonlyMap<string, string>,
-): string {
-  switch (key) {
+const dayText = (day: string | null): string =>
+  day === null ? m.tasks_clash_empty() : formatDay(day);
+
+/** 단위 값 하나를 읽을 수 있는 글로. 담당자는 `names`(사용자 id → 이름)에서 이름을 찾는다. */
+function fieldText(unit: MergeUnit, input: TaskInput, names: ReadonlyMap<string, string>): string {
+  switch (unit) {
     case 'title':
     case 'description':
-      return shorten(input[key]);
+      return fullText(input[unit]);
     case 'status':
       return STATUS_LABEL[input.status];
     case 'priority':
       return PRIORITY_LABEL[input.priority];
-    case 'start_date':
-    case 'due_date': {
-      const day = input[key];
-      return day === null || day === '' ? m.tasks_clash_empty() : formatDay(day);
+    case 'schedule': {
+      // 저장할 때 보내는 일정 그대로(마일스톤이면 시작일 없음) 묶음 전체를 한 줄로 보인다.
+      const s = scheduleOf(input);
+      return s.milestone
+        ? m.tasks_clash_schedule_milestone({ due: dayText(s.due_date) })
+        : m.tasks_clash_schedule_dates({ start: dayText(s.start_date), due: dayText(s.due_date) });
     }
     case 'estimate_minutes':
       return input.estimate_minutes === null
         ? m.tasks_clash_empty()
         : formatNumber(input.estimate_minutes);
     case 'tags':
-      return shorten(input.tags.join(', '));
+      return input.tags.length === 0 ? m.tasks_clash_empty() : input.tags.join(', ');
     case 'assignee_ids':
+      // 담당자는 순서 없는 모음이라 이름순으로 보인다(양쪽을 같은 순서로 견주어 볼 수 있게).
       return input.assignee_ids.length === 0
         ? m.tasks_clash_empty()
         : input.assignee_ids
             .map((id) => names.get(id) ?? m.tasks_clash_unknown_person())
+            .sort((a, b) => a.localeCompare(b))
             .join(', ');
-    case 'milestone':
-      return input.milestone ? m.tasks_clash_yes() : m.tasks_clash_no();
   }
 }
 
-/** 양쪽이 서로 다르게 바꾼 칸(`keys`)을 폼 순서로, 서버의 지금 값(`server`)과 내 값(`mine`)과 함께. */
+/** 양쪽이 서로 다르게 바꾼 단위(`keys`)를 폼 순서로, 서버의 지금 값(`server`)과 내 값(`mine`)과 함께. */
 export function clashRows(
-  keys: readonly (keyof TaskInput)[],
+  keys: readonly MergeUnit[],
   server: TaskInput,
   mine: TaskInput,
   names: ReadonlyMap<string, string>,
 ): ClashRow[] {
-  return FIELD_ORDER.filter((key) => keys.includes(key)).map((key) => ({
-    key,
-    label: fieldLabel(key),
-    server: fieldText(key, server, names),
-    mine: fieldText(key, mine, names),
+  return MERGE_UNITS.filter((unit) => keys.includes(unit)).map((unit) => ({
+    key: unit,
+    label: fieldLabel(unit),
+    server: fieldText(unit, server, names),
+    mine: fieldText(unit, mine, names),
   }));
 }

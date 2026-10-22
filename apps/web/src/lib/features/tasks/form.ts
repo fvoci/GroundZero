@@ -18,54 +18,117 @@ export function formOf(task: TaskDetailView): TaskInput {
   };
 }
 
+/** 업무의 일정: 시작일·마감일·마일스톤 여부. 병합과 충돌 확인에서 한 묶음으로 다룬다(`mergeForm`). */
+export type TaskSchedule = Pick<TaskInput, 'start_date' | 'due_date' | 'milestone'>;
+
 /**
- * 서버의 새 값(`fresh`)으로 다시 채우되, 기준 값(`before`, 마지막으로 불러온 판)에서 사용자가 바꾼 칸(`mine`)은
- * 그대로 둔다. 사용자가 바꾼 칸을 서버에서도 누가 다른 값으로 바꿨으면 `clash`이고 그 칸들이 `clashes`(폼 순서):
- * 다시 채울 때는 옛 판 번호로 저장해 충돌 화면(409)이 고르게 하고, 충돌 화면의 "내 입력으로 다시 저장"은 그 칸들을
- * 보이고 덮어쓸지 묻는다(D-94). `form`의 그 칸은 내 값이다. `baseline`은 다음 비교의 기준: 사용자가 바꾸지 않은 칸만
- * 새 값으로 옮긴다.
+ * 저장할 때 보내는 일정: 마일스톤에는 시작일이 없고(서버 규칙), 비운 날짜 칸은 없음이다. 폼을 입력으로 바꿀 때와 병합이
+ * 같은 함수를 써서, 병합이 고른 일정과 보내는 일정이 어긋나지 않게 한다.
+ */
+export function scheduleOf(input: TaskSchedule): TaskSchedule {
+  return {
+    start_date: input.milestone || input.start_date === '' ? null : input.start_date,
+    due_date: input.due_date === '' ? null : input.due_date,
+    milestone: input.milestone,
+  };
+}
+
+/**
+ * 병합에서 견주고 충돌을 묻는 단위. 일정(시작일·마감일·마일스톤)은 하나다: 칸마다 따로 고르면 아무도 고르지 않은
+ * 조합(서버의 시작일과 내 마감일이 뒤바뀌어 저장이 거절되거나, 내 시작일과 서버의 마감일이 한 줄로 보이는 것)이 생긴다.
+ * D-94가 일정(이벤트)의 날짜·시각·시간대·종일 여부를 한 묶음으로 처리하라고 한 것을 업무 일정에도 같은 뜻으로 적용한
+ * 구현 해석이다.
+ */
+export type MergeUnit = Exclude<keyof TaskInput, keyof TaskSchedule> | 'schedule';
+
+/**
+ * 폼에 놓인 순서(충돌 확인도 이 순서로 보인다): 제목, 상태, 우선순위, 시작일·마감일, 설명, 예상 시간, 태그, 마일스톤,
+ * 담당자. 일정 묶음은 그 첫 칸(시작일) 자리에 한 줄로 둔다(마일스톤 칸은 폼에서 태그 뒤에 있지만 이 묶음에 든다).
+ */
+export const MERGE_UNITS: readonly MergeUnit[] = [
+  'title',
+  'status',
+  'priority',
+  'schedule',
+  'description',
+  'estimate_minutes',
+  'tags',
+  'assignee_ids',
+];
+
+/**
+ * 사용자가 고쳤는지 견주는 값. 담당자는 순서 없는 모음이라(서버는 이름순으로 돌려주고 화면은 고른 순서로 덧붙인다)
+ * 정렬해 견주고, 일정은 보내는 모양(`scheduleOf`)으로 견준다. 태그는 서버가 받은 순서를 그대로 지키므로 순서까지
+ * 견준다. 글은 입력 그대로 견준다: 앞뒤 공백만 친 중인 글도 고친 칸이라 다시 채우기가 지우지 않는다.
+ */
+function edited(unit: MergeUnit, input: TaskInput): unknown {
+  switch (unit) {
+    case 'schedule':
+      return scheduleOf(input);
+    case 'assignee_ids':
+      return [...new Set(input.assignee_ids)].sort();
+    case 'title':
+    case 'description':
+    case 'status':
+    case 'priority':
+    case 'estimate_minutes':
+    case 'tags':
+      return input[unit];
+  }
+}
+
+/**
+ * 서버에 저장될 값: 제목·설명은 서버처럼 앞뒤 공백을 뗀다(그 밖은 `edited`와 같다). 앞뒤 공백만 다른 내 값과 서버 값은
+ * 겹친 것이 아니다(묻는 화면에서 두 값이 똑같아 보인다).
+ */
+function stored(unit: MergeUnit, input: TaskInput): unknown {
+  return unit === 'title' || unit === 'description' ? input[unit].trim() : edited(unit, input);
+}
+
+/** 단위마다 고른 쪽(`from`)의 값으로 폼 값을 만든다. 일정은 세 칸을 한쪽에서 함께 가져온다. */
+function assemble(from: (unit: MergeUnit) => TaskInput): TaskInput {
+  return {
+    title: from('title').title,
+    description: from('description').description,
+    status: from('status').status,
+    priority: from('priority').priority,
+    ...scheduleOf(from('schedule')),
+    estimate_minutes: from('estimate_minutes').estimate_minutes,
+    tags: from('tags').tags,
+    assignee_ids: from('assignee_ids').assignee_ids,
+  };
+}
+
+/**
+ * 서버의 새 값(`fresh`)으로 다시 채우되, 기준 값(`before`, 마지막으로 불러온 판)에서 사용자가 바꾼 단위(`mine`)는
+ * 그대로 둔다. 사용자가 바꾼 단위를 서버에서도 누가 다른 값으로 바꿨으면 `clash`이고 그 단위들이 `clashes`(폼 순서):
+ * 다시 채울 때는 옛 판 번호로 저장해 충돌 화면(409)이 고르게 하고, 충돌 화면의 "내 입력으로 다시 저장"은 그 단위들을
+ * 보이고 덮어쓸지 묻는다(D-94). `form`의 그 단위는 내 값이다. `baseline`은 다음 비교의 기준: 사용자가 바꾸지 않은
+ * 단위만 새 값으로 옮긴다. 일정은 한 단위라(`MergeUnit`) 고치지 않았으면 서버의 일정 전체, 나만 바꿨으면 내 일정 전체,
+ * 양쪽이 다르게 바꿨으면 충돌 하나로 양쪽 일정 전체를 보인다.
  */
 export function mergeForm(
   before: TaskInput,
   mine: TaskInput,
   fresh: TaskInput,
-): { form: TaskInput; baseline: TaskInput; clash: boolean; clashes: (keyof TaskInput)[] } {
-  const clashes: (keyof TaskInput)[] = [];
-  const same = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
-  const untouched = (key: keyof TaskInput): boolean => same(mine[key], before[key]);
-  const pick = <K extends keyof TaskInput>(key: K): TaskInput[K] => {
-    if (untouched(key) || same(mine[key], fresh[key])) return fresh[key];
-    if (!same(fresh[key], before[key])) clashes.push(key);
-    return mine[key];
-  };
-  // 사용자 값이 서버의 새 값과 같아진 칸도 기준을 새 값으로 옮긴다(그 뒤 사용자가 다시 고쳐도 옛 기준과 비교해 충돌로
-  // 보지 않게).
-  const keep = <K extends keyof TaskInput>(key: K): TaskInput[K] =>
-    untouched(key) || same(mine[key], fresh[key]) ? fresh[key] : before[key];
-  const baseline: TaskInput = {
-    title: keep('title'),
-    description: keep('description'),
-    status: keep('status'),
-    priority: keep('priority'),
-    start_date: keep('start_date'),
-    due_date: keep('due_date'),
-    estimate_minutes: keep('estimate_minutes'),
-    tags: keep('tags'),
-    assignee_ids: keep('assignee_ids'),
-    milestone: keep('milestone'),
-  };
-  const form: TaskInput = {
-    title: pick('title'),
-    description: pick('description'),
-    status: pick('status'),
-    priority: pick('priority'),
-    start_date: pick('start_date'),
-    due_date: pick('due_date'),
-    estimate_minutes: pick('estimate_minutes'),
-    tags: pick('tags'),
-    assignee_ids: pick('assignee_ids'),
-    milestone: pick('milestone'),
-  };
+): { form: TaskInput; baseline: TaskInput; clash: boolean; clashes: MergeUnit[] } {
+  const same = (
+    view: (unit: MergeUnit, input: TaskInput) => unknown,
+    unit: MergeUnit,
+    a: TaskInput,
+    b: TaskInput,
+  ): boolean => canonicalJson(view(unit, a)) === canonicalJson(view(unit, b));
+  // 고치지 않았거나 서버의 새 값과 같아진 단위는 새 값을 따른다.
+  const takesFresh = (unit: MergeUnit): boolean =>
+    same(edited, unit, mine, before) || same(edited, unit, mine, fresh);
+  // 저장될 값이 새 값과 같은 단위(앞뒤 공백만 다른 글 포함)는 겹친 것이 아니고, 기준도 새 값으로 옮긴다(그 뒤 사용자가
+  // 다시 고쳐도 옛 기준과 비교해 충돌로 보지 않게). 그런 글은 폼에 친 그대로 둔다.
+  const matchesFresh = (unit: MergeUnit): boolean => same(stored, unit, mine, fresh);
+  const clashes = MERGE_UNITS.filter(
+    (unit) => !takesFresh(unit) && !matchesFresh(unit) && !same(stored, unit, fresh, before),
+  );
+  const form = assemble((unit) => (takesFresh(unit) ? fresh : mine));
+  const baseline = assemble((unit) => (takesFresh(unit) || matchesFresh(unit) ? fresh : before));
   return { form, baseline, clash: clashes.length > 0, clashes };
 }
 
