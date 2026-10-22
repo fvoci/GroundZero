@@ -1,6 +1,6 @@
 # SQL 통합 준비: Cloud 관측과 후속 시험 계획
 
-상태: **PLAN ONLY**. 이 준비에서 원격 DB 연결·bootstrap·migrate·역할/비밀번호 변경·Cloud workflow dispatch를
+상태: **PLAN ONLY**. C 작업자는 원격 DB 연결·bootstrap·migrate·역할/비밀번호 변경·Cloud workflow dispatch를
 실행하지 않았다. 제품 Cloud 지원은 D-88의 범위 밖이다. 아래 단계는 별도 승인된 전용 프로젝트에서 실행할 후속안을
 구체화한 것이며, 준비 작업 권한을 원격 변경 권한으로 해석하지 않는다.
 
