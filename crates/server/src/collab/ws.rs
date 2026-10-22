@@ -20,11 +20,14 @@ use crate::ids::DocumentId;
 const OUTBOX: usize = 512;
 
 /// 연결 조건. `write=1`: 편집기로 연다(쓸 수 없게 됐으면 붙지 않고 4403으로 닫아, 그동안의 입력이 조용히 버려지지
-/// 않고 화면이 지금 권한으로 다시 열리게 한다).
+/// 않고 화면이 지금 권한으로 다시 열리게 한다). `expected_user`(필수): 편집기를 연 사용자 id. 브라우저 WebSocket은
+/// 머리를 붙이지 못해 질의로 받는다(저장 API의 `x-fvoci-expected-user`와 같은 계약, #60).
 #[derive(Debug, Default, Deserialize)]
 pub struct ConnectQuery {
     #[serde(default)]
     write: Option<String>,
+    #[serde(default)]
+    expected_user: Option<String>,
 }
 
 pub async fn connect(
@@ -38,6 +41,19 @@ pub async fn connect(
     let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
     if origin != Some(state.config.public_origin().as_str()) {
         return Err(AppError::Forbidden);
+    }
+    // 기대 사용자: 없거나 형식이 틀리면 업그레이드 전에 400(값 없는 옛 연결은 받지 않는다, D-92). 세션의 사용자와
+    // 다르면(다른 탭에서 계정을 바꾼 뒤 앞 계정의 화면이 새 쿠키로 다시 붙음) 문서를 보거나 방에 들어가기 전에 4412로
+    // 닫는다. 브라우저는 업그레이드 거절의 HTTP 상태를 읽지 못하고 y-websocket은 끝없이 다시 붙으므로, 열고 닫기 코드로
+    // 알린다. 값은 비교에만 쓰고 권한은 세션의 사용자로만 본다.
+    match accounts::check_expected_user(user, query.expected_user.as_deref(), "expected_user") {
+        Ok(()) => {}
+        Err(AppError::AccountChanged) => {
+            return Ok(ws.on_upgrade(|mut socket| async move {
+                let _ignored = socket.send(close(CloseReason::AccountChanged)).await;
+            }));
+        }
+        Err(err) => return Err(err),
     }
     let session =
         accounts::session_token_hash(&headers, &state.config).ok_or(AppError::Unauthorized)?;

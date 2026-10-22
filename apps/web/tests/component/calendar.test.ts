@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CalendarTaskView, EventOccurrenceView, EventView } from '$lib/api/client';
 import { entriesByDay, monthRange, shiftMonth } from '$lib/features/events/calendar';
-import { dayIn, instantOf, wallTime } from '$lib/features/events/time';
+import { dayIn, instantOf, instantsOf, offsetLabel, wallTime } from '$lib/features/events/time';
 import { me } from '$lib/me.svelte';
 
 // 이 파일의 문구·시각은 한국어·24시간 표시로 본다(D-81 표시 설정).
@@ -63,6 +63,27 @@ describe('time zones (D-50)', () => {
     expect(wallTime(instantOf('2026-03-08T12:00', 'America/New_York'), 'America/New_York')).toBe(
       '2026-03-08T12:00',
     );
+  });
+
+  it('lists every instant of a wall time and labels its UTC offset (D-93)', () => {
+    // 없는 시각은 0개, 보통은 1개, 두 번 있는 시각은 이른 것부터 2개.
+    expect(instantsOf('2026-03-08T02:30', 'America/New_York')).toEqual([]);
+    expect(instantsOf('2026-11-01T09:00', 'America/New_York')).toEqual([
+      '2026-11-01T14:00:00.000Z',
+    ]);
+    expect(instantsOf('2026-11-01T01:30', 'America/New_York')).toEqual([
+      '2026-11-01T05:30:00.000Z',
+      '2026-11-01T06:30:00.000Z',
+    ]);
+    // 오스트레일리아 로드하우섬은 30분만 되돌린다(01:30~01:59가 두 번).
+    expect(instantsOf('2026-04-05T01:45', 'Australia/Lord_Howe')).toHaveLength(2);
+    expect(() => instantsOf('2026-10-17T09:00', 'Factory/Nowhere')).toThrow(RangeError);
+    // 빼기는 U+2212, 더하기·0은 '+'.
+    expect(offsetLabel('2026-11-01T05:30:00Z', 'America/New_York')).toBe('UTC−04:00');
+    expect(offsetLabel('2026-11-01T06:30:00Z', 'America/New_York')).toBe('UTC−05:00');
+    expect(offsetLabel('2026-11-01T06:30:00Z', 'Asia/Seoul')).toBe('UTC+09:00');
+    expect(offsetLabel('2026-11-01T06:30:00Z', 'Asia/Kathmandu')).toBe('UTC+05:45');
+    expect(offsetLabel('2026-11-01T06:30:00Z', 'UTC')).toBe('UTC+00:00');
   });
 });
 

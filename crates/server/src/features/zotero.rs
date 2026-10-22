@@ -478,6 +478,7 @@ pub async fn import(
                     "reference",
                     &title,
                     merged(&old, fields),
+                    Some(&old),
                     &files,
                 )
                 .await?;
@@ -498,7 +499,7 @@ pub async fn import(
             }
             None => {
                 let (fields, files) =
-                    validate(&mut tx, item, "reference", &title, fields, &[]).await?;
+                    validate(&mut tx, item, "reference", &title, fields, None, &[]).await?;
                 sqlx::query_scalar::<_, Uuid>(
                     "SELECT app_create_record($1, $2, 'reference', $3, NULL, '', $4, $5, $6)",
                 )

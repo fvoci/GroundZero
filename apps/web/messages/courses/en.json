@@ -87,6 +87,7 @@
   "courses_delete": "Delete",
   "courses_delete_aria": "Delete episode {number}",
   "courses_deleted": "Deleted episode {number}.",
+  "courses_delete_confirm": "Deleting episode {number} also deletes every participant's progress and personal notes on it. This cannot be undone. Delete it?",
   "courses_mine_saved": "Saved your notes and dates for episode {number}.",
   "courses_my_planned": "My plan date",
   "courses_last_position": "Last position (min:sec)",

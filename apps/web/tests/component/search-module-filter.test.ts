@@ -110,6 +110,65 @@ describe('search module filter', () => {
     giveModules([]);
     expect(screen.getByText('모든 모듈')).toBeTruthy();
   });
+
+  it('keeps showing the chosen module while the list reloads on reopening', async () => {
+    // 같은 워크스페이스에서 닫았다 다시 열면 모듈 목록을 다시 읽는다. 그 사이에도 선택(거르기)은 남으므로 버튼도 고른
+    // 모듈을 보여야 한다. 전에는 목록이 올 때까지 '모든 모듈'로 보였는데 검색은 그 모듈로 좁혀졌다.
+    const modules = vi.spyOn(api, 'modules').mockResolvedValue([module('m-1', '출시')]);
+    const search = vi.spyOn(api, 'search').mockResolvedValue([]);
+    const view = render(SearchDialog, {
+      props: { open: true, memberOf: () => true, workspace: { id: 'ws-1', name: '공간' } },
+    });
+    const trigger = (): HTMLElement => {
+      const all = document.querySelectorAll<HTMLElement>('[aria-labelledby="search-module-label"]');
+      expect(all.length).toBe(1);
+      const el = all[0];
+      if (el === undefined) throw new Error('module trigger');
+      return el;
+    };
+    await screen.findByText('모든 모듈');
+    expect(modules).toHaveBeenCalledTimes(1);
+    await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의' } });
+    await pick('출시');
+    await waitFor(() => {
+      expect(search.mock.calls.at(-1)?.[2]?.moduleId).toBe('m-1');
+    });
+    expect(trigger().textContent.trim()).toBe('출시');
+    await view.rerender({
+      open: false,
+      memberOf: () => true,
+      workspace: { id: 'ws-1', name: '공간' },
+    });
+    // 다시 열 때의 목록 응답을 미룬다.
+    let giveModules: (list: Module[]) => void = () => undefined;
+    modules.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          giveModules = resolve;
+        }),
+    );
+    await view.rerender({
+      open: true,
+      memberOf: () => true,
+      workspace: { id: 'ws-1', name: '공간' },
+    });
+    await waitFor(() => {
+      expect(modules).toHaveBeenCalledTimes(2);
+    });
+    expect(trigger().textContent.trim()).toBe('출시');
+    // 목록이 오기 전에 찾아도 버튼이 말하는 대로 그 모듈로 좁힌다.
+    await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의록' } });
+    await waitFor(() => {
+      expect(search.mock.calls.at(-1)?.[0]).toBe('회의록');
+    });
+    expect(search.mock.calls.at(-1)?.[2]?.moduleId).toBe('m-1');
+    expect(trigger().textContent.trim()).toBe('출시');
+    giveModules([module('m-1', '출시')]);
+    await waitFor(() => {
+      expect(trigger().textContent.trim()).toBe('출시');
+    });
+    expect(search.mock.calls.at(-1)?.[2]?.moduleId).toBe('m-1');
+  });
 });
 
 // 클라이언트가 `moduleId`를 요청의 `module_id`로 싣는지(대화상자 시험은 `api.search`를 대신하므로 따로 본다).

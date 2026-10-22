@@ -34,7 +34,6 @@ function task(id: string, fields: Partial<TaskDetailView> = {}): TaskDetailView 
     estimate_minutes: 30,
     tags: ['가', '나'],
     milestone: false,
-    predecessor_ids: [],
     predecessors: [],
     series: null,
     occurrence_date: null,

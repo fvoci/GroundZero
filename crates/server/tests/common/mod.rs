@@ -7,7 +7,9 @@ use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use fvoci_server::app::build_state;
 use fvoci_server::config::Config;
-use fvoci_server::features::accounts::{SESSION_COOKIE, VerifiedIdentity, start_session};
+use fvoci_server::features::accounts::{
+    EXPECTED_USER_HEADER, SESSION_COOKIE, VerifiedIdentity, start_session,
+};
 use fvoci_server::http::{AppState, router};
 use fvoci_server::ids::UserId;
 use http_body_util::BodyExt;
@@ -126,9 +128,15 @@ pub async fn send_with_origin(
     body: Option<Value>,
     origin: Option<&str>,
 ) -> Reply {
+    let carries_expected_user = expects_user(&method, uri);
     let mut req = Request::builder().method(method).uri(uri);
     if let Some(u) = user {
         req = req.header(header::COOKIE, &u.cookie);
+        // 웹이 하듯 기대 사용자를 세션의 사용자로 붙인다. 머리 자체(없음·다름·형식)는 `expected_user.rs`가
+        // `send_raw`로 직접 시험한다.
+        if carries_expected_user {
+            req = req.header(EXPECTED_USER_HEADER, u.id.0.to_string());
+        }
     }
     if let Some(o) = origin {
         req = req.header(header::ORIGIN, o);
@@ -149,6 +157,19 @@ pub async fn send_with_origin(
         serde_json::from_slice(&bytes).unwrap_or(Value::Null)
     };
     Reply { status, json }
+}
+
+/// 기대 사용자 머리가 필요한 요청(문서 저장 `PUT /api/documents/{id}`, 내 노트 만들기 `POST /api/me/notes`, 업로드 시작
+/// `POST /api/uploads`).
+fn expects_user(method: &Method, uri: &str) -> bool {
+    let path = uri.split('?').next().unwrap_or_default();
+    match *method {
+        Method::PUT => path
+            .strip_prefix("/api/documents/")
+            .is_some_and(|rest| !rest.is_empty() && !rest.contains('/')),
+        Method::POST => path == "/api/me/notes" || path == "/api/uploads",
+        _ => false,
+    }
 }
 
 pub fn new_request_id() -> String {
@@ -278,6 +299,10 @@ pub struct FreshDb {
 
 pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> FreshDb {
     use sqlx::Connection as _;
+    // 같은 시험 바이너리에서 새 DB 준비가 겹치면 클러스터 공용 행(역할 권한 등)을 함께 고쳐 "tuple concurrently
+    // updated"(XX000)로 실패한다. 준비와 마이그레이션은 한 번에 하나씩 한다.
+    static PREPARE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _serial = PREPARE.lock().await;
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
     let migration_url =
         std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");

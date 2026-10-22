@@ -18,7 +18,7 @@ description: Rust 서버(crates/server)·HTTP API·PostgreSQL 스키마·권한 
 
 1. 핸들러에 `#[utoipa::path]`와 `ToSchema`를 붙이고 `http::ApiDoc`에 등록한다.
 2. `cargo xtask openapi`로 `contracts/openapi.json`을 재생성한다. `cargo xtask check`가 최신 여부를 검사한다.
-3. `pnpm run generate:api`로 TS 타입을 재생성한다. 생성 타입은 런타임 검증을 대신하지 않는다.
+3. `pnpm run generate:api`로 TS 타입을 재생성한다. `cargo xtask check`가 커밋된 `schema.ts`가 계약에서 만든 결과와 같은지도 검사한다. 생성 타입은 런타임 검증을 대신하지 않는다.
 4. 전송 표현: UUID·시각(RFC 3339 UTC)·날짜(YYYY-MM-DD)는 문자열, 64비트 정수는 number로 보내지 않는다.
 
 ## DB 변경
