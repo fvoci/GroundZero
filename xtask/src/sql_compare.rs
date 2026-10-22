@@ -290,6 +290,7 @@ pub fn run(
                 &json!({"passed":passed,"candidate":candidate,"supabase":supabase,"behavior_requested":behavior.is_some(),"behavior_scope":behavior.map(|scope|format!("{scope:?}").to_lowercase()),"restricted_admin":restricted_admin,"phases":phases,"behavior":behavior_results}),
             )
         },
+        |message| eprintln!("{message}"),
     )
 }
 
@@ -325,11 +326,12 @@ fn finish_run(
     result: Result<()>,
     stops: impl IntoIterator<Item = Result<()>>,
     record: impl FnOnce(bool, bool) -> Result<()>,
+    mut diagnose: impl FnMut(&str),
 ) -> Result<()> {
     let mut cleanup = Ok(());
     for stop in stops {
         if let Err(error) = stop {
-            eprintln!("comparison resource cleanup failed: {error:#}");
+            diagnose(&format!("comparison resource cleanup failed: {error:#}"));
             if cleanup.is_ok() {
                 cleanup = Err(error);
             }
@@ -338,6 +340,9 @@ fn finish_run(
     let cleanup_passed = cleanup.is_ok();
     let result = result.and(cleanup);
     let recorded = record(result.is_ok(), cleanup_passed);
+    if let Err(error) = &recorded {
+        diagnose(&format!("comparison result recording failed: {error:#}"));
+    }
     result.and(recorded)
 }
 
@@ -772,6 +777,7 @@ mod tests {
                     recorded = true;
                     Ok(())
                 },
+                |_| {},
             );
             assert_eq!(result.unwrap_err().to_string(), "partial startup failed");
             assert_eq!(stopped, [resource]);
@@ -800,6 +806,7 @@ mod tests {
                     &json!({"passed":passed,"cleanup_passed":cleanup_passed}),
                 )
             },
+            |_| {},
         );
         let recorded: Value = serde_json::from_slice(&std::fs::read(output.join("result.json"))?)?;
         std::fs::remove_file(output.join("result.json"))?;
@@ -811,19 +818,43 @@ mod tests {
     }
 
     #[test]
-    fn original_failure_survives_cleanup_and_recording_failures() {
-        let mut recorded = false;
-        let result = finish_run(
-            Err(anyhow::anyhow!("comparison failed")),
-            [Err(anyhow::anyhow!("stop failed"))],
-            |passed, cleanup_passed| {
-                assert!(!passed);
-                assert!(!cleanup_passed);
-                recorded = true;
-                anyhow::bail!("record failed")
-            },
-        );
-        assert_eq!(result.unwrap_err().to_string(), "comparison failed");
-        assert!(recorded);
+    fn recording_failure_is_diagnosed_without_replacing_an_earlier_error() {
+        for (work_failed, stop_failed, expected) in [
+            (true, true, "comparison failed"),
+            (true, false, "comparison failed"),
+            (false, true, "stop failed"),
+            (false, false, "record failed"),
+        ] {
+            let mut recorded = false;
+            let mut diagnostics = Vec::new();
+            let result = finish_run(
+                if work_failed {
+                    Err(anyhow::anyhow!("comparison failed"))
+                } else {
+                    Ok(())
+                },
+                [if stop_failed {
+                    Err(anyhow::anyhow!("stop failed"))
+                } else {
+                    Ok(())
+                }],
+                |passed, cleanup_passed| {
+                    assert_eq!(passed, !work_failed && !stop_failed);
+                    assert_eq!(cleanup_passed, !stop_failed);
+                    recorded = true;
+                    Err(anyhow::anyhow!("disk full").context("record failed"))
+                },
+                |message| diagnostics.push(message.to_owned()),
+            );
+            assert_eq!(result.unwrap_err().to_string(), expected);
+            assert!(recorded);
+            let mut expected_diagnostics = Vec::new();
+            if stop_failed {
+                expected_diagnostics.push("comparison resource cleanup failed: stop failed");
+            }
+            expected_diagnostics
+                .push("comparison result recording failed: record failed: disk full");
+            assert_eq!(diagnostics, expected_diagnostics);
+        }
     }
 }
