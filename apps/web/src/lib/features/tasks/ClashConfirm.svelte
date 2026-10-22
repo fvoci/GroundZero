@@ -25,7 +25,9 @@
 
   // Esc는 취소와 같다(아무것도 보내지 않는다). 둘러싼 업무 대화상자는 문서에서 Esc를 받아 닫으므로 여기서 멈춰, 확인만
   // 닫히고 대화상자와 입력은 남게 한다. 처리기는 이 요소에 직접 달아, Svelte의 위임 처리기가 어느 뿌리(앱, 대화상자를
-  // 그리는 포털)에 붙든 문서의 대화상자 처리기보다 먼저 받는다.
+  // 그리는 포털)에 붙든 문서의 대화상자 처리기보다 먼저 받는다. 확인 상자는 tabindex="-1"이라 안내문·값 상자처럼
+  // 단추가 아닌 곳을 눌러도 초점이 상자에 남는다(없으면 초점이 둘러싼 대화상자로 가서 Esc가 대화상자를 닫고 입력을
+  // 버렸다, 리뷰).
   let box = $state<HTMLElement | undefined>(undefined);
   $effect(() => {
     const el = box;
@@ -49,8 +51,9 @@
   실제로 쓸 수 있는 단추를 숨긴다. 업무 상세의 나머지는 확인이 떠 있는 동안 inert로 실제로 막는다(TaskDetail).
 -->
 <div
-  class="mt-3 flex flex-col gap-2 rounded-md border border-amber-500/50 p-3"
+  class="mt-3 flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 outline-none"
   role="alertdialog"
+  tabindex="-1"
   aria-labelledby="task-clash-heading"
   aria-describedby="task-clash-hint"
   bind:this={box}

@@ -664,4 +664,38 @@ describe('the overwrite question inside the task dialog', () => {
       expect(document.activeElement?.id).toBe('task-save-mine');
     });
   });
+
+  // 리뷰: 확인 상자의 단추가 아닌 곳(안내문·값 상자)을 누르면 초점이 둘러싼 대화상자로 가서, 그 뒤의 Esc가 확인 대신
+  // 업무 대화상자를 닫고 저장하지 않은 입력을 버렸다. 상자가 초점을 받으면(누른 곳의 가장 가까운 초점 대상) Esc는 확인만
+  // 거둔다.
+  it('keeps focus in the question after a click on its text, so Escape only cancels it', async () => {
+    await setLocale('ko', { reload: false });
+    window.history.replaceState(null, '', '/w/ws-1/i/i1');
+    vi.spyOn(api, 'tasks').mockResolvedValue([v2]);
+    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(api, 'task').mockResolvedValue(v2);
+    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
+    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    const update = vi.spyOn(api, 'updateTask').mockResolvedValueOnce(titleConflict);
+    const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    await fireEvent.click(await screen.findByRole('button', { name: /^KED-1\s*옛 제목$/ }));
+    await view.rerender({ item, workspaces: [], openTaskId: 't1' });
+    await screen.findByRole('dialog');
+
+    const ask = await askAboutTitle();
+    // 브라우저는 누른 곳의 가장 가까운 초점 대상으로 초점을 옮긴다. jsdom은 그러지 않으므로 그 대상(상자)에 직접 둔다.
+    ask.focus();
+    expect(document.activeElement).toBe(ask);
+    await fireEvent.keyDown(ask, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+    expect(back).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(field('task-title').value).toBe('내 제목');
+  });
 });
