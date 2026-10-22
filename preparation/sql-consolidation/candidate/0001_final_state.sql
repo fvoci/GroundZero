@@ -16508,4 +16508,7 @@ GRANT UPDATE(name) ON TABLE fvoci.workspaces TO fvoci_app;
 --
 
 
+-- SQLx 0.8.6은 커밋 전에 이 트랜잭션 안에서 비정규화 이름 _sqlx_migrations에 기록한다.
+-- bootstrap 계약의 search_path로 돌려 그 원장 쓰기도 같은 스키마를 쓰게 한다.
+SET LOCAL search_path = fvoci;
 -- 모든 SET LOCAL은 SQLx 트랜잭션이 끝나면 기존 세션 설정으로 복구된다.

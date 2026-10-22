@@ -10,6 +10,8 @@
 후보는 전체 이력을 적용한 카탈로그의 마지막 정의만 담는다. 함수 정의, 소유자, RLS, 정책, 인덱스, CHECK, FK 및 ACL을 함께 보존한다.
 `check_function_bodies`를 끄는 범위는 서로 참조하는 함수/행 타입을 설치하는 SQLx 트랜잭션 안이다.
 모든 설정은 `SET LOCAL`이므로 커밋·롤백 시 기존 세션 설정으로 복구된다. 단독 psql로 검사할 때도 `--single-transaction`을 사용한다.
+파일 끝에서는 search_path를 `fvoci`로 돌린다. SQLx 0.8.6의 `execute_migration`이 SQL 본문 실행 직후 같은 트랜잭션에서
+스키마를 붙이지 않은 `_sqlx_migrations`에 기록하므로, 원장 쓰기 전에 bootstrap의 스키마를 다시 보이게 해야 한다.
 각 SECURITY DEFINER 함수의 search_path와 권한은 기존 최종 정의 그대로 유지한다.
 
 이 단일 파일은 카탈로그 동일성을 먼저 검증하는 시험 후보다. 최종 파일 수·번호를 확정하지 않는다.
