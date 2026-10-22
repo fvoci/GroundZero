@@ -145,6 +145,8 @@ export interface paths {
          * @description 순서: 권한 확인 → 행 잠금 → 재시도 판단 → `If-Match`(있으면) → 리비전 비교 → 내용 동일 판단 → 갱신·리비전 기록.
          *     행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다. `If-Match`는 잠근 행으로 만든 지금
          *     표현의 ETag와 강하게 비교한다(D-77). 같은 요청의 재시도는 `If-Match`보다 먼저 판단해 멱등 응답을 지킨다.
+         *
+         *     권한 확인보다 먼저 기대 사용자를 비교한다(`ExpectedUser`): 다르면 문서를 읽거나 잠그지 않고 409 `account_changed`.
          */
         put: operations["save"];
         post?: never;
@@ -235,7 +237,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. */
+        /**
+         * 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인
+         *     방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문)다. 편집은 그대로
+         *     남고 다시 하면 된다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 경우처럼 다시 해도 남길 수 없을 때도 같은 409로
+         *     옮기지 않는다(문구에 "try again"이 없다). 다른 변경이 문서나 그 자리를 쥐어 잠금 하나를
+         *     한도(`LOCK_LIMIT`)보다 오래 기다리면 옮기지 않고 409다(편집은 방에 남는다, 다시 하면 된다).
+         */
         post: operations["move_document"];
         delete?: never;
         options?: never;
@@ -362,7 +370,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 옛 리비전의 내용으로 새 리비전을 만든다(쓰기 권한). 기준 리비전이 지났으면 409와 서버 최신본. */
+        /**
+         * 옛 리비전의 내용으로 새 리비전을 만든다(쓰기 권한). 기준 리비전이 지났으면 409와 서버 최신본. 실시간 편집(열린 방의
+         *     편집이나 방 없이 남은 저장 대기 상태)을 먼저 리비전으로 남기지 못하면 복원하지 않고 409(오류 본문, `invalid_state`)다.
+         *     편집은 남는다. 남겼으면 기준이 지나 최신본과 함께 409다.
+         */
         post: operations["restore_revision"];
         delete?: never;
         options?: never;
@@ -501,7 +513,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 일정 반복 정하기·멈추기(쓰기 권한). */
+        /**
+         * 일정 반복 정하기·멈추기(쓰기 권한). 기준 규칙과 지금 규칙이 다르면 409 `rule_conflict`(감사 W21: 기준 없이 저장해
+         *     그사이 다른 사람이 바꾼 규칙을 옛 규칙으로 말없이 덮었다).
+         */
         put: operations["set_event_recurrence"];
         post?: never;
         delete?: never;
@@ -1233,7 +1248,10 @@ export interface paths {
         /** 내 개인 노트 목록. 워크스페이스 관리자에게도 보이지 않는다 (D-22, D-49). */
         get: operations["my_notes"];
         put?: never;
-        /** 개인 노트 생성. */
+        /**
+         * 개인 노트 생성.
+         * @description 기대 사용자 머리가 필요하다(초안을 내 노트로 보존하는 길이 이 요청으로 시작한다, `ExpectedUser`).
+         */
         post: operations["create_note"];
         delete?: never;
         options?: never;
@@ -1766,9 +1784,9 @@ export interface paths {
         get?: never;
         /**
          * 선행 업무 추가·설정(후속 업무 쓰기 권한). 같은 항목만, 자기 자신·순환·잘못된 종류나 지연일은 400.
-         * @description 본문이 없으면 옛 동작이다: 없을 때 종료 후 시작·지연 0으로 만들고, 이미 있으면 종류·지연일을 그대로 둔다.
-         *     본문(`SetPredecessor`)이 있으면 그 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다. 승인 목록의
-         *     기준 버전이 지났거나 지금 다시 계산한 계획과 다르면 아무것도 바꾸지 않고 409 `shift_conflict`.
+         * @description 본문(`SetPredecessor`)의 종류·지연일로 만들거나 바꾸고, 승인한 재배치를 함께 옮긴다. 편집을 시작한 관계(`base`)가
+         *     지금과 다르면 409 `link_conflict`, 승인 목록의 기준 버전이 지났거나 지금 다시 계산한 계획과 다르면 409
+         *     `shift_conflict`(둘 다 아무것도 바꾸지 않음).
          */
         put: operations["add_predecessor"];
         post?: never;
@@ -1827,26 +1845,6 @@ export interface paths {
         put?: never;
         /** 날짜를 바꿀 때의 재배치 계획(읽기). 옮길 후속 업무와 원인 관계, 날짜가 없어 계산하지 않은 업무. */
         post: operations["plan_task_schedule"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/tasks/{task_id}/schedule-preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 후속 재배치 미리보기(읽기, 옛 응답 모양). 아무것도 바꾸지 않는다. 업무를 볼 수 없으면 404.
-         *     날짜 없는 업무 알림까지 받으려면 `schedule-plan`을 쓴다.
-         */
-        post: operations["preview_task_schedule"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1965,7 +1963,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 업로드 시작(같은 요청 id면 같은 업로드). 쓸 수 있는 문서·항목·파일에만. 크기·저장량 한도를 넘으면 400·409. */
+        /**
+         * 업로드 시작(같은 요청 id면 같은 업로드). 쓸 수 있는 문서·항목·파일에만. 크기·저장량 한도를 넘으면 400·409.
+         * @description 기대 사용자 머리가 필요하다(`ExpectedUser`). 웹은 만료된 업로드를 스스로 다시 시작하므로, 그사이 다른 탭에서 계정을
+         *     바꿨으면 새 계정의 업로드를 만들지 않고 409 `account_changed`.
+         */
         post: operations["create_upload"];
         delete?: never;
         options?: never;
@@ -2637,8 +2639,9 @@ export interface components {
             author_name?: string | null;
             body: string;
             can_delete: boolean;
+            /** @description 쓴 사람이 고칠 수 있는지(지운 댓글이나 보관된 항목의 댓글은 아님). */
             can_edit: boolean;
-            /** @description 스레드를 해결·해제할 수 있는지(첫 댓글에서만). */
+            /** @description 스레드를 해결·해제할 수 있는지(첫 댓글에서만, 보관된 항목에서는 아님). */
             can_resolve: boolean;
             /** Format: date-time */
             created_at: string;
@@ -2882,11 +2885,14 @@ export interface components {
          * @description 문서 내부 ID. CRDT 도입 후에도 유지된다 (D-62).
          */
         DocumentId: string;
-        /** @description 문서 설정 변경 요청. */
+        /**
+         * @description 문서 설정 변경 요청. 바꾸는 칸만 보낸다. 없거나 null인 칸은 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
+         *     비공개·복제 금지를 다른 칸만 바꾼 요청이 되돌리지 않게, 감사 W6).
+         */
         DocumentSettings: {
-            allow_copy: boolean;
+            allow_copy?: boolean | null;
             /** @description `workspace` 또는 `private`. */
-            visibility: string;
+            visibility?: string | null;
         };
         /** @description 문서 목록 항목. */
         DocumentSummary: {
@@ -3141,7 +3147,10 @@ export interface components {
             recent_tasks: components["schemas"]["HomeTask"][];
             /** @description 보는 사람 시간대의 오늘. */
             today: string;
+            /** @description 묶음(기한 지남·오늘·다가오는 일)마다 마감이 이른 것부터 50개까지(`UP_NEXT_PER_BUCKET`). */
             up_next: components["schemas"]["HomeTask"][];
+            /** @description 묶음마다의 전체 수. `up_next`보다 많으면 잘린 것이다. */
+            up_next_counts: components["schemas"]["UpNextCounts"];
         };
         /** @description 홈의 문서 한 줄. */
         HomeDocument: {
@@ -3286,6 +3295,12 @@ export interface components {
              */
             shared_seconds: number;
         };
+        /** @description 관계 편집을 시작한 때의 종류·지연일(관계 설정의 기준 조건). */
+        LinkBase: {
+            kind: components["schemas"]["LinkKind"];
+            /** Format: int32 */
+            lag_days: number;
+        };
         /** @description 관계 미리보기·설정 입력. */
         LinkInput: {
             kind: components["schemas"]["LinkKind"];
@@ -3391,6 +3406,15 @@ export interface components {
          * @enum {string}
          */
         ModuleKind: "project" | "research" | "study" | "course" | "hobby";
+        /**
+         * @description 이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+         *     - `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).
+         *     - `ErrorBody`(`error: "invalid_state"`): 옮기지 않았다. 실시간 방의 편집이나 방 없이 남은 저장 대기 상태를 먼저
+         *       리비전으로 남기지 못했거나(편집은 남는다), 다른 변경이 문서나 그 자리를 잠금 한도보다 오래 쥐었거나, 방이 바쁘거나
+         *       닫혔다. `message`가 "try again"으로 끝나면 다시 하면 된다. 그 밖(본문 검사를 통과하지 못하는 편집, 그 사이 다른 길로
+         *       바뀐 본문)은 문서를 다시 열어 보고 판단한다.
+         */
+        MoveConflict: components["schemas"]["MovePreview"] | components["schemas"]["ErrorBody"];
         /** @description 이동 요청. 미리보기에서 접근 변화를 확인했다는 표시(`acknowledge`)가 있어야 이동한다. */
         MoveDocument: {
             acknowledged?: null | components["schemas"]["AcknowledgedPreview"];
@@ -3650,9 +3674,9 @@ export interface components {
         };
         /**
          * @description 관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
-         *     - `TaskConflict`(`error: "shift_conflict"`, `current`): 승인한 재배치가 그사이 맞지 않게 됨(본문 있는 요청만).
+         *     - `TaskConflict`(`error: "shift_conflict"` 또는 `"link_conflict"`, `current`): 승인한 재배치가 그사이 맞지 않게
+         *       됨, 또는 편집을 시작한 관계(`base`)가 그사이 바뀌거나 생기거나 지워짐.
          *     - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 보관된 항목, 동시 변경 재시도(40001·40P01), 새 id 부족(FV001).
-         *       본문 없는 옛 요청의 409도 이 모양이다.
          */
         PredecessorConflict: components["schemas"]["TaskConflict"] | components["schemas"]["ErrorBody"];
         /** @description 아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다. */
@@ -3832,6 +3856,13 @@ export interface components {
             visible: boolean;
             workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
+        /**
+         * @description 복원의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+         *     - `ConflictBody`(`current` 포함): 기준 리비전이 지났다(먼저 남긴 실시간 편집의 리비전 때문일 수 있다).
+         *     - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 복원하지 않았다. 실시간 편집을 먼저 리비전으로 남기지 못했거나
+         *       (편집은 남는다), 다른 변경이 문서를 잠금 한도보다 오래 쥐었거나, 방이 바쁘거나 닫혔다.
+         */
+        RestoreConflict: components["schemas"]["ConflictBody"] | components["schemas"]["ErrorBody"];
         /** @description 복원 요청. `base_revision`은 사용자가 보고 있던 현재 리비전이다. */
         RestoreRevision: {
             /** Format: int32 */
@@ -3845,6 +3876,8 @@ export interface components {
             body: Record<string, never>;
             /** Format: date-time */
             created_at: string;
+            /** @description `RevisionSummary::edited_by_names`와 같다. */
+            edited_by_names?: (string | null)[] | null;
             /** Format: int32 */
             restored_from?: number | null;
             /** Format: int32 */
@@ -3860,6 +3893,11 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             /**
+             * @description 저장한 사람이 고친 사람 대신 남긴 리비전(실시간 편집, D-95)이면 실제로 고친 사람(마지막이 앞). 보통 리비전은
+             *     없음, 대신 저장했으나 고친 사람 기록이 없으면 빈 목록. 이름을 볼 수 없는 사람은 `author_name`처럼 null이다.
+             */
+            edited_by_names?: (string | null)[] | null;
+            /**
              * Format: int32
              * @description 복원으로 만든 리비전이면 원본 리비전 번호.
              */
@@ -3873,6 +3911,13 @@ export interface components {
          * @enum {string}
          */
         Role: "admin" | "writer" | "reader";
+        /**
+         * @description 문서 저장의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+         *     - `ConflictBody`(`error: "conflict"`, `current`): `base_revision`이 지남.
+         *     - `ErrorBody`(`current` 없음): `account_changed`(기대 사용자가 세션의 사용자와 다름), `invalid_state`(실시간 편집
+         *       중 본문 변경, 동시 변경 재시도 등).
+         */
+        SaveConflict: components["schemas"]["ConflictBody"] | components["schemas"]["ErrorBody"];
         /** @description 문서 저장 요청. */
         SaveDocument: {
             /**
@@ -3938,8 +3983,12 @@ export interface components {
         SetDocumentTemplate: {
             template: boolean;
         };
-        /** @description 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. */
+        /**
+         * @description 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. `base`는 편집을 시작한
+         *     규칙이다(반복이 없었으면 null). 그사이 규칙이 바뀌었으면 아무것도 바꾸지 않고 409 `rule_conflict`(최신 일정)다.
+         */
         SetEventRecurrence: {
+            base?: null | components["schemas"]["RecurrenceRule"];
             rule?: null | components["schemas"]["RecurrenceRule"];
         };
         /** @description 항목 멤버 정하기(항목 소유 권한자). 목록 전체를 보낸다. */
@@ -3981,9 +4030,11 @@ export interface components {
         };
         /**
          * @description 관계 설정. 종류·지연일이 바뀌어 후속 업무를 옮겨야 하면 미리보기에서 승인한 목록을 함께 보낸다(같은 트랜잭션).
-         *     비우면 관계만 바꾼다.
+         *     비우면 관계만 바꾼다. `base`는 화면이 편집을 시작한 관계의 종류·지연일이다(새 관계면 `null`). 지금 관계와 다르면
+         *     아무것도 바꾸지 않고 409 `link_conflict`(최신본 포함)다. 다른 사람이 그사이 바꾼 종류·지연일을 말없이 덮지 않는다.
          */
         SetPredecessor: {
+            base?: null | components["schemas"]["LinkBase"];
             kind: components["schemas"]["LinkKind"];
             /** Format: int32 */
             lag_days: number;
@@ -4238,8 +4289,6 @@ export interface components {
              * @description 하위 업무면 상위 업무.
              */
             parent_id?: string | null;
-            /** @description 같은 항목 안의 선행 업무 id(`predecessors`와 같은 순서). 종류·지연일은 `predecessors`에 있다. */
-            predecessor_ids: string[];
             /** @description 선행 관계: 선행 업무, 종류(FS·SS·FF·SF), 지연일(D-91). 후속 업무는 다른 업무의 이 목록을 거꾸로 찾는다. */
             predecessors: components["schemas"]["TaskLink"][];
             priority: components["schemas"]["TaskPriority"];
@@ -4449,6 +4498,15 @@ export interface components {
             /** Format: int32 */
             planned: number;
         };
+        /** @description Up Next 묶음마다의 전체 수. */
+        UpNextCounts: {
+            /** Format: int64 */
+            overdue: number;
+            /** Format: int64 */
+            today: number;
+            /** Format: int64 */
+            upcoming: number;
+        };
         /** @description 체크리스트 항목 고치기. 보낸 칸만 바꾼다(빠진 칸은 그대로). 둘 다 없으면 400. */
         UpdateChecklistItem: {
             checked?: boolean | null;
@@ -4483,8 +4541,11 @@ export interface components {
         UpdateItem: {
             description: string;
             title: string;
-            /** @description `workspace` 또는 `private`. */
-            visibility: string;
+            /**
+             * @description `workspace` 또는 `private`. 바꿀 때만 보낸다. 없거나 null이면 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
+             *     공개 범위를 설명만 고친 저장이 되돌리지 않게, 감사 W13).
+             */
+            visibility?: string | null;
         };
         /** @description 모듈 이름·키 변경 요청(관리자). */
         UpdateModule: {
@@ -4837,6 +4898,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     delete_comment: {
@@ -4912,6 +4981,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5031,9 +5108,11 @@ export interface operations {
     save: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description 단건 조회의 강한 ETag. 다르면 412 */
                 "If-Match"?: string | null;
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                "x-fvoci-expected-user": string;
             };
             path: {
                 document_id: string;
@@ -5080,12 +5159,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description `conflict`면 ConflictBody(서버 최신본 포함). `account_changed`(기대 사용자가 세션의 사용자와 다름)·`invalid_state`(실시간 편집 중 본문 변경 등)면 ErrorBody. 어느 쪽도 아무것도 바꾸지 않았다 */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConflictBody"];
+                    "application/json": components["schemas"]["SaveConflict"];
                 };
             };
             412: {
@@ -5315,7 +5395,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MovePreview"];
+                    "application/json": components["schemas"]["MoveConflict"];
                 };
             };
         };
@@ -5655,12 +5735,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description 기준이 지났으면 ConflictBody(최신본 포함), 실시간 편집을 먼저 남기지 못했거나 잠금 한도를 넘었으면 ErrorBody(`invalid_state`) */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConflictBody"];
+                    "application/json": components["schemas"]["RestoreConflict"];
                 };
             };
         };
@@ -5705,6 +5786,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6204,7 +6293,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["EventConflict"];
                 };
             };
         };
@@ -6570,6 +6659,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7033,6 +7130,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Participant"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {
@@ -7621,6 +7726,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudyParticipant"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {
@@ -8308,7 +8421,10 @@ export interface operations {
     create_note: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                "x-fvoci-expected-user": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8335,6 +8451,15 @@ export interface operations {
                 };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `account_changed`: 기대 사용자가 세션의 사용자와 다름(아무것도 만들지 않음) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9805,8 +9930,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        /** @description 없으면 옛 동작(없을 때 FS·0으로 추가, 있으면 그대로) */
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": components["schemas"]["SetPredecessor"];
             };
@@ -9844,7 +9968,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description `shift_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`) */
+            /** @description `shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -10021,47 +10145,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SchedulePlan"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    preview_task_schedule: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SchedulePreviewInput"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShiftProposal"][];
                 };
             };
             400: {
@@ -10330,7 +10413,10 @@ export interface operations {
     create_upload: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                "x-fvoci-expected-user": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10372,6 +10458,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description 저장량 한도 초과(`invalid_state`) 또는 `account_changed`(기대 사용자가 세션의 사용자와 다름, 아무것도 만들지 않음) */
             409: {
                 headers: {
                     [name: string]: unknown;

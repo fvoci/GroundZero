@@ -1,6 +1,6 @@
 //! 운영 로그(D-83). 기존 `tracing`을 그대로 쓰고 거르기와 출력 형식만 정한다.
 //!
-//! - 레벨·모듈 거르기: `FVOCI_LOG`(없으면 `RUST_LOG`, 둘 다 없으면 `info`). 예: `info,fvoci_server::collab=debug`.
+//! - 레벨·모듈 거르기: `FVOCI_LOG`(없으면 `info`. 옛 이름 `RUST_LOG`는 읽지 않는다, D-92). 예: `info,fvoci_server::collab=debug`.
 //!   시작할 때 한 번 읽으므로 바꾸면 다시 시작해야 한다. 잘못 쓰면 시작하지 않는다.
 //! - 형식: `FVOCI_LOG_FORMAT=json`(기본, 한 줄에 JSON 객체 하나) 또는 `pretty`(개발용, 같은 사건·필드를 한 줄
 //!   글로). 둘 다 stdout으로, 색(ANSI)은 쓰지 않는다.
@@ -61,7 +61,6 @@ pub enum Format {
 /// 거르기나 형식 값이 잘못되었을 때.
 pub fn settings(lookup: impl Fn(&str) -> Option<String>) -> Result<(EnvFilter, Format), String> {
     let directives = lookup("FVOCI_LOG")
-        .or_else(|| lookup("RUST_LOG"))
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "info".to_owned());
     let filter = EnvFilter::builder()
@@ -384,16 +383,10 @@ mod tests {
         assert!(settings(bad).is_err());
         let bad = |k: &str| (k == "FVOCI_LOG").then(|| "info,=nonsense[".to_owned());
         assert!(settings(bad).is_err());
-        let legacy = |k: &str| (k == "RUST_LOG").then(|| "warn".to_owned());
-        let (filter, _) = settings(legacy).unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(filter.max_level_hint(), Some(LevelFilter::WARN));
-        let both = |k: &str| match k {
-            "FVOCI_LOG" => Some("debug".to_owned()),
-            "RUST_LOG" => Some("error".to_owned()),
-            _ => None,
-        };
-        let (filter, _) = settings(both).unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(filter.max_level_hint(), Some(LevelFilter::DEBUG));
+        // 옛 이름 RUST_LOG는 읽지 않는다(D-92). FVOCI_LOG가 없으면 기본 info다.
+        let old_name = |k: &str| (k == "RUST_LOG").then(|| "error".to_owned());
+        let (filter, _) = settings(old_name).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(filter.max_level_hint(), Some(LevelFilter::INFO));
     }
 
     #[test]

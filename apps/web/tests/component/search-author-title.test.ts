@@ -131,4 +131,76 @@ describe('search author that is no longer in the member list', () => {
     });
     expect(trigger.textContent.trim()).toBe('누구나');
   });
+
+  it('keeps showing the chosen person while the member list reloads on reopening', async () => {
+    // 같은 워크스페이스에서 닫았다 다시 열면 멤버 목록을 다시 읽는다. 그 사이에도 작성자 거르기는 남으므로 버튼도 고른
+    // 사람을 보여야 한다. 전에는 목록이 올 때까지 '누구나'로 보였는데 검색은 그 사람으로 좁혀졌다.
+    vi.spyOn(api, 'modules').mockResolvedValue([]);
+    const roster: Awaited<ReturnType<typeof api.members>> = {
+      members: [
+        { user_id: 'u-1', display_name: '가상 멤버', email: null, role: 'writer', is_owner: false },
+      ],
+      my_role: 'admin',
+      i_am_owner: true,
+    };
+    const members = vi.spyOn(api, 'members').mockResolvedValue(roster);
+    const search = vi.spyOn(api, 'search').mockResolvedValue([]);
+    const dialog = render(SearchDialog, {
+      props: { open: true, memberOf: () => true, workspace: { id: 'ws-1', name: '공간' } },
+    });
+    const trigger = (): HTMLElement => {
+      const all = document.querySelectorAll<HTMLElement>('[aria-labelledby="search-author-label"]');
+      expect(all.length).toBe(1);
+      const el = all[0];
+      if (el === undefined) throw new Error('author trigger');
+      return el;
+    };
+    await waitFor(() => {
+      expect(members).toHaveBeenCalledTimes(1);
+    });
+    await fireEvent.pointerDown(trigger(), { button: 0, pointerType: 'mouse' });
+    await fireEvent.click(trigger());
+    const option = await screen.findByRole('option', { name: '가상 멤버' });
+    await fireEvent.pointerUp(option, { button: 0, pointerType: 'mouse' });
+    await fireEvent.click(option);
+    await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의' } });
+    await waitFor(() => {
+      expect(search.mock.calls.at(-1)?.[2]?.author).toBe('u-1');
+    });
+    expect(trigger().textContent.trim()).toBe('가상 멤버');
+    await dialog.rerender({
+      open: false,
+      memberOf: () => true,
+      workspace: { id: 'ws-1', name: '공간' },
+    });
+    // 다시 열 때의 멤버 응답을 미룬다.
+    let giveMembers: (v: Awaited<ReturnType<typeof api.members>>) => void = () => undefined;
+    members.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          giveMembers = resolve;
+        }),
+    );
+    await dialog.rerender({
+      open: true,
+      memberOf: () => true,
+      workspace: { id: 'ws-1', name: '공간' },
+    });
+    await waitFor(() => {
+      expect(members).toHaveBeenCalledTimes(2);
+    });
+    expect(trigger().textContent.trim()).toBe('가상 멤버');
+    // 목록이 오기 전에 찾아도 버튼이 말하는 대로 그 사람으로 좁힌다.
+    await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의록' } });
+    await waitFor(() => {
+      expect(search.mock.calls.at(-1)?.[0]).toBe('회의록');
+    });
+    expect(search.mock.calls.at(-1)?.[2]?.author).toBe('u-1');
+    expect(trigger().textContent.trim()).toBe('가상 멤버');
+    giveMembers(roster);
+    await waitFor(() => {
+      expect(trigger().textContent.trim()).toBe('가상 멤버');
+    });
+    expect(search.mock.calls.at(-1)?.[2]?.author).toBe('u-1');
+  });
 });

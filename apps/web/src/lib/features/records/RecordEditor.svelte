@@ -107,6 +107,19 @@
               <Label for={id(`${f.key}-${p.id}`)}>{p.name}</Label>
             </div>
           {/each}
+          <!-- 지금 멤버가 아닌 사람(나간 멤버)도 저장된 값이면 보여서 뺄 수 있게 한다(감사 W15). -->
+          {#each (form.people[f.key] ?? []).filter((pid) => !people.some((p) => p.id === pid)) as pid (pid)}
+            <div class="flex items-center gap-1">
+              <Checkbox
+                id={id(`${f.key}-${pid}`)}
+                checked={true}
+                onCheckedChange={(on: boolean) => {
+                  togglePerson(f.key, pid, on);
+                }}
+              />
+              <Label for={id(`${f.key}-${pid}`)}>{m.records_unknown_person()}</Label>
+            </div>
+          {/each}
         </div>
       </fieldset>
     {:else}

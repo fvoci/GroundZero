@@ -1,8 +1,8 @@
 # fvoci 직접 써 보기
 
-이 Mac 한 대에서 fvoci를 띄워 직접 써 보는 안내다. 운영 설치의 상세(HTTPS 역방향 프록시, 외부 OIDC, CDN, R2)는 [셀프호스트 설치·운영](self-hosting.md)을 본다. 기준: main `2d424f2`(2026-10-19).
+이 Mac 한 대에서 fvoci를 띄워 직접 써 보는 안내다. 운영 설치의 상세(HTTPS 역방향 프록시, 외부 OIDC, CDN, R2)는 [셀프호스트 설치·운영](self-hosting.md)을 본다.
 
-**지금 상태(2026-10-19 확인)**: 이 Mac에는 실행 중인 셀프호스트 설치본이 없다. 돌고 있는 것은 개발용 의존 서비스(`cargo xtask dev`의 PostgreSQL·Keycloak·Meilisearch)뿐이고 앱은 떠 있지 않다. 그래서 아래 순서로 새로 설치해야 한다.
+아래는 셀프호스트 설치본이 없는 상태에서 새로 설치하는 순서다. 기존 설치본(볼륨)이 있는지는 5단계에서 먼저 확인한다.
 
 ## 지금 바로 실행할 최소 단계
 
@@ -50,7 +50,7 @@ Docker Desktop이 켜져 있어야 한다. 첫 빌드는 Rust 서버와 HWP 미�
    ~/fvoci-try/fv up -d --build --wait
    ```
 
-6. 확인한다. `{"status":"ok","database":"ok"}`가 나와야 한다.
+6. 확인한다. `{"status":"ok","database":"ok","build":{"version":"dev","source":"dev"}}`가 나와야 한다(직접 빌드한 이미지는 `build`가 `dev`, 릴리스 이미지는 제품 버전과 소스 SHA).
 
    ```bash
    curl -s http://127.0.0.1:18080/healthz

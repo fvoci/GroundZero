@@ -58,12 +58,12 @@ describe('resuming an upload', () => {
     vi.spyOn(api, 'completeUpload').mockResolvedValue({ ...view([1, 2]), state: 'done' });
     const create = vi.spyOn(api, 'createUpload').mockResolvedValue(view([]));
     const first = new File(['AAAABBBB'], 'a.bin', { lastModified: 1000 });
-    await expect(uploadFile(first, { fileId: 'f1' })).rejects.toThrow('stop');
+    await expect(uploadFile(first, { expectedUser: 'u1', fileId: 'f1' })).rejects.toThrow('stop');
 
     create.mockResolvedValue(view([1]));
     sent.length = 0;
     const changed = new File(['CCCCBBBB'], 'a.bin', { lastModified: 1000 });
-    await uploadFile(changed, { fileId: 'f1' });
+    await uploadFile(changed, { expectedUser: 'u1', fileId: 'f1' });
     expect(put).toHaveBeenCalled();
     expect(sent).toEqual([
       [1, 'CCCC'],
@@ -79,13 +79,17 @@ describe('resuming an upload', () => {
       .mockRejectedValueOnce(new ApiError(400, 'bad', 'stop'));
     const create = vi.spyOn(api, 'createUpload').mockResolvedValue(view([]));
     await expect(
-      uploadFile(new File(['AAAABBBB'], 'a.bin', { lastModified: 2000 }), { fileId: 'f2' }),
+      uploadFile(new File(['AAAABBBB'], 'a.bin', { lastModified: 2000 }), {
+        expectedUser: 'u1',
+        fileId: 'f2',
+      }),
     ).rejects.toThrow('stop');
 
     create.mockResolvedValue(view([1, 2]));
     complete.mockResolvedValue({ ...view([1, 2]), state: 'done' });
     const seen: number[] = [];
     await uploadFile(new File(['CCCCBBBB'], 'a.bin', { lastModified: 2000 }), {
+      expectedUser: 'u1',
       fileId: 'f2',
       onProgress: (p) => seen.push(p.sent),
     });
@@ -110,7 +114,10 @@ describe('resuming an upload', () => {
       kept = window.localStorage.getItem('fvoci.upload-parts') ?? '';
       return Promise.resolve({ ...view([1, 2]), state: 'done' });
     });
-    await uploadFile(new File(['AAAABBBB'], 'a.bin', { lastModified: 1 }), { fileId: 'f2' });
+    await uploadFile(new File(['AAAABBBB'], 'a.bin', { lastModified: 1 }), {
+      expectedUser: 'u1',
+      fileId: 'f2',
+    });
     expect(kept).toContain('up-1');
     expect(kept).not.toContain('abandoned');
   });
@@ -127,11 +134,11 @@ describe('resuming an upload', () => {
     vi.spyOn(api, 'completeUpload').mockResolvedValue({ ...view([1, 2]), state: 'done' });
     const create = vi.spyOn(api, 'createUpload').mockResolvedValue(view([]));
     const file = new File(['AAAABBBB'], 'a.bin', { lastModified: 1000 });
-    await expect(uploadFile(file, { fileId: 'f1' })).rejects.toThrow('stop');
+    await expect(uploadFile(file, { expectedUser: 'u1', fileId: 'f1' })).rejects.toThrow('stop');
 
     create.mockResolvedValue(view([1]));
     sent.length = 0;
-    await uploadFile(file, { fileId: 'f1' });
+    await uploadFile(file, { expectedUser: 'u1', fileId: 'f1' });
     expect(sent).toEqual([2]);
   });
 });

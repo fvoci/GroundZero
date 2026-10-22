@@ -28,6 +28,7 @@
   import * as Dialog from '$lib/ui/dialog';
   import { durationText } from '$lib/features/time/format';
   import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { formatDay } from '$lib/display';
 
@@ -100,6 +101,8 @@
   let sort = $state<TaskSort>('position');
   let views = $state<SavedViewView[]>([]);
   let selectedView = $state('');
+  // 보기를 지우는 중(두 번 눌러 같은 보기를 다시 지우려다 404 실패를 보이지 않게).
+  let deletingView = $state(false);
   let viewName = $state('');
   // 같은 이름·설정의 재시도는 같은 요청 id, 고치면 새 id.
   const viewKey = new RetryKey();
@@ -184,7 +187,8 @@
   }
 
   async function deleteView(): Promise<void> {
-    if (selectedView === '') return;
+    if (selectedView === '' || deletingView) return;
+    deletingView = true;
     try {
       await api.deleteView(selectedView);
       selectedView = '';
@@ -192,6 +196,8 @@
       status = m.tasks_view_deleted();
     } catch (e: unknown) {
       error = errorText(e, m.tasks_view_delete_failed());
+    } finally {
+      deletingView = false;
     }
   }
 
@@ -479,7 +485,38 @@
   $effect(() => {
     if (openTaskId !== undefined) returnTo = openTaskId;
     else openedHere = false;
+    // 다른 업무를 열었거나 닫혔으면 앞 업무에 대해 물은 것을 거둔다(새로 연 업무를 닫거나 그 입력을 버리지 않게).
+    confirmClose = false;
   });
+
+  // 업무 상세에 기준과 다르게 고친 칸이 있는지, 그래서 닫기 전에 버릴지 묻는 중인지. 물은 업무(`askedFor`)가 지금 연
+  // 업무일 때만 버리고 닫는다. 계속 편집하면 물을 때 초점이 있던 곳(대화상자 밖이었으면 대화상자)으로 돌아간다.
+  let detailUnsaved = $state(false);
+  // 폼을 저장하는 동안은 닫지도 묻지도 않는다: 이미 보낸 저장은 서버에 남으므로 "버리고 닫기"가 거짓이 된다(일정 대화상자와 같음).
+  let detailSaving = $state(false);
+  let confirmClose = $state(false);
+  let askedFor: string | undefined;
+  let keepFocus: HTMLElement | null = null;
+  let dialogContent = $state<HTMLElement | null>(null);
+
+  /** Esc·바깥 클릭·닫기 단추. 저장하지 않은 입력이 있으면 닫지 않고 버릴지 묻는다. */
+  function requestClose(): void {
+    if (confirmClose || detailSaving) return;
+    if (detailUnsaved && openTaskId !== undefined) {
+      const active = document.activeElement;
+      keepFocus =
+        active instanceof HTMLElement && dialogContent?.contains(active) ? active : dialogContent;
+      askedFor = openTaskId;
+      confirmClose = true;
+      return;
+    }
+    close();
+  }
+
+  function discard(): void {
+    confirmClose = false;
+    if (askedFor !== undefined && askedFor === openTaskId && !detailSaving) close();
+  }
 
   function close(): void {
     if (openedHere) {
@@ -1254,7 +1291,7 @@
       >{m.tasks_view_save()}</Button
     >
     {#if selectedView !== ''}
-      <Button size="sm" variant="ghost" onclick={() => void deleteView()}
+      <Button size="sm" variant="ghost" disabled={deletingView} onclick={() => void deleteView()}
         >{m.tasks_view_delete()}</Button
       >
     {/if}
@@ -1613,14 +1650,21 @@
   <p class="sr-only" aria-live="polite">{status}</p>
 </section>
 
+<!-- 닫기를 대화상자가 정하지 않고 requestClose()가 정한다(고친 입력이 있으면 열어 둔 채 묻는다). -->
 <Dialog.Root
-  open={openTaskId !== undefined}
-  onOpenChange={(o: boolean) => {
-    if (!o) close();
-  }}
+  bind:open={
+    () => openTaskId !== undefined,
+    (o: boolean) => {
+      if (!o) requestClose();
+    }
+  }
 >
   <Dialog.Content
+    bind:ref={dialogContent}
     class="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
+    escapeKeydownBehavior={confirmClose || detailSaving ? 'ignore' : 'close'}
+    interactOutsideBehavior={confirmClose || detailSaving ? 'ignore' : 'close'}
+    showCloseButton={!detailSaving}
     onCloseAutoFocus={(e: Event) => {
       const card =
         returnTo === undefined
@@ -1646,9 +1690,23 @@
           {workspaces}
           onchanged={() => void reload()}
           onopen={open}
+          onunsaved={(value: boolean) => {
+            detailUnsaved = value;
+          }}
+          onsaving={(value: boolean) => {
+            detailSaving = value;
+          }}
         />
       {/key}
     {/if}
+    <DiscardChangesConfirm
+      open={confirmClose}
+      onkeep={() => {
+        confirmClose = false;
+      }}
+      ondiscard={discard}
+      returnFocus={() => (keepFocus?.isConnected === true ? keepFocus : dialogContent)}
+    />
   </Dialog.Content>
 </Dialog.Root>
 
