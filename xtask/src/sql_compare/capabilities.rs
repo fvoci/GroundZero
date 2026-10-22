@@ -134,17 +134,13 @@ pub(super) async fn verify(
         .output()?
     };
     let rejection_expected = !rejected.status.success()
-        && String::from_utf8_lossy(&rejected.stderr).contains("no ADMIN OPTION");
+        && [&rejected.stdout, &rejected.stderr]
+            .iter()
+            .any(|stream| String::from_utf8_lossy(stream).contains("no ADMIN OPTION"));
     let mut conn = PgConnection::connect(&urls.migration).await?;
     let after_rejection = super::catalog(&mut conn).await?;
     conn.close().await?;
-    // catalog() excludes the initial-row/sequence snapshots added by snapshot().
-    let before_catalog: Snapshot = before
-        .iter()
-        .filter(|(key, _)| !key.starts_with("initial_rows/") && !key.starts_with("sequence_state/"))
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect();
-    let rejected_unchanged = before_catalog == after_rejection;
+    let rejected_unchanged = before == &after_rejection;
 
     let mut probes = Vec::new();
     for (role, url) in [
