@@ -24,7 +24,7 @@ description: Svelte 컴포넌트·TypeScript 클라이언트 코드(apps/web, pa
 ## 컴포넌트 수명주기
 
 - `onMount`에서 등록한 이벤트·구독·타이머·편집기 인스턴스는 반환한 정리 함수에서 해제한다.
-- 비동기 응답은 컴포넌트가 사라진 뒤 도착할 수 있다. 취소 플래그로 오래된 응답을 버린다. 예: `HealthStatus.svelte`.
+- 비동기 응답은 컴포넌트가 사라진 뒤 도착할 수 있다. 취소 플래그로 오래된 응답을 버린다. 예: `apps/web/src/lib/features/modules/ItemScreen.svelte`의 항목 불러오기(`cancelled`).
 
 ## 접근성
 

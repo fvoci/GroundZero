@@ -34,7 +34,6 @@ function task(
     estimate_minutes: null,
     tags: [],
     milestone: false,
-    predecessor_ids: links.map((l) => l.task_id),
     predecessors: links,
     series: null,
     occurrence_date: null,
@@ -322,7 +321,6 @@ describe('removing a dependency while editing', () => {
   ]);
   const without = (id: string) => ({
     ...two,
-    predecessor_ids: two.predecessor_ids.filter((p) => p !== id),
     predecessors: two.predecessors.filter((l) => l.task_id !== id),
     checklist: [],
   });

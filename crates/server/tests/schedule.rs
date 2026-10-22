@@ -195,8 +195,8 @@ async fn dependencies_stay_in_one_item_reject_cycles_and_follow_access() {
     assert_eq!(link(&app, &reader, &a, &c).await, StatusCode::FORBIDDEN);
     assert_eq!(link(&app, &outsider, &a, &c).await, StatusCode::NOT_FOUND);
     assert_eq!(
-        fetch(&app, &reader, &c).await["predecessor_ids"],
-        json!([b["id"]])
+        fetch(&app, &reader, &c).await["predecessors"],
+        json!([{ "task_id": b["id"], "kind": "FS", "lag_days": 0 }])
     );
 
     let r = send(
@@ -212,7 +212,7 @@ async fn dependencies_stay_in_one_item_reject_cycles_and_follow_access() {
     )
     .await;
     assert_eq!(r.status, StatusCode::OK);
-    assert_eq!(r.json["predecessor_ids"], json!([]));
+    assert_eq!(r.json["predecessors"], json!([]));
 
     let mut tx = state.db.begin_as(admin.id).await.unwrap();
     let actions: Vec<String> = sqlx::query_scalar(
@@ -256,13 +256,13 @@ async fn moving_a_predecessor_previews_impact_and_shifts_only_approved_successor
     let preview = send(
         &app,
         Method::POST,
-        &format!("/api/tasks/{}/schedule-preview", a["id"].as_str().unwrap()),
+        &format!("/api/tasks/{}/schedule-plan", a["id"].as_str().unwrap()),
         Some(&writer),
         Some(json!({ "start_date": "2026-10-01", "due_date": "2026-10-10" })),
     )
     .await;
     assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
-    let shifts = preview.json.as_array().unwrap();
+    let shifts = preview.json["shifts"].as_array().unwrap();
     assert_eq!(shifts.len(), 2, "{shifts:?}");
     assert_eq!(
         (
@@ -302,12 +302,12 @@ async fn moving_a_predecessor_previews_impact_and_shifts_only_approved_successor
     let preview = send(
         &app,
         Method::POST,
-        &format!("/api/tasks/{}/schedule-preview", a["id"].as_str().unwrap()),
+        &format!("/api/tasks/{}/schedule-plan", a["id"].as_str().unwrap()),
         Some(&writer),
         Some(json!({ "start_date": "2026-10-01", "due_date": "2026-10-10" })),
     )
     .await;
-    let approved: Vec<Value> = preview.json.as_array().unwrap().iter().map(|s| json!({
+    let approved: Vec<Value> = preview.json["shifts"].as_array().unwrap().iter().map(|s| json!({
         "task_id": s["task_id"], "base_version": s["base_version"], "start_date": s["start_date"], "due_date": s["due_date"],
     })).collect();
     let (status, moved) = update(
@@ -370,7 +370,7 @@ async fn malformed_reschedules_are_rejected() {
     let preview = send(
         &app,
         Method::POST,
-        &format!("/api/tasks/{}/schedule-preview", a["id"].as_str().unwrap()),
+        &format!("/api/tasks/{}/schedule-plan", a["id"].as_str().unwrap()),
         Some(&admin),
         Some(json!({ "start_date": "2026-10-09", "due_date": "2026-10-08" })),
     )
@@ -478,7 +478,8 @@ async fn existing_links_are_finish_to_start_and_stale_link_edits_conflict() {
         b1["predecessors"],
         json!([{ "task_id": a["id"], "kind": "FS", "lag_days": 0 }])
     );
-    assert_eq!(b1["predecessor_ids"], json!([a["id"]]));
+    // 중복이던 `predecessor_ids`는 없앴다(D-92).
+    assert!(b1.get("predecessor_ids").is_none());
 
     // 종류·지연일 바꾸기(옮길 것이 없으면 관계만). 같은 쌍은 하나뿐이다.
     let r = set_link(&app, &admin, &a, &b, json!({ "kind": "SS", "lag_days": 2 })).await;

@@ -137,7 +137,9 @@
   const candidates = $derived(
     task === undefined
       ? []
-      : tasks.filter((t) => t.id !== taskId && !(task?.predecessor_ids.includes(t.id) ?? false)),
+      : tasks.filter(
+          (t) => t.id !== taskId && !(task?.predecessors.some((p) => p.task_id === t.id) ?? false),
+        ),
   );
 
   // 다시 채울 때 비교할 기준(마지막으로 다 불러온 판의 값, 사용자가 바꾸지 않은 칸만 새 값으로 옮긴다)과, 같은 칸을
