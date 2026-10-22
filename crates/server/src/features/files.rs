@@ -20,7 +20,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
 use crate::ids::{DocumentId, FileId, ItemId, UploadId, UserId};
-use crate::storage::{Part, sha256_hex};
+use crate::storage::{Assembled, Part, sha256_hex};
 
 /// 조각 본문의 SHA-256(16진수) 헤더.
 pub const PART_SHA256_HEADER: &str = "x-content-sha256";
@@ -430,14 +430,16 @@ async fn finish(
             size: u64::try_from(size).unwrap_or_default(),
         })
         .collect();
-    // 앞선 시도가 저장소에서는 마쳤을 수 있다(업로드가 이미 없음). 그러면 내용 확인으로 넘어간다. 다른 이유로
-    // 합치지 못하면(조각 표시가 어긋남 등) 처음부터 다시 받는다.
-    match state
+    // 조각을 잇는다. 로컬은 이 시도만의 준비본에 잇고, 최종 키로는 아래에서 점유를 쥔 채 게시한다(점유를 잃은 늦은
+    // 시도가 다른 시도가 마치고 기록한 내용을 덮지 않게, #65). 앞선 시도가 저장소에서 이미 게시했으면(업로드가 이미
+    // 없음) 최종 키의 내용을 확인한다. 다른 이유로 잇지 못하면(조각 표시가 어긋남 등) 처음부터 다시 받는다.
+    let assembled = match state
         .storage
-        .complete(&row.storage_key, &storage_upload, &parts)
+        .assemble(&row.storage_key, &storage_upload, &parts)
         .await
     {
-        Ok(()) | Err(AppError::NotFound) => {}
+        Ok(assembled) => assembled,
+        Err(AppError::NotFound) => Assembled::Published,
         Err(err) => {
             tracing::warn!(event = "upload.assemble_failed", upload = %id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "storage could not assemble the upload");
             let mut tx = state.db.begin_as(user).await?;
@@ -452,8 +454,27 @@ async fn finish(
                 "the storage could not assemble the parts; send them again".into(),
             ));
         }
-    }
-    let checked = state.storage.digest(&row.storage_key).await;
+    };
+    let result = record(state, user, id, &row, claim, &storage_upload, &assembled).await;
+    // 게시하지 않은 준비본(점유를 잃었거나 확인·기록에 실패함)은 버린다.
+    assembled.discard().await;
+    result
+}
+
+/// 이은 내용을 확인하고, 점유를 쥔 채 최종 키로 게시한 뒤 파일·버전을 기록한다.
+async fn record(
+    state: &AppState,
+    user: UserId,
+    id: UploadId,
+    row: &UploadRow,
+    claim: OffsetDateTime,
+    storage_upload: &str,
+    assembled: &Assembled,
+) -> Result<(), AppError> {
+    let checked = state
+        .storage
+        .digest_assembled(&row.storage_key, assembled)
+        .await;
     let failure = match &checked {
         Ok((_, size)) if i64::try_from(*size).ok() == Some(row.size) => None,
         Ok((_, size)) => Some(format!("stored {size} bytes, expected {}", row.size)),
@@ -467,6 +488,18 @@ async fn finish(
     let (sha256, _) = checked?;
     let mut tx = state.db.begin_as(user).await?;
     hold_claim(&mut tx, id, claim).await?;
+    // 점유 확인은 이미 마친 업로드에도 참이다. 다른 시도가 넘겨받아 마쳤으면 이 시도의 내용은 게시하지 않는다(기록된
+    // 내용을 덮는다).
+    if my_upload(&mut tx, id).await?.state == "done" {
+        return Ok(());
+    }
+    // 행을 잠근 채 게시하므로 이 트랜잭션이 끝날 때까지 다른 시도는 넘겨받지 못한다. 게시한 뒤 기록하지 못하면 최종
+    // 키에는 기록되지 않은 이 내용이 남는다. 잠깐의 충돌이면 점유를 풀고, 다음 시도가 (조각 폴더가 이미 없으니) 최종
+    // 키의 내용을 확인해 기록한다. 오래 갈 실패면 업로드를 닫고 최종 키를 지울 목록에 올린다(app_fail_upload).
+    state
+        .storage
+        .publish(&row.storage_key, storage_upload, assembled)
+        .await?;
     let finished = sqlx::query("SELECT app_finish_upload($1, $2, $3, $4)")
         .bind(id)
         .bind(&sha256)

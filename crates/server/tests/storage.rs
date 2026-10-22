@@ -148,5 +148,73 @@ async fn local_complete_failure_leaves_no_temp_file() {
         .map(|d| d.filter_map(Result::ok).map(|e| e.file_name()).collect())
         .unwrap_or_default();
     assert!(left.is_empty(), "temp files left: {left:?}");
+    let left: Vec<_> = std::fs::read_dir(dir.join("uploads").join(&upload))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with("staged-"))
+        .collect();
+    assert!(left.is_empty(), "staged files left: {left:?}");
+    let _ignored = std::fs::remove_dir_all(&dir);
+}
+
+/// #65: 로컬 저장소는 마치기 시도마다 따로 준비본에 조각을 잇고, 게시하기 전에는 최종 키를 건드리지 않는다. 다른 시도가
+/// 게시하면(조각 폴더가 지워지면) 늦게 이은 준비본은 더 게시되지 않는다.
+#[tokio::test]
+async fn local_staging_leaves_the_object_alone_until_published() {
+    let dir = std::env::temp_dir().join(format!("fvoci-storage-{}", uuid::Uuid::now_v7().simple()));
+    let storage = Storage::new(&StorageConfig::Local { dir: dir.clone() });
+    let key = format!("test/{}", uuid::Uuid::now_v7().simple());
+    let upload = storage.begin(&key).await.unwrap();
+    let put = |body: &'static [u8]| {
+        let (storage, key, upload) = (storage.clone(), key.clone(), upload.clone());
+        async move {
+            let etag = storage
+                .put_part(&key, &upload, 1, Bytes::from_static(body))
+                .await
+                .unwrap();
+            [Part {
+                number: 1,
+                etag,
+                size: body.len() as u64,
+            }]
+        }
+    };
+    let late = storage
+        .assemble(&key, &upload, &put(b"old bytes").await)
+        .await
+        .unwrap();
+    // 다른 시도가 조각을 다시 받아 잇는다. 준비본은 서로 섞이지 않는다.
+    let current = storage
+        .assemble(&key, &upload, &put(b"new bytes").await)
+        .await
+        .unwrap();
+    let sha = |bytes: &[u8]| hex::encode(Sha256::digest(bytes));
+    assert_eq!(
+        storage.digest_assembled(&key, &late).await.unwrap(),
+        (sha(b"old bytes"), 9)
+    );
+    assert_eq!(
+        storage.digest_assembled(&key, &current).await.unwrap(),
+        (sha(b"new bytes"), 9)
+    );
+    assert!(matches!(storage.get(&key).await, Err(AppError::NotFound)));
+
+    storage.publish(&key, &upload, &current).await.unwrap();
+    current.discard().await;
+    assert_eq!(read_all(&storage, &key).await, b"new bytes");
+    assert!(!dir.join("uploads").join(&upload).exists());
+    // 늦게 이은 준비본은 조각 폴더와 함께 지워져 게시할 수 없다. 읽기는 열어 둔 파일로 계속된다.
+    assert_eq!(
+        storage.digest_assembled(&key, &late).await.unwrap(),
+        (sha(b"old bytes"), 9)
+    );
+    assert!(storage.publish(&key, &upload, &late).await.is_err());
+    late.discard().await;
+    assert_eq!(read_all(&storage, &key).await, b"new bytes");
+    assert!(matches!(
+        storage.assemble(&key, &upload, &[]).await,
+        Err(AppError::NotFound)
+    ));
     let _ignored = std::fs::remove_dir_all(&dir);
 }

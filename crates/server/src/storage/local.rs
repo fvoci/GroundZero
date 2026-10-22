@@ -1,10 +1,11 @@
 //! 서버 로컬 디렉터리 저장소. `objects/<키>`에 내용을, `uploads/<업로드 id>/`에 받은 조각을 둔다.
-//! 조각과 완성본은 임시 파일에 쓴 뒤 이름을 바꿔 넣으므로, 중간에 멈춰도 반쯤 쓴 파일이 보이지 않는다.
+//! 조각은 임시 파일에 쓴 뒤 이름을 바꿔 넣으므로, 중간에 멈춰도 반쯤 쓴 파일이 보이지 않는다. 마칠 때는 시도마다
+//! 따로 준비 파일에 조각을 잇고(`stage`), 그 시도가 마치기를 맡고 있을 때만 최종 키로 이름을 바꿔 게시한다(`publish`).
 
 use std::path::PathBuf;
 
 use bytes::Bytes;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
@@ -16,11 +17,26 @@ pub struct LocalStore {
     dir: PathBuf,
 }
 
+/// 한 마치기 시도가 조각을 이은 준비 파일. 게시하기 전에는 최종 키와 다른 시도에 보이지 않는다.
+#[derive(Debug)]
+pub struct Staged {
+    path: PathBuf,
+    file: tokio::fs::File,
+}
+
+impl Staged {
+    /// 게시하지 않은 준비 파일을 지운다(게시했거나 조각 폴더와 함께 지워졌으면 할 일이 없다).
+    pub(super) async fn discard(self) {
+        drop(self.file);
+        let _ignored = tokio::fs::remove_file(&self.path).await;
+    }
+}
+
 fn io(err: std::io::Error) -> AppError {
     AppError::Storage(format!("local: {err}"))
 }
 
-/// 임시 파일에 쓰다 실패하면 그 파일을 지운다(반쯤 쓴 파일이 `tmp/`에 쌓이지 않게).
+/// 임시·준비 파일에 쓰다 실패하면 그 파일을 지운다(반쯤 쓴 파일이 쌓이지 않게).
 async fn discard_on_error(temp: &PathBuf, result: std::io::Result<()>) -> Result<(), AppError> {
     if result.is_err() {
         let _ignored = tokio::fs::remove_file(temp).await;
@@ -120,39 +136,75 @@ impl LocalStore {
         Ok(parts)
     }
 
-    pub(super) async fn complete(
-        &self,
-        key: &str,
-        upload_id: &str,
-        parts: &[Part],
-    ) -> Result<(), AppError> {
+    /// 조각을 순서대로 이 시도만의 준비 파일(`uploads/<업로드 id>/staged-<uuid>`)에 잇는다. 최종 키는 건드리지 않는다.
+    /// 받은 조각과 같은 폴더에 두므로 업로드를 게시하거나 그만두면(폴더를 지우면) 남은 준비 파일도 함께 지워진다.
+    pub(super) async fn stage(&self, upload_id: &str, parts: &[Part]) -> Result<Staged, AppError> {
         check_upload(upload_id)?;
         let dir = self.upload(upload_id);
-        // 앞선 시도가 이미 합쳤으면 업로드 폴더가 없다(S3의 NoSuchUpload와 같게).
+        // 앞선 시도가 이미 게시했으면 업로드 폴더가 없다(S3의 NoSuchUpload와 같게).
         if !tokio::fs::try_exists(&dir).await.map_err(io)? {
             return Err(AppError::NotFound);
         }
-        let temp = self.temp();
-        tokio::fs::create_dir_all(self.dir.join("tmp"))
+        let path = dir.join(format!("staged-{}", Uuid::now_v7().simple()));
+        let mut file = match tokio::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&path)
             .await
-            .map_err(io)?;
-        let target = self.object(key);
+        {
+            Ok(file) => file,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(AppError::NotFound),
+            Err(e) => return Err(io(e)),
+        };
         let joined = async {
-            let mut out = tokio::fs::File::create(&temp).await?;
             for part in parts {
-                let path = dir.join(format!("{:05}", part.number));
-                let mut input = tokio::fs::File::open(&path).await?;
-                tokio::io::copy(&mut input, &mut out).await?;
+                let mut input =
+                    tokio::fs::File::open(dir.join(format!("{:05}", part.number))).await?;
+                tokio::io::copy(&mut input, &mut file).await?;
             }
-            out.sync_all().await?;
-            if let Some(parent) = target.parent() {
-                tokio::fs::create_dir_all(parent).await?;
-            }
-            tokio::fs::rename(&temp, &target).await
+            file.sync_all().await
         }
         .await;
-        discard_on_error(&temp, joined).await?;
-        tokio::fs::remove_dir_all(&dir).await.map_err(io)
+        discard_on_error(&path, joined).await?;
+        Ok(Staged { path, file })
+    }
+
+    /// 준비본을 처음부터 읽는다. 다른 시도가 조각 폴더를 지워도 열어 둔 파일로 읽는다.
+    pub(super) async fn read_staged(staged: &Staged) -> Result<ByteStream, AppError> {
+        let mut file = staged.file.try_clone().await.map_err(io)?;
+        file.rewind().await.map_err(io)?;
+        Ok(Box::pin(ReaderStream::new(file)))
+    }
+
+    /// 준비본을 최종 키로 게시하고(이름 바꾸기) 받은 조각 폴더를 지운다.
+    pub(super) async fn publish(
+        &self,
+        key: &str,
+        upload_id: &str,
+        staged: &Staged,
+    ) -> Result<(), AppError> {
+        check_upload(upload_id)?;
+        let target = self.object(key);
+        if let Some(parent) = target.parent() {
+            tokio::fs::create_dir_all(parent).await.map_err(io)?;
+        }
+        tokio::fs::rename(&staged.path, &target).await.map_err(io)?;
+        // 게시는 끝났다. 조각 폴더(다른 시도가 남긴 준비본 포함)를 지우지 못해도 내용은 맞으므로 기록만 남긴다.
+        match tokio::fs::remove_dir_all(self.upload(upload_id)).await {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                let err = io(e);
+                tracing::warn!(
+                    event = "storage.upload_dir_left",
+                    upload = upload_id,
+                    error_code = err.code(),
+                    detail = crate::logging::safe_error(&err),
+                    "could not remove the parts of a published upload"
+                );
+            }
+            _ => {}
+        }
+        Ok(())
     }
 
     pub(super) async fn abort(&self, upload_id: &str) -> Result<(), AppError> {
