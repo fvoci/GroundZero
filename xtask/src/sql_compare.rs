@@ -461,8 +461,14 @@ fn run_behavior(
     let _direct = sh.push_env("FVOCI_TEST_DIRECT_APP_URL", &urls.app);
     let _admin = sh.push_env("FVOCI_TEST_ADMIN_URL", &urls.admin);
     let _migration = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
+    let _normal_admin = sh.push_env("DATABASE_ADMIN_URL", &urls.admin);
+    let _normal_migration = sh.push_env("DATABASE_MIGRATION_URL", &urls.migration);
     let _threads = sh.push_env("RUST_TEST_THREADS", "4");
+    let _storage = sh.push_env("FVOCI_STORAGE", "local");
     let _files = sh.push_env("FVOCI_STORAGE_DIR", output.join("files"));
+    let _web = sh.push_env("FVOCI_WEB_DIR", "");
+    // The Zotero integration tests override this with their own HTTP fixture.
+    let _zotero = sh.push_env("FVOCI_ZOTERO_API_URL", "http://127.0.0.1:9");
     let _candidate = sh.push_env(
         "FVOCI_TEST_CANDIDATE_MIGRATIONS",
         candidate.unwrap_or(Path::new("")),
@@ -474,8 +480,17 @@ fn run_behavior(
         format!("http://127.0.0.1:{search}"),
     );
     let _search_key = sh.push_env("FVOCI_TEST_SEARCH_KEY", compose::SEARCH_TEST_KEY);
+    let _normal_search = sh.push_env("FVOCI_SEARCH_URL", format!("http://127.0.0.1:{search}"));
+    let _normal_search_key = sh.push_env("FVOCI_SEARCH_KEY", compose::SEARCH_TEST_KEY);
     let _s3 = sh.push_env("FVOCI_TEST_S3_ENDPOINT", format!("http://127.0.0.1:{s3}"));
     let _s3_keys = crate::test::push_s3_credentials(sh);
+    let _normal_s3 = [
+        sh.push_env("FVOCI_S3_ENDPOINT", format!("http://127.0.0.1:{s3}")),
+        sh.push_env("FVOCI_S3_REGION", "us-east-1"),
+        sh.push_env("FVOCI_S3_BUCKET", compose::S3_TEST_BUCKET),
+        sh.push_env("FVOCI_S3_ACCESS_KEY", compose::S3_TEST_ACCESS_KEY),
+        sh.push_env("FVOCI_S3_SECRET_KEY", compose::S3_TEST_SECRET_KEY),
+    ];
     let _root = sh.push_dir(root);
     let _rest = if let Cluster::Supabase(c) = cluster {
         let rest = c.host_port(sh, "rest", 3000)?;

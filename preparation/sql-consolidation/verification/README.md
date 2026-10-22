@@ -29,7 +29,7 @@ Compose 파일·이미지·테스트 자격 증명은 기존 설정을 재사용
 - 테이블·인덱스·시퀀스·타입 소유자와 ACL, RLS/FORCE RLS, 컬럼 타입·기본값·generated/identity·collation·column ACL, 제약·인덱스 식과 상태.
 - RLS USING/WITH CHECK·대상 역할·명령·permissive/restrictive, 일반 트리거와 내부 FK 트리거의 enabled/deferrable/deferred 상태.
 - 역할 속성(비밀번호 제외), 멤버십 grantor/admin/inherit/set, 기본 ACL, DB 소유자·ACL·tablespace 이름과 설정, 확장 버전·스키마·소유자.
-- 관리 스키마를 포함한 namespace·relation·function 소유자/ACL/정의와 event trigger. `uuid_extract_version` 제공자 함수도 포함한다.
+- 관리 스키마를 포함한 namespace·relation 소유자/ACL/속성, function 정의/소유자/ACL과 event trigger. 관리 스키마의 relation 컬럼·제약·정책 등 전체 DDL을 비교한다는 뜻은 아니다. `uuid_extract_version` 제공자 함수도 포함한다.
 - 모든 앱 테이블의 초기 행(빈 테이블 포함), 시퀀스 현재 값/is_called. 초기 행의 시각·ID를 임의로 지우지 않는다.
 
 `pg_dump --schema-only --schema=fvoci --no-comments`를 같은 서버 이미지의 도구로 만들고 객체 블록별로 비교한다. 함수 본문이나 권한 텍스트를 지우지 않는다. SQLx 이력 테이블 **구조도 비교한다**. 그 테이블 행만 별도 `migration-ledger.json`에 기록한다. 후보의 진짜 적용 버전/체크섬과 누적 이력은 의도적으로 다르며 동등하다고 주장하지 않는다. 이력의 실행 시각·소요 시간만 별도 기록에서 제외한다.
@@ -52,6 +52,8 @@ CHECK ((A AND B AND C))
 ## 행동 비교와 한계
 
 `--behavior`는 기존 workspace Rust 시험을 실제 `fvoci_app` 접속으로 양쪽에서 실행한다. 후보 쪽의 `fresh_database` 공통 헬퍼도 같은 후보 SQLx 디렉터리로 DB를 준비한다. 별도 API/권한 구현이나 축약한 모의 SQL 시험으로 대체하지 않는다. CRUD·테넌트 격리·개인/공유 문서·철회·경합/409·반복·시간 기록·검색·백업 등의 기존 검증을 포함한다.
+
+행동 시험의 일반 DB·검색·S3 환경 변수도 격리된 서비스에 고정한다. 기본 파일 저장소는 local이며 S3 시험만 기존 헬퍼로 시험 SeaweedFS를 선택한다. 외부 환경에서 설정한 저장소·검색 URL이 시험에 새어 들어가지 않는다. Zotero 기본 URL은 닫힌 루프백 포트이고 해당 시험이 자체 HTTP fixture로 덮어쓴다.
 
 Supabase에서는 각 DB의 직접 연결과 session pooler를 실행한다. 일반 앱 연결과 `db_context`는 실제 pooler를 사용한다. **새 DB를 만드는 백업·검색 시험은 기존 규칙대로 직접 연결을 사용한다**. 따라서 session 단계 통과를 모든 시험의 pooler 통과로 해석하지 않는다. OIDC Keycloak 시험은 이 명령에서 NOT RUN이며, PostgreSQL 실행의 Supabase 전용 시험도 NOT RUN이다. S3는 기존 SeaweedFS 시험 서비스를 사용한다.
 
