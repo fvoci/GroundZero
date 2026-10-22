@@ -181,6 +181,10 @@ async fn course_episodes_and_personal_progress() {
     );
     assert_eq!(eps[0]["mine"]["status"], "not_started");
 
+    // 개인 계획일은 오늘 기준(참여자 집계의 today는 서버 날짜에서 하루 안이어야 한다).
+    let today = time::OffsetDateTime::now_utc().date();
+    let yesterday = today - time::Duration::days(1);
+
     // 진도는 사람마다(읽기만 하는 사람도 자기 진도는 남긴다). 다시 보아 완료해도 완료는 한 번.
     assert_eq!(
         progress(&app, &reader, &eps[0], json!({ "status": "done" })).await,
@@ -212,7 +216,7 @@ async fn course_episodes_and_personal_progress() {
             &app,
             &reader,
             &eps[1],
-            json!({ "status": "in_progress", "planned_on": "2026-10-25" })
+            json!({ "status": "in_progress", "planned_on": yesterday.to_string() })
         )
         .await,
         StatusCode::NO_CONTENT
@@ -229,7 +233,10 @@ async fn course_episodes_and_personal_progress() {
     assert_eq!(mine["episodes"][0]["mine"]["status"], "done");
     assert_eq!(mine["episodes"][0]["mine"]["watch_count"], 2);
     assert_eq!(mine["episodes"][0]["mine"]["note"], "다시 보기");
-    assert_eq!(mine["episodes"][1]["mine"]["planned_on"], "2026-10-25");
+    assert_eq!(
+        mine["episodes"][1]["mine"]["planned_on"],
+        yesterday.to_string()
+    );
     // 다른 사람에게는 내 진도·메모가 보이지 않는다.
     let theirs = get(&app, &writer, &item).await;
     assert_eq!(theirs["episodes"][0]["mine"]["status"], "not_started");
@@ -239,7 +246,7 @@ async fn course_episodes_and_personal_progress() {
     let parts = send(
         &app,
         Method::GET,
-        &format!("/api/items/{item}/course/participants?today=2026-10-30"),
+        &format!("/api/items/{item}/course/participants?today={today}"),
         Some(&writer),
         None,
     )
@@ -258,6 +265,21 @@ async fn course_episodes_and_personal_progress() {
     assert_eq!(p["overdue"], 1);
     assert_eq!(p["done_seconds"], 1200);
     assert!(p.get("note").is_none());
+    // 감사 S9: 서버 날짜에서 하루 넘게 떨어진 today는 400(개인 계획일을 알아내지 못하게).
+    for far in [
+        today + time::Duration::days(30),
+        today - time::Duration::days(30),
+    ] {
+        let r = send(
+            &app,
+            Method::GET,
+            &format!("/api/items/{item}/course/participants?today={far}"),
+            Some(&writer),
+            None,
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+    }
 
     // 회차를 시간 기록 대상으로 고를 수 있다.
     let entry = send(
@@ -587,6 +609,9 @@ async fn two_writers_on_the_same_episode_version_do_not_overwrite() {
     )
     .await;
     assert_eq!(second.status, StatusCode::CONFLICT, "{:?}", second.json);
+    // 판 충돌은 다시 보내라는 재시도가 아니라 다시 읽으라는 뜻이다(감사 C32, #77): 409 `invalid_state`와 SQL의 설명 그대로.
+    assert_eq!(second.json["error"], "invalid_state");
+    assert_eq!(second.json["message"], "the episode changed; reload it");
     let now = get(&app, &writer, &item).await["episodes"][0].clone();
     assert_eq!(now["title"], "벡터 공간");
     assert_eq!(now["url"], "https://example.test/a");

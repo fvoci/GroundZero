@@ -2,6 +2,7 @@
   // 항목 기록(D-33 산출물·위험·문제·회고, D-34 문헌·연구 기록·데이터·변수·분석·투고, D-36 자료·모임·시험·복습,
   // D-38 재료·장비·장비 사용·활동·결과물). 종류와 칸은 서버의 정의대로 그린다. 권한은 항목을 따른다.
   import type { ModuleKind } from '@fvoci/api-client';
+  import { tick } from 'svelte';
 
   import type { FileView, ItemView, RecordKindView, RecordView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl } from '$lib/api/client';
@@ -38,6 +39,14 @@
   let status = $state('');
   let creating = $state(false);
   let editingId = $state<string | undefined>(undefined);
+  /**
+   * 고치는 기록의 기준 판: 고치기를 연 때 읽은 판. 저장 때의 최신 목록에서 가져오면 고치는 사이 목록을 다시 읽은 것만으로
+   * 서버의 판 확인이 꺼져 다른 사람의 고침을 덮는다. 409 뒤에도 그대로 두고, 충돌 안내에서 서버 내용 불러오기를 골랐을
+   * 때만 그 판으로 옮긴다(덮어쓰기는 그 저장 한 번만 보여 준 판을 보낸다).
+   */
+  let editingVersion = 0;
+  /** 409 뒤 다시 읽은, 다른 사람이 먼저 고친 그 기록의 지금 내용. 고르기 전에는 입력과 기준 판을 그대로 둔다. */
+  let conflict = $state<RecordView | undefined>(undefined);
   let confirming = $state<string | undefined>(undefined);
   // 같은 종류 기록을 표로 나란히 비교(D-34 선행연구 비교 등).
   let asTable = $state(false);
@@ -93,6 +102,11 @@
         loadError = undefined;
         defs = mine;
         records = list;
+        // 고치던 기록이 그사이 지워졌으면 편집기가 말없이 사라지지 않게 알린다.
+        if (editingId !== undefined && !list.some((r) => r.id === editingId)) {
+          editingId = undefined;
+          error = m.common_error_not_found();
+        }
         people = members.members.map((x) => ({ id: x.user_id, name: x.display_name }));
         courses = courseList;
         if (selected === undefined || !mine.some((d) => d.kind === selected))
@@ -110,6 +124,7 @@
     form = emptyForm();
     createKey.done();
     editingId = undefined;
+    conflict = undefined;
     creating = true;
   }
 
@@ -117,9 +132,41 @@
     form = formOf(def, r);
     creating = false;
     editingId = r.id;
+    editingVersion = r.version;
+    conflict = undefined;
   }
 
-  async function save(def: RecordKindView): Promise<void> {
+  /**
+   * 409를 받은 뒤 이 항목의 기록을 다시 읽는다. 다른 사람이 먼저 고쳐 판이 바뀌었으면(보관으로 막힌 409와 구분) 입력과
+   * 기준 판은 그대로 두고 지금 저장된 내용을 보여 준다. 다시 저장해도 같은 기준 판을 보내 덮어쓰지 않고, 덮어쓰기를
+   * 골라야 바꾼다. 기록이 지워졌으면 고치기를 닫고 알린다. 처리했으면 true.
+   */
+  async function recordMovedOn(id: string, version: number): Promise<boolean> {
+    let list: RecordView[];
+    try {
+      list = await api.itemRecords(item.id);
+    } catch {
+      return false;
+    }
+    records = list;
+    // 기다리는 사이 고치기를 닫았거나 다른 기록을 열었으면 그 편집에 손대지 않는다.
+    if (editingId !== id) return true;
+    const latest = list.find((x) => x.id === id);
+    if (latest === undefined) {
+      editingId = undefined;
+      error = m.common_error_not_found();
+      return true;
+    }
+    if (latest.version === version) return false;
+    conflict = latest;
+    return true;
+  }
+
+  /**
+   * `baseVersion`은 고치기에서 보낼 기준 판. 충돌 안내에서 덮어쓰기를 고르면 보여 준 서버 판을 보낸다(그사이 또 바뀌면
+   * 다시 409로 알린다). 입력이 틀려 보내지 못하거나 실패하면 기준 판과 충돌 안내는 그대로 남는다.
+   */
+  async function save(def: RecordKindView, baseVersion = editingVersion): Promise<void> {
     if (form.title.trim() === '') {
       error = m.records_title_required();
       return;
@@ -130,26 +177,26 @@
       return;
     }
     error = undefined;
+    const base =
+      !creating && editingId !== undefined ? { id: editingId, version: baseVersion } : undefined;
     try {
       if (creating) {
         const requestId = createKey.for({ item: item.id, kind: def.kind, input: built.input });
         await api.createRecord(item.id, requestId, def.kind, built.input);
         createKey.done(requestId);
         status = m.records_added({ label: recordKindLabel(def) });
-      } else if (editingId !== undefined) {
-        const r = records.find((x) => x.id === editingId);
-        if (r === undefined) return;
-        await api.updateRecord(r.id, r.version, built.input);
+      } else if (base !== undefined) {
+        await api.updateRecord(base.id, base.version, built.input);
         status = m.records_updated({ label: recordKindLabel(def) });
       }
       creating = false;
       editingId = undefined;
+      conflict = undefined;
       reloadKey += 1;
     } catch (e: unknown) {
-      error =
-        e instanceof ApiError && e.status === 409
-          ? m.records_conflict()
-          : errorText(e, m.records_save_failed());
+      const refused = e instanceof ApiError && e.status === 409;
+      if (refused && base !== undefined && (await recordMovedOn(base.id, base.version))) return;
+      error = refused ? m.records_conflict() : errorText(e, m.records_save_failed());
     }
   }
 
@@ -184,6 +231,7 @@
             selected = d.kind;
             creating = false;
             editingId = undefined;
+            conflict = undefined;
           }}>{recordKindLabel(d)} {count(d.kind)}</Button
         >
       {/each}
@@ -287,6 +335,53 @@
         {#each shown as r (r.id)}
           <li class="flex flex-col gap-1 rounded-md border p-2 text-sm">
             {#if editingId === r.id}
+              {#if conflict?.id === r.id}
+                {@const latest = conflict}
+                <!-- 다른 사람이 먼저 고쳤다: 지금 저장된 내용을 보이고, 불러올지 덮어쓸지 사용자가 고른다(일정 충돌과 같은 원칙). -->
+                <div
+                  class="flex flex-col gap-2 rounded-md border border-amber-500/50 p-3"
+                  role="alert"
+                >
+                  <p>{m.records_changed()}</p>
+                  <dl class="grid grid-cols-[max-content_1fr] gap-x-3">
+                    <dt class="text-muted-foreground">{m.records_title()}</dt>
+                    <dd>{latest.title}</dd>
+                    {#if latest.occurred_on !== null && dateLabel !== null}
+                      <dt class="text-muted-foreground">{dateLabel}</dt>
+                      <dd>{formatDay(latest.occurred_on)}</dd>
+                    {/if}
+                    {#each summary(def, latest, names, courseNames) as line (line.key)}
+                      <dt class="text-muted-foreground">{line.label}</dt>
+                      <dd class="whitespace-pre-wrap">{line.text}</dd>
+                    {/each}
+                    {#if latest.body !== ''}
+                      <dt class="text-muted-foreground">{m.records_body()}</dt>
+                      <dd class="whitespace-pre-wrap">{latest.body}</dd>
+                    {/if}
+                    {#if latest.files.length > 0}
+                      <dt class="text-muted-foreground">{m.records_linked_files()}</dt>
+                      <dd>
+                        {latest.files.map((f) => `${f.file_name} v${String(f.version)}`).join(', ')}
+                      </dd>
+                    {/if}
+                  </dl>
+                  <div class="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onclick={async () => {
+                        startEdit(def, latest);
+                        // 안내가 사라지며 누른 단추도 없어지므로 초점을 제목 칸으로 옮긴다(키보드 사용자가 자리를 잃지 않게).
+                        await tick();
+                        document.getElementById(`record-${def.kind}-title`)?.focus();
+                      }}>{m.records_load_server()}</Button
+                    >
+                    <Button size="sm" onclick={() => void save(def, latest.version)}
+                      >{m.records_overwrite()}</Button
+                    >
+                  </div>
+                </div>
+              {/if}
               <RecordEditor
                 {def}
                 bind:form
@@ -298,6 +393,7 @@
                 oncancel={() => {
                   creating = false;
                   editingId = undefined;
+                  conflict = undefined;
                 }}
               />
             {:else}

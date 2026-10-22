@@ -120,8 +120,3 @@ export function formatInstant(
 export function formatClock(iso: string, settings: DisplaySettings = displaySettings()): string {
   return formatInstant(iso, { hour: 'numeric', minute: '2-digit' }, settings);
 }
-
-/** 숫자(천 단위 구분 등). */
-export function formatNumber(value: number, settings: DisplaySettings = displaySettings()): string {
-  return new Intl.NumberFormat(localeTag(settings)).format(value);
-}

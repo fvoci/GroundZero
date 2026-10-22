@@ -656,6 +656,124 @@ async fn item_totals_group_entries_under_the_item_by_kind() {
     );
 }
 
+/// 감사 델타 SD3 (P-27): 진행 중 타이머의 시작을 옮겨 누적 멈춤보다 짧은 구간을 만들면 거절한다. 전에는 받아서 길이가 0이
+/// 됐고, 그 상태로 멈추면 멈춤이 구간보다 긴 끝난 기록이 남아 메모만 고쳐도 400이 났다. 그렇게 이미 남은 기록도 메모는
+/// 고칠 수 있고, 시각·멈춤을 고칠 때는 지금처럼 범위를 본다.
+#[tokio::test]
+async fn a_running_timer_keeps_its_pauses_inside_its_span() {
+    use time::format_description::well_known::Rfc3339;
+    use time::{Duration, OffsetDateTime};
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "멈춤 범위").await;
+    let (me, _) = add_member(&app, &state, &admin, &ws, "pauser", "writer").await;
+    let body =
+        json!({ "request_id": new_request_id(), "kind": "work", "memo": "", "target": null });
+    let (status, timer) = start(&app, &me, body).await;
+    assert_eq!(status, StatusCode::CREATED, "{timer:?}");
+    let id = timer["id"].as_str().unwrap().to_owned();
+    // 두 시간 전에 시작해 한 시간을 멈췄다가 다시 시작한 타이머로 만든다.
+    act(&app, &me, &timer, "pause").await;
+    common::fixture_sql(
+        "UPDATE fvoci.time_entries SET started_at = now() - interval '2 hours', paused_at = now() - interval '1 hour'
+         WHERE id = $1::uuid",
+        &id,
+    )
+    .await;
+    let (_, running) = act(&app, &me, &timer, "resume").await;
+    assert!(
+        running["paused_seconds"].as_i64().unwrap() >= 3600,
+        "{running}"
+    );
+    let at = |v: &Value| OffsetDateTime::parse(v.as_str().unwrap(), &Rfc3339).unwrap();
+    let text = |t: OffsetDateTime| json!(t.format(&Rfc3339).unwrap());
+    let uri = format!("/api/time-entries/{id}");
+    let put = |cur: &Value, started: Value, memo: &str| {
+        let body = json!({ "base_version": cur["version"], "started_at": started, "ended_at": cur["ended_at"],
+                           "paused_seconds": cur["paused_seconds"], "kind": "work", "memo": memo, "target": null });
+        send(&app, Method::PUT, &uri, Some(&me), Some(body))
+    };
+
+    // 시작을 한 시간 반 뒤로 옮기면 남는 구간(30분)이 멈춤(1시간)보다 짧다.
+    let started = at(&running["started_at"]);
+    let late = put(&running, text(started + Duration::minutes(90)), "").await;
+    assert_eq!(late.status, StatusCode::BAD_REQUEST, "{:?}", late.json);
+    // 남는 구간이 멈춤보다 길면 된다.
+    let ok = put(&running, text(started + Duration::minutes(30)), "").await;
+    assert_eq!(ok.status, StatusCode::OK, "{:?}", ok.json);
+    assert!(
+        ok.json["seconds"].as_i64().unwrap() >= 29 * 60,
+        "{:?}",
+        ok.json
+    );
+
+    // 멈춰 있으면 멈춘 때까지의 구간과 비교한다(지금 멈춘 시간은 아직 누적에 없다).
+    let (_, paused) = act(&app, &me, &timer, "pause").await;
+    let paused_at = at(&paused["paused_at"]);
+    let short = put(&paused, text(paused_at - Duration::minutes(50)), "").await;
+    assert_eq!(short.status, StatusCode::BAD_REQUEST, "{:?}", short.json);
+    let fits = put(&paused, text(paused_at - Duration::minutes(70)), "").await;
+    assert_eq!(fits.status, StatusCode::OK, "{:?}", fits.json);
+
+    // 고치기 전 서버가 받아 이미 저장된, 멈춤이 구간보다 긴 끝난 기록.
+    act(&app, &me, &timer, "stop").await;
+    common::fixture_sql(
+        "UPDATE fvoci.time_entries SET paused_seconds = floor(extract(epoch FROM ended_at - started_at))::integer + 600
+         WHERE id = $1::uuid",
+        &id,
+    )
+    .await;
+    let (_, stopped) = act(&app, &me, &timer, "stop").await;
+    // 시각·멈춤을 그대로 두고 메모만 고치면 된다(데이터는 바꾸지 않는다).
+    let memo = put(&stopped, stopped["started_at"].clone(), "메모").await;
+    assert_eq!(memo.status, StatusCode::OK, "{:?}", memo.json);
+    assert_eq!(memo.json["paused_seconds"], stopped["paused_seconds"]);
+    // 시각을 고치면 범위를 본다.
+    let moved = put(
+        &memo.json,
+        text(at(&stopped["started_at"]) + Duration::seconds(1)),
+        "메모",
+    )
+    .await;
+    assert_eq!(moved.status, StatusCode::BAD_REQUEST, "{:?}", moved.json);
+
+    // 고치기 전 서버가 받아 이미 어긋난 진행 중 타이머(10분 전 시작, 멈춤 1시간). 시작을 그대로 두면 메모는 고칠 수 있고,
+    // 시작을 옮길 때만 범위를 본다.
+    let body =
+        json!({ "request_id": new_request_id(), "kind": "work", "memo": "", "target": null });
+    let (status, second) = start(&app, &me, body).await;
+    assert_eq!(status, StatusCode::CREATED, "{second:?}");
+    common::fixture_sql(
+        "UPDATE fvoci.time_entries SET started_at = now() - interval '10 minutes', paused_seconds = 3600
+         WHERE id = $1::uuid",
+        second["id"].as_str().unwrap(),
+    )
+    .await;
+    let running = send(&app, Method::GET, "/api/me/timer", Some(&me), None)
+        .await
+        .json;
+    assert_eq!(running["paused_seconds"], 3600, "{running}");
+    let second_uri = format!("/api/time-entries/{}", second["id"].as_str().unwrap());
+    let put_second = |cur: &Value, started: Value| {
+        let body = json!({ "base_version": cur["version"], "started_at": started, "ended_at": null,
+                           "paused_seconds": cur["paused_seconds"], "kind": "work", "memo": "메모", "target": null });
+        send(&app, Method::PUT, &second_uri, Some(&me), Some(body))
+    };
+    let kept = put_second(&running, running["started_at"].clone()).await;
+    assert_eq!(kept.status, StatusCode::OK, "{:?}", kept.json);
+    let started = at(&running["started_at"]);
+    let still_short = put_second(&kept.json, text(started - Duration::minutes(5))).await;
+    assert_eq!(
+        still_short.status,
+        StatusCode::BAD_REQUEST,
+        "{:?}",
+        still_short.json
+    );
+    let long_enough = put_second(&kept.json, text(started - Duration::hours(2))).await;
+    assert_eq!(long_enough.status, StatusCode::OK, "{:?}", long_enough.json);
+}
+
 /// 감사 S21·S20: 0시가 두 번 오는 날(아바나 2025-11-02, 05:00Z에 01:00 → 00:00)의 앞쪽 0시~1시 기록이 집계에서
 /// 빠지거나 줄었고, 목록은 그 기록을 전날에 두었다. 하루는 그날 0시가 처음 오는 시점부터다. 또 아주 긴 기록도 조회
 /// 기간의 날만큼만 나눠 같은 값을 낸다.

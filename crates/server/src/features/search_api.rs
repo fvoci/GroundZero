@@ -224,6 +224,18 @@ async fn visible(
     Ok(rows.into_iter().collect())
 }
 
+/// 이 항목들 가운데 그 사람이 볼 수 있는 것(호출자 권한, 항목 RLS).
+async fn visible_items(tx: &mut UserTx, ids: &[Uuid]) -> Result<HashSet<Uuid>, AppError> {
+    if ids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let rows: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM items WHERE id = ANY($1)")
+        .bind(ids)
+        .fetch_all(tx.conn())
+        .await?;
+    Ok(rows.into_iter().collect())
+}
+
 /// 후보 가운데 그 사람이 만든 것(각 대상의 `created_by`). 호출자 권한(RLS)으로 읽으므로 볼 수 없는 행은 나오지 않는다.
 async fn authored(
     tx: &mut UserTx,
@@ -313,9 +325,7 @@ pub async fn search(
     );
     tx.commit().await?;
     let title_only = query.title_only.unwrap_or(false);
-    if let Some(results) =
-        indexed(&state, client, user, q, &filter, title_only, wanted.author).await?
-    {
+    if let Some(results) = indexed(&state, client, user, q, &filter, title_only, &wanted).await? {
         return Ok(Json(results));
     }
     // 검색 서비스가 응답하지 않으면 제목 검색으로 대신한다.
@@ -334,8 +344,9 @@ async fn indexed(
     q: &str,
     filter: &str,
     title_only: bool,
-    author: Option<Uuid>,
+    wanted: &Filters,
 ) -> Result<Option<Vec<SearchResult>>, AppError> {
+    let (author, module) = (wanted.author, wanted.module);
     let mut results = Vec::new();
     for page in 0..MAX_PAGES {
         let hits = match client
@@ -373,14 +384,23 @@ async fn indexed(
             Some(author) => Some(authored(&mut tx, author, &candidates).await?),
             None => None,
         };
+        // 항목 id·모듈은 그 항목을 볼 수 있는 사람에게만 쓴다(감사 델타 SD4). 공유로만 문서·첨부를 보는 사람에게는 항목
+        // id를 주지 않고, 모듈로 거를 때는 대체(DB) 경로처럼 그 결과를 내지 않는다.
+        let item_ids: Vec<Uuid> = hits
+            .iter()
+            .filter_map(|h| parse_uuid(h.item_id.as_deref()))
+            .collect();
+        let seen_items = visible_items(&mut tx, &item_ids).await?;
         for h in hits {
             let Some(id) = Uuid::parse_str(&h.id).ok() else {
                 continue;
             };
             let key = (h.kind.clone(), id);
+            let item = parse_uuid(h.item_id.as_deref()).filter(|i| seen_items.contains(i));
             if results.len() == MAX_RESULTS
                 || !allowed.contains(&key)
                 || made.as_ref().is_some_and(|m| !m.contains(&key))
+                || (module.is_some() && h.item_id.is_some() && item.is_none())
             {
                 continue;
             }
@@ -399,7 +419,7 @@ async fn indexed(
                 title: h.title,
                 reference,
                 workspace_id: parse_uuid(h.workspace_id.as_deref()),
-                item_id: parse_uuid(h.item_id.as_deref()),
+                item_id: item,
                 snippet,
                 document_id,
             });
@@ -431,7 +451,11 @@ async fn fallback(
     );
     type Row = (String, Uuid, String, Option<Uuid>, Option<Uuid>);
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT kind, id, title, workspace_id, item_id FROM (
+        // 항목 id는 그 항목을 볼 수 있는 사람에게만 준다(공유로만 문서·첨부를 보는 사람에게 비공개 항목을 드러내지 않는다,
+        // 문서 조회와 같은 규칙). 감사 델타 SD4.
+        "SELECT kind, id, title, workspace_id,
+                CASE WHEN r.item_id IS NOT NULL AND app_item_access(r.item_id) IS NOT NULL THEN r.item_id END
+         FROM (
            SELECT 'document' AS kind, d.id, d.title, d.workspace_id, d.item_id, d.updated_at,
                   (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status,
                   NULL::uuid[] AS assignees, d.updated_at::date AS day, d.created_by
