@@ -13,7 +13,7 @@
   import * as Dialog from '$lib/ui/dialog';
 
   import type { EventUnit } from './conflict';
-  import { mergeEventInput, sameUnit } from './conflict';
+  import { mergeEventInput, sameUnit, trimLikeServer } from './conflict';
   import EventForm from './EventForm.svelte';
   import RecurrenceEditor from './RecurrenceEditor.svelte';
   import { describeRule, describeWhen, KIND_LABEL } from './labels';
@@ -250,7 +250,7 @@
     }
   }
 
-  /** 겹친 칸의 값. 일시는 머리말과 같은 글로 보인다. */
+  /** 겹친 칸의 값. 일시는 머리말과 같은 글로, 공백만인 설명은 서버가 저장할 대로 비었다고 보인다. */
   function unitText(unit: EventUnit, e: EventView): string {
     switch (unit) {
       case 'kind':
@@ -258,7 +258,7 @@
       case 'title':
         return e.title;
       case 'description':
-        return e.description === '' ? m.events_clash_empty() : e.description;
+        return trimLikeServer(e.description) === '' ? m.events_clash_empty() : e.description;
       case 'when':
         return describeWhen(e, zone);
     }

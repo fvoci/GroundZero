@@ -14,6 +14,20 @@ export interface MergedInput {
   clashes: EventUnit[];
 }
 
+const WHITE_SPACE = /\p{White_Space}/u;
+
+/**
+ * 서버가 저장할 때처럼 앞뒤 공백을 지운다. 서버(Rust `str::trim`)는 유니코드 White_Space만 지우는데 JS `trim()`은
+ * U+FEFF도 지우고 U+0085는 두므로 쓰지 않는다(서버가 다르게 저장할 칸을 같다고 보거나 그 반대가 되지 않게).
+ */
+export function trimLikeServer(s: string): string {
+  let start = 0;
+  let end = s.length;
+  while (start < end && WHITE_SPACE.test(s.charAt(start))) start += 1;
+  while (end > start && WHITE_SPACE.test(s.charAt(end - 1))) end -= 1;
+  return s.slice(start, end);
+}
+
 /** 같은 시각인지. 서버와 입력의 표기(`Z`·`+09:00`·소수 초)가 달라도 값으로 비교한다. */
 function sameInstant(a: string | null, b: string | null): boolean {
   if (a === null || b === null) return a === b;
@@ -31,9 +45,9 @@ export function sameUnit(unit: EventUnit, a: EventInput, b: EventInput): boolean
     case 'kind':
       return a.kind === b.kind;
     case 'title':
-      return a.title.trim() === b.title.trim();
+      return trimLikeServer(a.title) === trimLikeServer(b.title);
     case 'description':
-      return a.description.trim() === b.description.trim();
+      return trimLikeServer(a.description) === trimLikeServer(b.description);
     case 'when':
       return (
         a.all_day === b.all_day &&

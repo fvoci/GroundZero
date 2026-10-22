@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EventInput, EventView } from '$lib/api/client';
-import { api, NetworkError } from '$lib/api/client';
+import { api, NetworkError, RuleConflict } from '$lib/api/client';
 import EventDialog from '$lib/features/events/EventDialog.svelte';
 import { describeWhen } from '$lib/features/events/labels';
 import { localTimeZone } from '$lib/features/events/time';
@@ -66,6 +66,9 @@ const theirs = ev(
   { title: '새 제목', starts_at: '2026-10-20T05:00:00Z', ends_at: '2026-10-20T06:00:00Z' },
   6,
 );
+
+/** 내가 옮긴 시각(서울 15:00–16:00)을 입력 양식이 보내는 표기로. */
+const mineWhen = { starts_at: '2026-10-20T06:00:00.000Z', ends_at: '2026-10-20T07:00:00.000Z' };
 
 function field(label: string): HTMLInputElement | HTMLTextAreaElement {
   const el = screen.getByLabelText(label);
@@ -184,7 +187,6 @@ describe('saving my input after an event conflict (D-94)', () => {
       expect(document.activeElement).toBe(box);
     });
     const zone = localTimeZone();
-    const mineWhen = { starts_at: '2026-10-20T06:00:00.000Z', ends_at: '2026-10-20T07:00:00.000Z' };
     // 겹친 칸은 일시 하나(제목은 서버만 바꿨다). 서버 값과 내 값을 함께 보인다.
     expect(
       within(box)
@@ -335,13 +337,20 @@ describe('saving my input after an event conflict (D-94)', () => {
     });
   });
 
-  /** 알림이 떠 있는 동안 반복 규칙을 저장하면 서버는 더 새 판(7판, 그사이 제목도 바뀜)을 돌려준다. */
-  async function saveRuleDuringNotice(): Promise<EventView> {
-    const afterRule = { ...theirs, title: '규칙 뒤 제목', version: 7 };
-    const setRule = vi.spyOn(api, 'setEventRecurrence').mockResolvedValue(afterRule);
+  function ruleForm(): HTMLFormElement {
     const rule = document.querySelector('[aria-labelledby="event-recurrence-heading"] form');
     if (!(rule instanceof HTMLFormElement)) throw new Error('no recurrence form');
-    await fireEvent.submit(rule);
+    return rule;
+  }
+
+  /**
+   * 알림이 떠 있는 동안 반복 규칙을 저장하면 서버는 더 새 판(7판, 그사이 제목도 바뀜)을 돌려준다. `fields`는 그 판에서
+   * 더 바뀐 칸.
+   */
+  async function saveRuleDuringNotice(fields: Partial<EventInput> = {}): Promise<EventView> {
+    const afterRule = { ...theirs, title: '규칙 뒤 제목', ...fields, version: 7 };
+    const setRule = vi.spyOn(api, 'setEventRecurrence').mockResolvedValue(afterRule);
+    await fireEvent.submit(ruleForm());
     await waitFor(() => {
       expect(setRule).toHaveBeenCalledTimes(1);
     });
@@ -409,5 +418,185 @@ describe('saving my input after an event conflict (D-94)', () => {
       expect(update).toHaveBeenCalledTimes(2);
     });
     expect(update.mock.calls[1]).toEqual(['A', 5, sent({ description: '내 설명' })]);
+  });
+
+  // 반박 검증: 물은 뒤 반복 규칙 저장으로 더 새 판이 생겨도 겹친 일시는 그대로다. 덮어쓰기는 다시 묻지 않고 그 판에 합친다.
+  it('overwrites onto the newer version a rule save returned after the question, without asking again', async () => {
+    const update = stub({ kind: 'conflict', current: theirs });
+    await open();
+    await moveAndConflict();
+    await saveMine();
+    await screen.findByRole('alertdialog', { name: m.events_clash_question() });
+    await saveRuleDuringNotice();
+
+    await overwrite();
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]).toEqual(['A', 7, sent({ title: '규칙 뒤 제목', ...mineWhen })]);
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+  });
+
+  it('asks again when the newer version a rule save returned also moved the time', async () => {
+    const update = stub({ kind: 'conflict', current: theirs });
+    await open();
+    await moveAndConflict();
+    await saveMine();
+    await screen.findByRole('alertdialog', { name: m.events_clash_question() });
+    // 규칙 저장이 돌려준 판에서는 다른 사람이 서울 13:00–14:00으로 또 옮겼다.
+    const afterRule = await saveRuleDuringNotice({
+      starts_at: '2026-10-20T04:00:00Z',
+      ends_at: '2026-10-20T05:00:00Z',
+    });
+
+    await overwrite();
+    const zone = localTimeZone();
+    await waitFor(() => {
+      expect(screen.getByRole('alertdialog').textContent).toContain(
+        m.events_clash_server({ value: describeWhen(afterRule, zone) }),
+      );
+    });
+    expect(update).toHaveBeenCalledTimes(1);
+
+    await overwrite();
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]).toEqual(['A', 7, sent({ title: '규칙 뒤 제목', ...mineWhen })]);
+  });
+
+  it('asks again when I change the clashing time after the question', async () => {
+    const update = stub({ kind: 'conflict', current: theirs });
+    await open();
+    await moveAndConflict();
+    await saveMine();
+    await screen.findByRole('alertdialog', { name: m.events_clash_question() });
+    // 물은 뒤 서울 16:30–17:30으로 다시 옮겼다. 확인받은 내 값과 다르니 덮어쓰기는 새 값으로 다시 묻는다.
+    await fireEvent.input(field(m.events_starts()), { target: { value: '2026-10-20T16:30' } });
+    await fireEvent.input(field(m.events_ends()), { target: { value: '2026-10-20T17:30' } });
+    const again = { starts_at: '2026-10-20T07:30:00.000Z', ends_at: '2026-10-20T08:30:00.000Z' };
+
+    await overwrite();
+    const zone = localTimeZone();
+    await waitFor(() => {
+      expect(screen.getByRole('alertdialog').textContent).toContain(
+        m.events_clash_mine({ value: describeWhen({ ...theirs, ...again }, zone) }),
+      );
+    });
+    expect(update).toHaveBeenCalledTimes(1);
+
+    await overwrite();
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]).toEqual(['A', 6, sent({ title: '새 제목', ...again })]);
+  });
+
+  // 반박 검증: "서버 내용 불러오기"도 알림 뒤 반복 규칙 저장이 돌려준 더 새 판을 불러온다(옛 판이면 방금 저장한 규칙을
+  // 되돌리고, 다음 저장이 반드시 다시 409).
+  it('loads the newer version a rule save returned while the notice was shown', async () => {
+    const update = stub({ kind: 'conflict', current: theirs });
+    await open();
+    await describeAndConflict('내 설명');
+    await saveRuleDuringNotice();
+
+    await fireEvent.click(screen.getByRole('button', { name: m.events_load_server() }));
+    expect(await screen.findByDisplayValue('규칙 뒤 제목')).toBeTruthy();
+    expect(field(m.events_description()).value).toBe('');
+    expect(screen.queryByRole('button', { name: m.events_save_mine() })).toBeNull();
+
+    await fireEvent.submit(eventForm());
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]).toEqual([
+      'A',
+      7,
+      sent({
+        title: '규칙 뒤 제목',
+        starts_at: '2026-10-20T05:00:00Z',
+        ends_at: '2026-10-20T06:00:00Z',
+      }),
+    ]);
+  });
+
+  it('merges onto the event a rule conflict returned while the notice was shown', async () => {
+    const update = stub({ kind: 'conflict', current: theirs });
+    await open();
+    await describeAndConflict('내 설명');
+    // 반복 규칙 저장이 그사이 바뀐 규칙과 부딪쳐 서버가 지금 일정(7판)을 함께 돌려준다.
+    const ruled: EventView = {
+      ...theirs,
+      title: '규칙 뒤 제목',
+      recurrence: { freq: 'weekly', interval: 1, weekdays: [2], until: null, count: null },
+      version: 7,
+    };
+    vi.spyOn(api, 'setEventRecurrence').mockRejectedValue(new RuleConflict(ruled));
+    await fireEvent.submit(ruleForm());
+
+    const zone = localTimeZone();
+    expect(
+      await screen.findByText(
+        m.events_conflict({ title: '규칙 뒤 제목', when: describeWhen(ruled, zone) }),
+      ),
+    ).toBeTruthy();
+    expect(field(m.events_description()).value).toBe('내 설명');
+
+    await saveMine();
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]).toEqual([
+      'A',
+      7,
+      sent({
+        title: '규칙 뒤 제목',
+        starts_at: '2026-10-20T05:00:00Z',
+        ends_at: '2026-10-20T06:00:00Z',
+        description: '내 설명',
+      }),
+    ]);
+  });
+
+  // 반박 검증 nit: 공백만 남긴 내 설명은 서버가 빈 설명으로 저장한다. 물을 때도 비어 있다고 보인다.
+  it('shows a description of only spaces as empty in the question', async () => {
+    stub({ kind: 'conflict', current: ev({ description: '남의 설명' }, 6) });
+    vi.spyOn(api, 'event').mockResolvedValue(ev({ description: '원래 설명' }));
+    await open();
+    await describeAndConflict('  \n ');
+
+    await saveMine();
+    const box = await screen.findByRole('alertdialog', { name: m.events_clash_question() });
+    expect(box.textContent).toContain(m.events_clash_server({ value: '남의 설명' }));
+    expect(box.textContent).toContain(m.events_clash_mine({ value: m.events_clash_empty() }));
+  });
+
+  it('reopening drops the old notice and question', async () => {
+    const update = stub({ kind: 'conflict', current: theirs });
+    const props = (eventId: string | undefined) => ({
+      eventId,
+      onclose: () => undefined,
+      onchanged: () => undefined,
+    });
+    const { rerender } = render(EventDialog, { props: props('A') });
+    await screen.findByDisplayValue('회의');
+    await moveAndConflict();
+    await saveMine();
+    await screen.findByRole('alertdialog', { name: m.events_clash_question() });
+
+    await rerender(props(undefined));
+    await rerender(props('A'));
+    await screen.findByDisplayValue('회의');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.queryByRole('button', { name: m.events_save_mine() })).toBeNull();
+    expect(field(m.events_starts()).value).toBe('2026-10-20T10:00');
+
+    await fireEvent.submit(eventForm());
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]).toEqual(['A', 5, sent()]);
   });
 });

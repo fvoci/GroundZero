@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { EventInput, EventView } from '$lib/api/client';
-import { mergeEventInput } from '$lib/features/events/conflict';
+import { mergeEventInput, sameUnit } from '$lib/features/events/conflict';
 
 // D-94: 충돌 뒤 "내 입력으로 다시 저장"은 내가 고친 칸만 서버 최신 값에 얹는다. 같은 칸을 양쪽이 서로 다른 값으로
 // 고쳤으면 겹친 칸으로 돌려준다. 날짜·시각·시간대·종일 여부는 한 묶음이다.
@@ -83,6 +83,13 @@ describe('mergeEventInput', () => {
     const merged = mergeEventInput(base, input({ title: ' 회의 ', description: '\n' }), server);
     expect(merged.clashes).toEqual([]);
     expect(merged.input).toEqual(input({ title: '새 제목', description: '그쪽 설명' }));
+  });
+
+  it('trims the way the server does', () => {
+    // 서버(Rust `str::trim`)는 유니코드 White_Space만 지운다. JS `trim()`은 U+FEFF도 지우고 U+0085는 두어, 그것으로
+    // 비교하면 서버가 다르게 저장할 칸을 같다고 보거나(U+FEFF) 같게 저장할 칸을 고쳤다고 본다(U+0085).
+    expect(sameUnit('description', input({ description: '﻿' }), input())).toBe(false);
+    expect(sameUnit('title', input({ title: '\u0085회의　' }), input())).toBe(true);
   });
 
   it('compares instants by value, not by how they are written', () => {
