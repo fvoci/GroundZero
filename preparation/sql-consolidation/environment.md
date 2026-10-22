@@ -30,10 +30,10 @@ RLS 정책·정의자 함수·역할 멤버십을 직접 편집하는 설치 절
 
 근거: `deploy/compose.selfhost.yaml:20–45`, `docs/self-hosting-supabase.md:11–22,38–72`,
 `crates/server/src/db/admin.rs:244–281,285–340`, `xtask/src/compose.rs:189–220`.
-사용자는 최소 PostgreSQL 버전을 17로 확정했다(D-100). 검증한 메이저만 지원 목록에 기록하며 현재 검증 대상은 17·18이다.
-기존 PG17 성공은 셀프호스트 Supabase의 결과이고 일반 PG17 검증은 추가 실행 결과로 구분한다. 기존 환경별 등가성 결과는 검토한 통합 작업 `a32d8bf`의
-`preparation/sql-consolidation/verification/results.md`에 있으며, 제한된 설치 관리자 시험과 실제 Cloud 시험을
-대신하지 않는다.
+사용자는 최소 PostgreSQL 버전을 17로 확정했다(D-100). 검증한 지원 메이저는 17·18이며 미래 메이저를 자동으로 포함하지 않는다.
+일반 PG17.9에서 기존 SQL과 후보의 객체·권한 비교, 각 전체 시험 358건과 제한된 설치 관리자 조건의 핵심 시험 60건을 통과했다.
+일반 PG18.3 및 셀프호스트 Supabase PG17.6 결과도 [실행 기록](verification/results.md)에 별도로 유지한다.
+로컬 제한 관리자 시험은 실제 Cloud 버전·설치·앱 동작 검증을 대신하지 않는다.
 
 ## 2. 역할과 기존 설정 계약
 

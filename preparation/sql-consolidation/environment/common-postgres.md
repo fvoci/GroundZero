@@ -75,8 +75,9 @@ Supabase 전용 확장·패치가 있어야 하는 함수로 취급하지
 [PG17.0 태그의 함수 선언](https://github.com/postgres/postgres/blob/REL_17_0/src/include/catalog/pg_proc.dat#L8848),
 [PG18 UUID 함수](https://www.postgresql.org/docs/18/functions-uuid.html).
 
-사용자가 최소 PostgreSQL 버전을 17로 확정했다(D-100). 일반 PG17의 실제 검증을 추가하고 검증한 메이저만 지원 목록에 둔다.
-기존 결과는 일반 PG18과 셀프호스트 Supabase PG17이며, 일반 PG17의 결과는 추가 시험 기록으로 구분한다.
+사용자가 최소 PostgreSQL 버전을 17로 확정했다(D-100). 검증한 지원 메이저는 17·18이며 미래 메이저를 자동으로 포함하지 않는다.
+일반 PG17.9에서 기존 SQL과 후보의 객체·권한 비교, 각 전체 시험 358건과 제한된 설치 관리자 조건의 핵심 시험 60건을 통과했다.
+일반 PG18.3 및 셀프호스트 Supabase PG17.6 결과와 함께 [실행 기록](../verification/results.md)에 조건별로 구분한다.
 실제 Cloud 대상의 `server_version_num`, `to_regprocedure('pg_catalog.uuid_extract_version(uuid)')`, 반환형과
 두 제품 역할의 EXECUTE 권한, UUIDv7 입력의 결과는 기존 SELECT 1 점검에서 확인하지 않았다. 버전 숫자나
 프로젝트 생성일을 추측해 통과 처리하지 않는다. Supabase는 프로젝트별 업그레이드와 현재 서비스 버전 확인을 안내하므로
