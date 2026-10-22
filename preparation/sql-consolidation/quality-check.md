@@ -56,3 +56,21 @@ SQL 적용·카탈로그·행동 입력에는 변화가 없어 DB 행렬을 반�
 - `cargo test -p xtask --locked`: 16개 PASS, 실패·무시 0. 비교기 시험은 4개다.
 - 원본 로그: 로컬 `target/sql-consolidation-check/atomic-output-unit.log`.
 - 로그 SHA-256: `701e0be8490a7529e734a9c24e013dee20fae2feb313e968e64b804acd369bf0`.
+
+## 제한 설치 관리자 검증 도구 추가 후 확인
+
+종합 커밋 `848f13cb82ac236a6a5fd68a1f1c7af354c4c4fa`의 제품 코드·후보 SQL은 그대로이며, `sql-compare`에 제한 설치 관리자와
+명시적인 핵심 행동 시험 범위를 추가했다. B의 실행 소스 `213cc650bc3e192727935670dc1ee6862c1a8d88`과
+동일한 도구 코드를 반영했다.
+
+- `cargo fmt --all --check`: PASS.
+- `cargo clippy -p xtask --all-targets --locked -- -D warnings`: PASS.
+- `cargo test -p xtask --locked`: 16개 PASS, 실패·무시 0.
+- `cargo xtask sql-compare --help`: 새 옵션과 기존 기본 동작 확인.
+- 원본 단위 시험 로그: 로컬 `target/sql-consolidation-check/restricted-unit.log`.
+- 로그 SHA-256: `11160c0eb71b1b24be2d8027dcaf7473d15ead4db286faff9c59bbfa95b645a8`.
+
+A는 새 권한 검증 코드에 한정해 실제 역할 속성·DB 권한 확인, 거부 판정, 반복 실행·자격 증명 보존,
+결과 기록·등록 자원 정지를 교차 검토했고 구체적인 결함을 발견하지 못했다. 이는 실제 DB 시험을 대신하지 않는다.
+종합 담당도 최종 권한 JSON·단계 결과·변조 탐지/원복과 양쪽 로그의 60개 통과 합계를 독립 확인했다.
+두 Rust 모듈·후보의 SHA-256은 실행 입력과 같고, 위 B 실행 커밋과 종합본의 제품/도구 소스 차이는 없다.

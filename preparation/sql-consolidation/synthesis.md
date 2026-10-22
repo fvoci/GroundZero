@@ -6,16 +6,17 @@
 
 ## 기준 SHA에서 확인한 결과
 
-| 항목                                       | 결과                                                                    |
-| ------------------------------------------ | ----------------------------------------------------------------------- |
-| PostgreSQL 18.3 A/A 대조군                 | 객체 차이 0건, 정책·권한·함수·CHECK 변조 4/4 탐지·원복 PASS             |
-| PostgreSQL 18.3 누적 SQL / 후보            | 객체 차이 0건, 양쪽 각 353개 Rust 시험 PASS                             |
-| Supabase PostgreSQL 17.6 직접 연결         | 객체 차이 0건, 양쪽 각 364개 Rust 시험 PASS                             |
-| Supabase PostgreSQL 17.6 session pooler    | 양쪽 각 364개 Rust 시험 PASS; FreshDb 시험은 아래의 직접 연결 예외 적용 |
-| Supabase 변조 검사                         | 정책·권한·함수·CHECK 4/4 탐지·원복 PASS                                 |
-| 종합 `cargo xtask check`                   | Rust 단위 93개·웹 734개, 포맷·lint·타입·계약·고지·라이선스 PASS         |
-| OIDC·Cloud 변경·기존 데이터/백업 이력 전환 | NOT RUN                                                                 |
-| #69·후속 완료 및 최종 main 델타 확정       | 미완료 — 현재 기준의 통과와 구분                                        |
+| 항목                                       | 결과                                                                       |
+| ------------------------------------------ | -------------------------------------------------------------------------- |
+| PostgreSQL 18.3 A/A 대조군                 | 객체 차이 0건, 정책·권한·함수·CHECK 변조 4/4 탐지·원복 PASS                |
+| PostgreSQL 18.3 누적 SQL / 후보            | 객체 차이 0건, 양쪽 각 353개 Rust 시험 PASS                                |
+| Supabase PostgreSQL 17.6 직접 연결         | 객체 차이 0건, 양쪽 각 364개 Rust 시험 PASS                                |
+| Supabase PostgreSQL 17.6 session pooler    | 양쪽 각 364개 Rust 시험 PASS; FreshDb 시험은 아래의 직접 연결 예외 적용    |
+| Supabase 변조 검사                         | 정책·권한·함수·CHECK 4/4 탐지·원복 PASS                                    |
+| 일반 PG 제한 설치 관리자 A/B               | 동일 후보·객체 차이 0건, 각 핵심 앱 시험 60개 PASS; 각 권한 거부 20개 확인 |
+| 종합 `cargo xtask check`                   | Rust 단위 93개·웹 734개, 포맷·lint·타입·계약·고지·라이선스 PASS            |
+| OIDC·Cloud 변경·기존 데이터/백업 이력 전환 | NOT RUN                                                                    |
+| #69·후속 완료 및 최종 main 델타 확정       | 미완료 — 현재 기준의 통과와 구분                                           |
 
 수치는 경로별 전체 Rust 시험 합계이며 서로 다른 시험 수로 합산하지 않는다. 모든 완료 경로의 실패·무시는 0이다.
 명령·입력 SHA·로그·진단 차이는 [DB 실행 결과](verification/results.md), 종합 검사와 실행 소스의 대응은
@@ -47,6 +48,24 @@ Rust 단위 시험 96개, Clippy, 실제 A/A의 설치·객체·변조·정지 �
 
 권한·업무 규칙·경합/409·데이터 정합성의 최종 판단은 기존 서버와 DB에 남는다.
 이번 변경은 프런트엔드를 수정하지 않으며, 화면 좌표·미리보기·입력 안내를 서버로 옮기는 변경도 없다.
+
+추가 사용자 지시에 따라 Cloud의 권한 제약을 고려한 표준 PostgreSQL 공통 구현을 우선한다.
+일반 PG용·Supabase용 제품 SQL을 분리하지 않고, 불가피한 환경 차이는 최소 초기 설정·접속 설정으로 한정한다.
+Supabase 전용 서비스 의존성을 추가하지 않는다. 이 우선순위는 Cloud에서 실제 설치·권한·동작이 검증됐다는
+뜻이 아니며, 원격 Cloud 변경 시험은 기존 PLAN ONLY 범위를 유지한다.
+
+추가 검증에서 일반 PG18.3의 설치 관리자는 `CREATEROLE`과 대상 DB `CREATE`,
+`CONNECT WITH GRANT OPTION`만 받았다. SUPERUSER·CREATEDB·BYPASSRLS·REPLICATION과 DB 소유권은 없다.
+같은 누적 SQL/후보의 bootstrap·migration 재실행 뒤 객체·원장·ADMIN-only 멤버십이 같았으며,
+다른 관리자의 변경 요청 거부 후 원래 자격 증명도 유지됐다. 각 측의 금지 동작 20개가 `42501`로 거부됐다.
+실제 앱 역할로 7개 기존 시험 파일의 60개 시험이 각각 통과했다. 백업·검색·S3·OIDC와 나머지 시험은 이 추가
+핵심 범위에서 제외했으며, 이전 전체 환경 행렬과 구분한다. 명령·전체 로그·권한 실측은 [실행 결과](verification/results.md)에 있다.
+
+공통화 설계는 하나의 제품 SQL과 기존 세 URL 계약을 유지한다. `uuid_extract_version`은 PG17.0부터의 표준 함수라
+Supabase 보완 계층이 필요하지 않다. 복구의 매개변수 SET 권한은 최소 설치 권한보다 강하지만,
+표준 PG의 초기 권한 부여와 Cloud 제공 권한으로 같은 SQL을 사용할 수 있는지 먼저 확인한다.
+제한 프로필의 거부를 Cloud의 거부로 해석하거나, 복구 기능 제외·별도 제품 SQL 도입을 결론내리지 않는다.
+[환경 공통 계약](environment/common-postgres.md)은 실제 Cloud 역할·함수·접속·복구 검증이 남았음을 명시한다.
 
 ## 작업자 간 교차 검토
 
