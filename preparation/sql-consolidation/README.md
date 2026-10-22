@@ -41,6 +41,12 @@ DB·Docker 실행은 B가 전담한다. 이 작업용으로 새로 만든 프로
 공유 개발·시험 DB 및 기존 볼륨을 보존한다. `cargo xtask down`과 광범위한 정리는 하지 않는다.
 빌드 출력은 각 worktree에서 분리한다.
 
+실행 기록의 예외: 초기 A/A 도구는 수정 전 종료 경로에서 이 작업 전용 B 프로젝트에 한 번
+`docker compose down --volumes --remove-orphans`를 실행했다. 삭제 대상은 해당 임시 PostgreSQL
+컨테이너와 네트워크였고, DB는 tmpfs여서 해당 프로젝트의 이름 붙은 볼륨은 없었다.
+공유 DB·기존 볼륨을 대상으로 하지 않았다. 이후 도구는 `stop`만 사용하며,
+이 예외를 숨기거나 전체 실행이 처음부터 stop-only였다고 기록하지 않는다. 상세 로그는 검증 실행 기록에 남긴다.
+
 ## 전환 전 관문
 
 1. #69와 후속 변경 종료를 확인하고 최종 main SHA를 기록한다.
@@ -61,6 +67,7 @@ DB·Docker 실행은 B가 전담한다. 이 작업용으로 새로 만든 프로
 - [최종 객체·제거/유지 근거](analysis-a.md), [객체와 호출 목록](inventory/README.md)
 - [후보 SQL과 적용 조건](candidate/README.md)
 - [비교 명령·정규화·검증 한계](verification/README.md)
+- [SHA별 DB 실행 결과와 증거](verification/results.md), [종합 품질 검사](quality-check.md)
 - [설치·역할·환경](environment.md), [session 상태](environment/session-state.md), [Cloud 후속 계획](environment/cloud-plan.md)
 - [종합 판단·실제 시험 대응·전환 순서](synthesis.md)
 - 검토용 Draft PR: [#92](https://github.com/fvoci/GroundZero/pull/92)
