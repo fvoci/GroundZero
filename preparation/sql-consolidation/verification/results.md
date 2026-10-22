@@ -92,6 +92,40 @@ CHECK (length(btrim(name)) >= 1 AND length(btrim(name)) <= 255 AND name !~ '[\x0
 
 8개 스레드가 동일한 새 출력 경로를 동시에 요청하는 시험에서 하나만 성공하고 나머지는 `AlreadyExists`로 실패했다. 이후 같은 경로에 다시 요청해도 승자가 기록한 증거가 보존됨을 확인했다. `cargo test -p xtask sql_compare::tests --locked` 4/4 PASS, `cargo clippy -p xtask --all-targets --locked -- -D warnings` PASS다. 출력 준비 단계만 바꿨으므로 위의 SQL·행동 매트릭스는 다시 실행하지 않았다.
 
+## 표준 PostgreSQL의 제한 설치 관리자 검증
+
+추가 실행은 Supabase 환경을 복제하지 않고, 공통 제품 SQL이 요구하는 최소 설치 권한을 표준 PostgreSQL 18.3에서 검증한다. 소스 `213cc650bc3e192727935670dc1ee6862c1a8d88`에서 아래 명령을 실행했다. 후보는 앞선 PostgreSQL·Supabase 검증과 **동일한** SHA-256 `b8172cfb85f20145e5a9dd2fb65d473d47195549a21024de1ec8c11af2c55725`다. 환경별 제품 SQL이나 UUID adapter를 추가하지 않았다.
+
+```sh
+cargo xtask sql-compare \
+  --candidate /home/kinesis/orca/workspaces/GroundZero/sql-prep-a/preparation/sql-consolidation/candidate \
+  --output target/sql-compare-restricted-verified \
+  --restricted-admin --behavior --behavior-scope core
+```
+
+fixture superuser는 전용 클러스터 안에 설치 관리자 둘을 만들고 대상 DB 권한만 준비했다. 그 후 bootstrap은 제한 관리자, 누적/후보 SQLx와 카탈로그 조회는 `fvoci_migrator`, 앱 요청은 `fvoci_app`으로 수행했다. Supabase 관리 스키마·계정은 만들거나 수정하지 않았다. Meilisearch·SeaweedFS는 기존 시험 인프라로만 기동했고 이번 core 목록에 검색·S3 시험은 없다.
+
+| 실제 확인한 권한                               | 설치 관리자                         | migrator / app     |
+| ---------------------------------------------- | ----------------------------------- | ------------------ |
+| LOGIN                                          | true                                | true               |
+| CREATEROLE                                     | true                                | false              |
+| SUPERUSER / CREATEDB / BYPASSRLS / REPLICATION | 모두 false                          | 모두 false         |
+| 대상 DB CREATE                                 | true, grant option 없음             | 부여하지 않음      |
+| 대상 DB CONNECT                                | true, grant option 있음             | bootstrap으로 부여 |
+| DB 소유자                                      | fixture `fvoci`, 설치 관리자가 아님 | 소유하지 않음      |
+
+`createrole_self_grant=''` 조건에서 생성한 두 제품 역할에 대한 관리자 멤버십은 ADMIN true, SET false, INHERIT false였다. bootstrap을 다시 실행한 뒤 새 연결에서 grantor를 포함한 멤버십이 완전히 같았고, SQLx 재실행 뒤 카탈로그·초기 행·이력도 같았다. 다른 설치 관리자가 **기존과 다른 시험 비밀번호**로 bootstrap을 요청하면 ADMIN OPTION 부족으로 거절됐으며, 카탈로그와 원래 app/migrator 자격 증명이 보존됐다.
+
+A와 B 각각에서 금지 명령 20개가 기대 SQLSTATE `42501`로 거절됐다(설치 관리자 5, migrator 6, app 9). SUPERUSER 승격, CREATE DATABASE, fixture superuser로 SET ROLE, `session_replication_role`, 역할·스키마 생성, app의 RLS 해제 등을 실제 실행했다. 이는 의도한 거부 성공이며 기능 PASS와 구분한다. 상세 증거는 [A 권한 결과](runs/restricted/a-capabilities.json), [B 권한 결과](runs/restricted/b-capabilities.json)에 있다. 역할 속성은 기록만 하지 않고 기대 값과 일치해야 전체 검증을 통과한다.
+
+최종 [result.json](runs/restricted/result.json)은 설치·권한·스냅숏·객체 비교·변조·정지 모두 PASS다. 카탈로그와 정규 덤프 차이는 0건이며 네 변조가 모두 검출·원복됐다. 기존 `db_context`, `first_flow`, `ids`, `sharing`, `members`, `recurrence`, `time_tracking`의 실제 앱 역할 시험은 [A](runs/restricted/a-core.txt)와 [B](runs/restricted/b-core.txt) 각각 **60 passed, 0 failed, 0 ignored, 0 filtered**다(7개 바이너리). 그 외 시험과 session pooler는 이번 실행에서 NOT RUN이다. 앞선 전체 행렬의 353/364건과 합쳐 하나의 전체 시험 실행으로 계산하지 않는다.
+
+실행 입력과 두 Rust 모듈의 컴파일 해시는 [inputs.json](runs/restricted/inputs.json), 객체 차이는 [differences.json](runs/restricted/differences.json), 환경 권한은 [catalog-environment.json](runs/restricted/catalog-environment.json)에 보존했다. 원본 전체 카탈로그·덤프·이력은 로컬 `target/sql-compare-restricted-verified/{a,b}/`에 있으며 [경로별 해시](runs/restricted/local-artifacts.sha256)만 PR에 포함한다.
+
+처음 진단 실행은 CLI의 구조화 오류가 stdout에 기록되는데 stderr만 읽고, 초기 행을 포함한 `catalog()`를 잘못 부분 비교하는 도구 오류로 실패했다. [원래 결과](diagnostics/restricted-harness-result.json)와 [관찰 값](diagnostics/restricted-harness-capabilities.json)을 보존했다. 권한·반복 설치 시험 자체는 그 실행에서도 통과했으며 최종 실행은 두 판정 오류를 수정하고 다시 수행했다.
+
+이 증거는 한 공통 SQL을 제한 권한으로 설치할 수 있음을 보여 주며 실제 Cloud 프로젝트에 연결·변경한 결과는 아니다. 이 프로필의 `session_replication_role` 거부는 **이 프로필로 현재 복구 요구를 충족하지 못한다**는 뜻이다. 앞선 셀프호스트 Supabase 백업/복구 시험은 PASS였고 실제 Cloud의 SET LOCAL·복구는 NOT RUN이다. 복구 기능을 제외하기로 결정한 것이 아니다.
+
 ## 실행 자원과 보존
 
 첫 A/A 진단에는 보존 요청과 어긋난 정리 명령이 한 번 실행됐다. 수정 전 바이너리가 다음 전용 프로젝트의 B PostgreSQL 컨테이너와 네트워크를 삭제했다.
@@ -102,7 +136,7 @@ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163c1920
 
 [원본 전체 로그](diagnostics/initial-control-cleanup.txt) 31행이 명령이며 34–37행이 이 컨테이너와 네트워크의 제거 기록이다. 이 로그의 생성 시각은 `2026-10-22T22:16:22.128483746+09:00`, 마지막 수정 시각은 `2026-10-22T22:16:46.428293994+09:00`이다. 로그에 행별 시각이 없고 Docker event가 남아 있지 않아 이 범위보다 정확한 제거 시각은 확인하지 못했다. [유효 Compose 저장소 구성](diagnostics/initial-control-postgres-storage.json)은 `volumes: null`, `tmpfs: ["/var/lib/postgresql"]`이다. 이 프로젝트에는 이름 붙은 DB 볼륨이 없었으며 공유 컨테이너·DB·볼륨은 대상이 아니었다.
 
-이후 도구는 해당 실행 프로젝트에 `stop`만 사용하도록 수정했다. 진단 실행·수동 baseline export·최종 실행 종료 시 남은 전용 컨테이너는 37개였고, 후속 A/A를 포함한 39개 모두 exited다. 이름 붙은 볼륨 5개는 남아 있다. 자원 상태와 로그 감사 결과는 [컨테이너 처리 기록](container-disposition.txt)에 있다. 공유 개발 자원에는 정리 명령을 내리지 않았다. 중지한 DB의 tmpfs 내용은 사라지므로 DB 자체를 보존했다고 주장하지 않는다.
+이후 도구는 해당 실행 프로젝트에 `stop`만 사용하도록 수정했다. 첫 전체 행렬 종료 시 남은 전용 컨테이너는 37개였고, 후속 A/A·제한 권한 진단 및 검증을 포함한 48개 모두 exited다. 이름 붙은 볼륨 5개는 남아 있다. 자원 상태와 로그 감사 결과는 [컨테이너 처리 기록](container-disposition.txt)에 있다. 공유 개발 자원에는 정리 명령을 내리지 않았다. 중지한 DB의 tmpfs 내용은 사라지므로 DB 자체를 보존했다고 주장하지 않는다.
 
 PR에 보존한 것은 입력 해시, 결과·차이·변조 JSON, 환경 카탈로그, 전체 행동 로그, 각 실행의 `orchestration.txt` 및 위 진단 증거다. 텍스트 로그는 줄 끝 공백과 마지막 빈 줄만 정리했으며 내용과 명령은 보존했다. 가공 전 로컬 실행 로그 해시는 [원본 로그 해시](diagnostics/original-orchestration-logs.sha256)에 있다. 중복된 전체 원본 카탈로그·덤프·이력은 이 작업 공간의 `target/sql-compare-postgres-final/{a,b}/`, `target/sql-compare-supabase-final/{a,b}/`에만 남겼다. 경로와 SHA-256은 각 실행의 `local-artifacts.sha256`에 있으며 **이 로컬 파일 자체는 PR에 포함되지 않는다**. 최초 baseline export는 로컬 `target/sql-compare-baseline-export/`에 있다.
 

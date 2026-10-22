@@ -113,3 +113,25 @@ sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d055d27304872ef1b1ef5dc54f-b-postgr
 Retained task-owned named volumes=5
 31:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d055d27304872ef1b1ef5dc54f-b --file deploy/compose.test.yaml stop
 34:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d055d27304872ef1b1ef5dc54f-a --file deploy/compose.test.yaml stop
+
+Restricted-installer follow-up: diagnostic target/sql-compare-restricted, intermediate target/sql-compare-restricted-final, verified target/sql-compare-restricted-verified
+Captured UTC: 2026-10-22T13:44:34Z
+Task-owned container total=48
+exited=48
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d945c3716e9cc853a1c87807df-a-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d945c3716e9cc853a1c87807df-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d9b09471968cbc2396694bdd04-a-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d9b09471968cbc2396694bdd04-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d9b09471968cbc2396694bdd04-b-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d9b09471968cbc2396694bdd04-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d9b09471968cbc2396694bdd04-services-meilisearch-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d9b09471968cbc2396694bdd04-services
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d9b09471968cbc2396694bdd04-services-seaweedfs-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d9b09471968cbc2396694bdd04-services
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-a-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-a
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-b-postgres-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-b
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-services-meilisearch-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-services
+sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-services-seaweedfs-1	exited	sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-services
+Retained task-owned named volumes=5
+target/sql-compare-restricted.log:19:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d945c3716e9cc853a1c87807df-a --file deploy/compose.test.yaml stop
+target/sql-compare-restricted-final.log:56:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d9b09471968cbc2396694bdd04-services --file deploy/compose.test.yaml stop
+target/sql-compare-restricted-final.log:61:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d9b09471968cbc2396694bdd04-b --file deploy/compose.test.yaml stop
+target/sql-compare-restricted-final.log:64:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163d9b09471968cbc2396694bdd04-a --file deploy/compose.test.yaml stop
+target/sql-compare-restricted-verified.log:56:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-services --file deploy/compose.test.yaml stop
+target/sql-compare-restricted-verified.log:61:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-b --file deploy/compose.test.yaml stop
+target/sql-compare-restricted-verified.log:64:$ docker compose --project-name sqlprep-b-fvoci-sql-prep-b-28dc62-test-01a163da8de277d2be8b9efc2a97ea77-a --file deploy/compose.test.yaml stop

@@ -15,6 +15,12 @@ cargo xtask sql-compare \
 cargo xtask sql-compare \
   --candidate preparation/sql-consolidation/candidate \
   --output target/sql-compare-supabase --supabase --behavior
+
+# 표준 PostgreSQL의 제한 설치 관리자 + 명시된 앱 역할 시험만 실행
+cargo xtask sql-compare \
+  --candidate preparation/sql-consolidation/candidate \
+  --output target/sql-compare-restricted \
+  --restricted-admin --behavior --behavior-scope core
 ```
 
 출력 디렉터리는 새 경로여야 한다. 부모 디렉터리는 필요하면 만들고 출력 경로 자체는 원자적으로 생성해 같은 `--output`을 쓰는 동시 실행 중 하나만 허용한다. 기존 출력은 덮어쓰지 않는다. 후보는 SQLx 규칙의 `번호_설명.sql` 파일로 구성한다. 양쪽 모두 기존 `db bootstrap`을 실행한다. A에는 기존 `db migrate`, B에는 후보 디렉터리를 읽은 실제 SQLx `Migrator`를 적용한다. B에 누적 이력을 복사하거나 과거 SQL을 재실행하지 않는다. 후보는 SQLx가 같은 트랜잭션에서 `_sqlx_migrations`를 기록할 수 있게 마지막에 `SET LOCAL search_path = fvoci`를 둔다.
@@ -62,3 +68,13 @@ Supabase에서는 각 DB의 직접 연결과 session pooler를 실행한다. 일
 `inputs.json`은 소스 SHA·누적/후보 SQL SHA-256·비교기와 카탈로그 해시·Supabase 고정 revision을 기록한다. `result.json`은 설치·스냅숏·객체 비교·변조 시험과 각 행동 경로의 PASS/FAIL/NOT RUN을 분리한다. `a/`, `b/`의 원본 덤프·카탈로그·이력·행동 로그가 근거다. 실패한 실행도 별도 출력 경로로 보존한다.
 
 새 설치 동등성은 기존 DB의 이력 교체, 기존 백업의 새 버전 복구, 데이터 업그레이드, Supabase Cloud 실행을 증명하지 않는다. 특히 후보 v1과 누적 이력의 마지막 버전이 다르므로 기존 백업 호환 여부는 별도 설계·승인이 필요하다.
+
+## 제한 설치 관리자 프로필
+
+`--restricted-admin`은 표준 PostgreSQL의 전용 로컬 fixture에만 적용되며 `--supabase`와 함께 쓸 수 없다. 처음 한 번 fixture superuser가 설치 관리자 역할 둘을 만들고 대상 DB의 `CREATE`와 `CONNECT WITH GRANT OPTION`만 부여한다. DB 소유자는 바꾸지 않는다. 이후 제품 bootstrap·재실행은 제한 관리자, 누적/후보 SQLx 적용과 객체 조회는 `fvoci_migrator`, 앱 요청은 `fvoci_app`으로 수행한다. Supabase 관리 역할·스키마·서비스를 만들거나 흉내 내지 않는다.
+
+프로필 `restricted-installer-v1`의 설치 관리자는 LOGIN·CREATEROLE만 가지며 SUPERUSER·CREATEDB·BYPASSRLS·REPLICATION은 없다. `createrole_self_grant=''`로 새 제품 역할의 자동 ADMIN OPTION만 받고 SET/INHERIT는 받지 않게 한다. 두 제품 역할의 특권 속성도 실제로 확인한다. `capabilities.json`에 DB 소유자·DB 권한·역할 속성, 반복 bootstrap 뒤 새 연결에서 확인한 정확한 멤버십, SQLx 재실행 전후 카탈로그·이력 동일성을 기록한다.
+
+다른 설치 관리자가 기존 역할의 비밀번호 변경을 요청하면 ADMIN OPTION 부족으로 거절돼야 한다. 요청에는 기존과 다른 고정 시험 비밀번호를 쓰고, 거절 뒤 원래 자격 증명으로 새 연결이 열리는지 확인한다. SUPERUSER 승격·CREATE DATABASE·SET ROLE·역할/스키마 생성·RLS 해제 등의 실제 금지 명령은 기대 SQLSTATE `42501`과 관찰 결과를 각각 남긴다. 이 거부 성공은 일반 기능의 PASS와 구분한다.
+
+`--behavior-scope core`는 기존 `db_context`, `first_flow`, `ids`, `sharing`, `members`, `recurrence`, `time_tracking`만 실행한다. 전체 시험의 대체물이 아니며 미선택 바이너리, 백업/복구·FreshDb 검색·OIDC·S3·Supabase 전용 경로는 NOT RUN이다. 이 프로필에는 `session_replication_role` SET 권한이 없어 현재 복구 요구를 충족하지 못한다. 이는 **해당 로컬 프로필의 한계**다. 이전 셀프호스트 Supabase 복구 시험은 통과했고, 실제 Cloud에서 이 설정을 변경하는 시험은 실행하지 않았다.

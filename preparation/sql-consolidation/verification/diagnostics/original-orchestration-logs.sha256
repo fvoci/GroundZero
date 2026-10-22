@@ -3,3 +3,4 @@ e70460723177d5d9a06130e32dca168ad758d426893086a067cae10fabf64d67  target/sql-com
 5ceacfbf17f724f4bb99388bf752d40066d1b6353940ce11150114462392f0b0  target/sql-compare-postgres-final.log
 3b3aaa31c5d237677295565bc6441b04ad499ef176639bcb0e4fb3c2dc4e9d75  target/sql-compare-supabase-final.log
 1964c6f1d876594d3cdcdb22ca44ffa81adc23598c58f2ce3e37c741cbb87cdd  target/sql-compare-cleanup-aa.log
+14cf23e620c71b400648379d9931154aa8fe53e8582f90c8609b3ce9b37f333f  target/sql-compare-restricted-verified.log
