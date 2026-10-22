@@ -29,7 +29,7 @@ $ cargo run --quiet --package fvoci-server --locked -- db migrate
 ==> meilisearch on 127.0.0.1:54286
 ==> seaweedfs s3 on 127.0.0.1:54288
 $ cargo test --workspace --locked -- --skip oidc_ --skip supabase_
-   Compiling fvoci-server v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/crates/server)
+   Compiling fvoci-server v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/crates/server)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 16.59s
      Running unittests src/lib.rs (target/debug/deps/fvoci_server-46bf3b3cd98551d3)
 

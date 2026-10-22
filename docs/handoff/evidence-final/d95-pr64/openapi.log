@@ -1,4 +1,4 @@
-wrote ~/orca/workspaces/GroundZero/d95-pr64/contracts/openapi.json
+wrote <home>/orca/workspaces/GroundZero/d95-pr64/contracts/openapi.json
 regenerate the TS client with `pnpm run generate:api`
 $ pnpm --filter @fvoci/api-client run generate
 $ openapi-typescript ../../contracts/openapi.json --output ./src/generated/schema.ts

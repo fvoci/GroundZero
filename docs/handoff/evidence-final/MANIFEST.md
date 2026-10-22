@@ -10,8 +10,9 @@
 ## 사본 규칙 (앞선 `../evidence/MANIFEST.md`와 같다)
 
 - 로그는 원본이 아니라 사본이다. 원본(각 worktree의 `target/audit-evidence/`)은 읽기만 했고 고치거나 지우지 않았다.
-- 지운 것(텍스트 파일 117개에서 바뀜, 이미지·PDF는 바이트 그대로):
+- 지운 것(텍스트 파일 144개에서 바뀜, 이미지·PDF는 바이트 그대로):
   - 로컬 사용자 경로 `/home/<user>` → `<home>`, 사용자 이름 → `<user>` (29개: `d95-pr64-w1b` 18, `w2-pr82` 10, `w17/logs/dev-stack.log` 1).
+  - 홈 줄임 경로 `~/` → `<home>/` (42개: `d95-pr64` 19, `w10-expected-user` 17, `w6` 3, `w5`·`w7-pr65`·`w8` 각 1. 첫 push `659c378` 뒤 둘째 커밋에서 더함).
   - 터미널 색·제어 코드(ESC `[`…, OSC, vitest가 중간에서 자른 `ESC[32...` 같은 조각) 삭제 (65개: d95-pr64·d95-pr64-w1b·w2-pr82·w3-pr59·w5·w7-pr65·w8·w9·w11-dialogs·w13·w14·w17).
   - `…PASSWORD|SECRET|TOKEN|_KEY=` 값 → `<redacted>`, `Authorization: Bearer` 값 → `<redacted>` (2개: `w8/probe.sh`, `w8/probe2.sh`의
     Meilisearch 마스터 키. `deploy/`의 명백한 시험 값이지만 규칙대로 지웠다).
@@ -22,7 +23,7 @@
 - 바뀐 텍스트 가운데 패치·diff·소스 사본(`*.patch`·`*.diff`·`*.rs`·`*.svelte`·`*.sql`)은 없다. `w13/pr-update-patches/*.patch`는 원본과 같아 `git am`으로 쓸 수 있다.
 - 남은 낱말 확인(`rg --no-ignore`, 사본 전체. 저장소 `.gitignore`가 `*.log`를 빼므로 `--no-ignore` 없이는 로그를 보지 않는다): "PASSWORD"·"SECRET"·"TOKEN"·"_KEY"는 시험 이름(`fake_secrets_never_reach_the_log_even_at_trace`,
   `s3_rejects_a_wrong_secret`, `split_settings_preserve_raw_password_…`), Compose의 "variable is not set" 경고, 문서·리뷰 본문의 변수 이름뿐이다.
-  "cookie"는 시험 이름(`duplicate_cookies_are_rejected` 등)·크레이트 이름·설명문뿐이고 값은 없다. 사용자 이름·ESC 문자·`ghh_` 값은 0건이다.
+  "cookie"는 시험 이름(`duplicate_cookies_are_rejected` 등)·크레이트 이름·설명문뿐이고 값은 없다. 사용자 이름·ESC 문자·`ghh_` 값·`~/` 경로는 0건이다.
   남은 `/home/`은 `apps/web/src/lib/features/home/` 같은 저장소 경로뿐이다. `10.200.x.1`은 Compose 내부 망 주소, `127.0.0.1:5173/w/<uuid>`는 로컬 개발 주소다.
 - 환경 변수 파일·`.env`·인증 파일: 원본에 없다(넣은 것 없음).
 - 스크린숏: `w17/screenshots/`의 PNG 4장·PDF 14개를 하나씩 열어 합성 데이터만인지 확인했다. 뺀 것 없음. 목록과 확인 결과는 `w17/screenshots/INDEX.md`.

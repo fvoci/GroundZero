@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 ~/orca/workspaces/GroundZero/w4-ledger/apps/web
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w4-ledger/apps/web
 
  ❯ tests/component/document-save-account.test.ts (3 tests | 2 failed) 282ms
    ❯ a background save checks who is signed in before it goes out (3)

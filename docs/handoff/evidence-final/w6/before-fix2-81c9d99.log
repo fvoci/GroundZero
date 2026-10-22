@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 ~/orca/workspaces/GroundZero/w4-ledger/apps/web
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w4-ledger/apps/web
 
  ❯ tests/component/account-switch-unload.test.ts (2 tests | 1 failed) 1252ms
    ❯ account switch reload and the unsaved-edit warning (2)

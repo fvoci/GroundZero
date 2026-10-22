@@ -572,8 +572,8 @@ $ cargo test --workspace --locked -- --skip supabase_
    Compiling sqlx-macros-core v0.8.6
    Compiling sqlx-macros v0.8.6
    Compiling sqlx v0.8.6
-   Compiling fvoci-server v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/crates/server)
-   Compiling xtask v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/xtask)
+   Compiling fvoci-server v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/crates/server)
+   Compiling xtask v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/xtask)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 08s
      Running unittests src/lib.rs (target/debug/deps/fvoci_server-46bf3b3cd98551d3)
 

@@ -6,7 +6,7 @@ $ cargo clippy --workspace --all-targets --locked -- -D warnings
    Compiling foreign-types-shared v0.1.1
    Compiling openssl-sys v0.9.117
    Compiling openssl-probe v0.2.1
-   Compiling fvoci-server v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/crates/server)
+   Compiling fvoci-server v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/crates/server)
     Checking utf8parse v0.2.2
     Checking is_terminal_polyfill v1.70.2
     Checking colorchoice v1.0.5
@@ -29,12 +29,12 @@ $ cargo clippy --workspace --all-targets --locked -- -D warnings
    Compiling sqlx-macros-core v0.8.6
    Compiling sqlx-macros v0.8.6
     Checking sqlx v0.8.6
-    Checking xtask v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/xtask)
+    Checking xtask v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/xtask)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 19.87s
 PASS cargo clippy
 ==> cargo test (unit)
 $ cargo test --workspace --lib --bins --locked
-   Compiling fvoci-server v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/crates/server)
+   Compiling fvoci-server v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/crates/server)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 32.53s
      Running unittests src/lib.rs (target/debug/deps/fvoci_server-46bf3b3cd98551d3)
 
@@ -177,7 +177,7 @@ packages/api-client check$ tsc --noEmit -p tsconfig.json
 packages/api-client check: Done
 apps/web check$ pnpm run i18n && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings
 apps/web check: $ paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy globalVariable baseLocale --emit-ts-declarations --silent
-apps/web check: 1792636209523 START "~/orca/workspaces/GroundZero/d95-pr64/apps/web"
+apps/web check: 1792636209523 START "<home>/orca/workspaces/GroundZero/d95-pr64/apps/web"
 apps/web check: 1792636209533 COMPLETED 3101 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
 apps/web check: Done
 PASS pnpm check (svelte-check/tsc)
@@ -198,7 +198,7 @@ packages/api-client test: no tests in @fvoci/api-client
 packages/api-client test: Done
 apps/web test$ pnpm run i18n && vitest run
 apps/web test: $ paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy globalVariable baseLocale --emit-ts-declarations --silent
-apps/web test:  RUN  v5.0.5 ~/orca/workspaces/GroundZero/d95-pr64/apps/web
+apps/web test:  RUN  v5.0.5 <home>/orca/workspaces/GroundZero/d95-pr64/apps/web
 apps/web test: Not implemented: Window's scrollBy() method
 apps/web test: Not implemented: Window's scrollBy() method
 apps/web test: Not implemented: Window's scrollBy() method

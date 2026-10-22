@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 ~/orca/workspaces/GroundZero/w10-pr60/apps/web
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w10-pr60/apps/web
 
  ❯ tests/component/live-account-changed.test.ts (2 tests | 2 failed) 58ms
    ❯ the live connection carries the user the editor was opened with (1)
@@ -56,7 +56,7 @@ AssertionError: expected [ undefined ] to deeply equal [ 'user-a' ]
    Duration  4.22s (transform 63%, import 22%, environment 11%, setup 2%, tests 1%)
 
 
- RUN  v5.0.5 ~/orca/workspaces/GroundZero/w10-pr60/apps/web
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w10-pr60/apps/web
 
  ❯ tests/component/tmp-w10b-behaviour.test.ts (2 tests | 1 failed | 1 skipped) 140ms
    ❯ a live connection refused because the account changed (1)
@@ -84,7 +84,7 @@ AssertionError: expected "disconnect" to be called at least once
 
 --- rerun of test 1 (real openLive) against pre-fix live.ts
 
- RUN  v5.0.5 ~/orca/workspaces/GroundZero/w10-pr60/apps/web
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w10-pr60/apps/web
 
  ❯ tests/component/live-account-changed.test.ts (2 tests | 1 failed | 1 skipped) 14ms
    ❯ the live connection carries the user the editor was opened with (1)
@@ -119,7 +119,7 @@ null
 
 --- CodeRabbit retained concern: 4412 with storage full, against 1bc1f57 LiveDocumentEditor
 
- RUN  v5.0.5 ~/orca/workspaces/GroundZero/w10-pr60/apps/web
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w10-pr60/apps/web
 
  ❯ tests/component/live-account-changed.test.ts (3 tests | 1 failed | 2 skipped) 135ms
    ❯ a live connection refused because the account changed, when the draft cannot be kept (1)
@@ -157,7 +157,7 @@ Number of calls: 1
 
 --- CodeRabbit on 6ff6187: unload guard and title-only pending, against 6ff6187 LiveDocumentEditor
 
- RUN  v5.0.5 ~/orca/workspaces/GroundZero/w10-pr60/apps/web
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w10-pr60/apps/web
 
  ❯ tests/component/live-account-changed.test.ts (5 tests | 2 failed | 3 skipped) 162ms
    ❯ leaving the live editor with edits the server has not got (2)
@@ -208,7 +208,7 @@ Number of calls: 1
 
 --- CodeRabbit on 8e42036 (outside diff): title edited before the first sync, against 8e42036 LiveDocumentEditor
 
- RUN  v5.0.5 ~/orca/workspaces/GroundZero/w10-pr60/apps/web
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w10-pr60/apps/web
 
  ❯ tests/component/live-title-before-sync.test.ts (1 test | 1 failed) 60ms
    ❯ a title edited before the first live sync (1)

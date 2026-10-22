@@ -1,11 +1,11 @@
 $ paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy globalVariable baseLocale --emit-ts-declarations --silent
 I18N PASS
 ESLINT PASS
-1792637428681 START "~/orca/workspaces/GroundZero/w4-ledger/apps/web"
+1792637428681 START "<home>/orca/workspaces/GroundZero/w4-ledger/apps/web"
 1792637428690 COMPLETED 3118 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
 SVELTE-CHECK PASS
 
- RUN  v5.0.5 ~/orca/workspaces/GroundZero/w4-ledger/apps/web
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/w4-ledger/apps/web
 
 Not implemented: Window's scrollBy() method
 Not implemented: Window's scrollBy() method

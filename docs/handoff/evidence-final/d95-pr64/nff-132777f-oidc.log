@@ -36,7 +36,7 @@ $ cargo run --quiet --package fvoci-server --locked -- db migrate
 ==> seaweedfs s3 on 127.0.0.1:54312
 ==> keycloak on 127.0.0.1:54313
 $ cargo test --workspace --locked --no-fail-fast -- --skip supabase_
-   Compiling xtask v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/xtask)
+   Compiling xtask v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/xtask)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.53s
      Running unittests src/lib.rs (target/debug/deps/fvoci_server-46bf3b3cd98551d3)
 

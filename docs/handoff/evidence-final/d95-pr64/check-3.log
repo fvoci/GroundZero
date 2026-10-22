@@ -3,14 +3,14 @@ $ cargo fmt --all --check
 PASS cargo fmt --check
 ==> cargo clippy
 $ cargo clippy --workspace --all-targets --locked -- -D warnings
-    Checking fvoci-server v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/crates/server)
-    Checking xtask v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/xtask)
+    Checking fvoci-server v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/crates/server)
+    Checking xtask v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/xtask)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.92s
 PASS cargo clippy
 ==> cargo test (unit)
 $ cargo test --workspace --lib --bins --locked
-   Compiling fvoci-server v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/crates/server)
-   Compiling xtask v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/xtask)
+   Compiling fvoci-server v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/crates/server)
+   Compiling xtask v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/xtask)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 19.08s
      Running unittests src/lib.rs (target/debug/deps/fvoci_server-46bf3b3cd98551d3)
 
@@ -126,7 +126,7 @@ PASS cargo test (unit)
 ==> cargo deny (advisories, bans, sources)
 $ cargo deny --locked check advisories bans sources
 warning[duplicate]: found 3 duplicate entries for crate 'base64'
-   ┌─ ~/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:21:1
+   ┌─ <home>/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:21:1
    │  
 21 │ ╭ base64 0.21.7 registry+https://github.com/rust-lang/crates.io-index
 22 │ │ base64 0.22.1 registry+https://github.com/rust-lang/crates.io-index
@@ -175,7 +175,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'base64'
          └── reqwest v0.12.28 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
-   ┌─ ~/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:49:1
+   ┌─ <home>/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:49:1
    │  
 49 │ ╭ cpufeatures 0.2.17 registry+https://github.com/rust-lang/crates.io-index
 50 │ │ cpufeatures 0.3.1 registry+https://github.com/rust-lang/crates.io-index
@@ -234,7 +234,7 @@ warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
                      └── fvoci-server v0.1.0
 
 warning[duplicate]: found 3 duplicate entries for crate 'getrandom'
-    ┌─ ~/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:101:1
+    ┌─ <home>/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:101:1
     │  
 101 │ ╭ getrandom 0.2.17 registry+https://github.com/rust-lang/crates.io-index
 102 │ │ getrandom 0.3.4 registry+https://github.com/rust-lang/crates.io-index
@@ -340,7 +340,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'getrandom'
           └── xtask v0.1.0 (*)
 
 warning[duplicate]: found 3 duplicate entries for crate 'hashbrown'
-    ┌─ ~/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:105:1
+    ┌─ <home>/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:105:1
     │  
 105 │ ╭ hashbrown 0.14.5 registry+https://github.com/rust-lang/crates.io-index
 106 │ │ hashbrown 0.15.5 registry+https://github.com/rust-lang/crates.io-index
@@ -387,7 +387,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'hashbrown'
               └── fvoci-server v0.1.0 (*)
 
 warning[duplicate]: found 3 duplicate entries for crate 'rand'
-    ┌─ ~/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:197:1
+    ┌─ <home>/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:197:1
     │  
 197 │ ╭ rand 0.8.8 registry+https://github.com/rust-lang/crates.io-index
 198 │ │ rand 0.9.5 registry+https://github.com/rust-lang/crates.io-index
@@ -426,7 +426,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'rand'
               └── fvoci-server v0.1.0
 
 warning[duplicate]: found 2 duplicate entries for crate 'rand_chacha'
-    ┌─ ~/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:200:1
+    ┌─ <home>/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:200:1
     │  
 200 │ ╭ rand_chacha 0.3.1 registry+https://github.com/rust-lang/crates.io-index
 201 │ │ rand_chacha 0.9.0 registry+https://github.com/rust-lang/crates.io-index
@@ -462,7 +462,7 @@ warning[duplicate]: found 2 duplicate entries for crate 'rand_chacha'
                       └── fvoci-server v0.1.0 (*)
 
 warning[duplicate]: found 3 duplicate entries for crate 'rand_core'
-    ┌─ ~/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:202:1
+    ┌─ <home>/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:202:1
     │  
 202 │ ╭ rand_core 0.6.4 registry+https://github.com/rust-lang/crates.io-index
 203 │ │ rand_core 0.9.5 registry+https://github.com/rust-lang/crates.io-index
@@ -570,7 +570,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'rand_core'
       └── rand v0.10.3 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'syn'
-    ┌─ ~/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:256:1
+    ┌─ <home>/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:256:1
     │  
 256 │ ╭ syn 2.0.119 registry+https://github.com/rust-lang/crates.io-index
 257 │ │ syn 3.0.9 registry+https://github.com/rust-lang/crates.io-index
@@ -829,7 +829,7 @@ warning[duplicate]: found 2 duplicate entries for crate 'syn'
           └── zerovec v0.11.8 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
-    ┌─ ~/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:261:1
+    ┌─ <home>/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:261:1
     │  
 261 │ ╭ thiserror 1.0.69 registry+https://github.com/rust-lang/crates.io-index
 262 │ │ thiserror 2.0.21 registry+https://github.com/rust-lang/crates.io-index
@@ -870,7 +870,7 @@ warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
           └── fvoci-server v0.1.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'thiserror-impl'
-    ┌─ ~/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:263:1
+    ┌─ <home>/orca/workspaces/GroundZero/d95-pr64/Cargo.lock:263:1
     │  
 263 │ ╭ thiserror-impl 1.0.69 registry+https://github.com/rust-lang/crates.io-index
 264 │ │ thiserror-impl 2.0.21 registry+https://github.com/rust-lang/crates.io-index
@@ -936,7 +936,7 @@ packages/api-client check$ tsc --noEmit -p tsconfig.json
 packages/api-client check: Done
 apps/web check$ pnpm run i18n && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings
 apps/web check: $ paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy globalVariable baseLocale --emit-ts-declarations --silent
-apps/web check: 1792639566254 START "~/orca/workspaces/GroundZero/d95-pr64/apps/web"
+apps/web check: 1792639566254 START "<home>/orca/workspaces/GroundZero/d95-pr64/apps/web"
 apps/web check: 1792639566263 COMPLETED 3101 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
 apps/web check: Done
 PASS pnpm check (svelte-check/tsc)
@@ -957,7 +957,7 @@ packages/api-client test: no tests in @fvoci/api-client
 packages/api-client test: Done
 apps/web test$ pnpm run i18n && vitest run
 apps/web test: $ paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy globalVariable baseLocale --emit-ts-declarations --silent
-apps/web test:  RUN  v5.0.5 ~/orca/workspaces/GroundZero/d95-pr64/apps/web
+apps/web test:  RUN  v5.0.5 <home>/orca/workspaces/GroundZero/d95-pr64/apps/web
 apps/web test: Not implemented: Window's scrollBy() method
 apps/web test: Not implemented: Window's scrollBy() method
 apps/web test: Not implemented: Window's scrollBy() method

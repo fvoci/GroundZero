@@ -1,8 +1,8 @@
 $ paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy globalVariable baseLocale --emit-ts-declarations --silent
-1792635615344 START "~/orca/workspaces/GroundZero/d95-pr64/apps/web"
+1792635615344 START "<home>/orca/workspaces/GroundZero/d95-pr64/apps/web"
 1792635615357 COMPLETED 3101 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
 
- RUN  v5.0.5 ~/orca/workspaces/GroundZero/d95-pr64/apps/web
+ RUN  v5.0.5 <home>/orca/workspaces/GroundZero/d95-pr64/apps/web
 
 Not implemented: Window's scrollBy() method
 Not implemented: Window's scrollBy() method

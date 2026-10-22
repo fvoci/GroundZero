@@ -36,7 +36,7 @@ $ cargo run --quiet --package fvoci-server --locked -- db migrate
 ==> seaweedfs s3 on 127.0.0.1:54216
 ==> keycloak on 127.0.0.1:54217
 $ cargo test --workspace --locked -- --skip supabase_
-   Compiling fvoci-server v0.1.0 (~/orca/workspaces/GroundZero/d95-pr64/crates/server)
+   Compiling fvoci-server v0.1.0 (<home>/orca/workspaces/GroundZero/d95-pr64/crates/server)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 19.94s
      Running unittests src/lib.rs (target/debug/deps/fvoci_server-46bf3b3cd98551d3)
 

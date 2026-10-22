@@ -22,7 +22,7 @@ $ docker compose --project-name fvoci-d95-pr64-50fb65-test --file deploy/compose
  Container fvoci-d95-pr64-50fb65-test-seaweedfs-1 Healthy 
  Container fvoci-d95-pr64-50fb65-test-meilisearch-1 Healthy 
  Container fvoci-d95-pr64-50fb65-test-keycloak-1 Healthy 
-$ docker compose --project-name fvoci-d95-pr64-50fb65-supabase --project-directory ~/orca/workspaces/GroundZero/d95-pr64/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file ~/orca/workspaces/GroundZero/d95-pr64/deploy/supabase/test.env --file ~/orca/workspaces/GroundZero/d95-pr64/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file ~/orca/workspaces/GroundZero/d95-pr64/deploy/supabase/compose.test.yaml up --detach --wait db rest supavisor
+$ docker compose --project-name fvoci-d95-pr64-50fb65-supabase --project-directory <home>/orca/workspaces/GroundZero/d95-pr64/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file <home>/orca/workspaces/GroundZero/d95-pr64/deploy/supabase/test.env --file <home>/orca/workspaces/GroundZero/d95-pr64/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file <home>/orca/workspaces/GroundZero/d95-pr64/deploy/supabase/compose.test.yaml up --detach --wait db rest supavisor
 time="2026-10-22T11:38:41+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
 time="2026-10-22T11:38:41+09:00" level=warning msg="The \"DASHBOARD_USERNAME\" variable is not set. Defaulting to a blank string."
 time="2026-10-22T11:38:41+09:00" level=warning msg="The \"DASHBOARD_PASSWORD\" variable is not set. Defaulting to a blank string."
@@ -1761,7 +1761,7 @@ test result: FAILED. 2 passed; 6 failed; 0 ignored; 0 measured; 0 filtered out; 
 
 error: test failed, to rerun pass `-p fvoci-server --test search`
 ==> compose down
-$ docker compose --project-name fvoci-d95-pr64-50fb65-supabase --project-directory ~/orca/workspaces/GroundZero/d95-pr64/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file ~/orca/workspaces/GroundZero/d95-pr64/deploy/supabase/test.env --file ~/orca/workspaces/GroundZero/d95-pr64/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file ~/orca/workspaces/GroundZero/d95-pr64/deploy/supabase/compose.test.yaml down --volumes --remove-orphans
+$ docker compose --project-name fvoci-d95-pr64-50fb65-supabase --project-directory <home>/orca/workspaces/GroundZero/d95-pr64/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file <home>/orca/workspaces/GroundZero/d95-pr64/deploy/supabase/test.env --file <home>/orca/workspaces/GroundZero/d95-pr64/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file <home>/orca/workspaces/GroundZero/d95-pr64/deploy/supabase/compose.test.yaml down --volumes --remove-orphans
 time="2026-10-22T11:40:10+09:00" level=warning msg="The \"IMGPROXY_AUTO_WEBP\" variable is not set. Defaulting to a blank string."
 time="2026-10-22T11:40:10+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
 time="2026-10-22T11:40:10+09:00" level=warning msg="The \"STORAGE_TENANT_ID\" variable is not set. Defaulting to a blank string."
