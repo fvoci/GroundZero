@@ -4,7 +4,7 @@
 아니다.
 
 - 작성: 2026-10-22, 기존 환경(macOS arm64 데스크톱의 Claude Code 세션)
-- 원격 상태를 마지막으로 확인한 시각: 2026-10-22T01:14:14Z
+- 원격 상태를 마지막으로 확인한 시각: 2026-10-22T01:24:17Z
 - 이 문서가 있는 브랜치: `handoff/audit-resume` (main `a5cda4e` 위, 이 문서와 `docs/handoff/` 아래 파일만 더함). 병합하지 않는다.
 - 기존 환경은 인계 체크포인트 뒤 이 저장소의 브랜치·PR·원격 DB를 더 고치지 않는다. 인계 중에 돌던 작업(D-95 구현)은
   멈췄고, 읽기 전용 검증·수집만 끝까지 돌렸다. 새 환경은 0절에서 이를 확인한 뒤 시작한다.
@@ -19,7 +19,7 @@
 4. 9절의 "로컬에만 남은 것"이 새 환경에 필요한지 판단한다(필요한 것은 없게 만들었다. 원본 로그는 공개 저장소에 올리지 않았다).
 5. 인수 결과(일치/불일치, 누락)를 사용자에게 알린다. 기존 환경이 더 고치지 않는지(이 문서 머리말) 사용자에게 확인받은 뒤 작업을 시작한다.
 
-## 1. 원격 상태 (2026-10-22T01:14:14Z 확인)
+## 1. 원격 상태 (2026-10-22T01:24:17Z 확인)
 
 - 저장소: `fvoci/GroundZero`(공개). main: `a5cda4e169e237c6a33075fdde21c4b20fec8a1a`(Merge PR #48). 감사 PR은 아직 하나도
   병합하지 않았다. main에 보호 규칙은 없다(`branches/main/protection` 404). 병합은 기존 방식의 merge commit.
@@ -30,34 +30,34 @@
 "이번 인계에서 올림"은 2026-10-22 인계 체크포인트에 기존 환경이 push한 커밋이다. 표시가 없는 PR의 머리는 그 전부터 원격에
 있었다(이전 보고의 "push하지 않았다"는 그때 진행 중이던 이번 인계분만을 가리킨다).
 
-| PR  | 브랜치                              | base                       | 원격 HEAD 전체 SHA                         | 마이그레이션         | 의존·메모                                                                     |
-| --- | ----------------------------------- | -------------------------- | ------------------------------------------ | -------------------- | ----------------------------------------------------------------------------- |
-| #51 | `fix/audit-trash-restore`           | main                       | `eb881939efc85fe21556a7906fca6f320c0093bf` | 0080                 |                                                                               |
-| #52 | `fix/audit-membership-locks`        | main                       | `591f93917e5f97eba436036810c3c6c4118a8004` | 0081                 |                                                                               |
-| #53 | `fix/audit-schedule-links`          | main                       | `3fc48a5a7fd04209869c1f6aa58f39777c9099b9` | 0082                 | #62의 base                                                                    |
-| #54 | `fix/audit-time-events`             | main                       | `4c15e3a072c4e329ea60c89428402713c4b7ace8` | 0083                 |                                                                               |
-| #58 | `fix/audit-web-items`               | main                       | `c9a2bceb6359a643d106940c86aaac233085e2c2` | 0084                 | 서버 변경 있음(records.rs 판 검사·`validate`의 `kept` 인자)                   |
-| #57 | `fix/audit-web-documents`           | main                       | `40f54cb9ffaf7fcdecfb00a2d2ce626bfc8943fa` | 0085                 |                                                                               |
-| #59 | `fix/audit-web-calendar-home`       | main                       | `df2261597ccc577abbf2b96c8682b5bb7b2f3c72` | 0086                 | 이번 인계에서 올림: `d30bd03`, `df22615`(D-94 일정)                           |
-| #62 | `fix/audit-d92-cleanup`             | `fix/audit-schedule-links` | `26615d1493b5579b9d5df518cde8f3c992916ae1` | 0087                 | #53 위. #53 병합 뒤 base를 main으로                                           |
-| #65 | `fix/audit-upload-claim-release`    | main                       | `540097718c4c3ab6913624175a5dac0014b38e3f` | 0088                 |                                                                               |
-| #66 | `fix/audit-recurrence-lane-order`   | main                       | `611e6644adbedc34f1825eb5f116f60853360dc3` | 0089                 |                                                                               |
-| #67 | `fix/audit-search-claim-recheck`    | main                       | `e3d0df79c398c3c5c070ae8e44f9a4e873f7b18f` | 0090                 |                                                                               |
-| #74 | `fix/audit-delta-search`            | main                       | `01f028fa3550b749af12a85efe5a63cef21e209f` | 0091                 |                                                                               |
-| #75 | `fix/audit-delta-time-pause`        | main                       | `235e95d59c0fad6e82754b6d3b9c24ed578add95` | 0092                 |                                                                               |
-| #81 | `fix/audit-stale-version-reload`    | main                       | `bf5569669060a501cf67fff53dad28309843ccd4` | 0093                 | Closes #77                                                                    |
-| #55 | `fix/audit-time-summary`            | main                       | `a34a5300ca93e6f08a924869c34a795481f744c2` | —                    |                                                                               |
-| #56 | `fix/audit-web-csv-import`          | main                       | `1d7f9fc8b159686fa8e392992cc9791275f41c0e` | —                    |                                                                               |
-| #60 | `fix/audit-web-shell-members-files` | main                       | `d913314a94a9627221f5dd83a28e16c78f968a41` | —                    |                                                                               |
-| #61 | `fix/audit-home-up-next`            | main                       | `97447d83787259e9a25a3e7a8327fc57140e5522` | —                    | 서버 변경(home.rs)                                                            |
-| #63 | `fix/audit-idempotent-retries`      | main                       | `324d6e1d69057d06776130909dff5680af1911cb` | —                    | 서버 변경(records.rs)                                                         |
-| #64 | `fix/audit-move-live-snapshot`      | main                       | `5edd8f4545e1aca1f9e78376f4477b87ba4f81bc` | (0094 예정, WIP에만) | 이번 인계에서 올림: `d495c65`(#71), `5edd8f4`(P-34). D-95 조건 2 미완 → WIP   |
-| #68 | `fix/audit-test-gaps`               | main                       | `cd2c1bddaf769b395d3352cd4499d682c50c9f85` | —                    | 시험·문서                                                                     |
-| #72 | `fix/audit-delta-time-inputs`       | main                       | `0213eb8be9298e57c4d9222d681be08ce6b6f653` | —                    | D-93, Closes #78                                                              |
-| #73 | `fix/audit-delta-gantt-search`      | main                       | `067ef3630b9e49579abf436a8508693807640edb` | —                    |                                                                               |
-| #80 | `fix/audit-display-settings-reset`  | main                       | `48c00871864dd8270c97f6e324fcace52d8cfe5e` | —                    |                                                                               |
-| #82 | `fix/audit-task-conflict-merge`     | main                       | `70435e4ea95211f79fcb46b166bba80d638c4ecb` | —                    | 이번 인계에서 만든 새 Draft PR(D-94 업무). `6cee356`·`8ba72ad`·`70435e4`      |
-| #69 | `docs/audit-record`                 | main                       | `6ed1df82f28898c74501646f98fc9ba8455b37f8` | —                    | 감사 기록. 이번 인계에서 올림: `06df978`, `6ed1df8`(D-94·D-95). 마지막에 병합 |
+| PR  | 브랜치                              | base                       | 원격 HEAD 전체 SHA                         | 마이그레이션         | 의존·메모                                                                          |
+| --- | ----------------------------------- | -------------------------- | ------------------------------------------ | -------------------- | ---------------------------------------------------------------------------------- |
+| #51 | `fix/audit-trash-restore`           | main                       | `eb881939efc85fe21556a7906fca6f320c0093bf` | 0080                 |                                                                                    |
+| #52 | `fix/audit-membership-locks`        | main                       | `591f93917e5f97eba436036810c3c6c4118a8004` | 0081                 |                                                                                    |
+| #53 | `fix/audit-schedule-links`          | main                       | `3fc48a5a7fd04209869c1f6aa58f39777c9099b9` | 0082                 | #62의 base                                                                         |
+| #54 | `fix/audit-time-events`             | main                       | `4c15e3a072c4e329ea60c89428402713c4b7ace8` | 0083                 |                                                                                    |
+| #58 | `fix/audit-web-items`               | main                       | `c9a2bceb6359a643d106940c86aaac233085e2c2` | 0084                 | 서버 변경 있음(records.rs 판 검사·`validate`의 `kept` 인자)                        |
+| #57 | `fix/audit-web-documents`           | main                       | `40f54cb9ffaf7fcdecfb00a2d2ce626bfc8943fa` | 0085                 |                                                                                    |
+| #59 | `fix/audit-web-calendar-home`       | main                       | `df2261597ccc577abbf2b96c8682b5bb7b2f3c72` | 0086                 | 이번 인계에서 올림: `d30bd03`, `df22615`(D-94 일정)                                |
+| #62 | `fix/audit-d92-cleanup`             | `fix/audit-schedule-links` | `26615d1493b5579b9d5df518cde8f3c992916ae1` | 0087                 | #53 위. #53 병합 뒤 base를 main으로                                                |
+| #65 | `fix/audit-upload-claim-release`    | main                       | `540097718c4c3ab6913624175a5dac0014b38e3f` | 0088                 |                                                                                    |
+| #66 | `fix/audit-recurrence-lane-order`   | main                       | `611e6644adbedc34f1825eb5f116f60853360dc3` | 0089                 |                                                                                    |
+| #67 | `fix/audit-search-claim-recheck`    | main                       | `e3d0df79c398c3c5c070ae8e44f9a4e873f7b18f` | 0090                 |                                                                                    |
+| #74 | `fix/audit-delta-search`            | main                       | `01f028fa3550b749af12a85efe5a63cef21e209f` | 0091                 |                                                                                    |
+| #75 | `fix/audit-delta-time-pause`        | main                       | `235e95d59c0fad6e82754b6d3b9c24ed578add95` | 0092                 |                                                                                    |
+| #81 | `fix/audit-stale-version-reload`    | main                       | `bf5569669060a501cf67fff53dad28309843ccd4` | 0093                 | Closes #77                                                                         |
+| #55 | `fix/audit-time-summary`            | main                       | `a34a5300ca93e6f08a924869c34a795481f744c2` | —                    |                                                                                    |
+| #56 | `fix/audit-web-csv-import`          | main                       | `1d7f9fc8b159686fa8e392992cc9791275f41c0e` | —                    |                                                                                    |
+| #60 | `fix/audit-web-shell-members-files` | main                       | `d913314a94a9627221f5dd83a28e16c78f968a41` | —                    |                                                                                    |
+| #61 | `fix/audit-home-up-next`            | main                       | `97447d83787259e9a25a3e7a8327fc57140e5522` | —                    | 서버 변경(home.rs)                                                                 |
+| #63 | `fix/audit-idempotent-retries`      | main                       | `324d6e1d69057d06776130909dff5680af1911cb` | —                    | 서버 변경(records.rs)                                                              |
+| #64 | `fix/audit-move-live-snapshot`      | main                       | `5edd8f4545e1aca1f9e78376f4477b87ba4f81bc` | (0094 예정, WIP에만) | 이번 인계에서 올림: `d495c65`(#71), `5edd8f4`(P-34). D-95 조건 2 미완 → WIP        |
+| #68 | `fix/audit-test-gaps`               | main                       | `cd2c1bddaf769b395d3352cd4499d682c50c9f85` | —                    | 시험·문서                                                                          |
+| #72 | `fix/audit-delta-time-inputs`       | main                       | `0213eb8be9298e57c4d9222d681be08ce6b6f653` | —                    | D-93, Closes #78                                                                   |
+| #73 | `fix/audit-delta-gantt-search`      | main                       | `067ef3630b9e49579abf436a8508693807640edb` | —                    |                                                                                    |
+| #80 | `fix/audit-display-settings-reset`  | main                       | `48c00871864dd8270c97f6e324fcace52d8cfe5e` | —                    |                                                                                    |
+| #82 | `fix/audit-task-conflict-merge`     | main                       | `263e47163b29c68fa39e308d2af7c60a3e29944a` | —                    | 이번 인계에서 만든 새 Draft PR(D-94 업무). `6cee356`·`8ba72ad`·`70435e4`·`263e471` |
+| #69 | `docs/audit-record`                 | main                       | `6ed1df82f28898c74501646f98fc9ba8455b37f8` | —                    | 감사 기록. 이번 인계에서 올림: `06df978`, `6ed1df8`(D-94·D-95). 마지막에 병합      |
 
 PR이 아닌 원격 브랜치(이번 인계에서 올림, 병합하지 않는다):
 
@@ -70,7 +70,7 @@ PR이 아닌 원격 브랜치(이번 인계에서 올림, 병합하지 않는다
 | `handoff/ref-integration-4-prefix` | `7e7137159efeb14a753bfc7c8e5ab9d30edf19af` | 병합 순서대로 다시 짓기 시작한 통합의 앞부분(#51→#52→#53→#54→#58→#57, 모두 충돌 없음)                                                         |
 | `handoff/ref-int4-dry`             | `cd2d9b62b478f0d7675cf20795f4a6b8fe68a957` | 위 순서를 #80까지 지금(인계 전) 머리로 미리 합쳐 본 것. #64는 옛 머리 `2e1d3a1`, #59는 옛 머리 `dbd1861`, 고정 값 수정 없음. 충돌 해결 참고용 |
 
-후속 이슈(모두 OPEN, 2026-10-22T01:14:14Z): fvoci/GroundZero#50, #70, #71, #76, #77, #78, #79. #77은 #81, #78은 #72, #71은 #64가 병합되면
+후속 이슈(모두 OPEN, 2026-10-22T01:24:17Z): fvoci/GroundZero#50, #70, #71, #76, #77, #78, #79. #77은 #81, #78은 #72, #71은 #64가 병합되면
 닫힌다(#64는 D-95를 마친 뒤 본문에 `Closes #71`을 넣는다).
 
 ## 2. 결정 (확정·해석·미확정)
@@ -115,15 +115,21 @@ P-36(CI `integration` job 정리). SQL을 바꾸는 제안(P-24·P-25·P-26·P-2
 
 ## 3. 진행 중이던 작업의 상태 (인계 체크포인트)
 
-### 3.1 D-94 업무 — PR #82 (`70435e4`)
+### 3.1 D-94 업무 — PR #82 (`263e471`)
 
 - 완료: 내가 고친 칸만 최신 판에 얹기, 같은 칸 충돌 확인(양쪽 값 전체 표시), 일정 묶음, 담당자 집합 비교, 확인 중 나머지 잠금
   (inert), Esc는 확인만 취소, 다시 409·실패에서 입력 보존, 초점 복귀. jsdom 시험 38개(두 파일), 전체 vitest 413개 통과, eslint·
   svelte-check(`--fail-on-warnings`)·prettier 통과. 고치기 전 실패: main `a5cda4e`의 TaskDetail로 5/6 실패, 1차(`8ba72ad`)로 18/38 실패.
 - 1차(`8ba72ad`) 반박 검증: **실패**(일정 칸별 병합, 확인 값≠보낸 값, 담당자 순서, 긴 글 자름, 초점·잠금). 2차(`70435e4`)가 모두 고쳤다.
 - 2차 반박 검증: **통과 아님**(인계 중 완료, 읽기 전용). D-94 병합 자체(일정 묶음·담당자 집합·태그 순서·예상 시간)에서는 반례가 없었고 검사·vitest 413개가 통과했다. 그러나 [중간, 병합 차단] 확인 상자의 버튼이 아닌 곳을 눌러 초점이 업무 대화상자(`Dialog.Content`)로 간 뒤 Esc를 누르면 업무 대화상자가 닫히고 저장하지 않은 입력이 사라진다(고칠 방향: 확인 뿌리에 `tabindex="-1"`, 또는 확인이 떠 있는 동안 `onEscapeKeydown`에서 `preventDefault`. 회귀 시험은 확인이 뜬 뒤 대화상자에 초점 → Esc → 입력 유지). [낮음] 진행 중이던 체크리스트·반복·상위 업무 요청이 돌아오면 확인이 말없이 닫힘, 앞뒤 공백만 바꾼 칸을 고친 칸으로 봄, 태그 중복 제거를 따르지 않음, 여전히 똑같아 보이는 값 쌍, 값 상자 키보드 스크롤(Safari). [nit] 초점 이동 조건·기존 초점 문제·309자리 예상 시간. 전체 목록은 #82 댓글 https://github.com/fvoci/GroundZero/pull/82#issuecomment-6329993004 .
-- 남은 것: 위 2차 검증 지적(특히 Esc 입력 유실) 수정과 회귀 시험, 실제 브라우저 확인(NOT RUN), 최종 통합 시험. CodeRabbit은 `70435e4`에서
-  "No actionable comments", 합병 위험 Minimal(인계 때 확인).
+- **Esc 입력 유실 수정(`263e471`, 인계 체크포인트에서 함)**: 확인 상자 뿌리에 `tabindex="-1"`(outline-none)을 달아 안내문·값 상자를 눌러도 초점이
+  상자에 남고 Esc는 확인만 거둔다. 회귀 시험 "keeps focus in the question after a click on its text, so Escape only cancels it"는 `70435e4`에서
+  실패(`evidence/logs/d94-tasks/263e471-esc-fail-before-on-70435e4.log`)하고 지금 통과. prettier·eslint·svelte-check(`--fail-on-warnings`)·vitest
+  77파일·414개 통과(`263e471-vitest.log`). 반박 재검증과 실제 브라우저 확인은 하지 않았다. 대화상자 바깥(충돌 알림 글)을 눌러 초점이
+  `Dialog.Content`로 간 뒤의 Esc는 지금처럼 대화상자를 닫는다(확인이 떠 있지 않을 때와 같은 기존 동작).
+  설명은 https://github.com/fvoci/GroundZero/pull/82#issuecomment-6330375703 .
+- 남은 것: 2차 검증의 [낮음]·nit 지적, `263e471`의 반박 재검증, 실제 브라우저 확인(NOT RUN), 최종 통합 시험. CodeRabbit은 `70435e4`에서
+  "No actionable comments", 합병 위험 Minimal. `263e471`의 리뷰 상태는 7절 표를 본다.
 - 알려진 범위 밖: 화면에서 같은 태그를 두 번 치면 클라이언트는 겹침을 빼지 않아 고친 칸·충돌로 볼 수 있음. 값 칸의 스크롤 영역은
   Safari에서 키보드 초점을 받지 않음(tabindex는 lint 경고, 규칙 완화는 사용자 확인 대상).
 
@@ -159,7 +165,10 @@ P-36(CI `integration` job 정리). SQL을 바꾸는 제안(P-24·P-25·P-26·P-2
   6개 통과. **확인하지 않은 것**: DB 통합 시험, collab 시험, 취소 경로·복원 시험 작성 여부, 반박 검증. 검증 완료로 보지 말 것.
   **주의**: 멈추기 직전(09:36 KST) WIP 작업 트리의 collab 시험에서 27개 통과·1개 실패 기록이 있다. 실패한 것은 `5edd8f4`에서 통과하던
   P-34 시험 `a_move_without_a_room_saves_a_live_state_left_pending`이고, 409 "live edits could not be saved as a revision first"였다
-  (`evidence/logs/d95-wip/test1.log`). 스냅숏 커밋이 그 뒤 수정을 담았는지는 확인하지 않았다. WIP에 회귀가 있다고 보고 시작한다.
+  (`evidence/logs/d95-wip/test1.log`). **인계 체크포인트에서 스냅숏 `ab0ffaf`를 다시 돌린 결과(확정)**: `cargo xtask test --keep`(PostgreSQL,
+  OIDC 없음)에서 collab 27개 통과·1개 실패로 같은 P-34 시험이 같은 409로 실패했고, cargo가 그 시험 바이너리에서 멈춰 뒤의 시험
+  바이너리는 돌지 않았다(`evidence/logs/d95-wip/ab0ffaf-xtask-test-keep.log`). 곧 **WIP에는 확인된 회귀가 있다**. 원인은 아직
+  조사하지 않았다(새 환경의 첫 D-95 작업).
 - **CodeRabbit의 `5edd8f4` 새 지적(OPEN, 병합 전 처리)**: (1) 방 안에서 도는 `move_in_db`가 `app_lock_move`·`FOR UPDATE`·`app_lock_item`을
   `lock_timeout` 없이 기다려 방과 보내는 쪽이 끝없이 멈출 수 있고, 55P03이 409로 바뀌지 않는다
   (https://github.com/fvoci/GroundZero/pull/64#discussion_r4343460648). (2) 그 기다림 동안 방의 권한 재확인이 돌지 못해, 커밋 전에 받은 편집이
@@ -294,19 +303,22 @@ RLS 검증 완료로 보지 않는다. Cloud에는 쓰기·마이그레이션을
   구현 명시). **비차단** — 나머지는 기존 동작의 강화 제안이나 남은 관찰이다. 새 환경은 기존 이슈를 먼저 찾고, 필요하면 해당 PR 스레드에서
   `@coderabbitai`로 이슈 생성을 요청해 실제 URL을 확인한 뒤 장부를 갱신한다. 데이터 유실·덮어쓰기에 해당하면 이슈로 넘기지 않고 고친다.
 - FOLLOW_UP으로 실제 이슈가 있는 것: fvoci/GroundZero#76, fvoci/GroundZero#77, fvoci/GroundZero#78, fvoci/GroundZero#79
-- 장부는 각 PR의 그때 머리를 기준으로 했다. **인계에서 새로 올린 머리**의 리뷰 상태(2026-10-22T01:14:14Z):
+- 장부는 각 PR의 그때 머리를 기준으로 했다. **인계에서 새로 올린 머리**의 리뷰 상태(2026-10-22T01:24:17Z):
   | PR  | 머리           | CodeRabbit 상태              | 요약                                                                                   | 풀리지 않은 스레드                                                     |
   | --- | -------------- | ---------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
   | #59 | `df2261597ccc` | Review completed (00:50:45Z) | No actionable comments, Merge Risk Minimal up to `df226`                               | 0                                                                      |
   | #64 | `5edd8f4545e1` | Review completed (00:52:58Z) | Merge Risk Low up to `5edd8`, 새 OPEN 2건(아래 항목 표의 #64 OPEN)                     | 1 (https://github.com/fvoci/GroundZero/pull/64#discussion_r4343460648) |
   | #69 | `6ed1df82f288` | Review completed (00:46:30Z) | Merge Risk Low up to `6ed1d`, 새 OPEN 1건(D-95를 부분 구현으로 명시)                   | 1 (https://github.com/fvoci/GroundZero/pull/69#discussion_r4343454624) |
   | #82 | `70435e4ea952` | Review completed (00:47:30Z) | No actionable comments, Merge Risk Minimal up to `70435`(새 PR, 장부의 PR 표에는 없음) | 0                                                                      |
+
+| #82 | `263e47163b29` | Review in progress(01:22:09Z 시작, 01:23:56Z 확인) | 인계 체크포인트에서 올린 Esc 수정. CI도 진행 중(check·integration·oidc·supabase·rhwp 결과 전) — 새 환경이 결과 확인 | — |
+
 - 리뷰 본문이 비었거나 스레드가 resolved라는 것만으로 위험이 해결됐다고 보지 않는다. 요약의 "Some tools did not complete"
   (Clippy·ESLint 실행 실패) 경고는 CodeRabbit 쪽 도구 문제이며 저장소 CI(check·licenses·integration·oidc·supabase·rhwp)와 별개다.
 
 ## 8. 증거 묶음 (`docs/handoff/evidence/`)
 
-- 목록·관련 코드 SHA·시나리오·결과: `docs/handoff/evidence/MANIFEST.md`. 체크섬: `docs/handoff/evidence/SHA256SUMS`(파일 118개).
+- 목록·관련 코드 SHA·시나리오·결과: `docs/handoff/evidence/MANIFEST.md`. 체크섬: `docs/handoff/evidence/SHA256SUMS`(파일 123개).
 - 구성: `logs/`(R0~R7, 사고, #71, P-34, D-95 WIP, D-94 업무·일정), `screenshots/`(실제 브라우저 세 묶음, 각 `INDEX.md`), `patches/`(이번에
   올린 커밋의 사본, 통합 충돌 해결 예시).
 - 공개 저장소이므로 원본 로그 대신 비밀값·로컬 경로를 지운 사본만 올렸다(MANIFEST 머리말). 공개가 부적절해 따로 보낼 자료는 없다고
@@ -393,16 +405,16 @@ DST 일정("DST 확인: 뉴욕 두 번째 01:30", America/New_York 2026-11-01 01
 
 **실행 목록**(세션 기록의 명령 시각, UTC 2026-10-21. 모두 메인 체크아웃에서):
 
-| 시각                           | 맥락                  | 개발 볼륨 삭제 여부                                                                                                      | 근거                                                                      |
-| ------------------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| 11:35:19                       | 감사 초반 시험 전     | 미확인                                                                                                                   | 출력은 `tail -3`만 남음                                                   |
-| 12:19:56                       | 시험 전               | 미확인                                                                                                                   | 출력 일부만                                                               |
-| 12:34:05                       | 시험 전               | 미확인(12:27에 만든 개발 스택이 12:33~12:35 기록에 떠 있음. 이 실행과의 앞뒤 관계는 출력이 잘려 확인하지 못함)           | 출력에 개발 부분이 없음                                                   |
-| 12:52:51                       | 브라우저 확인 뒤 정리 | 지워졌다고 판단(그 전에 떠 있던 개발 스택의 볼륨을 16:28에 다시 "Creating"으로 만듦. 12:34 실행이 먼저 지웠을 수도 있음) | 출력은 `==> down` 줄만 남김                                               |
-| 17:46:06 / 17:54:36 / 18:20:04 | 시험 전               | 셋 중 하나에서 지워짐(16:28에 만든 스택이 16:54에 떠 있었고 20:15에 다시 "Creating"). 어느 실행인지는 미확인             | 출력 없음                                                                 |
-| 20:07:17 (R4)                  | 행렬 전               | 지워지지 않음(그때 개발 스택 없음)                                                                                       | `evidence/logs/incident/2026-10-21T2007Z-r4-down.log`에 개발 볼륨 줄 없음 |
-| 20:39:01                       | 행렬 뒤               | **지워짐**(`kcdata`·`pgdata`·`meilidata` Removed, 20:15에 만든 것)                                                       | `2026-10-21T2039Z-down.log`                                               |
-| 22:53:4x (R7)                  | check 뒤 행렬 전      | **지워짐**(같은 세 볼륨 Removed, 20:39~21:37 사이에 만든 것)                                                             | `2026-10-21T2253Z-r7-down.log`                                            |
+| 시각                           | 맥락                  | 개발 볼륨 삭제 여부                                                                                                                                                                  | 근거                                                                      |
+| ------------------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| 11:35:19                       | 감사 초반 시험 전     | 미확인. 세션 전부터 있던 개발 스택이 이때 지워졌을 가능성이 높음(아래)                                                                                                               | 출력은 `tail -3`만 남음                                                   |
+| 12:19:56                       | 시험 전               | 미확인                                                                                                                                                                               | 출력 일부만                                                               |
+| 12:34:05                       | 시험 전               | 미확인(12:27에 만든 개발 스택이 12:33~12:35 기록에 떠 있음. 이 실행과의 앞뒤 관계는 출력이 잘려 확인하지 못함)                                                                       | 출력에 개발 부분이 없음                                                   |
+| 12:52:51                       | 브라우저 확인 뒤 정리 | 지워졌다고 판단(그 전에 떠 있던 개발 스택의 볼륨을 16:28에 다시 "Creating"으로 만듦. 12:34 실행이 먼저 지웠을 수도 있음)                                                             | 출력은 `==> down` 줄만 남김                                               |
+| 17:46:06 / 17:54:36 / 18:20:04 | 시험 전               | 16:28에 만든 스택이 지워짐. Docker Desktop 로그에는 17:46:13Z에 `pgdata`를 다시 붙인 기록이 있어 이 구간에서 두 번 지워졌을 수 있다(20:15에 다시 "Creating"). 어느 실행인지는 미확인 | 출력 없음                                                                 |
+| 20:07:17 (R4)                  | 행렬 전               | 지워지지 않음(그때 개발 스택 없음)                                                                                                                                                   | `evidence/logs/incident/2026-10-21T2007Z-r4-down.log`에 개발 볼륨 줄 없음 |
+| 20:39:01                       | 행렬 뒤               | **지워짐**(`kcdata`·`pgdata`·`meilidata` Removed, 20:15에 만든 것)                                                                                                                   | `2026-10-21T2039Z-down.log`                                               |
+| 22:53:4x (R7)                  | check 뒤 행렬 전      | **지워짐**(같은 세 볼륨 Removed, 20:39~21:37 사이에 만든 것)                                                                                                                         | `2026-10-21T2253Z-r7-down.log`                                            |
 
 이 세션의 서브에이전트는 자기 worktree(예: `fvoci-wt71-33b5e0-*`)에서도 `cargo xtask down`을 돌렸다. 그 프로젝트는 그 에이전트가 만든
 시험·개발 스택이다(다른 사람의 데이터가 들어간 기록은 없음).
@@ -412,15 +424,20 @@ DST 일정("DST 확인: 뉴욕 두 번째 01:30", America/New_York 2026-11-01 01
 - 확인된 것: 세션 안에서 만든 개발 스택들. `cargo xtask dev --oidc`의 합성 시드(테스트 계정 둘, '개발' 워크스페이스, "모듈 예제 (합성
   데이터)")와 브라우저 확인 중 화면·API로 만든 합성 변경(업무 제목 수정, DST 일정, 표시 설정, 칸반 이동 등), Keycloak 개발 realm과
   세션, 그 DB에서 만든 검색 색인. 호스트의 `target/dev-files`(첨부)는 지우지 않는다.
-- **미확인**: 세션 시작(11:01:55Z) 전에 이 체크아웃에 개발 스택이 있었는지와 그 안의 데이터. 세션의 첫 개발 실행(12:27Z)이 볼륨을
-  "Creating"으로 만들었으므로, 그 전에 볼륨이 있었다면 11:35Z 또는 12:19Z 실행이 지웠다. 있었는지, 사용자가 직접 넣은 데이터가
-  있었는지는 확인할 수 없었다. 개발용이었다는 이유로 손실이 없었다고 보지 않는다.
+- **세션 전부터 있던 개발 데이터(가장 큰 손실 후보)**: Docker Desktop 로그(`evidence/logs/incident/docker-desktop-excerpt.txt`)로 보면 이
+  체크아웃의 개발 스택은 늦어도 2026-10-16부터 있었다. 세션 시작 전 02:13:18Z에 Docker Desktop에서 이 볼륨들을 포함한 일괄 삭제 요청이
+  있었으나 모두 409(사용 중)로 거절됐고, 02:13:27Z의 `compose down --remove-orphans`(Docker Desktop이 실행)는 볼륨을 지우지 않는다.
+  그런데 세션의 첫 개발 실행(12:27Z)은 볼륨을 새로 "Creating"했다. 그 사이 볼륨을 지운 기록은 로그에 없고, 그 사이 볼륨을 지울 수 있는
+  명령은 이 세션의 `cargo xtask down`(11:35:19Z·12:19:56Z, `--volumes`)뿐으로 확인된다. 따라서 **이 세션의 11:35Z 실행이 10-16 무렵부터
+  쌓인 개발 데이터를 지웠을 가능성이 높다**(직접 기록은 없어 확정하지 못함). 그 안의 내용(합성 시드 외에 사용자나 다른 작업이 넣은
+  데이터)은 확인할 수 없다. 개발용이었다는 이유로 손실이 없었다고 보지 않는다. 02:13Z의 일괄 삭제 요청을 누가 했는지는 미확인이다.
 - 다른 체크아웃(`GroundZero-int`·`-linecheck`·`-seedfresh`·`-seedfresh2`·`-seedupgrade`)의 개발 볼륨은 지금도 남아 있다(이 세션이
   건드린 기록 없음).
 
-**백업·복구 가능성**: 이 조사에서 백업은 찾지 못했다(pg_dump 파일·`docker commit` 이미지·볼륨 사본 없음). Docker 볼륨 삭제는
-되돌릴 수 없다. Docker Desktop 가상 디스크나 Time Machine 스냅숏에서 되살릴 수 있는지는 확인하지 않았다(미확인). 복구 시도는 하지
-않았다.
+**백업·복구 가능성**(읽기 전용으로 확인): Time Machine 대상이 설정돼 있지 않고(`tmutil destinationinfo`: No destinations configured), APFS
+로컬 스냅숏도 없으며(`tmutil listlocalsnapshots /` 비어 있음), Docker Desktop 가상 디스크(`Docker.raw`, 2026-09-07 생성, 저장소 초기화 없음)는
+Time Machine 제외 대상이다. pg_dump 파일·`docker commit` 이미지·볼륨 사본도 찾지 못했다. 따라서 **이 컴퓨터에서 찾은 복구 경로는 없다**.
+가상 디스크의 빈 블록에서 되살리는 것 같은 파일 시스템 수준 복구는 시도하지 않았고(지시에 따라 복구 작업 금지), 가능 여부는 미확인이다.
 
 **관련 사실(볼륨 아님)**: 같은 날 12:52:51Z에 이 세션은 자기가 만든 worktree 세 개(`GroundZero-inputs`·`-kdocs`·`-sdocs`, 11:21Z·
 12:45Z에 생성)를 `git worktree remove --force`로 지웠다. 직전에 커밋·push한 기록은 있으나(예: `fix/input-preservation-audit`
@@ -461,7 +478,7 @@ DST 일정("DST 확인: 뉴욕 두 번째 01:30", America/New_York 2026-11-01 01
 | ---- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1    | 인수 확인        | 0절 모두 OK, 사용자에게 보고, 기존 환경 중단 확인                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | 2    | D-95 마무리(#64) | WIP `ab0ffaf`를 검토해 이어서 구현하거나 다시 짠다. 대리 저장 리비전이 실제 편집자를 따로 기록(API·이력·내보내기 화면), 대리 저장은 이동 권한 확인 뒤 서버 안에서만, 저장 실패 시 409·편집 보존, 이동 실패·취소·방 없는 복원 경로 시험(고치기 전 실패 포함), `cargo xtask test`(+Supabase) 통과, 반박 검증, 3.3절 비차단 지적 처리 또는 근거, #64 본문에 `Closes #71`, CodeRabbit `5edd8f4` OPEN 2건(잠금 대기 시간 제한·55P03 매핑, 기다린 편집의 권한 재확인) 처리, WIP의 P-34 시험 실패 원인 확인 |
-| 3    | D-94 업무(#82)   | 2차 반박 검증 지적 처리(먼저 Esc 입력 유실[중간]과 그 회귀 시험), 실제 브라우저에서 409 재저장·같은 칸 확인·취소 보존 확인                                                                                                                                                                                                                                                                                                                                                                           |
+| 3    | D-94 업무(#82)   | 2차 반박 검증의 [낮음]·nit 처리, `263e471`(Esc 입력 유실 수정)의 반박 재검증, 실제 브라우저에서 409 재저장·같은 칸 확인·취소 보존 확인                                                                                                                                                                                                                                                                                                                                                               |
 | 4    | D-94 일정(#59)   | 회귀 시험 둘 추가와 nit, 실제 브라우저 확인                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | 5    | CodeRabbit       | 새 머리(#59·#64·#69·#82와 이후 커밋) 리뷰 완료 확인, `coderabbit-ledger.md`의 OPEN 항목을 수정·근거 있는 기각·후속 이슈(실제 URL)로 분류, 지적 분류에 수정 SHA·기각 근거·이슈 URL                                                                                                                                                                                                                                                                                                                    |
 | 6    | 최종 통합·R8     | 4절 순서의 통합 SHA 고정, R8 세 환경 + check PASS 기록                                                                                                                                                                                                                                                                                                                                                                                                                                               |

@@ -197,12 +197,13 @@
 
 위 PR별 표의 #59·#69는 그 전 머리로 모았다. 지금 머리와 리뷰 상태는 아래와 같다. CI는 네 PR 모두 7/7 SUCCESS(CodeRabbit 상태 포함).
 
-| PR  | 머리           | CodeRabbit 상태              | 요약                                                                                   | 풀리지 않은 스레드                                                     |
-| --- | -------------- | ---------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| #59 | `df2261597ccc` | Review completed (00:50:45Z) | No actionable comments, Merge Risk Minimal up to `df226`                               | 0                                                                      |
-| #64 | `5edd8f4545e1` | Review completed (00:52:58Z) | Merge Risk Low up to `5edd8`, 새 OPEN 2건(아래 항목 표의 #64 OPEN)                     | 1 (https://github.com/fvoci/GroundZero/pull/64#discussion_r4343460648) |
-| #69 | `6ed1df82f288` | Review completed (00:46:30Z) | Merge Risk Low up to `6ed1d`, 새 OPEN 1건(D-95를 부분 구현으로 명시)                   | 1 (https://github.com/fvoci/GroundZero/pull/69#discussion_r4343454624) |
-| #82 | `70435e4ea952` | Review completed (00:47:30Z) | No actionable comments, Merge Risk Minimal up to `70435`(새 PR, 장부의 PR 표에는 없음) | 0                                                                      |
+| PR  | 머리           | CodeRabbit 상태                                    | 요약                                                                                                                | 풀리지 않은 스레드                                                     |
+| --- | -------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| #59 | `df2261597ccc` | Review completed (00:50:45Z)                       | No actionable comments, Merge Risk Minimal up to `df226`                                                            | 0                                                                      |
+| #64 | `5edd8f4545e1` | Review completed (00:52:58Z)                       | Merge Risk Low up to `5edd8`, 새 OPEN 2건(아래 항목 표의 #64 OPEN)                                                  | 1 (https://github.com/fvoci/GroundZero/pull/64#discussion_r4343460648) |
+| #69 | `6ed1df82f288` | Review completed (00:46:30Z)                       | Merge Risk Low up to `6ed1d`, 새 OPEN 1건(D-95를 부분 구현으로 명시)                                                | 1 (https://github.com/fvoci/GroundZero/pull/69#discussion_r4343454624) |
+| #82 | `70435e4ea952` | Review completed (00:47:30Z)                       | No actionable comments, Merge Risk Minimal up to `70435`(새 PR, 장부의 PR 표에는 없음)                              | 0                                                                      |
+| #82 | `263e47163b29` | Review in progress(01:22:09Z 시작, 01:23:56Z 확인) | 인계 체크포인트에서 올린 Esc 수정. CI도 진행 중(check·integration·oidc·supabase·rhwp 결과 전) — 새 환경이 결과 확인 | —                                                                      |
 
 ## 비판 검토(critic)가 짚은 한계
 

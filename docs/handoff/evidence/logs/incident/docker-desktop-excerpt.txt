@@ -1,0 +1,18 @@
+# Docker Desktop 로그 발췌(읽기 전용, 2026-10-22 인계 때 모음). 메인 체크아웃 개발 스택(fvoci-groundzero-bf103f-dev) 줄만 싣는다.
+
+## host/electron-2026-10-21.log — 02:13:18Z Docker Desktop의 볼륨 일괄 삭제 요청(모두 409로 거절)
+2026-10-21T02:13:18.427Z error 	[HTTP] DELETE /volumes/fvoci-groundzero-bf103f-dev_kcdata: Conflict (HTTP 409: Conflict)
+2026-10-21T02:13:18.427Z error 	[HTTP] DELETE /volumes/fvoci-groundzero-bf103f-dev_pgdata: Conflict (HTTP 409: Conflict)
+2026-10-21T02:13:18.427Z error 	[HTTP] DELETE /volumes/fvoci-groundzero-bf103f-dev_meilidata: Conflict (HTTP 409: Conflict)
+(같은 요청은 다른 로컬 프로젝트 볼륨 22개도 대상으로 했고 모두 409로 거절됐다. 이름은 싣지 않는다)
+
+## host/supervisor.log — 02:13Z Docker Desktop이 실행한 compose 명령(볼륨을 지우는 --volumes 없음)
+2026-10-21T02:13:11.998187000Z compose --project-name fvoci-groundzero-bf103f-dev stop
+2026-10-21T02:13:27.446412000Z compose --project-name fvoci-groundzero-bf103f-dev down --remove-orphans
+
+## host/com.docker.backend.log.* — 개발 스택 볼륨을 컨테이너에 붙인 첫 기록(스택을 띄운 때)
+2026-10-21T16:28:02.189581000Z fvoci-groundzero-bf103f-dev_pgdata mounted
+2026-10-21T17:46:13.613733000Z fvoci-groundzero-bf103f-dev_pgdata mounted
+2026-10-21T20:15:36.681736000Z fvoci-groundzero-bf103f-dev_pgdata mounted
+2026-10-21T20:54:26.387477000Z fvoci-groundzero-bf103f-dev_pgdata mounted
+2026-10-21T23:03:41.652511000Z fvoci-groundzero-bf103f-dev_pgdata mounted

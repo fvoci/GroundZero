@@ -1,0 +1,136 @@
+
+ RUN  v5.0.5 <scratch>/wt-taskmerge/apps/web
+
+ ❯ tests/component/task-conflict-save-mine.test.ts (14 tests | 1 failed | 13 skipped) 183ms
+   ❯ the overwrite question inside the task dialog (2)
+     × keeps focus in the question after a click on its text, so Escape only cancels it 182ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/component/task-conflict-save-mine.test.ts > the overwrite question inside the task dialog > keeps focus in the question after a click on its text, so Escape only cancels it
+AssertionError: expected <h3 id="task-clash-heading" …(2)></h3> to be <div …(4)><h3 …(3)></h3>
+…(3)</div> // Object.is equality
+
+- Expected
++ Received
+
+- <div
+-   aria-describedby="task-clash-hint"
+-   aria-labelledby="task-clash-heading"
+-   class="mt-3 flex flex-col gap-2 rounded-md border border-amber-500/50 p-3"
+-   role="alertdialog"
+- >
+  <h3
+    class="font-semibold"
+    id="task-clash-heading"
+    tabindex="-1"
+  >
+    다른 사람도 바꾼 칸이 있습니다
+  </h3>
+-    
+-   <p
+-     class="text-muted-foreground"
+-     id="task-clash-hint"
+-   >
+-     아래 칸은 나와 다른 사람이 서로 다른 값으로 바꿨습니다(시작일·마감일·마일스톤은 한 묶음으로 봅니다). 덮어쓰면 이 칸은 내 값으로 저장하고, 내가 고치지 않은 칸은 서버의 최신 값을 그대로 둡니다.
+-   </p>
+-    
+-   <ul
+-     class="flex flex-col gap-3"
+-   >
+-     <li
+-       class="flex flex-col gap-1"
+-       data-clash-field="title"
+-     >
+-       <span
+-         class="font-medium"
+-       >
+-         제목
+-       </span>
+-        
+-       <dl
+-         class="grid gap-2 sm:grid-cols-2"
+-       >
+-         <div
+-           class="flex min-w-0 flex-col gap-0.5"
+-         >
+-           <dt
+-             class="text-muted-foreground"
+-           >
+-             서버의 지금 값
+-           </dt>
+-            
+-           <dd
+-             class="max-h-60 overflow-auto rounded bg-muted px-2 py-1 break-words whitespace-pre-wrap"
+-             data-clash-side="server"
+-           >
+-             남의 제목
+-           </dd>
+-         </div>
+-          
+-         <div
+-           class="flex min-w-0 flex-col gap-0.5"
+-         >
+-           <dt
+-             class="text-muted-foreground"
+-           >
+-             내 값
+-           </dt>
+-            
+-           <dd
+-             class="max-h-60 overflow-auto rounded bg-muted px-2 py-1 break-words whitespace-pre-wrap"
+-             data-clash-side="mine"
+-           >
+-             내 제목
+-           </dd>
+-         </div>
+-       </dl>
+-     </li>
+-     
+-   </ul>
+-    
+-   <div
+-     class="flex flex-wrap gap-2"
+-   >
+-     <!---->
+-     <button
+-       class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border border-transparent bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/80 h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+-       data-slot="button"
+-       type="button"
+-     >
+-       내 값으로 덮어쓰고 저장
+-       <!---->
+-     </button>
+-     
+-     <!---->
+-      
+-     <!---->
+-     <button
+-       class="focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 border bg-clip-padding font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
+-       data-slot="button"
+-       type="button"
+-     >
+-       취소
+-       <!---->
+-     </button>
+-     
+-     <!---->
+-   </div>
+- </div>
+
+ ❯ tests/component/task-conflict-save-mine.test.ts:691:36
+    689|     // 브라우저는 누른 곳의 가장 가까운 초점 대상으로 초점을 옮긴다. jsdom은 그러지 않으므로 그 대상(상자)에 직…
+    690|     ask.focus();
+    691|     expect(document.activeElement).toBe(ask);
+       |                                    ^
+    692|     await fireEvent.keyDown(ask, { key: 'Escape' });
+    693|     await waitFor(() => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 skipped (14)
+   Start at  10:20:40
+   Duration  1.76s (transform 45%, import 26%, environment 15%, tests 11%, setup 3%)
+

@@ -1,0 +1,16 @@
+
+ RUN  v5.0.5 <scratch>/wt-taskmerge/apps/web
+
+Not implemented: Window's scrollBy() method
+Not implemented: Window's scrollBy() method
+Not implemented: Window's scrollBy() method
+
+ Test Files  77 passed (77)
+      Tests  414 passed (414)
+   Start at  10:21:25
+   Duration  20.09s (import 35%, transform 28%, environment 21%, tests 11%, setup 4%)
+
+     Import  2864 modules were evaluated 155955 times · 59.72s total, 35% of tracked time
+             ~5.61s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
