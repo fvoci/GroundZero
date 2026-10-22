@@ -45,6 +45,9 @@ enum Command {
         /// Use a local PostgreSQL installer with CREATEROLE and target-DB privileges only.
         #[arg(long, conflicts_with = "supabase")]
         restricted_admin: bool,
+        /// Standard PostgreSQL major; ignored for the pinned Supabase fixture.
+        #[arg(long, value_enum, default_value = "17", conflicts_with = "supabase")]
+        postgres_major: compose::PostgresMajor,
         /// Use the pinned self-hosted Supabase PostgreSQL and session pooler.
         #[arg(long)]
         supabase: bool,
@@ -149,6 +152,7 @@ fn main() -> Result<()> {
             behavior,
             behavior_scope,
             restricted_admin,
+            postgres_major,
             supabase,
         } => sql_compare::run(
             &root,
@@ -157,6 +161,7 @@ fn main() -> Result<()> {
             behavior.then(|| behavior_scope.unwrap_or(sql_compare::BehaviorScope::Full)),
             supabase,
             restricted_admin,
+            postgres_major,
         ),
         Command::SupabaseCloudPrecheck { connect } => {
             std::process::exit(supabase_cloud_precheck::run(connect))

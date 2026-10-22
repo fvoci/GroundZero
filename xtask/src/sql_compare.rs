@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use sqlx::{Connection, PgConnection, Row};
 use xshell::{Shell, cmd};
 
-use crate::compose::{self, Compose, DbUrls};
+use crate::compose::{self, Compose, DbUrls, PostgresMajor};
 use crate::supabase::Supabase;
 
 mod capabilities;
@@ -43,11 +43,15 @@ enum Cluster {
 }
 
 impl Cluster {
-    fn new(root: &Path, run: &str, supabase: bool) -> Result<Self> {
+    fn new(root: &Path, run: &str, supabase: bool, postgres_major: PostgresMajor) -> Result<Self> {
         if supabase {
             Ok(Self::Supabase(Supabase::for_comparison(root, run)?))
         } else {
-            Ok(Self::Postgres(Compose::for_comparison(root, run)))
+            Ok(Self::Postgres(Compose::for_comparison(
+                root,
+                run,
+                postgres_major,
+            )))
         }
     }
 
@@ -115,6 +119,7 @@ pub fn run(
     behavior: Option<BehaviorScope>,
     supabase: bool,
     restricted_admin: bool,
+    postgres_major: PostgresMajor,
 ) -> Result<()> {
     ensure!(
         !restricted_admin || !supabase,
@@ -134,6 +139,9 @@ pub fn run(
         &output.join("inputs.json"),
         &json!({
             "source_sha":git.trim(), "run_id":run,
+            "postgres_major":if supabase {None}else{Some(postgres_major.number())},
+            "compose_test_sha256":format!("{:x}",Sha256::digest(std::fs::read(root.join("deploy/compose.test.yaml"))?)),
+            "compose_pg18_sha256":format!("{:x}",Sha256::digest(std::fs::read(root.join("deploy/compose.test.pg18.yaml"))?)),
             "migrations":sql_hashes(&root.join("crates/server/migrations"))?,
             "candidate":candidate.as_deref().map(sql_hashes).transpose()?,
             "tool_sha256":Sha256::digest(include_bytes!("sql_compare.rs")).iter().map(|b|format!("{b:02x}")).collect::<String>(),
@@ -171,7 +179,7 @@ pub fn run(
             phases.insert(format!("{side}_install"), "FAIL");
             let cluster = register_and_start(
                 &mut clusters,
-                Cluster::new(root, &format!("{run}-{side}"), supabase)?,
+                Cluster::new(root, &format!("{run}-{side}"), supabase, postgres_major)?,
                 |cluster| cluster.start(&sh),
             )?;
             let mut connection = cluster.urls(&sh)?;
@@ -228,7 +236,7 @@ pub fn run(
         if let Some(scope) = behavior {
             let services = register_and_start(
                 &mut services,
-                Compose::for_comparison(root, &format!("{run}-services")),
+                Compose::for_comparison(root, &format!("{run}-services"), postgres_major),
                 |services| services.up_services(&sh, &["meilisearch", "seaweedfs"]),
             )?;
             for (index, side) in ["a", "b"].iter().enumerate() {

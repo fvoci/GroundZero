@@ -6,6 +6,25 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use xshell::{Shell, cmd};
 
+/// Standard PostgreSQL majors verified by the integration fixtures.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, clap::ValueEnum)]
+pub enum PostgresMajor {
+    #[default]
+    #[value(name = "17")]
+    Pg17,
+    #[value(name = "18")]
+    Pg18,
+}
+
+impl PostgresMajor {
+    pub fn number(self) -> u32 {
+        match self {
+            Self::Pg17 => 17,
+            Self::Pg18 => 18,
+        }
+    }
+}
+
 /// Compose 파일 종류.
 #[derive(Debug, Clone, Copy)]
 pub enum Env {
@@ -56,13 +75,15 @@ pub struct Compose {
     env: Env,
     project: String,
     profiles: Vec<String>,
+    postgres_major: PostgresMajor,
 }
 
 impl Compose {
     /// A distinct, run-specific project for SQL comparison; never reuses dev/test resources.
-    pub fn for_comparison(root: &Path, run: &str) -> Self {
+    pub fn for_comparison(root: &Path, run: &str, postgres_major: PostgresMajor) -> Self {
         let mut compose = Self::new(root, Env::Test);
         compose.project = format!("sqlprep-b-{}-{run}", project_name(root, Env::Test));
+        compose.postgres_major = postgres_major;
         compose
     }
 
@@ -72,6 +93,7 @@ impl Compose {
             env,
             project: project_name(root, env),
             profiles: Vec::new(),
+            postgres_major: PostgresMajor::default(),
         }
     }
 
@@ -93,6 +115,12 @@ impl Compose {
             "--file".to_owned(),
             self.env.file().to_owned(),
         ];
+        if matches!(self.env, Env::Test) && self.postgres_major == PostgresMajor::Pg18 {
+            args.extend([
+                "--file".to_owned(),
+                "deploy/compose.test.pg18.yaml".to_owned(),
+            ]);
+        }
         for p in &self.profiles {
             args.push("--profile".to_owned());
             args.push(p.clone());

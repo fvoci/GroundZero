@@ -50,7 +50,7 @@ jobs:
     # 컨테이너 job 안에서는 Compose를 띄울 수 없으므로 job 서비스로 격리한다. 자격 증명은 compose.test.yaml과 같은 테스트 값.
     services:
       postgres:
-        image: postgres:18.3-bookworm@sha256:80630f83606d8db77d30b3851b16a9f78be2d0d4dda6f7b82a1fdca5ebe3acba
+        image: postgres:17.9-bookworm@sha256:47f917f7409eacd22fc5dfb1dee634e1b55cf0c01d1a7eb701be2227a03e0641
         env:
           POSTGRES_USER: fvoci
           POSTGRES_PASSWORD: fvoci-test-password
@@ -78,7 +78,8 @@ jobs:
   # S3 저장소 테스트(s3_*)는 SeaweedFS에 시작 인자(사용 통계 끄기 등)가 필요해 job 서비스로 띄울 수 없으므로
   # 아래 Compose job에서만 돈다(위 job은 NOT RUN으로 표시).
   # Keycloak을 거치는 OIDC 로그인 테스트. 컨테이너 job 안에서는 Compose를 띄울 수 없으므로 GitHub 호스트 러너에서
-  # compose.test.yaml(oidc 프로필)로 서비스를 띄우고, 테스트는 위 job과 같은 베이스 이미지 안에서 같은 진입점으로 돈다.
+  # compose.test.yaml + compose.test.pg18.yaml(oidc 프로필)로 상위 메이저 18도 검증한다. 기본 integration은 최소 17을 검증한다.
+  # 테스트는 위 job과 같은 베이스 이미지 안에서 같은 진입점으로 돈다.
   # 프로젝트명에 실행 번호·재시도 번호를 넣어 실행마다 컨테이너·네트워크·볼륨을 분리하고, 결과와 상관없이 지운다.
   # Docker 소켓은 테스트 컨테이너에 넘기지 않는다(체크아웃만 마운트).
   oidc:
@@ -89,8 +90,8 @@ jobs:
       IMAGE: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: services (postgres, meilisearch, keycloak)
-        run: docker compose --project-name "$PROJECT" --file deploy/compose.test.yaml --profile oidc up --detach --wait
+      - name: services (postgres 18, meilisearch, keycloak)
+        run: docker compose --project-name "$PROJECT" --file deploy/compose.test.yaml --file deploy/compose.test.pg18.yaml --profile oidc up --detach --wait
       - name: cargo xtask test --external-services --oidc (base image)
         run: >-
           docker run --rm --network "${PROJECT}_default"
@@ -105,7 +106,7 @@ jobs:
           "$IMAGE" cargo xtask test --external-services --oidc
       - name: compose down
         if: always()
-        run: docker compose --project-name "$PROJECT" --file deploy/compose.test.yaml --profile oidc down --volumes --remove-orphans
+        run: docker compose --project-name "$PROJECT" --file deploy/compose.test.yaml --file deploy/compose.test.pg18.yaml --profile oidc down --volumes --remove-orphans
 
   # 셀프호스트 Supabase를 DB로(D-88). 공식 구성을 고정 revision으로 받아 db·rest·supavisor만 띄우고(이미지 digest 고정,
   # 127.0.0.1 포트) 같은 통합 테스트를 직접 연결과 Supavisor session 모드로 두 번 돈다. 호스트의 Docker 포트를 쓰므로

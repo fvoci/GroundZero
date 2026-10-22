@@ -4,7 +4,7 @@ name: fvoci-test
 
 services:
   postgres:
-    image: postgres:18.3-bookworm@sha256:80630f83606d8db77d30b3851b16a9f78be2d0d4dda6f7b82a1fdca5ebe3acba
+    image: postgres:17.9-bookworm@sha256:47f917f7409eacd22fc5dfb1dee634e1b55cf0c01d1a7eb701be2227a03e0641
     environment:
       POSTGRES_USER: fvoci
       POSTGRES_PASSWORD: fvoci-test-password
@@ -12,7 +12,7 @@ services:
     ports:
       - '127.0.0.1::5432'
     tmpfs:
-      - /var/lib/postgresql
+      - /var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U fvoci -d fvoci']
       interval: 2s

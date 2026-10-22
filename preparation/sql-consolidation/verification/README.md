@@ -6,7 +6,7 @@
 # 비교기 대조군: 독립된 빈 클러스터 둘에 현재 누적 마이그레이션 적용
 cargo xtask sql-compare --output target/sql-compare-aa
 
-# PostgreSQL 18: 누적 마이그레이션 A / 후보 B + 기존 앱 역할 통합 테스트
+# PostgreSQL 17: 누적 마이그레이션 A / 후보 B + 기존 앱 역할 통합 테스트
 cargo xtask sql-compare \
   --candidate preparation/sql-consolidation/candidate \
   --output target/sql-compare-postgres --behavior
@@ -22,6 +22,8 @@ cargo xtask sql-compare \
   --output target/sql-compare-restricted \
   --restricted-admin --behavior --behavior-scope core
 ```
+
+표준 PostgreSQL의 기본값은 최소 지원 메이저 17이다. `--postgres-major 18`을 명시하면 기존 18 이미지로 같은 비교를 실행한다. 두 값 외에는 받지 않으며 Supabase는 자체 고정 이미지를 사용한다. 선택한 메이저와 Compose 파일 해시는 `inputs.json`에 기록한다. 기본 통합 CI는 17, 기존 OIDC·S3 CI는 `compose.test.pg18.yaml`을 겹쳐 18을 검증한다. 개발·셀프호스트 볼륨이 있는 구성은 기존 18을 유지한다.
 
 출력 디렉터리는 새 경로여야 한다. 부모 디렉터리는 필요하면 만들고 출력 경로 자체는 원자적으로 생성해 같은 `--output`을 쓰는 동시 실행 중 하나만 허용한다. 기존 출력은 덮어쓰지 않는다. 후보는 SQLx 규칙의 `번호_설명.sql` 파일로 구성한다. 양쪽 모두 기존 `db bootstrap`을 실행한다. A에는 기존 `db migrate`, B에는 후보 디렉터리를 읽은 실제 SQLx `Migrator`를 적용한다. B에 누적 이력을 복사하거나 과거 SQL을 재실행하지 않는다. 후보는 SQLx가 같은 트랜잭션에서 `_sqlx_migrations`를 기록할 수 있게 마지막에 `SET LOCAL search_path = fvoci`를 둔다.
 
