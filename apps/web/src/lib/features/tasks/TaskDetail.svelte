@@ -47,12 +47,25 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
-  import { estimateOf, formOf, mergeEstimate, mergeForm } from './form';
+  import ClashConfirm from './ClashConfirm.svelte';
+  import type { MergeUnit } from './form';
+  import {
+    edited,
+    estimateOf,
+    formOf,
+    mergeEstimate,
+    mergeForm,
+    scheduleOf,
+    trimLikeServer,
+  } from './form';
+  import type { ClashRow } from './labels';
   import {
     LINK_KIND_LABEL,
     LINK_KIND_MEANING,
     PRIORITY_LABEL,
     STATUS_LABEL,
+    assigneeLabels,
+    clashRows,
     linkText,
     undatedText,
   } from './labels';
@@ -65,9 +78,13 @@
     workspaces: Workspace[];
     onchanged: () => void;
     onopen: (taskId: string) => void;
+    /** 기준과 다르게 고친 칸이 있는지 바뀔 때마다 알린다(대화상자가 닫기 전에 묻는다). */
+    onunsaved?: ((unsaved: boolean) => void) | undefined;
+    /** 폼을 저장하는 중인지 바뀔 때마다 알린다(대화상자는 그동안 닫지 않는다). */
+    onsaving?: ((saving: boolean) => void) | undefined;
   }
 
-  const { taskId, tasks, workspaces, onchanged, onopen }: Props = $props();
+  const { taskId, tasks, workspaces, onchanged, onopen, onunsaved, onsaving }: Props = $props();
 
   const subtasks = $derived(tasks.filter((t) => t.parent_id === taskId));
   const byId = $derived(new Map(tasks.map((t) => [t.id, t])));
@@ -103,6 +120,15 @@
     retried: boolean;
   }
   let pending = $state<Pending | undefined>(undefined);
+  // 충돌 화면의 "내 입력으로 다시 저장"에서 나와 다른 사람이 서로 다르게 바꾼 칸(D-94). 보내기 전에 그 칸의 서버 값과
+  // 내 값을 보이고 덮어쓸지 묻는다. 묻는 동안 업무 상세(충돌 알림 밖)는 잠가 보인 값 그대로 덮어쓰고, 승인하면 물을 때
+  // 만든 병합(`merge`)을 그대로 저장한다. 취소하면 아무것도 보내지 않는다.
+  interface ClashAsk {
+    latest: TaskDetailView;
+    merge: Merge;
+    rows: ClashRow[];
+  }
+  let clashAsk = $state<ClashAsk | undefined>(undefined);
   // 저장했지만 날짜가 없어 옮기지 않은 후속 업무 알림(날짜를 지어내지 않는다).
   let undatedNotice = $state('');
   let busy = $state(false);
@@ -143,8 +169,9 @@
   );
 
   // 다시 채울 때 비교할 기준(마지막으로 다 불러온 판의 값, 사용자가 바꾸지 않은 칸만 새 값으로 옮긴다)과, 같은 칸을
-  // 양쪽에서 바꿔 충돌이 있었는지(다음 저장·불러오기까지 지킨다), 그때 남겨 둘 옛 판 번호.
-  let baseline: TaskInput | undefined;
+  // 양쪽에서 바꿔 충돌이 있었는지(다음 저장·불러오기까지 지킨다), 그때 남겨 둘 옛 판 번호. 기준은 저장하지 않은 입력이
+  // 있는지(`unsaved`)도 정하므로 상태로 둔다.
+  let baseline = $state.raw<TaskInput | undefined>(undefined);
   let baseVersion = 0;
   let clashed = false;
 
@@ -155,24 +182,29 @@
     baseVersion = next.version;
     clashed = false;
     pending = undefined;
+    clashAsk = undefined;
     tagsText = next.tags.join(', ');
     estimateText = next.estimate_minutes === null ? '' : String(next.estimate_minutes);
   }
 
+  /** 지금 입력을 기준 판에서 서버의 새 판으로 옮긴 결과(`mergeOnto`). */
+  interface Merge {
+    freshForm: TaskInput;
+    form: TaskInput;
+    baseline: TaskInput;
+    /** 나와 서버가 서로 다른 값으로 바꾼 단위(일정은 시작일·마감일·마일스톤 한 묶음). */
+    clashes: MergeUnit[];
+    keepTagsText: boolean;
+    keepEstimateText: boolean;
+  }
+
   /**
-   * 체크리스트·반복·선행 업무를 바꾼 뒤 서버의 새 판으로 다시 채운다. 고쳤지만 저장하지 않은 칸(태그·예상 시간은
-   * 저장할 때 보내는 값으로 비교)은 지키고, 그 칸을 서버에서도 누가 바꿨으면 옛 판 번호를 남겨 저장할 때 충돌
-   * 화면이 고르게 한다.
+   * 내 입력(`mine`)을 기준(`before`)에서 서버의 새 판(`fresh`)으로 옮긴다. 고치지 않은 칸은 새 값, 고친 칸은 내 값이고,
+   * 고친 칸을 서버에서도 다른 값으로 바꿨으면 `clashes`에 든다. 태그는 저장할 때 보내는 값으로 견주고, 예상 시간은
+   * 입력한 글자의 값으로 따로 맞춘다(병합에는 고치지 않은 칸으로 넘긴다). 다시 채우기와 충돌 뒤 저장이 같이 쓴다.
    */
-  function refresh(fresh: TaskDetailView): void {
-    const mine = currentInput();
-    if (task === undefined || mine === undefined || baseline === undefined) {
-      fill(fresh);
-      return;
-    }
+  function mergeOnto(fresh: TaskDetailView, mine: TaskInput, before: TaskInput): Merge {
     const freshForm = formOf(fresh);
-    const before = baseline;
-    // 예상 시간은 입력한 글자의 값으로 따로 맞춘다(병합에는 고치지 않은 칸으로 넘긴다).
     const estimate = mergeEstimate(
       before.estimate_minutes,
       estimateText,
@@ -183,19 +215,133 @@
       { ...mine, estimate_minutes: before.estimate_minutes },
       freshForm,
     );
-    const tagsTouched = canonicalJson(mine.tags) !== canonicalJson(before.tags);
-    baseline = { ...merged.baseline, estimate_minutes: estimate.baseline };
+    return {
+      freshForm,
+      form: merged.form,
+      baseline: { ...merged.baseline, estimate_minutes: estimate.baseline },
+      clashes: estimate.clash ? [...merged.clashes, 'estimate_minutes'] : merged.clashes,
+      keepTagsText: canonicalJson(mine.tags) !== canonicalJson(before.tags),
+      keepEstimateText: estimate.keepText,
+    };
+  }
+
+  /** 병합한 값을 폼에 옮긴다. 태그·예상 시간 글자는 내가 고치지 않았을 때만 새 값으로 바꾼다. */
+  function applyMerge(merge: Merge): void {
+    form = merge.form;
+    pending = undefined;
+    clashAsk = undefined;
+    if (!merge.keepTagsText) tagsText = merge.freshForm.tags.join(', ');
+    if (!merge.keepEstimateText) {
+      const fresh = merge.freshForm.estimate_minutes;
+      estimateText = fresh === null ? '' : String(fresh);
+    }
+  }
+
+  /**
+   * 체크리스트·반복·선행 업무를 바꾼 뒤 서버의 새 판으로 다시 채운다. 고쳤지만 저장하지 않은 칸(태그·예상 시간은
+   * 저장할 때 보내는 값으로 비교)은 지키고, 그 칸을 서버에서도 누가 바꿨으면 옛 판 번호를 남겨 저장할 때 충돌
+   * 화면이 고르게 한다.
+   */
+  function refresh(fresh: TaskDetailView): void {
+    const asking = clashAsk;
+    const mine = currentInput();
+    if (task === undefined || mine === undefined || baseline === undefined) {
+      fill(fresh);
+      return;
+    }
+    const merge = mergeOnto(fresh, mine, baseline);
+    baseline = merge.baseline;
     // 충돌은 지금의 병합으로 다시 본다. 기준은 사용자가 바꾼 칸을 옛 값으로 지키므로, 서버가 그 칸을 다르게 두는 한 계속
     // 충돌이고, 사용자가 서버 값으로 맞추면 풀려 최신 판으로 저장한다.
-    clashed = merged.clash || estimate.clash;
+    clashed = merge.clashes.length > 0;
     if (!clashed) baseVersion = fresh.version;
     task = clashed ? { ...fresh, version: baseVersion } : fresh;
-    form = merged.form;
-    pending = undefined;
-    if (!tagsTouched) tagsText = freshForm.tags.join(', ');
-    if (!estimate.keepText) {
-      estimateText = freshForm.estimate_minutes === null ? '' : String(freshForm.estimate_minutes);
+    applyMerge(merge);
+    if (asking !== undefined)
+      askAgain(fresh.version > asking.latest.version ? fresh : asking.latest);
+  }
+
+  /**
+   * 덮어쓰기 확인이 떠 있는 동안 먼저 보낸 체크리스트·반복·선행·상위 업무 요청이 돌아와 다시 채웠으면(`refresh`), 확인을
+   * 닫지 않고 아는 가장 새 판(`latest`)으로 다시 묻는다(전에는 말없이 닫혀 초점이 문서로 빠졌다, 리뷰). 받은 판이 충돌
+   * 판보다 새면 충돌 알림도 그 판을 보여 다시 저장이 그 판 번호로 간다. 더는 겹친 칸이 없으면 확인을 닫고 "내 입력으로
+   * 다시 저장"으로 돌린다(입력은 그대로, 보내는 것은 없다).
+   */
+  function askAgain(latest: TaskDetailView): void {
+    const mine = currentInput();
+    if (mine === undefined || baseline === undefined) return;
+    if (conflict !== undefined && latest.version > conflict.version) conflict = latest;
+    const merge = mergeOnto(latest, mine, baseline);
+    if (merge.clashes.length === 0) {
+      void focusLater('task-save-mine');
+      return;
     }
+    clashAsk = {
+      latest,
+      merge,
+      rows: clashRows(merge.clashes, merge.freshForm, mine, assigneeNames(latest)),
+    };
+  }
+
+  // 충돌 확인에 담당자 이름을 보일 때 쓴다(지정할 수 있는 사람과, 지금 판·서버 판에 지정된 사람). 같은 이름은 구분한다.
+  function assigneeNames(latest: TaskDetailView): Map<string, string> {
+    return assigneeLabels([...(task?.assignees ?? []), ...latest.assignees, ...(people ?? [])]);
+  }
+  // 폼의 담당자 이름표. 충돌 확인과 같은 글이라 확인에 보인 사람을 폼에서 찾을 수 있다.
+  const peopleLabels = $derived(assigneeLabels([...(task?.assignees ?? []), ...(people ?? [])]));
+
+  /**
+   * 충돌 화면의 "내 입력으로 다시 저장"(D-94): 서버 최신 판(`latest`) 위에 내가 고친 칸만 올려 그 판 번호로 저장한다.
+   * 내가 고치지 않은 칸은 최신 값을 따르고(전에는 폼 전체를 보내 그사이 다른 사람이 바꾼 제목 등을 옛 값으로
+   * 되돌렸다), 내가 고친 칸 가운데 서버에서는 그대로이거나 같은 값이 된 칸은 내 값을 쓴다. 양쪽이 서로 다른 값으로
+   * 바꾼 칸이 있으면 보내기 전에 그 칸의 서버 값과 내 값을 보이고 덮어쓸지 묻는다(전에는 묻지 않고 내 값으로 덮었다).
+   */
+  async function saveMine(latest: TaskDetailView): Promise<void> {
+    const mine = currentInput();
+    if (busy || mine === undefined || baseline === undefined) return;
+    // 잘못된 예상 시간은 병합 전에 막는다(입력을 그대로 두고 알린다).
+    if (estimateOf(estimateText) === 'invalid') {
+      error = m.tasks_estimate_invalid();
+      return;
+    }
+    const merge = mergeOnto(latest, mine, baseline);
+    if (merge.clashes.length > 0) {
+      error = undefined;
+      clashAsk = {
+        latest,
+        merge,
+        rows: clashRows(merge.clashes, merge.freshForm, mine, assigneeNames(latest)),
+      };
+      return;
+    }
+    await saveMerged(latest, merge);
+  }
+
+  /**
+   * 덮어쓰기 확인의 승인: 물을 때 만든 병합을 그대로 저장한다(묻는 동안 업무 상세는 잠겨 입력이 바뀌지 않는다). 양쪽이
+   * 바꾼 단위는 병합에서 이미 내 값이고, 일정은 묶음 전체가 한쪽 값이라 보인 내 일정이 그대로 보내진다.
+   */
+  async function overwrite(): Promise<void> {
+    const ask = clashAsk;
+    if (ask === undefined || busy) return;
+    await saveMerged(ask.latest, ask.merge);
+  }
+
+  /**
+   * 병합한 입력을 최신 판 번호로 저장한다(서버가 그 판으로 검사한다). 최신 판이 다음 비교의 기준이 되므로, 그사이 또
+   * 바뀌어 다시 409가 오면(충돌 화면이 더 새 판을 보인다) 다음 "내 입력으로 다시 저장"은 방금 받은 값을 고치지 않은
+   * 칸으로 보고 더 새 판 위에 다시 올린다. 실패해도 입력은 폼에 그대로 있다.
+   */
+  async function saveMerged(latest: TaskDetailView, merge: Merge): Promise<void> {
+    applyMerge(merge);
+    task = latest;
+    baseline = formOf(latest);
+    baseVersion = latest.version;
+    clashed = false;
+    await submit(latest);
+    // 충돌 화면이 남으면(저장 실패. 다시 409는 `save`가 돌린다) 누른 단추가 사라졌거나 잠겼던 자리이므로 "내 입력으로
+    // 다시 저장"으로 돌린다. 미리보기 패널이 떴으면 초점은 패널에 있다.
+    if (conflict !== undefined && pending === undefined) await focusLater('task-save-mine');
   }
 
   $effect(() => {
@@ -203,6 +349,7 @@
     let cancelled = false;
     task = undefined;
     conflict = undefined;
+    clashAsk = undefined;
     error = undefined;
     void api
       .task(id)
@@ -234,22 +381,55 @@
   });
 
   const canEdit = $derived(task !== undefined && task.access !== 'read');
+  // 폼을 저장하는 동안은 폼 칸을 잠근다: 저장되면 폼을 저장된 판으로 다시 채우므로(`fill`) 그사이 친 글이 말없이
+  // 사라졌다. 관계·상위 업무 요청은 돌아오면 고친 칸을 지켜 다시 채우므로(`refresh`) 잠그지 않는다.
+  let saving = $state(false);
+  const locked = $derived(!canEdit || saving);
 
   function currentInput(): TaskInput | undefined {
     if (form === undefined) return undefined;
     const estimate = estimateOf(estimateText);
     return {
       ...form,
-      start_date: form.milestone || form.start_date === '' ? null : form.start_date,
-      due_date: form.due_date === '' ? null : form.due_date,
+      // 병합과 같은 규칙(마일스톤이면 시작일 없음, 빈 칸은 없음)이라 병합이 고른 일정이 그대로 보내진다.
+      ...scheduleOf(form),
       // 잘못된 입력은 저장 전에 막는다(submit). 여기서는 비교용으로만 쓴다.
       estimate_minutes: estimate === 'invalid' ? null : estimate,
-      tags: tagsText
-        .split(',')
-        .map((t) => t.trim())
-        .filter((t) => t !== ''),
+      // 서버(`validate_tags`)처럼 앞뒤 공백을 떼고 겹친 태그는 처음 것만 둔다: 비교·확인·보내는 값이 저장될 값과 같다.
+      tags: [
+        ...new Set(
+          tagsText
+            .split(',')
+            .map(trimLikeServer)
+            .filter((t) => t !== ''),
+        ),
+      ],
     };
   }
+
+  // 기준과 다르게 고친 칸이 있는지(업무 대화상자가 닫기 전에 버릴지 묻는다). 병합과 같은 판정이다: 저장될 모양으로
+  // 견주고(제목·설명은 서버처럼 앞뒤 공백을 떼고 태그는 서버처럼 정리), 예상 시간은 입력한 글자의 값으로 본다(잘못된
+  // 글자는 고친 것이다).
+  const unsaved = $derived.by(() => {
+    const mine = currentInput();
+    if (!canEdit || mine === undefined || baseline === undefined) return false;
+    return (
+      estimateOf(estimateText) !== baseline.estimate_minutes ||
+      edited(baseline, { ...mine, estimate_minutes: baseline.estimate_minutes })
+    );
+  });
+  $effect(() => {
+    onunsaved?.(unsaved);
+    return () => {
+      onunsaved?.(false);
+    };
+  });
+  $effect(() => {
+    onsaving?.(saving);
+    return () => {
+      onsaving?.(false);
+    };
+  });
 
   /** 저장: 서버 기준 내용과 날짜가 다르면 먼저 후속 업무 영향을 미리 보고, 옮길 것이 있으면 사용자에게 묻는다. */
   async function submit(base: TaskDetailView): Promise<void> {
@@ -261,6 +441,7 @@
       return;
     }
     busy = true;
+    saving = true;
     error = undefined;
     saved = false;
     undatedNotice = '';
@@ -287,6 +468,7 @@
       error = errorText(e, m.tasks_save_failed());
     } finally {
       busy = false;
+      saving = false;
     }
   }
 
@@ -295,6 +477,7 @@
     const p = pending;
     if (p === undefined || busy) return;
     busy = true;
+    saving = true;
     error = undefined;
     try {
       await save(p.input, p.baseVersion, withShifts ? p.proposals : [], p.undated);
@@ -302,6 +485,7 @@
       error = errorText(e, m.tasks_save_failed());
     } finally {
       busy = false;
+      saving = false;
     }
   }
 
@@ -319,10 +503,15 @@
     undated: UndatedTaskView[] = [],
   ): Promise<void> {
     if (task === undefined) return;
+    // 후속 업무 미리보기에서 승인한 저장(덮어쓰기 뒤 미리보기 승인 등)이 다시 409면, 패널과 함께 누른 단추가 없어져
+    // 초점이 문서로 빠지므로 "내 입력으로 다시 저장"으로 돌린다. 폼의 "저장"은 그대로 있으므로 두고(2차 검증 nit),
+    // "내 입력으로 다시 저장"·덮어쓰기에서 바로 보낸 저장은 `saveMerged`가 돌린다.
+    const refocus = pending !== undefined;
     const result = await api.updateTask(task.id, baseVersion, input, shifts.map(toShift));
     if (result.kind === 'conflict') {
       pending = undefined;
       conflict = result.current;
+      if (refocus) await focusLater('task-save-mine');
       return;
     }
     if (result.kind === 'shift_conflict') {
@@ -597,8 +786,10 @@
 {#if task !== undefined && form !== undefined}
   {@const current = task}
   {@const f = form}
+  <!-- 덮어쓰기 확인이 떠 있는 동안에는 충돌 알림(확인 포함) 말고는 모두 잠근다. 체크리스트·반복·선행·상위 업무를
+       바꾸면 다시 채우기가 확인을 말없이 닫고, 보인 값과 저장할 값이 어긋날 수 있다. -->
   <div class="flex flex-col gap-4">
-    <div class="flex flex-wrap items-baseline gap-2">
+    <div class="flex flex-wrap items-baseline gap-2" inert={clashAsk !== undefined}>
       <span class="font-mono text-sm text-muted-foreground">{current.reference ?? ''}</span>
       {#if current.access === 'read'}<span class="text-sm text-muted-foreground"
           >{m.tasks_read_only()}</span
@@ -620,8 +811,9 @@
 
     {#if conflict !== undefined}
       {@const latest = conflict}
-      <div class="rounded-md border border-amber-500/50 p-3 text-sm" role="alert">
-        <p>
+      <!-- 알림은 문장에만 둔다(안의 덮어쓰기 확인이 따로 알리므로 알림 전체를 두 번 읽지 않게). -->
+      <div class="rounded-md border border-amber-500/50 p-3 text-sm">
+        <p role="alert">
           {m.tasks_conflict({ title: latest.title, status: STATUS_LABEL[latest.status] })}
         </p>
         <div class="mt-2 flex gap-2">
@@ -631,477 +823,501 @@
             onclick={() => {
               fill(latest);
               conflict = undefined;
+              // 누른 단추가 알림과 함께 사라지므로 다시 채운 폼의 첫 칸으로 돌린다(전에는 문서로 빠졌다).
+              void focusLater('task-title');
             }}>{m.tasks_load_server()}</Button
           >
-          <Button size="sm" disabled={busy} onclick={() => void submit(latest)}
-            >{m.tasks_save_mine()}</Button
-          >
-        </div>
-      </div>
-    {/if}
-
-    <!-- 제목 다음에 상태·우선순위·날짜를 두 칸으로 먼저 보이고(좁은 화면에서도 스크롤 없이), 설명은 그 아래에 둔다. -->
-    <form
-      class="grid grid-cols-2 gap-3"
-      inert={pending !== undefined}
-      onsubmit={(e) => {
-        e.preventDefault();
-        void submit(current);
-      }}
-    >
-      <div class="col-span-2 flex flex-col gap-1">
-        <Label for="task-title">{m.tasks_title()}</Label>
-        <Input id="task-title" bind:value={f.title} disabled={!canEdit} maxlength={200} />
-      </div>
-      <div class="flex min-w-0 flex-col gap-1">
-        <span class="text-sm font-medium" id="task-status-label">{m.tasks_status()}</span>
-        <Select.Root
-          type="single"
-          value={f.status}
-          disabled={!canEdit}
-          onValueChange={(v: string) => {
-            const s = TASK_STATUSES.find((x) => x === v);
-            if (s !== undefined) f.status = s satisfies TaskStatus;
-          }}
-        >
-          <Select.Trigger aria-labelledby="task-status-label"
-            >{STATUS_LABEL[f.status]}</Select.Trigger
-          >
-          <Select.Content>
-            {#each TASK_STATUSES as s (s)}
-              <Select.Item value={s} label={STATUS_LABEL[s]}>{STATUS_LABEL[s]}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="flex min-w-0 flex-col gap-1">
-        <span class="text-sm font-medium" id="task-priority-label">{m.tasks_priority()}</span>
-        <Select.Root
-          type="single"
-          value={f.priority}
-          disabled={!canEdit}
-          onValueChange={(v: string) => {
-            const p = TASK_PRIORITIES.find((x) => x === v);
-            if (p !== undefined) f.priority = p satisfies TaskPriority;
-          }}
-        >
-          <Select.Trigger aria-labelledby="task-priority-label"
-            >{PRIORITY_LABEL[f.priority]}</Select.Trigger
-          >
-          <Select.Content>
-            {#each TASK_PRIORITIES as p (p)}
-              <Select.Item value={p} label={PRIORITY_LABEL[p]}>{PRIORITY_LABEL[p]}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="flex min-w-0 flex-col gap-1">
-        <Label for="task-start">{m.tasks_start_date()}</Label>
-        <Input
-          id="task-start"
-          type="date"
-          bind:value={f.start_date}
-          disabled={!canEdit || f.milestone}
-        />
-      </div>
-      <div class="flex min-w-0 flex-col gap-1">
-        <Label for="task-due">{m.tasks_due_date()}</Label>
-        <Input id="task-due" type="date" bind:value={f.due_date} disabled={!canEdit} />
-      </div>
-      <div class="col-span-2 flex flex-col gap-1">
-        <Label for="task-description">{m.tasks_description()}</Label>
-        <textarea
-          id="task-description"
-          bind:value={f.description}
-          disabled={!canEdit}
-          rows={3}
-          class="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        ></textarea>
-      </div>
-      <div class="flex min-w-0 flex-col gap-1">
-        <Label for="task-estimate">{m.tasks_estimate()}</Label>
-        <Input
-          id="task-estimate"
-          inputmode="numeric"
-          bind:value={estimateText}
-          disabled={!canEdit}
-        />
-      </div>
-      <div class="flex min-w-0 flex-col gap-1">
-        <Label for="task-tags">{m.tasks_tags()}</Label>
-        <Input id="task-tags" bind:value={tagsText} disabled={!canEdit} />
-      </div>
-      <div class="col-span-2 flex items-center gap-2">
-        <Checkbox
-          id="task-milestone"
-          checked={f.milestone}
-          disabled={!canEdit}
-          onCheckedChange={(v) => {
-            f.milestone = v === true;
-            if (f.milestone) f.start_date = null;
-          }}
-        />
-        <Label for="task-milestone">{m.tasks_milestone()}</Label>
-      </div>
-      <fieldset class="col-span-2 flex flex-col gap-2">
-        <legend class="text-sm font-medium">{m.tasks_assignees()}</legend>
-        <div class="flex flex-wrap gap-3">
-          {#if peopleError !== undefined}
-            <span class="text-sm text-destructive" role="alert">{peopleError}</span>
-          {:else if people === undefined}
-            <span class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</span>
-          {:else}
-            {#each people as person (person.user_id)}
-              <span class="flex items-center gap-1.5">
-                <Checkbox
-                  id={`assignee-${person.user_id}`}
-                  checked={f.assignee_ids.includes(person.user_id)}
-                  disabled={!canEdit}
-                  onCheckedChange={(v) => {
-                    toggleAssignee(person.user_id, v === true);
-                  }}
-                />
-                <Label for={`assignee-${person.user_id}`}>{person.display_name}</Label>
-              </span>
-            {:else}
-              <span class="text-sm text-muted-foreground">{m.tasks_no_assignable()}</span>
-            {/each}
-          {/if}
-        </div>
-      </fieldset>
-      {#if canEdit}
-        <div class="col-span-2 flex items-center gap-2">
-          <Button id="task-save" type="submit" disabled={busy}>{m.common_save()}</Button>
-          {#if saved}<span class="text-sm" role="status">{m.common_saved()}</span>{/if}
-        </div>
-        {#if undatedNotice !== ''}
-          <p class="col-span-2 text-sm text-muted-foreground" data-testid="task-undated-notice">
-            {undatedNotice}
-          </p>
-        {/if}
-      {/if}
-    </form>
-
-    {#if pending !== undefined}
-      <ShiftProposals
-        proposals={pending.proposals}
-        undated={pending.undated}
-        blocked={pending.blocked}
-        retried={pending.retried}
-        {busy}
-        ondecide={(withShifts: boolean) => void decide(withShifts)}
-        oncancel={() => {
-          pending = undefined;
-          void focusSave();
-        }}
-      />
-    {/if}
-
-    <section class="flex flex-col gap-2" aria-labelledby="parent-heading">
-      <h3 id="parent-heading" class="text-sm font-semibold">{m.tasks_parent()}</h3>
-      {#if current.parent_id !== null}
-        {@const parentId = current.parent_id}
-        <button
-          type="button"
-          class="self-start rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          onclick={() => {
-            onopen(parentId);
-          }}>{label(byId.get(parentId)) || m.tasks_hidden_task()}</button
-        >
-      {:else}
-        <p class="text-sm text-muted-foreground">{m.tasks_parent_top()}</p>
-      {/if}
-      {#if canEdit && subtasks.length > 0}
-        <p class="text-sm text-muted-foreground">{m.tasks_parent_has_subtasks()}</p>
-      {:else if canEdit && (parentCandidates.length > 0 || current.parent_id !== null)}
-        <div class="flex flex-wrap items-center gap-2">
-          <span id="parent-choose-label" class="sr-only">{m.tasks_parent_choose()}</span>
-          <Select.Root
-            type="single"
-            value={parentChoice}
-            onValueChange={(v: string) => (parentChoice = v)}
-          >
-            <Select.Trigger aria-labelledby="parent-choose-label"
-              >{parentChoice === ''
-                ? m.tasks_parent_choose()
-                : parentChoice === TOP
-                  ? m.tasks_parent_top()
-                  : label(byId.get(parentChoice))}</Select.Trigger
-            >
-            <Select.Content>
-              {#if current.parent_id !== null}
-                <Select.Item value={TOP} label={m.tasks_parent_top()}
-                  >{m.tasks_parent_top()}</Select.Item
-                >
-              {/if}
-              {#each parentCandidates as c (c.id)}
-                <Select.Item value={c.id} label={label(c)}>{label(c)}</Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
           <Button
+            id="task-save-mine"
             size="sm"
-            disabled={parentChoice === ''}
-            onclick={() => {
-              const chosen = parentChoice;
-              parentChoice = '';
-              void changeParent(current.id, chosen === TOP ? null : chosen);
-            }}>{m.tasks_parent_change()}</Button
+            disabled={busy || clashAsk !== undefined}
+            onclick={() => void saveMine(latest)}>{m.tasks_save_mine()}</Button
           >
         </div>
-      {/if}
-      <p aria-live="polite" class="text-sm">{parentStatus}</p>
-    </section>
-
-    {#if current.parent_id === null}
-      <section class="flex flex-col gap-2" aria-labelledby="subtasks-heading">
-        <h3 id="subtasks-heading" class="text-sm font-semibold">{m.tasks_subtasks()}</h3>
-        {#each subtasks as sub (sub.id)}
-          <button
-            type="button"
-            class="flex items-baseline gap-2 rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            onclick={() => {
-              onopen(sub.id);
-            }}
-          >
-            <span class="font-mono text-xs text-muted-foreground">{sub.reference ?? ''}</span>
-            <span>{sub.title}</span>
-            <span class="ml-auto text-xs text-muted-foreground">{STATUS_LABEL[sub.status]}</span>
-          </button>
-        {:else}
-          <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
-        {/each}
-        {#if canEdit}
-          <CreateForm
-            id="new-subtask"
-            label={m.tasks_subtask_title()}
-            placeholder={m.tasks_subtask_placeholder()}
-            submitLabel={m.tasks_subtask_add()}
-            create={async (requestId: string, title: string) => {
-              await api.createTask(current.item_id, requestId, title, current.id);
-              onchanged();
+        {#if clashAsk !== undefined}
+          <ClashConfirm
+            rows={clashAsk.rows}
+            {busy}
+            onconfirm={() => void overwrite()}
+            oncancel={() => {
+              clashAsk = undefined;
+              void focusLater('task-save-mine');
             }}
           />
         {/if}
-      </section>
+      </div>
     {/if}
 
-    <section class="flex flex-col gap-2" aria-labelledby="predecessors-heading">
-      <h3 id="predecessors-heading" class="text-sm font-semibold" tabindex="-1">
-        {m.tasks_predecessors()}
-      </h3>
-      {#each current.predecessors as link (link.task_id)}
-        {@const pid = link.task_id}
-        <div class="flex flex-wrap items-center gap-x-2 text-sm" data-predecessor={pid}>
+    <div class="flex flex-col gap-4" inert={clashAsk !== undefined}>
+      <!-- 제목 다음에 상태·우선순위·날짜를 두 칸으로 먼저 보이고(좁은 화면에서도 스크롤 없이), 설명은 그 아래에 둔다. -->
+      <form
+        class="grid grid-cols-2 gap-3"
+        inert={pending !== undefined}
+        onsubmit={(e) => {
+          e.preventDefault();
+          void submit(current);
+        }}
+      >
+        <div class="col-span-2 flex flex-col gap-1">
+          <Label for="task-title">{m.tasks_title()}</Label>
+          <Input id="task-title" bind:value={f.title} disabled={locked} maxlength={200} />
+        </div>
+        <div class="flex min-w-0 flex-col gap-1">
+          <span class="text-sm font-medium" id="task-status-label">{m.tasks_status()}</span>
+          <Select.Root
+            type="single"
+            value={f.status}
+            disabled={locked}
+            onValueChange={(v: string) => {
+              const s = TASK_STATUSES.find((x) => x === v);
+              if (s !== undefined) f.status = s satisfies TaskStatus;
+            }}
+          >
+            <Select.Trigger aria-labelledby="task-status-label"
+              >{STATUS_LABEL[f.status]}</Select.Trigger
+            >
+            <Select.Content>
+              {#each TASK_STATUSES as s (s)}
+                <Select.Item value={s} label={STATUS_LABEL[s]}>{STATUS_LABEL[s]}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+        <div class="flex min-w-0 flex-col gap-1">
+          <span class="text-sm font-medium" id="task-priority-label">{m.tasks_priority()}</span>
+          <Select.Root
+            type="single"
+            value={f.priority}
+            disabled={locked}
+            onValueChange={(v: string) => {
+              const p = TASK_PRIORITIES.find((x) => x === v);
+              if (p !== undefined) f.priority = p satisfies TaskPriority;
+            }}
+          >
+            <Select.Trigger aria-labelledby="task-priority-label"
+              >{PRIORITY_LABEL[f.priority]}</Select.Trigger
+            >
+            <Select.Content>
+              {#each TASK_PRIORITIES as p (p)}
+                <Select.Item value={p} label={PRIORITY_LABEL[p]}>{PRIORITY_LABEL[p]}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+        <div class="flex min-w-0 flex-col gap-1">
+          <Label for="task-start">{m.tasks_start_date()}</Label>
+          <Input
+            id="task-start"
+            type="date"
+            bind:value={f.start_date}
+            disabled={locked || f.milestone}
+          />
+        </div>
+        <div class="flex min-w-0 flex-col gap-1">
+          <Label for="task-due">{m.tasks_due_date()}</Label>
+          <Input id="task-due" type="date" bind:value={f.due_date} disabled={locked} />
+        </div>
+        <div class="col-span-2 flex flex-col gap-1">
+          <Label for="task-description">{m.tasks_description()}</Label>
+          <textarea
+            id="task-description"
+            bind:value={f.description}
+            disabled={locked}
+            rows={3}
+            class="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          ></textarea>
+        </div>
+        <div class="flex min-w-0 flex-col gap-1">
+          <Label for="task-estimate">{m.tasks_estimate()}</Label>
+          <Input
+            id="task-estimate"
+            inputmode="numeric"
+            bind:value={estimateText}
+            disabled={locked}
+          />
+        </div>
+        <div class="flex min-w-0 flex-col gap-1">
+          <Label for="task-tags">{m.tasks_tags()}</Label>
+          <Input id="task-tags" bind:value={tagsText} disabled={locked} />
+        </div>
+        <div class="col-span-2 flex items-center gap-2">
+          <Checkbox
+            id="task-milestone"
+            checked={f.milestone}
+            disabled={locked}
+            onCheckedChange={(v) => {
+              f.milestone = v === true;
+              if (f.milestone) f.start_date = null;
+            }}
+          />
+          <Label for="task-milestone">{m.tasks_milestone()}</Label>
+        </div>
+        <fieldset class="col-span-2 flex flex-col gap-2">
+          <legend class="text-sm font-medium">{m.tasks_assignees()}</legend>
+          <div class="flex flex-wrap gap-3">
+            {#if peopleError !== undefined}
+              <span class="text-sm text-destructive" role="alert">{peopleError}</span>
+            {:else if people === undefined}
+              <span class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</span>
+            {:else}
+              {#each people as person (person.user_id)}
+                <span class="flex items-center gap-1.5">
+                  <Checkbox
+                    id={`assignee-${person.user_id}`}
+                    checked={f.assignee_ids.includes(person.user_id)}
+                    disabled={locked}
+                    onCheckedChange={(v) => {
+                      toggleAssignee(person.user_id, v === true);
+                    }}
+                  />
+                  <Label for={`assignee-${person.user_id}`}
+                    >{peopleLabels.get(person.user_id) ?? person.display_name}</Label
+                  >
+                </span>
+              {:else}
+                <span class="text-sm text-muted-foreground">{m.tasks_no_assignable()}</span>
+              {/each}
+            {/if}
+          </div>
+        </fieldset>
+        {#if canEdit}
+          <div class="col-span-2 flex items-center gap-2">
+            <Button id="task-save" type="submit" disabled={busy}>{m.common_save()}</Button>
+            {#if saved}<span class="text-sm" role="status">{m.common_saved()}</span>{/if}
+          </div>
+          {#if undatedNotice !== ''}
+            <p class="col-span-2 text-sm text-muted-foreground" data-testid="task-undated-notice">
+              {undatedNotice}
+            </p>
+          {/if}
+        {/if}
+      </form>
+
+      {#if pending !== undefined}
+        <ShiftProposals
+          proposals={pending.proposals}
+          undated={pending.undated}
+          blocked={pending.blocked}
+          retried={pending.retried}
+          {busy}
+          ondecide={(withShifts: boolean) => void decide(withShifts)}
+          oncancel={() => {
+            pending = undefined;
+            void focusSave();
+          }}
+        />
+      {/if}
+
+      <section class="flex flex-col gap-2" aria-labelledby="parent-heading">
+        <h3 id="parent-heading" class="text-sm font-semibold">{m.tasks_parent()}</h3>
+        {#if current.parent_id !== null}
+          {@const parentId = current.parent_id}
           <button
             type="button"
-            class="rounded px-2 py-1 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            class="self-start rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             onclick={() => {
-              onopen(pid);
-            }}>{label(byId.get(pid)) || m.tasks_hidden_task()}</button
+              onopen(parentId);
+            }}>{label(byId.get(parentId)) || m.tasks_hidden_task()}</button
           >
-          <span class="text-muted-foreground" data-link-text>{linkText(link)}</span>
-          {#if canEdit}
-            <span class="ml-auto flex gap-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy || linkPending !== undefined}
-                aria-label={m.tasks_link_edit_aria({ task: label(byId.get(pid)) })}
-                onclick={() => {
-                  startEdit(pid);
-                }}>{m.tasks_link_edit()}</Button
-              >
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy || linkPending !== undefined}
-                aria-label={m.tasks_predecessor_remove_aria({ task: label(byId.get(pid)) })}
-                onclick={() => void removeLink(pid)}>{m.tasks_remove()}</Button
-              >
-            </span>
-          {/if}
-        </div>
-      {:else}
-        <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
-      {/each}
-      {#if canEdit && (editing !== undefined || candidates.length > 0)}
-        <fieldset
-          class="flex flex-col gap-2 rounded-md border p-2"
-          inert={linkPending !== undefined}
-          aria-describedby="link-kind-meaning"
-        >
-          <legend class="px-1 text-sm font-medium" id="predecessor-label">
-            {editing === undefined ? m.tasks_predecessor_add() : m.tasks_link_edit()}
-          </legend>
-          {#if editing !== undefined}
-            <p class="text-sm">{m.tasks_link_editing({ task: label(byId.get(editing)) })}</p>
-          {:else}
+        {:else}
+          <p class="text-sm text-muted-foreground">{m.tasks_parent_top()}</p>
+        {/if}
+        {#if canEdit && subtasks.length > 0}
+          <p class="text-sm text-muted-foreground">{m.tasks_parent_has_subtasks()}</p>
+        {:else if canEdit && (parentCandidates.length > 0 || current.parent_id !== null)}
+          <div class="flex flex-wrap items-center gap-2">
+            <span id="parent-choose-label" class="sr-only">{m.tasks_parent_choose()}</span>
             <Select.Root
               type="single"
-              value={predecessorChoice}
-              onValueChange={(v: string) => (predecessorChoice = v)}
+              value={parentChoice}
+              onValueChange={(v: string) => (parentChoice = v)}
             >
-              <Select.Trigger aria-labelledby="predecessor-label"
-                >{predecessorChoice === ''
-                  ? m.tasks_predecessor_choose()
-                  : label(byId.get(predecessorChoice))}</Select.Trigger
+              <Select.Trigger aria-labelledby="parent-choose-label"
+                >{parentChoice === ''
+                  ? m.tasks_parent_choose()
+                  : parentChoice === TOP
+                    ? m.tasks_parent_top()
+                    : label(byId.get(parentChoice))}</Select.Trigger
               >
               <Select.Content>
-                {#each candidates as c (c.id)}
+                {#if current.parent_id !== null}
+                  <Select.Item value={TOP} label={m.tasks_parent_top()}
+                    >{m.tasks_parent_top()}</Select.Item
+                  >
+                {/if}
+                {#each parentCandidates as c (c.id)}
                   <Select.Item value={c.id} label={label(c)}>{label(c)}</Select.Item>
                 {/each}
               </Select.Content>
             </Select.Root>
+            <Button
+              size="sm"
+              disabled={parentChoice === ''}
+              onclick={() => {
+                const chosen = parentChoice;
+                parentChoice = '';
+                void changeParent(current.id, chosen === TOP ? null : chosen);
+              }}>{m.tasks_parent_change()}</Button
+            >
+          </div>
+        {/if}
+        <p aria-live="polite" class="text-sm">{parentStatus}</p>
+      </section>
+
+      {#if current.parent_id === null}
+        <section class="flex flex-col gap-2" aria-labelledby="subtasks-heading">
+          <h3 id="subtasks-heading" class="text-sm font-semibold">{m.tasks_subtasks()}</h3>
+          {#each subtasks as sub (sub.id)}
+            <button
+              type="button"
+              class="flex items-baseline gap-2 rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              onclick={() => {
+                onopen(sub.id);
+              }}
+            >
+              <span class="font-mono text-xs text-muted-foreground">{sub.reference ?? ''}</span>
+              <span>{sub.title}</span>
+              <span class="ml-auto text-xs text-muted-foreground">{STATUS_LABEL[sub.status]}</span>
+            </button>
+          {:else}
+            <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
+          {/each}
+          {#if canEdit}
+            <CreateForm
+              id="new-subtask"
+              label={m.tasks_subtask_title()}
+              placeholder={m.tasks_subtask_placeholder()}
+              submitLabel={m.tasks_subtask_add()}
+              create={async (requestId: string, title: string) => {
+                await api.createTask(current.item_id, requestId, title, current.id);
+                onchanged();
+              }}
+            />
           {/if}
-          <div class="flex flex-wrap items-end gap-2">
-            <div class="flex min-w-0 flex-col gap-1">
-              <span id="link-kind-label" class="text-sm">{m.tasks_link_kind_label()}</span>
+        </section>
+      {/if}
+
+      <section class="flex flex-col gap-2" aria-labelledby="predecessors-heading">
+        <h3 id="predecessors-heading" class="text-sm font-semibold" tabindex="-1">
+          {m.tasks_predecessors()}
+        </h3>
+        {#each current.predecessors as link (link.task_id)}
+          {@const pid = link.task_id}
+          <div class="flex flex-wrap items-center gap-x-2 text-sm" data-predecessor={pid}>
+            <button
+              type="button"
+              class="rounded px-2 py-1 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              onclick={() => {
+                onopen(pid);
+              }}>{label(byId.get(pid)) || m.tasks_hidden_task()}</button
+            >
+            <span class="text-muted-foreground" data-link-text>{linkText(link)}</span>
+            {#if canEdit}
+              <span class="ml-auto flex gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy || linkPending !== undefined}
+                  aria-label={m.tasks_link_edit_aria({ task: label(byId.get(pid)) })}
+                  onclick={() => {
+                    startEdit(pid);
+                  }}>{m.tasks_link_edit()}</Button
+                >
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy || linkPending !== undefined}
+                  aria-label={m.tasks_predecessor_remove_aria({ task: label(byId.get(pid)) })}
+                  onclick={() => void removeLink(pid)}>{m.tasks_remove()}</Button
+                >
+              </span>
+            {/if}
+          </div>
+        {:else}
+          <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
+        {/each}
+        {#if canEdit && (editing !== undefined || candidates.length > 0)}
+          <fieldset
+            class="flex flex-col gap-2 rounded-md border p-2"
+            inert={linkPending !== undefined}
+            aria-describedby="link-kind-meaning"
+          >
+            <legend class="px-1 text-sm font-medium" id="predecessor-label">
+              {editing === undefined ? m.tasks_predecessor_add() : m.tasks_link_edit()}
+            </legend>
+            {#if editing !== undefined}
+              <p class="text-sm">{m.tasks_link_editing({ task: label(byId.get(editing)) })}</p>
+            {:else}
               <Select.Root
                 type="single"
-                value={linkKind}
-                onValueChange={(v: string) => {
-                  const found = LINK_KINDS.find((k) => k === v);
-                  if (found !== undefined) linkKind = found;
-                }}
+                value={predecessorChoice}
+                onValueChange={(v: string) => (predecessorChoice = v)}
               >
-                <Select.Trigger aria-labelledby="link-kind-label" data-testid="link-kind"
-                  >{LINK_KIND_LABEL[linkKind]}</Select.Trigger
+                <Select.Trigger aria-labelledby="predecessor-label"
+                  >{predecessorChoice === ''
+                    ? m.tasks_predecessor_choose()
+                    : label(byId.get(predecessorChoice))}</Select.Trigger
                 >
                 <Select.Content>
-                  {#each LINK_KINDS as k (k)}
-                    <Select.Item value={k} label={LINK_KIND_LABEL[k]}
-                      >{LINK_KIND_LABEL[k]}</Select.Item
-                    >
+                  {#each candidates as c (c.id)}
+                    <Select.Item value={c.id} label={label(c)}>{label(c)}</Select.Item>
                   {/each}
                 </Select.Content>
               </Select.Root>
-            </div>
-            <div class="flex w-28 flex-col gap-1">
-              <Label for="link-lag">{m.tasks_link_lag_label()}</Label>
-              <Input
-                id="link-lag"
-                inputmode="numeric"
-                aria-describedby="link-lag-hint"
-                bind:value={lagText}
-              />
-            </div>
-          </div>
-          <p id="link-kind-meaning" class="text-sm text-muted-foreground">
-            {LINK_KIND_MEANING[linkKind]}
-          </p>
-          <p id="link-lag-hint" class="text-xs text-muted-foreground">{m.tasks_link_lag_hint()}</p>
-          <div class="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={busy || (editing === undefined && predecessorChoice === '')}
-              id="link-save"
-              onclick={() => void applyLink(editing ?? predecessorChoice)}
-              >{m.tasks_link_save()}</Button
-            >
-            {#if editing !== undefined}
-              <Button size="sm" variant="ghost" disabled={busy} onclick={resetLinkEditor}
-                >{m.common_cancel()}</Button
-              >
             {/if}
-          </div>
-        </fieldset>
-      {/if}
-      {#if linkPending !== undefined}
-        <ShiftProposals
-          proposals={linkPending.proposals}
-          undated={linkPending.undated}
-          blocked={linkPending.blocked}
-          retried={linkPending.retried}
-          {busy}
-          forLink
-          headingId="link-shift-heading"
-          ondecide={(withShifts: boolean) => void decideLink(withShifts)}
-          oncancel={() => {
-            // 편집 칸은 그대로 두고 관계 저장 단추로 돌린다(고친 값으로 다시 시도할 수 있게).
-            linkPending = undefined;
-            void focusLater('link-save');
-          }}
-        />
-      {/if}
-      <p aria-live="polite" class="text-sm" data-testid="link-status">{linkStatus}</p>
-    </section>
+            <div class="flex flex-wrap items-end gap-2">
+              <div class="flex min-w-0 flex-col gap-1">
+                <span id="link-kind-label" class="text-sm">{m.tasks_link_kind_label()}</span>
+                <Select.Root
+                  type="single"
+                  value={linkKind}
+                  onValueChange={(v: string) => {
+                    const found = LINK_KINDS.find((k) => k === v);
+                    if (found !== undefined) linkKind = found;
+                  }}
+                >
+                  <Select.Trigger aria-labelledby="link-kind-label" data-testid="link-kind"
+                    >{LINK_KIND_LABEL[linkKind]}</Select.Trigger
+                  >
+                  <Select.Content>
+                    {#each LINK_KINDS as k (k)}
+                      <Select.Item value={k} label={LINK_KIND_LABEL[k]}
+                        >{LINK_KIND_LABEL[k]}</Select.Item
+                      >
+                    {/each}
+                  </Select.Content>
+                </Select.Root>
+              </div>
+              <div class="flex w-28 flex-col gap-1">
+                <Label for="link-lag">{m.tasks_link_lag_label()}</Label>
+                <Input
+                  id="link-lag"
+                  inputmode="numeric"
+                  aria-describedby="link-lag-hint"
+                  bind:value={lagText}
+                />
+              </div>
+            </div>
+            <p id="link-kind-meaning" class="text-sm text-muted-foreground">
+              {LINK_KIND_MEANING[linkKind]}
+            </p>
+            <p id="link-lag-hint" class="text-xs text-muted-foreground">
+              {m.tasks_link_lag_hint()}
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={busy || (editing === undefined && predecessorChoice === '')}
+                id="link-save"
+                onclick={() => void applyLink(editing ?? predecessorChoice)}
+                >{m.tasks_link_save()}</Button
+              >
+              {#if editing !== undefined}
+                <Button size="sm" variant="ghost" disabled={busy} onclick={resetLinkEditor}
+                  >{m.common_cancel()}</Button
+                >
+              {/if}
+            </div>
+          </fieldset>
+        {/if}
+        {#if linkPending !== undefined}
+          <ShiftProposals
+            proposals={linkPending.proposals}
+            undated={linkPending.undated}
+            blocked={linkPending.blocked}
+            retried={linkPending.retried}
+            {busy}
+            forLink
+            headingId="link-shift-heading"
+            ondecide={(withShifts: boolean) => void decideLink(withShifts)}
+            oncancel={() => {
+              // 편집 칸은 그대로 두고 관계 저장 단추로 돌린다(고친 값으로 다시 시도할 수 있게).
+              linkPending = undefined;
+              void focusLater('link-save');
+            }}
+          />
+        {/if}
+        <p aria-live="polite" class="text-sm" data-testid="link-status">{linkStatus}</p>
+      </section>
 
-    <section class="flex flex-col gap-2" aria-labelledby="successors-heading">
-      <h3 id="successors-heading" class="text-sm font-semibold">{m.tasks_successors_heading()}</h3>
-      {#each successors as s (s.task.id)}
-        <div class="flex flex-wrap items-center gap-x-2 text-sm" data-successor={s.task.id}>
-          <button
-            type="button"
-            class="rounded px-2 py-1 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            onclick={() => {
-              onopen(s.task.id);
-            }}>{label(s.task)}</button
-          >
-          <span class="text-muted-foreground" data-link-text>{linkText(s.link)}</span>
-        </div>
-      {:else}
-        <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
-      {/each}
-    </section>
-
-    {#if current.parent_id === null}
-      {#if current.series !== null && current.series.root_task_id !== current.id}
-        {@const rootId = current.series.root_task_id}
-        <section class="flex flex-col gap-2" aria-labelledby="task-recurrence-heading">
-          <h3 id="task-recurrence-heading" class="text-sm font-semibold">
-            {m.tasks_recurrence()}
-          </h3>
-          <p class="text-sm text-muted-foreground">
-            {m.tasks_occurrence_note({ date: current.occurrence_date ?? '' })}
-          </p>
-          <div>
-            <Button
-              size="sm"
-              variant="outline"
+      <section class="flex flex-col gap-2" aria-labelledby="successors-heading">
+        <h3 id="successors-heading" class="text-sm font-semibold">
+          {m.tasks_successors_heading()}
+        </h3>
+        {#each successors as s (s.task.id)}
+          <div class="flex flex-wrap items-center gap-x-2 text-sm" data-successor={s.task.id}>
+            <button
+              type="button"
+              class="rounded px-2 py-1 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               onclick={() => {
-                onopen(rootId);
-              }}>{m.tasks_open_first()}</Button
+                onopen(s.task.id);
+              }}>{label(s.task)}</button
             >
+            <span class="text-muted-foreground" data-link-text>{linkText(s.link)}</span>
           </div>
-        </section>
-      {:else}
-        <RecurrenceEditor
-          idPrefix="task-recurrence"
-          rule={current.series?.rule ?? null}
-          canEdit={canEdit && (current.due_date !== null || current.start_date !== null)}
-          zoneNote={m.tasks_recurrence_zone({
-            zone: current.series?.timezone ?? localTimeZone(),
-          })}
-          onsave={saveRule}
-        />
-        {#if canEdit && current.due_date === null && current.start_date === null}
-          <p class="text-sm text-muted-foreground">{m.tasks_recurrence_needs_date()}</p>
+        {:else}
+          <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
+        {/each}
+      </section>
+
+      {#if current.parent_id === null}
+        {#if current.series !== null && current.series.root_task_id !== current.id}
+          {@const rootId = current.series.root_task_id}
+          <section class="flex flex-col gap-2" aria-labelledby="task-recurrence-heading">
+            <h3 id="task-recurrence-heading" class="text-sm font-semibold">
+              {m.tasks_recurrence()}
+            </h3>
+            <p class="text-sm text-muted-foreground">
+              {m.tasks_occurrence_note({ date: current.occurrence_date ?? '' })}
+            </p>
+            <div>
+              <Button
+                size="sm"
+                variant="outline"
+                onclick={() => {
+                  onopen(rootId);
+                }}>{m.tasks_open_first()}</Button
+              >
+            </div>
+          </section>
+        {:else}
+          <RecurrenceEditor
+            idPrefix="task-recurrence"
+            rule={current.series?.rule ?? null}
+            canEdit={canEdit && (current.due_date !== null || current.start_date !== null)}
+            zoneNote={m.tasks_recurrence_zone({
+              zone: current.series?.timezone ?? localTimeZone(),
+            })}
+            onsave={saveRule}
+          />
+          {#if canEdit && current.due_date === null && current.start_date === null}
+            <p class="text-sm text-muted-foreground">{m.tasks_recurrence_needs_date()}</p>
+          {/if}
         {/if}
       {/if}
-    {/if}
 
-    <ChecklistForm
-      idPrefix={`task-${current.id}`}
-      items={current.checklist.map((c) => ({ id: c.id, text: c.text, done: c.checked }))}
-      {canEdit}
-      onadd={(entries: NewChecklistEntry[]) =>
-        reloadChecklist(
-          api.addChecklist(
-            current.id,
-            entries.map((e) => ({ request_id: e.requestId, text: e.text, checked: e.done })),
-          ),
-        )}
-      ontoggle={(id: string, done: boolean) =>
-        reloadChecklist(api.updateChecklistItem(id, { checked: done }))}
-      onrename={(id: string, text: string) =>
-        reloadChecklist(api.updateChecklistItem(id, { text }))}
-      onremove={(id: string) => reloadChecklist(api.deleteChecklistItem(id))}
-    />
+      <ChecklistForm
+        idPrefix={`task-${current.id}`}
+        items={current.checklist.map((c) => ({ id: c.id, text: c.text, done: c.checked }))}
+        {canEdit}
+        onadd={(entries: NewChecklistEntry[]) =>
+          reloadChecklist(
+            api.addChecklist(
+              current.id,
+              entries.map((e) => ({ request_id: e.requestId, text: e.text, checked: e.done })),
+            ),
+          )}
+        ontoggle={(id: string, done: boolean) =>
+          reloadChecklist(api.updateChecklistItem(id, { checked: done }))}
+        onrename={(id: string, text: string) =>
+          reloadChecklist(api.updateChecklistItem(id, { text }))}
+        onremove={(id: string) => reloadChecklist(api.deleteChecklistItem(id))}
+      />
 
-    <TaskTimePanel taskId={current.id} />
-    <CommentsPanel target={{ kind: 'task', id: current.id }} />
+      <TaskTimePanel taskId={current.id} />
+      <CommentsPanel target={{ kind: 'task', id: current.id }} />
 
-    <Backlinks kind="task" id={current.id} {workspaces} />
+      <Backlinks kind="task" id={current.id} {workspaces} />
+    </div>
   </div>
 {/if}
