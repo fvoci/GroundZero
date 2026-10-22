@@ -45,7 +45,7 @@ enum Command {
         /// Use a local PostgreSQL installer with CREATEROLE and target-DB privileges only.
         #[arg(long, conflicts_with = "supabase")]
         restricted_admin: bool,
-        /// Standard PostgreSQL major; ignored for the pinned Supabase fixture.
+        /// Standard PostgreSQL major; Supabase uses its own pinned fixture.
         #[arg(long, value_enum, default_value = "17", conflicts_with = "supabase")]
         postgres_major: compose::PostgresMajor,
         /// Use the pinned self-hosted Supabase PostgreSQL and session pooler.
