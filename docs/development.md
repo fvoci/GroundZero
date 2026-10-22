@@ -1757,6 +1757,11 @@ Meilisearch 데이터를 지워 작업 번호가 처음부터 다시 매겨지�
   - `deploy/supabase/compose.test.yaml`을 겹쳐 db·rest·supavisor만 띄운다. 이미지는 digest로 고정하고, 고정 컨테이너 이름을 지우고,
     `127.0.0.1` 빈 포트와 tmpfs 데이터를 쓴다. Compose 프로젝트는 `fvoci-<체크아웃>-<해시>-supabase`다.
   - 검색·S3(·Keycloak)은 시험 Compose에서 PostgreSQL만 빼고 띄운다. 값은 `deploy/supabase/test.env`의 시험 값이다.
+  - 바이너리마다 동시에 도는 시험을 4개로 묶는다(`RUST_TEST_THREADS=4`, 직접 연결·session 두 단계). session 모드는 풀
+    크기(64)를 넘는 클라이언트를 기다리게 하지 않고 거절하는데, 시험마다 앱 상태(연결 풀 최대 16)를 따로 만들어 64 / 16 = 4다.
+    db의 `max_connections`(100, superuser 몫 3)에서 Supabase 자체 서비스가 약 10개를 쓰므로 직접 연결 단계도 같이 묶는다.
+    기본값(코어 수)이면 32코어 기계에서 collab 시험이 session 단계에서 앱 연결 64·DB 연결 97개 가운데 95개까지 써
+    `XX000`으로 실패했고, 직접 연결 단계에서도 94개까지 썼다(W14).
   - 관리자는 Supabase의 `postgres`(superuser 아님)다. `cargo xtask down`이 이 프로젝트도 지운다.
 - 빼는 서비스와 이유는 `docs/self-hosting-supabase.md` 6절에 있다. 운영자 안내도 그 문서에 있다.
 - CI `supabase` job이 같은 명령(`--session-pooler --oidc`)을 러너에서 돌린다. Supabase 서비스를 호스트 포트로 열므로 base 이미지
