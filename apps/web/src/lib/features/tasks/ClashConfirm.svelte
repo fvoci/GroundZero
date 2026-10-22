@@ -86,6 +86,10 @@
             </dd>
           </div>
         </dl>
+        <!-- 서로 다른 값이 똑같아 보이면(줄 끝 공백, 보이지 않는 글자 등) 그렇다고 알린다(2차 검증). -->
+        {#if row.looksSame}
+          <p class="text-muted-foreground" data-clash-looks-same>{m.tasks_clash_looks_same()}</p>
+        {/if}
       </li>
     {/each}
   </ul>

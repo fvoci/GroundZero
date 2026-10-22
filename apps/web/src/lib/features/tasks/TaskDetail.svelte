@@ -48,13 +48,14 @@
 
   import ClashConfirm from './ClashConfirm.svelte';
   import type { MergeUnit } from './form';
-  import { estimateOf, formOf, mergeEstimate, mergeForm, scheduleOf } from './form';
+  import { estimateOf, formOf, mergeEstimate, mergeForm, scheduleOf, trimLikeServer } from './form';
   import type { ClashRow } from './labels';
   import {
     LINK_KIND_LABEL,
     LINK_KIND_MEANING,
     PRIORITY_LABEL,
     STATUS_LABEL,
+    assigneeLabels,
     clashRows,
     linkText,
     undatedText,
@@ -222,6 +223,7 @@
    * 화면이 고르게 한다.
    */
   function refresh(fresh: TaskDetailView): void {
+    const asking = clashAsk;
     const mine = currentInput();
     if (task === undefined || mine === undefined || baseline === undefined) {
       fill(fresh);
@@ -235,13 +237,38 @@
     if (!clashed) baseVersion = fresh.version;
     task = clashed ? { ...fresh, version: baseVersion } : fresh;
     applyMerge(merge);
+    if (asking !== undefined)
+      askAgain(fresh.version > asking.latest.version ? fresh : asking.latest);
   }
 
-  // 충돌 확인에 담당자 이름을 보일 때 쓴다(지정할 수 있는 사람과, 지금 판·서버 판에 지정된 사람).
-  function assigneeNames(latest: TaskDetailView): Map<string, string> {
-    const known = [...(task?.assignees ?? []), ...latest.assignees, ...(people ?? [])];
-    return new Map(known.map((p) => [p.user_id, p.display_name]));
+  /**
+   * 덮어쓰기 확인이 떠 있는 동안 먼저 보낸 체크리스트·반복·선행·상위 업무 요청이 돌아와 다시 채웠으면(`refresh`), 확인을
+   * 닫지 않고 아는 가장 새 판(`latest`)으로 다시 묻는다(전에는 말없이 닫혀 초점이 문서로 빠졌다, 리뷰). 받은 판이 충돌
+   * 판보다 새면 충돌 알림도 그 판을 보여 다시 저장이 그 판 번호로 간다. 더는 겹친 칸이 없으면 확인을 닫고 "내 입력으로
+   * 다시 저장"으로 돌린다(입력은 그대로, 보내는 것은 없다).
+   */
+  function askAgain(latest: TaskDetailView): void {
+    const mine = currentInput();
+    if (mine === undefined || baseline === undefined) return;
+    if (conflict !== undefined && latest.version > conflict.version) conflict = latest;
+    const merge = mergeOnto(latest, mine, baseline);
+    if (merge.clashes.length === 0) {
+      void focusLater('task-save-mine');
+      return;
+    }
+    clashAsk = {
+      latest,
+      merge,
+      rows: clashRows(merge.clashes, merge.freshForm, mine, assigneeNames(latest)),
+    };
   }
+
+  // 충돌 확인에 담당자 이름을 보일 때 쓴다(지정할 수 있는 사람과, 지금 판·서버 판에 지정된 사람). 같은 이름은 구분한다.
+  function assigneeNames(latest: TaskDetailView): Map<string, string> {
+    return assigneeLabels([...(task?.assignees ?? []), ...latest.assignees, ...(people ?? [])]);
+  }
+  // 폼의 담당자 이름표. 충돌 확인과 같은 글이라 확인에 보인 사람을 폼에서 찾을 수 있다.
+  const peopleLabels = $derived(assigneeLabels([...(task?.assignees ?? []), ...(people ?? [])]));
 
   /**
    * 충돌 화면의 "내 입력으로 다시 저장"(D-94): 서버 최신 판(`latest`) 위에 내가 고친 칸만 올려 그 판 번호로 저장한다.
@@ -344,10 +371,15 @@
       ...scheduleOf(form),
       // 잘못된 입력은 저장 전에 막는다(submit). 여기서는 비교용으로만 쓴다.
       estimate_minutes: estimate === 'invalid' ? null : estimate,
-      tags: tagsText
-        .split(',')
-        .map((t) => t.trim())
-        .filter((t) => t !== ''),
+      // 서버(`validate_tags`)처럼 앞뒤 공백을 떼고 겹친 태그는 처음 것만 둔다: 비교·확인·보내는 값이 저장될 값과 같다.
+      tags: [
+        ...new Set(
+          tagsText
+            .split(',')
+            .map(trimLikeServer)
+            .filter((t) => t !== ''),
+        ),
+      ],
     };
   }
 
@@ -419,9 +451,10 @@
     undated: UndatedTaskView[] = [],
   ): Promise<void> {
     if (task === undefined) return;
-    // 후속 업무 미리보기에서 승인했거나(패널이 사라진다) 충돌 화면이 이미 떠 있던 저장(덮어쓰기 뒤 미리보기 승인 등)이
-    // 다시 409면, 누른 단추가 없어져 초점이 문서로 빠지므로 "내 입력으로 다시 저장"으로 돌린다.
-    const refocus = pending !== undefined || conflict !== undefined;
+    // 후속 업무 미리보기에서 승인한 저장(덮어쓰기 뒤 미리보기 승인 등)이 다시 409면, 패널과 함께 누른 단추가 없어져
+    // 초점이 문서로 빠지므로 "내 입력으로 다시 저장"으로 돌린다. 폼의 "저장"은 그대로 있으므로 두고(2차 검증 nit),
+    // "내 입력으로 다시 저장"·덮어쓰기에서 바로 보낸 저장은 `saveMerged`가 돌린다.
+    const refocus = pending !== undefined;
     const result = await api.updateTask(task.id, baseVersion, input, shifts.map(toShift));
     if (result.kind === 'conflict') {
       pending = undefined;
@@ -699,6 +732,8 @@
             onclick={() => {
               fill(latest);
               conflict = undefined;
+              // 누른 단추가 알림과 함께 사라지므로 다시 채운 폼의 첫 칸으로 돌린다(전에는 문서로 빠졌다).
+              void focusLater('task-title');
             }}>{m.tasks_load_server()}</Button
           >
           <Button
@@ -844,7 +879,9 @@
                       toggleAssignee(person.user_id, v === true);
                     }}
                   />
-                  <Label for={`assignee-${person.user_id}`}>{person.display_name}</Label>
+                  <Label for={`assignee-${person.user_id}`}
+                    >{peopleLabels.get(person.user_id) ?? person.display_name}</Label
+                  >
                 </span>
               {:else}
                 <span class="text-sm text-muted-foreground">{m.tasks_no_assignable()}</span>

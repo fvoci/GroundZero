@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import type { MockInstance } from 'vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -390,6 +391,10 @@ describe('saving my input after a task conflict', () => {
     expect(field('task-title').value).toBe('새 제목');
     expect(field('task-description').value).toBe('A 설명');
     expect(update).toHaveBeenCalledTimes(1);
+    // 누른 단추가 사라지므로 다시 채운 폼의 첫 칸으로 초점을 옮긴다(전에는 문서로 빠졌다, 2차 검증 nit).
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe('task-title');
+    });
   });
 });
 
@@ -697,5 +702,301 @@ describe('the overwrite question inside the task dialog', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(update).toHaveBeenCalledTimes(1);
     expect(field('task-title').value).toBe('내 제목');
+  });
+});
+
+// 2차 반박 검증·CodeRabbit의 남은 지적(D-94).
+describe('the overwrite question after the second review', () => {
+  // CodeRabbit: 이름이 같은 두 사람이 양쪽에 있으면 확인의 두 값이 똑같이 "Alex"로 보였다. 이름이 겹칠 때만 워크스페이스
+  // 배지(D-17)처럼 id 끝 네 글자를 붙인다(폼의 이름표도 같은 글이라 확인의 값과 맞춰 볼 수 있다).
+  it('tells apart people with the same name', async () => {
+    await setLocale('ko', { reload: false });
+    const alexA: AssigneeView = {
+      user_id: '0190a000-0000-7000-8000-00000000a1a1',
+      display_name: 'Alex',
+    };
+    const alexB: AssigneeView = {
+      user_id: '0190a000-0000-7000-8000-00000000b2b2',
+      display_name: 'Alex',
+    };
+    const bo: AssigneeView = { user_id: 'u3', display_name: '보라' };
+    mount(v2, [alexA, alexB, bo]);
+    vi.spyOn(api, 'updateTask').mockResolvedValueOnce({
+      kind: 'conflict',
+      current: { ...v2, version: 3, assignees: [alexB] },
+    });
+    await fireEvent.click(await screen.findByRole('checkbox', { name: 'Alex #a1a1' }));
+    // 이름이 겹치지 않는 사람은 이름만 보인다.
+    expect(screen.getByRole('checkbox', { name: '보라' })).toBeTruthy();
+    await saveIntoConflict();
+    await fireEvent.click(saveMineButton());
+    const ask = await screen.findByRole('alertdialog');
+    expect(sides(ask, 'assignee_ids')).toEqual({ server: 'Alex #b2b2', mine: 'Alex #a1a1' });
+  });
+
+  // 2차 검증: 서버는 겹친 태그를 하나로 저장한다(`validate_tags`). 따르지 않으면 "a, a"를 고친 칸으로 보아 쓸데없이
+  // 묻고, 확인에 보인 값과 저장되는 값이 달랐다.
+  it('reads tags the way the server stores them, without repeats', async () => {
+    await setLocale('ko', { reload: false });
+    mount({ ...v2, tags: ['a'] });
+    const update = vi
+      .spyOn(api, 'updateTask')
+      .mockResolvedValueOnce({ kind: 'conflict', current: { ...v2, version: 3, tags: ['b'] } })
+      .mockResolvedValueOnce({ kind: 'updated', task: { ...v2, version: 4, tags: ['b'] } });
+    await screen.findByLabelText('설명');
+    await type('task-tags', 'a, a');
+    await saveIntoConflict();
+    await fireEvent.click(saveMineButton());
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, tags: ['b'] }, []);
+  });
+
+  it('shows and saves my tags without repeats', async () => {
+    await setLocale('ko', { reload: false });
+    mount();
+    const update = vi
+      .spyOn(api, 'updateTask')
+      .mockResolvedValueOnce({ kind: 'conflict', current: { ...v2, version: 3, tags: ['x'] } })
+      .mockResolvedValueOnce({ kind: 'updated', task: { ...v2, version: 4, tags: ['b', 'a'] } });
+    await screen.findByLabelText('설명');
+    await type('task-tags', 'b, a, b');
+    await saveIntoConflict();
+    await fireEvent.click(saveMineButton());
+    const ask = await screen.findByRole('alertdialog');
+    expect(sides(ask, 'tags')).toEqual({ server: 'x', mine: 'b, a' });
+    await fireEvent.click(within(ask).getByRole('button', { name: '내 값으로 덮어쓰고 저장' }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, tags: ['b', 'a'] }, []);
+  });
+
+  // 2차 검증: 앞뒤 공백만 친 제목은 저장되는 값이 그대로라 고친 칸이 아니다. 묻지 않고 다른 사람이 바꾼 제목을 따른다.
+  it('does not treat surrounding spaces as an edit', async () => {
+    await setLocale('ko', { reload: false });
+    mount();
+    const update = vi
+      .spyOn(api, 'updateTask')
+      .mockResolvedValueOnce(titleConflict)
+      .mockResolvedValueOnce({ kind: 'updated', task: { ...titleConflict.current, version: 4 } });
+    await screen.findByLabelText('설명');
+    await type('task-title', `${v2.title} `);
+    await saveIntoConflict();
+    await fireEvent.click(saveMineButton());
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, title: '남의 제목' }, []);
+  });
+
+  // 2차 검증: 줄 끝 공백만 다른 설명처럼 서로 다른 값이 화면에서 똑같아 보이면 그렇다고 알린다.
+  it('says so when the two values look the same', async () => {
+    await setLocale('ko', { reload: false });
+    mount();
+    vi.spyOn(api, 'updateTask').mockResolvedValueOnce({
+      kind: 'conflict',
+      current: { ...v2, version: 3, description: '가 \n나' },
+    });
+    await screen.findByLabelText('설명');
+    await type('task-description', '가\n나');
+    await saveIntoConflict();
+    await fireEvent.click(saveMineButton());
+    const ask = await screen.findByRole('alertdialog');
+    const row = ask.querySelector('[data-clash-field="description"]');
+    expect(row?.textContent).toContain('같아 보이지만');
+    // 다르게 보이는 값에는 붙지 않는다.
+    expect(ask.querySelectorAll('[data-clash-looks-same]')).toHaveLength(1);
+  });
+
+  // 2차 검증 nit: 충돌 화면이 떠 있을 때 폼의 "저장"으로 다시 409가 나면, 누른 단추가 그대로 있는데도 초점을
+  // "내 입력으로 다시 저장"으로 옮겼다.
+  it('leaves focus on the form save button when saving the form conflicts again', async () => {
+    await setLocale('ko', { reload: false });
+    mount();
+    vi.spyOn(api, 'updateTask')
+      .mockResolvedValueOnce(titleConflict)
+      .mockResolvedValueOnce({
+        kind: 'conflict',
+        current: { ...titleConflict.current, version: 4, status: 'done' },
+      });
+    await screen.findByLabelText('설명');
+    await type('task-description', '내 설명');
+    await saveIntoConflict();
+    const save = document.getElementById('task-save');
+    if (save === null) throw new Error('task-save');
+    save.focus();
+    await fireEvent.click(save);
+    expect(await screen.findByText(/상태: 완료/)).toBeTruthy();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(document.activeElement?.id).toBe('task-save');
+  });
+
+  // 덮어쓰기가 다시 409면(그사이 같은 칸이 또 바뀜) 입력을 지키고, 다음 "내 입력으로 다시 저장"은 더 새 값으로 다시 묻고
+  // 그 판 번호로 보낸다.
+  it('asks again with the newer value when overwriting conflicts again', async () => {
+    await setLocale('ko', { reload: false });
+    mount();
+    const v4: TaskDetailView = { ...titleConflict.current, version: 4, title: '세 번째 제목' };
+    const update = vi
+      .spyOn(api, 'updateTask')
+      .mockResolvedValueOnce(titleConflict)
+      .mockResolvedValueOnce({ kind: 'conflict', current: v4 })
+      .mockResolvedValueOnce({ kind: 'updated', task: { ...v4, version: 5, title: '내 제목' } });
+    const ask = await askAboutTitle();
+    await fireEvent.click(within(ask).getByRole('button', { name: '내 값으로 덮어쓰고 저장' }));
+    expect(await screen.findByText(/지금 제목: “세 번째 제목”/)).toBeTruthy();
+    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, title: '내 제목' }, []);
+    expect(field('task-title').value).toBe('내 제목');
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe('task-save-mine');
+    });
+
+    await fireEvent.click(saveMineButton());
+    const again = await screen.findByRole('alertdialog');
+    expect(sides(again, 'title')).toEqual({ server: '세 번째 제목', mine: '내 제목' });
+    await fireEvent.click(within(again).getByRole('button', { name: '내 값으로 덮어쓰고 저장' }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(3);
+    });
+    expect(update).toHaveBeenNthCalledWith(3, 't1', 4, { ...unchanged, title: '내 제목' }, []);
+  });
+
+  // 승인한 덮어쓰기가 실패하면(서버에 닿지 않음) 입력과 충돌 화면이 남는다. 이미 승인한 판 3 위에서 다시 시도하므로
+  // 다시 묻지 않고 같은 판 번호로 보낸다(그사이 또 바뀌었으면 서버가 409로 답한다).
+  it('keeps my input when overwriting fails and retries on the version I approved', async () => {
+    await setLocale('ko', { reload: false });
+    mount();
+    const update = vi
+      .spyOn(api, 'updateTask')
+      .mockResolvedValueOnce(titleConflict)
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce({
+        kind: 'updated',
+        task: { ...titleConflict.current, version: 4, title: '내 제목' },
+      });
+    const ask = await askAboutTitle();
+    await fireEvent.click(within(ask).getByRole('button', { name: '내 값으로 덮어쓰고 저장' }));
+    expect(await screen.findByText('저장하지 못했습니다.')).toBeTruthy();
+    expect(field('task-title').value).toBe('내 제목');
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe('task-save-mine');
+    });
+    await fireEvent.click(saveMineButton());
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(3);
+    });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(update).toHaveBeenNthCalledWith(3, 't1', 3, { ...unchanged, title: '내 제목' }, []);
+  });
+});
+
+// CodeRabbit·2차 검증: 확인이 뜨기 전에 보낸 체크리스트(반복·선행·상위 업무도 같은 `refresh`) 요청이 확인이 떠 있는
+// 동안 돌아오면, 다시 채우기가 확인을 말없이 닫고 초점이 문서로 빠졌다. 이제 확인과 입력을 지키고, 받은 판이 더 새면 그
+// 판으로 다시 묻는다(충돌 알림도 그 판을 보인다).
+describe('a late response while the overwrite question is open', () => {
+  const listed: TaskDetailView = {
+    ...v2,
+    checklist: [{ id: 'c1', text: '검토', checked: false }],
+    checklist_total: 1,
+  };
+
+  async function askWithLateChecklist(
+    conflictWith: TaskDetailView,
+    reloaded: TaskDetailView,
+  ): Promise<{ finish: () => void; update: MockInstance<typeof api.updateTask> }> {
+    mount(listed);
+    let finish: () => void = () => undefined;
+    vi.spyOn(api, 'updateChecklistItem').mockReturnValue(
+      new Promise<undefined>((resolve) => {
+        finish = () => {
+          resolve(undefined);
+        };
+      }),
+    );
+    const update = vi
+      .spyOn(api, 'updateTask')
+      .mockResolvedValueOnce({ kind: 'conflict', current: conflictWith })
+      .mockResolvedValueOnce({ kind: 'updated', task: { ...reloaded, version: 9 } });
+    await screen.findByLabelText('설명');
+    await fireEvent.click(screen.getByRole('checkbox', { name: '미완료 항목: 검토' }));
+    vi.mocked(api.task).mockResolvedValue(reloaded);
+    await type('task-title', '내 제목');
+    await saveIntoConflict();
+    await fireEvent.click(saveMineButton());
+    await screen.findByRole('alertdialog');
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe('task-clash-heading');
+    });
+    return { finish, update };
+  }
+
+  it('keeps the question when the reloaded version is older than the conflict', async () => {
+    await setLocale('ko', { reload: false });
+    const checked = [{ id: 'c1', text: '검토', checked: true }];
+    const v3: TaskDetailView = { ...listed, version: 3, checklist: checked };
+    const v4: TaskDetailView = { ...v3, version: 4, title: '남의 제목' };
+    const { finish, update } = await askWithLateChecklist(v4, v3);
+    finish();
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: '완료 항목: 검토' })).toBeTruthy();
+    });
+    const ask = screen.getByRole('alertdialog');
+    expect(sides(ask, 'title')).toEqual({ server: '남의 제목', mine: '내 제목' });
+    expect(ask.contains(document.activeElement)).toBe(true);
+    expect(field('task-title').value).toBe('내 제목');
+    await fireEvent.click(within(ask).getByRole('button', { name: '내 값으로 덮어쓰고 저장' }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update).toHaveBeenNthCalledWith(2, 't1', 4, { ...unchanged, title: '내 제목' }, []);
+  });
+
+  it('asks again with the reloaded version when it is newer than the conflict', async () => {
+    await setLocale('ko', { reload: false });
+    const v3: TaskDetailView = { ...listed, version: 3, title: '남의 제목' };
+    const v4: TaskDetailView = {
+      ...v3,
+      version: 4,
+      title: '네 번째 제목',
+      checklist: [{ id: 'c1', text: '검토', checked: true }],
+    };
+    const { finish, update } = await askWithLateChecklist(v3, v4);
+    finish();
+    expect(await screen.findByText(/지금 제목: “네 번째 제목”/)).toBeTruthy();
+    const ask = screen.getByRole('alertdialog');
+    expect(sides(ask, 'title')).toEqual({ server: '네 번째 제목', mine: '내 제목' });
+    expect(ask.contains(document.activeElement)).toBe(true);
+    expect(field('task-title').value).toBe('내 제목');
+    await fireEvent.click(within(ask).getByRole('button', { name: '내 값으로 덮어쓰고 저장' }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update).toHaveBeenNthCalledWith(2, 't1', 4, { ...unchanged, title: '내 제목' }, []);
+  });
+
+  it('closes the question and returns to saving mine when the newer version no longer clashes', async () => {
+    await setLocale('ko', { reload: false });
+    const v3: TaskDetailView = { ...listed, version: 3, title: '남의 제목' };
+    // 다른 사람이 제목을 되돌렸다.
+    const v4: TaskDetailView = {
+      ...listed,
+      version: 4,
+      checklist: [{ id: 'c1', text: '검토', checked: true }],
+    };
+    const { finish, update } = await askWithLateChecklist(v3, v4);
+    finish();
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe('task-save-mine');
+    });
+    expect(field('task-title').value).toBe('내 제목');
+    expect(update).toHaveBeenCalledTimes(1);
   });
 });

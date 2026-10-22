@@ -181,6 +181,7 @@
   "tasks_clash_schedule_dates": "시작일 {start}, 마감일 {due}",
   "tasks_clash_schedule_milestone": "마일스톤, 마감일 {due}",
   "tasks_clash_unknown_person": "(알 수 없는 사람)",
+  "tasks_clash_looks_same": "두 값이 같아 보이지만 저장되는 값은 다릅니다(줄 끝 공백이나 보이지 않는 글자 등).",
   "tasks_title": "제목",
   "tasks_description": "설명",
   "tasks_start_date": "시작일",

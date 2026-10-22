@@ -57,11 +57,20 @@ export const MERGE_UNITS: readonly MergeUnit[] = [
 ];
 
 /**
- * 사용자가 고쳤는지 견주는 값. 담당자는 순서 없는 모음이라(서버는 이름순으로 돌려주고 화면은 고른 순서로 덧붙인다)
- * 정렬해 견주고, 일정은 보내는 모양(`scheduleOf`)으로 견준다. 태그는 서버가 받은 순서를 그대로 지키므로 순서까지
- * 견준다. 글은 입력 그대로 견준다: 앞뒤 공백만 친 중인 글도 고친 칸이라 다시 채우기가 지우지 않는다.
+ * 서버처럼 앞뒤 공백을 뗀다. 서버(Rust `str::trim`)는 유니코드 White_Space만 떼므로, JS `trim`과 달리 U+FEFF는 남기고
+ * U+0085는 뗀다. 고친 칸 판정과 충돌 확인의 글이 서버에 저장될 값과 어긋나지 않게 한다.
  */
-function edited(unit: MergeUnit, input: TaskInput): unknown {
+export function trimLikeServer(text: string): string {
+  return text.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, '');
+}
+
+/**
+ * 견주는 값: 서버에 저장될 모양. 담당자는 순서 없는 모음이라(서버는 이름순으로 돌려주고 화면은 고른 순서로 덧붙인다)
+ * 정렬해 견주고, 일정은 보내는 모양(`scheduleOf`)으로 견준다. 태그는 서버가 받은 순서를 그대로 지키므로 순서까지
+ * 견준다. 제목·설명은 서버처럼 앞뒤 공백을 뗀다: 앞뒤 공백만 친 칸은 고친 칸이 아니고(2차 검증), 서버 값과 앞뒤 공백만
+ * 다른 내 값은 겹친 것이 아니다(묻는 화면에서 두 값이 똑같아 보인다).
+ */
+function stored(unit: MergeUnit, input: TaskInput): unknown {
   switch (unit) {
     case 'schedule':
       return scheduleOf(input);
@@ -69,20 +78,13 @@ function edited(unit: MergeUnit, input: TaskInput): unknown {
       return [...new Set(input.assignee_ids)].sort();
     case 'title':
     case 'description':
+      return trimLikeServer(input[unit]);
     case 'status':
     case 'priority':
     case 'estimate_minutes':
     case 'tags':
       return input[unit];
   }
-}
-
-/**
- * 서버에 저장될 값: 제목·설명은 서버처럼 앞뒤 공백을 뗀다(그 밖은 `edited`와 같다). 앞뒤 공백만 다른 내 값과 서버 값은
- * 겹친 것이 아니다(묻는 화면에서 두 값이 똑같아 보인다).
- */
-function stored(unit: MergeUnit, input: TaskInput): unknown {
-  return unit === 'title' || unit === 'description' ? input[unit].trim() : edited(unit, input);
 }
 
 /** 단위마다 고른 쪽(`from`)의 값으로 폼 값을 만든다. 일정은 세 칸을 한쪽에서 함께 가져온다. */
@@ -112,31 +114,34 @@ export function mergeForm(
   mine: TaskInput,
   fresh: TaskInput,
 ): { form: TaskInput; baseline: TaskInput; clash: boolean; clashes: MergeUnit[] } {
-  const same = (
-    view: (unit: MergeUnit, input: TaskInput) => unknown,
-    unit: MergeUnit,
-    a: TaskInput,
-    b: TaskInput,
-  ): boolean => canonicalJson(view(unit, a)) === canonicalJson(view(unit, b));
-  // 고치지 않았거나 서버의 새 값과 같아진 단위는 새 값을 따른다.
+  const same = (unit: MergeUnit, a: TaskInput, b: TaskInput): boolean =>
+    canonicalJson(stored(unit, a)) === canonicalJson(stored(unit, b));
+  // 고치지 않았거나(앞뒤 공백만 친 글 포함, 2차 검증) 서버의 새 값과 같아진 단위는 새 값을 따르고, 기준도 새 값으로
+  // 옮긴다(그 뒤 사용자가 다시 고쳐도 옛 기준과 비교해 충돌로 보지 않게).
   const takesFresh = (unit: MergeUnit): boolean =>
-    same(edited, unit, mine, before) || same(edited, unit, mine, fresh);
-  // 저장될 값이 새 값과 같은 단위(앞뒤 공백만 다른 글 포함)는 겹친 것이 아니고, 기준도 새 값으로 옮긴다(그 뒤 사용자가
-  // 다시 고쳐도 옛 기준과 비교해 충돌로 보지 않게). 그런 글은 폼에 친 그대로 둔다.
-  const matchesFresh = (unit: MergeUnit): boolean => same(stored, unit, mine, fresh);
-  const clashes = MERGE_UNITS.filter(
-    (unit) => !takesFresh(unit) && !matchesFresh(unit) && !same(stored, unit, fresh, before),
-  );
-  const form = assemble((unit) => (takesFresh(unit) ? fresh : mine));
-  const baseline = assemble((unit) => (takesFresh(unit) || matchesFresh(unit) ? fresh : before));
+    same(unit, mine, before) || same(unit, mine, fresh);
+  const clashes = MERGE_UNITS.filter((unit) => !takesFresh(unit) && !same(unit, fresh, before));
+  // 저장될 값이 새 값과 같은 글은 폼에 친 그대로 둔다(친 중인 뒤 공백을 지워 다음 낱말이 붙지 않게).
+  const keepsTyped = (unit: MergeUnit): boolean =>
+    (unit === 'title' || unit === 'description') && same(unit, mine, fresh);
+  const form = assemble((unit) => (takesFresh(unit) && !keepsTyped(unit) ? fresh : mine));
+  const baseline = assemble((unit) => (takesFresh(unit) ? fresh : before));
   return { form, baseline, clash: clashes.length > 0, clashes };
 }
 
-/** 예상 시간 입력 글자의 값: 빈칸은 없음, 0 이상의 정수만 값, 그 밖은 잘못된 입력. */
+/** 서버가 저장하는 예상 시간의 상한(i32). */
+const MAX_ESTIMATE = 2_147_483_647;
+
+/**
+ * 예상 시간 입력 글자의 값: 빈칸은 없음, 서버 범위(0~i32 상한)의 정수만 값, 그 밖은 잘못된 입력(아주 큰 수는
+ * Infinity가 되어 JSON의 null로 보내져 저장된 값을 지웠다).
+ */
 export function estimateOf(text: string): number | null | 'invalid' {
   const t = text.trim();
   if (t === '') return null;
-  return /^\d+$/.test(t) ? Number.parseInt(t, 10) : 'invalid';
+  if (!/^\d+$/.test(t)) return 'invalid';
+  const n = Number.parseInt(t, 10);
+  return n <= MAX_ESTIMATE ? n : 'invalid';
 }
 
 /**

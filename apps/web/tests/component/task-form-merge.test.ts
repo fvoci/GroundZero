@@ -4,7 +4,7 @@ import type { TaskInput } from '$lib/api/client';
 import { formatDay } from '$lib/display';
 import type { MergeUnit } from '$lib/features/tasks/form';
 import { estimateOf, mergeEstimate, mergeForm } from '$lib/features/tasks/form';
-import { clashRows } from '$lib/features/tasks/labels';
+import { assigneeLabels, clashRows } from '$lib/features/tasks/labels';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 const base: TaskInput = {
@@ -320,5 +320,63 @@ describe('clashRows', () => {
     expect(row?.label).toBe('일정(시작일·마감일·마일스톤)');
     expect(row?.server).toBe(`마일스톤, 마감일 ${formatDay('2026-10-15')}`);
     expect(row?.mine).toBe(`시작일 ${formatDay('2026-10-01')}, 마감일 ${formatDay('2026-10-03')}`);
+  });
+
+  // 2차 검증: 서로 다른 값이 똑같아 보이는 쌍은 그렇다고 알린다(`looksSame`).
+  it('marks pairs that look the same', async () => {
+    await setLocale('ko', { reload: false });
+    const looks = (unit: MergeUnit, server: Partial<TaskInput>, mine: Partial<TaskInput>) =>
+      clashRows([unit], { ...base, ...server }, { ...base, ...mine }, new Map())[0]?.looksSame;
+    expect(looks('description', { description: '가 \n나' }, { description: '가\n나' })).toBe(true);
+    // 서버는 U+FEFF를 떼지 않는다(앞에 남아 보이지 않는다).
+    expect(looks('title', { title: '﻿제목' }, { title: '제목' })).toBe(true);
+    expect(looks('description', { description: '(비어 있음)' }, { description: '' })).toBe(true);
+    expect(looks('tags', { tags: ['a, b'] }, { tags: ['a', 'b'] })).toBe(true);
+    expect(looks('title', { title: '가  나' }, { title: '가 나' })).toBe(false);
+    expect(looks('description', { description: '가\n나' }, { description: '가 나' })).toBe(false);
+  });
+
+  // CodeRabbit: 이름이 같은 사람은 id 끝 네 글자로 구분한다(이름이 겹칠 때만, 같은 사람이 여러 번 들어와도 한 사람).
+  it('tells apart people with the same name', () => {
+    const labels = assigneeLabels([
+      { user_id: '0190a000-0000-7000-8000-00000000a1a1', display_name: 'Alex' },
+      { user_id: '0190a000-0000-7000-8000-00000000b2b2', display_name: 'Alex' },
+      { user_id: '0190a000-0000-7000-8000-00000000a1a1', display_name: 'Alex' },
+      { user_id: 'u3', display_name: '보라' },
+      { user_id: 'u3', display_name: '보라' },
+    ]);
+    expect([...labels.values()]).toEqual(['Alex #a1a1', 'Alex #b2b2', '보라']);
+  });
+});
+
+// 2차 반박 검증: 앞뒤 공백만 친 글은 저장되는 값이 그대로라 고친 칸이 아니다(D-94: 고치지 않은 칸은 서버 값). 공백은
+// 서버(Rust `str::trim`, 유니코드 White_Space)와 같은 글자만 뗀다.
+describe('mergeForm compares text the way the server trims it', () => {
+  it('takes the server value when I only added surrounding spaces', () => {
+    const merged = mergeForm(
+      base,
+      { ...base, title: ` ${base.title} ` },
+      { ...base, title: '남의 제목' },
+    );
+    expect(merged.clash).toBe(false);
+    expect(merged.form.title).toBe('남의 제목');
+    expect(merged.baseline.title).toBe('남의 제목');
+  });
+
+  it('trims the same characters as the server', () => {
+    const fresh = { ...base, title: '남의 제목' };
+    expect(mergeForm(base, { ...base, title: '남의 제목　' }, fresh).clash).toBe(false);
+    // JS `trim`은 U+FEFF를 떼지만 서버는 그대로 저장한다: 서버 값과 다른 값이다.
+    expect(mergeForm(base, { ...base, title: '﻿남의 제목' }, fresh).clash).toBe(true);
+  });
+});
+
+// 2차 검증 nit: 아주 큰 수는 Infinity가 되어 JSON의 null로 보내져 저장된 예상 시간을 지웠다. 서버 범위(i32) 밖은 잘못된
+// 입력이다.
+describe('estimateOf range', () => {
+  it('rejects numbers the server cannot store', () => {
+    expect(estimateOf('9'.repeat(309))).toBe('invalid');
+    expect(estimateOf('2147483648')).toBe('invalid');
+    expect(estimateOf('2147483647')).toBe(2147483647);
   });
 });

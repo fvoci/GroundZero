@@ -196,6 +196,7 @@
   "tasks_clash_schedule_dates": "Start {start}, due {due}",
   "tasks_clash_schedule_milestone": "Milestone, due {due}",
   "tasks_clash_unknown_person": "(unknown person)",
+  "tasks_clash_looks_same": "These look the same but are stored differently (for example spaces at line ends or invisible characters).",
   "tasks_title": "Title",
   "tasks_description": "Description",
   "tasks_start_date": "Start date",
