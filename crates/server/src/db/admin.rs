@@ -13,7 +13,6 @@
 //!     않는다).
 //! - migrate: 마이그레이션 역할 연결로 `migrations/`를 적용한다.
 
-use sqlx::postgres::PgPoolOptions;
 use sqlx::{Connection, PgConnection};
 
 use crate::config::{DatabaseUrl, DbCommandConfig, Secret};
@@ -25,6 +24,78 @@ pub const MIGRATOR_ROLE: &str = "fvoci_migrator";
 pub const APP_ROLE: &str = "fvoci_app";
 /// 스키마 이름.
 pub const SCHEMA: &str = "fvoci";
+
+/// 최소 엔진 버전이다. 이보다 새로운 모든 버전을 검증했다는 뜻은 아니다.
+const MIN_SERVER_VERSION: i32 = 170_000;
+
+fn require_server_version(version: i32) -> Result<(), AppError> {
+    if version < MIN_SERVER_VERSION {
+        return Err(AppError::Config(format!(
+            "PostgreSQL 17 or later is required (server_version_num={version}); \
+             bootstrap and migration changes were not started"
+        )));
+    }
+    Ok(())
+}
+
+/// 역할·스키마 DDL이나 SQLx 원장 생성보다 먼저 검사한다.
+async fn check_server_version(conn: &mut PgConnection) -> Result<(), AppError> {
+    let version: i32 =
+        sqlx::query_scalar("SELECT pg_catalog.current_setting('server_version_num')::int")
+            .fetch_one(conn)
+            .await?;
+    require_server_version(version)
+}
+
+/// 제품 SQL은 기본 SQL/PLpgSQL와 PG17의 UUID 검사 함수를 사용한다. 확장을 자동 설치하거나
+/// 권한을 올리지 않고, 실제 마이그레이션 역할이 사용할 수 있는지 먼저 확인한다.
+async fn check_migration_requirements(conn: &mut PgConnection, role: &str) -> Result<(), AppError> {
+    for language in ["sql", "plpgsql"] {
+        let properties: Option<(bool, bool)> = sqlx::query_as(
+            "SELECT lanpltrusted, pg_catalog.has_language_privilege($1, oid, 'USAGE')
+             FROM pg_catalog.pg_language WHERE lanname = $2",
+        )
+        .bind(role)
+        .bind(language)
+        .fetch_optional(&mut *conn)
+        .await?;
+        match properties {
+            Some((true, true)) => {}
+            Some((true, false)) => {
+                return Err(AppError::Config(format!(
+                    "role {role} requires USAGE on language {language}; \
+                     ask the database administrator to grant it before initialization"
+                )));
+            }
+            _ => {
+                return Err(AppError::Config(format!(
+                    "required trusted language {language} is unavailable; \
+                     ask the database administrator to enable it before initialization"
+                )));
+            }
+        }
+    }
+    let uuid_execute: Option<bool> = sqlx::query_scalar(
+        "SELECT pg_catalog.has_function_privilege($1, oid, 'EXECUTE')
+         FROM pg_catalog.pg_proc
+         WHERE oid = pg_catalog.to_regprocedure('pg_catalog.uuid_extract_version(uuid)')",
+    )
+    .bind(role)
+    .fetch_optional(conn)
+    .await?;
+    match uuid_execute {
+        Some(true) => Ok(()),
+        Some(false) => Err(AppError::Config(format!(
+            "role {role} requires EXECUTE on pg_catalog.uuid_extract_version(uuid); \
+             ask the database administrator to grant it before initialization"
+        ))),
+        None => Err(AppError::Config(
+            "required PostgreSQL function pg_catalog.uuid_extract_version(uuid) is unavailable; \
+             use PostgreSQL 17 or later with its built-in UUID functions"
+                .into(),
+        )),
+    }
+}
 
 fn need<'a>(value: Option<&'a Secret>, key: &str) -> Result<&'a Secret, AppError> {
     value.ok_or_else(|| AppError::Config(format!("{key} is required")))
@@ -289,6 +360,7 @@ pub async fn bootstrap(cfg: &DbCommandConfig) -> Result<(), AppError> {
     let app_pw = need(cfg.app_password.as_ref(), "FVOCI_DB_APP_PASSWORD")?;
 
     let mut conn = PgConnection::connect_with(&super::connect_options(admin)?).await?;
+    check_server_version(&mut conn).await?;
     // 역할·멤버십·스키마 DDL은 모두 트랜잭션 안에서 된다. 한 트랜잭션으로 묶어, 어느 단계에서 멈추든 한 역할만
     // 바뀐 채 남지 않게 한다. 이미 있는 두 역할은 무엇이든 바꾸기 전에 먼저 확인한다.
     let mut tx = conn.begin().await?;
@@ -314,6 +386,7 @@ pub async fn bootstrap(cfg: &DbCommandConfig) -> Result<(), AppError> {
         false,
     )
     .await?;
+    check_migration_requirements(&mut tx, MIGRATOR_ROLE).await?;
     prepare_database(&mut tx).await?;
     tx.commit().await?;
     conn.close().await?;
@@ -332,11 +405,31 @@ async fn role_exists(conn: &mut PgConnection, role: &str) -> Result<bool, AppErr
 /// 마이그레이션을 적용한다.
 pub async fn migrate(cfg: &DbCommandConfig) -> Result<(), AppError> {
     let url = need(cfg.migration_url.as_ref(), "DATABASE_MIGRATION_URL")?;
-    let pool = PgPoolOptions::new()
-        .max_connections(1)
-        .connect_with(super::connect_options(url)?)
+    let mut conn = PgConnection::connect_with(&super::connect_options(url)?).await?;
+    check_server_version(&mut conn).await?;
+    let role: String = sqlx::query_scalar("SELECT current_user::text")
+        .fetch_one(&mut conn)
         .await?;
-    sqlx::migrate!("./migrations").run(&pool).await?;
-    pool.close().await;
+    check_migration_requirements(&mut conn, &role).await?;
+    sqlx::migrate!("./migrations").run(&mut conn).await?;
+    conn.close().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn minimum_postgres_version_has_no_upper_bound() {
+        for version in [160_000, 160_999] {
+            let result = require_server_version(version);
+            assert!(
+                matches!(result, Err(AppError::Config(message)) if message.contains("PostgreSQL 17 or later") && message.contains("changes were not started"))
+            );
+        }
+        for version in [170_000, 170_009, 180_003, 190_000] {
+            assert!(require_server_version(version).is_ok());
+        }
+    }
 }
