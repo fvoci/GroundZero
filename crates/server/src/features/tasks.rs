@@ -136,9 +136,6 @@ pub struct Task {
     pub tags: Vec<String>,
     /// 마일스톤이면 마감일 하나만 쓴다.
     pub milestone: bool,
-    /// 같은 항목 안의 선행 업무 id(`predecessors`와 같은 순서). 종류·지연일은 `predecessors`에 있다.
-    #[schema(value_type = Vec<String>)]
-    pub predecessor_ids: Vec<Uuid>,
     /// 선행 관계: 선행 업무, 종류(FS·SS·FF·SF), 지연일(D-91). 후속 업무는 다른 업무의 이 목록을 거꾸로 찾는다.
     pub predecessors: Vec<TaskLink>,
     /// 반복 업무의 회차면 그 반복.
@@ -496,7 +493,6 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 estimate_minutes,
                 tags,
                 milestone,
-                predecessor_ids,
                 predecessors,
                 series: match (series_id, series_root, series_timezone) {
                     (Some(id), Some(root_task_id), Some(timezone)) => Some(TaskSeries {

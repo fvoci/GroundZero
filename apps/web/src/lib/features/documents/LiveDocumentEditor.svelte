@@ -4,11 +4,12 @@
   // 서버와 맞춰지지 않은 동안(끊김) 고친 본문은 이 사용자의 초안으로 남겨, 실시간이 꺼지거나 권한이 바뀌거나
   // 새로고침해도 사라지지 않게 한다. 다시 열 때 서버 내용과 다르면 내 노트로 보존할지 묻는다(실시간 문서에 섞지 않음).
   import { formatInstant } from '$lib/display';
-  import { onDestroy, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
 
   import type { DocNode, DocumentView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { switchAccount } from '$lib/features/feedback/feedback.svelte';
   import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { me } from '$lib/me.svelte';
@@ -45,6 +46,9 @@
 
   const { initial, references, onsaved, onrealtimeoff, onreload }: Props = $props();
   const start = untrack(() => initial);
+  // 이 화면을 연 사용자. 제목 저장·초안 보존(저장 API)과 실시간 연결(다시 붙을 때도)에 그대로 보내 서버가 세션의
+  // 사용자와 비교한다(#60, docs/development.md 96절).
+  const editingUser = untrack(() => me.userId);
   const INLINE_IMAGES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
   let session = $state<LiveSession | undefined>(undefined);
@@ -74,16 +78,19 @@
   let keepingFound = $state(false);
   let foundRequest: { note: string; save: string } | undefined;
   let keepTimer: ReturnType<typeof setTimeout> | undefined;
+  // 다른 계정으로 바뀌어 연결이 거절됐는데(4412) 확인받지 못한 편집을 이 브라우저에 남기지 못했다. 다시 읽지 않고 알린다.
+  let accountUnsavedLost = $state(false);
 
   /** 남겼으면 참. 고를 때까지 자리를 비워 둔 지난 초안이 있거나(`reserved`) 저장소가 가득 차면 남기지 못한다. */
   function keepDraft(): boolean {
     if (keepTimer !== undefined) clearTimeout(keepTimer);
     keepTimer = undefined;
-    if (latest === undefined || reserved !== undefined) return false;
+    if (reserved !== undefined) return false;
     return storeDraft(start.id, {
       baseRevision: start.revision,
       title,
-      body: latest,
+      // 편집기가 아직 본문을 넘기지 않았으면(첫 동기화 전) 연 내용 그대로다(제목만 고친 경우도 남긴다).
+      body: latest ?? start.body,
       savedAt: new Date().toISOString(),
     });
   }
@@ -97,6 +104,11 @@
   /** 멈추거나 닫기 전에, 서버가 받았다고 확인되지 않은 편집이 있으면 바로 남긴다. */
   function keepIfDirty(): void {
     if (watch?.dirty === true) keepDraft();
+  }
+
+  /** 서버에 반영되지 않은 편집이 있는지: 확인받지 못한 본문, 또는 저장하지 않은 제목. */
+  function hasPending(): boolean {
+    return watch?.dirty === true || (start.can_edit && title.trim() !== savedTitle);
   }
 
   // 서버가 연결을 닫아(권한·세션 끝 4403, 문서가 바뀜 4409 등) 확인받지 못한 편집이 있다. 서버에 반영하지 않은 것과
@@ -157,6 +169,7 @@
         color: colorFor(me.userId),
       },
       start.can_edit,
+      editingUser,
     );
     watch?.stop();
     watch = watchUnsynced(next.document, next.provider, next.persisted, {
@@ -178,6 +191,16 @@
       const stop = event === null ? undefined : stopFor(event.code);
       if (stop === undefined) {
         if (event?.code === 1006) void checkRefusal(next);
+        return;
+      }
+      if (stop === 'account') {
+        // 이 편집기를 연 계정이 아닌 세션으로 다시 붙었다(4412). 방에 들어가지 않았다. 확인받지 못한 편집(저장하지 않은
+        // 제목 포함)을 앞 계정의 초안으로 남겼으면 이 창을 지금 계정으로 다시 읽는다. 남기지 못했으면(저장소 가득 참 등)
+        // 다시 읽으면 사라지므로 화면에 두고 알린다(사람이 옮겨 둔 뒤 새로 고친다).
+        next.provider.disconnect();
+        stopped = stop;
+        if (!hasPending() || keepDraft()) switchAccount();
+        else accountUnsavedLost = true;
         return;
       }
       const kept = keepUnsaved();
@@ -246,6 +269,18 @@
   }
 
   open();
+  // 창을 떠나거나 다시 읽을 때(계정 전환으로 다시 읽기 포함: 저장 API의 409 `account_changed`, 창 복귀 확인) 반영되지 않은
+  // 편집을 초안으로 남긴다. 남기지 못하면(저장 공간 부족 등) 떠나기를 경고해 화면의 내용을 지킨다.
+  onMount(() => {
+    const beforeUnload = (event: BeforeUnloadEvent): void => {
+      if (!hasPending() || keepDraft()) return;
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload);
+    };
+  });
   onDestroy(() => {
     keepIfDirty();
     watch?.stop();
@@ -263,8 +298,9 @@
       title: draft.title.trim() === '' ? start.title : draft.title.trim(),
     });
     try {
-      const created = await api.createNote(foundRequest.note, copyTitle);
+      const created = await api.createNote(editingUser, foundRequest.note, copyTitle);
       const saved = await api.saveDocument(created.id, {
+        expectedUser: editingUser,
         requestId: foundRequest.save,
         baseRevision: created.revision,
         title: copyTitle,
@@ -286,7 +322,10 @@
 
   /** 본문 첨부로 올리고 넣을 주소를 돌려준다(일반 편집과 같다). */
   async function insertFile(file: File): Promise<{ href: string; name: string; image: boolean }> {
-    const done = await uploadFile(file, { target: { kind: 'document', id: start.id } });
+    const done = await uploadFile(file, {
+      expectedUser: editingUser,
+      target: { kind: 'document', id: start.id },
+    });
     if (done.file_id === null) throw new Error(done.failure ?? m.documents_upload_failed());
     const image = INLINE_IMAGES.includes(file.type);
     return {
@@ -310,6 +349,7 @@
       for (let tries = 0; tries < 2; tries += 1) {
         const current = await api.document(start.id);
         const result = await api.saveDocument(start.id, {
+          expectedUser: editingUser,
           requestId: newRequestId(),
           baseRevision: current.revision,
           title: next,
@@ -350,6 +390,10 @@
         return m.documents_live_reload();
       case 'off':
         return m.documents_live_off();
+      case 'account':
+        return accountUnsavedLost
+          ? m.documents_live_account_stopped()
+          : m.documents_live_account_changed();
     }
   }
 </script>
@@ -360,7 +404,7 @@
     <span role="status" aria-live="polite" class="text-muted-foreground"
       >{stopped === undefined ? statusText(status) : stopText(stopped)}</span
     >
-    {#if stopped !== undefined}
+    {#if stopped !== undefined && stopped !== 'account'}
       <Button size="sm" variant="outline" onclick={restart}>{m.documents_live_reconnect()}</Button>
     {/if}
   </div>
@@ -413,6 +457,9 @@
     {#if foundMessage !== undefined}<p role="alert" class="text-sm text-destructive">
         {foundMessage}
       </p>{/if}
+  {/if}
+  {#if accountUnsavedLost}
+    <p role="alert" class="text-sm text-destructive">{m.documents_live_account_changed_lost()}</p>
   {/if}
   {#if titleMessage !== undefined}<p role="alert" class="text-sm text-destructive">
       {titleMessage}

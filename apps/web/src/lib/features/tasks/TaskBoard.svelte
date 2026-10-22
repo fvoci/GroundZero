@@ -100,6 +100,8 @@
   let sort = $state<TaskSort>('position');
   let views = $state<SavedViewView[]>([]);
   let selectedView = $state('');
+  // 보기를 지우는 중(두 번 눌러 같은 보기를 다시 지우려다 404 실패를 보이지 않게).
+  let deletingView = $state(false);
   let viewName = $state('');
   // 같은 이름·설정의 재시도는 같은 요청 id, 고치면 새 id.
   const viewKey = new RetryKey();
@@ -184,7 +186,8 @@
   }
 
   async function deleteView(): Promise<void> {
-    if (selectedView === '') return;
+    if (selectedView === '' || deletingView) return;
+    deletingView = true;
     try {
       await api.deleteView(selectedView);
       selectedView = '';
@@ -192,6 +195,8 @@
       status = m.tasks_view_deleted();
     } catch (e: unknown) {
       error = errorText(e, m.tasks_view_delete_failed());
+    } finally {
+      deletingView = false;
     }
   }
 
@@ -1254,7 +1259,7 @@
       >{m.tasks_view_save()}</Button
     >
     {#if selectedView !== ''}
-      <Button size="sm" variant="ghost" onclick={() => void deleteView()}
+      <Button size="sm" variant="ghost" disabled={deletingView} onclick={() => void deleteView()}
         >{m.tasks_view_delete()}</Button
       >
     {/if}

@@ -90,6 +90,9 @@ pub enum CloseReason {
     Invalid,
     /// 권한·세션이 끝남. 다시 붙지 않는다.
     AccessLost,
+    /// 연결한 세션의 사용자가 연결 요청의 기대 사용자(`expected_user`, 편집기를 연 사용자)와 다름. 다른 탭에서 계정을
+    /// 바꾼 뒤 앞 계정의 화면이 다시 붙었다. 방에 들어가기 전에 닫고 다시 붙지 않는다.
+    AccountChanged,
     /// 문서가 다른 길로 바뀌었거나 클라이언트 상태가 맞지 않아 새 문서로 다시 열어야 함.
     Reload,
     /// 워크스페이스가 실시간을 끔.
@@ -106,6 +109,7 @@ impl CloseReason {
         match self {
             Self::Invalid => 4400,
             Self::AccessLost => 4403,
+            Self::AccountChanged => 4412,
             Self::Reload => 4409,
             Self::RealtimeOff => 4410,
             Self::Busy => 4503,
@@ -118,6 +122,7 @@ impl CloseReason {
         match self {
             Self::Invalid => "invalid message",
             Self::AccessLost => "access ended",
+            Self::AccountChanged => "signed-in account changed",
             Self::Reload => "document changed; reload",
             Self::RealtimeOff => "realtime editing turned off",
             Self::Busy => "too much traffic; reconnect later",

@@ -773,3 +773,67 @@ async fn export_follows_download_permission_and_is_audited() {
     .unwrap();
     assert_eq!(note_audit, (None, writer.id.0, bob.id.0));
 }
+
+/// 감사 W6: 문서 설정은 두 칸을 늘 함께 받아, 한 칸만 바꾼 화면이 연 뒤 다시 읽지 않은 다른 칸을 함께 보내 다른 소유
+/// 권한자가 켠 비공개를 되돌렸다. 바꾸는 칸만 보내고, 보내지 않은 칸은 잠근 뒤의 지금 값 그대로다.
+#[tokio::test]
+async fn document_settings_change_only_the_fields_sent() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "설정 한 칸").await;
+    let (second, _) = add_member(&app, &state, &admin, &ws, "second", "admin").await;
+    let doc = create_doc(&app, &admin, &ws, "회의록").await;
+    let uri = format!("/api/documents/{}/settings", doc["id"].as_str().unwrap());
+
+    // 관리자가 비공개로 바꾼다. 다른 관리자의 화면은 아직 공개로 열려 있고, 복제 허용만 켠다.
+    assert_eq!(
+        settings(&app, &admin, &doc, "private", false).await,
+        StatusCode::OK
+    );
+    let copy = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&second),
+        Some(json!({ "allow_copy": true })),
+    )
+    .await;
+    assert_eq!(copy.status, StatusCode::OK, "{:?}", copy.json);
+    assert_eq!(copy.json["visibility"], "private");
+    assert_eq!(copy.json["allow_copy"], true);
+    // 공개 범위만 보내면 복제 허용은 그대로다.
+    let open = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&admin),
+        Some(json!({ "visibility": "workspace", "allow_copy": null })),
+    )
+    .await;
+    assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
+    assert_eq!(open.json["visibility"], "workspace");
+    assert_eq!(open.json["allow_copy"], true);
+    // 개인 노트는 여전히 비공개만 된다.
+    let note = create_note(&app, &admin, "메모").await;
+    let note_uri = format!("/api/documents/{}/settings", note["id"].as_str().unwrap());
+    let r = send(
+        &app,
+        Method::PUT,
+        &note_uri,
+        Some(&admin),
+        Some(json!({ "allow_copy": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    assert_eq!(r.json["visibility"], "private");
+    let r = send(
+        &app,
+        Method::PUT,
+        &note_uri,
+        Some(&admin),
+        Some(json!({ "visibility": "workspace" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+}

@@ -148,5 +148,128 @@ async fn local_complete_failure_leaves_no_temp_file() {
         .map(|d| d.filter_map(Result::ok).map(|e| e.file_name()).collect())
         .unwrap_or_default();
     assert!(left.is_empty(), "temp files left: {left:?}");
+    let left: Vec<_> = std::fs::read_dir(dir.join("uploads").join(&upload))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with("staged-"))
+        .collect();
+    assert!(left.is_empty(), "staged files left: {left:?}");
+    let _ignored = std::fs::remove_dir_all(&dir);
+}
+
+/// #65: 로컬 저장소는 마치기 시도마다 따로 준비본에 조각을 잇고, 게시하기 전에는 최종 키를 건드리지 않는다. 다른 시도가
+/// 게시하면(조각 폴더가 지워지면) 늦게 이은 준비본은 더 게시되지 않는다.
+#[tokio::test]
+async fn local_staging_leaves_the_object_alone_until_published() {
+    let dir = std::env::temp_dir().join(format!("fvoci-storage-{}", uuid::Uuid::now_v7().simple()));
+    let storage = Storage::new(&StorageConfig::Local { dir: dir.clone() });
+    let key = format!("test/{}", uuid::Uuid::now_v7().simple());
+    let upload = storage.begin(&key).await.unwrap();
+    let put = |body: &'static [u8]| {
+        let (storage, key, upload) = (storage.clone(), key.clone(), upload.clone());
+        async move {
+            let etag = storage
+                .put_part(&key, &upload, 1, Bytes::from_static(body))
+                .await
+                .unwrap();
+            [Part {
+                number: 1,
+                etag,
+                size: body.len() as u64,
+            }]
+        }
+    };
+    let late = storage
+        .assemble(&key, &upload, &put(b"old bytes").await)
+        .await
+        .unwrap();
+    // 다른 시도가 조각을 다시 받아 잇는다. 준비본은 서로 섞이지 않는다.
+    let current = storage
+        .assemble(&key, &upload, &put(b"new bytes").await)
+        .await
+        .unwrap();
+    let sha = |bytes: &[u8]| hex::encode(Sha256::digest(bytes));
+    assert_eq!(
+        storage.digest_assembled(&key, &late).await.unwrap(),
+        (sha(b"old bytes"), 9)
+    );
+    assert_eq!(
+        storage.digest_assembled(&key, &current).await.unwrap(),
+        (sha(b"new bytes"), 9)
+    );
+    assert!(matches!(storage.get(&key).await, Err(AppError::NotFound)));
+
+    storage.publish(&key, &upload, &current).await.unwrap();
+    current.discard().await;
+    assert_eq!(read_all(&storage, &key).await, b"new bytes");
+    assert!(!dir.join("uploads").join(&upload).exists());
+    // 늦게 이은 준비본은 조각 폴더와 함께 지워져 게시할 수 없다. 읽기는 열어 둔 파일로 계속된다.
+    assert_eq!(
+        storage.digest_assembled(&key, &late).await.unwrap(),
+        (sha(b"old bytes"), 9)
+    );
+    assert!(storage.publish(&key, &upload, &late).await.is_err());
+    late.discard().await;
+    assert_eq!(read_all(&storage, &key).await, b"new bytes");
+    assert!(matches!(
+        storage.assemble(&key, &upload, &[]).await,
+        Err(AppError::NotFound)
+    ));
+    let _ignored = std::fs::remove_dir_all(&dir);
+}
+
+/// #65 리뷰: 잇는 사이 다른 시도가 게시해 조각 폴더를 지우면, 늦은 시도는 조각을 다시 받으라는 실패가 아니라 이미
+/// 게시된 것(`NotFound`)으로 본다. 첫 조각 자리에 둔 FIFO에서 읽다가 멈춘 사이 폴더를 지운다.
+#[cfg(unix)]
+#[tokio::test]
+async fn local_staging_sees_parts_removed_midway_as_already_published() {
+    let dir = std::env::temp_dir().join(format!("fvoci-storage-{}", uuid::Uuid::now_v7().simple()));
+    let storage = Storage::new(&StorageConfig::Local { dir: dir.clone() });
+    let key = format!("test/{}", uuid::Uuid::now_v7().simple());
+    let upload = storage.begin(&key).await.unwrap();
+    let mut parts = Vec::new();
+    for number in 1..=2 {
+        let etag = storage
+            .put_part(&key, &upload, number, Bytes::from_static(b"part"))
+            .await
+            .unwrap();
+        parts.push(Part {
+            number,
+            etag,
+            size: 4,
+        });
+    }
+    let parts_dir = dir.join("uploads").join(&upload);
+    let first = parts_dir.join("00001");
+    std::fs::remove_file(&first).unwrap();
+    let made = std::process::Command::new("mkfifo")
+        .arg(&first)
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let staging = {
+        let (storage, key, upload) = (storage.clone(), key.clone(), upload.clone());
+        tokio::spawn(async move { storage.assemble(&key, &upload, &parts).await })
+    };
+    let mut writer = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        tokio::task::spawn_blocking(move || std::fs::OpenOptions::new().write(true).open(first)),
+    )
+    .await
+    .expect("staging never started reading the parts")
+    .unwrap()
+    .unwrap();
+    std::fs::remove_dir_all(&parts_dir).unwrap();
+    {
+        use std::io::Write as _;
+        writer.write_all(b"part").unwrap();
+    }
+    drop(writer);
+    let staged = tokio::time::timeout(std::time::Duration::from_secs(30), staging)
+        .await
+        .expect("staging never finished")
+        .unwrap();
+    assert!(matches!(staged, Err(AppError::NotFound)), "{staged:?}");
     let _ignored = std::fs::remove_dir_all(&dir);
 }

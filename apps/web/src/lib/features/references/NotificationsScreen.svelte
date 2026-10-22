@@ -54,10 +54,28 @@
       router.navigate(itemPath(n.workspace_id, n.item_id));
   }
 
+  // "모두 읽음" 실패는 목록 대신이 아니라 단추 곁에 알린다(목록은 그대로 둔다, D-82).
+  let readError = $state<string | undefined>(undefined);
+  // 요청 중에는 다시 들어오지 않는다. 겹친 요청의 늦은 실패가 이미 갱신된 목록 위에 오류를 띄우면,
+  // 단추가 사라진 뒤라 다시 시도해 지울 수 없다.
+  let marking = $state(false);
+
   async function readAll(): Promise<void> {
-    await api.markNotificationsRead(null);
-    await load();
-    onchanged();
+    if (marking) return;
+    marking = true;
+    readError = undefined;
+    try {
+      try {
+        await api.markNotificationsRead(null);
+      } catch (e: unknown) {
+        readError = errorText(e, m.references_notifications_read_failed());
+        return;
+      }
+      await load();
+      onchanged();
+    } finally {
+      marking = false;
+    }
   }
 </script>
 
@@ -67,11 +85,18 @@
       {m.references_notifications_heading()}
     </h1>
     {#if unread > 0}
-      <Button size="sm" variant="outline" class="ml-auto" onclick={() => void readAll()}
-        >{m.references_notifications_read_all()}</Button
+      <Button
+        size="sm"
+        variant="outline"
+        class="ml-auto"
+        disabled={marking}
+        onclick={() => void readAll()}>{m.references_notifications_read_all()}</Button
       >
     {/if}
   </div>
+  {#if readError !== undefined}
+    <p role="alert" class="text-sm text-destructive">{readError}</p>
+  {/if}
   {#if error !== undefined}
     <p role="alert" class="text-destructive">{error}</p>
   {:else if items === undefined}

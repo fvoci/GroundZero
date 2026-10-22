@@ -50,6 +50,17 @@ struct Client {
     persisted: Vec<Vec<u8>>,
 }
 
+/// 연결 주소. 웹이 하듯 기대 사용자(`expected_user`)를 연결하는 사용자로 붙인다. 값 자체(없음·다름·형식)는
+/// `the_live_connection_carries_the_expected_user`가 직접 시험한다. `query`는 `?write=1`처럼 `?`로 시작하거나 비었다.
+fn collab_url(addr: SocketAddr, doc: &str, user: Option<&TestUser>, query: &str) -> String {
+    let base = format!("ws://{addr}/api/documents/{doc}/collab{query}");
+    match user {
+        Some(u) if query.is_empty() => format!("{base}?expected_user={}", u.id.0),
+        Some(u) => format!("{base}&expected_user={}", u.id.0),
+        None => base,
+    }
+}
+
 /// 연결. 실패하면 HTTP 상태.
 async fn connect(
     addr: SocketAddr,
@@ -68,7 +79,7 @@ async fn connect_with(
     origin: bool,
     local: Doc,
 ) -> Result<Client, StatusCode> {
-    let mut request = format!("ws://{addr}/api/documents/{doc}/collab")
+    let mut request = collab_url(addr, doc, user, "")
         .into_client_request()
         .unwrap();
     if let Some(user) = user {
@@ -675,7 +686,7 @@ async fn refused_code_with(
     doc: &str,
     query: &str,
 ) -> Option<u16> {
-    let mut request = format!("ws://{addr}/api/documents/{doc}/collab{query}")
+    let mut request = collab_url(addr, doc, Some(user), query)
         .into_client_request()
         .unwrap();
     request
@@ -692,6 +703,168 @@ async fn refused_code_with(
         persisted: Vec::new(),
     };
     client.closed().await
+}
+
+/// 기대 사용자를 그대로(자동으로 붙이지 않고) 정해 연결한다. 업그레이드가 거절되면 HTTP 상태.
+async fn connect_raw(
+    addr: SocketAddr,
+    user: &TestUser,
+    doc: &str,
+    query: &str,
+) -> Result<Client, StatusCode> {
+    let mut request = format!("ws://{addr}/api/documents/{doc}/collab{query}")
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("cookie", HeaderValue::from_str(&user.cookie).unwrap());
+    request
+        .headers_mut()
+        .insert("origin", HeaderValue::from_static(common::PUBLIC_URL));
+    match tokio_tungstenite::connect_async(request).await {
+        Ok((ws, _)) => Ok(Client {
+            ws,
+            doc: Doc::new(),
+            presence: std::collections::HashMap::new(),
+            persisted: Vec::new(),
+        }),
+        Err(WsError::Http(response)) => {
+            Err(StatusCode::from_u16(response.status().as_u16()).unwrap())
+        }
+        Err(err) => panic!("websocket error {err}"),
+    }
+}
+
+/// 실시간 연결의 기대 사용자(#60, 사용자 결정 2026-10-22): 다른 탭에서 계정을 바꾼 뒤 y-websocket이 새 쿠키로 다시
+/// 붙어도, 앞 계정의 화면이 연 연결이면 방에 들어가기 전에 4412로 닫혀 그 화면의 미동기화 편집이 새 계정 이름으로
+/// 합쳐지지 않는다. 값이 없거나 형식이 틀리면 업그레이드 전에 400. 값은 비교에만 쓰고 권한을 주지 않는다.
+#[tokio::test]
+async fn the_live_connection_carries_the_expected_user() {
+    let state = common::state();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "실시간 기대 사용자").await;
+    let (w1, _) = add_member(&app, &state, &admin, &ws, "w1", "writer").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let outsider = login(&state, "outsider").await;
+    let doc = common::create_doc(&app, &w1, &ws, "기대 사용자 문서").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let on = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/realtime"),
+        Some(&admin),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!(on.status, StatusCode::NO_CONTENT);
+
+    // 일치하면 평소대로 붙고 편집이 오간다.
+    let mut watcher = connect(addr, Some(&admin), &id, true).await.unwrap();
+    let mut mine = connect(addr, Some(&w1), &id, true).await.unwrap();
+    mine.paragraph("w1의 편집").await;
+    assert!(watcher.until(|c| c.text().contains("w1의 편집")).await);
+
+    // w1의 세션(새 쿠키)인데 연결은 다른 사용자(admin)의 화면이 열었다: 방에 들어가기 전에 4412. 그사이 보낸 편집은
+    // 방에 들어가지 않는다.
+    let mut other = connect_raw(
+        addr,
+        &w1,
+        &id,
+        &format!("?write=1&expected_user={}", admin.id.0),
+    )
+    .await
+    .unwrap();
+    let fragment = other.doc.get_or_insert_xml_fragment(FRAGMENT);
+    {
+        let mut txn = other.doc.transact_mut();
+        let p = fragment.push_back(&mut txn, XmlElementPrelim::empty("paragraph"));
+        p.push_back(&mut txn, XmlTextPrelim::new("다른 계정의 편집"));
+    }
+    let update = other
+        .doc
+        .transact()
+        .encode_state_as_update_v1(&yrs::StateVector::default());
+    let _sent = other
+        .ws
+        .send(WsMessage::Binary(
+            Message::Sync(SyncMessage::Update(update))
+                .encode_v1()
+                .into(),
+        ))
+        .await;
+    assert_eq!(other.closed().await, Some(4412));
+    // 그 뒤의 편집이 도착했을 때 거절된 편집은 없다(들어갔다면 먼저 도착했다).
+    mine.paragraph("표시").await;
+    assert!(watcher.until(|c| c.text().contains("표시")).await);
+    assert!(
+        !watcher.text().contains("다른 계정의 편집"),
+        "{}",
+        watcher.text()
+    );
+
+    // 값이 없거나(옛 연결) 형식이 틀리면 업그레이드 전에 400.
+    for query in [
+        "",
+        "?write=1",
+        "?expected_user=",
+        "?write=1&expected_user=not-a-uuid",
+    ] {
+        assert_eq!(
+            connect_raw(addr, &w1, &id, query).await.err(),
+            Some(StatusCode::BAD_REQUEST),
+            "{query}"
+        );
+    }
+
+    // 쓰기 권한자의 id를 넣어도 권한이 생기지 않는다: 다르면 4412로 닫힐 뿐이고, 자기 id면 평소대로(독자의 편집기
+    // 연결은 4403, 멤버가 아니면 404).
+    for who in [&reader, &outsider] {
+        let mut c = connect_raw(
+            addr,
+            who,
+            &id,
+            &format!("?write=1&expected_user={}", w1.id.0),
+        )
+        .await
+        .unwrap();
+        assert_eq!(c.closed().await, Some(4412));
+    }
+    assert_eq!(
+        refused_code_with(addr, &reader, &id, "?write=1").await,
+        Some(4403)
+    );
+    assert_eq!(
+        connect(addr, Some(&outsider), &id, true).await.err(),
+        Some(StatusCode::NOT_FOUND)
+    );
+
+    // 모두 나가면 남는 리비전에도 거절된 편집은 없다.
+    mine.close().await;
+    watcher.close().await;
+    let mut body = String::new();
+    for _ in 0..40 {
+        body = send(
+            &app,
+            Method::GET,
+            &format!("/api/documents/{id}"),
+            Some(&admin),
+            None,
+        )
+        .await
+        .json["body"]
+            .to_string();
+        if body.contains("표시") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    assert!(
+        body.contains("w1의 편집") && body.contains("표시"),
+        "{body}"
+    );
+    assert!(!body.contains("다른 계정의 편집"), "{body}");
 }
 
 /// 실시간 끄기 회귀(사용자 지시 2026-10-17, 리뷰 반영): 끄는 동안 새 방이 열리지 않고(4503), 열린 방과 방 없이 남은

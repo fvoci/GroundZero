@@ -244,7 +244,6 @@ async fn api_not_found() -> AppError {
 #[derive(Debug, OpenApi)]
 #[openapi(
     info(title = "fvoci API", version = "0.1.0"),
-    modifiers(&OptionalBodies),
     paths(
         healthz,
         accounts::login,
@@ -285,7 +284,6 @@ async fn api_not_found() -> AppError {
         tasks::add_checklist,
         tasks::update_checklist_item,
         tasks::delete_checklist_item,
-        schedule::preview,
         schedule::plan,
         schedule::plan_link,
         schedule::add_predecessor,
@@ -459,6 +457,7 @@ async fn api_not_found() -> AppError {
         documents::CreateDocument,
         documents::SaveDocument,
         documents::ConflictBody,
+        documents::SaveConflict,
         documents::Access,
         documents::SharedDocument,
         documents::DocumentSettings,
@@ -497,6 +496,7 @@ async fn api_not_found() -> AppError {
         schedule::LinkKind,
         schedule::LinkInput,
         schedule::SetPredecessor,
+        schedule::LinkBase,
         schedule::PredecessorConflict,
         schedule::TaskLink,
         events::EventKind,
@@ -547,6 +547,7 @@ async fn api_not_found() -> AppError {
         home::MarkKind,
         home::MarkedTarget,
         home::Home,
+        home::UpNextCounts,
         home::SetMark,
         home::MarkState,
         trash::Trashed,
@@ -672,36 +673,6 @@ async fn api_not_found() -> AppError {
     )
 )]
 pub struct ApiDoc;
-
-/// 본문을 생략할 수 있는 요청. `Option<Json<T>>`를 utoipa에 `Option<T>`로 적으면 본문 `null`까지 허용하는 것으로
-/// 나오지만, 서버는 `Content-Type`이 없을 때만 본문 없음으로 받는다(있으면 `T`여야 한다). 그래서 계약에는 "선택 본문
-/// `T`"로 적는다(D-91 관계 설정: 본문이 없으면 옛 동작).
-struct OptionalBodies;
-
-impl utoipa::Modify for OptionalBodies {
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        use utoipa::openapi::{Ref, RefOr, Required};
-        let bodies = [(
-            "/api/tasks/{task_id}/predecessors/{predecessor_id}",
-            "SetPredecessor",
-        )];
-        for (path, schema) in bodies {
-            let Some(body) = openapi
-                .paths
-                .paths
-                .get_mut(path)
-                .and_then(|item| item.put.as_mut())
-                .and_then(|op| op.request_body.as_mut())
-            else {
-                continue;
-            };
-            body.required = Some(Required::False);
-            for content in body.content.values_mut() {
-                content.schema = Some(RefOr::Ref(Ref::from_schema_name(schema)));
-            }
-        }
-    }
-}
 
 /// 라우터를 조립한다.
 /// 업로드 조각은 서버 전체에서 정해진 수만 동시에 받는다(본문을 읽기 전에 자리를 잡는다, D-52).
@@ -874,7 +845,6 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/tasks/{task_id}/position", put(tasks::move_task))
         .route("/tasks/{task_id}/parent", put(tasks::set_parent))
-        .route("/tasks/{task_id}/schedule-preview", post(schedule::preview))
         .route("/tasks/{task_id}/schedule-plan", post(schedule::plan))
         .route(
             "/tasks/{task_id}/predecessors/{predecessor_id}/schedule-plan",
@@ -1178,12 +1148,12 @@ mod tests {
         }
     }
 
-    /// 관계 설정의 본문은 생략할 수 있지만(옛 동작) `null`은 아니다(D-91). 계약이 서버 동작과 같아야 한다.
+    /// 관계 설정의 본문은 필수다(D-92로 본문 없는 옛 동작을 없앰). 계약이 서버 동작과 같아야 한다.
     #[test]
-    fn the_link_body_is_optional_but_not_nullable() {
+    fn the_link_body_is_required() {
         let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
         let body = &doc["paths"]["/api/tasks/{task_id}/predecessors/{predecessor_id}"]["put"]["requestBody"];
-        assert_eq!(body["required"], false);
+        assert_eq!(body["required"], true);
         assert_eq!(
             body["content"]["application/json"]["schema"],
             serde_json::json!({ "$ref": "#/components/schemas/SetPredecessor" })
@@ -1226,6 +1196,45 @@ mod tests {
         assert!(required("TaskConflict").iter().any(|k| k == "current"));
         assert!(!required("ErrorBody").iter().any(|k| k == "current"));
         assert!(required("ErrorBody").iter().any(|k| k == "message"));
+    }
+
+    /// 문서 저장의 409는 두 모양이다(#60): 리비전 충돌이면 `ConflictBody`, `account_changed`·`invalid_state`면
+    /// `ErrorBody`. 기대 사용자 머리는 적용 경로(문서 저장·내 노트 만들기)에서 필수다.
+    #[test]
+    fn the_save_conflict_and_the_expected_user_header_are_in_the_contract() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
+        let save = &doc["paths"]["/api/documents/{document_id}"]["put"];
+        assert_eq!(
+            save["responses"]["409"]["content"]["application/json"]["schema"],
+            serde_json::json!({ "$ref": "#/components/schemas/SaveConflict" })
+        );
+        let one_of: Vec<&str> = doc["components"]["schemas"]["SaveConflict"]["oneOf"]
+            .as_array()
+            .map(|v| v.iter().filter_map(|s| s["$ref"].as_str()).collect())
+            .unwrap_or_default();
+        assert_eq!(
+            one_of,
+            [
+                "#/components/schemas/ConflictBody",
+                "#/components/schemas/ErrorBody"
+            ]
+        );
+        for operation in [
+            save,
+            &doc["paths"]["/api/me/notes"]["post"],
+            &doc["paths"]["/api/uploads"]["post"],
+        ] {
+            let header = operation["parameters"]
+                .as_array()
+                .and_then(|ps| {
+                    ps.iter()
+                        .find(|p| p["name"] == crate::features::accounts::EXPECTED_USER_HEADER)
+                })
+                .cloned()
+                .unwrap_or_default();
+            assert_eq!(header["in"], "header", "{operation}");
+            assert_eq!(header["required"], true, "{operation}");
+        }
     }
 
     /// 리뷰: 이동의 409는 두 모양이다. 확인한 미리보기가 맞지 않으면 `MovePreview`, 실시간 방의 편집을 먼저 리비전으로

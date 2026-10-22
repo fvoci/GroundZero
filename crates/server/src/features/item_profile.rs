@@ -9,7 +9,7 @@ use time::Date;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{needed_ids, new_ids};
+use crate::db::{is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::modules::ModuleKind;
@@ -443,32 +443,39 @@ pub async fn copy(
     if input.title.trim().chars().count() > state.config.limits.max_title_chars {
         return Err(AppError::BadRequest("the title is too long".into()));
     }
-    let mut tx = state.db.begin_as(user).await?;
-    let ids = needed_ids(
-        tx.conn(),
-        sqlx::query_scalar("SELECT app_copy_item_ids($1)").bind(item),
-    )
-    .await?;
-    let (item_id, skipped_documents): (ItemId, i32) = sqlx::query_as(
-        "SELECT copied_item, skipped_count FROM app_copy_item($1, $2, $3, $4, $5, $6)",
-    )
-    .bind(item)
-    .bind(input.module_id)
-    .bind(input.request_id)
-    .bind(input.title.trim())
-    .bind(input.reset)
-    .bind(ids)
-    .fetch_one(tx.conn())
-    .await
-    .map_err(AppError::from_db_function)?;
-    tx.commit().await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(CopiedItem {
+    let run = || async {
+        let mut tx = state.db.begin_as(user).await?;
+        let ids = needed_ids(
+            tx.conn(),
+            sqlx::query_scalar("SELECT app_copy_item_ids($1)").bind(item),
+        )
+        .await?;
+        let (item_id, skipped_documents): (ItemId, i32) = sqlx::query_as(
+            "SELECT copied_item, skipped_count FROM app_copy_item($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(item)
+        .bind(input.module_id)
+        .bind(input.request_id)
+        .bind(input.title.trim())
+        .bind(input.reset)
+        .bind(ids)
+        .fetch_one(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+        tx.commit().await?;
+        Ok(CopiedItem {
             item_id,
             skipped_documents,
-        }),
-    ))
+        })
+    };
+    // 같은 요청 id의 앞 요청(응답을 잃고 다시 보낸 것)이 아직 끝나지 않았으면 고유 제약에서 기다린 뒤 23505로 끝난다.
+    // 그때는 한 번 더 돌려 앞 요청이 만든 복제본을 돌려준다(항목 만들기와 같다, 감사 S10. 전에는 500).
+    let copied = match run().await {
+        Ok(copied) => copied,
+        Err(AppError::Database(e)) if is_unique_violation(&e) => run().await?,
+        Err(e) => return Err(e),
+    };
+    Ok((StatusCode::CREATED, Json(copied)))
 }
 
 /// 템플릿 표시·해제(쓸 수 있는 사람).
