@@ -4,6 +4,7 @@
   "home_bucket_overdue": "Overdue",
   "home_bucket_today": "Today",
   "home_bucket_upcoming": "Upcoming",
+  "home_bucket_more": "Showing the {shown} with the earliest due dates (of {total}).",
   "home_personal": "Personal",
   "home_memo_created": "Memo created: “{title}”",
   "home_pick_item_required": "Choose an item to add it to.",

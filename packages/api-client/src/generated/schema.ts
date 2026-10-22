@@ -3137,7 +3137,10 @@ export interface components {
             recent_tasks: components["schemas"]["HomeTask"][];
             /** @description 보는 사람 시간대의 오늘. */
             today: string;
+            /** @description 묶음(기한 지남·오늘·다가오는 일)마다 마감이 이른 것부터 50개까지(`UP_NEXT_PER_BUCKET`). */
             up_next: components["schemas"]["HomeTask"][];
+            /** @description 묶음마다의 전체 수. `up_next`보다 많으면 잘린 것이다. */
+            up_next_counts: components["schemas"]["UpNextCounts"];
         };
         /** @description 홈의 문서 한 줄. */
         HomeDocument: {
@@ -4461,6 +4464,15 @@ export interface components {
         UnitsPlanned: {
             /** Format: int32 */
             planned: number;
+        };
+        /** @description Up Next 묶음마다의 전체 수. */
+        UpNextCounts: {
+            /** Format: int64 */
+            overdue: number;
+            /** Format: int64 */
+            today: number;
+            /** Format: int64 */
+            upcoming: number;
         };
         /** @description 체크리스트 항목 고치기. 보낸 칸만 바꾼다(빠진 칸은 그대로). 둘 다 없으면 400. */
         UpdateChecklistItem: {

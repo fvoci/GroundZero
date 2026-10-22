@@ -12390,6 +12390,7 @@
         "required": [
           "today",
           "up_next",
+          "up_next_counts",
           "recent_tasks",
           "recent_documents",
           "active_items",
@@ -12435,7 +12436,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/HomeTask"
-            }
+            },
+            "description": "묶음(기한 지남·오늘·다가오는 일)마다 마감이 이른 것부터 50개까지(`UP_NEXT_PER_BUCKET`)."
+          },
+          "up_next_counts": {
+            "$ref": "#/components/schemas/UpNextCounts",
+            "description": "묶음마다의 전체 수. `up_next`보다 많으면 잘린 것이다."
           }
         }
       },
@@ -16264,6 +16270,29 @@
           "planned": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "UpNextCounts": {
+        "type": "object",
+        "description": "Up Next 묶음마다의 전체 수.",
+        "required": [
+          "overdue",
+          "today",
+          "upcoming"
+        ],
+        "properties": {
+          "overdue": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "today": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "upcoming": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

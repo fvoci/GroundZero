@@ -1618,6 +1618,8 @@ export interface HomeTaskView {
 export interface HomeView {
   today: string;
   up_next: HomeTaskView[];
+  /** 묶음마다의 전체 수. `up_next`는 묶음마다 50개까지라 이보다 적을 수 있다. */
+  up_next_counts: { overdue: number; today: number; upcoming: number };
   recent_tasks: HomeTaskView[];
   recent_documents: {
     id: string;
@@ -1682,11 +1684,17 @@ function parseMarked(value: Json): MarkedTargetView {
   };
 }
 
+function parseUpNextCounts(value: unknown): HomeView['up_next_counts'] {
+  const c = rec(value, 'up next counts');
+  return { overdue: int(c, 'overdue'), today: int(c, 'today'), upcoming: int(c, 'upcoming') };
+}
+
 function parseHome(value: Json): HomeView {
   const o = rec(value, 'home');
   return {
     today: str(o, 'today'),
     up_next: parseList(o.up_next, parseHomeTask),
+    up_next_counts: parseUpNextCounts(o.up_next_counts),
     recent_tasks: parseList(o.recent_tasks, parseHomeTask),
     recent_documents: parseList(o.recent_documents, (v) => {
       const d = rec(v, 'home document');
