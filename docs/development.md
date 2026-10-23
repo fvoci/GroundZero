@@ -3152,7 +3152,7 @@ current}`, (4) 아니면 고치고 판을 올린다. `SavedView`에 `version`. �
   - **웹(`TaskBoard.svelte` `saveView`, `client.ts` `createView`·`updateView`)**: 목록에 같은 이름의 보기가 있으면 목록에서 읽은 판으로 고치고, 없으면
     만든다. 재시도 키(`RetryKey`)에 대상 id와 판을 넣어 목록을 다시 읽은 뒤의 저장은 새 요청이다. 409(`exists`·`conflict`)면 화면의 보기 방식·
     필터·정렬과 이름은 그대로 두고 목록만 다시 읽어, 최신 설정은 목록에서 고르면 보이고 다시 저장하면 최신 판 기준으로 지금 설정이 저장된다
-    (`tasks_view_conflict`, ko·en).
+    (`tasks_view_conflict`, ko·en). CodeRabbit 반영: 응답이 준 보기(저장한 것·409의 최신)는 목록 다시 읽기가 실패해도 목록에 남겨 다시 저장이 PUT으로 가고(전에는 목록이 비어 POST로 또 409), 기다리는 사이 사용자가 고른 다른 보기는 늦은 응답이 되돌리지 않는다(`saved-view-conflict.test.ts`의 두 시험, 수정 전 `Unable to find … option … 내 보기`·선택이 `v1`로 돌아가 실패).
 - **항목 정보(D-104, `0097_item_versions.sql`)**: 적용 필드와 경로는 다음 둘이다. 프로필 경로를 넣은 것은 구현 해석(사용자 결정 밖, coordinator 판단)이다: 화면이 두 저장을 같은 "항목 정보"로 부르므로 한쪽만 마지막 저장 우선으로 두면 "일관되게"에 어긋난다.
 
   | 경로                                                  | 적용 필드                                                                                                        | 판                      | 화면                               |
