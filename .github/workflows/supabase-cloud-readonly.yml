@@ -34,6 +34,9 @@ jobs:
           ref: ${{ inputs.reviewed_sha }}
           persist-credentials: false
           fetch-depth: 1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3; same pin as product CI
+        with:
+          save-if: ${{ !cancelled() }}
       - name: Build reviewed binaries and selected tests before credentials
         timeout-minutes: 20
         run: |

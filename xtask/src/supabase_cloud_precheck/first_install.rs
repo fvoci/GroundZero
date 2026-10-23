@@ -179,8 +179,10 @@ fn managed(mut after: Catalog) -> Result<Catalog> {
                 == Some(json!({"config":["search_path=fvoci"]})),
         )?;
         require(
-            after.remove(&("membership".into(), format!("{role}->postgres/postgres")))
-                == Some(json!({"admin":true,"inherit":false,"set":false})),
+            after.remove(&(
+                "membership".into(),
+                format!("{role}->postgres/supabase_admin"),
+            )) == Some(json!({"admin":true,"inherit":false,"set":false})),
         )?;
     }
     let acl = after
@@ -565,7 +567,16 @@ async fn verify_existing(
     let mut admin = PgConnection::connect_with(&super::connect_options(target))
         .await
         .map_err(super::classify_connection_error)?;
-    let before = managed(snapshot(&mut admin).await?)?;
+    let current = snapshot(&mut admin).await?;
+    let effects: Vec<_> = current.iter().filter(|((kind, identity),_)| {
+        (kind=="role" && ["fvoci_app","fvoci_migrator"].contains(&identity.as_str()))
+        || (kind=="setting" && (identity.starts_with("fvoci_app/") || identity.starts_with("fvoci_migrator/")))
+        || (kind=="membership" && (identity.starts_with("fvoci_app->") || identity.starts_with("fvoci_migrator->")
+            || identity.contains("->fvoci_app/") || identity.contains("->fvoci_migrator/")))
+    }).map(|((kind,identity),definition)|json!({"kind":kind,"identity":identity,"definition":definition})).collect();
+    report["installation_effects"] = json!({"roles_settings_memberships":effects,
+        "database_acl":current.get(&("database".into(),"current".into())).map(|v|v["acl"].clone())});
+    let before = managed(current)?;
     report["managed_before_app_tests_sha256"] = json!(fingerprint(&before)?);
     require(
         report["managed_before_app_tests_sha256"]
@@ -917,7 +928,10 @@ mod tests {
                 json!({"config":["search_path=fvoci"]}),
             );
             after.insert(
-                ("membership".into(), format!("{role}->postgres/postgres")),
+                (
+                    "membership".into(),
+                    format!("{role}->postgres/supabase_admin"),
+                ),
                 json!({"admin":true,"inherit":false,"set":false}),
             );
             after
@@ -934,6 +948,32 @@ mod tests {
     fn only_authorized_additions_leave_managed_catalog_equal() {
         let (before, after) = fixture();
         assert_eq!(managed(after).unwrap(), before);
+    }
+
+    #[test]
+    fn observed_supabase_grantor_does_not_allow_other_grantors_or_extra_memberships() {
+        let (before, after) = fixture();
+        let mut wrong = after.clone();
+        let value = wrong
+            .remove(&(
+                "membership".into(),
+                "fvoci_app->postgres/supabase_admin".into(),
+            ))
+            .unwrap();
+        wrong.insert(
+            ("membership".into(), "fvoci_app->postgres/postgres".into()),
+            value,
+        );
+        assert!(managed(wrong).is_err());
+        let mut extra = after;
+        extra.insert(
+            (
+                "membership".into(),
+                "fvoci_app->other/supabase_admin".into(),
+            ),
+            json!({"admin":false,"inherit":false,"set":true}),
+        );
+        assert_ne!(managed(extra).unwrap(), before);
     }
 
     #[test]
