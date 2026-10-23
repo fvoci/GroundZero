@@ -3311,7 +3311,10 @@ current}`, (4) 아니면 고치고 판을 올린다. `SavedView`에 `version`. �
   `item-profile-stale-status.test.ts` 두 건(409, 기간 오류), 수정 전 `expected document not to contain element, found <p …>`로 실패.
   같은 패널은 저장 성공(204, 새 판 없음) 뒤 바로 편집을 닫고 다시 읽기를 맡겨, 다시 읽기 전에 연 편집이 옛 판을 기준으로 삼아 다음 저장이
   거짓 409가 될 수 있었다(CodeRabbit 범위 밖 지적). 이제 저장한 정보를 다시 읽은 뒤 편집을 닫는다. 같은 시험 파일의 "다시 읽은 뒤에만 닫음",
-  수정 전 `expected document not to contain element, found <button …>`로 실패.
+  수정 전 `expected document not to contain element, found <button …>`로 실패. 이어진 CodeRabbit 지적 둘도 고쳤다: 다시 읽기를 기다리는 동안
+  취소하고 다시 연 편집을 앞선 저장이 닫지 않게 편집 세션 번호를 두고(`CoursePanel`과 같은 방식), 다시 읽기가 실패하면 정보를 비우고 다시
+  읽기를 맡겨 옛 판으로 편집을 다시 열 수 없게 했다. 시험 두 건, 수정 전 `Unable to find … "저장"`(새 편집이 닫힘)과
+  `expected document not to contain element, found <button …>`(옛 판의 "고치기")로 실패.
 
 ## 99. CSV 업무 한 건 만들기의 원자성 (2026-10-23, D-105, `fvoci/policy-task-create`)
 

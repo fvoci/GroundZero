@@ -39,6 +39,8 @@
   let editing = $state(false);
   // 편집을 연 때의 판(D-104). 편집 중에 패널을 다시 읽어도 옮기지 않는다(옮기면 그사이 다른 사람이 고친 것을 덮는다).
   let editBase = 0;
+  // 편집을 열거나 취소할 때마다 오른다. 저장을 기다리는 동안 취소하고 다시 연 편집을 앞선 저장이 닫지 않게 한다.
+  let editSession = 0;
   // 편집을 연 때의 리더. 고를 수 있는 사람 목록에 없어도 입력의 리더 이름을 보인다.
   let editLeader = $state<PersonRefView | null>(null);
   // 저장이 판 충돌(409)로 거절됐을 때의 서버 최신본. 입력은 그대로 두고 최신본을 보인다.
@@ -100,6 +102,7 @@
   });
 
   async function startEdit(p: ItemProfileView): Promise<void> {
+    editSession += 1;
     editBase = p.version;
     editLeader = p.leader;
     conflict = undefined;
@@ -131,6 +134,7 @@
       return;
     }
     error = undefined;
+    const session = editSession;
     try {
       const result = await api.setItemProfile(item.id, base, {
         leader_id: form.leader === '' ? null : form.leader,
@@ -142,22 +146,30 @@
         details: toDetails(kind, form.values, form.keywords),
       });
       if (result.kind === 'conflict') {
+        // 기다리는 동안 취소했거나 편집을 새로 열었으면 그 화면을 바꾸지 않는다(이 저장은 아무것도 바꾸지 않았다).
+        if (session !== editSession) return;
         // 그사이 다른 사람이 고쳤다. 서버는 아무것도 바꾸지 않았다. 입력은 그대로 두고 최신본을 보인다.
         conflict = result.current;
         profile = result.current;
         return;
       }
-      conflict = undefined;
       // 저장은 새 판을 주지 않으므로(204) 다시 읽은 뒤에 편집을 닫는다. 먼저 닫으면 다시 읽기 전에 연 편집이 옛 판을
-      // 기준으로 삼아 다음 저장이 거짓 409가 된다. 읽지 못하면 지금처럼 다시 읽기를 맡긴다.
-      try {
-        profile = await api.itemProfile(item.id);
-      } catch {
-        reloadKey += 1;
-      }
-      editing = false;
-      status = m.modules_profile_saved();
+      // 기준으로 삼아 다음 저장이 거짓 409가 된다.
+      const fresh = await api.itemProfile(item.id).catch(() => undefined);
       onchanged();
+      if (session !== editSession && editing) {
+        // 기다리는 동안 취소하고 편집을 새로 열었다. 그 편집은 닫거나 바꾸지 않는다(그 편집의 판이 지났으면 저장이
+        // 409로 알린다).
+        return;
+      }
+      if (session === editSession) {
+        conflict = undefined;
+        editing = false;
+        status = m.modules_profile_saved();
+      }
+      // 다시 읽지 못하면 정보를 비우고 다시 읽기를 맡긴다. 옛 판이 남아 있으면 그 판으로 편집을 다시 열 수 있다.
+      profile = fresh;
+      if (fresh === undefined) reloadKey += 1;
     } catch (err: unknown) {
       error = errorText(err, m.modules_save_failed());
     }
@@ -322,6 +334,7 @@
           type="button"
           variant="ghost"
           onclick={() => {
+            editSession += 1;
             editing = false;
             conflict = undefined;
           }}>{m.common_cancel()}</Button
