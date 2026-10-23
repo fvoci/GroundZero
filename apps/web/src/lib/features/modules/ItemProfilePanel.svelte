@@ -14,6 +14,7 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
+  import ItemProfileSummary from './ItemProfileSummary.svelte';
   import { detailFields, itemStatusLabel, peopleLabels, periodText, toDetails } from './profile';
 
   interface Props {
@@ -197,7 +198,7 @@
         data-profile-conflict
       >
         <p role="alert">{m.modules_profile_conflict()}</p>
-        {@render summary(latest)}
+        <ItemProfileSummary profile={latest} {kind} />
         <div class="flex flex-wrap gap-2">
           <Button
             size="sm"
@@ -306,39 +307,8 @@
       </div>
     </form>
   {:else}
-    {@render summary(profile)}
+    <ItemProfileSummary {profile} {kind} />
   {/if}
-
-  {#snippet summary(p: ItemProfileView)}
-    <dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-      <dt class="text-muted-foreground">{m.modules_status()}</dt>
-      <dd><Badge variant="outline">{itemStatusLabel(p.status)}</Badge></dd>
-      {#if p.starts_on !== null || p.ends_on !== null}
-        <dt class="text-muted-foreground">{m.modules_period()}</dt>
-        <dd>{periodText(p.starts_on, p.ends_on)}</dd>
-      {/if}
-      <dt class="text-muted-foreground">{labels.leader}</dt>
-      <dd>{p.leader?.display_name ?? m.modules_none()}</dd>
-      {#if p.goal !== ''}
-        <dt class="text-muted-foreground">{m.modules_goal()}</dt>
-        <dd class="whitespace-pre-wrap">{p.goal}</dd>
-      {/if}
-      {#if p.scope !== ''}
-        <dt class="text-muted-foreground">{m.modules_scope()}</dt>
-        <dd class="whitespace-pre-wrap">{p.scope}</dd>
-      {/if}
-      {#if (p.details.keywords ?? []).length > 0}
-        <dt class="text-muted-foreground">{m.modules_keywords()}</dt>
-        <dd>{(p.details.keywords ?? []).join(', ')}</dd>
-      {/if}
-      {#each fields as f (f.key)}
-        {#if p.details[f.key] !== undefined}
-          <dt class="text-muted-foreground">{f.label}</dt>
-          <dd class="whitespace-pre-wrap">{p.details[f.key]}</dd>
-        {/if}
-      {/each}
-    </dl>
-  {/snippet}
 
   {#if profile !== undefined}
     {@const p = profile}

@@ -2285,7 +2285,7 @@ function fail(status: number, json: Json): never {
 }
 
 /** 판 충돌 409가 함께 보낸 서버 최신본(`current`). 판 충돌이 아닌 409(보관 등)와 다른 응답은 undefined다. */
-function versionConflict(status: number, json: Json): Json | undefined {
+function versionConflict(status: number, json: Json): unknown {
   if (status !== 409 || !isRecord(json) || json.current === undefined) return undefined;
   return json.current;
 }

@@ -51,7 +51,7 @@ function viewServer(
     const path = typeof input === 'string' ? input : '';
     const method = init?.method ?? 'GET';
     const raw: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
-    const body = typeof raw === 'object' && raw !== null ? { ...raw } : {};
+    const body: Record<string, unknown> = typeof raw === 'object' && raw !== null ? { ...raw } : {};
     if (path === '/api/items/i1/views' && method === 'GET') {
       return Promise.resolve(response(200, stored));
     }
@@ -62,7 +62,7 @@ function viewServer(
         return Promise.resolve(response(409, { error: 'exists', current: taken }));
       }
       const created = {
-        id: `v${stored.length + 1}`,
+        id: `v${String(stored.length + 1)}`,
         name: String(body.name),
         config: {},
         version: 1,
