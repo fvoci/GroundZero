@@ -1,0 +1,34 @@
+cluster: sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a
+$ docker compose --project-name sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a --file deploy/compose.test.yaml up --detach --wait --remove-orphans postgres
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a_default Creating 
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a_default Creating 
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a_default Created 
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a_default Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a-postgres-1 Creating 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a-postgres-1 Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a-postgres-1 Starting 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a-postgres-1 Started 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a-postgres-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a-postgres-1 Healthy 
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+cluster: sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b
+$ docker compose --project-name sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b --file deploy/compose.test.yaml up --detach --wait --remove-orphans postgres
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b_default Creating 
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b_default Creating 
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b_default Created 
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b_default Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b-postgres-1 Creating 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b-postgres-1 Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b-postgres-1 Starting 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b-postgres-1 Started 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b-postgres-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b-postgres-1 Healthy 
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+PASS: catalog, required initial rows and schema dump objects are equal
+NOT RUN: app-role behavioral suite (add --behavior)
+$ docker compose --project-name sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b --file deploy/compose.test.yaml stop
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b-postgres-1 Stopping 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-b-postgres-1 Stopped 
+$ docker compose --project-name sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a --file deploy/compose.test.yaml stop
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a-postgres-1 Stopping 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168d84b04728abadeaec6eba12b17-a-postgres-1 Stopped 

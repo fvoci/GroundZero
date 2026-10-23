@@ -1,0 +1,12 @@
+precheck	Read-only session pooler precheck	﻿2026-10-23T12:40:40.9123180Z ##[group]Run target/debug/xtask supabase-cloud-precheck --connect
+precheck	Read-only session pooler precheck	2026-10-23T12:40:40.9123776Z [36;1mtarget/debug/xtask supabase-cloud-precheck --connect[0m
+precheck	Read-only session pooler precheck	2026-10-23T12:40:40.9162679Z shell: /usr/bin/bash -e {0}
+precheck	Read-only session pooler precheck	2026-10-23T12:40:40.9163027Z env:
+precheck	Read-only session pooler precheck	2026-10-23T12:40:40.9163508Z   SUPABASE_TEST_HOST: ***
+precheck	Read-only session pooler precheck	2026-10-23T12:40:40.9163853Z   SUPABASE_TEST_PORT: ***
+precheck	Read-only session pooler precheck	2026-10-23T12:40:40.9164199Z   SUPABASE_TEST_DATABASE: ***
+precheck	Read-only session pooler precheck	2026-10-23T12:40:40.9164608Z   SUPABASE_TEST_USER: ***
+precheck	Read-only session pooler precheck	2026-10-23T12:40:40.9164957Z   SUPABASE_TEST_PASSWORD: ***
+precheck	Read-only session pooler precheck	2026-10-23T12:40:40.9170702Z   SUPABASE_TEST_SSL_ROOT_CERT: ***
+precheck	Read-only session pooler precheck	2026-10-23T12:40:40.9171043Z ##[endgroup]
+precheck	Read-only session pooler precheck	2026-10-23T12:40:43.4571589Z {"changes":"NOT RUN","connection":"PASS","connection_kind":"session_pooler","***_major":17,"query":"PASS","server_version_num":170011,"server_version_query":"PASS","tls_certificate_and_hostname":"PASS"}

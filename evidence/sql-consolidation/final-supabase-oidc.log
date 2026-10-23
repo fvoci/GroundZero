@@ -1,0 +1,1007 @@
+==> fetch supabase/supabase docker/ at bc27d2661edd09a5d0b8d76ce33da6d4071a756e
+$ git init --quiet
+$ git remote add origin https://github.com/supabase/supabase.git
+$ git sparse-checkout set --no-cone /docker
+$ git fetch --quiet --depth 1 --filter=blob:none origin bc27d2661edd09a5d0b8d76ce33da6d4071a756e
+$ git checkout --quiet FETCH_HEAD
+cluster: sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a
+$ docker compose --project-name sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a --project-directory /home/kinesis/orca/workspaces/GroundZero/leatherback/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/leatherback/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/leatherback/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/leatherback/deploy/supabase/compose.test.yaml up --detach --wait db rest supavisor
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"STUDIO_DEFAULT_ORGANIZATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"STUDIO_DEFAULT_PROJECT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"OPENAI_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SUPABASE_PUBLISHABLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SUPABASE_SECRET_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"GLOBAL_S3_BUCKET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"STORAGE_TENANT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"REGION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"IMGPROXY_AUTO_WEBP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"FUNCTIONS_VERIFY_JWT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"DASHBOARD_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"DASHBOARD_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"ENABLE_PHONE_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"ENABLE_ANONYMOUS_USERS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"ENABLE_PHONE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"ENABLE_EMAIL_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"MAILER_URLPATHS_RECOVERY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"ENABLE_EMAIL_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SMTP_PORT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"MAILER_URLPATHS_INVITE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SMTP_USER\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SITE_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"ADDITIONAL_REDIRECT_URLS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SMTP_ADMIN_EMAIL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SMTP_PASS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SMTP_SENDER_NAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"MAILER_URLPATHS_CONFIRMATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"DISABLE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"SMTP_HOST\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"MAILER_URLPATHS_EMAIL_CHANGE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:50:11+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+ Image supabase/supavisor:2.9.13@sha256:07f1a6098ffc04b80263bca4eb5c3e7bd2e03dfd1fc465aa108d7329000a1a4e Pulling 
+ Image postgrest/postgrest:v14.18@sha256:c7cd7e265a85b05248abf53f4473fcec7e327c282d0bd0cf60f1551996d09fcf Pulling 
+ Image supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00 Pulling 
+ 46897c4fed69 Pulling fs layer 0B
+ 11e6d34b3d6b Pulling fs layer 0B
+ 300db975b37c Pulling fs layer 0B
+ 5c621431b652 Pulling fs layer 0B
+ 2ce232a1ce76 Pulling fs layer 0B
+ 5c32499ab806 Pulling fs layer 0B
+ 0e0ef0ea5a70 Pulling fs layer 0B
+ d9a1679877de Pulling fs layer 0B
+ 46897c4fed69 Download complete 0B
+ 11e6d34b3d6b Download complete 0B
+ 300db975b37c Download complete 0B
+ 5c621431b652 Download complete 0B
+ 2ce232a1ce76 Downloading 1.049MB
+ 2ce232a1ce76 Downloading 3.146MB
+ 2ce232a1ce76 Downloading 5.243MB
+ 2ce232a1ce76 Downloading 9.437MB
+ 2ce232a1ce76 Downloading 12.58MB
+ 2ce232a1ce76 Download complete 0B
+ 0e0ef0ea5a70 Downloading 1.049MB
+ 0e0ef0ea5a70 Downloading 2.097MB
+ 8ddaf57867eb Pulling fs layer 0B
+ 27080c64989e Pulling fs layer 0B
+ 6a0ac1617861 Pulling fs layer 0B
+ 90e0d490e65d Pulling fs layer 0B
+ 57a2f2b49499 Pulling fs layer 0B
+ 5cc41111c814 Pulling fs layer 0B
+ fbca7e993e1c Pulling fs layer 0B
+ 7e2a3209ccb0 Pulling fs layer 0B
+ a08f9afeb021 Pulling fs layer 0B
+ 7bd6db39b9a3 Pulling fs layer 0B
+ 9e88118ea305 Pulling fs layer 0B
+ f04e445057ae Pulling fs layer 0B
+ 9705dc122b7f Pulling fs layer 0B
+ 934229c37c0f Pulling fs layer 0B
+ 77a683edb945 Pulling fs layer 0B
+ 40b5286cf380 Pulling fs layer 0B
+ 9c04f0608c11 Pulling fs layer 0B
+ 99eec413ff9c Pulling fs layer 0B
+ 66bdddd6039a Pulling fs layer 0B
+ 15efbe177d1c Pulling fs layer 0B
+ abb565a09a47 Pulling fs layer 0B
+ d57bc9046944 Pulling fs layer 0B
+ 09f359af2c8c Pulling fs layer 0B
+ 050236ff9d6f Pulling fs layer 0B
+ 37896fbd0b4d Pulling fs layer 0B
+ d343daf747a6 Pulling fs layer 0B
+ 7caa0d6a85af Pulling fs layer 0B
+ 5f373982f445 Pulling fs layer 0B
+ e7cd8a022c6d Pulling fs layer 0B
+ 0e0ef0ea5a70 Downloading 5.243MB
+ 0e0ef0ea5a70 Downloading 6.291MB
+ 0e0ef0ea5a70 Downloading 6.291MB
+ 5c32499ab806 Downloading 1.049MB
+ 0e0ef0ea5a70 Downloading 7.34MB
+ 5c32499ab806 Downloading 1.049MB
+ 0e0ef0ea5a70 Downloading 7.34MB
+ 5c32499ab806 Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 16.78MB
+ 44136fa355b3 Already exists 0B
+ 5c32499ab806 Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 16.78MB
+ 5c32499ab806 Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 16.78MB
+ 5c32499ab806 Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 16.78MB
+ 5c32499ab806 Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 18.87MB
+ 0e0ef0ea5a70 Downloading 18.87MB
+ 5c32499ab806 Downloading 2.097MB
+ 5c32499ab806 Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 18.87MB
+ 5c32499ab806 Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 20.97MB
+ 5c32499ab806 Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 23.07MB
+ 5c32499ab806 Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 25.17MB
+ 5c32499ab806 Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 25.17MB
+ 5c32499ab806 Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 25.17MB
+ 5c32499ab806 Downloading 5.243MB
+ 0e0ef0ea5a70 Downloading 36.7MB
+ 5c32499ab806 Downloading 6.291MB
+ 0e0ef0ea5a70 Downloading 36.7MB
+ 5c32499ab806 Downloading 6.291MB
+ 0e0ef0ea5a70 Downloading 36.7MB
+ 5c32499ab806 Downloading 6.291MB
+ 0e0ef0ea5a70 Downloading 36.7MB
+ 5c32499ab806 Downloading 6.291MB
+ 0e0ef0ea5a70 Downloading 36.7MB
+ 5c32499ab806 Downloading 6.291MB
+ 0e0ef0ea5a70 Downloading 40.89MB
+ 5c32499ab806 Downloading 6.291MB
+ 0e0ef0ea5a70 Downloading 40.89MB
+ 5c32499ab806 Downloading 7.34MB
+ 0e0ef0ea5a70 Downloading 48.23MB
+ 5c32499ab806 Downloading 7.34MB
+ 0e0ef0ea5a70 Downloading 49.28MB
+ 5c32499ab806 Downloading 8.389MB
+ 0e0ef0ea5a70 Downloading 51.38MB
+ 5c32499ab806 Downloading 8.389MB
+ 0e0ef0ea5a70 Downloading 51.38MB
+ 5c32499ab806 Downloading 8.389MB
+ 0e0ef0ea5a70 Downloading 52.43MB
+ 5c32499ab806 Downloading 9.437MB
+ 0e0ef0ea5a70 Downloading 55.57MB
+ 5c32499ab806 Downloading 9.437MB
+ 0e0ef0ea5a70 Downloading 57.67MB
+ 5c32499ab806 Downloading 9.437MB
+ 0e0ef0ea5a70 Downloading 57.67MB
+ 5c32499ab806 Downloading 10.49MB
+ 0e0ef0ea5a70 Downloading 60.82MB
+ 5c32499ab806 Downloading 10.49MB
+ 0e0ef0ea5a70 Downloading 61.87MB
+ 5c32499ab806 Downloading 11.53MB
+ 0e0ef0ea5a70 Downloading 63.96MB
+ 5c32499ab806 Downloading 11.53MB
+ 0e0ef0ea5a70 Downloading 65.01MB
+ 5c32499ab806 Downloading 11.53MB
+ 0e0ef0ea5a70 Downloading 67.11MB
+ 5c32499ab806 Downloading 12.58MB
+ 0e0ef0ea5a70 Downloading 69.21MB
+ 5c32499ab806 Downloading 12.58MB
+ 0e0ef0ea5a70 Downloading 71.3MB
+ 5c32499ab806 Downloading 13.63MB
+ 0e0ef0ea5a70 Downloading 72.35MB
+ 5c32499ab806 Downloading 13.63MB
+ 0e0ef0ea5a70 Downloading 73.4MB
+ 5c32499ab806 Downloading 14.68MB
+ 0e0ef0ea5a70 Downloading 75.5MB
+ 5c32499ab806 Downloading 14.68MB
+ 0e0ef0ea5a70 Downloading 77.59MB
+ d9a1679877de Downloading 1.049MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 15.73MB
+ 0e0ef0ea5a70 Downloading 79.69MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 15.73MB
+ 0e0ef0ea5a70 Downloading 80.74MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 16.78MB
+ 0e0ef0ea5a70 Downloading 83.89MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 16.78MB
+ 0e0ef0ea5a70 Downloading 85.98MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 17.83MB
+ 0e0ef0ea5a70 Downloading 88.08MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 17.83MB
+ 0e0ef0ea5a70 Downloading 91.23MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 18.87MB
+ 0e0ef0ea5a70 Downloading 93.32MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 18.87MB
+ 0e0ef0ea5a70 Downloading 95.42MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 19.92MB
+ 0e0ef0ea5a70 Downloading 97.52MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 20.97MB
+ 0e0ef0ea5a70 Downloading 101.7MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 20.97MB
+ 0e0ef0ea5a70 Downloading 104.9MB
+ d9a1679877de Downloading 1.049MB
+ 5c32499ab806 Downloading 22.02MB
+ 0e0ef0ea5a70 Downloading 107MB
+ d9a1679877de Downloading 2.097MB
+ 5c32499ab806 Downloading 23.07MB
+ 0e0ef0ea5a70 Downloading 111.1MB
+ d9a1679877de Downloading 2.097MB
+ 5c32499ab806 Downloading 24.12MB
+ 0e0ef0ea5a70 Downloading 114.3MB
+ d9a1679877de Downloading 2.097MB
+ 0e0ef0ea5a70 Downloading 119.5MB
+ 5c32499ab806 Downloading 24.12MB
+ d9a1679877de Downloading 2.097MB
+ 5c32499ab806 Downloading 25.17MB
+ 0e0ef0ea5a70 Downloading 123.7MB
+ d9a1679877de Downloading 2.097MB
+ 5c32499ab806 Downloading 26.21MB
+ 0e0ef0ea5a70 Downloading 126.9MB
+ d9a1679877de Downloading 2.097MB
+ 5c32499ab806 Download complete 0B
+ 0e0ef0ea5a70 Downloading 133.2MB
+ 5c32499ab806 Extracting 1B
+ d9a1679877de Downloading 3.146MB
+ 0e0ef0ea5a70 Downloading 138.4MB
+ 5c32499ab806 Extracting 1B
+ d9a1679877de Downloading 3.146MB
+ 0e0ef0ea5a70 Downloading 142.6MB
+ 5c32499ab806 Extracting 1B
+ d9a1679877de Downloading 3.146MB
+ 0e0ef0ea5a70 Downloading 145.8MB
+ 5c32499ab806 Extracting 1B
+ d9a1679877de Downloading 3.146MB
+ 0e0ef0ea5a70 Downloading 153.1MB
+ 5c32499ab806 Extracting 1B
+ d9a1679877de Downloading 3.146MB
+ 0e0ef0ea5a70 Downloading 157.3MB
+ 5c32499ab806 Extracting 1B
+ d9a1679877de Downloading 3.146MB
+ 0e0ef0ea5a70 Downloading 162.5MB
+ 5c32499ab806 Extracting 1B
+ d9a1679877de Downloading 3.146MB
+ d343daf747a6 Downloading 1.049MB
+ 0e0ef0ea5a70 Downloading 165.7MB
+ 5c32499ab806 Extracting 1B
+ d9a1679877de Downloading 3.146MB
+ d343daf747a6 Downloading 1.049MB
+ 0e0ef0ea5a70 Downloading 165.7MB
+ 5c32499ab806 Extracting 1B
+ d343daf747a6 Downloading 2.097MB
+ d9a1679877de Downloading 4.194MB
+ 0e0ef0ea5a70 Downloading 173MB
+ 5c32499ab806 Extracting 1B
+ d9a1679877de Downloading 4.194MB
+ d343daf747a6 Downloading 4.194MB
+ 0e0ef0ea5a70 Downloading 180.4MB
+ 5c32499ab806 Pull complete 0B
+ d9a1679877de Downloading 4.194MB
+ d343daf747a6 Downloading 4.386MB
+ 0e0ef0ea5a70 Downloading 182.5MB
+ d9a1679877de Downloading 4.194MB
+ d343daf747a6 Download complete 0B
+ 0e0ef0ea5a70 Downloading 191.9MB
+ d9a1679877de Downloading 5.243MB
+ 0e0ef0ea5a70 Downloading 198.2MB
+ d9a1679877de Downloading 5.243MB
+ 5f373982f445 Download complete 0B
+ 0e0ef0ea5a70 Downloading 201.3MB
+ d9a1679877de Downloading 5.243MB
+ 0e0ef0ea5a70 Downloading 207.6MB
+ d9a1679877de Downloading 5.243MB
+ 0e0ef0ea5a70 Downloading 211.8MB
+ d9a1679877de Downloading 5.243MB
+ 7e2a3209ccb0 Download complete 0B
+ 0e0ef0ea5a70 Downloading 218.1MB
+ d9a1679877de Downloading 5.243MB
+ 0e0ef0ea5a70 Downloading 224.4MB
+ d9a1679877de Downloading 6.291MB
+ 0e0ef0ea5a70 Downloading 230.7MB
+ d9a1679877de Download complete 0B
+ d9a1679877de Extracting 1B
+ 0e0ef0ea5a70 Downloading 233.8MB
+ d9a1679877de Pull complete 0B
+ Image postgrest/postgrest:v14.18@sha256:c7cd7e265a85b05248abf53f4473fcec7e327c282d0bd0cf60f1551996d09fcf Pulled 
+ 0e0ef0ea5a70 Downloading 233.8MB
+ 6a0ac1617861 Downloading 1.049MB
+ 0e0ef0ea5a70 Downloading 244.3MB
+ 6a0ac1617861 Downloading 3.146MB
+ 0e0ef0ea5a70 Downloading 249.6MB
+ 6a0ac1617861 Download complete 0B
+ 0e0ef0ea5a70 Downloading 253.8MB
+ 7bd6db39b9a3 Download complete 0B
+ 6a0ac1617861 Extracting 1B
+ 0e0ef0ea5a70 Downloading 260MB
+ 6a0ac1617861 Extracting 1B
+ d343daf747a6 Extracting 1B
+ 0e0ef0ea5a70 Downloading 264.2MB
+ 6a0ac1617861 Pull complete 0B
+ 0e0ef0ea5a70 Downloading 272.6MB
+ 27080c64989e Download complete 0B
+ 90e0d490e65d Download complete 0B
+ d343daf747a6 Extracting 1B
+ d343daf747a6 Pull complete 0B
+ 0e0ef0ea5a70 Downloading 277.9MB
+ 0e0ef0ea5a70 Downloading 284.2MB
+ 57a2f2b49499 Download complete 0B
+ 0e0ef0ea5a70 Downloading 289.4MB
+ 0e0ef0ea5a70 Downloading 293.6MB
+ 0e0ef0ea5a70 Downloading 297.8MB
+ 0e0ef0ea5a70 Downloading 298.8MB
+ 0e0ef0ea5a70 Downloading 303MB
+ fbca7e993e1c Downloading 1.049MB
+ fbca7e993e1c Downloading 3.146MB
+ 0e0ef0ea5a70 Downloading 313.2MB
+ fbca7e993e1c Downloading 4.194MB
+ 77a683edb945 Download complete 0B
+ 0e0ef0ea5a70 Download complete 0B
+ 0e0ef0ea5a70 Extracting 1B
+ fbca7e993e1c Downloading 5.243MB
+ 0e0ef0ea5a70 Extracting 1B
+ fbca7e993e1c Downloading 7.34MB
+ 9e88118ea305 Download complete 0B
+ f04e445057ae Download complete 0B
+ 0e0ef0ea5a70 Extracting 1B
+ 9e88118ea305 Pull complete 0B
+ fbca7e993e1c Downloading 9.437MB
+ 0e0ef0ea5a70 Extracting 1B
+ fbca7e993e1c Downloading 11.53MB
+ 9705dc122b7f Download complete 0B
+ 0e0ef0ea5a70 Extracting 1B
+ fbca7e993e1c Downloading 13.63MB
+ 0e0ef0ea5a70 Extracting 1B
+ fbca7e993e1c Downloading 15.73MB
+ 0e0ef0ea5a70 Extracting 1B
+ fbca7e993e1c Downloading 17.83MB
+ 0e0ef0ea5a70 Extracting 1B
+ fbca7e993e1c Downloading 20.97MB
+ a08f9afeb021 Download complete 0B
+ 934229c37c0f Download complete 0B
+ 0e0ef0ea5a70 Extracting 1B
+ fbca7e993e1c Downloading 23.07MB
+ 0e0ef0ea5a70 Extracting 1B
+ fbca7e993e1c Downloading 25.17MB
+ 9c04f0608c11 Download complete 0B
+ 0e0ef0ea5a70 Extracting 1B
+ fbca7e993e1c Downloading 28.31MB
+ 15efbe177d1c Download complete 0B
+ 0e0ef0ea5a70 Extracting 2B
+ fbca7e993e1c Downloading 31.46MB
+ 0e0ef0ea5a70 Extracting 2B
+ 40b5286cf380 Download complete 0B
+ fbca7e993e1c Downloading 33.55MB
+ 0e0ef0ea5a70 Extracting 2B
+ fbca7e993e1c Downloading 37.75MB
+ 5cc41111c814 Download complete 0B
+ 0e0ef0ea5a70 Extracting 2B
+ fbca7e993e1c Downloading 40.89MB
+ 0e0ef0ea5a70 Extracting 2B
+ abb565a09a47 Download complete 0B
+ fbca7e993e1c Downloading 42.99MB
+ 0e0ef0ea5a70 Extracting 2B
+ d57bc9046944 Download complete 0B
+ fbca7e993e1c Downloading 44.04MB
+ 0e0ef0ea5a70 Extracting 2B
+ fbca7e993e1c Downloading 48.23MB
+ 0e0ef0ea5a70 Extracting 2B
+ fbca7e993e1c Downloading 50.33MB
+ 99eec413ff9c Download complete 0B
+ 0e0ef0ea5a70 Extracting 2B
+ fbca7e993e1c Downloading 55.57MB
+ 0e0ef0ea5a70 Extracting 2B
+ fbca7e993e1c Downloading 58.72MB
+ 0e0ef0ea5a70 Extracting 3B
+ 66bdddd6039a Download complete 0B
+ 050236ff9d6f Download complete 0B
+ fbca7e993e1c Downloading 61.87MB
+ 0e0ef0ea5a70 Extracting 3B
+ fbca7e993e1c Downloading 65.01MB
+ 0e0ef0ea5a70 Extracting 3B
+ 09f359af2c8c Download complete 0B
+ fbca7e993e1c Downloading 69.21MB
+ 0e0ef0ea5a70 Extracting 3B
+ fbca7e993e1c Downloading 72.35MB
+ 37896fbd0b4d Download complete 0B
+ 0e0ef0ea5a70 Extracting 3B
+ fbca7e993e1c Downloading 75.5MB
+ 0e0ef0ea5a70 Extracting 3B
+ fbca7e993e1c Downloading 79.69MB
+ 7caa0d6a85af Download complete 0B
+ 0e0ef0ea5a70 Extracting 3B
+ fbca7e993e1c Downloading 80.74MB
+ 0e0ef0ea5a70 Extracting 3B
+ fbca7e993e1c Downloading 82.84MB
+ 0e0ef0ea5a70 Extracting 3B
+ fbca7e993e1c Downloading 85.98MB
+ 0e0ef0ea5a70 Extracting 3B
+ e7cd8a022c6d Download complete 0B
+ fbca7e993e1c Downloading 87.03MB
+ 0e0ef0ea5a70 Extracting 4B
+ fbca7e993e1c Downloading 91.23MB
+ 0e0ef0ea5a70 Extracting 4B
+ fbca7e993e1c Downloading 92.27MB
+ 0e0ef0ea5a70 Extracting 4B
+ 1a175c5c4463 Download complete 0B
+ fbca7e993e1c Downloading 95.42MB
+ 0e0ef0ea5a70 Extracting 4B
+ fbca7e993e1c Downloading 103.8MB
+ 0e0ef0ea5a70 Extracting 4B
+ fbca7e993e1c Downloading 108MB
+ 0e0ef0ea5a70 Extracting 4B
+ fbca7e993e1c Downloading 112.2MB
+ 8ddaf57867eb Download complete 0B
+ 0e0ef0ea5a70 Extracting 4B
+ fbca7e993e1c Downloading 116.4MB
+ 0e0ef0ea5a70 Extracting 4B
+ fbca7e993e1c Downloading 120.6MB
+ 0e0ef0ea5a70 Extracting 4B
+ fbca7e993e1c Downloading 124.8MB
+ 0190525e6ddf Download complete 0B
+ 0e0ef0ea5a70 Extracting 4B
+ fbca7e993e1c Downloading 127.9MB
+ 0e0ef0ea5a70 Extracting 5B
+ fbca7e993e1c Downloading 135.3MB
+ 0e0ef0ea5a70 Extracting 5B
+ fbca7e993e1c Downloading 139.5MB
+ 0e0ef0ea5a70 Extracting 5B
+ fbca7e993e1c Downloading 144.7MB
+ 0e0ef0ea5a70 Extracting 5B
+ fbca7e993e1c Downloading 153.1MB
+ 0e0ef0ea5a70 Extracting 5B
+ fbca7e993e1c Downloading 157.3MB
+ 0e0ef0ea5a70 Extracting 5B
+ fbca7e993e1c Downloading 163.6MB
+ 0e0ef0ea5a70 Extracting 5B
+ fbca7e993e1c Downloading 169.9MB
+ 0e0ef0ea5a70 Extracting 5B
+ fbca7e993e1c Downloading 175.1MB
+ 0e0ef0ea5a70 Extracting 5B
+ fbca7e993e1c Downloading 179.3MB
+ 0e0ef0ea5a70 Extracting 5B
+ fbca7e993e1c Downloading 186.6MB
+ 0e0ef0ea5a70 Extracting 6B
+ fbca7e993e1c Downloading 192.9MB
+ 0e0ef0ea5a70 Extracting 6B
+ fbca7e993e1c Downloading 195MB
+ 0e0ef0ea5a70 Extracting 6B
+ fbca7e993e1c Downloading 201.3MB
+ 0e0ef0ea5a70 Extracting 6B
+ fbca7e993e1c Downloading 206.6MB
+ 0e0ef0ea5a70 Extracting 6B
+ fbca7e993e1c Downloading 212.9MB
+ 0e0ef0ea5a70 Extracting 6B
+ fbca7e993e1c Downloading 221.2MB
+ 0e0ef0ea5a70 Extracting 6B
+ fbca7e993e1c Downloading 226.5MB
+ 0e0ef0ea5a70 Extracting 6B
+ fbca7e993e1c Downloading 231.7MB
+ 0e0ef0ea5a70 Extracting 6B
+ fbca7e993e1c Downloading 235.9MB
+ 0e0ef0ea5a70 Extracting 6B
+ fbca7e993e1c Downloading 241.2MB
+ 0e0ef0ea5a70 Extracting 7B
+ fbca7e993e1c Downloading 249.6MB
+ 0e0ef0ea5a70 Extracting 7B
+ fbca7e993e1c Downloading 252.7MB
+ 0e0ef0ea5a70 Extracting 7B
+ fbca7e993e1c Downloading 261.1MB
+ 0e0ef0ea5a70 Extracting 7B
+ fbca7e993e1c Downloading 267.4MB
+ 0e0ef0ea5a70 Extracting 7B
+ fbca7e993e1c Downloading 270.5MB
+ 0e0ef0ea5a70 Extracting 7B
+ fbca7e993e1c Downloading 278.9MB
+ 0e0ef0ea5a70 Extracting 7B
+ fbca7e993e1c Downloading 283.1MB
+ 0e0ef0ea5a70 Extracting 7B
+ fbca7e993e1c Downloading 289.4MB
+ 0e0ef0ea5a70 Extracting 7B
+ fbca7e993e1c Downloading 293.6MB
+ 0e0ef0ea5a70 Extracting 7B
+ fbca7e993e1c Downloading 300.9MB
+ 0e0ef0ea5a70 Extracting 8B
+ fbca7e993e1c Downloading 307.2MB
+ 0e0ef0ea5a70 Extracting 8B
+ fbca7e993e1c Downloading 311.4MB
+ 0e0ef0ea5a70 Extracting 8B
+ fbca7e993e1c Downloading 318.8MB
+ 0e0ef0ea5a70 Extracting 8B
+ fbca7e993e1c Downloading 324MB
+ 0e0ef0ea5a70 Extracting 8B
+ fbca7e993e1c Downloading 328.2MB
+ 46897c4fed69 Pull complete 0B
+ 300db975b37c Pull complete 0B
+ 5c621431b652 Pull complete 0B
+ 2ce232a1ce76 Extracting 1B
+ 0e0ef0ea5a70 Pull complete 0B
+ fbca7e993e1c Downloading 336.6MB
+ 2ce232a1ce76 Extracting 1B
+ fbca7e993e1c Downloading 341.8MB
+ 2ce232a1ce76 Extracting 1B
+ fbca7e993e1c Downloading 346MB
+ 2ce232a1ce76 Extracting 1B
+ fbca7e993e1c Downloading 353.4MB
+ 2ce232a1ce76 Extracting 1B
+ fbca7e993e1c Downloading 358MB
+ 2ce232a1ce76 Extracting 1B
+ fbca7e993e1c Downloading 358MB
+ 2ce232a1ce76 Extracting 1B
+ 11e6d34b3d6b Pull complete 0B
+ 2ce232a1ce76 Pull complete 0B
+ Image supabase/supavisor:2.9.13@sha256:07f1a6098ffc04b80263bca4eb5c3e7bd2e03dfd1fc465aa108d7329000a1a4e Pulled 
+ fbca7e993e1c Download complete 0B
+ fbca7e993e1c Extracting 1B
+ fbca7e993e1c Extracting 1B
+ fbca7e993e1c Extracting 1B
+ fbca7e993e1c Extracting 1B
+ fbca7e993e1c Extracting 1B
+ fbca7e993e1c Extracting 1B
+ fbca7e993e1c Extracting 1B
+ fbca7e993e1c Extracting 1B
+ fbca7e993e1c Extracting 1B
+ fbca7e993e1c Extracting 1B
+ fbca7e993e1c Extracting 2B
+ fbca7e993e1c Extracting 2B
+ fbca7e993e1c Extracting 2B
+ fbca7e993e1c Extracting 2B
+ fbca7e993e1c Extracting 2B
+ fbca7e993e1c Extracting 2B
+ fbca7e993e1c Extracting 2B
+ fbca7e993e1c Extracting 2B
+ fbca7e993e1c Extracting 2B
+ fbca7e993e1c Extracting 2B
+ fbca7e993e1c Extracting 3B
+ fbca7e993e1c Extracting 3B
+ fbca7e993e1c Extracting 3B
+ fbca7e993e1c Extracting 3B
+ fbca7e993e1c Extracting 3B
+ fbca7e993e1c Extracting 3B
+ fbca7e993e1c Extracting 3B
+ fbca7e993e1c Extracting 3B
+ fbca7e993e1c Extracting 3B
+ fbca7e993e1c Extracting 3B
+ fbca7e993e1c Extracting 4B
+ fbca7e993e1c Extracting 4B
+ fbca7e993e1c Extracting 4B
+ fbca7e993e1c Extracting 4B
+ fbca7e993e1c Extracting 4B
+ fbca7e993e1c Extracting 4B
+ fbca7e993e1c Extracting 4B
+ fbca7e993e1c Extracting 4B
+ fbca7e993e1c Extracting 4B
+ fbca7e993e1c Extracting 4B
+ fbca7e993e1c Extracting 4B
+ fbca7e993e1c Extracting 5B
+ fbca7e993e1c Extracting 5B
+ fbca7e993e1c Extracting 5B
+ fbca7e993e1c Extracting 5B
+ fbca7e993e1c Extracting 5B
+ fbca7e993e1c Extracting 5B
+ fbca7e993e1c Extracting 5B
+ fbca7e993e1c Extracting 5B
+ fbca7e993e1c Extracting 5B
+ fbca7e993e1c Extracting 5B
+ fbca7e993e1c Extracting 6B
+ fbca7e993e1c Extracting 6B
+ fbca7e993e1c Extracting 6B
+ fbca7e993e1c Extracting 6B
+ fbca7e993e1c Extracting 6B
+ fbca7e993e1c Extracting 6B
+ fbca7e993e1c Extracting 6B
+ fbca7e993e1c Extracting 6B
+ fbca7e993e1c Extracting 6B
+ fbca7e993e1c Extracting 7B
+ fbca7e993e1c Extracting 7B
+ fbca7e993e1c Extracting 7B
+ fbca7e993e1c Extracting 7B
+ fbca7e993e1c Extracting 7B
+ fbca7e993e1c Extracting 7B
+ fbca7e993e1c Extracting 7B
+ fbca7e993e1c Extracting 7B
+ fbca7e993e1c Extracting 7B
+ fbca7e993e1c Extracting 7B
+ fbca7e993e1c Extracting 8B
+ fbca7e993e1c Extracting 8B
+ fbca7e993e1c Extracting 8B
+ fbca7e993e1c Extracting 8B
+ fbca7e993e1c Extracting 8B
+ fbca7e993e1c Extracting 8B
+ fbca7e993e1c Extracting 8B
+ fbca7e993e1c Extracting 8B
+ fbca7e993e1c Extracting 8B
+ fbca7e993e1c Extracting 8B
+ fbca7e993e1c Extracting 9B
+ fbca7e993e1c Extracting 9B
+ fbca7e993e1c Extracting 9B
+ fbca7e993e1c Extracting 9B
+ fbca7e993e1c Extracting 9B
+ fbca7e993e1c Extracting 9B
+ fbca7e993e1c Extracting 9B
+ fbca7e993e1c Extracting 9B
+ fbca7e993e1c Extracting 9B
+ fbca7e993e1c Extracting 10B
+ fbca7e993e1c Extracting 10B
+ fbca7e993e1c Extracting 10B
+ fbca7e993e1c Extracting 10B
+ fbca7e993e1c Extracting 10B
+ fbca7e993e1c Extracting 10B
+ fbca7e993e1c Extracting 10B
+ fbca7e993e1c Extracting 10B
+ fbca7e993e1c Extracting 10B
+ fbca7e993e1c Extracting 11B
+ fbca7e993e1c Extracting 11B
+ fbca7e993e1c Extracting 11B
+ fbca7e993e1c Extracting 11B
+ fbca7e993e1c Extracting 11B
+ fbca7e993e1c Extracting 11B
+ fbca7e993e1c Extracting 11B
+ fbca7e993e1c Extracting 11B
+ fbca7e993e1c Extracting 12B
+ fbca7e993e1c Extracting 12B
+ fbca7e993e1c Extracting 12B
+ fbca7e993e1c Extracting 12B
+ fbca7e993e1c Extracting 12B
+ fbca7e993e1c Extracting 12B
+ fbca7e993e1c Extracting 12B
+ fbca7e993e1c Extracting 12B
+ fbca7e993e1c Extracting 12B
+ fbca7e993e1c Extracting 13B
+ fbca7e993e1c Extracting 13B
+ fbca7e993e1c Extracting 13B
+ fbca7e993e1c Extracting 13B
+ fbca7e993e1c Extracting 13B
+ fbca7e993e1c Extracting 13B
+ fbca7e993e1c Extracting 13B
+ fbca7e993e1c Extracting 13B
+ fbca7e993e1c Extracting 14B
+ fbca7e993e1c Extracting 14B
+ fbca7e993e1c Extracting 14B
+ fbca7e993e1c Extracting 14B
+ fbca7e993e1c Extracting 14B
+ fbca7e993e1c Extracting 14B
+ fbca7e993e1c Extracting 14B
+ fbca7e993e1c Extracting 15B
+ fbca7e993e1c Extracting 15B
+ fbca7e993e1c Extracting 15B
+ fbca7e993e1c Extracting 15B
+ fbca7e993e1c Extracting 15B
+ fbca7e993e1c Extracting 15B
+ fbca7e993e1c Extracting 15B
+ fbca7e993e1c Extracting 15B
+ fbca7e993e1c Extracting 16B
+ fbca7e993e1c Extracting 16B
+ fbca7e993e1c Extracting 16B
+ fbca7e993e1c Extracting 16B
+ fbca7e993e1c Extracting 16B
+ fbca7e993e1c Extracting 16B
+ fbca7e993e1c Extracting 16B
+ fbca7e993e1c Extracting 16B
+ fbca7e993e1c Extracting 17B
+ fbca7e993e1c Extracting 17B
+ fbca7e993e1c Extracting 17B
+ fbca7e993e1c Extracting 17B
+ fbca7e993e1c Extracting 17B
+ fbca7e993e1c Extracting 17B
+ fbca7e993e1c Extracting 17B
+ fbca7e993e1c Extracting 17B
+ fbca7e993e1c Extracting 17B
+ fbca7e993e1c Extracting 17B
+ fbca7e993e1c Extracting 18B
+ fbca7e993e1c Extracting 18B
+ fbca7e993e1c Extracting 18B
+ fbca7e993e1c Extracting 18B
+ fbca7e993e1c Extracting 18B
+ fbca7e993e1c Extracting 18B
+ fbca7e993e1c Extracting 18B
+ fbca7e993e1c Extracting 18B
+ fbca7e993e1c Extracting 18B
+ fbca7e993e1c Extracting 18B
+ fbca7e993e1c Extracting 19B
+ fbca7e993e1c Extracting 19B
+ fbca7e993e1c Extracting 19B
+ fbca7e993e1c Extracting 19B
+ fbca7e993e1c Extracting 19B
+ fbca7e993e1c Extracting 19B
+ fbca7e993e1c Extracting 19B
+ fbca7e993e1c Extracting 19B
+ fbca7e993e1c Extracting 19B
+ fbca7e993e1c Extracting 19B
+ fbca7e993e1c Extracting 20B
+ fbca7e993e1c Extracting 20B
+ fbca7e993e1c Pull complete 0B
+ 9c04f0608c11 Pull complete 0B
+ 8ddaf57867eb Pull complete 0B
+ 9705dc122b7f Pull complete 0B
+ 77a683edb945 Pull complete 0B
+ 99eec413ff9c Extracting 1B
+ abb565a09a47 Pull complete 0B
+ 99eec413ff9c Pull complete 0B
+ f04e445057ae Extracting 1B
+ 5cc41111c814 Pull complete 0B
+ 7bd6db39b9a3 Pull complete 0B
+ f04e445057ae Pull complete 0B
+ a08f9afeb021 Pull complete 0B
+ 934229c37c0f Pull complete 0B
+ 66bdddd6039a Pull complete 0B
+ d57bc9046944 Pull complete 0B
+ 050236ff9d6f Pull complete 0B
+ 09f359af2c8c Pull complete 0B
+ 7e2a3209ccb0 Pull complete 0B
+ e7cd8a022c6d Pull complete 0B
+ 27080c64989e Pull complete 0B
+ 40b5286cf380 Pull complete 0B
+ 37896fbd0b4d Extracting 1B
+ 7caa0d6a85af Pull complete 0B
+ 5f373982f445 Pull complete 0B
+ 90e0d490e65d Pull complete 0B
+ 57a2f2b49499 Pull complete 0B
+ 15efbe177d1c Pull complete 0B
+ 37896fbd0b4d Pull complete 0B
+ Image supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00 Pulled 
+ Network sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a_default Creating 
+ Volume sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a_db-config Creating 
+ Volume sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a_db-config Creating 
+ Network sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a_default Creating 
+ Volume sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a_db-config Created 
+ Volume sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a_db-config Created 
+ Network sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a_default Created 
+ Network sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a_default Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Creating 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-supavisor-1 Creating 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-rest-1 Creating 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-rest-1 Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-supavisor-1 Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Starting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Started 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Healthy 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-supavisor-1 Starting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Healthy 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-rest-1 Starting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-supavisor-1 Started 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-rest-1 Started 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-rest-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-supavisor-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Healthy 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-supavisor-1 Healthy 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-rest-1 Healthy 
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+cluster: sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b
+$ docker compose --project-name sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b --project-directory /home/kinesis/orca/workspaces/GroundZero/leatherback/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/leatherback/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/leatherback/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/leatherback/deploy/supabase/compose.test.yaml up --detach --wait db rest supavisor
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"GLOBAL_S3_BUCKET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"STORAGE_TENANT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"REGION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"IMGPROXY_AUTO_WEBP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"FUNCTIONS_VERIFY_JWT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SMTP_USER\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"ENABLE_PHONE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SMTP_PASS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"MAILER_URLPATHS_INVITE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"ADDITIONAL_REDIRECT_URLS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"ENABLE_EMAIL_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SMTP_HOST\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"MAILER_URLPATHS_RECOVERY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SMTP_SENDER_NAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"MAILER_URLPATHS_EMAIL_CHANGE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SMTP_ADMIN_EMAIL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"MAILER_URLPATHS_CONFIRMATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SITE_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"ENABLE_EMAIL_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SMTP_PORT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"DISABLE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"ENABLE_ANONYMOUS_USERS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"ENABLE_PHONE_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SUPABASE_PUBLISHABLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"OPENAI_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"STUDIO_DEFAULT_ORGANIZATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"STUDIO_DEFAULT_PROJECT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SUPABASE_SECRET_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"DASHBOARD_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"DASHBOARD_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T21:51:13+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+ Network sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b_default Creating 
+ Volume sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b_db-config Creating 
+ Volume sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b_db-config Creating 
+ Network sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b_default Creating 
+ Volume sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b_db-config Created 
+ Volume sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b_db-config Created 
+ Network sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b_default Created 
+ Network sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b_default Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Creating 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-supavisor-1 Creating 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-rest-1 Creating 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-rest-1 Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-supavisor-1 Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Starting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Started 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Healthy 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-supavisor-1 Starting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Healthy 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-rest-1 Starting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-supavisor-1 Started 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-rest-1 Started 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-rest-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-supavisor-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Healthy 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-supavisor-1 Healthy 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-rest-1 Healthy 
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+$ cargo run --quiet --package fvoci-server --locked -- db migrate
+PASS: catalog, required initial rows and schema dump objects are equal
+$ docker compose --project-name sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services --file deploy/compose.test.yaml --profile oidc up --detach --wait --remove-orphans meilisearch seaweedfs keycloak
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services_default Creating 
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services_default Creating 
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services_default Created 
+ Network sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services_default Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-seaweedfs-1 Creating 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-meilisearch-1 Creating 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-keycloak-1 Creating 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-keycloak-1 Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-seaweedfs-1 Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-meilisearch-1 Created 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-keycloak-1 Starting 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-meilisearch-1 Starting 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-seaweedfs-1 Starting 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-keycloak-1 Started 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-meilisearch-1 Started 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-seaweedfs-1 Started 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-seaweedfs-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-keycloak-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-meilisearch-1 Waiting 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-meilisearch-1 Healthy 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-seaweedfs-1 Healthy 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-keycloak-1 Healthy 
+==> app-role behavior direct, /home/kinesis/orca/workspaces/GroundZero/leatherback/target/sql-consolidation/final-supabase-oidc/a
+==> app-role behavior session pooler, /home/kinesis/orca/workspaces/GroundZero/leatherback/target/sql-consolidation/final-supabase-oidc/a
+==> app-role behavior direct, /home/kinesis/orca/workspaces/GroundZero/leatherback/target/sql-consolidation/final-supabase-oidc/b
+==> app-role behavior session pooler, /home/kinesis/orca/workspaces/GroundZero/leatherback/target/sql-consolidation/final-supabase-oidc/b
+$ docker compose --project-name sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services --file deploy/compose.test.yaml --profile oidc stop
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-seaweedfs-1 Stopping 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-meilisearch-1 Stopping 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-keycloak-1 Stopping 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-meilisearch-1 Stopped 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-keycloak-1 Stopped 
+ Container sqlprep-b-fvoci-leatherback-b57275-test-01a168cfbb2575fa8f6e8cb7b300bd05-services-seaweedfs-1 Stopped 
+$ docker compose --project-name sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b --project-directory /home/kinesis/orca/workspaces/GroundZero/leatherback/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/leatherback/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/leatherback/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/leatherback/deploy/supabase/compose.test.yaml stop
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"STUDIO_DEFAULT_ORGANIZATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"STUDIO_DEFAULT_PROJECT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SUPABASE_PUBLISHABLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SUPABASE_SECRET_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"OPENAI_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"FUNCTIONS_VERIFY_JWT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"DASHBOARD_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"DASHBOARD_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SMTP_PASS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"MAILER_URLPATHS_INVITE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"ENABLE_ANONYMOUS_USERS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"ADDITIONAL_REDIRECT_URLS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"ENABLE_EMAIL_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SMTP_HOST\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SMTP_USER\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"MAILER_URLPATHS_RECOVERY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SMTP_ADMIN_EMAIL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SMTP_SENDER_NAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"MAILER_URLPATHS_CONFIRMATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"MAILER_URLPATHS_EMAIL_CHANGE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SITE_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"ENABLE_EMAIL_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SMTP_PORT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"ENABLE_PHONE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"ENABLE_PHONE_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"DISABLE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"GLOBAL_S3_BUCKET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"REGION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"STORAGE_TENANT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:28+09:00" level=warning msg="The \"IMGPROXY_AUTO_WEBP\" variable is not set. Defaulting to a blank string."
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-rest-1 Stopping 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-supavisor-1 Stopping 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-supavisor-1 Stopped 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-rest-1 Stopped 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Stopping 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-b-db-1 Stopped 
+$ docker compose --project-name sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a --project-directory /home/kinesis/orca/workspaces/GroundZero/leatherback/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/leatherback/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/leatherback/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/leatherback/deploy/supabase/compose.test.yaml stop
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"IMGPROXY_AUTO_WEBP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"DASHBOARD_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"DASHBOARD_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"ENABLE_EMAIL_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"MAILER_URLPATHS_CONFIRMATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"ENABLE_PHONE_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SMTP_PASS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"MAILER_URLPATHS_RECOVERY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"ENABLE_ANONYMOUS_USERS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"ENABLE_PHONE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"ADDITIONAL_REDIRECT_URLS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"ENABLE_EMAIL_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SMTP_ADMIN_EMAIL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SMTP_HOST\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"MAILER_URLPATHS_EMAIL_CHANGE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SITE_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"DISABLE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SMTP_PORT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SMTP_USER\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SMTP_SENDER_NAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"MAILER_URLPATHS_INVITE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"STORAGE_TENANT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"GLOBAL_S3_BUCKET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"REGION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"FUNCTIONS_VERIFY_JWT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"STUDIO_DEFAULT_ORGANIZATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"STUDIO_DEFAULT_PROJECT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"OPENAI_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SUPABASE_SECRET_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T22:00:31+09:00" level=warning msg="The \"SUPABASE_PUBLISHABLE_KEY\" variable is not set. Defaulting to a blank string."
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-supavisor-1 Stopping 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-rest-1 Stopping 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-rest-1 Stopped 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-supavisor-1 Stopped 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Stopping 
+ Container sqlprep-b-fvoci-leatherback-b57275-supabase-01a168cfbb2575fa8f6e8cb7b300bd05-a-db-1 Stopped 
