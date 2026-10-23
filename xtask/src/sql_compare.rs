@@ -746,7 +746,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn oidc_needs_the_full_suite_and_restricted_admin_stays_core() {
+    fn restricted_admin_stays_core_and_full_suite_gates_oidc() {
         let full = |oidc| {
             Some(Behavior {
                 scope: BehaviorScope::Full,

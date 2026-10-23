@@ -212,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn sql_compare_oidc_requires_behavior() {
+    fn sql_compare_requires_behavior_for_oidc() {
         let error = sql_compare(&["--oidc"]).unwrap_err();
         assert_eq!(
             error.kind(),
