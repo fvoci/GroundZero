@@ -15,7 +15,7 @@
   import * as Select from '$lib/ui/select';
 
   import ItemProfileSummary from './ItemProfileSummary.svelte';
-  import { detailFields, itemStatusLabel, peopleLabels, periodText, toDetails } from './profile';
+  import { detailFields, itemStatusLabel, peopleLabels, toDetails } from './profile';
 
   interface Props {
     item: ItemView;
