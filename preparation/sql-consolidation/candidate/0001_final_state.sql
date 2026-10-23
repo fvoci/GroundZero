@@ -1,4 +1,4 @@
--- 검토용 최종 상태 후보. 적용 기준: 5c266229b08eddfaba7723d983483a137ad9e0bc.
+-- 검토용 최종 상태 후보. 적용 기준: 3db81d1deae24b16478581ebd6a06de2b2a2d8c9.
 -- 원본 97개 마이그레이션 적용 후 PostgreSQL 18.3 카탈로그에서 추출했다.
 -- 기존 db bootstrap 뒤 빈 DB에 SQLx의 단일 트랜잭션으로 적용한다.
 -- 이력 연결이 아니다: 마지막 함수/테이블 정의만 있으며 과거 데이터 보정은 포함하지 않는다.
@@ -6411,7 +6411,7 @@ CREATE FUNCTION fvoci.app_set_item_profile(p_item uuid, p_base_version integer, 
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
     -- 0097: 읽은 판이 지났으면 바꾸지 않는다(바꿀 것이 없는 재시도는 그대로 성공).
-    IF v_item.profile_version <> p_base_version THEN
+    IF v_item.profile_version IS DISTINCT FROM p_base_version THEN
       IF v_item.leader_id IS NOT DISTINCT FROM p_leader AND v_item.goal = coalesce(p_goal, '')
          AND v_item.scope = coalesce(p_scope, '') AND v_item.starts_on IS NOT DISTINCT FROM p_starts
          AND v_item.ends_on IS NOT DISTINCT FROM p_ends AND v_item.status = p_status
@@ -9171,7 +9171,7 @@ CREATE FUNCTION fvoci.app_update_item(p_item uuid, p_base_version integer, p_tit
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
     -- 0097: 읽은 판이 지났으면 바꾸지 않는다(바꿀 것이 없는 재시도는 그대로 성공).
-    IF v_item.version <> p_base_version THEN
+    IF v_item.version IS DISTINCT FROM p_base_version THEN
       IF v_item.title = btrim(p_title) AND v_item.description = coalesce(p_description, '')
          AND (p_visibility IS NULL OR p_visibility = v_item.visibility) THEN
         RETURN 'updated';
@@ -9578,7 +9578,7 @@ CREATE FUNCTION fvoci.app_update_view(p_request uuid, p_view uuid, p_base_versio
                WHERE user_id = app_user_id() AND (request_id = p_request OR updated_request_id = p_request)) THEN
       RAISE EXCEPTION 'request_id was already used for another change' USING ERRCODE = '22023';
     END IF;
-    IF v_view.version <> p_base_version THEN
+    IF v_view.version IS DISTINCT FROM p_base_version THEN
       RETURN 'conflict';
     END IF;
     UPDATE saved_views SET config = p_config, version = version + 1, updated_request_id = p_request

@@ -34,11 +34,11 @@
 {"symbol":"app_system_purge_expired","path":"crates/server/src/worker.rs","line":49,"source":"        call: \"SELECT app_system_purge_expired($1)\","}
 {"symbol":"app_user_id","path":"crates/server/tests/db_context.rs","line":49,"source":"            assert_eq!(user, None, \"after {finish}: app_user_id() leaked\");"}
 {"symbol":"app_user_id","path":"crates/server/tests/ids.rs","line":52,"source":"        \"SELECT count(*) FROM workspaces WHERE created_by = app_user_id() AND request_id = $1\","}
-{"symbol":"app_create_workspace","path":"deploy/postgres/dev-module-seed.sql","line":52,"source":"  v_ws := app_create_workspace(pg_temp.take1(), '모듈 예제 (합성 데이터)', pg_temp.take(2));"}
 {"symbol":"app_system_purge_old_versions","path":"crates/server/src/worker.rs","line":53,"source":"        call: \"SELECT app_system_purge_old_versions()\","}
-{"symbol":"app_invite","path":"deploy/postgres/dev-module-seed.sql","line":53,"source":"  v_inv := app_invite(v_ws, 'test-user-2@example.test', 'writer', 7 * 24 * 3600, pg_temp.take(2));"}
 {"symbol":"app_url","path":"crates/server/tests/shutdown.rs","line":54,"source":"        .env(\"DATABASE_URL\", &app_url)"}
-{"symbol":"app_respond_invitation","path":"deploy/postgres/dev-module-seed.sql","line":55,"source":"  PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));"}
+{"symbol":"app_create_workspace","path":"deploy/postgres/dev-module-seed.sql","line":54,"source":"  v_ws := app_create_workspace(pg_temp.take1(), '모듈 예제 (합성 데이터)', pg_temp.take(2));"}
+{"symbol":"app_invite","path":"deploy/postgres/dev-module-seed.sql","line":55,"source":"  v_inv := app_invite(v_ws, 'test-user-2@example.test', 'writer', 7 * 24 * 3600, pg_temp.take(2));"}
+{"symbol":"app_respond_invitation","path":"deploy/postgres/dev-module-seed.sql","line":57,"source":"  PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));"}
 {"symbol":"app_system_recurrence_tick_ids","path":"crates/server/src/worker.rs","line":58,"source":"    ids: Some(\"SELECT app_system_recurrence_tick_ids()\"),"}
 {"symbol":"app_respond_invitation","path":"deploy/postgres/dev-seed.sql","line":58,"source":"  PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));"}
 {"symbol":"app_system_recurrence_tick","path":"crates/server/src/worker.rs","line":59,"source":"    call: \"SELECT app_system_recurrence_tick($1)\","}
@@ -50,69 +50,69 @@
 {"symbol":"app_place_document","path":"docs/reference-products-survey.md","line":64,"source":"| 가. 검색으로 상위 문서 고르기    | 트리 Alt+방향키·메뉴로 한 단계씩(`DocumentTree.svelte`). `PUT /api/documents/{id}/parent`가 같은 자리(같은 워크스페이스 위키·같은 항목·같은 소유자 노트)만, 자기·하위 아래 금지, 깊이 한도를 서버에서 막는다(`app_place_document`, 0071) | 트리가 이미 읽은 같은 자리 문서 목록을 제목으로 거르는 이동 창. 자기·하위 문서는 후보에서 뺀다(서버 거부는 그대로 마지막 방어). API 변경 없음                                                                                                                                                              | 공통 위키·모듈 문서·개인 노트(트리를 쓰는 곳)              | D-27           | 컴포넌트 시험(후보 거르기·자기/하위 제외·키보드·실패), 브라우저(옮긴 뒤 새로고침 유지) | 구현 `b0c716e`. `MoveDocumentDialog.svelte`(새)·`DocumentTree.svelte`·`tree.ts`. 시험 5건(후보·자기와 하위 제외·Alt+M·맨 위·지금 상위는 고를 수 없음·서버 거절이면 창에 남음). 브라우저: 위키 트리에서 Alt+M → \"점검\" → Enter, 서버에서 백업의 상위가 점검 기록으로 바뀜, 초점이 옮긴 줄로 돌아옴                                                                                                                                                                                                                                                                                             |"}
 {"symbol":"app_system_due_notifications_ids","path":"crates/server/src/worker.rs","line":66,"source":"        ids: Some(\"SELECT app_system_due_notifications_ids(current_date)\"),"}
 {"symbol":"app_system_due_notifications","path":"crates/server/src/worker.rs","line":67,"source":"        call: \"SELECT app_system_due_notifications(current_date, $1)\","}
-{"symbol":"app_create_module","path":"deploy/postgres/dev-module-seed.sql","line":67,"source":"    v_module := app_create_module(v_ws, pg_temp.take1(), v_kind, v_row->>'name', v_row->>'key', pg_temp.take(2));"}
-{"symbol":"app_set_module_description","path":"deploy/postgres/dev-module-seed.sql","line":68,"source":"    PERFORM app_set_module_description(v_module, '개발 전용 합성 예제. 실제 고객·연구 자료가 아닙니다.');"}
-{"symbol":"app_create_item","path":"deploy/postgres/dev-module-seed.sql","line":69,"source":"    v_item := app_create_item(v_module, pg_temp.take1(), v_row->>'title', '수정·저장·새로고침 후 재조회하는 개발 예제',"}
+{"symbol":"app_create_module","path":"deploy/postgres/dev-module-seed.sql","line":69,"source":"    v_module := app_create_module(v_ws, pg_temp.take1(), v_kind, v_row->>'name', v_row->>'key', pg_temp.take(2));"}
 {"symbol":"app_item_access","path":"crates/server/src/features/saved_views.rs","line":70,"source":"    let visible: bool = sqlx::query_scalar(\"SELECT app_item_access($1) IS NOT NULL\")"}
 {"symbol":"app_system_item_reminders_ids","path":"crates/server/src/worker.rs","line":70,"source":"        ids: Some(\"SELECT app_system_item_reminders_ids(current_date)\"),"}
+{"symbol":"app_set_module_description","path":"deploy/postgres/dev-module-seed.sql","line":70,"source":"    PERFORM app_set_module_description(v_module, '개발 전용 합성 예제. 실제 고객·연구 자료가 아닙니다.');"}
 {"symbol":"app_system_item_reminders","path":"crates/server/src/worker.rs","line":71,"source":"        call: \"SELECT app_system_item_reminders(current_date, $1)\","}
+{"symbol":"app_create_item","path":"deploy/postgres/dev-module-seed.sql","line":71,"source":"    v_item := app_create_item(v_module, pg_temp.take1(), v_row->>'title', '수정·저장·새로고침 후 재조회하는 개발 예제',"}
 {"symbol":"app_document_base_access","path":"crates/server/src/features/documents.rs","line":72,"source":"    let raw: Option<String> = sqlx::query_scalar(\"SELECT app_document_base_access($1)\")"}
-{"symbol":"app_set_item_members","path":"deploy/postgres/dev-module-seed.sql","line":72,"source":"    PERFORM app_set_item_members(v_item, ARRAY[v_user], ARRAY[]::uuid[],"}
-{"symbol":"app_set_item_members_ids","path":"deploy/postgres/dev-module-seed.sql","line":73,"source":"                                 pg_temp.take(app_set_item_members_ids(v_item)));"}
-{"symbol":"app_set_item_profile","path":"deploy/postgres/dev-module-seed.sql","line":74,"source":"    PERFORM app_set_item_profile(v_item, v_admin, v_row->>'goal', '모듈 연결과 저장 동작 확인',"}
+{"symbol":"app_set_item_members","path":"deploy/postgres/dev-module-seed.sql","line":74,"source":"    PERFORM app_set_item_members(v_item, ARRAY[v_user], ARRAY[]::uuid[],"}
+{"symbol":"app_set_item_members_ids","path":"deploy/postgres/dev-module-seed.sql","line":75,"source":"                                 pg_temp.take(app_set_item_members_ids(v_item)));"}
 {"symbol":"app_claim_schedule","path":"crates/server/src/worker.rs","line":77,"source":"    let due: bool = sqlx::query_scalar(\"SELECT app_claim_schedule($1, $2::interval)\")"}
-{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":79,"source":"    v_task := app_create_task(v_item, pg_temp.take1(), '대표 업무: 준비 사항 확인', NULL,"}
+{"symbol":"app_set_item_profile","path":"deploy/postgres/dev-module-seed.sql","line":78,"source":"    v_outcome := app_set_item_profile(v_item, v_version, v_admin, v_row->>'goal', '모듈 연결과 저장 동작 확인',"}
 {"symbol":"app_url","path":"crates/server/tests/backup.rs","line":81,"source":"        (\"DATABASE_URL\", &source.app_url),"}
 {"symbol":"app_system_search_payload","path":"docs/reference-products-survey.md","line":81,"source":"  SQL 함수(`app_system_search_payload`)를 바꾸는 마이그레이션이 필요하다. 대신 이미 있는 방식을 따른다: Meilisearch 후보를 쪽마다 받아"}
-{"symbol":"app_add_checklist_items","path":"deploy/postgres/dev-module-seed.sql","line":82,"source":"    PERFORM app_add_checklist_items(v_task, jsonb_build_array("}
 {"symbol":"app_normalize_key","path":"crates/server/tests/supabase.rs","line":86,"source":"                \"SELECT fvoci.app_normalize_key('x')\","}
-{"symbol":"app_create_module_document","path":"deploy/postgres/dev-module-seed.sql","line":86,"source":"    v_doc := app_create_module_document(v_item, pg_temp.take1(), '공동 작업 노트', 1,"}
-{"symbol":"app_create_event","path":"deploy/postgres/dev-module-seed.sql","line":90,"source":"    PERFORM app_create_event(v_item, pg_temp.take1(), 'meeting', '예제 점검 모임', '공통 일정의 모듈별 표시 확인',"}
-{"symbol":"app_add_time_entry","path":"deploy/postgres/dev-module-seed.sql","line":94,"source":"    PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '90 minutes', now() - interval '60 minutes',"}
+{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":86,"source":"    v_task := app_create_task(v_item, pg_temp.take1(), '대표 업무: 준비 사항 확인', NULL,"}
+{"symbol":"app_add_checklist_items","path":"deploy/postgres/dev-module-seed.sql","line":89,"source":"    PERFORM app_add_checklist_items(v_task, jsonb_build_array("}
+{"symbol":"app_create_module_document","path":"deploy/postgres/dev-module-seed.sql","line":93,"source":"    v_doc := app_create_module_document(v_item, pg_temp.take1(), '공동 작업 노트', 1,"}
 {"symbol":"app_comment_target_state","path":"crates/server/src/features/comments.rs","line":95,"source":"        sqlx::query_as(\"SELECT access, archived FROM app_comment_target_state($1, $2)\")"}
 {"symbol":"app_user_id","path":"crates/server/src/features/workspaces.rs","line":95,"source":"         WHERE m.user_id = app_user_id()"}
-{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":97,"source":"      v_child := app_create_task(v_item, pg_temp.take1(), '하위 업무: 검토 목록 작성', v_task, '', 'done', 'low',"}
-{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":99,"source":"      v_milestone := app_create_task(v_item, pg_temp.take1(), '마일스톤: 검토 완료', NULL, '', 'todo', 'high',"}
-{"symbol":"app_set_task_dependency","path":"deploy/postgres/dev-module-seed.sql","line":101,"source":"      PERFORM app_set_task_dependency(v_task, v_milestone, 'FS', 0, NULL, NULL, '[]'::jsonb, pg_temp.take(1));"}
-{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":104,"source":"      v_together := app_create_task(v_item, pg_temp.take1(), '관계 예제: 하루 뒤 함께 시작', NULL, '', 'todo', 'medium',"}
-{"symbol":"app_set_task_dependency","path":"deploy/postgres/dev-module-seed.sql","line":106,"source":"      PERFORM app_set_task_dependency(v_task, v_together, 'SS', 1, NULL, NULL, '[]', pg_temp.take(1));"}
-{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":107,"source":"      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 함께 마무리', NULL, '', 'todo', 'low',"}
-{"symbol":"app_set_task_dependency","path":"deploy/postgres/dev-module-seed.sql","line":109,"source":"      PERFORM app_set_task_dependency(v_task, v_linked, 'FF', 0, NULL, NULL, '[]', pg_temp.take(1));"}
-{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":110,"source":"      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 시작 전에 준비 끝', NULL, '', 'todo', 'low',"}
+{"symbol":"app_create_event","path":"deploy/postgres/dev-module-seed.sql","line":97,"source":"    PERFORM app_create_event(v_item, pg_temp.take1(), 'meeting', '예제 점검 모임', '공통 일정의 모듈별 표시 확인',"}
+{"symbol":"app_add_time_entry","path":"deploy/postgres/dev-module-seed.sql","line":101,"source":"    PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '90 minutes', now() - interval '60 minutes',"}
+{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":104,"source":"      v_child := app_create_task(v_item, pg_temp.take1(), '하위 업무: 검토 목록 작성', v_task, '', 'done', 'low',"}
+{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":106,"source":"      v_milestone := app_create_task(v_item, pg_temp.take1(), '마일스톤: 검토 완료', NULL, '', 'todo', 'high',"}
+{"symbol":"app_set_task_dependency","path":"deploy/postgres/dev-module-seed.sql","line":108,"source":"      PERFORM app_set_task_dependency(v_task, v_milestone, 'FS', 0, NULL, NULL, '[]'::jsonb, pg_temp.take(1));"}
 {"symbol":"app_trash_list","path":"crates/server/src/features/trash.rs","line":111,"source":"    let rows: Vec<EntryRow> = sqlx::query_as(\"SELECT * FROM app_trash_list($1)\")"}
-{"symbol":"app_set_task_dependency","path":"deploy/postgres/dev-module-seed.sql","line":112,"source":"      PERFORM app_set_task_dependency(v_together, v_linked, 'SF', 0, NULL, NULL, '[]', pg_temp.take(1));"}
+{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":111,"source":"      v_together := app_create_task(v_item, pg_temp.take1(), '관계 예제: 하루 뒤 함께 시작', NULL, '', 'todo', 'medium',"}
+{"symbol":"app_set_task_dependency","path":"deploy/postgres/dev-module-seed.sql","line":113,"source":"      PERFORM app_set_task_dependency(v_task, v_together, 'SS', 1, NULL, NULL, '[]', pg_temp.take(1));"}
+{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":114,"source":"      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 함께 마무리', NULL, '', 'todo', 'low',"}
+{"symbol":"app_set_task_dependency","path":"deploy/postgres/dev-module-seed.sql","line":116,"source":"      PERFORM app_set_task_dependency(v_task, v_linked, 'FF', 0, NULL, NULL, '[]', pg_temp.take(1));"}
 {"symbol":"app_create_public_link","path":"crates/server/src/features/public_links.rs","line":117,"source":"    let link: Uuid = sqlx::query_scalar(\"SELECT app_create_public_link($1, $2, $3, $4)\")"}
+{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":117,"source":"      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 시작 전에 준비 끝', NULL, '', 'todo', 'low',"}
 {"symbol":"app_create_workspace","path":"crates/server/src/features/workspaces.rs","line":118,"source":"    let id: WorkspaceId = sqlx::query_scalar(\"SELECT app_create_workspace($1, $2, $3)\")"}
-{"symbol":"app_set_course_details","path":"deploy/postgres/dev-module-seed.sql","line":118,"source":"  PERFORM app_set_course_details(v_course, '데이터 기초', '가상 강사', '개발 예제',"}
+{"symbol":"app_set_task_dependency","path":"deploy/postgres/dev-module-seed.sql","line":119,"source":"      PERFORM app_set_task_dependency(v_together, v_linked, 'SF', 0, NULL, NULL, '[]', pg_temp.take(1));"}
 {"symbol":"app_set_task_recurrence","path":"crates/server/src/features/recurrence.rs","line":120,"source":"    let series: Option<Uuid> = sqlx::query_scalar(\"SELECT app_set_task_recurrence($1, $2, $3, $4)\")"}
 {"symbol":"app_trash_kept_for_references","path":"crates/server/src/features/trash.rs","line":120,"source":"        sqlx::query_scalar(\"SELECT * FROM app_trash_kept_for_references($1)\")"}
-{"symbol":"app_add_episodes","path":"deploy/postgres/dev-module-seed.sql","line":120,"source":"  PERFORM app_add_episodes(v_course, jsonb_build_array("}
+{"symbol":"app_set_course_details","path":"deploy/postgres/dev-module-seed.sql","line":125,"source":"  PERFORM app_set_course_details(v_course, '데이터 기초', '가상 강사', '개발 예제',"}
 {"symbol":"app_user_id","path":"crates/server/src/features/workspaces.rs","line":126,"source":"         JOIN workspace_members m ON m.workspace_id = w.id AND m.user_id = app_user_id()"}
-{"symbol":"app_set_episode_progress","path":"deploy/postgres/dev-module-seed.sql","line":128,"source":"  PERFORM app_set_episode_progress(v_episode, 'done', NULL, 600, '내 비공개 메모: 첫 회차 완료', v_today);"}
-{"symbol":"app_add_time_entry","path":"deploy/postgres/dev-module-seed.sql","line":129,"source":"  PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '50 minutes', now() - interval '40 minutes',"}
-{"symbol":"app_set_episode_progress","path":"deploy/postgres/dev-module-seed.sql","line":132,"source":"  PERFORM app_set_episode_progress(v_episode, 'in_progress', v_today + 1, 240,"}
+{"symbol":"app_add_episodes","path":"deploy/postgres/dev-module-seed.sql","line":127,"source":"  PERFORM app_add_episodes(v_course, jsonb_build_array("}
 {"symbol":"app_user_id","path":"crates/server/src/features/search_api.rs","line":133,"source":"            \"SELECT coalesce(nullif((SELECT time_zone FROM user_settings WHERE user_id = app_user_id()), ''), 'UTC')\","}
-{"symbol":"app_set_episode_progress","path":"deploy/postgres/dev-module-seed.sql","line":136,"source":"  PERFORM app_set_episode_progress(v_episode, 'in_progress', NULL, 120, '질문을 적으며 시청 중', v_today);"}
+{"symbol":"app_set_episode_progress","path":"deploy/postgres/dev-module-seed.sql","line":135,"source":"  PERFORM app_set_episode_progress(v_episode, 'done', NULL, 600, '내 비공개 메모: 첫 회차 완료', v_today);"}
+{"symbol":"app_add_time_entry","path":"deploy/postgres/dev-module-seed.sql","line":136,"source":"  PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '50 minutes', now() - interval '40 minutes',"}
 {"symbol":"app_check_timezone","path":"crates/server/src/features/search_api.rs","line":138,"source":"    sqlx::query(\"SELECT app_check_timezone($1)\")"}
-{"symbol":"app_add_study_units","path":"deploy/postgres/dev-module-seed.sql","line":139,"source":"  PERFORM app_add_study_units(v_study, jsonb_build_array("}
+{"symbol":"app_set_episode_progress","path":"deploy/postgres/dev-module-seed.sql","line":139,"source":"  PERFORM app_set_episode_progress(v_episode, 'in_progress', v_today + 1, 240,"}
+{"symbol":"app_set_episode_progress","path":"deploy/postgres/dev-module-seed.sql","line":143,"source":"  PERFORM app_set_episode_progress(v_episode, 'in_progress', NULL, 120, '질문을 적으며 시청 중', v_today);"}
 {"symbol":"app_local_instant","path":"crates/server/src/features/search_api.rs","line":146,"source":"        \"SELECT coalesce(app_local_instant($1::date::timestamp, $3), $1::date::timestamp AT TIME ZONE $3),"}
+{"symbol":"app_add_study_units","path":"deploy/postgres/dev-module-seed.sql","line":146,"source":"  PERFORM app_add_study_units(v_study, jsonb_build_array("}
 {"symbol":"app_my_workspace_ids","path":"crates/server/src/features/home.rs","line":147,"source":"       AND t.workspace_id IN (SELECT app_my_workspace_ids())"}
 {"symbol":"app_local_instant","path":"crates/server/src/features/search_api.rs","line":147,"source":"                coalesce(app_local_instant(($2::date + 1)::timestamp, $3), ($2::date + 1)::timestamp AT TIME ZONE $3)\","}
-{"symbol":"app_set_unit_progress","path":"deploy/postgres/dev-module-seed.sql","line":147,"source":"  PERFORM app_set_unit_progress(v_unit, 'done', 20, NULL, '내 비공개 독서 메모', v_today);"}
 {"symbol":"app_user_id","path":"crates/server/src/features/home.rs","line":148,"source":"       AND (EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = app_user_id())"}
-{"symbol":"app_add_time_entry","path":"deploy/postgres/dev-module-seed.sql","line":148,"source":"  PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '35 minutes', now() - interval '10 minutes',"}
 {"symbol":"app_create_view","path":"crates/server/src/features/saved_views.rs","line":149,"source":"            sqlx::query_as(\"SELECT view_id, outcome FROM app_create_view($1, $2, $3, $4, $5)\")"}
 {"symbol":"app_user_id","path":"crates/server/src/features/home.rs","line":150,"source":"                AND t.created_by = app_user_id()))\";"}
 {"symbol":"app_sync_task_series_ids","path":"crates/server/src/features/recurrence.rs","line":150,"source":"        sqlx::query_scalar(\"SELECT app_sync_task_series_ids($1)\").bind(series),"}
 {"symbol":"app_url","path":"crates/server/tests/backup.rs","line":150,"source":"    assert_storage_lock_free(&source.app_url).await;"}
-{"symbol":"app_set_unit_progress","path":"deploy/postgres/dev-module-seed.sql","line":151,"source":"  PERFORM app_set_unit_progress(v_unit, 'in_progress', 8, v_today + 1, '두 번째 사용자의 독서 메모', v_today);"}
 {"symbol":"app_set_member_role_ids","path":"crates/server/src/features/members.rs","line":152,"source":"        sqlx::query_scalar(\"SELECT app_set_member_role_ids($1, $2)\")"}
 {"symbol":"app_revoke_public_link","path":"crates/server/src/features/public_links.rs","line":152,"source":"    sqlx::query(\"SELECT app_revoke_public_link($1, $2)\")"}
 {"symbol":"app_sync_task_series","path":"crates/server/src/features/recurrence.rs","line":153,"source":"    let made: i32 = sqlx::query_scalar(\"SELECT app_sync_task_series($1, $2)\")"}
-{"symbol":"app_set_unit_progress","path":"deploy/postgres/dev-module-seed.sql","line":154,"source":"  PERFORM app_set_unit_progress(v_unit, 'in_progress', 3, NULL, '나머지 다섯 문제를 복습한다', v_today);"}
+{"symbol":"app_set_unit_progress","path":"deploy/postgres/dev-module-seed.sql","line":154,"source":"  PERFORM app_set_unit_progress(v_unit, 'done', 20, NULL, '내 비공개 독서 메모', v_today);"}
 {"symbol":"app_begin_complete","path":"crates/server/src/features/files.rs","line":155,"source":"    /// 마치기 시도의 점유를 구별한다(`app_begin_complete`가 그 시도에 매긴 시각, 0088)."}
+{"symbol":"app_add_time_entry","path":"deploy/postgres/dev-module-seed.sql","line":155,"source":"  PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '35 minutes', now() - interval '10 minutes',"}
 {"symbol":"app_set_member_role","path":"crates/server/src/features/members.rs","line":157,"source":"    call(&mut tx, \"SELECT app_set_member_role($1, $2, $3, $4)\", |q| {"}
+{"symbol":"app_set_unit_progress","path":"deploy/postgres/dev-module-seed.sql","line":158,"source":"  PERFORM app_set_unit_progress(v_unit, 'in_progress', 8, v_today + 1, '두 번째 사용자의 독서 메모', v_today);"}
 {"symbol":"app_url","path":"crates/server/tests/backup.rs","line":159,"source":"        (\"DATABASE_URL\", &target.app_url),"}
+{"symbol":"app_set_unit_progress","path":"deploy/postgres/dev-module-seed.sql","line":161,"source":"  PERFORM app_set_unit_progress(v_unit, 'in_progress', 3, NULL, '나머지 다섯 문제를 복습한다', v_today);"}
 {"symbol":"app_url","path":"crates/server/tests/worker.rs","line":164,"source":"        (\"DATABASE_URL\", &fresh.app_url),"}
 {"symbol":"app_entry_seconds","path":"crates/server/src/features/time_tracking.rs","line":166,"source":"        app_entry_seconds(e) AS seconds, e.kind, e.memo, e.target_kind, e.target_id,"}
 {"symbol":"app_document_access","path":"docs/decisions.md","line":166,"source":"- **D-78 모듈별 기능 대조와 공통 구현 원칙.** D-31~D-38을 현재 구현(main `da11216`)과 대조한 결과는 `docs/development.md` 63절의 표(구현됨·부분 구현·미구현, 통합 테스트·브라우저 검증 구분)다. 이 결정은 새 기능을 더하지 않고 다음을 정한다. (1) 공통 정본 하나: 업무(`tasks`, 상태는 공유), 문서(`documents`, 한 엔진·리비전), 체크리스트(업무는 `checklist_items`, 문서는 본문 노드), 첨부·버전(`files`·`file_versions`), 시간 기록(`time_entries`, 종류 일·공부·강의·휴식·기타), 일정(`events`), 권한(`app_item_access`·`app_task_access`·`app_document_access`), 알림, 감사 기록을 모든 모듈이 같이 쓰고 모듈별 사본을 두지 않는다. 칸반·목록·달력·간트는 같은 업무 목록을 보는 방식이며 한 보기의 변경은 다시 읽은 같은 목록으로 다른 보기에 보인다. (2) 모듈 전용 정본은 강의의 강좌·회차·개인 진도, 스터디의 계획 단위·개인 진행, 항목 기록(연구 문헌·데이터·변수·분석·투고, 프로젝트 산출물·위험·문제·회고, 스터디 자료·모임·시험·복습, 취미 재료·장비·장비 사용·활동·결과물)뿐이다. (3) 완료 조건: 업무 완료는 담당자 모두에게 하나(D-31), 강의 이수·스터디 진행은 사람마다(진행 행은 본인만 읽고 함께 보기는 집계만), 재수강은 시간 기록에 더하고 완료 회차 수는 늘리지 않는다(D-37). (4) 모듈별 흐름: 모듈(키·이름·아이콘) → 항목(제목·설명·정보·리더·멤버·공개 범위) → 항목 화면의 업무·문서·일정·첨부·기록과 모듈 전용 패널(강좌·스터디 계획) → 보관·휴지통·복구. (5) 대조에서 나온 보완: 칸반 끌어서 놓기(D-79), 달력 범위와 집계 연결(D-80), 항목별 시간 합계(같은 시간 기록에서 항목 아래 업무·회차·스터디 단위·항목 대상 기록을 모아 종류별로, 개인 기록은 본인 것만, 공유 집계는 D-32 공유를 켠 사람만), 표시 언어와 날짜·시간 정책(D-81). 기존 결정에 없던 세부는 사용자 선택으로 더한다: 모듈 설명(관리자), 모듈 휴지통·복구(모듈 행만 휴지통에 들고 되살리면 모듈만 돌아온다. 그 전에 따로 지운 항목은 자기 묶음에 남고 항목의 공개 범위·멤버는 바꾸지 않아 권한이 넓어지지 않는다. 관리자만 되살린다), 시간 기록 종류 \"취미\". 근거: 사용자 \"모듈별 기능을 현재 구현과 대조하고, 빠진 기능과 보완 사항을 docs/decisions.md에 기록한 뒤 구현을 이어간다. 기존 결정과 구현을 재사용하고, 새로운 기획을 무제한으로 늘리지 않는다.\""}
@@ -132,13 +132,13 @@
 {"symbol":"app_audit_document_rename","path":"docs/decisions.md","line":186,"source":"  - 새 행의 UUIDv7은 앱(Rust `Uuid::now_v7()`)이 만들어 넘긴다(사용자 지시 2026-10-20). DB는 id를 만들지 않는다: 표에 id 기본값이 없고, 행을 만드는 정의자 함수는 마지막 인자 `p_ids uuid[]`에서 차례로 꺼내 쓰며(`app_id`), 모자라면 `FV001`(경합: HTTP는 409, 작업 프로세스는 트랜잭션째 다시), 잘못된 id면 `FV002`(500)로 멈춘다(다른 값으로 채우지 않음). 만드는 행 수가 미리 정해지지 않는 함수는 `<함수>_ids`가 같은 트랜잭션에서 상한을 알려 준다(권한이 없으면 0). 표는 `uuid_extract_version(id) = 7`을 확인한다. 셀프호스트 Supabase의 PostgreSQL 17에는 내장 `uuidv7()`이 없고, 같은 함수를 DB에 따로 두지 않는다. 문서 제목 변경 감사는 트리거 대신 제목을 바꾸는 두 길이 `app_audit_document_rename`으로 남긴다(이전·새 제목은 리비전에서 읽음, 리비전마다 한 번). 개발 준비 SQL도 `cargo xtask dev`가 넘긴 id 목록을 쓴다."}
 {"symbol":"app_id","path":"docs/decisions.md","line":186,"source":"  - 새 행의 UUIDv7은 앱(Rust `Uuid::now_v7()`)이 만들어 넘긴다(사용자 지시 2026-10-20). DB는 id를 만들지 않는다: 표에 id 기본값이 없고, 행을 만드는 정의자 함수는 마지막 인자 `p_ids uuid[]`에서 차례로 꺼내 쓰며(`app_id`), 모자라면 `FV001`(경합: HTTP는 409, 작업 프로세스는 트랜잭션째 다시), 잘못된 id면 `FV002`(500)로 멈춘다(다른 값으로 채우지 않음). 만드는 행 수가 미리 정해지지 않는 함수는 `<함수>_ids`가 같은 트랜잭션에서 상한을 알려 준다(권한이 없으면 0). 표는 `uuid_extract_version(id) = 7`을 확인한다. 셀프호스트 Supabase의 PostgreSQL 17에는 내장 `uuidv7()`이 없고, 같은 함수를 DB에 따로 두지 않는다. 문서 제목 변경 감사는 트리거 대신 제목을 바꾸는 두 길이 `app_audit_document_rename`으로 남긴다(이전·새 제목은 리비전에서 읽음, 리비전마다 한 번). 개발 준비 SQL도 `cargo xtask dev`가 넘긴 id 목록을 쓴다."}
 {"symbol":"app_update_view","path":"crates/server/src/features/saved_views.rs","line":189,"source":"    let outcome: String = sqlx::query_scalar(\"SELECT app_update_view($1, $2, $3, $4)\")"}
-{"symbol":"app_create_record","path":"deploy/postgres/dev-module-seed.sql","line":191,"source":"    PERFORM app_create_record(pg_temp.take1(), (v_items->>(v_row->>'module'))::uuid, v_row->>'kind', v_row->>'title',"}
 {"symbol":"app_renumber_lane","path":"docs/decisions.md","line":191,"source":"  - 업무마다 이동 판(`move_version`)을 둔다. 열(상태)이나 열 안 위치가 바뀔 때마다 1 오르고, 어느 함수가 바꿨든 같다(표의 트리거). 필드 고치기의 판(`version`)과는 따로 둬서 순서 바꾸기가 상세 편집의 충돌을 만들지 않는다. 열을 다시 매기면(`app_renumber_lane`, 순서는 그대로) 그 열 업무의 이동 판도 오르므로 그 사이의 조건부 이동은 409가 된다(안전한 쪽)."}
 {"symbol":"app_move_task","path":"docs/decisions.md","line":192,"source":"  - 요청에 `base_move_version`을 주면 `app_move_task`가 행을 잠근 같은 트랜잭션에서 비교하고, 다르면 아무것도 바꾸지 않고 409(`move_conflict`)와 지금 업무를 돌려준다. 주지 않으면 지금과 같다(마지막 저장이 이기는 이동, D-79)."}
 {"symbol":"app_add_comment_ids","path":"crates/server/src/features/comments.rs","line":194,"source":"        sqlx::query_scalar(\"SELECT app_add_comment_ids($1, $2, $3)\")"}
 {"symbol":"app_study_access","path":"crates/server/src/features/study.rs","line":194,"source":"    let access: String = sqlx::query_scalar(\"SELECT app_study_access($1)\")"}
 {"symbol":"app_system_expire_uploads","path":"crates/server/src/worker.rs","line":194,"source":"            call: \"SELECT app_system_expire_uploads()\","}
 {"symbol":"app_trash_task","path":"crates/server/src/features/trash.rs","line":196,"source":"    let batch_id = trash_call(&state, user, \"SELECT app_trash_task($1, $2)\", id).await?;"}
+{"symbol":"app_create_record","path":"deploy/postgres/dev-module-seed.sql","line":198,"source":"    PERFORM app_create_record(pg_temp.take1(), (v_items->>(v_row->>'module'))::uuid, v_row->>'kind', v_row->>'title',"}
 {"symbol":"app_add_comment","path":"crates/server/src/features/comments.rs","line":200,"source":"    let id: Uuid = sqlx::query_scalar(\"SELECT app_add_comment($1, $2, $3, $4, $5, $6)\")"}
 {"symbol":"app_my_deleted_workspaces","path":"crates/server/src/features/workspaces.rs","line":200,"source":"        sqlx::query_as(\"SELECT id, name, deleted_at, expires_at FROM app_my_deleted_workspaces()\")"}
 {"symbol":"app_leave_workspace_ids","path":"crates/server/src/features/members.rs","line":203,"source":"        sqlx::query_scalar(\"SELECT app_leave_workspace_ids($1)\").bind(ws),"}
@@ -184,7 +184,6 @@
 {"symbol":"app_delete_comment","path":"docs/decisions.md","line":259,"source":"- **D-106 보관된 항목에서 자기 댓글 지우기는 현행 유지(P-28).** 보관된 항목에서도 쓴 사람 본인의 댓글 지우기는 허용한다(개인 내용 회수, P-28 (b), 0083의 현재 동작). 이를 댓글 고치기·새 댓글·다른 사람 댓글 지우기 허용으로 넓히지 않는다. 현행(전체 권한 경로로 확인): 보관된 항목·모듈 아래에서는 `app_task_access`(0019)·`app_document_access`(0007)가 읽기보다 높은 권한을 `read`로 낮추므로, `app_delete_comment`(0071)의 \"쓴 사람 또는 소유 권한\" 검사에서 남의 댓글 지우기는 이미 403(`42501`)이고 목록의 지우기 표시도 꺼진다. 쓴 사람 본인의 지우기만 통과한다. 고치기·스레드 해결·새 댓글은 0083의 409다. 따라서 D-106은 **권한 변경이 아니며 403→409 응답 변경도 아니다**(코드·SQL 변경 없음). 보관 항목의 지우기 경계는 기존 시험에 없어서 현행을 고정하는 시험만 더한다(98절)."}
 {"symbol":"app_document_access","path":"docs/decisions.md","line":259,"source":"- **D-106 보관된 항목에서 자기 댓글 지우기는 현행 유지(P-28).** 보관된 항목에서도 쓴 사람 본인의 댓글 지우기는 허용한다(개인 내용 회수, P-28 (b), 0083의 현재 동작). 이를 댓글 고치기·새 댓글·다른 사람 댓글 지우기 허용으로 넓히지 않는다. 현행(전체 권한 경로로 확인): 보관된 항목·모듈 아래에서는 `app_task_access`(0019)·`app_document_access`(0007)가 읽기보다 높은 권한을 `read`로 낮추므로, `app_delete_comment`(0071)의 \"쓴 사람 또는 소유 권한\" 검사에서 남의 댓글 지우기는 이미 403(`42501`)이고 목록의 지우기 표시도 꺼진다. 쓴 사람 본인의 지우기만 통과한다. 고치기·스레드 해결·새 댓글은 0083의 409다. 따라서 D-106은 **권한 변경이 아니며 403→409 응답 변경도 아니다**(코드·SQL 변경 없음). 보관 항목의 지우기 경계는 기존 시험에 없어서 현행을 고정하는 시험만 더한다(98절)."}
 {"symbol":"app_task_access","path":"docs/decisions.md","line":259,"source":"- **D-106 보관된 항목에서 자기 댓글 지우기는 현행 유지(P-28).** 보관된 항목에서도 쓴 사람 본인의 댓글 지우기는 허용한다(개인 내용 회수, P-28 (b), 0083의 현재 동작). 이를 댓글 고치기·새 댓글·다른 사람 댓글 지우기 허용으로 넓히지 않는다. 현행(전체 권한 경로로 확인): 보관된 항목·모듈 아래에서는 `app_task_access`(0019)·`app_document_access`(0007)가 읽기보다 높은 권한을 `read`로 낮추므로, `app_delete_comment`(0071)의 \"쓴 사람 또는 소유 권한\" 검사에서 남의 댓글 지우기는 이미 403(`42501`)이고 목록의 지우기 표시도 꺼진다. 쓴 사람 본인의 지우기만 통과한다. 고치기·스레드 해결·새 댓글은 0083의 409다. 따라서 D-106은 **권한 변경이 아니며 403→409 응답 변경도 아니다**(코드·SQL 변경 없음). 보관 항목의 지우기 경계는 기존 시험에 없어서 현행을 고정하는 시험만 더한다(98절)."}
-{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":264,"source":"        v_task := app_create_task(v_item, pg_temp.take1(), v_row->>'title', NULL, '개발용 합성 업무입니다.',"}
 {"symbol":"app_invite","path":"crates/server/src/features/members.rs","line":265,"source":"    let id: Uuid = sqlx::query_scalar(\"SELECT app_invite($1, $2, $3, $4, $5)\")"}
 {"symbol":"app_resolve_comment","path":"crates/server/src/features/comments.rs","line":268,"source":"    sqlx::query(\"SELECT app_resolve_comment($1, $2)\")"}
 {"symbol":"app_task_reference","path":"crates/server/src/features/home.rs","line":269,"source":"         SELECT id, item_id, workspace_id, app_task_reference(id), title, status, due_date"}
@@ -192,13 +191,14 @@
 {"symbol":"app_item_reference","path":"crates/server/src/features/references.rs","line":270,"source":"                CASE n.target_kind WHEN 'item' THEN app_item_reference(n.target_id)"}
 {"symbol":"app_item_reference","path":"crates/server/src/features/modules.rs","line":271,"source":"    \"SELECT i.id, i.module_id, i.workspace_id, app_item_reference(i.id), i.title,"}
 {"symbol":"app_task_reference","path":"crates/server/src/features/references.rs","line":271,"source":"                                   WHEN 'task' THEN app_task_reference(n.target_id)"}
+{"symbol":"app_create_task","path":"deploy/postgres/dev-module-seed.sql","line":271,"source":"        v_task := app_create_task(v_item, pg_temp.take1(), v_row->>'title', NULL, '개발용 합성 업무입니다.',"}
 {"symbol":"app_item_access","path":"crates/server/src/features/modules.rs","line":272,"source":"        i.description, i.visibility, app_item_access(i.id), i.archived_at IS NOT NULL, i.updated_at,"}
 {"symbol":"app_document_reference","path":"crates/server/src/features/references.rs","line":272,"source":"                                   ELSE app_document_reference(n.target_id) END,"}
 {"symbol":"app_exclude_event_occurrence","path":"crates/server/src/features/recurrence.rs","line":274,"source":"    sqlx::query(\"SELECT app_exclude_event_occurrence($1, $2, $3)\")"}
-{"symbol":"app_create_wiki_document","path":"deploy/postgres/dev-module-seed.sql","line":274,"source":"    v_guide := app_create_wiki_document(v_ws, pg_temp.take1(), '운영 안내 (합성)', 1,"}
 {"symbol":"app_conn","path":"crates/server/tests/backup.rs","line":278,"source":"    let mut app_conn = PgConnection::connect(&target.app_url).await.unwrap();"}
 {"symbol":"app_url","path":"crates/server/tests/backup.rs","line":278,"source":"    let mut app_conn = PgConnection::connect(&target.app_url).await.unwrap();"}
 {"symbol":"app_conn","path":"crates/server/tests/backup.rs","line":280,"source":"        .fetch_one(&mut app_conn)"}
+{"symbol":"app_create_wiki_document","path":"deploy/postgres/dev-module-seed.sql","line":281,"source":"    v_guide := app_create_wiki_document(v_ws, pg_temp.take1(), '운영 안내 (합성)', 1,"}
 {"symbol":"app_search_visible","path":"crates/server/src/features/search_api.rs","line":282,"source":"        sqlx::query_as(\"SELECT kind, id FROM app_search_visible($1, $2)\")"}
 {"symbol":"app_update_study_unit","path":"crates/server/src/features/study.rs","line":282,"source":"    sqlx::query(\"SELECT app_update_study_unit($1, $2, $3, $4, $5, $6, $7, $8)\")"}
 {"symbol":"app_restore_batch","path":"crates/server/src/features/trash.rs","line":282,"source":"    sqlx::query(\"SELECT app_restore_batch($1, $2)\")"}
@@ -206,34 +206,34 @@
 {"symbol":"app_member_role","path":"crates/server/src/features/workspaces.rs","line":285,"source":"        let role: Option<String> = sqlx::query_scalar(\"SELECT app_member_role($1)\")"}
 {"symbol":"app_task_reference","path":"crates/server/src/features/home.rs","line":286,"source":"        \"SELECT t.id, t.item_id, t.workspace_id, app_task_reference(t.id), t.title, t.status, t.due_date"}
 {"symbol":"app_user_id","path":"crates/server/src/features/home.rs","line":287,"source":"         FROM tasks t WHERE t.updated_by = app_user_id() ORDER BY t.updated_at DESC, t.id LIMIT 8\","}
-{"symbol":"app_create_wiki_document","path":"deploy/postgres/dev-module-seed.sql","line":287,"source":"    v_install := app_create_wiki_document(v_ws, pg_temp.take1(), '설치', 1, jsonb_build_object("}
 {"symbol":"app_upsert_user","path":"crates/server/src/features/accounts.rs","line":289,"source":"    let user: UserId = sqlx::query_scalar(\"SELECT app_upsert_user($1, $2, $3, $4, $5, $6)\")"}
 {"symbol":"app_system_search_payload","path":"docs/decisions.md","line":290,"source":"  색인하고(`app_system_search_payload`, `search_api.rs` 대체 경로), 날짜 범위 `from`·`to`도 시간대 없이 그 정수 날짜와 비교한다. 서울(UTC+9)"}
 {"symbol":"app_item_access","path":"crates/server/src/features/events.rs","line":291,"source":"    let visible: bool = sqlx::query_scalar(\"SELECT app_item_access($1) IS NOT NULL\")"}
+{"symbol":"app_create_wiki_document","path":"deploy/postgres/dev-module-seed.sql","line":294,"source":"    v_install := app_create_wiki_document(v_ws, pg_temp.take1(), '설치', 1, jsonb_build_object("}
 {"symbol":"app_collab_pending","path":"crates/server/src/features/workspaces.rs","line":296,"source":"                let pending: Vec<Uuid> = sqlx::query_scalar(\"SELECT app_collab_pending($1)\")"}
 {"symbol":"app_url","path":"crates/server/tests/common/mod.rs","line":297,"source":"    pub app_url: String,"}
-{"symbol":"app_create_wiki_document","path":"deploy/postgres/dev-module-seed.sql","line":298,"source":"    v_backup := app_create_wiki_document(v_ws, pg_temp.take1(), '백업', 1,"}
 {"symbol":"app_create_session","path":"crates/server/src/features/accounts.rs","line":299,"source":"    sqlx::query(\"SELECT app_create_session($1, $2, $3, $4, $5, $6)\")"}
 {"symbol":"app_document_reference","path":"crates/server/src/features/home.rs","line":300,"source":"        \"SELECT d.id, d.title, app_document_reference(d.id), d.workspace_id, d.item_id, d.updated_at"}
 {"symbol":"app_user_id","path":"crates/server/src/features/home.rs","line":301,"source":"         FROM documents d WHERE d.updated_by = app_user_id() ORDER BY d.updated_at DESC, d.id LIMIT 8\","}
-{"symbol":"app_create_wiki_document","path":"deploy/postgres/dev-module-seed.sql","line":301,"source":"    v_log := app_create_wiki_document(v_ws, pg_temp.take1(), '점검 기록', 1, jsonb_build_object("}
 {"symbol":"app_purge_batch","path":"crates/server/src/features/trash.rs","line":302,"source":"    sqlx::query(\"SELECT app_purge_batch($1, $2)\")"}
 {"symbol":"app_system_search_release_stale","path":"crates/server/tests/worker.rs","line":302,"source":"        sqlx::query(\"SELECT app_system_search_release_stale($1, $2, $3, $4)\")"}
 {"symbol":"app_set_course_details","path":"crates/server/src/features/courses.rs","line":305,"source":"    sqlx::query(\"SELECT app_set_course_details($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\")"}
+{"symbol":"app_create_wiki_document","path":"deploy/postgres/dev-module-seed.sql","line":305,"source":"    v_backup := app_create_wiki_document(v_ws, pg_temp.take1(), '백업', 1,"}
 {"symbol":"app_save_view","path":"docs/decisions.md","line":306,"source":"  `saved_views`에 판 열(`version`)을 더하고 `app_save_view`에 선택 `p_base_version`을 더해 어긋나면 409(아무것도 바꾸지 않음), 웹은 읽은 판을"}
 {"symbol":"app_delete_study_unit","path":"crates/server/src/features/study.rs","line":308,"source":"    sqlx::query(\"SELECT app_delete_study_unit($1, $2)\")"}
+{"symbol":"app_create_wiki_document","path":"deploy/postgres/dev-module-seed.sql","line":308,"source":"    v_log := app_create_wiki_document(v_ws, pg_temp.take1(), '점검 기록', 1, jsonb_build_object("}
 {"symbol":"app_url","path":"crates/server/tests/common/mod.rs","line":310,"source":"    let app_url = std::env::var(\"FVOCI_TEST_DIRECT_APP_URL\")"}
-{"symbol":"app_record_document_references","path":"deploy/postgres/dev-module-seed.sql","line":310,"source":"    PERFORM app_record_document_references(v_install, false,"}
-{"symbol":"app_record_document_references_ids","path":"deploy/postgres/dev-module-seed.sql","line":311,"source":"      pg_temp.take(app_record_document_references_ids(v_install, false)));"}
 {"symbol":"app_item_reference","path":"crates/server/src/features/export.rs","line":312,"source":"      SELECT it.*, app_item_reference(it.id) AS reference FROM items it"}
-{"symbol":"app_record_document_references","path":"deploy/postgres/dev-module-seed.sql","line":312,"source":"    PERFORM app_record_document_references(v_log, false,"}
-{"symbol":"app_record_document_references_ids","path":"deploy/postgres/dev-module-seed.sql","line":313,"source":"      pg_temp.take(app_record_document_references_ids(v_log, false)));"}
 {"symbol":"app_timer_action","path":"crates/server/src/features/time_tracking.rs","line":314,"source":"    sqlx::query(\"SELECT app_timer_action($1, $2)\")"}
 {"symbol":"app_item_reference","path":"crates/server/src/features/home.rs","line":316,"source":"        \"SELECT i.id, i.workspace_id, m.kind, app_item_reference(i.id), i.title, c.done, c.total,"}
 {"symbol":"app_item_access","path":"crates/server/src/features/home.rs","line":317,"source":"                app_item_access(i.id)"}
 {"symbol":"app_restore_document_revision","path":"crates/server/src/features/revisions.rs","line":317,"source":"/// 복원 SQL: 한도 확인 뒤 `app_restore_document_revision`(권한·기준 확인 포함). `restored`·`unchanged`·`conflict`."}
+{"symbol":"app_record_document_references","path":"deploy/postgres/dev-module-seed.sql","line":317,"source":"    PERFORM app_record_document_references(v_install, false,"}
+{"symbol":"app_record_document_references_ids","path":"deploy/postgres/dev-module-seed.sql","line":318,"source":"      pg_temp.take(app_record_document_references_ids(v_install, false)));"}
 {"symbol":"app_document_reference","path":"crates/server/src/features/search_api.rs","line":319,"source":"        \"document\" => \"SELECT app_document_reference($1)\","}
+{"symbol":"app_record_document_references","path":"deploy/postgres/dev-module-seed.sql","line":319,"source":"    PERFORM app_record_document_references(v_log, false,"}
 {"symbol":"app_task_reference","path":"crates/server/src/features/search_api.rs","line":320,"source":"        \"task\" => \"SELECT app_task_reference($1)\","}
+{"symbol":"app_record_document_references_ids","path":"deploy/postgres/dev-module-seed.sql","line":320,"source":"      pg_temp.take(app_record_document_references_ids(v_log, false)));"}
 {"symbol":"app_item_reference","path":"crates/server/src/features/search_api.rs","line":321,"source":"        \"item\" => \"SELECT app_item_reference($1)\","}
 {"symbol":"app_set_workspace_realtime","path":"crates/server/src/features/workspaces.rs","line":321,"source":"    sqlx::query(\"SELECT app_set_workspace_realtime($1, $2, $3)\")"}
 {"symbol":"app_my_workspace_ids","path":"crates/server/src/features/home.rs","line":324,"source":"           AND i.workspace_id IN (SELECT app_my_workspace_ids())"}
@@ -295,6 +295,7 @@
 {"symbol":"app_document_realtime","path":"crates/server/src/features/documents.rs","line":404,"source":"    is_template, app_document_realtime(id) AS realtime, app_document_can_export(id) AS can_export\";"}
 {"symbol":"app_item_access","path":"crates/server/src/features/zotero.rs","line":405,"source":"            \"SELECT m.kind, app_item_access(i.id) FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1\","}
 {"symbol":"app_password","path":"crates/server/src/config.rs","line":408,"source":"            app_password: get(\"FVOCI_DB_APP_PASSWORD\"),"}
+{"symbol":"app_update_view","path":"crates/server/tests/saved_views.rs","line":408,"source":"        sqlx::query_scalar::<_, String>(\"SELECT app_update_view($1, $2, NULL::integer, $3)\")"}
 {"symbol":"app_set_episode_progress","path":"crates/server/src/features/courses.rs","line":410,"source":"    sqlx::query(\"SELECT app_set_episode_progress($1, $2, $3, $4, $5, $6)\")"}
 {"symbol":"app_set_module_icon","path":"crates/server/src/features/item_profile.rs","line":410,"source":"    sqlx::query(\"SELECT app_set_module_icon($1, $2)\")"}
 {"symbol":"app_set_mark","path":"crates/server/src/features/home.rs","line":412,"source":"    sqlx::query(\"SELECT app_set_mark($1, $2, $3, $4)\")"}
@@ -340,7 +341,6 @@
 {"symbol":"app_copy_item","path":"crates/server/src/features/item_profile.rs","line":502,"source":"            \"SELECT copied_item, skipped_count FROM app_copy_item($1, $2, $3, $4, $5, $6)\","}
 {"symbol":"app_fail_upload","path":"crates/server/src/features/files.rs","line":504,"source":"    // 키의 내용을 확인해 기록한다. 오래 갈 실패면 업로드를 닫고 최종 키를 지울 목록에 올린다(app_fail_upload)."}
 {"symbol":"app_create_record","path":"crates/server/src/features/zotero.rs","line":504,"source":"                    \"SELECT app_create_record($1, $2, 'reference', $3, NULL, '', $4, $5, $6)\","}
-{"symbol":"app_url","path":"crates/server/tests/saved_views.rs","line":504,"source":"        (\"DATABASE_URL\", &fresh.app_url),"}
 {"symbol":"app_role_cannot_touch_internal_tables_or_rewind_revisions","path":"crates/server/tests/first_flow.rs","line":508,"source":"async fn app_role_cannot_touch_internal_tables_or_rewind_revisions() {"}
 {"symbol":"app_finish_upload","path":"crates/server/src/features/files.rs","line":509,"source":"    let finished = sqlx::query(\"SELECT app_finish_upload($1, $2, $3, $4)\")"}
 {"symbol":"app_update_time_entry","path":"crates/server/src/features/time_tracking.rs","line":509,"source":"        sqlx::query_scalar(\"SELECT app_update_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\")"}
@@ -369,6 +369,7 @@
 {"symbol":"app_delete_time_entry","path":"crates/server/src/features/time_tracking.rs","line":549,"source":"    sqlx::query(\"SELECT app_delete_time_entry($1)\")"}
 {"symbol":"app_system_search_enqueue_all","path":"crates/server/src/backup.rs","line":550,"source":"    sqlx::query(\"SELECT fvoci.app_system_search_enqueue_all()\")"}
 {"symbol":"app_user_id","path":"crates/server/tests/first_flow.rs","line":555,"source":"        denied(\"INSERT INTO documents (workspace_id, placement, scope, number, title, schema_version, body, revision, created_by, updated_by, request_id) VALUES ($1, 'wiki', 'WIKI', 99, 't', 1, '{}', 1, app_user_id(), app_user_id(), $1)\", Some(ws_id)).await,"}
+{"symbol":"app_url","path":"crates/server/tests/saved_views.rs","line":556,"source":"        (\"DATABASE_URL\", &fresh.app_url),"}
 {"symbol":"app_upload_claim_held","path":"crates/server/src/features/files.rs","line":557,"source":"    let held: bool = sqlx::query_scalar(\"SELECT app_upload_claim_held($1, $2)\")"}
 {"symbol":"app_system_search_release_stale","path":"crates/server/src/search.rs","line":558,"source":"        sqlx::query(\"SELECT app_system_search_release_stale($1, $2, $3, $4)\")"}
 {"symbol":"app_file_access","path":"docs/development.md","line":562,"source":"- **모델**: 파일은 문서나 항목에 붙고 그 권한을 그대로 따른다(`app_file_access`: 문서 권한 또는 항목 권한). 문서를 공유받은 사람은 첨부도 읽고, 비공개 항목의 첨부는 항목을 볼 수 있는 사람만, 개인 노트의 첨부는 소유자만(관리자도 아님). 같은 파일에 새 내용을 올리면 v2, v3…으로 쌓이고 이전 버전은 남는다(올린 사람·시각·설명·크기·SHA-256). 구현 선택: 연구 자료(D-35)의 \"자료 + 버전\" 모델을 모든 첨부에 쓴다(P-06 방향). 다른 범위를 원하면 바꿀 수 있다."}
@@ -496,7 +497,10 @@
 {"symbol":"app_update_record","path":"crates/server/src/features/records.rs","line":1048,"source":"    let version: i32 = sqlx::query_scalar(\"SELECT app_update_record($1, $2, $3, $4, $5, $6, $7)\")"}
 {"symbol":"app_release_upload_claim","path":"crates/server/tests/files.rs","line":1056,"source":"    sqlx::query(\"SELECT app_release_upload_claim($1, $2)\")"}
 {"symbol":"app_delete_record","path":"crates/server/src/features/records.rs","line":1074,"source":"    sqlx::query(\"SELECT app_delete_record($1, $2)\")"}
+{"symbol":"app_update_item","path":"crates/server/tests/item_profile.rs","line":1099,"source":"        sqlx::query_scalar(\"SELECT app_update_item($1, NULL::integer, '바뀐 제목', '', NULL, $2)\")"}
+{"symbol":"app_set_item_profile","path":"crates/server/tests/item_profile.rs","line":1106,"source":"        \"SELECT app_set_item_profile($1, NULL::integer, NULL, '바뀐 목표', '', NULL, NULL, 'active', '{}', $2)\","}
 {"symbol":"app_share_document","path":"crates/server/src/features/documents.rs","line":1110,"source":"    let share_id: Uuid = sqlx::query_scalar(\"SELECT app_share_document($1, $2, $3, $4)\")"}
+{"symbol":"app_update_item","path":"crates/server/tests/item_profile.rs","line":1118,"source":"        sqlx::query_scalar(\"SELECT app_update_item($1, NULL::integer, '원래 제목', '', NULL, $2)\")"}
 {"symbol":"app_unshare_document","path":"crates/server/src/features/documents.rs","line":1139,"source":"    sqlx::query(\"SELECT app_unshare_document($1, $2)\")"}
 {"symbol":"app_url","path":"crates/server/tests/search.rs","line":1154,"source":"        (\"DATABASE_URL\", &fresh.app_url),"}
 {"symbol":"app_collab_load","path":"crates/server/src/collab/room.rs","line":1168,"source":"            sqlx::query_as(\"SELECT * FROM app_collab_load($1)\")"}
@@ -609,12 +613,18 @@
 {"symbol":"app_document_access","path":"docs/development.md","line":3257,"source":"  141행), 문서면 `app_document_access`(`0007_module_review_fixes.sql` 84행)다. 둘 다 항목이나 모듈이 보관되면(`app_item_archived`, 0006 148행)"}
 {"symbol":"app_item_archived","path":"docs/development.md","line":3257,"source":"  141행), 문서면 `app_document_access`(`0007_module_review_fixes.sql` 84행)다. 둘 다 항목이나 모듈이 보관되면(`app_item_archived`, 0006 148행)"}
 {"symbol":"app_comment_target_state","path":"docs/development.md","line":3260,"source":"  권한(`app_comment_target_state`, 116행 `owner`)에서 나와 소유 권한자에게 꺼져 있다. 따라서 D-106은 **권한 변경도 403→409 응답 변경도 아니다**."}
-{"symbol":"app_create_task","path":"docs/development.md","line":3308,"source":"- **DB(0098)**: `0098_task_create_fields.sql`이 `app_create_task`를 모든 칸을 받는 서명으로 바꾼다(옛 5인자 서명은 지움, D-92). 순서:"}
-{"symbol":"app_update_task","path":"docs/development.md","line":3309,"source":"  권한(404·403) → **같은 요청 id 찾기(있으면 그 업무 id를 돌려주고 끝, 그 업무가 휴지통이면 `FV004`)** → 고치기(0082 `app_update_task`)와 같은 확인(상태·우선순위 값, 시작일 ≤"}
-{"symbol":"app_check_assignee","path":"docs/development.md","line":3311,"source":"  다른 담당자를 id 순으로 `app_check_assignee`(멤버 행 공유 잠금, 항목을 볼 수 있는지) → 번호 할당 → 모든 칸을 담은 `INSERT` 하나(완료면"}
-{"symbol":"app_user_id","path":"docs/development.md","line":3321,"source":"  배경 재전송이 없다. 요청 id 찾기는 만든 사람(`created_by = app_user_id()`) 범위라 계정이 바뀐 뒤의 재시도가 앞 계정의 업무를 돌려받지는 않는다(지금"}
-{"symbol":"app_create_task","path":"docs/development.md","line":3334,"source":"- **개발 예제(CodeRabbit 지적)**: `deploy/postgres/dev-module-seed.sql`이 지운 5인자 `app_create_task`를 불러(만들기 → `app_update_task`)"}
-{"symbol":"app_update_task","path":"docs/development.md","line":3334,"source":"- **개발 예제(CodeRabbit 지적)**: `deploy/postgres/dev-module-seed.sql`이 지운 5인자 `app_create_task`를 불러(만들기 → `app_update_task`)"}
+{"symbol":"app_update_item","path":"docs/development.md","line":3290,"source":"- **통합 뒤 수정: 판을 보내지 않은 호출(2026-10-23, `fvoci/policy-int-fix`, 기준 `874d866`)**: `app_update_view`(0096)·`app_update_item`·"}
+{"symbol":"app_update_view","path":"docs/development.md","line":3290,"source":"- **통합 뒤 수정: 판을 보내지 않은 호출(2026-10-23, `fvoci/policy-int-fix`, 기준 `874d866`)**: `app_update_view`(0096)·`app_update_item`·"}
+{"symbol":"app_set_item_profile","path":"docs/development.md","line":3291,"source":"  `app_set_item_profile`(0097)의 판 비교가 `<>`라, `p_base_version`이 NULL이면 비교가 NULL이 되어 검사를 건너뛰고 덮어썼다. 서버 API의 판은"}
+{"symbol":"app_set_item_profile","path":"docs/development.md","line":3299,"source":"- **통합 뒤 수정: 개발 준비 SQL**: `dev-module-seed.sql`이 0097이 지운 옛 9인자 `app_set_item_profile`을 불러 새 DB에서 `cargo xtask dev --oidc`가"}
+{"symbol":"app_set_item_profile","path":"docs/development.md","line":3300,"source":"  `function app_set_item_profile(uuid, uuid, text, unknown, date, date, unknown, jsonb, uuid[]) does not exist`로 멈췄다. 바로 앞에서 그 항목의"}
+{"symbol":"app_create_task","path":"docs/development.md","line":3301,"source":"  `profile_version`을 읽어 넘기고 결과가 `'updated'`가 아니면 멈추게 했다. 두 준비 SQL에서 0095~0098이 서명을 바꾼 다른 함수 호출은 없다(`app_create_task`는"}
+{"symbol":"app_create_task","path":"docs/development.md","line":3328,"source":"- **DB(0098)**: `0098_task_create_fields.sql`이 `app_create_task`를 모든 칸을 받는 서명으로 바꾼다(옛 5인자 서명은 지움, D-92). 순서:"}
+{"symbol":"app_update_task","path":"docs/development.md","line":3329,"source":"  권한(404·403) → **같은 요청 id 찾기(있으면 그 업무 id를 돌려주고 끝, 그 업무가 휴지통이면 `FV004`)** → 고치기(0082 `app_update_task`)와 같은 확인(상태·우선순위 값, 시작일 ≤"}
+{"symbol":"app_check_assignee","path":"docs/development.md","line":3331,"source":"  다른 담당자를 id 순으로 `app_check_assignee`(멤버 행 공유 잠금, 항목을 볼 수 있는지) → 번호 할당 → 모든 칸을 담은 `INSERT` 하나(완료면"}
+{"symbol":"app_user_id","path":"docs/development.md","line":3341,"source":"  배경 재전송이 없다. 요청 id 찾기는 만든 사람(`created_by = app_user_id()`) 범위라 계정이 바뀐 뒤의 재시도가 앞 계정의 업무를 돌려받지는 않는다(지금"}
+{"symbol":"app_create_task","path":"docs/development.md","line":3354,"source":"- **개발 예제(CodeRabbit 지적)**: `deploy/postgres/dev-module-seed.sql`이 지운 5인자 `app_create_task`를 불러(만들기 → `app_update_task`)"}
+{"symbol":"app_update_task","path":"docs/development.md","line":3354,"source":"- **개발 예제(CodeRabbit 지적)**: `deploy/postgres/dev-module-seed.sql`이 지운 5인자 `app_create_task`를 불러(만들기 → `app_update_task`)"}
 {"symbol":"app_lock_move","path":"crates/server/tests/collab.rs","line":3381,"source":"    until_waiting_on_lock(\"app_lock_move\", holder).await;"}
 {"symbol":"app_lock_move","path":"crates/server/tests/collab.rs","line":3505,"source":"    until_waiting_on_lock(\"app_lock_move\", holder).await;"}
 {"symbol":"app_lock_move","path":"crates/server/tests/collab.rs","line":3558,"source":"    until_waiting_on_lock(\"app_lock_move\", holder).await;"}

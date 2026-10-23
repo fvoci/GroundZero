@@ -227,6 +227,7 @@
 {"path":"crates/server/tests/ids.rs","line":113,"source":"        \"INSERT INTO fvoci.users (issuer, subject, display_name) VALUES ('https://ids.test', $1, 'ids')\",","matches":["INTO fvoci.users"]}
 {"path":"crates/server/tests/ids.rs","line":216,"source":"        \"UPDATE fvoci.tasks SET due_date = current_date WHERE id = $1::uuid\",","matches":["UPDATE fvoci.tasks"]}
 {"path":"crates/server/tests/ids.rs","line":223,"source":"            \"SELECT count(*) FROM notifications WHERE task_id = $1::uuid AND kind = 'due'\",","matches":["FROM notifications"]}
+{"path":"crates/server/tests/item_profile.rs","line":1126,"source":"        sqlx::query_as(\"SELECT title, version, goal, profile_version FROM items WHERE id = $1\")","matches":["FROM items"]}
 {"path":"crates/server/tests/members.rs","line":520,"source":"        \"SELECT target_type || ':' || action FROM audit_log WHERE workspace_id = $1::uuid ORDER BY created_at, id\",","matches":["FROM audit_log"]}
 {"path":"crates/server/tests/members.rs","line":648,"source":"        \"SELECT EXISTS (SELECT 1 FROM fvoci.workspaces w JOIN fvoci.workspace_members m","matches":["FROM fvoci.workspaces","JOIN fvoci.workspace_members"]}
 {"path":"crates/server/tests/members.rs","line":784,"source":"        \"SELECT (SELECT count(*) FROM fvoci.item_members WHERE user_id = $1)\n              + (SELECT count(*) FROM fvoci.group_members WHERE user_id = $1)\",","matches":["FROM fvoci.item_members","FROM fvoci.group_members"]}
@@ -324,24 +325,25 @@
 {"path":"crates/server/tests/worker.rs","line":329,"source":"        \"UPDATE fvoci.search_queue SET claimed_until = now() - interval '1 second'","matches":["UPDATE fvoci.search_queue"]}
 {"path":"crates/server/tests/workspace_delete.rs","line":404,"source":"        \"UPDATE workspaces SET deleted_at = now() - interval '31 days' WHERE id = $1::uuid\",","matches":["UPDATE workspaces"]}
 {"path":"crates/server/tests/zotero.rs","line":219,"source":"        \"SELECT (SELECT count(*) FROM fvoci.item_records WHERE fields::text LIKE '%' || $1 || '%')\n              + (SELECT count(*) FROM fvoci.audit_log WHERE detail::text LIKE '%' || $1 || '%')\",","matches":["FROM fvoci.item_records","FROM fvoci.audit_log"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":37,"source":"  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_module_seed_v1') THEN","matches":["FROM instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":40,"source":"  IF NOT EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_seed') THEN","matches":["FROM instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":43,"source":"  SELECT id INTO v_admin FROM users","matches":["FROM users"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":45,"source":"  SELECT id INTO v_user FROM users","matches":["FROM users"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":127,"source":"  SELECT id INTO STRICT v_episode FROM course_episodes WHERE item_id = v_course AND number = 1;","matches":["FROM course_episodes"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":135,"source":"  SELECT id INTO STRICT v_episode FROM course_episodes WHERE item_id = v_course AND number = 2;","matches":["FROM course_episodes"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":146,"source":"  SELECT id INTO STRICT v_unit FROM study_units WHERE item_id = v_study AND number = 1;","matches":["FROM study_units"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":153,"source":"  SELECT id INTO STRICT v_unit FROM study_units WHERE item_id = v_study AND number = 2;","matches":["FROM study_units"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":196,"source":"  INSERT INTO instance_state (key, value) VALUES ('dev_module_seed_v1', jsonb_build_object(","matches":["INTO instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":201,"source":"SELECT value FROM instance_state WHERE key = 'dev_module_seed_v1';","matches":["FROM instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":225,"source":"  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_module_seed_v2') THEN","matches":["FROM instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":228,"source":"  SELECT value INTO v_v1 FROM instance_state WHERE key = 'dev_module_seed_v1';","matches":["FROM instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":233,"source":"  IF NOT EXISTS (SELECT 1 FROM workspaces WHERE id = v_ws AND deleted_at IS NULL) THEN\n    INSERT INTO instance_state (key, value)","matches":["FROM workspaces","INTO instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":238,"source":"  SELECT id INTO v_admin FROM users","matches":["FROM users"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":252,"source":"        SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id","matches":["FROM items","JOIN modules"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":291,"source":"          CASE WHEN EXISTS (SELECT 1 FROM items WHERE id = (v_v1->'items'->>'project')::uuid AND deleted_at IS NULL)","matches":["FROM items"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":316,"source":"    INSERT INTO instance_state (key, value) VALUES ('dev_module_seed_v2', jsonb_build_object(","matches":["INTO instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":327,"source":"SELECT value FROM instance_state WHERE key = 'dev_module_seed_v2';","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":39,"source":"  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_module_seed_v1') THEN","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":42,"source":"  IF NOT EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_seed') THEN","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":45,"source":"  SELECT id INTO v_admin FROM users","matches":["FROM users"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":47,"source":"  SELECT id INTO v_user FROM users","matches":["FROM users"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":77,"source":"    SELECT profile_version INTO STRICT v_version FROM items WHERE id = v_item;","matches":["FROM items"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":134,"source":"  SELECT id INTO STRICT v_episode FROM course_episodes WHERE item_id = v_course AND number = 1;","matches":["FROM course_episodes"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":142,"source":"  SELECT id INTO STRICT v_episode FROM course_episodes WHERE item_id = v_course AND number = 2;","matches":["FROM course_episodes"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":153,"source":"  SELECT id INTO STRICT v_unit FROM study_units WHERE item_id = v_study AND number = 1;","matches":["FROM study_units"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":160,"source":"  SELECT id INTO STRICT v_unit FROM study_units WHERE item_id = v_study AND number = 2;","matches":["FROM study_units"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":203,"source":"  INSERT INTO instance_state (key, value) VALUES ('dev_module_seed_v1', jsonb_build_object(","matches":["INTO instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":208,"source":"SELECT value FROM instance_state WHERE key = 'dev_module_seed_v1';","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":232,"source":"  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_module_seed_v2') THEN","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":235,"source":"  SELECT value INTO v_v1 FROM instance_state WHERE key = 'dev_module_seed_v1';","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":240,"source":"  IF NOT EXISTS (SELECT 1 FROM workspaces WHERE id = v_ws AND deleted_at IS NULL) THEN\n    INSERT INTO instance_state (key, value)","matches":["FROM workspaces","INTO instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":245,"source":"  SELECT id INTO v_admin FROM users","matches":["FROM users"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":259,"source":"        SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id","matches":["FROM items","JOIN modules"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":298,"source":"          CASE WHEN EXISTS (SELECT 1 FROM items WHERE id = (v_v1->'items'->>'project')::uuid AND deleted_at IS NULL)","matches":["FROM items"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":323,"source":"    INSERT INTO instance_state (key, value) VALUES ('dev_module_seed_v2', jsonb_build_object(","matches":["INTO instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":334,"source":"SELECT value FROM instance_state WHERE key = 'dev_module_seed_v2';","matches":["FROM instance_state"]}
 {"path":"deploy/postgres/dev-seed.sql","line":19,"source":"  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_seed') THEN","matches":["FROM instance_state"]}
 {"path":"deploy/postgres/dev-seed.sql","line":23,"source":"    IF NOT EXISTS (SELECT 1 FROM instance_state s\n                   JOIN workspace_members wm ON wm.workspace_id = (s.value->>'workspace')::uuid\n                   JOIN users u ON u.id = wm.user_id","matches":["FROM instance_state","JOIN workspace_members","JOIN users"]}
 {"path":"deploy/postgres/dev-seed.sql","line":60,"source":"  INSERT INTO instance_state (key, value)","matches":["INTO instance_state"]}
