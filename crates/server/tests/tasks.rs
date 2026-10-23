@@ -1154,3 +1154,87 @@ async fn a_create_carries_every_field_and_a_replay_returns_the_first_task() {
         ]
     );
 }
+
+/// D-105(P-31), CodeRabbit #98: 응답을 잃은 만들기를 다시 보낼 때 항목을 잠시 볼 수 없으면 404(존재를 드러내지 않음)이고 새
+/// 업무를 만들지 않는다. 다시 볼 수 있게 되면 같은 요청 id가 처음 업무를 돌려준다. 그 요청 id의 업무를 지웠으면(휴지통)
+/// 404와 구분되는 409 `task_deleted`라 웹은 그때만 새 요청 id로 다시 만든다.
+#[tokio::test]
+async fn a_replay_tells_a_deleted_task_from_a_lost_access() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "한 번에 만들기 404").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let item = module_item(&app, &admin, &ws, "CSV").await;
+    make_public(&app, &admin, &item).await;
+    let uri = format!("/api/items/{}/tasks", item["id"].as_str().unwrap());
+    let request_id = new_request_id();
+    let body = full_create(
+        &request_id,
+        "주간 회의",
+        json!({ "assignee_ids": [writer.id.0.to_string()] }),
+    );
+    let first = send(&app, Method::POST, &uri, Some(&writer), Some(body.clone())).await;
+    assert_eq!(first.status, StatusCode::CREATED, "{:?}", first.json);
+    let made_by_request = || async {
+        let mut tx = state.db.begin_as(admin.id).await.unwrap();
+        let n: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM tasks WHERE item_id = $1::uuid AND request_id = $2::uuid",
+        )
+        .bind(item["id"].as_str().unwrap())
+        .bind(&request_id)
+        .fetch_one(tx.conn())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        n
+    };
+
+    // 항목이 비공개가 되어 작성자가 볼 수 없다: 404 not_found, 새 업무 없음.
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{}", item["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "title": item["title"], "description": "", "visibility": "private" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let hidden = send(&app, Method::POST, &uri, Some(&writer), Some(body.clone())).await;
+    assert_eq!(hidden.status, StatusCode::NOT_FOUND, "{:?}", hidden.json);
+    assert_eq!(hidden.json["error"], "not_found");
+    assert_eq!(made_by_request().await, 1);
+
+    // 다시 볼 수 있으면 같은 요청 id는 처음 업무다.
+    make_public(&app, &admin, &item).await;
+    let back = send(&app, Method::POST, &uri, Some(&writer), Some(body.clone())).await;
+    assert_eq!(back.status, StatusCode::CREATED, "{:?}", back.json);
+    assert_eq!(back.json["id"], first.json["id"]);
+    assert_eq!(made_by_request().await, 1);
+
+    // 그 업무를 지우면(휴지통) 같은 요청 id는 409 task_deleted: 볼 수 없음(404)과 다르다.
+    let trashed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/tasks/{}", first.json["id"].as_str().unwrap()),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert!(trashed.status.is_success(), "{:?}", trashed.json);
+    let gone = send(&app, Method::POST, &uri, Some(&writer), Some(body.clone())).await;
+    assert_eq!(gone.status, StatusCode::CONFLICT, "{:?}", gone.json);
+    assert_eq!(gone.json["error"], "task_deleted");
+    assert_eq!(made_by_request().await, 1);
+    // 새 요청 id로는 새 업무를 만든다.
+    let fresh = send(
+        &app,
+        Method::POST,
+        &uri,
+        Some(&writer),
+        Some(full_create(&new_request_id(), "주간 회의", json!({}))),
+    )
+    .await;
+    assert_eq!(fresh.status, StatusCode::CREATED, "{:?}", fresh.json);
+    assert_ne!(fresh.json["id"], first.json["id"]);
+}

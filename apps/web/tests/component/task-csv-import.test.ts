@@ -50,8 +50,10 @@ type Fields = Omit<TaskInput, 'title'>;
 function fakeServer() {
   const byRequest = new Map<string, string>();
   const tasks = new Map<string, TaskDetailView>();
-  // 지운(휴지통) 업무. 만들기는 같은 request_id에 그 업무 id를 찾지만(app_create_task) 지운 업무는 읽을 수 없어 404다.
+  // 지운(휴지통) 업무. 만들기는 같은 request_id에 그 업무 id를 찾고 지웠으면 409 `task_deleted`다(0098).
   const deleted = new Set<string>();
+  // 항목을 잠시 볼 수 없다(멤버에서 빠짐·비공개). 만들기는 요청 id를 찾기 전에 404다.
+  let hidden = false;
   // 이 제목의 다음 만들기를 이 오류로 거절한다(아무것도 만들지 않음).
   const rejects = new Map<string, Error>();
   // 이 제목의 다음 만들기는 서버에서 만들고 응답만 잃는다.
@@ -73,9 +75,10 @@ function fakeServer() {
         const held = gate;
         gate = Promise.resolve();
         await held;
+        if (hidden) throw new ApiError(404, 'not_found', 'not found');
         const known = byRequest.get(requestId);
         if (known !== undefined) {
-          if (deleted.has(known)) throw new ApiError(404, 'not_found', 'not found');
+          if (deleted.has(known)) throw new ApiError(409, 'task_deleted', 'deleted');
           return tasks.get(known) ?? detail(known, title, 1);
         }
         const rejected = rejects.get(title);
@@ -121,6 +124,9 @@ function fakeServer() {
   const remove = (id: string): void => {
     deleted.add(id);
   };
+  const hide = (on: boolean): void => {
+    hidden = on;
+  };
   const reject = (title: string, error: Error): void => {
     rejects.set(title, error);
   };
@@ -136,7 +142,7 @@ function fakeServer() {
     return release;
   };
   const titles = (): string[] => create.mock.calls.map((c) => c[2]);
-  return { create, update, bump, remove, reject, lose, holdNextCreate, made, tasks, titles };
+  return { create, update, bump, remove, hide, reject, lose, holdNextCreate, made, tasks, titles };
 }
 
 async function setText(value: string): Promise<void> {
@@ -278,7 +284,8 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(screen.getByText('업무 3개를 등록했습니다.')).toBeInTheDocument();
   });
 
-  // 응답을 잃은 줄의 업무(보드에는 보인다)를 지우면 같은 요청 id의 만들기가 404다. 다음 누름은 새 id로 한 번만 만든다.
+  // 응답을 잃은 줄의 업무(보드에는 보인다)를 지우면 같은 요청 id의 만들기가 409 `task_deleted`다. 다음 누름은 새 id로 한
+  // 번만 만든다.
   it('creates the row anew when the task of a lost create was deleted', async () => {
     const server = fakeServer();
     server.lose('A');
@@ -289,7 +296,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     server.remove('t1');
     await pressImport(onimported, 2);
     expect(screen.getByText(/0개 등록됨/)).toHaveTextContent(
-      '"A" 업무가 지워졌거나 볼 수 없습니다. 다시 누르면 새로 만듭니다.',
+      '"A" 업무가 지워졌습니다. 다시 누르면 새로 만듭니다.',
     );
     await pressImport(onimported, 3);
     const ids = server.create.mock.calls.map((c) => c[1]);
@@ -297,6 +304,28 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(ids[2]).not.toBe(ids[0]);
     expect(server.made).toEqual(['t1', 't2']);
     expect(screen.getByText('업무 1개를 등록했습니다.')).toBeInTheDocument();
+  });
+
+  // CodeRabbit #98: 응답을 잃은 줄을 다시 보낼 때 항목을 잠시 볼 수 없으면(404) 요청 id를 지킨다. 볼 수 있게 된 뒤 다시
+  // 누르면 같은 id라 처음 만든 업무가 돌아오고 같은 줄이 둘이 되지 않는다.
+  it('keeps the request id of a row whose retry was refused with 404', async () => {
+    const server = fakeServer();
+    server.lose('A');
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('A\nB');
+    await pressImport(onimported, 1);
+    server.hide(true);
+    await pressImport(onimported, 2);
+    const message = screen.getByText(/0개 등록됨/);
+    expect(message).toHaveTextContent('A: 등록하지 못했습니다.');
+    expect(message).not.toHaveTextContent('새로 만듭니다');
+    server.hide(false);
+    await pressImport(onimported, 3);
+    const ids = server.create.mock.calls.filter((c) => c[2] === 'A').map((c) => c[1]);
+    expect(ids).toEqual([ids[0], ids[0], ids[0]]);
+    expect(server.made).toEqual(['t1', 't2']);
+    expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
   });
 });
 
