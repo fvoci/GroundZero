@@ -2780,8 +2780,19 @@ export const api = {
       parseList(v, parseAssignee),
     ),
   task: (id: string) => expectOk('GET', `/api/tasks/${encodeURIComponent(id)}`, parseTaskDetail),
-  createTask: (itemId: string, requestId: string, title: string, parentId: string | null = null) =>
+  /**
+   * 업무 만들기. `fields`를 주면 그 칸까지 서버가 한 트랜잭션에서 확인·저장한다(D-105, 하나라도 거절되면 업무가 남지
+   * 않는다). 같은 요청 id는 처음 만든 업무를 지금 상태로 돌려준다(보낸 칸이 달라도).
+   */
+  createTask: (
+    itemId: string,
+    requestId: string,
+    title: string,
+    parentId: string | null = null,
+    fields?: Omit<TaskInput, 'title'>,
+  ) =>
     expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/tasks`, parseTaskDetail, {
+      ...fields,
       request_id: requestId,
       title,
       parent_id: parentId,

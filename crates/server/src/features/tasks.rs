@@ -4,7 +4,8 @@
 //! 하나로 판정한다(보관 아래 읽기 전용). 필드 고치기는 `base_version`으로 충돌을 막고, 칸반 이동과 체크리스트
 //! 체크는 버전 없이 따로 한다(같은 보드를 여럿이 써도 충돌하지 않게). 날짜는 시각이 없는 날짜로 저장한다(D-50).
 //! 초기 정의는 `migrations/0011_tasks.sql`, 앱 생성 id를 받는 D-88 전환은
-//! `migrations/0073_app_ids_tasks.sql`에 있다.
+//! `migrations/0073_app_ids_tasks.sql`, 모든 칸을 한 번에 받는 만들기(D-105)는 `migrations/0098_task_create_fields.sql`에
+//! 있다.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -35,9 +36,10 @@ const MAX_TAG_CHARS: usize = 50;
 const MAX_CHECKLIST_BATCH: usize = 200;
 
 /// 업무 상태. 완료 시각은 서버가 기록한다.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
+    #[default]
     Todo,
     InProgress,
     Done,
@@ -63,9 +65,10 @@ impl TaskStatus {
 }
 
 /// 우선순위.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskPriority {
+    #[default]
     None,
     Low,
     Medium,
@@ -179,7 +182,9 @@ pub struct TaskDetail {
     pub checklist: Vec<ChecklistItem>,
 }
 
-/// 업무 만들기.
+/// 업무 만들기. 제목 밖의 칸은 고치기(`UpdateTask`)와 같고 같은 규칙으로 확인해 한 트랜잭션에서 넣는다(D-105): 하나라도
+/// 거절되면 업무도 담당도 남지 않는다. 빠진 칸은 새 업무의 기본값(설명 없음, 할 일, 우선순위 없음, 날짜·예상·태그·담당자
+/// 없음, 이정표 아님)이다. 같은 `request_id`는 처음 만든 업무를 지금 상태로 돌려준다(보낸 칸이 달라도 다시 쓰지 않는다).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateTask {
     #[schema(value_type = String, format = Uuid)]
@@ -189,6 +194,26 @@ pub struct CreateTask {
     #[serde(default)]
     #[schema(value_type = Option<String>, format = Uuid)]
     pub parent_id: Option<Uuid>,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub status: TaskStatus,
+    #[serde(default)]
+    pub priority: TaskPriority,
+    #[serde(default)]
+    pub start_date: Option<String>,
+    #[serde(default)]
+    pub due_date: Option<String>,
+    #[serde(default)]
+    pub estimate_minutes: Option<i32>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// 담당자(그 항목을 볼 수 있는 멤버).
+    #[serde(default)]
+    pub assignee_ids: Vec<UserId>,
+    /// 마일스톤이면 시작일 없이 마감일만.
+    #[serde(default)]
+    pub milestone: bool,
 }
 
 /// 업무 고치기. `base_version`이 지났으면 409와 서버 최신본.
@@ -321,6 +346,43 @@ pub(crate) fn validate_text(raw: &str, max: usize, field: &str) -> Result<String
         )));
     }
     Ok(trimmed.to_owned())
+}
+
+/// 만들기·고치기가 함께 쓰는 칸 확인(같은 규칙). 상태·우선순위 값, 시작일 ≤ 마감일, 이정표, 담당자는 DB 함수가 본다.
+struct CheckedFields {
+    title: String,
+    description: String,
+    start: Option<Date>,
+    due: Option<Date>,
+    tags: Vec<String>,
+}
+
+fn check_fields(
+    state: &AppState,
+    title: &str,
+    description: &str,
+    start_date: Option<&str>,
+    due_date: Option<&str>,
+    estimate_minutes: Option<i32>,
+    tags: &[String],
+) -> Result<CheckedFields, AppError> {
+    let title = validate_title(title, state.config.limits.max_title_chars, "title")?;
+    let description = validate_text(description, MAX_DESCRIPTION_CHARS, "description")?;
+    let start = parse_date(start_date, "start_date")?;
+    let due = parse_date(due_date, "due_date")?;
+    if estimate_minutes.is_some_and(|m| m < 0) {
+        return Err(AppError::BadRequest(
+            "estimate_minutes must not be negative".into(),
+        ));
+    }
+    let tags = validate_tags(tags)?;
+    Ok(CheckedFields {
+        title,
+        description,
+        start,
+        due,
+        tags,
+    })
 }
 
 fn validate_tags(tags: &[String]) -> Result<Vec<String>, AppError> {
@@ -617,7 +679,7 @@ pub async fn get(
 // 쓰기
 // ---------------------------------------------------------------------------
 
-/// 업무 만들기(항목 쓰기 권한). 같은 `request_id`는 같은 업무를 돌려준다.
+/// 업무 만들기(항목 쓰기 권한). 모든 칸을 한 트랜잭션에서 확인·저장한다(D-105). 같은 `request_id`는 같은 업무를 돌려준다.
 #[utoipa::path(post, path = "/api/items/{item_id}/tasks", operation_id = "create_task",
     params(("item_id" = String, Path, format = Uuid)), request_body = CreateTask,
     responses((status = 201, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
@@ -628,18 +690,38 @@ pub async fn create(
     Path(item): Path<ItemId>,
     Json(input): Json<CreateTask>,
 ) -> Result<(StatusCode, Json<TaskDetail>), AppError> {
-    let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
+    let fields = check_fields(
+        &state,
+        &input.title,
+        &input.description,
+        input.start_date.as_deref(),
+        input.due_date.as_deref(),
+        input.estimate_minutes,
+        &input.tags,
+    )?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let id: Uuid = sqlx::query_scalar("SELECT app_create_task($1, $2, $3, $4, $5)")
-            .bind(item)
-            .bind(input.request_id)
-            .bind(&title)
-            .bind(input.parent_id)
-            .bind(new_ids(2))
-            .fetch_one(tx.conn())
-            .await
-            .map_err(AppError::from_db_function)?;
+        let id: Uuid = sqlx::query_scalar(
+            "SELECT app_create_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+        )
+        .bind(item)
+        .bind(input.request_id)
+        .bind(&fields.title)
+        .bind(input.parent_id)
+        .bind(&fields.description)
+        .bind(input.status.as_str())
+        .bind(input.priority.as_str())
+        .bind(fields.start)
+        .bind(fields.due)
+        .bind(input.estimate_minutes)
+        .bind(&fields.tags)
+        .bind(&input.assignee_ids)
+        .bind(input.milestone)
+        // 업무, 만들기 감사, 담당자마다 감사(같은 사람이 겹치면 남는 id는 쓰지 않는다).
+        .bind(new_ids(2 + input.assignee_ids.len()))
+        .fetch_one(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
         let detail = load_detail(&mut tx, id).await?;
         tx.commit().await?;
         Ok(detail)
@@ -664,16 +746,21 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateTask>,
 ) -> Result<Response, AppError> {
-    let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
-    let description = validate_text(&input.description, MAX_DESCRIPTION_CHARS, "description")?;
-    let start = parse_date(input.start_date.as_deref(), "start_date")?;
-    let due = parse_date(input.due_date.as_deref(), "due_date")?;
-    if input.estimate_minutes.is_some_and(|m| m < 0) {
-        return Err(AppError::BadRequest(
-            "estimate_minutes must not be negative".into(),
-        ));
-    }
-    let tags = validate_tags(&input.tags)?;
+    let CheckedFields {
+        title,
+        description,
+        start,
+        due,
+        tags,
+    } = check_fields(
+        &state,
+        &input.title,
+        &input.description,
+        input.start_date.as_deref(),
+        input.due_date.as_deref(),
+        input.estimate_minutes,
+        &input.tags,
+    )?;
     let (shifts, approved) = schedule::approved_shifts(&input.successor_shifts)?;
     let mut tx = state.db.begin_as(user).await?;
     // 승인 목록을 다시 계산해 볼 때 쓰는 옮기기 전 날짜(이 업무와 옮길 업무).
