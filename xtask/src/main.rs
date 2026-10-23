@@ -80,6 +80,11 @@ enum Command {
         #[arg(long)]
         connect: bool,
     },
+    /// Verify the already-installed approved Cloud target. Never bootstraps or migrates.
+    SupabaseCloudVerify {
+        #[arg(long)]
+        connect: bool,
+    },
     /// 포맷·lint·타입·단위 테스트·라이선스·계약 최신 여부를 검사한다. 외부 서비스는 띄우지 않는다.
     Check {
         /// 라이선스 검사를 뺀다. CI는 라이선스를 따로 job(`cargo xtask licenses`)으로 돌려 결과를 나눠 보인다.
@@ -159,6 +164,7 @@ fn main() -> Result<()> {
                 || arg == "supabase-cloud-inventory"
                 || arg == "supabase-cloud-first-install"
                 || arg == "supabase-cloud-first-install-inspect"
+                || arg == "supabase-cloud-verify"
         }) && !matches!(
             error.kind(),
             clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
@@ -201,10 +207,22 @@ fn main() -> Result<()> {
             std::process::exit(supabase_cloud_precheck::inventory::run(connect))
         }
         Command::SupabaseCloudFirstInstall { connect } => {
-            std::process::exit(supabase_cloud_precheck::first_install::run(connect, false))
+            std::process::exit(supabase_cloud_precheck::first_install::run(
+                connect,
+                supabase_cloud_precheck::first_install::Operation::Install,
+            ))
         }
         Command::SupabaseCloudFirstInstallInspect { connect } => {
-            std::process::exit(supabase_cloud_precheck::first_install::run(connect, true))
+            std::process::exit(supabase_cloud_precheck::first_install::run(
+                connect,
+                supabase_cloud_precheck::first_install::Operation::Inspect,
+            ))
+        }
+        Command::SupabaseCloudVerify { connect } => {
+            std::process::exit(supabase_cloud_precheck::first_install::run(
+                connect,
+                supabase_cloud_precheck::first_install::Operation::Verify,
+            ))
         }
         Command::Check { skip_licenses } => check::run(&root, skip_licenses),
         Command::Test {

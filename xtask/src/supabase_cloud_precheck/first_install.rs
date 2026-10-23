@@ -16,6 +16,13 @@ const SQL: &[u8] =
 type Catalog = BTreeMap<(String, String), Value>;
 type Result<T> = std::result::Result<T, Failure>;
 
+#[derive(Clone, Copy)]
+pub enum Operation {
+    Install,
+    Inspect,
+    Verify,
+}
+
 fn require(value: bool) -> Result<()> {
     if value {
         Ok(())
@@ -230,7 +237,7 @@ fn url(target: &Target, role: &str, password: &str, cert: &std::path::Path) -> R
     Ok(url.to_string())
 }
 
-async fn install(target: &Target, report: &mut Value, inspect_only: bool) -> Result<()> {
+async fn install(target: &Target, report: &mut Value, operation: Operation) -> Result<()> {
     let source = setting("GITHUB_SHA")?;
     require(
         source.len() == 40
@@ -270,7 +277,12 @@ async fn install(target: &Target, report: &mut Value, inspect_only: bool) -> Res
     report["sql_sha256"] = json!(SQL_HASH);
     report["target"] = json!({"project":PROJECT,"host":HOST,"port":5432,"database":"postgres"});
     report["connection_kind"] = json!("session_pooler");
-    if inspect_only {
+    if matches!(operation, Operation::Verify) {
+        let result = verify_existing(target, &migration_url, &app_url, report).await;
+        fs::remove_file(cert).map_err(|_| Failure::ClientError)?;
+        return result;
+    }
+    if matches!(operation, Operation::Inspect) {
         report["operation"] = json!("read_only_failed_first_install_diagnosis");
         report["bootstrap"] = json!("FAIL in prior attempt; not retried");
         super::inventory::inspect(target, report).await?;
@@ -425,6 +437,232 @@ async fn install(target: &Target, report: &mut Value, inspect_only: bool) -> Res
     Ok(())
 }
 
+const FIRST_FLOW: &[&str] = &[
+    "workspace_create_is_idempotent_and_listed",
+    "document_write_save_reopen_with_revisions",
+    "save_retry_is_idempotent_and_stale_save_conflicts",
+    "other_user_cannot_see_or_change_documents",
+    "rls_hides_rows_from_other_users_under_app_role",
+    "audit_records_creation_and_rename_without_body",
+    "input_validation_and_origin_and_session_failures",
+    "data_and_session_survive_fresh_state",
+    "replay_after_a_newer_save_reports_conflict",
+    "app_role_cannot_touch_internal_tables_or_rewind_revisions",
+    "duplicate_session_cookies_are_rejected",
+];
+
+fn safe_test_result(output: &std::process::Output, expected: &[&str]) -> Value {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let mut statuses = BTreeMap::new();
+    let mut failure_test = None;
+    let mut actual_http = None;
+    let mut http_status_assertions = Vec::new();
+    for line in stdout.lines() {
+        if line.starts_with("---- ") {
+            failure_test = line
+                .strip_prefix("---- ")
+                .and_then(|s| s.strip_suffix(" stdout ----"))
+                .filter(|name| expected.contains(name));
+            actual_http = None;
+        }
+        let http = |text: &str| {
+            text.parse::<u16>().ok().filter(|code| {
+                [
+                    200, 201, 202, 204, 301, 302, 303, 304, 307, 308, 400, 401, 403, 404, 405, 409,
+                    410, 422, 429, 500, 502, 503, 504,
+                ]
+                .contains(code)
+            })
+        };
+        if let Some(left) = line.trim().strip_prefix("left: ") {
+            actual_http = http(left);
+        }
+        if let Some(right) = line.trim().strip_prefix("right: ")
+            && let (Some(test), Some(actual), Some(expected)) =
+                (failure_test, actual_http, http(right))
+        {
+            http_status_assertions.push(json!({"test":test,"actual":actual,"expected":expected}));
+            actual_http = None;
+        }
+        if let Some((name, status)) = line
+            .strip_prefix("test ")
+            .and_then(|line| line.split_once(" ... "))
+            && expected.contains(&name)
+            && ["ok", "FAILED", "ignored"].contains(&status)
+        {
+            statuses.insert(name.to_owned(), status.to_owned());
+        }
+    }
+    let summary = stdout
+        .lines()
+        .find(|line| line.starts_with("test result: "));
+    let mut counts = Vec::new();
+    if let Some(summary) = summary {
+        for (index, segment) in summary
+            .trim_start_matches("test result: ")
+            .split(';')
+            .take(5)
+            .enumerate()
+        {
+            let count = segment
+                .split_whitespace()
+                .nth(usize::from(index == 0))
+                .and_then(|s| s.parse::<usize>().ok());
+            counts.push(count);
+        }
+    }
+    let kinds: Vec<_> = [
+        "PoolTimedOut",
+        "PoolClosed",
+        "RowNotFound",
+        "ColumnNotFound",
+        "TypeNotFound",
+        "Tls(",
+        "Io(",
+    ]
+    .into_iter()
+    .filter(|kind| stdout.contains(kind) || stderr.contains(kind))
+    .collect();
+    let sqlstates: Vec<_> = [
+        "42501", "42P01", "42704", "23505", "23514", "57014", "55P03", "08006", "28P01", "3F000",
+        "28000", "53300", "53100", "57P03",
+    ]
+    .into_iter()
+    .filter(|code| {
+        let marker = format!("code: \"{code}\"");
+        stdout.contains(&marker) || stderr.contains(&marker)
+    })
+    .collect();
+    let passed = output.status.success()
+        && counts.first() == Some(&Some(expected.len()))
+        && counts.get(1) == Some(&Some(0))
+        && counts.get(2) == Some(&Some(0))
+        && statuses.len() == expected.len()
+        && statuses.values().all(|status| status == "ok");
+    json!({"result":if passed {"PASS"} else {"FAIL"},"exit_success":output.status.success(),
+        "test_statuses":statuses,"summary_counts_passed_failed_ignored_measured_filtered":counts,
+        "error_kinds":kinds,"sqlstates":sqlstates,"http_status_assertions":http_status_assertions})
+}
+
+async fn verify_existing(
+    target: &Target,
+    migration_url: &str,
+    app_url: &str,
+    report: &mut Value,
+) -> Result<()> {
+    report["operation"] = json!("verify_existing_approved_cloud_installation");
+    report["backup"] = json!(
+        "Existing synthetic GroundZero data is retained; no backup was created; managed backup availability NOT VERIFIED."
+    );
+    report["installed_by_sha"] = json!("3f18a08ac412b95febf40cbc3fbac6a236f80cdd");
+    report["bootstrap"] = json!("NOT RUN (previous installation PASS)");
+    report["migrate"] = json!("NOT RUN (previous installation PASS)");
+    report["repeat_migrate"] = json!("NOT RUN (previous installation PASS)");
+    report["phase"] = json!("managed_objects_before_app_tests");
+    super::inventory::inspect(target, report).await?;
+    report["phase"] = json!("managed_objects_before_app_tests");
+    let mut admin = PgConnection::connect_with(&super::connect_options(target))
+        .await
+        .map_err(super::classify_connection_error)?;
+    let before = managed(snapshot(&mut admin).await?)?;
+    report["managed_before_app_tests_sha256"] = json!(fingerprint(&before)?);
+    require(
+        report["managed_before_app_tests_sha256"]
+            == "8c4d03f3fbe1fbf1e698ad02f14c04d235cb84e2c8b4d4c70cb9d8bf7f2ab743",
+    )?;
+    report["managed_objects_before_app_tests"] = json!("PASS");
+    report["phase"] = json!("ledger_and_roles_read_only");
+    let mut migrator = PgConnection::connect(migration_url)
+        .await
+        .map_err(super::classify_connection_error)?;
+    sqlx::raw_sql("BEGIN READ ONLY")
+        .execute(&mut migrator)
+        .await
+        .map_err(|_| Failure::QueryFailed)?;
+    let (role,count,version,success,checksum):(String,i64,i64,bool,String)=sqlx::query_as(
+        "SELECT current_user::text,count(*) OVER (),version,success,encode(checksum,'hex') FROM fvoci._sqlx_migrations")
+        .fetch_one(&mut migrator).await.map_err(|_| Failure::QueryFailed)?;
+    require(
+        role == "fvoci_migrator"
+            && count == 1
+            && version == 202610230001
+            && success
+            && checksum == CHECKSUM,
+    )?;
+    sqlx::raw_sql("ROLLBACK")
+        .execute(&mut migrator)
+        .await
+        .map_err(|_| Failure::QueryFailed)?;
+    migrator.close().await.map_err(|_| Failure::ClientError)?;
+    report["ledger"] =
+        json!({"result":"PASS","rows":1,"version":version,"checksum_sha384":CHECKSUM});
+    report["migration_identity"] = json!({"role":"fvoci_migrator","tls_verify_full":"PASS"});
+    let mut app = PgConnection::connect(app_url)
+        .await
+        .map_err(super::classify_connection_error)?;
+    sqlx::raw_sql("BEGIN READ ONLY")
+        .execute(&mut app)
+        .await
+        .map_err(|_| Failure::QueryFailed)?;
+    let safe:bool=sqlx::query_scalar("SELECT current_user='fvoci_app' AND NOT rolsuper AND NOT rolbypassrls FROM pg_roles WHERE rolname=current_user")
+        .fetch_one(&mut app).await.map_err(|_| Failure::QueryFailed)?;
+    require(safe)?;
+    sqlx::raw_sql("ROLLBACK")
+        .execute(&mut app)
+        .await
+        .map_err(|_| Failure::QueryFailed)?;
+    app.close().await.map_err(|_| Failure::ClientError)?;
+    report["app_connection"] = json!("PASS");
+    report["app_identity"] =
+        json!({"role":"fvoci_app","superuser":false,"bypassrls":false,"tls_verify_full":"PASS"});
+    let artifacts = fs::read_to_string("target/cloud-install-test-artifacts.jsonl")
+        .map_err(|_| Failure::ClientError)?;
+    let mut all_passed = true;
+    for (test, names) in [
+        ("first_flow", FIRST_FLOW),
+        (
+            "db_context",
+            &["user_context_does_not_outlive_commit_or_rollback"][..],
+        ),
+        (
+            "trash",
+            &["deleted_documents_disappear_and_come_back_with_their_subtree"][..],
+        ),
+    ] {
+        report["phase"] = json!(test);
+        let executable = artifacts
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .find(|v| {
+                v["reason"] == "compiler-artifact"
+                    && v["target"]["name"] == test
+                    && v["profile"]["test"] == true
+            })
+            .and_then(|v| v["executable"].as_str().map(str::to_owned))
+            .ok_or(Failure::ClientError)?;
+        let mut command = Command::new(executable);
+        command.env("DATABASE_URL", app_url).arg("--test-threads=1");
+        if test == "trash" {
+            command.args(["--exact", names[0]]);
+        }
+        let output = command.output().map_err(|_| Failure::ClientError)?;
+        let result = safe_test_result(&output, names);
+        all_passed &= result["result"] == "PASS";
+        report["tests"][test] = result;
+    }
+    report["phase"] = json!("managed_objects_after_app_tests");
+    let after = managed(snapshot(&mut admin).await?)?;
+    report["managed_after_app_tests_sha256"] = json!(fingerprint(&after)?);
+    require(before == after)?;
+    report["managed_objects_unchanged"] = json!("PASS");
+    admin.close().await.map_err(|_| Failure::ClientError)?;
+    report["phase"] = json!("verification_complete");
+    require(all_passed)?;
+    report["result"] = json!("PASS");
+    Ok(())
+}
+
 async fn probe_url(url: &str) -> Value {
     let probe = async {
         let mut conn = PgConnection::connect(url)
@@ -451,7 +689,7 @@ async fn probe_url(url: &str) -> Value {
     }
 }
 
-pub fn run(connect: bool, inspect_only: bool) -> i32 {
+pub fn run(connect: bool, operation: Operation) -> i32 {
     super::print_report(super::run_with(
         connect,
         |name| {
@@ -480,7 +718,7 @@ pub fn run(connect: bool, inspect_only: bool) -> i32 {
                 || {
                     runtime.block_on(super::bounded(
                         std::time::Duration::from_secs(480),
-                        install(target, &mut report, inspect_only),
+                        install(target, &mut report, operation),
                     ))
                 },
             );
@@ -507,6 +745,64 @@ pub fn run(connect: bool, inspect_only: bool) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::process::ExitStatusExt;
+
+    #[test]
+    fn test_parser_publishes_only_allowed_names_statuses_counts_and_error_codes() {
+        let name = FIRST_FLOW[6];
+        let stdout = format!(
+            "test {name} ... FAILED\ntest untrusted-secret-name ... FAILED\n\n---- {name} stdout ----\nURL postgres://user:secret-value@host/db\n  left: 401\n right: 200\nDatabase error code: \"42501\"\nPoolTimedOut\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1s\n"
+        );
+        let output = std::process::Output {
+            status: std::process::ExitStatus::from_raw(256),
+            stdout: stdout.into_bytes(),
+            stderr: b"secret stderr value".to_vec(),
+        };
+        let report = safe_test_result(&output, &[name]);
+        assert_eq!(report["result"], "FAIL");
+        assert_eq!(report["test_statuses"], json!({name:"FAILED"}));
+        assert_eq!(report["sqlstates"], json!(["42501"]));
+        assert_eq!(report["error_kinds"], json!(["PoolTimedOut"]));
+        assert_eq!(
+            report["http_status_assertions"],
+            json!([{"test":name,"actual":401,"expected":200}])
+        );
+        let encoded = report.to_string();
+        for secret in [
+            "postgres://",
+            "secret-value",
+            "untrusted-secret-name",
+            "secret stderr",
+        ] {
+            assert!(!encoded.contains(secret));
+        }
+    }
+
+    #[test]
+    fn zero_tests_or_missing_expected_test_names_cannot_pass() {
+        let stdout = format!(
+            "test {} ... ok\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0s\n",
+            FIRST_FLOW[0]
+        );
+        let normal = std::process::Output {
+            status: std::process::ExitStatus::from_raw(0),
+            stdout: stdout.into_bytes(),
+            stderr: vec![],
+        };
+        assert_eq!(
+            safe_test_result(&normal, &[FIRST_FLOW[0]])["result"],
+            "PASS"
+        );
+        assert_eq!(
+            safe_test_result(&normal, &FIRST_FLOW[..2])["result"],
+            "FAIL"
+        );
+        let output=std::process::Output{status:std::process::ExitStatus::from_raw(0),stdout:b"test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0s\n".to_vec(),stderr:vec![]};
+        assert_eq!(
+            safe_test_result(&output, &[FIRST_FLOW[0]])["result"],
+            "FAIL"
+        );
+    }
 
     #[test]
     fn diagnosis_metadata_redacts_all_three_credentials_and_credential_shaped_values() {

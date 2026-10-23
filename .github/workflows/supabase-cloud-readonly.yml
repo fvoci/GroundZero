@@ -1,5 +1,5 @@
 # One approved first installation. Evidence branch only; never merged into the product branch.
-name: supabase-cloud-first-install
+name: supabase-cloud-installed-target-verification
 
 on:
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
           cargo build --locked --package fvoci-server --features sqlx/tls-native-tls
           cargo build --locked --package xtask
           cargo test --locked --package fvoci-server --features sqlx/tls-native-tls --test first_flow --test db_context --test trash --no-run --message-format=json > target/cloud-install-test-artifacts.jsonl
-      - name: Approved empty-target first installation and app-role tests
+      - name: Verify existing target and run approved synthetic app-role tests
         timeout-minutes: 9
         env:
           APPROVED_SHA: ${{ inputs.reviewed_sha }}
@@ -54,12 +54,12 @@ jobs:
           SUPABASE_TEST_APP_PASSWORD: ${{ secrets.SUPABASE_TEST_APP_PASSWORD }}
         run: |
           mkdir -p target/cloud-install
-          target/debug/xtask supabase-cloud-first-install --connect > target/cloud-install/report.json
+          target/debug/xtask supabase-cloud-verify --connect > target/cloud-install/report.json
       - name: Preserve sanitized installation evidence only
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: cloud-first-install-${{ github.sha }}
+          name: cloud-installed-verification-${{ github.sha }}
           path: target/cloud-install/report.json
           if-no-files-found: ignore
           retention-days: 14
