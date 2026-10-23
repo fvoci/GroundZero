@@ -53,57 +53,43 @@ ID 개수·순서·FV001/002 재시도 계약은 [SQL ID 계약](../../../docs/s
 
 ```sh
 rg -n '^CREATE FUNCTION fvoci\.app_record_document_references\(' crates/server/migrations
-cargo xtask sql-compare --baseline-sha 8ffd8c3b940924eca8cf7ec739a85494243c0479 \
-  --output target/sql-compare-baseline --behavior --oidc
 ```
 
-비교기는 고정 SHA의 누적 SQL과 현재 제품 SQL을 각각 격리된 빈 DB에 적용한다.
-객체·권한·RLS·초기 상태와 동작을 비교하고, 의도한 SQLx 이력·원장 주석 차이를 구분한다.
+제품 검사는 `cargo xtask check`·`cargo xtask test`를 쓴다. 이번 통합의 전용 비교 도구와 준비 자료는
+현재 트리에서 제거했다. 고정 SHA의 누적 SQL과 새 기준을 각각 격리된 빈 DB에 적용해
+객체·권한·RLS·초기 상태와 동작을 비교하며, 의도한 SQLx 이력·원장 주석 차이를 구분했다.
 빈 DB 동등성은 구버전 백업 복구나 기존 데이터 보존을 증명하지 않는다.
 
-### 비교 명령과 실행 범위
+### 고정 검증 소스의 재현과 실행 범위
 
-다음은 이번 통합의 최종 행렬 증거를 만드는 전용 비교 명령이다. 행렬 완료 뒤 비교 명령·전용 helper를 제거하고
-해당 검증 SHA의 소스로 재현한다. 일반 제품 검사 진입점은 `cargo xtask check`·`cargo xtask test`다.
+다음 명령은 [검증 소스 `b7d34936d68b6cc2901c020e5cc26a6098314a54`](https://github.com/fvoci/GroundZero/tree/b7d34936d68b6cc2901c020e5cc26a6098314a54)를
+별도로 받은 checkout에서만 실행한다. 도구는 Git에서 과거 SQL을 읽고 실행 SHA를 기록하므로 Git 이력이 없는
+압축 해제본으로 실행하지 않는다. 기존 개발 checkout이나 DB를 재생성하지 않는다.
 
 ```sh
+git clone --no-checkout https://github.com/fvoci/GroundZero.git target/sql-consolidation-reproduce
+git -C target/sql-consolidation-reproduce fetch origin b7d34936d68b6cc2901c020e5cc26a6098314a54
+git -C target/sql-consolidation-reproduce checkout --detach b7d34936d68b6cc2901c020e5cc26a6098314a54
+git -C target/sql-consolidation-reproduce cat-file -e '8ffd8c3b940924eca8cf7ec739a85494243c0479^{commit}'
+cd target/sql-consolidation-reproduce
 cargo xtask sql-compare --control --output target/sql-compare-aa
 cargo xtask sql-compare --postgres-major 17 --output target/sql-compare-pg17 --behavior --oidc
 cargo xtask sql-compare --postgres-major 18 --output target/sql-compare-pg18 --behavior --oidc
 cargo xtask sql-compare --supabase --output target/sql-compare-supabase --behavior --oidc
-cargo xtask sql-compare --restricted-admin --behavior --behavior-scope core --output target/sql-compare-restricted
 ```
 
-출력 경로는 실행마다 새로 지정한다. 기본 A는 위 고정 SHA의 SQL을 `previous-migrations/`에 꺼내 SQLx로 적용하며,
-B는 현재 제품 `db migrate`다. `--control`은 양쪽에 A를 적용한다. 양쪽 모두 제품 bootstrap을 쓰고 별도 클러스터·
-Compose 프로젝트·동적 루프백 포트를 사용한다. 종료 시 생성한 프로젝트만 `stop`하며 DB tmpfs 내용은 사라지므로
-그 전에 카탈로그·덤프·로그를 출력 경로에 저장한다. 개발·Cloud DB URL은 받지 않는다.
+출력 경로는 실행마다 새로 지정한다. A는 `8ffd8c3`의 실제 SQLx 이력, B는 검증 소스의 제품 `db migrate`를 쓴다.
+양쪽은 별도 클러스터·Compose 프로젝트에 설치하고 증거를 저장한 뒤 해당 프로젝트만 `stop`한다.
+Supabase 직접 연결과 session pooler를 각각 실행하지만 별도 빈 DB가 필요한 백업·검색 시험은 직접 연결을 쓴다.
+A의 일반 API·백업·검색은 과거 이력, 시작·마이그레이션 거부·종료 회귀시험은 별도 새 기준 DB를 사용한다.
+위 A/A control은 객체 비교만 실행하며 행동시험은 NOT RUN이다.
 
-`--behavior`는 기존 앱 역할 통합 시험을 양쪽에서 실행한다. `--oidc`가 없으면 OIDC는 NOT RUN이다.
-Supabase는 직접 연결과 session pooler를 각각 실행하되 별도 빈 DB가 필요한 백업·검색 시험은 직접 연결을 쓴다.
-과거 A의 일반 API·백업·검색 시험은 A의 이력을 쓰며, 시작·마이그레이션 거부·종료 회귀시험은 별도 현재 제품 DB를 만든다.
-새 앱이 과거 A의 시작을 거부하는 계약과 일반 API 동등성을 구분하기 위한 예외다.
-제한 관리자 프로필은 표준 PostgreSQL만 대상으로 LOGIN·CREATEROLE과 대상 DB CREATE·CONNECT 위임을 사용한다.
-`--behavior-scope core`는 `db_context`·`first_flow`·`ids`·`sharing`·`members`·`recurrence`·`time_tracking`만 실행한다.
-이 프로필의 백업/복구·FreshDb 검색·OIDC·S3·Supabase 전용 경로는 NOT RUN이다.
-
-### 비교 대상과 정규화
-
-[비교 카탈로그](../../../xtask/src/sql_compare/catalog.sql)는 함수 정의·속성·소유자·실효 ACL,
-테이블·열·타입·제약·인덱스·트리거·RLS·정책·기본 권한·역할/멤버십·DB 설정과 초기 행·시퀀스 상태를 비교한다.
-관리 스키마의 namespace/relation 소유권·ACL·속성과 함수·이벤트 트리거도 비교하지만 관리 스키마 전체 DDL 감사는 아니다.
-같은 이미지의 `pg_dump --schema-only --schema=fvoci --no-comments` 결과도 객체별로 대조한다.
-
-OID는 이름, DB 이름은 `current`로 바꾸고 시스템 transaction horizon·물리 tablespace OID·덤프의 무작위 토큰·버전 표제·
-객체 순서는 제외한다. TABLE 블록의 이름 있는 단일 줄 CHECK는 별도 비교한 카탈로그의 제약 표현으로 맞춰
-PostgreSQL 덤프 재파싱의 AND 괄호 차이를 없앤다. 제약의 실제 내용은 계속 비교한다.
-`fvoci` 함수 본문은 문자열·인용 식별자·중첩 달러 문자열·블록 주석 밖의 전체 줄 `--` 주석만 정규화한다.
-실행 바이트·인라인 주석·공백·함수 속성·ACL은 보존하며 주석만 달라진 원본은 `comment-only-differences.json`에 기록한다.
-
-SQLx 원장 구조는 비교하고 행과 세대 COMMENT는 별도 기록한다. 실제 파일의 버전·설명·성공·체크섬을 확인하며
-원장의 실행 시각·소요 시간만 비교에서 제외한다. 과거 A에 새 migrator를 실행한 거부 전후에 객체·초기 행·원장 보존을 확인한다.
-정책·테이블 권한·함수 실행 내용·CHECK 변조를 실제 비교 경로가 탐지하고 ROLLBACK 후 원본으로 돌아오는지도 검사한다.
-`inputs.json`에는 소스 SHA와 입력 해시, `result.json`에는 단계별 PASS/FAIL/NOT RUN을 남긴다.
+카탈로그와 스키마 덤프에서 정의·소유자·ACL·RLS·초기 상태를 비교한다. 함수 본문은 문자열·인용 식별자·
+달러 문자열·블록 주석 밖의 전체 줄 `--` 주석만 정규화하며 실행 바이트·인라인 주석·공백은 보존한다.
+SQLx 원장 구조는 비교하고 버전·체크섬·세대 COMMENT의 의도한 차이를 별도 확인한다.
+OID·덤프 표기 정규화, 변조 탐지·기존 DB 무변경 거부 검사와 추가 제한 관리자 명령은
+[검증 당시 안내](https://github.com/fvoci/GroundZero/blob/b7d34936d68b6cc2901c020e5cc26a6098314a54/crates/server/migrations/README.md#comparison)에 있다.
+추가 명령의 존재를 최종 SHA에서 실행한 결과로 보지 않는다. 실행 SHA·범위와 PASS/FAIL/NOT RUN은 해당 PR의 증거를 확인한다.
 
 ### 과거 자료와 증거
 
@@ -111,4 +97,6 @@ SQLx 원장 구조는 비교하고 행과 세대 COMMENT는 별도 기록한다.
 [준비 디렉터리 제거 직전 기록](https://github.com/fvoci/GroundZero/tree/6837acc6283efb1c06fd061c6fe2884a95826e9f/preparation/sql-consolidation)은 해당 SHA의 역사다.
 기존 원시 증거 270개는 [보존 커밋 `0dfa2b9`](https://github.com/fvoci/GroundZero/tree/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation)에 있으며,
 [SHA-256 목록](https://github.com/fvoci/GroundZero/blob/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation/evidence.sha256)으로 확인한다.
+이번 통합의 [최종 검증 증거 `e304e6b`](https://github.com/fvoci/GroundZero/tree/e304e6b24fbd766e443c0eb764c8c519342daf60/evidence/sql-consolidation)는
+[SHA-256 목록](https://github.com/fvoci/GroundZero/blob/e304e6b24fbd766e443c0eb764c8c519342daf60/evidence/sql-consolidation.sha256)으로 확인한다.
 새 원시 출력은 `target/`에 두고 원격 보존·재현 명령·검증 SHA·체크섬·최종 결과는 해당 PR에 남긴다.

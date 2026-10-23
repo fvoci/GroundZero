@@ -43,9 +43,9 @@
 
 - [결정 기록](decisions.md): 승인 원칙, 미승인 제안, 보류·대체 관계.
 - [개발 지침](development.md): 현재 개발·검사 방법과 유지보수 계약.
-- [마이그레이션 안내](../crates/server/migrations/README.md): 제품 SQL 기준과 고정 SHA 비교·검증·과거 증거 위치.
-  통합 검증용 비교 코드·카탈로그는 `xtask/src/sql_compare/`, 제품 사전 검사 fixture는
-  `crates/server/tests/fixtures/postgres-preflight/`에 둔다. 준비 문서·후보 SQL 사본은 현재 트리에 두지 않는다.
+- [마이그레이션 안내](../crates/server/migrations/README.md): 제품 SQL 기준과 고정 SHA 검증 재현·과거 증거 위치.
+  제품 사전 검사 fixture는 `crates/server/tests/fixtures/postgres-preflight/`에 둔다.
+  통합 전용 비교 도구·준비 문서·후보 SQL 사본은 현재 트리에 두지 않는다.
 
 과거 실행 로그·스크린숏·중간 소스는 현재 코드와 분리하고, 관련 결함이나 SHA를 조사할 때만 연다.
 분리 원칙은 [개발 지침의 검사와 예외](development.md#4-검사와-예외)를 따른다.

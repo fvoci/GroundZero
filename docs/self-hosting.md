@@ -22,7 +22,7 @@
 | Supabase Cloud                      | 같은 제품 SQL의 설계·검증 대상. 기존 TLS·읽기 전용 연결만 확인했으며 버전 확인과 실제 제품 설치·앱·복구 결과는 별도 기록 |
 
 준비 당시 코드 SHA·명령·제외 경로는 [고정 SHA의 검증 기록](https://github.com/fvoci/GroundZero/blob/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation/verification/results.md)에 있다.
-현재 제품 SQL의 검증은 [비교 명령](../crates/server/migrations/README.md#comparison)과 해당 변경 PR의 실행 SHA·결과를 확인한다.
+현재 제품 SQL의 검증은 [통합 검증 재현](../crates/server/migrations/README.md#comparison)과 해당 변경 PR의 실행 SHA·결과를 확인한다.
 검증한 메이저의 지원은 미래 메이저의 지원 보장이 아니며, Cloud의 서버 버전도 이름만으로 추정하지 않는다.
 
 모든 환경에서 같은 제품 SQL과 `db bootstrap` → `db migrate` → 서버 시작을 사용한다. 환경 차이는 초기 DB/역할

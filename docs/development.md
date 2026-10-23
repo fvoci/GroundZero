@@ -99,8 +99,8 @@ Supabase session 실행에서도 별도 빈 DB를 만드는 시험은 직접 연
 
 ### DB 비교와 사전 검사 fixture
 
-현재 SQL과 과거 고정 SHA의 비교는 [마이그레이션 안내](../crates/server/migrations/README.md#comparison)를 따른다.
-비교 카탈로그는 [xtask/src/sql_compare/catalog.sql](../xtask/src/sql_compare/catalog.sql), 제품 사전 검사 fixture는
+통합 SQL 비교 결과와 고정 검증 SHA의 재현은 [마이그레이션 안내](../crates/server/migrations/README.md#comparison)를 따른다.
+이번 통합 전용 비교 도구는 현재 트리에서 제거했다. 제품 사전 검사 fixture는
 [crates/server/tests/fixtures/postgres-preflight/](../crates/server/tests/fixtures/postgres-preflight)에 둔다.
 PG16은 지원 대상이 아니라 `db bootstrap`·`db migrate`의 변경 전 거부를 확인하는 fixture다.
 새 전용 Compose 프로젝트에 `deploy/compose.test.yaml`과 `crates/server/tests/fixtures/postgres-preflight/compose.pg16.yaml`을 겹쳐 실행한다.
@@ -224,7 +224,7 @@ VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev
 개수 산정·바인딩 순서·FV001/002·HTTP와 작업 프로세스의 재시도 차이는 [Rust→SQL UUID 인자 계약](sql-id-contract.md)을 따른다.
 [통합 초기 마이그레이션](../crates/server/migrations/README.md)이 제품 적용 경로다(D-107).
 기존 누적 이력 DB는 자동 이전하지 않는다. 정확한 대상·손실 영향·백업 방안을 확인하고 승인받은 뒤 재생성한다.
-비교용 누적 SQL은 고정 SHA에서 읽으며 [비교 명령](../crates/server/migrations/README.md#comparison)을 따른다.
+통합 당시 비교는 [고정 검증 SHA의 별도 checkout](../crates/server/migrations/README.md#comparison)에서 재현한다.
 빈 DB 설치 동등성을 기존 데이터 보존·구버전 백업 복구 검증으로 보지 않는다.
 
 <a id="create-retry"></a>
@@ -537,9 +537,9 @@ D-105의 원자성 단위는 업무 한 건이다. CSV 각 줄은 모든 칸을 
 
 - [SQL 준비 기준까지의 개발 기록 전체](https://github.com/fvoci/GroundZero/blob/abd545a250ff1fd9cc166b3c078c4dff76846724/docs/development.md): 초기화·라이선스 조사, 기능별 구현, 감사·실행 결과와 당시 절 번호.
 - [최신 정책 구현 검증의 개발 기록 전체](https://github.com/fvoci/GroundZero/blob/0a26654db6c96ccfb232ecbf0a6a02ff8220a5dd/docs/development.md): 기대 사용자와 검색·판 검사·CSV 원자성, 통합 뒤 수정·시험 범위. 옛 96~99절은 이 원문에서 확인한다.
-- [SQL 통합 준비 기록](https://github.com/fvoci/GroundZero/tree/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation), [준비 검증 요약](https://github.com/fvoci/GroundZero/blob/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation/verification/results.md): 해당 SHA의 누적 SQL·후보 검증과 NOT RUN을 구분한다. 현재 비교 절차와 원시 증거 위치는 [마이그레이션 안내](../crates/server/migrations/README.md#comparison)에 있다.
+- [SQL 통합 준비 기록](https://github.com/fvoci/GroundZero/tree/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation), [준비 검증 요약](https://github.com/fvoci/GroundZero/blob/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation/verification/results.md): 해당 SHA의 누적 SQL·후보 검증과 NOT RUN을 구분한다. 통합 검증 재현과 원시 증거 위치는 [마이그레이션 안내](../crates/server/migrations/README.md#comparison)에 있다.
 
-변경하지 않은 마이그레이션 주석 등에서 옛 절 번호를 만나면 다음 원문 위치를 쓴다. 새 절 번호로 재해석하지 않는다.
+고정 SHA에 보존된 과거 SQL 주석 등에서 옛 절 번호를 만나면 다음 원문 위치를 쓴다. 새 절 번호로 재해석하지 않는다.
 
 | 옛 참조                      | 고정 원문                                                                                                                                                                                                                                                                                                                                                     |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

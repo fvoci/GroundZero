@@ -8,7 +8,6 @@ mod licenses;
 mod notices;
 mod openapi;
 mod rhwp;
-mod sql_compare;
 mod supabase;
 mod supabase_cloud_precheck;
 mod test;
@@ -28,45 +27,9 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Compare a fixed historical SQL revision with product migrations in isolated Compose projects.
-    SqlCompare {
-        /// Full immutable commit SHA supplying the previous cumulative migrations.
-        #[arg(long, default_value = sql_compare::PREVIOUS_SQL_SHA)]
-        baseline_sha: String,
-        /// Apply the historical source to both sides for an A/A control.
-        #[arg(long)]
-        control: bool,
-        /// Evidence directory (must not already exist).
-        #[arg(long)]
-        output: PathBuf,
-        /// Also run the existing integration suite against both databases.
-        #[arg(long)]
-        behavior: bool,
-        /// Select all existing tests or only the listed app-role capability tests.
-        #[arg(long, value_enum, requires = "behavior")]
-        behavior_scope: Option<sql_compare::BehaviorScope>,
-        /// Also start the test Keycloak (`oidc` profile) and run the OIDC tests in the full suite.
-        #[arg(long, requires = "behavior")]
-        oidc: bool,
-        /// Use a local PostgreSQL installer with CREATEROLE and target-DB privileges only.
-        #[arg(long, conflicts_with = "supabase")]
-        restricted_admin: bool,
-        /// Standard PostgreSQL major; Supabase uses its own pinned fixture.
-        #[arg(long, value_enum, default_value = "17", conflicts_with = "supabase")]
-        postgres_major: compose::PostgresMajor,
-        /// Use the pinned self-hosted Supabase PostgreSQL and session pooler.
-        #[arg(long)]
-        supabase: bool,
-    },
     /// 전용 Supabase Cloud 대상의 읽기 전용 사전 점검. 기본값은 연결하지 않는다.
     SupabaseCloudPrecheck {
         /// 승인된 대상에 한 번 연결한다. 수동 workflow는 검토된 main에서만 실행한다.
-        #[arg(long)]
-        connect: bool,
-    },
-    /// 승인된 Cloud 재생성 대상을 읽기 전용으로 조사한다. 행 내용이나 시크릿은 출력하지 않는다.
-    SupabaseCloudInventory {
-        /// 기존 테스트 자격 증명으로 한 번 연결한다. 쓰기·초기화는 수행하지 않는다.
         #[arg(long)]
         connect: bool,
     },
@@ -144,48 +107,22 @@ fn main() -> Result<()> {
     let cli = Cli::try_parse().unwrap_or_else(|error| {
         // clap의 일반 오류에는 사용자가 잘못 붙인 URI가 포함될 수 있다.
         // 이 명령의 잘못된 입력은 고정 코드만 보고하고 환경도 읽지 않는다.
-        if std::env::args_os().nth(1).is_some_and(|arg| {
-            arg == "supabase-cloud-precheck" || arg == "supabase-cloud-inventory"
-        }) && !matches!(
-            error.kind(),
-            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
-        ) {
+        if std::env::args_os()
+            .nth(1)
+            .is_some_and(|arg| arg == "supabase-cloud-precheck")
+            && !matches!(
+                error.kind(),
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+            )
+        {
             std::process::exit(supabase_cloud_precheck::rejected_arguments());
         }
         error.exit()
     });
     let root = repo_root()?;
     match cli.command {
-        Command::SqlCompare {
-            baseline_sha,
-            control,
-            output,
-            behavior,
-            behavior_scope,
-            oidc,
-            restricted_admin,
-            postgres_major,
-            supabase,
-        } => sql_compare::run(
-            &root,
-            sql_compare::Baseline {
-                sha: &baseline_sha,
-                control,
-            },
-            &output,
-            behavior.then(|| sql_compare::Behavior {
-                scope: behavior_scope.unwrap_or(sql_compare::BehaviorScope::Full),
-                oidc,
-            }),
-            supabase,
-            restricted_admin,
-            postgres_major,
-        ),
         Command::SupabaseCloudPrecheck { connect } => {
             std::process::exit(supabase_cloud_precheck::run(connect))
-        }
-        Command::SupabaseCloudInventory { connect } => {
-            std::process::exit(supabase_cloud_precheck::inventory::run(connect))
         }
         Command::Check { skip_licenses } => check::run(&root, skip_licenses),
         Command::Test {
@@ -213,42 +150,5 @@ fn main() -> Result<()> {
                 rhwp::run(&root, force)
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sql_compare(args: &[&str]) -> Result<Command, clap::Error> {
-        let base = ["xtask", "sql-compare", "--output", "target/x"];
-        Cli::try_parse_from(base.iter().chain(args)).map(|cli| cli.command)
-    }
-
-    #[test]
-    fn sql_compare_requires_behavior_for_oidc() {
-        let error = sql_compare(&["--oidc"]).unwrap_err();
-        assert_eq!(
-            error.kind(),
-            clap::error::ErrorKind::MissingRequiredArgument
-        );
-        for args in [
-            &["--behavior", "--oidc"][..],
-            &["--behavior", "--oidc", "--postgres-major", "18"],
-            &["--behavior", "--oidc", "--supabase"],
-        ] {
-            assert!(matches!(
-                sql_compare(args),
-                Ok(Command::SqlCompare {
-                    behavior: true,
-                    oidc: true,
-                    ..
-                })
-            ));
-        }
-        assert!(matches!(
-            sql_compare(&["--behavior"]),
-            Ok(Command::SqlCompare { oidc: false, .. })
-        ));
     }
 }

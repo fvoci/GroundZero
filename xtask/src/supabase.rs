@@ -65,24 +65,6 @@ pub struct Supabase {
 }
 
 impl Supabase {
-    /// Independent cluster for one side of SQL comparison.
-    pub fn for_comparison(root: &Path, run: &str) -> Result<Self> {
-        let mut cluster = Self::new(root)?;
-        cluster.project = format!("sqlprep-b-{}-{run}", cluster.project);
-        Ok(cluster)
-    }
-
-    pub fn exec_read(&self, sh: &Shell, command: &[String]) -> Result<String> {
-        let args = self.args();
-        cmd!(
-            sh,
-            "docker {args...} exec -T --env PGPASSWORD db {command...}"
-        )
-        .quiet()
-        .read()
-        .context("Supabase DB command failed")
-    }
-
     pub fn new(root: &Path) -> Result<Self> {
         Ok(Self {
             root: root.to_path_buf(),
@@ -193,12 +175,6 @@ impl Supabase {
     pub fn down(&self, sh: &Shell) -> Result<()> {
         let args = self.args();
         cmd!(sh, "docker {args...} down --volumes --remove-orphans").run()?;
-        Ok(())
-    }
-
-    pub fn stop(&self, sh: &Shell) -> Result<()> {
-        let args = self.args();
-        cmd!(sh, "docker {args...} stop").run()?;
         Ok(())
     }
 
