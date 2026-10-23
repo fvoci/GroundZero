@@ -1,4 +1,4 @@
-rhwp-wasm-inputs: 8e5afd88811d30c6
+rhwp-wasm-inputs: 57c774a2beee02f1
 Rust crates compiled into the HWP/HWPX preview WebAssembly (rhwp, D-76): 131
 
 ---- adler2 2.0.1 ----
@@ -6716,7 +6716,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
----- ctutils 0.4.2 ----
+---- ctutils 0.4.4 ----
 License: Apache-2.0 OR MIT
 Source: https://github.com/RustCrypto/utils
 
