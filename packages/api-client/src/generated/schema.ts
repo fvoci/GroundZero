@@ -9491,10 +9491,15 @@ export interface operations {
                 status?: string | null;
                 /** @description 담당자(`me` 또는 사용자 id). 주면 업무만 나온다. */
                 assignee?: string | null;
-                /** @description 날짜 범위 시작(YYYY-MM-DD): 업무는 기한(없으면 시작일), 일정은 시작일, 기록은 발생일(없으면 고친 날), 그 밖은 고친 날. */
+                /**
+                 * @description 날짜 범위 시작(YYYY-MM-DD). 날짜만 있는 값(업무 기한(없으면 시작일), 종일 일정의 시작일, 기록의 발생일)은 그 날짜로,
+                 *     실제 시각(문서·항목·파일의 고친 때, 발생일 없는 기록의 고친 때, 시각 일정의 시작)은 `tz`의 그날 0시부터 비교한다.
+                 */
                 from?: string | null;
-                /** @description 날짜 범위 끝(YYYY-MM-DD, 포함). */
+                /** @description 날짜 범위 끝(YYYY-MM-DD, 포함). 실제 시각은 `tz`의 다음 날 0시 전까지. */
                 to?: string | null;
+                /** @description 날짜 범위의 하루를 정하는 IANA 시간대(예: `Asia/Seoul`). 없으면 저장한 시간대, 그것도 없으면 UTC. 모르는 이름은 400. */
+                tz?: string | null;
                 /** @description 작성자(`me` 또는 사용자 id): 그 사람이 만든 것만(각 대상의 `created_by`). 볼 수 있는 범위는 넓히지 않는다. */
                 author?: string | null;
                 /** @description `true`면 제목에서만 찾는다(본문·첨부 글자·번호는 보지 않는다). */
