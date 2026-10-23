@@ -162,6 +162,24 @@ PostgreSQL 17.9에서는 `sql`·`plpgsql`의 PUBLIC USAGE와 UUID 추출 함수�
 
 거부 fixture의 소스는 `9c122173e4c6ec5d33c6be261975f68753008015`이며 [재현 절차](fixtures/README.md)에 사용한 기존 Compose·CLI·psql 명령을 기록했다. 새 서비스·제품 SQL 변형·권한 우회는 없다. 이 세 fixture의 관리자는 시험 준비·권한 철회용 superuser이고 제한 설치 관리자 증명은 위의 별도 core 실행이다. Cloud 연결·변경은 하지 않았다.
 
+## 후보의 OIDC 실행 경로: 도구 확인
+
+**도구 확인이며 최종 증거가 아니다.** 2026-10-23 사용자 결정으로 채택된 정책은 별도 브랜치에서 구현 중이다. 구현 검증 뒤 그 최종 상태에서 후보와 목록을 다시 만들고([재생성 명령](../inventory/README.md#재생성-명령)) A/B를 새 출력 경로로 다시 실행해야 한다. 이 실행은 정책 반영 전의 현재 후보 `b8172cf…55725`에서 새 `--oidc` 경로가 실제로 작동하는지만 보인다. 이 결과와 위의 이전 A/B 결과는 정책 반영 후의 최신 검증으로 재사용하지 않는다.
+
+| 17.9 실행          | 소스 SHA                                   | A와 B 각각의 행동 결과                            | 객체·권한·정지 |
+| ------------------ | ------------------------------------------ | ------------------------------------------------- | -------------- |
+| 전체 direct + OIDC | `b1c1dbabda2626b3f7068bfee03b6a84af82b9cf` | 47그룹, 366 passed, 0 failed/ignored, 12 filtered | 모두 PASS      |
+
+```sh
+cargo xtask sql-compare --postgres-major 17 \
+  --candidate preparation/sql-consolidation/candidate \
+  --output target/sql-compare-pg17-oidc-toolcheck-20261023 --behavior --oidc
+```
+
+양쪽 모두 이전 17 전체 실행에서 NOT RUN이던 OIDC 6건이 통과했다. Keycloak 통합 시험 `oidc_*` 5건(로그인·로그아웃, 다른 사용자 문서 거부, 세션 만료, 위조 state 거부, 서명 키 교체)과 `auth_info_is_public_and_reports_whether_oidc_is_configured`다. filtered 12건은 PostgreSQL 실행에서 제외되는 `supabase_*`다. 366에는 이 소스에서 이름에 `oidc_`가 들어 있던 새 xtask 단위 시험 2건도 포함된다. `--skip oidc_`는 부분 문자열로 거르므로 이후 커밋에서 이 두 시험의 이름만 바꿨다. OIDC가 없는 실행에서도 빠지지 않게 하기 위해서다.
+
+카탈로그·정규 덤프 차이 0, 변조 4/4 검출·원복, 설치·정지 PASS다. 양쪽 `catalog.json`의 SHA-256 `f2a16247…`은 이전 17 전체 실행과 같다. Keycloak은 이 실행 전용 검색·S3 프로젝트의 `oidc` 프로필 서비스이며 A·B가 차례로 같은 인스턴스를 썼다. [결과](runs/pg17-oidc-toolcheck/result.json), `inputs.json`(`"oidc": true`), `a-direct.txt`·`b-direct.txt`, `*-test-summary.json`이 근거다. 로컬 원본은 `local-artifacts.sha256`이 식별한다. 정지 후 이 실행의 컨테이너 5개(A·B PostgreSQL, Meilisearch, SeaweedFS, Keycloak)는 모두 exited이고 볼륨은 없다. Keycloak의 realm 파일만 읽기 전용 bind mount다. 18과 Supabase의 `--oidc` 실행, 정책 반영 후 후보의 OIDC 행렬은 NOT RUN이다.
+
 ## 실행 자원과 보존
 
 첫 A/A 진단에는 보존 요청과 어긋난 정리 명령이 한 번 실행됐다. 수정 전 바이너리가 다음 전용 프로젝트의 B PostgreSQL 컨테이너와 네트워크를 삭제했다.

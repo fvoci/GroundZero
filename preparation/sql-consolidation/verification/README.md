@@ -11,6 +11,11 @@ cargo xtask sql-compare \
   --candidate preparation/sql-consolidation/candidate \
   --output target/sql-compare-postgres --behavior
 
+# 같은 비교 + 시험용 Keycloak으로 OIDC 시험까지 포함한 전체 행동 시험(18·Supabase에도 붙일 수 있다)
+cargo xtask sql-compare --postgres-major 17 \
+  --candidate preparation/sql-consolidation/candidate \
+  --output target/sql-compare-postgres-oidc --behavior --oidc
+
 # 고정된 셀프호스트 Supabase PostgreSQL 17: 같은 비교 + 직접 연결 및 session pooler
 cargo xtask sql-compare \
   --candidate preparation/sql-consolidation/candidate \
@@ -65,9 +70,9 @@ CHECK ((A AND B AND C))
 
 행동 시험의 일반 DB·검색·S3 환경 변수도 격리된 서비스에 고정한다. 기본 파일 저장소는 local이며 S3 시험만 기존 헬퍼로 시험 SeaweedFS를 선택한다. 외부 환경에서 설정한 저장소·검색 URL이 시험에 새어 들어가지 않는다. Zotero 기본 URL은 닫힌 루프백 포트이고 해당 시험이 자체 HTTP fixture로 덮어쓴다.
 
-Supabase에서는 각 DB의 직접 연결과 session pooler를 실행한다. 일반 앱 연결과 `db_context`는 실제 pooler를 사용한다. **새 DB를 만드는 백업·검색 시험은 기존 규칙대로 직접 연결을 사용한다**. 따라서 session 단계 통과를 모든 시험의 pooler 통과로 해석하지 않는다. OIDC Keycloak 시험은 이 명령에서 NOT RUN이며, PostgreSQL 실행의 Supabase 전용 시험도 NOT RUN이다. S3는 기존 SeaweedFS 시험 서비스를 사용한다.
+Supabase에서는 각 DB의 직접 연결과 session pooler를 실행한다. 일반 앱 연결과 `db_context`는 실제 pooler를 사용한다. **새 DB를 만드는 백업·검색 시험은 기존 규칙대로 직접 연결을 사용한다**. 따라서 session 단계 통과를 모든 시험의 pooler 통과로 해석하지 않는다. OIDC Keycloak 시험은 `--oidc`를 붙인 실행에서만 돈다. `cargo xtask test --oidc`처럼 기존 `oidc` 프로필의 시험용 Keycloak을 이 실행의 검색·S3 프로젝트에 함께 띄우고 `FVOCI_TEST_OIDC_ISSUER`를 넣어 `--skip oidc_` 없이 전체 시험을 실행한다. A와 B는 같은 Keycloak을 차례로 쓴다(기존 Supabase direct→session 실행과 같은 방식). `--oidc`는 `--behavior`가 필요하고 core 범위·제한 설치 관리자와는 함께 쓸 수 없다. 붙이지 않은 실행의 OIDC는 NOT RUN이며, PostgreSQL 실행의 Supabase 전용 시험도 NOT RUN이다. S3는 기존 SeaweedFS 시험 서비스를 사용한다.
 
-`inputs.json`은 소스 SHA·누적/후보 SQL SHA-256·비교기와 카탈로그 해시·Supabase 고정 revision을 기록한다. `result.json`은 설치·스냅숏·객체 비교·변조 시험과 각 행동 경로의 PASS/FAIL/NOT RUN을 분리한다. `a/`, `b/`의 원본 덤프·카탈로그·이력·행동 로그가 근거다. 실패한 실행도 별도 출력 경로로 보존한다.
+`inputs.json`은 소스 SHA·누적/후보 SQL SHA-256·비교기와 카탈로그 해시·Supabase 고정 revision을 기록한다. `result.json`은 설치·스냅숏·객체 비교·변조 시험과 각 행동 경로의 PASS/FAIL/NOT RUN을 분리한다. 두 파일의 `oidc`는 OIDC 시험 요청 여부이며, 행동 경로의 PASS 문구에도 OIDC 실행 여부를 적는다. `a/`, `b/`의 원본 덤프·카탈로그·이력·행동 로그가 근거다. 실패한 실행도 별도 출력 경로로 보존한다.
 
 새 설치 동등성은 기존 DB의 이력 교체, 기존 백업의 새 버전 복구, 데이터 업그레이드, Supabase Cloud 실행을 증명하지 않는다. 특히 후보 v1과 누적 이력의 마지막 버전이 다르므로 기존 백업 호환 여부는 별도 설계·승인이 필요하다.
 
