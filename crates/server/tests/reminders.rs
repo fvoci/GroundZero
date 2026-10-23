@@ -40,7 +40,7 @@ async fn open_item(app: &Router, admin: &TestUser, module: &str, title: &str) ->
         Method::PUT,
         &format!("/api/items/{id}"),
         Some(admin),
-        Some(json!({ "title": title, "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": title, "description": "", "visibility": "workspace" })),
     )
     .await;
     id
@@ -171,7 +171,7 @@ async fn item_reminders_reach_people_who_can_see_the_item_once_a_day() {
         Method::PUT,
         &format!("/api/items/{study}"),
         Some(&admin),
-        Some(json!({ "title": "동기 연구", "description": "", "visibility": "private" })),
+        Some(json!({ "base_version": 2, "title": "동기 연구", "description": "", "visibility": "private" })),
     )
     .await;
     assert!(

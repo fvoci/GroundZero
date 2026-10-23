@@ -37,7 +37,7 @@ async fn course(app: &Router, admin: &TestUser, ws: &str) -> String {
         Method::PUT,
         &format!("/api/items/{id}"),
         Some(admin),
-        Some(json!({ "title": "선형대수", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": "선형대수", "description": "", "visibility": "workspace" })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
@@ -483,7 +483,7 @@ async fn completion_dates_links_and_participant_visibility() {
         Method::PUT,
         &format!("/api/items/{item}"),
         Some(&admin),
-        Some(json!({ "title": "선형대수", "description": "", "visibility": "private" })),
+        Some(json!({ "base_version": 2, "title": "선형대수", "description": "", "visibility": "private" })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);

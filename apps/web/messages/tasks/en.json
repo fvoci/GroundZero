@@ -20,13 +20,13 @@
   "tasks_csv_too_many_tags": "At most {max} tags",
   "tasks_csv_tag_too_long": "Each tag can be at most {max} characters",
   "tasks_csv_tag_control": "A tag contains line breaks, tabs or other control characters",
-  "tasks_csv_title_only": "\"{title}\" was created with only its title. Press again to fill in the rest of that task.",
-  "tasks_csv_task_gone": "\"{title}\" was deleted or is no longer visible. Press again to create it anew.",
+  "tasks_csv_task_gone": "\"{title}\" was deleted. Press again to create it anew.",
+  "tasks_csv_already_created": "{title}: an earlier attempt already created this task, and it differs from this line. Edit that task directly; press again to continue with the next line.",
+  "tasks_csv_row_failed": "{title}: {reason}",
   "tasks_csv_start_after_due": "Start date is after the due date",
   "tasks_csv_bad_estimate": "Estimate (minutes) must be a number: {value}",
   "tasks_csv_unknown_assignee": "Assignee not found: {name}",
   "tasks_csv_ambiguous_assignee": "More than one person has this name: {name}",
-  "tasks_csv_conflict": "{title}: changed elsewhere in the meantime. Press again to overwrite it with this line.",
   "tasks_csv_progress": "Adding {done} of {total}…",
   "tasks_csv_imported": [
     {
@@ -50,16 +50,6 @@
       }
     }
   ],
-  "tasks_csv_resume_fill": [
-    {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=one": "{count} task created with only its title will be filled in.",
-        "countPlural=other": "{count} tasks created with only their titles will be filled in."
-      }
-    }
-  ],
   "tasks_csv_resume_restart": "To start a new import instead, clear the text first.",
   "tasks_csv_summary": "Import tasks from CSV",
   "tasks_csv_label": "One task per line: title, description, status (todo, in_progress, done), priority (none, low, medium, high, urgent), start date, due date (YYYY-MM-DD), estimate (minutes), assignees (names, separated by ;), tags (separated by ;)",
@@ -79,6 +69,7 @@
   "tasks_view_name_required": "Enter a view name.",
   "tasks_view_saved": "Saved view \"{name}\".",
   "tasks_view_save_failed": "Couldn't save the view.",
+  "tasks_view_conflict": "Another tab saved the view \"{name}\" first, so this save wasn't applied. Your current settings are kept. Pick the view in the list to see the latest settings, or save again to replace them with these.",
   "tasks_view_deleted": "View deleted.",
   "tasks_view_delete_failed": "Couldn't delete the view.",
   "tasks_view_board": "Board",

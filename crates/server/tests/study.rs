@@ -40,7 +40,7 @@ async fn open_item(app: &Router, admin: &TestUser, module: &str, title: &str) ->
         Method::PUT,
         &format!("/api/items/{id}"),
         Some(admin),
-        Some(json!({ "title": title, "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": title, "description": "", "visibility": "workspace" })),
     )
     .await;
     id
@@ -245,7 +245,7 @@ async fn study_units_are_shared_and_progress_is_personal() {
         Method::PUT,
         &format!("/api/items/{item}"),
         Some(&admin),
-        Some(json!({ "title": "통계 스터디", "description": "", "visibility": "private" })),
+        Some(json!({ "base_version": 2, "title": "통계 스터디", "description": "", "visibility": "private" })),
     )
     .await;
     assert_eq!(participants(admin.clone()).await, json!([]));

@@ -46,6 +46,7 @@ function item(over: Partial<ItemView> = {}): ItemView {
     updated_at: '2026-10-19T00:00:00Z',
     status: 'active',
     is_template: false,
+    version: 1,
     starts_on: null,
     ends_on: null,
     ...over,
@@ -64,6 +65,7 @@ const profile: ItemProfileView = {
   groups: [],
   can_edit: true,
   can_manage_members: false,
+  version: 1,
 };
 
 /** 항목 화면의 하위 칸(업무·일정·기록 등)이 부르는 나머지 요청은 끝나지 않게 둔다. 이 테스트는 항목 정보만 본다. */
@@ -116,7 +118,7 @@ describe('item info form while the item is read again', () => {
     quietServer();
     mockItem(item(), item({ title: '다른 사람이 고친 제목' }));
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-    const setProfile = vi.spyOn(api, 'setItemProfile').mockResolvedValue(undefined);
+    const setProfile = vi.spyOn(api, 'setItemProfile').mockResolvedValue({ kind: 'saved' });
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
 
     await fireEvent.input(await waitFor(description), { target: { value: '쓰는 중인 설명' } });
@@ -139,10 +141,13 @@ describe('item info form while the item is read again', () => {
     quietServer();
     mockItem(item());
     let finish: (next: ItemView) => void = () => undefined;
+    type Saved = Awaited<ReturnType<typeof api.updateItem>>;
     const update = vi.spyOn(api, 'updateItem').mockImplementation(
       () =>
-        new Promise<ItemView>((resolve) => {
-          finish = resolve;
+        new Promise<Saved>((resolve) => {
+          finish = (next) => {
+            resolve({ kind: 'updated', item: next });
+          };
         }),
     );
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
@@ -166,7 +171,10 @@ describe('item info form while the item is read again', () => {
     await setLocale('ko', { reload: false });
     quietServer();
     mockItem(item());
-    vi.spyOn(api, 'updateItem').mockResolvedValue(item({ title: '보낸 제목' }));
+    vi.spyOn(api, 'updateItem').mockResolvedValue({
+      kind: 'updated',
+      item: item({ title: '보낸 제목' }),
+    });
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
 
     // 앞뒤 공백은 서버가 다듬어 돌려준다. 그대로 보낸 칸이므로 다듬은 값으로 바꾸고 저장된 것으로 본다.
@@ -190,18 +198,23 @@ describe('item info save while a visibility change is in flight', () => {
     // 서버의 공개 범위. 첫 저장은 손으로 끝내고, 그 뒤의 저장은 보낸 공개 범위만 바꾼다(없으면 그대로).
     let serverVisibility: ItemView['visibility'] = 'private';
     let finishFirst: (next: ItemView) => void = () => undefined;
+    type Saved = Awaited<ReturnType<typeof api.updateItem>>;
     const update = vi
       .spyOn(api, 'updateItem')
       .mockImplementationOnce(
         () =>
-          new Promise<ItemView>((resolve) => {
-            finishFirst = resolve;
+          new Promise<Saved>((resolve) => {
+            finishFirst = (next) => {
+              resolve({ kind: 'updated', item: next });
+            };
           }),
       )
-      .mockImplementation((_id: string, input: Parameters<typeof api.updateItem>[1]) => {
-        serverVisibility = input.visibility ?? serverVisibility;
-        return Promise.resolve(item({ visibility: serverVisibility }));
-      });
+      .mockImplementation(
+        (_id: string, _base: number, input: Parameters<typeof api.updateItem>[2]) => {
+          serverVisibility = input.visibility ?? serverVisibility;
+          return Promise.resolve({ kind: 'updated', item: item({ visibility: serverVisibility }) });
+        },
+      );
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
 
     const sharedBox = await screen.findByLabelText(/워크스페이스 멤버에게 공개/);
@@ -212,7 +225,7 @@ describe('item info save while a visibility change is in flight', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(1);
     });
-    expect(update.mock.calls[0]?.[1]).toEqual({
+    expect(update.mock.calls[0]?.[2]).toEqual({
       title: '항목',
       description: '원래 설명',
       visibility: 'workspace',
@@ -239,7 +252,7 @@ describe('item info save while a visibility change is in flight', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
-    expect(update.mock.calls[1]?.[1]).toEqual({
+    expect(update.mock.calls[1]?.[2]).toEqual({
       title: '항목',
       description: '원래 설명',
       visibility: 'private',

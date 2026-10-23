@@ -40,7 +40,7 @@ async fn item(app: &Router, admin: &TestUser, ws: &str, key: &str, public: bool)
             Method::PUT,
             &format!("/api/items/{}", i.json["id"].as_str().unwrap()),
             Some(admin),
-            Some(json!({ "title": key, "description": "", "visibility": "workspace" })),
+            Some(json!({ "base_version": 1, "title": key, "description": "", "visibility": "workspace" })),
         )
         .await;
     }
@@ -258,7 +258,7 @@ async fn home_collects_my_upcoming_work_and_marks_only_what_i_can_see() {
         Method::PUT,
         &format!("/api/items/{}", shared["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "title": "PUB", "description": "", "visibility": "private" })),
+        Some(json!({ "base_version": 2, "title": "PUB", "description": "", "visibility": "private" })),
     )
     .await;
     let home = send(

@@ -47,6 +47,7 @@ function item(id: 'A' | 'B'): ItemView {
     updated_at: '2026-10-19T00:00:00Z',
     status: 'active',
     is_template: false,
+    version: 1,
     starts_on: null,
     ends_on: null,
   };
@@ -64,6 +65,7 @@ const profile: ItemProfileView = {
   groups: [],
   can_edit: true,
   can_manage_members: false,
+  version: 1,
 };
 
 /** 손으로 끝내는 응답. */
@@ -100,7 +102,7 @@ describe('item screen results after switching items', () => {
     vi.spyOn(api, 'item').mockImplementation((id: string) =>
       Promise.resolve(item(id === 'A' ? 'A' : 'B')),
     );
-    const write = deferred<ItemView>();
+    const write = deferred<Awaited<ReturnType<typeof api.updateItem>>>();
     vi.spyOn(api, 'updateItem').mockReturnValue(write.promise);
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
     await screen.findByRole('heading', { name: '항목 A' });
@@ -108,7 +110,7 @@ describe('item screen results after switching items', () => {
 
     await view.rerender({ workspace, itemId: 'B', workspaces: [workspace] });
     await screen.findByRole('heading', { name: '항목 B' });
-    write.resolve(item('A'));
+    write.resolve({ kind: 'updated', item: item('A') });
     await settle();
 
     expect(heading()).toHaveTextContent('항목 B');
@@ -146,7 +148,7 @@ describe('item screen results after switching items', () => {
       return readsOfA === 1 ? Promise.resolve(item('A')) : reread.promise;
     });
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-    vi.spyOn(api, 'setItemProfile').mockResolvedValue(undefined);
+    vi.spyOn(api, 'setItemProfile').mockResolvedValue({ kind: 'saved' });
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
     const panel = await screen.findByRole('region', { name: '정보' });
     await fireEvent.click(await within(panel).findByRole('button', { name: '고치기' }));
@@ -169,7 +171,7 @@ describe('item screen results after switching items', () => {
     vi.spyOn(api, 'item').mockImplementation((id: string) =>
       Promise.resolve(item(id === 'A' ? 'A' : 'B')),
     );
-    vi.spyOn(api, 'updateItem').mockResolvedValue(item('A'));
+    vi.spyOn(api, 'updateItem').mockResolvedValue({ kind: 'updated', item: item('A') });
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
     await screen.findByRole('heading', { name: '항목 A' });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
@@ -218,14 +220,14 @@ describe('item screen results after leaving and coming back to the same item', (
     vi.spyOn(api, 'item').mockImplementation((id: string) =>
       Promise.resolve(item(id === 'A' ? 'A' : 'B')),
     );
-    const write = deferred<ItemView>();
+    const write = deferred<Awaited<ReturnType<typeof api.updateItem>>>();
     vi.spyOn(api, 'updateItem').mockReturnValue(write.promise);
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
     await screen.findByRole('heading', { name: '항목 A' });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await leaveAndComeBack(view, '항목 A');
-    write.resolve(item('A'));
+    write.resolve({ kind: 'updated', item: item('A') });
     await settle();
 
     expect(screen.queryByText('저장했습니다.')).toBeNull();
@@ -239,7 +241,7 @@ describe('item screen results after leaving and coming back to the same item', (
     );
     let fail: (reason: unknown) => void = () => undefined;
     vi.spyOn(api, 'updateItem').mockReturnValue(
-      new Promise<ItemView>((_, reject) => {
+      new Promise<Awaited<ReturnType<typeof api.updateItem>>>((_, reject) => {
         fail = reject;
       }),
     );
@@ -267,7 +269,7 @@ describe('item screen results after leaving and coming back to the same item', (
       return Promise.resolve(readsOfA === 1 ? item('A') : { ...item('A'), title: '새 제목 A' });
     });
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-    vi.spyOn(api, 'setItemProfile').mockResolvedValue(undefined);
+    vi.spyOn(api, 'setItemProfile').mockResolvedValue({ kind: 'saved' });
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
     const panel = await screen.findByRole('region', { name: '정보' });
     await fireEvent.click(await within(panel).findByRole('button', { name: '고치기' }));

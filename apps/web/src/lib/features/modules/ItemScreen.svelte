@@ -64,28 +64,46 @@
   let saved = $state(false);
   let docTemplate = $state('');
 
-  // 마지막으로 서버 값으로 채운 입력란 값. 입력란이 이 값과 같으면 아직 고치지 않은 것이다.
-  let filled = { title: '', description: '', shared: false };
+  // 마지막으로 서버 값으로 채운 입력란 값. 입력란이 이 값과 같으면 아직 고치지 않은 것이다. `version`은 저장할 때 보낼
+  // 기준 판(D-104)이다: 입력 중에 다시 읽은 항목의 판으로 옮기면 그사이 다른 사람이 고친 것을 덮으므로, 입력란을
+  // 서버 값으로 채울 때(또는 내 저장의 응답)만 옮긴다.
+  let filled = { title: '', description: '', shared: false, version: 0 };
+  // 저장이 판 충돌(409)로 거절됐을 때의 서버 최신본. 입력은 그대로 두고 최신본을 보인다.
+  let conflict = $state<ItemView | undefined>(undefined);
 
   function fill(next: ItemView): void {
     item = next;
     title = next.title;
     description = next.description;
     shared = next.visibility === 'workspace';
-    filled = { title, description, shared };
+    filled = { title, description, shared, version: next.version };
+    conflict = undefined;
   }
 
   /**
    * 항목을 다시 읽었을 때(정보 저장·템플릿 표시 뒤): 고치지 않은 입력란만 새 값으로, 입력 중인 칸은 그대로 둔다.
-   * `base`는 "고치지 않았다"를 가를 기준 값(기본은 마지막으로 채운 서버 값, 저장 응답에서는 보낸 값).
+   * `base`는 "고치지 않았다"를 가를 기준 값(기본은 마지막으로 채운 서버 값, 저장 응답에서는 보낸 값). `own`이면 내 저장의
+   * 응답이라 그 판을 다음 저장의 기준으로 삼는다. 아니면 입력 중인 칸이 없을 때만 옮긴다(입력 중이면 옛 판을 두어, 그사이
+   * 바뀐 것을 저장이 409로 알린다).
    */
-  function refresh(next: ItemView, base = filled): void {
+  function refresh(
+    next: ItemView,
+    base: { title: string; description: string; shared: boolean } = filled,
+    own = false,
+  ): void {
     item = next;
     const nextShared = next.visibility === 'workspace';
+    const editing =
+      title !== base.title || description !== base.description || shared !== base.shared;
     if (title === base.title) title = next.title;
     if (description === base.description) description = next.description;
     if (shared === base.shared) shared = nextShared;
-    filled = { title: next.title, description: next.description, shared: nextShared };
+    filled = {
+      title: next.title,
+      description: next.description,
+      shared: nextShared,
+      version: own || !editing ? next.version : filled.version,
+    };
   }
 
   // 항목을 (다시) 불러올 때마다 늘리는 차례. A → B → A로 돌아오면 항목 id는 같아도 새로 읽은 화면이다.
@@ -102,6 +120,7 @@
     // 옮겨 가면 그 템플릿은 목록에 없어 보이지 않는데도 쓰였다).
     saved = false;
     formError = undefined;
+    conflict = undefined;
     docTemplate = '';
     api
       .item(id)
@@ -151,6 +170,14 @@
 
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    await submit(filled.version);
+  }
+
+  /**
+   * 입력란을 `baseVersion` 판에 대한 고치기로 보낸다. 보통은 입력란을 채운 판이고, 충돌 알림의 "내 입력으로 다시
+   * 저장"은 알림이 보인 최신본의 판이다(그 뒤 또 바뀌었으면 다시 409).
+   */
+  async function submit(baseVersion: number): Promise<void> {
     if (item === undefined || saving) return;
     if (title.trim() === '') {
       formError = m.modules_title_required();
@@ -167,14 +194,20 @@
     const sent = { title, description, shared };
     saving = true;
     try {
-      const next = await api.updateItem(id, {
+      const result = await api.updateItem(id, baseVersion, {
         title: title.trim(),
         description,
         ...(visibility === undefined ? {} : { visibility }),
       });
+      if (result.kind === 'conflict') {
+        // 그사이 다른 사람이 고쳤다. 서버는 아무것도 바꾸지 않았다. 입력은 그대로 두고 최신본을 보인다(D-104).
+        if (stillOn(id, mine)) conflict = result.current;
+        return;
+      }
       forgetReferences();
       if (!stillOn(id, mine)) return;
-      refresh(next, sent);
+      conflict = undefined;
+      refresh(result.item, sent, true);
       // 더 고친 칸이 남아 있으면 "저장했습니다."를 보이지 않는다(그 입력은 아직 저장되지 않았다).
       saved =
         title === filled.title && description === filled.description && shared === filled.shared;
@@ -359,6 +392,42 @@
           {/if}
         </div>
       </form>
+      {#if conflict !== undefined}
+        {@const latest = conflict}
+        <!-- 판 충돌(D-104): 입력은 그대로 두고 서버 최신본을 보인다. 최신본으로 바꾸거나 내 입력으로 다시 저장한다. -->
+        <div class="rounded-md border border-amber-500/50 p-3 text-sm" data-item-conflict>
+          <p role="alert">{m.modules_item_conflict()}</p>
+          <dl class="mt-2 grid gap-1">
+            <dt class="text-muted-foreground">{m.modules_title()}</dt>
+            <dd class="break-words whitespace-pre-wrap" data-latest="title">{latest.title}</dd>
+            <dt class="text-muted-foreground">{m.modules_description()}</dt>
+            <dd class="break-words whitespace-pre-wrap" data-latest="description">
+              {latest.description === '' ? m.modules_item_conflict_empty() : latest.description}
+            </dd>
+            {#if isOwner}
+              <dt class="text-muted-foreground">{m.modules_share_with_members()}</dt>
+              <dd data-latest="visibility">
+                {latest.visibility === 'workspace'
+                  ? m.modules_item_conflict_shared()
+                  : m.modules_item_conflict_not_shared()}
+              </dd>
+            {/if}
+          </dl>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onclick={() => {
+                fill(latest);
+                document.getElementById('item-title')?.focus();
+              }}>{m.modules_item_conflict_load()}</Button
+            >
+            <Button size="sm" disabled={saving} onclick={() => void submit(latest.version)}
+              >{m.modules_item_conflict_save_mine()}</Button
+            >
+          </div>
+        </div>
+      {/if}
     {:else}
       {#if current.description !== ''}
         <p class="whitespace-pre-wrap">{current.description}</p>

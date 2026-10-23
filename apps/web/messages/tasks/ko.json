@@ -20,13 +20,13 @@
   "tasks_csv_too_many_tags": "태그는 {max}개까지입니다",
   "tasks_csv_tag_too_long": "태그는 하나에 {max}자까지입니다",
   "tasks_csv_tag_control": "태그에 쓸 수 없는 문자(줄바꿈·탭 등)가 있습니다",
-  "tasks_csv_title_only": "\"{title}\" 업무는 제목만 만들어졌습니다. 다시 누르면 그 업무에 나머지를 채웁니다.",
-  "tasks_csv_task_gone": "\"{title}\" 업무가 지워졌거나 볼 수 없습니다. 다시 누르면 새로 만듭니다.",
+  "tasks_csv_task_gone": "\"{title}\" 업무가 지워졌습니다. 다시 누르면 새로 만듭니다.",
+  "tasks_csv_already_created": "{title}: 앞서 보낸 요청으로 이미 만들어진 업무가 이 줄 내용과 다릅니다. 그 업무에서 직접 고치세요. 다시 누르면 다음 줄부터 넣습니다.",
+  "tasks_csv_row_failed": "{title}: {reason}",
   "tasks_csv_start_after_due": "시작일이 기한보다 늦습니다",
   "tasks_csv_bad_estimate": "예상 시간(분)은 숫자로 적어 주세요: {value}",
   "tasks_csv_unknown_assignee": "담당자를 찾을 수 없습니다: {name}",
   "tasks_csv_ambiguous_assignee": "같은 이름이 여럿입니다: {name}",
-  "tasks_csv_conflict": "{title}: 그사이 다른 곳에서 바뀌었습니다. 다시 누르면 이 줄 내용으로 덮어씁니다.",
   "tasks_csv_progress": "{done} / {total}개 넣는 중…",
   "tasks_csv_imported": [
     {
@@ -48,15 +48,6 @@
       }
     }
   ],
-  "tasks_csv_resume_fill": [
-    {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=other": "제목만 만들어진 업무 {count}개는 이어서 채웁니다."
-      }
-    }
-  ],
   "tasks_csv_resume_restart": "처음부터 새로 넣으려면 글자를 모두 지우세요.",
   "tasks_csv_summary": "CSV로 여러 업무 등록",
   "tasks_csv_label": "한 줄에 한 업무: 제목, 설명, 상태(할 일·진행 중·완료), 우선순위(없음·낮음·보통·높음·긴급), 시작일, 기한(YYYY-MM-DD), 예상(분), 담당자(이름, ;로 여럿), 태그(;로 여럿)",
@@ -75,6 +66,7 @@
   "tasks_view_name_required": "보기 이름을 적어 주세요.",
   "tasks_view_saved": "보기 \"{name}\"을(를) 저장했습니다.",
   "tasks_view_save_failed": "보기를 저장하지 못했습니다.",
+  "tasks_view_conflict": "다른 탭에서 보기 \"{name}\"을(를) 먼저 저장해 이 저장은 반영하지 않았습니다. 지금 화면의 설정은 그대로 두었습니다. 최신 설정은 목록에서 골라 보고, 이 설정으로 바꾸려면 다시 저장하세요.",
   "tasks_view_deleted": "보기를 지웠습니다.",
   "tasks_view_delete_failed": "보기를 지우지 못했습니다.",
   "tasks_view_board": "칸반",

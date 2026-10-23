@@ -155,6 +155,15 @@
     views = await api.savedViews(itemId).catch(() => []);
   }
 
+  /** `list`에 `saved`가 없거나 더 오래된 판이면 `saved`로 바꾼다(이름순은 다음 다시 읽기에 맡긴다). */
+  function withView(list: SavedViewView[], saved: SavedViewView): SavedViewView[] {
+    const found = list.find((v) => v.id === saved.id);
+    if (found !== undefined && found.version >= saved.version) return list;
+    return found === undefined
+      ? [...list, saved]
+      : list.map((v) => (v.id === saved.id ? saved : v));
+  }
+
   function applyView(id: string): void {
     selectedView = id;
     const v = views.find((x) => x.id === id);
@@ -172,13 +181,39 @@
       error = m.tasks_view_name_required();
       return;
     }
+    const itemId = item.id;
+    const config = { view, filter: { ...filter }, sort };
+    // 목록에 같은 이름의 보기가 있으면 읽은 판으로 그 보기를 고치고, 없으면 새로 만든다(D-103). 재시도 키에 대상과
+    // 판을 넣어, 목록을 다시 읽은 뒤의 저장은 새 요청이 된다.
+    const target = views.find((v) => v.name === name);
+    // 기다리는 사이 사용자가 목록에서 다른 보기를 고르면 늦은 응답이 그 선택을 되돌리지 않는다.
+    const selectedAtStart = selectedView;
     try {
-      const config = { view, filter: { ...filter }, sort };
-      const requestId = viewKey.for({ item: item.id, name, config });
-      const saved = await api.saveView(item.id, requestId, name, config);
+      const requestId = viewKey.for({
+        item: itemId,
+        name,
+        config,
+        target: target === undefined ? null : { id: target.id, version: target.version },
+      });
+      const result =
+        target === undefined
+          ? await api.createView(itemId, requestId, name, config)
+          : await api.updateView(target.id, requestId, target.version, config);
       viewKey.done(requestId);
-      await loadViews(item.id);
-      selectedView = saved.id;
+      // 응답이 준 보기(저장한 것 또는 409의 최신)는 목록 다시 읽기가 실패해도 남긴다. 비면 다시 저장이 PUT 대신 POST가
+      // 되어 또 409였다(CodeRabbit).
+      const returned = result.kind === 'saved' ? result.view : result.current;
+      const reread = await api.savedViews(itemId).catch(() => views);
+      if (item.id !== itemId) return;
+      views = withView(reread, returned);
+      if (selectedView === selectedAtStart) selectedView = returned.id;
+      if (result.kind !== 'saved') {
+        // 다른 탭이 이 이름으로 먼저 만들거나 저장했다. 서버는 아무것도 바꾸지 않았다. 지금 화면의 설정과 이름은 그대로
+        // 두고 최신 목록만 읽는다(최신 설정은 목록에서 고르면 보이고, 다시 저장하면 최신 판을 기준으로 이 설정이 된다).
+        status = '';
+        error = m.tasks_view_conflict({ name });
+        return;
+      }
       status = m.tasks_view_saved({ name });
       error = undefined;
     } catch (e: unknown) {
