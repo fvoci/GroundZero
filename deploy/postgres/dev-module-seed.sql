@@ -32,6 +32,8 @@ DECLARE
   v_today date := current_date;
   v_kind text;
   v_time_kind text;
+  v_version integer;
+  v_outcome text;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('fvoci:dev_module_seed_v1', 0));
   IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_module_seed_v1') THEN
@@ -71,8 +73,13 @@ BEGIN
     -- 새 항목의 기본 공개 범위는 private다. 두 번째 테스트 사용자를 명시적 항목 멤버로 추가한다.
     PERFORM app_set_item_members(v_item, ARRAY[v_user], ARRAY[]::uuid[],
                                  pg_temp.take(app_set_item_members_ids(v_item)));
-    PERFORM app_set_item_profile(v_item, v_admin, v_row->>'goal', '모듈 연결과 저장 동작 확인',
+    -- 정보 패널 저장은 읽은 판을 받는다(0097, D-104). 멤버 정리도 판을 올릴 수 있어 바로 앞에서 읽는다.
+    SELECT profile_version INTO STRICT v_version FROM items WHERE id = v_item;
+    v_outcome := app_set_item_profile(v_item, v_version, v_admin, v_row->>'goal', '모듈 연결과 저장 동작 확인',
       v_today - 7, v_today + 14, 'active', v_row->'details', pg_temp.take(2));
+    IF v_outcome <> 'updated' THEN
+      RAISE EXCEPTION 'dev item profile was not saved: %', v_outcome;
+    END IF;
     v_items := v_items || jsonb_build_object(v_kind, v_item);
 
     -- 업무는 모든 칸과 함께 한 번에 만든다(0098, D-105). id: 업무·만들기 감사 + 담당자마다 1개.

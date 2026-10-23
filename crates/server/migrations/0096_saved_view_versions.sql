@@ -10,7 +10,8 @@
 -- 3. `app_update_view`: 행을 잠근 같은 트랜잭션에서 요청 id와 판을 본다. 마지막 고치기의 요청 id(`updated_request_id`)와
 --    같으면 이미 반영한 재시도라 쓰지 않고 'replayed', 읽은 판이 지금 판과 다르면 쓰지 않고 'conflict'(409와 최신 보기),
 --    아니면 고치고 판을 올린다. 요청 id는 마지막 고치기의 것만 남으므로, 다른 탭이 그 뒤 또 저장했으면 옛 재시도는
---    알아보지 못하고 판 검사에서 409가 된다(덮지 않는다).
+--    알아보지 못하고 판 검사에서 409가 된다(덮지 않는다). 판을 보내지 않으면(NULL) 지난 판과 같이 'conflict'다
+--    (`IS DISTINCT FROM`, 0073·0082의 판 검사와 같다). 서버 API는 판을 늘 보내지만 이 함수가 마지막 보장이다.
 -- 4. 이미 쓴 요청 id(다른 보기의 것이거나 만들기의 것)를 다른 저장에 쓰면 22023(400).
 
 ALTER TABLE saved_views
@@ -77,7 +78,7 @@ CREATE FUNCTION app_update_view(p_request uuid, p_view uuid, p_base_version inte
                WHERE user_id = app_user_id() AND (request_id = p_request OR updated_request_id = p_request)) THEN
       RAISE EXCEPTION 'request_id was already used for another change' USING ERRCODE = '22023';
     END IF;
-    IF v_view.version <> p_base_version THEN
+    IF v_view.version IS DISTINCT FROM p_base_version THEN
       RETURN 'conflict';
     END IF;
     UPDATE saved_views SET config = p_config, version = version + 1, updated_request_id = p_request

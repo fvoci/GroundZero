@@ -3287,6 +3287,26 @@ current}`, (4) 아니면 고치고 판을 올린다. `SavedView`에 `version`. �
 불러오기`·`다른 탭에서 보기 …`), 다시 읽기 뒤 저장은 판 없이 다시 읽은 제목을 보냄(`expected { title: '다른 사람이 고친 제목', … } to match object
 { base_version: 1, … }`). 기존 웹 시험은 새 결과 모양(`{kind}`)과 `version`에 맞췄다.
 - **돌린 검사(`7f6da61` 기준, 리베이스 전 같은 코드)**: `cargo xtask check` PASS(fmt·clippy·단위·deny·계약 최신·format·lint·svelte-check·i18n·rhwp 고지·고지·웹 시험 133파일 745건·라이선스). `cargo xtask test --oidc` PASS 두 번: 위 `--keep` 스택을 이어 쓴 실행(끝에 그 스택을 지움), 그리고 리베이스한 머리(`3f138d4` 위)에서 새 DB로 처음부터 마이그레이션한 격리 Compose 실행. 수정 전 증거는 같은 스택에서 시험 바이너리를 하나씩 돌렸다(`cargo test -p fvoci-server --test …`, 주소는 xtask의 시험 값). **NOT RUN**: `cargo xtask test --supabase`(셀프호스트 Supabase), 실제 브라우저 확인(coordinator가 마지막에 한 번 돌림, `cargo xtask dev` 금지), 두 탭 동시 저장의 실제 경합(시험은 순서를 정한 두 요청과 같은 트랜잭션의 잠금으로 본다).
+- **통합 뒤 수정: 판을 보내지 않은 호출(2026-10-23, `fvoci/policy-int-fix`, 기준 `874d866`)**: `app_update_view`(0096)·`app_update_item`·
+  `app_set_item_profile`(0097)의 판 비교가 `<>`라, `p_base_version`이 NULL이면 비교가 NULL이 되어 검사를 건너뛰고 덮어썼다. 서버 API의 판은
+  필수 정수(`i32`)라 지금 경로로는 NULL이 오지 않지만, D-103·D-104는 판 검사를 필수로 정했고 정의자 함수가 마지막 보장이다. 세 비교를
+  `IS DISTINCT FROM`으로 바꿨다(0096·0097을 직접 고침, main에 아직 없음). 22023으로 거절하지 않고 이렇게 한 이유: 앞선 판 검사(0073·0078·0082·0092)와
+  같은 모양이고, 모르는 판은 지난 판과 같이 "아무것도 쓰지 않는 `'conflict'`"가 안전한 결과이며, 바꿀 것이 없는 재시도(`'updated'`, 쓰지 않음)와
+  보기의 `'replayed'`(판보다 먼저 봄)는 그대로다. 시험: `item_profile::a_null_base_version_does_not_skip_the_item_version_checks`(앱 역할로 NULL 판을
+  보내 두 함수 모두 `'conflict'`, 같은 값 재시도는 `'updated'`, 행의 제목·목표·두 판 그대로)와
+  `saved_views::a_null_base_version_does_not_skip_the_view_version_check`(NULL 판은 `'conflict'`, 반영한 요청 id는 `'replayed'`, 목록의 설정·판
+  그대로). 수정 전 실패: `left: ("updated", "updated"), right: ("conflict", "conflict")`, `left: "updated", right: "conflict"`.
+- **통합 뒤 수정: 개발 준비 SQL**: `dev-module-seed.sql`이 0097이 지운 옛 9인자 `app_set_item_profile`을 불러 새 DB에서 `cargo xtask dev --oidc`가
+  `function app_set_item_profile(uuid, uuid, text, unknown, date, date, unknown, jsonb, uuid[]) does not exist`로 멈췄다. 바로 앞에서 그 항목의
+  `profile_version`을 읽어 넘기고 결과가 `'updated'`가 아니면 멈추게 했다. 두 준비 SQL에서 0095~0098이 서명을 바꾼 다른 함수 호출은 없다(`app_create_task`는
+  이미 0098 서명). 준비 SQL을 돌리는 시험·CI 단계는 없다(`xtask/src/dev.rs`만 돌린다).
+- **통합 뒤 수정: 정보 패널의 리더 칸(브라우저 확인 FAIL)**: `ItemProfilePanel.svelte`의 리더 선택 칸 글자가 `people`에서 찾지 못하면 서버의
+  리더(`profile.leader`) 이름을 보였다. 입력이 "없음"(`''`)이어도 그래서, (A) 다른 탭이 리더를 정한 뒤 이 탭의 저장이 409가 되면 칸은 그
+  리더를 보이지만 남은 입력은 "없음"이라 "내 입력으로 다시 저장"이 보이지 않게 리더를 지웠고, (B) 리더를 "없음"으로 골라도 칸은 옛 리더를
+  보였다. `e360b40c`(2026-10-17)부터 있던 것이 D-104의 "입력 유지" 화면에서 드러났다. 이제 칸은 입력만 보인다: `''`은 "없음", 사용자 id는
+  고를 수 있는 사람·지금 보이는 정보·편집을 연 때의 리더 가운데 그 id의 이름, 어디에도 없으면 "(알 수 없는 사람)"(`modules_leader_unknown`,
+  ko·en). 409와 입력 유지 동작은 그대로다. 시험 `item-profile-leader-label.test.ts` 세 건, 수정 전 `expected 'Test User' to be '없음'`(A·B)과
+  `expected 'Second User' to be 'Test User'`(최신본과 입력의 리더가 다를 때)로 실패.
 
 ## 99. CSV 업무 한 건 만들기의 원자성 (2026-10-23, D-105, `fvoci/policy-task-create`)
 

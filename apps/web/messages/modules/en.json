@@ -125,6 +125,7 @@
   "modules_edit": "Edit",
   "modules_status": "Status",
   "modules_none": "None",
+  "modules_leader_unknown": "(unknown person)",
   "modules_starts_on": "Start date",
   "modules_ends_on": "End date",
   "modules_period": "Period",
