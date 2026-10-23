@@ -37,90 +37,96 @@ fn body_without_comment_lines(body: &str) -> String {
             continue;
         }
         result.push_str(line);
-        let bytes = line.as_bytes();
-        let mut at = 0;
-        while at < bytes.len() {
-            let rest = &bytes[at..];
-            match &mut quote {
-                Quote::None => {
-                    if rest.starts_with(b"--") {
-                        break;
-                    } else if rest.starts_with(b"/*") {
-                        quote = Quote::Block(1);
-                        at += 2;
-                    } else if rest[0] == b'\'' {
-                        let escapes = at > 0
-                            && matches!(bytes[at - 1], b'e' | b'E')
-                            && (at == 1
-                                || !(bytes[at - 2].is_ascii_alphanumeric()
-                                    || bytes[at - 2] >= 0x80
-                                    || bytes[at - 2] == b'_'));
-                        quote = Quote::Single { escapes };
-                        at += 1;
-                    } else if rest[0] == b'"' {
-                        quote = Quote::Double;
-                        at += 1;
-                    } else if let Some(tag) = dollar_tag(rest) {
-                        quote = Quote::Dollar(tag.to_vec());
-                        at += tag.len();
-                    } else {
-                        at += 1;
-                    }
+        scan_line(line, &mut quote);
+    }
+    result
+}
+
+fn scan_line(line: &str, quote: &mut Quote) {
+    let bytes = line.as_bytes();
+    let mut at = 0;
+    while at < bytes.len() {
+        let rest = &bytes[at..];
+        match quote {
+            Quote::None => {
+                if rest.starts_with(b"--") {
+                    break;
+                } else if rest.starts_with(b"/*") {
+                    *quote = Quote::Block(1);
+                    at += 2;
+                } else if rest[0] == b'\'' {
+                    let escapes = at > 0
+                        && matches!(bytes[at - 1], b'e' | b'E')
+                        && (at == 1
+                            || !(bytes[at - 2].is_ascii_alphanumeric()
+                                || bytes[at - 2] >= 0x80
+                                || bytes[at - 2] == b'_'));
+                    *quote = Quote::Single { escapes };
+                    at += 1;
+                } else if rest[0] == b'"' {
+                    *quote = Quote::Double;
+                    at += 1;
+                } else if let Some(tag) = dollar_tag(rest) {
+                    *quote = Quote::Dollar(tag.to_vec());
+                    at += tag.len();
+                } else {
+                    at += 1;
                 }
-                Quote::Single { escapes } => {
-                    if (*escapes && rest[0] == b'\\') || rest.starts_with(b"''") {
-                        at += 2;
-                    } else {
-                        if rest[0] == b'\'' {
-                            quote = Quote::None;
-                        }
-                        at += 1;
+            }
+            Quote::Single { escapes } => {
+                if (*escapes && rest[0] == b'\\') || rest.starts_with(b"''") {
+                    at += 2;
+                } else {
+                    if rest[0] == b'\'' {
+                        *quote = Quote::None;
                     }
+                    at += 1;
                 }
-                Quote::Double => {
-                    if rest.starts_with(b"\"\"") {
-                        at += 2;
-                    } else {
-                        if rest[0] == b'"' {
-                            quote = Quote::None;
-                        }
-                        at += 1;
+            }
+            Quote::Double => {
+                if rest.starts_with(b"\"\"") {
+                    at += 2;
+                } else {
+                    if rest[0] == b'"' {
+                        *quote = Quote::None;
                     }
+                    at += 1;
                 }
-                Quote::Dollar(tag) => {
-                    if rest.starts_with(tag) {
-                        at += tag.len();
-                        quote = Quote::None;
-                    } else {
-                        at += 1;
-                    }
+            }
+            Quote::Dollar(tag) => {
+                if rest.starts_with(tag) {
+                    at += tag.len();
+                    *quote = Quote::None;
+                } else {
+                    at += 1;
                 }
-                Quote::Block(depth) => {
-                    if rest.starts_with(b"/*") {
-                        *depth += 1;
-                        at += 2;
-                    } else if rest.starts_with(b"*/") {
-                        *depth -= 1;
-                        at += 2;
-                        if *depth == 0 {
-                            quote = Quote::None;
-                        }
-                    } else {
-                        at += 1;
+            }
+            Quote::Block(depth) => {
+                if rest.starts_with(b"/*") {
+                    *depth += 1;
+                    at += 2;
+                } else if rest.starts_with(b"*/") {
+                    *depth -= 1;
+                    at += 2;
+                    if *depth == 0 {
+                        *quote = Quote::None;
                     }
+                } else {
+                    at += 1;
                 }
             }
         }
     }
-    result
 }
 
 /// PostgreSQL's deparsed function header and footer remain byte-identical, including attributes.
 pub(super) fn function(definition: &str) -> Result<String> {
     let mut offset = 0;
+    let mut quote = Quote::None;
     for line in definition.split_inclusive('\n') {
         let trimmed = line.trim_start();
-        if let Some(rest) = trimmed.strip_prefix("AS ")
+        if matches!(quote, Quote::None)
+            && let Some(rest) = trimmed.strip_prefix("AS ")
             && let Some(tag) = dollar_tag(rest.as_bytes())
         {
             let start = offset + line.len() - trimmed.len() + 3 + tag.len();
@@ -136,6 +142,7 @@ pub(super) fn function(definition: &str) -> Result<String> {
                 &definition[end..]
             ));
         }
+        scan_line(line, &mut quote);
         offset += line.len();
     }
     // SQL-standard BEGIN ATOMIC bodies are outside this consolidation's normalization scope.
@@ -178,5 +185,23 @@ mod tests {
             normalized,
             body_without_comment_lines(&sql.replace("value A", "value B"))
         );
+    }
+
+    #[test]
+    fn quoted_header_text_cannot_be_mistaken_for_the_function_body() -> Result<()> {
+        for default in [
+            "'header\nAS $fake$\n-- value A\n$fake$'",
+            "$header$\nAS $fake$\n-- value A\n$fake$\n$header$",
+        ] {
+            let sql = format!(
+                "CREATE FUNCTION f(p text DEFAULT {default}) RETURNS text\n LANGUAGE sql\n AS $function$\n-- body comment\nSELECT p;\n$function$\n"
+            );
+            assert_eq!(function(&sql)?, sql.replace("-- body comment\n", ""));
+            assert_ne!(
+                function(&sql)?,
+                function(&sql.replace("value A", "value B"))?
+            );
+        }
+        Ok(())
     }
 }

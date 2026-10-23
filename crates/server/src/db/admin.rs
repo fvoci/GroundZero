@@ -54,6 +54,18 @@ pub async fn check_application_baseline(conn: &mut PgConnection) -> Result<(), A
 
 /// SQLx가 원장을 만들거나 수정하기 전에 옛 이력을 거부한다. 같은 세대의 체크섬은 SQLx가 검증한다.
 async fn check_migration_baseline(conn: &mut PgConnection) -> Result<(), AppError> {
+    // 다른 설치의 커밋 전 원장과 커밋 후 객체를 섞어 읽으면 새 DB도 구 DB로 오인할 수 있다.
+    // 한 읽기 스냅숏에서 점검한 뒤 종료한다. 적용 순서와 체크섬 검사는 SQLx의 잠금이 맡는다.
+    let mut snapshot = conn.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *snapshot)
+        .await?;
+    inspect_migration_baseline(&mut snapshot).await?;
+    snapshot.commit().await?;
+    Ok(())
+}
+
+async fn inspect_migration_baseline(conn: &mut PgConnection) -> Result<(), AppError> {
     let ledger_exists: bool =
         sqlx::query_scalar("SELECT pg_catalog.to_regclass('fvoci._sqlx_migrations') IS NOT NULL")
             .fetch_one(&mut *conn)

@@ -102,9 +102,18 @@ async fn previous_history_and_untracked_objects_are_rejected_without_data_loss()
 }
 
 #[tokio::test]
-async fn new_history_repeats_and_preserves_sqlx_checksum_validation_without_app_ledger_access() {
+async fn concurrent_new_installs_repeat_and_preserve_checksums_without_app_ledger_access() {
     let (mut fixture_admin, fixture) = empty_database("baseline_guard").await;
-    admin::migrate(&fixture.db).await.unwrap();
+    // 모두 같은 빈 DB를 사용한다. 선행 설치의 커밋과 사전점검이 겹쳐도 구 이력으로 오인하지 않는다.
+    let results = tokio::join!(
+        admin::migrate(&fixture.db),
+        admin::migrate(&fixture.db),
+        admin::migrate(&fixture.db),
+        admin::migrate(&fixture.db),
+    );
+    for result in [results.0, results.1, results.2, results.3] {
+        result.unwrap();
+    }
     let mut conn = PgConnection::connect(fixture.db.migration_url.as_ref().unwrap().expose())
         .await
         .unwrap();
