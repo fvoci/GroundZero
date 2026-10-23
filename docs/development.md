@@ -3191,7 +3191,8 @@ ZONE tz)`. 그래서 23·25시간인 날이 그대로 맞고, 0시가 두 번 �
   시험은 경계를 `날짜::timestamp AT TIME ZONE`만으로 바꾼 격리 DB에서 `…&tz=America/Havana&from=2026-10-31&to=2026-10-31 never settled
 left: [전날 밤, 첫 0시 뒤] right: [전날 밤]`로 실패했다(`d2b07ac`에서는 따로 돌리지 않음, 그때는 UTC 날짜라 11-01로 나온다). 웹 시험은
   대화상자의 `tz` 줄을 뺀 사본에서 `expected null to be 'America/New_York'`.
-- **통과**: 아래 PR 본문의 검사 기록. NOT RUN: `cargo xtask test --supabase`(검색 경로는 DB 종류와 무관한 SQL만 바꿨다), 실제 브라우저 확인
+- **통과**(구현 커밋 `7bd8ddf`): `cargo xtask check`(라이선스 포함) PASS, `cargo xtask test --oidc` PASS(364 통과·0 실패, 검색 16건 포함).
+  NOT RUN: `cargo xtask test --supabase`(검색 경로는 DB 종류와 무관한 SQL만 바꿨다), 실제 브라우저 확인
   (coordinator가 마지막에 한 번 한다), 운영·개인 개발 색인의 재색인(배포하지 않음).
 
 ## 98. 저장한 보기·항목 정보의 판 검사와 보관 항목 댓글 지우기 (2026-10-23, D-103·D-104·D-106, `fvoci/policy-version`)
