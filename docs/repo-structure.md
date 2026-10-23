@@ -31,7 +31,7 @@
 
 ## 실행·개발 도구
 
-- `xtask/`: 개발·검사·통합 시험·API 생성·라이선스·rhwp·SQL 비교의 실행 진입점.
+- `xtask/`: 개발·검사·통합 시험·API 생성·라이선스·rhwp의 실행 진입점.
   사용법은 [개발 지침](development.md), 설치는 [셀프호스트 안내](self-hosting.md)를 따른다.
 - `deploy/`: 개발·시험·셀프호스트 Compose와 Dockerfile, PostgreSQL·Keycloak 준비,
   Supabase 시험, rhwp 빌드 입력, CDN 예시. 서비스별 역할과 제약을 문서에서 확인한다.
