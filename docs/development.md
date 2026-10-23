@@ -3298,6 +3298,13 @@ current}`, (4) 아니면 고치고 판을 올린다. `SavedView`에 `version`. �
   `function app_set_item_profile(uuid, uuid, text, unknown, date, date, unknown, jsonb, uuid[]) does not exist`로 멈췄다. 바로 앞에서 그 항목의
   `profile_version`을 읽어 넘기고 결과가 `'updated'`가 아니면 멈추게 했다. 두 준비 SQL에서 0095~0098이 서명을 바꾼 다른 함수 호출은 없다(`app_create_task`는
   이미 0098 서명). 준비 SQL을 돌리는 시험·CI 단계는 없다(`xtask/src/dev.rs`만 돌린다).
+- **통합 뒤 수정: 정보 패널의 리더 칸(브라우저 확인 FAIL)**: `ItemProfilePanel.svelte`의 리더 선택 칸 글자가 `people`에서 찾지 못하면 서버의
+  리더(`profile.leader`) 이름을 보였다. 입력이 "없음"(`''`)이어도 그래서, (A) 다른 탭이 리더를 정한 뒤 이 탭의 저장이 409가 되면 칸은 그
+  리더를 보이지만 남은 입력은 "없음"이라 "내 입력으로 다시 저장"이 보이지 않게 리더를 지웠고, (B) 리더를 "없음"으로 골라도 칸은 옛 리더를
+  보였다. `e360b40c`(2026-10-17)부터 있던 것이 D-104의 "입력 유지" 화면에서 드러났다. 이제 칸은 입력만 보인다: `''`은 "없음", 사용자 id는
+  고를 수 있는 사람·지금 보이는 정보·편집을 연 때의 리더 가운데 그 id의 이름, 어디에도 없으면 "(알 수 없는 사람)"(`modules_leader_unknown`,
+  ko·en). 409와 입력 유지 동작은 그대로다. 시험 `item-profile-leader-label.test.ts` 세 건, 수정 전 `expected 'Test User' to be '없음'`(A·B)과
+  `expected 'Second User' to be 'Test User'`(최신본과 입력의 리더가 다를 때)로 실패.
 
 ## 99. CSV 업무 한 건 만들기의 원자성 (2026-10-23, D-105, `fvoci/policy-task-create`)
 
