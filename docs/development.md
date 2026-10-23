@@ -3291,7 +3291,9 @@ equal [ 't1', 't2', 't3' ]` 등.
 - **실행(2026-10-23, `1e2aed0`와 같은 코드)**: `cargo xtask check` PASS(포맷·clippy·단위·계약·라이선스·svelte-check·웹 시험 전체),
   `cargo xtask test --oidc` PASS(격리 Compose, 새 서버 시험 둘 포함, `supabase_*`는 그 명령의 NOT RUN 안내대로 빠짐). 수정 전 증거는 `d2b07ac`에
   시험만 얹은 `cargo xtask test`(위 두 서버 시험 FAILED)와 옛 화면 소스에 새 웹 시험을 돌린 `vitest`(12 실패)다.
-  CI(PR #98, `deaeca9`): check·integration·oidc·supabase·licenses·rhwp 모두 pass(Supabase 구성은 CI에서만 돌렸다).
+  CI(PR #98, `deaeca9`·`ed4914b`): check·integration·oidc·supabase·licenses·rhwp 모두 pass(Supabase 구성은 CI에서만 돌렸다).
+  `fvoci/sql-policy`(#99 병합 `f8e0a75`)를 `7066511`로 합친 뒤(충돌 없음, 생성물 다시 만들어도 같음) CodeRabbit (3) 반영 머리 `848249b`에서
+  `cargo xtask check` PASS, `cargo xtask test --oidc` PASS(새 서버 시험 셋 포함).
 - **CodeRabbit(`deaeca9` 검토, 지적 2)**: (1) 개발 예제의 옛 서명 호출: 맞는 지적이라 위처럼 고쳤다. (2) 처리기에서 `check_fields`보다 먼저
   요청 id를 찾아 형식이 틀린 재시도도 처음 업무를 돌려주라: 받지 않았다. 재시도는 처음 요청과 같은 본문이라 형식 확인을 통과하고, 형식 확인을
   먼저 하는 것은 이 변경 전 처리기(`validate_title`이 DB 호출 앞)와 같은 기존 계약이며 찾기를 처리기로 끌어올리면 DB 함수 안의 찾기와 둘이
