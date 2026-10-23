@@ -3,7 +3,13 @@
   // 멤버는 비공개 항목을 워크스페이스 역할 안에서 볼 수 있는 사람이다(D-20 공유). 정하는 것은 항목 소유 권한자.
   import type { ModuleKind } from '@fvoci/api-client';
 
-  import type { AssigneeView, ItemProfileView, ItemStatus, ItemView } from '$lib/api/client';
+  import type {
+    AssigneeView,
+    ItemProfileView,
+    ItemStatus,
+    ItemView,
+    PersonRefView,
+  } from '$lib/api/client';
   import { api, ITEM_STATUSES } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
@@ -33,6 +39,8 @@
   let editing = $state(false);
   // 편집을 연 때의 판(D-104). 편집 중에 패널을 다시 읽어도 옮기지 않는다(옮기면 그사이 다른 사람이 고친 것을 덮는다).
   let editBase = 0;
+  // 편집을 연 때의 리더. 고를 수 있는 사람 목록에 없어도 입력의 리더 이름을 보인다.
+  let editLeader = $state<PersonRefView | null>(null);
   // 저장이 판 충돌(409)로 거절됐을 때의 서버 최신본. 입력은 그대로 두고 최신본을 보인다.
   let conflict = $state<ItemProfileView | undefined>(undefined);
   let managing = $state(false);
@@ -63,6 +71,12 @@
   let candidates = $state<{ id: string; name: string }[]>([]);
   let groupChoices = $state<{ id: string; name: string }[]>([]);
 
+  // 리더 칸은 입력만 보인다. 서버의 리더(409의 최신본 등)를 대신 보이면 "내 입력으로 다시 저장"이 보이지 않게 리더를 지운다.
+  const leaderLabel = $derived.by(() => {
+    if (form.leader === '') return m.modules_none();
+    const known = [...people, profile?.leader, editLeader].find((p) => p?.user_id === form.leader);
+    return known?.display_name ?? m.modules_leader_unknown();
+  });
   const fields = $derived(detailFields(kind));
   const labels = $derived(peopleLabels(kind));
   const textarea =
@@ -87,6 +101,7 @@
 
   async function startEdit(p: ItemProfileView): Promise<void> {
     editBase = p.version;
+    editLeader = p.leader;
     conflict = undefined;
     form = {
       status: p.status,
@@ -243,9 +258,7 @@
           }}
         >
           <Select.Trigger class="w-48" aria-labelledby="item-leader-label"
-            >{people.find((p) => p.user_id === form.leader)?.display_name ??
-              profile.leader?.display_name ??
-              m.modules_none()}</Select.Trigger
+            >{leaderLabel}</Select.Trigger
           >
           <Select.Content>
             <Select.Item value="none" label={m.modules_none()}>{m.modules_none()}</Select.Item>

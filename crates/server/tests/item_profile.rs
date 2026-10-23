@@ -1082,3 +1082,51 @@ async fn stale_profile_saves_are_refused_with_the_latest() {
     assert_eq!(revive.status, StatusCode::CONFLICT, "{:?}", revive.json);
     assert!(revive.json["current"]["leader"].is_null());
 }
+
+/// D-104: 판 확인은 SQL 함수가 마지막으로 보장한다. 읽은 판을 NULL로 보내도(앱 역할로 직접 불러도) 확인을 건너뛰어
+/// 덮어쓰지 않고 'conflict'다. 바꿀 것이 없는 재시도는 그대로 'updated'이고 아무것도 쓰지 않는다.
+#[tokio::test]
+async fn a_null_base_version_does_not_skip_the_item_version_checks() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "판 없음").await;
+    let m = module(&app, &admin, &ws, "project", "PNUL").await;
+    let it: uuid::Uuid = item(&app, &admin, &m, "원래 제목").await.parse().unwrap();
+
+    let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    let details: String =
+        sqlx::query_scalar("SELECT app_update_item($1, NULL::integer, '바뀐 제목', '', NULL, $2)")
+            .bind(it)
+            .bind(fvoci_server::db::new_ids(2))
+            .fetch_one(tx.conn())
+            .await
+            .unwrap();
+    let profile: String = sqlx::query_scalar(
+        "SELECT app_set_item_profile($1, NULL::integer, NULL, '바뀐 목표', '', NULL, NULL, 'active', '{}', $2)",
+    )
+    .bind(it)
+    .bind(fvoci_server::db::new_ids(2))
+    .fetch_one(tx.conn())
+    .await
+    .unwrap();
+    assert_eq!(
+        (details.as_str(), profile.as_str()),
+        ("conflict", "conflict")
+    );
+    let same: String =
+        sqlx::query_scalar("SELECT app_update_item($1, NULL::integer, '원래 제목', '', NULL, $2)")
+            .bind(it)
+            .bind(fvoci_server::db::new_ids(2))
+            .fetch_one(tx.conn())
+            .await
+            .unwrap();
+    assert_eq!(same, "updated");
+    let row: (String, i32, String, i32) =
+        sqlx::query_as("SELECT title, version, goal, profile_version FROM items WHERE id = $1")
+            .bind(it)
+            .fetch_one(tx.conn())
+            .await
+            .unwrap();
+    assert_eq!(row, ("원래 제목".to_owned(), 1, String::new(), 1));
+}

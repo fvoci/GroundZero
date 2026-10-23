@@ -376,6 +376,58 @@ async fn a_lost_view_save_is_retried_without_overwriting_a_later_save() {
     assert_eq!(list.as_array().unwrap().len(), 2, "{list:?}");
 }
 
+/// D-103: 판 확인은 SQL 함수가 마지막으로 보장한다. 읽은 판을 NULL로 보내도(앱 역할로 직접 불러도) 확인을 건너뛰어
+/// 덮어쓰지 않고 'conflict'다. 이미 반영한 요청 id의 재시도는 판을 보기 전에 그대로 'replayed'다.
+#[tokio::test]
+async fn a_null_base_version_does_not_skip_the_view_version_check() {
+    let state = common::state();
+    let app = common::app(&state);
+    let me = login(&state, "view-null").await;
+    let (view_uri, list_uri, created) = one_view(
+        &app,
+        &me,
+        "VNUL",
+        &new_request_id(),
+        json!({ "view": "list" }),
+    )
+    .await;
+    let view: uuid::Uuid = created["id"].as_str().unwrap().parse().unwrap();
+    let saved_request = new_request_id();
+    let saved = send(
+        &app,
+        Method::PUT,
+        &view_uri,
+        Some(&me),
+        Some(json!({ "request_id": saved_request, "base_version": 1, "config": { "view": "board" } })),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+
+    let mut tx = state.db.begin_as(me.id).await.unwrap();
+    let update = |request: uuid::Uuid| {
+        sqlx::query_scalar::<_, String>("SELECT app_update_view($1, $2, NULL::integer, $3)")
+            .bind(request)
+            .bind(view)
+            .bind(json!({ "view": "gantt" }))
+    };
+    let stale = update(uuid::Uuid::now_v7())
+        .fetch_one(tx.conn())
+        .await
+        .unwrap();
+    assert_eq!(stale, "conflict");
+    let replay = update(saved_request.parse().unwrap())
+        .fetch_one(tx.conn())
+        .await
+        .unwrap();
+    assert_eq!(replay, "replayed");
+    tx.commit().await.unwrap();
+    let list = send(&app, Method::GET, &list_uri, Some(&me), None)
+        .await
+        .json;
+    assert_eq!(list[0]["config"], json!({ "view": "board" }), "{list:?}");
+    assert_eq!(list[0]["version"], 2);
+}
+
 /// 내 시간대(D-50): 본인만 보고, 모르는 이름은 400, 비우면 지운다.
 #[tokio::test]
 async fn time_zone_is_a_personal_setting() {
