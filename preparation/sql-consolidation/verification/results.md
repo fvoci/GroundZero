@@ -15,14 +15,14 @@
 | 셀프호스트 Supabase 고정 revision   | `bc27d2661edd09a5d0b8d76ce33da6d4071a756e`                                    |
 | 서버 버전(각 `*-environment.json`)  | PostgreSQL 17.9, 18.3(`compose.test.pg18.yaml`), Supabase PostgreSQL 17.6     |
 
-| 실행 (`runs/`)                                   | 명령 옵션                                                                 | 객체·변조·정지                | A와 B 각각의 Rust 결과                                               | 로컬 출력 `target/sqlp2-…-p2-20261023t065441z` |
-| ------------------------------------------------ | ------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------- | ---------------------------------------------- |
-| [PG17 A/A](runs/policy-pg17-aa/)                 | `--postgres-major 17`                                                     | 차이 0/0, 4/4, PASS           | NOT RUN(요청 안 함)                                                  | `pg17-aa`                                      |
-| [PG17 A/B 전체](runs/policy-pg17-full/)          | `--postgres-major 17 --candidate … --behavior`                            | 차이 0/0, 4/4, PASS           | 47그룹, 377 passed, 0 failed/ignored, 18 filtered                    | `pg17-full`                                    |
-| [PG17 A/B 전체+OIDC](runs/policy-pg17-oidc/)     | 위 + `--oidc`                                                             | 차이 0/0, 4/4, PASS           | 47그룹, 383 passed, 0 failed/ignored, 12 filtered                    | `pg17-oidc`                                    |
-| [PG17 제한 관리자](runs/policy-pg17-restricted/) | `--postgres-major 17 --restricted-admin --behavior --behavior-scope core` | 차이 0/0, 4/4, 권한·정지 PASS | 7그룹, 60 passed, 0 failed/ignored/filtered                          | `pg17-restricted`                              |
-| [PG18 A/B 전체+OIDC](runs/policy-pg18-oidc/)     | `--postgres-major 18 --candidate … --behavior --oidc`                     | 차이 0/0, 4/4, PASS           | 47그룹, 383 passed, 0 failed/ignored, 12 filtered                    | `pg18-oidc`                                    |
-| [Supabase A/B](runs/policy-supabase/)            | `--candidate … --supabase --behavior`                                     | 차이 0/0, 4/4, PASS           | direct·session 각각 47그룹, 389 passed, 0 failed/ignored, 6 filtered | `supabase`                                     |
+| 실행 (`runs/`)                                   | 명령 옵션                                                                               | 객체·변조·정지                | A와 B 각각의 Rust 결과                                               | 로컬 출력 `target/sqlp2-…-p2-20261023t065441z` |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------- | ---------------------------------------------- |
+| [PG17 A/A](runs/policy-pg17-aa/)                 | `--postgres-major 17`                                                                   | 차이 0/0, 4/4, PASS           | NOT RUN(요청 안 함)                                                  | `pg17-aa`                                      |
+| [PG17 A/B 전체](runs/policy-pg17-full/)          | `--postgres-major 17 --candidate … --behavior`                                          | 차이 0/0, 4/4, PASS           | 47그룹, 377 passed, 0 failed/ignored, 18 filtered                    | `pg17-full`                                    |
+| [PG17 A/B 전체+OIDC](runs/policy-pg17-oidc/)     | 위 + `--oidc`                                                                           | 차이 0/0, 4/4, PASS           | 47그룹, 383 passed, 0 failed/ignored, 12 filtered                    | `pg17-oidc`                                    |
+| [PG17 제한 관리자](runs/policy-pg17-restricted/) | `--postgres-major 17 --candidate … --restricted-admin --behavior --behavior-scope core` | 차이 0/0, 4/4, 권한·정지 PASS | 7그룹, 60 passed, 0 failed/ignored/filtered                          | `pg17-restricted`                              |
+| [PG18 A/B 전체+OIDC](runs/policy-pg18-oidc/)     | `--postgres-major 18 --candidate … --behavior --oidc`                                   | 차이 0/0, 4/4, PASS           | 47그룹, 383 passed, 0 failed/ignored, 12 filtered                    | `pg18-oidc`                                    |
+| [Supabase A/B](runs/policy-supabase/)            | `--candidate … --supabase --behavior`                                                   | 차이 0/0, 4/4, PASS           | direct·session 각각 47그룹, 389 passed, 0 failed/ignored, 6 filtered | `supabase`                                     |
 
 「차이 0/0」은 의미 카탈로그·정규 덤프 차이 수, 「4/4」는 정책·권한·함수·CHECK 변조의 검출·원복이다. 각 A/B 실행의 A 이력은 97건·최대 98, B는 후보 1건·버전 1이며 A/A는 양쪽 97건이다(`migration-ledger-summary.json`). 양쪽 `catalog.json` SHA-256은 실행마다 A와 B가 같다(`local-artifacts.sha256`).
 
@@ -36,7 +36,7 @@
 
 **NOT RUN.** 이 결과는 빈 DB 새 설치의 동등성이다. 기존 데이터가 있는 DB의 누적 이력(최대 98)→후보(버전 1) 전환, 기존 백업의 새 버전 복구, SQLx 이력 교체, 0095의 전체 재색인을 기존 데이터에서 실행하는 경로는 검증하지 않았다. Supabase Cloud 실행·변경, Supabase의 `--oidc`, transaction pooler, 실제 운영 데이터도 NOT RUN이다.
 
-**자원.** 각 실행은 자체 Compose 프로젝트(17개)만 만들고 `stop`했다. 그 컨테이너 28개는 모두 exited다. Keycloak의 realm 파일은 읽기 전용 bind mount이고, Supabase A·B DB 컨테이너는 기존 Supabase 구성의 이름 붙은 `db-config` 볼륨 2개를 남겼다(지우지 않았다). 공유 개발 자원에는 손대지 않았다. 텍스트 로그는 줄 끝 공백만 정리했고 원본 콘솔 로그 해시는 [원본 로그 해시](diagnostics/original-orchestration-logs.sha256)에 더했다.
+**자원.** 각 실행은 자체 Compose 프로젝트(17개)만 만들고 `stop`했다. 그 컨테이너 28개는 모두 exited다. Keycloak 2개는 realm 파일, Supabase 컨테이너는 고정 revision의 구성 파일(pooler 설정 등)을 bind mount로 읽고, Supabase A·B DB 컨테이너는 기존 Supabase 구성의 이름 붙은 `db-config` 볼륨 2개를 남겼다(지우지 않았다). 공유 개발 자원에는 손대지 않았다. 텍스트 로그는 줄 끝 공백만 정리했고 원본 콘솔 로그 해시는 [원본 로그 해시](diagnostics/original-orchestration-logs.sha256)에 더했다.
 
 **시험 실행(dry run, 증거 아님).** 정책 브랜치가 아직 최종이 아니던 `874d866`을 병합한 `5c26622`·`4f53d82`로 재생성 절차와 PG17 A/A·PG17 전체 A/B를 먼저 돌렸다(`target/sqlp2-*-p2-20261023t060246z`). 이후 #103이 판 비교를 바꿨으므로 그 결과는 기록하지 않고 위 실행으로 대체했다.
 
