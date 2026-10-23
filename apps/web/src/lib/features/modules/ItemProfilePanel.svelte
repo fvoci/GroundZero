@@ -30,6 +30,10 @@
   let error = $state<string | undefined>(undefined);
   let status = $state('');
   let editing = $state(false);
+  // 편집을 연 때의 판(D-104). 편집 중에 패널을 다시 읽어도 옮기지 않는다(옮기면 그사이 다른 사람이 고친 것을 덮는다).
+  let editBase = 0;
+  // 저장이 판 충돌(409)로 거절됐을 때의 서버 최신본. 입력은 그대로 두고 최신본을 보인다.
+  let conflict = $state<ItemProfileView | undefined>(undefined);
   let managing = $state(false);
   let reloadKey = $state(0);
   interface FormState {
@@ -81,6 +85,8 @@
   });
 
   async function startEdit(p: ItemProfileView): Promise<void> {
+    editBase = p.version;
+    conflict = undefined;
     form = {
       status: p.status,
       leader: p.leader?.user_id ?? '',
@@ -97,13 +103,18 @@
 
   async function save(e: SubmitEvent): Promise<void> {
     e.preventDefault();
+    await submit(editBase);
+  }
+
+  /** 입력을 `base` 판에 대한 고치기로 보낸다(충돌 알림의 "내 입력으로 다시 저장"은 알림이 보인 최신본의 판). */
+  async function submit(base: number): Promise<void> {
     if (form.starts_on !== '' && form.ends_on !== '' && form.starts_on > form.ends_on) {
       error = m.modules_period_invalid();
       return;
     }
     error = undefined;
     try {
-      await api.setItemProfile(item.id, {
+      const result = await api.setItemProfile(item.id, base, {
         leader_id: form.leader === '' ? null : form.leader,
         goal: form.goal,
         scope: form.scope,
@@ -112,6 +123,13 @@
         status: form.status,
         details: toDetails(kind, form.values, form.keywords),
       });
+      if (result.kind === 'conflict') {
+        // 그사이 다른 사람이 고쳤다. 서버는 아무것도 바꾸지 않았다. 입력은 그대로 두고 최신본을 보인다.
+        conflict = result.current;
+        profile = result.current;
+        return;
+      }
+      conflict = undefined;
       editing = false;
       status = m.modules_profile_saved();
       reloadKey += 1;
@@ -171,6 +189,29 @@
   {#if profile === undefined}
     <p class="text-sm text-muted-foreground">{m.modules_loading()}</p>
   {:else if editing}
+    {#if conflict !== undefined}
+      {@const latest = conflict}
+      <!-- 판 충돌(D-104): 입력은 그대로 두고 서버 최신본을 보인다. 최신본으로 다시 편집하거나 내 입력으로 다시 저장한다. -->
+      <div
+        class="flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 text-sm"
+        data-profile-conflict
+      >
+        <p role="alert">{m.modules_profile_conflict()}</p>
+        {@render summary(latest)}
+        <div class="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onclick={() => {
+              void startEdit(latest);
+            }}>{m.modules_profile_conflict_load()}</Button
+          >
+          <Button size="sm" onclick={() => void submit(latest.version)}
+            >{m.modules_profile_conflict_save_mine()}</Button
+          >
+        </div>
+      </div>
+    {/if}
     <form class="grid gap-3 sm:grid-cols-2" onsubmit={(e) => void save(e)} novalidate>
       <div class="flex flex-col gap-1">
         <span id="item-status-label" class="text-sm font-medium">{m.modules_status()}</span>
@@ -254,13 +295,21 @@
       {/each}
       <div class="flex gap-2 sm:col-span-2">
         <Button type="submit">{m.common_save()}</Button>
-        <Button type="button" variant="ghost" onclick={() => (editing = false)}
-          >{m.common_cancel()}</Button
+        <Button
+          type="button"
+          variant="ghost"
+          onclick={() => {
+            editing = false;
+            conflict = undefined;
+          }}>{m.common_cancel()}</Button
         >
       </div>
     </form>
   {:else}
-    {@const p = profile}
+    {@render summary(profile)}
+  {/if}
+
+  {#snippet summary(p: ItemProfileView)}
     <dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
       <dt class="text-muted-foreground">{m.modules_status()}</dt>
       <dd><Badge variant="outline">{itemStatusLabel(p.status)}</Badge></dd>
@@ -289,7 +338,7 @@
         {/if}
       {/each}
     </dl>
-  {/if}
+  {/snippet}
 
   {#if profile !== undefined}
     {@const p = profile}

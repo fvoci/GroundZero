@@ -502,6 +502,7 @@ export function parseItem(value: Json): ItemView {
     starts_on: optStr(o, 'starts_on'),
     ends_on: optStr(o, 'ends_on'),
     is_template: bool(o, 'is_template'),
+    version: int(o, 'version'),
   };
 }
 
@@ -536,6 +537,8 @@ export interface ItemProfileView {
   groups: { id: string; name: string }[];
   can_edit: boolean;
   can_manage_members: boolean;
+  /** 항목 정보(리더·목표·범위·기간·상태·종류별 정보)의 판. 고칠 때 연 때의 판을 보낸다(D-104). */
+  version: number;
 }
 
 const DETAIL_TEXT_KEYS = [
@@ -579,6 +582,7 @@ export function parseItemProfile(value: Json): ItemProfileView {
     }),
     can_edit: bool(o, 'can_edit'),
     can_manage_members: bool(o, 'can_manage_members'),
+    version: int(o, 'version'),
   };
 }
 
@@ -750,11 +754,18 @@ export interface SavedViewView {
   id: string;
   name: string;
   config: Record<string, unknown>;
+  /** 고칠 때 읽은 판을 보낸다(그사이 다른 탭이 저장했으면 409, D-103). */
+  version: number;
 }
 
 export function parseSavedView(value: Json): SavedViewView {
   const o = rec(value, 'saved view');
-  return { id: str(o, 'id'), name: str(o, 'name'), config: rec(o.config, 'view config') };
+  return {
+    id: str(o, 'id'),
+    name: str(o, 'name'),
+    config: rec(o.config, 'view config'),
+    version: int(o, 'version'),
+  };
 }
 
 // --- 스터디 계획 (D-36) ------------------------------------------------------
@@ -2273,6 +2284,12 @@ function fail(status: number, json: Json): never {
   throw new ApiError(status, 'unexpected', m.common_error_unexpected({ status: String(status) }));
 }
 
+/** 판 충돌 409가 함께 보낸 서버 최신본(`current`). 판 충돌이 아닌 409(보관 등)와 다른 응답은 undefined다. */
+function versionConflict(status: number, json: Json): Json | undefined {
+  if (status !== 409 || !isRecord(json) || json.current === undefined) return undefined;
+  return json.current;
+}
+
 async function expectOk<T>(
   method: string,
   path: string,
@@ -2699,12 +2716,46 @@ export const api = {
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/views`, (v) =>
       parseList(v, parseSavedView),
     ),
-  saveView: (itemId: string, requestId: string, name: string, config: Record<string, unknown>) =>
-    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/views`, parseSavedView, {
+  /** 새 보기. 같은 이름이 이미 있으면(다른 탭이 먼저 만듦) 만들지 않고 그 보기를 돌려준다(D-103). */
+  async createView(
+    itemId: string,
+    requestId: string,
+    name: string,
+    config: Record<string, unknown>,
+  ): Promise<{ kind: 'saved'; view: SavedViewView } | { kind: 'exists'; current: SavedViewView }> {
+    const { status, json } = await request(
+      'POST',
+      `/api/items/${encodeURIComponent(itemId)}/views`,
+      {
+        request_id: requestId,
+        name,
+        config: { ...config },
+      },
+    );
+    const current = versionConflict(status, json);
+    if (current !== undefined) return { kind: 'exists', current: parseSavedView(current) };
+    if (status !== 201) fail(status, json);
+    return { kind: 'saved', view: parseSavedView(json) };
+  },
+  /** 기존 보기 고치기. 읽은 판이 지났으면(다른 탭이 저장함) 바꾸지 않고 최신 보기를 돌려준다(D-103). */
+  async updateView(
+    viewId: string,
+    requestId: string,
+    baseVersion: number,
+    config: Record<string, unknown>,
+  ): Promise<
+    { kind: 'saved'; view: SavedViewView } | { kind: 'conflict'; current: SavedViewView }
+  > {
+    const { status, json } = await request('PUT', `/api/views/${encodeURIComponent(viewId)}`, {
       request_id: requestId,
-      name,
+      base_version: baseVersion,
       config: { ...config },
-    }),
+    });
+    const current = versionConflict(status, json);
+    if (current !== undefined) return { kind: 'conflict', current: parseSavedView(current) };
+    if (status !== 200) fail(status, json);
+    return { kind: 'saved', view: parseSavedView(json) };
+  },
   deleteView: (id: string) => expectOk('DELETE', `/api/views/${encodeURIComponent(id)}`, none),
   recordKinds: () => expectOk('GET', '/api/record-kinds', (v) => parseList(v, parseRecordKind)),
   itemRecords: (itemId: string) =>
@@ -2734,8 +2785,10 @@ export const api = {
   deleteRecord: (id: string) => expectOk('DELETE', `/api/records/${encodeURIComponent(id)}`, none),
   itemProfile: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/profile`, parseItemProfile),
-  setItemProfile: (
+  /** 항목 정보 고치기. 연 때의 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104). */
+  async setItemProfile(
     itemId: string,
+    baseVersion: number,
     profile: {
       leader_id: string | null;
       goal: string;
@@ -2745,11 +2798,17 @@ export const api = {
       status: ItemStatus;
       details: ItemDetailsView;
     },
-  ) =>
-    expectOk('PUT', `/api/items/${encodeURIComponent(itemId)}/profile`, none, {
-      ...profile,
-      details: { ...profile.details },
-    }),
+  ): Promise<{ kind: 'saved' } | { kind: 'conflict'; current: ItemProfileView }> {
+    const { status, json } = await request(
+      'PUT',
+      `/api/items/${encodeURIComponent(itemId)}/profile`,
+      { base_version: baseVersion, ...profile, details: { ...profile.details } },
+    );
+    const current = versionConflict(status, json);
+    if (current !== undefined) return { kind: 'conflict', current: parseItemProfile(current) };
+    if (status < 200 || status >= 300) fail(status, json);
+    return { kind: 'saved' };
+  },
   setItemMembers: (itemId: string, userIds: string[], groupIds: string[]) =>
     expectOk('PUT', `/api/items/${encodeURIComponent(itemId)}/members`, none, {
       user_ids: userIds,
@@ -3249,11 +3308,22 @@ export const api = {
       title,
     }),
   item: (id: string) => expectOk('GET', `/api/items/${encodeURIComponent(id)}`, parseItem),
-  updateItem: (
+  /** 항목 정보(제목·설명·공개 범위) 고치기. 읽은 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104). */
+  async updateItem(
     id: string,
+    baseVersion: number,
     /** 공개 범위는 바꿀 때만 보낸다(없으면 서버의 지금 값 그대로). */
     input: { title: string; description: string; visibility?: 'workspace' | 'private' },
-  ) => expectOk('PUT', `/api/items/${encodeURIComponent(id)}`, parseItem, input),
+  ): Promise<{ kind: 'updated'; item: ItemView } | { kind: 'conflict'; current: ItemView }> {
+    const { status, json } = await request('PUT', `/api/items/${encodeURIComponent(id)}`, {
+      base_version: baseVersion,
+      ...input,
+    });
+    const current = versionConflict(status, json);
+    if (current !== undefined) return { kind: 'conflict', current: parseItem(current) };
+    if (status !== 200) fail(status, json);
+    return { kind: 'updated', item: parseItem(json) };
+  },
   archiveItem: (id: string, archived: boolean) =>
     expectOk('PUT', `/api/items/${encodeURIComponent(id)}/archived`, parseItem, { archived }),
   itemDocuments: (itemId: string) =>

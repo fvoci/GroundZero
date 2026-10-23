@@ -172,13 +172,33 @@
       error = m.tasks_view_name_required();
       return;
     }
+    const itemId = item.id;
+    const config = { view, filter: { ...filter }, sort };
+    // 목록에 같은 이름의 보기가 있으면 읽은 판으로 그 보기를 고치고, 없으면 새로 만든다(D-103). 재시도 키에 대상과
+    // 판을 넣어, 목록을 다시 읽은 뒤의 저장은 새 요청이 된다.
+    const target = views.find((v) => v.name === name);
     try {
-      const config = { view, filter: { ...filter }, sort };
-      const requestId = viewKey.for({ item: item.id, name, config });
-      const saved = await api.saveView(item.id, requestId, name, config);
+      const requestId = viewKey.for({
+        item: itemId,
+        name,
+        config,
+        target: target === undefined ? null : { id: target.id, version: target.version },
+      });
+      const result =
+        target === undefined
+          ? await api.createView(itemId, requestId, name, config)
+          : await api.updateView(target.id, requestId, target.version, config);
       viewKey.done(requestId);
-      await loadViews(item.id);
-      selectedView = saved.id;
+      await loadViews(itemId);
+      if (result.kind !== 'saved') {
+        // 다른 탭이 이 이름으로 먼저 만들거나 저장했다. 서버는 아무것도 바꾸지 않았다. 지금 화면의 설정과 이름은 그대로
+        // 두고 최신 목록만 읽는다(최신 설정은 목록에서 고르면 보이고, 다시 저장하면 최신 판을 기준으로 이 설정이 된다).
+        selectedView = result.current.id;
+        status = '';
+        error = m.tasks_view_conflict({ name });
+        return;
+      }
+      selectedView = result.view.id;
       status = m.tasks_view_saved({ name });
       error = undefined;
     } catch (e: unknown) {
