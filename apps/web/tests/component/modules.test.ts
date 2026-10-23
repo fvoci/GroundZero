@@ -79,6 +79,7 @@ describe('module validation', () => {
       starts_on: null,
       ends_on: '2026-12-31',
       is_template: false,
+      version: 1,
       realtime: false,
       can_export: true,
     });

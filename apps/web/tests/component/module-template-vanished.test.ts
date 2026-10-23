@@ -46,6 +46,7 @@ function template(id: string, title: string): ItemView {
     updated_at: '2026-10-22T00:00:00Z',
     status: 'active',
     is_template: true,
+    version: 1,
     starts_on: null,
     ends_on: null,
   };

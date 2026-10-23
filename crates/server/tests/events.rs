@@ -37,7 +37,7 @@ async fn module_item(app: &Router, admin: &TestUser, ws: &str, key: &str, public
             Method::PUT,
             &format!("/api/items/{}", i.json["id"].as_str().unwrap()),
             Some(admin),
-            Some(json!({ "title": key, "description": "", "visibility": "workspace" })),
+            Some(json!({ "base_version": 1, "title": key, "description": "", "visibility": "workspace" })),
         )
         .await;
         assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
@@ -347,7 +347,7 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
                     Method::PUT,
                     &format!("/api/items/{item}"),
                     Some(&admin),
-                    Some(json!({ "title": key, "description": "", "visibility": "workspace" })),
+                    Some(json!({ "base_version": 1, "title": key, "description": "", "visibility": "workspace" })),
                 )
                 .await;
                 assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);

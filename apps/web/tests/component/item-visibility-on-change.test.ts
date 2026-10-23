@@ -47,6 +47,7 @@ const loaded: ItemView = {
   updated_at: '2026-10-19T00:00:00Z',
   status: 'active',
   is_template: false,
+  version: 1,
   starts_on: null,
   ends_on: null,
 };
@@ -74,7 +75,7 @@ describe('item info save and visibility', () => {
   it('does not send the visibility when only the description changed', async () => {
     await setLocale('ko', { reload: false });
     setup();
-    const update = vi.spyOn(api, 'updateItem').mockResolvedValue(loaded);
+    const update = vi.spyOn(api, 'updateItem').mockResolvedValue({ kind: 'updated', item: loaded });
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
 
     const description = await waitFor(() => {
@@ -87,13 +88,13 @@ describe('item info save and visibility', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(1);
     });
-    expect(update.mock.calls[0]?.[1]).toEqual({ title: '항목', description: '오타 고침' });
+    expect(update.mock.calls[0]?.[2]).toEqual({ title: '항목', description: '오타 고침' });
   });
 
   it('sends the visibility the owner chose', async () => {
     await setLocale('ko', { reload: false });
     setup();
-    const update = vi.spyOn(api, 'updateItem').mockResolvedValue(loaded);
+    const update = vi.spyOn(api, 'updateItem').mockResolvedValue({ kind: 'updated', item: loaded });
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
 
     await fireEvent.click(await screen.findByLabelText(/워크스페이스 멤버에게 공개/));
@@ -101,7 +102,7 @@ describe('item info save and visibility', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(1);
     });
-    expect(update.mock.calls[0]?.[1]).toEqual({
+    expect(update.mock.calls[0]?.[2]).toEqual({
       title: '항목',
       description: '원래 설명',
       visibility: 'private',

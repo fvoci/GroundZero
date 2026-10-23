@@ -58,7 +58,7 @@ async fn task_in_public_item(app: &Router, admin: &TestUser, ws: &str) -> Value 
         Method::PUT,
         &format!("/api/items/{}", i.json["id"].as_str().unwrap()),
         Some(admin),
-        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": "항목", "description": "", "visibility": "workspace" })),
     )
     .await;
     send(

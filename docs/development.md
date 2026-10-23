@@ -3125,6 +3125,306 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   떠나기 막음과 제목만 고친 4412(수정 전 초안 없음·다시 읽어 실패), `live-title-before-sync.test.ts`(첫 동기화 전 제목만
   고침: 떠날 때 막지 않고 4412에 초안을 남기고 다시 읽음. 수정 전 떠나기를 막아 실패).
 
+## 97. 검색 날짜의 사용자 시간대 경계와 작성자 색인 필터 (2026-10-23, D-101·D-102, `fvoci/policy-search`)
+
+사용자 결정(D-101·D-102, 요지): 실제 시각을 가진 데이터는 사용자가 고른 시간대(D-81)의 그날 시작·끝을 서버가 계산해 비교하고(DST로 23·25시간인
+날 포함), 날짜만 있는 값은 날짜로 비교한다. 색인 경로와 대체 SQL 경로의 의미를 같게 한다. 작성자 조건은 후보 300개를 받은 뒤 거르지 않고 검색
+색인 필터에 넣되, 최종 접근 확인은 지금처럼 서버가 한다(P-14). 재색인은 한 번에 묶고, 과거 개발 버전 호환만을 위한 `day` 필드·경로는 남기지
+않는다(D-92).
+
+- **색인의 두 종류 날짜** (`0095_search_time_zone_author.sql`, `search.rs` `IndexDoc`): `app_system_search_payload`를 다시 정의해 예전의 `day`
+  (UTC 날짜와 일정 자체 시간대의 날짜가 섞인 YYYYMMDD) 대신 둘을 준다. 한 문서에는 둘 중 하나만 있다.
+
+  | 대상              | 색인 속성                     | 비교                                       |
+  | ----------------- | ----------------------------- | ------------------------------------------ |
+  | 문서·항목·파일    | `at` = 고친 때(UTC 유닉스 초) | 보는 사람 시간대의 [그날 0시, 다음 날 0시) |
+  | 기록(발생일 없음) | `at` = 고친 때                | 위와 같음                                  |
+  | 기록(발생일 있음) | `date` = 발생일(YYYYMMDD)     | 날짜 그대로(끝 포함)                       |
+  | 업무              | `date` = 기한(없으면 시작일)  | 날짜 그대로                                |
+  | 종일 일정         | `date` = 시작일               | 날짜 그대로                                |
+  | 시각 일정         | `at` = 시작 시각(`starts_at`) | 보는 사람 시간대(일정 자체 시간대가 아님)  |
+
+  `date`는 지금 날짜 전용 기능(기한·종일 일정·발생일)에 필요한 필드이고 예전 `day`와 이름을 달리해, 재색인 전의 옛 문서가 옛 의미로 걸리지
+  않게 했다(옛 문서에는 `at`·`date`가 없어 재색인될 때까지 날짜 필터에 걸리지 않는다). 작성자는 `created_by`로 싣는다. 거를 수 있는 속성은
+  `kind`·`workspace_id`·`owner_user_id`·`id`·`module_id`·`status`·`assignee_ids`·`created_by`·`at`·`date`(`ensure_index`).
+
+- **날짜 경계** (`search_api.rs` `day_bounds`): `from`·`to`가 있으면 PostgreSQL에서 `from`의 그날 시작과 `to` 다음 날의 시작(제외)을 구한다.
+  식은 시간 기록의 날 경계(`time_tracking.rs`, 감사 S21)와 같다: `coalesce(app_local_instant(날짜::timestamp, tz), 날짜::timestamp AT TIME
+ZONE tz)`. 그래서 23·25시간인 날이 그대로 맞고, 0시가 두 번 오는 날(America/Havana 2026-11-01)은 앞의 0시에, 0시가 없는 날은 건너뛴 직후에
+  시작한다. 시간대 이름은 `app_check_timezone`(달력·홈·시간 기록과 같은 확인)으로 보고 모르는 이름·`posix/…` 등은 400 `bad_request`. 구한 두
+  시각을 Meilisearch 필터(`at >= 시작 AND at < 끝`, 유닉스 초)와 대체 SQL(`r.at >= $9 AND r.at < $10`)에 똑같이 넘긴다. 날짜만 있는 값은 두
+  경로 모두 `date`/`on_day`를 `from`·`to`와 비교한다. 필터 모양: `AND ((at >= S AND at < E) OR (date >= F AND date <= T))`(한쪽 끝만 있으면 그
+  끝만). 서버에 시간대 crate를 더하지 않았다(`time`만 있음).
+- **작성자 필터** (D-102): 색인 경로는 `AND created_by = "<uuid>"`를 Meilisearch 필터에 더한다(값은 파싱한 UUID라 따옴표 밖으로 나갈 수 없다).
+  후보를 받은 뒤 작성자를 거르던 `authored()`와 그 조건을 지웠다. 쪽마다 후보를 받아 `app_search_visible`·항목 RLS로 다시 거르는 접근 확인은
+  그대로다(작성자 필터가 넓히지 않음). 대체 경로는 이미 `created_by` 조건이라 의미가 같다.
+- **재색인과 전환**: 0095 끝의 `SELECT app_system_search_enqueue_all()`이 검색 대상 전부를 `search_queue`에 한 번 올린다(D-101·D-102 공통,
+  0040과 같은 방식, `ON CONFLICT … DO UPDATE`라 다시 해도 같다). 새 속성의 필터 설정은 프로세스마다 처음 색인 작업 전에 `ensure_index`가
+  맞춘다(`configured` 깃발). 옛 색인으로 시작한 서버는 설정을 맞춘 뒤 대기열이 비면 새 속성으로 거른다. 그 전환 사이에는 (1) 아직 재색인되지
+  않은 문서가 날짜·작성자 필터에 걸리지 않고, (2) 설정이 반영되기 전의 검색이 "거를 수 없는 속성" 오류를 받으면 첫 쪽 실패로 보아 제목 검색
+  (대체 경로)으로 대신한다. 옛 `day` 속성은 문서를 다시 넣을 때 사라진다(넣기는 문서 전체를 바꿈).
+- **웹** (`SearchDialog.svelte`, `client.ts`): 날짜를 고르면 설정의 시간대(`displaySettings().timeZone`, 저장한 값이 없으면 브라우저 시간대)를
+  `tz`로 함께 보낸다. 날짜는 고른 YYYY-MM-DD 그대로이고 화면은 경계를 계산하지 않는다. 날짜를 고르지 않으면 `tz`도 보내지 않는다. 안내
+  `search_date_hint`(ko·en)에 "고친 날과 시각이 있는 일정의 날짜는 설정한 시간대로 봅니다"를 더했다. 계약(`tz` 매개변수)과 생성 클라이언트는
+  `cargo xtask openapi`·`pnpm run generate:api`로 다시 만들었다.
+- **구현 해석(사용자 결정 밖)**: (1) `tz`가 없거나 빈 값이면 저장한 시간대(D-81 `user_settings.time_zone`), 그것도 없으면 UTC로 본다. 웹은 늘
+  보내므로 다른 호출자(직접 API 호출)를 위한 기본값이다. 400으로 거절하는 방법도 있었지만 달력·홈과 달리 검색은 날짜 범위가 선택 사항이고
+  저장한 값을 쓰는 편이 사용자 설정을 따르는 결정에 가깝다고 보았다. (2) 시간대는 날짜 범위가 있을 때만 확인한다(범위가 없으면 쓰지 않는다).
+  (3) 시각 일정은 지금처럼 시작만 본다(기간이 범위에 걸치는지는 보지 않음, D-101 "시각 일정의 시작"). (4) 날짜만 있는 속성 이름은 `date`, 대체
+  SQL·payload 열 이름은 `on_day`(`date`는 SQL 형 이름이라 피함). (5) 경계 식은 새 SQL 함수를 만들지 않고 시간 기록의 식(`app_local_instant`)을
+  다시 썼다. 달력 범위(`events.rs` 602행)는 아직 `날짜::timestamp AT TIME ZONE`만 써서 0시가 두 번 오는 날의 첫 1시간이 다르다. 이번 범위
+  밖이라 고치지 않았다(후속 후보).
+- **시험** (`crates/server/tests/search.rs`, 실제 PostgreSQL·Meilisearch, 모든 단언을 대체 경로에서도 반복):
+  `search_dates_use_the_viewers_day_boundaries` — 2026-10-20 23:30Z에 고친 문서가 서울 10-21·뉴욕 10-20에만 나옴, 뉴욕 2026-03-08(23시간)
+  `[05:00Z, 다음 날 04:00Z)`와 2026-11-01(25시간) `[04:00Z, 다음 날 05:00Z)`의 처음·마지막 1초가 들고 바로 앞·뒤 1초가 빠짐, `from`만·`to`만,
+  `tz` 없이 저장한 시간대(America/New_York) 사용, 모르는 시간대·`posix/Asia/Seoul` 400(두 경로). `date_only_values_keep_their_day_and_timed_events_follow_the_viewer`
+  — 기한 업무·종일 일정·발생일 기록(모두 2026-10-21)은 서울·키리티마티(UTC+14)·뉴욕·파고파고(UTC−11) 어디서나 10-21에 나오고, 서울 10-21
+  08:00 시각 일정은 서울·키리티마티 10-21, 뉴욕·파고파고 10-20에 나옴. `a_day_with_a_repeated_midnight_starts_at_the_first_one` — 아바나
+  2026-11-01 03:30Z(10-31 23:30 CDT)는 10-31, 04:30Z(첫 번째 00:30)는 11-01. `an_author_filter_finds_results_beyond_the_old_candidate_window`
+  — 제목이 검색어와 같은 다른 사람의 미끼 320개 뒤에 있는 작성자의 문서: 작성자 없이 받은 Meilisearch 순위에서 대상이 300번째 이후임을 먼저
+  확인한 뒤 작성자 필터로 찾음(두 경로), 읽기 멤버가 관리자를 작성자로 골라도 관리자의 비공개 항목 업무는 나오지 않고 관리자에게는 나옴. 단위
+  시험 `search_api::tests::date_ranges_compare_instants_and_dates_separately`(필터 문자열 모양). 웹 `search-date-time-zone.test.ts` — 날짜 없이는
+  `tz` 없음, 시작 날짜를 고르면 `from=2026-03-08`과 설정의 `tz=America/New_York`(`to` 없음).
+- **수정 전 실패**(시험만 먼저 커밋한 `cfcfdd7`, 기준 `d2b07ac`, 격리 Compose): `an_author_filter_…` 순위 확인(300 이후)은 통과하고
+  `left: [] right: ["… 대상 문서"]`, `search_dates_…` `…&tz=Asia/Seoul&from=2026-10-21&to=2026-10-21 never settled left: [] right: ["… 서울 아침"]`,
+  `date_only_…` `…&tz=America/New_York&from=2026-10-21&to=2026-10-21 never settled`(시각 일정이 일정 시간대의 날짜 10-21로 나옴). 아바나
+  시험은 경계를 `날짜::timestamp AT TIME ZONE`만으로 바꾼 격리 DB에서 `…&tz=America/Havana&from=2026-10-31&to=2026-10-31 never settled
+left: [전날 밤, 첫 0시 뒤] right: [전날 밤]`로 실패했다(`d2b07ac`에서는 따로 돌리지 않음, 그때는 UTC 날짜라 11-01로 나온다). 웹 시험은
+  대화상자의 `tz` 줄을 뺀 사본에서 `expected null to be 'America/New_York'`.
+- **CodeRabbit 반영**(#99): (1) `to=9999-12-31`이면 `to` 다음 날(10000-01-01)을 `time`이 나타내지 못해 응답이 500이었다. `parse_day`가
+  다음 날이 없는 날과 1년 전(시간대에 따라 PostgreSQL 시각 범위 밖)을 400 `… is out of range`로 거절한다. 단위 시험
+  `days_without_a_representable_boundary_are_rejected`(수정 전 `9999-12-31`에서 실패)와 `search_dates_…`의 두 경로 400 단언. (2) 영어 안내의
+  "Edit dates"를 "The dates of edits"로 고쳤다(편집할 날짜로 읽히지 않게).
+- **통과**(구현 커밋 `7bd8ddf`): `cargo xtask check`(라이선스 포함) PASS, `cargo xtask test --oidc` PASS(364 통과·0 실패, 검색 16건 포함).
+  CodeRabbit 반영 뒤의 결과는 PR 본문. CI(check·integration·licenses·oidc·rhwp·supabase)는 `dafa2bd`에서 모두 통과. NOT RUN: 로컬
+  `cargo xtask test --supabase`(CI의 supabase job은 통과), 실제 브라우저 확인(coordinator가 마지막에 한 번 한다), 운영·개인 개발 색인의
+  재색인(배포하지 않음).
+
+## 98. 저장한 보기·항목 정보의 판 검사와 보관 항목 댓글 지우기 (2026-10-23, D-103·D-104·D-106, `fvoci/policy-version`)
+
+사용자 결정(2026-10-23, `docs/decisions.md` 1.14 요지): D-103 기존 보기 수정은 기준 판 검사가 필수이고 검사와 갱신은 한 트랜잭션, 어긋나면 409와
+최신 정보, 웹은 입력 보존, 새로 만들기와 기존 수정을 구분하고 무조건 덮어쓰기 경로를 남기지 않는다(마지막 저장 우선이 아님, D-92). D-104 항목 정보의
+적용 필드를 명시하고 그 수정 경로에 판 검사를 일관되게 둔다(D-94가 항목에 이미 승인돼 있었던 것이 아니며 이 결정으로 새로 더함, 3-way 병합·범용 충돌
+틀 없음). D-106 보관된 항목에서 쓴 사람의 자기 댓글 지우기는 현행 유지, 고치기·새 댓글·남의 댓글 지우기로 넓히지 않는다. 마이그레이션 0096(보기)·
+0097(항목).
+
+- **저장한 보기(D-103, `0096_saved_view_versions.sql`, `saved_views.rs`)**: `saved_views`에 `version`(고칠 때마다 +1)과
+  `updated_request_id`(마지막 고치기의 요청 id, 사용자별 유일)를 더했다. 계약은 둘로 나눴다. `POST /api/items/{item_id}/views`(`CreateView`:
+  `request_id`·`name`·`config`)는 새 보기만 만들고, 같은 이름이 있으면 아무것도 바꾸지 않고 409 `{error: "exists", current: SavedView}`. 같은 요청
+  id의 재시도는 처음 만든 보기(지금 내용)를 201로 돌려준다(지금과 같음). `PUT /api/views/{view_id}`(`UpdateView`: `request_id`·`base_version`·
+  `config`, 이름은 바꾸지 않음)는 `app_update_view`가 행을 `FOR UPDATE`로 잠근 뒤 (1) 요청 id가 마지막 고치기의 것이면 쓰지 않고 지금 보기를
+  200으로(응답을 잃은 재시도), (2) 요청 id가 다른 보기·만들기에 이미 쓰였으면 400, (3) 판이 다르면 쓰지 않고 409 `{error: "conflict",
+current}`, (4) 아니면 고치고 판을 올린다. `SavedView`에 `version`. 옛 `app_save_view`(`ON CONFLICT … DO UPDATE`)는 지웠다(D-92). 이름이 같은
+  두 만들기가 겹치면 한쪽은 `ON CONFLICT DO NOTHING`으로 409, 같은 요청 id가 겹치면 유일성 위반 뒤 다시 읽어 처음 것을 돌려준다(`create_item`과 같은 방식).
+  - **응답을 잃은 재시도의 순서(구현 해석(사용자 결정 밖))**: A 반영(판 2) → A 같은 요청 id 재시도: 200, 판 2 그대로(두 번 쓰지 않음). A 반영 →
+    B 저장(판 3) → A 재시도: 고치기가 남기는 요청 id는 마지막 고치기의 것뿐이라 A의 id를 알아보지 못하고, A가 읽은 판(1)이 지금 판(3)과 달라 409와
+    최신(B의 설정)이며 아무것도 쓰지 않는다. A의 반영을 "성공"으로 돌려주려면 고치기마다 요청 id 이력을 남겨야 하는데, 그것은 새 멱등 틀이라 두지
+    않았다. 어느 쪽이든 B를 덮지 않는다.
+  - **웹(`TaskBoard.svelte` `saveView`, `client.ts` `createView`·`updateView`)**: 목록에 같은 이름의 보기가 있으면 목록에서 읽은 판으로 고치고, 없으면
+    만든다. 재시도 키(`RetryKey`)에 대상 id와 판을 넣어 목록을 다시 읽은 뒤의 저장은 새 요청이다. 409(`exists`·`conflict`)면 화면의 보기 방식·
+    필터·정렬과 이름은 그대로 두고 목록만 다시 읽어, 최신 설정은 목록에서 고르면 보이고 다시 저장하면 최신 판 기준으로 지금 설정이 저장된다
+    (`tasks_view_conflict`, ko·en). CodeRabbit 반영: 응답이 준 보기(저장한 것·409의 최신)는 목록 다시 읽기가 실패해도 목록에 남겨 다시 저장이 PUT으로 가고(전에는 목록이 비어 POST로 또 409), 기다리는 사이 사용자가 고른 다른 보기는 늦은 응답이 되돌리지 않는다(`saved-view-conflict.test.ts`의 두 시험, 수정 전 `Unable to find … option … 내 보기`·선택이 `v1`로 돌아가 실패).
+- **항목 정보(D-104, `0097_item_versions.sql`)**: 적용 필드와 경로는 다음 둘이다. 프로필 경로를 넣은 것은 구현 해석(사용자 결정 밖, coordinator 판단)이다: 화면이 두 저장을 같은 "항목 정보"로 부르므로 한쪽만 마지막 저장 우선으로 두면 "일관되게"에 어긋난다.
+
+  | 경로                                                  | 적용 필드                                                                                                        | 판                      | 화면                               |
+  | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------- |
+  | `PUT /api/items/{id}`(`app_update_item`)              | 제목·설명·공개 범위(`title`·`description`·`visibility`)                                                          | `items.version`         | 항목 화면의 정보 폼(`ItemScreen`)  |
+  | `PUT /api/items/{id}/profile`(`app_set_item_profile`) | 리더·목표·범위·시작일·끝날·상태·종류별 정보(`leader_id`·`goal`·`scope`·`starts_on`·`ends_on`·`status`·`details`) | `items.profile_version` | 항목 정보 패널(`ItemProfilePanel`) |
+
+  두 요청 모두 `base_version`이 필수다. 함수는 행을 잠근 뒤 접근(404·403)·보관(409 `invalid_state`, 최신본 없음)을 먼저 보고 판을 비교한다. 다르면
+  아무것도 바꾸지 않고 `'conflict'`이고 서버가 같은 트랜잭션에서 읽은 최신본과 함께 409 `{error: "conflict", current: Item}`(`ItemConflict`)·
+  `{error: "conflict", current: ItemProfile}`(`ItemProfileConflict`)를 돌려준다(업무·일정·시간 기록의 `…Conflict`와 같은 모양·코드). `Item.version`·
+  `ItemProfile.version`을 응답에 더했다. 프로필 저장의 성공은 지금처럼 204. 계약의 409는 두 모양(`ItemSaveConflict`·`ItemProfileSaveConflict` = 위 `…Conflict` | `ErrorBody`)으로 적었다(CodeRabbit 범위 밖 지적, 문서 저장의 `SaveConflict`와 같은 방식. 계약 시험 `http::tests::the_item_save_conflicts_are_a_stale_version_or_error_body`, 수정 전 409 스키마가 `ItemConflict`라 실패).
+  - **판이 오르는 때(구현 해석(사용자 결정 밖))**: 표의 `BEFORE UPDATE` 트리거 `items_versions`(0076 `tasks_move_version`과 같은 방식)가 그 칸 묶음이
+    실제로 바뀔 때만, 어느 함수가 바꿨든 1 올린다(직접 다른 값을 넣어도 트리거가 맞춘다). 그래서 폼이 덮을 수 있는 칸의 다른 쓰기도 모두 판을 올린다:
+    멤버에서 빠진 리더 지우기(`app_set_item_members`, `app_drop_unseen_assignees`의 `leader_id = NULL`), 항목 복제의 정보 복사. 두 폼이 보내지 않는
+    칸(보관·휴지통·템플릿 표시·`updated_at`)은 판을 올리지 않는다(보관된 항목은 판보다 먼저 409). 판을 둘로 나눈 것은 한 폼의 저장이 다른 폼을
+    409로 만들지 않게 하려는 것이다(coordinator 지시의 "별도 카운터"). `items`를 고치는 다른 함수(`UPDATE items` 전부: 0019·0035·0038·0070~0072·
+    0074·0077·0079·0080·0081·0084)는 고치지 않았고 그대로 동작한다(통합 시험 전체 통과).
+  - **바꿀 것이 없는 재시도(구현 해석(사용자 결정 밖))**: 판이 달라도 보낸 값이 이미 지금 값과 모두 같으면(공개 범위는 보내지 않았으면 비교하지
+    않음) 아무것도 쓰지 않고 성공으로 끝낸다. 응답을 잃은 같은 저장을 다시 보냈을 때 자기 변경을 충돌로 보지 않게 하려는 것이며, 덮어쓰는 것이 없다.
+  - **웹**: 정보 폼은 입력란을 서버 값으로 채울 때의 판(`filled.version`)을 보낸다. 입력 중에 항목을 다시 읽으면(템플릿 표시·정보 패널 저장 뒤)
+    입력 중인 칸이 있을 때는 판을 옮기지 않는다(옮기면 그사이 다른 사람이 고친 것을 저장이 말없이 덮는다). 내 저장의 응답은 그 판을 받는다.
+    정보 패널은 편집을 연 때의 판(`editBase`)을 보낸다. 409면 입력은 그대로 두고 알림(`role="alert"`)에 서버의 지금 내용(제목·설명·공개 범위, 패널은
+    읽기 보기와 같은 요약)을 보이며 "서버 내용 불러오기"(입력을 최신본으로 바꿈)와 "내 입력으로 다시 저장"(알림이 보인 최신 판 기준, 그사이 또
+    바뀌었으면 다시 409)을 준다. 업무의 `ClashConfirm`은 업무 칸 묶음·번역에 묶여 있어 다시 쓰지 않았다(범용 틀을 만들지 않음). 번역
+    `modules_item_conflict*`·`modules_profile_conflict*`(ko·en).
+
+- **보관된 항목의 댓글 지우기(D-106, 현행 유지, SQL 변경 없음)**: 전체 경로로 확인한 지금 동작: `app_delete_comment`(`0071_app_ids_documents.sql`
+  876행)는 대상 권한을 `app_comment_target_access`(`0032_comments_notifications.sql` 50행)로 보고, 그것은 업무면 `app_task_access`(`0019_trash.sql`
+  141행), 문서면 `app_document_access`(`0007_module_review_fixes.sql` 84행)다. 둘 다 항목이나 모듈이 보관되면(`app_item_archived`, 0006 148행)
+  읽기 아닌 권한을 `'read'`로 낮춘다(0019 154행, 0007 96행). 그래서 쓴 사람이 아니면 소유 권한자(관리자·항목을 만든 사람)도 892행의 "쓴 사람 또는
+  소유자" 검사에서 42501 → 403(`error.rs` 80행)이고, 쓴 사람의 자기 댓글 지우기는 통과한다. 목록의 `can_delete`(`comments.rs` 144행)도 같은 낮춘
+  권한(`app_comment_target_state`, 116행 `owner`)에서 나와 소유 권한자에게 꺼져 있다. 따라서 D-106은 **권한 변경도 403→409 응답 변경도 아니다**.
+  처음에 "소유자가 남의 댓글을 204로 지운다"고 보고 409로 바꾸려 했으나 수정 전 시험이 403을 보여 전제가 틀렸음을 확인했고(아래), coordinator
+  지시대로 바꾸지 않았다. 기존 시험의 범위: 고치기·스레드 해결의 409는 `comments_in_an_archived_item_are_not_edited_or_resolved`, 새 댓글의 409는
+  `comments_threads_and_notifications_follow_access`(289행대), 지우기는 시험이 없었다.
+- **시험(서버, 수정 전 실패 → 수정 뒤 통과)**: 격리 Compose(`cargo xtask test --oidc --keep`, 프로젝트 `fvoci-policy-version-d22158-test`)에 시험만
+  더한 커밋(`704f777`)으로 돌린 실패 줄:
+  - `saved_views::saved_views_are_personal_and_follow_item_access` — 같은 이름 POST가 덮어썼다: `left: 201, right: 409`(65행).
+  - `saved_views::a_view_saved_from_a_stale_tab_is_refused_with_the_latest`(두 탭: B 저장 뒤 A의 판 1 저장은 409와 최신, 목록은 B 그대로, 최신 판으로
+    다시 보내면 저장)과 `a_lost_view_save_is_retried_without_overwriting_a_later_save`(같은 id 재시도는 200·판 그대로, A 반영 → B 저장 → A 재시도는
+    409이고 B 유지, 만들기 재시도는 같은 보기, 남아 있는 요청 id를 다른 보기에 쓰면 400) — 고치기 경로가 없어 `left: 405, right: 200`.
+  - 옛 계약의 SD1 재현(임시 시험, 저장소에 넣지 않고 지움): 이미 있는 이름을 A가 요청 id RA로 덮어쓰고, B가 저장한 뒤, A가 RA로 다시 보내면
+    `SD1 old contract: A=201 Created B=201 Created A-retry=201 Created stored={"view":"board"}`(A의 재시도가 B를 덮음).
+  - `modules::stale_item_details_are_refused_with_the_latest`(판 1의 A 저장은 409와 최신, 같은 값의 재시도는 200·판 그대로, 정보 패널·템플릿·보관은
+    판을 올리지 않음, 공개 범위만 바뀌어도 판이 올라 작성자의 옛 판은 409, 보관된 항목은 최신본 없는 409 `invalid_state`) — `left: 200, right: 409`(913행).
+  - `item_profile::stale_profile_saves_are_refused_with_the_latest`(판 1의 저장은 409와 최신, 같은 값 재시도 204, 제목 저장은 이 판을 올리지 않음,
+    멤버에서 빠져 리더가 지워지면 판이 올라 옛 판으로 리더를 되살리지 못함) — `left: 204, right: 409`.
+  - `comments::archived_items_let_authors_delete_only_their_own_comments`는 지금 동작의 고정 시험이다(수정 전에도 통과, fail-before 대상 아님):
+    보관된 항목에서 소유 권한자의 남의 댓글 지우기 403·목록 `can_delete` 꺼짐, 쓴 사람은 자기 댓글 `can_delete`·지우기 204, 작성자의 남의 댓글
+    403, 바깥 사람 404, 보관을 풀면 소유 권한자 204, 모듈을 보관해도 소유 권한자 403·쓴 사람 204. 처음 409를 기대한 판은 수정 전에
+    `left: 403, right: 409`(780행)로 실패해 지금 동작이 403임을 보여 주었다.
+  - 기존 시험은 `base_version`을 보낸다. 공개 범위만 바꾸는 도우미(`modules.rs` `set_item`, `tasks.rs` `make_public`)와 칸 확인용 프로필 도우미는
+    지금 판을 읽어 보낸다. W13 시험(`item_details_keep_the_visibility_unless_it_is_sent`)은 지금 판으로 보내 "보내지 않은 공개 범위는 그대로"만 본다
+    (연 때의 판으로 보낸 저장은 이제 409이며 새 시험이 본다).
+- **시험(웹, 수정 전 소스에서 6건 모두 실패)**: `item-info-conflict.test.ts` — 가짜 서버(409와 최신본)로 정보 폼의 입력 유지·최신본 표시·첫 요청
+  `base_version: 1`·"내 입력으로 다시 저장"이 판 2로 보냄, "서버 내용 불러오기", 입력 중 다시 읽기(판 2) 뒤에도 판 1로 보냄, 정보 패널의 같은 흐름.
+  `saved-view-conflict.test.ts` — 보기 고치기가 `PUT /api/views/v1`·판 1, 409에서 보기 방식(칸반)·이름 유지와 안내, 다시 저장은 판 2·새 요청 id,
+  다른 탭이 먼저 만든 이름은 409 안내·설정 유지. 수정 전 실패: 충돌 안내·단추를 찾지 못함(`Unable to find … 그사이 다른 사람이 …`·`서버 내용
+불러오기`·`다른 탭에서 보기 …`), 다시 읽기 뒤 저장은 판 없이 다시 읽은 제목을 보냄(`expected { title: '다른 사람이 고친 제목', … } to match object
+{ base_version: 1, … }`). 기존 웹 시험은 새 결과 모양(`{kind}`)과 `version`에 맞췄다.
+- **돌린 검사(`7f6da61` 기준, 리베이스 전 같은 코드)**: `cargo xtask check` PASS(fmt·clippy·단위·deny·계약 최신·format·lint·svelte-check·i18n·rhwp 고지·고지·웹 시험 133파일 745건·라이선스). `cargo xtask test --oidc` PASS 두 번: 위 `--keep` 스택을 이어 쓴 실행(끝에 그 스택을 지움), 그리고 리베이스한 머리(`3f138d4` 위)에서 새 DB로 처음부터 마이그레이션한 격리 Compose 실행. 수정 전 증거는 같은 스택에서 시험 바이너리를 하나씩 돌렸다(`cargo test -p fvoci-server --test …`, 주소는 xtask의 시험 값). **NOT RUN**: `cargo xtask test --supabase`(셀프호스트 Supabase), 실제 브라우저 확인(coordinator가 마지막에 한 번 돌림, `cargo xtask dev` 금지), 두 탭 동시 저장의 실제 경합(시험은 순서를 정한 두 요청과 같은 트랜잭션의 잠금으로 본다).
+- **통합 뒤 수정: 판을 보내지 않은 호출(2026-10-23, `fvoci/policy-int-fix`, 기준 `874d866`)**: `app_update_view`(0096)·`app_update_item`·
+  `app_set_item_profile`(0097)의 판 비교가 `<>`라, `p_base_version`이 NULL이면 비교가 NULL이 되어 검사를 건너뛰고 덮어썼다. 서버 API의 판은
+  필수 정수(`i32`)라 지금 경로로는 NULL이 오지 않지만, D-103·D-104는 판 검사를 필수로 정했고 정의자 함수가 마지막 보장이다. 세 비교를
+  `IS DISTINCT FROM`으로 바꿨다(0096·0097을 직접 고침, main에 아직 없음). 22023으로 거절하지 않고 이렇게 한 이유: 앞선 판 검사(0073·0078·0082·0092)와
+  같은 모양이고, 모르는 판은 지난 판과 같이 "아무것도 쓰지 않는 `'conflict'`"가 안전한 결과이며, 바꿀 것이 없는 재시도(`'updated'`, 쓰지 않음)와
+  보기의 `'replayed'`(판보다 먼저 봄)는 그대로다. 시험: `item_profile::a_null_base_version_does_not_skip_the_item_version_checks`(앱 역할로 NULL 판을
+  보내 두 함수 모두 `'conflict'`, 같은 값 재시도는 `'updated'`, 행의 제목·목표·두 판 그대로)와
+  `saved_views::a_null_base_version_does_not_skip_the_view_version_check`(NULL 판은 `'conflict'`, 반영한 요청 id는 `'replayed'`, 목록의 설정·판
+  그대로). 수정 전 실패: `left: ("updated", "updated"), right: ("conflict", "conflict")`, `left: "updated", right: "conflict"`.
+- **통합 뒤 수정: 개발 준비 SQL**: `dev-module-seed.sql`이 0097이 지운 옛 9인자 `app_set_item_profile`을 불러 새 DB에서 `cargo xtask dev --oidc`가
+  `function app_set_item_profile(uuid, uuid, text, unknown, date, date, unknown, jsonb, uuid[]) does not exist`로 멈췄다. 바로 앞에서 그 항목의
+  `profile_version`을 읽어 넘기고 결과가 `'updated'`가 아니면 멈추게 했다. 두 준비 SQL에서 0095~0098이 서명을 바꾼 다른 함수 호출은 없다(`app_create_task`는
+  이미 0098 서명). 준비 SQL을 돌리는 시험·CI 단계는 없다(`xtask/src/dev.rs`만 돌린다).
+- **통합 뒤 수정: 정보 패널의 리더 칸(브라우저 확인 FAIL)**: `ItemProfilePanel.svelte`의 리더 선택 칸 글자가 `people`에서 찾지 못하면 서버의
+  리더(`profile.leader`) 이름을 보였다. 입력이 "없음"(`''`)이어도 그래서, (A) 다른 탭이 리더를 정한 뒤 이 탭의 저장이 409가 되면 칸은 그
+  리더를 보이지만 남은 입력은 "없음"이라 "내 입력으로 다시 저장"이 보이지 않게 리더를 지웠고, (B) 리더를 "없음"으로 골라도 칸은 옛 리더를
+  보였다. `e360b40c`(2026-10-17)부터 있던 것이 D-104의 "입력 유지" 화면에서 드러났다. 이제 칸은 입력만 보인다: `''`은 "없음", 사용자 id는
+  고를 수 있는 사람·지금 보이는 정보·편집을 연 때의 리더 가운데 그 id의 이름, 어디에도 없으면 "(알 수 없는 사람)"(`modules_leader_unknown`,
+  ko·en). 409와 입력 유지 동작은 그대로다. 시험 `item-profile-leader-label.test.ts` 세 건, 수정 전 `expected 'Test User' to be '없음'`(A·B)과
+  `expected 'Second User' to be 'Test User'`(최신본과 입력의 리더가 다를 때)로 실패.
+- **통합 뒤 수정: 정보 패널의 남은 "저장했습니다" 안내(브라우저 재확인 B)**: 정보 패널의 안내 줄(`status`)은 저장이 성공하면
+  "항목 정보를 저장했습니다."가 되고 지워지지 않아, 다음 저장이 409가 되면 충돌 알림 옆에 그 안내가 남아 입력이 저장된 것처럼 보였다
+  (데이터 영향은 없지만 보존한 입력을 두고 떠나게 한다). 이제 정보 저장(날짜 확인보다 먼저)·멤버 저장을 보낼 때 앞선 안내를 지운다(날짜 확인 순서는 CodeRabbit 지적). 시험
+  `item-profile-stale-status.test.ts` 두 건(409, 기간 오류), 수정 전 `expected document not to contain element, found <p …>`로 실패.
+  같은 패널은 저장 성공(204, 새 판 없음) 뒤 바로 편집을 닫고 다시 읽기를 맡겨, 다시 읽기 전에 연 편집이 옛 판을 기준으로 삼아 다음 저장이
+  거짓 409가 될 수 있었다(CodeRabbit 범위 밖 지적). 이제 저장한 정보를 다시 읽은 뒤 편집을 닫는다. 같은 시험 파일의 "다시 읽은 뒤에만 닫음",
+  수정 전 `expected document not to contain element, found <button …>`로 실패. 이어진 CodeRabbit 지적 둘도 고쳤다: 다시 읽기를 기다리는 동안
+  취소하고 다시 연 편집을 앞선 저장이 닫지 않게 편집 세션 번호를 두고(`CoursePanel`과 같은 방식), 다시 읽기가 실패하면 정보를 비우고 다시
+  읽기를 맡겨 옛 판으로 편집을 다시 열 수 없게 했다. 시험 두 건, 수정 전 `Unable to find … "저장"`(새 편집이 닫힘)과
+  `expected document not to contain element, found <button …>`(옛 판의 "고치기")로 실패.
+
+## 99. CSV 업무 한 건 만들기의 원자성 (2026-10-23, D-105, `fvoci/policy-task-create`)
+
+사용자 결정(D-105, P-31 채택, 요지): 만들기 뒤 따로 고치는 두 단계 대신 업무 한 건에 필요한 칸을 서버가 확인하고 한 트랜잭션으로 저장한다.
+실패하면 제목만 있는 업무나 일부 관계가 남지 않는다. 응답을 잃은 뒤의 재시도도 기존 멱등 계약(요청 id)과 합쳐 중복 생성하지 않는다. 원자성의
+단위는 업무 한 건이며 CSV 전체를 한꺼번에 성공·실패시키지 않고 지금의 행별 결과 안내를 유지한다.
+
+- **무엇이 문제였나**: CSV 가져오기(37절, #56 감사 W1~W3)는 줄마다 만들기(제목만, `POST /api/items/{id}/tasks`) → 고치기(나머지 칸,
+  `PUT /api/tasks/{id}`) 두 요청이었다. 고치기가 거절되면(볼 수 없는 담당자, 시작일 > 마감일 등 서버만 아는 조건) 제목만 있는 업무가 남았고,
+  웹은 그 업무를 기억해 "제목만 만들어졌습니다"라고 알린 뒤 다시 누르면 채웠다. 고치기의 응답을 잃으면 다시 누를 때 옛 판으로 보내 자기 변경을
+  409로 받았고(`rowApplied`로 같은 내용이면 끝난 것으로 봄), 그사이 다른 사람이 고쳤으면 덮어쓰기를 물었다. 37절의 "만들기와 고치기
+  API를 쓴다"는 이 절이 대신한다.
+- **계약(만들기 확장, 새 경로 없음)**: `CreateTask`(`crates/server/src/features/tasks.rs:190`)가 고치기(`UpdateTask`)와 같은 칸을 받는다:
+  `description`·`status`·`priority`·`start_date`·`due_date`·`estimate_minutes`·`tags`·`assignee_ids`·`milestone`. 모두 생략할 수 있고 빠지면 새
+  업무의 기본값(설명 없음, 할 일, 우선순위 없음, 날짜·예상·태그·담당자 없음, 이정표 아님)이다. 그래서 제목만 보내는 기존 만들기(칸반 빠른 추가,
+  목록 아래 만들기, 홈 빠른 업무, 하위 업무, 달력)는 그대로다. 글자 수·설명 제어 문자·날짜 형식과 연도 범위·예상(음수 거절)·태그는 고치기와 같은
+  함수 `check_fields`(같은 파일 361행, 고치기도 이것을 쓰도록 옮김)로 먼저 본다. 웹 `api.createTask`(`apps/web/src/lib/api/client.ts:2789`)는
+  다섯째 인자로 제목 밖의 칸(`Omit<TaskInput, 'title'>`)을 받는다. `contracts/openapi.json`·`schema.ts`는 생성물이다.
+- **DB(0098)**: `0098_task_create_fields.sql`이 `app_create_task`를 모든 칸을 받는 서명으로 바꾼다(옛 5인자 서명은 지움, D-92). 순서:
+  권한(404·403) → **같은 요청 id 찾기(있으면 그 업무 id를 돌려주고 끝, 그 업무가 휴지통이면 `FV004`)** → 고치기(0082 `app_update_task`)와 같은 확인(상태·우선순위 값, 시작일 ≤
+  마감일, 이정표는 시작일 없음, 예상 음수 거절) → 받은 상태의 열 잠금(전에는 늘 '할 일') → 상위 업무 확인 → 항목 공유 잠금·보관 확인 → 서로
+  다른 담당자를 id 순으로 `app_check_assignee`(멤버 행 공유 잠금, 항목을 볼 수 있는지) → 번호 할당 → 모든 칸을 담은 `INSERT` 하나(완료면
+  완료 시각, 위치는 그 열의 끝) → 만들기 감사 → 담당마다 `task_assignees`와 `assign` 감사. 하나라도 실패하면 처리기의 트랜잭션이 업무·담당·
+  감사·번호를 모두 되돌린다. 첫 판은 1이다(만들기 + 고치기라면 2). id는 처리기가 `2 + assignee_ids.len()`개를 넘긴다(겹친 사람 몫은 쓰지
+  않음). PostgreSQL 17에 없는 기능은 쓰지 않았다(UUIDv7은 지금처럼 앱이 만든다).
+- **멱등(기존 계약 유지)**: 같은 `(항목, 만든 사람, request_id)`는 `tasks_request` 유일 제약과 함수 맨 앞의 찾기로 처음 만든 업무를 **지금
+  상태로** 201과 함께 돌려준다. 칸을 다시 쓰지 않으므로 응답을 잃은 재시도가 그사이 다른 사람이 고친 값을 되돌리지 않는다. 동시에 겹친 같은
+  요청은 유일 제약 위반(23505) 뒤 처리기가 한 번 다시 하여(전과 같은 `run()` 재시도) 같은 업무를 받는다. **같은 요청 id에 다른 내용**: 기존
+  계약 그대로 견주지 않고 처음 업무를 돌려준다(DB 함수 안에서는 찾기가 DB 쪽 확인(상태·우선순위 값, 날짜 순서, 이정표, 담당자)보다 앞이라 그 조건에 걸릴 내용이어도 처음 업무가 돌아온다. 처리기의 형식 확인 `check_fields`(글자 수·제어 문자·날짜 형식과 범위·음수 예상·태그)는 그보다 먼저라 전처럼 400이다). 409로 바꾸지 않았다.
+  그 요청 id의 업무를 휴지통에 넣었으면 409 `task_deleted`(`AppError::TaskDeleted`, DB `FV004`)다. 전에는 그 업무를 읽지 못해 404였고, 항목을 볼 수 없는 404(권한 확인이 찾기보다 앞)와 같아 웹이 둘을 가르지 못했다(아래 CodeRabbit (3)). 항목을 볼 수 없으면 지금도 404 `not_found`라 볼 수 없는 사람에게 업무가 있는지 드러내지 않는다.
+- **D-96 기대 사용자 머리**: 적용하지 않는다. 96절 표의 "`RetryKey`를 쓰는 만들기"와 같다: CSV 등록은 사용자가 누르는 요청이고 브라우저 초안·
+  배경 재전송이 없다. 요청 id 찾기는 만든 사람(`created_by = app_user_id()`) 범위라 계정이 바뀐 뒤의 재시도가 앞 계정의 업무를 돌려받지는 않는다(지금
+  계정의 업무로 만들어지는 것은 다른 `RetryKey` 만들기와 같다).
+- **웹(CSV)**: `TaskCsvImport.svelte`는 줄마다 모든 칸을 실은 `createTask` 하나만 보내고(90행) 고치기를 보내지 않는다. 줄 진행 상태
+  (`csv-import.ts` `RowProgress`)는 요청 id·제목·넣은 줄 내용만 남는다(업무 id·판을 들고 있을 까닭이 없어짐). 다시 누르면 다 넣은 줄은 건너뛰고,
+  아직인 줄은 같은 요청 id로 보낸다: 응답을 잃은 만들기가 서버에 반영됐으면 그 업무를 돌려받고 끝난 것으로 센다. 실패한 줄을 고쳐 다시 누르면
+  (같은 제목) 그 줄의 요청 id를 이어 쓴다(`pairRows`, 전과 같음): 거절된 만들기는 아무것도 남기지 않았으므로 고친 내용으로 새로 만들어진다.
+  응답을 잃은 줄을 고쳤다면 서버는 고치기 전 내용의 업무를 돌려주므로(같은 요청 id에 다른 내용) `rowApplied`(104행)로 견주어 다르면 "앞서 보낸
+  요청으로 이미 만들어진 업무가 이 줄 내용과 다릅니다. 그 업무에서 직접 고치세요"(`tasks_csv_already_created`)라고 알리고 그 줄은 끝난 것으로
+  둔다(다시 누르면 다음 줄부터, 같은 업무를 또 만들지 않는다). 409 `task_deleted`(그 요청 id의 업무를 지움)일 때만 새 요청 id로 되돌린다(`resetRow`). 404(항목을 잠시 볼 수 없음)·연결 오류에는 요청 id를 지킨다: 응답을 잃은 만들기가 반영됐을 수 있어, 다시 볼 수 있게 된 뒤 같은 id가 처음 업무를 돌려받는다. 그 밖의
+  실패는 줄 제목을 붙여 알린다(`tasks_csv_row_failed`, 131행. 전에는 고치기 실패만 "제목만 만들어졌습니다"로 줄 이름이 나왔다). 첫 실패에서
+  멈추고 앞 줄의 결과·"N개 등록됨, 다시 누르면 나머지를 이어서 넣습니다"·이어서 넣기 안내·새 묶음 규칙(글자를 모두 지움, 겹치는 줄 없음)은
+  그대로다(CSV 전체를 한꺼번에 처리하지 않음). 쓰지 않게 된 문구 `tasks_csv_title_only`·`tasks_csv_conflict`·`tasks_csv_resume_fill`(ko·en)과
+  `resumeCounts`의 "채울 줄" 셈은 지웠다(D-92). `csv.ts`의 미리 확인은 남는다(줄 번호와 함께 등록 전에 알리려고. 최종 판단은 서버).
+- **개발 예제(CodeRabbit 지적)**: `deploy/postgres/dev-module-seed.sql`이 지운 5인자 `app_create_task`를 불러(만들기 → `app_update_task`)
+  `cargo xtask dev --oidc`의 예제 단계가 `function … does not exist`로 멈출 뻔했다. 업무를 만드는 일곱 곳(그중 하나는 줄 반복)을 모든 칸을 실은 한 번의 만들기로
+  바꿨다(같은 값, 첫 판은 이제 1. id는 업무·만들기 감사 + 담당자 수). 이 파일은 개발 실행만 돌리고 시험이 없다(아래 NOT RUN).
+- **구현 해석(사용자 결정 밖)**:
+  - 새 경로 대신 기존 만들기를 넓혔고 칸은 생략할 수 있게 했다(제목만 보내는 호출을 위해. 옛 호출 호환을 위한 별도 경로는 없다).
+  - 원자성의 범위는 CSV 한 줄이 넣는 칸(위 목록)이다. CSV가 넣지 않는 선행 관계·체크리스트·반복은 만들기에 넣지 않았다(상위 업무는 원래
+    만들기가 받았다).
+  - 응답을 잃은 줄을 고친 경우는 덮어쓰지도 새로 만들지도 않고 알린다(위). 고친 줄에 새 요청 id를 주면 중복이, 받은 업무를 고치기로 덮으면
+    두 단계가 되살아나므로 둘 다 택하지 않았다.
+  - 줄 실패 안내에 줄 제목을 붙였다(`tasks_csv_row_failed`).
+  - 지운 업무의 재시도는 409 `task_deleted`로 했다. 기존 `AppError`의 409 + 고유 코드(`account_changed`)와 같은 모양이고, 사용자 정의
+    SQLSTATE는 FV001~FV003 다음인 `FV004`다(`AppError::from_db_function`이 바꾼다). 404에 코드만 다르게 붙이는 쪽은 `NotFound`가 늘
+    `not_found`라 새 갈래가 더 커서 택하지 않았다. 410은 이 저장소가 쓰지 않는 상태라 택하지 않았다. 찾기 범위는 전과 같은
+    `(항목, 만든 사람, request_id)`이고, 휴지통에서 되살리면 같은 요청 id가 다시 그 업무를 돌려준다. 문구 `tasks_csv_task_gone`은 "지워졌거나 볼 수
+    없습니다"에서 "지워졌습니다"로 좁혔다(ko·en).
+  - **바꾸지 않은 다른 두 단계**: 달력의 업무 만들기(`CalendarTaskDialog.svelte`, 만들기 → 마감일 고치기)와 칸반 열의 빠른 추가
+    (`TaskBoard.svelte` `quickAdd`, 만들기 → 그 열로 옮기기)도 같은 꼴이지만 D-105의 범위(CSV)가 아니고 각자 실패 뒤 안내·다시 넣기가 있어 이번에
+    바꾸지 않았다. 새 계약으로 한 요청에 담을 수 있다(후속 후보).
+  - fvoci/GroundZero#84의 "(설계 검토) 단일 API로 합칠지"는 이 결정으로 답이 났다. 화면 이탈·취소·진행 상태 보존은 이 변경 밖이라 #84에 남는다.
+- **시험(수정 전 실패 → 수정 뒤 통과)**:
+  - 서버 `crates/server/tests/tasks.rs` `a_rejected_create_leaves_no_task_and_no_relations`: 모든 칸을 실은 만들기가 멤버 아닌 담당자·시작일 >
+    마감일·시작일 있는 이정표·음수 예상으로 400이고, 매번 그 항목의 업무·담당·업무 감사 기록 수가 (0, 0, 0)이다. 그 뒤 성공한 만들기는 번호
+    `CSV-2`(거절된 만들기가 번호를 쓰지 않음)이고 (1, 2, 3). 수정 전(`d2b07ac`): `assertion left == right failed: not a member … left: 201 right:
+400`(칸을 무시하고 제목만 있는 업무를 만듦).
+  - 서버 `a_create_carries_every_field_and_a_replay_returns_the_first_task`: 모든 칸이 첫 판(1)에 들어가고(제목 공백 다듬기, 태그 합치기, 담당자),
+    같은 요청 id의 재시도는 같은 업무·판 1, 다른 사람이 고친 뒤 내용이 다른 재시도는 같은 업무를 고친 상태(할 일, 담당 없음, 판 2)로 돌려주고
+    업무는 하나, 같은 요청 넷을 동시에 보내면 모두 같은 업무·담당 둘·완료 시각, 감사 기록은 만들기·담당만큼, 받은 상태의 열에 놓인다. 수정 전:
+    `left: String("") right: "회의록 정리"`.
+  - 웹 `apps/web/tests/component/task-csv-import.test.ts`(가짜 서버가 D-105처럼 만들기 하나로 모든 칸을 저장하고 고치기는 부르면 안 됨):
+    한 줄 한 요청에 모든 칸(175행), 가운데 줄 거절 뒤 멈춤·앞 줄 결과 유지·다시 누르면 남은 줄만(203행), 응답을 잃은 만들기는 같은 요청 id로
+    다시 보내 중복 없음(227행), 거절된 줄을 고치면 같은 id로 고친 내용(247행), 응답을 잃은 줄을 고치면 알리고 중복 없음(266행), 지운 업무
+    (409 `task_deleted`)는 새 id(289행), 404에는 요청 id를 지켜 접근이 돌아온 뒤 같은 id로 처음 업무를 받음(311행), 새 묶음 규칙
+    여섯(346~448행), `matchRows`·`rowApplied`. 수정 전 소스(시험만 새것)에서 15개 중 12개 실패: 첫 시험
+    `expected "createTask" to be called 2 times, but got 1 times`(옛 화면은 첫 줄에서 고치기를 불렀다), 그 밖에 `expected [ 't1' ] to deeply
+equal [ 't1', 't2', 't3' ]` 등.
+  - CodeRabbit (3) 반영(`76b6ca4` 시험 → 수정): 서버 `a_replay_tells_a_deleted_task_from_a_lost_access` — 쓰기 멤버가 만든 뒤 항목이
+    비공개가 되면 같은 요청 id는 404 `not_found`이고 그 요청 id의 업무는 1개 그대로, 다시 공개되면 같은 id가 처음 업무(201), 그 업무를
+    휴지통에 넣으면 409 `task_deleted`(업무 수 1), 새 요청 id는 새 업무. 수정 전(`7066511` + 시험): `left: 404 right: 409`(지운 업무의 재시도가
+    404라 볼 수 없음과 같았다. 접근 부분은 서버가 이미 맞았고 중복은 웹이 404에 새 id를 준 탓이었다). 웹 289·311행 — 수정 전 둘 다 실패:
+    `Expected … "A" 업무가 지워졌습니다 … Received: A: 등록하지 못했습니다`(409를 몰라 새 id를 주지 않음), `Expected … A: 등록하지 못했습니다
+… Received: "A" 업무가 지워졌거나 볼 수 없습니다. 다시 누르면 새로 만듭니다`(404에 새 id를 줌).
+- **실행(2026-10-23, `1e2aed0`와 같은 코드)**: `cargo xtask check` PASS(포맷·clippy·단위·계약·라이선스·svelte-check·웹 시험 전체),
+  `cargo xtask test --oidc` PASS(격리 Compose, 새 서버 시험 둘 포함, `supabase_*`는 그 명령의 NOT RUN 안내대로 빠짐). 수정 전 증거는 `d2b07ac`에
+  시험만 얹은 `cargo xtask test`(위 두 서버 시험 FAILED)와 옛 화면 소스에 새 웹 시험을 돌린 `vitest`(12 실패)다.
+  CI(PR #98, `deaeca9`·`ed4914b`): check·integration·oidc·supabase·licenses·rhwp 모두 pass(Supabase 구성은 CI에서만 돌렸다).
+  `fvoci/sql-policy`(#99 병합 `f8e0a75`)를 `7066511`로 합친 뒤(충돌 없음, 생성물 다시 만들어도 같음) CodeRabbit (3) 반영 머리 `848249b`에서
+  `cargo xtask check` PASS, `cargo xtask test --oidc` PASS(새 서버 시험 셋 포함).
+  `fvoci/sql-policy`(#100 병합 `23445db`)를 `e61fee7`로 다시 합친 뒤(충돌 없음, 생성물 같음. #100이 항목 고치기에 `base_version`을 받게 해 새 시험의 비공개
+  전환에 지금 판을 실음) `cargo xtask check` PASS, `cargo xtask test --oidc` PASS. CI `a577965` 모두 pass.
+- **CodeRabbit(`deaeca9` 검토, 지적 2)**: (1) 개발 예제의 옛 서명 호출: 맞는 지적이라 위처럼 고쳤다. (2) 처리기에서 `check_fields`보다 먼저
+  요청 id를 찾아 형식이 틀린 재시도도 처음 업무를 돌려주라: 받지 않았다. 재시도는 처음 요청과 같은 본문이라 형식 확인을 통과하고, 형식 확인을
+  먼저 하는 것은 이 변경 전 처리기(`validate_title`이 DB 호출 앞)와 같은 기존 계약이며 찾기를 처리기로 끌어올리면 DB 함수 안의 찾기와 둘이
+  된다(위 「멱등」). (3, `ed4914b` 검토의 diff 밖 Minor) 만들기 404면 늘 `resetRow`로 새 요청 id를 주므로, 응답을 잃은 줄을 다시 보낼 때
+  항목 접근이 잠시 막혀(멤버에서 빠짐·비공개) 404가 나고 접근이 돌아온 뒤 다시 누르면 같은 줄이 둘이 될 수 있었다. 처음에는 남는 위험으로
+  적었으나 coordinator가 D-105(응답 유실 뒤 재시도에도 중복 없음)의 범위라고 판단해 이 PR에서 고쳤다: 서버는 지운 업무의 재시도를 409
+  `task_deleted`로 알리고(위 「멱등」), 웹은 그때만 새 요청 id를 준다(위 「웹」).
+  (4, `291bf60` 검토의 diff 밖 Minor) `rowApplied`가 제목을 다듬지 않고 견주어 " 회의 " 줄을 다르다고 알린다: 받지 않았다. CSV 읽기
+  `csvRecords`(`apps/web/src/lib/csv.ts` 19·39행)가 따옴표 안의 칸까지 앞뒤 공백을 지워 줄의 제목은 이미 서버(`validate_title`)와 같은 값이고, 이
+  비교는 main(#56)과 같다. 이를 묶는 시험을 더했다(`task-csv-import.test.ts` "treats a task stored with the trimmed title as this row": 따옴표 안
+  공백을 두른 제목을 지운 제목으로 보내고, 응답을 잃은 뒤 돌려받은 업무를 이 줄로 본다).
+  (5, `dd33cce` 검토) `api.createTask`의 `fields`를 `Partial`로: 받지 않았다. `fields`를 넘기는 호출은 CSV 하나이고 타입이 모든 칸을 요구해야 CSV가
+  칸을 빠뜨렸을 때 서버 기본값으로 조용히 저장되지 않고 `pnpm check`가 막는다. 제목만 보내는 호출은 `fields`를 넘기지 않는다.
+- **NOT RUN**: 로컬 `cargo xtask test --supabase`(CI의 supabase job은 pass), 개발 예제 SQL 실행(`cargo xtask dev --oidc`만 실행하며 작업자는
+  돌리지 않는다. coordinator의 마지막 개발 실행에서 확인), 실제 브라우저로 CSV 등록(coordinator가 마지막에 한 번 돌린다), 칸반 빠른 추가·달력
+  만들기의 두 단계(바꾸지 않음).
+
 ## 참고 자료
 
 - [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict.html)

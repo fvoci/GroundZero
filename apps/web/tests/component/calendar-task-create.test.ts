@@ -41,6 +41,7 @@ function itemView(id: string, title: string, over: Partial<ItemView> = {}): Item
     updated_at: '2026-10-21T00:00:00Z',
     status: 'active',
     is_template: false,
+    version: 1,
     starts_on: null,
     ends_on: null,
     ...over,

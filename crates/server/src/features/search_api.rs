@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use axum::Json;
 use axum::extract::{Query, State};
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -18,7 +19,7 @@ use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::member_role;
 use crate::http::AppState;
 use crate::ids::{UserId, WorkspaceId};
-use crate::search::SearchClient;
+use crate::search::{SearchClient, day_number};
 
 /// 한 번에 돌려주는 결과 수.
 const MAX_RESULTS: usize = 20;
@@ -47,10 +48,13 @@ pub struct SearchQuery {
     pub status: Option<String>,
     /// 담당자(`me` 또는 사용자 id). 주면 업무만 나온다.
     pub assignee: Option<String>,
-    /// 날짜 범위 시작(YYYY-MM-DD): 업무는 기한(없으면 시작일), 일정은 시작일, 기록은 발생일(없으면 고친 날), 그 밖은 고친 날.
+    /// 날짜 범위 시작(YYYY-MM-DD). 날짜만 있는 값(업무 기한(없으면 시작일), 종일 일정의 시작일, 기록의 발생일)은 그 날짜로,
+    /// 실제 시각(문서·항목·파일의 고친 때, 발생일 없는 기록의 고친 때, 시각 일정의 시작)은 `tz`의 그날 0시부터 비교한다.
     pub from: Option<String>,
-    /// 날짜 범위 끝(YYYY-MM-DD, 포함).
+    /// 날짜 범위 끝(YYYY-MM-DD, 포함). 실제 시각은 `tz`의 다음 날 0시 전까지.
     pub to: Option<String>,
+    /// 날짜 범위의 하루를 정하는 IANA 시간대(예: `Asia/Seoul`). 없으면 저장한 시간대, 그것도 없으면 UTC. 모르는 이름은 400.
+    pub tz: Option<String>,
     /// 작성자(`me` 또는 사용자 id): 그 사람이 만든 것만(각 대상의 `created_by`). 볼 수 있는 범위는 넓히지 않는다.
     pub author: Option<String>,
     /// `true`면 제목에서만 찾는다(본문·첨부 글자·번호는 보지 않는다).
@@ -63,8 +67,12 @@ struct Filters {
     module: Option<Uuid>,
     status: Option<String>,
     assignee: Option<Uuid>,
+    /// 날짜만 있는 값과 비교하는 범위(끝 포함).
     from: Option<time::Date>,
     to: Option<time::Date>,
+    /// 실제 시각과 비교하는 범위: `from`의 그날 시작부터 `to` 다음 날 시작 전까지(보는 사람 시간대, `day_bounds`).
+    start: Option<OffsetDateTime>,
+    end: Option<OffsetDateTime>,
     author: Option<Uuid>,
 }
 
@@ -73,9 +81,14 @@ fn parse_day(raw: Option<&str>, name: &str) -> Result<Option<time::Date>, AppErr
         return Ok(None);
     };
     let format = time::macros::format_description!("[year]-[month]-[day]");
-    time::Date::parse(raw.trim(), &format)
-        .map(Some)
-        .map_err(|_| AppError::BadRequest(format!("{name} must be YYYY-MM-DD")))
+    let day = time::Date::parse(raw.trim(), &format)
+        .map_err(|_| AppError::BadRequest(format!("{name} must be YYYY-MM-DD")))?;
+    // 그날 시작과 다음 날 시작을 시각으로 만들 수 있는 날만(`day_bounds`): 9999-12-31은 다음 날이 `time` 범위 밖이고,
+    // 1년 전은 시간대에 따라 PostgreSQL 시각 범위를 벗어날 수 있다.
+    if day.year() < 1 || day.next_day().is_none() {
+        return Err(AppError::BadRequest(format!("{name} is out of range")));
+    }
+    Ok(Some(day))
 }
 
 fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
@@ -101,12 +114,47 @@ fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
         assignee,
         from: parse_day(query.from.as_deref(), "from")?,
         to: parse_day(query.to.as_deref(), "to")?,
+        start: None,
+        end: None,
         author,
     })
 }
 
-fn day_number(day: time::Date) -> i32 {
-    day.year() * 10_000 + i32::from(u8::from(day.month())) * 100 + i32::from(day.day())
+/// 날짜 범위를 보는 사람 시간대의 시각 범위로 바꾼다(D-101). 시작은 `from`의 그날 시작, 끝은 `to` 다음 날의 시작(제외)이라
+/// 여름시간으로 23·25시간인 날도 그대로 맞다. 색인 경로와 대체 경로가 이 값을 함께 쓴다. 시간대를 보내지 않으면 저장한
+/// 시간대(D-81), 그것도 없으면 UTC. 모르는 시간대는 400.
+async fn day_bounds(tx: &mut UserTx, f: &mut Filters, tz: Option<&str>) -> Result<(), AppError> {
+    if f.from.is_none() && f.to.is_none() {
+        return Ok(());
+    }
+    let tz: String = match tz.map(str::trim).filter(|t| !t.is_empty()) {
+        Some(tz) => tz.to_owned(),
+        None => sqlx::query_scalar(
+            "SELECT coalesce(nullif((SELECT time_zone FROM user_settings WHERE user_id = app_user_id()), ''), 'UTC')",
+        )
+        .fetch_one(tx.conn())
+        .await?,
+    };
+    sqlx::query("SELECT app_check_timezone($1)")
+        .bind(&tz)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    // 하루의 시작은 그날 0시가 처음 오는 시점이다(0시가 두 번 오는 날은 앞의 0시, 없는 날은 건너뛴 직후). 시간 기록의 날
+    // 경계(`time_tracking.rs`, 감사 S21)와 같은 식.
+    let (start, end): (Option<OffsetDateTime>, Option<OffsetDateTime>) = sqlx::query_as(
+        "SELECT coalesce(app_local_instant($1::date::timestamp, $3), $1::date::timestamp AT TIME ZONE $3),
+                coalesce(app_local_instant(($2::date + 1)::timestamp, $3), ($2::date + 1)::timestamp AT TIME ZONE $3)",
+    )
+    .bind(f.from)
+    .bind(f.to)
+    .bind(&tz)
+    .fetch_one(tx.conn())
+    .await
+    .map_err(AppError::from_db_function)?;
+    f.start = start;
+    f.end = end;
+    Ok(())
 }
 
 /// Meilisearch 필터에 더할 조건(값은 UUID·고정 낱말·숫자뿐이라 따옴표 밖으로 나갈 수 없다).
@@ -121,11 +169,26 @@ fn meili_filters(f: &Filters) -> String {
     if let Some(a) = f.assignee {
         out.push_str(&format!(" AND assignee_ids = \"{a}\""));
     }
-    if let Some(d) = f.from {
-        out.push_str(&format!(" AND day >= {}", day_number(d)));
+    // 한 문서에는 `at`(실제 시각)·`date`(날짜만) 가운데 하나만 있다. 대체 경로와 같은 조건.
+    let mut at = Vec::new();
+    let mut date = Vec::new();
+    if let (Some(start), Some(d)) = (f.start, f.from) {
+        at.push(format!("at >= {}", start.unix_timestamp()));
+        date.push(format!("date >= {}", day_number(d)));
     }
-    if let Some(d) = f.to {
-        out.push_str(&format!(" AND day <= {}", day_number(d)));
+    if let (Some(end), Some(d)) = (f.end, f.to) {
+        at.push(format!("at < {}", end.unix_timestamp()));
+        date.push(format!("date <= {}", day_number(d)));
+    }
+    if !at.is_empty() {
+        out.push_str(&format!(
+            " AND (({}) OR ({}))",
+            at.join(" AND "),
+            date.join(" AND ")
+        ));
+    }
+    if let Some(a) = f.author {
+        out.push_str(&format!(" AND created_by = \"{a}\""));
     }
     out
 }
@@ -236,28 +299,6 @@ async fn visible_items(tx: &mut UserTx, ids: &[Uuid]) -> Result<HashSet<Uuid>, A
     Ok(rows.into_iter().collect())
 }
 
-/// 후보 가운데 그 사람이 만든 것(각 대상의 `created_by`). 호출자 권한(RLS)으로 읽으므로 볼 수 없는 행은 나오지 않는다.
-async fn authored(
-    tx: &mut UserTx,
-    author: Uuid,
-    candidates: &[(String, Uuid)],
-) -> Result<HashSet<(String, Uuid)>, AppError> {
-    let ids: Vec<Uuid> = candidates.iter().map(|(_, id)| *id).collect();
-    let rows: Vec<(String, Uuid)> = sqlx::query_as(
-        "SELECT 'document', id FROM documents WHERE id = ANY($2) AND created_by = $1
-         UNION ALL SELECT 'task', id FROM tasks WHERE id = ANY($2) AND created_by = $1
-         UNION ALL SELECT 'item', id FROM items WHERE id = ANY($2) AND created_by = $1
-         UNION ALL SELECT 'event', id FROM events WHERE id = ANY($2) AND created_by = $1
-         UNION ALL SELECT 'file', id FROM files WHERE id = ANY($2) AND created_by = $1
-         UNION ALL SELECT 'record', id FROM item_records WHERE id = ANY($2) AND created_by = $1",
-    )
-    .bind(author)
-    .bind(&ids)
-    .fetch_all(tx.conn())
-    .await?;
-    Ok(rows.into_iter().collect())
-}
-
 /// 파일이 붙은 문서(파일 결과에서 문서로 열 때).
 async fn file_document(tx: &mut UserTx, kind: &str, id: Uuid) -> Result<Option<Uuid>, AppError> {
     if kind != "file" {
@@ -310,14 +351,14 @@ pub async fn search(
         )));
     }
     let kinds = parse_kinds(query.kinds.as_deref())?;
-    let wanted = filters(&query, user)?;
+    let mut wanted = filters(&query, user)?;
+    let mut tx = state.db.begin_as(user).await?;
+    day_bounds(&mut tx, &mut wanted, query.tz.as_deref()).await?;
     let Some(client) = &state.search else {
-        let mut tx = state.db.begin_as(user).await?;
         let results = fallback(&mut tx, q, query.workspace_id, &kinds, &wanted).await?;
         tx.commit().await?;
         return Ok(Json(results));
     };
-    let mut tx = state.db.begin_as(user).await?;
     let filter = format!(
         "({}){}",
         scope_filter(&mut tx, query.workspace_id, &kinds).await?,
@@ -336,6 +377,7 @@ pub async fn search(
 }
 
 /// Meilisearch 후보를 쪽마다 받아 볼 수 있는 것만 20개까지 모은다. 검색 서비스가 처음부터 응답하지 않으면 `None`.
+/// 작성자·날짜 등 조건은 `filter`에 이미 들어 있고(D-102), 여기서는 호출자 권한으로 볼 수 있는지만 다시 본다(P-14).
 /// Meilisearch를 기다리는 동안 DB 트랜잭션을 열어 두지 않는다.
 async fn indexed(
     state: &AppState,
@@ -346,7 +388,7 @@ async fn indexed(
     title_only: bool,
     wanted: &Filters,
 ) -> Result<Option<Vec<SearchResult>>, AppError> {
-    let (author, module) = (wanted.author, wanted.module);
+    let module = wanted.module;
     let mut results = Vec::new();
     for page in 0..MAX_PAGES {
         let hits = match client
@@ -380,10 +422,6 @@ async fn indexed(
             .collect();
         let mut tx = state.db.begin_as(user).await?;
         let allowed = visible(&mut tx, &candidates).await?;
-        let made = match author {
-            Some(author) => Some(authored(&mut tx, author, &candidates).await?),
-            None => None,
-        };
         // 항목 id·모듈은 그 항목을 볼 수 있는 사람에게만 쓴다(감사 델타 SD4). 공유로만 문서·첨부를 보는 사람에게는 항목
         // id를 주지 않고, 모듈로 거를 때는 대체(DB) 경로처럼 그 결과를 내지 않는다.
         let item_ids: Vec<Uuid> = hits
@@ -399,7 +437,6 @@ async fn indexed(
             let item = parse_uuid(h.item_id.as_deref()).filter(|i| seen_items.contains(i));
             if results.len() == MAX_RESULTS
                 || !allowed.contains(&key)
-                || made.as_ref().is_some_and(|m| !m.contains(&key))
                 || (module.is_some() && h.item_id.is_some() && item.is_none())
             {
                 continue;
@@ -453,47 +490,50 @@ async fn fallback(
     let rows: Vec<Row> = sqlx::query_as(
         // 항목 id는 그 항목을 볼 수 있는 사람에게만 준다(공유로만 문서·첨부를 보는 사람에게 비공개 항목을 드러내지 않는다,
         // 문서 조회와 같은 규칙). 감사 델타 SD4.
+        // 날짜: 실제 시각(`at`)은 보는 사람 시간대의 범위($9·$10)로, 날짜만 있는 값(`on_day`)은 날짜($7·$8)로 본다. 한 행에는
+        // 둘 중 하나만 있다(색인 `app_system_search_payload`와 같은 규칙, D-101).
         "SELECT kind, id, title, workspace_id,
                 CASE WHEN r.item_id IS NOT NULL AND app_item_access(r.item_id) IS NOT NULL THEN r.item_id END
          FROM (
            SELECT 'document' AS kind, d.id, d.title, d.workspace_id, d.item_id, d.updated_at,
                   (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status,
-                  NULL::uuid[] AS assignees, d.updated_at::date AS day, d.created_by
+                  NULL::uuid[] AS assignees, d.updated_at AS at, NULL::date AS on_day, d.created_by
            FROM documents d WHERE d.title ILIKE $1 AND d.deleted_at IS NULL
            UNION ALL
            SELECT 'task', t.id, t.title, t.workspace_id, t.item_id, t.updated_at,
                   (SELECT module_id FROM items WHERE id = t.item_id), t.status,
-                  ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id), coalesce(t.due_date, t.start_date),
-                  t.created_by
+                  ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id), NULL,
+                  coalesce(t.due_date, t.start_date), t.created_by
            FROM tasks t WHERE t.title ILIKE $1 AND t.deleted_at IS NULL
            UNION ALL
            SELECT 'item', i.id, i.title, i.workspace_id, NULL, i.updated_at, i.module_id, NULL, NULL,
-                  i.updated_at::date, i.created_by
+                  i.updated_at, NULL, i.created_by
            FROM items i WHERE i.title ILIKE $1 AND i.deleted_at IS NULL
            UNION ALL
            SELECT 'event', e.id, e.title, e.workspace_id, e.item_id, e.updated_at,
                   (SELECT module_id FROM items WHERE id = e.item_id), NULL, NULL,
-                  coalesce(e.start_date, (e.starts_at AT TIME ZONE e.timezone)::date), e.created_by
+                  e.starts_at, e.start_date, e.created_by
            FROM events e WHERE e.title ILIKE $1 AND e.deleted_at IS NULL
            UNION ALL
            SELECT 'file', f.id, f.name, f.workspace_id, coalesce(f.item_id, d.item_id), f.updated_at,
                   (SELECT module_id FROM items WHERE id = coalesce(f.item_id, d.item_id)), NULL, NULL,
-                  f.updated_at::date, f.created_by
+                  f.updated_at, NULL, f.created_by
            FROM files f LEFT JOIN documents d ON d.id = f.document_id
            WHERE f.name ILIKE $1 AND f.deleted_at IS NULL
            UNION ALL
            SELECT 'record', rc.id, rc.title, rc.workspace_id, rc.item_id, rc.updated_at,
                   (SELECT module_id FROM items WHERE id = rc.item_id), NULL, NULL,
-                  coalesce(rc.occurred_on, rc.updated_at::date), rc.created_by
+                  CASE WHEN rc.occurred_on IS NULL THEN rc.updated_at END, rc.occurred_on, rc.created_by
            FROM item_records rc WHERE rc.title ILIKE $1
          ) r
          WHERE r.kind = ANY($2) AND ($3::uuid IS NULL OR r.workspace_id = $3)
            AND ($4::uuid IS NULL OR r.module_id = $4)
            AND ($5::text IS NULL OR r.status = $5)
            AND ($6::uuid IS NULL OR $6 = ANY (r.assignees))
-           AND ($7::date IS NULL OR r.day >= $7)
-           AND ($8::date IS NULL OR r.day <= $8)
-           AND ($9::uuid IS NULL OR r.created_by = $9)
+           AND (($7::date IS NULL AND $8::date IS NULL)
+                OR (r.at >= coalesce($9::timestamptz, '-infinity') AND r.at < coalesce($10::timestamptz, 'infinity'))
+                OR (r.on_day >= coalesce($7::date, '-infinity') AND r.on_day <= coalesce($8::date, 'infinity')))
+           AND ($11::uuid IS NULL OR r.created_by = $11)
          ORDER BY r.updated_at DESC LIMIT 60",
     )
     .bind(&pattern)
@@ -504,6 +544,8 @@ async fn fallback(
     .bind(wanted.assignee)
     .bind(wanted.from)
     .bind(wanted.to)
+    .bind(wanted.start)
+    .bind(wanted.end)
     .bind(wanted.author)
     .fetch_all(tx.conn())
     .await?;
@@ -528,4 +570,58 @@ async fn fallback(
         });
     }
     Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 날짜 범위는 그날 시작과 다음 날 시작을 시각으로 만든다. 다음 날이 없는 날(9999-12-31)이나 1년 전은 그 시각을
+    /// 나타낼 수 없어(`time`·PostgreSQL 범위 밖) 500이 되던 것을 400으로 거절한다(CodeRabbit #99).
+    #[test]
+    fn days_without_a_representable_boundary_are_rejected() {
+        for raw in ["9999-12-31", "0000-12-31", "-0001-01-01"] {
+            assert!(
+                matches!(parse_day(Some(raw), "to"), Err(AppError::BadRequest(_))),
+                "{raw}"
+            );
+        }
+        for raw in ["9999-12-30", "0001-01-01", "2026-03-08"] {
+            assert!(matches!(parse_day(Some(raw), "to"), Ok(Some(_))), "{raw}");
+        }
+    }
+
+    #[test]
+    fn date_ranges_compare_instants_and_dates_separately() {
+        let day = |s: &str| {
+            time::Date::parse(s, time::macros::format_description!("[year]-[month]-[day]")).ok()
+        };
+        let at = |s: i64| OffsetDateTime::from_unix_timestamp(s).ok();
+        let author = Uuid::from_u128(7);
+        let both = Filters {
+            from: day("2026-03-08"),
+            to: day("2026-03-08"),
+            start: at(1_772_946_000),
+            end: at(1_773_028_800),
+            author: Some(author),
+            ..Filters::default()
+        };
+        assert_eq!(
+            meili_filters(&both),
+            format!(
+                " AND ((at >= 1772946000 AND at < 1773028800) OR (date >= 20260308 AND date <= 20260308)) \
+                 AND created_by = \"{author}\""
+            )
+        );
+        let from_only = Filters {
+            from: day("2026-03-09"),
+            start: at(1_773_028_800),
+            ..Filters::default()
+        };
+        assert_eq!(
+            meili_filters(&from_only),
+            " AND ((at >= 1773028800) OR (date >= 20260309))"
+        );
+        assert_eq!(meili_filters(&Filters::default()), "");
+    }
 }
