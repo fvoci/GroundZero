@@ -6,6 +6,7 @@
 
   import type { SearchFilters, SearchKind, SearchResultView, TaskStatus } from '$lib/api/client';
   import { api } from '$lib/api/client';
+  import { displaySettings } from '$lib/display';
   import { STATUS_LABEL } from '$lib/features/tasks/labels';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
@@ -143,6 +144,8 @@
     if (mine) f.assignee = 'me';
     if (from !== '') f.from = from;
     if (to !== '') f.to = to;
+    // 날짜의 하루는 설정의 시간대로 서버가 정한다(D-101). 화면은 시간대만 보내고 경계를 계산하지 않는다.
+    if (from !== '' || to !== '') f.tz = displaySettings().timeZone;
     if (author !== 'any') f.author = author;
     if (moduleId !== 'any') f.moduleId = moduleId;
     if (titleOnly) f.titleOnly = true;

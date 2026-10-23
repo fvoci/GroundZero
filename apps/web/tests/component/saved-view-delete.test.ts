@@ -21,11 +21,17 @@ const item: ItemView = {
   updated_at: '2026-10-21T00:00:00Z',
   status: 'active',
   is_template: false,
+  version: 1,
   starts_on: null,
   ends_on: null,
 };
 
-const view = { id: 'v1', name: '내 보기', config: { view: 'list', sort: 'position', filter: {} } };
+const view = {
+  id: 'v1',
+  name: '내 보기',
+  config: { view: 'list', sort: 'position', filter: {} },
+  version: 1,
+};
 
 describe('saved view delete', () => {
   beforeEach(async () => {

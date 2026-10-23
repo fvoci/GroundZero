@@ -147,7 +147,7 @@ async fn private_items_open_to_their_members_only() {
     // 리더는 그 항목을 볼 수 있는 사람만.
     let profile_uri = format!("/api/items/{it}/profile");
     let profile = |leader: &TestUser| {
-        json!({ "leader_id": leader.id.0, "goal": "출시", "scope": "웹",
+        json!({ "base_version": 1, "leader_id": leader.id.0, "goal": "출시", "scope": "웹",
         "starts_on": "2026-10-01", "ends_on": "2026-12-31", "status": "active", "details": {} })
     };
     assert_eq!(
@@ -275,7 +275,13 @@ async fn profile_fields_follow_the_module_kind() {
         let app = app.clone();
         let admin = admin.clone();
         let uri = format!("/api/items/{it}/profile");
-        async move { send(&app, Method::PUT, &uri, Some(&admin), Some(body)).await }
+        async move {
+            // 이 시험은 판 검사가 아니라 칸 확인을 본다: 지금 판으로 보낸다.
+            let mut body = body;
+            body["base_version"] =
+                send(&app, Method::GET, &uri, Some(&admin), None).await.json["version"].clone();
+            send(&app, Method::PUT, &uri, Some(&admin), Some(body)).await
+        }
     };
     let base = |details: Value| {
         json!({ "leader_id": null, "goal": "", "scope": "", "starts_on": null,
@@ -714,12 +720,17 @@ async fn group_changes_and_leaving_end_item_roles() {
     let task_uri = format!("/api/tasks/{}", task.json["id"].as_str().unwrap());
     // 리더와 담당으로 정하고, 둘 다 정해졌는지 돌려준다.
     let take_roles = || async {
+        // 리더가 지워질 때마다 판이 오르므로 지금 판으로 보낸다.
+        let version = send(&app, Method::GET, &profile_uri, Some(&owner), None)
+            .await
+            .json["version"]
+            .clone();
         let p = send(
             &app,
             Method::PUT,
             &profile_uri,
             Some(&owner),
-            Some(json!({
+            Some(json!({ "base_version": version,
             "leader_id": grouped.id.0, "goal": "", "scope": "", "starts_on": null, "ends_on": null,
             "status": "active", "details": {} })),
         )
@@ -944,4 +955,178 @@ async fn a_retried_copy_waiting_on_the_first_returns_that_copy() {
     )
     .await;
     assert_eq!(tasks.json.as_array().unwrap().len(), 1, "{:?}", tasks.json);
+}
+
+/// D-104(감사 P-30): 항목 정보 패널 저장(`PUT /api/items/{id}/profile`의 리더·목표·범위·기간·상태·종류별 정보)도 읽은
+/// 판을 확인한다. 판은 제목·설명 저장의 판과 따로라 서로 409를 내지 않는다. 리더는 멤버에서 빠져 지워질 때도(다른
+/// 경로의 쓰기) 판이 올라, 그 전에 연 화면이 지워진 리더를 되살리지 못한다.
+#[tokio::test]
+async fn stale_profile_saves_are_refused_with_the_latest() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "정보 판").await;
+    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "writer").await;
+    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "writer").await;
+    let m = module(&app, &admin, &ws, "research", "PVER").await;
+    let it = item(&app, &owner, &m, "연구").await;
+    let uri = format!("/api/items/{it}/profile");
+    let body = |base: i64, goal: &str, leader: Option<&TestUser>| {
+        json!({ "base_version": base, "leader_id": leader.map(|u| u.id.0), "goal": goal, "scope": "",
+            "starts_on": null, "ends_on": null, "status": "active", "details": { "field": goal } })
+    };
+
+    let b = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(1, "B 목표", None)),
+    )
+    .await;
+    assert_eq!(b.status, StatusCode::NO_CONTENT, "{:?}", b.json);
+    let a = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(1, "A 목표", None)),
+    )
+    .await;
+    assert_eq!(a.status, StatusCode::CONFLICT, "{:?}", a.json);
+    assert_eq!(a.json["error"], "conflict");
+    assert_eq!(a.json["current"]["goal"], "B 목표");
+    assert_eq!(a.json["current"]["details"]["field"], "B 목표");
+    assert_eq!(a.json["current"]["version"], 2);
+    let now = send(&app, Method::GET, &uri, Some(&owner), None).await.json;
+    assert_eq!(now["goal"], "B 목표");
+    assert_eq!(now["version"], 2);
+    // 같은 내용을 다시 보내면(응답을 잃은 B) 바뀔 것이 없어 성공하고 판도 그대로다.
+    let retry = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(1, "B 목표", None)),
+    )
+    .await;
+    assert_eq!(retry.status, StatusCode::NO_CONTENT, "{:?}", retry.json);
+
+    // 제목·설명 저장은 이 판을 올리지 않는다.
+    let details = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{it}"),
+        Some(&owner),
+        Some(json!({ "base_version": 1, "title": "연구 2", "description": "설명" })),
+    )
+    .await;
+    assert_eq!(details.status, StatusCode::OK, "{:?}", details.json);
+    let led = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(2, "B 목표", Some(&mate))),
+    )
+    .await;
+    assert_eq!(
+        led.status,
+        StatusCode::BAD_REQUEST,
+        "비공개 항목을 볼 수 없는 리더: {:?}",
+        led.json
+    );
+    let members = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{it}/members"),
+        Some(&owner),
+        Some(json!({ "user_ids": [mate.id.0], "group_ids": [] })),
+    )
+    .await;
+    assert_eq!(members.status, StatusCode::NO_CONTENT, "{:?}", members.json);
+    let led = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(2, "B 목표", Some(&mate))),
+    )
+    .await;
+    assert_eq!(led.status, StatusCode::NO_CONTENT, "{:?}", led.json);
+    let now = send(&app, Method::GET, &uri, Some(&owner), None).await.json;
+    assert_eq!(now["leader"]["user_id"], json!(mate.id.0));
+    assert_eq!(now["version"], 3);
+
+    // 멤버에서 빼면 리더가 지워지고 판이 오른다. 그 전(판 3)에 연 화면은 리더를 되살리지 못한다.
+    let removed = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{it}/members"),
+        Some(&owner),
+        Some(json!({ "user_ids": [], "group_ids": [] })),
+    )
+    .await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT, "{:?}", removed.json);
+    let now = send(&app, Method::GET, &uri, Some(&owner), None).await.json;
+    assert!(now["leader"].is_null(), "{now:?}");
+    assert_eq!(now["version"], 4);
+    let revive = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(3, "B 목표", Some(&mate))),
+    )
+    .await;
+    assert_eq!(revive.status, StatusCode::CONFLICT, "{:?}", revive.json);
+    assert!(revive.json["current"]["leader"].is_null());
+}
+
+/// D-104: 판 확인은 SQL 함수가 마지막으로 보장한다. 읽은 판을 NULL로 보내도(앱 역할로 직접 불러도) 확인을 건너뛰어
+/// 덮어쓰지 않고 'conflict'다. 바꿀 것이 없는 재시도는 그대로 'updated'이고 아무것도 쓰지 않는다.
+#[tokio::test]
+async fn a_null_base_version_does_not_skip_the_item_version_checks() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "판 없음").await;
+    let m = module(&app, &admin, &ws, "project", "PNUL").await;
+    let it: uuid::Uuid = item(&app, &admin, &m, "원래 제목").await.parse().unwrap();
+
+    let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    let details: String =
+        sqlx::query_scalar("SELECT app_update_item($1, NULL::integer, '바뀐 제목', '', NULL, $2)")
+            .bind(it)
+            .bind(fvoci_server::db::new_ids(2))
+            .fetch_one(tx.conn())
+            .await
+            .unwrap();
+    let profile: String = sqlx::query_scalar(
+        "SELECT app_set_item_profile($1, NULL::integer, NULL, '바뀐 목표', '', NULL, NULL, 'active', '{}', $2)",
+    )
+    .bind(it)
+    .bind(fvoci_server::db::new_ids(2))
+    .fetch_one(tx.conn())
+    .await
+    .unwrap();
+    assert_eq!(
+        (details.as_str(), profile.as_str()),
+        ("conflict", "conflict")
+    );
+    let same: String =
+        sqlx::query_scalar("SELECT app_update_item($1, NULL::integer, '원래 제목', '', NULL, $2)")
+            .bind(it)
+            .bind(fvoci_server::db::new_ids(2))
+            .fetch_one(tx.conn())
+            .await
+            .unwrap();
+    assert_eq!(same, "updated");
+    let row: (String, i32, String, i32) =
+        sqlx::query_as("SELECT title, version, goal, profile_version FROM items WHERE id = $1")
+            .bind(it)
+            .fetch_one(tx.conn())
+            .await
+            .unwrap();
+    assert_eq!(row, ("원래 제목".to_owned(), 1, String::new(), 1));
 }

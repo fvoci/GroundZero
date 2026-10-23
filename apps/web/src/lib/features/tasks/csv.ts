@@ -6,8 +6,8 @@ import { m } from '$lib/paraglide/messages.js';
 
 /** 업무 제목 한도(서버 기본 FVOCI_MAX_TITLE_CHARS). */
 const MAX_TITLE = 200;
-// 서버가 고치기에서 거부하는 값(crates/server/src/features/tasks.rs). 만들기는 제목만 보내 먼저 성공하므로, 여기서 놓치면
-// 제목만 있는 업무가 남는다. 글자 수는 서버처럼 문자(코드 포인트)로 센다.
+// 서버가 만들기에서 거부하는 값(crates/server/src/features/tasks.rs). 서버가 최종 판단하고 거절된 줄은 아무것도 남기지
+// 않지만(D-105), 등록 전에 줄 번호와 함께 알리려고 같은 규칙으로 미리 본다. 글자 수는 서버처럼 문자(코드 포인트)로 센다.
 /** 설명 글자 수(MAX_DESCRIPTION_CHARS). */
 const MAX_DESCRIPTION = 10_000;
 /** 태그 수(MAX_TAGS, 같은 태그를 합치기 전)와 태그 하나의 글자 수(MAX_TAG_CHARS). */

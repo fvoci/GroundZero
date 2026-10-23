@@ -136,6 +136,11 @@ describe('live editor that cannot keep unconfirmed edits', () => {
     expect(opened).toHaveLength(1);
     expect(screen.getByText(/다시 연결하면 새 내용으로 엽니다/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'stub-type' })).toBeTruthy();
+    // 아직 남길 수 없으면 다시 연결해도 바꾸지 않는다(사용자 결정 2026-10-22). 남길 수 있게 되면 남기고 다시 연다.
+    await fireEvent.click(screen.getByRole('button', { name: '다시 연결' }));
+    expect(opened).toHaveLength(1);
+    expect(screen.getByRole('alert').textContent).toMatch(/이 브라우저에도 남기지 못했습니다/);
+    vi.restoreAllMocks();
     await fireEvent.click(screen.getByRole('button', { name: '다시 연결' }));
     expect(opened).toHaveLength(2);
     expect(screen.queryByRole('alert')).toBeNull();

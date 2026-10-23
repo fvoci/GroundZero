@@ -3,7 +3,13 @@
   // 멤버는 비공개 항목을 워크스페이스 역할 안에서 볼 수 있는 사람이다(D-20 공유). 정하는 것은 항목 소유 권한자.
   import type { ModuleKind } from '@fvoci/api-client';
 
-  import type { AssigneeView, ItemProfileView, ItemStatus, ItemView } from '$lib/api/client';
+  import type {
+    AssigneeView,
+    ItemProfileView,
+    ItemStatus,
+    ItemView,
+    PersonRefView,
+  } from '$lib/api/client';
   import { api, ITEM_STATUSES } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
@@ -14,7 +20,8 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
-  import { detailFields, itemStatusLabel, peopleLabels, periodText, toDetails } from './profile';
+  import ItemProfileSummary from './ItemProfileSummary.svelte';
+  import { detailFields, itemStatusLabel, peopleLabels, toDetails } from './profile';
 
   interface Props {
     item: ItemView;
@@ -30,6 +37,12 @@
   let error = $state<string | undefined>(undefined);
   let status = $state('');
   let editing = $state(false);
+  // 편집을 연 때의 판(D-104). 편집 중에 패널을 다시 읽어도 옮기지 않는다(옮기면 그사이 다른 사람이 고친 것을 덮는다).
+  let editBase = 0;
+  // 편집을 연 때의 리더. 고를 수 있는 사람 목록에 없어도 입력의 리더 이름을 보인다.
+  let editLeader = $state<PersonRefView | null>(null);
+  // 저장이 판 충돌(409)로 거절됐을 때의 서버 최신본. 입력은 그대로 두고 최신본을 보인다.
+  let conflict = $state<ItemProfileView | undefined>(undefined);
   let managing = $state(false);
   let reloadKey = $state(0);
   interface FormState {
@@ -58,6 +71,12 @@
   let candidates = $state<{ id: string; name: string }[]>([]);
   let groupChoices = $state<{ id: string; name: string }[]>([]);
 
+  // 리더 칸은 입력만 보인다. 서버의 리더(409의 최신본 등)를 대신 보이면 "내 입력으로 다시 저장"이 보이지 않게 리더를 지운다.
+  const leaderLabel = $derived.by(() => {
+    if (form.leader === '') return m.modules_none();
+    const known = [...people, profile?.leader, editLeader].find((p) => p?.user_id === form.leader);
+    return known?.display_name ?? m.modules_leader_unknown();
+  });
   const fields = $derived(detailFields(kind));
   const labels = $derived(peopleLabels(kind));
   const textarea =
@@ -81,6 +100,9 @@
   });
 
   async function startEdit(p: ItemProfileView): Promise<void> {
+    editBase = p.version;
+    editLeader = p.leader;
+    conflict = undefined;
     form = {
       status: p.status,
       leader: p.leader?.user_id ?? '',
@@ -97,13 +119,18 @@
 
   async function save(e: SubmitEvent): Promise<void> {
     e.preventDefault();
+    await submit(editBase);
+  }
+
+  /** 입력을 `base` 판에 대한 고치기로 보낸다(충돌 알림의 "내 입력으로 다시 저장"은 알림이 보인 최신본의 판). */
+  async function submit(base: number): Promise<void> {
     if (form.starts_on !== '' && form.ends_on !== '' && form.starts_on > form.ends_on) {
       error = m.modules_period_invalid();
       return;
     }
     error = undefined;
     try {
-      await api.setItemProfile(item.id, {
+      const result = await api.setItemProfile(item.id, base, {
         leader_id: form.leader === '' ? null : form.leader,
         goal: form.goal,
         scope: form.scope,
@@ -112,6 +139,13 @@
         status: form.status,
         details: toDetails(kind, form.values, form.keywords),
       });
+      if (result.kind === 'conflict') {
+        // 그사이 다른 사람이 고쳤다. 서버는 아무것도 바꾸지 않았다. 입력은 그대로 두고 최신본을 보인다.
+        conflict = result.current;
+        profile = result.current;
+        return;
+      }
+      conflict = undefined;
       editing = false;
       status = m.modules_profile_saved();
       reloadKey += 1;
@@ -171,6 +205,29 @@
   {#if profile === undefined}
     <p class="text-sm text-muted-foreground">{m.modules_loading()}</p>
   {:else if editing}
+    {#if conflict !== undefined}
+      {@const latest = conflict}
+      <!-- 판 충돌(D-104): 입력은 그대로 두고 서버 최신본을 보인다. 최신본으로 다시 편집하거나 내 입력으로 다시 저장한다. -->
+      <div
+        class="flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 text-sm"
+        data-profile-conflict
+      >
+        <p role="alert">{m.modules_profile_conflict()}</p>
+        <ItemProfileSummary profile={latest} {kind} />
+        <div class="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onclick={() => {
+              void startEdit(latest);
+            }}>{m.modules_profile_conflict_load()}</Button
+          >
+          <Button size="sm" onclick={() => void submit(latest.version)}
+            >{m.modules_profile_conflict_save_mine()}</Button
+          >
+        </div>
+      </div>
+    {/if}
     <form class="grid gap-3 sm:grid-cols-2" onsubmit={(e) => void save(e)} novalidate>
       <div class="flex flex-col gap-1">
         <span id="item-status-label" class="text-sm font-medium">{m.modules_status()}</span>
@@ -201,9 +258,7 @@
           }}
         >
           <Select.Trigger class="w-48" aria-labelledby="item-leader-label"
-            >{people.find((p) => p.user_id === form.leader)?.display_name ??
-              profile.leader?.display_name ??
-              m.modules_none()}</Select.Trigger
+            >{leaderLabel}</Select.Trigger
           >
           <Select.Content>
             <Select.Item value="none" label={m.modules_none()}>{m.modules_none()}</Select.Item>
@@ -254,41 +309,18 @@
       {/each}
       <div class="flex gap-2 sm:col-span-2">
         <Button type="submit">{m.common_save()}</Button>
-        <Button type="button" variant="ghost" onclick={() => (editing = false)}
-          >{m.common_cancel()}</Button
+        <Button
+          type="button"
+          variant="ghost"
+          onclick={() => {
+            editing = false;
+            conflict = undefined;
+          }}>{m.common_cancel()}</Button
         >
       </div>
     </form>
   {:else}
-    {@const p = profile}
-    <dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-      <dt class="text-muted-foreground">{m.modules_status()}</dt>
-      <dd><Badge variant="outline">{itemStatusLabel(p.status)}</Badge></dd>
-      {#if p.starts_on !== null || p.ends_on !== null}
-        <dt class="text-muted-foreground">{m.modules_period()}</dt>
-        <dd>{periodText(p.starts_on, p.ends_on)}</dd>
-      {/if}
-      <dt class="text-muted-foreground">{labels.leader}</dt>
-      <dd>{p.leader?.display_name ?? m.modules_none()}</dd>
-      {#if p.goal !== ''}
-        <dt class="text-muted-foreground">{m.modules_goal()}</dt>
-        <dd class="whitespace-pre-wrap">{p.goal}</dd>
-      {/if}
-      {#if p.scope !== ''}
-        <dt class="text-muted-foreground">{m.modules_scope()}</dt>
-        <dd class="whitespace-pre-wrap">{p.scope}</dd>
-      {/if}
-      {#if (p.details.keywords ?? []).length > 0}
-        <dt class="text-muted-foreground">{m.modules_keywords()}</dt>
-        <dd>{(p.details.keywords ?? []).join(', ')}</dd>
-      {/if}
-      {#each fields as f (f.key)}
-        {#if p.details[f.key] !== undefined}
-          <dt class="text-muted-foreground">{f.label}</dt>
-          <dd class="whitespace-pre-wrap">{p.details[f.key]}</dd>
-        {/if}
-      {/each}
-    </dl>
+    <ItemProfileSummary {profile} {kind} />
   {/if}
 
   {#if profile !== undefined}

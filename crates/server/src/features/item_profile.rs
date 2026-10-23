@@ -4,12 +4,13 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use time::Date;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{is_unique_violation, needed_ids, new_ids};
+use crate::db::{UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::modules::ModuleKind;
@@ -142,11 +143,15 @@ pub struct ItemProfile {
     pub can_edit: bool,
     /// 멤버를 정할 수 있는지(항목 소유 권한자).
     pub can_manage_members: bool,
+    /// 이 칸들(리더·목표·범위·기간·상태·종류별 정보)의 판. 고칠 때 연 판을 `base_version`으로 보낸다(D-104). 항목의
+    /// 제목·설명·공개 범위의 판(`Item.version`)과는 따로다.
+    pub version: i32,
 }
 
-/// 항목 정보 바꾸기(쓸 수 있는 사람).
+/// 항목 정보 바꾸기(쓸 수 있는 사람). `base_version`(연 때의 `version`)이 지났으면 409와 서버 최신본(D-104).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct SetItemProfile {
+    pub base_version: i32,
     #[schema(value_type = Option<String>, format = Uuid)]
     pub leader_id: Option<UserId>,
     #[serde(default)]
@@ -191,7 +196,25 @@ type ProfileRow = (
     serde_json::Value,
     String,
     bool,
+    i32,
 );
+
+/// 409 응답: 판이 지난 항목 정보 저장. 서버 최신본.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ItemProfileConflict {
+    pub error: &'static str,
+    pub current: ItemProfile,
+}
+
+/// 항목 정보 바꾸기의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+/// - `ItemProfileConflict`(`error: "conflict"`, `current`): `base_version`이 지남.
+/// - `ErrorBody`(`current` 없음): `invalid_state`(보관된 항목, 동시 변경 재시도 등).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum ItemProfileSaveConflict {
+    Stale(Box<ItemProfileConflict>),
+    State(ErrorBody),
+}
 
 /// 항목 정보(볼 수 있는 사람).
 #[utoipa::path(get, path = "/api/items/{item_id}/profile", operation_id = "get_item_profile",
@@ -203,13 +226,21 @@ pub async fn get(
     Path(item): Path<ItemId>,
 ) -> Result<Json<ItemProfile>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
+    let profile = load(&mut tx, item).await?;
+    tx.commit().await?;
+    Ok(Json(profile))
+}
+
+/// 항목 정보를 읽는다. 볼 수 없으면(RLS) 404.
+async fn load(tx: &mut UserTx, item: ItemId) -> Result<ItemProfile, AppError> {
     // 항목 RLS가 볼 수 없는 항목을 거른다. 리더 이름은 그 사람이 아직 워크스페이스 멤버일 때만.
     let row: Option<ProfileRow> = sqlx::query_as(
         "SELECT m.kind, i.leader_id,
                 (SELECT u.display_name FROM users u JOIN workspace_members wm
                   ON wm.user_id = u.id AND wm.workspace_id = i.workspace_id WHERE u.id = i.leader_id),
                 i.goal, i.scope, i.starts_on, i.ends_on, i.status, i.details,
-                app_item_access(i.id), i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL
+                app_item_access(i.id), i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL,
+                i.profile_version
          FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1",
     )
     .bind(item)
@@ -227,6 +258,7 @@ pub async fn get(
         details,
         access,
         archived,
+        version,
     ) = row.ok_or(AppError::NotFound)?;
     let members: Vec<(UserId, String)> = sqlx::query_as(
         "SELECT u.id, u.display_name FROM item_members im JOIN users u ON u.id = im.user_id
@@ -242,7 +274,6 @@ pub async fn get(
     .bind(item)
     .fetch_all(tx.conn())
     .await?;
-    tx.commit().await?;
     let details: ItemDetails = serde_json::from_value(details).unwrap_or_default();
     let leader = match (leader_id, leader_name) {
         (Some(user_id), Some(display_name)) => Some(PersonRef {
@@ -251,7 +282,7 @@ pub async fn get(
         }),
         _ => None,
     };
-    Ok(Json(ItemProfile {
+    Ok(ItemProfile {
         leader,
         goal,
         scope,
@@ -272,20 +303,23 @@ pub async fn get(
             .collect(),
         can_edit: !archived && (access == "owner" || access == "write"),
         can_manage_members: !archived && access == "owner",
-    }))
+        version,
+    })
 }
 
-/// 항목 정보 바꾸기(쓸 수 있는 사람). 종류에 없는 칸은 400, 리더는 그 항목을 볼 수 있는 사람이어야 한다.
+/// 항목 정보 바꾸기(쓸 수 있는 사람). 종류에 없는 칸은 400, 리더는 그 항목을 볼 수 있는 사람이어야 한다. 연 판이
+/// 지났으면 아무것도 바꾸지 않고 409와 서버 최신본(`ItemProfileConflict`), 보관된 항목은 409 `invalid_state`.
 #[utoipa::path(put, path = "/api/items/{item_id}/profile", operation_id = "set_item_profile",
     params(("item_id" = String, Path, format = Uuid)), request_body = SetItemProfile,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
+              (status = 404, body = ErrorBody), (status = 409, body = ItemProfileSaveConflict,
+               description = "`conflict`면 ItemProfileConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다")), tag = "modules")]
 pub async fn set(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
     Json(input): Json<SetItemProfile>,
-) -> Result<StatusCode, AppError> {
+) -> Result<Response, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     let kind: Option<String> = sqlx::query_scalar(
         "SELECT m.kind FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1",
@@ -300,21 +334,35 @@ pub async fn set(
     let details = input.details.normalize(kind)?;
     let details = serde_json::to_value(&details)
         .map_err(|e| AppError::Config(format!("item details: {e}")))?;
-    sqlx::query("SELECT app_set_item_profile($1, $2, $3, $4, $5, $6, $7, $8, $9)")
-        .bind(item)
-        .bind(input.leader_id)
-        .bind(input.goal.trim())
-        .bind(input.scope.trim())
-        .bind(input.starts_on)
-        .bind(input.ends_on)
-        .bind(&input.status)
-        .bind(details)
-        .bind(new_ids(2))
-        .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
+    let outcome: String =
+        sqlx::query_scalar("SELECT app_set_item_profile($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)")
+            .bind(item)
+            .bind(input.base_version)
+            .bind(input.leader_id)
+            .bind(input.goal.trim())
+            .bind(input.scope.trim())
+            .bind(input.starts_on)
+            .bind(input.ends_on)
+            .bind(&input.status)
+            .bind(details)
+            .bind(new_ids(2))
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+    if outcome == "conflict" {
+        let current = load(&mut tx, item).await?;
+        tx.commit().await?;
+        return Ok((
+            StatusCode::CONFLICT,
+            Json(ItemProfileConflict {
+                error: "conflict",
+                current,
+            }),
+        )
+            .into_response());
+    }
     tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 /// 항목 멤버 정하기(항목 소유 권한자). 비공개 항목은 멤버만 워크스페이스 역할 안에서 본다(D-20 공유).
