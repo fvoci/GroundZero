@@ -1,4 +1,4 @@
-# cargo-deny 설정. 라이선스 정책은 docs/decisions.md D-60.
+# cargo-deny 설정. 라이선스 정책은 docs/decisions.md#d-60.
 # 허용 목록 밖의 크레이트는 보고해 승인을 받는다. 승인된 것만 크레이트·판 단위 예외(exceptions)로 둔다.
 
 [graph]
@@ -58,7 +58,7 @@ yanked = "deny"
 ignore = [
   # rsa 0.9.10 (openidconnect 4.0.1 경유). Marvin 공격은 RSA 개인키 연산(복호화·서명)의 타이밍 누출이다.
   # fvoci는 OIDC 제공자의 공개키로 ID 토큰 서명을 검증만 하고 RSA 개인키를 갖지 않는다.
-  # 패치가 나오면 이 항목을 지운다. 기록: docs/development.md 9절.
+  # 패치가 나오면 이 항목을 지운다. 당시 기록: https://github.com/fvoci/GroundZero/blob/abd545a250ff1fd9cc166b3c078c4dff76846724/docs/development.md#9-라이선스-승인-요청-2026-10-17-초기화-o-30
   { id = "RUSTSEC-2023-0071", reason = "public-key signature verification only; no RSA private key operations in fvoci" },
   # smallstr 0.3.1 (yrs 0.28.0 경유, 실시간 공동 편집 D-70). 취약점이 아닌 유지 중단 알림(informational = "unmaintained",
   # 수정 판 없음)이며 yrs가 글 조각 저장에 쓴다. 사용자 승인 2026-10-17(D-70). yrs가 smallstr를 떼면 이 항목을 지운다.

@@ -22,7 +22,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 utoipa = { version = "5", features = ["axum_extras", "uuid"] }
 xshell = "0.2"
 
-# 품질 기준 D-09. 선택 근거는 docs/development.md 1절과 O-23 기록 참조.
+# 품질 기준 D-09. 선택 근거: docs/development.md#1-rust (O-23 기록).
 [workspace.lints.rust]
 unsafe_code = "forbid"
 unused_must_use = "deny"

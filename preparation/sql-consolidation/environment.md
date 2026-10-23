@@ -12,8 +12,8 @@
 
 기준은 `cb65cc31156c0fd8d28cf856bc132d4a506c8885`이다. 아래 저장소 파일의 행 번호는 모두 이 SHA의
 행 번호다. 작업 브랜치는 `fvoci/sql-prep-c`이며, #91은 기준에 포함되어 있다. #69의
-`e4cae26dbf3104ba40d6ef39fda50b8d8b2035cb`는 미병합 참고 자료로만 읽었다. 그 문서의 95절
-(`docs/development.md:3019–3028`)도 누적 마이그레이션의 성공을 통합본의 성공으로 대신하지 말라고 구분한다.
+`e4cae26dbf3104ba40d6ef39fda50b8d8b2035cb`는 미병합 참고 자료로만 읽었다. 그때의
+[감사 문서](https://github.com/fvoci/GroundZero/blob/e4cae26dbf3104ba40d6ef39fda50b8d8b2035cb/docs/development.md#L3019-L3028)도 누적 마이그레이션의 성공을 통합본의 성공으로 대신하지 말라고 구분한다.
 최종 #69 변경은 통합 작업자가 별도로 대조한다.
 
 설치자는 연결 값과 배포 설정을 제공하고 기존 `db bootstrap` → `db migrate` → 서버 시작 흐름을 따른다.

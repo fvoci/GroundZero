@@ -1,5 +1,5 @@
 //! 의존성 라이선스 검사. Cargo는 cargo-deny, pnpm은 `pnpm licenses list --json`을 허용 목록과 비교한다.
-//! 허용 목록은 docs/decisions.md D-60. 목록에 없는 라이선스는 실패시키고 보고한다. 조용히 예외 처리하지 않는다.
+//! 허용 목록은 docs/decisions.md#d-60. 목록에 없는 라이선스는 실패시키고 보고한다. 조용히 예외 처리하지 않는다.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -22,7 +22,7 @@ const ALLOWED: &[&str] = &[
 /// 허용 목록 밖이지만 사용자가 패키지·판·사용 범위를 정해 승인한 npm 패키지(D-72). (이름, 판, 라이선스 식).
 /// 판이나 식이 바뀌면 맞지 않아 다시 실패하고, 그때 다시 보고해 승인받는다. 쓰이지 않는 항목은 경고한다.
 const NPM_EXCEPTIONS: &[(&str, &str, &str)] = &[
-    // 빌드·테스트 도구(운영 번들에 들지 않음, docs/development.md 9절)
+    // 빌드·테스트 도구(운영 번들에 들지 않음, docs/decisions.md#d-72)
     ("tslib", "2.8.1", "0BSD"),
     ("lru-cache", "11.5.3", "BlueOak-1.0.0"),
     ("minimatch", "10.2.6", "BlueOak-1.0.0"),

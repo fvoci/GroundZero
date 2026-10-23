@@ -2,7 +2,7 @@
 
 처음 한 대의 Mac에서 직접 써 보려면 [직접 써 보기](try-it.md)부터 본다.
 
-한 대의 서버에 Docker Compose로 fvoci를 설치하고 운영하는 방법이다. 구성 파일은 `deploy/compose.selfhost.yaml`이고 비밀 값은 운영자의 `.env`에만 둔다. 개발·테스트 환경은 `docs/development.md`를 본다.
+한 대의 서버에 Docker Compose로 fvoci를 설치하고 운영하는 방법이다. 구성 파일은 `deploy/compose.selfhost.yaml`이고 비밀 값은 운영자의 `.env`에만 둔다. 개발·테스트 환경은 [개발 지침](development.md)을 본다.
 
 이 문서의 Compose는 자체 PostgreSQL을 함께 띄운다. 기존 셀프호스트 Supabase의 PostgreSQL을 쓰려면
 [Supabase 연결 안내](self-hosting-supabase.md)를 따른다. 두 구성 모두 로그인은 OIDC(Keycloak 등)를 사용한다.

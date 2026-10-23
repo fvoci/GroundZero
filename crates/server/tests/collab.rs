@@ -1162,8 +1162,9 @@ async fn upload_small(
     done.json
 }
 
-/// 제품 로직 점검(80절): 아직 리비전이 되지 않은 실시간 본문이 가리키는 파일 버전은 지울 수 없다. 전에는 리비전·기록의
+/// 제품 로직 점검: 아직 리비전이 되지 않은 실시간 본문이 가리키는 파일 버전은 지울 수 없다. 전에는 리비전·기록의
 /// 참조만 보아 지울 수 있었고, 그 본문이 리비전이 되면 그 버전 주소가 404였다.
+/// 당시 기록: https://github.com/fvoci/GroundZero/blob/abd545a250ff1fd9cc166b3c078c4dff76846724/docs/development.md#L1360
 #[tokio::test]
 async fn live_body_pins_the_file_versions_it_points_to() {
     let state = fvoci_server::app::build_state(config_with(&[])).unwrap();
@@ -1266,7 +1267,8 @@ async fn live_body_pins_the_file_versions_it_points_to() {
     assert_eq!(delete.status, StatusCode::CONFLICT, "{:?}", delete.json);
 }
 
-/// 제품 로직 점검(80절, 0061): 휴지통에 넣은 문서의 아직 리비전이 되지 않은 실시간 본문도 파일 버전을 붙잡는다.
+/// 제품 로직 점검(0061): 휴지통에 넣은 문서의 아직 리비전이 되지 않은 실시간 본문도 파일 버전을 붙잡는다.
+/// 당시 기록: https://github.com/fvoci/GroundZero/blob/abd545a250ff1fd9cc166b3c078c4dff76846724/docs/development.md#L1360
 /// 휴지통에 넣은 직후 방이 닫히며 하는 마지막 저장이 거절될 때 그 참조를 지우지 않는다(되살리면 이미지가 보여야 한다).
 #[tokio::test]
 async fn trashed_document_keeps_live_file_pins() {
@@ -1335,8 +1337,9 @@ async fn trashed_document_keeps_live_file_pins() {
     owner.close().await;
 }
 
-/// 사용자 지시(80절 마무리): 실시간 본문에 이미지 주소를 넣은 직후, 주기적 상태 저장(3초) 전에 그 버전을 지우는
+/// 사용자 지시: 실시간 본문에 이미지 주소를 넣은 직후, 주기적 상태 저장(3초) 전에 그 버전을 지우는
 /// 경합. 4초를 기다린 뒤 지우는 시험만으로는 이 구간을 보지 못한다.
+/// 당시 기록: https://github.com/fvoci/GroundZero/blob/abd545a250ff1fd9cc166b3c078c4dff76846724/docs/development.md#L1360
 #[tokio::test]
 async fn deleting_a_version_right_after_a_live_reference_is_refused() {
     let state = fvoci_server::app::build_state(config_with(&[])).unwrap();

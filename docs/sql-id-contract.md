@@ -1,6 +1,6 @@
 # Rust→SQL UUID 인자 계약
 
-D-88과 [개발 지침 85.1절](development.md#851-id는-앱이-만든다)의 호출부 유지보수 지침이다.
+[D-88](decisions.md#d-88)의 호출부 유지보수 지침이며 UUID 인자·오류·재시도의 정본이다.
 UUIDv7 생성은 Rust 앱의 책임이다. SQL에 ID 생성을 맡기거나 설치자에게 추가 설정을 요구하지 않는다.
 자체 PostgreSQL과 셀프호스트 Supabase DB에서 같은 계약을 사용하며 Keycloak/OIDC 구성과는 별개다.
 

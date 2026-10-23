@@ -1377,7 +1377,7 @@ pub enum MoveReply {
 /// 이동·복원 트랜잭션이 잠금 하나를 기다리는 한도. 열린 방은 이동·복원을 자기 명령 안에서 하므로(#71) 그동안 편집이 멈춘다
 /// (권한 재확인은 이동 중에도 이어 간다, `Room::move_rechecking`). 끝없이 기다리지 않고 409로 돌려준다(하지 않음, 편집은 방에 남는다, #64 리뷰). PostgreSQL
 /// `lock_timeout`이라 잠금을 얻으려는 시도마다 따로 재며, 이동·복원 요청 전체의 상한이 아니다(잠금 대기는 최대 이 값 ×
-/// 기다린 잠금 수, docs/development.md W1b). 다른 이동·항목 변경은 보통 이보다 훨씬 짧게 잠근다.
+/// 기다린 잠금 수, docs/development.md#live-document-preservation). 다른 이동·항목 변경은 보통 이보다 훨씬 짧게 잠근다.
 pub(crate) const LOCK_LIMIT: &str = "10s";
 
 /// 이 트랜잭션에만 잠금 대기 한도(`LOCK_LIMIT`)를 건다(세션 풀러의 연결에 남지 않는다).
