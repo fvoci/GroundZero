@@ -137,5 +137,5 @@ shared session pooler의 URL 사용자 표기는 `<role>.<project-ref>`이며 TL
 
 ## 8. 이전 설치에서 올릴 때
 
-D-88 이전 개발 DB의 checksum 불일치와 기존 데이터 보존은 자체 PostgreSQL에도 같은 주의사항이 적용된다.
-[공통 DB 준비 안내의 D-88 주의사항](self-hosting.md#db-setup)을 확인한 뒤 진행한다.
+통합 SQL 이전 개발·시험 DB의 재생성과 기존 데이터 보존은 자체 PostgreSQL에도 같은 주의사항이 적용된다.
+[통합 SQL 이전 설치의 재생성 안내](self-hosting.md#sql-baseline-reset)를 확인한 뒤 진행한다.

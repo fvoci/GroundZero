@@ -176,7 +176,7 @@ docker compose --env-file .env -f deploy/compose.selfhost.yaml run --rm --no-dep
 ## 6. 올리기(업그레이드)
 
 먼저 현재 릴리스에서 백업을 만든다(5절). 새 마이그레이션은 앱이 뜨기 전에 `migrate`가 적용한다.
-이전 개발 설치라면 위 [DB 준비 안내의 D-88 주의사항](#db-setup)을 먼저 확인한다.
+이전 개발 설치라면 위 [통합 SQL 이전 설치의 재생성 안내](#sql-baseline-reset)를 먼저 확인한다.
 
 PostgreSQL 이미지가 Alpine에서 Debian(`postgres:18.3-bookworm`, D-85)으로 바뀐 판으로 올릴 때는 아래 명령으로 바로 올리지 않는다. 데이터 파일 소유자와 정렬 라이브러리가 달라 기존 `pgdata`를 그대로 쓸 수 없으므로, 이전 판에서 백업을 만들고(5절) 새 판을 새로 설치한 뒤 복구한다.
 
