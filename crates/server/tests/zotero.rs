@@ -119,7 +119,7 @@ async fn zotero_references_import_and_refresh_without_storing_the_key() {
                 Method::PUT,
                 &format!("/api/items/{id}"),
                 Some(&admin),
-                Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+                Some(json!({ "base_version": 1, "title": "항목", "description": "", "visibility": "workspace" })),
             )
             .await;
             id

@@ -346,7 +346,8 @@ async fn api_not_found() -> AppError {
         documents::templates,
         documents::set_template,
         saved_views::list,
-        saved_views::save,
+        saved_views::create,
+        saved_views::update,
         saved_views::delete,
         study::get,
         study::add_units,
@@ -570,7 +571,9 @@ async fn api_not_found() -> AppError {
         documents::DocumentTemplate,
         documents::SetDocumentTemplate,
         saved_views::SavedView,
-        saved_views::SaveView,
+        saved_views::CreateView,
+        saved_views::UpdateView,
+        saved_views::SavedViewConflict,
         study::MyUnitProgress,
         study::StudyUnit,
         study::StudyPlan,
@@ -602,6 +605,7 @@ async fn api_not_found() -> AppError {
         item_profile::PersonRef,
         item_profile::GroupRef,
         item_profile::SetItemProfile,
+        item_profile::ItemProfileConflict,
         item_profile::SetItemMembers,
         item_profile::SetModuleIcon,
         item_profile::CopyItem,
@@ -637,6 +641,7 @@ async fn api_not_found() -> AppError {
         modules::Item,
         modules::CreateItem,
         modules::UpdateItem,
+        modules::ItemConflict,
         references::ReferenceKind,
         references::ReferenceCandidate,
         references::ReferenceInput,
@@ -720,9 +725,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/items/{item_id}/views",
-            get(saved_views::list).post(saved_views::save),
+            get(saved_views::list).post(saved_views::create),
         )
-        .route("/views/{view_id}", delete(saved_views::delete))
+        .route(
+            "/views/{view_id}",
+            put(saved_views::update).delete(saved_views::delete),
+        )
         .route("/items/{item_id}/study", get(study::get))
         .route("/items/{item_id}/study/units", post(study::add_units))
         .route("/items/{item_id}/study/plan", put(study::plan))

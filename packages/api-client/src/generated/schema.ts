@@ -690,7 +690,10 @@ export interface paths {
         };
         /** 항목 하나. */
         get: operations["get_item"];
-        /** 항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다. */
+        /**
+         * 항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다. 읽은 판이 지났으면 아무것도 바꾸지 않고 409와
+         *     서버 최신본(`ItemConflict`), 보관된 항목은 409 `invalid_state`.
+         */
         put: operations["update_item"];
         post?: never;
         /** 항목 지우기(항목 소유 권한). 그 안의 업무·문서·일정은 항목과 함께 보이지 않는다. */
@@ -902,7 +905,10 @@ export interface paths {
         };
         /** 항목 정보(볼 수 있는 사람). */
         get: operations["get_item_profile"];
-        /** 항목 정보 바꾸기(쓸 수 있는 사람). 종류에 없는 칸은 400, 리더는 그 항목을 볼 수 있는 사람이어야 한다. */
+        /**
+         * 항목 정보 바꾸기(쓸 수 있는 사람). 종류에 없는 칸은 400, 리더는 그 항목을 볼 수 있는 사람이어야 한다. 연 판이
+         *     지났으면 아무것도 바꾸지 않고 409와 서버 최신본(`ItemProfileConflict`), 보관된 항목은 409 `invalid_state`.
+         */
         put: operations["set_item_profile"];
         post?: never;
         delete?: never;
@@ -1076,8 +1082,11 @@ export interface paths {
         /** 이 항목의 내 저장한 보기(이름순). */
         get: operations["saved_views"];
         put?: never;
-        /** 보기 저장(그 항목을 볼 수 있는 사람). 같은 이름이면 덮어쓴다. */
-        post: operations["save_view"];
+        /**
+         * 새 보기(그 항목을 볼 수 있는 사람). 같은 이름이 이미 있으면 바꾸지 않고 409와 그 보기(고치려면 `PUT /api/views/{id}`).
+         *     같은 `request_id`는 처음 만든 보기를 돌려준다.
+         */
+        post: operations["create_view"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2041,7 +2050,11 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /**
+         * 내 보기 고치기. 읽은 판이 지났으면(다른 탭이 저장함) 아무것도 바꾸지 않고 409와 최신 보기. 확인과 고치기는 같은
+         *     트랜잭션이다. 마지막 고치기와 같은 `request_id`면 다시 쓰지 않고 그 결과를 돌려준다.
+         */
+        put: operations["update_view"];
         post?: never;
         /** 내 저장한 보기 지우기. */
         delete: operations["delete_view"];
@@ -2808,6 +2821,13 @@ export interface components {
             size: number;
             target?: null | components["schemas"]["UploadTarget"];
         };
+        /** @description 새 보기. 같은 이름이 이미 있으면 만들지 않고 409(`exists`)와 그 보기. */
+        CreateView: {
+            config: Record<string, never>;
+            name: string;
+            /** Format: uuid */
+            request_id: string;
+        };
         /** @description 워크스페이스 생성 요청. */
         CreateWorkspace: {
             name: string;
@@ -3221,9 +3241,20 @@ export interface components {
             title: string;
             /** Format: date-time */
             updated_at: string;
+            /**
+             * Format: int32
+             * @description 항목 정보(제목·설명·공개 범위)의 판. 고칠 때 읽은 판을 `base_version`으로 보낸다(D-104). 항목 정보 패널(`profile`)의
+             *     판과는 따로다.
+             */
+            version: number;
             /** @description `workspace` 또는 `private`. */
             visibility: string;
             workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /** @description 409 응답: 판이 지난 항목 정보 저장. 서버 최신본. */
+        ItemConflict: {
+            current: components["schemas"]["Item"];
+            error: string;
         };
         /**
          * @description 모듈 종류별 항목 정보. 종류에 없는 칸을 보내면 400.
@@ -3268,6 +3299,17 @@ export interface components {
             starts_on?: string | null;
             /** @description `planned`·`active`·`on_hold`·`done`·`cancelled`. */
             status: string;
+            /**
+             * Format: int32
+             * @description 이 칸들(리더·목표·범위·기간·상태·종류별 정보)의 판. 고칠 때 연 판을 `base_version`으로 보낸다(D-104). 항목의
+             *     제목·설명·공개 범위의 판(`Item.version`)과는 따로다.
+             */
+            version: number;
+        };
+        /** @description 409 응답: 판이 지난 항목 정보 저장. 서버 최신본. */
+        ItemProfileConflict: {
+            current: components["schemas"]["ItemProfile"];
+            error: string;
         };
         /** @description 항목의 시간 합계(D-78): 항목 자체와 그 아래 업무·문서·강의 회차·스터디 단위의 기록을 종류별로 모은다. */
         ItemTime: {
@@ -3930,19 +3972,22 @@ export interface components {
             request_id: string;
             title: string;
         };
-        /** @description 보기 저장. 같은 이름이면 내용을 바꾼다. */
-        SaveView: {
-            config: Record<string, never>;
-            name: string;
-            /** Format: uuid */
-            request_id: string;
-        };
         /** @description 저장한 보기. */
         SavedView: {
             config: Record<string, never>;
             /** Format: uuid */
             id: string;
             name: string;
+            /**
+             * Format: int32
+             * @description 고칠 때마다 1 오른다. 고치기의 `base_version`으로 보낸다.
+             */
+            version: number;
+        };
+        /** @description 409 응답: 이름이 이미 있거나(`exists`) 읽은 판이 지났다(`conflict`). 아무것도 바꾸지 않았고 `current`가 지금 보기다. */
+        SavedViewConflict: {
+            current: components["schemas"]["SavedView"];
+            error: string;
         };
         /** @description 재배치 미리보기: 옮길 후속 업무와, 바뀐 관계가 닿지만 날짜가 없어 계산하지 않은 업무(날짜를 지어내지 않는다). */
         SchedulePlan: {
@@ -3996,8 +4041,10 @@ export interface components {
             group_ids: string[];
             user_ids: string[];
         };
-        /** @description 항목 정보 바꾸기(쓸 수 있는 사람). */
+        /** @description 항목 정보 바꾸기(쓸 수 있는 사람). `base_version`(연 때의 `version`)이 지났으면 409와 서버 최신본(D-104). */
         SetItemProfile: {
+            /** Format: int32 */
+            base_version: number;
             details?: components["schemas"]["ItemDetails"];
             /** Format: date */
             ends_on?: string | null;
@@ -4537,8 +4584,13 @@ export interface components {
             /** Format: int32 */
             base_version: number;
         };
-        /** @description 항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다. */
+        /**
+         * @description 항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다. `base_version`(읽은 `version`)이 지났으면
+         *     409와 서버 최신본(D-104).
+         */
         UpdateItem: {
+            /** Format: int32 */
+            base_version: number;
             description: string;
             title: string;
             /**
@@ -4588,6 +4640,17 @@ export interface components {
             successor_shifts?: components["schemas"]["SuccessorShift"][];
             tags: string[];
             title: string;
+        };
+        /**
+         * @description 기존 보기 고치기. `base_version`이 지났으면 409(`conflict`)와 최신 보기. 같은 `request_id`의 재시도는 이미 반영한
+         *     결과를 돌려준다(마지막 고치기의 요청 id만 알아본다).
+         */
+        UpdateView: {
+            /** Format: int32 */
+            base_version: number;
+            config: Record<string, never>;
+            /** Format: uuid */
+            request_id: string;
         };
         /**
          * Format: uuid
@@ -6829,7 +6892,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["ItemConflict"];
                 };
             };
         };
@@ -7542,7 +7605,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["ItemProfileConflict"];
                 };
             };
         };
@@ -8035,7 +8098,7 @@ export interface operations {
             };
         };
     };
-    save_view: {
+    create_view: {
         parameters: {
             query?: never;
             header?: never;
@@ -8046,7 +8109,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SaveView"];
+                "application/json": components["schemas"]["CreateView"];
             };
         };
         responses: {
@@ -8072,6 +8135,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewConflict"];
                 };
             };
         };
@@ -10614,6 +10685,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateView"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewConflict"];
                 };
             };
         };

@@ -147,7 +147,7 @@ async fn private_items_open_to_their_members_only() {
     // 리더는 그 항목을 볼 수 있는 사람만.
     let profile_uri = format!("/api/items/{it}/profile");
     let profile = |leader: &TestUser| {
-        json!({ "leader_id": leader.id.0, "goal": "출시", "scope": "웹",
+        json!({ "base_version": 1, "leader_id": leader.id.0, "goal": "출시", "scope": "웹",
         "starts_on": "2026-10-01", "ends_on": "2026-12-31", "status": "active", "details": {} })
     };
     assert_eq!(
@@ -275,7 +275,13 @@ async fn profile_fields_follow_the_module_kind() {
         let app = app.clone();
         let admin = admin.clone();
         let uri = format!("/api/items/{it}/profile");
-        async move { send(&app, Method::PUT, &uri, Some(&admin), Some(body)).await }
+        async move {
+            // 이 시험은 판 검사가 아니라 칸 확인을 본다: 지금 판으로 보낸다.
+            let mut body = body;
+            body["base_version"] =
+                send(&app, Method::GET, &uri, Some(&admin), None).await.json["version"].clone();
+            send(&app, Method::PUT, &uri, Some(&admin), Some(body)).await
+        }
     };
     let base = |details: Value| {
         json!({ "leader_id": null, "goal": "", "scope": "", "starts_on": null,
@@ -714,12 +720,17 @@ async fn group_changes_and_leaving_end_item_roles() {
     let task_uri = format!("/api/tasks/{}", task.json["id"].as_str().unwrap());
     // 리더와 담당으로 정하고, 둘 다 정해졌는지 돌려준다.
     let take_roles = || async {
+        // 리더가 지워질 때마다 판이 오르므로 지금 판으로 보낸다.
+        let version = send(&app, Method::GET, &profile_uri, Some(&owner), None)
+            .await
+            .json["version"]
+            .clone();
         let p = send(
             &app,
             Method::PUT,
             &profile_uri,
             Some(&owner),
-            Some(json!({
+            Some(json!({ "base_version": version,
             "leader_id": grouped.id.0, "goal": "", "scope": "", "starts_on": null, "ends_on": null,
             "status": "active", "details": {} })),
         )

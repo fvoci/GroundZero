@@ -239,7 +239,7 @@ async fn comments_threads_and_notifications_follow_access() {
         Method::PUT,
         &format!("/api/items/{}", item["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": "항목", "description": "", "visibility": "workspace" })),
     )
     .await;
     let task = send(
@@ -469,7 +469,7 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
         Method::PUT,
         &format!("/api/items/{}", item["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": "항목", "description": "", "visibility": "workspace" })),
     )
     .await;
     let task = send(
@@ -526,7 +526,7 @@ async fn item_task(app: &Router, admin: &TestUser, ws: &str, key: &str) -> (Valu
         Method::PUT,
         &format!("/api/items/{}", item["id"].as_str().unwrap()),
         Some(admin),
-        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": "항목", "description": "", "visibility": "workspace" })),
     )
     .await;
     assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
@@ -724,7 +724,7 @@ async fn task_comments_follow_the_item_access() {
         Method::PUT,
         &format!("/api/items/{}", item["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "title": "비공개 항목", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": "비공개 항목", "description": "", "visibility": "workspace" })),
     )
     .await;
     assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);

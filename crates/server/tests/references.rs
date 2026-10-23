@@ -547,7 +547,7 @@ async fn same_named_workspaces_are_searched_together_and_links_survive_renames()
         Method::PUT,
         &format!("/api/items/{}", b["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "title": "둘째 실험 (수정)", "description": "", "visibility": "private" })),
+        Some(json!({ "base_version": 1, "title": "둘째 실험 (수정)", "description": "", "visibility": "private" })),
     )
     .await;
     let resolved = resolve(&app, &admin, json!([{ "kind": "item", "id": b["id"] }])).await;

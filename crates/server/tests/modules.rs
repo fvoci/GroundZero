@@ -82,12 +82,16 @@ async fn set_item(
     item: &Value,
     visibility: &str,
 ) -> (StatusCode, Value) {
+    let uri = format!("/api/items/{}", item["id"].as_str().unwrap());
+    // 공개 범위만 바꾸는 도우미라 지금 판으로 보낸다(볼 수 없으면 판과 상관없이 404).
+    let (_, now) = get(app, user, &uri).await;
+    let version = now["version"].as_i64().unwrap_or(1);
     let r = send(
         app,
         Method::PUT,
-        &format!("/api/items/{}", item["id"].as_str().unwrap()),
+        &uri,
         Some(user),
-        Some(json!({ "title": item["title"], "description": "", "visibility": visibility })),
+        Some(json!({ "base_version": version, "title": item["title"], "description": "", "visibility": visibility })),
     )
     .await;
     (r.status, r.json)
@@ -814,7 +818,8 @@ async fn copies_moves_and_retries_respect_item_boundaries() {
 
 /// 감사 W13: 항목 정보 저장이 공개 범위를 늘 받아, 화면은 연 때의 값을 보냈다. 그사이 다른 소유 권한자가 비공개로
 /// 바꿨으면 설명만 고친 저장이 다시 공개했고, 소유자가 아닌 작성자는 옛 값 때문에 제목도 못 고쳤다(403). 공개 범위는
-/// 보낼 때만 바꾸고, 보내지 않으면 잠근 뒤의 지금 값 그대로다.
+/// 보낼 때만 바꾸고, 보내지 않으면 잠근 뒤의 지금 값 그대로다. D-104 뒤로는 연 때의 판으로 보낸 저장이 409이므로(아래
+/// `stale_item_details_are_refused_with_the_latest`), 여기서는 지금 판으로 보내 "보내지 않은 공개 범위는 그대로"만 본다.
 #[tokio::test]
 async fn item_details_keep_the_visibility_unless_it_is_sent() {
     let state = common::state();
@@ -837,7 +842,7 @@ async fn item_details_keep_the_visibility_unless_it_is_sent() {
         Method::PUT,
         &uri,
         Some(&creator),
-        Some(json!({ "title": "설계", "description": "오타 고침" })),
+        Some(json!({ "base_version": 3, "title": "설계", "description": "오타 고침" })),
     )
     .await;
     assert_eq!(typo.status, StatusCode::OK, "{:?}", typo.json);
@@ -852,7 +857,9 @@ async fn item_details_keep_the_visibility_unless_it_is_sent() {
         Method::PUT,
         &uri,
         Some(&helper),
-        Some(json!({ "title": "설계 2", "description": "", "visibility": null })),
+        Some(
+            json!({ "base_version": 5, "title": "설계 2", "description": "", "visibility": null }),
+        ),
     )
     .await;
     assert_eq!(renamed.status, StatusCode::OK, "{:?}", renamed.json);
@@ -864,7 +871,7 @@ async fn item_details_keep_the_visibility_unless_it_is_sent() {
         Method::PUT,
         &uri,
         Some(&helper),
-        Some(json!({ "title": "설계 2", "description": "", "visibility": "private" })),
+        Some(json!({ "base_version": 6, "title": "설계 2", "description": "", "visibility": "private" })),
     )
     .await;
     assert_eq!(denied.status, StatusCode::FORBIDDEN, "{:?}", denied.json);
@@ -873,7 +880,7 @@ async fn item_details_keep_the_visibility_unless_it_is_sent() {
         Method::PUT,
         &uri,
         Some(&creator),
-        Some(json!({ "title": "설계 2", "description": "", "visibility": "private" })),
+        Some(json!({ "base_version": 6, "title": "설계 2", "description": "", "visibility": "private" })),
     )
     .await;
     assert_eq!(closed.status, StatusCode::OK, "{:?}", closed.json);

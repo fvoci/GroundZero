@@ -35,7 +35,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
         Method::PUT,
         &format!("/api/items/{item_id}"),
         Some(&admin),
-        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": "항목", "description": "", "visibility": "workspace" })),
     )
     .await;
     let uri = format!("/api/items/{item_id}/views");
@@ -130,7 +130,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
         Method::PUT,
         &format!("/api/items/{item_id}"),
         Some(&admin),
-        Some(json!({ "title": "항목", "description": "", "visibility": "private" })),
+        Some(json!({ "base_version": 2, "title": "항목", "description": "", "visibility": "private" })),
     )
     .await;
     assert_eq!(
@@ -144,7 +144,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
         Method::PUT,
         &format!("/api/items/{item_id}"),
         Some(&admin),
-        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 3, "title": "항목", "description": "", "visibility": "workspace" })),
     )
     .await;
     assert_eq!(
