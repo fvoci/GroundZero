@@ -12,7 +12,9 @@
 --    휴지통·템플릿 표시처럼 두 폼이 보내지 않는 칸은 판을 올리지 않는다. 직접 다른 값을 넣어도 트리거가 맞춘다.
 -- 2. `app_update_item`·`app_set_item_profile`에 `p_base_version`을 더한다. 보관 검사 뒤에 비교하고, 다르면 아무것도
 --    바꾸지 않고 'conflict'(서버가 409와 서버 최신본을 돌려준다). 다만 보낸 값이 이미 지금 값과 모두 같으면(응답을 잃은
---    같은 저장의 재시도) 바꿀 것이 없어 'updated'로 끝낸다. 판이 같으면 지금처럼 고친다.
+--    같은 저장의 재시도) 바꿀 것이 없어 'updated'로 끝낸다. 판이 같으면 지금처럼 고친다. 판을 보내지 않으면(NULL)
+--    지난 판과 같이 다룬다(`IS DISTINCT FROM`, 0073·0082의 판 검사와 같다). 서버 API는 판을 늘 보내지만 이 함수가
+--    마지막 보장이다.
 -- 함수 본문은 마지막 정의(0084 `app_update_item`, 0081 `app_set_item_profile`)와 같고 판 부분만 다르다.
 
 ALTER TABLE items
@@ -69,7 +71,7 @@ CREATE FUNCTION app_update_item(p_item uuid, p_base_version integer, p_title tex
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
     -- 0097: 읽은 판이 지났으면 바꾸지 않는다(바꿀 것이 없는 재시도는 그대로 성공).
-    IF v_item.version <> p_base_version THEN
+    IF v_item.version IS DISTINCT FROM p_base_version THEN
       IF v_item.title = btrim(p_title) AND v_item.description = coalesce(p_description, '')
          AND (p_visibility IS NULL OR p_visibility = v_item.visibility) THEN
         RETURN 'updated';
@@ -130,7 +132,7 @@ CREATE FUNCTION app_set_item_profile(p_item uuid, p_base_version integer, p_lead
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
     -- 0097: 읽은 판이 지났으면 바꾸지 않는다(바꿀 것이 없는 재시도는 그대로 성공).
-    IF v_item.profile_version <> p_base_version THEN
+    IF v_item.profile_version IS DISTINCT FROM p_base_version THEN
       IF v_item.leader_id IS NOT DISTINCT FROM p_leader AND v_item.goal = coalesce(p_goal, '')
          AND v_item.scope = coalesce(p_scope, '') AND v_item.starts_on IS NOT DISTINCT FROM p_starts
          AND v_item.ends_on IS NOT DISTINCT FROM p_ends AND v_item.status = p_status
