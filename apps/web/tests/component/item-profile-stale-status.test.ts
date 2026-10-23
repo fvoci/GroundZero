@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ItemProfileView, ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // 앞서 저장에 성공한 안내("항목 정보를 저장했습니다.")가 다음 저장의 409 알림 옆에 남으면, 입력이 저장된 것처럼 보여 보존한
@@ -93,5 +94,26 @@ describe('item profile status line', () => {
     await waitFor(() => {
       expect(screen.queryByText('항목 정보를 저장했습니다.')).not.toBeInTheDocument();
     });
+  });
+
+  it('drops the earlier "saved" line when the period is invalid', async () => {
+    vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
+    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    serve([[204, undefined]]);
+    render(ItemProfilePanel, { props: { item, kind: 'project', onchanged: () => undefined } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    expect(await screen.findByText('항목 정보를 저장했습니다.')).toBeInTheDocument();
+
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    const start = document.querySelector<HTMLInputElement>('#item-starts');
+    const end = document.querySelector<HTMLInputElement>('#item-ends');
+    if (start === null || end === null) throw new Error('period inputs');
+    await fireEvent.input(start, { target: { value: '2026-10-20' } });
+    await fireEvent.input(end, { target: { value: '2026-10-10' } });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await screen.findByText(m.modules_period_invalid());
+    expect(screen.queryByText('항목 정보를 저장했습니다.')).not.toBeInTheDocument();
   });
 });

@@ -3307,8 +3307,8 @@ current}`, (4) 아니면 고치고 판을 올린다. `SavedView`에 `version`. �
   `expected 'Second User' to be 'Test User'`(최신본과 입력의 리더가 다를 때)로 실패.
 - **통합 뒤 수정: 정보 패널의 남은 "저장했습니다" 안내(브라우저 재확인 B)**: 정보 패널의 안내 줄(`status`)은 저장이 성공하면
   "항목 정보를 저장했습니다."가 되고 지워지지 않아, 다음 저장이 409가 되면 충돌 알림 옆에 그 안내가 남아 입력이 저장된 것처럼 보였다
-  (데이터 영향은 없지만 보존한 입력을 두고 떠나게 한다). 이제 정보 저장·멤버 저장을 보낼 때 앞선 안내를 지운다. 시험
-  `item-profile-stale-status.test.ts`, 수정 전 `expected document not to contain element, found <p …>`로 실패.
+  (데이터 영향은 없지만 보존한 입력을 두고 떠나게 한다). 이제 정보 저장(날짜 확인보다 먼저)·멤버 저장을 보낼 때 앞선 안내를 지운다(날짜 확인 순서는 CodeRabbit 지적). 시험
+  `item-profile-stale-status.test.ts` 두 건(409, 기간 오류), 수정 전 `expected document not to contain element, found <p …>`로 실패.
 
 ## 99. CSV 업무 한 건 만들기의 원자성 (2026-10-23, D-105, `fvoci/policy-task-create`)
 

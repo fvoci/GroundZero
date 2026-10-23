@@ -124,13 +124,13 @@
 
   /** 입력을 `base` 판에 대한 고치기로 보낸다(충돌 알림의 "내 입력으로 다시 저장"은 알림이 보인 최신본의 판). */
   async function submit(base: number): Promise<void> {
+    // 앞선 저장의 안내가 이번 결과(날짜 오류·409·실패) 옆에 남아 저장된 것처럼 보이지 않게 한다.
+    status = '';
     if (form.starts_on !== '' && form.ends_on !== '' && form.starts_on > form.ends_on) {
       error = m.modules_period_invalid();
       return;
     }
     error = undefined;
-    // 앞선 저장의 안내가 이번 결과(409·실패) 옆에 남아 저장된 것처럼 보이지 않게 한다.
-    status = '';
     try {
       const result = await api.setItemProfile(item.id, base, {
         leader_id: form.leader === '' ? null : form.leader,
