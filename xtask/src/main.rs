@@ -8,6 +8,7 @@ mod licenses;
 mod notices;
 mod openapi;
 mod rhwp;
+mod sql_compare;
 mod supabase;
 mod supabase_cloud_precheck;
 mod test;
@@ -27,6 +28,33 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Compare fresh cumulative migrations with a proposed SQL baseline in isolated Compose projects.
+    SqlCompare {
+        /// Directory containing ordered, plain SQL candidate files. Omit for A/A control.
+        #[arg(long)]
+        candidate: Option<PathBuf>,
+        /// Evidence directory (must not already exist).
+        #[arg(long)]
+        output: PathBuf,
+        /// Also run the existing integration suite against both databases.
+        #[arg(long)]
+        behavior: bool,
+        /// Select all existing tests or only the listed app-role capability tests.
+        #[arg(long, value_enum, requires = "behavior")]
+        behavior_scope: Option<sql_compare::BehaviorScope>,
+        /// Also start the test Keycloak (`oidc` profile) and run the OIDC tests in the full suite.
+        #[arg(long, requires = "behavior")]
+        oidc: bool,
+        /// Use a local PostgreSQL installer with CREATEROLE and target-DB privileges only.
+        #[arg(long, conflicts_with = "supabase")]
+        restricted_admin: bool,
+        /// Standard PostgreSQL major; Supabase uses its own pinned fixture.
+        #[arg(long, value_enum, default_value = "17", conflicts_with = "supabase")]
+        postgres_major: compose::PostgresMajor,
+        /// Use the pinned self-hosted Supabase PostgreSQL and session pooler.
+        #[arg(long)]
+        supabase: bool,
+    },
     /// 전용 Supabase Cloud 대상의 읽기 전용 사전 점검. 기본값은 연결하지 않는다.
     SupabaseCloudPrecheck {
         /// 승인된 대상에 한 번 연결한다. 수동 workflow는 검토된 main에서만 실행한다.
@@ -121,6 +149,27 @@ fn main() -> Result<()> {
     });
     let root = repo_root()?;
     match cli.command {
+        Command::SqlCompare {
+            candidate,
+            output,
+            behavior,
+            behavior_scope,
+            oidc,
+            restricted_admin,
+            postgres_major,
+            supabase,
+        } => sql_compare::run(
+            &root,
+            candidate.as_deref(),
+            &output,
+            behavior.then(|| sql_compare::Behavior {
+                scope: behavior_scope.unwrap_or(sql_compare::BehaviorScope::Full),
+                oidc,
+            }),
+            supabase,
+            restricted_admin,
+            postgres_major,
+        ),
         Command::SupabaseCloudPrecheck { connect } => {
             std::process::exit(supabase_cloud_precheck::run(connect))
         }
@@ -150,5 +199,42 @@ fn main() -> Result<()> {
                 rhwp::run(&root, force)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sql_compare(args: &[&str]) -> Result<Command, clap::Error> {
+        let base = ["xtask", "sql-compare", "--output", "target/x"];
+        Cli::try_parse_from(base.iter().chain(args)).map(|cli| cli.command)
+    }
+
+    #[test]
+    fn sql_compare_requires_behavior_for_oidc() {
+        let error = sql_compare(&["--oidc"]).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::MissingRequiredArgument
+        );
+        for args in [
+            &["--behavior", "--oidc"][..],
+            &["--behavior", "--oidc", "--postgres-major", "18"],
+            &["--behavior", "--oidc", "--supabase"],
+        ] {
+            assert!(matches!(
+                sql_compare(args),
+                Ok(Command::SqlCompare {
+                    behavior: true,
+                    oidc: true,
+                    ..
+                })
+            ));
+        }
+        assert!(matches!(
+            sql_compare(&["--behavior"]),
+            Ok(Command::SqlCompare { oidc: false, .. })
+        ));
     }
 }

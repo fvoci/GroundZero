@@ -1,0 +1,5 @@
+# Rejection fixture only: PostgreSQL 16 is not a supported product or sql-compare target.
+# Overlay deploy/compose.test.yaml using an explicit task-owned project; stop, never down.
+services:
+  postgres:
+    image: postgres:16.13-bookworm@sha256:472efd9a66f2b2f1a5aeb18b28de74332e6ef88c2b93a1a5d812fb6db67a5f60

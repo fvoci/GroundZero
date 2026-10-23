@@ -42,6 +42,8 @@
 - 실제 지원하는 feature 조합을 검사한다. 서로 배타적인 feature를 억지로 all-features로 합치지 않는다.
 - 로컬과 CI는 같은 검사 진입점을 사용한다. 경고를 숨기거나 검사를 skip해서 성공시키지 않는다.
 - 설정이 존재하는 것만으로 완료 처리하지 않는다. 대표적인 위반 코드가 실제로 실패하는지 확인한 뒤 제거하고 결과를 기록한다. 기록은 실행 명령·대상 커밋 SHA·결과·필요한 실패 로그를 PR이나 작업 보고에 남긴다(D-42). 별도 증거 프레임워크를 만들지 않는다.
+- 실행별 TXT·JSON·JSONL 로그, 환경·카탈로그 스냅숏, 스크린샷과 중간 소스 사본은 현재 설계 문서와 분리한다. **역사 기록이며 현재 상태를 나타내지 않음**으로 표시하고 관련 결함·SHA 조사 때만 명시적으로 참조한다. 현재 사용자 요구사항·승인 결정·코드·테스트가 기준이며, 서로 충돌하면 보고한다.
+- 새 원시 출력은 기존 `target/` 경로를 쓴다. 장기 증거는 접근 가능한 원격 커밋에 보존하고 요약에 SHA·범위·PASS/FAIL/NOT RUN·대체 관계·재현 명령·SHA-256·permalink를 남긴다. 추적된 원시 파일을 분리하기 전 원격 바이트를 검증한다. `.gitignore`만으로 추적 파일이나 모든 도구가 제외되지는 않으므로 실제 검색·색인·포맷·lint·시험 수집 대상을 확인한다. 제품 코드·fixture·비교 도구·후보 SQL·생성 계약·클라이언트·고지·자산은 실행 로그로 취급하지 않는다. [SQL 준비 분리 기록](../preparation/sql-consolidation/evidence.md)은 이 원칙의 적용 예다.
 
 ## 5. 복잡도 원칙
 
@@ -49,6 +51,7 @@
 
 ## 6. 개발·통합 테스트 환경: Docker Compose
 
+- PostgreSQL 최소 버전은 17이며 검증한 메이저만 지원 목록에 둔다(D-100). 기본 시험 DB는 PG17, 기존 개발·셀프호스트 DB 이미지는 PG18을 유지한다. 기존 PG18 데이터 볼륨을 PG17 이미지에 연결하지 않는다. 환경별 제품 SQL은 분기하지 않는다.
 - PostgreSQL·Meilisearch·격리된 Keycloak은 컨테이너로 실행한다. 테스트용 S3 호환 저장소는 SeaweedFS 고정 버전을 사용한다(D-61, O-31). 운영 서비스나 개인 개발 DB를 테스트에 사용하지 않는다.
 - 통합 테스트는 격리된 Keycloak으로 로그인·세션 만료·로그아웃·권한 거부를 검증한다(결정 D-45). Keycloak 전용 API에 의존하지 않고 표준 OIDC만 사용한다.
 - Dockerfile·Compose·의존성 버전을 저장소에서 관리하고, 로컬과 CI가 동일한 이미지와 검사 명령을 사용하게 한다.
@@ -256,6 +259,7 @@ rhwp, Meilisearch 클라이언트 SDK, Tiptap 유료 확장, OIDC 클라이언�
 
   `check`·`licenses`·`integration`은 같은 `ghcr.io/fvoci/groundzero-ci-base@<digest>` 컨테이너 job으로 돌고, `oidc`의 테스트 단계와 `rhwp --audit`는 같은 이미지를 `docker run`으로 돌린다. digest는 저장소 변수 `CI_BASE_IMAGE_DIGEST`이며 base-image 워크플로가 게시한 값을 옮겨 적는다. 변수가 비면 job이 시작 단계에서 실패하며 성공으로 간주하지 않는다.
 
+- **PostgreSQL 메이저 검증(D-100)**: 기본 Compose 시험과 `integration`은 표준 PG17을 사용한다. 기존 `oidc` job은 고정 PG18 이미지로 같은 공통 SQL과 OIDC·S3를 검증한다. `supabase`는 고정 공식 PG17 구성을 사용한다. 새 메이저를 지원 목록에 넣기 전에는 같은 설치·권한·행동 검증을 추가하며, Cloud의 읽기 전용 버전 조회를 제품 검증으로 대신하지 않는다.
 - **서비스 격리**: GitHub의 컨테이너 job 안에서는 Compose를 띄울 수 없어 `integration` job은 PostgreSQL·Meilisearch를 job `services`로 둔다. 자격 증명은 `compose.test.yaml`과 같은 테스트 값이다. `cargo xtask test --external-services`는 Compose를 띄우지 않고, `FVOCI_TEST_PG_HOST_PORT`(테스트 관리자 `fvoci`로 닿는 PostgreSQL의 `호스트:포트`)나 `FVOCI_TEST_SEARCH_URL`(Meilisearch)이 없으면 실패하며 `--oidc`면 `FVOCI_TEST_OIDC_ISSUER`도 요구한다. 세 DB 역할 주소와 `DATABASE_URL`은 xtask가 그 호스트·포트와 테스트 자격 증명으로 만든다(밖에서 준 `DATABASE_URL`은 쓰지 않는다). `FVOCI_TEST_S3_ENDPOINT`가 없으면 S3 테스트(`s3_*`)는 NOT RUN으로 표시한다. 그래서 `integration` job은 `oidc_*`·`s3_*`·`supabase_*`를 빼고 돌며, 그 job이 돌리는 테스트는 `oidc` job도 모두 돌린다. 로컬은 `cargo xtask test`(Compose)로 같은 테스트를 돌린다.
 - **OIDC 로그인 테스트(`oidc` job)**: 컨테이너 job에서는 Compose를 띄울 수 없으므로 GitHub 호스트 러너(`ubuntu-24.04`)에서 `compose.test.yaml`의 `oidc` 프로필(PostgreSQL·Meilisearch·SeaweedFS·Keycloak. SeaweedFS는 프로필이 없어 함께 뜨고, S3 테스트도 이 job에서 돈다)을 띄운다. 테스트는 다른 job과 같은 베이스 이미지 digest 안에서 같은 진입점 `cargo xtask test --external-services --oidc`로 돈다. 테스트 컨테이너는 Compose 네트워크에 붙고 체크아웃만 마운트한다(Docker 소켓은 넘기지 않음). 프로젝트명 `fvoci-ci-<run_id>-<run_attempt>`로 실행마다 컨테이너·네트워크·볼륨을 분리하고, PostgreSQL은 tmpfs라 매번 빈 DB에서 시작하며, 결과와 상관없이 `down --volumes`로 지운다.
 - **셀프호스트 Supabase 테스트(`supabase` job, D-88): D-64의 이미지 계약 예외.**

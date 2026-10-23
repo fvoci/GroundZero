@@ -1,4 +1,4 @@
-//! Supabase Cloud Session pooler에 한 번 연결해 읽기 전용 SELECT 1만 확인한다.
+//! Supabase Cloud Session pooler에 한 번 연결해 읽기 전용 SELECT 1과 서버 버전을 확인한다.
 //! --connect 없이는 환경을 읽지 않으며, 연결 정보와 오류 원문은 출력하지 않는다.
 
 use std::fmt;
@@ -13,6 +13,8 @@ const PASSWORD_NAME: &str = "SUPABASE_TEST_PASSWORD";
 const SSL_ROOT_CERT_NAME: &str = "SUPABASE_TEST_SSL_ROOT_CERT";
 const BEGIN_READ_ONLY: &str = "BEGIN TRANSACTION READ ONLY";
 const SELECT_ONE: &str = "SELECT 1";
+const SELECT_SERVER_VERSION: &str =
+    "SELECT pg_catalog.current_setting('server_version_num')::integer";
 // new_without_pgpass still reads ambient defaults. Reject presence without
 // printing values or mutating environment; the extra CA is scoped to this connection.
 const AMBIENT_SETTINGS: &[&str] = &[
@@ -205,7 +207,8 @@ fn connect_options(target: &Target) -> PgConnectOptions {
 
 fn empty_report() -> Value {
     json!({"connection_kind": "session_pooler", "connection": "NOT RUN",
-        "tls_certificate_and_hostname": "NOT RUN", "query": "NOT RUN", "changes": "NOT RUN"})
+        "tls_certificate_and_hostname": "NOT RUN", "query": "NOT RUN",
+        "server_version_query": "NOT RUN", "changes": "NOT RUN"})
 }
 
 fn fail(mut report: Value, failure: Failure, code: i32) -> (Value, i32) {
@@ -234,6 +237,7 @@ trait ConnectionClient {
     async fn connect(&mut self, target: &Target) -> Result<(), Failure>;
     async fn begin_read_only(&mut self) -> Result<(), Failure>;
     async fn select_one(&mut self) -> Result<i32, Failure>;
+    async fn server_version(&mut self) -> Result<i32, Failure>;
     async fn rollback(&mut self) -> Result<(), Failure>;
     async fn close(&mut self) -> Result<(), Failure>;
 }
@@ -271,6 +275,12 @@ impl ConnectionClient for NativeClient {
             .await
             .map_err(|_| Failure::QueryFailed)
     }
+    async fn server_version(&mut self) -> Result<i32, Failure> {
+        sqlx::query_scalar(SELECT_SERVER_VERSION)
+            .fetch_one(self.connection()?)
+            .await
+            .map_err(|_| Failure::QueryFailed)
+    }
     async fn rollback(&mut self) -> Result<(), Failure> {
         self.statement("ROLLBACK").await
     }
@@ -303,20 +313,29 @@ async fn inspect_steps(
     report["connection"] = json!("PASS");
     report["tls_certificate_and_hostname"] = json!("PASS");
     report["query"] = json!("FAIL");
-    let query = match bounded(limits.query, client.begin_read_only()).await {
-        Ok(()) => bounded(limits.query, client.select_one()).await,
-        Err(error) => Err(error),
-    };
+    let query = async {
+        bounded(limits.query, client.begin_read_only()).await?;
+        if bounded(limits.query, client.select_one()).await? != 1 {
+            return Err(Failure::UnexpectedQueryResult);
+        }
+        report["server_version_query"] = json!("FAIL");
+        let version = bounded(limits.query, client.server_version()).await?;
+        if version < 10_000 {
+            return Err(Failure::UnexpectedQueryResult);
+        }
+        Ok(version)
+    }
+    .await;
     // Cleanup is bounded even after failure. Preserve the first error; never retry.
     let rollback = bounded(limits.query, client.rollback()).await;
     let close = bounded(limits.query, client.close()).await;
-    let value = query?;
+    let version = query?;
     rollback?;
     close?;
-    if value != 1 {
-        return Err(Failure::UnexpectedQueryResult);
-    }
     report["query"] = json!("PASS");
+    report["server_version_query"] = json!("PASS");
+    report["server_version_num"] = json!(version);
+    report["postgres_major"] = json!(version / 10_000);
     Ok(())
 }
 

@@ -18,6 +18,8 @@
 
 프론트엔드 `features/`에 `projects`·`hobbies`·`notifications` 폴더가 없는 것은 기능 제외가 아니다. 모듈 종류(프로젝트·취미 등)는 `modules`·`records`가, 알림 화면은 `references`가 맡는다. 개인 노트는 `documents` 안에서 소유권·권한으로 구분하며 편집·저장 코드를 복제하지 않는다.
 
+`preparation/sql-consolidation/`에는 검토 후보 SQL, 재현용 조회·fixture, SHA별 요약을 둔다. 실행별 원시 로그·카탈로그와 환경 스냅숏은 [기존 원격 보존본](../preparation/sql-consolidation/evidence.md)으로 분리했다. 그중 과거 실행 기록은 **역사 기록이며 현재 상태를 나타내지 않음**이며 현재 구현은 코드·테스트와 승인 결정을 확인한다. 새 실행 출력은 기존 `target/` 아래에 두며 원격 보존 트리를 현재 소스에 복사하지 않는다.
+
 ```
 fvoci/
 ├── Cargo.toml                 # Rust workspace
