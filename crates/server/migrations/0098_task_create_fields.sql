@@ -5,7 +5,10 @@
 -- 넣는다. 확인 하나라도 실패하면 이 함수를 부른 트랜잭션이 업무·담당·감사 기록·번호 할당을 모두 되돌린다.
 --
 -- 1. 같은 요청 id(`tasks_request`)는 전처럼 무엇보다 먼저 찾아 그 업무를 돌려준다. 보낸 칸이 달라도 다시 쓰거나 견주지
---    않는다(기존 멱등 계약 그대로: 응답을 잃은 재시도가 그사이 다른 사람이 고친 값을 되돌리지 않는다).
+--    않는다(기존 멱등 계약 그대로: 응답을 잃은 재시도가 그사이 다른 사람이 고친 값을 되돌리지 않는다). 찾은 업무가 휴지통에
+--    있으면 `FV004`(서버가 409 `task_deleted`)를 올린다. 전에는 그 업무를 읽지 못해 404였는데, 항목을 볼 수 없는 404(권한
+--    확인이 찾기보다 앞)와 같아 웹이 둘을 가르지 못하고 404마다 새 요청 id로 다시 만들어, 항목을 잠시 볼 수 없던 뒤의 재시도가
+--    같은 업무를 하나 더 만들 수 있었다. 이 코드는 항목을 볼 수 있는 만든 사람에게만 나므로 존재를 새로 드러내지 않는다.
 -- 2. 확인은 `app_update_task`(0082)와 같다: 상태·우선순위 값, 시작일 ≤ 마감일, 이정표는 시작일 없음, 담당자는 그 항목을
 --    볼 수 있는 멤버(`app_check_assignee`, 멤버 행 공유 잠금은 사용자 id 순). 글자 수·태그·날짜 범위는 서버(Rust)가 고치기와
 --    같은 함수로 먼저 본다.
@@ -32,6 +35,7 @@ CREATE FUNCTION app_create_task(p_item uuid, p_request_id uuid, p_title text, p_
     v_uid    uuid;
     v_people uuid[];
     v_at     integer := 2;
+    v_deleted boolean;
   BEGIN
     IF v_access IS NULL THEN
       RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
@@ -39,7 +43,11 @@ CREATE FUNCTION app_create_task(p_item uuid, p_request_id uuid, p_title text, p_
     IF v_access NOT IN ('owner', 'write') THEN
       RAISE EXCEPTION 'write access is required' USING ERRCODE = '42501';
     END IF;
-    SELECT id INTO v_id FROM tasks WHERE item_id = p_item AND created_by = v_user AND request_id = p_request_id;
+    SELECT id, deleted_at IS NOT NULL INTO v_id, v_deleted
+    FROM tasks WHERE item_id = p_item AND created_by = v_user AND request_id = p_request_id;
+    IF v_deleted THEN
+      RAISE EXCEPTION 'the task made by this request was deleted' USING ERRCODE = 'FV004';
+    END IF;
     IF v_id IS NOT NULL THEN
       RETURN v_id;
     END IF;

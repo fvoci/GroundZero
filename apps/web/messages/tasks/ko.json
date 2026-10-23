@@ -20,7 +20,7 @@
   "tasks_csv_too_many_tags": "태그는 {max}개까지입니다",
   "tasks_csv_tag_too_long": "태그는 하나에 {max}자까지입니다",
   "tasks_csv_tag_control": "태그에 쓸 수 없는 문자(줄바꿈·탭 등)가 있습니다",
-  "tasks_csv_task_gone": "\"{title}\" 업무가 지워졌거나 볼 수 없습니다. 다시 누르면 새로 만듭니다.",
+  "tasks_csv_task_gone": "\"{title}\" 업무가 지워졌습니다. 다시 누르면 새로 만듭니다.",
   "tasks_csv_already_created": "{title}: 앞서 보낸 요청으로 이미 만들어진 업무가 이 줄 내용과 다릅니다. 그 업무에서 직접 고치세요. 다시 누르면 다음 줄부터 넣습니다.",
   "tasks_csv_row_failed": "{title}: {reason}",
   "tasks_csv_start_after_due": "시작일이 기한보다 늦습니다",

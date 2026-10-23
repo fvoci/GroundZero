@@ -64,9 +64,9 @@ export function matchRows(rows: readonly TaskRow[], known: readonly RowProgress[
 }
 
 /**
- * 이 줄의 요청 id로 만든 업무가 지워졌거나 볼 수 없게 되었을 때(만들기 404) 줄을 처음 상태로 되돌린다. 같은 요청 id로
- * 만들면 서버가 지운 업무를 다시 찾아 404를 내므로(app_create_task는 휴지통을 거르지 않는다) 새 요청 id를 쓴다. 항목이
- * 없어서 난 404였다면 새 id도 404일 뿐이다.
+ * 이 줄의 요청 id로 만든 업무가 지워졌을 때(만들기 409 `task_deleted`) 줄을 처음 상태로 되돌린다. 같은 요청 id로 만들면
+ * 서버가 지운 업무를 다시 찾아 같은 오류를 내므로 새 요청 id를 쓴다. 404(항목을 볼 수 없음)에는 부르지 않는다: 응답을 잃은
+ * 만들기가 반영됐을 수 있어 새 id로 보내면 다시 볼 수 있게 된 뒤 같은 줄이 둘이 된다.
  */
 export function resetRow(progress: RowProgress): void {
   progress.applied = undefined;

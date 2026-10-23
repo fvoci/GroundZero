@@ -20,7 +20,7 @@
   "tasks_csv_too_many_tags": "At most {max} tags",
   "tasks_csv_tag_too_long": "Each tag can be at most {max} characters",
   "tasks_csv_tag_control": "A tag contains line breaks, tabs or other control characters",
-  "tasks_csv_task_gone": "\"{title}\" was deleted or is no longer visible. Press again to create it anew.",
+  "tasks_csv_task_gone": "\"{title}\" was deleted. Press again to create it anew.",
   "tasks_csv_already_created": "{title}: an earlier attempt already created this task, and it differs from this line. Edit that task directly; press again to continue with the next line.",
   "tasks_csv_row_failed": "{title}: {reason}",
   "tasks_csv_start_after_due": "Start date is after the due date",

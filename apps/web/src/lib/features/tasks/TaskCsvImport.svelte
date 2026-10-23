@@ -120,13 +120,14 @@
       let reason = errorText(e, m.tasks_csv_import_failed());
       if (differs !== undefined) {
         reason = m.tasks_csv_already_created({ title: differs });
-      } else if (current !== undefined && e instanceof ApiError && e.status === 404) {
-        // 이 줄의 요청 id로 만든 업무를 그사이 지웠다(또는 볼 수 없다). 같은 요청 id의 만들기는 404이므로 그 줄은
-        // 다음에 새 요청 id로 만든다.
+      } else if (current !== undefined && e instanceof ApiError && e.code === 'task_deleted') {
+        // 이 줄의 요청 id로 만든 업무를 그사이 지웠다(409 `task_deleted`). 같은 요청 id로는 다시 만들 수 없으므로 그
+        // 줄은 다음에 새 요청 id로 만든다.
         resetRow(current.progress);
         reason = m.tasks_csv_task_gone({ title: current.row.title });
       } else if (current !== undefined) {
-        // 거절된 줄은 아무것도 남기지 않았다(D-105). 어느 줄인지 알린다.
+        // 거절된 줄은 아무것도 남기지 않았다(D-105). 어느 줄인지 알린다. 요청 id는 지킨다: 404(항목을 잠시 볼 수 없음)나
+        // 연결 오류 뒤에도 응답을 잃은 만들기가 반영됐을 수 있어, 새 id로 보내면 다시 볼 수 있게 된 뒤 같은 줄이 둘이 된다.
         reason = m.tasks_csv_row_failed({ title: current.row.title, reason });
       }
       error = m.tasks_csv_import_error({ reason, count: done });
