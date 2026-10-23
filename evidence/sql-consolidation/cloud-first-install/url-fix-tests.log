@@ -1,0 +1,39 @@
+   Compiling xtask v0.1.0 (/home/kinesis/orca/workspaces/GroundZero/leatherback/target/cloud-install-ci/xtask)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.83s
+     Running unittests src/main.rs (target/debug/deps/xtask-47a566ab19b3ad63)
+
+running 31 tests
+test licenses::tests::npm_exceptions_match_name_version_and_license ... ok
+test licenses::tests::spdx_or_and ... ok
+test licenses::tests::compound_expressions_keep_grouping_and_precedence ... ok
+test notices::tests::source_archives_point_at_the_exact_version ... ok
+test sql_compare::comments::tests::non_ascii_dollar_tags_preserve_comment_shaped_data ... ok
+test sql_compare::comments::tests::function_attributes_code_whitespace_and_literal_changes_still_differ ... ok
+test sql_compare::comments::tests::only_full_comment_lines_outside_sql_literals_are_removed ... ok
+test sql_compare::comments::tests::quoted_header_text_cannot_be_mistaken_for_the_function_body ... ok
+test sql_compare::tests::failed_database_and_service_starts_remain_registered_for_stop ... ok
+test sql_compare::tests::recording_failure_is_diagnosed_without_replacing_an_earlier_error ... ok
+test sql_compare::tests::restricted_admin_stays_core_and_full_suite_gates_oidc ... ok
+test supabase_cloud_precheck::first_install::tests::changed_managed_function_foreign_objects_and_extra_grants_are_not_hidden ... ok
+test sql_compare::tests::stop_failures_attempt_all_resources_and_write_failed_result ... ok
+test supabase_cloud_precheck::first_install::tests::product_url_roundtrip_preserves_password_ca_path_and_verify_full ... ok
+test supabase_cloud_precheck::inventory::tests::inventory_without_connect_never_reads_settings_or_connects ... ok
+test supabase_cloud_precheck::first_install::tests::only_authorized_additions_leave_managed_catalog_equal ... ok
+test supabase_cloud_precheck::inventory::tests::project_route_is_explicit_and_credential_shaped_metadata_is_redacted ... ok
+test supabase_cloud_precheck::first_install::tests::raw_url_set_password_corrupts_percent_sequences_but_sqlx_serializer_preserves_them ... ok
+test supabase_cloud_precheck::first_install::tests::diagnosis_metadata_redacts_all_three_credentials_and_credential_shaped_values ... ok
+test supabase_cloud_precheck::tests::approved_first_install_workflow_builds_before_credentials ... ok
+test supabase_cloud_precheck::tests::absent_connect_missing_settings_or_ambient_overrides_never_start_client ... ok
+test sql_compare::tests::concurrent_output_claim_has_one_winner_and_preserves_existing_evidence ... ok
+test supabase_cloud_precheck::tests::first_install_workflow_publishes_only_sanitized_metadata ... ok
+test supabase_cloud_precheck::tests::connection_errors_use_only_types_and_sqlstate_class_without_exposing_details ... ok
+test tests::sql_compare_requires_behavior_for_oidc ... ok
+test supabase_cloud_precheck::tests::split_settings_preserve_raw_password_and_reject_non_session_targets ... ok
+test supabase_cloud_precheck::tests::one_connection_reads_probe_and_numeric_version_then_rolls_back ... ok
+test supabase_cloud_precheck::tests::version_probe_reports_older_and_newer_servers_without_claiming_support ... ok
+test supabase_cloud_precheck::tests::connection_query_cleanup_failures_and_wrong_answer_are_sanitized ... ok
+test supabase_cloud_precheck::tests::missing_or_invalid_ca_never_starts_client_and_exposes_only_fixed_codes ... ok
+test supabase_cloud_precheck::tests::deadlines_bound_connection_query_cleanup_and_total_without_retry ... ok
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+

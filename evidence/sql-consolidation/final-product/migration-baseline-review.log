@@ -1,0 +1,12 @@
+   Compiling fvoci-server v0.1.0 (/home/kinesis/orca/workspaces/GroundZero/leatherback/crates/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.88s
+     Running tests/migration_baseline.rs (target/debug/deps/migration_baseline-d727db68859a769f)
+
+running 4 tests
+test previous_history_and_untracked_objects_are_rejected_without_data_loss ... ok
+test standalone_types_are_rejected_without_creating_a_ledger ... ok
+test bootstrap_only_database_requests_migration_and_can_initialize ... ok
+test concurrent_new_installs_repeat_and_preserve_checksums_without_app_ledger_access ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
+

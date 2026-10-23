@@ -1,0 +1,11 @@
+{
+  "executed_sha": "05403d7b68b0b562bfcd3ae1d83144ea3f21478c",
+  "run_id": 39959747871,
+  "preflight": "PASS",
+  "bootstrap": "FAIL (called, child exited nonzero)",
+  "migrate": "NOT RUN",
+  "repeat_migrate": "NOT RUN",
+  "application_role_tests": "NOT RUN",
+  "raw_report_limit": "The raw report's bootstrap NOT RUN field was initialized before invocation and updated only after success. phase=bootstrap and the failed child mean bootstrap was attempted, not skipped.",
+  "followup": "No blind retry. Inspect remote state read-only before any further installation."
+}

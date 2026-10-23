@@ -1,0 +1,47 @@
+{
+  "source_sha": "f4a32c8e9b30eaa8548ccf98c24c30d6ee13b1a7",
+  "final_product_sha": "d42c30414ebb867b93b868f85f11b84aff833daa",
+  "final_followup": "One documentation line removes the retired SQL comparison command; formatting, 10 local links and git diff --check PASS. Executable code and SQL are identical to source_sha.",
+  "comparison_source_sha": "b7d34936d68b6cc2901c020e5cc26a6098314a54",
+  "baseline_source_sha": "8ffd8c3b940924eca8cf7ec739a85494243c0479",
+  "commands": {
+    "cargo xtask check": "PASS (exit 0, including licenses; web 136 files / 756 tests)",
+    "cargo xtask test --keep --oidc": "PASS (exit 0, 381 tests / 48 groups, 0 failed / ignored)",
+    "PG17 migration_baseline": "PASS (4 tests)"
+  },
+  "github_ci": {
+    "run_id": 39959582467,
+    "result": "PASS",
+    "jobs": ["check", "integration", "oidc", "supabase", "licenses", "rhwp"]
+  },
+  "final_github_ci": {
+    "run_id": 39964186977,
+    "source_sha": "d42c30414ebb867b93b868f85f11b84aff833daa",
+    "result": "PASS",
+    "jobs": ["check", "integration", "oidc", "supabase", "licenses", "rhwp"]
+  },
+  "sql_sha256": "ba83f4bb97c060f49efe3c17ca47fd1c1297d594e1331949052a63d398d789f7",
+  "sqlx_sha384": "496c7802d169fd13f777cb7949574b09fdd4d2e65e64cb6e26243e827e6a9069f99b3f687c2ee2cbd47ff96998bfa7c7",
+  "cleanup": {
+    "tracked_preparation_or_task_python": 0,
+    "removed_runtime_callers_remaining": 0,
+    "canonical_document_local_links_checked": 153,
+    "working_tree_clean": true,
+    "diff_check": "PASS",
+    "existing_databases_or_volumes_deleted": 0
+  },
+  "retained_resources": {
+    "dev_project": "fvoci-leatherback-b57275-dev",
+    "dev_containers": ["970fd5ce5e1d", "fab820a594f7", "86e4f717bb9a"],
+    "dev_volumes": ["fvoci-leatherback-b57275-dev_pgdata", "fvoci-leatherback-b57275-dev_kcdata", "fvoci-leatherback-b57275-dev_meilidata"],
+    "test_project": "fvoci-leatherback-b57275-test",
+    "test_containers": ["6c85d705ee63", "3857363994f5", "a9e592c991e1", "6645f585a964"]
+  },
+  "limits": {
+    "old_release_backup_restore": "NOT RUN",
+    "browser_pixel_capture": "FAIL (blank image; issue #112)",
+    "browser_visual_validation": "NOT RUN",
+    "standard_postgresql_restricted_admin_additional_profile": "NOT RUN",
+    "existing_development_database_upgrade": "NOT IMPLEMENTED (recreation requires separate approval)"
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "pull_request": "https://github.com/fvoci/GroundZero/pull/111",
+  "head_sha": "d42c30414ebb867b93b868f85f11b84aff833daa",
+  "completed_review": {
+    "run_id": "b7ff0e62-a206-412e-8f5a-897e06792195",
+    "summary_comment_id": 6365135967,
+    "summary_url": "https://github.com/fvoci/GroundZero/pull/111#issuecomment-6365135967",
+    "review_submission_id": null,
+    "review_submission_time": null,
+    "submission_note": "No separate PullRequestReview submission was published for this zero-actionable review; completion is recorded in the summary comment's recent-review section.",
+    "summary_updated_at": "2026-10-23T13:37:39Z",
+    "observed_at_utc": "2026-10-23 13:40:07 UTC",
+    "source_commit_id": "f4a32c8e9b30eaa8548ccf98c24c30d6ee13b1a7",
+    "covered_commit_id": "f4a32c8e9b30eaa8548ccf98c24c30d6ee13b1a7",
+    "range_from": "8ffd8c3b940924eca8cf7ec739a85494243c0479",
+    "selected_files": 155,
+    "files_with_no_reviewable_changes": 75,
+    "result": "No actionable comments were generated in the recent review.",
+    "new_actionable_findings": 0,
+    "new_inline_findings": 0,
+    "new_outside_diff_findings": 0,
+    "resolved_thread_ids": [
+      "PRRT_kwDOVMhYH86vnI5t",
+      "PRRT_kwDOVMhYH86vnI6A",
+      "PRRT_kwDOVMhYH86vnI6Q",
+      "PRRT_kwDOVMhYH86vnI6b",
+      "PRRT_kwDOVMhYH86vnI6l"
+    ]
+  },
+  "additional_same_sha_review": {
+    "run_id": "a2857777-4947-4bee-8a50-c86d6b3f603d",
+    "state": "completed",
+    "review_submission_id": 5629117138,
+    "review_url": "https://github.com/fvoci/GroundZero/pull/111#pullrequestreview-5629117138",
+    "review_submission_time": "2026-10-23T13:46:08Z",
+    "covered_commit_id": "f4a32c8e9b30eaa8548ccf98c24c30d6ee13b1a7",
+    "observed_at_utc": "2026-10-23 13:47:05 UTC",
+    "new_inline_findings": 0,
+    "new_outside_diff_findings": 1,
+    "requested_again_by_this_agent": false,
+    "finding": {
+      "path": "docs/repo-structure.md",
+      "line": 34,
+      "severity": "minor",
+      "assessment": "valid",
+      "detail": "The current xtask entrypoint description still listed the retired SQL comparison command.",
+      "resolution_commit": "d42c30414ebb867b93b868f85f11b84aff833daa",
+      "resolution": "Removed only the SQL comparison phrase; the fixed-SHA reproduction link remains.",
+      "validation": {
+        "prettier": "PASS",
+        "local_links": "PASS (10)",
+        "git_diff_check": "PASS",
+        "changed_source_files": ["docs/repo-structure.md"],
+        "product_sql_changed": false
+      }
+    }
+  },
+  "request": {
+    "count_by_this_agent": 1,
+    "comment_id": 6365935040,
+    "url": "https://github.com/fvoci/GroundZero/pull/111#issuecomment-6365935040"
+  }
+}
