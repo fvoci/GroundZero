@@ -3301,6 +3301,10 @@ equal [ 't1', 't2', 't3' ]` 등.
   항목 접근이 잠시 막혀(멤버에서 빠짐·비공개) 404가 나고 접근이 돌아온 뒤 다시 누르면 같은 줄이 둘이 될 수 있었다. 처음에는 남는 위험으로
   적었으나 coordinator가 D-105(응답 유실 뒤 재시도에도 중복 없음)의 범위라고 판단해 이 PR에서 고쳤다: 서버는 지운 업무의 재시도를 409
   `task_deleted`로 알리고(위 「멱등」), 웹은 그때만 새 요청 id를 준다(위 「웹」).
+  (4, `291bf60` 검토의 diff 밖 Minor) `rowApplied`가 제목을 다듬지 않고 견주어 " 회의 " 줄을 다르다고 알린다: 받지 않았다. CSV 읽기
+  `csvRecords`(`apps/web/src/lib/csv.ts` 19·39행)가 따옴표 안의 칸까지 앞뒤 공백을 지워 줄의 제목은 이미 서버(`validate_title`)와 같은 값이고, 이
+  비교는 main(#56)과 같다. 이를 묶는 시험을 더했다(`task-csv-import.test.ts` "treats a task stored with the trimmed title as this row": 따옴표 안
+  공백을 두른 제목을 지운 제목으로 보내고, 응답을 잃은 뒤 돌려받은 업무를 이 줄로 본다).
 - **NOT RUN**: 로컬 `cargo xtask test --supabase`(CI의 supabase job은 pass), 개발 예제 SQL 실행(`cargo xtask dev --oidc`만 실행하며 작업자는
   돌리지 않는다. coordinator의 마지막 개발 실행에서 확인), 실제 브라우저로 CSV 등록(coordinator가 마지막에 한 번 돌린다), 칸반 빠른 추가·달력
   만들기의 두 단계(바꾸지 않음).

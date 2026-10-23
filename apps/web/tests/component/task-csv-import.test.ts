@@ -90,7 +90,7 @@ function fakeServer() {
         byRequest.set(requestId, id);
         made.push(id);
         const task: TaskDetailView = {
-          ...detail(id, title, 1),
+          ...detail(id, title.trim(), 1),
           ...(fields === undefined
             ? {}
             : {
@@ -326,6 +326,24 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(ids).toEqual([ids[0], ids[0], ids[0]]);
     expect(server.made).toEqual(['t1', 't2']);
     expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
+  });
+
+  // CodeRabbit #98(`291bf60`): 서버는 제목 앞뒤 공백을 지워 저장한다(validate_title). CSV 읽기(`csvRecords`)도 따옴표 안의
+  // 칸까지 앞뒤 공백을 지우므로, 공백을 두른 제목 줄은 지운 제목으로 보내고 돌려받은 업무를 이 줄로 본다(앞서 만든 업무와
+  // 다르다고 알리지 않는다). 응답을 잃고 다시 보내 처음 업무를 돌려받을 때도 같다.
+  it('treats a task stored with the trimmed title as this row', async () => {
+    const server = fakeServer();
+    server.lose('회의');
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('"  회의  ",설명');
+    await pressImport(onimported, 1);
+    expect(server.titles()).toEqual(['회의']);
+    await pressImport(onimported, 2);
+    expect(server.made).toEqual(['t1']);
+    expect(server.tasks.get('t1')?.title).toBe('회의');
+    expect(screen.queryByText(/이 줄 내용과 다릅니다/)).not.toBeInTheDocument();
+    expect(screen.getByText('업무 1개를 등록했습니다.')).toBeInTheDocument();
   });
 });
 
