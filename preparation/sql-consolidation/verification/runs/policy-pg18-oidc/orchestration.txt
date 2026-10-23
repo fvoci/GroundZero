@@ -1,0 +1,68 @@
+cluster: sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a --file deploy/compose.test.yaml --file deploy/compose.test.pg18.yaml up --detach --wait --remove-orphans postgres
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a_default Creating
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a_default Creating
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a_default Created
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a_default Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a-postgres-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a-postgres-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a-postgres-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a-postgres-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a-postgres-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a-postgres-1 Healthy
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+$ cargo run --quiet --package fvoci-server --locked -- db migrate
+cluster: sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b --file deploy/compose.test.yaml --file deploy/compose.test.pg18.yaml up --detach --wait --remove-orphans postgres
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b_default Creating
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b_default Creating
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b_default Created
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b_default Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b-postgres-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b-postgres-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b-postgres-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b-postgres-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b-postgres-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b-postgres-1 Healthy
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+PASS: catalog, required initial rows and schema dump objects are equal
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services --file deploy/compose.test.yaml --file deploy/compose.test.pg18.yaml --profile oidc up --detach --wait --remove-orphans meilisearch seaweedfs keycloak
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services_default Creating
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services_default Creating
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services_default Created
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services_default Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-meilisearch-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-keycloak-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-seaweedfs-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-keycloak-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-meilisearch-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-seaweedfs-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-meilisearch-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-seaweedfs-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-keycloak-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-meilisearch-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-seaweedfs-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-keycloak-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-seaweedfs-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-keycloak-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-meilisearch-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-meilisearch-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-seaweedfs-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-keycloak-1 Healthy
+==> app-role behavior direct, /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/sqlp2-pg18-oidc-p2-20261023t065441z/a
+NOT RUN: self-hosted Supabase tests (supabase_*). Use `cargo xtask test --supabase`.
+==> app-role behavior direct, /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/sqlp2-pg18-oidc-p2-20261023t065441z/b
+NOT RUN: self-hosted Supabase tests (supabase_*). Use `cargo xtask test --supabase`.
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services --file deploy/compose.test.yaml --file deploy/compose.test.pg18.yaml --profile oidc stop
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-meilisearch-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-keycloak-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-seaweedfs-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-meilisearch-1 Stopped
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-keycloak-1 Stopped
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-services-seaweedfs-1 Stopped
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b --file deploy/compose.test.yaml --file deploy/compose.test.pg18.yaml stop
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b-postgres-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-b-postgres-1 Stopped
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a --file deploy/compose.test.yaml --file deploy/compose.test.pg18.yaml stop
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a-postgres-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679433e772e1b4603bc12e879c3b-a-postgres-1 Stopped

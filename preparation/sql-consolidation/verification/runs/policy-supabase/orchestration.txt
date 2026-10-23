@@ -1,0 +1,314 @@
+==> fetch supabase/supabase docker/ at bc27d2661edd09a5d0b8d76ce33da6d4071a756e
+$ git init --quiet
+$ git remote add origin https://github.com/supabase/supabase.git
+$ git sparse-checkout set --no-cone /docker
+$ git fetch --quiet --depth 1 --filter=blob:none origin bc27d2661edd09a5d0b8d76ce33da6d4071a756e
+$ git checkout --quiet FETCH_HEAD
+cluster: sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a --project-directory /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/deploy/supabase/compose.test.yaml up --detach --wait db rest supavisor
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SUPABASE_SECRET_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"STUDIO_DEFAULT_ORGANIZATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"OPENAI_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"STUDIO_DEFAULT_PROJECT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SUPABASE_PUBLISHABLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"DASHBOARD_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"DASHBOARD_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"GLOBAL_S3_BUCKET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"STORAGE_TENANT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"REGION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SMTP_PORT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SMTP_PASS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"ENABLE_PHONE_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"ADDITIONAL_REDIRECT_URLS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"ENABLE_ANONYMOUS_USERS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SMTP_ADMIN_EMAIL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"MAILER_URLPATHS_INVITE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"MAILER_URLPATHS_CONFIRMATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"MAILER_URLPATHS_RECOVERY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"ENABLE_PHONE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SITE_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"ENABLE_EMAIL_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SMTP_SENDER_NAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SMTP_USER\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"MAILER_URLPATHS_EMAIL_CHANGE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"DISABLE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"ENABLE_EMAIL_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SMTP_HOST\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"IMGPROXY_AUTO_WEBP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"FUNCTIONS_VERIFY_JWT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:03+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a_default Creating
+ Volume sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a_db-config Creating
+ Volume sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a_db-config Creating
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a_default Creating
+ Volume sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a_db-config Created
+ Volume sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a_db-config Created
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a_default Created
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a_default Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-supavisor-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-rest-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-rest-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-supavisor-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-rest-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-supavisor-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-rest-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-supavisor-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-supavisor-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-rest-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-rest-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-supavisor-1 Healthy
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+$ cargo run --quiet --package fvoci-server --locked -- db migrate
+cluster: sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b --project-directory /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/deploy/supabase/compose.test.yaml up --detach --wait db rest supavisor
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"STUDIO_DEFAULT_PROJECT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SUPABASE_PUBLISHABLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SUPABASE_SECRET_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"STUDIO_DEFAULT_ORGANIZATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"OPENAI_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"DASHBOARD_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"DASHBOARD_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"MAILER_URLPATHS_CONFIRMATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"ADDITIONAL_REDIRECT_URLS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"ENABLE_ANONYMOUS_USERS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SMTP_PASS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"MAILER_URLPATHS_INVITE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SITE_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"DISABLE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SMTP_HOST\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SMTP_PORT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"MAILER_URLPATHS_RECOVERY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"ENABLE_PHONE_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"ENABLE_EMAIL_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SMTP_ADMIN_EMAIL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SMTP_USER\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"ENABLE_EMAIL_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SMTP_SENDER_NAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"MAILER_URLPATHS_EMAIL_CHANGE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"ENABLE_PHONE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"GLOBAL_S3_BUCKET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"STORAGE_TENANT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"REGION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"IMGPROXY_AUTO_WEBP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"FUNCTIONS_VERIFY_JWT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:10:20+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b_default Creating
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b_default Creating
+ Volume sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b_db-config Creating
+ Volume sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b_db-config Creating
+ Volume sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b_db-config Created
+ Volume sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b_db-config Created
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b_default Created
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b_default Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-supavisor-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-rest-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-rest-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-supavisor-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-rest-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-supavisor-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-rest-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-supavisor-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-rest-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-supavisor-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-rest-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-supavisor-1 Healthy
+$ cargo run --quiet --package fvoci-server --locked -- db bootstrap
+PASS: catalog, required initial rows and schema dump objects are equal
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services --file deploy/compose.test.yaml up --detach --wait --remove-orphans meilisearch seaweedfs
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services_default Creating
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services_default Creating
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services_default Created
+ Network sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services_default Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-seaweedfs-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-meilisearch-1 Creating
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-seaweedfs-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-meilisearch-1 Created
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-meilisearch-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-seaweedfs-1 Starting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-meilisearch-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-seaweedfs-1 Started
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-seaweedfs-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-meilisearch-1 Waiting
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-meilisearch-1 Healthy
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-seaweedfs-1 Healthy
+==> app-role behavior direct, /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/sqlp2-supabase-p2-20261023t065441z/a
+NOT RUN: OIDC integration tests (oidc_*). Use `cargo xtask test --oidc`.
+==> app-role behavior session pooler, /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/sqlp2-supabase-p2-20261023t065441z/a
+NOT RUN: OIDC integration tests (oidc_*). Use `cargo xtask test --oidc`.
+==> app-role behavior direct, /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/sqlp2-supabase-p2-20261023t065441z/b
+NOT RUN: OIDC integration tests (oidc_*). Use `cargo xtask test --oidc`.
+==> app-role behavior session pooler, /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/sqlp2-supabase-p2-20261023t065441z/b
+NOT RUN: OIDC integration tests (oidc_*). Use `cargo xtask test --oidc`.
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services --file deploy/compose.test.yaml stop
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-seaweedfs-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-meilisearch-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-meilisearch-1 Stopped
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-test-01a1679855c070cb907d0a16ca1996da-services-seaweedfs-1 Stopped
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b --project-directory /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/deploy/supabase/compose.test.yaml stop
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"DASHBOARD_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"DASHBOARD_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"IMGPROXY_AUTO_WEBP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SUPABASE_SECRET_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"STUDIO_DEFAULT_ORGANIZATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"STUDIO_DEFAULT_PROJECT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"OPENAI_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SUPABASE_PUBLISHABLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"ENABLE_ANONYMOUS_USERS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SMTP_PORT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SMTP_USER\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SMTP_PASS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"MAILER_URLPATHS_EMAIL_CHANGE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SITE_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"ENABLE_EMAIL_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"ENABLE_EMAIL_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"MAILER_URLPATHS_CONFIRMATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"ENABLE_PHONE_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"DISABLE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"MAILER_URLPATHS_RECOVERY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"ADDITIONAL_REDIRECT_URLS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SMTP_ADMIN_EMAIL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"MAILER_URLPATHS_INVITE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"ENABLE_PHONE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SMTP_SENDER_NAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SMTP_HOST\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"STORAGE_TENANT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"GLOBAL_S3_BUCKET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"REGION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"FUNCTIONS_VERIFY_JWT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:03+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-supavisor-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-rest-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-supavisor-1 Stopped
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-rest-1 Stopped
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-b-db-1 Stopped
+$ docker compose --project-name sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a --project-directory /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker --env-file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/deploy/supabase/test.env --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml --file /home/kinesis/orca/workspaces/GroundZero/sql-prep-synthesis/deploy/supabase/compose.test.yaml stop
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"STORAGE_TENANT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"S3_PROTOCOL_ACCESS_KEY_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"GLOBAL_S3_BUCKET\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"REGION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"IMGPROXY_AUTO_WEBP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"OPENAI_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SUPABASE_PUBLISHABLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SUPABASE_SECRET_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"PG_META_CRYPTO_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"STUDIO_DEFAULT_ORGANIZATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"STUDIO_DEFAULT_PROJECT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"MAILER_URLPATHS_INVITE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SITE_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"ADDITIONAL_REDIRECT_URLS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SMTP_ADMIN_EMAIL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SMTP_HOST\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SMTP_USER\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"ENABLE_EMAIL_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"MAILER_URLPATHS_EMAIL_CHANGE\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"ENABLE_ANONYMOUS_USERS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SMTP_SENDER_NAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"ENABLE_PHONE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"DISABLE_SIGNUP\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SMTP_PASS\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"MAILER_URLPATHS_RECOVERY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"API_EXTERNAL_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SMTP_PORT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"ENABLE_EMAIL_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"MAILER_URLPATHS_CONFIRMATION\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"ENABLE_PHONE_AUTOCONFIRM\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"FUNCTIONS_VERIFY_JWT\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"DASHBOARD_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SUPABASE_PUBLIC_URL\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"DASHBOARD_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"SERVICE_ROLE_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-10-23T16:19:05+09:00" level=warning msg="The \"ANON_KEY\" variable is not set. Defaulting to a blank string."
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-supavisor-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-rest-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-rest-1 Stopped
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-supavisor-1 Stopped
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Stopping
+ Container sqlprep-b-fvoci-sql-prep-synthesis-998f21-supabase-01a1679855c070cb907d0a16ca1996da-a-db-1 Stopped

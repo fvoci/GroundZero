@@ -1,6 +1,6 @@
 # 객체와 호출 근거
 
-기준 커밋은 `5c266229b08eddfaba7723d983483a137ad9e0bc`다(#92에 `fvoci/sql-policy` `874d866`을 병합한 커밋, 마이그레이션 디렉터리는 `874d866`과 같다).
+기준 커밋은 `3db81d1deae24b16478581ebd6a06de2b2a2d8c9`다(#92에 `fvoci/sql-policy` `b01d74a`를 병합한 커밋, 마이그레이션 디렉터리는 `b01d74a`와 같다).
 아래 수치는 그 커밋의 97개 마이그레이션을 PostgreSQL 18.3의 빈 DB에 적용한 직후이며 아래 [재생성 명령](#재생성-명령)으로 만들었다. 최종 통합 기준선 승인과 구분한다.
 처음 목록은 `cb65cc31156c0fd8d28cf856bc132d4a506c8885`(93개)에서 Worker B 소유 `sqlprep-b-cb65cc31-postgres-1`로 만들었다. 그 수치는 아래에 이력으로만 남긴다.
 정책 반영으로 바뀐 객체의 목록과 호출 위치는 [analysis-a.md](../analysis-a.md#정책-반영으로-바뀐-객체)에 있다.
@@ -13,15 +13,15 @@
 | `function-history.jsonl`                          | 현재 소스의 함수 CREATE 438건, CREATE OR REPLACE 189건, DROP 138건, 총 765건. 각 선언의 원본 파일·시작 줄·전체 인자 목록. OUT 인자로 반환형을 표현한 함수도 포함                                                                                          |
 | `function-map.jsonl`                              | 최종 앱 함수 300개의 서명·소유자·SECURITY DEFINER·search_path·ACL, 마지막 선언 위치, SQL 본문의 다른 최종 함수 이름, 소스 등장 위치                                                                                                                       |
 | `retired-signatures.jsonl`                        | 138개 과거 DROP 선언과 같은 이름으로 현재 남은 서명. 같은 이름의 새 서명이 있으므로 이름 전체를 삭제하라는 목록이 아님                                                                                                                                    |
-| `source-occurrences.jsonl`                        | `crates/server/src`, `crates/server/tests`, `xtask/src`, `deploy/postgres`, `docs`의 app_* 등장 623건. 실제 호출, 문자열 Job, 문서·주석이 원문과 경로로 구분됨. `xtask/src` 1건은 #92 비교 도구의 변조 시험 문자열(`sql_compare.rs`)이며 제품 호출이 아님 |
-| `direct-table-occurrences.jsonl`                  | 같은 경로에서 최종 테이블에 대한 FROM/JOIN/INTO/UPDATE/TABLE 문맥 352건. 직접 조회·변경·테스트 fixture·문서의 근거이며 SQL parser 결과는 아님. `xtask/src/sql_compare*` 3건은 #92 비교 도구의 시험 문자열                                                 |
+| `source-occurrences.jsonl`                        | `crates/server/src`, `crates/server/tests`, `xtask/src`, `deploy/postgres`, `docs`의 app_* 등장 633건. 실제 호출, 문자열 Job, 문서·주석이 원문과 경로로 구분됨. `xtask/src` 1건은 #92 비교 도구의 변조 시험 문자열(`sql_compare.rs`)이며 제품 호출이 아님 |
+| `direct-table-occurrences.jsonl`                  | 같은 경로에서 최종 테이블에 대한 FROM/JOIN/INTO/UPDATE/TABLE 문맥 354건. 직접 조회·변경·테스트 fixture·문서의 근거이며 SQL parser 결과는 아님. `xtask/src/sql_compare*` 3건은 #92 비교 도구의 시험 문자열                                                 |
 | `object-function-references.jsonl`                | CHECK·정책·트리거에서 최종 함수 이름을 참조하는 객체 72개. 테이블 RLS와 SQL 내부 호출을 외부 Rust 호출과 함께 보기 위한 목록                                                                                                                              |
 | `dependencies.sql`, `dependencies-postgres.jsonl` | pg_depend가 기록한 의존성 3091건. 행 타입·테이블·제약·트리거·함수 사이의 구조적 의존성. 물리 OID 대신 객체 식별자를 사용                                                                                                                                  |
 | `tables.md`                                       | 55개 테이블의 실제 RLS/강제 RLS 상태와 테이블 ACL. 열 단위 권한은 원본 카탈로그의 column 항목으로 확인                                                                                                                                                    |
 
 모든 JSON 목록은 객체 하나를 한 줄에 담는 JSON Lines다. `jq -s`로 읽으면 행 순서를 유지한 배열이 된다.
 배열 형식에서 변환한 여섯 목록은 변환 전후 객체 키를 정렬한 배열의 SHA-256과 행 수를 대조하여 데이터가 같음을 확인했다.
-최초 추출(`cb65cc3`)의 원본은 B worktree의 `target/sql-compare-baseline-export/`에, 현재 목록의 원본 행·덤프는 이 체크아웃의 `target/sql-regen-5c266229b08e-20261023t055712z/`에만 보존한다.
+최초 추출(`cb65cc3`)의 원본은 B worktree의 `target/sql-compare-baseline-export/`에, 현재 목록의 원본 행·덤프는 이 체크아웃의 `target/sql-regen-3db81d1deae2-20261023t065319z/`에만 보존한다.
 PR에서 검토할 카탈로그 근거는 위 `catalog-postgres.jsonl`이며, 로컬 원본 경로를 Git에 포함된 파일로 해석하지 않는다.
 
 함수 지도에서 `body_name_references`는 주석을 뺀 본문을 최종 함수 이름 목록과 대조한 **이름 참조**다.
@@ -248,8 +248,12 @@ sha256sum "$REGEN/0001_final_state.sql" "$REGEN"/inventory/*
 **바이트 단위로 같았다**. `dependencies-postgres.jsonl`도 포함된다. 카탈로그 원본 행은 B가 보존한 최초 추출과 같았고 초기 행 파일은 비어 있었다.
 출력은 로컬 `target/sql-regen-cb65cc31156c-20261023t033728z/`에 있다. 컨테이너는 정지 상태이며 볼륨은 없다.
 
-정책 반영 재생성(2026-10-23): 같은 블록을 README에서 그대로 뽑아 `SRC_SHA=5c266229b08eddfaba7723d983483a137ad9e0bc`로 실행했다(종료 코드 0).
-97개 마이그레이션, PostgreSQL 18.3, 초기 행 파일은 비어 있었고 금지 줄 검사도 통과했다. 위 반영 절차대로 후보와 JSON Lines 8개를 복사했다.
-새 후보 SHA-256은 `bb9f1063f6fc5575cb96c30764fd8147f94ac9da7ebd38ae66728191bc4cf94e`, `tables.md`는 테이블·RLS·ACL이 같아 바이트 단위로 같았다.
-출력은 로컬 `target/sql-regen-5c266229b08e-20261023t055712z/`에 있고 그 컨테이너는 정지 상태이며 마운트·볼륨이 없다.
-비결정적 출력은 두 실행 모두 없었다. 덤프의 `\restrict` 토큰은 후보에 들어가기 전에 지워지고 날짜·시각을 담는 출력 파일은 없다.
+정책 반영 재생성(2026-10-23, 최종): 같은 블록을 README에서 그대로 뽑아 `SRC_SHA=3db81d1deae24b16478581ebd6a06de2b2a2d8c9`로 실행했다(종료 코드 0).
+이 SHA는 #92에 최종 `fvoci/sql-policy` `b01d74a`를 병합한 커밋이다. 97개 마이그레이션, PostgreSQL 18.3, 초기 행 파일은 비어 있었고 금지 줄 검사도 통과했다.
+위 반영 절차대로 후보와 JSON Lines 8개를 복사했다. 후보 SHA-256은 `24a0a3dfaf7b2cf09152a11f80ff2100dd6004990b31cb661bf52a688ae9eea0`이고,
+`tables.md`는 테이블·RLS·ACL이 같아 바이트 단위로 같았다. 출력은 로컬 `target/sql-regen-3db81d1deae2-20261023t065319z/`이며 그 컨테이너는 정지 상태이고 마운트·볼륨이 없다.
+
+그 전의 시험 실행(dry run): 정책 브랜치 `874d866`을 병합한 `5c26622`로 같은 블록을 실행했다(후보 `bb9f1063…cf94e`, 출력
+`target/sql-regen-5c266229b08e-20261023t055712z/`). 이후 #103이 0096·0097의 판 비교를 `IS DISTINCT FROM`으로 바꿔 최종 결과와는
+`app_update_view`·`app_update_item`·`app_set_item_profile` 본문, 그리고 #103이 더한 시험·개발 seed·문서의 등장(623→633, 직접 테이블 문맥 352→354)만 다르다. 이 시험 실행의 후보는 증거로 쓰지 않는다.
+비결정적 출력은 세 실행 모두 없었다. 덤프의 `\restrict` 토큰은 후보에 들어가기 전에 지워지고 날짜·시각을 담는 출력 파일은 없다.

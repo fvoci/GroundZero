@@ -1,0 +1,13 @@
+{
+  "a": {
+    "count": 97,
+    "max_version": 98,
+    "all_success": true
+  },
+  "b": {
+    "count": 97,
+    "max_version": 98,
+    "all_success": true
+  },
+  "comparison": "Structure is compared. Real SQLx ledger rows intentionally differ; upgrade/backup compatibility is not asserted."
+}
