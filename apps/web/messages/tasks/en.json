@@ -79,6 +79,7 @@
   "tasks_view_name_required": "Enter a view name.",
   "tasks_view_saved": "Saved view \"{name}\".",
   "tasks_view_save_failed": "Couldn't save the view.",
+  "tasks_view_conflict": "Another tab saved the view \"{name}\" first, so this save wasn't applied. Your current settings are kept. Pick the view in the list to see the latest settings, or save again to replace them with these.",
   "tasks_view_deleted": "View deleted.",
   "tasks_view_delete_failed": "Couldn't delete the view.",
   "tasks_view_board": "Board",

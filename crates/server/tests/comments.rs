@@ -239,7 +239,7 @@ async fn comments_threads_and_notifications_follow_access() {
         Method::PUT,
         &format!("/api/items/{}", item["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": "항목", "description": "", "visibility": "workspace" })),
     )
     .await;
     let task = send(
@@ -469,7 +469,7 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
         Method::PUT,
         &format!("/api/items/{}", item["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": "항목", "description": "", "visibility": "workspace" })),
     )
     .await;
     let task = send(
@@ -526,7 +526,7 @@ async fn item_task(app: &Router, admin: &TestUser, ws: &str, key: &str) -> (Valu
         Method::PUT,
         &format!("/api/items/{}", item["id"].as_str().unwrap()),
         Some(admin),
-        Some(json!({ "title": "항목", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": "항목", "description": "", "visibility": "workspace" })),
     )
     .await;
     assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
@@ -724,7 +724,7 @@ async fn task_comments_follow_the_item_access() {
         Method::PUT,
         &format!("/api/items/{}", item["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "title": "비공개 항목", "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": "비공개 항목", "description": "", "visibility": "workspace" })),
     )
     .await;
     assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
@@ -732,4 +732,147 @@ async fn task_comments_follow_the_item_access() {
     assert_eq!(seen.status, StatusCode::OK, "{:?}", seen.json);
     assert_eq!(seen.json.as_array().unwrap().len(), 2);
     assert_eq!(seen.json[0]["can_edit"], false);
+}
+
+/// D-106(감사 P-28, 현행 유지): 보관된 항목·모듈에서는 쓴 사람만 자기 댓글을 지운다(개인 내용 회수). 지금 경로를 그대로
+/// 고정하는 시험이다(수정 전에도 통과한다): 보관되면 대상 권한이 읽기로 낮아져(`app_task_access`·`app_document_access`)
+/// 소유 권한자도 남의 댓글은 `app_delete_comment`의 쓴 사람·소유자 검사에서 403이고 목록의 지우기 표시도 꺼진다. 남의
+/// 댓글을 지울 권한이 없는 사람도 403, 대상을 볼 수 없는 사람은 404다. 보관을 풀면 소유 권한자가 다시 지운다.
+/// 고치기·해결·새 댓글의 409는 `comments_in_an_archived_item_are_not_edited_or_resolved`와 첫 시험이 본다.
+#[tokio::test]
+async fn archived_items_let_authors_delete_only_their_own_comments() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "보관 댓글 지우기").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
+    let outsider = login(&state, "outsider").await;
+    let (module, item, task) = item_task(&app, &admin, &ws, "ARD").await;
+    let mut ids = Vec::new();
+    for (user, body) in [
+        (&writer, "내 메모"),
+        (&writer, "둘째 메모"),
+        (&other, "남의 메모"),
+        (&writer, "모듈 보관 뒤"),
+    ] {
+        let (status, created) =
+            comment(&app, user, json!({ "task_id": task["id"], "body": body })).await;
+        assert_eq!(status, StatusCode::CREATED, "{created:?}");
+        ids.push(format!("/api/comments/{}", created["id"].as_str().unwrap()));
+    }
+    let archive = |archived: bool| {
+        let (app, admin) = (app.clone(), admin.clone());
+        let uri = format!("/api/items/{}/archived", item["id"].as_str().unwrap());
+        async move {
+            let r = send(
+                &app,
+                Method::PUT,
+                &uri,
+                Some(&admin),
+                Some(json!({ "archived": archived })),
+            )
+            .await;
+            assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+        }
+    };
+    archive(true).await;
+
+    let by_owner = send(&app, Method::DELETE, &ids[0], Some(&admin), None).await;
+    assert_eq!(
+        by_owner.status,
+        StatusCode::FORBIDDEN,
+        "{:?}",
+        by_owner.json
+    );
+    let list_uri = format!("/api/tasks/{}/comments", task["id"].as_str().unwrap());
+    let list = send(&app, Method::GET, &list_uri, Some(&admin), None)
+        .await
+        .json;
+    assert!(
+        list.as_array()
+            .unwrap()
+            .iter()
+            .all(|c| c["can_delete"] == false),
+        "{list:?}"
+    );
+    let mine = send(&app, Method::GET, &list_uri, Some(&writer), None)
+        .await
+        .json;
+    let flags: Vec<(String, bool)> = mine
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            (
+                c["body"].as_str().unwrap().to_owned(),
+                c["can_delete"] == true,
+            )
+        })
+        .collect();
+    assert!(flags.contains(&("내 메모".to_owned(), true)), "{flags:?}");
+    assert!(
+        flags.contains(&("남의 메모".to_owned(), false)),
+        "{flags:?}"
+    );
+    assert_eq!(
+        send(&app, Method::DELETE, &ids[2], Some(&writer), None)
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        send(&app, Method::DELETE, &ids[2], Some(&outsider), None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    let own = send(&app, Method::DELETE, &ids[0], Some(&writer), None).await;
+    assert_eq!(own.status, StatusCode::NO_CONTENT, "{:?}", own.json);
+    let left: Vec<Value> = send(&app, Method::GET, &list_uri, Some(&admin), None)
+        .await
+        .json
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(left.len(), 3, "{left:?}");
+    assert!(left.iter().all(|c| c["body"] != "내 메모"), "{left:?}");
+
+    archive(false).await;
+    let unarchived = send(&app, Method::DELETE, &ids[1], Some(&admin), None).await;
+    assert_eq!(
+        unarchived.status,
+        StatusCode::NO_CONTENT,
+        "{:?}",
+        unarchived.json
+    );
+
+    // 모듈을 보관해도 같다: 쓴 사람은 자기 댓글을 지우고, 소유 권한자는 남의 댓글을 지우지 못한다.
+    let module_archived = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{}/archived", module["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(
+        module_archived.status,
+        StatusCode::OK,
+        "{:?}",
+        module_archived.json
+    );
+    assert_eq!(
+        send(&app, Method::DELETE, &ids[2], Some(&admin), None)
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    let own_in_module = send(&app, Method::DELETE, &ids[3], Some(&writer), None).await;
+    assert_eq!(
+        own_in_module.status,
+        StatusCode::NO_CONTENT,
+        "{:?}",
+        own_in_module.json
+    );
 }

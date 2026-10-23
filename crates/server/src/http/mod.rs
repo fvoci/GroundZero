@@ -346,7 +346,8 @@ async fn api_not_found() -> AppError {
         documents::templates,
         documents::set_template,
         saved_views::list,
-        saved_views::save,
+        saved_views::create,
+        saved_views::update,
         saved_views::delete,
         study::get,
         study::add_units,
@@ -570,7 +571,9 @@ async fn api_not_found() -> AppError {
         documents::DocumentTemplate,
         documents::SetDocumentTemplate,
         saved_views::SavedView,
-        saved_views::SaveView,
+        saved_views::CreateView,
+        saved_views::UpdateView,
+        saved_views::SavedViewConflict,
         study::MyUnitProgress,
         study::StudyUnit,
         study::StudyPlan,
@@ -602,6 +605,8 @@ async fn api_not_found() -> AppError {
         item_profile::PersonRef,
         item_profile::GroupRef,
         item_profile::SetItemProfile,
+        item_profile::ItemProfileConflict,
+        item_profile::ItemProfileSaveConflict,
         item_profile::SetItemMembers,
         item_profile::SetModuleIcon,
         item_profile::CopyItem,
@@ -637,6 +642,8 @@ async fn api_not_found() -> AppError {
         modules::Item,
         modules::CreateItem,
         modules::UpdateItem,
+        modules::ItemConflict,
+        modules::ItemSaveConflict,
         references::ReferenceKind,
         references::ReferenceCandidate,
         references::ReferenceInput,
@@ -720,9 +727,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/items/{item_id}/views",
-            get(saved_views::list).post(saved_views::save),
+            get(saved_views::list).post(saved_views::create),
         )
-        .route("/views/{view_id}", delete(saved_views::delete))
+        .route(
+            "/views/{view_id}",
+            put(saved_views::update).delete(saved_views::delete),
+        )
         .route("/items/{item_id}/study", get(study::get))
         .route("/items/{item_id}/study/units", post(study::add_units))
         .route("/items/{item_id}/study/plan", put(study::plan))
@@ -1283,5 +1293,38 @@ mod tests {
                 "#/components/schemas/ErrorBody"
             ]
         );
+    }
+
+    /// 항목 정보·항목 정보 패널 저장의 409는 두 모양이다(D-104): 판이 지났으면 서버 최신본(`current`), 보관 등이면
+    /// `ErrorBody`(`invalid_state`, 최신본 없음).
+    #[test]
+    fn the_item_save_conflicts_are_a_stale_version_or_error_body() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
+        for (path, wrapper, stale) in [
+            ("/api/items/{item_id}", "ItemSaveConflict", "ItemConflict"),
+            (
+                "/api/items/{item_id}/profile",
+                "ItemProfileSaveConflict",
+                "ItemProfileConflict",
+            ),
+        ] {
+            assert_eq!(
+                doc["paths"][path]["put"]["responses"]["409"]["content"]["application/json"]["schema"],
+                serde_json::json!({ "$ref": format!("#/components/schemas/{wrapper}") }),
+                "{path}"
+            );
+            let one_of: Vec<&str> = doc["components"]["schemas"][wrapper]["oneOf"]
+                .as_array()
+                .map(|v| v.iter().filter_map(|s| s["$ref"].as_str()).collect())
+                .unwrap_or_default();
+            assert_eq!(
+                one_of,
+                [
+                    format!("#/components/schemas/{stale}"),
+                    "#/components/schemas/ErrorBody".to_owned()
+                ],
+                "{path}"
+            );
+        }
     }
 }

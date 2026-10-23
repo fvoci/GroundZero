@@ -37,7 +37,7 @@ async fn item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> Value {
         Method::PUT,
         &format!("/api/items/{}", i.json["id"].as_str().unwrap()),
         Some(admin),
-        Some(json!({ "title": key, "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": key, "description": "", "visibility": "workspace" })),
     )
     .await;
     i.json
@@ -635,7 +635,7 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
             Method::PUT,
             &format!("/api/items/{id}"),
             Some(&admin),
-            Some(json!({ "title": title, "description": "", "visibility": visibility })),
+            Some(json!({ "base_version": 1, "title": title, "description": "", "visibility": visibility })),
         )
         .await;
         assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
@@ -1373,7 +1373,7 @@ async fn trashed_items_keep_assignees_who_did_not_lose_access() {
         "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [keep.id.0, gone.id.0] }))).await;
     assert_eq!(assigned.status, StatusCode::OK, "{:?}", assigned.json);
-    let lead = send(&app, Method::PUT, &format!("/api/items/{item_id}/profile"), Some(&admin), Some(json!({
+    let lead = send(&app, Method::PUT, &format!("/api/items/{item_id}/profile"), Some(&admin), Some(json!({ "base_version": 1,
         "leader_id": gone.id.0, "goal": "", "scope": "", "starts_on": null, "ends_on": null, "status": "active",
         "details": {} }))).await;
     assert!(lead.status.is_success(), "{:?}", lead.json);

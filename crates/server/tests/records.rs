@@ -44,7 +44,7 @@ async fn open_item(app: &Router, admin: &TestUser, module: &str, title: &str) ->
         Method::PUT,
         &format!("/api/items/{id}"),
         Some(admin),
-        Some(json!({ "title": title, "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": 1, "title": title, "description": "", "visibility": "workspace" })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
