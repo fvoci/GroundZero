@@ -2142,6 +2142,8 @@ export interface SearchFilters {
   assignee?: string;
   from?: string;
   to?: string;
+  /** 날짜의 하루를 정하는 IANA 시간대(설정의 시간대). 경계는 서버가 계산한다(D-101). */
+  tz?: string;
   /** 작성자: `me` 또는 사용자 id(그 사람이 만든 것만). */
   author?: string;
   /** 제목에서만 찾기. */
@@ -3192,6 +3194,7 @@ export const api = {
     if (filters.assignee !== undefined) params.set('assignee', filters.assignee);
     if (filters.from !== undefined) params.set('from', filters.from);
     if (filters.to !== undefined) params.set('to', filters.to);
+    if (filters.tz !== undefined) params.set('tz', filters.tz);
     if (filters.author !== undefined) params.set('author', filters.author);
     if (filters.titleOnly === true) params.set('title_only', 'true');
     return expectOk('GET', `/api/search?${params.toString()}`, (v) =>

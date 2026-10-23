@@ -3127,7 +3127,78 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
 
 ## 97. 검색 날짜의 사용자 시간대 경계와 작성자 색인 필터 (2026-10-23, D-101·D-102, `fvoci/policy-search`)
 
-작성 중(작업자 W-search).
+사용자 결정(D-101·D-102, 요지): 실제 시각을 가진 데이터는 사용자가 고른 시간대(D-81)의 그날 시작·끝을 서버가 계산해 비교하고(DST로 23·25시간인
+날 포함), 날짜만 있는 값은 날짜로 비교한다. 색인 경로와 대체 SQL 경로의 의미를 같게 한다. 작성자 조건은 후보 300개를 받은 뒤 거르지 않고 검색
+색인 필터에 넣되, 최종 접근 확인은 지금처럼 서버가 한다(P-14). 재색인은 한 번에 묶고, 과거 개발 버전 호환만을 위한 `day` 필드·경로는 남기지
+않는다(D-92).
+
+- **색인의 두 종류 날짜** (`0095_search_time_zone_author.sql`, `search.rs` `IndexDoc`): `app_system_search_payload`를 다시 정의해 예전의 `day`
+  (UTC 날짜와 일정 자체 시간대의 날짜가 섞인 YYYYMMDD) 대신 둘을 준다. 한 문서에는 둘 중 하나만 있다.
+
+  | 대상              | 색인 속성                     | 비교                                       |
+  | ----------------- | ----------------------------- | ------------------------------------------ |
+  | 문서·항목·파일    | `at` = 고친 때(UTC 유닉스 초) | 보는 사람 시간대의 [그날 0시, 다음 날 0시) |
+  | 기록(발생일 없음) | `at` = 고친 때                | 위와 같음                                  |
+  | 기록(발생일 있음) | `date` = 발생일(YYYYMMDD)     | 날짜 그대로(끝 포함)                       |
+  | 업무              | `date` = 기한(없으면 시작일)  | 날짜 그대로                                |
+  | 종일 일정         | `date` = 시작일               | 날짜 그대로                                |
+  | 시각 일정         | `at` = 시작 시각(`starts_at`) | 보는 사람 시간대(일정 자체 시간대가 아님)  |
+
+  `date`는 지금 날짜 전용 기능(기한·종일 일정·발생일)에 필요한 필드이고 예전 `day`와 이름을 달리해, 재색인 전의 옛 문서가 옛 의미로 걸리지
+  않게 했다(옛 문서에는 `at`·`date`가 없어 재색인될 때까지 날짜 필터에 걸리지 않는다). 작성자는 `created_by`로 싣는다. 거를 수 있는 속성은
+  `kind`·`workspace_id`·`owner_user_id`·`id`·`module_id`·`status`·`assignee_ids`·`created_by`·`at`·`date`(`ensure_index`).
+
+- **날짜 경계** (`search_api.rs` `day_bounds`): `from`·`to`가 있으면 PostgreSQL에서 `from`의 그날 시작과 `to` 다음 날의 시작(제외)을 구한다.
+  식은 시간 기록의 날 경계(`time_tracking.rs`, 감사 S21)와 같다: `coalesce(app_local_instant(날짜::timestamp, tz), 날짜::timestamp AT TIME
+ZONE tz)`. 그래서 23·25시간인 날이 그대로 맞고, 0시가 두 번 오는 날(America/Havana 2026-11-01)은 앞의 0시에, 0시가 없는 날은 건너뛴 직후에
+  시작한다. 시간대 이름은 `app_check_timezone`(달력·홈·시간 기록과 같은 확인)으로 보고 모르는 이름·`posix/…` 등은 400 `bad_request`. 구한 두
+  시각을 Meilisearch 필터(`at >= 시작 AND at < 끝`, 유닉스 초)와 대체 SQL(`r.at >= $9 AND r.at < $10`)에 똑같이 넘긴다. 날짜만 있는 값은 두
+  경로 모두 `date`/`on_day`를 `from`·`to`와 비교한다. 필터 모양: `AND ((at >= S AND at < E) OR (date >= F AND date <= T))`(한쪽 끝만 있으면 그
+  끝만). 서버에 시간대 crate를 더하지 않았다(`time`만 있음).
+- **작성자 필터** (D-102): 색인 경로는 `AND created_by = "<uuid>"`를 Meilisearch 필터에 더한다(값은 파싱한 UUID라 따옴표 밖으로 나갈 수 없다).
+  후보를 받은 뒤 작성자를 거르던 `authored()`와 그 조건을 지웠다. 쪽마다 후보를 받아 `app_search_visible`·항목 RLS로 다시 거르는 접근 확인은
+  그대로다(작성자 필터가 넓히지 않음). 대체 경로는 이미 `created_by` 조건이라 의미가 같다.
+- **재색인과 전환**: 0095 끝의 `SELECT app_system_search_enqueue_all()`이 검색 대상 전부를 `search_queue`에 한 번 올린다(D-101·D-102 공통,
+  0040과 같은 방식, `ON CONFLICT … DO UPDATE`라 다시 해도 같다). 새 속성의 필터 설정은 프로세스마다 처음 색인 작업 전에 `ensure_index`가
+  맞춘다(`configured` 깃발). 옛 색인으로 시작한 서버는 설정을 맞춘 뒤 대기열이 비면 새 속성으로 거른다. 그 전환 사이에는 (1) 아직 재색인되지
+  않은 문서가 날짜·작성자 필터에 걸리지 않고, (2) 설정이 반영되기 전의 검색이 "거를 수 없는 속성" 오류를 받으면 첫 쪽 실패로 보아 제목 검색
+  (대체 경로)으로 대신한다. 옛 `day` 속성은 문서를 다시 넣을 때 사라진다(넣기는 문서 전체를 바꿈).
+- **웹** (`SearchDialog.svelte`, `client.ts`): 날짜를 고르면 설정의 시간대(`displaySettings().timeZone`, 저장한 값이 없으면 브라우저 시간대)를
+  `tz`로 함께 보낸다. 날짜는 고른 YYYY-MM-DD 그대로이고 화면은 경계를 계산하지 않는다. 날짜를 고르지 않으면 `tz`도 보내지 않는다. 안내
+  `search_date_hint`(ko·en)에 "고친 날과 시각이 있는 일정의 날짜는 설정한 시간대로 봅니다"를 더했다. 계약(`tz` 매개변수)과 생성 클라이언트는
+  `cargo xtask openapi`·`pnpm run generate:api`로 다시 만들었다.
+- **구현 해석(사용자 결정 밖)**: (1) `tz`가 없거나 빈 값이면 저장한 시간대(D-81 `user_settings.time_zone`), 그것도 없으면 UTC로 본다. 웹은 늘
+  보내므로 다른 호출자(직접 API 호출)를 위한 기본값이다. 400으로 거절하는 방법도 있었지만 달력·홈과 달리 검색은 날짜 범위가 선택 사항이고
+  저장한 값을 쓰는 편이 사용자 설정을 따르는 결정에 가깝다고 보았다. (2) 시간대는 날짜 범위가 있을 때만 확인한다(범위가 없으면 쓰지 않는다).
+  (3) 시각 일정은 지금처럼 시작만 본다(기간이 범위에 걸치는지는 보지 않음, D-101 "시각 일정의 시작"). (4) 날짜만 있는 속성 이름은 `date`, 대체
+  SQL·payload 열 이름은 `on_day`(`date`는 SQL 형 이름이라 피함). (5) 경계 식은 새 SQL 함수를 만들지 않고 시간 기록의 식(`app_local_instant`)을
+  다시 썼다. 달력 범위(`events.rs` 602행)는 아직 `날짜::timestamp AT TIME ZONE`만 써서 0시가 두 번 오는 날의 첫 1시간이 다르다. 이번 범위
+  밖이라 고치지 않았다(후속 후보).
+- **시험** (`crates/server/tests/search.rs`, 실제 PostgreSQL·Meilisearch, 모든 단언을 대체 경로에서도 반복):
+  `search_dates_use_the_viewers_day_boundaries` — 2026-10-20 23:30Z에 고친 문서가 서울 10-21·뉴욕 10-20에만 나옴, 뉴욕 2026-03-08(23시간)
+  `[05:00Z, 다음 날 04:00Z)`와 2026-11-01(25시간) `[04:00Z, 다음 날 05:00Z)`의 처음·마지막 1초가 들고 바로 앞·뒤 1초가 빠짐, `from`만·`to`만,
+  `tz` 없이 저장한 시간대(America/New_York) 사용, 모르는 시간대·`posix/Asia/Seoul` 400(두 경로). `date_only_values_keep_their_day_and_timed_events_follow_the_viewer`
+  — 기한 업무·종일 일정·발생일 기록(모두 2026-10-21)은 서울·키리티마티(UTC+14)·뉴욕·파고파고(UTC−11) 어디서나 10-21에 나오고, 서울 10-21
+  08:00 시각 일정은 서울·키리티마티 10-21, 뉴욕·파고파고 10-20에 나옴. `a_day_with_a_repeated_midnight_starts_at_the_first_one` — 아바나
+  2026-11-01 03:30Z(10-31 23:30 CDT)는 10-31, 04:30Z(첫 번째 00:30)는 11-01. `an_author_filter_finds_results_beyond_the_old_candidate_window`
+  — 제목이 검색어와 같은 다른 사람의 미끼 320개 뒤에 있는 작성자의 문서: 작성자 없이 받은 Meilisearch 순위에서 대상이 300번째 이후임을 먼저
+  확인한 뒤 작성자 필터로 찾음(두 경로), 읽기 멤버가 관리자를 작성자로 골라도 관리자의 비공개 항목 업무는 나오지 않고 관리자에게는 나옴. 단위
+  시험 `search_api::tests::date_ranges_compare_instants_and_dates_separately`(필터 문자열 모양). 웹 `search-date-time-zone.test.ts` — 날짜 없이는
+  `tz` 없음, 시작 날짜를 고르면 `from=2026-03-08`과 설정의 `tz=America/New_York`(`to` 없음).
+- **수정 전 실패**(시험만 먼저 커밋한 `cfcfdd7`, 기준 `d2b07ac`, 격리 Compose): `an_author_filter_…` 순위 확인(300 이후)은 통과하고
+  `left: [] right: ["… 대상 문서"]`, `search_dates_…` `…&tz=Asia/Seoul&from=2026-10-21&to=2026-10-21 never settled left: [] right: ["… 서울 아침"]`,
+  `date_only_…` `…&tz=America/New_York&from=2026-10-21&to=2026-10-21 never settled`(시각 일정이 일정 시간대의 날짜 10-21로 나옴). 아바나
+  시험은 경계를 `날짜::timestamp AT TIME ZONE`만으로 바꾼 격리 DB에서 `…&tz=America/Havana&from=2026-10-31&to=2026-10-31 never settled
+left: [전날 밤, 첫 0시 뒤] right: [전날 밤]`로 실패했다(`d2b07ac`에서는 따로 돌리지 않음, 그때는 UTC 날짜라 11-01로 나온다). 웹 시험은
+  대화상자의 `tz` 줄을 뺀 사본에서 `expected null to be 'America/New_York'`.
+- **CodeRabbit 반영**(#99): (1) `to=9999-12-31`이면 `to` 다음 날(10000-01-01)을 `time`이 나타내지 못해 응답이 500이었다. `parse_day`가
+  다음 날이 없는 날과 1년 전(시간대에 따라 PostgreSQL 시각 범위 밖)을 400 `… is out of range`로 거절한다. 단위 시험
+  `days_without_a_representable_boundary_are_rejected`(수정 전 `9999-12-31`에서 실패)와 `search_dates_…`의 두 경로 400 단언. (2) 영어 안내의
+  "Edit dates"를 "The dates of edits"로 고쳤다(편집할 날짜로 읽히지 않게).
+- **통과**(구현 커밋 `7bd8ddf`): `cargo xtask check`(라이선스 포함) PASS, `cargo xtask test --oidc` PASS(364 통과·0 실패, 검색 16건 포함).
+  CodeRabbit 반영 뒤의 결과는 PR 본문. CI(check·integration·licenses·oidc·rhwp·supabase)는 `dafa2bd`에서 모두 통과. NOT RUN: 로컬
+  `cargo xtask test --supabase`(CI의 supabase job은 통과), 실제 브라우저 확인(coordinator가 마지막에 한 번 한다), 운영·개인 개발 색인의
+  재색인(배포하지 않음).
 
 ## 98. 저장한 보기·항목 정보의 판 검사와 보관 항목 댓글 지우기 (2026-10-23, D-103·D-104·D-106, `fvoci/policy-version`)
 

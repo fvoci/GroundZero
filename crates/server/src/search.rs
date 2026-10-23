@@ -72,8 +72,14 @@ pub struct IndexDoc {
     pub status: Option<String>,
     /// 필터용: 업무 담당자.
     pub assignee_ids: Vec<String>,
-    /// 필터용 날짜(YYYYMMDD 숫자): 업무는 기한(없으면 시작일), 일정은 시작일, 그 밖은 고친 날.
-    pub day: Option<i32>,
+    /// 필터용: 만든 사람.
+    pub created_by: Option<String>,
+    /// 필터용 실제 시각(UTC 유닉스 초): 문서·항목·파일의 고친 때, 발생일 없는 기록의 고친 때, 시각 일정의 시작.
+    /// 검색 API가 보는 사람 시간대의 그날 시작·끝과 비교한다(D-101).
+    pub at: Option<i64>,
+    /// 필터용 날짜만 있는 값(YYYYMMDD 숫자): 업무 기한(없으면 시작일), 종일 일정의 시작일, 기록의 발생일. 시간대로 옮기지
+    /// 않는다. 한 문서에는 `at`·`date` 가운데 하나만 있다.
+    pub date: Option<i32>,
 }
 
 /// 검색 결과 후보.
@@ -200,7 +206,7 @@ impl SearchClient {
                 .request(reqwest::Method::PATCH, &format!("/indexes/{INDEX}/settings"))
                 .json(&json!({
                     "searchableAttributes": ["title", "reference", "text"],
-                    "filterableAttributes": ["kind", "workspace_id", "owner_user_id", "id", "module_id", "status", "assignee_ids", "day"],
+                    "filterableAttributes": ["kind", "workspace_id", "owner_user_id", "id", "module_id", "status", "assignee_ids", "created_by", "at", "date"],
                     "displayedAttributes": ["kind", "id", "title", "reference", "workspace_id", "item_id", "text"]
                 }))
                 .send()
@@ -298,14 +304,16 @@ struct PayloadRow {
     module_id: Option<Uuid>,
     status: Option<String>,
     assignee_ids: Option<Vec<Uuid>>,
-    day: Option<time::Date>,
+    created_by: Option<Uuid>,
+    at: Option<OffsetDateTime>,
+    on_day: Option<time::Date>,
     file_key: Option<String>,
     file_type: Option<String>,
     file_size: Option<i64>,
 }
 
-/// 날짜를 필터용 숫자(YYYYMMDD)로.
-fn day_number(day: time::Date) -> i32 {
+/// 날짜를 필터용 숫자(YYYYMMDD)로. 검색 API가 같은 함수로 범위를 만든다.
+pub(crate) fn day_number(day: time::Date) -> i32 {
     day.year() * 10_000 + i32::from(u8::from(day.month())) * 100 + i32::from(day.day())
 }
 
@@ -477,7 +485,7 @@ pub async fn drain(
     let mut tx = db.begin_anonymous().await?;
     let rows: Vec<PayloadRow> = sqlx::query_as(
         "SELECT kind, id, live, workspace_id, owner_user_id, item_id, title, reference, body, description,
-                module_id, status, assignee_ids, day, file_key, file_type, file_size
+                module_id, status, assignee_ids, created_by, at, on_day, file_key, file_type, file_size
          FROM app_system_search_payload($1, $2)",
     )
     .bind(&kinds)
@@ -517,7 +525,9 @@ pub async fn drain(
                 .iter()
                 .map(Uuid::to_string)
                 .collect(),
-            day: row.day.map(day_number),
+            created_by: row.created_by.map(|c| c.to_string()),
+            at: row.at.map(OffsetDateTime::unix_timestamp),
+            date: row.on_day.map(day_number),
             kind: row.kind,
         });
     }
