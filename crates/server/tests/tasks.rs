@@ -954,3 +954,297 @@ async fn a_wrong_undo_target_is_saved_as_sent_even_with_a_valid_move_version() {
         "the server keeps the wrong intent as sent"
     );
 }
+
+/// D-105: 한 요청이 업무 한 건의 모든 칸을 가져온다. (작업 공간, 항목 id) 아래 남은 업무·담당·업무 감사 기록 수.
+async fn task_rows(
+    state: &fvoci_server::http::AppState,
+    admin: &TestUser,
+    item: &Value,
+) -> (i64, i64, i64) {
+    let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    let counts: (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM tasks WHERE item_id = $1::uuid),
+                (SELECT count(*) FROM task_assignees a JOIN tasks t ON t.id = a.task_id WHERE t.item_id = $1::uuid),
+                (SELECT count(*) FROM audit_log l WHERE l.target_type = 'task'
+                   AND l.workspace_id = (SELECT workspace_id FROM items WHERE id = $1::uuid))",
+    )
+    .bind(item["id"].as_str().unwrap())
+    .fetch_one(tx.conn())
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    counts
+}
+
+/// 만들기 요청 본문: 제목과 CSV 한 줄이 넣는 모든 칸.
+fn full_create(request_id: &str, title: &str, changes: Value) -> Value {
+    let mut body = json!({
+        "request_id": request_id, "title": title, "description": "회의록 정리", "status": "in_progress",
+        "priority": "high", "start_date": "2026-11-02", "due_date": "2026-11-09", "estimate_minutes": 30,
+        "tags": ["회의", "보고", "회의"], "assignee_ids": [], "milestone": false,
+    });
+    for (k, v) in changes.as_object().unwrap() {
+        body[k] = v.clone();
+    }
+    body
+}
+
+/// D-105(P-31): 만들기가 모든 칸을 받아 한 트랜잭션에서 확인·저장한다. 둘째 단계에서 거절될 칸(볼 수 없는 담당자,
+/// 시작일이 마감일 뒤, 시작일 있는 이정표)이 있으면 업무·담당·감사 기록이 하나도 남지 않고 번호도 쓰지 않는다.
+#[tokio::test]
+async fn a_rejected_create_leaves_no_task_and_no_relations() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "한 번에 만들기").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let outsider = login(&state, "outsider").await;
+    let item = module_item(&app, &admin, &ws, "CSV").await;
+    make_public(&app, &admin, &item).await;
+    let uri = format!("/api/items/{}/tasks", item["id"].as_str().unwrap());
+    let people = json!([writer.id.0.to_string(), admin.id.0.to_string()]);
+    for (case, changes) in [
+        (
+            "not a member",
+            json!({ "assignee_ids": [writer.id.0.to_string(), outsider.id.0.to_string()] }),
+        ),
+        (
+            "start after due",
+            json!({ "assignee_ids": people, "start_date": "2026-11-10" }),
+        ),
+        (
+            "milestone with a start",
+            json!({ "assignee_ids": people, "milestone": true }),
+        ),
+        (
+            "negative estimate",
+            json!({ "assignee_ids": people, "estimate_minutes": -1 }),
+        ),
+    ] {
+        let r = send(
+            &app,
+            Method::POST,
+            &uri,
+            Some(&admin),
+            Some(full_create(&new_request_id(), "주간 회의", changes)),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{case}: {:?}", r.json);
+        assert_eq!(
+            task_rows(&state, &admin, &item).await,
+            (0, 0, 0),
+            "{case}: nothing is left behind"
+        );
+    }
+    // 거절된 만들기는 번호도 쓰지 않았다(같은 트랜잭션에서 되돌림): 다음 업무가 항목 바로 다음 번호다.
+    let request_id = new_request_id();
+    let r = send(
+        &app,
+        Method::POST,
+        &uri,
+        Some(&admin),
+        Some(full_create(
+            &request_id,
+            "주간 회의",
+            json!({ "assignee_ids": people }),
+        )),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    assert_eq!(r.json["reference"], "CSV-2");
+    assert_eq!(
+        task_rows(&state, &admin, &item).await,
+        (1, 2, 3),
+        "create + two assigns"
+    );
+}
+
+/// D-105(P-31): 모든 칸이 첫 판(1)에 들어가고, 같은 요청 id의 재시도(응답을 잃은 뒤)는 처음 만든 업무를 지금 상태로
+/// 돌려줄 뿐 다시 만들거나 칸을 다시 쓰지 않는다. 내용이 다른 재시도도 기존 계약대로 처음 업무를 돌려준다. 동시에
+/// 겹친 재시도도 업무 하나·담당 한 벌이다.
+#[tokio::test]
+async fn a_create_carries_every_field_and_a_replay_returns_the_first_task() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "한 번에 만들기 재시도").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let item = module_item(&app, &admin, &ws, "CSV").await;
+    make_public(&app, &admin, &item).await;
+    let uri = format!("/api/items/{}/tasks", item["id"].as_str().unwrap());
+    let request_id = new_request_id();
+    let body = full_create(
+        &request_id,
+        " 주간 회의 ",
+        json!({ "assignee_ids": [writer.id.0.to_string()] }),
+    );
+    let first = send(&app, Method::POST, &uri, Some(&admin), Some(body.clone())).await;
+    assert_eq!(first.status, StatusCode::CREATED, "{:?}", first.json);
+    let t = &first.json;
+    assert_eq!(t["title"], "주간 회의");
+    assert_eq!(t["description"], "회의록 정리");
+    assert_eq!(t["status"], "in_progress");
+    assert_eq!(t["priority"], "high");
+    assert_eq!(t["start_date"], "2026-11-02");
+    assert_eq!(t["due_date"], "2026-11-09");
+    assert_eq!(t["estimate_minutes"], 30);
+    assert_eq!(t["tags"], json!(["회의", "보고"]));
+    assert_eq!(t["assignees"][0]["user_id"], writer.id.0.to_string());
+    assert_eq!(t["milestone"], false);
+    assert_eq!(t["version"], 1, "one write, not create + update");
+    assert_eq!(t["completed_at"], Value::Null);
+
+    // 응답을 잃고 다시 보냄: 같은 업무, 칸은 그대로.
+    let again = send(&app, Method::POST, &uri, Some(&admin), Some(body.clone())).await;
+    assert_eq!(again.status, StatusCode::CREATED, "{:?}", again.json);
+    assert_eq!(again.json["id"], t["id"]);
+    assert_eq!(again.json["version"], 1);
+    // 그사이 다른 사람이 고친 뒤의 재시도는 그 변경을 되돌리지 않는다. 내용이 다른 재시도도 처음 업무다(기존 계약).
+    let (status, edited) = update(
+        &app,
+        &writer,
+        &again.json,
+        json!({ "status": "todo", "assignee_ids": [] }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{edited:?}");
+    let other = full_create(
+        &request_id,
+        "다른 제목",
+        json!({ "status": "done", "assignee_ids": [admin.id.0.to_string()] }),
+    );
+    let replay = send(&app, Method::POST, &uri, Some(&admin), Some(other)).await;
+    assert_eq!(replay.status, StatusCode::CREATED, "{:?}", replay.json);
+    assert_eq!(replay.json["id"], t["id"]);
+    assert_eq!(replay.json["title"], "주간 회의");
+    assert_eq!(replay.json["status"], "todo");
+    assert_eq!(replay.json["assignees"], json!([]));
+    assert_eq!(replay.json["version"], 2);
+    assert_eq!(task_rows(&state, &admin, &item).await.0, 1);
+
+    // 동시에 겹친 같은 요청: 하나만 만들고 모두 그 업무를 받는다. 완료로 만들면 완료 시각을 서버가 적는다.
+    let request_id = new_request_id();
+    let body = full_create(
+        &request_id,
+        "보고서",
+        json!({
+            "status": "done", "assignee_ids": [writer.id.0.to_string(), admin.id.0.to_string()],
+        }),
+    );
+    let replies = futures_util::future::join_all(
+        (0..4).map(|_| send(&app, Method::POST, &uri, Some(&admin), Some(body.clone()))),
+    )
+    .await;
+    for r in &replies {
+        assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+        assert_eq!(r.json["id"], replies[0].json["id"]);
+        assert_eq!(r.json["assignees"].as_array().unwrap().len(), 2);
+    }
+    assert!(replies[0].json["completed_at"].is_string());
+    // 감사 기록: 첫 업무(만들기 1·담당 1·담당 해제 1) + 이 업무(만들기 1·담당 2).
+    assert_eq!(task_rows(&state, &admin, &item).await, (2, 2, 6));
+    // 상태를 받은 업무는 그 열에 있다(할 일 열이 아니라).
+    let lanes: Vec<(String, String)> = board(&app, &admin, &item)
+        .await
+        .into_iter()
+        .map(|(title, status, _, _)| (title, status))
+        .collect();
+    assert_eq!(
+        lanes,
+        vec![
+            ("주간 회의".to_owned(), "todo".to_owned()),
+            ("보고서".to_owned(), "done".to_owned())
+        ]
+    );
+}
+
+/// D-105(P-31), CodeRabbit #98: 응답을 잃은 만들기를 다시 보낼 때 항목을 잠시 볼 수 없으면 404(존재를 드러내지 않음)이고 새
+/// 업무를 만들지 않는다. 다시 볼 수 있게 되면 같은 요청 id가 처음 업무를 돌려준다. 그 요청 id의 업무를 지웠으면(휴지통)
+/// 404와 구분되는 409 `task_deleted`라 웹은 그때만 새 요청 id로 다시 만든다.
+#[tokio::test]
+async fn a_replay_tells_a_deleted_task_from_a_lost_access() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "한 번에 만들기 404").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let item = module_item(&app, &admin, &ws, "CSV").await;
+    make_public(&app, &admin, &item).await;
+    let uri = format!("/api/items/{}/tasks", item["id"].as_str().unwrap());
+    let request_id = new_request_id();
+    let body = full_create(
+        &request_id,
+        "주간 회의",
+        json!({ "assignee_ids": [writer.id.0.to_string()] }),
+    );
+    let first = send(&app, Method::POST, &uri, Some(&writer), Some(body.clone())).await;
+    assert_eq!(first.status, StatusCode::CREATED, "{:?}", first.json);
+    // 이 요청 id로 만든 업무 행 수. 휴지통에 든 업무는 앱 역할(RLS)에 보이지 않으므로 표 소유 역할로 센다.
+    let made_by_request = || async {
+        use sqlx::Connection;
+        let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+        let mut owner = sqlx::PgConnection::connect(&url).await.unwrap();
+        let n: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM fvoci.tasks WHERE item_id = $1::uuid AND request_id = $2::uuid",
+        )
+        .bind(item["id"].as_str().unwrap())
+        .bind(&request_id)
+        .fetch_one(&mut owner)
+        .await
+        .unwrap();
+        n
+    };
+
+    // 항목이 비공개가 되어 작성자가 볼 수 없다: 404 not_found, 새 업무 없음.
+    let item_uri = format!("/api/items/{}", item["id"].as_str().unwrap());
+    let version = send(&app, Method::GET, &item_uri, Some(&admin), None)
+        .await
+        .json["version"]
+        .clone();
+    let r = send(
+        &app,
+        Method::PUT,
+        &item_uri,
+        Some(&admin),
+        Some(json!({ "base_version": version, "title": item["title"], "description": "", "visibility": "private" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let hidden = send(&app, Method::POST, &uri, Some(&writer), Some(body.clone())).await;
+    assert_eq!(hidden.status, StatusCode::NOT_FOUND, "{:?}", hidden.json);
+    assert_eq!(hidden.json["error"], "not_found");
+    assert_eq!(made_by_request().await, 1);
+
+    // 다시 볼 수 있으면 같은 요청 id는 처음 업무다.
+    make_public(&app, &admin, &item).await;
+    let back = send(&app, Method::POST, &uri, Some(&writer), Some(body.clone())).await;
+    assert_eq!(back.status, StatusCode::CREATED, "{:?}", back.json);
+    assert_eq!(back.json["id"], first.json["id"]);
+    assert_eq!(made_by_request().await, 1);
+
+    // 그 업무를 지우면(휴지통) 같은 요청 id는 409 task_deleted: 볼 수 없음(404)과 다르다.
+    let trashed = send(
+        &app,
+        Method::DELETE,
+        &format!("/api/tasks/{}", first.json["id"].as_str().unwrap()),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert!(trashed.status.is_success(), "{:?}", trashed.json);
+    let gone = send(&app, Method::POST, &uri, Some(&writer), Some(body.clone())).await;
+    assert_eq!(gone.status, StatusCode::CONFLICT, "{:?}", gone.json);
+    assert_eq!(gone.json["error"], "task_deleted");
+    assert_eq!(made_by_request().await, 1);
+    // 새 요청 id로는 새 업무를 만든다.
+    let fresh = send(
+        &app,
+        Method::POST,
+        &uri,
+        Some(&writer),
+        Some(full_create(&new_request_id(), "주간 회의", json!({}))),
+    )
+    .await;
+    assert_eq!(fresh.status, StatusCode::CREATED, "{:?}", fresh.json);
+    assert_ne!(fresh.json["id"], first.json["id"]);
+}

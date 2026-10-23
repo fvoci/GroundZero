@@ -1030,7 +1030,10 @@ export interface paths {
         /** 항목의 업무 목록(칸반 열 순서, 열 안은 위치 순). 항목을 볼 수 없으면 404. */
         get: operations["list_tasks"];
         put?: never;
-        /** 업무 만들기(항목 쓰기 권한). 같은 `request_id`는 같은 업무를 돌려준다. */
+        /**
+         * 업무 만들기(항목 쓰기 권한). 모든 칸을 한 트랜잭션에서 확인·저장한다(D-105). 같은 `request_id`는 같은 업무를 돌려주고,
+         *     그 업무를 지웠으면(휴지통) 409 `task_deleted`(항목을 볼 수 없으면 404).
+         */
         post: operations["create_task"];
         delete?: never;
         options?: never;
@@ -2793,15 +2796,32 @@ export interface components {
             /** @description `read` 또는 `write`. */
             permission: string;
         };
-        /** @description 업무 만들기. */
+        /**
+         * @description 업무 만들기. 제목 밖의 칸은 고치기(`UpdateTask`)와 같고 같은 규칙으로 확인해 한 트랜잭션에서 넣는다(D-105): 하나라도
+         *     거절되면 업무도 담당도 남지 않는다. 빠진 칸은 새 업무의 기본값(설명 없음, 할 일, 우선순위 없음, 날짜·예상·태그·담당자
+         *     없음, 이정표 아님)이다. 같은 `request_id`는 처음 만든 업무를 지금 상태로 돌려준다(보낸 칸이 달라도 다시 쓰지 않는다).
+         *     그 업무가 휴지통에 있으면 409 `task_deleted`(새 요청 id로 보낸다).
+         */
         CreateTask: {
+            /** @description 담당자(그 항목을 볼 수 있는 멤버). */
+            assignee_ids?: components["schemas"]["UserId"][];
+            description?: string;
+            due_date?: string | null;
+            /** Format: int32 */
+            estimate_minutes?: number | null;
+            /** @description 마일스톤이면 시작일 없이 마감일만. */
+            milestone?: boolean;
             /**
              * Format: uuid
              * @description 하위 업무로 만들 때 상위 업무(같은 항목, 한 단계).
              */
             parent_id?: string | null;
+            priority?: components["schemas"]["TaskPriority"];
             /** Format: uuid */
             request_id: string;
+            start_date?: string | null;
+            status?: components["schemas"]["TaskStatus"];
+            tags?: string[];
             title: string;
         };
         /** @description 업로드 시작. `file_id`가 있으면 그 파일의 새 버전, 없으면 `target`에 새 파일. */

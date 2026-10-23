@@ -59,6 +59,10 @@ pub enum AppError {
     /// 보낸 요청이다. 아무것도 바꾸지 않고 409 `account_changed`.
     #[error("account changed")]
     AccountChanged,
+    /// 같은 요청 id로 만든 업무가 휴지통에 있다(`app_create_task`의 `FV004`, D-105). 그 요청 id로는 다시 만들 수 없으니
+    /// 새 요청 id로 보내라는 뜻이고, 항목을 볼 수 없는 404와 구분된다. 아무것도 바꾸지 않고 409 `task_deleted`.
+    #[error("task deleted")]
+    TaskDeleted,
     /// 파일 저장소(로컬·S3) 실패.
     #[error("storage error: {0}")]
     Storage(String),
@@ -69,7 +73,7 @@ pub enum AppError {
 
 impl AppError {
     /// 정의자 함수가 올린 오류 코드를 응답으로 바꾼다.
-    /// P0002 → 404, 42501 → 403, 22023 → 400, 55000 → 409. 그 밖은 내부 오류.
+    /// P0002 → 404, 42501 → 403, 22023 → 400, 55000 → 409, FV004 → 409 `task_deleted`. 그 밖은 내부 오류.
     pub fn from_db_function(err: sqlx::Error) -> Self {
         let Some(db) = err.as_database_error() else {
             return Self::Database(err);
@@ -80,6 +84,7 @@ impl AppError {
             Some("42501") => Self::Forbidden,
             Some("22023") => Self::BadRequest(message),
             Some("55000") => Self::Conflict(message),
+            Some("FV004") => Self::TaskDeleted,
             // 동시에 같은 업무를 바꾸다 부딪힌 경우(교착 감지·다시 시도 요청): 아무것도 바뀌지 않았으니 다시 보내면 된다.
             Some("40001" | "40P01") => {
                 Self::Conflict("the change collided with another one; try again".into())
@@ -112,6 +117,7 @@ impl AppError {
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             Self::Conflict(_) => (StatusCode::CONFLICT, "invalid_state"),
             Self::AccountChanged => (StatusCode::CONFLICT, "account_changed"),
+            Self::TaskDeleted => (StatusCode::CONFLICT, "task_deleted"),
             Self::Oidc(_) => (StatusCode::BAD_GATEWAY, "oidc_error"),
             Self::Storage(_) => (StatusCode::BAD_GATEWAY, "storage_error"),
             Self::Upstream(_) => (StatusCode::BAD_GATEWAY, "upstream_error"),
@@ -151,6 +157,9 @@ impl IntoResponse for AppError {
             Self::BadRequest(msg) | Self::Conflict(msg) | Self::Upstream(msg) => msg.clone(),
             Self::AccountChanged => {
                 "the signed-in account is not the one this edit was started with".to_owned()
+            }
+            Self::TaskDeleted => {
+                "the task made by this request was deleted; send a new request id".to_owned()
             }
             _ => status.canonical_reason().unwrap_or("error").to_owned(),
         };

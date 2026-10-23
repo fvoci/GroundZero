@@ -75,10 +75,10 @@ BEGIN
       v_today - 7, v_today + 14, 'active', v_row->'details', pg_temp.take(2));
     v_items := v_items || jsonb_build_object(v_kind, v_item);
 
-    v_task := app_create_task(v_item, pg_temp.take1(), '대표 업무: 준비 사항 확인', NULL, pg_temp.take(2));
-    PERFORM app_update_task(v_task, 1, '대표 업무: 준비 사항 확인', '모든 담당자가 같은 업무 상태를 공유합니다.',
-      'in_progress', 'medium', v_today, v_today + 2, 45, ARRAY['개발예제'], ARRAY[v_admin, v_user], false, '[]',
-      pg_temp.take(app_update_task_ids(v_task, ARRAY[v_admin, v_user], '[]')));
+    -- 업무는 모든 칸과 함께 한 번에 만든다(0098, D-105). id: 업무·만들기 감사 + 담당자마다 1개.
+    v_task := app_create_task(v_item, pg_temp.take1(), '대표 업무: 준비 사항 확인', NULL,
+      '모든 담당자가 같은 업무 상태를 공유합니다.', 'in_progress', 'medium', v_today, v_today + 2, 45,
+      ARRAY['개발예제'], ARRAY[v_admin, v_user], false, pg_temp.take(4));
     PERFORM app_add_checklist_items(v_task, jsonb_build_array(
       jsonb_build_object('request_id', pg_temp.take1(), 'text', '준비 자료 확인', 'checked', true),
       jsonb_build_object('request_id', pg_temp.take1(), 'text', '저장 후 다시 열기', 'checked', false)),
@@ -94,31 +94,21 @@ BEGIN
     PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '90 minutes', now() - interval '60 minutes',
       0, v_time_kind, '개발 예제: 종료된 개인 시간 기록', 'task', v_task, pg_temp.take(1));
     IF v_kind = 'project' THEN
-      v_child := app_create_task(v_item, pg_temp.take1(), '하위 업무: 검토 목록 작성', v_task, pg_temp.take(2));
-      PERFORM app_update_task(v_child, 1, '하위 업무: 검토 목록 작성', '', 'done', 'low',
-        v_today, v_today, 15, ARRAY['개발예제'], ARRAY[v_admin], false, '[]',
-        pg_temp.take(app_update_task_ids(v_child, ARRAY[v_admin], '[]')));
-      v_milestone := app_create_task(v_item, pg_temp.take1(), '마일스톤: 검토 완료', NULL, pg_temp.take(2));
-      PERFORM app_update_task(v_milestone, 1, '마일스톤: 검토 완료', '', 'todo', 'high',
-        NULL, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], true, '[]',
-        pg_temp.take(app_update_task_ids(v_milestone, ARRAY[v_admin], '[]')));
+      v_child := app_create_task(v_item, pg_temp.take1(), '하위 업무: 검토 목록 작성', v_task, '', 'done', 'low',
+        v_today, v_today, 15, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(3));
+      v_milestone := app_create_task(v_item, pg_temp.take1(), '마일스톤: 검토 완료', NULL, '', 'todo', 'high',
+        NULL, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], true, pg_temp.take(3));
       PERFORM app_set_task_dependency(v_task, v_milestone, 'FS', 0, NULL, NULL, '[]'::jsonb, pg_temp.take(1));
       -- 관계 종류 예제(D-91): 대표 업무와 함께 시작(SS·1), 함께 끝(FF·0), 그 업무가 시작하기 전에 끝(SF·0).
       -- 날짜는 이미 관계를 채우므로 옮길 업무가 없다.
-      v_together := app_create_task(v_item, pg_temp.take1(), '관계 예제: 하루 뒤 함께 시작', NULL, pg_temp.take(2));
-      PERFORM app_update_task(v_together, 1, '관계 예제: 하루 뒤 함께 시작', '', 'todo', 'medium',
-        v_today + 1, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, '[]',
-        pg_temp.take(app_update_task_ids(v_together, ARRAY[v_admin], '[]')));
+      v_together := app_create_task(v_item, pg_temp.take1(), '관계 예제: 하루 뒤 함께 시작', NULL, '', 'todo', 'medium',
+        v_today + 1, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(3));
       PERFORM app_set_task_dependency(v_task, v_together, 'SS', 1, NULL, NULL, '[]', pg_temp.take(1));
-      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 함께 마무리', NULL, pg_temp.take(2));
-      PERFORM app_update_task(v_linked, 1, '관계 예제: 함께 마무리', '', 'todo', 'low',
-        v_today + 1, v_today + 2, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, '[]',
-        pg_temp.take(app_update_task_ids(v_linked, ARRAY[v_admin], '[]')));
+      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 함께 마무리', NULL, '', 'todo', 'low',
+        v_today + 1, v_today + 2, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(3));
       PERFORM app_set_task_dependency(v_task, v_linked, 'FF', 0, NULL, NULL, '[]', pg_temp.take(1));
-      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 시작 전에 준비 끝', NULL, pg_temp.take(2));
-      PERFORM app_update_task(v_linked, 1, '관계 예제: 시작 전에 준비 끝', '', 'todo', 'low',
-        v_today - 1, v_today, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, '[]',
-        pg_temp.take(app_update_task_ids(v_linked, ARRAY[v_admin], '[]')));
+      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 시작 전에 준비 끝', NULL, '', 'todo', 'low',
+        v_today - 1, v_today, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(3));
       PERFORM app_set_task_dependency(v_together, v_linked, 'SF', 0, NULL, NULL, '[]', pg_temp.take(1));
     END IF;
   END LOOP;
@@ -271,12 +261,10 @@ BEGIN
         {"title":"자료 정리","status":"todo","priority":"medium","due":3},
         {"title":"지난 활동 돌아보기","status":"done","priority":"low"}
       ]' END::jsonb) LOOP
-        v_task := app_create_task(v_item, pg_temp.take1(), v_row->>'title', NULL, pg_temp.take(2));
-        PERFORM app_update_task(v_task, 1, v_row->>'title', '개발용 합성 업무입니다.',
+        v_task := app_create_task(v_item, pg_temp.take1(), v_row->>'title', NULL, '개발용 합성 업무입니다.',
           v_row->>'status', v_row->>'priority', NULL,
           CASE WHEN v_row ? 'due' THEN v_today + (v_row->>'due')::integer END,
-          NULL, ARRAY['개발예제'], ARRAY[v_admin], false, '[]',
-          pg_temp.take(app_update_task_ids(v_task, ARRAY[v_admin], '[]')));
+          NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(3));
         v_added := v_added + 1;
       END LOOP;
     END LOOP;
