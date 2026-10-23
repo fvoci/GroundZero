@@ -31,7 +31,7 @@ pub const BASELINE_MARKER: &str = "fvoci baseline 202610230001";
 
 fn recreation_required() -> AppError {
     AppError::Config(
-        "this database uses the previous GroundZero development SQL history and requires recreation; \
+        "this database contains previous GroundZero development SQL history or untracked schema objects and requires recreation; \
          preserve the database and backups, confirm the exact target and data loss, then obtain \
          approval before recreating it. No data or migration history was changed. \
          See docs/self-hosting.md#sql-baseline-reset"
@@ -39,17 +39,56 @@ fn recreation_required() -> AppError {
     )
 }
 
-/// 앱에는 원장 SELECT 권한을 주지 않는다. SQLx 트랜잭션과 함께 기록된 세대 표시만 카탈로그에서 읽는다.
-pub async fn check_application_baseline(conn: &mut PgConnection) -> Result<(), AppError> {
-    let marker: Option<String> = sqlx::query_scalar(
-        "SELECT pg_catalog.obj_description(pg_catalog.to_regclass('fvoci._sqlx_migrations'), 'pg_class')",
+/// 원장·세대 표시·객체 존재를 한 스냅숏에서 읽는다. bootstrap 직후 앱에는 스키마 USAGE도 없으므로
+/// 이름을 regclass로 해석하거나 원장을 조회하지 않고 카탈로그만 사용한다.
+async fn schema_state(conn: &mut PgConnection) -> Result<(bool, Option<String>, bool), AppError> {
+    // 빈 SQLx 원장의 행 타입과 자동 배열 타입만 제외한다. 독립 enum·domain 등은 관계가 없어도 기존 객체다.
+    Ok(sqlx::query_as(
+        "WITH ledger AS (
+             SELECT c.oid, c.reltype FROM pg_catalog.pg_class c
+             JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'fvoci' AND c.relname = '_sqlx_migrations'
+         )
+         SELECT EXISTS (SELECT 1 FROM ledger),
+                (SELECT pg_catalog.obj_description(oid, 'pg_class') FROM ledger),
+                EXISTS (SELECT 1 FROM pg_catalog.pg_class c
+                        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'fvoci'
+                          AND c.oid NOT IN (SELECT oid FROM ledger)
+                          AND c.oid NOT IN (SELECT indexrelid FROM pg_catalog.pg_index
+                                           WHERE indrelid IN (SELECT oid FROM ledger)))
+                OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+                           JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                           WHERE n.nspname = 'fvoci')
+                OR EXISTS (SELECT 1 FROM pg_catalog.pg_type t
+                           JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+                           WHERE n.nspname = 'fvoci'
+                             AND t.oid NOT IN (
+                                 SELECT reltype FROM ledger
+                                 UNION ALL
+                                 SELECT lt.typarray FROM pg_catalog.pg_type lt
+                                 JOIN ledger ON ledger.reltype = lt.oid))",
     )
     .fetch_one(conn)
-    .await?;
-    if marker.as_deref() != Some(BASELINE_MARKER) {
-        return Err(recreation_required());
+    .await?)
+}
+
+/// 앱에는 원장 SELECT 권한을 주지 않는다. SQLx 트랜잭션과 함께 기록된 세대 표시만 카탈로그에서 읽는다.
+pub async fn check_application_baseline(conn: &mut PgConnection) -> Result<(), AppError> {
+    let (_, marker, has_objects) = schema_state(conn).await?;
+    if marker.as_deref() == Some(BASELINE_MARKER) {
+        return Ok(());
     }
-    Ok(())
+    if !has_objects {
+        return Err(AppError::Config(
+            "this GroundZero database has no application objects; run `fvoci-server db migrate` \
+             after `db bootstrap` to validate its migration history and initialize the schema, then \
+             start the application. No data or migration history was changed. \
+             See docs/self-hosting.md#db-setup"
+                .into(),
+        ));
+    }
+    Err(recreation_required())
 }
 
 /// SQLx가 원장을 만들거나 수정하기 전에 옛 이력을 거부한다. 같은 세대의 체크섬은 SQLx가 검증한다.
@@ -66,10 +105,7 @@ async fn check_migration_baseline(conn: &mut PgConnection) -> Result<(), AppErro
 }
 
 async fn inspect_migration_baseline(conn: &mut PgConnection) -> Result<(), AppError> {
-    let ledger_exists: bool =
-        sqlx::query_scalar("SELECT pg_catalog.to_regclass('fvoci._sqlx_migrations') IS NOT NULL")
-            .fetch_one(&mut *conn)
-            .await?;
+    let (ledger_exists, _, has_objects) = schema_state(conn).await?;
     let mut has_baseline = false;
     if ledger_exists {
         let old_history: bool = sqlx::query_scalar(
@@ -88,23 +124,8 @@ async fn inspect_migration_baseline(conn: &mut PgConnection) -> Result<(), AppEr
         .fetch_one(&mut *conn)
         .await?;
     }
-    if !has_baseline {
-        let has_objects: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_class c
-             JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-             WHERE n.nspname = 'fvoci'
-               AND c.oid <> coalesce(to_regclass('fvoci._sqlx_migrations'), 0)
-               AND c.oid NOT IN (SELECT indexrelid FROM pg_catalog.pg_index
-                                WHERE indrelid = to_regclass('fvoci._sqlx_migrations')))
-             OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
-                        JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-                        WHERE n.nspname = 'fvoci')",
-        )
-        .fetch_one(&mut *conn)
-        .await?;
-        if has_objects {
-            return Err(recreation_required());
-        }
+    if !has_baseline && has_objects {
+        return Err(recreation_required());
     }
     Ok(())
 }

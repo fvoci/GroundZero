@@ -50,6 +50,122 @@ async fn ledger(conn: &mut PgConnection) -> Vec<(i64, Vec<u8>, bool)> {
         .unwrap()
 }
 
+async fn startup_error(app_url: &str) -> AppError {
+    let config = common::config_with(&[("DATABASE_URL", app_url)]);
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        fvoci_server::app::run(config),
+    )
+    .await
+    .unwrap()
+    .unwrap_err()
+}
+
+async fn schema_types(conn: &mut PgConnection) -> serde_json::Value {
+    sqlx::query_scalar(
+        "SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY t.oid), '[]'::jsonb)
+         FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+         WHERE n.nspname = 'fvoci'",
+    )
+    .fetch_one(conn)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn bootstrap_only_database_requests_migration_and_can_initialize() {
+    let (mut fixture_admin, fixture) = empty_database("uninitialized_guard").await;
+    let mut conn = PgConnection::connect(fixture.db.migration_url.as_ref().unwrap().expose())
+        .await
+        .unwrap();
+    let before = schema_types(&mut conn).await;
+    assert_eq!(before, serde_json::json!([]));
+    let error = startup_error(&fixture.app_url).await;
+    assert!(matches!(error, AppError::Config(message)
+            if message.contains("has no application objects")
+                && message.contains("fvoci-server db migrate")
+                && !message.contains("recreation")));
+    assert_eq!(schema_types(&mut conn).await, before);
+    let ledger_exists: bool =
+        sqlx::query_scalar("SELECT to_regclass('fvoci._sqlx_migrations') IS NOT NULL")
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+    assert!(
+        !ledger_exists,
+        "application startup must not create a ledger"
+    );
+
+    // SQLx의 빈 원장·행 타입·배열 타입만 남은 초기 설치 재시도도 정상 적용할 수 있다.
+    conn.ensure_migrations_table().await.unwrap();
+    let error = startup_error(&fixture.app_url).await;
+    assert!(matches!(error, AppError::Config(message)
+            if message.contains("fvoci-server db migrate")
+                && message.contains("validate its migration history")
+                && !message.contains("recreation")));
+    assert!(ledger(&mut conn).await.is_empty());
+    admin::migrate(&fixture.db).await.unwrap();
+    let installed = ledger(&mut conn).await;
+    assert_eq!(installed.len(), 1);
+    assert_eq!(installed[0].0, admin::BASELINE_VERSION);
+    let app = Db::connect_lazy(&Secret::new(fixture.app_url.clone())).unwrap();
+    app.check_baseline().await.unwrap();
+    app.close().await;
+    conn.close().await.unwrap();
+    sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fixture.name))
+        .execute(&mut fixture_admin)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn standalone_types_are_rejected_without_creating_a_ledger() {
+    for (label, create, read) in [
+        (
+            "enum_guard",
+            "CREATE TYPE fvoci.users AS ENUM ('preserved')",
+            "SELECT 'preserved'::fvoci.users::text",
+        ),
+        (
+            "domain_guard",
+            "CREATE DOMAIN fvoci.preserved_domain AS text CHECK (VALUE = 'preserved')",
+            "SELECT 'preserved'::fvoci.preserved_domain::text",
+        ),
+    ] {
+        let (mut fixture_admin, fixture) = empty_database(label).await;
+        let mut conn = PgConnection::connect(fixture.db.migration_url.as_ref().unwrap().expose())
+            .await
+            .unwrap();
+        sqlx::raw_sql(create).execute(&mut conn).await.unwrap();
+        let before = schema_types(&mut conn).await;
+        let error = admin::migrate(&fixture.db).await.unwrap_err();
+        assert!(
+            matches!(error, AppError::Config(message) if message.contains("requires recreation"))
+        );
+        let error = startup_error(&fixture.app_url).await;
+        assert!(
+            matches!(error, AppError::Config(message) if message.contains("requires recreation"))
+        );
+        assert_eq!(schema_types(&mut conn).await, before);
+        let value: String = sqlx::query_scalar(read).fetch_one(&mut conn).await.unwrap();
+        assert_eq!(value, "preserved");
+        let ledger_exists: bool =
+            sqlx::query_scalar("SELECT to_regclass('fvoci._sqlx_migrations') IS NOT NULL")
+                .fetch_one(&mut conn)
+                .await
+                .unwrap();
+        assert!(
+            !ledger_exists,
+            "rejected types must not create SQLx history"
+        );
+        conn.close().await.unwrap();
+        sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fixture.name))
+            .execute(&mut fixture_admin)
+            .await
+            .unwrap();
+    }
+}
+
 #[tokio::test]
 async fn previous_history_and_untracked_objects_are_rejected_without_data_loss() {
     let (mut fixture_admin, fixture) = empty_database("legacy_guard").await;
@@ -72,14 +188,7 @@ async fn previous_history_and_untracked_objects_are_rejected_without_data_loss()
     let error = admin::migrate(&fixture.db).await.unwrap_err();
     assert!(matches!(error, AppError::Config(message) if message.contains("requires recreation")));
     assert_eq!(ledger(&mut conn).await, before);
-    let config = common::config_with(&[("DATABASE_URL", &fixture.app_url)]);
-    let error = tokio::time::timeout(
-        std::time::Duration::from_secs(3),
-        fvoci_server::app::run(config),
-    )
-    .await
-    .unwrap()
-    .unwrap_err();
+    let error = startup_error(&fixture.app_url).await;
     assert!(matches!(error, AppError::Config(message) if message.contains("requires recreation")));
     sqlx::query("DELETE FROM _sqlx_migrations")
         .execute(&mut conn)
