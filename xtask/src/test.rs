@@ -12,17 +12,7 @@ use xshell::{Shell, cmd};
 use crate::compose::{self, Compose, DbUrls, Env};
 use crate::supabase::Supabase;
 
-pub(crate) fn run_tests(sh: &Shell, oidc: bool, s3: bool, supabase: bool) -> Result<()> {
-    run_tests_with_log(sh, oidc, s3, supabase, None)
-}
-
-pub(crate) fn run_tests_with_log(
-    sh: &Shell,
-    oidc: bool,
-    s3: bool,
-    supabase: bool,
-    log: Option<&Path>,
-) -> Result<()> {
+fn run_tests(sh: &Shell, oidc: bool, s3: bool, supabase: bool) -> Result<()> {
     let mut skip: Vec<&str> = Vec::new();
     if !oidc {
         skip.extend(["--skip", "oidc_"]);
@@ -33,23 +23,10 @@ pub(crate) fn run_tests_with_log(
     if !supabase {
         skip.extend(["--skip", "supabase_"]);
     }
-    let command = if skip.is_empty() {
-        cmd!(sh, "cargo test --workspace --locked")
+    if skip.is_empty() {
+        cmd!(sh, "cargo test --workspace --locked").run()?;
     } else {
-        cmd!(sh, "cargo test --workspace --locked -- {skip...}")
-    };
-    if let Some(log) = log {
-        let output = command.ignore_status().output()?;
-        let mut bytes = output.stdout;
-        bytes.extend_from_slice(&output.stderr);
-        std::fs::write(log, bytes)?;
-        anyhow::ensure!(
-            output.status.success(),
-            "integration suite failed; see {}",
-            log.display()
-        );
-    } else {
-        command.run()?;
+        cmd!(sh, "cargo test --workspace --locked -- {skip...}").run()?;
     }
     if !oidc {
         println!("NOT RUN: OIDC integration tests (oidc_*). Use `cargo xtask test --oidc`.");
@@ -262,7 +239,7 @@ fn run_external(root: &Path, oidc: bool) -> Result<()> {
 }
 
 /// 시험용 SeaweedFS의 버킷과 자격 증명(compose.test.yaml과 같은 명백한 테스트 값).
-pub(crate) fn push_s3_credentials(sh: &Shell) -> [xshell::PushEnv<'_>; 3] {
+fn push_s3_credentials(sh: &Shell) -> [xshell::PushEnv<'_>; 3] {
     [
         sh.push_env("FVOCI_TEST_S3_BUCKET", compose::S3_TEST_BUCKET),
         sh.push_env("FVOCI_TEST_S3_ACCESS_KEY", compose::S3_TEST_ACCESS_KEY),

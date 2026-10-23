@@ -1,6 +1,6 @@
 //! 홈 (D-19): Up Next(기한 초과·오늘·다가오는 업무), 최근 문서·최근 작업, 진행 중인 항목과 의미에 맞는 진행률,
 //! 고정·즐겨찾기. 모두 볼 수 있는 것만(RLS) 나온다. 주간 달력은 달력 API, 실행 중인 스톱워치는 타이머 API,
-//! 알림은 알림 API를 그대로 쓴다. 처리는 `migrations/0017_home.sql`.
+//! 알림은 알림 API를 그대로 쓴다. 고정·즐겨찾기는 `migrations/202610230001_initial_state.sql`의 `app_set_mark`가 처리한다.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};

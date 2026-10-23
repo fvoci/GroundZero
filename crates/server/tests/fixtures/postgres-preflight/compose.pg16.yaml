@@ -1,4 +1,4 @@
-# Rejection fixture only: PostgreSQL 16 is not a supported product or sql-compare target.
+# Rejection fixture only: PostgreSQL 16 is not supported by the product.
 # Overlay deploy/compose.test.yaml using an explicit task-owned project; stop, never down.
 services:
   postgres:

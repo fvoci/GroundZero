@@ -31,7 +31,7 @@
 
 ## 실행·개발 도구
 
-- `xtask/`: 개발·검사·통합 시험·API 생성·라이선스·rhwp·SQL 비교의 실행 진입점.
+- `xtask/`: 개발·검사·통합 시험·API 생성·라이선스·rhwp의 실행 진입점.
   사용법은 [개발 지침](development.md), 설치는 [셀프호스트 안내](self-hosting.md)를 따른다.
 - `deploy/`: 개발·시험·셀프호스트 Compose와 Dockerfile, PostgreSQL·Keycloak 준비,
   Supabase 시험, rhwp 빌드 입력, CDN 예시. 서비스별 역할과 제약을 문서에서 확인한다.
@@ -43,8 +43,9 @@
 
 - [결정 기록](decisions.md): 승인 원칙, 미승인 제안, 보류·대체 관계.
 - [개발 지침](development.md): 현재 개발·검사 방법과 유지보수 계약.
-- [SQL 통합 준비](../preparation/sql-consolidation/README.md): 제품 마이그레이션을 대체하지 않는
-  후보·재현 절차와 검증 범위. 원시 증거의 보존 위치는 [증거 안내](../preparation/sql-consolidation/evidence.md).
+- [마이그레이션 안내](../crates/server/migrations/README.md): 제품 SQL 기준과 고정 SHA 검증 재현·과거 증거 위치.
+  제품 사전 검사 fixture는 `crates/server/tests/fixtures/postgres-preflight/`에 둔다.
+  통합 전용 비교 도구·준비 문서·후보 SQL 사본은 현재 트리에 두지 않는다.
 
 과거 실행 로그·스크린숏·중간 소스는 현재 코드와 분리하고, 관련 결함이나 SHA를 조사할 때만 연다.
 분리 원칙은 [개발 지침의 검사와 예외](development.md#4-검사와-예외)를 따른다.

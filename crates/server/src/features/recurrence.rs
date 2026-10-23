@@ -4,8 +4,8 @@
 //! DB 함수 `app_recurrence_dates` 하나가 한다. 반복 업무의 회차는 쓰기 요청 안에서만 만든다(백그라운드 작업 구조
 //! O-19 미결): 규칙을 정할 때, 반복 업무를 고칠 때, 쓰기 권한이 있는 사람이 항목을 열 때의 동기화 요청.
 //! 읽기는 아직 없는 회차를 "예정"으로 계산해 보여 줄 뿐 만들지 않는다. 반복 일정은 달력에서 펼친다.
-//! 초기 정의는 `migrations/0014_recurrence.sql`, 앱 생성 id를 받는 D-88 전환은
-//! `migrations/0073_app_ids_tasks.sql`에 있다.
+//! `app_recurrence_dates`·`app_sync_task_series`의 최종 정의와 앱 공급 UUIDv7(D-88) 처리는
+//! `migrations/202610230001_initial_state.sql`에 있다.
 
 use axum::Json;
 use axum::extract::{Path, State};

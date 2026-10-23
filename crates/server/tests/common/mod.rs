@@ -334,22 +334,7 @@ pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> Fres
         migrator_password: None,
         app_password: None,
     };
-    if let Some(candidate) =
-        std::env::var_os("FVOCI_TEST_CANDIDATE_MIGRATIONS").filter(|v| !v.is_empty())
-    {
-        // The comparison command installs an independent SQLx candidate, including its real ledger.
-        // Fresh databases used by backup/search tests must use that same source, never replay history.
-        let migrator = sqlx::migrate::Migrator::new(std::path::PathBuf::from(candidate))
-            .await
-            .unwrap();
-        let mut conn = sqlx::PgConnection::connect(db.migration_url.as_ref().unwrap().expose())
-            .await
-            .unwrap();
-        migrator.run(&mut conn).await.unwrap();
-        conn.close().await.unwrap();
-    } else {
-        fvoci_server::db::admin::migrate(&db).await.unwrap();
-    }
+    fvoci_server::db::admin::migrate(&db).await.unwrap();
     FreshDb {
         app_url: with_database(&app_url, &name),
         name,

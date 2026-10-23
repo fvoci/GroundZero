@@ -2,7 +2,7 @@
 //!
 //! 한 문서 엔진을 쓴다. 문서는 워크스페이스 소유(위키) 또는 사용자 소유(개인 노트) 중 하나다 (D-59).
 //! 접근 판정은 DB 함수 `app_document_access`(owner·write·read·없음) 하나로 하고, RLS와 이 모듈이 같은 함수를
-//! 쓴다(`migrations/0004_personal_notes_sharing.sql`).
+//! 쓴다(`migrations/202610230001_initial_state.sql`의 `app_document_access`).
 //!
 //! 저장 경계 (D-62): 본문은 Tiptap JSON(`schema_version` 1)이며 저장할 때마다 리비전이 하나 늘어난다.
 //! 이것은 JSON 리비전 저장이고 공동 편집이 아니다. CRDT 도입 시 상태 열을 `body` 옆에 추가하며

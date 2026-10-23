@@ -25,6 +25,111 @@ pub const APP_ROLE: &str = "fvoci_app";
 /// 스키마 이름.
 pub const SCHEMA: &str = "fvoci";
 
+/// 새 설치 이력의 시작점. 이전 개발 DB는 이력 수정 없이 승인 후 재생성한다(D-107).
+pub const BASELINE_VERSION: i64 = 202_610_230_001;
+pub const BASELINE_MARKER: &str = "fvoci baseline 202610230001";
+
+fn recreation_required() -> AppError {
+    AppError::Config(
+        "this database contains previous GroundZero development SQL history or untracked schema objects and requires recreation; \
+         preserve the database and backups, confirm the exact target and data loss, then obtain \
+         approval before recreating it. No data or migration history was changed. \
+         See docs/self-hosting.md#sql-baseline-reset"
+            .into(),
+    )
+}
+
+/// 원장·세대 표시·객체 존재를 한 스냅숏에서 읽는다. bootstrap 직후 앱에는 스키마 USAGE도 없으므로
+/// 이름을 regclass로 해석하거나 원장을 조회하지 않고 카탈로그만 사용한다.
+async fn schema_state(conn: &mut PgConnection) -> Result<(bool, Option<String>, bool), AppError> {
+    // 빈 SQLx 원장의 행 타입과 자동 배열 타입만 제외한다. 독립 enum·domain 등은 관계가 없어도 기존 객체다.
+    Ok(sqlx::query_as(
+        "WITH ledger AS (
+             SELECT c.oid, c.reltype FROM pg_catalog.pg_class c
+             JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'fvoci' AND c.relname = '_sqlx_migrations'
+         )
+         SELECT EXISTS (SELECT 1 FROM ledger),
+                (SELECT pg_catalog.obj_description(oid, 'pg_class') FROM ledger),
+                EXISTS (SELECT 1 FROM pg_catalog.pg_class c
+                        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'fvoci'
+                          AND c.oid NOT IN (SELECT oid FROM ledger)
+                          AND c.oid NOT IN (SELECT indexrelid FROM pg_catalog.pg_index
+                                           WHERE indrelid IN (SELECT oid FROM ledger)))
+                OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+                           JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                           WHERE n.nspname = 'fvoci')
+                OR EXISTS (SELECT 1 FROM pg_catalog.pg_type t
+                           JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+                           WHERE n.nspname = 'fvoci'
+                             AND t.oid NOT IN (
+                                 SELECT reltype FROM ledger
+                                 UNION ALL
+                                 SELECT lt.typarray FROM pg_catalog.pg_type lt
+                                 JOIN ledger ON ledger.reltype = lt.oid))",
+    )
+    .fetch_one(conn)
+    .await?)
+}
+
+/// 앱에는 원장 SELECT 권한을 주지 않는다. SQLx 트랜잭션과 함께 기록된 세대 표시만 카탈로그에서 읽는다.
+pub async fn check_application_baseline(conn: &mut PgConnection) -> Result<(), AppError> {
+    let (_, marker, has_objects) = schema_state(conn).await?;
+    if marker.as_deref() == Some(BASELINE_MARKER) {
+        return Ok(());
+    }
+    if !has_objects {
+        return Err(AppError::Config(
+            "this GroundZero database has no application objects; run `fvoci-server db migrate` \
+             after `db bootstrap` to validate its migration history and initialize the schema, then \
+             start the application. No data or migration history was changed. \
+             See docs/self-hosting.md#db-setup"
+                .into(),
+        ));
+    }
+    Err(recreation_required())
+}
+
+/// SQLx가 원장을 만들거나 수정하기 전에 옛 이력을 거부한다. 같은 세대의 체크섬은 SQLx가 검증한다.
+async fn check_migration_baseline(conn: &mut PgConnection) -> Result<(), AppError> {
+    // 다른 설치의 커밋 전 원장과 커밋 후 객체를 섞어 읽으면 새 DB도 구 DB로 오인할 수 있다.
+    // 한 읽기 스냅숏에서 점검한 뒤 종료한다. 적용 순서와 체크섬 검사는 SQLx의 잠금이 맡는다.
+    let mut snapshot = conn.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *snapshot)
+        .await?;
+    inspect_migration_baseline(&mut snapshot).await?;
+    snapshot.commit().await?;
+    Ok(())
+}
+
+async fn inspect_migration_baseline(conn: &mut PgConnection) -> Result<(), AppError> {
+    let (ledger_exists, _, has_objects) = schema_state(conn).await?;
+    let mut has_baseline = false;
+    if ledger_exists {
+        let old_history: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM fvoci._sqlx_migrations WHERE version < $1)",
+        )
+        .bind(BASELINE_VERSION)
+        .fetch_one(&mut *conn)
+        .await?;
+        if old_history {
+            return Err(recreation_required());
+        }
+        has_baseline = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM fvoci._sqlx_migrations WHERE version = $1)",
+        )
+        .bind(BASELINE_VERSION)
+        .fetch_one(&mut *conn)
+        .await?;
+    }
+    if !has_baseline && has_objects {
+        return Err(recreation_required());
+    }
+    Ok(())
+}
+
 /// 최소 엔진 버전이다. 이보다 새로운 모든 버전을 검증했다는 뜻은 아니다.
 const MIN_SERVER_VERSION: i32 = 170_000;
 
@@ -411,6 +516,7 @@ pub async fn migrate(cfg: &DbCommandConfig) -> Result<(), AppError> {
         .fetch_one(&mut conn)
         .await?;
     check_migration_requirements(&mut conn, &role).await?;
+    check_migration_baseline(&mut conn).await?;
     sqlx::migrate!("./migrations").run(&mut conn).await?;
     conn.close().await?;
     Ok(())

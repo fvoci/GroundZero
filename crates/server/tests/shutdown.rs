@@ -39,6 +39,7 @@ fn server_shuts_down_cleanly_on_sigterm() {
             let admin_url =
                 std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
             let mut admin = sqlx::PgConnection::connect(&admin_url).await.unwrap();
+            // 현재 서버는 구 SQL 이력의 DB를 시작하지 않는다. 종료 신호 계약은 새 제품 DB에서 확인한다.
             common::fresh_database(&mut admin, "shutdown").await.app_url
         });
     let port = std::net::TcpListener::bind("127.0.0.1:0")

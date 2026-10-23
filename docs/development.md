@@ -44,7 +44,7 @@
 - 설정 존재, 구현 완료, 실행 성공, 지원 보장을 구분한다. CodeRabbit의 전체 검토·증분 검토·파일 생략·전체 skipped·지적 해소도 따로 적는다. 새 지적이 없다는 것만으로 검토 완료를 선언하지 않는다.
 - 실행별 TXT·JSON·JSONL 로그, 환경·카탈로그 스냅숏, 스크린숏, 중간 소스 사본은 현재 지침과 분리한다. 역사 기록임을 표시하고 관련 결함·SHA를 확인할 때만 좁게 읽는다.
 - 새 원시 출력은 기존 `target/` 경로에 둔다. 장기 증거는 접근 가능한 원격 커밋에 보존하고 요약에 SHA·범위·결과·대체 관계·재현 명령·SHA-256·permalink를 남긴다. 추적 파일을 분리하기 전 원격 바이트를 확인한다.
-- `.gitignore`만으로 추적 파일이나 모든 도구가 제외되지는 않는다. 검색·색인·포맷·lint·시험 수집 대상을 확인한다. 제품 코드·fixture·비교 도구·후보 SQL·생성 계약·클라이언트·고지·자산은 실행 로그로 취급하지 않는다. [SQL 준비의 증거 위치](../preparation/sql-consolidation/evidence.md)를 참고한다.
+- `.gitignore`만으로 추적 파일이나 모든 도구가 제외되지는 않는다. 검색·색인·포맷·lint·시험 수집 대상을 확인한다. 제품 코드·fixture·비교 도구·생성 계약·클라이언트·고지·자산은 실행 로그로 취급하지 않는다. [SQL 비교와 증거 위치](../crates/server/migrations/README.md#comparison)를 참고한다.
 
 ## 5. 복잡도 원칙
 
@@ -96,6 +96,21 @@ Supabase session 실행에서도 별도 빈 DB를 만드는 시험은 직접 연
 | 기본 통합·개발 Compose   | [compose.test.yaml](../deploy/compose.test.yaml), [compose.dev.yaml](../deploy/compose.dev.yaml)                |
 | Supabase 고정 구성       | [연결·시험 안내](self-hosting-supabase.md), [compose.test.yaml](../deploy/supabase/compose.test.yaml)           |
 | 검사 순서와 대상         | [xtask/src/check.rs](../xtask/src/check.rs), [xtask/src/test.rs](../xtask/src/test.rs)                          |
+
+### DB 비교와 사전 검사 fixture
+
+통합 SQL 비교 결과와 고정 검증 SHA의 재현은 [마이그레이션 안내](../crates/server/migrations/README.md#comparison)를 따른다.
+이번 통합 전용 비교 도구는 현재 트리에서 제거했다. 제품 사전 검사 fixture는
+[crates/server/tests/fixtures/postgres-preflight/](../crates/server/tests/fixtures/postgres-preflight)에 둔다.
+PG16은 지원 대상이 아니라 `db bootstrap`·`db migrate`의 변경 전 거부를 확인하는 fixture다.
+새 전용 Compose 프로젝트에 `deploy/compose.test.yaml`과 `crates/server/tests/fixtures/postgres-preflight/compose.pg16.yaml`을 겹쳐 실행한다.
+거부 전후에 `crates/server/tests/fixtures/postgres-preflight/catalog.sql`을 조회해 역할·스키마·원장·권한이 그대로인지 비교한다.
+PG17 필수 언어·UUID 함수 권한의 거부 검사는 PG16 override 없이 같은 격리 방식으로 실행하고,
+시험 fixture에서만 권한을 하나씩 철회·원복한다. 비밀번호 보존은 잘못된 비밀번호의 거부와 원래 비밀번호의 새 연결을 함께 확인한다.
+
+구체적인 거부 조건·명령은 [고정 SHA의 재현 절차](https://github.com/fvoci/GroundZero/blob/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation/verification/fixtures/README.md)에 있다.
+그 절차의 `compose.pg16.yaml`·`preflight-catalog.sql` 경로는 위 정식 경로를 사용하고, 성공 후 이력은 현재 SQLx 기준과 대조한다.
+기존 개발·Cloud DB에 이 fixture를 실행하지 않는다. 출력은 새 `target/` 경로에 남기고 생성한 프로젝트만 `stop`한다.
 
 <a id="license-records"></a>
 
@@ -207,8 +222,10 @@ VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev
 
 새 행의 UUIDv7은 Rust 앱이 만들고 SQL은 받은 값을 소비한다(D-88). 기존 대상 ID·요청 ID와 새 행 ID를 구분한다.
 개수 산정·바인딩 순서·FV001/002·HTTP와 작업 프로세스의 재시도 차이는 [Rust→SQL UUID 인자 계약](sql-id-contract.md)을 따른다.
-누적 마이그레이션이 제품 적용 경로이며 [SQL 통합 후보](../preparation/sql-consolidation/synthesis.md)는 별도 준비물이다.
-빈 DB 설치 동등성을 기존 데이터·백업·SQLx 이력 전환 검증으로 보지 않는다.
+[통합 초기 마이그레이션](../crates/server/migrations/README.md)이 제품 적용 경로다(D-107).
+기존 누적 이력 DB는 자동 이전하지 않는다. 정확한 대상·손실 영향·백업 방안을 확인하고 승인받은 뒤 재생성한다.
+통합 당시 비교는 [고정 검증 SHA의 별도 checkout](../crates/server/migrations/README.md#comparison)에서 재현한다.
+빈 DB 설치 동등성을 기존 데이터 보존·구버전 백업 복구 검증으로 보지 않는다.
 
 <a id="create-retry"></a>
 
@@ -287,8 +304,8 @@ VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev
 개인 노트는 30일이다. 만료 뒤 복원은 409지만, 살아 있는 기록·문서의 파일 버전 참조 때문에 자동 삭제를 미룬 묶음은
 D-69에 따라 복원할 수 있다. 자동 삭제는 참조 버전을 보호하며(D-56), 관리자의 직접 영구 삭제는 별도 동작이다.
 대상을 영구 삭제해도 개인 시간 기록 자체는 지우지 않고 대상 이름을 가린다.
-[휴지통 시험](../crates/server/tests/trash.rs), [최신 복원 함수](../crates/server/migrations/0080_trash_restore_races.sql),
-[파일·정리 함수](../crates/server/migrations/0074_app_ids_files_system.sql)를 함께 확인한다.
+[휴지통 시험](../crates/server/tests/trash.rs)과
+[통합 SQL](../crates/server/migrations/202610230001_initial_state.sql)의 `app_restore_batch`·`app_purge_batch_as`를 함께 확인한다.
 
 <a id="attachment-retention"></a>
 
@@ -318,7 +335,7 @@ D-56의 참조 보호와 D-69의 만료 복원은 [휴지통 계약](#trash-cont
 준비 파일은 게시·취소·만료 때 조각과 함께 정리한다. S3는 완료된 multipart를 다시 완료할 수 없으므로
 로컬 준비 파일 방식을 그대로 적용하지 않는다.
 
-[파일 처리기](../crates/server/src/features/files.rs), [점유 해제 함수](../crates/server/migrations/0088_upload_claim_release.sql),
+[파일 처리기](../crates/server/src/features/files.rs), [통합 SQL](../crates/server/migrations/202610230001_initial_state.sql)의 `app_release_upload_claim`,
 [저장소](../crates/server/src/storage), [업로드 클라이언트](../apps/web/src/lib/features/files/upload.ts),
 [파일 시험](../crates/server/tests/files.rs)을 함께 확인한다.
 
@@ -329,7 +346,7 @@ D-56의 참조 보호와 D-69의 만료 복원은 [휴지통 계약](#trash-cont
 항목 리더는 표시용이며 권한을 주지 않는다. 비공개 항목 멤버십도 워크스페이스 역할을 넘지 않아 독자에게는 읽기만 허용한다.
 항목 멤버 관리는 소유 권한자가 한다. 워크스페이스를 떠나면 직접 항목 멤버십을 지우며 다시 초대돼도 예전 비공개 항목 접근은 돌아오지 않는다.
 담당·리더 정리는 휴지통에 있다는 이유만으로 실행하지 않는다. 실제 접근 권한을 잃거나 공간을 떠났을 때는 휴지통 항목에서도 정리한다.
-[접근·정리 함수](../crates/server/migrations/0080_trash_restore_races.sql),
+[통합 SQL](../crates/server/migrations/202610230001_initial_state.sql)의 `app_item_access_ignoring_trash`·`app_drop_unseen_assignees`,
 [항목 권한 시험](../crates/server/tests/item_profile.rs), [휴지통 시험](../crates/server/tests/trash.rs)을 함께 본다.
 
 <a id="item-copy"></a>
@@ -388,8 +405,9 @@ Zotero 키는 가져오는 요청 동안만 서버가 API 헤더로 전달하며
 - **일정**: 회차 행을 만들지 않고 달력에서 펼친다. 일정 시간대의 현지 시각을 유지하며 DST로 없는 시각은 건너뛰고 겹친 시각은 앞선 한 번만 쓴다(D-81). 전체 수정과 회차 제외를 지원하며 회차 하나의 독립 수정은 지원하지 않는다. 일정 날짜를 옮기면 제외 날짜도 함께 옮긴다.
 - 일정의 규칙 저장에는 편집을 시작한 규칙 `base`를 보내며, 규칙 없음은 NULL이다. 규칙이 달라졌으면 쓰지 않고 409 `rule_conflict`와 최신 일정이다. 제목만 바뀐 것은 이 충돌이 아니고, 요청 규칙이 이미 현재 값이면 쓰지 않고 성공한다. 일정 시작·시간대를 바꿔 첫 회차가 `until` 뒤로 가는 요청은 400이다.
 
-[반복 처리기](../crates/server/src/features/recurrence.rs), [회차 생성 함수](../crates/server/migrations/0073_app_ids_tasks.sql),
-[일정 규칙 비교](../crates/server/migrations/0086_event_rule_base.sql), [반복 시험](../crates/server/tests/recurrence.rs)을 함께 본다.
+[반복 처리기](../crates/server/src/features/recurrence.rs),
+[통합 SQL](../crates/server/migrations/202610230001_initial_state.sql)의 `app_sync_task_series`·`app_set_event_recurrence`,
+[반복 시험](../crates/server/tests/recurrence.rs)을 함께 본다.
 
 <a id="worker-contract"></a>
 
@@ -405,9 +423,9 @@ Zotero 키는 가져오는 요청 동안만 서버가 API 헤더로 전달하며
 worker가 만든 반복 회차의 작성자는 규칙 작성자다. HTTP 경로가 이 시스템 함수를 사용자 권한 우회용으로 호출하지 않는다.
 
 반복 tick은 여전히 한 트랜잭션이며, 항목 순서로 각 항목의 열을 `done` → `in_progress` → `todo` 순으로 잠그고 끝까지 보유한다.
-한 항목의 열 잠금 실패는 그 항목을 건너뛰고, 개별 반복 실패는 경고 후 나머지를 계속한다(0089).
+한 항목의 열 잠금 실패는 그 항목을 건너뛰고, 개별 반복 실패는 경고 후 나머지를 계속한다(`app_system_recurrence_tick`).
 이를 항목별 부분 커밋으로 해석하지 않는다. P-35의 항목별 트랜잭션 제안은 보류 상태다.
-[작업 시험](../crates/server/tests/worker.rs), [잠금 순서 함수](../crates/server/migrations/0089_recurrence_tick_lane_order.sql),
+[작업 시험](../crates/server/tests/worker.rs), [통합 SQL](../crates/server/migrations/202610230001_initial_state.sql)의 `app_system_recurrence_tick`,
 [반복 시험](../crates/server/tests/recurrence.rs)이 이 경계를 확인한다.
 
 <a id="live-document-preservation"></a>
@@ -519,9 +537,9 @@ D-105의 원자성 단위는 업무 한 건이다. CSV 각 줄은 모든 칸을 
 
 - [SQL 준비 기준까지의 개발 기록 전체](https://github.com/fvoci/GroundZero/blob/abd545a250ff1fd9cc166b3c078c4dff76846724/docs/development.md): 초기화·라이선스 조사, 기능별 구현, 감사·실행 결과와 당시 절 번호.
 - [최신 정책 구현 검증의 개발 기록 전체](https://github.com/fvoci/GroundZero/blob/0a26654db6c96ccfb232ecbf0a6a02ff8220a5dd/docs/development.md): 기대 사용자와 검색·판 검사·CSV 원자성, 통합 뒤 수정·시험 범위. 옛 96~99절은 이 원문에서 확인한다.
-- [SQL 통합 준비 종합](../preparation/sql-consolidation/synthesis.md), [검증 요약](../preparation/sql-consolidation/verification/results.md), [증거 위치](../preparation/sql-consolidation/evidence.md): 누적 SQL·후보, 검증한 환경과 NOT RUN을 구분한다.
+- [SQL 통합 준비 기록](https://github.com/fvoci/GroundZero/tree/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation), [준비 검증 요약](https://github.com/fvoci/GroundZero/blob/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation/verification/results.md): 해당 SHA의 누적 SQL·후보 검증과 NOT RUN을 구분한다. 통합 검증 재현과 원시 증거 위치는 [마이그레이션 안내](../crates/server/migrations/README.md#comparison)에 있다.
 
-변경하지 않은 마이그레이션 주석 등에서 옛 절 번호를 만나면 다음 원문 위치를 쓴다. 새 절 번호로 재해석하지 않는다.
+고정 SHA에 보존된 과거 SQL 주석 등에서 옛 절 번호를 만나면 다음 원문 위치를 쓴다. 새 절 번호로 재해석하지 않는다.
 
 | 옛 참조                      | 고정 원문                                                                                                                                                                                                                                                                                                                                                     |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

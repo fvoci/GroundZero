@@ -414,7 +414,9 @@ async fn input_validation_and_origin_and_session_failures() {
         display_name: "expiring".into(),
         id_token: "t".into(),
     };
-    let (_, token) = start_session(&state.db, Duration::from_secs(1), &identity, None)
+    // 원격 DB 왕복 중 만료되기 전에 유효 세션 응답을 먼저 검사할 수 있도록 여유를 둔다.
+    let session_ttl = Duration::from_secs(10);
+    let (_, token) = start_session(&state.db, session_ttl, &identity, None)
         .await
         .unwrap();
     let expiring = common::TestUser {
@@ -427,7 +429,7 @@ async fn input_validation_and_origin_and_session_failures() {
             .status,
         StatusCode::OK
     );
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    tokio::time::sleep(session_ttl + Duration::from_millis(500)).await;
     assert_eq!(
         send(&app, Method::GET, "/api/me", Some(&expiring), None)
             .await
