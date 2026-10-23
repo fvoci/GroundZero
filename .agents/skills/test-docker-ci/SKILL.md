@@ -7,12 +7,14 @@ description: 통합 테스트, Docker Compose, Dockerfile, CI 워크플로, xtas
 
 적용 대상: `deploy/**`, `.github/workflows/**`, `xtask/src/{compose,test,dev}.rs`, `crates/server/tests/**`.
 
-## 실행 격리 (docs/development.md 6절)
+## 실행 격리
+
+[개발·통합 테스트 환경](../../../docs/development.md#6-개발통합-테스트-환경-docker-compose)을 따른다.
 
 - Compose 프로젝트명은 `xtask::compose::project_name`이 체크아웃 경로로 만든다. 고정 이름을 쓰지 않는다.
 - 호스트 포트는 `127.0.0.1::<port>`로 동적 할당하고 `docker compose port`로 찾는다. 고정 포트를 추가하지 않는다.
   문서화된 예외는 개발 Keycloak 하나다: 사용자 식별(발급자 + subject)이 바뀌지 않게
-  `127.0.0.1:${FVOCI_DEV_KEYCLOAK_PORT:-8180}`에 고정한다(`deploy/compose.dev.yaml`, docs/development.md 12.1).
+  `127.0.0.1:${FVOCI_DEV_KEYCLOAK_PORT:-8180}`에 고정한다([개발 실행 구성](../../../docs/development.md#121-실행-구성), `deploy/compose.dev.yaml`).
 - `cargo xtask down`은 자기 프로젝트의 컨테이너·네트워크·볼륨만 지운다. 전역 `prune`을 넣지 않는다.
 - 테스트 자격 증명은 `deploy/compose.*.yaml`과 `deploy/keycloak/realm-test.json`의 명백한 테스트 값이다. 운영 값과 섞지 않는다.
 
@@ -27,7 +29,7 @@ description: 통합 테스트, Docker Compose, Dockerfile, CI 워크플로, xtas
 
 - 서비스가 필요한 테스트는 환경 변수가 없을 때 실패해야 한다. 건너뛰어 통과시키지 않는다.
 - 로컬과 CI는 xtask 진입점(`cargo xtask check`·`test`·`licenses`·`rhwp`)을 호출한다. 검사 로직은 xtask에 두고 워크플로에 별도
-  검사 명령을 흩뿌리지 않는다(지금 예외: `rhwp` job의 고지 파일 `git diff --exit-code`). CI job 목록은 docs/development.md 10절.
+  검사 명령을 흩뿌리지 않는다(지금 예외: `rhwp` job의 고지 파일 `git diff --exit-code`). CI job 목록은 [CI 구조](../../../docs/development.md#10-ci-구조-d-64)에 있다.
 
 ## 이미지
 

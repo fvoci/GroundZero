@@ -1,170 +1,52 @@
-# fvoci 저장소 구조안
+# fvoci 저장소 구조
 
-작성일: 2026-10-17, 목록·트리 갱신: 2026-10-22
-상태: 초기 구조 기준으로 승인됨(`docs/decisions.md` D-46). 구조는 책임 배치의 예시이며 전체 파일 목록이 아니다. 빈 폴더·파일을 미리 만들지 않고 구현에 필요한 순서대로 만든다. 아래 목록과 트리는 2026-10-22 저장소(`git ls-files`)에 있는 것만 적는다.
+초기 구조는 [D-46](decisions.md#d-46)에 따라 승인됐다. 파일 배치 같은 구현 선택은
+[D-47](decisions.md#d-47)의 경계를 따른다. 아래는 책임 배치이며
+전체 파일 목록이 아니다. 빈 폴더를 미리 만들거나 기능마다 같은 공통 코드를 복제하지 않는다.
+현재 파일은 필요한 경로에 한정해 `rg --files` 또는 `git ls-files`로 확인한다.
 
-## 현재 존재하는 것 (2026-10-22, `git ls-files` 기준)
+## 코드와 계약
 
-- 루트: `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `rustfmt.toml`, `clippy.toml`, `deny.toml`, `.cargo/config.toml`, `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `.npmrc`, `tsconfig.base.json`, `eslint.config.mjs`, `.prettierrc.json`, `.prettierignore`, `.editorconfig`, `.gitignore`, `.dockerignore`, `.env.example`, `.coderabbit.yaml`, `THIRD_PARTY_NOTICES.txt`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`
-- `crates/server/`: `build.rs`, `migrations/`, `src/`(아래 트리), `tests/`(기능별 통합 테스트 `*.rs`와 `common/mod.rs`)
-- `xtask/`: `src/{main,check,compose,dev,test,openapi,licenses,notices,rhwp,i18n,supabase,supabase_cloud_precheck}.rs`, `src/supabase_cloud_precheck/tests.rs`
-- `apps/web/`: Vite + Svelte 5 SPA, `src/{app,assets,lib,styles}/`, `messages/`(화면 문구), `project.inlang/`, `tests/`(`component/`와 최상위 시험 파일)
-- `packages/api-client/`: `src/index.ts`, `src/generated/schema.ts`(생성)
-- `contracts/`: `openapi.json`(생성), `collab/`(실시간 공동 편집 기준 파일, D-70)
-- `deploy/`: `compose.{dev,test,selfhost}.yaml`, `selfhost.env.example`, `docker/{dev,app}.Dockerfile`, `keycloak/realm-{test,selfhost}.json`, `postgres/`(`initdb/`와 개발 준비 SQL), `supabase/`(D-88 시험 구성·연결 예시), `rhwp/`(HWP·HWPX 미리보기 WASM 빌드 입력, D-76), `cdn/`(CDN 설정 예시, D-77)
-- `.agents/skills/{rust-api-db,svelte-ui,test-docker-ci}/SKILL.md`
-- `.github/workflows/{base-image,ci,release-image,supabase-cloud-readonly}.yml`
-- `docs/`: `decisions.md`, `development.md`, `repo-structure.md`, `self-hosting.md`, `self-hosting-supabase.md`, `try-it.md`, `sql-id-contract.md`, `supabase-cloud-readonly-precheck.md`, `reference-products-survey.md`
+| 경로                                                                | 책임                                                                              |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `crates/server/src/app.rs`, `config.rs`, `main.rs`                  | 서버 구성·시작·종료와 설정                                                        |
+| `crates/server/src/http/`                                           | HTTP 라우팅·공통 경계·OpenAPI                                                     |
+| `crates/server/src/db/`                                             | 연결·트랜잭션·RLS 문맥·역할 준비                                                  |
+| `crates/server/migrations/`                                         | 제품 스키마·SQL 함수의 정본. [읽기와 변경](../crates/server/migrations/README.md) |
+| `crates/server/src/features/`                                       | 기능별 서버 동작. 공통 권한·데이터를 재사용                                       |
+| `crates/server/src/collab/`                                         | 실시간 공동 편집                                                                  |
+| `crates/server/src/worker.rs`, `search.rs`, `storage/`, `backup.rs` | 백그라운드 작업·검색·파일 저장·백업과 복구                                        |
+| `crates/server/tests/`                                              | 기능별 API·DB·권한 통합 시험, 공통 준비는 `common/`                               |
+| `apps/web/src/app/`, `src/lib/features/`                            | 앱 시작·화면 이동과 기능별 UI                                                     |
+| `apps/web/src/lib/ui/`                                              | 가져온 공통 UI. [출처·추가·수정 규칙](../apps/web/src/lib/ui/README.md)           |
+| `apps/web/src/lib/api/`                                             | 생성 계약과 런타임 입력 검증을 연결하는 클라이언트                                |
+| `apps/web/src/styles/`, `messages/`, `project.inlang/`              | 디자인 토큰·화면 문구·번역 구성                                                   |
+| `apps/web/tests/`                                                   | 웹 단위·컴포넌트 시험                                                             |
+| `contracts/openapi.json`, `packages/api-client/src/generated/`      | Rust 정의에서 생성하는 API 계약과 TypeScript 타입                                 |
+| `contracts/collab/`                                                 | 실시간 공동 편집의 기준 파일                                                      |
 
-프론트엔드 `features/`에 `projects`·`hobbies`·`notifications` 폴더가 없는 것은 기능 제외가 아니다. 모듈 종류(프로젝트·취미 등)는 `modules`·`records`가, 알림 화면은 `references`가 맡는다. 개인 노트는 `documents` 안에서 소유권·권한으로 구분하며 편집·저장 코드를 복제하지 않는다.
+프로젝트·취미 등의 모듈 종류는 `modules`·`records`가, 알림 화면은 `references`가 맡는다.
+개인 노트는 `documents`에서 소유권·권한으로 구분하며 편집·저장 코드를 복제하지 않는다.
+폴더 이름이 없다는 이유로 기능이 제외됐다고 판단하지 않는다.
 
-`preparation/sql-consolidation/`에는 검토 후보 SQL, 재현용 조회·fixture, SHA별 요약을 둔다. 실행별 원시 로그·카탈로그와 환경 스냅숏은 [기존 원격 보존본](../preparation/sql-consolidation/evidence.md)으로 분리했다. 그중 과거 실행 기록은 **역사 기록이며 현재 상태를 나타내지 않음**이며 현재 구현은 코드·테스트와 승인 결정을 확인한다. 새 실행 출력은 기존 `target/` 아래에 두며 원격 보존 트리를 현재 소스에 복사하지 않는다.
+## 실행·개발 도구
 
-```
-fvoci/
-├── Cargo.toml                 # Rust workspace
-├── Cargo.lock
-├── rust-toolchain.toml
-├── rustfmt.toml
-├── clippy.toml                # 필요한 Clippy 설정만
-├── deny.toml                  # cargo-deny(라이선스·권고)
-├── package.json              # pnpm 공통 명령·버전 지정
-├── pnpm-workspace.yaml
-├── pnpm-lock.yaml
-├── tsconfig.base.json
-├── eslint.config.mjs
-├── .prettierrc.json
-├── .editorconfig
-├── .gitignore
-├── .dockerignore
-├── .env.example              # 설명과 비밀 아닌 예시만
-├── THIRD_PARTY_NOTICES.txt   # 배포물 제3자 고지(`cargo xtask notices`)
-├── .cargo/
-│   └── config.toml           # cargo xtask 별칭 등
-├── AGENTS.md                 # 짧은 공통 규칙·스킬 진입점
-├── README.md
-├── CONTRIBUTING.md
-│
-├── crates/
-│   └── server/
-│       ├── Cargo.toml
-│       ├── build.rs
-│       ├── migrations/       # PostgreSQL 스키마 변경의 정본
-│       ├── src/
-│       │   ├── main.rs
-│       │   ├── lib.rs
-│       │   ├── config.rs
-│       │   ├── app.rs        # 구성·시작·종료 연결
-│       │   ├── error.rs
-│       │   ├── build_info.rs # 제품 버전·소스 SHA(D-87)
-│       │   ├── ids.rs        # 의미 있는 ID·역할 타입(D-09)
-│       │   ├── logging.rs    # 운영 로그(D-83)
-│       │   ├── http/         # 라우팅·HTTP 공통 경계·캐시 머리글
-│       │   ├── db/           # 풀·트랜잭션·RLS 문맥, 역할 준비
-│       │   ├── worker.rs     # 백그라운드 작업(O-19, 실행 역할로 켬)
-│       │   ├── search.rs     # 통합 검색 색인·Meilisearch 연결(D-39)
-│       │   ├── storage/      # 로컬·S3 구현
-│       │   ├── backup.rs     # 백업·복구
-│       │   ├── collab/       # 실시간 공동 편집(D-70)
-│       │   └── features/     # 기능마다 .rs 파일 하나(하위 폴더 없음), mod.rs가 묶는다
-│       │       ├── accounts.rs · workspaces.rs · members.rs · audit.rs
-│       │       ├── modules.rs · item_profile.rs · records.rs · zotero.rs
-│       │       ├── documents.rs · revisions.rs · references.rs · comments.rs · public_links.rs
-│       │       ├── tasks.rs · schedule.rs · recurrence.rs · events.rs · saved_views.rs
-│       │       ├── time_tracking.rs · courses.rs · study.rs · home.rs
-│       │       ├── files.rs · file_text.rs · export.rs · trash.rs
-│       │       └── search_api.rs · search_text.rs
-│       └── tests/            # API·DB·권한 통합 테스트(기능별 *.rs)
-│           └── common/
-│
-├── apps/
-│   └── web/
-│       ├── package.json
-│       ├── tsconfig.json
-│       ├── vite.config.ts
-│       ├── vite.pptx-frame.config.ts
-│       ├── svelte.config.js
-│       ├── messages/         # 화면 문구(ko·en, D-81)
-│       ├── project.inlang/
-│       ├── src/
-│       │   ├── app/          # 시작·화면 이동·전체 설정
-│       │   ├── assets/
-│       │   ├── lib/
-│       │   │   ├── api/      # 생성 client 연결 설정
-│       │   │   ├── ui/       # 공통 UI
-│       │   │   ├── hooks/
-│       │   │   └── features/ # 기능별 폴더. 편집기(Tiptap)는 documents, 미리보기(Office·HWP)는 files 안
-│       │   │       ├── workspaces/ · members/ · settings/ · nav/ · auth/ · health/
-│       │   │       ├── modules/ · records/ · courses/ · study/
-│       │   │       ├── documents/ · references/ · comments/ · notes/ · public/
-│       │   │       ├── tasks/ · checklists/ · events/ · time/ · home/
-│       │   │       └── files/ · search/ · trash/ · audit/ · feedback/
-│       │   └── styles/
-│       └── tests/
-│           └── component/
-│
-├── packages/
-│   └── api-client/           # 계약에서 생성하는 TS client
-│       ├── package.json
-│       └── src/generated/
-│
-├── contracts/
-│   ├── openapi.json          # Rust 정의에서 생성
-│   └── collab/               # 실시간 공동 편집 기준 파일(D-70)
-│
-├── xtask/
-│   ├── Cargo.toml
-│   └── src/
-│       ├── main.rs
-│       ├── check.rs
-│       ├── compose.rs
-│       ├── dev.rs
-│       ├── test.rs
-│       ├── openapi.rs
-│       ├── licenses.rs
-│       ├── notices.rs
-│       ├── i18n.rs
-│       ├── rhwp.rs
-│       ├── supabase.rs
-│       └── supabase_cloud_precheck.rs
-│
-├── deploy/
-│   ├── docker/
-│   │   ├── dev.Dockerfile
-│   │   └── app.Dockerfile
-│   ├── compose.dev.yaml
-│   ├── compose.test.yaml
-│   ├── compose.selfhost.yaml   # 셀프호스트(docs/self-hosting.md)
-│   ├── selfhost.env.example
-│   ├── postgres/              # 첫 설치 때 Keycloak DB(initdb/, 선택), 개발 준비 SQL
-│   ├── keycloak/              # 테스트 렐름, 셀프호스트 렐름 틀
-│   ├── supabase/              # 셀프호스트 Supabase 시험 구성·연결 예시(D-88)
-│   ├── rhwp/                  # HWP·HWPX 미리보기 WASM 빌드 입력(D-76)
-│   └── cdn/                   # Cloudflare·CloudFront 설정 예시(D-77)
-│
-├── docs/
-│   ├── decisions.md
-│   ├── development.md
-│   ├── repo-structure.md
-│   ├── self-hosting.md
-│   ├── self-hosting-supabase.md
-│   ├── try-it.md               # 이 Mac에서 직접 써 보기(로컬 체험)
-│   ├── sql-id-contract.md
-│   ├── supabase-cloud-readonly-precheck.md
-│   └── reference-products-survey.md
-│
-├── .agents/
-│   └── skills/              # 실제로 필요한 역할별 스킬
-└── .github/
-    └── workflows/           # 공통 검사 명령 실행과 gate, 이미지 게시
-```
+- `xtask/`: 개발·검사·통합 시험·API 생성·라이선스·rhwp·SQL 비교의 실행 진입점.
+  사용법은 [개발 지침](development.md), 설치는 [셀프호스트 안내](self-hosting.md)를 따른다.
+- `deploy/`: 개발·시험·셀프호스트 Compose와 Dockerfile, PostgreSQL·Keycloak 준비,
+  Supabase 시험, rhwp 빌드 입력, CDN 예시. 서비스별 역할과 제약을 문서에서 확인한다.
+- `.github/workflows/`: xtask를 실행하는 CI와 이미지 게시.
+- 루트의 Cargo·pnpm·TypeScript·lint 설정: 도구 버전과 검사 설정의 정본.
+- `AGENTS.md`: 공통 진입점. `.agents/skills/`는 변경 종류에 필요한 작업 지침만 둔다.
 
-## 검토자 메모 (제안, 미승인)
+## 문서와 과거 증거
 
-구조 기준 자체는 승인되었다. 아래는 초기화 시 D-47에 따라 검토자가 판단하고 이유를 기록할 사항이다.
+- [결정 기록](decisions.md): 승인 원칙, 미승인 제안, 보류·대체 관계.
+- [개발 지침](development.md): 현재 개발·검사 방법과 유지보수 계약.
+- [SQL 통합 준비](../preparation/sql-consolidation/README.md): 제품 마이그레이션을 대체하지 않는
+  후보·재현 절차와 검증 범위. 원시 증거의 보존 위치는 [증거 안내](../preparation/sql-consolidation/evidence.md).
 
-- 결정 기록과 맞는 점: `contracts/openapi.json`을 Rust 정의에서 생성하고 `packages/api-client`를 그 계약에서 생성하는 구조는 O-22 권장안과 일치한다. 백그라운드 작업은 O-19 권장안대로 `crates/server/src/worker.rs`(단일 바이너리, 실행 역할, PostgreSQL 기록)로 두었다. `features/documents/`가 개인 노트까지 담는 것은 O-02(개인 노트 소유 구조)의 결과에 따라 분리될 수 있다.
-- 프론트엔드 `features/`에 `projects`, `hobbies`, `notifications`, `audit`, `modules`가 없다. 서버 쪽에는 있으므로 의도적 생략인지 확인이 필요하다. (2026-10-22: `audit`·`modules`는 생겼고, 나머지는 위 설명대로 다른 폴더가 맡는다.)
-- `deploy/compose.test.yaml`에 Keycloak이 들어가야 한다(D-45, D-10). `compose.selfhost.yaml`의 Keycloak은 선택 프로필(O-25 해소).
-- `docs/development.md`는 기존 `development-guidelines.md`를 이 이름으로 옮겼다. `product.md`, `architecture.md`, `testing.md`, `security.md`는 아직 없다(`self-hosting.md`는 생겼다).
-- `AGENTS.md`와 `.agents/skills/`의 역할과 내용은 별도 지침이 필요하다.
+과거 실행 로그·스크린숏·중간 소스는 현재 코드와 분리하고, 관련 결함이나 SHA를 조사할 때만 연다.
+분리 원칙은 [개발 지침의 검사와 예외](development.md#4-검사와-예외)를 따른다.
+초기 파일 트리와 미승인 검토자 메모는
+[구조안 원문](https://github.com/fvoci/GroundZero/blob/6ecad60f737363dfb0ffb7cf79b623ac84871761/docs/repo-structure.md)에 남아 있다.

@@ -4,25 +4,21 @@
 
 ## 기준 문서
 
-- 결정 기록: `docs/decisions.md` (확정 결정 D, 미승인 제안 P, 열린 항목 O, 제외 X, 보류 H)
-- 개발 절차·품질 기준: `docs/development.md`
-- 저장소 배치: `docs/repo-structure.md`
+- [결정 기록](docs/decisions.md): 확정 결정 D, 제안 P, 열린 항목 O, 제외 X, 보류 H. 항목의 채택·대체·해소 표시를 함께 읽는다.
+- [개발 절차·품질 기준](docs/development.md): 현재 방법과 유지보수 계약.
+- [저장소 배치](docs/repo-structure.md): 경로별 책임.
 
 ## 현재 기준과 실행 증거
 
 - 현재 사용자 요구사항, 승인된 결정과 현재 코드·테스트를 기준으로 삼는다. 결정과 코드가 충돌하면 어느 쪽도 조용히 우선하지 말고 충돌을 보고한다.
-- 과거 실행 기록은 기록된 SHA에만 적용된다. 로그·환경 스냅숏·중간 소스 사본은 **역사 기록이며 현재 상태를 나타내지 않음**으로 표시하고, 관련 결함이나 SHA를 조사할 때만 명시적으로 열어 본다.
-- 요약에는 대상 SHA, 범위, PASS/FAIL/NOT RUN, 대체된 기록과 이번 결과를 구분한다. 입력과 적용 범위를 확인하지 않고 과거 PASS/FAIL을 현재 판정으로 단정하지 않는다.
-- 원시 증거는 현재 소스 트리에 복사하지 않는다. 새 로컬 출력은 기존 무시 경로 `target/`에 두고, 장기 보존은 접근 가능한 원격 SHA 링크와 SHA-256 목록으로 연결한다. [SQL 준비 증거 안내](preparation/sql-consolidation/evidence.md)를 따른다.
+- 과거 기록은 해당 SHA의 역사이며 현재 정책·검증 결과가 아니다. 관련 결함이나 SHA를 조사할 때만 열고 원시 증거를 현재 소스 트리에 복사하지 않는다.
+- 결과의 범위·PASS/FAIL/NOT RUN 구분과 보존 방법은 [검사와 예외](docs/development.md#4-검사와-예외)를 따른다. SQL 원시 증거의 위치는 [증거 안내](preparation/sql-consolidation/evidence.md)에 있다.
 
 ## 빌드·검사 명령
 
-- `pnpm install --frozen-lockfile`
-- `cargo xtask check` — 포맷·lint·타입·단위 테스트·라이선스·계약 (`--skip-licenses`는 라이선스만 빼며 CI는 `cargo xtask licenses`를 따로 돌린다)
-- `cargo xtask test` — 격리된 Compose로 통합 테스트 (`--oidc`로 Keycloak 포함, `--supabase [--session-pooler]`로 셀프호스트 Supabase 공식 구성을 DB로, D-88)
-- `cargo xtask dev --oidc` — 개발 서비스·서버·웹을 한 번에 띄우고 테스트 계정으로 바로 로그인(`docs/development.md` 12.1). `--no-web`이면 웹은 `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`로 따로. 정리는 `cargo xtask down`(이 체크아웃의 개발·테스트 컨테이너와 DB·검색·Keycloak 볼륨을 지움. `target/dev-files` 첨부는 남음)
-- `cargo xtask openapi` 후 `pnpm run generate:api`
-- `cargo xtask rhwp` — HWP·HWPX 미리보기 WASM(D-76)을 제품 이미지와 같은 단계로 만들어 개발 서버 자리에 두고 고지를 갱신한다(입력이 같으면 다시 쓴다)
+[명령표](README.md#명령)를 따른다. 공통 검사는 `cargo xtask check`, 격리 통합 시험은
+`cargo xtask test`다. OIDC·Supabase 조합과 CI의 라이선스 분리는 [개발 지침](docs/development.md)에 있다.
+개발 환경 실행·정리는 [실행 구성](docs/development.md#121-실행-구성)을 읽고 진행한다.
 
 ## 변경 종류별 읽을 스킬
 
@@ -41,7 +37,7 @@
 ## 개발 도구 사용
 
 - 저장소 검색은 `rg`, 파일 목록은 `rg --files`. 경로와 파일 유형을 좁히고 필요한 결과만 출력한다.
-- 검색 패턴은 셸이 펼치지 않는 리터럴로 넘긴다(작은따옴표, 고정 문자열은 `rg -F`). 큰따옴표 안의 백틱·`$( )`는 명령으로 실행된다(문서의 `cargo xtask dev` 같은 글자가 개발 서비스를 띄우고 컨테이너를 바꾼 일이 있다, `docs/development.md` 84절).
+- 검색 패턴은 셸이 펼치지 않는 리터럴로 넘긴다(작은따옴표, 고정 문자열은 `rg -F`). 큰따옴표 안의 백틱·`$( )`는 명령으로 실행된다([개발 환경 오기동 기록](https://github.com/fvoci/GroundZero/blob/6ecad60f737363dfb0ffb7cf79b623ac84871761/docs/development.md#84-개발-keycloak-컨테이너가-실수로-다시-만들어진-일-2026-10-20)).
 - `rg`는 숨김·ignore 파일을 제외한다. 결과가 없다는 것만으로 파일이나 호출자가 없다고 단정하지 말고, 필요할 때만 해당 경로에 `--hidden`·`--no-ignore`를 쓴다.
 - Git 추적 파일만 볼 때는 `git grep`. 간단한 파이프 필터는 `grep`.
 - JSON은 `jq` 등 구조화된 도구로 다룬다. 코드 변경은 문맥을 확인한 패치로 하고, 셸 안에서 Python 코드를 생성하는 임시 헬퍼로 파일을 고치지 않는다.

@@ -13,7 +13,9 @@ description: Svelte 컴포넌트·TypeScript 클라이언트 코드(apps/web, pa
 - 디자인 변경은 `src/styles/app.css` 토큰으로. 가져온 컴포넌트 파일은 수정을 최소화한다. 자체 래퍼·모달·메뉴·포커스 관리자를 만들지 않는다.
 - 앱 고유 컴포넌트는 `$lib/features/<기능>/`. 글자 크기는 rem, CJK 줄 높이 토큰을 쓴다.
 
-## 타입과 lint (docs/development.md 2절)
+## 타입과 lint
+
+[TypeScript·Svelte 품질 기준](../../../docs/development.md#2-typescriptsvelte)을 따른다.
 
 - `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` 등은 `tsconfig.base.json`에 켜져 있다. 끄지 않는다.
 - `any`, `as unknown as T`, non-null `!`, `@ts-ignore`, `@ts-nocheck`는 ESLint가 거부한다. 타입 단언(`as`)도 금지다. 좁히기는 `in`·`typeof`·`instanceof`로 한다.

@@ -1,6 +1,7 @@
 /* KaTeX 0.18.10 stylesheet (MIT, Copyright (c) 2013-2020 Khan Academy and other contributors),
    with its @font-face rules removed: the KaTeX fonts are SIL OFL-1.1, outside the D-60 allow list
-   until O-30 is decided. Formulas use this layout with system fonts. See docs/development.md section 9. */
+   and are not covered by the specific font exceptions in docs/decisions.md#d-86.
+   Formulas use this layout with system fonts. See docs/development.md#license-records. */
 .katex {
   font:
     normal 1.21em KaTeX_Main,

@@ -48,7 +48,7 @@
   const { initial, references, onsaved, onrealtimeoff, onreload }: Props = $props();
   const start = untrack(() => initial);
   // 이 화면을 연 사용자. 제목 저장·초안 보존(저장 API)과 실시간 연결(다시 붙을 때도)에 그대로 보내 서버가 세션의
-  // 사용자와 비교한다(#60, docs/development.md 96절).
+  // 사용자와 비교한다(#60, docs/development.md#expected-user).
   const editingUser = untrack(() => me.userId);
   const INLINE_IMAGES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 

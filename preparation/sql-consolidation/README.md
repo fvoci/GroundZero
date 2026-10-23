@@ -27,7 +27,7 @@
 - [비교 명령·정규화·검증 한계](verification/README.md), [사전 검사 재현 fixture](verification/fixtures/README.md)
 - [기록된 품질 검사 결과](quality-check.md)
 - [설치·역할·환경](environment.md), [세션 상태](environment/session-state.md), [Cloud 후속 계획](environment/cloud-plan.md)
-- [종합 판단·시험 대응·전환 조건](synthesis.md)
+- [범위·후속 순서와 과거 종합 기록](synthesis.md)
 
 기존 데이터·백업·SQLx 이력 전환, 실제 Cloud 및 transaction pooler는 NOT RUN이다.
 빈 DB 동등성 PASS는 기존 DB 전환 완료를 뜻하지 않는다. 실제 마이그레이션 교체는 별도 구현 범위다.
