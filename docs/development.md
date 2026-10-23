@@ -3131,7 +3131,89 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
 
 ## 98. 저장한 보기·항목 정보의 판 검사와 보관 항목 댓글 지우기 (2026-10-23, D-103·D-104·D-106, `fvoci/policy-version`)
 
-작성 중(작업자 W-version).
+사용자 결정(2026-10-23, `docs/decisions.md` 1.14 요지): D-103 기존 보기 수정은 기준 판 검사가 필수이고 검사와 갱신은 한 트랜잭션, 어긋나면 409와
+최신 정보, 웹은 입력 보존, 새로 만들기와 기존 수정을 구분하고 무조건 덮어쓰기 경로를 남기지 않는다(마지막 저장 우선이 아님, D-92). D-104 항목 정보의
+적용 필드를 명시하고 그 수정 경로에 판 검사를 일관되게 둔다(D-94가 항목에 이미 승인돼 있었던 것이 아니며 이 결정으로 새로 더함, 3-way 병합·범용 충돌
+틀 없음). D-106 보관된 항목에서 쓴 사람의 자기 댓글 지우기는 현행 유지, 고치기·새 댓글·남의 댓글 지우기로 넓히지 않는다. 마이그레이션 0096(보기)·
+0097(항목).
+
+- **저장한 보기(D-103, `0096_saved_view_versions.sql`, `saved_views.rs`)**: `saved_views`에 `version`(고칠 때마다 +1)과
+  `updated_request_id`(마지막 고치기의 요청 id, 사용자별 유일)를 더했다. 계약은 둘로 나눴다. `POST /api/items/{item_id}/views`(`CreateView`:
+  `request_id`·`name`·`config`)는 새 보기만 만들고, 같은 이름이 있으면 아무것도 바꾸지 않고 409 `{error: "exists", current: SavedView}`. 같은 요청
+  id의 재시도는 처음 만든 보기(지금 내용)를 201로 돌려준다(지금과 같음). `PUT /api/views/{view_id}`(`UpdateView`: `request_id`·`base_version`·
+  `config`, 이름은 바꾸지 않음)는 `app_update_view`가 행을 `FOR UPDATE`로 잠근 뒤 (1) 요청 id가 마지막 고치기의 것이면 쓰지 않고 지금 보기를
+  200으로(응답을 잃은 재시도), (2) 요청 id가 다른 보기·만들기에 이미 쓰였으면 400, (3) 판이 다르면 쓰지 않고 409 `{error: "conflict",
+current}`, (4) 아니면 고치고 판을 올린다. `SavedView`에 `version`. 옛 `app_save_view`(`ON CONFLICT … DO UPDATE`)는 지웠다(D-92). 이름이 같은
+  두 만들기가 겹치면 한쪽은 `ON CONFLICT DO NOTHING`으로 409, 같은 요청 id가 겹치면 유일성 위반 뒤 다시 읽어 처음 것을 돌려준다(`create_item`과 같은 방식).
+  - **응답을 잃은 재시도의 순서(구현 해석(사용자 결정 밖))**: A 반영(판 2) → A 같은 요청 id 재시도: 200, 판 2 그대로(두 번 쓰지 않음). A 반영 →
+    B 저장(판 3) → A 재시도: 고치기가 남기는 요청 id는 마지막 고치기의 것뿐이라 A의 id를 알아보지 못하고, A가 읽은 판(1)이 지금 판(3)과 달라 409와
+    최신(B의 설정)이며 아무것도 쓰지 않는다. A의 반영을 "성공"으로 돌려주려면 고치기마다 요청 id 이력을 남겨야 하는데, 그것은 새 멱등 틀이라 두지
+    않았다. 어느 쪽이든 B를 덮지 않는다.
+  - **웹(`TaskBoard.svelte` `saveView`, `client.ts` `createView`·`updateView`)**: 목록에 같은 이름의 보기가 있으면 목록에서 읽은 판으로 고치고, 없으면
+    만든다. 재시도 키(`RetryKey`)에 대상 id와 판을 넣어 목록을 다시 읽은 뒤의 저장은 새 요청이다. 409(`exists`·`conflict`)면 화면의 보기 방식·
+    필터·정렬과 이름은 그대로 두고 목록만 다시 읽어, 최신 설정은 목록에서 고르면 보이고 다시 저장하면 최신 판 기준으로 지금 설정이 저장된다
+    (`tasks_view_conflict`, ko·en).
+- **항목 정보(D-104, `0097_item_versions.sql`)**: 적용 필드와 경로는 다음 둘이다.
+
+  | 경로                                                  | 적용 필드                                                                                                        | 판                      | 화면                               |
+  | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------- |
+  | `PUT /api/items/{id}`(`app_update_item`)              | 제목·설명·공개 범위(`title`·`description`·`visibility`)                                                          | `items.version`         | 항목 화면의 정보 폼(`ItemScreen`)  |
+  | `PUT /api/items/{id}/profile`(`app_set_item_profile`) | 리더·목표·범위·시작일·끝날·상태·종류별 정보(`leader_id`·`goal`·`scope`·`starts_on`·`ends_on`·`status`·`details`) | `items.profile_version` | 항목 정보 패널(`ItemProfilePanel`) |
+
+  두 요청 모두 `base_version`이 필수다. 함수는 행을 잠근 뒤 접근(404·403)·보관(409 `invalid_state`, 최신본 없음)을 먼저 보고 판을 비교한다. 다르면
+  아무것도 바꾸지 않고 `'conflict'`이고 서버가 같은 트랜잭션에서 읽은 최신본과 함께 409 `{error: "conflict", current: Item}`(`ItemConflict`)·
+  `{error: "conflict", current: ItemProfile}`(`ItemProfileConflict`)를 돌려준다(업무·일정·시간 기록의 `…Conflict`와 같은 모양·코드). `Item.version`·
+  `ItemProfile.version`을 응답에 더했다. 프로필 저장의 성공은 지금처럼 204.
+  - **판이 오르는 때(구현 해석(사용자 결정 밖))**: 표의 `BEFORE UPDATE` 트리거 `items_versions`(0076 `tasks_move_version`과 같은 방식)가 그 칸 묶음이
+    실제로 바뀔 때만, 어느 함수가 바꿨든 1 올린다(직접 다른 값을 넣어도 트리거가 맞춘다). 그래서 폼이 덮을 수 있는 칸의 다른 쓰기도 모두 판을 올린다:
+    멤버에서 빠진 리더 지우기(`app_set_item_members`, `app_drop_unseen_assignees`의 `leader_id = NULL`), 항목 복제의 정보 복사. 두 폼이 보내지 않는
+    칸(보관·휴지통·템플릿 표시·`updated_at`)은 판을 올리지 않는다(보관된 항목은 판보다 먼저 409). 판을 둘로 나눈 것은 한 폼의 저장이 다른 폼을
+    409로 만들지 않게 하려는 것이다(coordinator 지시의 "별도 카운터"). `items`를 고치는 다른 함수(`UPDATE items` 전부: 0019·0035·0038·0070~0072·
+    0074·0077·0079·0080·0081·0084)는 고치지 않았고 그대로 동작한다(통합 시험 전체 통과).
+  - **바꿀 것이 없는 재시도(구현 해석(사용자 결정 밖))**: 판이 달라도 보낸 값이 이미 지금 값과 모두 같으면(공개 범위는 보내지 않았으면 비교하지
+    않음) 아무것도 쓰지 않고 성공으로 끝낸다. 응답을 잃은 같은 저장을 다시 보냈을 때 자기 변경을 충돌로 보지 않게 하려는 것이며, 덮어쓰는 것이 없다.
+  - **웹**: 정보 폼은 입력란을 서버 값으로 채울 때의 판(`filled.version`)을 보낸다. 입력 중에 항목을 다시 읽으면(템플릿 표시·정보 패널 저장 뒤)
+    입력 중인 칸이 있을 때는 판을 옮기지 않는다(옮기면 그사이 다른 사람이 고친 것을 저장이 말없이 덮는다). 내 저장의 응답은 그 판을 받는다.
+    정보 패널은 편집을 연 때의 판(`editBase`)을 보낸다. 409면 입력은 그대로 두고 알림(`role="alert"`)에 서버의 지금 내용(제목·설명·공개 범위, 패널은
+    읽기 보기와 같은 요약)을 보이며 "서버 내용 불러오기"(입력을 최신본으로 바꿈)와 "내 입력으로 다시 저장"(알림이 보인 최신 판 기준, 그사이 또
+    바뀌었으면 다시 409)을 준다. 업무의 `ClashConfirm`은 업무 칸 묶음·번역에 묶여 있어 다시 쓰지 않았다(범용 틀을 만들지 않음). 번역
+    `modules_item_conflict*`·`modules_profile_conflict*`(ko·en).
+
+- **보관된 항목의 댓글 지우기(D-106, 현행 유지, SQL 변경 없음)**: 전체 경로로 확인한 지금 동작: `app_delete_comment`(`0071_app_ids_documents.sql`
+  876행)는 대상 권한을 `app_comment_target_access`(`0032_comments_notifications.sql` 50행)로 보고, 그것은 업무면 `app_task_access`(`0019_trash.sql`
+  141행), 문서면 `app_document_access`(`0007_module_review_fixes.sql` 84행)다. 둘 다 항목이나 모듈이 보관되면(`app_item_archived`, 0006 148행)
+  읽기 아닌 권한을 `'read'`로 낮춘다(0019 154행, 0007 96행). 그래서 쓴 사람이 아니면 소유 권한자(관리자·항목을 만든 사람)도 892행의 "쓴 사람 또는
+  소유자" 검사에서 42501 → 403(`error.rs` 80행)이고, 쓴 사람의 자기 댓글 지우기는 통과한다. 목록의 `can_delete`(`comments.rs` 144행)도 같은 낮춘
+  권한(`app_comment_target_state`, 116행 `owner`)에서 나와 소유 권한자에게 꺼져 있다. 따라서 D-106은 **권한 변경도 403→409 응답 변경도 아니다**.
+  처음에 "소유자가 남의 댓글을 204로 지운다"고 보고 409로 바꾸려 했으나 수정 전 시험이 403을 보여 전제가 틀렸음을 확인했고(아래), coordinator
+  지시대로 바꾸지 않았다. 기존 시험의 범위: 고치기·스레드 해결의 409는 `comments_in_an_archived_item_are_not_edited_or_resolved`, 새 댓글의 409는
+  `comments_threads_and_notifications_follow_access`(289행대), 지우기는 시험이 없었다.
+- **시험(서버, 수정 전 실패 → 수정 뒤 통과)**: 격리 Compose(`cargo xtask test --oidc --keep`, 프로젝트 `fvoci-policy-version-d22158-test`)에 시험만
+  더한 커밋(`1be042a`)으로 돌린 실패 줄:
+  - `saved_views::saved_views_are_personal_and_follow_item_access` — 같은 이름 POST가 덮어썼다: `left: 201, right: 409`(65행).
+  - `saved_views::a_view_saved_from_a_stale_tab_is_refused_with_the_latest`(두 탭: B 저장 뒤 A의 판 1 저장은 409와 최신, 목록은 B 그대로, 최신 판으로
+    다시 보내면 저장)과 `a_lost_view_save_is_retried_without_overwriting_a_later_save`(같은 id 재시도는 200·판 그대로, A 반영 → B 저장 → A 재시도는
+    409이고 B 유지, 만들기 재시도는 같은 보기, 남아 있는 요청 id를 다른 보기에 쓰면 400) — 고치기 경로가 없어 `left: 405, right: 200`.
+  - 옛 계약의 SD1 재현(임시 시험, 저장소에 넣지 않고 지움): 이미 있는 이름을 A가 요청 id RA로 덮어쓰고, B가 저장한 뒤, A가 RA로 다시 보내면
+    `SD1 old contract: A=201 Created B=201 Created A-retry=201 Created stored={"view":"board"}`(A의 재시도가 B를 덮음).
+  - `modules::stale_item_details_are_refused_with_the_latest`(판 1의 A 저장은 409와 최신, 같은 값의 재시도는 200·판 그대로, 정보 패널·템플릿·보관은
+    판을 올리지 않음, 공개 범위만 바뀌어도 판이 올라 작성자의 옛 판은 409, 보관된 항목은 최신본 없는 409 `invalid_state`) — `left: 200, right: 409`(913행).
+  - `item_profile::stale_profile_saves_are_refused_with_the_latest`(판 1의 저장은 409와 최신, 같은 값 재시도 204, 제목 저장은 이 판을 올리지 않음,
+    멤버에서 빠져 리더가 지워지면 판이 올라 옛 판으로 리더를 되살리지 못함) — `left: 204, right: 409`.
+  - `comments::archived_items_let_authors_delete_only_their_own_comments`는 지금 동작의 고정 시험이다(수정 전에도 통과, fail-before 대상 아님):
+    보관된 항목에서 소유 권한자의 남의 댓글 지우기 403·목록 `can_delete` 꺼짐, 쓴 사람은 자기 댓글 `can_delete`·지우기 204, 작성자의 남의 댓글
+    403, 바깥 사람 404, 보관을 풀면 소유 권한자 204, 모듈을 보관해도 소유 권한자 403·쓴 사람 204. 처음 409를 기대한 판은 수정 전에
+    `left: 403, right: 409`(780행)로 실패해 지금 동작이 403임을 보여 주었다.
+  - 기존 시험은 `base_version`을 보낸다. 공개 범위만 바꾸는 도우미(`modules.rs` `set_item`, `tasks.rs` `make_public`)와 칸 확인용 프로필 도우미는
+    지금 판을 읽어 보낸다. W13 시험(`item_details_keep_the_visibility_unless_it_is_sent`)은 지금 판으로 보내 "보내지 않은 공개 범위는 그대로"만 본다
+    (연 때의 판으로 보낸 저장은 이제 409이며 새 시험이 본다).
+- **시험(웹, 수정 전 소스에서 6건 모두 실패)**: `item-info-conflict.test.ts` — 가짜 서버(409와 최신본)로 정보 폼의 입력 유지·최신본 표시·첫 요청
+  `base_version: 1`·"내 입력으로 다시 저장"이 판 2로 보냄, "서버 내용 불러오기", 입력 중 다시 읽기(판 2) 뒤에도 판 1로 보냄, 정보 패널의 같은 흐름.
+  `saved-view-conflict.test.ts` — 보기 고치기가 `PUT /api/views/v1`·판 1, 409에서 보기 방식(칸반)·이름 유지와 안내, 다시 저장은 판 2·새 요청 id,
+  다른 탭이 먼저 만든 이름은 409 안내·설정 유지. 수정 전 실패: 충돌 안내·단추를 찾지 못함(`Unable to find … 그사이 다른 사람이 …`·`서버 내용
+불러오기`·`다른 탭에서 보기 …`), 다시 읽기 뒤 저장은 판 없이 다시 읽은 제목을 보냄(`expected { title: '다른 사람이 고친 제목', … } to match object
+{ base_version: 1, … }`). 기존 웹 시험은 새 결과 모양(`{kind}`)과 `version`에 맞췄다.
+- **돌린 검사**: 아래 "검사 결과"에 적는다.
 
 ## 99. CSV 업무 한 건 만들기의 원자성 (2026-10-23, D-105, `fvoci/policy-task-create`)
 
