@@ -647,7 +647,7 @@ fn approved_first_install_workflow_builds_before_credentials() -> Result<()> {
         .context("build step")?;
     let secret = source.find("secrets.").context("secret step")?;
     let run = source
-        .find("target/debug/xtask supabase-cloud-first-install --connect")
+        .find("target/debug/xtask supabase-cloud-first-install-inspect --connect")
         .context("prebuilt command")?;
     assert!(build < secret && secret < run);
     assert!(source.contains("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"));
@@ -673,7 +673,7 @@ fn first_install_workflow_publishes_only_sanitized_metadata() -> Result<()> {
         "inputs.reviewed_sha == github.sha",
         "ref: ${{ inputs.reviewed_sha }}",
         "persist-credentials: false",
-        "target/debug/xtask supabase-cloud-first-install --connect",
+        "target/debug/xtask supabase-cloud-first-install-inspect --connect",
         "path: target/cloud-install/report.json",
     ] {
         assert!(

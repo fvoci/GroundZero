@@ -207,7 +207,7 @@ fn url(target: &Target, role: &str, password: &str, cert: &std::path::Path) -> R
     Ok(url.to_string())
 }
 
-async fn install(target: &Target, report: &mut Value) -> Result<()> {
+async fn install(target: &Target, report: &mut Value, inspect_only: bool) -> Result<()> {
     let source = setting("GITHUB_SHA")?;
     require(
         source.len() == 40
@@ -247,6 +247,44 @@ async fn install(target: &Target, report: &mut Value) -> Result<()> {
     report["sql_sha256"] = json!(SQL_HASH);
     report["target"] = json!({"project":PROJECT,"host":HOST,"port":5432,"database":"postgres"});
     report["connection_kind"] = json!("session_pooler");
+    if inspect_only {
+        report["operation"] = json!("read_only_failed_first_install_diagnosis");
+        report["bootstrap"] = json!("FAIL in prior attempt; not retried");
+        super::inventory::inspect(target, report).await?;
+        let mut admin = PgConnection::connect_with(&super::connect_options(target))
+            .await
+            .map_err(super::classify_connection_error)?;
+        let current = snapshot(&mut admin).await?;
+        let hash = fingerprint(&current)?;
+        report["managed_current_sha256"] = json!(hash);
+        report["managed_equal_to_before_attempt"] =
+            json!(hash == "8c4d03f3fbe1fbf1e698ad02f14c04d235cb84e2c8b4d4c70cb9d8bf7f2ab743");
+        report["target_still_empty"] = json!(empty(&mut admin).await.is_ok());
+        let requirements: Value = sqlx::query_scalar(
+            "SELECT jsonb_build_object('uuid_extract_version_exists',to_regprocedure('pg_catalog.uuid_extract_version(uuid)') IS NOT NULL,
+             'admin_createrole',(SELECT rolcreaterole FROM pg_roles WHERE rolname=current_user),
+             'admin_database_create',has_database_privilege(current_database(),'CREATE'),
+             'sql_usage',has_language_privilege('sql','USAGE'),'plpgsql_usage',has_language_privilege('plpgsql','USAGE'))")
+            .fetch_one(&mut admin).await.map_err(|_| Failure::QueryFailed)?;
+        report["requirements"] = requirements;
+        admin.close().await.map_err(|_| Failure::ClientError)?;
+        report["legacy_url_select_only"] = probe_url(&admin_url).await;
+        let canonical = sqlx::postgres::PgConnectOptions::new_without_pgpass()
+            .host(HOST)
+            .port(5432)
+            .database("postgres")
+            .username(&target.user)
+            .password(&target.password)
+            .ssl_mode(sqlx::postgres::PgSslMode::VerifyFull)
+            .ssl_root_cert(&cert)
+            .to_url_lossy()
+            .to_string();
+        report["sqlx_serializer_url_select_only"] = probe_url(&canonical).await;
+        fs::remove_file(cert).map_err(|_| Failure::ClientError)?;
+        report["phase"] = json!("read_only_diagnosis_complete");
+        report["result"] = json!("PASS");
+        return Ok(());
+    }
     report["phase"] = json!("read_only_preflight");
     let mut admin = PgConnection::connect_with(&super::connect_options(target))
         .await
@@ -354,7 +392,33 @@ async fn install(target: &Target, report: &mut Value) -> Result<()> {
     Ok(())
 }
 
-pub fn run(connect: bool) -> i32 {
+async fn probe_url(url: &str) -> Value {
+    let probe = async {
+        let mut conn = PgConnection::connect(url)
+            .await
+            .map_err(super::classify_connection_error)?;
+        sqlx::raw_sql("BEGIN READ ONLY")
+            .execute(&mut conn)
+            .await
+            .map_err(|_| Failure::QueryFailed)?;
+        let one: i32 = sqlx::query_scalar("SELECT 1")
+            .fetch_one(&mut conn)
+            .await
+            .map_err(|_| Failure::QueryFailed)?;
+        sqlx::raw_sql("ROLLBACK")
+            .execute(&mut conn)
+            .await
+            .map_err(|_| Failure::QueryFailed)?;
+        conn.close().await.map_err(|_| Failure::ClientError)?;
+        require(one == 1)
+    };
+    match super::bounded(std::time::Duration::from_secs(10), probe).await {
+        Ok(()) => json!({"result":"PASS"}),
+        Err(error) => json!({"result":"FAIL","failure_code":error.code()}),
+    }
+}
+
+pub fn run(connect: bool, inspect_only: bool) -> i32 {
     super::print_report(super::run_with(
         connect,
         |name| {
@@ -383,11 +447,22 @@ pub fn run(connect: bool) -> i32 {
                 || {
                     runtime.block_on(super::bounded(
                         std::time::Duration::from_secs(480),
-                        install(target, &mut report),
+                        install(target, &mut report, inspect_only),
                     ))
                 },
             );
             runtime.shutdown_background();
+            super::inventory::redact_metadata(&mut report, &target.password);
+            for name in [
+                "SUPABASE_TEST_MIGRATOR_PASSWORD",
+                "SUPABASE_TEST_APP_PASSWORD",
+            ] {
+                if let Ok(password) = setting(name)
+                    && !password.is_empty()
+                {
+                    super::inventory::redact_metadata(&mut report, &password);
+                }
+            }
             match result {
                 Ok(()) => (report, 0),
                 Err(error) => super::fail(report, error, 1),
@@ -399,6 +474,55 @@ pub fn run(connect: bool) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn diagnosis_metadata_redacts_all_three_credentials_and_credential_shaped_values() {
+        let mut report = json!({"catalog":{"names":["admin-fixture", "migrator-fixture", "app-fixture", "postgres://fixture", "safe"]}});
+        for password in ["admin-fixture", "migrator-fixture", "app-fixture"] {
+            super::super::inventory::redact_metadata(&mut report, password);
+        }
+        assert_eq!(
+            report["catalog"]["names"],
+            json!([
+                "<redacted>",
+                "<redacted>",
+                "<redacted>",
+                "<redacted>",
+                "safe"
+            ])
+        );
+    }
+
+    #[test]
+    fn raw_url_set_password_corrupts_percent_sequences_but_sqlx_serializer_preserves_them() {
+        let target = Target {
+            host: HOST.into(),
+            user: format!("postgres.{PROJECT}"),
+            password: "fixture%41!".into(),
+            ssl_root_cert: vec![],
+        };
+        let legacy = url(
+            &target,
+            "postgres",
+            &target.password,
+            std::path::Path::new("/tmp/fixture.crt"),
+        )
+        .unwrap();
+        let legacy_options: sqlx::postgres::PgConnectOptions = legacy.parse().unwrap();
+        let canonical = sqlx::postgres::PgConnectOptions::new_without_pgpass()
+            .password(&target.password)
+            .to_url_lossy();
+        let canonical_options: sqlx::postgres::PgConnectOptions =
+            canonical.as_str().parse().unwrap();
+        assert_ne!(
+            legacy_options.to_url_lossy().password(),
+            canonical.password()
+        );
+        assert_eq!(
+            canonical_options.to_url_lossy().password(),
+            canonical.password()
+        );
+    }
 
     fn fixture() -> (Catalog, Catalog) {
         let before = Catalog::from([

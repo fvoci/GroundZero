@@ -116,7 +116,7 @@ async fn read_inventory(conn: &mut PgConnection, report: &mut Value) -> Result<(
     Ok(())
 }
 
-async fn inspect(target: &Target, report: &mut Value) -> Result<(), Failure> {
+pub(super) async fn inspect(target: &Target, report: &mut Value) -> Result<(), Failure> {
     let project = project_ref(&target.user)?;
     report["connection"] = json!("UNCONFIRMED");
     report["tls_certificate_and_hostname"] = json!("UNCONFIRMED");
@@ -156,7 +156,7 @@ async fn inspect(target: &Target, report: &mut Value) -> Result<(), Failure> {
 }
 
 // Metadata is authorized for publication, but a credential-shaped object name is still redacted.
-fn redact_metadata(value: &mut Value, password: &str) {
+pub(super) fn redact_metadata(value: &mut Value, password: &str) {
     match value {
         Value::String(text) => {
             if text.contains(password) || text.contains("://") || text.contains("-----BEGIN") {
