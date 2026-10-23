@@ -298,6 +298,22 @@ pub struct FreshDb {
 }
 
 pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> FreshDb {
+    let migrations = std::env::var_os("FVOCI_TEST_MIGRATIONS")
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from);
+    fresh_database_with_migrations(admin, label, migrations).await
+}
+
+/// 서버 실행 파일의 수명주기 시험은 현재 제품 DB를 쓴다. 구 이력의 시작 거부는 별도 회귀 시험이다.
+pub async fn fresh_product_database(admin: &mut sqlx::PgConnection, label: &str) -> FreshDb {
+    fresh_database_with_migrations(admin, label, None).await
+}
+
+async fn fresh_database_with_migrations(
+    admin: &mut sqlx::PgConnection,
+    label: &str,
+    migrations: Option<std::path::PathBuf>,
+) -> FreshDb {
     use sqlx::Connection as _;
     // 같은 시험 바이너리에서 새 DB 준비가 겹치면 클러스터 공용 행(역할 권한 등)을 함께 고쳐 "tuple concurrently
     // updated"(XX000)로 실패한다. 준비와 마이그레이션은 한 번에 하나씩 한다.
@@ -334,12 +350,10 @@ pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> Fres
         migrator_password: None,
         app_password: None,
     };
-    if let Some(migrations) = std::env::var_os("FVOCI_TEST_MIGRATIONS").filter(|v| !v.is_empty()) {
+    if let Some(migrations) = migrations {
         // The comparison command selects a fixed historical source with its real SQLx ledger.
         // Fresh databases used by backup/search tests must use the same source as that side.
-        let migrator = sqlx::migrate::Migrator::new(std::path::PathBuf::from(migrations))
-            .await
-            .unwrap();
+        let migrator = sqlx::migrate::Migrator::new(migrations).await.unwrap();
         let mut conn = sqlx::PgConnection::connect(db.migration_url.as_ref().unwrap().expose())
             .await
             .unwrap();
