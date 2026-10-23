@@ -190,7 +190,12 @@ fn managed(mut after: Catalog) -> Result<Catalog> {
     Ok(after)
 }
 
-fn url(target: &Target, role: &str, password: &str, cert: &std::path::Path) -> Result<String> {
+fn legacy_url(
+    target: &Target,
+    role: &str,
+    password: &str,
+    cert: &std::path::Path,
+) -> Result<String> {
     let mut url = sqlx::postgres::PgConnectOptions::new_without_pgpass()
         .host(HOST)
         .port(5432)
@@ -204,6 +209,24 @@ fn url(target: &Target, role: &str, password: &str, cert: &std::path::Path) -> R
     url.set_password(Some(password))
         .map_err(|_| Failure::InvalidTarget)?;
     require(target.host == HOST)?;
+    Ok(url.to_string())
+}
+
+fn url(target: &Target, role: &str, password: &str, cert: &std::path::Path) -> Result<String> {
+    require(target.host == HOST)?;
+    let mut url = sqlx::postgres::PgConnectOptions::new_without_pgpass()
+        .host(HOST)
+        .port(5432)
+        .database("postgres")
+        .username(&format!("{role}.{PROJECT}"))
+        .password(password)
+        .ssl_mode(sqlx::postgres::PgSslMode::VerifyFull)
+        .to_url_lossy();
+    // SQLx 0.8.6 serializes CertificateInput::File as "file: <path>", but its parser expects a filename.
+    url.query_pairs_mut()
+        .append_pair("sslrootcert", cert.to_str().ok_or(Failure::ClientError)?)
+        .append_pair("application_name", "fvoci-approved-first-install")
+        .append_pair("options", "-c statement_timeout=60000 -c lock_timeout=5000");
     Ok(url.to_string())
 }
 
@@ -268,7 +291,8 @@ async fn install(target: &Target, report: &mut Value, inspect_only: bool) -> Res
             .fetch_one(&mut admin).await.map_err(|_| Failure::QueryFailed)?;
         report["requirements"] = requirements;
         admin.close().await.map_err(|_| Failure::ClientError)?;
-        report["legacy_url_select_only"] = probe_url(&admin_url).await;
+        report["legacy_url_select_only"] =
+            probe_url(&legacy_url(target, "postgres", &target.password, &cert)?).await;
         let canonical = sqlx::postgres::PgConnectOptions::new_without_pgpass()
             .host(HOST)
             .port(5432)
@@ -280,6 +304,7 @@ async fn install(target: &Target, report: &mut Value, inspect_only: bool) -> Res
             .to_url_lossy()
             .to_string();
         report["sqlx_serializer_url_select_only"] = probe_url(&canonical).await;
+        report["corrected_url_select_only"] = probe_url(&admin_url).await;
         fs::remove_file(cert).map_err(|_| Failure::ClientError)?;
         report["phase"] = json!("read_only_diagnosis_complete");
         report["result"] = json!("PASS");
@@ -290,16 +315,23 @@ async fn install(target: &Target, report: &mut Value, inspect_only: bool) -> Res
         .await
         .map_err(super::classify_connection_error)?;
     report["identity"] = empty(&mut admin).await?;
-    let before = snapshot(&mut admin).await?;
-    report["managed_before_sha256"] = json!(fingerprint(&before)?);
+    report["product_admin_url_read_only_probe"] = probe_url(&admin_url).await;
+    require(report["product_admin_url_read_only_probe"]["result"] == "PASS")?;
     // Last preflight immediately precedes bootstrap; bootstrap also refuses existing roles inside its transaction.
     empty(&mut admin).await?;
+    let before = snapshot(&mut admin).await?;
+    report["managed_before_sha256"] = json!(fingerprint(&before)?);
+    require(
+        report["managed_before_sha256"]
+            == "8c4d03f3fbe1fbf1e698ad02f14c04d235cb84e2c8b4d4c70cb9d8bf7f2ab743",
+    )?;
     report["preflight"] = json!("PASS");
     report["backup"] = json!(
         "No preexisting GroundZero data; managed backup availability NOT VERIFIED; no managed data deleted."
     );
     report["admin_tls_verify_full"] = json!("PASS");
     report["phase"] = json!("bootstrap");
+    report["bootstrap"] = json!("FAIL (attempt started; success not confirmed)");
     subprocess(
         Command::new("target/debug/fvoci-server")
             .args(["db", "bootstrap"])
@@ -309,6 +341,7 @@ async fn install(target: &Target, report: &mut Value, inspect_only: bool) -> Res
     )?;
     report["bootstrap"] = json!("PASS");
     report["phase"] = json!("migrate");
+    report["migrate"] = json!("FAIL (attempt started; success not confirmed)");
     subprocess(
         Command::new("target/debug/fvoci-server")
             .args(["db", "migrate"])
@@ -501,7 +534,7 @@ mod tests {
             password: "fixture%41!".into(),
             ssl_root_cert: vec![],
         };
-        let legacy = url(
+        let legacy = legacy_url(
             &target,
             "postgres",
             &target.password,
@@ -521,6 +554,38 @@ mod tests {
         assert_eq!(
             canonical_options.to_url_lossy().password(),
             canonical.password()
+        );
+    }
+
+    #[test]
+    fn product_url_roundtrip_preserves_password_ca_path_and_verify_full() {
+        let target = Target {
+            host: HOST.into(),
+            user: format!("postgres.{PROJECT}"),
+            password: "fixture%41!".into(),
+            ssl_root_cert: vec![],
+        };
+        let path = std::path::Path::new("/tmp/fixture CA.crt");
+        let fixed = url(&target, "postgres", &target.password, path).unwrap();
+        let parsed: sqlx::postgres::PgConnectOptions = fixed.parse().unwrap();
+        assert!(matches!(
+            parsed.get_ssl_mode(),
+            sqlx::postgres::PgSslMode::VerifyFull
+        ));
+        let encoded = parsed.to_url_lossy();
+        assert_eq!(encoded.password(), Some("fixture%2541%21"));
+        // Re-serialization exposes the known Display prefix and proves the parser retained the exact filename.
+        assert_eq!(
+            encoded
+                .query_pairs()
+                .find(|(key, _)| key == "sslrootcert")
+                .unwrap()
+                .1,
+            "file: /tmp/fixture CA.crt"
+        );
+        assert_eq!(
+            parsed.get_options(),
+            Some("-c statement_timeout=60000 -c lock_timeout=5000")
         );
     }
 
