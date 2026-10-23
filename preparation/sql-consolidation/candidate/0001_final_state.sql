@@ -1,5 +1,5 @@
--- 검토용 최종 상태 후보. 적용 기준: cb65cc31156c0fd8d28cf856bc132d4a506c8885.
--- 원본 93개 마이그레이션 적용 후 PostgreSQL 18.3 카탈로그에서 추출했다.
+-- 검토용 최종 상태 후보. 적용 기준: 5c266229b08eddfaba7723d983483a137ad9e0bc.
+-- 원본 97개 마이그레이션 적용 후 PostgreSQL 18.3 카탈로그에서 추출했다.
 -- 기존 db bootstrap 뒤 빈 DB에 SQLx의 단일 트랜잭션으로 적용한다.
 -- 이력 연결이 아니다: 마지막 함수/테이블 정의만 있으며 과거 데이터 보정은 포함하지 않는다.
 -- pg_dump 의존성 순서를 보존하여 행 타입을 쓰는 함수 앞에 필요한 테이블이 온다.
@@ -1860,10 +1860,10 @@ CREATE FUNCTION fvoci.app_create_session(p_token_hash bytea, p_user uuid, p_id_t
 ALTER FUNCTION fvoci.app_create_session(p_token_hash bytea, p_user uuid, p_id_token text, p_ttl_secs bigint, p_replaces bytea, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 --
--- Name: app_create_task(uuid, uuid, text, uuid, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
+-- Name: app_create_task(uuid, uuid, text, uuid, text, text, text, date, date, integer, text[], uuid[], boolean, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
 --
 
-CREATE FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_ids uuid[]) RETURNS uuid
+CREATE FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_description text, p_status text, p_priority text, p_start date, p_due date, p_estimate integer, p_tags text[], p_assignees uuid[], p_milestone boolean, p_ids uuid[]) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
@@ -1873,6 +1873,10 @@ CREATE FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title te
     v_access text := app_item_access(p_item);
     v_id     uuid;
     v_number bigint;
+    v_uid    uuid;
+    v_people uuid[];
+    v_at     integer := 2;
+    v_deleted boolean;
   BEGIN
     IF v_access IS NULL THEN
       RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
@@ -1880,30 +1884,64 @@ CREATE FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title te
     IF v_access NOT IN ('owner', 'write') THEN
       RAISE EXCEPTION 'write access is required' USING ERRCODE = '42501';
     END IF;
-    SELECT id INTO v_id FROM tasks WHERE item_id = p_item AND created_by = v_user AND request_id = p_request_id;
+    SELECT id, deleted_at IS NOT NULL INTO v_id, v_deleted
+    FROM tasks WHERE item_id = p_item AND created_by = v_user AND request_id = p_request_id;
+    IF v_deleted THEN
+      RAISE EXCEPTION 'the task made by this request was deleted' USING ERRCODE = 'FV004';
+    END IF;
     IF v_id IS NOT NULL THEN
       RETURN v_id;
     END IF;
-    PERFORM app_lock_lane(p_item, 'todo');
+    IF p_status IS NULL OR p_status NOT IN ('todo', 'in_progress', 'done') THEN
+      RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
+    END IF;
+    IF p_priority IS NULL OR p_priority NOT IN ('none', 'low', 'medium', 'high', 'urgent') THEN
+      RAISE EXCEPTION 'invalid priority' USING ERRCODE = '22023';
+    END IF;
+    IF p_start IS NOT NULL AND p_due IS NOT NULL AND p_start > p_due THEN
+      RAISE EXCEPTION 'the start date must not be after the due date' USING ERRCODE = '22023';
+    END IF;
+    IF p_milestone AND p_start IS NOT NULL THEN
+      RAISE EXCEPTION 'a milestone has only a due date' USING ERRCODE = '22023';
+    END IF;
+    IF p_estimate IS NOT NULL AND p_estimate < 0 THEN
+      RAISE EXCEPTION 'estimate_minutes must not be negative' USING ERRCODE = '22023';
+    END IF;
+    PERFORM app_lock_lane(p_item, p_status);
     PERFORM app_check_task_parent(NULL, p_parent, p_item);
     PERFORM app_lock_item(p_item);
     IF app_item_archived(p_item) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
     SELECT * INTO v_item FROM items WHERE id = p_item;
+    SELECT coalesce(array_agg(u ORDER BY u), '{}') INTO v_people
+    FROM (SELECT DISTINCT u FROM unnest(coalesce(p_assignees, '{}')) AS u) s;
+    FOREACH v_uid IN ARRAY v_people LOOP
+      PERFORM app_check_assignee(v_item.workspace_id, p_item, v_uid);
+    END LOOP;
     v_id := app_id(p_ids, 1);
     v_number := app_allocate_number(v_item.workspace_id, v_item.module_id, 'task', v_id);
-    INSERT INTO tasks (id, workspace_id, item_id, parent_id, number, title, position, created_by, updated_by, request_id)
-    VALUES (v_id, v_item.workspace_id, p_item, p_parent, v_number, btrim(p_title),
-            app_task_lane_end(p_item, 'todo'), v_user, v_user, p_request_id);
+    INSERT INTO tasks (id, workspace_id, item_id, parent_id, number, title, description, status, priority, start_date,
+                       due_date, estimate_minutes, tags, milestone, completed_at, position, created_by, updated_by,
+                       request_id)
+    VALUES (v_id, v_item.workspace_id, p_item, p_parent, v_number, btrim(p_title), coalesce(p_description, ''),
+            p_status, p_priority, p_start, p_due, p_estimate, coalesce(p_tags, '{}'), coalesce(p_milestone, false),
+            CASE WHEN p_status = 'done' THEN now() END, app_task_lane_end(p_item, p_status), v_user, v_user,
+            p_request_id);
     PERFORM app_audit(app_id(p_ids, 2), v_item.workspace_id, 'create', 'task', v_id,
                       jsonb_build_object('title', btrim(p_title)));
+    FOREACH v_uid IN ARRAY v_people LOOP
+      INSERT INTO task_assignees (task_id, user_id, assigned_by) VALUES (v_id, v_uid, v_user);
+      v_at := v_at + 1;
+      PERFORM app_audit(app_id(p_ids, v_at), v_item.workspace_id, 'assign', 'task', v_id,
+                        jsonb_build_object('user', v_uid));
+    END LOOP;
     RETURN v_id;
   END
   $$;
 
 
-ALTER FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_description text, p_status text, p_priority text, p_start date, p_due date, p_estimate integer, p_tags text[], p_assignees uuid[], p_milestone boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 --
 -- Name: app_create_upload(uuid, uuid, text, uuid, text, text, text, bigint, bigint, integer, bigint, bigint, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
@@ -1973,6 +2011,49 @@ CREATE FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text
 
 
 ALTER FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text, p_target uuid, p_name text, p_note text, p_type text, p_size bigint, p_chunk bigint, p_ttl_secs integer, p_max_file bigint, p_max_storage bigint, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+--
+-- Name: app_create_view(uuid, uuid, text, jsonb, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
+--
+
+CREATE FUNCTION fvoci.app_create_view(p_request uuid, p_item uuid, p_name text, p_config jsonb, p_ids uuid[]) RETURNS TABLE(view_id uuid, outcome text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_view saved_views%ROWTYPE;
+    v_id   uuid;
+  BEGIN
+    SELECT * INTO v_view FROM saved_views
+    WHERE user_id = app_user_id() AND (request_id = p_request OR updated_request_id = p_request);
+    IF v_view.id IS NOT NULL THEN
+      IF v_view.request_id <> p_request OR v_view.item_id <> p_item OR v_view.name <> btrim(p_name) THEN
+        RAISE EXCEPTION 'request_id was already used for another change' USING ERRCODE = '22023';
+      END IF;
+      RETURN QUERY SELECT v_view.id, 'created'::text;
+      RETURN;
+    END IF;
+    IF app_item_access(p_item) IS NULL THEN
+      RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
+    END IF;
+    INSERT INTO saved_views (id, user_id, item_id, name, config, request_id)
+    VALUES (app_id(p_ids, 1), app_user_id(), p_item, btrim(p_name), p_config, p_request)
+    ON CONFLICT (user_id, item_id, name) DO NOTHING
+    RETURNING id INTO v_id;
+    IF v_id IS NULL THEN
+      RETURN QUERY SELECT id, 'exists'::text FROM saved_views
+      WHERE user_id = app_user_id() AND item_id = p_item AND name = btrim(p_name);
+      RETURN;
+    END IF;
+    RETURN QUERY SELECT v_id, 'created'::text;
+  EXCEPTION
+    WHEN check_violation OR not_null_violation THEN
+      RAISE EXCEPTION 'invalid view: %', SQLERRM USING ERRCODE = '22023';
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_create_view(p_request uuid, p_item uuid, p_name text, p_config jsonb, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 --
 -- Name: app_create_wiki_document(uuid, uuid, text, integer, jsonb, uuid, integer, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
@@ -3564,6 +3645,33 @@ CREATE FUNCTION fvoci.app_item_time(p_item uuid) RETURNS TABLE(entry_kind text, 
 
 
 ALTER FUNCTION fvoci.app_item_time(p_item uuid) OWNER TO fvoci_migrator;
+
+--
+-- Name: app_items_versions(); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
+--
+
+CREATE FUNCTION fvoci.app_items_versions() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  BEGIN
+    IF (NEW.title, NEW.description, NEW.visibility) IS DISTINCT FROM (OLD.title, OLD.description, OLD.visibility) THEN
+      NEW.version := OLD.version + 1;
+    ELSE
+      NEW.version := OLD.version;
+    END IF;
+    IF (NEW.leader_id, NEW.goal, NEW.scope, NEW.starts_on, NEW.ends_on, NEW.status, NEW.details)
+       IS DISTINCT FROM (OLD.leader_id, OLD.goal, OLD.scope, OLD.starts_on, OLD.ends_on, OLD.status, OLD.details) THEN
+      NEW.profile_version := OLD.profile_version + 1;
+    ELSE
+      NEW.profile_version := OLD.profile_version;
+    END IF;
+    RETURN NEW;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_items_versions() OWNER TO fvoci_migrator;
 
 --
 -- Name: app_leave_workspace(uuid, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
@@ -5727,38 +5835,6 @@ CREATE FUNCTION fvoci.app_revoke_public_link(p_link uuid, p_ids uuid[]) RETURNS 
 ALTER FUNCTION fvoci.app_revoke_public_link(p_link uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 --
--- Name: app_save_view(uuid, uuid, text, jsonb, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
---
-
-CREATE FUNCTION fvoci.app_save_view(p_request uuid, p_item uuid, p_name text, p_config jsonb, p_ids uuid[]) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_id uuid;
-  BEGIN
-    SELECT id INTO v_id FROM saved_views WHERE user_id = app_user_id() AND request_id = p_request;
-    IF v_id IS NOT NULL THEN
-      RETURN v_id;
-    END IF;
-    IF app_item_access(p_item) IS NULL THEN
-      RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
-    END IF;
-    INSERT INTO saved_views (id, user_id, item_id, name, config, request_id)
-    VALUES (app_id(p_ids, 1), app_user_id(), p_item, btrim(p_name), p_config, p_request)
-    ON CONFLICT (user_id, item_id, name) DO UPDATE SET config = EXCLUDED.config
-    RETURNING id INTO v_id;
-    RETURN v_id;
-  EXCEPTION
-    WHEN check_violation OR not_null_violation THEN
-      RAISE EXCEPTION 'invalid view: %', SQLERRM USING ERRCODE = '22023';
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_save_view(p_request uuid, p_item uuid, p_name text, p_config jsonb, p_ids uuid[]) OWNER TO fvoci_migrator;
-
---
 -- Name: app_search_enqueue(); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
 --
 
@@ -6307,10 +6383,10 @@ CREATE FUNCTION fvoci.app_set_item_members_ids(p_item uuid) RETURNS integer
 ALTER FUNCTION fvoci.app_set_item_members_ids(p_item uuid) OWNER TO fvoci_migrator;
 
 --
--- Name: app_set_item_profile(uuid, uuid, text, text, date, date, text, jsonb, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
+-- Name: app_set_item_profile(uuid, integer, uuid, text, text, date, date, text, jsonb, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
 --
 
-CREATE FUNCTION fvoci.app_set_item_profile(p_item uuid, p_leader uuid, p_goal text, p_scope text, p_starts date, p_ends date, p_status text, p_details jsonb, p_ids uuid[]) RETURNS void
+CREATE FUNCTION fvoci.app_set_item_profile(p_item uuid, p_base_version integer, p_leader uuid, p_goal text, p_scope text, p_starts date, p_ends date, p_status text, p_details jsonb, p_ids uuid[]) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
@@ -6333,6 +6409,16 @@ CREATE FUNCTION fvoci.app_set_item_profile(p_item uuid, p_leader uuid, p_goal te
     END IF;
     IF app_item_archived(p_item) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
+    -- 0097: 읽은 판이 지났으면 바꾸지 않는다(바꿀 것이 없는 재시도는 그대로 성공).
+    IF v_item.profile_version <> p_base_version THEN
+      IF v_item.leader_id IS NOT DISTINCT FROM p_leader AND v_item.goal = coalesce(p_goal, '')
+         AND v_item.scope = coalesce(p_scope, '') AND v_item.starts_on IS NOT DISTINCT FROM p_starts
+         AND v_item.ends_on IS NOT DISTINCT FROM p_ends AND v_item.status = p_status
+         AND v_item.details = coalesce(p_details, '{}'::jsonb) THEN
+        RETURN 'updated';
+      END IF;
+      RETURN 'conflict';
     END IF;
     IF p_status NOT IN ('planned', 'active', 'on_hold', 'done', 'cancelled') THEN
       RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
@@ -6360,11 +6446,12 @@ CREATE FUNCTION fvoci.app_set_item_profile(p_item uuid, p_leader uuid, p_goal te
       PERFORM app_audit(app_id(p_ids, 2), v_item.workspace_id, 'change_leader', 'item', p_item,
                         jsonb_build_object('from', v_item.leader_id, 'to', p_leader));
     END IF;
+    RETURN 'updated';
   END
   $$;
 
 
-ALTER FUNCTION fvoci.app_set_item_profile(p_item uuid, p_leader uuid, p_goal text, p_scope text, p_starts date, p_ends date, p_status text, p_details jsonb, p_ids uuid[]) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_set_item_profile(p_item uuid, p_base_version integer, p_leader uuid, p_goal text, p_scope text, p_starts date, p_ends date, p_status text, p_details jsonb, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 --
 -- Name: app_set_item_template(uuid, boolean, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
@@ -8039,7 +8126,7 @@ ALTER FUNCTION fvoci.app_system_search_enqueue_all() OWNER TO fvoci_migrator;
 -- Name: app_system_search_payload(text[], uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
 --
 
-CREATE FUNCTION fvoci.app_system_search_payload(p_kinds text[], p_ids uuid[]) RETURNS TABLE(kind text, id uuid, live boolean, workspace_id uuid, owner_user_id uuid, item_id uuid, title text, reference text, body jsonb, description text, updated_at timestamp with time zone, module_id uuid, status text, assignee_ids uuid[], day date, file_key text, file_type text, file_size bigint)
+CREATE FUNCTION fvoci.app_system_search_payload(p_kinds text[], p_ids uuid[]) RETURNS TABLE(kind text, id uuid, live boolean, workspace_id uuid, owner_user_id uuid, item_id uuid, title text, reference text, body jsonb, description text, created_by uuid, module_id uuid, status text, assignee_ids uuid[], at timestamp with time zone, on_day date, file_key text, file_type text, file_size bigint)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
@@ -8075,17 +8162,23 @@ CREATE FUNCTION fvoci.app_system_search_payload(p_kinds text[], p_ids uuid[]) RE
         coalesce(t.description, it.description, e.description,
           rc.body || ' ' || coalesce((SELECT string_agg(f.value, ' ') FROM jsonb_each_text(rc.fields) f), ''))
           AS description,
-        coalesce(d.updated_at, t.updated_at, it.updated_at, e.updated_at, fl.updated_at, rc.updated_at) AS updated_at,
+        coalesce(d.created_by, t.created_by, it.created_by, e.created_by, fl.created_by, rc.created_by) AS created_by,
         it.module_id AS item_module,
         t.status,
         CASE WHEN w.kind = 'task' THEN ARRAY(SELECT a.user_id FROM task_assignees a WHERE a.task_id = t.id ORDER BY 1) END
           AS assignee_ids,
+        -- 검색 API의 대체 경로(`search_api.rs` `fallback`)와 같은 규칙.
+        CASE w.kind
+          WHEN 'task' THEN NULL
+          WHEN 'event' THEN e.starts_at
+          WHEN 'record' THEN CASE WHEN rc.occurred_on IS NULL THEN rc.updated_at END
+          ELSE coalesce(d.updated_at, it.updated_at, fl.updated_at)
+        END AS at,
         CASE w.kind
           WHEN 'task' THEN coalesce(t.due_date, t.start_date)
-          WHEN 'event' THEN coalesce(e.start_date, (e.starts_at AT TIME ZONE coalesce(e.timezone, 'UTC'))::date)
-          WHEN 'record' THEN coalesce(rc.occurred_on, rc.updated_at::date)
-          ELSE coalesce(d.updated_at, it.updated_at, fl.updated_at)::date
-        END AS day,
+          WHEN 'event' THEN e.start_date
+          WHEN 'record' THEN rc.occurred_on
+        END AS on_day,
         v.storage_key AS file_key, v.content_type AS file_type, v.size AS file_size
       FROM wanted w
       LEFT JOIN documents d ON w.kind = 'document' AND d.id = w.id
@@ -8098,9 +8191,9 @@ CREATE FUNCTION fvoci.app_system_search_payload(p_kinds text[], p_ids uuid[]) RE
       WHERE app_user_id() IS NULL
     )
     SELECT r.kind, r.id, r.live, r.workspace_id, r.owner_user_id, r.item_id, r.title, r.reference, r.body,
-           r.description, r.updated_at,
+           r.description, r.created_by,
            coalesce(r.item_module, (SELECT module_id FROM items WHERE id = r.item_id)),
-           r.status, r.assignee_ids, r.day, r.file_key, r.file_type, r.file_size
+           r.status, r.assignee_ids, r.at, r.on_day, r.file_key, r.file_type, r.file_size
     FROM rows r
   $$;
 
@@ -9054,10 +9147,10 @@ CREATE FUNCTION fvoci.app_update_event(p_event uuid, p_base_version integer, p_k
 ALTER FUNCTION fvoci.app_update_event(p_event uuid, p_base_version integer, p_kind text, p_title text, p_description text, p_all_day boolean, p_start_date date, p_end_date date, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone, p_timezone text, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 --
--- Name: app_update_item(uuid, text, text, text, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
+-- Name: app_update_item(uuid, integer, text, text, text, uuid[]); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
 --
 
-CREATE FUNCTION fvoci.app_update_item(p_item uuid, p_title text, p_description text, p_visibility text, p_ids uuid[]) RETURNS void
+CREATE FUNCTION fvoci.app_update_item(p_item uuid, p_base_version integer, p_title text, p_description text, p_visibility text, p_ids uuid[]) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
@@ -9076,6 +9169,14 @@ CREATE FUNCTION fvoci.app_update_item(p_item uuid, p_title text, p_description t
     END IF;
     IF app_item_archived(v_item.id) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
+    -- 0097: 읽은 판이 지났으면 바꾸지 않는다(바꿀 것이 없는 재시도는 그대로 성공).
+    IF v_item.version <> p_base_version THEN
+      IF v_item.title = btrim(p_title) AND v_item.description = coalesce(p_description, '')
+         AND (p_visibility IS NULL OR p_visibility = v_item.visibility) THEN
+        RETURN 'updated';
+      END IF;
+      RETURN 'conflict';
     END IF;
     -- 보내지 않았으면 지금 값 그대로(잠근 뒤의 값).
     v_visibility := coalesce(p_visibility, v_item.visibility);
@@ -9098,11 +9199,12 @@ CREATE FUNCTION fvoci.app_update_item(p_item uuid, p_title text, p_description t
       -- 비공개가 되어 볼 수 없게 된 사람은 그 항목 업무의 담당에서 뺀다.
       PERFORM app_drop_unseen_assignees(p_item, NULL, NULL, 'item_private', app_ids_from(p_ids, 3));
     END IF;
+    RETURN 'updated';
   END
   $$;
 
 
-ALTER FUNCTION fvoci.app_update_item(p_item uuid, p_title text, p_description text, p_visibility text, p_ids uuid[]) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_update_item(p_item uuid, p_base_version integer, p_title text, p_description text, p_visibility text, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 --
 -- Name: app_update_item_ids(uuid); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
@@ -9453,6 +9555,43 @@ CREATE FUNCTION fvoci.app_update_time_entry(p_entry uuid, p_base_version integer
 
 
 ALTER FUNCTION fvoci.app_update_time_entry(p_entry uuid, p_base_version integer, p_started timestamp with time zone, p_ended timestamp with time zone, p_paused integer, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+--
+-- Name: app_update_view(uuid, uuid, integer, jsonb); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
+--
+
+CREATE FUNCTION fvoci.app_update_view(p_request uuid, p_view uuid, p_base_version integer, p_config jsonb) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_view saved_views%ROWTYPE;
+  BEGIN
+    SELECT * INTO v_view FROM saved_views WHERE id = p_view AND user_id = app_user_id() FOR UPDATE;
+    IF v_view.id IS NULL OR app_item_access(v_view.item_id) IS NULL THEN
+      RAISE EXCEPTION 'view not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_view.updated_request_id = p_request THEN
+      RETURN 'replayed';
+    END IF;
+    IF EXISTS (SELECT 1 FROM saved_views
+               WHERE user_id = app_user_id() AND (request_id = p_request OR updated_request_id = p_request)) THEN
+      RAISE EXCEPTION 'request_id was already used for another change' USING ERRCODE = '22023';
+    END IF;
+    IF v_view.version <> p_base_version THEN
+      RETURN 'conflict';
+    END IF;
+    UPDATE saved_views SET config = p_config, version = version + 1, updated_request_id = p_request
+    WHERE id = p_view;
+    RETURN 'updated';
+  EXCEPTION
+    WHEN check_violation OR not_null_violation THEN
+      RAISE EXCEPTION 'invalid view: %', SQLERRM USING ERRCODE = '22023';
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_update_view(p_request uuid, p_view uuid, p_base_version integer, p_config jsonb) OWNER TO fvoci_migrator;
 
 --
 -- Name: app_upload_claim_held(uuid, timestamp with time zone); Type: FUNCTION; Schema: fvoci; Owner: fvoci_migrator
@@ -10142,6 +10281,8 @@ CREATE TABLE fvoci.items (
     status text DEFAULT 'active'::text NOT NULL,
     details jsonb DEFAULT '{}'::jsonb NOT NULL,
     is_template boolean DEFAULT false NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    profile_version integer DEFAULT 1 NOT NULL,
     CONSTRAINT items_details_check CHECK ((jsonb_typeof(details) = 'object'::text)),
     CONSTRAINT items_goal_check CHECK ((length(goal) <= 4000)),
     CONSTRAINT items_id_uuidv7 CHECK ((uuid_extract_version(id) = 7)),
@@ -10337,6 +10478,8 @@ CREATE TABLE fvoci.saved_views (
     config jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     request_id uuid NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    updated_request_id uuid,
     CONSTRAINT saved_views_config_check CHECK (((jsonb_typeof(config) = 'object'::text) AND (length((config)::text) <= 4000))),
     CONSTRAINT saved_views_id_uuidv7 CHECK ((uuid_extract_version(id) = 7)),
     CONSTRAINT saved_views_name_check CHECK (((length(btrim(name)) >= 1) AND (length(btrim(name)) <= 100)))
@@ -11132,6 +11275,14 @@ ALTER TABLE ONLY fvoci.saved_views
 
 ALTER TABLE ONLY fvoci.saved_views
     ADD CONSTRAINT saved_views_request UNIQUE (user_id, request_id);
+
+
+--
+-- Name: saved_views saved_views_updated_request; Type: CONSTRAINT; Schema: fvoci; Owner: fvoci_migrator
+--
+
+ALTER TABLE ONLY fvoci.saved_views
+    ADD CONSTRAINT saved_views_updated_request UNIQUE (user_id, updated_request_id);
 
 
 --
@@ -12038,6 +12189,13 @@ CREATE TRIGGER items_search AFTER INSERT OR DELETE OR UPDATE OF title, descripti
 --
 
 CREATE TRIGGER items_search_children AFTER UPDATE OF deleted_at ON fvoci.items FOR EACH ROW WHEN ((old.deleted_at IS DISTINCT FROM new.deleted_at)) EXECUTE FUNCTION fvoci.app_search_enqueue_item_children();
+
+
+--
+-- Name: items items_versions; Type: TRIGGER; Schema: fvoci; Owner: fvoci_migrator
+--
+
+CREATE TRIGGER items_versions BEFORE UPDATE ON fvoci.items FOR EACH ROW EXECUTE FUNCTION fvoci.app_items_versions();
 
 
 --
@@ -14330,11 +14488,11 @@ GRANT ALL ON FUNCTION fvoci.app_create_session(p_token_hash bytea, p_user uuid, 
 
 
 --
--- Name: FUNCTION app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_ids uuid[]); Type: ACL; Schema: fvoci; Owner: fvoci_migrator
+-- Name: FUNCTION app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_description text, p_status text, p_priority text, p_start date, p_due date, p_estimate integer, p_tags text[], p_assignees uuid[], p_milestone boolean, p_ids uuid[]); Type: ACL; Schema: fvoci; Owner: fvoci_migrator
 --
 
-REVOKE ALL ON FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_ids uuid[]) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_description text, p_status text, p_priority text, p_start date, p_due date, p_estimate integer, p_tags text[], p_assignees uuid[], p_milestone boolean, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_description text, p_status text, p_priority text, p_start date, p_due date, p_estimate integer, p_tags text[], p_assignees uuid[], p_milestone boolean, p_ids uuid[]) TO fvoci_app;
 
 
 --
@@ -14343,6 +14501,14 @@ GRANT ALL ON FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_ti
 
 REVOKE ALL ON FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text, p_target uuid, p_name text, p_note text, p_type text, p_size bigint, p_chunk bigint, p_ttl_secs integer, p_max_file bigint, p_max_storage bigint, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text, p_target uuid, p_name text, p_note text, p_type text, p_size bigint, p_chunk bigint, p_ttl_secs integer, p_max_file bigint, p_max_storage bigint, p_ids uuid[]) TO fvoci_app;
+
+
+--
+-- Name: FUNCTION app_create_view(p_request uuid, p_item uuid, p_name text, p_config jsonb, p_ids uuid[]); Type: ACL; Schema: fvoci; Owner: fvoci_migrator
+--
+
+REVOKE ALL ON FUNCTION fvoci.app_create_view(p_request uuid, p_item uuid, p_name text, p_config jsonb, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_create_view(p_request uuid, p_item uuid, p_name text, p_config jsonb, p_ids uuid[]) TO fvoci_app;
 
 
 --
@@ -14770,6 +14936,13 @@ GRANT ALL ON FUNCTION fvoci.app_item_reference(p_item uuid) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_item_time(p_item uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_item_time(p_item uuid) TO fvoci_app;
+
+
+--
+-- Name: FUNCTION app_items_versions(); Type: ACL; Schema: fvoci; Owner: fvoci_migrator
+--
+
+REVOKE ALL ON FUNCTION fvoci.app_items_versions() FROM PUBLIC;
 
 
 --
@@ -15298,14 +15471,6 @@ GRANT ALL ON FUNCTION fvoci.app_revoke_public_link(p_link uuid, p_ids uuid[]) TO
 
 
 --
--- Name: FUNCTION app_save_view(p_request uuid, p_item uuid, p_name text, p_config jsonb, p_ids uuid[]); Type: ACL; Schema: fvoci; Owner: fvoci_migrator
---
-
-REVOKE ALL ON FUNCTION fvoci.app_save_view(p_request uuid, p_item uuid, p_name text, p_config jsonb, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_save_view(p_request uuid, p_item uuid, p_name text, p_config jsonb, p_ids uuid[]) TO fvoci_app;
-
-
---
 -- Name: FUNCTION app_search_enqueue(); Type: ACL; Schema: fvoci; Owner: fvoci_migrator
 --
 
@@ -15445,11 +15610,11 @@ GRANT ALL ON FUNCTION fvoci.app_set_item_members_ids(p_item uuid) TO fvoci_app;
 
 
 --
--- Name: FUNCTION app_set_item_profile(p_item uuid, p_leader uuid, p_goal text, p_scope text, p_starts date, p_ends date, p_status text, p_details jsonb, p_ids uuid[]); Type: ACL; Schema: fvoci; Owner: fvoci_migrator
+-- Name: FUNCTION app_set_item_profile(p_item uuid, p_base_version integer, p_leader uuid, p_goal text, p_scope text, p_starts date, p_ends date, p_status text, p_details jsonb, p_ids uuid[]); Type: ACL; Schema: fvoci; Owner: fvoci_migrator
 --
 
-REVOKE ALL ON FUNCTION fvoci.app_set_item_profile(p_item uuid, p_leader uuid, p_goal text, p_scope text, p_starts date, p_ends date, p_status text, p_details jsonb, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_set_item_profile(p_item uuid, p_leader uuid, p_goal text, p_scope text, p_starts date, p_ends date, p_status text, p_details jsonb, p_ids uuid[]) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_set_item_profile(p_item uuid, p_base_version integer, p_leader uuid, p_goal text, p_scope text, p_starts date, p_ends date, p_status text, p_details jsonb, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_set_item_profile(p_item uuid, p_base_version integer, p_leader uuid, p_goal text, p_scope text, p_starts date, p_ends date, p_status text, p_details jsonb, p_ids uuid[]) TO fvoci_app;
 
 
 --
@@ -16080,11 +16245,11 @@ GRANT ALL ON FUNCTION fvoci.app_update_event(p_event uuid, p_base_version intege
 
 
 --
--- Name: FUNCTION app_update_item(p_item uuid, p_title text, p_description text, p_visibility text, p_ids uuid[]); Type: ACL; Schema: fvoci; Owner: fvoci_migrator
+-- Name: FUNCTION app_update_item(p_item uuid, p_base_version integer, p_title text, p_description text, p_visibility text, p_ids uuid[]); Type: ACL; Schema: fvoci; Owner: fvoci_migrator
 --
 
-REVOKE ALL ON FUNCTION fvoci.app_update_item(p_item uuid, p_title text, p_description text, p_visibility text, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_update_item(p_item uuid, p_title text, p_description text, p_visibility text, p_ids uuid[]) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_update_item(p_item uuid, p_base_version integer, p_title text, p_description text, p_visibility text, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_update_item(p_item uuid, p_base_version integer, p_title text, p_description text, p_visibility text, p_ids uuid[]) TO fvoci_app;
 
 
 --
@@ -16141,6 +16306,14 @@ GRANT ALL ON FUNCTION fvoci.app_update_task_ids(p_task uuid, p_assignees uuid[],
 
 REVOKE ALL ON FUNCTION fvoci.app_update_time_entry(p_entry uuid, p_base_version integer, p_started timestamp with time zone, p_ended timestamp with time zone, p_paused integer, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_update_time_entry(p_entry uuid, p_base_version integer, p_started timestamp with time zone, p_ended timestamp with time zone, p_paused integer, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) TO fvoci_app;
+
+
+--
+-- Name: FUNCTION app_update_view(p_request uuid, p_view uuid, p_base_version integer, p_config jsonb); Type: ACL; Schema: fvoci; Owner: fvoci_migrator
+--
+
+REVOKE ALL ON FUNCTION fvoci.app_update_view(p_request uuid, p_view uuid, p_base_version integer, p_config jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_update_view(p_request uuid, p_view uuid, p_base_version integer, p_config jsonb) TO fvoci_app;
 
 
 --
