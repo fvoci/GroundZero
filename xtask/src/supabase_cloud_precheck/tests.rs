@@ -581,8 +581,8 @@ async fn deadlines_bound_connection_query_cleanup_and_total_without_retry() -> R
 
 #[test]
 fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
-    let source = include_str!("../../../.github/workflows/supabase-cloud-readonly.yml");
-    assert!(source.contains("on:\n  workflow_dispatch:"));
+    let workflow = include_str!("../../../.github/workflows/supabase-cloud-readonly.yml");
+    assert!(workflow.contains("on:\n  workflow_dispatch:"));
     for trigger in [
         "push",
         "pull_request",
@@ -591,15 +591,23 @@ fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
         "schedule",
     ] {
         assert!(
-            !source
+            !workflow
                 .lines()
                 .any(|line| line.starts_with(&format!("  {trigger}:")))
         );
     }
+    assert!(workflow.contains("permissions:\n  contents: read"));
+    assert!(workflow.contains("group: supabase-cloud-readonly"));
+    assert!(workflow.contains("cancel-in-progress: false"));
+    let source = workflow
+        .split("  inventory:")
+        .next()
+        .context("precheck job")?;
     for required in [
         "${{ github.event_name == 'workflow_dispatch'",
         "github.repository == 'fvoci/GroundZero'",
         "github.ref == 'refs/heads/main'",
+        "inputs.operation == 'precheck'",
         "ref: ${{ github.sha }}",
         "persist-credentials: false",
         "permissions:\n  contents: read",
@@ -622,7 +630,6 @@ fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
         assert!(source.contains(&format!("secrets.SUPABASE_TEST_{setting}")));
     }
     for forbidden in [
-        "inputs.",
         "vars.",
         "${{ false",
         "upload-artifact",
@@ -634,6 +641,9 @@ fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
     ] {
         assert!(!source.contains(forbidden));
     }
+    // The only input used by the original job selects precheck; it cannot select code or a target.
+    let precheck_job = source.split("  precheck:").nth(1).context("precheck job")?;
+    assert_eq!(precheck_job.matches("inputs.").count(), 1);
     assert_eq!(source.matches("secrets.").count(), 6);
     let build = source
         .find("cargo build --locked --package xtask")
@@ -649,5 +659,43 @@ fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
             .lines()
             .any(|line| line.trim_end().ends_with(": write"))
     );
+    Ok(())
+}
+
+#[test]
+fn inventory_workflow_is_manual_owner_scoped_and_runs_only_the_exact_reviewed_branch_commit()
+-> Result<()> {
+    let source = include_str!("../../../.github/workflows/supabase-cloud-readonly.yml")
+        .split("  inventory:")
+        .nth(1)
+        .context("inventory job")?;
+    for required in [
+        "github.event_name == 'workflow_dispatch'",
+        "github.repository == 'fvoci/GroundZero'",
+        "github.actor == github.repository_owner",
+        "github.ref == 'refs/heads/fvoci/leatherback'",
+        "inputs.operation == 'inventory'",
+        "inputs.reviewed_sha == github.sha",
+        "ref: ${{ inputs.reviewed_sha }}",
+        "persist-credentials: false",
+        "target/debug/xtask supabase-cloud-inventory --connect",
+        "path: target/cloud-inventory/report.json",
+    ] {
+        assert!(
+            source.contains(required),
+            "missing inventory gate: {required}"
+        );
+    }
+    assert_eq!(source.matches("secrets.").count(), 6);
+    assert!(source.find("cargo build --locked --package xtask") < source.find("secrets."));
+    for forbidden in [
+        "DATABASE_ADMIN_URL",
+        "cargo xtask test",
+        "supabase-cloud-precheck --connect",
+        "env |",
+        "printenv",
+    ] {
+        assert!(!source.contains(forbidden));
+    }
     Ok(())
 }

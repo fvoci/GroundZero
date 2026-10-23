@@ -9,6 +9,8 @@ use serde_json::{Value, json};
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use sqlx::{ConnectOptions, Connection, PgConnection};
 
+pub mod inventory;
+
 const PASSWORD_NAME: &str = "SUPABASE_TEST_PASSWORD";
 const SSL_ROOT_CERT_NAME: &str = "SUPABASE_TEST_SSL_ROOT_CERT";
 const BEGIN_READ_ONLY: &str = "BEGIN TRANSACTION READ ONLY";
