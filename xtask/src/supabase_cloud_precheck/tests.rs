@@ -580,7 +580,7 @@ async fn deadlines_bound_connection_query_cleanup_and_total_without_retry() -> R
 }
 
 #[test]
-fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
+fn approved_first_install_workflow_builds_before_credentials() -> Result<()> {
     let workflow = include_str!("../../../.github/workflows/supabase-cloud-readonly.yml");
     assert!(workflow.contains("on:\n  workflow_dispatch:"));
     for trigger in [
@@ -599,23 +599,22 @@ fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
     assert!(workflow.contains("permissions:\n  contents: read"));
     assert!(workflow.contains("group: supabase-cloud-readonly"));
     assert!(workflow.contains("cancel-in-progress: false"));
-    let source = workflow
-        .split("  inventory:")
-        .next()
-        .context("precheck job")?;
+    let source = workflow;
     for required in [
         "${{ github.event_name == 'workflow_dispatch'",
         "github.repository == 'fvoci/GroundZero'",
-        "github.ref == 'refs/heads/main'",
-        "inputs.operation == 'precheck'",
-        "ref: ${{ github.sha }}",
+        "github.ref == 'refs/heads/fvoci/sql-consolidation-cloud-once'",
+        "github.actor == github.repository_owner",
+        "inputs.reviewed_sha == github.sha",
+        "ref: ${{ inputs.reviewed_sha }}",
         "persist-credentials: false",
         "permissions:\n  contents: read",
         "group: supabase-cloud-readonly",
         "cancel-in-progress: false",
-        "    timeout-minutes: 15",
-        "      - name: Build xtask\n        timeout-minutes: 12",
-        "      - name: Read-only session pooler precheck\n        timeout-minutes: 1",
+        "    timeout-minutes: 30",
+        "        shell: bash",
+        "        timeout-minutes: 20",
+        "        timeout-minutes: 9",
     ] {
         assert!(source.contains(required));
     }
@@ -626,13 +625,14 @@ fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
         "USER",
         "PASSWORD",
         "SSL_ROOT_CERT",
+        "MIGRATOR_PASSWORD",
+        "APP_PASSWORD",
     ] {
         assert!(source.contains(&format!("secrets.SUPABASE_TEST_{setting}")));
     }
     for forbidden in [
         "vars.",
         "${{ false",
-        "upload-artifact",
         "cargo xtask test",
         "DATABASE_ADMIN_URL",
         "TARGET_SHA256",
@@ -641,16 +641,13 @@ fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
     ] {
         assert!(!source.contains(forbidden));
     }
-    // The only input used by the original job selects precheck; it cannot select code or a target.
-    let precheck_job = source.split("  precheck:").nth(1).context("precheck job")?;
-    assert_eq!(precheck_job.matches("inputs.").count(), 1);
-    assert_eq!(source.matches("secrets.").count(), 6);
+    assert_eq!(source.matches("secrets.").count(), 8);
     let build = source
         .find("cargo build --locked --package xtask")
         .context("build step")?;
     let secret = source.find("secrets.").context("secret step")?;
     let run = source
-        .find("target/debug/xtask supabase-cloud-precheck --connect")
+        .find("target/debug/xtask supabase-cloud-first-install --connect")
         .context("prebuilt command")?;
     assert!(build < secret && secret < run);
     assert!(source.contains("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"));
@@ -663,37 +660,42 @@ fn approved_main_only_workflow_builds_before_credentials() -> Result<()> {
 }
 
 #[test]
-fn inventory_workflow_is_manual_owner_scoped_and_runs_only_the_exact_reviewed_branch_commit()
--> Result<()> {
+fn first_install_workflow_publishes_only_sanitized_metadata() -> Result<()> {
     let source = include_str!("../../../.github/workflows/supabase-cloud-readonly.yml")
-        .split("  inventory:")
+        .split("  first-install:")
         .nth(1)
         .context("inventory job")?;
     for required in [
         "github.event_name == 'workflow_dispatch'",
         "github.repository == 'fvoci/GroundZero'",
         "github.actor == github.repository_owner",
-        "github.ref == 'refs/heads/fvoci/leatherback'",
-        "inputs.operation == 'inventory'",
+        "github.ref == 'refs/heads/fvoci/sql-consolidation-cloud-once'",
         "inputs.reviewed_sha == github.sha",
         "ref: ${{ inputs.reviewed_sha }}",
         "persist-credentials: false",
-        "target/debug/xtask supabase-cloud-inventory --connect",
-        "path: target/cloud-inventory/report.json",
+        "target/debug/xtask supabase-cloud-first-install --connect",
+        "path: target/cloud-install/report.json",
     ] {
         assert!(
             source.contains(required),
             "missing inventory gate: {required}"
         );
     }
-    assert_eq!(source.matches("secrets.").count(), 6);
-    assert!(source.find("cargo build --locked --package xtask") < source.find("secrets."));
+    assert_eq!(source.matches("secrets.").count(), 8);
+    let build = source
+        .find("cargo build --locked --package xtask")
+        .context("build step")?;
+    let credentials = source.find("secrets.").context("credential step")?;
+    assert!(build < credentials);
     for forbidden in [
         "DATABASE_ADMIN_URL",
         "cargo xtask test",
         "supabase-cloud-precheck --connect",
         "env |",
         "printenv",
+        "tee ",
+        "DROP ",
+        "TRUNCATE ",
     ] {
         assert!(!source.contains(forbidden));
     }

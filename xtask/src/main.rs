@@ -70,6 +70,11 @@ enum Command {
         #[arg(long)]
         connect: bool,
     },
+    /// Approved single-project first installation; evidence branch only.
+    SupabaseCloudFirstInstall {
+        #[arg(long)]
+        connect: bool,
+    },
     /// 포맷·lint·타입·단위 테스트·라이선스·계약 최신 여부를 검사한다. 외부 서비스는 띄우지 않는다.
     Check {
         /// 라이선스 검사를 뺀다. CI는 라이선스를 따로 job(`cargo xtask licenses`)으로 돌려 결과를 나눠 보인다.
@@ -145,7 +150,9 @@ fn main() -> Result<()> {
         // clap의 일반 오류에는 사용자가 잘못 붙인 URI가 포함될 수 있다.
         // 이 명령의 잘못된 입력은 고정 코드만 보고하고 환경도 읽지 않는다.
         if std::env::args_os().nth(1).is_some_and(|arg| {
-            arg == "supabase-cloud-precheck" || arg == "supabase-cloud-inventory"
+            arg == "supabase-cloud-precheck"
+                || arg == "supabase-cloud-inventory"
+                || arg == "supabase-cloud-first-install"
         }) && !matches!(
             error.kind(),
             clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
@@ -186,6 +193,9 @@ fn main() -> Result<()> {
         }
         Command::SupabaseCloudInventory { connect } => {
             std::process::exit(supabase_cloud_precheck::inventory::run(connect))
+        }
+        Command::SupabaseCloudFirstInstall { connect } => {
+            std::process::exit(supabase_cloud_precheck::first_install::run(connect))
         }
         Command::Check { skip_licenses } => check::run(&root, skip_licenses),
         Command::Test {

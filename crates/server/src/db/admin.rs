@@ -210,14 +210,10 @@ async fn ensure_role(
     may_create_db: bool,
 ) -> Result<(), AppError> {
     if role_exists(conn, role).await? {
-        check_attributes(conn, role, may_create_db).await?;
-        check_manageable(conn, role).await?;
-        execute_formatted(
-            conn,
-            "SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', $1, $2)",
-            &[role, password.expose()],
-        )
-        .await?;
+        // This evidence-only checkout is authorized for first installation, never rotation.
+        return Err(AppError::Config(
+            "approved first installation requires absent roles".into(),
+        ));
     } else {
         execute_formatted(
             conn,
@@ -409,7 +405,7 @@ pub async fn prepare_database(conn: &mut PgConnection) -> Result<(), AppError> {
     let borrow = borrow_migrator(conn).await?;
     let created = execute_formatted(
         conn,
-        "SELECT format('CREATE SCHEMA IF NOT EXISTS %I AUTHORIZATION %I', $1, $2)",
+        "SELECT format('CREATE SCHEMA %I AUTHORIZATION %I', $1, $2)",
         &[SCHEMA, MIGRATOR_ROLE],
     )
     .await;
@@ -448,6 +444,18 @@ pub async fn bootstrap(cfg: &DbCommandConfig) -> Result<(), AppError> {
     // 역할·멤버십·스키마 DDL은 모두 트랜잭션 안에서 된다. 한 트랜잭션으로 묶어, 어느 단계에서 멈추든 한 역할만
     // 바뀐 채 남지 않게 한다. 이미 있는 두 역할은 무엇이든 바꾸기 전에 먼저 확인한다.
     let mut tx = conn.begin().await?;
+    let occupied: bool = sqlx::query_scalar(
+        "SELECT current_database() <> 'postgres' OR current_user <> 'postgres'
+         OR EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='fvoci')
+         OR EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if occupied {
+        return Err(AppError::Config(
+            "approved first installation target is not empty".into(),
+        ));
+    }
     for (role, may_create_db) in [(MIGRATOR_ROLE, true), (APP_ROLE, false)] {
         if role_exists(&mut tx, role).await? {
             check_attributes(&mut tx, role, may_create_db).await?;

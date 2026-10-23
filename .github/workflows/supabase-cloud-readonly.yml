@@ -1,20 +1,12 @@
-# Manual checks only. The precheck stays main-only; inventory uses an explicitly reviewed commit.
-name: supabase-cloud-readonly
+# One approved first installation. Evidence branch only; never merged into the product branch.
+name: supabase-cloud-first-install
 
 on:
   workflow_dispatch:
     inputs:
-      operation:
-        description: Read-only operation
-        required: true
-        default: precheck
-        type: choice
-        options:
-          - precheck
-          - inventory
       reviewed_sha:
-        description: Exact reviewed commit SHA for inventory (must equal the dispatch commit)
-        required: false
+        description: Exact reviewed installation source SHA, equal to dispatch commit
+        required: true
         type: string
 
 permissions:
@@ -25,69 +17,49 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  precheck:
-    if: >-
-      ${{ github.event_name == 'workflow_dispatch' &&
-          github.repository == 'fvoci/GroundZero' && github.ref == 'refs/heads/main' &&
-          inputs.operation == 'precheck' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-          fetch-depth: 1
-      # rust-toolchain.toml pins the toolchain. Build before injecting credentials.
-      - name: Build xtask
-        timeout-minutes: 12
-        run: cargo build --locked --package xtask
-      - name: Read-only session pooler precheck
-        timeout-minutes: 1
-        env:
-          SUPABASE_TEST_HOST: ${{ secrets.SUPABASE_TEST_HOST }}
-          SUPABASE_TEST_PORT: ${{ secrets.SUPABASE_TEST_PORT }}
-          SUPABASE_TEST_DATABASE: ${{ secrets.SUPABASE_TEST_DATABASE }}
-          SUPABASE_TEST_USER: ${{ secrets.SUPABASE_TEST_USER }}
-          SUPABASE_TEST_PASSWORD: ${{ secrets.SUPABASE_TEST_PASSWORD }}
-          SUPABASE_TEST_SSL_ROOT_CERT: ${{ secrets.SUPABASE_TEST_SSL_ROOT_CERT }}
-        run: target/debug/xtask supabase-cloud-precheck --connect
-
-  inventory:
-    # Temporary, user-authorized inspection on this exact branch. Revert to main-only after inspection.
+  first-install:
     if: >-
       ${{ github.event_name == 'workflow_dispatch' &&
           github.repository == 'fvoci/GroundZero' && github.actor == github.repository_owner &&
-          github.ref == 'refs/heads/fvoci/leatherback' && inputs.operation == 'inventory' &&
+          github.ref == 'refs/heads/fvoci/sql-consolidation-cloud-once' &&
           inputs.reviewed_sha == github.sha }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.reviewed_sha }}
           persist-credentials: false
           fetch-depth: 1
-      - name: Build inventory before credentials
-        timeout-minutes: 12
-        run: cargo build --locked --package xtask
-      - name: Read-only recreation target inventory
-        timeout-minutes: 2
+      - name: Build reviewed binaries and selected tests before credentials
+        timeout-minutes: 20
+        run: |
+          cargo build --locked --package fvoci-server --features sqlx/tls-native-tls
+          cargo build --locked --package xtask
+          cargo test --locked --package fvoci-server --features sqlx/tls-native-tls --test first_flow --test db_context --test trash --no-run --message-format=json > target/cloud-install-test-artifacts.jsonl
+      - name: Approved empty-target first installation and app-role tests
+        timeout-minutes: 9
         env:
+          APPROVED_SHA: ${{ inputs.reviewed_sha }}
           SUPABASE_TEST_HOST: ${{ secrets.SUPABASE_TEST_HOST }}
           SUPABASE_TEST_PORT: ${{ secrets.SUPABASE_TEST_PORT }}
           SUPABASE_TEST_DATABASE: ${{ secrets.SUPABASE_TEST_DATABASE }}
           SUPABASE_TEST_USER: ${{ secrets.SUPABASE_TEST_USER }}
           SUPABASE_TEST_PASSWORD: ${{ secrets.SUPABASE_TEST_PASSWORD }}
           SUPABASE_TEST_SSL_ROOT_CERT: ${{ secrets.SUPABASE_TEST_SSL_ROOT_CERT }}
+          SUPABASE_TEST_MIGRATOR_PASSWORD: ${{ secrets.SUPABASE_TEST_MIGRATOR_PASSWORD }}
+          SUPABASE_TEST_APP_PASSWORD: ${{ secrets.SUPABASE_TEST_APP_PASSWORD }}
         run: |
-          mkdir -p target/cloud-inventory
-          target/debug/xtask supabase-cloud-inventory --connect | tee target/cloud-inventory/report.json
-      - name: Preserve sanitized target inventory
+          mkdir -p target/cloud-install
+          target/debug/xtask supabase-cloud-first-install --connect > target/cloud-install/report.json
+      - name: Preserve sanitized installation evidence only
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: cloud-inventory-${{ github.sha }}
-          path: target/cloud-inventory/report.json
+          name: cloud-first-install-${{ github.sha }}
+          path: target/cloud-install/report.json
           if-no-files-found: ignore
           retention-days: 14

@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use sqlx::{ConnectOptions, Connection, PgConnection};
 
+pub mod first_install;
 pub mod inventory;
 
 const PASSWORD_NAME: &str = "SUPABASE_TEST_PASSWORD";
