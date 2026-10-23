@@ -16,7 +16,7 @@
   "search_mine": "Assigned to me",
   "search_from": "From",
   "search_to": "To",
-  "search_date_hint": "Dates match a task's due date (or its start date if none), an event's start date, a record's date occurred (or the date it was last edited if none), and otherwise the date it was last edited. Edit dates and the dates of timed events follow the time zone in your settings.",
+  "search_date_hint": "Dates match a task's due date (or its start date if none), an event's start date, a record's date occurred (or the date it was last edited if none), and otherwise the date it was last edited. The dates of edits and of timed events follow the time zone in your settings.",
   "search_reversed": "The start date is after the end date.",
   "search_searching": "Searching…",
   "search_failed": "Search failed. Try again in a moment.",

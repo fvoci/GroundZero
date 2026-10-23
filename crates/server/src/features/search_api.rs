@@ -81,9 +81,14 @@ fn parse_day(raw: Option<&str>, name: &str) -> Result<Option<time::Date>, AppErr
         return Ok(None);
     };
     let format = time::macros::format_description!("[year]-[month]-[day]");
-    time::Date::parse(raw.trim(), &format)
-        .map(Some)
-        .map_err(|_| AppError::BadRequest(format!("{name} must be YYYY-MM-DD")))
+    let day = time::Date::parse(raw.trim(), &format)
+        .map_err(|_| AppError::BadRequest(format!("{name} must be YYYY-MM-DD")))?;
+    // 그날 시작과 다음 날 시작을 시각으로 만들 수 있는 날만(`day_bounds`): 9999-12-31은 다음 날이 `time` 범위 밖이고,
+    // 1년 전은 시간대에 따라 PostgreSQL 시각 범위를 벗어날 수 있다.
+    if day.year() < 1 || day.next_day().is_none() {
+        return Err(AppError::BadRequest(format!("{name} is out of range")));
+    }
+    Ok(Some(day))
 }
 
 fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
@@ -570,6 +575,21 @@ async fn fallback(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 날짜 범위는 그날 시작과 다음 날 시작을 시각으로 만든다. 다음 날이 없는 날(9999-12-31)이나 1년 전은 그 시각을
+    /// 나타낼 수 없어(`time`·PostgreSQL 범위 밖) 500이 되던 것을 400으로 거절한다(CodeRabbit #99).
+    #[test]
+    fn days_without_a_representable_boundary_are_rejected() {
+        for raw in ["9999-12-31", "0000-12-31", "-0001-01-01"] {
+            assert!(
+                matches!(parse_day(Some(raw), "to"), Err(AppError::BadRequest(_))),
+                "{raw}"
+            );
+        }
+        for raw in ["9999-12-30", "0001-01-01", "2026-03-08"] {
+            assert!(matches!(parse_day(Some(raw), "to"), Ok(Some(_))), "{raw}");
+        }
+    }
 
     #[test]
     fn date_ranges_compare_instants_and_dates_separately() {

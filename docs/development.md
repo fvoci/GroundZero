@@ -3191,9 +3191,14 @@ ZONE tz)`. 그래서 23·25시간인 날이 그대로 맞고, 0시가 두 번 �
   시험은 경계를 `날짜::timestamp AT TIME ZONE`만으로 바꾼 격리 DB에서 `…&tz=America/Havana&from=2026-10-31&to=2026-10-31 never settled
 left: [전날 밤, 첫 0시 뒤] right: [전날 밤]`로 실패했다(`d2b07ac`에서는 따로 돌리지 않음, 그때는 UTC 날짜라 11-01로 나온다). 웹 시험은
   대화상자의 `tz` 줄을 뺀 사본에서 `expected null to be 'America/New_York'`.
+- **CodeRabbit 반영**(#99): (1) `to=9999-12-31`이면 `to` 다음 날(10000-01-01)을 `time`이 나타내지 못해 응답이 500이었다. `parse_day`가
+  다음 날이 없는 날과 1년 전(시간대에 따라 PostgreSQL 시각 범위 밖)을 400 `… is out of range`로 거절한다. 단위 시험
+  `days_without_a_representable_boundary_are_rejected`(수정 전 `9999-12-31`에서 실패)와 `search_dates_…`의 두 경로 400 단언. (2) 영어 안내의
+  "Edit dates"를 "The dates of edits"로 고쳤다(편집할 날짜로 읽히지 않게).
 - **통과**(구현 커밋 `7bd8ddf`): `cargo xtask check`(라이선스 포함) PASS, `cargo xtask test --oidc` PASS(364 통과·0 실패, 검색 16건 포함).
-  NOT RUN: `cargo xtask test --supabase`(검색 경로는 DB 종류와 무관한 SQL만 바꿨다), 실제 브라우저 확인
-  (coordinator가 마지막에 한 번 한다), 운영·개인 개발 색인의 재색인(배포하지 않음).
+  CodeRabbit 반영 뒤의 결과는 PR 본문. CI(check·integration·licenses·oidc·rhwp·supabase)는 `dafa2bd`에서 모두 통과. NOT RUN: 로컬
+  `cargo xtask test --supabase`(CI의 supabase job은 통과), 실제 브라우저 확인(coordinator가 마지막에 한 번 한다), 운영·개인 개발 색인의
+  재색인(배포하지 않음).
 
 ## 98. 저장한 보기·항목 정보의 판 검사와 보관 항목 댓글 지우기 (2026-10-23, D-103·D-104·D-106, `fvoci/policy-version`)
 

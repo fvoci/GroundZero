@@ -1694,6 +1694,18 @@ async fn search_dates_use_the_viewers_day_boundaries() {
             }
         }
     }
+    // 경계 시각을 나타낼 수 없는 날(다음 날이 없는 9999-12-31)은 500이 아니라 400(CodeRabbit #99).
+    for router in [&app, &plain] {
+        let r = send(
+            router,
+            Method::GET,
+            &format!("/api/search?q={tok}&to=9999-12-31&tz=UTC"),
+            Some(&admin),
+            None,
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+    }
 }
 
 /// D-101(P-24): 날짜만 있는 값(업무 기한, 종일 일정의 시작일, 기록의 발생일)은 시각으로 바꾸지 않아 어느 시간대에서도 같은
