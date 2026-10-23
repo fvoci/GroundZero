@@ -12,7 +12,7 @@
 
 - 현재 사용자 요구사항, 승인된 결정과 현재 코드·테스트를 기준으로 삼는다. 결정과 코드가 충돌하면 어느 쪽도 조용히 우선하지 말고 충돌을 보고한다.
 - 과거 기록은 해당 SHA의 역사이며 현재 정책·검증 결과가 아니다. 관련 결함이나 SHA를 조사할 때만 열고 원시 증거를 현재 소스 트리에 복사하지 않는다.
-- 결과의 범위·PASS/FAIL/NOT RUN 구분과 보존 방법은 [검사와 예외](docs/development.md#4-검사와-예외)를 따른다. SQL 원시 증거의 위치는 [증거 안내](preparation/sql-consolidation/evidence.md)에 있다.
+- 결과의 범위·PASS/FAIL/NOT RUN 구분과 보존 방법은 [검사와 예외](docs/development.md#4-검사와-예외)를 따른다. SQL 비교와 과거 증거 위치는 [마이그레이션 안내](crates/server/migrations/README.md#comparison)에 있다.
 
 ## 빌드·검사 명령
 

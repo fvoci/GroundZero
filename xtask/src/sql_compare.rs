@@ -66,7 +66,7 @@ fn check_options(behavior: Option<Behavior>, supabase: bool, restricted_admin: b
     Ok(())
 }
 
-const CATALOG: &str = include_str!("../../preparation/sql-consolidation/verification/catalog.sql");
+const CATALOG: &str = include_str!("sql_compare/catalog.sql");
 type Snapshot = BTreeMap<String, Value>;
 
 enum Cluster {

@@ -44,7 +44,7 @@
 - 설정 존재, 구현 완료, 실행 성공, 지원 보장을 구분한다. CodeRabbit의 전체 검토·증분 검토·파일 생략·전체 skipped·지적 해소도 따로 적는다. 새 지적이 없다는 것만으로 검토 완료를 선언하지 않는다.
 - 실행별 TXT·JSON·JSONL 로그, 환경·카탈로그 스냅숏, 스크린숏, 중간 소스 사본은 현재 지침과 분리한다. 역사 기록임을 표시하고 관련 결함·SHA를 확인할 때만 좁게 읽는다.
 - 새 원시 출력은 기존 `target/` 경로에 둔다. 장기 증거는 접근 가능한 원격 커밋에 보존하고 요약에 SHA·범위·결과·대체 관계·재현 명령·SHA-256·permalink를 남긴다. 추적 파일을 분리하기 전 원격 바이트를 확인한다.
-- `.gitignore`만으로 추적 파일이나 모든 도구가 제외되지는 않는다. 검색·색인·포맷·lint·시험 수집 대상을 확인한다. 제품 코드·fixture·비교 도구·후보 SQL·생성 계약·클라이언트·고지·자산은 실행 로그로 취급하지 않는다. [SQL 준비의 증거 위치](../preparation/sql-consolidation/evidence.md)를 참고한다.
+- `.gitignore`만으로 추적 파일이나 모든 도구가 제외되지는 않는다. 검색·색인·포맷·lint·시험 수집 대상을 확인한다. 제품 코드·fixture·비교 도구·생성 계약·클라이언트·고지·자산은 실행 로그로 취급하지 않는다. [SQL 비교와 증거 위치](../crates/server/migrations/README.md#comparison)를 참고한다.
 
 ## 5. 복잡도 원칙
 
@@ -96,6 +96,21 @@ Supabase session 실행에서도 별도 빈 DB를 만드는 시험은 직접 연
 | 기본 통합·개발 Compose   | [compose.test.yaml](../deploy/compose.test.yaml), [compose.dev.yaml](../deploy/compose.dev.yaml)                |
 | Supabase 고정 구성       | [연결·시험 안내](self-hosting-supabase.md), [compose.test.yaml](../deploy/supabase/compose.test.yaml)           |
 | 검사 순서와 대상         | [xtask/src/check.rs](../xtask/src/check.rs), [xtask/src/test.rs](../xtask/src/test.rs)                          |
+
+### DB 비교와 사전 검사 fixture
+
+현재 SQL과 과거 고정 SHA의 비교는 [마이그레이션 안내](../crates/server/migrations/README.md#comparison)를 따른다.
+비교 카탈로그는 [xtask/src/sql_compare/catalog.sql](../xtask/src/sql_compare/catalog.sql), 제품 사전 검사 fixture는
+[crates/server/tests/fixtures/postgres-preflight/](../crates/server/tests/fixtures/postgres-preflight)에 둔다.
+PG16은 지원 대상이 아니라 `db bootstrap`·`db migrate`의 변경 전 거부를 확인하는 fixture다.
+새 전용 Compose 프로젝트에 `deploy/compose.test.yaml`과 `crates/server/tests/fixtures/postgres-preflight/compose.pg16.yaml`을 겹쳐 실행한다.
+거부 전후에 `crates/server/tests/fixtures/postgres-preflight/catalog.sql`을 조회해 역할·스키마·원장·권한이 그대로인지 비교한다.
+PG17 필수 언어·UUID 함수 권한의 거부 검사는 PG16 override 없이 같은 격리 방식으로 실행하고,
+시험 fixture에서만 권한을 하나씩 철회·원복한다. 비밀번호 보존은 잘못된 비밀번호의 거부와 원래 비밀번호의 새 연결을 함께 확인한다.
+
+구체적인 거부 조건·명령은 [고정 SHA의 재현 절차](https://github.com/fvoci/GroundZero/blob/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation/verification/fixtures/README.md)에 있다.
+그 절차의 `compose.pg16.yaml`·`preflight-catalog.sql` 경로는 위 정식 경로를 사용하고, 성공 후 이력은 현재 SQLx 기준과 대조한다.
+기존 개발·Cloud DB에 이 fixture를 실행하지 않는다. 출력은 새 `target/` 경로에 남기고 생성한 프로젝트만 `stop`한다.
 
 <a id="license-records"></a>
 
@@ -209,7 +224,7 @@ VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev
 개수 산정·바인딩 순서·FV001/002·HTTP와 작업 프로세스의 재시도 차이는 [Rust→SQL UUID 인자 계약](sql-id-contract.md)을 따른다.
 [통합 초기 마이그레이션](../crates/server/migrations/README.md)이 제품 적용 경로다(D-107).
 기존 누적 이력 DB는 자동 이전하지 않는다. 정확한 대상·손실 영향·백업 방안을 확인하고 승인받은 뒤 재생성한다.
-비교용 누적 SQL은 고정 SHA에서 읽으며 [비교 명령](../preparation/sql-consolidation/verification/README.md)을 따른다.
+비교용 누적 SQL은 고정 SHA에서 읽으며 [비교 명령](../crates/server/migrations/README.md#comparison)을 따른다.
 빈 DB 설치 동등성을 기존 데이터 보존·구버전 백업 복구 검증으로 보지 않는다.
 
 <a id="create-retry"></a>
@@ -522,7 +537,7 @@ D-105의 원자성 단위는 업무 한 건이다. CSV 각 줄은 모든 칸을 
 
 - [SQL 준비 기준까지의 개발 기록 전체](https://github.com/fvoci/GroundZero/blob/abd545a250ff1fd9cc166b3c078c4dff76846724/docs/development.md): 초기화·라이선스 조사, 기능별 구현, 감사·실행 결과와 당시 절 번호.
 - [최신 정책 구현 검증의 개발 기록 전체](https://github.com/fvoci/GroundZero/blob/0a26654db6c96ccfb232ecbf0a6a02ff8220a5dd/docs/development.md): 기대 사용자와 검색·판 검사·CSV 원자성, 통합 뒤 수정·시험 범위. 옛 96~99절은 이 원문에서 확인한다.
-- [SQL 통합 준비 종합](../preparation/sql-consolidation/synthesis.md), [검증 요약](../preparation/sql-consolidation/verification/results.md), [증거 위치](../preparation/sql-consolidation/evidence.md): 누적 SQL·후보, 검증한 환경과 NOT RUN을 구분한다.
+- [SQL 통합 준비 기록](https://github.com/fvoci/GroundZero/tree/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation), [준비 검증 요약](https://github.com/fvoci/GroundZero/blob/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation/verification/results.md): 해당 SHA의 누적 SQL·후보 검증과 NOT RUN을 구분한다. 현재 비교 절차와 원시 증거 위치는 [마이그레이션 안내](../crates/server/migrations/README.md#comparison)에 있다.
 
 변경하지 않은 마이그레이션 주석 등에서 옛 절 번호를 만나면 다음 원문 위치를 쓴다. 새 절 번호로 재해석하지 않는다.
 
