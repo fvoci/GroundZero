@@ -945,3 +945,129 @@ async fn a_retried_copy_waiting_on_the_first_returns_that_copy() {
     .await;
     assert_eq!(tasks.json.as_array().unwrap().len(), 1, "{:?}", tasks.json);
 }
+
+/// D-104(감사 P-30): 항목 정보 패널 저장(`PUT /api/items/{id}/profile`의 리더·목표·범위·기간·상태·종류별 정보)도 읽은
+/// 판을 확인한다. 판은 제목·설명 저장의 판과 따로라 서로 409를 내지 않는다. 리더는 멤버에서 빠져 지워질 때도(다른
+/// 경로의 쓰기) 판이 올라, 그 전에 연 화면이 지워진 리더를 되살리지 못한다.
+#[tokio::test]
+async fn stale_profile_saves_are_refused_with_the_latest() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "정보 판").await;
+    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "writer").await;
+    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "writer").await;
+    let m = module(&app, &admin, &ws, "research", "PVER").await;
+    let it = item(&app, &owner, &m, "연구").await;
+    let uri = format!("/api/items/{it}/profile");
+    let body = |base: i64, goal: &str, leader: Option<&TestUser>| {
+        json!({ "base_version": base, "leader_id": leader.map(|u| u.id.0), "goal": goal, "scope": "",
+            "starts_on": null, "ends_on": null, "status": "active", "details": { "field": goal } })
+    };
+
+    let b = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(1, "B 목표", None)),
+    )
+    .await;
+    assert_eq!(b.status, StatusCode::NO_CONTENT, "{:?}", b.json);
+    let a = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(1, "A 목표", None)),
+    )
+    .await;
+    assert_eq!(a.status, StatusCode::CONFLICT, "{:?}", a.json);
+    assert_eq!(a.json["error"], "conflict");
+    assert_eq!(a.json["current"]["goal"], "B 목표");
+    assert_eq!(a.json["current"]["details"]["field"], "B 목표");
+    assert_eq!(a.json["current"]["version"], 2);
+    let now = send(&app, Method::GET, &uri, Some(&owner), None).await.json;
+    assert_eq!(now["goal"], "B 목표");
+    assert_eq!(now["version"], 2);
+    // 같은 내용을 다시 보내면(응답을 잃은 B) 바뀔 것이 없어 성공하고 판도 그대로다.
+    let retry = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(1, "B 목표", None)),
+    )
+    .await;
+    assert_eq!(retry.status, StatusCode::NO_CONTENT, "{:?}", retry.json);
+
+    // 제목·설명 저장은 이 판을 올리지 않는다.
+    let details = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{it}"),
+        Some(&owner),
+        Some(json!({ "base_version": 1, "title": "연구 2", "description": "설명" })),
+    )
+    .await;
+    assert_eq!(details.status, StatusCode::OK, "{:?}", details.json);
+    let led = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(2, "B 목표", Some(&mate))),
+    )
+    .await;
+    assert_eq!(
+        led.status,
+        StatusCode::BAD_REQUEST,
+        "비공개 항목을 볼 수 없는 리더: {:?}",
+        led.json
+    );
+    let members = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{it}/members"),
+        Some(&owner),
+        Some(json!({ "user_ids": [mate.id.0], "group_ids": [] })),
+    )
+    .await;
+    assert_eq!(members.status, StatusCode::NO_CONTENT, "{:?}", members.json);
+    let led = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(2, "B 목표", Some(&mate))),
+    )
+    .await;
+    assert_eq!(led.status, StatusCode::NO_CONTENT, "{:?}", led.json);
+    let now = send(&app, Method::GET, &uri, Some(&owner), None).await.json;
+    assert_eq!(now["leader"]["user_id"], json!(mate.id.0));
+    assert_eq!(now["version"], 3);
+
+    // 멤버에서 빼면 리더가 지워지고 판이 오른다. 그 전(판 3)에 연 화면은 리더를 되살리지 못한다.
+    let removed = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{it}/members"),
+        Some(&owner),
+        Some(json!({ "user_ids": [], "group_ids": [] })),
+    )
+    .await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT, "{:?}", removed.json);
+    let now = send(&app, Method::GET, &uri, Some(&owner), None).await.json;
+    assert!(now["leader"].is_null(), "{now:?}");
+    assert_eq!(now["version"], 4);
+    let revive = send(
+        &app,
+        Method::PUT,
+        &uri,
+        Some(&owner),
+        Some(body(3, "B 목표", Some(&mate))),
+    )
+    .await;
+    assert_eq!(revive.status, StatusCode::CONFLICT, "{:?}", revive.json);
+    assert!(revive.json["current"]["leader"].is_null());
+}

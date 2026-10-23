@@ -3,13 +3,13 @@
     clippy::expect_used,
     reason = "integration test crate: every item is test code; failures must panic"
 )]
-//! 저장한 보기 (D-31): 사람마다 따로(본인만 읽음), 같은 이름이면 덮어쓰기, 항목을 볼 수 있어야 한다.
+//! 저장한 보기 (D-31): 사람마다 따로(본인만 읽음), 항목을 볼 수 있어야 한다. 기존 보기 고치기는 읽은 판을 확인한다(D-103).
 
 mod common;
 
 use axum::http::{Method, StatusCode};
 use common::{TestUser, add_member, create_workspace, login, new_request_id, send};
-use serde_json::json;
+use serde_json::{Value, json};
 
 #[tokio::test]
 async fn saved_views_are_personal_and_follow_item_access() {
@@ -52,7 +52,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
     .await;
     assert_eq!(saved.status, StatusCode::CREATED, "{:?}", saved.json);
     assert_eq!(saved.json["config"]["sort"], "due");
-    // 같은 이름이면 덮어쓴다.
+    // 같은 이름은 새로 만들지 않는다(기존 보기는 판을 붙인 고치기로만 바꾼다, D-103).
     let again = send(
         &app,
         Method::POST,
@@ -62,16 +62,44 @@ async fn saved_views_are_personal_and_follow_item_access() {
         "name": "내 할 일", "config": { "view": "board" } })),
     )
     .await;
-    assert_eq!(again.json["id"], saved.json["id"]);
+    assert_eq!(again.status, StatusCode::CONFLICT, "{:?}", again.json);
+    assert_eq!(again.json["error"], "exists");
+    assert_eq!(saved.json["version"], 1);
+    assert_eq!(again.json["current"]["id"], saved.json["id"]);
+    assert_eq!(again.json["current"]["config"]["sort"], "due");
+    let view_uri = format!("/api/views/{}", saved.json["id"].as_str().unwrap());
+    let changed = send(
+        &app,
+        Method::PUT,
+        &view_uri,
+        Some(&writer),
+        Some(json!({ "request_id": new_request_id(), "base_version": 1,
+        "config": { "view": "board" } })),
+    )
+    .await;
+    assert_eq!(changed.status, StatusCode::OK, "{:?}", changed.json);
+    assert_eq!(changed.json["id"], saved.json["id"]);
+    assert_eq!(changed.json["version"], 2);
     let mine = send(&app, Method::GET, &uri, Some(&writer), None).await;
     assert_eq!(mine.json.as_array().unwrap().len(), 1);
     assert_eq!(mine.json[0]["config"], json!({ "view": "board" }));
-    // 다른 사람에게는 보이지 않고 지울 수도 없다.
+    // 다른 사람에게는 보이지 않고 고치거나 지울 수도 없다.
     assert_eq!(
         send(&app, Method::GET, &uri, Some(&admin), None).await.json,
         json!([])
     );
-    let view_uri = format!("/api/views/{}", saved.json["id"].as_str().unwrap());
+    assert_eq!(
+        send(
+            &app,
+            Method::PUT,
+            &view_uri,
+            Some(&admin),
+            Some(json!({ "request_id": new_request_id(), "base_version": 2, "config": {} }))
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
     assert_eq!(
         send(&app, Method::DELETE, &view_uri, Some(&admin), None)
             .await
@@ -125,6 +153,227 @@ async fn saved_views_are_personal_and_follow_item_access() {
             .status,
         StatusCode::NO_CONTENT
     );
+}
+
+/// `request` 요청 id로 보기를 하나 만들고 (보기 주소, 목록 주소, 보기)를 돌려준다.
+async fn one_view(
+    app: &axum::Router,
+    user: &TestUser,
+    key: &str,
+    request: &str,
+    config: Value,
+) -> (String, String, Value) {
+    let ws = create_workspace(app, user, key).await;
+    let m = send(
+        app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(user),
+        Some(json!({ "request_id": new_request_id(), "kind": "project", "name": key, "key": key })),
+    )
+    .await;
+    let item = send(
+        app,
+        Method::POST,
+        &format!("/api/modules/{}/items", m.json["id"].as_str().unwrap()),
+        Some(user),
+        Some(json!({ "request_id": new_request_id(), "title": "항목" })),
+    )
+    .await;
+    let list_uri = format!("/api/items/{}/views", item.json["id"].as_str().unwrap());
+    let created = send(
+        app,
+        Method::POST,
+        &list_uri,
+        Some(user),
+        Some(json!({ "request_id": request, "name": "내 보기", "config": config })),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{:?}", created.json);
+    let view_uri = format!("/api/views/{}", created.json["id"].as_str().unwrap());
+    (view_uri, list_uri, created.json)
+}
+
+/// D-103(감사 P-26): 두 탭이 같은 보기를 읽은 뒤 탭 B가 먼저 저장하면, 탭 A가 읽은 판(1)으로 보낸 저장은 409와 최신
+/// 보기를 받고 아무것도 바꾸지 않는다(마지막 저장 우선이 아니다). 고치기와 확인은 같은 트랜잭션이다.
+#[tokio::test]
+async fn a_view_saved_from_a_stale_tab_is_refused_with_the_latest() {
+    let state = common::state();
+    let app = common::app(&state);
+    let me = login(&state, "view-tabs").await;
+    let (view_uri, list_uri, created) = one_view(
+        &app,
+        &me,
+        "TABS",
+        &new_request_id(),
+        json!({ "view": "list", "sort": "due" }),
+    )
+    .await;
+    let tab_b = send(
+        &app,
+        Method::PUT,
+        &view_uri,
+        Some(&me),
+        Some(json!({ "request_id": new_request_id(), "base_version": 1,
+            "config": { "view": "board", "sort": "position" } })),
+    )
+    .await;
+    assert_eq!(tab_b.status, StatusCode::OK, "{:?}", tab_b.json);
+    assert_eq!(created["version"], 1);
+    assert_eq!(tab_b.json["version"], 2);
+    let tab_a = send(
+        &app,
+        Method::PUT,
+        &view_uri,
+        Some(&me),
+        Some(json!({ "request_id": new_request_id(), "base_version": 1,
+            "config": { "view": "gantt", "sort": "due" } })),
+    )
+    .await;
+    assert_eq!(tab_a.status, StatusCode::CONFLICT, "{:?}", tab_a.json);
+    assert_eq!(tab_a.json["error"], "conflict");
+    assert_eq!(tab_a.json["current"]["id"], created["id"]);
+    assert_eq!(tab_a.json["current"]["version"], 2);
+    assert_eq!(
+        tab_a.json["current"]["config"],
+        json!({ "view": "board", "sort": "position" })
+    );
+    let list = send(&app, Method::GET, &list_uri, Some(&me), None)
+        .await
+        .json;
+    assert_eq!(list.as_array().unwrap().len(), 1, "{list:?}");
+    assert_eq!(
+        list[0]["config"],
+        json!({ "view": "board", "sort": "position" })
+    );
+    assert_eq!(list[0]["version"], 2);
+    // 최신 판으로 다시 보내면 저장된다.
+    let again = send(
+        &app,
+        Method::PUT,
+        &view_uri,
+        Some(&me),
+        Some(json!({ "request_id": new_request_id(), "base_version": 2,
+            "config": { "view": "gantt", "sort": "due" } })),
+    )
+    .await;
+    assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
+    assert_eq!(again.json["version"], 3);
+    assert_eq!(
+        again.json["config"],
+        json!({ "view": "gantt", "sort": "due" })
+    );
+}
+
+/// D-103(감사 SD1): 응답을 잃은 저장을 같은 요청 id로 다시 보내면 이미 반영한 결과를 돌려주고 두 번 쓰지 않는다. 그
+/// 뒤 다른 탭이 저장했으면(A 반영 → B 저장 → A 재시도) 그 재시도는 B를 덮지 않는다: 고치기가 남기는 요청 id는 마지막
+/// 고치기의 것뿐이라 A의 id를 알아보지 못하고, A가 읽은 판(1)이 지금 판(3)과 달라 409다. 만들기 재시도도 같은 보기를
+/// 돌려줄 뿐 새로 만들지 않는다.
+#[tokio::test]
+async fn a_lost_view_save_is_retried_without_overwriting_a_later_save() {
+    let state = common::state();
+    let app = common::app(&state);
+    let me = login(&state, "view-retry").await;
+    let create_request = new_request_id();
+    let (view_uri, list_uri, created) = one_view(
+        &app,
+        &me,
+        "RETRY",
+        &create_request,
+        json!({ "view": "list" }),
+    )
+    .await;
+    let a_request = new_request_id();
+    let a_body =
+        json!({ "request_id": a_request, "base_version": 1, "config": { "view": "board" } });
+
+    let a = send(
+        &app,
+        Method::PUT,
+        &view_uri,
+        Some(&me),
+        Some(a_body.clone()),
+    )
+    .await;
+    assert_eq!(a.status, StatusCode::OK, "{:?}", a.json);
+    assert_eq!(a.json["version"], 2);
+    // 응답을 잃었다고 보고 그대로 다시 보낸다: 반영한 결과(판 2), 두 번째 쓰기 없음.
+    let retry = send(
+        &app,
+        Method::PUT,
+        &view_uri,
+        Some(&me),
+        Some(a_body.clone()),
+    )
+    .await;
+    assert_eq!(retry.status, StatusCode::OK, "{:?}", retry.json);
+    assert_eq!(retry.json["version"], 2);
+    assert_eq!(retry.json["config"], json!({ "view": "board" }));
+
+    let b_request = new_request_id();
+    let b = send(
+        &app,
+        Method::PUT,
+        &view_uri,
+        Some(&me),
+        Some(json!({ "request_id": b_request, "base_version": 2,
+            "config": { "view": "calendar" } })),
+    )
+    .await;
+    assert_eq!(b.status, StatusCode::OK, "{:?}", b.json);
+    assert_eq!(b.json["version"], 3);
+    let late = send(&app, Method::PUT, &view_uri, Some(&me), Some(a_body)).await;
+    assert_eq!(late.status, StatusCode::CONFLICT, "{:?}", late.json);
+    assert_eq!(
+        late.json["current"]["config"],
+        json!({ "view": "calendar" })
+    );
+    let list = send(&app, Method::GET, &list_uri, Some(&me), None)
+        .await
+        .json;
+    assert_eq!(list[0]["config"], json!({ "view": "calendar" }), "{list:?}");
+    assert_eq!(list[0]["version"], 3);
+
+    // 처음 만들기를 같은 요청 id로 다시 보내도 같은 보기(지금 내용)이고 새 보기는 없다.
+    let create_again = send(
+        &app,
+        Method::POST,
+        &list_uri,
+        Some(&me),
+        Some(json!({ "request_id": create_request, "name": "내 보기", "config": { "view": "list" } })),
+    )
+    .await;
+    assert_eq!(
+        create_again.status,
+        StatusCode::CREATED,
+        "{:?}",
+        create_again.json
+    );
+    assert_eq!(create_again.json["id"], created["id"]);
+    assert_eq!(create_again.json["config"], json!({ "view": "calendar" }));
+    // 남아 있는 요청 id(B의 고치기)를 다른 보기에 쓰면 받지 않는다(그 요청의 결과로 다른 보기를 돌려주지 않게).
+    let other = send(
+        &app,
+        Method::POST,
+        &list_uri,
+        Some(&me),
+        Some(json!({ "request_id": new_request_id(), "name": "둘째", "config": {} })),
+    )
+    .await;
+    assert_eq!(other.status, StatusCode::CREATED, "{:?}", other.json);
+    let reused = send(
+        &app,
+        Method::PUT,
+        &format!("/api/views/{}", other.json["id"].as_str().unwrap()),
+        Some(&me),
+        Some(json!({ "request_id": b_request, "base_version": 1, "config": { "view": "board" } })),
+    )
+    .await;
+    assert_eq!(reused.status, StatusCode::BAD_REQUEST, "{:?}", reused.json);
+    let list = send(&app, Method::GET, &list_uri, Some(&me), None)
+        .await
+        .json;
+    assert_eq!(list.as_array().unwrap().len(), 2, "{list:?}");
 }
 
 /// 내 시간대(D-50): 본인만 보고, 모르는 이름은 400, 비우면 지운다.

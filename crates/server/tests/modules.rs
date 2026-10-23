@@ -879,3 +879,136 @@ async fn item_details_keep_the_visibility_unless_it_is_sent() {
     assert_eq!(closed.status, StatusCode::OK, "{:?}", closed.json);
     assert_eq!(closed.json["visibility"], "private");
 }
+
+/// D-104(감사 P-30): 항목 정보 저장(`PUT /api/items/{id}`의 제목·설명·공개 범위)은 읽은 판(`base_version`)을 확인한다.
+/// 두 탭이 판 1을 읽고 B가 먼저 저장하면 A의 저장은 409와 서버 최신본을 받고 아무것도 바꾸지 않는다. 같은 값을 다시
+/// 보내는 재시도(응답을 잃은 B)는 바꿀 것이 없어 그대로 성공한다. 판은 이 세 칸이 바뀔 때만 오르고(누가 바꿨든),
+/// 항목 정보 패널(프로필)·보관·템플릿 표시는 이 판을 올리지 않는다.
+#[tokio::test]
+async fn stale_item_details_are_refused_with_the_latest() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "항목 판").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let m = module(&app, &admin, &ws, "IVER").await;
+    let it = item(&app, &admin, &m, "설계").await;
+    let uri = format!("/api/items/{}", it["id"].as_str().unwrap());
+    let put = |user: &TestUser, body: Value| {
+        let (app, user, uri) = (app.clone(), user.clone(), uri.clone());
+        async move { send(&app, Method::PUT, &uri, Some(&user), Some(body)).await }
+    };
+
+    let b = put(
+        &admin,
+        json!({ "base_version": 1, "title": "설계 B", "description": "B가 쓴 설명", "visibility": "workspace" }),
+    )
+    .await;
+    assert_eq!(b.status, StatusCode::OK, "{:?}", b.json);
+    let a = put(
+        &admin,
+        json!({ "base_version": 1, "title": "설계 A", "description": "A가 쓴 설명" }),
+    )
+    .await;
+    assert_eq!(a.status, StatusCode::CONFLICT, "{:?}", a.json);
+    assert_eq!(b.json["version"], 2);
+    assert_eq!(a.json["error"], "conflict");
+    assert_eq!(a.json["current"]["title"], "설계 B");
+    assert_eq!(a.json["current"]["description"], "B가 쓴 설명");
+    assert_eq!(a.json["current"]["version"], 2);
+    let (_, now) = get(&app, &admin, &uri).await;
+    assert_eq!(now["title"], "설계 B");
+    assert_eq!(now["visibility"], "workspace");
+    assert_eq!(now["version"], 2);
+
+    // B의 응답을 잃고 같은 내용으로 다시 보낸다: 바뀔 것이 없어 성공, 판도 그대로.
+    let retry = put(
+        &admin,
+        json!({ "base_version": 1, "title": "설계 B", "description": "B가 쓴 설명", "visibility": "workspace" }),
+    )
+    .await;
+    assert_eq!(retry.status, StatusCode::OK, "{:?}", retry.json);
+    assert_eq!(retry.json["version"], 2);
+
+    // 다른 경로의 쓰기는 이 판을 올리지 않는다: 항목 정보 패널, 템플릿 표시, 보관과 해제.
+    let profile = send(
+        &app,
+        Method::PUT,
+        &format!("{uri}/profile"),
+        Some(&admin),
+        Some(
+            json!({ "base_version": 1, "leader_id": null, "goal": "출시", "scope": "",
+            "starts_on": null, "ends_on": null, "status": "on_hold", "details": {} }),
+        ),
+    )
+    .await;
+    assert_eq!(profile.status, StatusCode::NO_CONTENT, "{:?}", profile.json);
+    for (path, body) in [
+        ("template", json!({ "template": true })),
+        ("archived", json!({ "archived": true })),
+        ("archived", json!({ "archived": false })),
+    ] {
+        let r = send(
+            &app,
+            Method::PUT,
+            &format!("{uri}/{path}"),
+            Some(&admin),
+            Some(body),
+        )
+        .await;
+        assert!(r.status.is_success(), "{path}: {:?}", r.json);
+    }
+    let (_, now) = get(&app, &admin, &uri).await;
+    assert_eq!(now["version"], 2, "{now:?}");
+
+    // 쓰기 권한자(작성자)가 판 2로 고친다. 그사이 소유 권한자가 공개 범위만 바꿨으면(판 3) 작성자의 옛 판은 409다.
+    let closed = put(
+        &admin,
+        json!({ "base_version": 2, "title": "설계 B", "description": "B가 쓴 설명", "visibility": "private" }),
+    )
+    .await;
+    assert_eq!(closed.status, StatusCode::OK, "{:?}", closed.json);
+    assert_eq!(closed.json["version"], 3);
+    let reopened = put(
+        &admin,
+        json!({ "base_version": 3, "title": "설계 B", "description": "B가 쓴 설명", "visibility": "workspace" }),
+    )
+    .await;
+    assert_eq!(reopened.json["version"], 4);
+    let stale = put(
+        &writer,
+        json!({ "base_version": 2, "title": "작성자 제목", "description": "" }),
+    )
+    .await;
+    assert_eq!(stale.status, StatusCode::CONFLICT, "{:?}", stale.json);
+    let fresh = put(
+        &writer,
+        json!({ "base_version": 4, "title": "작성자 제목", "description": "" }),
+    )
+    .await;
+    assert_eq!(fresh.status, StatusCode::OK, "{:?}", fresh.json);
+    assert_eq!(fresh.json["version"], 5);
+    assert_eq!(fresh.json["visibility"], "workspace");
+
+    // 보관된 항목은 판보다 먼저 보관으로 거절한다(최신본 없는 409).
+    send(
+        &app,
+        Method::PUT,
+        &format!("{uri}/archived"),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    let archived = put(
+        &admin,
+        json!({ "base_version": 5, "title": "보관 뒤", "description": "" }),
+    )
+    .await;
+    assert_eq!(archived.status, StatusCode::CONFLICT, "{:?}", archived.json);
+    assert_eq!(archived.json["error"], "invalid_state");
+    assert!(
+        archived.json.get("current").is_none(),
+        "{:?}",
+        archived.json
+    );
+}
