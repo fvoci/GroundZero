@@ -1176,17 +1176,19 @@ async fn a_replay_tells_a_deleted_task_from_a_lost_access() {
     );
     let first = send(&app, Method::POST, &uri, Some(&writer), Some(body.clone())).await;
     assert_eq!(first.status, StatusCode::CREATED, "{:?}", first.json);
+    // 이 요청 id로 만든 업무 행 수. 휴지통에 든 업무는 앱 역할(RLS)에 보이지 않으므로 표 소유 역할로 센다.
     let made_by_request = || async {
-        let mut tx = state.db.begin_as(admin.id).await.unwrap();
+        use sqlx::Connection;
+        let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+        let mut owner = sqlx::PgConnection::connect(&url).await.unwrap();
         let n: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM tasks WHERE item_id = $1::uuid AND request_id = $2::uuid",
+            "SELECT count(*) FROM fvoci.tasks WHERE item_id = $1::uuid AND request_id = $2::uuid",
         )
         .bind(item["id"].as_str().unwrap())
         .bind(&request_id)
-        .fetch_one(tx.conn())
+        .fetch_one(&mut owner)
         .await
         .unwrap();
-        tx.commit().await.unwrap();
         n
     };
 
