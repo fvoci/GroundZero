@@ -5,7 +5,7 @@
 //! 번호는 모듈마다 하나의 번호열을 항목·문서·작업이 함께 쓴다. 할당은 DB 함수 `app_allocate_number`만 한다.
 //! 참조 문자열(`DEV-3`)은 저장하지 않고 현재 키로 만든다. 링크는 내부 id 기준이다.
 //!
-//! 권한은 DB 함수가 판정한다(`migrations/0006_modules_items.sql`). 모듈 관리는 관리자, 항목 생성은 작성자 이상,
+//! 권한은 `migrations/202610230001_initial_state.sql`의 DB 함수가 판정한다. 모듈 관리는 관리자, 항목 생성은 작성자 이상,
 //! 항목 권한은 `app_item_access`, 항목 아래 문서는 `app_document_access`(항목 권한과 문서 규칙 중 낮은 쪽).
 
 use axum::Json;

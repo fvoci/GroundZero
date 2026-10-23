@@ -289,8 +289,8 @@ VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev
 개인 노트는 30일이다. 만료 뒤 복원은 409지만, 살아 있는 기록·문서의 파일 버전 참조 때문에 자동 삭제를 미룬 묶음은
 D-69에 따라 복원할 수 있다. 자동 삭제는 참조 버전을 보호하며(D-56), 관리자의 직접 영구 삭제는 별도 동작이다.
 대상을 영구 삭제해도 개인 시간 기록 자체는 지우지 않고 대상 이름을 가린다.
-[휴지통 시험](../crates/server/tests/trash.rs), [최신 복원 함수](../crates/server/migrations/0080_trash_restore_races.sql),
-[파일·정리 함수](../crates/server/migrations/0074_app_ids_files_system.sql)를 함께 확인한다.
+[휴지통 시험](../crates/server/tests/trash.rs)과
+[통합 SQL](../crates/server/migrations/202610230001_initial_state.sql)의 `app_restore_batch`·`app_purge_batch_as`를 함께 확인한다.
 
 <a id="attachment-retention"></a>
 
@@ -320,7 +320,7 @@ D-56의 참조 보호와 D-69의 만료 복원은 [휴지통 계약](#trash-cont
 준비 파일은 게시·취소·만료 때 조각과 함께 정리한다. S3는 완료된 multipart를 다시 완료할 수 없으므로
 로컬 준비 파일 방식을 그대로 적용하지 않는다.
 
-[파일 처리기](../crates/server/src/features/files.rs), [점유 해제 함수](../crates/server/migrations/0088_upload_claim_release.sql),
+[파일 처리기](../crates/server/src/features/files.rs), [통합 SQL](../crates/server/migrations/202610230001_initial_state.sql)의 `app_release_upload_claim`,
 [저장소](../crates/server/src/storage), [업로드 클라이언트](../apps/web/src/lib/features/files/upload.ts),
 [파일 시험](../crates/server/tests/files.rs)을 함께 확인한다.
 
@@ -331,7 +331,7 @@ D-56의 참조 보호와 D-69의 만료 복원은 [휴지통 계약](#trash-cont
 항목 리더는 표시용이며 권한을 주지 않는다. 비공개 항목 멤버십도 워크스페이스 역할을 넘지 않아 독자에게는 읽기만 허용한다.
 항목 멤버 관리는 소유 권한자가 한다. 워크스페이스를 떠나면 직접 항목 멤버십을 지우며 다시 초대돼도 예전 비공개 항목 접근은 돌아오지 않는다.
 담당·리더 정리는 휴지통에 있다는 이유만으로 실행하지 않는다. 실제 접근 권한을 잃거나 공간을 떠났을 때는 휴지통 항목에서도 정리한다.
-[접근·정리 함수](../crates/server/migrations/0080_trash_restore_races.sql),
+[통합 SQL](../crates/server/migrations/202610230001_initial_state.sql)의 `app_item_access_ignoring_trash`·`app_drop_unseen_assignees`,
 [항목 권한 시험](../crates/server/tests/item_profile.rs), [휴지통 시험](../crates/server/tests/trash.rs)을 함께 본다.
 
 <a id="item-copy"></a>
@@ -390,8 +390,9 @@ Zotero 키는 가져오는 요청 동안만 서버가 API 헤더로 전달하며
 - **일정**: 회차 행을 만들지 않고 달력에서 펼친다. 일정 시간대의 현지 시각을 유지하며 DST로 없는 시각은 건너뛰고 겹친 시각은 앞선 한 번만 쓴다(D-81). 전체 수정과 회차 제외를 지원하며 회차 하나의 독립 수정은 지원하지 않는다. 일정 날짜를 옮기면 제외 날짜도 함께 옮긴다.
 - 일정의 규칙 저장에는 편집을 시작한 규칙 `base`를 보내며, 규칙 없음은 NULL이다. 규칙이 달라졌으면 쓰지 않고 409 `rule_conflict`와 최신 일정이다. 제목만 바뀐 것은 이 충돌이 아니고, 요청 규칙이 이미 현재 값이면 쓰지 않고 성공한다. 일정 시작·시간대를 바꿔 첫 회차가 `until` 뒤로 가는 요청은 400이다.
 
-[반복 처리기](../crates/server/src/features/recurrence.rs), [회차 생성 함수](../crates/server/migrations/0073_app_ids_tasks.sql),
-[일정 규칙 비교](../crates/server/migrations/0086_event_rule_base.sql), [반복 시험](../crates/server/tests/recurrence.rs)을 함께 본다.
+[반복 처리기](../crates/server/src/features/recurrence.rs),
+[통합 SQL](../crates/server/migrations/202610230001_initial_state.sql)의 `app_sync_task_series`·`app_set_event_recurrence`,
+[반복 시험](../crates/server/tests/recurrence.rs)을 함께 본다.
 
 <a id="worker-contract"></a>
 
@@ -407,9 +408,9 @@ Zotero 키는 가져오는 요청 동안만 서버가 API 헤더로 전달하며
 worker가 만든 반복 회차의 작성자는 규칙 작성자다. HTTP 경로가 이 시스템 함수를 사용자 권한 우회용으로 호출하지 않는다.
 
 반복 tick은 여전히 한 트랜잭션이며, 항목 순서로 각 항목의 열을 `done` → `in_progress` → `todo` 순으로 잠그고 끝까지 보유한다.
-한 항목의 열 잠금 실패는 그 항목을 건너뛰고, 개별 반복 실패는 경고 후 나머지를 계속한다(0089).
+한 항목의 열 잠금 실패는 그 항목을 건너뛰고, 개별 반복 실패는 경고 후 나머지를 계속한다(`app_system_recurrence_tick`).
 이를 항목별 부분 커밋으로 해석하지 않는다. P-35의 항목별 트랜잭션 제안은 보류 상태다.
-[작업 시험](../crates/server/tests/worker.rs), [잠금 순서 함수](../crates/server/migrations/0089_recurrence_tick_lane_order.sql),
+[작업 시험](../crates/server/tests/worker.rs), [통합 SQL](../crates/server/migrations/202610230001_initial_state.sql)의 `app_system_recurrence_tick`,
 [반복 시험](../crates/server/tests/recurrence.rs)이 이 경계를 확인한다.
 
 <a id="live-document-preservation"></a>

@@ -25,7 +25,7 @@ BEGIN
                    JOIN users u ON u.id = wm.user_id
                    WHERE s.key = 'dev_seed' AND u.issuer = v_issuer
                      AND u.subject = '00000000-0000-4000-8000-00000000000a') THEN
-      RAISE EXCEPTION 'the dev seed was made for another OIDC issuer than %; start with the first FVOCI_DEV_KEYCLOAK_PORT again, or reset with cargo xtask down',
+      RAISE EXCEPTION 'the dev seed was made for another OIDC issuer than %; restore the original FVOCI_DEV_KEYCLOAK_PORT and preserve the Keycloak accounts and database. Any reset requires confirmed targets, backups and approval; see docs/self-hosting.md#sql-baseline-reset',
         v_issuer;
     END IF;
     RETURN;

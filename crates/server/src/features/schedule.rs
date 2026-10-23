@@ -5,8 +5,8 @@
 //! 목록만 같은 트랜잭션에서 옮긴다. 제안은 바뀐 것(옮겨진 선행 또는 고친 관계)이 전보다 더 요구하는 만큼만 뒤로 미는
 //! 최소 이동이며 기간(시작~마감)을 유지한다. 앞당긴 경우에는 제안하지 않는다. 승인할 때는 잠근 뒤 같은 계산을 다시
 //! 해서 승인 목록과 다르면(그사이 관계·날짜·완료가 바뀜) 아무것도 바꾸지 않는다.
-//! 초기 정의는 `migrations/0012_task_schedule.sql`, 앱 생성 id를 받는 D-88 전환은
-//! `migrations/0073_app_ids_tasks.sql`, 종류·지연일은 `migrations/0077_dependency_kinds.sql`에 있다.
+//! 관계의 종류·지연일과 앱 공급 UUIDv7(D-88)은
+//! `migrations/202610230001_initial_state.sql`의 `app_set_task_dependency` 등이 처리한다.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
