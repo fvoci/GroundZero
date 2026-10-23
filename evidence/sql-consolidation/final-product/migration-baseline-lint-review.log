@@ -1,0 +1,387 @@
+   Compiling fvoci-server v0.1.0 (/home/kinesis/orca/workspaces/GroundZero/leatherback/crates/server)
+   Compiling sqlx-core v0.8.6
+    Checking sqlx-postgres v0.8.6
+   Compiling sqlx-macros-core v0.8.6
+   Compiling sqlx-macros v0.8.6
+    Checking sqlx v0.8.6
+warning: used `unwrap()` on a `Result` value
+  --> crates/server/tests/common/mod.rs:30:5
+   |
+30 | /     Config::from_lookup(move |k| {
+31 | |         if let Some((_, v)) = overrides.iter().find(|(key, _)| key == k) {
+32 | |             return Some(v.clone());
+...  |
+41 | |     })
+42 | |     .unwrap() // DATABASE_URL must be set; run via `cargo xtask test`
+   | |_____________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+   = note: requested on the command line with `--force-warn clippy::unwrap-used`
+
+warning: used `unwrap()` on a `Result` value
+  --> crates/server/tests/common/mod.rs:46:5
+   |
+46 |     build_state(config_with(&[])).unwrap()
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> crates/server/tests/common/mod.rs:75:23
+   |
+75 |       let (id, token) = start_session(&state.db, state.config.session_ttl, &identity, None)
+   |  _______________________^
+76 | |         .await
+77 | |         .unwrap();
+   | |_________________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:99:23
+    |
+ 99 |       let (id, token) = start_session(&state.db, state.config.session_ttl, &identity, None)
+    |  _______________________^
+100 | |         .await
+101 | |         .unwrap();
+    | |_________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:145:20
+    |
+145 |           Some(b) => req
+    |  ____________________^
+146 | |             .header(header::CONTENT_TYPE, "application/json")
+147 | |             .body(Body::from(serde_json::to_vec(&b).unwrap()))
+148 | |             .unwrap(),
+    | |_____________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:147:30
+    |
+147 |             .body(Body::from(serde_json::to_vec(&b).unwrap()))
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:149:17
+    |
+149 |         None => req.body(Body::empty()).unwrap(),
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:153:17
+    |
+153 |     let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on an `Option` value
+   --> crates/server/tests/common/mod.rs:190:5
+    |
+190 |     r.json["id"].as_str().unwrap().to_owned()
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is `None`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on an `Option` value
+   --> crates/server/tests/common/mod.rs:233:14
+    |
+233 |     let id = inv.json["id"].as_str().unwrap();
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is `None`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `expect()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:250:15
+    |
+250 |     let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#expect_used
+    = note: requested on the command line with `--force-warn clippy::expect-used`
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:251:20
+    |
+251 |     let mut conn = sqlx::PgConnection::connect(&url).await.unwrap();
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:252:5
+    |
+252 |     sqlx::query(sql).bind(id).execute(&mut conn).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:276:18
+    |
+276 |         .oneshot(req.body(Body::from(body)).unwrap())
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:281:17
+    |
+281 |     let bytes = res.into_body().collect().await.unwrap().to_bytes().to_vec();
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:287:22
+    |
+287 |     let mut parsed = url::Url::parse(url).unwrap();
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `expect()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:306:21
+    |
+306 |     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:308:9
+    |
+308 |         std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:310:19
+    |
+310 |       let app_url = std::env::var("FVOCI_TEST_DIRECT_APP_URL")
+    |  ___________________^
+311 | |         .or_else(|_| std::env::var("DATABASE_URL"))
+312 | |         .expect("run via `cargo xtask test`");
+    | |_____________________________________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#expect_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:314:5
+    |
+314 | /     sqlx::raw_sql(&format!("CREATE DATABASE {name}"))
+315 | |         .execute(&mut *admin)
+316 | |         .await
+317 | |         .unwrap();
+    | |_________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:318:24
+    |
+318 |       let mut db_admin = sqlx::PgConnection::connect(&with_database(&admin_url, &name))
+    |  ________________________^
+319 | |         .await
+320 | |         .unwrap();
+    | |_________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:322:5
+    |
+322 | /     fvoci_server::db::admin::prepare_database(&mut db_admin)
+323 | |         .await
+324 | |         .unwrap();
+    | |_________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:325:5
+    |
+325 |     db_admin.close().await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> crates/server/tests/common/mod.rs:337:5
+    |
+337 |     fvoci_server::db::admin::migrate(&db).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `expect()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:19:21
+   |
+19 |     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via cargo xtask test");
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:21:9
+   |
+21 |         std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via cargo xtask test");
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:22:19
+   |
+22 |       let app_url = std::env::var("FVOCI_TEST_DIRECT_APP_URL")
+   |  ___________________^
+23 | |         .or_else(|_| std::env::var("DATABASE_URL"))
+24 | |         .expect("run via cargo xtask test");
+   | |___________________________________________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#expect_used
+
+warning: used `unwrap()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:25:26
+   |
+25 |     let mut connection = PgConnection::connect(&admin_url).await.unwrap();
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:27:5
+   |
+27 | /     sqlx::raw_sql(&format!("CREATE DATABASE {name}"))
+28 | |         .execute(&mut connection)
+29 | |         .await
+30 | |         .unwrap();
+   | |_________________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:31:28
+   |
+31 |       let mut target_admin = PgConnection::connect(&common::with_database(&admin_url, &name))
+   |  ____________________________^
+32 | |         .await
+33 | |         .unwrap();
+   | |_________________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:34:5
+   |
+34 |     admin::prepare_database(&mut target_admin).await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:35:5
+   |
+35 |     target_admin.close().await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:47:5
+   |
+47 | /     sqlx::query_as("SELECT version, checksum, success FROM fvoci._sqlx_migrations ORDER BY version")
+48 | |         .fetch_all(conn)
+49 | |         .await
+50 | |         .unwrap()
+   | |_________________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap_err()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:55:5
+   |
+55 | /     tokio::time::timeout(
+56 | |         std::time::Duration::from_secs(3),
+57 | |         fvoci_server::app::run(config),
+...  |
+60 | |     .unwrap()
+61 | |     .unwrap_err()
+   | |_________________^
+   |
+   = note: if this value is an `Ok`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:55:5
+   |
+55 | /     tokio::time::timeout(
+56 | |         std::time::Duration::from_secs(3),
+57 | |         fvoci_server::app::run(config),
+...  |
+60 | |     .unwrap()
+   | |_____________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> crates/server/tests/migration_baseline.rs:65:5
+   |
+65 | /     sqlx::query_scalar(
+66 | |         "SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY t.oid), '[]'::jsonb)
+67 | |          FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+68 | |          WHERE n.nspname = 'fvoci'",
+...  |
+71 | |     .await
+72 | |     .unwrap()
+   | |_____________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+warning: `fvoci-server` (test "migration_baseline") generated 36 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.50s

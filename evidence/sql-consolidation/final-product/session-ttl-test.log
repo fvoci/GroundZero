@@ -1,0 +1,19 @@
+   Compiling fvoci-server v0.1.0 (/home/kinesis/orca/workspaces/GroundZero/leatherback/crates/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.47s
+     Running tests/first_flow.rs (target/debug/deps/first_flow-5474d89aae37fc8d)
+
+running 11 tests
+test duplicate_session_cookies_are_rejected ... ok
+test workspace_create_is_idempotent_and_listed ... ok
+test other_user_cannot_see_or_change_documents ... ok
+test document_write_save_reopen_with_revisions ... ok
+test audit_records_creation_and_rename_without_body ... ok
+test replay_after_a_newer_save_reports_conflict ... ok
+test save_retry_is_idempotent_and_stale_save_conflicts ... ok
+test data_and_session_survive_fresh_state ... ok
+test rls_hides_rows_from_other_users_under_app_role ... ok
+test app_role_cannot_touch_internal_tables_or_rewind_revisions ... ok
+test input_validation_and_origin_and_session_failures ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.66s
+

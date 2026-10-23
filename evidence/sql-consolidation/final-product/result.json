@@ -1,7 +1,30 @@
 {
   "source_sha": "f4a32c8e9b30eaa8548ccf98c24c30d6ee13b1a7",
-  "final_product_sha": "d42c30414ebb867b93b868f85f11b84aff833daa",
-  "final_followup": "One documentation line removes the retired SQL comparison command; formatting, 10 local links and git diff --check PASS. Executable code and SQL are identical to source_sha.",
+  "final_product_sha": "207251955d5398ac1de657d9aa7ee16fc114bb20",
+  "final_followup": "d42c304 removes one obsolete documentation clause (format and 10 local links PASS); 2072519 gives the session-expiry test a 10-second TTL and waits that same duration plus 500ms, retaining both pre-expiry 200 and post-expiry 401 assertions. Product runtime and SQL are identical to source_sha.",
+  "session_fixture_validation": "PASS: first_flow 11/11, 0 failed/ignored (10.66s); targeted Clippy -D warnings, format and diff checks PASS.",
+  "final_github_ci": {
+    "run_id": 39968429001,
+    "source_sha": "207251955d5398ac1de657d9aa7ee16fc114bb20",
+    "result": "PASS",
+    "jobs": ["check", "integration", "oidc", "supabase", "licenses", "rhwp"]
+  },
+  "cloud_validation": {
+    "installation_sha": "3f18a08ac412b95febf40cbc3fbac6a236f80cdd",
+    "installation_run": 39961746335,
+    "installation_and_repeat_migrate": "PASS",
+    "first_test_batch_sha": "20f68bd6ff2f3507b765ca79cd5cf628f714f816",
+    "first_test_batch_run": 39966192945,
+    "first_test_batch": "12 PASS, 1 FAIL (one-second session expired during remote round trip)",
+    "corrected_expiry_sha": "d244a7e63401548ad0409c7cb0ebfce123f96782",
+    "corrected_expiry_run": 39968514727,
+    "corrected_expiry": "1 PASS, 0 failed/ignored, 10 filtered; not a single run of all 13 cases",
+    "actual_app_role": "fvoci_app (NOSUPERUSER, NOBYPASSRLS, TLS VerifyFull)",
+    "sqlx_ledger": "1 successful row, version 202610230001, exact SQLx checksum",
+    "managed_catalog_before_after_sha256": "8c4d03f3fbe1fbf1e698ad02f14c04d235cb84e2c8b4d4c70cb9d8bf7f2ab743",
+    "synthetic_data": "retained",
+    "preexisting_data_deleted": false
+  },
   "comparison_source_sha": "b7d34936d68b6cc2901c020e5cc26a6098314a54",
   "baseline_source_sha": "8ffd8c3b940924eca8cf7ec739a85494243c0479",
   "commands": {
@@ -14,7 +37,7 @@
     "result": "PASS",
     "jobs": ["check", "integration", "oidc", "supabase", "licenses", "rhwp"]
   },
-  "final_github_ci": {
+  "documentation_followup_ci": {
     "run_id": 39964186977,
     "source_sha": "d42c30414ebb867b93b868f85f11b84aff833daa",
     "result": "PASS",
@@ -39,6 +62,7 @@
   },
   "limits": {
     "old_release_backup_restore": "NOT RUN",
+    "actual_cloud_backup_restore": "NOT RUN",
     "browser_pixel_capture": "FAIL (blank image; issue #112)",
     "browser_visual_validation": "NOT RUN",
     "standard_postgresql_restricted_admin_additional_profile": "NOT RUN",

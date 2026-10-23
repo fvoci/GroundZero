@@ -1,6 +1,6 @@
 {
   "pull_request": "https://github.com/fvoci/GroundZero/pull/111",
-  "head_sha": "d42c30414ebb867b93b868f85f11b84aff833daa",
+  "head_sha": "207251955d5398ac1de657d9aa7ee16fc114bb20",
   "completed_review": {
     "run_id": "b7ff0e62-a206-412e-8f5a-897e06792195",
     "summary_comment_id": 6365135967,
@@ -53,6 +53,62 @@
         "changed_source_files": ["docs/repo-structure.md"],
         "product_sql_changed": false
       }
+    }
+  },
+  "latest_review": {
+    "run_id": "e3d0383e-c4e5-4d7c-a229-06aef005c68c",
+    "review_submission_id": 5629302740,
+    "review_url": "https://github.com/fvoci/GroundZero/pull/111#pullrequestreview-5629302740",
+    "review_submission_time": "2026-10-23T14:00:50Z",
+    "covered_commit_id": "d42c30414ebb867b93b868f85f11b84aff833daa",
+    "state": "completed",
+    "new_inline_findings": 1,
+    "new_outside_diff_findings": 0,
+    "finding": {
+      "comment_id": 4360345846,
+      "thread_id": "PRRT_kwDOVMhYH86voaAm",
+      "path": "crates/server/tests/migration_baseline.rs",
+      "line": 1,
+      "severity": "minor",
+      "assessment": "The proposed header-only deletion is not applicable: allow-unwrap-in-tests and allow-expect-in-tests do not cover non-test-annotated integration fixture helpers.",
+      "diagnostic_command": "cargo clippy --locked --package fvoci-server --test migration_baseline -- --force-warn clippy::unwrap_used --force-warn clippy::expect_used",
+      "diagnostic_exit_code": 0,
+      "intentional_forced_warnings": 36,
+      "diagnostic_log": "target/migration-baseline-lint-review.log",
+      "representative_helpers": ["empty_database", "ledger", "startup_error", "schema_types", "tests/common/mod.rs fixture helpers"],
+      "standard_check_status": "PASS; the forced-warning probe is a separate intentional diagnostic, not a standard Clippy failure",
+      "source_changed": false,
+      "reply_url": "https://github.com/fvoci/GroundZero/pull/111#discussion_r4360377335",
+      "reviewer_withdrew_finding": true,
+      "withdrawal_url": "https://github.com/fvoci/GroundZero/pull/111#discussion_r4360401622",
+      "withdrawal_time": "2026-10-23T14:06:30Z",
+      "thread_resolved": true
+    }
+  },
+  "latest_automatic_review": {
+    "head_sha": "207251955d5398ac1de657d9aa7ee16fc114bb20",
+    "state": "pending",
+    "observed_at_utc": "2026-10-23 14:20:25 UTC",
+    "run_id": "dc7c9fc6-9480-4604-8f23-dab30095150c",
+    "source_mode": "Auto",
+    "range_from": "d42c30414ebb867b93b868f85f11b84aff833daa",
+    "selected_files": ["crates/server/tests/first_flow.rs"],
+    "covered_commit_id": null,
+    "new_findings_observed": 0,
+    "manual_review_requested": false,
+    "scope": "One test-only commit after the completed d42c304 review: the session-expiry test uses a 10-second TTL and waits that same TTL plus 500 ms; initial 200 and expired 401 assertions remain.",
+    "product_runtime_changed": false,
+    "product_sql_changed": false,
+    "validation": {
+      "cargo_fmt_check": "PASS",
+      "git_diff_check": "PASS",
+      "clippy_first_flow_with_warnings_denied": "PASS",
+      "first_flow_local_isolated_pg17": "PASS: 11 passed, 0 failed, 0 ignored; 10.66 seconds",
+      "test_log": "target/first-flow-session-ttl-test.log",
+      "test_log_sha256": "f267792572a42b4b258ef88dafb8a405e9dfdeaca5aaaedeb22137827b02e1a4",
+      "clippy_log": "target/first-flow-session-ttl-clippy.log",
+      "clippy_log_sha256": "49ab046e77ebc2c1562438d7b149bb4c213691bd55f2758c50dc291bfa3b321f",
+      "first_flow_source_sha256": "c82d0289cb3085bda72c3adae413fddef26ba601fae40b83b6e611888381cc21"
     }
   },
   "request": {
