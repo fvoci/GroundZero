@@ -3125,6 +3125,18 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
   떠나기 막음과 제목만 고친 4412(수정 전 초안 없음·다시 읽어 실패), `live-title-before-sync.test.ts`(첫 동기화 전 제목만
   고침: 떠날 때 막지 않고 4412에 초안을 남기고 다시 읽음. 수정 전 떠나기를 막아 실패).
 
+## 97. 검색 날짜의 사용자 시간대 경계와 작성자 색인 필터 (2026-10-23, D-101·D-102, `fvoci/policy-search`)
+
+작성 중(작업자 W-search).
+
+## 98. 저장한 보기·항목 정보의 판 검사와 보관 항목 댓글 지우기 (2026-10-23, D-103·D-104·D-106, `fvoci/policy-version`)
+
+작성 중(작업자 W-version).
+
+## 99. CSV 업무 한 건 만들기의 원자성 (2026-10-23, D-105, `fvoci/policy-task-create`)
+
+작성 중(작업자 W-csv).
+
 ## 참고 자료
 
 - [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict.html)
