@@ -3389,6 +3389,8 @@ equal [ 't1', 't2', 't3' ]` 등.
   `csvRecords`(`apps/web/src/lib/csv.ts` 19·39행)가 따옴표 안의 칸까지 앞뒤 공백을 지워 줄의 제목은 이미 서버(`validate_title`)와 같은 값이고, 이
   비교는 main(#56)과 같다. 이를 묶는 시험을 더했다(`task-csv-import.test.ts` "treats a task stored with the trimmed title as this row": 따옴표 안
   공백을 두른 제목을 지운 제목으로 보내고, 응답을 잃은 뒤 돌려받은 업무를 이 줄로 본다).
+  (5, `dd33cce` 검토) `api.createTask`의 `fields`를 `Partial`로: 받지 않았다. `fields`를 넘기는 호출은 CSV 하나이고 타입이 모든 칸을 요구해야 CSV가
+  칸을 빠뜨렸을 때 서버 기본값으로 조용히 저장되지 않고 `pnpm check`가 막는다. 제목만 보내는 호출은 `fields`를 넘기지 않는다.
 - **NOT RUN**: 로컬 `cargo xtask test --supabase`(CI의 supabase job은 pass), 개발 예제 SQL 실행(`cargo xtask dev --oidc`만 실행하며 작업자는
   돌리지 않는다. coordinator의 마지막 개발 실행에서 확인), 실제 브라우저로 CSV 등록(coordinator가 마지막에 한 번 돌린다), 칸반 빠른 추가·달력
   만들기의 두 단계(바꾸지 않음).
