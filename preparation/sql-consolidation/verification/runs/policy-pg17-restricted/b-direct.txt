@@ -1,0 +1,103 @@
+
+running 1 test
+test user_context_does_not_outlive_commit_or_rollback ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+
+running 11 tests
+test audit_records_creation_and_rename_without_body ... ok
+test document_write_save_reopen_with_revisions ... ok
+test data_and_session_survive_fresh_state ... ok
+test duplicate_session_cookies_are_rejected ... ok
+test app_role_cannot_touch_internal_tables_or_rewind_revisions ... ok
+test other_user_cannot_see_or_change_documents ... ok
+test replay_after_a_newer_save_reports_conflict ... ok
+test workspace_create_is_idempotent_and_listed ... ok
+test save_retry_is_idempotent_and_stale_save_conflicts ... ok
+test rls_hides_rows_from_other_users_under_app_role ... ok
+test input_validation_and_origin_and_session_failures ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.79s
+
+
+running 4 tests
+test tables_have_no_id_default_and_accept_only_uuidv7 ... ok
+test functions_use_the_ids_the_server_passes_and_never_fill_in_missing_ones ... ok
+test missing_targets_are_404_not_500 ... ok
+test worker_retries_the_whole_job_and_leaves_nothing_on_short_ids ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+
+running 15 tests
+test decline_and_revoke_close_invitations ... ok
+test an_admin_demoted_meanwhile_cannot_revoke_an_invitation ... ok
+test an_admin_demoted_meanwhile_cannot_add_to_a_group ... ok
+test groups_hold_only_workspace_members ... ok
+test adding_a_member_who_is_being_removed_does_not_survive_the_removal ... ok
+test membership_changes_are_audited ... ok
+test invitation_requires_the_verified_invited_email ... ok
+test only_the_owner_cancels_an_ownership_offer ... ok
+test removed_member_loses_access_and_team_documents_remain ... ok
+test owner_is_protected_and_ownership_transfer_needs_acceptance ... ok
+test removing_a_member_who_is_accepting_ownership_meanwhile_conflicts ... ok
+test revoking_an_invitation_being_accepted_does_not_overwrite_the_acceptance ... ok
+test roles_are_enforced_and_only_admins_manage_members ... ok
+test setting_item_members_does_not_deadlock_with_the_workspace_assignee_lock ... ok
+test two_admins_removing_each_other_at_once_leave_one_of_them ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.89s
+
+
+running 10 tests
+test event_rule_saves_from_a_stale_rule_conflict ... ok
+test catch_up_is_capped_per_request_and_archived_items_refuse ... ok
+test changing_a_rule_applies_from_today_and_the_template_stays_top_level ... ok
+test repeating_events_keep_their_wall_clock_across_daylight_saving ... ok
+test moving_a_repeating_event_past_its_until_is_refused ... ok
+test rules_expand_with_skips_counts_and_limits ... ok
+test a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick ... ok
+test repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule ... ok
+test weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_ones ... ok
+test the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+
+
+running 12 tests
+test document_settings_change_only_the_fields_sent ... ok
+test copies_of_private_documents_stay_private ... ok
+test copy_requires_permission_and_is_independent ... ok
+test export_follows_download_permission_and_is_audited ... ok
+test personal_note_moves_into_a_workspace_as_private ... ok
+test moving_a_private_document_where_the_mover_loses_access_still_completes ... ok
+test move_requires_the_reviewed_preview_and_changes_who_can_see ... ok
+test private_team_document_is_visible_to_creator_admin_and_shares_only ... ok
+test revision_cannot_advance_without_content_change ... ok
+test settings_need_definer_path_and_personal_audit_is_visible_to_owner ... ok
+test share_permissions_and_revocation_take_effect_immediately ... ok
+test shared_personal_note_does_not_reach_the_grantees_workspace_admin ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+
+
+running 7 tests
+test days_start_at_the_first_midnight_and_long_entries_split_within_the_range ... ok
+test item_totals_group_entries_under_the_item_by_kind ... ok
+test entries_are_edited_with_history_and_summed_in_the_viewers_days ... ok
+test a_running_timer_keeps_its_pauses_inside_its_span ... ok
+test one_timer_per_user_survives_pause_and_stays_private ... ok
+test time_sharing_reads_back_per_person_and_workspace ... ok
+test task_totals_include_only_people_who_chose_to_share ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running tests/db_context.rs (target/debug/deps/db_context-c60c4cd44c7deee1)
+     Running tests/first_flow.rs (target/debug/deps/first_flow-5474d89aae37fc8d)
+     Running tests/ids.rs (target/debug/deps/ids-fbc78bf9b3635f76)
+     Running tests/members.rs (target/debug/deps/members-ff427be1e8fc365d)
+     Running tests/recurrence.rs (target/debug/deps/recurrence-9f8d851d1e21ae5d)
+     Running tests/sharing.rs (target/debug/deps/sharing-2ad5c6cf0dfe11d0)
+     Running tests/time_tracking.rs (target/debug/deps/time_tracking-eb0ec2269ca2192d)

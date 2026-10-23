@@ -79,21 +79,21 @@
 {"path":"crates/server/src/features/home.rs","line":318,"source":"         FROM items i JOIN modules m ON m.id = i.module_id","matches":["FROM items","JOIN modules"]}
 {"path":"crates/server/src/features/home.rs","line":321,"source":"           FROM tasks t WHERE t.item_id = i.id","matches":["FROM tasks"]}
 {"path":"crates/server/src/features/home.rs","line":432,"source":"         FROM user_marks WHERE target_kind = $1 AND target_id = $2\",","matches":["FROM user_marks"]}
-{"path":"crates/server/src/features/item_profile.rs","line":209,"source":"                (SELECT u.display_name FROM users u JOIN workspace_members wm","matches":["FROM users","JOIN workspace_members"]}
-{"path":"crates/server/src/features/item_profile.rs","line":213,"source":"         FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1\",","matches":["FROM items","JOIN modules"]}
-{"path":"crates/server/src/features/item_profile.rs","line":232,"source":"        \"SELECT u.id, u.display_name FROM item_members im JOIN users u ON u.id = im.user_id","matches":["FROM item_members","JOIN users"]}
-{"path":"crates/server/src/features/item_profile.rs","line":239,"source":"        \"SELECT g.id, g.name FROM item_members im JOIN groups g ON g.id = im.group_id","matches":["FROM item_members","JOIN groups"]}
-{"path":"crates/server/src/features/item_profile.rs","line":291,"source":"        \"SELECT m.kind FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1\",","matches":["FROM items","JOIN modules"]}
+{"path":"crates/server/src/features/item_profile.rs","line":239,"source":"                (SELECT u.display_name FROM users u JOIN workspace_members wm","matches":["FROM users","JOIN workspace_members"]}
+{"path":"crates/server/src/features/item_profile.rs","line":244,"source":"         FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1\",","matches":["FROM items","JOIN modules"]}
+{"path":"crates/server/src/features/item_profile.rs","line":264,"source":"        \"SELECT u.id, u.display_name FROM item_members im JOIN users u ON u.id = im.user_id","matches":["FROM item_members","JOIN users"]}
+{"path":"crates/server/src/features/item_profile.rs","line":271,"source":"        \"SELECT g.id, g.name FROM item_members im JOIN groups g ON g.id = im.group_id","matches":["FROM item_members","JOIN groups"]}
+{"path":"crates/server/src/features/item_profile.rs","line":325,"source":"        \"SELECT m.kind FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1\",","matches":["FROM items","JOIN modules"]}
 {"path":"crates/server/src/features/members.rs","line":91,"source":"         FROM workspace_members m\n         JOIN users u ON u.id = m.user_id\n         JOIN workspaces w ON w.id = m.workspace_id","matches":["FROM workspace_members","JOIN users","JOIN workspaces"]}
 {"path":"crates/server/src/features/members.rs","line":100,"source":"    let owner: UserId = sqlx::query_scalar(\"SELECT owner_id FROM workspaces WHERE id = $1\")","matches":["FROM workspaces"]}
 {"path":"crates/server/src/features/members.rs","line":105,"source":"        sqlx::query_scalar(\"SELECT to_user FROM ownership_offers WHERE workspace_id = $1\")","matches":["FROM ownership_offers"]}
 {"path":"crates/server/src/features/members.rs","line":275,"source":"        sqlx::query_as(\"SELECT email, role, expires_at FROM invitations WHERE id = $1\")","matches":["FROM invitations"]}
 {"path":"crates/server/src/features/members.rs","line":306,"source":"        \"SELECT id, email, role, expires_at FROM invitations","matches":["FROM invitations"]}
 {"path":"crates/server/src/features/members.rs","line":540,"source":"         FROM groups g LEFT JOIN group_members gm ON gm.group_id = g.id","matches":["FROM groups","JOIN group_members"]}
-{"path":"crates/server/src/features/modules.rs","line":215,"source":"        coalesce((SELECT array_agg(o.key ORDER BY o.created_at) FROM module_keys o","matches":["FROM module_keys"]}
-{"path":"crates/server/src/features/modules.rs","line":218,"source":" FROM modules m JOIN module_keys k ON k.module_id = m.id AND k.retired_at IS NULL\";","matches":["FROM modules","JOIN module_keys"]}
-{"path":"crates/server/src/features/modules.rs","line":267,"source":" FROM items i\";","matches":["FROM items"]}
-{"path":"crates/server/src/features/modules.rs","line":637,"source":"        \"SELECT {SUMMARY_COLUMNS} FROM documents WHERE item_id = $1 ORDER BY {TREE_ORDER}\"","matches":["FROM documents"]}
+{"path":"crates/server/src/features/modules.rs","line":221,"source":"        coalesce((SELECT array_agg(o.key ORDER BY o.created_at) FROM module_keys o","matches":["FROM module_keys"]}
+{"path":"crates/server/src/features/modules.rs","line":224,"source":" FROM modules m JOIN module_keys k ON k.module_id = m.id AND k.retired_at IS NULL\";","matches":["FROM modules","JOIN module_keys"]}
+{"path":"crates/server/src/features/modules.rs","line":274,"source":" FROM items i\";","matches":["FROM items"]}
+{"path":"crates/server/src/features/modules.rs","line":678,"source":"        \"SELECT {SUMMARY_COLUMNS} FROM documents WHERE item_id = $1 ORDER BY {TREE_ORDER}\"","matches":["FROM documents"]}
 {"path":"crates/server/src/features/public_links.rs","line":86,"source":"         FROM public_links WHERE document_id = $1 ORDER BY created_at DESC\",","matches":["FROM public_links"]}
 {"path":"crates/server/src/features/records.rs","line":777,"source":"        \"SELECT m.kind, i.workspace_id FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1\",","matches":["FROM items","JOIN modules"]}
 {"path":"crates/server/src/features/records.rs","line":812,"source":"            \"SELECT count(DISTINCT user_id) FROM workspace_members WHERE workspace_id = $1 AND user_id = ANY($2)\",","matches":["FROM workspace_members"]}
@@ -122,35 +122,35 @@
 {"path":"crates/server/src/features/revisions.rs","line":111,"source":"         FROM document_revisions r LEFT JOIN users u ON u.id = r.author","matches":["FROM document_revisions","JOIN users"]}
 {"path":"crates/server/src/features/revisions.rs","line":174,"source":"         FROM document_revisions r LEFT JOIN users u ON u.id = r.author","matches":["FROM document_revisions","JOIN users"]}
 {"path":"crates/server/src/features/revisions.rs","line":329,"source":"        \"SELECT title, body FROM document_revisions WHERE document_id = $1 AND revision = $2\",","matches":["FROM document_revisions"]}
-{"path":"crates/server/src/features/saved_views.rs","line":55,"source":"        \"SELECT id, name, config FROM saved_views WHERE item_id = $1 ORDER BY name, created_at\",","matches":["FROM saved_views"]}
-{"path":"crates/server/src/features/saved_views.rs","line":100,"source":"        sqlx::query_as(\"SELECT name, config FROM saved_views WHERE id = $1\")","matches":["FROM saved_views"]}
+{"path":"crates/server/src/features/saved_views.rs","line":78,"source":"        \"SELECT id, name, config, version FROM saved_views WHERE item_id = $1 ORDER BY name, created_at\",","matches":["FROM saved_views"]}
+{"path":"crates/server/src/features/saved_views.rs","line":106,"source":"        sqlx::query_as(\"SELECT name, config, version FROM saved_views WHERE id = $1\")","matches":["FROM saved_views"]}
 {"path":"crates/server/src/features/schedule.rs","line":481,"source":"         FROM tasks WHERE item_id = $1\",","matches":["FROM tasks"]}
 {"path":"crates/server/src/features/schedule.rs","line":487,"source":"        \"SELECT predecessor_id, successor_id, kind, lag_days FROM task_dependencies WHERE item_id = $1\",","matches":["FROM task_dependencies"]}
 {"path":"crates/server/src/features/schedule.rs","line":593,"source":"    let item: Option<Uuid> = sqlx::query_scalar(\"SELECT item_id FROM tasks WHERE id = $1\")","matches":["FROM tasks"]}
 {"path":"crates/server/src/features/schedule.rs","line":753,"source":"        sqlx::query_as(\"SELECT id, start_date, due_date FROM tasks WHERE id = ANY($1)\")","matches":["FROM tasks"]}
-{"path":"crates/server/src/features/search_api.rs","line":189,"source":"        \"SELECT d.id FROM documents d","matches":["FROM documents"]}
-{"path":"crates/server/src/features/search_api.rs","line":232,"source":"    let rows: Vec<Uuid> = sqlx::query_scalar(\"SELECT id FROM items WHERE id = ANY($1)\")","matches":["FROM items"]}
-{"path":"crates/server/src/features/search_api.rs","line":247,"source":"        \"SELECT 'document', id FROM documents WHERE id = ANY($2) AND created_by = $1\n         UNION ALL SELECT 'task', id FROM tasks WHERE id = ANY($2) AND created_by = $1\n         UNION ALL SELECT 'item', id FROM items WHERE id = ANY($2) AND created_by = $1\n         UNION ALL SELECT 'event', id FROM events WHERE id = ANY($2) AND created_by = $1\n         UNION ALL SELECT 'file', id FROM files WHERE id = ANY($2) AND created_by = $1\n         UNION ALL SELECT 'record', id FROM item_records WHERE id = ANY($2) AND created_by = $1\",","matches":["FROM documents","FROM tasks","FROM items","FROM events","FROM files","FROM item_records"]}
-{"path":"crates/server/src/features/search_api.rs","line":267,"source":"        sqlx::query_scalar(\"SELECT document_id FROM files WHERE id = $1\")","matches":["FROM files"]}
-{"path":"crates/server/src/features/search_api.rs","line":460,"source":"                  (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status,","matches":["FROM items"]}
-{"path":"crates/server/src/features/search_api.rs","line":462,"source":"           FROM documents d WHERE d.title ILIKE $1 AND d.deleted_at IS NULL","matches":["FROM documents"]}
-{"path":"crates/server/src/features/search_api.rs","line":465,"source":"                  (SELECT module_id FROM items WHERE id = t.item_id), t.status,\n                  ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id), coalesce(t.due_date, t.start_date),","matches":["FROM items","FROM task_assignees"]}
-{"path":"crates/server/src/features/search_api.rs","line":468,"source":"           FROM tasks t WHERE t.title ILIKE $1 AND t.deleted_at IS NULL","matches":["FROM tasks"]}
-{"path":"crates/server/src/features/search_api.rs","line":472,"source":"           FROM items i WHERE i.title ILIKE $1 AND i.deleted_at IS NULL","matches":["FROM items"]}
-{"path":"crates/server/src/features/search_api.rs","line":475,"source":"                  (SELECT module_id FROM items WHERE id = e.item_id), NULL, NULL,","matches":["FROM items"]}
-{"path":"crates/server/src/features/search_api.rs","line":477,"source":"           FROM events e WHERE e.title ILIKE $1 AND e.deleted_at IS NULL","matches":["FROM events"]}
-{"path":"crates/server/src/features/search_api.rs","line":480,"source":"                  (SELECT module_id FROM items WHERE id = coalesce(f.item_id, d.item_id)), NULL, NULL,","matches":["FROM items"]}
-{"path":"crates/server/src/features/search_api.rs","line":482,"source":"           FROM files f LEFT JOIN documents d ON d.id = f.document_id","matches":["FROM files","JOIN documents"]}
-{"path":"crates/server/src/features/search_api.rs","line":486,"source":"                  (SELECT module_id FROM items WHERE id = rc.item_id), NULL, NULL,","matches":["FROM items"]}
-{"path":"crates/server/src/features/search_api.rs","line":488,"source":"           FROM item_records rc WHERE rc.title ILIKE $1","matches":["FROM item_records"]}
+{"path":"crates/server/src/features/search_api.rs","line":133,"source":"            \"SELECT coalesce(nullif((SELECT time_zone FROM user_settings WHERE user_id = app_user_id()), ''), 'UTC')\",","matches":["FROM user_settings"]}
+{"path":"crates/server/src/features/search_api.rs","line":252,"source":"        \"SELECT d.id FROM documents d","matches":["FROM documents"]}
+{"path":"crates/server/src/features/search_api.rs","line":295,"source":"    let rows: Vec<Uuid> = sqlx::query_scalar(\"SELECT id FROM items WHERE id = ANY($1)\")","matches":["FROM items"]}
+{"path":"crates/server/src/features/search_api.rs","line":308,"source":"        sqlx::query_scalar(\"SELECT document_id FROM files WHERE id = $1\")","matches":["FROM files"]}
+{"path":"crates/server/src/features/search_api.rs","line":499,"source":"                  (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status,","matches":["FROM items"]}
+{"path":"crates/server/src/features/search_api.rs","line":501,"source":"           FROM documents d WHERE d.title ILIKE $1 AND d.deleted_at IS NULL","matches":["FROM documents"]}
+{"path":"crates/server/src/features/search_api.rs","line":504,"source":"                  (SELECT module_id FROM items WHERE id = t.item_id), t.status,\n                  ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id), NULL,","matches":["FROM items","FROM task_assignees"]}
+{"path":"crates/server/src/features/search_api.rs","line":507,"source":"           FROM tasks t WHERE t.title ILIKE $1 AND t.deleted_at IS NULL","matches":["FROM tasks"]}
+{"path":"crates/server/src/features/search_api.rs","line":511,"source":"           FROM items i WHERE i.title ILIKE $1 AND i.deleted_at IS NULL","matches":["FROM items"]}
+{"path":"crates/server/src/features/search_api.rs","line":514,"source":"                  (SELECT module_id FROM items WHERE id = e.item_id), NULL, NULL,","matches":["FROM items"]}
+{"path":"crates/server/src/features/search_api.rs","line":516,"source":"           FROM events e WHERE e.title ILIKE $1 AND e.deleted_at IS NULL","matches":["FROM events"]}
+{"path":"crates/server/src/features/search_api.rs","line":519,"source":"                  (SELECT module_id FROM items WHERE id = coalesce(f.item_id, d.item_id)), NULL, NULL,","matches":["FROM items"]}
+{"path":"crates/server/src/features/search_api.rs","line":521,"source":"           FROM files f LEFT JOIN documents d ON d.id = f.document_id","matches":["FROM files","JOIN documents"]}
+{"path":"crates/server/src/features/search_api.rs","line":525,"source":"                  (SELECT module_id FROM items WHERE id = rc.item_id), NULL, NULL,","matches":["FROM items"]}
+{"path":"crates/server/src/features/search_api.rs","line":527,"source":"           FROM item_records rc WHERE rc.title ILIKE $1","matches":["FROM item_records"]}
 {"path":"crates/server/src/features/study.rs","line":201,"source":"         FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1\",","matches":["FROM items","JOIN modules"]}
 {"path":"crates/server/src/features/study.rs","line":209,"source":"         FROM study_units s\n         LEFT JOIN unit_progress p ON p.unit_id = s.id AND p.user_id = app_user_id()","matches":["FROM study_units","JOIN unit_progress"]}
-{"path":"crates/server/src/features/tasks.rs","line":381,"source":"        ARRAY(SELECT d.predecessor_id FROM task_dependencies d WHERE d.successor_id = t.id","matches":["FROM task_dependencies"]}
-{"path":"crates/server/src/features/tasks.rs","line":383,"source":"        ARRAY(SELECT d.kind FROM task_dependencies d WHERE d.successor_id = t.id","matches":["FROM task_dependencies"]}
-{"path":"crates/server/src/features/tasks.rs","line":385,"source":"        ARRAY(SELECT d.lag_days FROM task_dependencies d WHERE d.successor_id = t.id","matches":["FROM task_dependencies"]}
-{"path":"crates/server/src/features/tasks.rs","line":391,"source":" FROM tasks t JOIN items i ON i.id = t.item_id\n LEFT JOIN task_series s ON s.id = t.series_id","matches":["FROM tasks","JOIN items","JOIN task_series"]}
-{"path":"crates/server/src/features/tasks.rs","line":403,"source":"         FROM task_assignees a LEFT JOIN users u ON u.id = a.user_id","matches":["FROM task_assignees","JOIN users"]}
-{"path":"crates/server/src/features/tasks.rs","line":532,"source":"        \"SELECT id, text, checked FROM checklist_items WHERE task_id = $1 ORDER BY position, created_at\",","matches":["FROM checklist_items"]}
+{"path":"crates/server/src/features/tasks.rs","line":444,"source":"        ARRAY(SELECT d.predecessor_id FROM task_dependencies d WHERE d.successor_id = t.id","matches":["FROM task_dependencies"]}
+{"path":"crates/server/src/features/tasks.rs","line":446,"source":"        ARRAY(SELECT d.kind FROM task_dependencies d WHERE d.successor_id = t.id","matches":["FROM task_dependencies"]}
+{"path":"crates/server/src/features/tasks.rs","line":448,"source":"        ARRAY(SELECT d.lag_days FROM task_dependencies d WHERE d.successor_id = t.id","matches":["FROM task_dependencies"]}
+{"path":"crates/server/src/features/tasks.rs","line":454,"source":" FROM tasks t JOIN items i ON i.id = t.item_id\n LEFT JOIN task_series s ON s.id = t.series_id","matches":["FROM tasks","JOIN items","JOIN task_series"]}
+{"path":"crates/server/src/features/tasks.rs","line":466,"source":"         FROM task_assignees a LEFT JOIN users u ON u.id = a.user_id","matches":["FROM task_assignees","JOIN users"]}
+{"path":"crates/server/src/features/tasks.rs","line":595,"source":"        \"SELECT id, text, checked FROM checklist_items WHERE task_id = $1 ORDER BY position, created_at\",","matches":["FROM checklist_items"]}
 {"path":"crates/server/src/features/time_tracking.rs","line":168,"source":" FROM time_entries e\";","matches":["FROM time_entries"]}
 {"path":"crates/server/src/features/time_tracking.rs","line":595,"source":"        \"SELECT started_at, ended_at, paused_seconds, kind, memo, changed_at FROM time_entry_revisions","matches":["FROM time_entry_revisions"]}
 {"path":"crates/server/src/features/time_tracking.rs","line":683,"source":"           FROM time_entries e","matches":["FROM time_entries"]}
@@ -227,6 +227,7 @@
 {"path":"crates/server/tests/ids.rs","line":113,"source":"        \"INSERT INTO fvoci.users (issuer, subject, display_name) VALUES ('https://ids.test', $1, 'ids')\",","matches":["INTO fvoci.users"]}
 {"path":"crates/server/tests/ids.rs","line":216,"source":"        \"UPDATE fvoci.tasks SET due_date = current_date WHERE id = $1::uuid\",","matches":["UPDATE fvoci.tasks"]}
 {"path":"crates/server/tests/ids.rs","line":223,"source":"            \"SELECT count(*) FROM notifications WHERE task_id = $1::uuid AND kind = 'due'\",","matches":["FROM notifications"]}
+{"path":"crates/server/tests/item_profile.rs","line":1126,"source":"        sqlx::query_as(\"SELECT title, version, goal, profile_version FROM items WHERE id = $1\")","matches":["FROM items"]}
 {"path":"crates/server/tests/members.rs","line":520,"source":"        \"SELECT target_type || ':' || action FROM audit_log WHERE workspace_id = $1::uuid ORDER BY created_at, id\",","matches":["FROM audit_log"]}
 {"path":"crates/server/tests/members.rs","line":648,"source":"        \"SELECT EXISTS (SELECT 1 FROM fvoci.workspaces w JOIN fvoci.workspace_members m","matches":["FROM fvoci.workspaces","JOIN fvoci.workspace_members"]}
 {"path":"crates/server/tests/members.rs","line":784,"source":"        \"SELECT (SELECT count(*) FROM fvoci.item_members WHERE user_id = $1)\n              + (SELECT count(*) FROM fvoci.group_members WHERE user_id = $1)\",","matches":["FROM fvoci.item_members","FROM fvoci.group_members"]}
@@ -236,9 +237,9 @@
 {"path":"crates/server/tests/members.rs","line":980,"source":"        sqlx::query_scalar(\"SELECT close_reason FROM fvoci.invitations WHERE id = $1::uuid\")","matches":["FROM fvoci.invitations"]}
 {"path":"crates/server/tests/members.rs","line":1048,"source":"        sqlx::query(\"SELECT 1 FROM fvoci.items WHERE id = $1::uuid FOR UPDATE\")","matches":["FROM fvoci.items"]}
 {"path":"crates/server/tests/members.rs","line":1115,"source":"        \"SELECT action FROM audit_log WHERE workspace_id = $1::uuid AND target_type = 'workspace' ORDER BY created_at, id\",","matches":["FROM audit_log"]}
-{"path":"crates/server/tests/modules.rs","line":340,"source":"        \"SELECT action FROM audit_log WHERE target_id = $1::uuid ORDER BY created_at, id\",","matches":["FROM audit_log"]}
-{"path":"crates/server/tests/modules.rs","line":382,"source":"        sqlx::query_scalar(\"SELECT count(*) FROM numbered_targets WHERE scope_id = $1::uuid\")","matches":["FROM numbered_targets"]}
-{"path":"crates/server/tests/modules.rs","line":390,"source":"        \"INSERT INTO numbered_targets (workspace_id, scope_id, number, target_kind, target_id)","matches":["INTO numbered_targets"]}
+{"path":"crates/server/tests/modules.rs","line":344,"source":"        \"SELECT action FROM audit_log WHERE target_id = $1::uuid ORDER BY created_at, id\",","matches":["FROM audit_log"]}
+{"path":"crates/server/tests/modules.rs","line":386,"source":"        sqlx::query_scalar(\"SELECT count(*) FROM numbered_targets WHERE scope_id = $1::uuid\")","matches":["FROM numbered_targets"]}
+{"path":"crates/server/tests/modules.rs","line":394,"source":"        \"INSERT INTO numbered_targets (workspace_id, scope_id, number, target_kind, target_id)","matches":["INTO numbered_targets"]}
 {"path":"crates/server/tests/oidc.rs","line":173,"source":"        sqlx::query_as(\"SELECT issuer, subject FROM users WHERE id = $1::uuid\")","matches":["FROM users"]}
 {"path":"crates/server/tests/records.rs","line":490,"source":"        \"UPDATE fvoci.file_versions SET created_at = now() - interval '10 days' WHERE file_id = $1\",","matches":["UPDATE fvoci.file_versions"]}
 {"path":"crates/server/tests/records.rs","line":564,"source":"                \"UPDATE fvoci.file_versions SET created_at = now() - make_interval(days => $3)","matches":["UPDATE fvoci.file_versions"]}
@@ -278,6 +279,7 @@
 {"path":"crates/server/tests/search.rs","line":1223,"source":"        \"SELECT queued_at FROM fvoci.search_queue WHERE kind = 'document' AND target_id = $1::uuid\",","matches":["FROM fvoci.search_queue"]}
 {"path":"crates/server/tests/search.rs","line":1231,"source":"        \"UPDATE fvoci.search_queue SET claimed_until = now() - interval '1 second'","matches":["UPDATE fvoci.search_queue"]}
 {"path":"crates/server/tests/search.rs","line":1399,"source":"        \"UPDATE fvoci.items SET title = title, updated_at = '2026-09-01T03:00:00Z' WHERE id = $1::uuid\",","matches":["UPDATE fvoci.items"]}
+{"path":"crates/server/tests/search.rs","line":1526,"source":"        \"UPDATE fvoci.documents SET title = title, updated_at = $2::timestamptz WHERE id = $1::uuid\",","matches":["UPDATE fvoci.documents"]}
 {"path":"crates/server/tests/sharing.rs","line":245,"source":"    let n: i64 = sqlx::query_scalar(\"SELECT count(*) FROM documents WHERE id = $1::uuid\")","matches":["FROM documents"]}
 {"path":"crates/server/tests/sharing.rs","line":592,"source":"    let err = sqlx::query(\"UPDATE documents SET revision = revision + 1, updated_by = app_user_id() WHERE id = $1::uuid\")","matches":["UPDATE documents"]}
 {"path":"crates/server/tests/sharing.rs","line":626,"source":"    let err = sqlx::query(\"UPDATE documents SET visibility = 'private' WHERE id = $1::uuid\")","matches":["UPDATE documents"]}
@@ -285,9 +287,11 @@
 {"path":"crates/server/tests/sharing.rs","line":753,"source":"        \"SELECT workspace_id, detail FROM fvoci.audit_log","matches":["FROM fvoci.audit_log"]}
 {"path":"crates/server/tests/sharing.rs","line":767,"source":"        \"SELECT workspace_id, owner_user_id, actor FROM fvoci.audit_log","matches":["FROM fvoci.audit_log"]}
 {"path":"crates/server/tests/supabase.rs","line":87,"source":"                \"SELECT count(*) FROM fvoci.documents\",","matches":["FROM fvoci.documents"]}
-{"path":"crates/server/tests/tasks.rs","line":370,"source":"        \"SELECT action FROM audit_log WHERE target_id = $1::uuid AND target_type = 'task' ORDER BY created_at, id\",","matches":["FROM audit_log"]}
-{"path":"crates/server/tests/tasks.rs","line":574,"source":"        \"SELECT detail->>'reason' FROM audit_log","matches":["FROM audit_log"]}
-{"path":"crates/server/tests/tasks.rs","line":836,"source":"                \"SELECT title, status, position::text FROM fvoci.tasks WHERE item_id = $1::uuid \\","matches":["FROM fvoci.tasks"]}
+{"path":"crates/server/tests/tasks.rs","line":373,"source":"        \"SELECT action FROM audit_log WHERE target_id = $1::uuid AND target_type = 'task' ORDER BY created_at, id\",","matches":["FROM audit_log"]}
+{"path":"crates/server/tests/tasks.rs","line":577,"source":"        \"SELECT detail->>'reason' FROM audit_log","matches":["FROM audit_log"]}
+{"path":"crates/server/tests/tasks.rs","line":839,"source":"                \"SELECT title, status, position::text FROM fvoci.tasks WHERE item_id = $1::uuid \\","matches":["FROM fvoci.tasks"]}
+{"path":"crates/server/tests/tasks.rs","line":966,"source":"        \"SELECT (SELECT count(*) FROM tasks WHERE item_id = $1::uuid),\n                (SELECT count(*) FROM task_assignees a JOIN tasks t ON t.id = a.task_id WHERE t.item_id = $1::uuid),\n                (SELECT count(*) FROM audit_log l WHERE l.target_type = 'task'\n                   AND l.workspace_id = (SELECT workspace_id FROM items WHERE id = $1::uuid))\",","matches":["FROM tasks","FROM task_assignees","JOIN tasks","FROM audit_log","FROM items"]}
+{"path":"crates/server/tests/tasks.rs","line":1188,"source":"            \"SELECT count(*) FROM fvoci.tasks WHERE item_id = $1::uuid AND request_id = $2::uuid\",","matches":["FROM fvoci.tasks"]}
 {"path":"crates/server/tests/time_tracking.rs","line":137,"source":"    let seen: i64 = sqlx::query_scalar(\"SELECT count(*) FROM time_entries\")","matches":["FROM time_entries"]}
 {"path":"crates/server/tests/time_tracking.rs","line":143,"source":"        sqlx::query_scalar(\"SELECT count(*) FROM audit_log WHERE target_id = $1::uuid\")","matches":["FROM audit_log"]}
 {"path":"crates/server/tests/time_tracking.rs","line":522,"source":"    let left: i64 = sqlx::query_scalar(\"SELECT count(*) FROM time_sharing\")","matches":["FROM time_sharing"]}
@@ -321,25 +325,30 @@
 {"path":"crates/server/tests/worker.rs","line":329,"source":"        \"UPDATE fvoci.search_queue SET claimed_until = now() - interval '1 second'","matches":["UPDATE fvoci.search_queue"]}
 {"path":"crates/server/tests/workspace_delete.rs","line":404,"source":"        \"UPDATE workspaces SET deleted_at = now() - interval '31 days' WHERE id = $1::uuid\",","matches":["UPDATE workspaces"]}
 {"path":"crates/server/tests/zotero.rs","line":219,"source":"        \"SELECT (SELECT count(*) FROM fvoci.item_records WHERE fields::text LIKE '%' || $1 || '%')\n              + (SELECT count(*) FROM fvoci.audit_log WHERE detail::text LIKE '%' || $1 || '%')\",","matches":["FROM fvoci.item_records","FROM fvoci.audit_log"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":37,"source":"  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_module_seed_v1') THEN","matches":["FROM instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":40,"source":"  IF NOT EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_seed') THEN","matches":["FROM instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":43,"source":"  SELECT id INTO v_admin FROM users","matches":["FROM users"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":45,"source":"  SELECT id INTO v_user FROM users","matches":["FROM users"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":137,"source":"  SELECT id INTO STRICT v_episode FROM course_episodes WHERE item_id = v_course AND number = 1;","matches":["FROM course_episodes"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":145,"source":"  SELECT id INTO STRICT v_episode FROM course_episodes WHERE item_id = v_course AND number = 2;","matches":["FROM course_episodes"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":156,"source":"  SELECT id INTO STRICT v_unit FROM study_units WHERE item_id = v_study AND number = 1;","matches":["FROM study_units"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":163,"source":"  SELECT id INTO STRICT v_unit FROM study_units WHERE item_id = v_study AND number = 2;","matches":["FROM study_units"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":206,"source":"  INSERT INTO instance_state (key, value) VALUES ('dev_module_seed_v1', jsonb_build_object(","matches":["INTO instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":211,"source":"SELECT value FROM instance_state WHERE key = 'dev_module_seed_v1';","matches":["FROM instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":235,"source":"  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_module_seed_v2') THEN","matches":["FROM instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":238,"source":"  SELECT value INTO v_v1 FROM instance_state WHERE key = 'dev_module_seed_v1';","matches":["FROM instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":243,"source":"  IF NOT EXISTS (SELECT 1 FROM workspaces WHERE id = v_ws AND deleted_at IS NULL) THEN\n    INSERT INTO instance_state (key, value)","matches":["FROM workspaces","INTO instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":248,"source":"  SELECT id INTO v_admin FROM users","matches":["FROM users"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":262,"source":"        SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id","matches":["FROM items","JOIN modules"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":303,"source":"          CASE WHEN EXISTS (SELECT 1 FROM items WHERE id = (v_v1->'items'->>'project')::uuid AND deleted_at IS NULL)","matches":["FROM items"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":328,"source":"    INSERT INTO instance_state (key, value) VALUES ('dev_module_seed_v2', jsonb_build_object(","matches":["INTO instance_state"]}
-{"path":"deploy/postgres/dev-module-seed.sql","line":339,"source":"SELECT value FROM instance_state WHERE key = 'dev_module_seed_v2';","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":39,"source":"  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_module_seed_v1') THEN","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":42,"source":"  IF NOT EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_seed') THEN","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":45,"source":"  SELECT id INTO v_admin FROM users","matches":["FROM users"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":47,"source":"  SELECT id INTO v_user FROM users","matches":["FROM users"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":77,"source":"    SELECT profile_version INTO STRICT v_version FROM items WHERE id = v_item;","matches":["FROM items"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":134,"source":"  SELECT id INTO STRICT v_episode FROM course_episodes WHERE item_id = v_course AND number = 1;","matches":["FROM course_episodes"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":142,"source":"  SELECT id INTO STRICT v_episode FROM course_episodes WHERE item_id = v_course AND number = 2;","matches":["FROM course_episodes"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":153,"source":"  SELECT id INTO STRICT v_unit FROM study_units WHERE item_id = v_study AND number = 1;","matches":["FROM study_units"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":160,"source":"  SELECT id INTO STRICT v_unit FROM study_units WHERE item_id = v_study AND number = 2;","matches":["FROM study_units"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":203,"source":"  INSERT INTO instance_state (key, value) VALUES ('dev_module_seed_v1', jsonb_build_object(","matches":["INTO instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":208,"source":"SELECT value FROM instance_state WHERE key = 'dev_module_seed_v1';","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":232,"source":"  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_module_seed_v2') THEN","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":235,"source":"  SELECT value INTO v_v1 FROM instance_state WHERE key = 'dev_module_seed_v1';","matches":["FROM instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":240,"source":"  IF NOT EXISTS (SELECT 1 FROM workspaces WHERE id = v_ws AND deleted_at IS NULL) THEN\n    INSERT INTO instance_state (key, value)","matches":["FROM workspaces","INTO instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":245,"source":"  SELECT id INTO v_admin FROM users","matches":["FROM users"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":259,"source":"        SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id","matches":["FROM items","JOIN modules"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":298,"source":"          CASE WHEN EXISTS (SELECT 1 FROM items WHERE id = (v_v1->'items'->>'project')::uuid AND deleted_at IS NULL)","matches":["FROM items"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":323,"source":"    INSERT INTO instance_state (key, value) VALUES ('dev_module_seed_v2', jsonb_build_object(","matches":["INTO instance_state"]}
+{"path":"deploy/postgres/dev-module-seed.sql","line":334,"source":"SELECT value FROM instance_state WHERE key = 'dev_module_seed_v2';","matches":["FROM instance_state"]}
 {"path":"deploy/postgres/dev-seed.sql","line":19,"source":"  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_seed') THEN","matches":["FROM instance_state"]}
 {"path":"deploy/postgres/dev-seed.sql","line":23,"source":"    IF NOT EXISTS (SELECT 1 FROM instance_state s\n                   JOIN workspace_members wm ON wm.workspace_id = (s.value->>'workspace')::uuid\n                   JOIN users u ON u.id = wm.user_id","matches":["FROM instance_state","JOIN workspace_members","JOIN users"]}
 {"path":"deploy/postgres/dev-seed.sql","line":60,"source":"  INSERT INTO instance_state (key, value)","matches":["INTO instance_state"]}
 {"path":"deploy/postgres/dev-seed.sql","line":66,"source":"FROM instance_state WHERE key = 'dev_seed';","matches":["FROM instance_state"]}
+{"path":"docs/development.md","line":3244,"source":"    409로 만들지 않게 하려는 것이다(coordinator 지시의 \"별도 카운터\"). `items`를 고치는 다른 함수(`UPDATE items` 전부: 0019·0035·0038·0070~0072·","matches":["UPDATE items"]}
+{"path":"xtask/src/sql_compare.rs","line":575,"source":"            \"ALTER TABLE fvoci.files DROP CONSTRAINT files_name_check, ADD CONSTRAINT files_name_check CHECK (true)\",","matches":["TABLE fvoci.files"]}
+{"path":"xtask/src/sql_compare/capabilities.rs","line":226,"source":"                    \"SELECT count(*) FROM fvoci.documents\",","matches":["FROM fvoci.documents"]}
+{"path":"xtask/src/sql_compare/capabilities.rs","line":265,"source":"                    \"ALTER TABLE fvoci.documents DISABLE ROW LEVEL SECURITY\",","matches":["TABLE fvoci.documents"]}

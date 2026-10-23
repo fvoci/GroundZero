@@ -1,0 +1,801 @@
+{
+  "database/current": {
+    "acl": [
+      "=Tc/postgres",
+      "dashboard_user=CTc/postgres",
+      "fvoci_app=c/postgres",
+      "fvoci_migrator=c/postgres",
+      "postgres=CTc/postgres",
+      "supabase_etl_admin=C/postgres",
+      "supabase_storage_admin=C/postgres"
+    ],
+    "datallowconn": true,
+    "datcollate": "en_US.UTF-8",
+    "datcollversion": "153.121",
+    "datconnlimit": -1,
+    "datctype": "en_US.UTF-8",
+    "dathasloginevt": false,
+    "daticurules": null,
+    "datistemplate": false,
+    "datlocale": "en-US",
+    "datlocprovider": "i",
+    "encoding": 6,
+    "owner": "postgres",
+    "tablespace": "pg_default"
+  },
+  "extension/pg_net": {
+    "condition": null,
+    "config": [],
+    "owner": "supabase_admin",
+    "relocatable": false,
+    "schema": "extensions",
+    "version": "0.20.3"
+  },
+  "extension/pg_stat_statements": {
+    "condition": null,
+    "config": [],
+    "owner": "supabase_admin",
+    "relocatable": true,
+    "schema": "extensions",
+    "version": "1.11"
+  },
+  "extension/pgcrypto": {
+    "condition": null,
+    "config": [],
+    "owner": "supabase_admin",
+    "relocatable": true,
+    "schema": "extensions",
+    "version": "1.3"
+  },
+  "extension/plpgsql": {
+    "condition": null,
+    "config": [],
+    "owner": "supabase_admin",
+    "relocatable": false,
+    "schema": "pg_catalog",
+    "version": "1.0"
+  },
+  "extension/supabase_vault": {
+    "condition": [""],
+    "config": ["vault.secrets"],
+    "owner": "supabase_admin",
+    "relocatable": false,
+    "schema": "vault",
+    "version": "0.3.1"
+  },
+  "extension/uuid-ossp": {
+    "condition": null,
+    "config": [],
+    "owner": "supabase_admin",
+    "relocatable": true,
+    "schema": "extensions",
+    "version": "1.1"
+  },
+  "function/uuid_extract_version(uuid)": {
+    "acl": ["=X/supabase_admin", "supabase_admin=X/supabase_admin"],
+    "config": [],
+    "cost": 1,
+    "definition": "CREATE OR REPLACE FUNCTION pg_catalog.uuid_extract_version(uuid)\n RETURNS smallint\n LANGUAGE internal\n IMMUTABLE PARALLEL SAFE STRICT LEAKPROOF\nAS $function$uuid_extract_version$function$\n",
+    "language": "internal",
+    "leakproof": true,
+    "owner": "supabase_admin",
+    "parallel": "s",
+    "rows": 0,
+    "security_definer": false,
+    "strict": true,
+    "volatility": "i"
+  },
+  "membership/anon->authenticator/supabase_admin": {
+    "admin": false,
+    "inherit": false,
+    "set": true
+  },
+  "membership/anon->postgres/supabase_admin": {
+    "admin": true,
+    "inherit": true,
+    "set": true
+  },
+  "membership/authenticated->authenticator/supabase_admin": {
+    "admin": false,
+    "inherit": false,
+    "set": true
+  },
+  "membership/authenticated->postgres/supabase_admin": {
+    "admin": true,
+    "inherit": true,
+    "set": true
+  },
+  "membership/authenticator->postgres/supabase_admin": {
+    "admin": true,
+    "inherit": true,
+    "set": true
+  },
+  "membership/authenticator->supabase_storage_admin/supabase_admin": {
+    "admin": false,
+    "inherit": false,
+    "set": true
+  },
+  "membership/fvoci_app->postgres/supabase_admin": {
+    "admin": true,
+    "inherit": false,
+    "set": false
+  },
+  "membership/fvoci_migrator->postgres/supabase_admin": {
+    "admin": true,
+    "inherit": false,
+    "set": false
+  },
+  "membership/pg_create_subscription->postgres/supabase_admin": {
+    "admin": true,
+    "inherit": true,
+    "set": true
+  },
+  "membership/pg_monitor->postgres/supabase_admin": {
+    "admin": true,
+    "inherit": true,
+    "set": true
+  },
+  "membership/pg_monitor->supabase_etl_admin/supabase_admin": {
+    "admin": false,
+    "inherit": true,
+    "set": true
+  },
+  "membership/pg_monitor->supabase_read_only_user/supabase_admin": {
+    "admin": false,
+    "inherit": true,
+    "set": true
+  },
+  "membership/pg_read_all_data->postgres/supabase_admin": {
+    "admin": true,
+    "inherit": true,
+    "set": true
+  },
+  "membership/pg_read_all_data->supabase_etl_admin/supabase_admin": {
+    "admin": false,
+    "inherit": true,
+    "set": true
+  },
+  "membership/pg_read_all_data->supabase_read_only_user/supabase_admin": {
+    "admin": false,
+    "inherit": true,
+    "set": true
+  },
+  "membership/pg_read_all_settings->pg_monitor/supabase_admin": {
+    "admin": false,
+    "inherit": true,
+    "set": true
+  },
+  "membership/pg_read_all_stats->pg_monitor/supabase_admin": {
+    "admin": false,
+    "inherit": true,
+    "set": true
+  },
+  "membership/pg_signal_backend->postgres/supabase_admin": {
+    "admin": true,
+    "inherit": true,
+    "set": true
+  },
+  "membership/pg_stat_scan_tables->pg_monitor/supabase_admin": {
+    "admin": false,
+    "inherit": true,
+    "set": true
+  },
+  "membership/service_role->authenticator/supabase_admin": {
+    "admin": false,
+    "inherit": false,
+    "set": true
+  },
+  "membership/service_role->postgres/supabase_admin": {
+    "admin": true,
+    "inherit": true,
+    "set": true
+  },
+  "membership/supabase_functions_admin->postgres/supabase_admin": {
+    "admin": false,
+    "inherit": true,
+    "set": true
+  },
+  "membership/supabase_privileged_role->postgres/supabase_admin": {
+    "admin": false,
+    "inherit": true,
+    "set": true
+  },
+  "membership/supabase_privileged_role->supabase_etl_admin/supabase_admin": {
+    "admin": false,
+    "inherit": true,
+    "set": true
+  },
+  "role/anon": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": ["statement_timeout=3s"],
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "anon",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/authenticated": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": ["statement_timeout=8s"],
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "authenticated",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/authenticator": {
+    "rolbypassrls": false,
+    "rolcanlogin": true,
+    "rolconfig": [
+      "session_preload_libraries=supautils, safeupdate",
+      "statement_timeout=8s",
+      "lock_timeout=8s"
+    ],
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": false,
+    "rolname": "authenticator",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/dashboard_user": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": true,
+    "rolcreaterole": true,
+    "rolinherit": true,
+    "rolname": "dashboard_user",
+    "rolreplication": true,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/fvoci_app": {
+    "rolbypassrls": false,
+    "rolcanlogin": true,
+    "rolconfig": ["search_path=fvoci"],
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "fvoci_app",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/fvoci_migrator": {
+    "rolbypassrls": false,
+    "rolcanlogin": true,
+    "rolconfig": ["search_path=fvoci"],
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "fvoci_migrator",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_checkpoint": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_checkpoint",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_create_subscription": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_create_subscription",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_database_owner": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_database_owner",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_execute_server_program": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_execute_server_program",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_maintain": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_maintain",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_monitor": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_monitor",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_read_all_data": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_read_all_data",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_read_all_settings": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_read_all_settings",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_read_all_stats": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_read_all_stats",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_read_server_files": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_read_server_files",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_signal_backend": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_signal_backend",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_stat_scan_tables": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_stat_scan_tables",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_use_reserved_connections": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_use_reserved_connections",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_write_all_data": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_write_all_data",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pg_write_server_files": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pg_write_server_files",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/pgbouncer": {
+    "rolbypassrls": false,
+    "rolcanlogin": true,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "pgbouncer",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/postgres": {
+    "rolbypassrls": true,
+    "rolcanlogin": true,
+    "rolconfig": ["search_path=\"\\$user\", public, extensions"],
+    "rolconnlimit": -1,
+    "rolcreatedb": true,
+    "rolcreaterole": true,
+    "rolinherit": true,
+    "rolname": "postgres",
+    "rolreplication": true,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/service_role": {
+    "rolbypassrls": true,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "service_role",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/supabase_admin": {
+    "rolbypassrls": true,
+    "rolcanlogin": true,
+    "rolconfig": ["search_path=\"\\$user\", public, auth, extensions", "log_statement=none"],
+    "rolconnlimit": -1,
+    "rolcreatedb": true,
+    "rolcreaterole": true,
+    "rolinherit": true,
+    "rolname": "supabase_admin",
+    "rolreplication": true,
+    "rolsuper": true,
+    "rolvaliduntil": null
+  },
+  "role/supabase_auth_admin": {
+    "rolbypassrls": false,
+    "rolcanlogin": true,
+    "rolconfig": [
+      "search_path=auth",
+      "idle_in_transaction_session_timeout=60000",
+      "log_statement=none"
+    ],
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": true,
+    "rolinherit": false,
+    "rolname": "supabase_auth_admin",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/supabase_etl_admin": {
+    "rolbypassrls": true,
+    "rolcanlogin": true,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "supabase_etl_admin",
+    "rolreplication": true,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/supabase_functions_admin": {
+    "rolbypassrls": false,
+    "rolcanlogin": true,
+    "rolconfig": ["search_path=supabase_functions"],
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": true,
+    "rolinherit": false,
+    "rolname": "supabase_functions_admin",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/supabase_privileged_role": {
+    "rolbypassrls": false,
+    "rolcanlogin": false,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "supabase_privileged_role",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/supabase_read_only_user": {
+    "rolbypassrls": true,
+    "rolcanlogin": true,
+    "rolconfig": ["default_transaction_read_only=on"],
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "supabase_read_only_user",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/supabase_replication_admin": {
+    "rolbypassrls": false,
+    "rolcanlogin": true,
+    "rolconfig": null,
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolinherit": true,
+    "rolname": "supabase_replication_admin",
+    "rolreplication": true,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "role/supabase_storage_admin": {
+    "rolbypassrls": false,
+    "rolcanlogin": true,
+    "rolconfig": ["search_path=storage", "log_statement=none"],
+    "rolconnlimit": -1,
+    "rolcreatedb": false,
+    "rolcreaterole": true,
+    "rolinherit": false,
+    "rolname": "supabase_storage_admin",
+    "rolreplication": false,
+    "rolsuper": false,
+    "rolvaliduntil": null
+  },
+  "schema/_realtime": {
+    "acl": ["supabase_admin=UC/supabase_admin"],
+    "owner": "supabase_admin"
+  },
+  "schema/auth": {
+    "acl": [
+      "anon=U/supabase_admin",
+      "authenticated=U/supabase_admin",
+      "dashboard_user=UC/supabase_admin",
+      "postgres=U/supabase_admin",
+      "service_role=U/supabase_admin",
+      "supabase_admin=UC/supabase_admin",
+      "supabase_auth_admin=UC/supabase_admin"
+    ],
+    "owner": "supabase_admin"
+  },
+  "schema/extensions": {
+    "acl": [
+      "anon=U/postgres",
+      "authenticated=U/postgres",
+      "dashboard_user=UC/postgres",
+      "postgres=UC/postgres",
+      "service_role=U/postgres",
+      "supabase_functions_admin=U/postgres"
+    ],
+    "owner": "postgres"
+  },
+  "schema/fvoci": {
+    "acl": ["fvoci_app=U/fvoci_migrator", "fvoci_migrator=UC/fvoci_migrator"],
+    "owner": "fvoci_migrator"
+  },
+  "schema/graphql": {
+    "acl": [
+      "anon=U/supabase_admin",
+      "authenticated=U/supabase_admin",
+      "postgres=U*/supabase_admin",
+      "service_role=U/supabase_admin",
+      "supabase_admin=UC/supabase_admin"
+    ],
+    "owner": "supabase_admin"
+  },
+  "schema/graphql_public": {
+    "acl": [
+      "anon=U/supabase_admin",
+      "authenticated=U/supabase_admin",
+      "postgres=U*/supabase_admin",
+      "service_role=U/supabase_admin",
+      "supabase_admin=UC/supabase_admin"
+    ],
+    "owner": "supabase_admin"
+  },
+  "schema/information_schema": {
+    "acl": ["=U/supabase_admin", "supabase_admin=UC/supabase_admin"],
+    "owner": "supabase_admin"
+  },
+  "schema/net": {
+    "acl": [
+      "=U/supabase_admin",
+      "anon=U/supabase_admin",
+      "authenticated=U/supabase_admin",
+      "postgres=U/supabase_admin",
+      "service_role=U/supabase_admin",
+      "supabase_admin=UC/supabase_admin",
+      "supabase_functions_admin=U/supabase_admin"
+    ],
+    "owner": "supabase_admin"
+  },
+  "schema/pg_catalog": {
+    "acl": ["=U/supabase_admin", "supabase_admin=UC/supabase_admin"],
+    "owner": "supabase_admin"
+  },
+  "schema/pg_toast": {
+    "acl": ["supabase_admin=UC/supabase_admin"],
+    "owner": "supabase_admin"
+  },
+  "schema/pgbouncer": {
+    "acl": ["pgbouncer=UC/pgbouncer"],
+    "owner": "pgbouncer"
+  },
+  "schema/public": {
+    "acl": [
+      "=U/pg_database_owner",
+      "anon=U/pg_database_owner",
+      "authenticated=U/pg_database_owner",
+      "pg_database_owner=UC/pg_database_owner",
+      "postgres=U/pg_database_owner",
+      "service_role=U/pg_database_owner"
+    ],
+    "owner": "pg_database_owner"
+  },
+  "schema/realtime": {
+    "acl": ["postgres=U/supabase_admin", "supabase_admin=UC/supabase_admin"],
+    "owner": "supabase_admin"
+  },
+  "schema/storage": {
+    "acl": [
+      "anon=U/supabase_admin",
+      "authenticated=U/supabase_admin",
+      "dashboard_user=UC/supabase_admin",
+      "postgres=U*/supabase_admin",
+      "service_role=U/supabase_admin",
+      "supabase_admin=UC/supabase_admin",
+      "supabase_storage_admin=U*C*/supabase_admin"
+    ],
+    "owner": "supabase_admin"
+  },
+  "schema/supabase_functions": {
+    "acl": [
+      "anon=U/supabase_admin",
+      "authenticated=U/supabase_admin",
+      "postgres=U/supabase_admin",
+      "service_role=U/supabase_admin",
+      "supabase_admin=UC/supabase_admin",
+      "supabase_functions_admin=UC/supabase_admin"
+    ],
+    "owner": "supabase_admin"
+  },
+  "schema/vault": {
+    "acl": [
+      "postgres=U*/supabase_admin",
+      "service_role=U/supabase_admin",
+      "supabase_admin=UC/supabase_admin"
+    ],
+    "owner": "supabase_admin"
+  },
+  "setting/*/current": {
+    "config": ["app.settings.jwt_exp=3600"]
+  },
+  "setting/anon/*": {
+    "config": ["statement_timeout=3s"]
+  },
+  "setting/authenticated/*": {
+    "config": ["statement_timeout=8s"]
+  },
+  "setting/authenticator/*": {
+    "config": [
+      "lock_timeout=8s",
+      "session_preload_libraries=supautils, safeupdate",
+      "statement_timeout=8s"
+    ]
+  },
+  "setting/fvoci_app/*": {
+    "config": ["search_path=fvoci"]
+  },
+  "setting/fvoci_migrator/*": {
+    "config": ["search_path=fvoci"]
+  },
+  "setting/postgres/*": {
+    "config": ["search_path=\"\\$user\", public, extensions"]
+  },
+  "setting/supabase_admin/*": {
+    "config": ["log_statement=none", "search_path=\"\\$user\", public, auth, extensions"]
+  },
+  "setting/supabase_auth_admin/*": {
+    "config": [
+      "idle_in_transaction_session_timeout=60000",
+      "log_statement=none",
+      "search_path=auth"
+    ]
+  },
+  "setting/supabase_functions_admin/*": {
+    "config": ["search_path=supabase_functions"]
+  },
+  "setting/supabase_read_only_user/*": {
+    "config": ["default_transaction_read_only=on"]
+  },
+  "setting/supabase_storage_admin/*": {
+    "config": ["log_statement=none", "search_path=storage"]
+  }
+}
