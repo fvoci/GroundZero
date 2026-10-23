@@ -3202,7 +3202,11 @@ coalesce(paused_at, now()) − p_started)`면 400)를 더하고, 웹은 같은 �
     id(282행), 새 묶음 규칙 여섯(317~419행), `matchRows`·`rowApplied`. 수정 전 소스(시험만 새것)에서 15개 중 12개 실패: 첫 시험
     `expected "createTask" to be called 2 times, but got 1 times`(옛 화면은 첫 줄에서 고치기를 불렀다), 그 밖에 `expected [ 't1' ] to deeply
 equal [ 't1', 't2', 't3' ]` 등.
-- **실행**: 시험 결과는 아래 「검증」에 적는다.
+- **실행(2026-10-23, `1e2aed0`와 같은 코드)**: `cargo xtask check` PASS(포맷·clippy·단위·계약·라이선스·svelte-check·웹 시험 전체),
+  `cargo xtask test --oidc` PASS(격리 Compose, 새 서버 시험 둘 포함, `supabase_*`는 그 명령의 NOT RUN 안내대로 빠짐). 수정 전 증거는 `d2b07ac`에
+  시험만 얹은 `cargo xtask test`(위 두 서버 시험 FAILED)와 옛 화면 소스에 새 웹 시험을 돌린 `vitest`(12 실패)다.
+- **NOT RUN**: `cargo xtask test --supabase`, 실제 브라우저로 CSV 등록(coordinator가 마지막에 한 번 돌린다), 칸반 빠른 추가·달력 만들기의 두
+  단계(바꾸지 않음).
 
 ## 참고 자료
 
