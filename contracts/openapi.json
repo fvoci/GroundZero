@@ -3066,11 +3066,11 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "`conflict`면 ItemConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ItemConflict"
+                  "$ref": "#/components/schemas/ItemSaveConflict"
                 }
               }
             }
@@ -4096,11 +4096,11 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "`conflict`면 ItemProfileConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ItemProfileConflict"
+                  "$ref": "#/components/schemas/ItemProfileSaveConflict"
                 }
               }
             }
@@ -12986,6 +12986,28 @@
             "type": "string"
           }
         }
+      },
+      "ItemProfileSaveConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ItemProfileConflict"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "항목 정보 바꾸기의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).\n- `ItemProfileConflict`(`error: \"conflict\"`, `current`): `base_version`이 지남.\n- `ErrorBody`(`current` 없음): `invalid_state`(보관된 항목, 동시 변경 재시도 등)."
+      },
+      "ItemSaveConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ItemConflict"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "항목 변경의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).\n- `ItemConflict`(`error: \"conflict\"`, `current`): `base_version`이 지남.\n- `ErrorBody`(`current` 없음): `invalid_state`(보관된 항목, 동시 변경 재시도 등)."
       },
       "ItemTime": {
         "type": "object",

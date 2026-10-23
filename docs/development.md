@@ -3163,7 +3163,7 @@ current}`, (4) 아니면 고치고 판을 올린다. `SavedView`에 `version`. �
   두 요청 모두 `base_version`이 필수다. 함수는 행을 잠근 뒤 접근(404·403)·보관(409 `invalid_state`, 최신본 없음)을 먼저 보고 판을 비교한다. 다르면
   아무것도 바꾸지 않고 `'conflict'`이고 서버가 같은 트랜잭션에서 읽은 최신본과 함께 409 `{error: "conflict", current: Item}`(`ItemConflict`)·
   `{error: "conflict", current: ItemProfile}`(`ItemProfileConflict`)를 돌려준다(업무·일정·시간 기록의 `…Conflict`와 같은 모양·코드). `Item.version`·
-  `ItemProfile.version`을 응답에 더했다. 프로필 저장의 성공은 지금처럼 204.
+  `ItemProfile.version`을 응답에 더했다. 프로필 저장의 성공은 지금처럼 204. 계약의 409는 두 모양(`ItemSaveConflict`·`ItemProfileSaveConflict` = 위 `…Conflict` | `ErrorBody`)으로 적었다(CodeRabbit 범위 밖 지적, 문서 저장의 `SaveConflict`와 같은 방식. 계약 시험 `http::tests::the_item_save_conflicts_are_a_stale_version_or_error_body`, 수정 전 409 스키마가 `ItemConflict`라 실패).
   - **판이 오르는 때(구현 해석(사용자 결정 밖))**: 표의 `BEFORE UPDATE` 트리거 `items_versions`(0076 `tasks_move_version`과 같은 방식)가 그 칸 묶음이
     실제로 바뀔 때만, 어느 함수가 바꿨든 1 올린다(직접 다른 값을 넣어도 트리거가 맞춘다). 그래서 폼이 덮을 수 있는 칸의 다른 쓰기도 모두 판을 올린다:
     멤버에서 빠진 리더 지우기(`app_set_item_members`, `app_drop_unseen_assignees`의 `leader_id = NULL`), 항목 복제의 정보 복사. 두 폼이 보내지 않는

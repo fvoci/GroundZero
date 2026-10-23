@@ -606,6 +606,7 @@ async fn api_not_found() -> AppError {
         item_profile::GroupRef,
         item_profile::SetItemProfile,
         item_profile::ItemProfileConflict,
+        item_profile::ItemProfileSaveConflict,
         item_profile::SetItemMembers,
         item_profile::SetModuleIcon,
         item_profile::CopyItem,
@@ -642,6 +643,7 @@ async fn api_not_found() -> AppError {
         modules::CreateItem,
         modules::UpdateItem,
         modules::ItemConflict,
+        modules::ItemSaveConflict,
         references::ReferenceKind,
         references::ReferenceCandidate,
         references::ReferenceInput,
@@ -1291,5 +1293,38 @@ mod tests {
                 "#/components/schemas/ErrorBody"
             ]
         );
+    }
+
+    /// 항목 정보·항목 정보 패널 저장의 409는 두 모양이다(D-104): 판이 지났으면 서버 최신본(`current`), 보관 등이면
+    /// `ErrorBody`(`invalid_state`, 최신본 없음).
+    #[test]
+    fn the_item_save_conflicts_are_a_stale_version_or_error_body() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
+        for (path, wrapper, stale) in [
+            ("/api/items/{item_id}", "ItemSaveConflict", "ItemConflict"),
+            (
+                "/api/items/{item_id}/profile",
+                "ItemProfileSaveConflict",
+                "ItemProfileConflict",
+            ),
+        ] {
+            assert_eq!(
+                doc["paths"][path]["put"]["responses"]["409"]["content"]["application/json"]["schema"],
+                serde_json::json!({ "$ref": format!("#/components/schemas/{wrapper}") }),
+                "{path}"
+            );
+            let one_of: Vec<&str> = doc["components"]["schemas"][wrapper]["oneOf"]
+                .as_array()
+                .map(|v| v.iter().filter_map(|s| s["$ref"].as_str()).collect())
+                .unwrap_or_default();
+            assert_eq!(
+                one_of,
+                [
+                    format!("#/components/schemas/{stale}"),
+                    "#/components/schemas/ErrorBody".to_owned()
+                ],
+                "{path}"
+            );
+        }
     }
 }

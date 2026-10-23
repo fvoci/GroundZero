@@ -581,12 +581,24 @@ pub struct ItemConflict {
     pub current: Item,
 }
 
+/// 항목 변경의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+/// - `ItemConflict`(`error: "conflict"`, `current`): `base_version`이 지남.
+/// - `ErrorBody`(`current` 없음): `invalid_state`(보관된 항목, 동시 변경 재시도 등).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum ItemSaveConflict {
+    Stale(Box<ItemConflict>),
+    State(ErrorBody),
+}
+
 /// 항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다. 읽은 판이 지났으면 아무것도 바꾸지 않고 409와
 /// 서버 최신본(`ItemConflict`), 보관된 항목은 409 `invalid_state`.
 #[utoipa::path(put, path = "/api/items/{item_id}",
     params(("item_id" = String, Path, format = Uuid)), request_body = UpdateItem,
     responses((status = 200, body = Item), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ItemConflict)), tag = "modules")]
+              (status = 404, body = ErrorBody),
+              (status = 409, body = ItemSaveConflict,
+               description = "`conflict`면 ItemConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다")), tag = "modules")]
 pub async fn update_item(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,

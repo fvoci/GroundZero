@@ -206,6 +206,16 @@ pub struct ItemProfileConflict {
     pub current: ItemProfile,
 }
 
+/// 항목 정보 바꾸기의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+/// - `ItemProfileConflict`(`error: "conflict"`, `current`): `base_version`이 지남.
+/// - `ErrorBody`(`current` 없음): `invalid_state`(보관된 항목, 동시 변경 재시도 등).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum ItemProfileSaveConflict {
+    Stale(Box<ItemProfileConflict>),
+    State(ErrorBody),
+}
+
 /// 항목 정보(볼 수 있는 사람).
 #[utoipa::path(get, path = "/api/items/{item_id}/profile", operation_id = "get_item_profile",
     params(("item_id" = String, Path, format = Uuid)),
@@ -302,7 +312,8 @@ async fn load(tx: &mut UserTx, item: ItemId) -> Result<ItemProfile, AppError> {
 #[utoipa::path(put, path = "/api/items/{item_id}/profile", operation_id = "set_item_profile",
     params(("item_id" = String, Path, format = Uuid)), request_body = SetItemProfile,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ItemProfileConflict)), tag = "modules")]
+              (status = 404, body = ErrorBody), (status = 409, body = ItemProfileSaveConflict,
+               description = "`conflict`면 ItemProfileConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다")), tag = "modules")]
 pub async fn set(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,

@@ -3311,6 +3311,18 @@ export interface components {
             current: components["schemas"]["ItemProfile"];
             error: string;
         };
+        /**
+         * @description 항목 정보 바꾸기의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+         *     - `ItemProfileConflict`(`error: "conflict"`, `current`): `base_version`이 지남.
+         *     - `ErrorBody`(`current` 없음): `invalid_state`(보관된 항목, 동시 변경 재시도 등).
+         */
+        ItemProfileSaveConflict: components["schemas"]["ItemProfileConflict"] | components["schemas"]["ErrorBody"];
+        /**
+         * @description 항목 변경의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+         *     - `ItemConflict`(`error: "conflict"`, `current`): `base_version`이 지남.
+         *     - `ErrorBody`(`current` 없음): `invalid_state`(보관된 항목, 동시 변경 재시도 등).
+         */
+        ItemSaveConflict: components["schemas"]["ItemConflict"] | components["schemas"]["ErrorBody"];
         /** @description 항목의 시간 합계(D-78): 항목 자체와 그 아래 업무·문서·강의 회차·스터디 단위의 기록을 종류별로 모은다. */
         ItemTime: {
             /**
@@ -6887,12 +6899,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description `conflict`면 ItemConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다 */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ItemConflict"];
+                    "application/json": components["schemas"]["ItemSaveConflict"];
                 };
             };
         };
@@ -7600,12 +7613,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description `conflict`면 ItemProfileConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다 */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ItemProfileConflict"];
+                    "application/json": components["schemas"]["ItemProfileSaveConflict"];
                 };
             };
         };
