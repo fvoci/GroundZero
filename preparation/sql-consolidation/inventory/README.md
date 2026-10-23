@@ -235,7 +235,8 @@ fi
 } | pnpm exec prettier --stdin-filepath "$INV/tables.md" > "$REGEN/inventory/tables.md"
 
 # 5. 비교. 반영 전 차이를 검토한다.
-cmp "$REGEN/0001_final_state.sql" preparation/sql-consolidation/candidate/0001_final_state.sql || true
+git show 8ffd8c3b940924eca8cf7ec739a85494243c0479:preparation/sql-consolidation/candidate/0001_final_state.sql > "$REGEN/recorded-candidate.sql"
+cmp "$REGEN/0001_final_state.sql" "$REGEN/recorded-candidate.sql"
 for file in "$REGEN"/inventory/*; do
   # 이 SHA의 보존 목록과 비교한다. 새 기준 SHA라면 차이는 별도 검토한다.
   git show "0dfa2b9f99cbcafb71158bdfe8598dba985d530b:preparation/sql-consolidation/inventory/${file##*/}" \
@@ -245,7 +246,8 @@ sha256sum "$REGEN/0001_final_state.sql" "$REGEN"/inventory/*
 ```
 
 위 비교는 보존 커밋이 로컬에 있어야 한다. 없으면 기존 `origin`의 `fvoci/sql-prep-review-head`를 fetch하고 [보존 SHA](../evidence.md)를 확인한다.
-반영은 검토 뒤 별도로 한다: `cp "$REGEN/0001_final_state.sql" preparation/sql-consolidation/candidate/`,
+위 명령은 준비 당시 후보의 재현용이다. 현재 제품 정본은 `crates/server/migrations/`이며 후보 사본을 다시 추가하지 않는다.
+당시 반영 절차는 후보 복사와 함께
 `cp "$REGEN/inventory/tables.md" "$INV/"`. 원시 JSONL은 `target/`에 남겨 원격 증거로 보존하고 현재 트리에 복사하지 않는다. 그다음 수치가 들어 있는 문서(이 README의 객체 수와 파일 설명의 건수, `tables.md`의 테이블 수,
 `../analysis-a.md`, `../candidate/README.md`의 준비 기준)를 새 목록에서 다시 세어 고친다. 이 문서 갱신은 자동화하지 않았다.
 후보가 바뀌면 이전 A/B 결과를 최신 검증으로 재사용하지 않고 비교기를 새 출력 경로로 다시 실행한다.

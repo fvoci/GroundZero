@@ -3,9 +3,7 @@
 //! 업무는 모듈 항목 아래에 있고 모듈 번호열을 함께 쓴다. 권한은 항목을 따르며 DB 함수 `app_task_access`
 //! 하나로 판정한다(보관 아래 읽기 전용). 필드 고치기는 `base_version`으로 충돌을 막고, 칸반 이동과 체크리스트
 //! 체크는 버전 없이 따로 한다(같은 보드를 여럿이 써도 충돌하지 않게). 날짜는 시각이 없는 날짜로 저장한다(D-50).
-//! 초기 정의는 `migrations/0011_tasks.sql`, 앱 생성 id를 받는 D-88 전환은
-//! `migrations/0073_app_ids_tasks.sql`, 모든 칸을 한 번에 받는 만들기(D-105)는 `migrations/0098_task_create_fields.sql`에
-//! 있다.
+//! 앱 공급 UUIDv7(D-88)과 모든 칸을 한 번에 받는 만들기(D-105)의 SQL 정본은 `migrations/`에 있다.
 
 use axum::Json;
 use axum::extract::{Path, State};

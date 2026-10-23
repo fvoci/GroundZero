@@ -78,6 +78,12 @@ impl Db {
         Ok(())
     }
 
+    /// HTTP·작업 프로세스를 시작하기 전에 새 SQL 이력으로 설치한 DB인지 확인한다.
+    pub async fn check_baseline(&self) -> Result<(), AppError> {
+        let mut conn = self.pool.acquire().await?;
+        admin::check_application_baseline(&mut conn).await
+    }
+
     /// 사용자 문맥 트랜잭션을 연다. `app.user_id`는 트랜잭션 범위(`is_local = true`)로만 설정된다.
     pub async fn begin_as(&self, user: UserId) -> Result<UserTx, AppError> {
         let mut tx = self.pool.begin().await?;

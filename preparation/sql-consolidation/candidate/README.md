@@ -1,26 +1,16 @@
-# 최종 상태 SQL 후보
+# 통합 후보의 제품 기준 전환
 
-> **역사 기록이며 현재 상태를 나타내지 않음.** 본문 판단·상태·결과는 명시된 조사/실행 SHA에만 적용한다. 관련 결함이나 SHA를 조사할 때만 참조하며, 현재 기준과 분리 검증은 [증거 안내](../evidence.md)를 따른다.
+검토 후보는 [제품 마이그레이션](../../../crates/server/migrations/README.md)으로 전환했다.
+현재 정본은 `crates/server/migrations/202610230001_initial_state.sql`이며 이 디렉터리에 별도 SQL 사본을 유지하지 않는다.
+새 비교는 고정 SHA의 누적 SQL과 현재 제품 경로를 사용한다.
 
-준비 기준: `3db81d1deae24b16478581ebd6a06de2b2a2d8c9`(#92에 `fvoci/sql-policy` `b01d74a`를 병합, 채택 정책 D-101~D-105의 마이그레이션 0095~0098 포함).
-마이그레이션 디렉터리는 `b01d74a`와 같다. #92 쪽 변경은 준비 자료·비교 도구와 기존 PG17 사전 검사(`db/admin.rs`)·시험 헬퍼이며 SQL은 없다. 적용 순서는 정책 PR #97 → #92다. 기준선 확정 전의 검토용 후보다.
-SHA-256 `24a0a3dfaf7b2cf09152a11f80ff2100dd6004990b31cb661bf52a688ae9eea0`. 이전 후보(`cb65cc3` 기준 `b8172cf…55725`)는 이력이며 최신 검증에 쓰지 않는다.
-실제 마이그레이션 디렉터리를 대체하지 않으며 기존 DB에 실행하지 않는다.
+#92에서 검증했던 후보 원문은 [고정 SHA `8ffd8c3`](https://github.com/fvoci/GroundZero/blob/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation/candidate/0001_final_state.sql)에서만 참조한다.
+그 후보의 생성 기준은 `3db81d1deae24b16478581ebd6a06de2b2a2d8c9`, SHA-256은
+`24a0a3dfaf7b2cf09152a11f80ff2100dd6004990b31cb661bf52a688ae9eea0`이다.
+생성 기준과 `8ffd8c3b940924eca8cf7ec739a85494243c0479` 사이의 제품 SQL 차이는 없다.
+이 해시는 과거 후보의 바이트를 식별하며 새 제품 SQL의 해시·실행 결과를 대신하지 않는다.
 
-적용 인터페이스는 기존 `db bootstrap` 뒤 빈 DB에 이 디렉터리의 숫자 접두사 `.sql` 파일을 SQLx로 순서대로 적용하는 것이다.
-`_sqlx_migrations`는 SQLx가 이 후보의 실제 버전·체크섬으로 만든다. 기존 97개 이력 행을 복사하지 않는다.
-역할 생성과 관리자 멤버십·비밀번호·DB CONNECT 설정은 기존 bootstrap이 담당한다.
-
-후보는 전체 이력을 적용한 카탈로그의 마지막 정의만 담는다. 함수 정의, 소유자, RLS, 정책, 인덱스, CHECK, FK 및 ACL을 함께 보존한다.
-`check_function_bodies`를 끄는 범위는 서로 참조하는 함수/행 타입을 설치하는 SQLx 트랜잭션 안이다.
-모든 설정은 `SET LOCAL`이므로 커밋·롤백 시 기존 세션 설정으로 복구된다. 단독 psql로 검사할 때도 `--single-transaction`을 사용한다.
-파일 끝에서는 search_path를 `fvoci`로 돌린다. SQLx 0.8.6의 `execute_migration`이 SQL 본문 실행 직후 같은 트랜잭션에서
-스키마를 붙이지 않은 `_sqlx_migrations`에 기록하므로, 원장 쓰기 전에 bootstrap의 스키마를 다시 보이게 해야 한다.
-각 SECURITY DEFINER 함수의 search_path와 권한은 기존 최종 정의 그대로 유지한다.
-
-이 단일 파일은 카탈로그 동일성을 먼저 검증하는 시험 후보다. 최종 파일 수·번호를 확정하지 않는다.
-실제 전환에서는 공통 테이블·행 타입, 공통 도우미, 도메인별 함수, 제약·인덱스, 트리거·RLS·권한으로 나눌 수 있지만,
-행 타입을 반환하는 함수와 CHECK가 참조하는 도우미의 순서를 검증한 뒤 나누어야 한다.
-
-제거/유지 이유와 데이터 보정 의미는 `../analysis-a.md`, 전체 객체·호출 근거는 `../inventory/`에서 검토한다.
-지원 환경 비교와 실행 결과는 [검증 결과](../verification/results.md)에 있다.
+제품 전환에서는 최종 객체 정의를 테이블/행 타입 → 함수 → 제약·인덱스·트리거·외래 키 → RLS·권한 순서로 정리하고,
+함수 본문의 실행 SQL은 보존하면서 이력 번호·중복 덤프 표제·대체된 설명을 정리했다.
+기존 데이터 재생성은 [D-107](../../../docs/decisions.md#d-107)의 별도 대상·백업·삭제 승인을 따른다.
+과거 준비 실행의 범위와 한계는 [검증 결과](../verification/results.md), [증거 위치](../evidence.md)에 남아 있다.

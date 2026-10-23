@@ -207,8 +207,10 @@ VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev
 
 새 행의 UUIDv7은 Rust 앱이 만들고 SQL은 받은 값을 소비한다(D-88). 기존 대상 ID·요청 ID와 새 행 ID를 구분한다.
 개수 산정·바인딩 순서·FV001/002·HTTP와 작업 프로세스의 재시도 차이는 [Rust→SQL UUID 인자 계약](sql-id-contract.md)을 따른다.
-누적 마이그레이션이 제품 적용 경로이며 [SQL 통합 후보](../preparation/sql-consolidation/synthesis.md)는 별도 준비물이다.
-빈 DB 설치 동등성을 기존 데이터·백업·SQLx 이력 전환 검증으로 보지 않는다.
+[통합 초기 마이그레이션](../crates/server/migrations/README.md)이 제품 적용 경로다(D-107).
+기존 누적 이력 DB는 자동 이전하지 않는다. 정확한 대상·손실 영향·백업 방안을 확인하고 승인받은 뒤 재생성한다.
+비교용 누적 SQL은 고정 SHA에서 읽으며 [비교 명령](../preparation/sql-consolidation/verification/README.md)을 따른다.
+빈 DB 설치 동등성을 기존 데이터 보존·구버전 백업 복구 검증으로 보지 않는다.
 
 <a id="create-retry"></a>
 

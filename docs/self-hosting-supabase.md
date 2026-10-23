@@ -78,7 +78,8 @@ Supabase의 [공식 PG17 안내](https://supabase.com/docs/guides/self-hosting/p
 
 2. 두 명령이 성공하면 서버를 `DATABASE_URL`(앱 역할)로 띄운다. DB 준비는 위 명령들이 처리하므로 별도 SQL이나 RLS 설정을
    실행할 필요가 없다. 나머지 설정은 [셀프호스트 문서](self-hosting.md)와 같다.
-3. 올릴 때는 백업(5절)을 만든 뒤 새 릴리스로 `db migrate`를 실행하고, 성공하면 서버를 바꾼다. 마이그레이션은 되돌리지 않는다.
+3. 같은 SQL 기준 안에서 올릴 때는 백업(5절)을 만든 뒤 새 릴리스로 `db migrate`를 실행하고, 성공하면 서버를 바꾼다. 마이그레이션은 되돌리지 않는다.
+   통합 SQL 이전 개발·시험 DB는 [별도 재생성 절차](self-hosting.md#sql-baseline-reset)를 따른다. 기존 SQLx 이력을 새 기준으로 덮어쓰지 않는다.
 
 실패하면 [공통 DB 준비·마이그레이션 안내](self-hosting.md#db-setup)에서 멈춘 단계와 설정 이름을 확인한다.
 

@@ -1,4 +1,4 @@
-//! Preparation-only comparison. Production migration/bootstrap commands stay unchanged.
+//! Historical cumulative SQL versus the current product baseline, on isolated fresh databases.
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -12,6 +12,14 @@ use crate::compose::{self, Compose, DbUrls, PostgresMajor};
 use crate::supabase::Supabase;
 
 mod capabilities;
+mod comments;
+
+pub const PREVIOUS_SQL_SHA: &str = "8ffd8c3b940924eca8cf7ec739a85494243c0479";
+
+pub struct Baseline<'a> {
+    pub sha: &'a str,
+    pub control: bool,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum BehaviorScope {
@@ -37,7 +45,7 @@ pub struct Behavior {
 }
 
 struct BehaviorRun<'a> {
-    candidate: Option<&'a Path>,
+    migrations: Option<&'a Path>,
     behavior: Behavior,
 }
 
@@ -138,20 +146,28 @@ impl Cluster {
 
 pub fn run(
     root: &Path,
-    candidate: Option<&Path>,
+    baseline: Baseline<'_>,
     output: &Path,
     behavior: Option<Behavior>,
     supabase: bool,
     restricted_admin: bool,
     postgres_major: PostgresMajor,
 ) -> Result<()> {
+    let Baseline {
+        sha: baseline_sha,
+        control,
+    } = baseline;
     check_options(behavior, supabase, restricted_admin)?;
     let oidc = behavior.is_some_and(|behavior| behavior.oidc);
     let scope = behavior.map(|behavior| behavior.scope);
-    let candidate = candidate.map(std::fs::canonicalize).transpose()?;
     let output = claim_output(output)?;
     let sh = Shell::new()?;
     sh.change_dir(root);
+    let previous = export_previous_sql(&sh, baseline_sha, &output)?;
+    let sources = [
+        Some(previous.as_path()),
+        control.then_some(previous.as_path()),
+    ];
     let run = uuid::Uuid::now_v7().simple().to_string();
     let git = cmd!(sh, "git rev-parse HEAD").read()?;
     write_json(
@@ -162,9 +178,12 @@ pub fn run(
             "compose_test_sha256":format!("{:x}",Sha256::digest(std::fs::read(root.join("deploy/compose.test.yaml"))?)),
             "compose_pg18_sha256":format!("{:x}",Sha256::digest(std::fs::read(root.join("deploy/compose.test.pg18.yaml"))?)),
             "migrations":sql_hashes(&root.join("crates/server/migrations"))?,
-            "candidate":candidate.as_deref().map(sql_hashes).transpose()?,
+            "previous_sql_sha":baseline_sha,
+            "previous_migrations":sql_hashes(&previous)?,
+            "control":control,
             "tool_sha256":Sha256::digest(include_bytes!("sql_compare.rs")).iter().map(|b|format!("{b:02x}")).collect::<String>(),
             "capabilities_sha256":format!("{:x}",Sha256::digest(include_bytes!("sql_compare/capabilities.rs"))),
+            "comments_sha256":format!("{:x}",Sha256::digest(include_bytes!("sql_compare/comments.rs"))),
             "catalog_sha256":format!("{:x}",Sha256::digest(CATALOG.as_bytes())),
             "supabase_upstream":if supabase {Some(crate::supabase::REVISION)}else{None},
             "capability_profile":if restricted_admin {"restricted-installer-v1"}else{"image-default"},
@@ -199,7 +218,8 @@ pub fn run(
         let mut snapshots = Vec::new();
         let mut dump_snapshots = Vec::new();
         let mut urls = Vec::new();
-        for (side, source) in [("a", None), ("b", candidate.as_deref())] {
+        for (index, side) in ["a", "b"].into_iter().enumerate() {
+            let source = sources[index];
             phases.insert(format!("{side}_install"), "FAIL");
             let cluster = register_and_start(
                 &mut clusters,
@@ -214,11 +234,36 @@ pub fn run(
             }
             bootstrap(&sh, &connection)?;
             runtime.block_on(install_source(&sh, &connection, source))?;
+            runtime.block_on(verify_history(
+                &connection,
+                source.unwrap_or(&root.join("crates/server/migrations")),
+                source.is_none(),
+            ))?;
             std::fs::write(dir.join("behavior-direct.txt"), "NOT RUN\n")?;
             std::fs::write(dir.join("behavior-session.txt"), "NOT RUN\n")?;
             phases.insert(format!("{side}_install"), "PASS");
             phases.insert(format!("{side}_snapshot"), "FAIL");
             let snapshot = runtime.block_on(snapshot(&connection.migration, &dir))?;
+            if side == "a" {
+                phases.insert("old_database_rejected_unchanged".to_owned(), "FAIL");
+                verify_old_database_rejected(&sh, &connection, &dir)?;
+                let after = runtime.block_on(self::snapshot(
+                    &connection.migration,
+                    &dir.join("after-rejection"),
+                ))?;
+                ensure!(
+                    after == snapshot,
+                    "rejected migration changed the old database catalog or data"
+                );
+                for file in ["migration-ledger.json", "migration-marker.json"] {
+                    ensure!(
+                        std::fs::read(dir.join(file))?
+                            == std::fs::read(dir.join("after-rejection").join(file))?,
+                        "rejected migration changed {file}"
+                    );
+                }
+                phases.insert("old_database_rejected_unchanged".to_owned(), "PASS");
+            }
             if restricted_admin {
                 phases.insert(format!("{side}_capabilities"), "FAIL");
                 runtime.block_on(capabilities::verify(
@@ -239,8 +284,24 @@ pub fn run(
             urls.push(connection);
             phases.insert(format!("{side}_snapshot"), "PASS");
         }
-        let catalog_differences = differences(&snapshots[0], &snapshots[1]);
-        let dump_differences = differences(&dump_snapshots[0], &dump_snapshots[1]);
+        let catalogs = [
+            normalize_function_comments(&snapshots[0], false)?,
+            normalize_function_comments(&snapshots[1], false)?,
+        ];
+        let dumps = [
+            normalize_function_comments(&dump_snapshots[0], true)?,
+            normalize_function_comments(&dump_snapshots[1], true)?,
+        ];
+        let catalog_differences = differences(&catalogs[0], &catalogs[1]);
+        let dump_differences = differences(&dumps[0], &dumps[1]);
+        write_json(
+            &output.join("comment-only-differences.json"),
+            &json!({
+                "rule":"Only full-line SQL comments outside quoted literals in fvoci function bodies; all executable bytes, inline comments, whitespace, attributes and ACLs remain exact.",
+                "catalog":comment_only_differences(&snapshots, &catalogs),
+                "dump":comment_only_differences(&dump_snapshots, &dumps),
+            }),
+        )?;
         write_json(
             &output.join("differences.json"),
             &json!({"catalog":catalog_differences,"dump":dump_differences}),
@@ -269,11 +330,7 @@ pub fn run(
                 services.up_services(&sh, &wanted)
             })?;
             for (index, side) in ["a", "b"].iter().enumerate() {
-                let source = if index == 1 {
-                    candidate.as_deref()
-                } else {
-                    None
-                };
+                let source = sources[index];
                 run_behavior(
                     root,
                     &sh,
@@ -281,7 +338,7 @@ pub fn run(
                     &clusters[index],
                     &urls[index],
                     BehaviorRun {
-                        candidate: source,
+                        migrations: source,
                         behavior,
                     },
                     &output.join(side),
@@ -316,11 +373,41 @@ pub fn run(
             }
             write_json(
                 &output.join("result.json"),
-                &json!({"passed":passed,"candidate":candidate,"supabase":supabase,"behavior_requested":behavior.is_some(),"behavior_scope":scope.map(|scope|format!("{scope:?}").to_lowercase()),"oidc":oidc,"restricted_admin":restricted_admin,"phases":phases,"behavior":behavior_results}),
+                &json!({"passed":passed,"previous_sql_sha":baseline_sha,"control":control,"supabase":supabase,"behavior_requested":behavior.is_some(),"behavior_scope":scope.map(|scope|format!("{scope:?}").to_lowercase()),"oidc":oidc,"restricted_admin":restricted_admin,"phases":phases,"behavior":behavior_results}),
             )
         },
         |message| eprintln!("{message}"),
     )
+}
+
+fn export_previous_sql(sh: &Shell, sha: &str, output: &Path) -> Result<PathBuf> {
+    ensure!(
+        sha.len() == 40 && sha.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "--baseline-sha must be a full immutable commit SHA"
+    );
+    ensure!(
+        cmd!(sh, "git cat-file -t {sha}").read()? == "commit",
+        "baseline must identify a commit"
+    );
+    let directory = output.join("previous-migrations");
+    std::fs::create_dir(&directory)?;
+    let paths = cmd!(
+        sh,
+        "git ls-tree -r --name-only {sha} -- crates/server/migrations"
+    )
+    .read()?;
+    let mut count = 0;
+    for path in paths.lines().filter(|path| path.ends_with(".sql")) {
+        let filename = Path::new(path)
+            .file_name()
+            .context("migration has no filename")?;
+        let object = format!("{sha}:{path}");
+        let bytes = cmd!(sh, "git cat-file blob {object}").output()?.stdout;
+        std::fs::write(directory.join(filename), bytes)?;
+        count += 1;
+    }
+    ensure!(count > 0, "baseline commit contains no migrations");
+    Ok(directory)
 }
 
 fn claim_output(output: &Path) -> Result<PathBuf> {
@@ -407,11 +494,11 @@ fn bootstrap(sh: &Shell, urls: &DbUrls) -> Result<()> {
     Ok(())
 }
 
-async fn install_candidate(url: &str, path: &Path) -> Result<()> {
+async fn install_historical(url: &str, path: &Path) -> Result<()> {
     let migrator = sqlx::migrate::Migrator::new(path).await?;
     ensure!(
         migrator.iter().next().is_some(),
-        "candidate contains no SQLx migrations"
+        "historical source contains no SQLx migrations"
     );
     let mut conn = PgConnection::connect(url).await?;
     migrator.run(&mut conn).await?;
@@ -419,9 +506,9 @@ async fn install_candidate(url: &str, path: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn install_source(sh: &Shell, urls: &DbUrls, candidate: Option<&Path>) -> Result<()> {
-    if let Some(path) = candidate {
-        install_candidate(&urls.migration, path).await
+async fn install_source(sh: &Shell, urls: &DbUrls, migrations: Option<&Path>) -> Result<()> {
+    if let Some(path) = migrations {
+        install_historical(&urls.migration, path).await
     } else {
         let _migration = sh.push_env("DATABASE_MIGRATION_URL", &urls.migration);
         cmd!(
@@ -431,6 +518,61 @@ async fn install_source(sh: &Shell, urls: &DbUrls, candidate: Option<&Path>) -> 
         .run()?;
         Ok(())
     }
+}
+
+async fn verify_history(urls: &DbUrls, path: &Path, product: bool) -> Result<()> {
+    let expected = sqlx::migrate::Migrator::new(path).await?;
+    let mut conn = PgConnection::connect(&urls.migration).await?;
+    let rows: Vec<(i64, String, bool, Vec<u8>)> = sqlx::query_as(
+        "SELECT version, description, success, checksum FROM fvoci._sqlx_migrations ORDER BY version",
+    ).fetch_all(&mut conn).await?;
+    ensure!(
+        rows.len() == expected.iter().count(),
+        "unexpected SQLx history length"
+    );
+    for (row, migration) in rows.iter().zip(expected.iter()) {
+        ensure!(
+            row.0 == migration.version
+                && row.1 == migration.description
+                && row.2
+                && row.3.as_slice() == migration.checksum.as_ref(),
+            "SQLx history does not match source bytes"
+        );
+    }
+    conn.close().await?;
+    // The marker is readable using the app role without granting access to migration history.
+    let mut app = PgConnection::connect(&urls.app).await?;
+    let marker: Option<String> = sqlx::query_scalar(
+        "SELECT obj_description('fvoci._sqlx_migrations'::regclass, 'pg_class')",
+    )
+    .fetch_one(&mut app)
+    .await?;
+    ensure!(
+        marker.as_deref() == product.then_some("fvoci baseline 202610230001"),
+        "unexpected SQLx baseline marker"
+    );
+    app.close().await?;
+    Ok(())
+}
+
+fn verify_old_database_rejected(sh: &Shell, urls: &DbUrls, dir: &Path) -> Result<()> {
+    let _migration = sh.push_env("DATABASE_MIGRATION_URL", &urls.migration);
+    let result = cmd!(
+        sh,
+        "cargo run --quiet --package fvoci-server --locked -- db migrate"
+    )
+    .ignore_status()
+    .output()?;
+    let mut output = result.stdout;
+    output.extend_from_slice(&result.stderr);
+    std::fs::write(dir.join("old-database-rejection.log"), &output)?;
+    ensure!(
+        !result.status.success()
+            && String::from_utf8_lossy(&output).contains("requires recreation"),
+        "old database was not rejected with recreation guidance"
+    );
+    std::fs::create_dir(dir.join("after-rejection"))?;
+    Ok(())
 }
 
 async fn catalog(conn: &mut PgConnection) -> Result<Snapshot> {
@@ -474,8 +616,42 @@ async fn snapshot(url: &str, dir: &Path) -> Result<Snapshot> {
     write_json(&dir.join("catalog.json"), &json!(state))?;
     let ledger: Value = sqlx::query_scalar("SELECT coalesce(jsonb_agg(to_jsonb(m) - 'installed_on' - 'execution_time' ORDER BY version),'[]'::jsonb) FROM fvoci._sqlx_migrations m").fetch_one(&mut conn).await?;
     write_json(&dir.join("migration-ledger.json"), &ledger)?;
+    let marker: Option<String> = sqlx::query_scalar(
+        "SELECT obj_description('fvoci._sqlx_migrations'::regclass, 'pg_class')",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    write_json(&dir.join("migration-marker.json"), &json!(marker))?;
     conn.close().await?;
     Ok(state)
+}
+
+fn normalize_function_comments(snapshot: &Snapshot, dump: bool) -> Result<Snapshot> {
+    let mut result = snapshot.clone();
+    for (key, value) in &mut result {
+        if dump && key.contains("; Type: FUNCTION; Schema: fvoci;") {
+            if let Some(text) = value.as_str() {
+                *value = json!(comments::function(text)?);
+            }
+        } else if !dump
+            && key.starts_with("function/fvoci.")
+            && let Some(text) = value["definition"].as_str()
+        {
+            value["definition"] = json!(comments::function(text)?);
+        }
+    }
+    Ok(result)
+}
+
+fn comment_only_differences(raw: &[Snapshot], normalized: &[Snapshot]) -> Vec<Value> {
+    differences(&raw[0], &raw[1])
+        .into_iter()
+        .filter(|difference| {
+            difference["object"]
+                .as_str()
+                .is_some_and(|key| normalized[0].get(key) == normalized[1].get(key))
+        })
+        .collect()
 }
 
 fn differences(a: &Snapshot, b: &Snapshot) -> Vec<Value> {
@@ -581,7 +757,10 @@ async fn self_test(url: &str) -> Result<Value> {
         let tested = async {
             sqlx::raw_sql(mutation).execute(&mut conn).await?;
             let changed = catalog(&mut conn).await?;
-            let delta = differences(&before, &changed);
+            let delta = differences(
+                &normalize_function_comments(&before, false)?,
+                &normalize_function_comments(&changed, false)?,
+            );
             ensure!(
                 delta.iter().any(|row| row["object"]
                     .as_str()
@@ -625,9 +804,9 @@ fn run_behavior(
     let _web = sh.push_env("FVOCI_WEB_DIR", "");
     // The Zotero integration tests override this with their own HTTP fixture.
     let _zotero = sh.push_env("FVOCI_ZOTERO_API_URL", "http://127.0.0.1:9");
-    let _candidate = sh.push_env(
-        "FVOCI_TEST_CANDIDATE_MIGRATIONS",
-        behavior.candidate.unwrap_or(Path::new("")),
+    let _migrations = sh.push_env(
+        "FVOCI_TEST_MIGRATIONS",
+        behavior.migrations.unwrap_or(Path::new("")),
     );
     let search = services.host_port(sh, "meilisearch", 7700)?;
     let s3 = services.host_port(sh, "seaweedfs", 8333)?;

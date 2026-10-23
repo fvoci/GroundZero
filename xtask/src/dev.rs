@@ -126,7 +126,8 @@ fn check_realm_users(root: &Path, compose: &Compose, sh: &Shell) -> Result<()> {
             let found = found.map_or_else(|| "missing".to_owned(), |id| format!("id {id}"));
             bail!(
                 "the dev Keycloak keeps an older test realm: {name} should be id {want} but is {found}. \
-                 Reset with `cargo xtask down` (removes this checkout's dev and test containers and volumes) and start again"
+                 Preserve the Keycloak accounts and database, then inspect the original realm and issuer configuration. \
+                 Any reset requires confirmed targets, backups and approval; see docs/self-hosting.md#sql-baseline-reset"
             );
         }
     }

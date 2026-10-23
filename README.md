@@ -36,4 +36,4 @@
 `cargo xtask down`은 이 체크아웃의 개발·시험 컨테이너와 DB·검색·Keycloak 볼륨을 지운다.
 `target/dev-files` 첨부는 남는다. 기존 데이터를 지우기 전에 보존 범위와 사용자 승인을 확인한다.
 
-SQL을 변경할 때는 [마이그레이션 적용 순서와 D-88 파일 지도](crates/server/migrations/README.md)를 먼저 본다.
+SQL을 변경할 때는 [통합 기준 SQL과 마이그레이션 규칙](crates/server/migrations/README.md)을 먼저 본다.

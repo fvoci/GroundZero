@@ -25,6 +25,78 @@ pub const APP_ROLE: &str = "fvoci_app";
 /// 스키마 이름.
 pub const SCHEMA: &str = "fvoci";
 
+/// 새 설치 이력의 시작점. 이전 개발 DB는 이력 수정 없이 승인 후 재생성한다(D-107).
+pub const BASELINE_VERSION: i64 = 202_610_230_001;
+pub const BASELINE_MARKER: &str = "fvoci baseline 202610230001";
+
+fn recreation_required() -> AppError {
+    AppError::Config(
+        "this database uses the previous GroundZero development SQL history and requires recreation; \
+         preserve the database and backups, confirm the exact target and data loss, then obtain \
+         approval before recreating it. No data or migration history was changed. \
+         See docs/self-hosting.md#sql-baseline-reset"
+            .into(),
+    )
+}
+
+/// 앱에는 원장 SELECT 권한을 주지 않는다. SQLx 트랜잭션과 함께 기록된 세대 표시만 카탈로그에서 읽는다.
+pub async fn check_application_baseline(conn: &mut PgConnection) -> Result<(), AppError> {
+    let marker: Option<String> = sqlx::query_scalar(
+        "SELECT pg_catalog.obj_description(pg_catalog.to_regclass('fvoci._sqlx_migrations'), 'pg_class')",
+    )
+    .fetch_one(conn)
+    .await?;
+    if marker.as_deref() != Some(BASELINE_MARKER) {
+        return Err(recreation_required());
+    }
+    Ok(())
+}
+
+/// SQLx가 원장을 만들거나 수정하기 전에 옛 이력을 거부한다. 같은 세대의 체크섬은 SQLx가 검증한다.
+async fn check_migration_baseline(conn: &mut PgConnection) -> Result<(), AppError> {
+    let ledger_exists: bool =
+        sqlx::query_scalar("SELECT pg_catalog.to_regclass('fvoci._sqlx_migrations') IS NOT NULL")
+            .fetch_one(&mut *conn)
+            .await?;
+    let mut has_baseline = false;
+    if ledger_exists {
+        let old_history: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM fvoci._sqlx_migrations WHERE version < $1)",
+        )
+        .bind(BASELINE_VERSION)
+        .fetch_one(&mut *conn)
+        .await?;
+        if old_history {
+            return Err(recreation_required());
+        }
+        has_baseline = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM fvoci._sqlx_migrations WHERE version = $1)",
+        )
+        .bind(BASELINE_VERSION)
+        .fetch_one(&mut *conn)
+        .await?;
+    }
+    if !has_baseline {
+        let has_objects: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_class c
+             JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'fvoci'
+               AND c.oid <> coalesce(to_regclass('fvoci._sqlx_migrations'), 0)
+               AND c.oid NOT IN (SELECT indexrelid FROM pg_catalog.pg_index
+                                WHERE indrelid = to_regclass('fvoci._sqlx_migrations')))
+             OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+                        JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                        WHERE n.nspname = 'fvoci')",
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+        if has_objects {
+            return Err(recreation_required());
+        }
+    }
+    Ok(())
+}
+
 /// 최소 엔진 버전이다. 이보다 새로운 모든 버전을 검증했다는 뜻은 아니다.
 const MIN_SERVER_VERSION: i32 = 170_000;
 
@@ -411,6 +483,7 @@ pub async fn migrate(cfg: &DbCommandConfig) -> Result<(), AppError> {
         .fetch_one(&mut conn)
         .await?;
     check_migration_requirements(&mut conn, &role).await?;
+    check_migration_baseline(&mut conn).await?;
     sqlx::migrate!("./migrations").run(&mut conn).await?;
     conn.close().await?;
     Ok(())

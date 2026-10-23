@@ -16,13 +16,13 @@
 
 | 환경                                | 현재 검증 상태                                                                                                           |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 표준 PostgreSQL 17.9                | 누적 SQL과 통합 후보 각각 전체 시험 358개 PASS, 객체 차이 0. 기본 CI integration은 17 필수                               |
-| 표준 PostgreSQL 18.3                | 누적 SQL과 통합 후보 각각 전체 시험 353개 PASS. 기존 OIDC/S3 CI에서 18 검증, 기본 개발·설치 이미지는 18 유지             |
+| 표준 PostgreSQL 17.9                | 기본 CI integration의 최소 지원 대상. 통합 SQL의 객체·앱 역할 결과는 대상 SHA의 실행 보고를 확인한다                     |
+| 표준 PostgreSQL 18.3                | 기존 OIDC/S3 CI 검증 대상. 기본 개발·설치 이미지는 18 유지, 통합 SQL 결과는 대상 SHA의 실행 보고를 확인한다              |
 | 셀프호스트 Supabase PostgreSQL 17.6 | [고정 구성](self-hosting-supabase.md#1-검증한-조합)의 직접 연결·앱 session 연결 검증                                     |
 | Supabase Cloud                      | 같은 제품 SQL의 설계·검증 대상. 기존 TLS·읽기 전용 연결만 확인했으며 버전 확인과 실제 제품 설치·앱·복구 결과는 별도 기록 |
 
-위 수치는 각 실행 시점의 전체 Rust 시험 합계다. 코드 SHA·명령·제외 경로는
-[SQL 통합 준비 검증 기록](../preparation/sql-consolidation/verification/results.md)에 있다.
+준비 당시 코드 SHA·명령·제외 경로는 [SQL 통합 준비 검증 기록](../preparation/sql-consolidation/verification/results.md)에 있다.
+현재 제품 SQL의 검증은 [비교 명령](../preparation/sql-consolidation/verification/README.md)과 해당 변경 PR의 실행 SHA·결과를 확인한다.
 검증한 메이저의 지원은 미래 메이저의 지원 보장이 아니며, Cloud의 서버 버전도 이름만으로 추정하지 않는다.
 
 모든 환경에서 같은 제품 SQL과 `db bootstrap` → `db migrate` → 서버 시작을 사용한다. 환경 차이는 초기 DB/역할
@@ -100,10 +100,21 @@ docker compose --env-file .env -f deploy/compose.selfhost.yaml logs --since 10m 
 기존 역할이나 권한에 대한 오류라면 내부 SQL을 직접 바꾸지 말고 오류 종류와 릴리스 정보를 유지보수 담당자에게 전달한다.
 문제 보고에 `.env`나 연결 URL·비밀번호를 붙이지 않는다.
 
-**D-88 이전 개발 설치:** UUIDv7 생성을 DB에서 앱으로 옮기며 배포 전에 일부 초기 마이그레이션을 고쳤다.
-이전 DB에서 생기는 checksum 불일치는 자체 PostgreSQL과 Supabase에 공통이다. 기존 데이터·볼륨을 보존한 채 중단한다.
-이전 판의 백업은 같은 마이그레이션 판에만 복구할 수 있으므로 새 판에 바로 복구할 수 없다.
-새 설치가 필요한 경우에도 기존 데이터의 보존·이전 방법과 삭제 여부를 먼저 별도로 결정한다.
+<a id="sql-baseline-reset"></a>
+
+**통합 SQL 이전의 개발·시험 설치(D-107):** 새 설치는 `202610230001_initial_state.sql`의 새 SQLx 이력으로 시작한다.
+기존 누적 이력(97개 파일, 마지막 버전 98) DB를 자동 이전하지 않는다. `db migrate`와 앱 시작이 재생성 필요를
+알리면 기존 DB·볼륨을 보존하고 멈춘다. `_sqlx_migrations`의 행·체크섬을 고치거나 검사를 끄지 않는다.
+
+재생성 전에는 실제 호스트·DB·Compose 프로젝트·볼륨·공유 객체, 삭제할 데이터와 검색 색인,
+백업 위치·검증 방법·복구 한계를 확인하고 대상별 최종 승인을 받는다. 승인은 재생성 방향과 별개다.
+승인된 GroundZero 범위만 정리하며 Keycloak 계정·첨부·다른 checkout과 앱의 자원,
+Supabase의 auth·storage 등 관리 스키마·기본 역할·프로젝트 전체를 함께 지우지 않는다.
+범위가 불명확하면 삭제하지 않는다. `cargo xtask down`이나 광범위한 prune은 이 절차가 아니다.
+
+새 DB에 기존 자격 증명으로 `db bootstrap` → `db migrate`를 실행한 뒤 앱 역할 연결·CRUD·RLS 거부·공간 격리를 확인한다.
+개발 seed는 새 합성 예제이며 이전 데이터를 복원하지 않는다. 백업은 만든 판과 같은 판의 별도 빈 DB에 복구하는 것이 원칙이다.
+구버전 백업을 새 기준에 복구하는 경로는 제공하지 않으며, 실제 복구 시험 여부는 실행 보고의 PASS/FAIL/NOT RUN을 따른다.
 
 ## 3. 무엇이 어디에 저장되나
 

@@ -28,11 +28,14 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Compare fresh cumulative migrations with a proposed SQL baseline in isolated Compose projects.
+    /// Compare a fixed historical SQL revision with product migrations in isolated Compose projects.
     SqlCompare {
-        /// Directory containing ordered, plain SQL candidate files. Omit for A/A control.
+        /// Full immutable commit SHA supplying the previous cumulative migrations.
+        #[arg(long, default_value = sql_compare::PREVIOUS_SQL_SHA)]
+        baseline_sha: String,
+        /// Apply the historical source to both sides for an A/A control.
         #[arg(long)]
-        candidate: Option<PathBuf>,
+        control: bool,
         /// Evidence directory (must not already exist).
         #[arg(long)]
         output: PathBuf,
@@ -150,7 +153,8 @@ fn main() -> Result<()> {
     let root = repo_root()?;
     match cli.command {
         Command::SqlCompare {
-            candidate,
+            baseline_sha,
+            control,
             output,
             behavior,
             behavior_scope,
@@ -160,7 +164,10 @@ fn main() -> Result<()> {
             supabase,
         } => sql_compare::run(
             &root,
-            candidate.as_deref(),
+            sql_compare::Baseline {
+                sha: &baseline_sha,
+                control,
+            },
             &output,
             behavior.then(|| sql_compare::Behavior {
                 scope: behavior_scope.unwrap_or(sql_compare::BehaviorScope::Full),

@@ -50,6 +50,7 @@ pub async fn run(config: Config) -> Result<(), AppError> {
         "starting"
     );
     let state = build_state(config)?;
+    state.db.check_baseline().await?;
     let db = state.db.clone();
     let (stop, stopped) = watch::channel(false);
     let worker = role.runs_worker().then(|| {
