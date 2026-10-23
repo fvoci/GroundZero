@@ -1,6 +1,8 @@
 # 사전 검사 거부 시험 재현
 
-기존 Compose, 서버 `db bootstrap`·`db migrate`, 이미지의 `psql`만 사용했다. 아래는 같은 시험을 새 전용 프로젝트에 재현하는 절차다. 원래 프로젝트 이름·소스 SHA·오류·전후 카탈로그는 [PG16](../runs/preflight/pg16/), [PG17 ACL](../runs/preflight/pg17-acl/), [PG17 인증](../runs/preflight/pg17-credentials/)에 있다. 원래 서버 소스는 `9c122173e4c6ec5d33c6be261975f68753008015`이고 사전 검사 구현은 `c41d589`와 같다.
+> **역사 기록이며 현재 상태를 나타내지 않음.** 본문 판단·상태·결과는 명시된 조사/실행 SHA에만 적용한다. 관련 결함이나 SHA를 조사할 때만 참조하며, 현재 기준과 분리 검증은 [증거 안내](../../evidence.md)를 따른다.
+
+기존 Compose, 서버 `db bootstrap`·`db migrate`, 이미지의 `psql`만 사용했다. 아래는 같은 시험을 새 전용 프로젝트에 재현하는 절차다. 원래 프로젝트 이름·소스 SHA·오류·전후 카탈로그는 [PG16](https://github.com/fvoci/GroundZero/tree/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/verification/runs/preflight/pg16), [PG17 ACL](https://github.com/fvoci/GroundZero/tree/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/verification/runs/preflight/pg17-acl), [PG17 인증](https://github.com/fvoci/GroundZero/tree/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/verification/runs/preflight/pg17-credentials)에 있다. 원래 서버 소스는 `9c122173e4c6ec5d33c6be261975f68753008015`이고 사전 검사 구현은 `c41d589`와 같다.
 
 ## 공통 준비
 
@@ -46,7 +48,7 @@ for action in bootstrap migrate; do
 done
 ```
 
-전후 JSON의 제품 역할 목록·관계 목록은 비어 있고 스키마·원장은 null이다. `sql-compare --postgres-major`는 17·18만 받으며 16은 [CLI에서 거부](../runs/preflight/cli-selection.txt)한다.
+전후 JSON의 제품 역할 목록·관계 목록은 비어 있고 스키마·원장은 null이다. `sql-compare --postgres-major`는 17·18만 받으며 16은 [CLI에서 거부](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/verification/runs/preflight/cli-selection.txt)한다.
 
 ## PostgreSQL 17: 필수 권한 부족과 원복
 
@@ -89,7 +91,7 @@ cmp "$case_dir/before.json" "$case_dir/after.json"
 
 첫 ACL 진단에서 `psql -h 127.0.0.1`은 이미지의 trust 규칙을 사용했다. 그 연결은 비밀번호 원복 증거가 아니며 `pg17-acl/catalog-result.txt`에는 카탈로그 판정만 남겼다. `local-original-artifacts.sha256`은 주장 줄을 제외하기 전 로컬 원본을 식별한다.
 
-별도 PG17 fixture에서는 정상 bootstrap 후 Compose DNS `postgres`를 사용했다. [pg_hba_file_rules](../runs/preflight/pg17-credentials/auth-rules.json)의 일반 host 규칙은 `scram-sha-256`이다. 아래 음성 대조를 **두 역할 모두** 실행해 exit 2와 `password authentication failed`를 확인했다.
+별도 PG17 fixture에서는 정상 bootstrap 후 Compose DNS `postgres`를 사용했다. [pg_hba_file_rules](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/verification/runs/preflight/pg17-credentials/auth-rules.json)의 일반 host 규칙은 `scram-sha-256`이다. 아래 음성 대조를 **두 역할 모두** 실행해 exit 2와 `password authentication failed`를 확인했다.
 
 ```sh
 for role in fvoci_app fvoci_migrator; do
@@ -112,4 +114,4 @@ done
   psql -h postgres -XAt -U fvoci_app -d fvoci -v ON_ERROR_STOP=1 -c 'SELECT current_user'
 ```
 
-각 fixture는 종료 시 자기 프로젝트의 `stop`만 실행했다. 컨테이너·네트워크·볼륨 제거 명령은 쓰지 않았다. 이 fixture의 권한 철회는 시험용 superuser 작업이며 Cloud에서 수행하지 않았다. 비-superuser 설치의 기능 검증은 [별도 제한 역할 실행](../runs/pg17-restricted/result.json)이다.
+각 fixture는 종료 시 자기 프로젝트의 `stop`만 실행했다. 컨테이너·네트워크·볼륨 제거 명령은 쓰지 않았다. 이 fixture의 권한 철회는 시험용 superuser 작업이며 Cloud에서 수행하지 않았다. 비-superuser 설치의 기능 검증은 [별도 제한 역할 실행](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/verification/runs/pg17-restricted/result.json)이다.

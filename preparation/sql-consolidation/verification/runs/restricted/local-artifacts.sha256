@@ -1,6 +1,0 @@
-2f8d96fe5c91ea900d183c1ad59c3093ac23c65938a1a3bab242c751c3a65908  target/sql-compare-restricted-verified/a/catalog.json
-7bb482931c2cd6760587183f81dde34475d592bbdf14b4b7603baac1a8bda7a4  target/sql-compare-restricted-verified/a/schema.sql
-df49de4ba71a2f48b7750142a21509b6ae45d71cffd4a6389a06d6fd10763490  target/sql-compare-restricted-verified/a/migration-ledger.json
-2f8d96fe5c91ea900d183c1ad59c3093ac23c65938a1a3bab242c751c3a65908  target/sql-compare-restricted-verified/b/catalog.json
-ec16b72b16b8fd52a0074dd423d6f8a31593f1710d0e6010d10ada33236fca3b  target/sql-compare-restricted-verified/b/schema.sql
-c2fdbfa64bbe51d53814d9b0346704c3aed6129c6a6fbee0dd1a01057329435e  target/sql-compare-restricted-verified/b/migration-ledger.json

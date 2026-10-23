@@ -1,4 +1,0 @@
-bootstrap expected rejection, exit=1
-bootstrap role/schema/ledger/catalog unchanged: PASS
-migrate expected rejection, exit=1
-migrate role/schema/ledger/catalog unchanged: PASS

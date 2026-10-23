@@ -1,5 +1,7 @@
 # SQL 통합 준비: Cloud 관측과 후속 시험 계획
 
+> **역사 기록이며 현재 상태를 나타내지 않음.** 본문 판단·상태·결과는 명시된 조사/실행 SHA에만 적용한다. 관련 결함이나 SHA를 조사할 때만 참조하며, 현재 기준과 분리 검증은 [증거 안내](../evidence.md)를 따른다.
+
 상태: **PLAN ONLY**. C 작업자는 원격 DB 연결·bootstrap·migrate·역할/비밀번호 변경·Cloud workflow dispatch를
 실행하지 않았다. 사용자가 추가로 지시한 표준 PostgreSQL 공통 구현은 Cloud의 권한 제약을 포함해 설계한다.
 일반 PostgreSQL/Supabase 제품 SQL 분기나 Supabase 서비스 의존성은 만들지 않는다. 아래 단계는 별도 승인된 전용

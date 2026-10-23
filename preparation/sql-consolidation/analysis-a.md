@@ -1,5 +1,7 @@
 # SQL 통합 준비 A: 최종 상태 후보와 제거 근거
 
+> **역사 기록이며 현재 상태를 나타내지 않음.** 본문 판단·상태·결과는 명시된 조사/실행 SHA에만 적용한다. 관련 결함이나 SHA를 조사할 때만 참조하며, 현재 기준과 분리 검증은 [증거 안내](evidence.md)를 따른다.
+
 상태: 정책 반영 후 최종 상태에서 후보를 다시 만들었다. [B의 실행 결과](verification/results.md)를 함께 본다.
 현재 기준은 #92에 `fvoci/sql-policy` `b01d74a`(D-101~D-105 구현, 마이그레이션 0095~0098)을 병합한 `3db81d1deae24b16478581ebd6a06de2b2a2d8c9`이며 최종 기준선 확정이 아니다.
 처음 작성 기준은 `cb65cc31156c0fd8d28cf856bc132d4a506c8885`(93개 이력)였다. 아래 「정책 반영으로 바뀐 객체」 밖의 근거 위치는 그 SHA의 것이다.
@@ -96,7 +98,7 @@ Cloud PG17 이상과 위 권한·접속 조건이 충족되면 동일 SQL을 사
 
 ## 이미 대체된 정의
 
-정확한 CREATE/REPLACE/DROP 위치와 인자 전체는 `inventory/function-history.jsonl`에 있다. 일부 같은 이름은 살아 있는 다른 서명이 있으므로 이름 전체를 제거해서는 안 된다.
+정확한 CREATE/REPLACE/DROP 위치와 인자 전체는 [inventory/function-history.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/function-history.jsonl)에 있다. 일부 같은 이름은 살아 있는 다른 서명이 있으므로 이름 전체를 제거해서는 안 된다.
 
 | 이력             | 최종 후보에서 재생하지 않을 것                                                                                                      | 유지하는 의미                                                                      |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -145,7 +147,7 @@ Cloud PG17 이상과 위 권한·접속 조건이 충족되면 동일 SQL을 사
 
 ## 호출 경로와 검증 경계
 
-`inventory/source-occurrences.jsonl`은 서버·worker·테스트·xtask·개발 seed·문서의 함수 이름 등장 위치와 원문을 보존한다.
+[inventory/source-occurrences.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/source-occurrences.jsonl)은 서버·worker·테스트·xtask·개발 seed·문서의 함수 이름 등장 위치와 원문을 보존한다.
 문서·주석과 실제 호출을 같은 의미로 세지 않는다. SQL 함수 내부 호출 및 정책·트리거 경로는 카탈로그에서 별도로 대조한다.
 UUID 목록 개수와 호출 순서는 `docs/sql-id-contract.md`의 `new_ids` / `needed_ids` 계약을 유지한다.
 worker는 상한 조회부터 트랜잭션 전체를 최대 세 번 재시도하며, HTTP의 FV001은 409다.
@@ -158,17 +160,17 @@ worker는 상한 조회부터 트랜잭션 전체를 최대 세 번 재시도하
 
 2026-10-23에 `3db81d1`(정책 브랜치 `b01d74a` 병합)에서 [재생성 명령](inventory/README.md#재생성-명령)으로 후보와 목록을 다시 만들었다.
 마이그레이션 디렉터리는 `b01d74a`와 같다. 아래는 이전 후보(`cb65cc3`, `b8172cf…55725`)와의 카탈로그 차이 전부다.
-호출 위치는 `inventory/function-map.jsonl`의 `external_references`에서 문서를 뺀 것이다.
+호출 위치는 [inventory/function-map.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/function-map.jsonl)의 `external_references`에서 문서를 뺀 것이다.
 
-| 바뀐 것              | 내용                                                                                                                                                                                                                                                     | 코드 호출 위치                                                                                                                     |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 삭제된 서명 4개      | `app_save_view(uuid,uuid,text,jsonb,uuid[])`, `app_update_item(uuid,text,text,text,uuid[])`, `app_set_item_profile(uuid,uuid,text,text,date,date,text,jsonb,uuid[])`, `app_create_task(uuid,uuid,text,uuid,uuid[])`                                      | 없음. `app_save_view`는 이름 자체가 코드에서 사라졌다                                                                              |
-| 새 함수 3개          | `app_create_view(uuid,uuid,text,jsonb,uuid[])`, `app_update_view(uuid,uuid,integer,jsonb)`(0096), 트리거 함수 `app_items_versions()`(0097)                                                                                                               | `features/saved_views.rs`(두 보기 함수). `app_items_versions`는 트리거 전용이며 앱 역할 EXECUTE가 없다                             |
-| 서명이 바뀐 함수 3개 | `app_update_item(uuid,integer,text,text,text,uuid[])`, `app_set_item_profile(uuid,integer,uuid,text,text,date,date,text,jsonb,uuid[])`(0097), `app_create_task(uuid,uuid,text,uuid,text,text,text,date,date,integer,text[],uuid[],boolean,uuid[])`(0098) | `features/modules.rs`, `features/item_profile.rs`, `features/tasks.rs`·`error.rs`, 개발 seed `deploy/postgres/dev-module-seed.sql` |
-| 정의가 바뀐 함수 1개 | `app_system_search_payload(text[],uuid[])`: 반환 열 `updated_at`·`day`를 빼고 `created_by uuid`, `at timestamptz`, `on_day date`를 더함(0095)                                                                                                            | `search.rs`, `features/search_api.rs`                                                                                              |
-| 새 열 4개            | `items.version`·`items.profile_version`(integer NOT NULL DEFAULT 1), `saved_views.version`(integer NOT NULL DEFAULT 1), `saved_views.updated_request_id`(uuid)                                                                                           | 위 함수와 판 검사                                                                                                                  |
-| 새 제약·인덱스       | NOT NULL 3개(위 판 열), UNIQUE `saved_views_updated_request (user_id, updated_request_id)`와 그 인덱스                                                                                                                                                   |                                                                                                                                    |
-| 새 트리거 1개        | `items_versions BEFORE UPDATE ON items FOR EACH ROW EXECUTE FUNCTION app_items_versions()`                                                                                                                                                               | `object-function-references.jsonl`에 추가됨                                                                                        |
+| 바뀐 것              | 내용                                                                                                                                                                                                                                                     | 코드 호출 위치                                                                                                                                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 삭제된 서명 4개      | `app_save_view(uuid,uuid,text,jsonb,uuid[])`, `app_update_item(uuid,text,text,text,uuid[])`, `app_set_item_profile(uuid,uuid,text,text,date,date,text,jsonb,uuid[])`, `app_create_task(uuid,uuid,text,uuid,uuid[])`                                      | 없음. `app_save_view`는 이름 자체가 코드에서 사라졌다                                                                                                                                                   |
+| 새 함수 3개          | `app_create_view(uuid,uuid,text,jsonb,uuid[])`, `app_update_view(uuid,uuid,integer,jsonb)`(0096), 트리거 함수 `app_items_versions()`(0097)                                                                                                               | `features/saved_views.rs`(두 보기 함수). `app_items_versions`는 트리거 전용이며 앱 역할 EXECUTE가 없다                                                                                                  |
+| 서명이 바뀐 함수 3개 | `app_update_item(uuid,integer,text,text,text,uuid[])`, `app_set_item_profile(uuid,integer,uuid,text,text,date,date,text,jsonb,uuid[])`(0097), `app_create_task(uuid,uuid,text,uuid,text,text,text,date,date,integer,text[],uuid[],boolean,uuid[])`(0098) | `features/modules.rs`, `features/item_profile.rs`, `features/tasks.rs`·`error.rs`, 개발 seed `deploy/postgres/dev-module-seed.sql`                                                                      |
+| 정의가 바뀐 함수 1개 | `app_system_search_payload(text[],uuid[])`: 반환 열 `updated_at`·`day`를 빼고 `created_by uuid`, `at timestamptz`, `on_day date`를 더함(0095)                                                                                                            | `search.rs`, `features/search_api.rs`                                                                                                                                                                   |
+| 새 열 4개            | `items.version`·`items.profile_version`(integer NOT NULL DEFAULT 1), `saved_views.version`(integer NOT NULL DEFAULT 1), `saved_views.updated_request_id`(uuid)                                                                                           | 위 함수와 판 검사                                                                                                                                                                                       |
+| 새 제약·인덱스       | NOT NULL 3개(위 판 열), UNIQUE `saved_views_updated_request (user_id, updated_request_id)`와 그 인덱스                                                                                                                                                   |                                                                                                                                                                                                         |
+| 새 트리거 1개        | `items_versions BEFORE UPDATE ON items FOR EACH ROW EXECUTE FUNCTION app_items_versions()`                                                                                                                                                               | [object-function-references.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/object-function-references.jsonl)에 추가됨 |
 
 새 서명의 ACL·소유자·설정은 기존 규칙과 같다: 소유자 `fvoci_migrator`, `search_path=fvoci, pg_temp`, 앱이 부르는 함수는 `fvoci_app` EXECUTE.
 `app_items_versions()`는 SECURITY DEFINER가 아니지만 `search_path`를 고정했고 EXECUTE는 소유자만 가진다.

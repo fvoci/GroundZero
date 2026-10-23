@@ -1,92 +1,34 @@
 # SQL 통합 준비
 
-이 디렉터리는 누적 마이그레이션을 대체하기 전 검토용 후보와 비교 근거를 담는다.
-제품의 정본은 계속 `crates/server/migrations/`다. 이 작업은 기존 SQL의 교체·삭제·번호 변경,
-기존 DB의 이력 수정·초기화, main 병합·태그·배포를 수행하지 않는다.
+누적 마이그레이션 교체 전의 검토 후보와 재현 절차를 보존한다. 제품 정본은
+`crates/server/migrations/`이며 D-101~D-106 구현, 후보 SQL, 비교 도구와 fixture는 증거 분리에서 바꾸지 않는다.
 
-## 조사 기준과 경계
+## 기준과 증거
 
-- 공통 조사 SHA: `cb65cc31156c0fd8d28cf856bc132d4a506c8885` (2026-10-22 원격 main).
-- 정책 반영 후 기준: `3db81d1deae24b16478581ebd6a06de2b2a2d8c9`(2026-10-23, #92에 `fvoci/sql-policy` `b01d74a` 병합). 현재 후보·목록·A/B 결과의 기준이다.
-  적용 순서는 #97 → #92다. 위의 공통 조사 SHA는 처음 조사 기준이며 환경 문서의 줄 번호는 그 SHA의 것이다.
-- [#91](https://github.com/fvoci/GroundZero/pull/91)은 공통 조사 SHA로 병합됐다.
-- 조사 시작 시 [#69](https://github.com/fvoci/GroundZero/pull/69)는 열린 Draft,
-  head `e4cae26dbf3104ba40d6ef39fda50b8d8b2035cb`였다. 미병합 기록을 확정 결정으로 삼지 않는다.
-- #69와 후속 수정이 정리되기 전에는 **최종 통합 기준 미확정**이다. 그 뒤에는 공통 조사 SHA와
-  최종 main 사이의 변경만 추가 검토하고, 영향을 받은 후보·시험을 갱신한다.
-- 진행 중 #69가 `4fa6f1589984141fc4f892e522ca9182f178738d`로 바뀌었다. 직전 head와의 델타는
-  결정·개발 문서 두 파일이며 D-99와 `fix/audit-reconnect-discard`(W21) 후속을 기록한다.
-  SQL·서버·시험 변경은 없지만 이 후속도 기준 확정의 대기 대상이다. 해당 편집기 작업은 수정하지 않는다.
-- 이후 #69의 `44aa798106a89f754c67dd1cf88ca61bf79e2bd5`까지 확인했다. 직전 head와의 차이는
-  개발 문서의 리뷰 처리 기록과 NOT RUN 목록 정정뿐이다. 원격 main은 공통 조사 SHA와 같으며 최종 기준은 여전히 미확정이다.
-- 재연결 후속은 [#94](https://github.com/fvoci/GroundZero/pull/94)의
-  `558c887b474668f757a26299a285ecbb3146c655`로 확인했다. 열린 Draft이며 웹 파일 5개가 변경됐다.
-  #69와 #94가 반영된 최종 main은 아직 없으므로 이 기준의 완료를 주장하지 않는다.
-- D-08·D-17·D-42·D-88·D-92 및 기존 서버 권한·업무 규칙을 보존한다.
-  UUIDv7은 앱이 공급하며 DB 생성 fallback을 추가하지 않는다.
-- PostgreSQL과 셀프호스트 Supabase 어댑터는 지원 환경 계약이다. 과거 개발 버전 호환 코드와
-  구분한다. Supabase Cloud 변경 시험은 계획만 작성한다.
-- 추가 사용자 지시에 따라 Supabase Cloud의 권한 제약에서도 동작하는 표준 PostgreSQL 공통 구현을
-  설계 우선순위로 삼는다. 제품 SQL은 하나로 유지하고 환경 차이는 불가피한 최소 초기 설정·접속 설정에만 둔다.
-  Supabase 전용 서비스 의존성은 추가하지 않는다. 로컬 제한 권한 시험과 실제 Cloud 검증은 구분하며,
-  이 설계 지시를 원격 DB 변경 승인으로 해석하지 않는다.
-- 추가 지원 기준은 PostgreSQL 최소 17이다. 검증된 상위 메이저만 지원 목록에 올리며,
-  “17 이상”은 미래 버전의 무조건적인 지원 보장이 아니다. D-100 및 환경 문서에서 실제 검증 범위를 구분한다.
-- P-24·P-25·P-26·P-30·P-31은 2026-10-23 채택(D-101~D-105, `docs/decisions.md` 1.14)되어 `fvoci/sql-policy`(#97)에 구현됐다.
-  후보는 그 최종 상태(`3db81d1`)에서 다시 만들었다. P-28은 현행 유지(D-106), P-29·P-35는 보류·추적(#96·#95)이며 후보에 구현하지 않는다.
+이 디렉터리의 조사·실행 요약은 **역사 기록이며 현재 상태를 나타내지 않음**이다.
+관련 결함이나 SHA를 조사할 때만 원시 증거를 명시적으로 연다. 현재 사용자 요구사항,
+승인 결정, 코드·테스트를 기준으로 삼고 서로 충돌하면 보고한다.
 
-## 작업 분리
+- 분리 대상 체크아웃: `abd545a250ff1fd9cc166b3c078c4dff76846724` (#92).
+- 후보 생성 기준: `3db81d1deae24b16478581ebd6a06de2b2a2d8c9` (#97의 `b01d74a` 병합).
+- 최종 기록된 A/B 실행 소스: `f5b5a9d4a42dc6c87deddddcda0d0ea41f7092f9`.
+- 최초 조사 기준: `cb65cc31156c0fd8d28cf856bc132d4a506c8885`. 이 기준의 실행은 정책 반영 후 결과로 대체되었다.
+- [보존 위치·SHA-256 목록·분리 검증](evidence.md), [SHA별 최종 결과와 NOT RUN 범위](verification/results.md).
 
-세 작업자는 위 SHA에서 각각 독립 worktree로 시작했다. 결과를 종합 worktree에 모아 하나의
-독립 Draft PR로 검토한다. 기존 편집기 수정·감사 기록·병합 worktree는 수정하지 않는다.
+분리 시 #97 최신 `0a26654`와 이미 포함된 `b01d74a` 사이의 추가 변경은 웹 컴포넌트·시험·문서이며
+마이그레이션 입력은 바뀌지 않았다. 이번 작업은 SQL이나 동작 변경 및 A/B 재실행을 포함하지 않는다.
+#106은 검토 완료·조치 항목 없음인 보존용 PR이며 다시 검토하거나 병합할 대상이 아니다.
+#97 → #92의 병합 및 최종 main 상태 판단은 별도 조정 작업이다.
 
-| 담당                | worktree             | 소유 파일                                                                 |
-| ------------------- | -------------------- | ------------------------------------------------------------------------- |
-| A: 최종 객체·후보   | `sql-prep-a`         | `preparation/sql-consolidation/candidate/`, `inventory/`, `analysis-a.md` |
-| B: 동등성 도구·시험 | `sql-prep-b`         | xtask 비교 구현, 필요한 최소 시험 연결, `verification/`                   |
-| C: 설치·역할·환경   | `sql-prep-c`         | `environment.md`, `environment/`                                          |
-| 종합                | `sql-prep-synthesis` | 본 안내, 기준·판단·검증 결과 종합, Draft PR                               |
+## 유지하는 자료
 
-작업자 모델은 `gpt-6-astra`, 추론 강도는 별도 `xhigh`로 지정했다. 시작 시 로컬 Codex의
-실행 속도 설정은 `service_tier = "ultrafast"`였다. `/batch`와 새 전면 감사는 사용하지 않는다.
-2026-10-22 사용량 99% 도달 후 ultrafast 기본 설정을 해제했고, 진행 중 주 세션도
-`Service tier set to default`로 전환된 것을 확인했다. 모델·추론 강도와 속도 설정을 구분한다.
+- [최종 객체·제거/유지 근거](analysis-a.md), [목록 설명과 재생성 명령](inventory/README.md), [테이블 요약](inventory/tables.md)
+- [실제 후보 SQL과 적용 조건](candidate/README.md)
+- [비교 명령·정규화·검증 한계](verification/README.md), [사전 검사 재현 fixture](verification/fixtures/README.md)
+- [기록된 품질 검사 결과](quality-check.md)
+- [설치·역할·환경](environment.md), [세션 상태](environment/session-state.md), [Cloud 후속 계획](environment/cloud-plan.md)
+- [종합 판단·시험 대응·전환 조건](synthesis.md)
 
-PG17 추가 지시의 소유 범위는 A가 `crates/server/src/db/admin.rs`의 초기화 전 검사,
-B가 비교 도구·격리 시험·CI와 Compose, C가 결정·설치 문서와 Cloud 읽기 전용 사전 검사다.
-기존 감사·편집기 수정 파일은 계속 분리한다.
-
-DB·Docker 실행은 B가 전담한다. 이 작업용으로 새로 만든 프로젝트·DB와 동적 포트만 쓰며
-공유 개발·시험 DB 및 기존 볼륨을 보존한다. `cargo xtask down`과 광범위한 정리는 하지 않는다.
-빌드 출력은 각 worktree에서 분리한다.
-
-실행 기록의 예외: 초기 A/A 도구는 수정 전 종료 경로에서 이 작업 전용 B 프로젝트에 한 번
-`docker compose down --volumes --remove-orphans`를 실행했다. 삭제 대상은 해당 임시 PostgreSQL
-컨테이너와 네트워크였고, DB는 tmpfs여서 해당 프로젝트의 이름 붙은 볼륨은 없었다.
-공유 DB·기존 볼륨을 대상으로 하지 않았다. 이후 도구는 `stop`만 사용하며,
-이 예외를 숨기거나 전체 실행이 처음부터 stop-only였다고 기록하지 않는다. 상세 로그는 검증 실행 기록에 남긴다.
-
-## 전환 전 관문
-
-1. #69와 후속 변경 종료를 확인하고 최종 main SHA를 기록한다.
-2. 기준과의 델타에서 SQL·호출자·seed·권한·설치 계약 변화만 추적해 후보에 반영한다.
-3. 기존 누적 SQL과 후보를 별도 빈 DB에 적용하고 객체 비교와 앱 역할 동작 비교를 각각 통과한다.
-   정책·권한·함수 차이를 넣은 검사 자체 검증도 통과해야 한다.
-4. PostgreSQL, 셀프호스트 Supabase 직접 연결·session pooler에서 해당 결과를 확인한다.
-   Cloud의 읽기 전용 연결 성공을 이 결과로 대체하지 않는다.
-5. 남은 정책 및 기존 데이터 보존·이전 방법을 결정한다. 새 설치의 동등성만으로 기존 DB의
-   checksum·백업 복원 호환성을 보장하지 않는다.
-6. 별도 구현에서만 실제 마이그레이션 교체를 검토한다. 본 PR은 그 전 단계다.
-
-객체 차이와 동작 시험 결과는 서로 대체하지 않는다. 실행하지 않은 환경·경로는 `NOT RUN`,
-비교 실패는 `FAIL`로 기록한다.
-
-## 검토 자료
-
-- [최종 객체·제거/유지 근거](analysis-a.md), [객체와 호출 목록](inventory/README.md)
-- [후보 SQL과 적용 조건](candidate/README.md)
-- [비교 명령·정규화·검증 한계](verification/README.md)
-- [SHA별 DB 실행 결과와 증거](verification/results.md), [종합 품질 검사](quality-check.md)
-- [설치·역할·환경](environment.md), [session 상태](environment/session-state.md), [Cloud 후속 계획](environment/cloud-plan.md)
-- [종합 판단·실제 시험 대응·전환 순서](synthesis.md)
-- 검토용 Draft PR: [#92](https://github.com/fvoci/GroundZero/pull/92)
+기존 데이터·백업·SQLx 이력 전환, 실제 Cloud 및 transaction pooler는 NOT RUN이다.
+빈 DB 동등성 PASS는 기존 DB 전환 완료를 뜻하지 않는다. 실제 마이그레이션 교체는 별도 구현 범위다.
+과거 작업 분담·진행 경과는 [원래 안내](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/README.md)에 보존한다.

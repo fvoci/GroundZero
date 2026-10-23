@@ -1,5 +1,7 @@
 # 객체와 호출 근거
 
+> **역사 기록이며 현재 상태를 나타내지 않음.** 본문 판단·상태·결과는 명시된 조사/실행 SHA에만 적용한다. 관련 결함이나 SHA를 조사할 때만 참조하며, 현재 기준과 분리 검증은 [증거 안내](../evidence.md)를 따른다.
+
 기준 커밋은 `3db81d1deae24b16478581ebd6a06de2b2a2d8c9`다(#92에 `fvoci/sql-policy` `b01d74a`를 병합한 커밋, 마이그레이션 디렉터리는 `b01d74a`와 같다).
 아래 수치는 그 커밋의 97개 마이그레이션을 PostgreSQL 18.3의 빈 DB에 적용한 직후이며 아래 [재생성 명령](#재생성-명령)으로 만들었다. 최종 통합 기준선 승인과 구분한다.
 처음 목록은 `cb65cc31156c0fd8d28cf856bc132d4a506c8885`(93개)에서 Worker B 소유 `sqlprep-b-cb65cc31-postgres-1`로 만들었다. 그 수치는 아래에 이력으로만 남긴다.
@@ -7,22 +9,22 @@
 
 ## 읽는 순서
 
-| 파일                                              | 내용과 한계                                                                                                                                                                                                                                               |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `catalog-postgres.jsonl`                          | 객체별 실제 카탈로그. `kind`, `identity`, `definition`의 JSON Lines. `catalog-inventory.sql`(B의 `verification/catalog.sql` 초기판)로 얻은 원본 행을 JSON으로 변환. SQLx 원장과 DB 기본 역할·확장을 포함하므로 객체 이름을 구분해서 센다                  |
-| `function-history.jsonl`                          | 현재 소스의 함수 CREATE 438건, CREATE OR REPLACE 189건, DROP 138건, 총 765건. 각 선언의 원본 파일·시작 줄·전체 인자 목록. OUT 인자로 반환형을 표현한 함수도 포함                                                                                          |
-| `function-map.jsonl`                              | 최종 앱 함수 300개의 서명·소유자·SECURITY DEFINER·search_path·ACL, 마지막 선언 위치, SQL 본문의 다른 최종 함수 이름, 소스 등장 위치                                                                                                                       |
-| `retired-signatures.jsonl`                        | 138개 과거 DROP 선언과 같은 이름으로 현재 남은 서명. 같은 이름의 새 서명이 있으므로 이름 전체를 삭제하라는 목록이 아님                                                                                                                                    |
-| `source-occurrences.jsonl`                        | `crates/server/src`, `crates/server/tests`, `xtask/src`, `deploy/postgres`, `docs`의 app_* 등장 633건. 실제 호출, 문자열 Job, 문서·주석이 원문과 경로로 구분됨. `xtask/src` 1건은 #92 비교 도구의 변조 시험 문자열(`sql_compare.rs`)이며 제품 호출이 아님 |
-| `direct-table-occurrences.jsonl`                  | 같은 경로에서 최종 테이블에 대한 FROM/JOIN/INTO/UPDATE/TABLE 문맥 354건. 직접 조회·변경·테스트 fixture·문서의 근거이며 SQL parser 결과는 아님. `xtask/src/sql_compare*` 3건은 #92 비교 도구의 시험 문자열                                                 |
-| `object-function-references.jsonl`                | CHECK·정책·트리거에서 최종 함수 이름을 참조하는 객체 72개. 테이블 RLS와 SQL 내부 호출을 외부 Rust 호출과 함께 보기 위한 목록                                                                                                                              |
-| `dependencies.sql`, `dependencies-postgres.jsonl` | pg_depend가 기록한 의존성 3091건. 행 타입·테이블·제약·트리거·함수 사이의 구조적 의존성. 물리 OID 대신 객체 식별자를 사용                                                                                                                                  |
-| `tables.md`                                       | 55개 테이블의 실제 RLS/강제 RLS 상태와 테이블 ACL. 열 단위 권한은 원본 카탈로그의 column 항목으로 확인                                                                                                                                                    |
+| 파일                                                                                                                                                                                                     | 내용과 한계                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [catalog-postgres.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/catalog-postgres.jsonl)                               | 객체별 실제 카탈로그. `kind`, `identity`, `definition`의 JSON Lines. `catalog-inventory.sql`(B의 `verification/catalog.sql` 초기판)로 얻은 원본 행을 JSON으로 변환. SQLx 원장과 DB 기본 역할·확장을 포함하므로 객체 이름을 구분해서 센다                  |
+| [function-history.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/function-history.jsonl)                               | 현재 소스의 함수 CREATE 438건, CREATE OR REPLACE 189건, DROP 138건, 총 765건. 각 선언의 원본 파일·시작 줄·전체 인자 목록. OUT 인자로 반환형을 표현한 함수도 포함                                                                                          |
+| [function-map.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/function-map.jsonl)                                       | 최종 앱 함수 300개의 서명·소유자·SECURITY DEFINER·search_path·ACL, 마지막 선언 위치, SQL 본문의 다른 최종 함수 이름, 소스 등장 위치                                                                                                                       |
+| [retired-signatures.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/retired-signatures.jsonl)                           | 138개 과거 DROP 선언과 같은 이름으로 현재 남은 서명. 같은 이름의 새 서명이 있으므로 이름 전체를 삭제하라는 목록이 아님                                                                                                                                    |
+| [source-occurrences.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/source-occurrences.jsonl)                           | `crates/server/src`, `crates/server/tests`, `xtask/src`, `deploy/postgres`, `docs`의 app_* 등장 633건. 실제 호출, 문자열 Job, 문서·주석이 원문과 경로로 구분됨. `xtask/src` 1건은 #92 비교 도구의 변조 시험 문자열(`sql_compare.rs`)이며 제품 호출이 아님 |
+| [direct-table-occurrences.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/direct-table-occurrences.jsonl)               | 같은 경로에서 최종 테이블에 대한 FROM/JOIN/INTO/UPDATE/TABLE 문맥 354건. 직접 조회·변경·테스트 fixture·문서의 근거이며 SQL parser 결과는 아님. `xtask/src/sql_compare*` 3건은 #92 비교 도구의 시험 문자열                                                 |
+| [object-function-references.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/object-function-references.jsonl)           | CHECK·정책·트리거에서 최종 함수 이름을 참조하는 객체 72개. 테이블 RLS와 SQL 내부 호출을 외부 Rust 호출과 함께 보기 위한 목록                                                                                                                              |
+| `dependencies.sql`, [dependencies-postgres.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/dependencies-postgres.jsonl) | pg_depend가 기록한 의존성 3091건. 행 타입·테이블·제약·트리거·함수 사이의 구조적 의존성. 물리 OID 대신 객체 식별자를 사용                                                                                                                                  |
+| `tables.md`                                                                                                                                                                                              | 55개 테이블의 실제 RLS/강제 RLS 상태와 테이블 ACL. 열 단위 권한은 원본 카탈로그의 column 항목으로 확인                                                                                                                                                    |
 
 모든 JSON 목록은 객체 하나를 한 줄에 담는 JSON Lines다. `jq -s`로 읽으면 행 순서를 유지한 배열이 된다.
 배열 형식에서 변환한 여섯 목록은 변환 전후 객체 키를 정렬한 배열의 SHA-256과 행 수를 대조하여 데이터가 같음을 확인했다.
 최초 추출(`cb65cc3`)의 원본은 B worktree의 `target/sql-compare-baseline-export/`에, 현재 목록의 원본 행·덤프는 이 체크아웃의 `target/sql-regen-3db81d1deae2-20261023t065319z/`에만 보존한다.
-PR에서 검토할 카탈로그 근거는 위 `catalog-postgres.jsonl`이며, 로컬 원본 경로를 Git에 포함된 파일로 해석하지 않는다.
+PR에서 검토할 카탈로그 근거는 위 [catalog-postgres.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/catalog-postgres.jsonl)이며, 로컬 원본 경로를 Git에 포함된 파일로 해석하지 않는다.
 
 함수 지도에서 `body_name_references`는 주석을 뺀 본문을 최종 함수 이름 목록과 대조한 **이름 참조**다.
 문자열 본문은 pg_depend에 모두 기록되지 않으므로 이 목록과 구조적 의존성을 함께 본다.
@@ -234,18 +236,23 @@ fi
 
 # 5. 비교. 반영 전 차이를 검토한다.
 cmp "$REGEN/0001_final_state.sql" preparation/sql-consolidation/candidate/0001_final_state.sql || true
-for file in "$REGEN"/inventory/*; do cmp "$file" "$INV/${file##*/}" || true; done
+for file in "$REGEN"/inventory/*; do
+  # 이 SHA의 보존 목록과 비교한다. 새 기준 SHA라면 차이는 별도 검토한다.
+  git show "0dfa2b9f99cbcafb71158bdfe8598dba985d530b:preparation/sql-consolidation/inventory/${file##*/}" \
+    | cmp "$file" - || true
+done
 sha256sum "$REGEN/0001_final_state.sql" "$REGEN"/inventory/*
 ```
 
+위 비교는 보존 커밋이 로컬에 있어야 한다. 없으면 기존 `origin`의 `fvoci/sql-prep-review-head`를 fetch하고 [보존 SHA](../evidence.md)를 확인한다.
 반영은 검토 뒤 별도로 한다: `cp "$REGEN/0001_final_state.sql" preparation/sql-consolidation/candidate/`,
-`cp "$REGEN"/inventory/* "$INV"/`. 그다음 수치가 들어 있는 문서(이 README의 객체 수와 파일 설명의 건수, `tables.md`의 테이블 수,
+`cp "$REGEN/inventory/tables.md" "$INV/"`. 원시 JSONL은 `target/`에 남겨 원격 증거로 보존하고 현재 트리에 복사하지 않는다. 그다음 수치가 들어 있는 문서(이 README의 객체 수와 파일 설명의 건수, `tables.md`의 테이블 수,
 `../analysis-a.md`, `../candidate/README.md`의 준비 기준)를 새 목록에서 다시 세어 고친다. 이 문서 갱신은 자동화하지 않았다.
 후보가 바뀌면 이전 A/B 결과를 최신 검증으로 재사용하지 않고 비교기를 새 출력 경로로 다시 실행한다.
 
 재현 확인(2026-10-23): 위 블록을 README에서 그대로 뽑아 `SRC_SHA=cb65cc31156c0fd8d28cf856bc132d4a506c8885`로 실행했다.
 새 PostgreSQL 18.3 DB에서 만든 후보(SHA-256 `b8172cfb…55725`), JSON Lines 8개, `tables.md`가 모두 커밋된 파일과
-**바이트 단위로 같았다**. `dependencies-postgres.jsonl`도 포함된다. 카탈로그 원본 행은 B가 보존한 최초 추출과 같았고 초기 행 파일은 비어 있었다.
+**바이트 단위로 같았다**. [dependencies-postgres.jsonl](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/inventory/dependencies-postgres.jsonl)도 포함된다. 카탈로그 원본 행은 B가 보존한 최초 추출과 같았고 초기 행 파일은 비어 있었다.
 출력은 로컬 `target/sql-regen-cb65cc31156c-20261023t033728z/`에 있다. 컨테이너는 정지 상태이며 볼륨은 없다.
 
 정책 반영 재생성(2026-10-23, 최종): 같은 블록을 README에서 그대로 뽑아 `SRC_SHA=3db81d1deae24b16478581ebd6a06de2b2a2d8c9`로 실행했다(종료 코드 0).

@@ -1,6 +1,0 @@
-36b713c1c6c8e55a15c5e28bd84d29754d403bbd6ce506f87a7efff814b72211  target/sql-compare-pg17-restricted/a/catalog.json
-e7a95325743308562eee5f9a972a270664340d9e9a239e2c37fc8a019bbd8fa6  target/sql-compare-pg17-restricted/a/schema.sql
-df49de4ba71a2f48b7750142a21509b6ae45d71cffd4a6389a06d6fd10763490  target/sql-compare-pg17-restricted/a/migration-ledger.json
-36b713c1c6c8e55a15c5e28bd84d29754d403bbd6ce506f87a7efff814b72211  target/sql-compare-pg17-restricted/b/catalog.json
-1681af9adab1815102a7725b4ede3d1c4bfcaa0ead89cefdfe8922b6f90f0eff  target/sql-compare-pg17-restricted/b/schema.sql
-c2fdbfa64bbe51d53814d9b0346704c3aed6129c6a6fbee0dd1a01057329435e  target/sql-compare-pg17-restricted/b/migration-ledger.json

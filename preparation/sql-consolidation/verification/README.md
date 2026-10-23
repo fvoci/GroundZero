@@ -1,5 +1,7 @@
 # SQL 통합 준비 검증
 
+> **역사 기록이며 현재 상태를 나타내지 않음.** 본문 판단·상태·결과는 명시된 조사/실행 SHA에만 적용한다. 관련 결함이나 SHA를 조사할 때만 참조하며, 현재 기준과 분리 검증은 [증거 안내](../evidence.md)를 따른다.
+
 실제 `crates/server/migrations/`와 제품 설치 경로는 바꾸지 않는다. 이 도구는 새 설치 후보가 누적 마이그레이션의 최종 상태와 같은지 비교하는 준비용 명령이다.
 
 ```sh
@@ -34,7 +36,7 @@ cargo xtask sql-compare \
 
 Compose 파일·이미지·테스트 자격 증명은 기존 설정을 재사용한다. 프로젝트 이름은 체크아웃 해시와 실행 UUID를 포함하며 A/B/검색·S3가 서로 다르다. 호스트 포트는 동적 루프백 포트다. 종료 시 생성한 프로젝트만 `stop`한다. 시작 전에 정지 대상을 등록해 부분 시작 실패도 처리하며, 한 정지가 실패해도 나머지 정지와 `result.json` 기록을 시도한다. 정지 실패는 `cleanup: FAIL`과 `passed: false`로 남긴다. 컨테이너·이름 붙은 볼륨은 보존하고 `down`·`prune`을 호출하지 않는다. 기존 Compose DB는 tmpfs이므로 **컨테이너를 정지하면 DB의 tmpfs 데이터 자체는 사라진다**. 그 전에 카탈로그·덤프·로그를 출력 경로에 저장한다. 개인 개발 DB 또는 Cloud DB 주소는 받지 않는다.
 
-과거 실행에는 예외가 있다. 2026-10-22 첫 A/A 진단에서 수정 전 바이너리가 해당 실행 B 프로젝트에 `down --volumes --remove-orphans`를 호출해 전용 PostgreSQL 컨테이너와 네트워크를 삭제했다. 이 DB는 tmpfs였고 이름 붙은 볼륨은 없었다. 공유 컨테이너·볼륨은 대상이 아니었다. 이후 실행은 위의 `stop` 방식으로 수정했다. 정확한 명령과 삭제 로그는 [원본 진단 로그](diagnostics/initial-control-cleanup.txt), 구성 증거는 [저장소 구성](diagnostics/initial-control-postgres-storage.json), 실행별 처리는 [결과 보고서](results.md)에 남겼다.
+과거 실행에는 예외가 있다. 2026-10-22 첫 A/A 진단에서 수정 전 바이너리가 해당 실행 B 프로젝트에 `down --volumes --remove-orphans`를 호출해 전용 PostgreSQL 컨테이너와 네트워크를 삭제했다. 이 DB는 tmpfs였고 이름 붙은 볼륨은 없었다. 공유 컨테이너·볼륨은 대상이 아니었다. 이후 실행은 위의 `stop` 방식으로 수정했다. 정확한 명령과 삭제 로그는 [원본 진단 로그](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/verification/diagnostics/initial-control-cleanup.txt), 구성 증거는 [저장소 구성](https://github.com/fvoci/GroundZero/blob/0dfa2b9f99cbcafb71158bdfe8598dba985d530b/preparation/sql-consolidation/verification/diagnostics/initial-control-postgres-storage.json), 실행별 처리는 [결과 보고서](results.md)에 남겼다.
 
 ## 객체 비교
 
