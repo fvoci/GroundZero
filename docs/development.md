@@ -3213,7 +3213,7 @@ current}`, (4) 아니면 고치고 판을 올린다. `SavedView`에 `version`. �
   다른 탭이 먼저 만든 이름은 409 안내·설정 유지. 수정 전 실패: 충돌 안내·단추를 찾지 못함(`Unable to find … 그사이 다른 사람이 …`·`서버 내용
 불러오기`·`다른 탭에서 보기 …`), 다시 읽기 뒤 저장은 판 없이 다시 읽은 제목을 보냄(`expected { title: '다른 사람이 고친 제목', … } to match object
 { base_version: 1, … }`). 기존 웹 시험은 새 결과 모양(`{kind}`)과 `version`에 맞췄다.
-- **돌린 검사(`7f6da61` 기준, 리베이스 전 같은 코드)**: `cargo xtask check` PASS(fmt·clippy·단위·deny·계약 최신·format·lint·svelte-check·i18n·rhwp 고지·고지·웹 시험 133파일 745건·라이선스). `cargo xtask test --oidc` PASS(격리 Compose, 위 `--keep` 스택을 이어 써서 DB는 새로 만든 것이 아니다. 끝에 그 스택을 지움). 수정 전 증거는 같은 스택에서 시험 바이너리를 하나씩 돌렸다(`cargo test -p fvoci-server --test …`, 주소는 xtask의 시험 값). **NOT RUN**: `cargo xtask test --supabase`(셀프호스트 Supabase), 실제 브라우저 확인(coordinator가 마지막에 한 번 돌림, `cargo xtask dev` 금지), 두 탭 동시 저장의 실제 경합(시험은 순서를 정한 두 요청과 같은 트랜잭션의 잠금으로 본다).
+- **돌린 검사(`7f6da61` 기준, 리베이스 전 같은 코드)**: `cargo xtask check` PASS(fmt·clippy·단위·deny·계약 최신·format·lint·svelte-check·i18n·rhwp 고지·고지·웹 시험 133파일 745건·라이선스). `cargo xtask test --oidc` PASS 두 번: 위 `--keep` 스택을 이어 쓴 실행(끝에 그 스택을 지움), 그리고 리베이스한 머리(`3f138d4` 위)에서 새 DB로 처음부터 마이그레이션한 격리 Compose 실행. 수정 전 증거는 같은 스택에서 시험 바이너리를 하나씩 돌렸다(`cargo test -p fvoci-server --test …`, 주소는 xtask의 시험 값). **NOT RUN**: `cargo xtask test --supabase`(셀프호스트 Supabase), 실제 브라우저 확인(coordinator가 마지막에 한 번 돌림, `cargo xtask dev` 금지), 두 탭 동시 저장의 실제 경합(시험은 순서를 정한 두 요청과 같은 트랜잭션의 잠금으로 본다).
 
 ## 99. CSV 업무 한 건 만들기의 원자성 (2026-10-23, D-105, `fvoci/policy-task-create`)
 
