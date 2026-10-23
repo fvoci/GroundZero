@@ -148,9 +148,15 @@
         return;
       }
       conflict = undefined;
+      // 저장은 새 판을 주지 않으므로(204) 다시 읽은 뒤에 편집을 닫는다. 먼저 닫으면 다시 읽기 전에 연 편집이 옛 판을
+      // 기준으로 삼아 다음 저장이 거짓 409가 된다. 읽지 못하면 지금처럼 다시 읽기를 맡긴다.
+      try {
+        profile = await api.itemProfile(item.id);
+      } catch {
+        reloadKey += 1;
+      }
       editing = false;
       status = m.modules_profile_saved();
-      reloadKey += 1;
       onchanged();
     } catch (err: unknown) {
       error = errorText(err, m.modules_save_failed());

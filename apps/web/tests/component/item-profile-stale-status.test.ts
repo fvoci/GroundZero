@@ -96,6 +96,46 @@ describe('item profile status line', () => {
     });
   });
 
+  it('closes the form only after the saved profile is reread', async () => {
+    // 저장은 204라 새 판을 주지 않는다. 다시 읽기 전에 편집을 다시 열면 옛 판을 기준으로 삼아 다음 저장이 거짓 409가 된다.
+    let reread: (p: ItemProfileView) => void = () => undefined;
+    vi.spyOn(api, 'itemProfile')
+      .mockResolvedValueOnce(profile)
+      .mockImplementationOnce(
+        () =>
+          new Promise<ItemProfileView>((resolve) => {
+            reread = resolve;
+          }),
+      )
+      .mockResolvedValue({ ...profile, goal: '새 목표', version: 2 });
+    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    const sent: Record<string, unknown>[] = [];
+    vi.stubGlobal('fetch', (input: unknown, init?: RequestInit) => {
+      if (input === '/api/items/i1/profile' && init?.method === 'PUT') {
+        const body: unknown = JSON.parse(typeof init.body === 'string' ? init.body : '{}');
+        if (typeof body === 'object' && body !== null) sent.push({ ...body });
+        return Promise.resolve(response(204, undefined));
+      }
+      return new Promise<Response>(() => undefined);
+    });
+    render(ItemProfilePanel, { props: { item, kind: 'project', onchanged: () => undefined } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => {
+      expect(sent).toHaveLength(1);
+    });
+    expect(screen.queryByRole('button', { name: '고치기' })).not.toBeInTheDocument();
+
+    reread({ ...profile, goal: '새 목표', version: 2 });
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => {
+      expect(sent).toHaveLength(2);
+    });
+    expect(sent[1]).toMatchObject({ base_version: 2 });
+  });
+
   it('drops the earlier "saved" line when the period is invalid', async () => {
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
     vi.spyOn(api, 'assignable').mockResolvedValue([]);
