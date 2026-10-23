@@ -1889,20 +1889,50 @@ async fn an_author_filter_finds_results_beyond_the_old_candidate_window() {
     let by = |author: &TestUser| format!("{tok}&author={}", author.id.0);
     assert_eq!(
         titles(&search(&app, &admin, &by(&writer)).await),
-        [target.clone()]
+        std::slice::from_ref(&target)
     );
     assert_eq!(
         titles(&search(&plain, &admin, &by(&writer)).await),
-        [target.clone()]
+        std::slice::from_ref(&target)
     );
     // 작성자 필터는 좁히기만 한다: 멤버는 관리자의 비공개 항목 업무를 보지 못하고, 관리자는 본다.
     for router in [&app, &plain] {
         assert_eq!(
             titles(&search(router, &reader, &by(&admin)).await),
-            [admin_doc.clone()]
+            std::slice::from_ref(&admin_doc)
         );
         let mut mine = vec![admin_doc.clone(), hidden.clone()];
         mine.sort();
         assert_eq!(titles(&search(router, &admin, &by(&admin)).await), mine);
     }
+}
+
+/// D-101: 0시에 여름시간이 끝나 0시가 두 번 있는 날(America/Havana 2026-11-01, 01:00 CDT → 00:00 CST)은 첫 번째 0시
+/// (04:00Z)에 시작한다. `날짜::timestamp AT TIME ZONE`만 쓰면 두 번째 0시(05:00Z)를 시작으로 보아 그날 첫 1시간이 앞날에
+/// 들어간다(시간 기록의 날 경계와 같은 `app_local_instant`, 감사 S21).
+#[tokio::test]
+async fn a_day_with_a_repeated_midnight_starts_at_the_first_one() {
+    let state = search_state().await;
+    let app = common::app(&state);
+    let plain = plain_app();
+    let tok = token();
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "두 번의 0시").await;
+    let before = format!("{tok} 전날 밤");
+    let first_hour = format!("{tok} 첫 0시 뒤");
+    // 10-31 23:30 CDT, 11-01 00:30 CDT(첫 번째).
+    doc_changed_at(&app, &admin, &ws, &before, "2026-11-01T03:30:00Z").await;
+    doc_changed_at(&app, &admin, &ws, &first_hour, "2026-11-01T04:30:00Z").await;
+    settle(&state, &app, &admin, &tok, &[&before, &first_hour]).await;
+    let day = |d: &str| format!("{tok}&kinds=document&tz=America/Havana&from={d}&to={d}");
+    both_paths(&state, &app, &plain, &admin, &day("2026-10-31"), &[&before]).await;
+    both_paths(
+        &state,
+        &app,
+        &plain,
+        &admin,
+        &day("2026-11-01"),
+        &[&first_hour],
+    )
+    .await;
 }
