@@ -1,0 +1,225 @@
+{
+  "snapshot": "- generic\n  - region \"Notifications alt+T\" [ref=e1]\n  - StaticText \"fvoci\"\n  - list\n    - listitem [level=1]\n      - button \"Search Ctrl/⌘ K\" [ref=e12]\n        - StaticText \"Search\"\n        - StaticText \"Ctrl/⌘ K\"\n  - generic\n    - generic\n      - StaticText \"Personal\"\n      - list\n        - listitem [level=1]\n          - link \"Home\" [ref=e39]\n            - StaticText \"Home\"\n        - listitem [level=1]\n          - link \"Notifications · 2 unread notifications\" [ref=e40]\n            - StaticText \"Notifications\"\n        - listitem [level=1]\n          - link \"My notes\" [ref=e41]\n            - StaticText \"My notes\"\n        - listitem [level=1]\n          - link \"Shared with me\" [ref=e42]\n            - StaticText \"Shared with me\"\n        - listitem [level=1]\n          - link \"My time\" [ref=e43]\n            - StaticText \"My time\"\n        - listitem [level=1]\n          - link \"My notes trash\" [ref=e44]\n            - StaticText \"My notes trash\"\n        - listitem [level=1]\n          - link \"My activity\" [ref=e45]\n            - StaticText \"My activity\"\n    - separator\n    - generic\n      - StaticText \"Workspaces\"\n      - list\n        - listitem [level=1]\n          - button \"Switch workspace: 개발\" [expanded=false, ref=e46]\n            - StaticText \"개발\"\n      - list\n        - listitem [level=1]\n          - link \"Wiki\" [ref=e47]\n            - StaticText \"Wiki\"\n          - button \"Collapse Wiki\" [expanded=true, ref=e48]\n      - navigation \"Wiki\" [ref=e25]\n        - list\n          - listitem [level=1]\n            - link \"공동 편집 연습\" [ref=e54]\n              - StaticText \"공동 편집 연습\"\n          - listitem [level=1]\n            - link \"SQL baseline browser verified\" [ref=e55]\n              - StaticText \"SQL baseline browser verified\"\n      - list\n        - listitem [level=1]\n          - link \"Calendar\" [ref=e49]\n            - StaticText \"Calendar\"\n        - listitem [level=1]\n          - link \"Members\" [ref=e50]\n            - StaticText \"Members\"\n        - listitem [level=1]\n          - link \"Trash\" [ref=e51]\n            - StaticText \"Trash\"\n        - listitem [level=1]\n          - link \"Audit log\" [ref=e52]\n            - StaticText \"Audit log\"\n    - generic\n      - StaticText \"Modules\"\n      - paragraph\n        - StaticText \"No modules yet.\"\n  - list\n    - listitem [level=1]\n      - button \"Account menu: Test User\" [expanded=false, ref=e13]\n        - StaticText \"Test User\"\n  - button \"Toggle sidebar\" [ref=e2]\n  - main\n    - sectionheader\n      - button \"Toggle sidebar\" [ref=e3]\n        - StaticText \"Toggle sidebar\"\n      - StaticText \"개발\"\n      - group \"Timer\"\n        - button \"Start timer\" [ref=e14]\n    - main\n      - navigation \"Breadcrumb\" [ref=e4]\n        - link \"개발 wiki\" [ref=e15]\n          - StaticText \"개발 wiki\"\n      - toolbar \"Document actions\"\n        - button \"Share & settings\" [ref=e16]\n        - button \"Duplicate\" [ref=e17]\n        - button \"Move\" [ref=e18]\n      - button \"History\" [ref=e5]\n      - button \"Export\" [ref=e6]\n      - group \"Show on home\"\n        - button \"Pin to home\" [ref=e19]\n        - button \"Favorite\" [ref=e20]\n      - button \"Delete document\" [ref=e7]\n      - status\n      - region \"Live co-editing\" [ref=e8]\n        - StaticText \"WIKI-2\"\n        - status\n          - StaticText \"Live\"\n        - form\n          - LabelText\n            - StaticText \"Title\"\n          - textbox \"Title\" [ref=e26]: SQL baseline browser verified\n            - StaticText \"SQL baseline browser verified\"\n          - button \"Save title\" [disabled, ref=e27]\n        - group \"Editing mode\"\n        - toolbar \"Formatting\"\n          - button \"Bold\" [ref=e28]\n          - button \"Italic\" [ref=e29]\n          - button \"Heading\" [ref=e30]\n          - button \"List\" [ref=e31]\n          - button \"Checklist\" [ref=e32]\n          - button \"Code\" [ref=e33]\n          - button \"Table\" [ref=e34]\n          - button \"Math\" [ref=e35]\n          - button \"File or image\" [ref=e36]\n        - generic\n          - textbox \"Body\" [ref=e37]: Fresh SQL baseline: browser save and reopen verification.\n            - paragraph\n              - StaticText \"Fresh SQL baseline: browser save and reopen verification.\"\n          - paragraph\n            - StaticText \"Alt+Shift+↑↓ move · Ctrl/⌘+Shift+D duplicate · Ctrl/⌘+/ this menu\"\n        - paragraph\n          - StaticText \"Several people edit this document together. Changes are shared right away and kept as a revision after a quiet moment or when everyone leaves.\"\n      - complementary\n      - region \"Documents linking here\" [ref=e9]\n        - heading \"Documents linking here\" [level=2, ref=e21]\n        - paragraph\n          - StaticText \"None.\"\n      - region \"Attachments\" [ref=e10]\n        - heading \"Attachments\" [level=2, ref=e22]\n        - button \"Upload files\" [ref=e23]\n        - paragraph\n        - paragraph\n          - StaticText \"No attachments.\"\n      - region \"Comments\" [ref=e11]\n        - heading \"Comments\" [level=2, ref=e24]\n        - paragraph\n        - list\n          - listitem [level=1]\n            - StaticText \"No comments yet.\"\n        - form\n          - textbox \"New comment (Ctrl/⌘+Enter to post)\" [ref=e38]\n          - button \"Post comment\" [disabled, ref=e53]",
+  "refs": {
+    "e1": {
+      "name": "Notifications alt+T",
+      "role": "region"
+    },
+    "e10": {
+      "name": "Attachments",
+      "role": "region"
+    },
+    "e11": {
+      "name": "Comments",
+      "role": "region"
+    },
+    "e12": {
+      "name": "Search Ctrl/⌘ K",
+      "role": "button"
+    },
+    "e13": {
+      "name": "Account menu: Test User",
+      "role": "button"
+    },
+    "e14": {
+      "name": "Start timer",
+      "role": "button"
+    },
+    "e15": {
+      "name": "개발 wiki",
+      "role": "link"
+    },
+    "e16": {
+      "name": "Share & settings",
+      "role": "button"
+    },
+    "e17": {
+      "name": "Duplicate",
+      "role": "button"
+    },
+    "e18": {
+      "name": "Move",
+      "role": "button"
+    },
+    "e19": {
+      "name": "Pin to home",
+      "role": "button"
+    },
+    "e2": {
+      "name": "Toggle sidebar",
+      "role": "button"
+    },
+    "e20": {
+      "name": "Favorite",
+      "role": "button"
+    },
+    "e21": {
+      "name": "Documents linking here",
+      "role": "heading"
+    },
+    "e22": {
+      "name": "Attachments",
+      "role": "heading"
+    },
+    "e23": {
+      "name": "Upload files",
+      "role": "button"
+    },
+    "e24": {
+      "name": "Comments",
+      "role": "heading"
+    },
+    "e25": {
+      "name": "Wiki",
+      "role": "navigation"
+    },
+    "e26": {
+      "name": "Title",
+      "role": "textbox"
+    },
+    "e27": {
+      "name": "Save title",
+      "role": "button"
+    },
+    "e28": {
+      "name": "Bold",
+      "role": "button"
+    },
+    "e29": {
+      "name": "Italic",
+      "role": "button"
+    },
+    "e3": {
+      "name": "Toggle sidebar",
+      "role": "button"
+    },
+    "e30": {
+      "name": "Heading",
+      "role": "button"
+    },
+    "e31": {
+      "name": "List",
+      "role": "button"
+    },
+    "e32": {
+      "name": "Checklist",
+      "role": "button"
+    },
+    "e33": {
+      "name": "Code",
+      "role": "button"
+    },
+    "e34": {
+      "name": "Table",
+      "role": "button"
+    },
+    "e35": {
+      "name": "Math",
+      "role": "button"
+    },
+    "e36": {
+      "name": "File or image",
+      "role": "button"
+    },
+    "e37": {
+      "name": "Body",
+      "role": "textbox"
+    },
+    "e38": {
+      "name": "New comment (Ctrl/⌘+Enter to post)",
+      "role": "textbox"
+    },
+    "e39": {
+      "name": "Home",
+      "role": "link"
+    },
+    "e4": {
+      "name": "Breadcrumb",
+      "role": "navigation"
+    },
+    "e40": {
+      "name": "Notifications · 2 unread notifications",
+      "role": "link"
+    },
+    "e41": {
+      "name": "My notes",
+      "role": "link"
+    },
+    "e42": {
+      "name": "Shared with me",
+      "role": "link"
+    },
+    "e43": {
+      "name": "My time",
+      "role": "link"
+    },
+    "e44": {
+      "name": "My notes trash",
+      "role": "link"
+    },
+    "e45": {
+      "name": "My activity",
+      "role": "link"
+    },
+    "e46": {
+      "name": "Switch workspace: 개발",
+      "role": "button"
+    },
+    "e47": {
+      "name": "Wiki",
+      "role": "link"
+    },
+    "e48": {
+      "name": "Collapse Wiki",
+      "role": "button"
+    },
+    "e49": {
+      "name": "Calendar",
+      "role": "link"
+    },
+    "e5": {
+      "name": "History",
+      "role": "button"
+    },
+    "e50": {
+      "name": "Members",
+      "role": "link"
+    },
+    "e51": {
+      "name": "Trash",
+      "role": "link"
+    },
+    "e52": {
+      "name": "Audit log",
+      "role": "link"
+    },
+    "e53": {
+      "name": "Post comment",
+      "role": "button"
+    },
+    "e54": {
+      "name": "공동 편집 연습",
+      "role": "link"
+    },
+    "e55": {
+      "name": "SQL baseline browser verified",
+      "role": "link"
+    },
+    "e6": {
+      "name": "Export",
+      "role": "button"
+    },
+    "e7": {
+      "name": "Delete document",
+      "role": "button"
+    },
+    "e8": {
+      "name": "Live co-editing",
+      "role": "region"
+    },
+    "e9": {
+      "name": "Documents linking here",
+      "role": "region"
+    }
+  }
+}

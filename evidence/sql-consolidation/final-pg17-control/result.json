@@ -1,0 +1,26 @@
+{
+  "behavior": {
+    "a_direct": "NOT RUN\n",
+    "a_session": "NOT RUN\n",
+    "b_direct": "NOT RUN\n",
+    "b_session": "NOT RUN\n"
+  },
+  "behavior_requested": false,
+  "behavior_scope": null,
+  "control": true,
+  "oidc": false,
+  "passed": true,
+  "phases": {
+    "a_install": "PASS",
+    "a_snapshot": "PASS",
+    "b_install": "PASS",
+    "b_snapshot": "PASS",
+    "cleanup": "PASS",
+    "objects": "PASS",
+    "old_database_rejected_unchanged": "PASS",
+    "self_test": "PASS"
+  },
+  "previous_sql_sha": "8ffd8c3b940924eca8cf7ec739a85494243c0479",
+  "restricted_admin": false,
+  "supabase": false
+}

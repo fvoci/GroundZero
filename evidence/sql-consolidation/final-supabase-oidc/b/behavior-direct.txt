@@ -1,0 +1,1 @@
+PASS: existing Full suite; OIDC run with the isolated test Keycloak

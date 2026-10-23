@@ -1,0 +1,5 @@
+{
+  "catalog": [],
+  "dump": [],
+  "rule": "Only full-line SQL comments outside quoted literals in fvoci function bodies; all executable bytes, inline comments, whitespace, attributes and ACLs remain exact."
+}

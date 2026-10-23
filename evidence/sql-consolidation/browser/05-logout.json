@@ -1,0 +1,17 @@
+{
+  "snapshot": "- generic\n  - region \"Notifications alt+T\" [ref=e1]\n  - main\n    - heading \"fvoci\" [level=1, ref=e2]\n    - paragraph\n      - StaticText \"Manage work, knowledge and learning in one place. Sign in to continue.\"\n    - link \"Sign in\" [ref=e3]",
+  "refs": {
+    "e1": {
+      "name": "Notifications alt+T",
+      "role": "region"
+    },
+    "e2": {
+      "name": "fvoci",
+      "role": "heading"
+    },
+    "e3": {
+      "name": "Sign in",
+      "role": "link"
+    }
+  }
+}

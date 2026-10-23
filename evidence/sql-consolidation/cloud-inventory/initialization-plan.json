@@ -1,0 +1,85 @@
+{
+  "status": "NOT RUN — requires separate approval for new role credentials and first Cloud installation",
+  "observed": {
+    "source_sha": "b7d34936d68b6cc2901c020e5cc26a6098314a54",
+    "run": "https://github.com/fvoci/GroundZero/actions/runs/39956303784",
+    "artifact_id": 12502088973,
+    "report_sha256": "7a25c22af19e1475b113eeef981b41d5e2510fbd3dcb95b5531e5115ee7ffbd1",
+    "project_ref": "fpbqhckdkhhnhqvsixnr",
+    "host": "aws-0-ap-southeast-1.pooler.supabase.com",
+    "port": 5432,
+    "database": "postgres",
+    "version": "17.11",
+    "role": "postgres",
+    "fvoci_schema": false,
+    "fvoci_roles": [],
+    "fvoci_sqlx_history": false,
+    "groundzero_objects": 0
+  },
+  "impact": {
+    "classification": "First installation into an empty GroundZero namespace, not deletion/recreation of existing Cloud GroundZero data.",
+    "existing_groundzero_data_loss": "No GroundZero schema, roles, objects or SQLx history found at the inspected snapshot. Recheck immediately before installation; stop on any difference.",
+    "backup": "No existing GroundZero data to back up at this snapshot. Managed auth/storage and platform data are outside scope; Dashboard backup existence and recoverability remain NOT VERIFIED. This is not a decision to forgo backup of any pre-existing data.",
+    "excluded": [
+      "Supabase project deletion/reset",
+      "auth/storage/realtime/vault and other managed schemas",
+      "platform roles, extensions, configuration",
+      "other application objects",
+      "new database creation",
+      "backup restore",
+      "new credential generation before explicit approval"
+    ],
+    "synthetic_data": "Approved smoke tests would create new synthetic users, sessions, workspaces, documents, revisions and audit/queue rows. They remain after testing; no automatic schema/drop/truncate cleanup."
+  },
+  "preconditions": [
+    "Confirm exact project-ref, TLS-verified session host:5432, postgres database and authenticated current_user=postgres match the inventory.",
+    "Require no fvoci schema, no fvoci_migrator/fvoci_app roles, no fvoci-owned objects outside that schema, and no GroundZero SQLx history. Unexpected objects or role sharing stop initialization.",
+    "Record managed schemas/owners/ACLs and public objects before installation for after-state comparison; exclude transient connection counts.",
+    "Receive explicit approval to create the standard two roles, two unique credentials and a named private retention mechanism. Do not reuse the admin password or deploy/ public test passwords.",
+    "Build reviewed source and selected test binaries before credential injection. Pin manual execution to reviewed immutable SHA and repository owner. Keep full URLs/passwords/CA contents out of logs and artifacts.",
+    "Continue verify-full TLS with existing CA; do not lower TLS verification, grant new permanent admin capabilities, or switch to transaction pooler."
+  ],
+  "existing_secret_sources": [
+    "SUPABASE_TEST_HOST",
+    "SUPABASE_TEST_PORT",
+    "SUPABASE_TEST_DATABASE",
+    "SUPABASE_TEST_USER",
+    "SUPABASE_TEST_PASSWORD",
+    "SUPABASE_TEST_SSL_ROOT_CERT"
+  ],
+  "additional_existing_secret_note": "SUPABASE_TEST_DATABASE_ADMIN_URL_SESSION_POOLER reportedly exists but was neither read nor needed for inventory. Any use must validate the same target and enforce verify-full with the existing CA; never print its value.",
+  "product_environment": {
+    "bootstrap": [
+      "DATABASE_ADMIN_URL (derived privately from the validated existing admin target)",
+      "FVOCI_DB_MIGRATOR_PASSWORD (new credential, not yet authorized/generated)",
+      "FVOCI_DB_APP_PASSWORD (new credential, not yet authorized/generated)"
+    ],
+    "migrate": [
+      "DATABASE_MIGRATION_URL (standard fvoci_migrator session login, same approved target, new credential)"
+    ],
+    "smoke": [
+      "DATABASE_URL (fvoci_app session login, same target, NOBYPASSRLS)",
+      "FVOCI_STORAGE=local",
+      "FVOCI_STORAGE_DIR=<private ephemeral runner directory>",
+      "FVOCI_WEB_DIR=",
+      "RUST_TEST_THREADS=1"
+    ]
+  },
+  "planned_commands": [
+    "fvoci-server db bootstrap",
+    "fvoci-server db migrate",
+    "fvoci-server db migrate (repeat to confirm unchanged one-row SQLx ledger/checksum)",
+    "cargo test --locked --package fvoci-server --test first_flow --test db_context -- --test-threads=1",
+    "Optional approved normal-delete/restore smoke: cargo test --locked --package fvoci-server --test trash deleted_documents_disappear_and_come_back_with_their_subtree -- --exact --test-threads=1"
+  ],
+  "execution_notes": [
+    "Run only explicitly selected first_flow/db_context binaries against this confirmed empty dedicated test target. Do not point cargo xtask test, full workspace tests, FreshDb fixtures or backup tests at Cloud.",
+    "first_flow verifies create/read/update, idempotent saves, app role identity, NOBYPASSRLS, unauthorized visibility/update denial and direct DELETE permission denial. db_context verifies user context clears after commit/rollback.",
+    "first_flow/db_context alone do not prove a successful application delete; the named existing trash test adds soft-delete/access-denial/restore of its own new synthetic document subtree, if approved as part of smoke scope.",
+    "The Cloud session route for migrator and custom app roles is not established by administrator connection success; each role must connect itself and its real commands/tests must pass.",
+    "Record final source SHA, SQL SHA256/SQLx checksum, role properties, actual route, selected test names/results and managed-object before/after equality.",
+    "If bootstrap or migrate fails, preserve any partial/new GroundZero state and report the failure; do not retry with broader permissions or automatic cleanup.",
+    "No restore, old backup compatibility, real Cloud OIDC, full Cloud integration suite or browser flow is claimed by these selected DB/API smoke tests.",
+    "For any future approved backup containing real data, use encrypted backup plus approved private storage and integrity/restore checks; never publish plaintext backup through public repository artifacts."
+  ]
+}

@@ -1,0 +1,6 @@
+fvoci-leatherback-b57275-dev_pgdata
+fvoci-leatherback-b57275-dev-postgres-1
+fvoci-leatherback-b57275-dev_kcdata
+fvoci-leatherback-b57275-dev-keycloak-1
+fvoci-leatherback-b57275-dev_meilidata
+fvoci-leatherback-b57275-dev-meilisearch-1

@@ -1,0 +1,321 @@
+{
+  "snapshot": "- generic\n  - region \"Notifications alt+T\" [ref=e1]\n  - StaticText \"fvoci\"\n  - list\n    - listitem [level=1]\n      - button \"Search Ctrl/⌘ K\" [ref=e6]\n        - StaticText \"Search\"\n        - StaticText \"Ctrl/⌘ K\"\n  - generic\n    - StaticText \"Personal\"\n    - list\n      - listitem [level=1]\n        - link \"Home\" [ref=e18]\n          - StaticText \"Home\"\n      - listitem [level=1]\n        - link \"Notifications · 2 unread notifications\" [ref=e19]\n          - StaticText \"Notifications\"\n      - listitem [level=1]\n        - link \"My notes\" [ref=e20]\n          - StaticText \"My notes\"\n      - listitem [level=1]\n        - link \"Shared with me\" [ref=e21]\n          - StaticText \"Shared with me\"\n      - listitem [level=1]\n        - link \"My time\" [ref=e22]\n          - StaticText \"My time\"\n      - listitem [level=1]\n        - link \"My notes trash\" [ref=e23]\n          - StaticText \"My notes trash\"\n      - listitem [level=1]\n        - link \"My activity\" [ref=e24]\n          - StaticText \"My activity\"\n  - separator\n  - generic\n    - StaticText \"Workspaces\"\n    - list\n      - listitem [level=1]\n        - button \"Switch workspace: Choose a workspace\" [expanded=false, ref=e25]\n          - StaticText \"Choose a workspace\"\n  - list\n    - listitem [level=1]\n      - button \"Account menu: Test User\" [expanded=false, ref=e7]\n        - StaticText \"Test User\"\n  - button \"Toggle sidebar\" [ref=e2]\n  - main\n    - sectionheader\n      - button \"Toggle sidebar\" [ref=e3]\n        - StaticText \"Toggle sidebar\"\n      - StaticText \"Home\"\n      - group \"Timer\"\n        - button \"Start timer\" [ref=e8]\n    - main\n      - region \"Today\" [ref=e4]\n        - heading \"Today\" [level=1, ref=e9]\n        - StaticText \"Friday, October 23, 2026\"\n        - form \"Quick add\"\n          - StaticText \"Quick add\"\n          - button \"Quick add\" [expanded=false, ref=e26]\n            - StaticText \"Memo\"\n          - LabelText\n            - StaticText \"Title\"\n          - textbox \"Title\" [ref=e27]\n          - button \"Add\" [ref=e28]\n        - paragraph\n        - region \"Up next\" [ref=e10]\n          - heading \"Up next\" [level=2, ref=e29]\n          - heading \"Today 1\" [level=3, ref=e30]\n          - list\n            - listitem [level=1]\n              - button \"DEVP-8 관계 예제: 시작 전에 준비 끝 Oct 23, 2026\" [ref=e64]\n                - StaticText \"DEVP-8\"\n                - StaticText \"관계 예제: 시작 전에 준비 끝\"\n                - StaticText \"Oct 23, 2026\"\n          - heading \"Upcoming 15\" [level=3, ref=e31]\n          - list\n            - listitem [level=1]\n              - button \"DEVP-11 배포 체크리스트 확인 Oct 24, 2026\" [ref=e65]\n                - StaticText \"DEVP-11\"\n                - StaticText \"배포 체크리스트 확인\"\n                - StaticText \"Oct 24, 2026\"\n            - listitem [level=1]\n              - button \"DEVP-2 대표 업무: 준비 사항 확인 Oct 25, 2026\" [ref=e66]\n                - StaticText \"DEVP-2\"\n                - StaticText \"대표 업무: 준비 사항 확인\"\n                - StaticText \"Oct 25, 2026\"\n            - listitem [level=1]\n              - button \"DEVR-2 대표 업무: 준비 사항 확인 Oct 25, 2026\" [ref=e67]\n                - StaticText \"DEVR-2\"\n                - StaticText \"대표 업무: 준비 사항 확인\"\n                - StaticText \"Oct 25, 2026\"\n            - listitem [level=1]\n              - button \"DEVS-2 대표 업무: 준비 사항 확인 Oct 25, 2026\" [ref=e68]\n                - StaticText \"DEVS-2\"\n                - StaticText \"대표 업무: 준비 사항 확인\"\n                - StaticText \"Oct 25, 2026\"\n            - listitem [level=1]\n              - button \"DEVC-2 대표 업무: 준비 사항 확인 Oct 25, 2026\" [ref=e69]\n                - StaticText \"DEVC-2\"\n                - StaticText \"대표 업무: 준비 사항 확인\"\n                - StaticText \"Oct 25, 2026\"\n            - listitem [level=1]\n              - button \"DEVH-2 대표 업무: 준비 사항 확인 Oct 25, 2026\" [ref=e70]\n                - StaticText \"DEVH-2\"\n                - StaticText \"대표 업무: 준비 사항 확인\"\n                - StaticText \"Oct 25, 2026\"\n            - listitem [level=1]\n              - button \"DEVP-7 관계 예제: 함께 마무리 Oct 25, 2026\" [ref=e71]\n                - StaticText \"DEVP-7\"\n                - StaticText \"관계 예제: 함께 마무리\"\n                - StaticText \"Oct 25, 2026\"\n            - listitem [level=1]\n              - button \"DEVH-4 자료 정리 Oct 26, 2026\" [ref=e72]\n                - StaticText \"DEVH-4\"\n                - StaticText \"자료 정리\"\n                - StaticText \"Oct 26, 2026\"\n            - listitem [level=1]\n              - button \"DEVS-4 자료 정리 Oct 26, 2026\" [ref=e73]\n                - StaticText \"DEVS-4\"\n                - StaticText \"자료 정리\"\n                - StaticText \"Oct 26, 2026\"\n            - listitem [level=1]\n              - button \"DEVC-4 자료 정리 Oct 26, 2026\" [ref=e74]\n                - StaticText \"DEVC-4\"\n                - StaticText \"자료 정리\"\n                - StaticText \"Oct 26, 2026\"\n            - listitem [level=1]\n              - button \"DEVR-4 자료 정리 Oct 26, 2026\" [ref=e75]\n                - StaticText \"DEVR-4\"\n                - StaticText \"자료 정리\"\n                - StaticText \"Oct 26, 2026\"\n            - listitem [level=1]\n              - button \"DEVP-5 마일스톤: 검토 완료 Oct 26, 2026\" [ref=e76]\n                - StaticText \"DEVP-5\"\n                - StaticText \"마일스톤: 검토 완료\"\n                - StaticText \"Oct 26, 2026\"\n            - listitem [level=1]\n              - button \"DEVP-6 관계 예제: 하루 뒤 함께 시작 Oct 26, 2026\" [ref=e77]\n                - StaticText \"DEVP-6\"\n                - StaticText \"관계 예제: 하루 뒤 함께 시작\"\n                - StaticText \"Oct 26, 2026\"\n            - listitem [level=1]\n              - button \"DEVP-9 API 연결 점검 Oct 27, 2026\" [ref=e78]\n                - StaticText \"DEVP-9\"\n                - StaticText \"API 연결 점검\"\n                - StaticText \"Oct 27, 2026\"\n            - listitem [level=1]\n              - button \"DEVP-10 문서 초안 검토 Oct 29, 2026\" [ref=e79]\n                - StaticText \"DEVP-10\"\n                - StaticText \"문서 초안 검토\"\n                - StaticText \"Oct 29, 2026\"\n        - region \"This week\" [ref=e11]\n          - heading \"This week\" [level=2, ref=e32]\n          - list\n            - listitem [level=1]\n              - StaticText \"Sun 18\"\n              - StaticText \"—\"\n            - listitem [level=1]\n              - StaticText \"Mon 19\"\n              - StaticText \"—\"\n            - listitem [level=1]\n              - StaticText \"Tue 20\"\n              - StaticText \"—\"\n            - listitem [level=1]\n              - StaticText \"Wed 21\"\n              - StaticText \"—\"\n            - listitem [level=1]\n              - StaticText \"Thu 22\"\n              - StaticText \"Watch 1. 데이터와 표 · Study 1. 1장 읽기\"\n            - listitem [level=1]\n              - StaticText \"Fri 23\"\n              - StaticText \"Due DEVP-8 관계 예제: 시작 전에 준비 끝 · Due DEVP-4 하위 업무: 검토 목록 작성 · Watch 2. 질문 만들기 · Study 2. 연습 문제\"\n            - listitem [level=1]\n              - StaticText \"Sat 24\"\n              - StaticText \"All day 예제 점검 모임 · All day 예제 점검 모임 · All day 예제 점검 모임 · All day 예제 점검 모임 · All day 예제 점검 모임 · Due DEVP-11 배포 체크리스트 확인 · Watch 3. 결과 읽기 · Study 3. 개념 복습\"\n        - region \"Pinned\" [ref=e12]\n          - heading \"Pinned\" [level=2, ref=e33]\n          - paragraph\n            - StaticText \"Use “Pin to home” on an item, document or task to add one here.\"\n        - region \"Favorites\" [ref=e13]\n          - heading \"Favorites\" [level=2, ref=e34]\n          - paragraph\n            - StaticText \"Use “Favorite” on an item, document or task to add one here.\"\n        - region \"Active items\" [ref=e14]\n          - heading \"Active items\" [level=2, ref=e35]\n          - button \"DEVP-1 작은 출시 준비 · 모듈 예제 (합성 데이터) 2/10 tasks done\" [ref=e36]\n            - StaticText \"DEVP-1 작은 출시 준비 \"\n            - StaticText \"· 모듈 예제 (합성 데이터)\"\n            - StaticText \"2/10 tasks done\"\n          - button \"DEVR-1 학습 습관 합성 연구 · 모듈 예제 (합성 데이터) 1/3 tasks done\" [ref=e37]\n            - StaticText \"DEVR-1 학습 습관 합성 연구 \"\n            - StaticText \"· 모듈 예제 (합성 데이터)\"\n            - StaticText \"1/3 tasks done\"\n          - button \"DEVS-1 SQL 기초 함께 읽기 · 모듈 예제 (합성 데이터) 1/3 tasks done\" [ref=e38]\n            - StaticText \"DEVS-1 SQL 기초 함께 읽기 \"\n            - StaticText \"· 모듈 예제 (합성 데이터)\"\n            - StaticText \"1/3 tasks done\"\n          - button \"DEVC-1 데이터 입문 강좌 · 모듈 예제 (합성 데이터) 1/3 tasks done\" [ref=e39]\n            - StaticText \"DEVC-1 데이터 입문 강좌 \"\n            - StaticText \"· 모듈 예제 (합성 데이터)\"\n            - StaticText \"1/3 tasks done\"\n          - button \"DEVH-1 주말 수채화 · 모듈 예제 (합성 데이터) 1/3 tasks done\" [ref=e40]\n            - StaticText \"DEVH-1 주말 수채화 \"\n            - StaticText \"· 모듈 예제 (합성 데이터)\"\n            - StaticText \"1/3 tasks done\"\n        - region \"Recent work\" [ref=e15]\n          - heading \"Recent work\" [level=2, ref=e41]\n          - button \"WIKI-1 운영 안내 (합성)\" [ref=e42]\n            - StaticText \"WIKI-1\"\n            - StaticText \"운영 안내 (합성)\"\n          - button \"WIKI-2 설치\" [ref=e43]\n            - StaticText \"WIKI-2\"\n            - StaticText \"설치\"\n          - button \"WIKI-3 백업\" [ref=e44]\n            - StaticText \"WIKI-3\"\n            - StaticText \"백업\"\n          - button \"WIKI-4 점검 기록\" [ref=e45]\n            - StaticText \"WIKI-4\"\n            - StaticText \"점검 기록\"\n          - button \"DEVP-3 공동 작업 노트\" [ref=e46]\n            - StaticText \"DEVP-3\"\n            - StaticText \"공동 작업 노트\"\n          - button \"DEVR-3 공동 작업 노트\" [ref=e47]\n            - StaticText \"DEVR-3\"\n            - StaticText \"공동 작업 노트\"\n          - button \"DEVS-3 공동 작업 노트\" [ref=e48]\n            - StaticText \"DEVS-3\"\n            - StaticText \"공동 작업 노트\"\n          - button \"DEVC-3 공동 작업 노트\" [ref=e49]\n            - StaticText \"DEVC-3\"\n            - StaticText \"공동 작업 노트\"\n          - button \"DEVH-4 자료 정리\" [ref=e50]\n            - StaticText \"DEVH-4\"\n            - StaticText \"자료 정리\"\n          - button \"DEVH-5 지난 활동 돌아보기\" [ref=e51]\n            - StaticText \"DEVH-5\"\n            - StaticText \"지난 활동 돌아보기\"\n          - button \"DEVS-4 자료 정리\" [ref=e52]\n            - StaticText \"DEVS-4\"\n            - StaticText \"자료 정리\"\n          - button \"DEVS-5 지난 활동 돌아보기\" [ref=e53]\n            - StaticText \"DEVS-5\"\n            - StaticText \"지난 활동 돌아보기\"\n          - button \"DEVC-4 자료 정리\" [ref=e54]\n            - StaticText \"DEVC-4\"\n            - StaticText \"자료 정리\"\n          - button \"DEVC-5 지난 활동 돌아보기\" [ref=e55]\n            - StaticText \"DEVC-5\"\n            - StaticText \"지난 활동 돌아보기\"\n          - button \"DEVP-9 API 연결 점검\" [ref=e56]\n            - StaticText \"DEVP-9\"\n            - StaticText \"API 연결 점검\"\n          - button \"DEVP-10 문서 초안 검토\" [ref=e57]\n            - StaticText \"DEVP-10\"\n            - StaticText \"문서 초안 검토\"\n        - region \"Notifications\" [ref=e16]\n          - heading \"Notifications\" [level=2, ref=e58]\n          - paragraph\n            - StaticText \"DEVP-8 관계 예제: 시작 전에 준비 끝 is due Oct 23, 2026\"\n          - paragraph\n            - StaticText \"DEVP-11 배포 체크리스트 확인 is due Oct 24, 2026\"\n          - link \"See all notifications\" [ref=e59]\n      - region \"Workspaces\" [ref=e5]\n        - heading \"Workspaces\" [level=2, ref=e17]\n        - list\n          - listitem [level=1]\n            - link \"개발 (Admin)\" [ref=e62]\n              - StaticText \"개발\"\n              - StaticText \"(Admin)\"\n          - listitem [level=1]\n            - link \"모듈 예제 (합성 데이터) (Admin)\" [ref=e63]\n              - StaticText \"모듈 예제 (합성 데이터)\"\n              - StaticText \"(Admin)\"\n        - form\n          - LabelText\n            - StaticText \"New workspace name\"\n          - textbox \"New workspace name\" [ref=e60]\n          - button \"Create\" [ref=e61]",
+  "refs": {
+    "e1": {
+      "name": "Notifications alt+T",
+      "role": "region"
+    },
+    "e10": {
+      "name": "Up next",
+      "role": "region"
+    },
+    "e11": {
+      "name": "This week",
+      "role": "region"
+    },
+    "e12": {
+      "name": "Pinned",
+      "role": "region"
+    },
+    "e13": {
+      "name": "Favorites",
+      "role": "region"
+    },
+    "e14": {
+      "name": "Active items",
+      "role": "region"
+    },
+    "e15": {
+      "name": "Recent work",
+      "role": "region"
+    },
+    "e16": {
+      "name": "Notifications",
+      "role": "region"
+    },
+    "e17": {
+      "name": "Workspaces",
+      "role": "heading"
+    },
+    "e18": {
+      "name": "Home",
+      "role": "link"
+    },
+    "e19": {
+      "name": "Notifications · 2 unread notifications",
+      "role": "link"
+    },
+    "e2": {
+      "name": "Toggle sidebar",
+      "role": "button"
+    },
+    "e20": {
+      "name": "My notes",
+      "role": "link"
+    },
+    "e21": {
+      "name": "Shared with me",
+      "role": "link"
+    },
+    "e22": {
+      "name": "My time",
+      "role": "link"
+    },
+    "e23": {
+      "name": "My notes trash",
+      "role": "link"
+    },
+    "e24": {
+      "name": "My activity",
+      "role": "link"
+    },
+    "e25": {
+      "name": "Switch workspace: Choose a workspace",
+      "role": "button"
+    },
+    "e26": {
+      "name": "Quick add",
+      "role": "button"
+    },
+    "e27": {
+      "name": "Title",
+      "role": "textbox"
+    },
+    "e28": {
+      "name": "Add",
+      "role": "button"
+    },
+    "e29": {
+      "name": "Up next",
+      "role": "heading"
+    },
+    "e3": {
+      "name": "Toggle sidebar",
+      "role": "button"
+    },
+    "e30": {
+      "name": "Today 1",
+      "role": "heading"
+    },
+    "e31": {
+      "name": "Upcoming 15",
+      "role": "heading"
+    },
+    "e32": {
+      "name": "This week",
+      "role": "heading"
+    },
+    "e33": {
+      "name": "Pinned",
+      "role": "heading"
+    },
+    "e34": {
+      "name": "Favorites",
+      "role": "heading"
+    },
+    "e35": {
+      "name": "Active items",
+      "role": "heading"
+    },
+    "e36": {
+      "name": "DEVP-1 작은 출시 준비 · 모듈 예제 (합성 데이터) 2/10 tasks done",
+      "role": "button"
+    },
+    "e37": {
+      "name": "DEVR-1 학습 습관 합성 연구 · 모듈 예제 (합성 데이터) 1/3 tasks done",
+      "role": "button"
+    },
+    "e38": {
+      "name": "DEVS-1 SQL 기초 함께 읽기 · 모듈 예제 (합성 데이터) 1/3 tasks done",
+      "role": "button"
+    },
+    "e39": {
+      "name": "DEVC-1 데이터 입문 강좌 · 모듈 예제 (합성 데이터) 1/3 tasks done",
+      "role": "button"
+    },
+    "e4": {
+      "name": "Today",
+      "role": "region"
+    },
+    "e40": {
+      "name": "DEVH-1 주말 수채화 · 모듈 예제 (합성 데이터) 1/3 tasks done",
+      "role": "button"
+    },
+    "e41": {
+      "name": "Recent work",
+      "role": "heading"
+    },
+    "e42": {
+      "name": "WIKI-1 운영 안내 (합성)",
+      "role": "button"
+    },
+    "e43": {
+      "name": "WIKI-2 설치",
+      "role": "button"
+    },
+    "e44": {
+      "name": "WIKI-3 백업",
+      "role": "button"
+    },
+    "e45": {
+      "name": "WIKI-4 점검 기록",
+      "role": "button"
+    },
+    "e46": {
+      "name": "DEVP-3 공동 작업 노트",
+      "role": "button"
+    },
+    "e47": {
+      "name": "DEVR-3 공동 작업 노트",
+      "role": "button"
+    },
+    "e48": {
+      "name": "DEVS-3 공동 작업 노트",
+      "role": "button"
+    },
+    "e49": {
+      "name": "DEVC-3 공동 작업 노트",
+      "role": "button"
+    },
+    "e5": {
+      "name": "Workspaces",
+      "role": "region"
+    },
+    "e50": {
+      "name": "DEVH-4 자료 정리",
+      "role": "button"
+    },
+    "e51": {
+      "name": "DEVH-5 지난 활동 돌아보기",
+      "role": "button"
+    },
+    "e52": {
+      "name": "DEVS-4 자료 정리",
+      "role": "button"
+    },
+    "e53": {
+      "name": "DEVS-5 지난 활동 돌아보기",
+      "role": "button"
+    },
+    "e54": {
+      "name": "DEVC-4 자료 정리",
+      "role": "button"
+    },
+    "e55": {
+      "name": "DEVC-5 지난 활동 돌아보기",
+      "role": "button"
+    },
+    "e56": {
+      "name": "DEVP-9 API 연결 점검",
+      "role": "button"
+    },
+    "e57": {
+      "name": "DEVP-10 문서 초안 검토",
+      "role": "button"
+    },
+    "e58": {
+      "name": "Notifications",
+      "role": "heading"
+    },
+    "e59": {
+      "name": "See all notifications",
+      "role": "link"
+    },
+    "e6": {
+      "name": "Search Ctrl/⌘ K",
+      "role": "button"
+    },
+    "e60": {
+      "name": "New workspace name",
+      "role": "textbox"
+    },
+    "e61": {
+      "name": "Create",
+      "role": "button"
+    },
+    "e62": {
+      "name": "개발 (Admin)",
+      "role": "link"
+    },
+    "e63": {
+      "name": "모듈 예제 (합성 데이터) (Admin)",
+      "role": "link"
+    },
+    "e64": {
+      "name": "DEVP-8 관계 예제: 시작 전에 준비 끝 Oct 23, 2026",
+      "role": "button"
+    },
+    "e65": {
+      "name": "DEVP-11 배포 체크리스트 확인 Oct 24, 2026",
+      "role": "button"
+    },
+    "e66": {
+      "name": "DEVP-2 대표 업무: 준비 사항 확인 Oct 25, 2026",
+      "role": "button"
+    },
+    "e67": {
+      "name": "DEVR-2 대표 업무: 준비 사항 확인 Oct 25, 2026",
+      "role": "button"
+    },
+    "e68": {
+      "name": "DEVS-2 대표 업무: 준비 사항 확인 Oct 25, 2026",
+      "role": "button"
+    },
+    "e69": {
+      "name": "DEVC-2 대표 업무: 준비 사항 확인 Oct 25, 2026",
+      "role": "button"
+    },
+    "e7": {
+      "name": "Account menu: Test User",
+      "role": "button"
+    },
+    "e70": {
+      "name": "DEVH-2 대표 업무: 준비 사항 확인 Oct 25, 2026",
+      "role": "button"
+    },
+    "e71": {
+      "name": "DEVP-7 관계 예제: 함께 마무리 Oct 25, 2026",
+      "role": "button"
+    },
+    "e72": {
+      "name": "DEVH-4 자료 정리 Oct 26, 2026",
+      "role": "button"
+    },
+    "e73": {
+      "name": "DEVS-4 자료 정리 Oct 26, 2026",
+      "role": "button"
+    },
+    "e74": {
+      "name": "DEVC-4 자료 정리 Oct 26, 2026",
+      "role": "button"
+    },
+    "e75": {
+      "name": "DEVR-4 자료 정리 Oct 26, 2026",
+      "role": "button"
+    },
+    "e76": {
+      "name": "DEVP-5 마일스톤: 검토 완료 Oct 26, 2026",
+      "role": "button"
+    },
+    "e77": {
+      "name": "DEVP-6 관계 예제: 하루 뒤 함께 시작 Oct 26, 2026",
+      "role": "button"
+    },
+    "e78": {
+      "name": "DEVP-9 API 연결 점검 Oct 27, 2026",
+      "role": "button"
+    },
+    "e79": {
+      "name": "DEVP-10 문서 초안 검토 Oct 29, 2026",
+      "role": "button"
+    },
+    "e8": {
+      "name": "Start timer",
+      "role": "button"
+    },
+    "e9": {
+      "name": "Today",
+      "role": "heading"
+    }
+  }
+}

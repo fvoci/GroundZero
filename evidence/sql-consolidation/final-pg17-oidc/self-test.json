@@ -1,0 +1,125 @@
+[
+  {
+    "detected": true,
+    "differences": [
+      {
+        "a": null,
+        "b": {
+          "check": null,
+          "command": "r",
+          "permissive": true,
+          "roles": [
+            "fvoci_app"
+          ],
+          "using": "true"
+        },
+        "object": "policy/fvoci.documents.sql_compare_probe"
+      }
+    ],
+    "mutation": "policy",
+    "restored": true
+  },
+  {
+    "detected": true,
+    "differences": [
+      {
+        "a": {
+          "acl": [
+            "fvoci_migrator=arwdDxtm/fvoci_migrator"
+          ],
+          "force_rls": false,
+          "kind": "r",
+          "options": null,
+          "owner": "fvoci_migrator",
+          "persistence": "p",
+          "replica_identity": "d",
+          "rls": false
+        },
+        "b": {
+          "acl": [
+            "fvoci_app=d/fvoci_migrator",
+            "fvoci_migrator=arwdDxtm/fvoci_migrator"
+          ],
+          "force_rls": false,
+          "kind": "r",
+          "options": null,
+          "owner": "fvoci_migrator",
+          "persistence": "p",
+          "replica_identity": "d",
+          "rls": false
+        },
+        "object": "relation/fvoci.sessions"
+      }
+    ],
+    "mutation": "relation",
+    "restored": true
+  },
+  {
+    "detected": true,
+    "differences": [
+      {
+        "a": {
+          "acl": [
+            "fvoci_app=X/fvoci_migrator",
+            "fvoci_migrator=X/fvoci_migrator"
+          ],
+          "config": [
+            "search_path=fvoci, pg_temp"
+          ],
+          "cost": 100,
+          "definition": "CREATE OR REPLACE FUNCTION fvoci.app_user_id()\n RETURNS uuid\n LANGUAGE sql\n STABLE\n SET search_path TO 'fvoci', 'pg_temp'\nAS $function$ SELECT nullif(current_setting('app.user_id', true), '')::uuid $function$\n",
+          "language": "sql",
+          "leakproof": false,
+          "owner": "fvoci_migrator",
+          "parallel": "u",
+          "rows": 0,
+          "security_definer": false,
+          "strict": false,
+          "volatility": "s"
+        },
+        "b": {
+          "acl": [
+            "fvoci_app=X/fvoci_migrator",
+            "fvoci_migrator=X/fvoci_migrator"
+          ],
+          "config": [],
+          "cost": 100,
+          "definition": "CREATE OR REPLACE FUNCTION fvoci.app_user_id()\n RETURNS uuid\n LANGUAGE sql\n STABLE\nAS $function$SELECT NULL::uuid$function$\n",
+          "language": "sql",
+          "leakproof": false,
+          "owner": "fvoci_migrator",
+          "parallel": "u",
+          "rows": 0,
+          "security_definer": false,
+          "strict": false,
+          "volatility": "s"
+        },
+        "object": "function/fvoci.app_user_id()"
+      }
+    ],
+    "mutation": "function",
+    "restored": true
+  },
+  {
+    "detected": true,
+    "differences": [
+      {
+        "a": {
+          "deferrable": false,
+          "deferred": false,
+          "definition": "CHECK (length(btrim(name)) >= 1 AND length(btrim(name)) <= 255 AND name !~ '[\\x00-\\x1f/\\\\]'::text)",
+          "validated": true
+        },
+        "b": {
+          "deferrable": false,
+          "deferred": false,
+          "definition": "CHECK (true)",
+          "validated": true
+        },
+        "object": "constraint/fvoci.files.files_name_check"
+      }
+    ],
+    "mutation": "constraint",
+    "restored": true
+  }
+]

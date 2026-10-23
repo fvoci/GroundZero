@@ -1,0 +1,75 @@
+[
+  {
+    "Id": "970fd5ce5e1dc7b056178f340722d911ca12e9c2b1cd1503d844df57d0c42c76",
+    "Name": "/fvoci-leatherback-b57275-dev-postgres-1",
+    "Image": "postgres:18.3-bookworm@sha256:80630f83606d8db77d30b3851b16a9f78be2d0d4dda6f7b82a1fdca5ebe3acba",
+    "State": {
+      "Status": "running",
+      "Health": "healthy"
+    },
+    "Mounts": [
+      {
+        "Type": "volume",
+        "Name": "fvoci-leatherback-b57275-dev_pgdata",
+        "Source": "/var/lib/docker/volumes/fvoci-leatherback-b57275-dev_pgdata/_data",
+        "Destination": "/var/lib/postgresql",
+        "RW": true
+      }
+    ],
+    "Compose": {
+      "project": "fvoci-leatherback-b57275-dev",
+      "working_dir": "/home/kinesis/orca/workspaces/GroundZero/leatherback/deploy"
+    }
+  },
+  {
+    "Id": "fab820a594f7e11b811dfdf9b47aad5e093d29893dbd02f5fbb0a2e181851c6f",
+    "Name": "/fvoci-leatherback-b57275-dev-keycloak-1",
+    "Image": "quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4",
+    "State": {
+      "Status": "running",
+      "Health": "healthy"
+    },
+    "Mounts": [
+      {
+        "Type": "volume",
+        "Name": "fvoci-leatherback-b57275-dev_kcdata",
+        "Source": "/var/lib/docker/volumes/fvoci-leatherback-b57275-dev_kcdata/_data",
+        "Destination": "/opt/keycloak/data",
+        "RW": true
+      },
+      {
+        "Type": "bind",
+        "Name": null,
+        "Source": "/home/kinesis/orca/workspaces/GroundZero/leatherback/deploy/keycloak/realm-test.json",
+        "Destination": "/opt/keycloak/data/import/realm-test.json",
+        "RW": false
+      }
+    ],
+    "Compose": {
+      "project": "fvoci-leatherback-b57275-dev",
+      "working_dir": "/home/kinesis/orca/workspaces/GroundZero/leatherback/deploy"
+    }
+  },
+  {
+    "Id": "86e4f717bb9aff0201dd3c2673e877c6c1422e2bdbc9c207fc9cdd7ab11c2c6e",
+    "Name": "/fvoci-leatherback-b57275-dev-meilisearch-1",
+    "Image": "getmeili/meilisearch:v1.37.0@sha256:9cde2774864e6c19cdd09fcd2950bc01ac9a0454b6f343fffafa14faae6eb7ea",
+    "State": {
+      "Status": "running",
+      "Health": "healthy"
+    },
+    "Mounts": [
+      {
+        "Type": "volume",
+        "Name": "fvoci-leatherback-b57275-dev_meilidata",
+        "Source": "/var/lib/docker/volumes/fvoci-leatherback-b57275-dev_meilidata/_data",
+        "Destination": "/meili_data",
+        "RW": true
+      }
+    ],
+    "Compose": {
+      "project": "fvoci-leatherback-b57275-dev",
+      "working_dir": "/home/kinesis/orca/workspaces/GroundZero/leatherback/deploy"
+    }
+  }
+]

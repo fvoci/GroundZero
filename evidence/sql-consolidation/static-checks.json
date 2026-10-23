@@ -1,0 +1,14 @@
+{
+  "baseline_sha": "8ffd8c3b940924eca8cf7ec739a85494243c0479",
+  "product_sql": "crates/server/migrations/202610230001_initial_state.sql",
+  "product_sha256": "ba83f4bb97c060f49efe3c17ca47fd1c1297d594e1331949052a63d398d789f7",
+  "product_sqlx_sha384": "496c7802d169fd13f777cb7949574b09fdd4d2e65e64cb6e26243e827e6a9069f99b3f687c2ee2cbd47ff96998bfa7c7",
+  "candidate_sha256": "24a0a3dfaf7b2cf09152a11f80ff2100dd6004990b31cb661bf52a688ae9eea0",
+  "checks": {
+    "executable_line_multiset": "PASS (only added SQLx COMMENT excluded; full-line comments and blank lines omitted)",
+    "function_definitions": "PASS (300/300, full-line comments omitted; all remaining bytes and order equal)",
+    "table_definitions": "PASS (55/55, exact bytes)",
+    "document_anchors": "PASS (10/10)"
+  },
+  "limits": "Static preservation checks only; DB catalog and behavior validation recorded separately."
+}

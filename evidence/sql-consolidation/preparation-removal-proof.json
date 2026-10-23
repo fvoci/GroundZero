@@ -1,0 +1,119 @@
+{
+  "checked_at": "2026-10-23T12:48:10.867Z",
+  "independent_remote_fetch": true,
+  "remote": "https://github.com/fvoci/GroundZero.git",
+  "main_sha": "8ffd8c3b940924eca8cf7ec739a85494243c0479",
+  "preparation_archive_sha": "6837acc6283efb1c06fd061c6fe2884a95826e9f",
+  "old_evidence_sha": "0dfa2b9f99cbcafb71158bdfe8598dba985d530b",
+  "current_files_equal": 21,
+  "main_preparation_files_equal": 22,
+  "historical_manifest_files_equal": 270,
+  "historical_manifest_bytes": 3738386,
+  "files": [
+    {
+      "path": "preparation/sql-consolidation/README.md",
+      "bytes": 4072,
+      "sha256": "505ff2cdee5c0c88a76c705623756c4cb4198633f14ea0c1629c27eb62a302fb"
+    },
+    {
+      "path": "preparation/sql-consolidation/analysis-a.md",
+      "bytes": 30113,
+      "sha256": "eaa7b4d6544644a8c4d0c5b3eb7ef2dd7df1386857bd9720f6a7a8a754c66ff0"
+    },
+    {
+      "path": "preparation/sql-consolidation/candidate/README.md",
+      "bytes": 1539,
+      "sha256": "57788d7fa43d3735bf65df23f8c8d6034353a8b676419f247757773c4a2595ca"
+    },
+    {
+      "path": "preparation/sql-consolidation/environment.md",
+      "bytes": 20911,
+      "sha256": "a7cff18af1d6a1e5721dd77bd3b0b02b7f851fea9274a1ba41153912892ef40a"
+    },
+    {
+      "path": "preparation/sql-consolidation/environment/cloud-plan.md",
+      "bytes": 12535,
+      "sha256": "c1005e846c493446536c74cb14940233884706f759f9c1adff87ca1008834346"
+    },
+    {
+      "path": "preparation/sql-consolidation/environment/common-postgres.md",
+      "bytes": 14450,
+      "sha256": "b7c9db50c8f97294fd3d23cd1f4361bb9bc01f32feefd6f2793a79d51f188e4a"
+    },
+    {
+      "path": "preparation/sql-consolidation/environment/session-state.md",
+      "bytes": 8636,
+      "sha256": "c57f102f66fe031955866600c00248d56067f87228f94e3970c724bc2f742792"
+    },
+    {
+      "path": "preparation/sql-consolidation/evidence.md",
+      "bytes": 7307,
+      "sha256": "de75a147a1d0f9a09d5f60029fd9e9d75095beb2dca8628edfca79cb591c1c81"
+    },
+    {
+      "path": "preparation/sql-consolidation/evidence.sha256",
+      "bytes": 40347,
+      "sha256": "765486c09302265c217a507a7503ba5dc6325d82ec4c8a50004366c0c589dec2"
+    },
+    {
+      "path": "preparation/sql-consolidation/inventory/README.md",
+      "bytes": 28925,
+      "sha256": "4af22620d3c7ed591bd244442a54962018d3055dd2c748b4cc0576d9fb08f175"
+    },
+    {
+      "path": "preparation/sql-consolidation/inventory/catalog-inventory.sql",
+      "bytes": 6947,
+      "sha256": "3b9dda2aabf4edd8e6f87ad6c215802395d8e160fe5fa6c3005fdd300d93785b"
+    },
+    {
+      "path": "preparation/sql-consolidation/inventory/dependencies.sql",
+      "bytes": 980,
+      "sha256": "65b782419f1e43999eed7ac0e5f9375556e8986b0a4ce8708992ef0bede452c5"
+    },
+    {
+      "path": "preparation/sql-consolidation/inventory/tables.md",
+      "bytes": 8087,
+      "sha256": "82d7e894492da7bfc40fed295d5655308c91b65898bbd58cbfd82333e8565e3d"
+    },
+    {
+      "path": "preparation/sql-consolidation/quality-check.md",
+      "bytes": 2332,
+      "sha256": "2d54c0210abadece38dfdc08fb3175ba8984198022505d54b2e51c96d7a98cdd"
+    },
+    {
+      "path": "preparation/sql-consolidation/synthesis.md",
+      "bytes": 3463,
+      "sha256": "10f61aac38ff176d2d16efa455262a8a52a5f24f3bc800155dd8a88b86a15eee"
+    },
+    {
+      "path": "preparation/sql-consolidation/verification/README.md",
+      "bytes": 13736,
+      "sha256": "a24f5845d81e32a24e6ba7f46ea7fb9f34bdcf4032e698ec7b48cea1936839db"
+    },
+    {
+      "path": "preparation/sql-consolidation/verification/catalog.sql",
+      "bytes": 6951,
+      "sha256": "e0f8ee937a1e12fbf2d87ccd53a4bb2ae132eb7e7b3ba2bdecfc7ce110f26c3e"
+    },
+    {
+      "path": "preparation/sql-consolidation/verification/fixtures/README.md",
+      "bytes": 8491,
+      "sha256": "e44e33d4a7b1e08d939a4acb285e80952f83e4c66dcd37256cbef6a4dc5859ce"
+    },
+    {
+      "path": "preparation/sql-consolidation/verification/fixtures/compose.pg16.yaml",
+      "bytes": 310,
+      "sha256": "a8d833bf4ccf87cb5bb5877ccb7d5f4105da56698d1055f7328bacbeeb2866e6"
+    },
+    {
+      "path": "preparation/sql-consolidation/verification/fixtures/preflight-catalog.sql",
+      "bytes": 1638,
+      "sha256": "3c1603b7320bf40d30c50f66cb0a87ba7070115aac2e4cf3d37b8b5c0f414e7f"
+    },
+    {
+      "path": "preparation/sql-consolidation/verification/results.md",
+      "bytes": 10291,
+      "sha256": "92c937306d6ee0fada83b096199ce366ba3faf24144a228fbb123ac9ccd19f23"
+    }
+  ]
+}
