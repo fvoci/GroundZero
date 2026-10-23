@@ -35,12 +35,15 @@ async fn module_item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> Val
 }
 
 async fn make_public(app: &Router, admin: &TestUser, item: &Value) {
+    let uri = format!("/api/items/{}", item["id"].as_str().unwrap());
+    // 공개 범위만 바꾸는 도우미라 지금 판으로 보낸다.
+    let version = send(app, Method::GET, &uri, Some(admin), None).await.json["version"].clone();
     let r = send(
         app,
         Method::PUT,
-        &format!("/api/items/{}", item["id"].as_str().unwrap()),
+        &uri,
         Some(admin),
-        Some(json!({ "title": item["title"], "description": "", "visibility": "workspace" })),
+        Some(json!({ "base_version": version, "title": item["title"], "description": "", "visibility": "workspace" })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
@@ -325,7 +328,7 @@ async fn assignees_must_see_the_item_and_lose_assignments_with_access() {
         Method::PUT,
         &format!("/api/items/{}", item["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "title": item["title"], "description": "", "visibility": "private" })),
+        Some(json!({ "base_version": 2, "title": item["title"], "description": "", "visibility": "private" })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK);
@@ -1193,12 +1196,17 @@ async fn a_replay_tells_a_deleted_task_from_a_lost_access() {
     };
 
     // 항목이 비공개가 되어 작성자가 볼 수 없다: 404 not_found, 새 업무 없음.
+    let item_uri = format!("/api/items/{}", item["id"].as_str().unwrap());
+    let version = send(&app, Method::GET, &item_uri, Some(&admin), None)
+        .await
+        .json["version"]
+        .clone();
     let r = send(
         &app,
         Method::PUT,
-        &format!("/api/items/{}", item["id"].as_str().unwrap()),
+        &item_uri,
         Some(&admin),
-        Some(json!({ "title": item["title"], "description": "", "visibility": "private" })),
+        Some(json!({ "base_version": version, "title": item["title"], "description": "", "visibility": "private" })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);

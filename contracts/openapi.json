@@ -3001,7 +3001,7 @@
         "tags": [
           "modules"
         ],
-        "summary": "항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다.",
+        "summary": "항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다. 읽은 판이 지났으면 아무것도 바꾸지 않고 409와\n서버 최신본(`ItemConflict`), 보관된 항목은 409 `invalid_state`.",
         "operationId": "update_item",
         "parameters": [
           {
@@ -3066,11 +3066,11 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "`conflict`면 ItemConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
+                  "$ref": "#/components/schemas/ItemSaveConflict"
                 }
               }
             }
@@ -4038,7 +4038,7 @@
         "tags": [
           "modules"
         ],
-        "summary": "항목 정보 바꾸기(쓸 수 있는 사람). 종류에 없는 칸은 400, 리더는 그 항목을 볼 수 있는 사람이어야 한다.",
+        "summary": "항목 정보 바꾸기(쓸 수 있는 사람). 종류에 없는 칸은 400, 리더는 그 항목을 볼 수 있는 사람이어야 한다. 연 판이\n지났으면 아무것도 바꾸지 않고 409와 서버 최신본(`ItemProfileConflict`), 보관된 항목은 409 `invalid_state`.",
         "operationId": "set_item_profile",
         "parameters": [
           {
@@ -4096,11 +4096,11 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "`conflict`면 ItemProfileConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
+                  "$ref": "#/components/schemas/ItemProfileSaveConflict"
                 }
               }
             }
@@ -4825,8 +4825,8 @@
         "tags": [
           "tasks"
         ],
-        "summary": "보기 저장(그 항목을 볼 수 있는 사람). 같은 이름이면 덮어쓴다.",
-        "operationId": "save_view",
+        "summary": "새 보기(그 항목을 볼 수 있는 사람). 같은 이름이 이미 있으면 바꾸지 않고 409와 그 보기(고치려면 `PUT /api/views/{id}`).\n같은 `request_id`는 처음 만든 보기를 돌려준다.",
+        "operationId": "create_view",
         "parameters": [
           {
             "name": "item_id",
@@ -4842,7 +4842,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveView"
+                "$ref": "#/components/schemas/CreateView"
               }
             }
           },
@@ -4875,6 +4875,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewConflict"
                 }
               }
             }
@@ -8617,6 +8627,76 @@
       }
     },
     "/api/views/{view_id}": {
+      "put": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "내 보기 고치기. 읽은 판이 지났으면(다른 탭이 저장함) 아무것도 바꾸지 않고 409와 최신 보기. 확인과 고치기는 같은\n트랜잭션이다. 마지막 고치기와 같은 `request_id`면 다시 쓰지 않고 그 결과를 돌려준다.",
+        "operationId": "update_view",
+        "parameters": [
+          {
+            "name": "view_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateView"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewConflict"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "tasks"
@@ -11466,6 +11546,27 @@
           }
         }
       },
+      "CreateView": {
+        "type": "object",
+        "description": "새 보기. 같은 이름이 이미 있으면 만들지 않고 409(`exists`)와 그 보기.",
+        "required": [
+          "request_id",
+          "name",
+          "config"
+        ],
+        "properties": {
+          "config": {
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "CreateWorkspace": {
         "type": "object",
         "description": "워크스페이스 생성 요청.",
@@ -12688,7 +12789,8 @@
           "archived",
           "updated_at",
           "status",
-          "is_template"
+          "is_template",
+          "version"
         ],
         "properties": {
           "access": {
@@ -12742,12 +12844,33 @@
             "type": "string",
             "format": "date-time"
           },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "항목 정보(제목·설명·공개 범위)의 판. 고칠 때 읽은 판을 `base_version`으로 보낸다(D-104). 항목 정보 패널(`profile`)의\n판과는 따로다."
+          },
           "visibility": {
             "type": "string",
             "description": "`workspace` 또는 `private`."
           },
           "workspace_id": {
             "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "ItemConflict": {
+        "type": "object",
+        "description": "409 응답: 판이 지난 항목 정보 저장. 서버 최신본.",
+        "required": [
+          "error",
+          "current"
+        ],
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "error": {
+            "type": "string"
           }
         }
       },
@@ -12835,7 +12958,8 @@
           "members",
           "groups",
           "can_edit",
-          "can_manage_members"
+          "can_manage_members",
+          "version"
         ],
         "properties": {
           "can_edit": {
@@ -12896,8 +13020,51 @@
           "status": {
             "type": "string",
             "description": "`planned`·`active`·`on_hold`·`done`·`cancelled`."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "이 칸들(리더·목표·범위·기간·상태·종류별 정보)의 판. 고칠 때 연 판을 `base_version`으로 보낸다(D-104). 항목의\n제목·설명·공개 범위의 판(`Item.version`)과는 따로다."
           }
         }
+      },
+      "ItemProfileConflict": {
+        "type": "object",
+        "description": "409 응답: 판이 지난 항목 정보 저장. 서버 최신본.",
+        "required": [
+          "error",
+          "current"
+        ],
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/ItemProfile"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "ItemProfileSaveConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ItemProfileConflict"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "항목 정보 바꾸기의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).\n- `ItemProfileConflict`(`error: \"conflict\"`, `current`): `base_version`이 지남.\n- `ErrorBody`(`current` 없음): `invalid_state`(보관된 항목, 동시 변경 재시도 등)."
+      },
+      "ItemSaveConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ItemConflict"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "항목 변경의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).\n- `ItemConflict`(`error: \"conflict\"`, `current`): `base_version`이 지남.\n- `ErrorBody`(`current` 없음): `invalid_state`(보관된 항목, 동시 변경 재시도 등)."
       },
       "ItemTime": {
         "type": "object",
@@ -14761,34 +14928,14 @@
           }
         }
       },
-      "SaveView": {
-        "type": "object",
-        "description": "보기 저장. 같은 이름이면 내용을 바꾼다.",
-        "required": [
-          "request_id",
-          "name",
-          "config"
-        ],
-        "properties": {
-          "config": {
-            "type": "object"
-          },
-          "name": {
-            "type": "string"
-          },
-          "request_id": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      },
       "SavedView": {
         "type": "object",
         "description": "저장한 보기.",
         "required": [
           "id",
           "name",
-          "config"
+          "config",
+          "version"
         ],
         "properties": {
           "config": {
@@ -14799,6 +14946,27 @@
             "format": "uuid"
           },
           "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "고칠 때마다 1 오른다. 고치기의 `base_version`으로 보낸다."
+          }
+        }
+      },
+      "SavedViewConflict": {
+        "type": "object",
+        "description": "409 응답: 이름이 이미 있거나(`exists`) 읽은 판이 지났다(`conflict`). 아무것도 바꾸지 않았고 `current`가 지금 보기다.",
+        "required": [
+          "error",
+          "current"
+        ],
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/SavedView"
+          },
+          "error": {
             "type": "string"
           }
         }
@@ -14985,11 +15153,16 @@
       },
       "SetItemProfile": {
         "type": "object",
-        "description": "항목 정보 바꾸기(쓸 수 있는 사람).",
+        "description": "항목 정보 바꾸기(쓸 수 있는 사람). `base_version`(연 때의 `version`)이 지났으면 409와 서버 최신본(D-104).",
         "required": [
+          "base_version",
           "status"
         ],
         "properties": {
+          "base_version": {
+            "type": "integer",
+            "format": "int32"
+          },
           "details": {
             "$ref": "#/components/schemas/ItemDetails"
           },
@@ -16503,12 +16676,17 @@
       },
       "UpdateItem": {
         "type": "object",
-        "description": "항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다.",
+        "description": "항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다. `base_version`(읽은 `version`)이 지났으면\n409와 서버 최신본(D-104).",
         "required": [
+          "base_version",
           "title",
           "description"
         ],
         "properties": {
+          "base_version": {
+            "type": "integer",
+            "format": "int32"
+          },
           "description": {
             "type": "string"
           },
@@ -16652,6 +16830,28 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "UpdateView": {
+        "type": "object",
+        "description": "기존 보기 고치기. `base_version`이 지났으면 409(`conflict`)와 최신 보기. 같은 `request_id`의 재시도는 이미 반영한\n결과를 돌려준다(마지막 고치기의 요청 id만 알아본다).",
+        "required": [
+          "request_id",
+          "base_version",
+          "config"
+        ],
+        "properties": {
+          "base_version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "config": {
+            "type": "object"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },

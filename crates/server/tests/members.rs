@@ -599,7 +599,7 @@ async fn private_item(app: &axum::Router, admin: &TestUser, ws: &str, key: &str)
         Method::PUT,
         &format!("/api/items/{id}"),
         Some(admin),
-        Some(json!({ "title": "비공개 항목", "description": "", "visibility": "private" })),
+        Some(json!({ "base_version": 1, "title": "비공개 항목", "description": "", "visibility": "private" })),
     )
     .await;
     assert!(private.status.is_success(), "{:?}", private.json);

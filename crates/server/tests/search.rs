@@ -1417,7 +1417,7 @@ async fn changing_an_item_profile_reindexes_its_day() {
         Method::PUT,
         &format!("/api/items/{id}/profile"),
         Some(&admin),
-        Some(json!({ "leader_id": null, "goal": "목표", "scope": "", "starts_on": null, "ends_on": null,
+        Some(json!({ "base_version": 1, "leader_id": null, "goal": "목표", "scope": "", "starts_on": null, "ends_on": null,
                      "status": "active", "details": {} })),
     )
     .await;

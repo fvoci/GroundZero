@@ -11,6 +11,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
@@ -136,6 +137,9 @@ pub struct Item {
     pub ends_on: Option<Date>,
     /// 재사용 템플릿으로 표시됨(D-33).
     pub is_template: bool,
+    /// 항목 정보(제목·설명·공개 범위)의 판. 고칠 때 읽은 판을 `base_version`으로 보낸다(D-104). 항목 정보 패널(`profile`)의
+    /// 판과는 따로다.
+    pub version: i32,
 }
 
 /// 항목 생성 요청.
@@ -148,9 +152,11 @@ pub struct CreateItem {
     pub description: String,
 }
 
-/// 항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다.
+/// 항목 변경 요청. 공개 범위는 항목 소유 권한자(만든 사람·관리자)만 바꾼다. `base_version`(읽은 `version`)이 지났으면
+/// 409와 서버 최신본(D-104).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateItem {
+    pub base_version: i32,
     pub title: String,
     pub description: String,
     /// `workspace` 또는 `private`. 바꿀 때만 보낸다. 없거나 null이면 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
@@ -258,12 +264,13 @@ type ItemRow = (
     Option<Date>,
     Option<Date>,
     bool,
+    i32,
 );
 
 const ITEM_SELECT: &str =
     "SELECT i.id, i.module_id, i.workspace_id, app_item_reference(i.id), i.title,
         i.description, i.visibility, app_item_access(i.id), i.archived_at IS NOT NULL, i.updated_at,
-        i.status, i.starts_on, i.ends_on, i.is_template
+        i.status, i.starts_on, i.ends_on, i.is_template, i.version
  FROM items i";
 
 fn to_item(
@@ -282,6 +289,7 @@ fn to_item(
         starts_on,
         ends_on,
         is_template,
+        version,
     ): ItemRow,
 ) -> Result<Item, AppError> {
     let access = Access::parse(&access)
@@ -301,6 +309,7 @@ fn to_item(
         starts_on,
         ends_on,
         is_template,
+        version,
     })
 }
 
@@ -565,17 +574,37 @@ pub async fn get_item(
     Ok(Json(item))
 }
 
-/// 항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다.
+/// 409 응답: 판이 지난 항목 정보 저장. 서버 최신본.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ItemConflict {
+    pub error: &'static str,
+    pub current: Item,
+}
+
+/// 항목 변경의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
+/// - `ItemConflict`(`error: "conflict"`, `current`): `base_version`이 지남.
+/// - `ErrorBody`(`current` 없음): `invalid_state`(보관된 항목, 동시 변경 재시도 등).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum ItemSaveConflict {
+    Stale(Box<ItemConflict>),
+    State(ErrorBody),
+}
+
+/// 항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다. 읽은 판이 지났으면 아무것도 바꾸지 않고 409와
+/// 서버 최신본(`ItemConflict`), 보관된 항목은 409 `invalid_state`.
 #[utoipa::path(put, path = "/api/items/{item_id}",
     params(("item_id" = String, Path, format = Uuid)), request_body = UpdateItem,
     responses((status = 200, body = Item), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
+              (status = 404, body = ErrorBody),
+              (status = 409, body = ItemSaveConflict,
+               description = "`conflict`면 ItemConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다")), tag = "modules")]
 pub async fn update_item(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<ItemId>,
     Json(input): Json<UpdateItem>,
-) -> Result<Json<Item>, AppError> {
+) -> Result<Response, AppError> {
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let description = validate_description(&input.description)?;
     let mut tx = state.db.begin_as(user).await?;
@@ -584,18 +613,30 @@ pub async fn update_item(
         sqlx::query_scalar("SELECT app_update_item_ids($1)").bind(id),
     )
     .await?;
-    sqlx::query("SELECT app_update_item($1, $2, $3, $4, $5)")
+    let outcome: String = sqlx::query_scalar("SELECT app_update_item($1, $2, $3, $4, $5, $6)")
         .bind(id)
+        .bind(input.base_version)
         .bind(&title)
         .bind(&description)
         .bind(&input.visibility)
         .bind(ids)
-        .execute(tx.conn())
+        .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
     let item = load_item(&mut tx, id).await?;
     tx.commit().await?;
-    Ok(Json(item))
+    Ok(if outcome == "conflict" {
+        (
+            StatusCode::CONFLICT,
+            Json(ItemConflict {
+                error: "conflict",
+                current: item,
+            }),
+        )
+            .into_response()
+    } else {
+        Json(item).into_response()
+    })
 }
 
 /// 항목 보관·해제(항목 소유 권한자).
