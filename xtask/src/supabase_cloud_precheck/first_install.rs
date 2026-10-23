@@ -21,6 +21,7 @@ pub enum Operation {
     Install,
     Inspect,
     Verify,
+    VerifyExpiry,
 }
 
 fn require(value: bool) -> Result<()> {
@@ -279,8 +280,15 @@ async fn install(target: &Target, report: &mut Value, operation: Operation) -> R
     report["sql_sha256"] = json!(SQL_HASH);
     report["target"] = json!({"project":PROJECT,"host":HOST,"port":5432,"database":"postgres"});
     report["connection_kind"] = json!("session_pooler");
-    if matches!(operation, Operation::Verify) {
-        let result = verify_existing(target, &migration_url, &app_url, report).await;
+    if matches!(operation, Operation::Verify | Operation::VerifyExpiry) {
+        let result = verify_existing(
+            target,
+            &migration_url,
+            &app_url,
+            report,
+            matches!(operation, Operation::VerifyExpiry),
+        )
+        .await;
         fs::remove_file(cert).map_err(|_| Failure::ClientError)?;
         return result;
     }
@@ -552,8 +560,14 @@ async fn verify_existing(
     migration_url: &str,
     app_url: &str,
     report: &mut Value,
+    expiry_only: bool,
 ) -> Result<()> {
     report["operation"] = json!("verify_existing_approved_cloud_installation");
+    report["verification_scope"] = json!(if expiry_only {
+        "exactly one corrected expiry fixture; prior 12 PASS are separate 20f68bd evidence"
+    } else {
+        "first_flow 11, db_context 1, trash exact 1"
+    });
     report["backup"] = json!(
         "Existing synthetic GroundZero data is retained; no backup was created; managed backup availability NOT VERIFIED."
     );
@@ -630,7 +644,7 @@ async fn verify_existing(
     let artifacts = fs::read_to_string("target/cloud-install-test-artifacts.jsonl")
         .map_err(|_| Failure::ClientError)?;
     let mut all_passed = true;
-    for (test, names) in [
+    let all_tests = [
         ("first_flow", FIRST_FLOW),
         (
             "db_context",
@@ -640,7 +654,13 @@ async fn verify_existing(
             "trash",
             &["deleted_documents_disappear_and_come_back_with_their_subtree"][..],
         ),
-    ] {
+    ];
+    let selected = if expiry_only {
+        &[("first_flow", &FIRST_FLOW[6..7])][..]
+    } else {
+        &all_tests[..]
+    };
+    for &(test, names) in selected {
         report["phase"] = json!(test);
         let executable = artifacts
             .lines()
@@ -654,7 +674,7 @@ async fn verify_existing(
             .ok_or(Failure::ClientError)?;
         let mut command = Command::new(executable);
         command.env("DATABASE_URL", app_url).arg("--test-threads=1");
-        if test == "trash" {
+        if test == "trash" || expiry_only {
             command.args(["--exact", names[0]]);
         }
         let output = command.output().map_err(|_| Failure::ClientError)?;

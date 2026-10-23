@@ -84,6 +84,9 @@ enum Command {
     SupabaseCloudVerify {
         #[arg(long)]
         connect: bool,
+        /// Only recheck the corrected expiry fixture; prior full-matrix results remain separate evidence.
+        #[arg(long)]
+        expiry_only: bool,
     },
     /// 포맷·lint·타입·단위 테스트·라이선스·계약 최신 여부를 검사한다. 외부 서비스는 띄우지 않는다.
     Check {
@@ -218,12 +221,17 @@ fn main() -> Result<()> {
                 supabase_cloud_precheck::first_install::Operation::Inspect,
             ))
         }
-        Command::SupabaseCloudVerify { connect } => {
-            std::process::exit(supabase_cloud_precheck::first_install::run(
-                connect,
-                supabase_cloud_precheck::first_install::Operation::Verify,
-            ))
-        }
+        Command::SupabaseCloudVerify {
+            connect,
+            expiry_only,
+        } => std::process::exit(supabase_cloud_precheck::first_install::run(
+            connect,
+            if expiry_only {
+                supabase_cloud_precheck::first_install::Operation::VerifyExpiry
+            } else {
+                supabase_cloud_precheck::first_install::Operation::Verify
+            },
+        )),
         Command::Check { skip_licenses } => check::run(&root, skip_licenses),
         Command::Test {
             keep,
