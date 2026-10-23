@@ -129,6 +129,8 @@
       return;
     }
     error = undefined;
+    // 앞선 저장의 안내가 이번 결과(409·실패) 옆에 남아 저장된 것처럼 보이지 않게 한다.
+    status = '';
     try {
       const result = await api.setItemProfile(item.id, base, {
         leader_id: form.leader === '' ? null : form.leader,
@@ -179,6 +181,7 @@
 
   async function saveMembers(): Promise<void> {
     error = undefined;
+    status = '';
     try {
       await api.setItemMembers(item.id, memberIds, groupIds);
       managing = false;
