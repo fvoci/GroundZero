@@ -42,6 +42,9 @@ enum Command {
         /// Select all existing tests or only the listed app-role capability tests.
         #[arg(long, value_enum, requires = "behavior")]
         behavior_scope: Option<sql_compare::BehaviorScope>,
+        /// Also start the test Keycloak (`oidc` profile) and run the OIDC tests in the full suite.
+        #[arg(long, requires = "behavior")]
+        oidc: bool,
         /// Use a local PostgreSQL installer with CREATEROLE and target-DB privileges only.
         #[arg(long, conflicts_with = "supabase")]
         restricted_admin: bool,
@@ -151,6 +154,7 @@ fn main() -> Result<()> {
             output,
             behavior,
             behavior_scope,
+            oidc,
             restricted_admin,
             postgres_major,
             supabase,
@@ -158,7 +162,10 @@ fn main() -> Result<()> {
             &root,
             candidate.as_deref(),
             &output,
-            behavior.then(|| behavior_scope.unwrap_or(sql_compare::BehaviorScope::Full)),
+            behavior.then(|| sql_compare::Behavior {
+                scope: behavior_scope.unwrap_or(sql_compare::BehaviorScope::Full),
+                oidc,
+            }),
             supabase,
             restricted_admin,
             postgres_major,
@@ -192,5 +199,42 @@ fn main() -> Result<()> {
                 rhwp::run(&root, force)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sql_compare(args: &[&str]) -> Result<Command, clap::Error> {
+        let base = ["xtask", "sql-compare", "--output", "target/x"];
+        Cli::try_parse_from(base.iter().chain(args)).map(|cli| cli.command)
+    }
+
+    #[test]
+    fn sql_compare_oidc_requires_behavior() {
+        let error = sql_compare(&["--oidc"]).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::MissingRequiredArgument
+        );
+        for args in [
+            &["--behavior", "--oidc"][..],
+            &["--behavior", "--oidc", "--postgres-major", "18"],
+            &["--behavior", "--oidc", "--supabase"],
+        ] {
+            assert!(matches!(
+                sql_compare(args),
+                Ok(Command::SqlCompare {
+                    behavior: true,
+                    oidc: true,
+                    ..
+                })
+            ));
+        }
+        assert!(matches!(
+            sql_compare(&["--behavior"]),
+            Ok(Command::SqlCompare { oidc: false, .. })
+        ));
     }
 }

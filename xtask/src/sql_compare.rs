@@ -29,9 +29,33 @@ const CORE_TESTS: &[&str] = &[
     "time_tracking",
 ];
 
+/// Requested app-role behavior phase. `oidc` adds the test Keycloak and the `oidc_` tests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Behavior {
+    pub scope: BehaviorScope,
+    pub oidc: bool,
+}
+
 struct BehaviorRun<'a> {
     candidate: Option<&'a Path>,
-    scope: BehaviorScope,
+    behavior: Behavior,
+}
+
+fn check_options(behavior: Option<Behavior>, supabase: bool, restricted_admin: bool) -> Result<()> {
+    let scope = behavior.map(|behavior| behavior.scope);
+    ensure!(
+        !restricted_admin || !supabase,
+        "restricted admin requires the isolated standard PostgreSQL fixture"
+    );
+    ensure!(
+        !restricted_admin || scope != Some(BehaviorScope::Full),
+        "restricted admin requires --behavior-scope core; the full suite needs CREATE DATABASE and restore capabilities"
+    );
+    ensure!(
+        !behavior.is_some_and(|behavior| behavior.oidc && behavior.scope != BehaviorScope::Full),
+        "--oidc requires the full behavior scope; the core scope excludes the OIDC tests"
+    );
+    Ok(())
 }
 
 const CATALOG: &str = include_str!("../../preparation/sql-consolidation/verification/catalog.sql");
@@ -116,19 +140,14 @@ pub fn run(
     root: &Path,
     candidate: Option<&Path>,
     output: &Path,
-    behavior: Option<BehaviorScope>,
+    behavior: Option<Behavior>,
     supabase: bool,
     restricted_admin: bool,
     postgres_major: PostgresMajor,
 ) -> Result<()> {
-    ensure!(
-        !restricted_admin || !supabase,
-        "restricted admin requires the isolated standard PostgreSQL fixture"
-    );
-    ensure!(
-        !restricted_admin || behavior != Some(BehaviorScope::Full),
-        "restricted admin requires --behavior-scope core; the full suite needs CREATE DATABASE and restore capabilities"
-    );
+    check_options(behavior, supabase, restricted_admin)?;
+    let oidc = behavior.is_some_and(|behavior| behavior.oidc);
+    let scope = behavior.map(|behavior| behavior.scope);
     let candidate = candidate.map(std::fs::canonicalize).transpose()?;
     let output = claim_output(output)?;
     let sh = Shell::new()?;
@@ -149,10 +168,15 @@ pub fn run(
             "catalog_sha256":format!("{:x}",Sha256::digest(CATALOG.as_bytes())),
             "supabase_upstream":if supabase {Some(crate::supabase::REVISION)}else{None},
             "capability_profile":if restricted_admin {"restricted-installer-v1"}else{"image-default"},
-            "behavior_scope":behavior.map(|scope|format!("{scope:?}").to_lowercase()),
-            "core_tests":if behavior==Some(BehaviorScope::Core) {Some(CORE_TESTS)}else{None},
+            "behavior_scope":scope.map(|scope|format!("{scope:?}").to_lowercase()),
+            "oidc":oidc,
+            "core_tests":if scope==Some(BehaviorScope::Core) {Some(CORE_TESTS)}else{None},
             "core_excluded":"All unlisted test binaries, including backup/restore, FreshDb search, OIDC, S3 and Supabase-specific paths; no Cloud execution.",
-            "route_note":"Session uses pooler for DATABASE_URL; FreshDb backup/search fixture databases use direct connection. OIDC is not requested."
+            "route_note":if oidc {
+                "Supabase session uses pooler for DATABASE_URL; FreshDb backup/search fixture databases use direct connection. OIDC tests use the run's isolated test Keycloak, shared by A and B in sequence."
+            } else {
+                "Supabase session uses pooler for DATABASE_URL; FreshDb backup/search fixture databases use direct connection. OIDC is not requested."
+            }
         }),
     )?;
     let mut phases: BTreeMap<String, &str> = [
@@ -233,12 +257,17 @@ pub fn run(
         );
         println!("PASS: catalog, required initial rows and schema dump objects are equal");
         phases.insert("objects".to_owned(), "PASS");
-        if let Some(scope) = behavior {
-            let services = register_and_start(
-                &mut services,
-                Compose::for_comparison(root, &format!("{run}-services"), postgres_major),
-                |services| services.up_services(&sh, &["meilisearch", "seaweedfs"]),
-            )?;
+        if let Some(behavior) = behavior {
+            let mut fixture =
+                Compose::for_comparison(root, &format!("{run}-services"), postgres_major);
+            let mut wanted = vec!["meilisearch", "seaweedfs"];
+            if behavior.oidc {
+                fixture = fixture.with_profile("oidc");
+                wanted.push("keycloak");
+            }
+            let services = register_and_start(&mut services, fixture, |services| {
+                services.up_services(&sh, &wanted)
+            })?;
             for (index, side) in ["a", "b"].iter().enumerate() {
                 let source = if index == 1 {
                     candidate.as_deref()
@@ -253,7 +282,7 @@ pub fn run(
                     &urls[index],
                     BehaviorRun {
                         candidate: source,
-                        scope,
+                        behavior,
                     },
                     &output.join(side),
                 )?;
@@ -287,7 +316,7 @@ pub fn run(
             }
             write_json(
                 &output.join("result.json"),
-                &json!({"passed":passed,"candidate":candidate,"supabase":supabase,"behavior_requested":behavior.is_some(),"behavior_scope":behavior.map(|scope|format!("{scope:?}").to_lowercase()),"restricted_admin":restricted_admin,"phases":phases,"behavior":behavior_results}),
+                &json!({"passed":passed,"candidate":candidate,"supabase":supabase,"behavior_requested":behavior.is_some(),"behavior_scope":scope.map(|scope|format!("{scope:?}").to_lowercase()),"oidc":oidc,"restricted_admin":restricted_admin,"phases":phases,"behavior":behavior_results}),
             )
         },
         |message| eprintln!("{message}"),
@@ -618,6 +647,24 @@ fn run_behavior(
         sh.push_env("FVOCI_S3_ACCESS_KEY", compose::S3_TEST_ACCESS_KEY),
         sh.push_env("FVOCI_S3_SECRET_KEY", compose::S3_TEST_SECRET_KEY),
     ];
+    let _oidc = if behavior.behavior.oidc {
+        let keycloak = services.host_port(sh, "keycloak", 8080)?;
+        Some(sh.push_env(
+            "FVOCI_TEST_OIDC_ISSUER",
+            format!("http://127.0.0.1:{keycloak}/realms/{}", compose::OIDC_REALM),
+        ))
+    } else {
+        None
+    };
+    let passed = format!(
+        "PASS: existing {:?} suite; {}\n",
+        behavior.behavior.scope,
+        if behavior.behavior.oidc {
+            "OIDC run with the isolated test Keycloak"
+        } else {
+            "OIDC not run"
+        }
+    );
     let _root = sh.push_dir(root);
     let _rest = if let Cluster::Supabase(c) = cluster {
         let rest = c.host_port(sh, "rest", 3000)?;
@@ -635,14 +682,11 @@ fn run_behavior(
     )?;
     run_behavior_tests(
         sh,
-        behavior.scope,
+        behavior.behavior,
         cluster,
         &output.join("behavior-direct.log"),
     )?;
-    std::fs::write(
-        output.join("behavior-direct.txt"),
-        format!("PASS: existing {:?} suite; OIDC not run\n", behavior.scope),
-    )?;
+    std::fs::write(output.join("behavior-direct.txt"), &passed)?;
     if let Cluster::Supabase(c) = cluster {
         let port = c.host_port(sh, "supavisor", 5432)?;
         let _pooler = sh.push_env("DATABASE_URL", DbUrls::supabase_session_pooler(port));
@@ -654,28 +698,20 @@ fn run_behavior(
         )?;
         run_behavior_tests(
             sh,
-            behavior.scope,
+            behavior.behavior,
             cluster,
             &output.join("behavior-session.log"),
         )?;
-        std::fs::write(
-            output.join("behavior-session.txt"),
-            format!("PASS: existing {:?} suite; OIDC not run\n", behavior.scope),
-        )?;
+        std::fs::write(output.join("behavior-session.txt"), &passed)?;
     }
     Ok(())
 }
 
-fn run_behavior_tests(
-    sh: &Shell,
-    scope: BehaviorScope,
-    cluster: &Cluster,
-    log: &Path,
-) -> Result<()> {
-    match scope {
+fn run_behavior_tests(sh: &Shell, behavior: Behavior, cluster: &Cluster, log: &Path) -> Result<()> {
+    match behavior.scope {
         BehaviorScope::Full => crate::test::run_tests_with_log(
             sh,
-            false,
+            behavior.oidc,
             true,
             matches!(cluster, Cluster::Supabase(_)),
             Some(log),
@@ -708,6 +744,54 @@ fn run_behavior_tests(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn oidc_needs_the_full_suite_and_restricted_admin_stays_core() {
+        let full = |oidc| {
+            Some(Behavior {
+                scope: BehaviorScope::Full,
+                oidc,
+            })
+        };
+        let core = |oidc| {
+            Some(Behavior {
+                scope: BehaviorScope::Core,
+                oidc,
+            })
+        };
+        for (behavior, supabase, restricted_admin) in [
+            (None, false, false),
+            (full(true), false, false),
+            (full(true), true, false),
+            (core(false), false, true),
+        ] {
+            assert!(check_options(behavior, supabase, restricted_admin).is_ok());
+        }
+        for (behavior, supabase, restricted_admin, expected) in [
+            (
+                core(true),
+                false,
+                false,
+                "--oidc requires the full behavior scope",
+            ),
+            (
+                core(true),
+                false,
+                true,
+                "--oidc requires the full behavior scope",
+            ),
+            (
+                full(true),
+                false,
+                true,
+                "restricted admin requires --behavior-scope core",
+            ),
+            (None, true, true, "restricted admin requires the isolated"),
+        ] {
+            let error = check_options(behavior, supabase, restricted_admin).unwrap_err();
+            assert!(error.to_string().starts_with(expected), "{error}");
+        }
+    }
 
     #[test]
     fn concurrent_output_claim_has_one_winner_and_preserves_existing_evidence() -> Result<()> {
