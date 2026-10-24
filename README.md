@@ -29,3 +29,5 @@
 ## 의존성 작업자의 인계 시점 보고
 
 `dependencies/rust/report.md`와 `dependencies/node/report.md`는 각 작업자가 통합 전 작성한 역사적 보고다. 원문을 보존했으므로 당시의 `Not pushed`, NOTICE 실패, 브라우저·통합 검사 미실행 표시는 최종 상태가 아니다. 두 원본 브랜치는 이후 원격에 보존했고, 통합은 별도 PR https://github.com/fvoci/GroundZero/pull/123 에서 수행한다. 최신 검증과 병합 상태는 그 PR 및 최종 main 실행을 기준으로 한다.
+
+`dependencies/smoke-baseline/`은 제품 이미지 smoke 실패가 기존 시작 시 DB 검사와 맞지 않는 시험 설정에서 발생했음을 구분한 재현이다. 의존성 갱신 전과 후의 실행이 같은 DB 연결 시간 초과로 종료했다. 서버 검사를 약화하지 않고 기존 smoke에 격리된 정상 DB를 준비하는 수정은 PR #123에서 별도 커밋으로 검증한다.

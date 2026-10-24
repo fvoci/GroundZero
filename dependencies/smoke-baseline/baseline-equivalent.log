@@ -1,0 +1,2 @@
+{"event":"server.starting","level":"INFO","message":"starting","role":"Api","source":"dev","target":"fvoci_server::app","timestamp":"2026-10-24T11:50:50.334233256Z","version":"dev"}
+{"detail":"database pool timed out","error_code":"internal","event":"server.exit_error","level":"ERROR","message":"exited with error","target":"fvoci_server","timestamp":"2026-10-24T11:50:55.336418087Z"}
