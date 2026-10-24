@@ -126,4 +126,20 @@ describe('first paint script in index.html', () => {
     applyTheme(choice);
     expect(fromScript).toEqual({ dark: isDark(), theme: document.documentElement.dataset.theme });
   });
+
+  // 리뷰: 저장소를 읽지 못하면(사생활 보호 모드 등) 시스템 설정 확인까지 건너뛰어, 시스템이 어두워도 첫 그림이 밝았다.
+  it('follows a dark system setting when storage cannot be read', () => {
+    if (inline === undefined) throw new Error('no inline script in index.html');
+    systemDark = true;
+    runInNewContext(inline, {
+      localStorage: {
+        getItem: () => {
+          throw new DOMException('blocked', 'SecurityError');
+        },
+      },
+      matchMedia: (query: string) => window.matchMedia(query),
+      document,
+    });
+    expect(isDark()).toBe(true);
+  });
 });
