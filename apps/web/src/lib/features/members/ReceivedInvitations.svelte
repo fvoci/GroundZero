@@ -18,6 +18,8 @@
 
   let items = $state<ReceivedInvitation[]>([]);
   let error = $state<string | undefined>(undefined);
+  // 답하는 중인 초대. 그동안 수락·거절을 막는다(두 번 누르면 두 번째가 409로 실패했다).
+  let busy = $state<string | undefined>(undefined);
 
   async function load(): Promise<void> {
     try {
@@ -28,6 +30,8 @@
   }
 
   async function respond(inv: ReceivedInvitation, accept: boolean): Promise<void> {
+    if (busy !== undefined) return;
+    busy = inv.id;
     error = undefined;
     try {
       if (accept) {
@@ -41,6 +45,8 @@
     } catch (e: unknown) {
       error = errorText(e, m.members_invitation_failed());
       await load();
+    } finally {
+      busy = undefined;
     }
   }
 
@@ -58,9 +64,14 @@
           <span class="text-sm text-muted-foreground">{inv.invited_by} · {roleLabel(inv.role)}</span
           >
           <span class="ml-auto flex gap-2">
-            <Button size="sm" onclick={() => void respond(inv, true)}>{m.members_accept()}</Button>
-            <Button size="sm" variant="ghost" onclick={() => void respond(inv, false)}
-              >{m.members_decline()}</Button
+            <Button size="sm" disabled={busy !== undefined} onclick={() => void respond(inv, true)}
+              >{m.members_accept()}</Button
+            >
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy !== undefined}
+              onclick={() => void respond(inv, false)}>{m.members_decline()}</Button
             >
           </span>
         </li>

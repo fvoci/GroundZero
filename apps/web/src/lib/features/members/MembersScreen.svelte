@@ -35,6 +35,8 @@
   let groupName = $state('');
   // 초대·그룹 만들기 실패는 그 입력 칸 옆에 보이고 입력은 남긴다(D-82).
   let inviteError = $state<string | undefined>(undefined);
+  // 초대를 보내는 중. 그동안 다시 보내지 않는다(Enter 두 번이면 같은 초대가 두 번 나갔다).
+  let inviting = $state(false);
   let groupError = $state<string | undefined>(undefined);
   let deleteName = $state('');
   let deleteError = $state<string | undefined>(undefined);
@@ -122,12 +124,18 @@
       {error}
     </p>
   {/if}
-  {#if notice !== undefined}
-    <p role="status" class="text-sm text-muted-foreground">{notice}</p>
-  {/if}
+  <!-- 완료 알림은 처음부터 있는 알림 영역 안에서 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
+  <p role="status" class="text-sm text-muted-foreground empty:sr-only">{notice ?? ''}</p>
 
   {#if view === undefined}
-    <p aria-live="polite">{m.app_loading()}</p>
+    <!-- 첫 읽기가 실패하면 "불러오는 중"을 남기지 않고 위 오류와 함께 다시 시도를 둔다. -->
+    {#if error === undefined}
+      <p aria-live="polite">{m.app_loading()}</p>
+    {:else}
+      <div>
+        <Button variant="outline" onclick={() => void load()}>{m.common_retry()}</Button>
+      </div>
+    {/if}
   {:else}
     {@const v = view}
     <ul class="flex flex-col divide-y rounded border" data-testid="member-list">
@@ -219,16 +227,20 @@
           class="flex flex-wrap items-end gap-2"
           onsubmit={(e) => {
             e.preventDefault();
+            if (inviting) return;
             const email = inviteEmail;
             inviteError = undefined;
+            inviting = true;
             void act(
               () => api.invite(workspace.id, email, inviteRole),
               m.members_invited({ email }),
               (text: string) => (inviteError = text),
-            ).then((ok: boolean) => {
-              // 성공했을 때만, 그사이 고쳐 치지 않았으면 비운다.
-              if (ok && inviteEmail === email) inviteEmail = '';
-            });
+            )
+              .then((ok: boolean) => {
+                // 성공했을 때만, 그사이 고쳐 치지 않았으면 비운다.
+                if (ok && inviteEmail === email) inviteEmail = '';
+              })
+              .finally(() => (inviting = false));
           }}
         >
           <div class="flex min-w-60 flex-1 flex-col gap-1">
@@ -248,7 +260,9 @@
             label={m.members_invite_role()}
             onchange={(r: Role) => (inviteRole = r)}
           />
-          <Button type="submit" disabled={inviteEmail.trim() === ''}>{m.members_invite()}</Button>
+          <Button type="submit" disabled={inviting || inviteEmail.trim() === ''}
+            >{m.members_invite()}</Button
+          >
           {#if inviteError !== undefined}
             <p id="invite-email-error" role="alert" class="w-full text-sm text-destructive">
               {inviteError}
@@ -296,8 +310,12 @@
                 size="sm"
                 variant="ghost"
                 class="ml-auto"
-                onclick={() => void act(() => api.deleteGroup(group.id))}
-                >{m.members_delete_group()}</Button
+                onclick={() =>
+                  (confirm = {
+                    title: m.members_delete_group_title({ name: group.name }),
+                    body: m.members_delete_group_body(),
+                    run: () => act(() => api.deleteGroup(group.id)),
+                  })}>{m.members_delete_group()}</Button
               >
             {/if}
           </div>
