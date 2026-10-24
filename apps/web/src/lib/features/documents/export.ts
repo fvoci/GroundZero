@@ -106,7 +106,9 @@ function safeName(name: string): string {
     .replace(/[\\/:*?"<>|\p{Cc}]/gu, '_')
     .replace(/^\.+/, '')
     .trim()
-    .slice(0, 80);
+    .slice(0, 80)
+    // UTF-16 길이 한도는 유지하되, 끝에서 잘린 서로게이트가 URI 인코딩을 깨뜨리지 않게 한다.
+    .replace(/[\uD800-\uDBFF]$/u, '');
   return cleaned === '' ? m.documents_export_name_fallback() : cleaned;
 }
 
