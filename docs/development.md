@@ -201,6 +201,7 @@ VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev
 - 서버 8080·웹 5173·개발 Keycloak 8180이 고정이므로 한 컴퓨터에서 개발 환경은 한 번에 하나만 띄운다. Keycloak 포트는 `FVOCI_DEV_KEYCLOAK_PORT`로 바꿀 수 있지만 발급자가 바뀌면 기존 개발 사용자와 다른 신원이 된다.
 - `test-user`는 개발 워크스페이스 소유자, `test-user-2`는 작성자다. 비밀번호는 [realm-test.json](../deploy/keycloak/realm-test.json)의 `credentials`에 있다. Keycloak 관리자 비밀번호는 [compose.dev.yaml](../deploy/compose.dev.yaml)에만 둔다.
 - 공동 편집은 두 사용자를 서로 다른 브라우저 프로필로 열어 확인한다. 같은 브라우저의 두 탭은 쿠키를 공유하므로 서로 다른 사용자가 아니다.
+- 화면 캡처는 데스크톱 창이 있는 브라우저에서 앞에 띄운 탭으로 만든다. 창 없는 헤드리스·원격 브라우저 런타임은 페이지가 정상이어도 단색 이미지를 돌려줄 수 있다([#112](https://github.com/fvoci/GroundZero/issues/112)). 만든 이미지 파일을 직접 열어 확인하고 DOM·HTTP·DB 결과로 픽셀 확인을 대신하지 않는다. 좁은 창은 실제 기기 시험과 구분해 적는다.
 - [dev-seed.sql](../deploy/postgres/dev-seed.sql)과 [dev-module-seed.sql](../deploy/postgres/dev-module-seed.sql)은 기존 앱 함수를 사용하고 새 ID는 xtask에서 받는다. 개발 워크스페이스와 모듈 예제는 합성 데이터이며 운영 설치에는 들어가지 않는다.
 - seed 표시는 반복 실행의 중복과 사용자 편집 덮어쓰기를 막는다. 예제만 지우려면 앱에서 예제 워크스페이스를 삭제한다. 다음 개발 실행이 다시 만들지 않는다. 발급자·고정 사용자 ID가 기존 DB와 다르면 준비를 중단한다.
 - Ctrl-C는 데이터를 남긴다. `cargo xtask down`은 이 체크아웃의 개발·시험 컨테이너·네트워크·DB·검색·Keycloak 볼륨을 지운다. `target/dev-files`의 첨부는 남는다. 기존 데이터 삭제는 별도 확인 범위다.
