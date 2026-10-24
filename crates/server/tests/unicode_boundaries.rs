@@ -1,5 +1,10 @@
 //! 문자열 경계의 실제 API·DB 검증. 브라우저의 사전 검증과 별개로 서버가 최종 판단한다.
 
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "shared integration fixtures panic when setup or response decoding fails"
+)]
 mod common;
 
 use axum::http::{Method, StatusCode};
