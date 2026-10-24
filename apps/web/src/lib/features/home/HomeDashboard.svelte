@@ -308,6 +308,7 @@
                 <button
                   type="button"
                   class="flex w-full items-baseline gap-2 rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  title={t.title}
                   onclick={() => {
                     openTask(t);
                   }}
@@ -408,6 +409,7 @@
         <button
           type="button"
           class="rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          title={d.title}
           onclick={() => {
             router.navigate(pathFor(d, memberOf));
           }}
@@ -422,6 +424,7 @@
         <button
           type="button"
           class="rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          title={t.title}
           onclick={() => {
             openTask(t);
           }}
