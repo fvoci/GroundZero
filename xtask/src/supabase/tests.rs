@@ -3,37 +3,6 @@
 
 use super::*;
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
-
-#[cfg(unix)]
-const COMMAND: &str = r#"#!/bin/sh
-case "$0" in
-  */cargo) case "$*" in
-    *'db bootstrap') step=bootstrap ;;
-    *'db migrate') step=migrate ;;
-    *) exit 91 ;;
-  esac ;;
-  */docker) case "$*" in
-    *'stop supavisor') step=stop ;;
-    *'up --detach --wait db rest') step=database ;;
-    *'up --detach --wait supavisor') step=pooler ;;
-    *'port db 5432') printf '127.0.0.1:30001\n'; exit 0 ;;
-    *'ps --all --quiet '*) printf 'diagnose\n' >> "$SETUP_LOG"; exit 0 ;;
-    *) exit 92 ;;
-  esac ;;
-esac
-printf '%s\n' "$step" >> "$SETUP_LOG"
-# Every Docker mutation must be scoped to the handle's project.
-case "$0" in */docker)
-  case "$*" in *'--project-name fvoci-synthetic-setup '*) ;; *) exit 93 ;; esac ;;
-esac
-if [ "$FAIL_AT" = "$step" ]; then
-  printf 'deliberate %s failure\n' "$step" >&2
-  exit 42
-fi
-"#;
-
-#[cfg(unix)]
 fn preparation(fail_at: &str) -> Result<(Result<compose::DbUrls>, Vec<String>)> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -42,10 +11,13 @@ fn preparation(fail_at: &str) -> Result<(Result<compose::DbUrls>, Vec<String>)> 
         .join(uuid::Uuid::now_v7().to_string());
     std::fs::create_dir_all(&root)?;
     let result = (|| {
+        // Never open the executable for writing while parallel tests spawn children:
+        // a child can inherit the writer until exec and cause ETXTBSY after we close it.
+        // Symlinks keep each sandbox's command names without a writable script inode.
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/supabase/fixtures/setup-command.sh");
         for command in ["docker", "cargo"] {
-            let file = root.join(command);
-            std::fs::write(&file, COMMAND)?;
-            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o700))?;
+            std::os::unix::fs::symlink(&fixture, root.join(command))?;
         }
         let sh = Shell::new()?;
         let _path = sh.push_env("PATH", &root);

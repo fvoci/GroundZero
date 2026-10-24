@@ -103,6 +103,43 @@ Supabase 시험 준비는 해당 프로젝트의 풀러를 멈추고 DB 역할·
 | Supabase 고정 구성       | [연결·시험 안내](self-hosting-supabase.md), [compose.test.yaml](../deploy/supabase/compose.test.yaml)           |
 | 검사 순서와 대상         | [xtask/src/check.rs](../xtask/src/check.rs), [xtask/src/test.rs](../xtask/src/test.rs)                          |
 
+### 실제 브라우저 회귀 검사
+
+브라우저 검사는 Playwright Test와 Chromium을 쓴다. 여러 로그인 원점과 독립된 두 사용자 컨텍스트가 필요한
+전체 흐름에 맞춘 선택이며, 기존 Vitest·jsdom 컴포넌트 검사를 대체하거나 별도 Vitest browser 구성을 추가하지 않는다.
+Playwright 판과 Chromium revision은 lockfile에 고정된 패키지로 맞춘다.
+
+```sh
+pnpm install --frozen-lockfile
+PLAYWRIGHT_SKIP_BROWSER_GC=1 pnpm --filter @fvoci/web exec playwright install --with-deps chromium
+cargo xtask browser
+```
+
+`browser`는 별도 `-browser` Compose 프로젝트에 시험 PostgreSQL·Keycloak을 준비한다.
+같은 체크아웃에서 이미 실행 중이면 파일 정리나 서비스 기동 전에 실패한다. `target/browser/run.lock`은
+운영체제가 관리하는 잠금이며 프로세스 종료 시 풀린다. 남아 있는 잠금 파일을 지울 필요는 없다.
+설치 명령의 `PLAYWRIGHT_SKIP_BROWSER_GC=1`은 다른 작업에서 쓰던 공유 브라우저 캐시 판을 보존한다.
+동적 루프백 포트의 실제 서버·DB·OIDC와 합성 데이터를 쓰며 사용자 흐름 전체를 HTTP mock으로 대체하지 않는다.
+기존 개발 환경이나 `cargo xtask test`의 프로젝트를 재사용하지 않는다.
+로그인·로그아웃 후 거부, 한국어 문서 저장·재열기, 두 사용자 협업, 칸반 이동과 서버 반영,
+한국어 줄바꿈·넘침, 좁은 화면·간트 내부 스크롤, 키보드·취소·편집 보존을 확인한다.
+일반 어절의 줄바꿈과 컨테이너보다 긴 공백 없는 문자열의 불가피한 줄바꿈을 구분한다.
+375px viewport 검사는 실제 휴대 기기 검증이 아니며, 문자열 입력은 OS IME 조합 검증이 아니다.
+WebKit·실제 Safari는 이 Chromium 묶음의 실행 범위가 아니다.
+
+시험 재시도는 끄고 화면·요청·저장 완료 조건을 기다린다. 실패 결과를 재실행 성공으로 덮어쓰지 않는다.
+정상 묶음에서는 `FVOCI_BROWSER_FAILURE_SMOKE`를 설정하지 않는다. `clean`·`leak` 값은 증거 수집·공개 거절을
+확인하는 의도적 실패 시험에만 쓴다.
+원시 출력은 `target/browser/runs/<실행 ID>/`에 보존하며 다음 실행으로 덮어쓰지 않는다.
+`target/browser/artifacts/`는 실행 시작 때 비우며, CI는 이곳의 검증된 실패 캡처·trace·로그만 업로드한다.
+trace는 OIDC 로그인 뒤에 시작하고 로그아웃 전에 끝낸다. 공개할 때 요청·응답의 `*.network` 기록을 제거하고
+남은 압축 내용도 검사한다. 공개 trace에는 네트워크 상세가 없고 DOM 재생에서 원래 스타일 일부가 빠질 수 있으므로,
+실제 배치는 함께 보존한 스크린샷으로 확인한다.
+자격 증명·쿠키·토큰을 담은 원본은 업로드 대상이 아니다. 검증이 끝나 표시 파일 `SAFE_TO_UPLOAD`가 있는 경우에만
+Actions artifact를 게시한다. 정상 캡처를 PR에 첨부할 때는 직접 열어 확인하고 Git에는 넣지 않는다.
+`--keep`은 이 명령의 PostgreSQL·Keycloak 컨테이너를 남기고 제품 서버는 종료한다.
+원시 출력과 `target/browser/files/`의 파일 저장소는 `--keep` 여부와 관계없이 보존한다.
+
 ### DB 비교와 사전 검사 fixture
 
 통합 SQL 비교 결과와 고정 검증 SHA의 재현은 [마이그레이션 안내](../crates/server/migrations/README.md#comparison)를 따른다.
@@ -148,18 +185,22 @@ HWP·HWPX 전용 빌드는 [deploy/rhwp/deny.toml](../deploy/rhwp/deny.toml)에�
 | `integration` | PG17·Meilisearch, `cargo xtask test --external-services`                           |
 | `oidc`        | PG18·Meilisearch·SeaweedFS·Keycloak, `cargo xtask test --external-services --oidc` |
 | `supabase`    | 공식 PG17 구성, `cargo xtask test --supabase --session-pooler --oidc`              |
+| `browser`     | 고정 Node·Corepack과 Chromium, 실제 서버·OIDC를 쓰는 `cargo xtask browser`         |
 | `rhwp`        | `cargo xtask rhwp`, 고지 차이 검사, `cargo xtask rhwp --audit`                     |
 
 `check`·`licenses`·`integration`은 공통 digest의 컨테이너 job이다. `oidc`의 시험과 `rhwp --audit`도 같은 이미지를 쓴다.
 OIDC 서비스는 호스트의 격리 Compose에서 띄우고 시험 컨테이너에 Docker 소켓을 넘기지 않는다.
 Supabase는 기동·실패 진단에 호스트 Docker가 필요하므로 D-88에 따라 호스트 러너에서 같은 고정 툴체인으로 실행한다.
+`browser`도 호스트 Docker를 사용한다. Node 24.22.1·Corepack 0.36.0을 명시적으로 설치하고
+`packageManager`의 정확한 pnpm 판과 lockfile로 설치한 Playwright의 Chromium을 사용한다.
 
 외부 서비스 모드는 `FVOCI_TEST_PG_HOST_PORT`와 `FVOCI_TEST_SEARCH_URL`을 요구하며 `--oidc`에는
 `FVOCI_TEST_OIDC_ISSUER`도 필요하다. xtask가 테스트 자격 증명으로 세 DB 역할 주소를 만든다.
 `FVOCI_TEST_S3_ENDPOINT`가 없으면 S3 시험을 NOT RUN으로 표시한다. 임의의 운영 DB 주소를 넘기는 방식이 아니다.
 
 실행마다 프로젝트·DB·볼륨을 분리한다. 캐시는 속도용이며 없어도 같은 검사가 가능해야 한다.
-현재 통합 시험은 in-process라 제품 바이너리를 소비하지 않는다. 별도 e2e 산출물 공유나 job 분할은 실제 필요와 병목을 확인한 뒤 정한다.
+Rust 통합 시험은 in-process이고, `browser`는 같은 체크아웃에서 빌드한 제품 서버와 웹 번들을 사용한다.
+두 검사는 산출물을 다른 job에서 받아 재사용하지 않는다.
 
 ### 제품 이미지 릴리스
 

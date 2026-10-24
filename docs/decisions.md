@@ -298,7 +298,8 @@
 
 <a id="d-64"></a>
 
-- **D-64 CI 구조 원칙.** 공통 `deploy/docker/dev.Dockerfile` 기반 이미지에 Rust·Node·pnpm·검사/시스템 도구를 고정하고 표준 xtask·pnpm 명령을 재사용한다. 이미지 변경·보안 갱신 때만 빌드하며 제품 커밋마다 만들지 않는다. 후속 job은 같은 digest를 쓰고 latest에 의존하지 않는다. YAML은 트리거·권한·의존·명령 호출·결과 업로드만 맡고 긴 설치/판정 셸은 두지 않는다. 이미지에 제품 소스·시크릿·실행 DB를 넣지 않고 서비스를 격리한다. 제품 빌드는 가능하면 한 번 만들어 SHA·아키텍처·옵션이 같은 것만 공유하고 캐시 없이도 검증돼야 한다. 병목 측정 전 샤딩·matrix·범용 프레임워크를 만들지 않는다. 이미지 게시 승인 전에는 로컬 빌드까지만 한다(D-65의 후속 승인, D-88의 Supabase job 예외). 근거: CI 지침.
+- **D-64 CI 구조 원칙.** 공통 `deploy/docker/dev.Dockerfile` 기반 이미지에 Rust·Node·pnpm·검사/시스템 도구를 고정하고 표준 xtask·pnpm 명령을 재사용한다. 이미지 변경·보안 갱신 때만 빌드하며 제품 커밋마다 만들지 않는다. 후속 job은 같은 digest를 쓰고 latest에 의존하지 않는다. YAML은 트리거·권한·의존·명령 호출·결과 업로드만 맡고 긴 설치/판정 셸은 두지 않는다. 이미지에 제품 소스·시크릿·실행 DB를 넣지 않고 서비스를 격리한다. 제품 빌드는 가능하면 한 번 만들어 SHA·아키텍처·옵션이 같은 것만 공유하고 캐시 없이도 검증돼야 한다. 병목 측정 전 샤딩·matrix·범용 프레임워크를 만들지 않는다. 이미지 게시 승인 전에는 로컬 빌드까지만 한다(D-65의 후속 승인, D-88의 Supabase job 및 아래 browser job 예외). 근거: CI 지침.
+  - 구현 선택(2026-10-25 실제 브라우저 회귀 자동화 지시): `browser` job은 `cargo xtask browser`가 호스트 Docker의 격리 Compose·실제 서버·OIDC·Chromium 기동과 정리를 함께 맡으므로 호스트 러너에서 실행한다. Rust·Node·Corepack·pnpm·Playwright/Chromium 판은 고정하며, 기존 공통 이미지 job과 검사 항목·권한 계약은 유지한다. 실행·증거 수집 범위는 [개발 지침](development.md#ci)에 둔다.
 
 <a id="d-65"></a>
 
@@ -434,7 +435,7 @@
   - 문서 제목 감사는 제목을 바꾸는 두 경로가 app_audit_document_rename으로 남기고 리비전의 전후 제목을 읽어 리비전당 한 번 기록한다. 개발 SQL도 xtask가 넘기는 ID를 쓴다. 상세 호출·재시도는 [UUID 계약](sql-id-contract.md).
   - 사용자 지시로 기존 마이그레이션의 id 기본값을 고쳤다. 당시 개발 DB는 checksum 불일치로 재생성이 필요하지만 삭제는 사용자 확인 뒤다.
   - 소유자는 fvoci_migrator, 앱은 fvoci_app NOBYPASSRLS, RLS는 트랜잭션 app.user_id를 쓴다. auth.uid()로 바꾸거나 fvoci 스키마를 Data API에 노출하거나 anon/authenticated에 권한을 주지 않는다.
-  - Supabase CI job만 D-64 이미지 계약의 예외다. xtask가 호스트 Docker로 공식 구성을 띄우고 실패 후 정리 전에 상태/로그를 읽기 위해 호스트 러너에서 실행한다. 툴체인은 같은 고정 판이며 다른 job 계약은 유지한다.
+  - Supabase CI job은 D-64 이미지 계약의 예외다. xtask가 호스트 Docker로 공식 구성을 띄우고 실패 후 정리 전에 상태/로그를 읽기 위해 호스트 러너에서 실행한다. 툴체인은 같은 고정 판이다. 이후 추가한 browser job의 예외는 D-64의 구현 선택을 따르며 다른 공통 이미지 job 계약은 유지한다.
 
 <a id="d-89"></a>
 
