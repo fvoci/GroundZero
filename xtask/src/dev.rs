@@ -4,6 +4,8 @@
 //!   로그인할 수 있다: `test-user`는 초기 관리자(D-51)로 '개발' 워크스페이스의 소유자, `test-user-2`는 그 워크스페이스의
 //!   작성자. 둘이 함께 쓰는 실시간 공동 편집 문서도 한 번만 만든다(`deploy/postgres/dev-seed.sql`). 이어서 둘이
 //!   함께 쓰는 별도 합성 워크스페이스에 다섯 모듈의 예제를 한 번만 만든다(`deploy/postgres/dev-module-seed.sql`).
+//!   마지막으로 Storybook과 같은 합성 데이터(`deploy/postgres/dev-ui-data.json`)로 "UI 상태 예제" 워크스페이스를
+//!   한 번만 만든다(`deploy/postgres/dev-ui-seed.sql`).
 //! - `--no-web`: 웹 개발 서버를 띄우지 않는다(API만). 기본은 `pnpm --filter @fvoci/web dev`를 함께 띄운다.
 //! - 공개 URL 기본값은 Vite 원점 `http://127.0.0.1:5173`이며 `FVOCI_PUBLIC_URL`로 바꾼다. 쿠키·리다이렉트가 이
 //!   원점에 맞춰진다.
@@ -137,16 +139,45 @@ fn check_realm_users(root: &Path, compose: &Compose, sh: &Shell) -> Result<()> {
 /// 개발 전용 사용자·공동 작업 공간·공동 편집 문서를 한 번만 만든다(이미 있으면 아무것도 바꾸지 않음).
 fn seed(root: &Path, compose: &Compose, sh: &Shell, issuer: &str) -> Result<()> {
     println!("==> dev seed (shared workspace and document, once)");
-    seed_file(root, compose, sh, issuer, "dev-seed.sql")?;
+    seed_file(root, compose, sh, issuer, "dev-seed.sql", None)?;
     // 모듈 예제는 자기 표시(dev_module_seed_v1)로 따로 한 번만 만든다. 이미 dev_seed가 있는 개발 DB에도 더해진다.
     println!("==> dev module examples (separate synthetic workspace, once)");
-    seed_file(root, compose, sh, issuer, "dev-module-seed.sql")
+    seed_file(root, compose, sh, issuer, "dev-module-seed.sql", None)?;
+    // Storybook story와 같은 내용(apps/web/stories/fixtures/synthetic.ts). 자기 표시(dev_ui_seed_v1)로 한 번만.
+    println!("==> dev UI examples (same synthetic data as Storybook, once)");
+    let path = root.join("deploy/postgres/dev-ui-data.json");
+    let data =
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    // 형식이 틀리면 DB에 보내기 전에 멈춘다. 세션 설정으로 넘겨 dev-ui-seed.sql이 읽는다.
+    let data = serde_json::from_str::<serde_json::Value>(&data)
+        .with_context(|| format!("parse {}", path.display()))?
+        .to_string();
+    seed_file(
+        root,
+        compose,
+        sh,
+        issuer,
+        "dev-ui-seed.sql",
+        Some(("fvoci.dev_ui_data", &data)),
+    )
 }
+
+/// 준비 SQL에 넘기는 값의 달러 따옴표. 값에 이 글자열이 있으면 넘기지 않는다.
+const SEED_QUOTE: &str = "$fvoci_seed$";
 
 /// 준비 SQL 하나가 쓸 수 있는 새 행 id 수(넉넉히). 모자라면 준비 SQL이 멈춘다.
 const SEED_IDS: usize = 1000;
 
-fn seed_file(root: &Path, compose: &Compose, sh: &Shell, issuer: &str, name: &str) -> Result<()> {
+/// `setting`은 준비 SQL 앞에서 정할 세션 설정 하나(이름, 값). 명령줄이 아니라 표준 입력으로 넘겨 실행 기록에 값이
+/// 찍히지 않게 한다.
+fn seed_file(
+    root: &Path,
+    compose: &Compose,
+    sh: &Shell,
+    issuer: &str,
+    name: &str,
+    setting: Option<(&str, &str)>,
+) -> Result<()> {
     let dir = root.join("deploy/postgres");
     let read = |file: &str| {
         let path = dir.join(file);
@@ -157,11 +188,15 @@ fn seed_file(root: &Path, compose: &Compose, sh: &Shell, issuer: &str, name: &st
         .map(|_| uuid::Uuid::now_v7().to_string())
         .collect::<Vec<_>>()
         .join(",");
-    let sql = format!(
-        "SELECT set_config('fvoci.dev_ids', '{{{ids}}}', false);\n{}\n{}",
-        read("dev-ids.sql")?,
-        read(name)?
-    );
+    let mut sql = format!("SELECT set_config('fvoci.dev_ids', '{{{ids}}}', false);\n");
+    if let Some((key, value)) = setting {
+        if value.contains(SEED_QUOTE) {
+            bail!("{name}: the value for {key} contains {SEED_QUOTE}");
+        }
+        // SET은 결과 행을 찍지 않는다(SELECT set_config는 값 전체를 출력한다).
+        sql.push_str(&format!("SET {key} = {SEED_QUOTE}{value}{SEED_QUOTE};\n"));
+    }
+    sql.push_str(&format!("{}\n{}", read("dev-ids.sql")?, read(name)?));
     let command: Vec<String> = [
         "psql",
         "--quiet",

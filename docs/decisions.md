@@ -557,7 +557,7 @@
 
 <a id="d-108"></a>
 
-- **D-108 Storybook과 Cloudflare Workers 공개 미리보기.** 실제 제품 컴포넌트의 상태를 합성 데이터로 확인하는 Storybook을 둔다. 복제 컴포넌트·Storybook 전용 제품 분기·새 디자인 시스템을 만들지 않고 로그인·API·DB·협업 흐름은 브라우저 회귀 시험(#118)에 남긴다. 정적 빌드는 Cloudflare Workers(정적 자산 Worker `fvoci-storybook`)의 workers.dev에 접근 제한 없이 공개하고, Workers Builds가 main 배포와 PR별 미리보기를 맡는다. 유료 서비스 가입과 제품 앱 배포는 포함하지 않는다. 사용·설정은 [개발 지침의 Storybook](development.md#storybook). 근거: 사용자(2026-10-25).
+- **D-108 Storybook과 Cloudflare Workers 공개 미리보기.** 실제 제품 컴포넌트의 상태를 합성 데이터로 확인하는 Storybook을 둔다. 복제 컴포넌트·Storybook 전용 제품 분기·새 디자인 시스템을 만들지 않고 로그인·API·DB·협업 흐름은 브라우저 회귀 시험(#118)에 남긴다. 정적 빌드는 Cloudflare Workers(정적 자산 Worker `fvoci-storybook`)의 workers.dev에 접근 제한 없이 공개하고, Workers Builds가 main 배포와 PR별 미리보기를 맡는다. 유료 서비스 가입과 제품 앱 배포는 포함하지 않는다. story의 합성 데이터는 풍부하게 두고 개발 seed와 같은 데이터 파일을 쓴다. 사용·설정은 [개발 지침의 Storybook](development.md#storybook). 근거: 사용자(2026-10-25).
 
 ## 2. 미승인 제안 (검토자)
 

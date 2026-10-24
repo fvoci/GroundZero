@@ -196,6 +196,9 @@ pnpm --filter @fvoci/web run build-storybook  # target/storybook-static
   제품 화면과 같은 방식으로 조립한다.
 - `.storybook/preview.ts`가 제품의 `app.css`·서체·번역을 쓰고, 표시 설정(한국어·Asia/Seoul)을 고정한다. 도구 막대로 언어,
   글자 크기(루트 글꼴 100·150·200%, 브라우저 설정의 흉내), 375·500px·데스크톱 화면 폭을 바꾼다.
+- 합성 데이터는 [dev-ui-data.json](../deploy/postgres/dev-ui-data.json) 하나를 개발 seed와 함께 쓴다. story(`stories/fixtures/synthetic.ts`)와
+  `cargo xtask dev`의 "UI 상태 예제" 워크스페이스는 문서 제목·본문·트리, 댓글 스레드·답글·해결, 업무 제목·상태·우선순위·담당자가
+  같다. id·시각은 DB가 정하므로 story는 고정값을 쓰고, 사람은 개발 Keycloak 테스트 사용자 둘(이름은 `tests/synthetic-data.test.ts`가 대조)뿐이다.
 - 서버 데이터가 필요한 story는 `api`의 함수를 story의 `beforeEach`에서 바꿔 끼운다(`spyOn`). 같은 원점의
   `/api`·`/auth`·`/healthz`와 다른 원점 요청은 막고 콘솔 오류로 남긴다. 실제 OIDC·DB·운영 API에 연결하지 않는다.
 - `tests/component/stories.test.ts`가 모든 story를 jsdom에서 다시 그리고 play 함수(키보드·실패·입력 보존)를 실행한다.
@@ -209,14 +212,14 @@ pnpm --filter @fvoci/web run build-storybook  # target/storybook-static
 Storybook에는 합성 데이터만 있으며 workers.dev 주소는 누구나 볼 수 있다. Workers Builds가 main 커밋은 배포하고, 다른 브랜치·PR은
 미리보기 주소를 PR에 댓글로 남긴다. 저장소 연결은 소유자가 Cloudflare 대시보드에서 한다.
 
-| Workers Builds 설정 | 값                                                                                  |
-| ------------------- | ----------------------------------------------------------------------------------- |
-| Root directory      | `/` (pnpm 작업 공간 전체 설치)                                                      |
-| Build command       | `pnpm --filter @fvoci/web run build-storybook`                                      |
-| Deploy command      | `pnpm dlx wrangler@4.151.3 deploy --config apps/web/wrangler.jsonc`                 |
-| Preview command     | `pnpm dlx wrangler@4.151.3 preview --config apps/web/wrangler.jsonc`                |
-| Build variable      | `NODE_VERSION=24.22.1` (pnpm 판은 `packageManager`를 따른다)                        |
-| Build watch paths   | `apps/web/*`, `packages/*`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` |
+| Workers Builds 설정 | 값                                                                                                                      |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Root directory      | `/` (pnpm 작업 공간 전체 설치)                                                                                          |
+| Build command       | `pnpm --filter @fvoci/web run build-storybook`                                                                          |
+| Deploy command      | `pnpm dlx wrangler@4.151.3 deploy --config apps/web/wrangler.jsonc`                                                     |
+| Preview command     | `pnpm dlx wrangler@4.151.3 preview --config apps/web/wrangler.jsonc`                                                    |
+| Build variable      | `NODE_VERSION=24.22.1` (pnpm 판은 `packageManager`를 따른다)                                                            |
+| Build watch paths   | `apps/web/*`, `packages/*`, `deploy/postgres/dev-ui-data.json`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` |
 
 Wrangler는 빌드 환경에서만 받아 쓰고 작업 공간 의존성·라이선스 검사 대상에 넣지 않는다.
 
@@ -243,7 +246,7 @@ VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev
 - `test-user`는 개발 워크스페이스 소유자, `test-user-2`는 작성자다. 비밀번호는 [realm-test.json](../deploy/keycloak/realm-test.json)의 `credentials`에 있다. Keycloak 관리자 비밀번호는 [compose.dev.yaml](../deploy/compose.dev.yaml)에만 둔다.
 - 공동 편집은 두 사용자를 서로 다른 브라우저 프로필로 열어 확인한다. 같은 브라우저의 두 탭은 쿠키를 공유하므로 서로 다른 사용자가 아니다.
 - 화면 캡처는 데스크톱 창이 있는 브라우저에서 앞에 띄운 탭으로 만든다. 창 없는 헤드리스·원격 브라우저 런타임은 페이지가 정상이어도 단색 이미지를 돌려줄 수 있다([#112](https://github.com/fvoci/GroundZero/issues/112)). 만든 이미지 파일을 직접 열어 확인하고 DOM·HTTP·DB 결과로 픽셀 확인을 대신하지 않는다. 좁은 창은 실제 기기 시험과 구분해 적는다.
-- [dev-seed.sql](../deploy/postgres/dev-seed.sql)과 [dev-module-seed.sql](../deploy/postgres/dev-module-seed.sql)은 기존 앱 함수를 사용하고 새 ID는 xtask에서 받는다. 개발 워크스페이스와 모듈 예제는 합성 데이터이며 운영 설치에는 들어가지 않는다.
+- [dev-seed.sql](../deploy/postgres/dev-seed.sql)·[dev-module-seed.sql](../deploy/postgres/dev-module-seed.sql)·[dev-ui-seed.sql](../deploy/postgres/dev-ui-seed.sql)은 기존 앱 함수를 사용하고 새 ID는 xtask에서 받는다. 개발 워크스페이스·모듈 예제·UI 상태 예제는 합성 데이터이며 운영 설치에는 들어가지 않는다. UI 상태 예제는 Storybook과 같은 [dev-ui-data.json](../deploy/postgres/dev-ui-data.json)으로 만든다([Storybook](#storybook)).
 - seed 표시는 반복 실행의 중복과 사용자 편집 덮어쓰기를 막는다. 예제만 지우려면 앱에서 예제 워크스페이스를 삭제한다. 다음 개발 실행이 다시 만들지 않는다. 발급자·고정 사용자 ID가 기존 DB와 다르면 준비를 중단한다.
 - Ctrl-C는 데이터를 남긴다. `cargo xtask down`은 이 체크아웃의 개발·시험 컨테이너·네트워크·DB·검색·Keycloak 볼륨을 지운다. `target/dev-files`의 첨부는 남는다. 기존 데이터 삭제는 별도 확인 범위다.
 - `dev`의 Compose 실행은 정의가 바뀐 컨테이너를 다시 만들 수 있다. 예전 개발 상태를 보존해야 하면 먼저 [당시 Keycloak 저장 위치와 보존 절차](https://github.com/fvoci/GroundZero/blob/abd545a250ff1fd9cc166b3c078c4dff76846724/docs/development.md#84-개발-keycloak-컨테이너가-실수로-다시-만들어진-일-2026-10-20)를 확인한다. 기존 DB의 checksum 불일치는 볼륨 삭제로 자동 해결하지 않는다.
