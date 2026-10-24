@@ -42,7 +42,7 @@ Chromium 18건을 통과했다(1280px 데스크톱 11건·375px viewport 7건, �
 - **관찰 — 공개와 개인 영역.** 항목은 비공개/공간 공개와 항목 멤버로 접근을 나누며,
   공간의 비공개 문서는 작성자·관리자 접근과 명시적 공유를 함께 고려한다. 개인 노트는 공간 관리자에게 자동 공개되지 않지만
   소유자가 공유할 수 있다. 읽기·쓰기·복제·반출·첨부 다운로드는 같은 권한이 아니다.
-  시간 원본은 개인 소유이며 동의한 시간만 합계에 포함한다. 이는 DB·서버 운영자 대상 암호화를 뜻하지 않는다(H-01).
+  개인 시간 기록은 워크스페이스 관리자에게도 비공개이며, 소유자가 동의한 시간만 합계에 포함한다. 이는 DB·서버 운영자 대상 암호화를 뜻하지 않는다(H-01).
   근거: SQL의 `app_item_access`, `app_document_base_access`, `app_document_can_export`, `time_entries_select`;
   [sharing.rs](../crates/server/tests/sharing.rs)의 `shared_personal_note_does_not_reach_the_grantees_workspace_admin`,
   [time_tracking.rs](../crates/server/tests/time_tracking.rs)의 `task_totals_include_only_people_who_chose_to_share`.
