@@ -71,7 +71,7 @@ describe('members screen', () => {
     await fireEvent.click(await screen.findByRole('button', { name: '그룹 삭제' }));
     expect(del).not.toHaveBeenCalled();
     const dialog = await screen.findByRole('dialog');
-    expect(dialog.textContent).toContain('세미나 준비 그룹을 삭제할까요?');
+    expect(dialog.textContent).toContain('세미나 준비을(를) 삭제할까요?');
     await fireEvent.click(screen.getByRole('button', { name: '확인' }));
     await waitFor(() => {
       expect(del).toHaveBeenCalledWith('g-1');
