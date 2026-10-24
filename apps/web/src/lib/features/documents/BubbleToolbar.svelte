@@ -4,6 +4,7 @@
   import type { Editor } from '@tiptap/core';
 
   import { m } from '$lib/paraglide/messages.js';
+  import { Input } from '$lib/ui/input';
 
   import type { BlockKind } from './block-types';
   import { activeBlockKind, BLOCK_KINDS, blockKindLabel, setBlockKind } from './block-types';
@@ -41,10 +42,10 @@
   let linkEditing = $state(false);
   let linkValue = $state('');
   let linkError = $state(false);
-  let linkInput = $state<HTMLInputElement | undefined>();
+  let linkInput = $state<HTMLInputElement | null>(null);
   // 링크 입력을 열면 주소 칸으로 초점을 옮긴다(조건부로 그려지는 칸에는 autofocus가 듣지 않는다).
   $effect(() => {
-    if (linkEditing && linkInput !== undefined) {
+    if (linkEditing && linkInput !== null) {
       linkInput.focus();
       linkInput.select();
     }
@@ -125,13 +126,14 @@
         applyLink();
       }}
     >
-      <input
-        class="h-7 w-56 max-w-[60vw] rounded border border-input-border bg-background px-2 text-sm"
+      <!-- 공통 Input의 테두리·초점·잘못된 값 표시를 쓰고, 막대 안에 맞게 높이·폭·모서리·여백만 줄인다. -->
+      <Input
+        class="h-7 w-56 max-w-[60vw] rounded bg-background px-2"
         aria-label={m.documents_link_url()}
         aria-invalid={linkError}
         placeholder="https://"
         bind:value={linkValue}
-        bind:this={linkInput}
+        bind:ref={linkInput}
         onkeydown={(e: KeyboardEvent) => {
           if (e.key === 'Escape') {
             e.preventDefault();
