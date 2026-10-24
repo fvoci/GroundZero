@@ -4,7 +4,8 @@
 -- 긴 한국어·공백 없는 문자열·이모지·숫자가 섞인 위키 문서 트리, 답글과 해결된 스레드가 있는 댓글, 상태·우선순위·
 -- 담당자가 다른 업무를 실제 앱에서도 같은 내용으로 본다. 기존 테스트 사용자만 조회하고 계정을 만들거나 바꾸지 않는다.
 -- 제품 데이터는 기존 app_* 정의자 함수로만 만든다. 'dev_ui_seed_v1' 표시가 있으면 아무것도 바꾸지 않는다(편집·삭제한
--- 예제를 되살리거나 덮어쓰지 않는다). 실패하면 경고만 남기고 개발 실행은 계속하며 다음 실행 때 다시 시도한다.
+-- 예제를 되살리거나 덮어쓰지 않는다). 새 워크스페이스만 만들므로 실패는 결함이다: 전부 되돌리고 원래 오류 코드로
+-- 실패시켜 `cargo xtask dev`가 멈추게 한다(경고로 바꿔 성공처럼 넘기지 않는다).
 -- 새 행 id는 앞에 붙는 dev-ids.sql의 `pg_temp.take`로 받는다(D-88).
 SET search_path = fvoci, pg_temp;
 SET fvoci.dev_issuer = :'issuer';
@@ -39,8 +40,7 @@ BEGIN
   SELECT id INTO v_user FROM users
     WHERE issuer = current_setting('fvoci.dev_issuer') AND subject = '00000000-0000-4000-8000-00000000000b';
   IF v_admin IS NULL OR v_user IS NULL THEN
-    RAISE WARNING 'dev UI examples need the existing dev test users; run the dev seed first';
-    RETURN;
+    RAISE EXCEPTION 'existing dev test users are required for this issuer';
   END IF;
   -- 데이터의 사람 열쇠(owner·writer)를 테스트 사용자에 잇는다.
   v_people := jsonb_build_object('owner', v_admin, 'writer', v_user);
@@ -108,8 +108,8 @@ BEGIN
     INSERT INTO instance_state (key, value) VALUES ('dev_ui_seed_v1', jsonb_build_object(
       'workspace', v_ws, 'documents', v_docs, 'comments', v_comments, 'tasks', v_tasks, 'seeded_on', v_today));
   EXCEPTION WHEN OTHERS THEN
-    RAISE WARNING 'dev UI examples not added (%: %); the dev run continues and tries again next time',
-      SQLSTATE, SQLERRM;
+    -- 무엇을 하다 실패했는지 붙여 원래 오류 코드 그대로 다시 낸다.
+    RAISE EXCEPTION 'dev UI examples not added: %', SQLERRM USING ERRCODE = SQLSTATE;
   END;
 END
 $seed$;
