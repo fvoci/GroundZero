@@ -9,4 +9,7 @@
     // `pnpm --filter @fvoci/web run build-storybook`의 출력.
     "directory": "../../target/storybook-static",
   },
+  // Worker Previews(`wrangler preview`, PR별 미리보기)는 이 블록이 있어야 한다. 정적 자산만 쓰므로 미리보기 전용
+  // 변수·바인딩은 없다.
+  "previews": {},
 }

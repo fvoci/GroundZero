@@ -212,8 +212,10 @@ pnpm --filter @fvoci/web run build-storybook  # target/storybook-static
   addon(`@storybook/addon-a11y`)은 axe-core(MPL-2.0)가 허용 목록 밖이라 도입하지 않았다.
 
 공개 배포는 Cloudflare Workers의 정적 자산 Worker `fvoci-storybook`이다([wrangler.jsonc](../apps/web/wrangler.jsonc)).
-Storybook에는 합성 데이터만 있으며 workers.dev 주소는 누구나 볼 수 있다. Workers Builds가 main 커밋은 배포하고, 다른 브랜치·PR은
-미리보기 주소를 PR에 댓글로 남긴다. 저장소 연결은 소유자가 Cloudflare 대시보드에서 한다.
+Storybook에는 합성 데이터만 있으며 workers.dev 주소는 누구나 볼 수 있다. 저장소는 Workers Builds에 연결돼 있다(Worker Previews
+방식). main 커밋은 배포하고, 다른 브랜치·PR은 브랜치별 미리보기를 만들어 주소를 PR에 댓글로 남긴다. `apps/web/wrangler.jsonc`가
+없는 브랜치(이 설정보다 먼저 갈라진 브랜치)의 미리보기 빌드는 설정을 찾지 못해 실패한다. main을 받아 오면 해결된다.
+설정을 바꾸거나 확인할 때는 대시보드의 Worker 설정 > 빌드, 또는 `cf builds workers get <Worker tag>`를 쓴다.
 
 | Workers Builds 설정 | 값                                                                                                                      |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------- |
