@@ -508,14 +508,15 @@
             {#if e.chapter !== ''}<span class="text-xs text-muted-foreground">{e.chapter}</span
               >{/if}
             {#if isWebUrl(e.url)}
+              <!-- 제목은 자르지 않고 줄을 바꾼다. 좁으면 시간·날짜·상태가 다음 줄로 내려간다. -->
               <a
-                class="min-w-0 flex-1 truncate underline"
+                class="min-w-40 flex-1 underline"
                 href={e.url}
                 target="_blank"
                 rel="noopener noreferrer">{e.title}</a
               >
             {:else}
-              <span class="min-w-0 flex-1 truncate">{e.title}</span>
+              <span class="min-w-40 flex-1">{e.title}</span>
             {/if}
             <span class="text-xs text-muted-foreground tabular-nums"
               >{e.duration_seconds > 0 ? clockText(e.duration_seconds) : ''}</span
@@ -788,7 +789,7 @@
           });
         }}
       >
-        <div class="flex flex-1 flex-col gap-1">
+        <div class="flex min-w-48 flex-1 flex-col gap-1">
           <Label for="episode-title">{m.courses_new_title()}</Label>
           <Input id="episode-title" bind:value={newEpisode.title} maxlength={300} />
         </div>

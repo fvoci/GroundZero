@@ -591,7 +591,7 @@
 
     {#if current.can_write}
       <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addUnit(e)} novalidate>
-        <div class="flex flex-1 flex-col gap-1">
+        <div class="flex min-w-48 flex-1 flex-col gap-1">
           <Label for="study-unit-title">{m.study_new_title()}</Label>
           <Input id="study-unit-title" bind:value={draft.title} maxlength={300} />
         </div>

@@ -189,11 +189,13 @@
   });
   const remPx = (): number =>
     Number.parseFloat(getComputedStyle(document.documentElement).fontSize || '16') || 16;
+  // 줄 이름 열 너비(rem). 기본 14rem이고, 좁은 화면에서는 보이는 폭의 45%까지 줄여(최소 8rem) 날짜 칸이 보이게 한다.
+  const nameCol = $derived(width === 0 ? 14 : Math.min(14, Math.max(8, (width / remPx()) * 0.45)));
   // 날짜 열 너비(rem). 기본 1.75rem이고, 기간이 짧아 오른쪽이 비면 남는 폭을 날짜 열에 나눈다(최대 5rem).
   const col = $derived(
     layout.days === 0 || width === 0
       ? 1.75
-      : Math.min(5, Math.max(1.75, (width / remPx() - 14) / layout.days)),
+      : Math.min(5, Math.max(1.75, (width / remPx() - nameCol) / layout.days)),
   );
   const columnPx = (): number => col * remPx();
   const weekend = (day: string): boolean => {
@@ -252,8 +254,8 @@
             });
       const rem = w.span * col;
       // 넓으면 전체, 중간이면 주차와 첫날(일요일 시작이면 첫날~), 아주 좁으면 비운다(설명은 남김). 보이는 날짜 영역
-      // (스크롤 영역 - 줄 이름 14rem)이 12rem보다 좁은 화면(휴대 폭)에서는 칸이 넓어도 짧게 쓴다.
-      const narrowView = width > 0 && width / remPx() - 14 < 12;
+      // (스크롤 영역 - 줄 이름 열)이 12rem보다 좁은 화면(휴대 폭)에서는 칸이 넓어도 짧게 쓴다.
+      const narrowView = width > 0 && width / remPx() - nameCol < 12;
       const label =
         rem >= 10 && !narrowView
           ? full
@@ -369,7 +371,7 @@
   <div class="overflow-x-auto rounded-md border" data-testid="task-gantt" bind:this={scroller}>
     <div
       class="grid min-w-max text-xs"
-      style:grid-template-columns={`14rem repeat(${String(layout.days)}, ${String(col)}rem)`}
+      style:grid-template-columns={`${String(nameCol)}rem repeat(${String(layout.days)}, ${String(col)}rem)`}
       style:grid-template-rows={`auto auto auto repeat(${String(layout.rows.length)}, ${String(ROW)}rem)`}
     >
       <div
@@ -386,8 +388,8 @@
           style:grid-row="1"
           style:grid-column={`${String(seg.start + 2)} / span ${String(seg.span)}`}
         >
-          <!-- 가로로 넘기면 글이 줄 이름 열(14rem) 바로 옆에 붙어 남는다(칸 앞부분이 그 열 아래로 들어가도 읽힘). -->
-          <span class="sticky left-56 inline-block">{seg.label}</span>
+          <!-- 가로로 넘기면 글이 줄 이름 열 바로 옆에 붙어 남는다(칸 앞부분이 그 열 아래로 들어가도 읽힘). -->
+          <span class="sticky inline-block" style:left={`${String(nameCol)}rem`}>{seg.label}</span>
         </div>
       {/each}
       {#each weeks as w (w.key)}
@@ -398,7 +400,9 @@
           title={w.spoken}
           data-gantt-week={w.from}
         >
-          <span class="sticky left-56 inline-block" aria-hidden="true">{w.label}</span>
+          <span class="sticky inline-block" style:left={`${String(nameCol)}rem`} aria-hidden="true"
+            >{w.label}</span
+          >
           <span class="sr-only">{w.spoken}</span>
         </div>
       {/each}
@@ -439,6 +443,7 @@
             type="button"
             data-task-card={row.task.id}
             class="w-full truncate rounded px-1 text-left hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            title={`${row.task.reference ?? ''} ${row.task.title}`.trim()}
             aria-label={describe(row.task)}
             onfocus={() => (focusId = row.task.id)}
             onblur={() => (focusId = undefined)}

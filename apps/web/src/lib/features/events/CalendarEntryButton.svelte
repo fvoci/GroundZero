@@ -22,7 +22,8 @@
   type="button"
   data-calendar-entry={entryKey}
   class={[
-    'w-full truncate rounded px-1 text-left text-xs hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+    // 좁은 화면의 날짜별 목록에서는 누르기 쉽게 높이를 1.5rem으로 둔다(달력 칸은 md 이상에서만 보인다).
+    'w-full truncate rounded px-1 py-1 text-left text-xs hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:py-0',
     entry.kind === 'event' && 'bg-primary/10',
     entry.kind === 'date' && 'border-l-2 border-primary/60',
     entry.kind === 'projected' && 'border border-dashed text-muted-foreground italic',
