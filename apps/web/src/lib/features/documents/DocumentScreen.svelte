@@ -52,6 +52,10 @@
     let cancelled = false;
     doc = undefined;
     error = undefined;
+    // 다른 문서로 옮기면 화면은 그대로라 앞 문서에서 연 지우기 확인·내보내기가 새 문서에 이어진다(리뷰: 확인을 누르면
+    // 새 문서가 휴지통으로 간다). 문서가 바뀔 때 닫는다.
+    deleting = false;
+    exportOpen = false;
     api
       .document(id)
       .then((d) => {

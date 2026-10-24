@@ -142,3 +142,31 @@ describe('document actions menu', () => {
     expect(trash).not.toHaveBeenCalled();
   });
 });
+
+// 리뷰: 같은 화면에서 다른 문서로 옮기면 앞 문서에서 연 지우기 확인이 새 문서에 남아, 확인을 누르면 새 문서가 휴지통으로
+// 갔다. 문서가 바뀌면 확인과 내보내기 창을 닫는다.
+describe('document actions after switching documents', () => {
+  it('does not carry an open delete question or export dialog over to the next document', async () => {
+    vi.spyOn(api, 'document').mockImplementation((id: string) =>
+      Promise.resolve(documentView({ id, title: id === 'doc-1' ? '운영 안내' : '설치' })),
+    );
+    const trash = vi.spyOn(api, 'trashDocument').mockResolvedValue('batch-1');
+    const view = render(DocumentScreen, { props: { documentId: 'doc-1', workspaces } });
+    const menu = await openMore();
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: '문서 지우기' }));
+    expect(await screen.findByText('문서: 휴지통으로 옮길까요?')).toBeInTheDocument();
+
+    await view.rerender({ documentId: 'doc-2', workspaces });
+    await screen.findByRole('button', { name: '더 보기' });
+    expect(screen.queryByText('문서: 휴지통으로 옮길까요?')).toBeNull();
+    expect(screen.queryByRole('button', { name: '휴지통으로' })).toBeNull();
+    expect(trash).not.toHaveBeenCalled();
+
+    const again = await openMore();
+    await fireEvent.click(within(again).getByRole('menuitem', { name: '내보내기' }));
+    await screen.findByRole('dialog');
+    await view.rerender({ documentId: 'doc-1', workspaces });
+    await screen.findByRole('button', { name: '더 보기' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
