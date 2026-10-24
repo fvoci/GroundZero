@@ -20,6 +20,7 @@
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Textarea } from '$lib/ui/textarea';
 
   import { plannedOn, replan, studyProgress, unitAmount, unitLabel } from './progress';
 
@@ -574,11 +575,7 @@
               </div>
               <div class="flex flex-col gap-1 sm:col-span-3">
                 <Label for={`unit-note-${u.id}`}>{m.study_note()}</Label>
-                <textarea
-                  id={`unit-note-${u.id}`}
-                  class="rounded-md border border-input bg-transparent px-3 py-2 text-base"
-                  rows={2}
-                  bind:value={mine.note}></textarea>
+                <Textarea id={`unit-note-${u.id}`} rows={2} bind:value={mine.note} />
               </div>
               <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
             </form>

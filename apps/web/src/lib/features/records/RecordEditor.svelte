@@ -6,6 +6,7 @@
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Textarea } from '$lib/ui/textarea';
 
   import { recordChoiceLabel, recordDateLabel, recordFieldLabel, recordRoleLabel } from './labels';
   import type { RecordForm } from './records';
@@ -72,12 +73,13 @@
     {#if f.type === 'long_text'}
       <div class="flex flex-col gap-1 sm:col-span-2">
         <Label for={id(f.key)}>{recordFieldLabel(def, f)}</Label>
-        <textarea
+        <Textarea
           id={id(f.key)}
-          class={box}
+          class="min-h-20"
           rows={3}
           maxlength={10000}
-          bind:value={form.values[f.key]}></textarea>
+          bind:value={form.values[f.key]}
+        />
       </div>
     {:else if f.type === 'choice' || f.type === 'person' || f.type === 'course'}
       {@const options =
@@ -159,8 +161,7 @@
   {/each}
   <div class="flex flex-col gap-1 sm:col-span-2">
     <Label for={id('body')}>{m.records_body()}</Label>
-    <textarea id={id('body')} class={box} rows={3} maxlength={20000} bind:value={form.body}
-    ></textarea>
+    <Textarea id={id('body')} class="min-h-20" rows={3} maxlength={20000} bind:value={form.body} />
   </div>
   {#if def.file_roles.length > 0}
     <fieldset class="flex flex-col gap-2 rounded-md border p-2 sm:col-span-2">

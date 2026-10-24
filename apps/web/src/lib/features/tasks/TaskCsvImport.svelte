@@ -10,6 +10,7 @@
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Label } from '$lib/ui/label';
+  import { Textarea } from '$lib/ui/textarea';
 
   import { parseTasksCsv } from './csv';
   import {
@@ -143,13 +144,14 @@
   <summary class="cursor-pointer">{m.tasks_csv_summary()}</summary>
   <div class="flex flex-col gap-2 pt-2">
     <Label for={`tasks-csv-${itemId}`}>{m.tasks_csv_label()}</Label>
-    <textarea
+    <Textarea
       id={`tasks-csv-${itemId}`}
-      class="min-h-32 rounded-md border bg-background p-2 font-code text-sm"
+      class="min-h-32 font-code"
       bind:value={text}
-      oninput={(e) => {
-        edited(e.currentTarget.value);
-      }}></textarea>
+      oninput={(e: Event) => {
+        if (e.currentTarget instanceof HTMLTextAreaElement) edited(e.currentTarget.value);
+      }}
+    />
     <p aria-live="polite">
       {#if error !== undefined}
         <span class="text-destructive">{error}</span>

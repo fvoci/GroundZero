@@ -20,6 +20,7 @@
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
+  import { Textarea } from '$lib/ui/textarea';
 
   import BlockControls from './BlockControls.svelte';
   import { BlockKeys, insertDivider } from './block-ops';
@@ -654,13 +655,13 @@
   <label class="mt-2 block text-sm font-medium" for="markdown-source"
     >{m.documents_markdown_source()}</label
   >
-  <textarea
+  <Textarea
     id="markdown-source"
     bind:value={markdownText}
     oninput={onMarkdownInput}
     spellcheck="false"
-    class="mt-1 min-h-[16rem] w-full rounded-md border border-input bg-transparent px-3 py-2 font-code text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-  ></textarea>
+    class="mt-1 min-h-[16rem] font-code"
+  />
   {#if markdownProblem !== undefined}
     <p class="mt-1 text-sm text-destructive" role="alert" data-testid="markdown-problem">
       {markdownProblem}

@@ -6,6 +6,7 @@
   import { RetryKey } from '$lib/api/retry-key';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
+  import { Textarea } from '$lib/ui/textarea';
 
   import CommentItem from './CommentItem.svelte';
   import { threads } from './threads';
@@ -195,15 +196,15 @@
                 void reply(t.root.id);
               }}
             >
-              <textarea
-                use:focusOnMount
+              <Textarea
+                {@attach focusOnMount}
                 aria-label={m.comments_reply()}
-                class="min-h-16 rounded-md border bg-background p-2 text-sm"
                 bind:value={replyDraft}
                 maxlength={10000}
                 onkeydown={(e: KeyboardEvent) => {
                   submitOnCtrlEnter(e, () => void reply(t.root.id));
-                }}></textarea>
+                }}
+              />
               <div class="flex gap-2">
                 <Button type="submit" size="sm" disabled={busy || replyDraft.trim() === ''}
                   >{m.comments_reply_submit()}</Button
@@ -231,15 +232,16 @@
       void post();
     }}
   >
-    <textarea
+    <Textarea
       aria-label={m.comments_new_label()}
-      class="min-h-20 rounded-md border bg-background p-2 text-sm"
+      class="min-h-20"
       bind:value={draft}
       maxlength={10000}
       placeholder={m.comments_new_placeholder()}
       onkeydown={(e: KeyboardEvent) => {
         submitOnCtrlEnter(e, () => void post());
-      }}></textarea>
+      }}
+    />
     <div>
       <Button type="submit" disabled={busy || draft.trim() === ''}>{m.comments_post()}</Button>
     </div>

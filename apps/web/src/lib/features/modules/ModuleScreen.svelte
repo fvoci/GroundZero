@@ -18,6 +18,7 @@
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Textarea } from '$lib/ui/textarea';
 
   import { kindLabel, normalizeKey } from './kinds';
   import { itemStatusLabel, periodText } from './profile';
@@ -326,13 +327,13 @@
         </div>
         <div class="flex w-full flex-col gap-1">
           <Label for="module-edit-description">{m.modules_description()}</Label>
-          <textarea
+          <Textarea
             id="module-edit-description"
             bind:value={editDescription}
             maxlength={2000}
             rows={3}
-            class="rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          ></textarea>
+            class="min-h-20"
+          />
         </div>
         <Button type="submit" variant="outline" disabled={savingSettings}>{m.common_save()}</Button>
         <Button type="button" variant="outline" onclick={() => void toggleArchive()}

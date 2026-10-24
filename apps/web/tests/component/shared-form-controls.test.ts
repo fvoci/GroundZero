@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -50,5 +51,38 @@ describe('task board fields use the shared controls', () => {
       screen.getByRole('textbox', { name: '보기 이름' }),
     ];
     for (const field of fields) expect(field).toHaveAttribute('data-slot', 'input');
+  });
+});
+
+describe('comment boxes use the shared Textarea', () => {
+  it('draws the new comment and reply boxes with it, and still focuses the reply box when opened', async () => {
+    vi.spyOn(api, 'comments').mockResolvedValue([
+      {
+        id: 'c1',
+        parent_id: null,
+        body: '첫 댓글',
+        author_id: 'u1',
+        author_name: 'Test User',
+        created_at: '2026-10-21T00:00:00Z',
+        edited: false,
+        deleted: false,
+        resolved: false,
+        can_edit: false,
+        can_delete: false,
+        can_resolve: false,
+      },
+    ]);
+    render(CommentsPanel, { props: { target: { kind: 'document', id: 'doc-1' } } });
+    await screen.findByText('첫 댓글');
+    expect(screen.getByRole('textbox', { name: /새 댓글/ })).toHaveAttribute(
+      'data-slot',
+      'textarea',
+    );
+
+    await fireEvent.click(screen.getByRole('button', { name: '답글' }));
+    const reply = screen.getByRole('textbox', { name: '답글' });
+    expect(reply).toHaveAttribute('data-slot', 'textarea');
+    // 손으로 꾸민 textarea의 use:focusOnMount를 구성요소에서는 {@attach}로 넘긴다.
+    expect(reply).toHaveFocus();
   });
 });

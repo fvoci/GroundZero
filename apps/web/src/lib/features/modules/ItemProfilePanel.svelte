@@ -18,6 +18,7 @@
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Textarea } from '$lib/ui/textarea';
   import * as Select from '$lib/ui/select';
 
   import ItemProfileSummary from './ItemProfileSummary.svelte';
@@ -81,8 +82,6 @@
   });
   const fields = $derived(detailFields(kind));
   const labels = $derived(peopleLabels(kind));
-  const textarea =
-    'rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 
   $effect(() => {
     const id = item.id;
@@ -299,13 +298,11 @@
       </div>
       <div class="flex flex-col gap-1 sm:col-span-2">
         <Label for="item-goal">{m.modules_goal()}</Label>
-        <textarea id="item-goal" class={textarea} rows={2} maxlength={4000} bind:value={form.goal}
-        ></textarea>
+        <Textarea id="item-goal" rows={2} maxlength={4000} bind:value={form.goal} />
       </div>
       <div class="flex flex-col gap-1 sm:col-span-2">
         <Label for="item-scope">{m.modules_scope()}</Label>
-        <textarea id="item-scope" class={textarea} rows={2} maxlength={4000} bind:value={form.scope}
-        ></textarea>
+        <Textarea id="item-scope" rows={2} maxlength={4000} bind:value={form.scope} />
       </div>
       {#if kind === 'research'}
         <div class="flex flex-col gap-1 sm:col-span-2">
@@ -317,12 +314,12 @@
         <div class={['flex flex-col gap-1', f.multiline ? 'sm:col-span-2' : '']}>
           <Label for={`item-detail-${f.key}`}>{f.label}</Label>
           {#if f.multiline}
-            <textarea
+            <Textarea
               id={`item-detail-${f.key}`}
-              class={textarea}
               rows={2}
               maxlength={2000}
-              bind:value={form.values[f.key]}></textarea>
+              bind:value={form.values[f.key]}
+            />
           {:else}
             <Input id={`item-detail-${f.key}`} maxlength={2000} bind:value={form.values[f.key]} />
           {/if}

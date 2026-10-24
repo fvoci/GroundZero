@@ -15,6 +15,7 @@
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Textarea } from '$lib/ui/textarea';
   import { isWebUrl } from '$lib/url';
 
   import type { EpisodeRow } from './csv';
@@ -680,10 +681,11 @@
               </div>
               <div class="flex flex-col gap-1 sm:col-span-4">
                 <Label for={`ep-materials-${e.id}`}>{m.courses_materials()}</Label>
-                <textarea
+                <Textarea
                   id={`ep-materials-${e.id}`}
-                  class="min-h-20 rounded-md border bg-background p-2 text-sm"
-                  bind:value={shared.materials}></textarea>
+                  class="min-h-20"
+                  bind:value={shared.materials}
+                />
               </div>
               <div class="flex gap-2 sm:col-span-4">
                 <Button type="submit" size="sm" disabled={savingEpisode}>{m.common_save()}</Button>
@@ -753,10 +755,7 @@
               </div>
               <div class="flex flex-col gap-1 sm:col-span-3">
                 <Label for={`mine-note-${e.id}`}>{m.courses_my_note()}</Label>
-                <textarea
-                  id={`mine-note-${e.id}`}
-                  class="min-h-20 rounded-md border bg-background p-2 text-sm"
-                  bind:value={mine.note}></textarea>
+                <Textarea id={`mine-note-${e.id}`} class="min-h-20" bind:value={mine.note} />
               </div>
               <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
             </form>
@@ -811,10 +810,7 @@
         <summary class="cursor-pointer">{m.courses_csv_summary()}</summary>
         <div class="flex flex-col gap-2 pt-2">
           <Label for="episodes-csv">{m.courses_csv_help()}</Label>
-          <textarea
-            id="episodes-csv"
-            class="min-h-32 rounded-md border bg-background p-2 font-code text-sm"
-            bind:value={csvText}></textarea>
+          <Textarea id="episodes-csv" class="min-h-32 font-code" bind:value={csvText} />
           {#if csv !== undefined}
             <p aria-live="polite">
               {m.courses_csv_read({ count: csv.rows.length })}
