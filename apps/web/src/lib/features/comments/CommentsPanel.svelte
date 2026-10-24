@@ -41,9 +41,11 @@
       lastTarget = t.id;
       draftKey.done();
       replyKey.done();
-      // 다른 대상의 댓글을 보이지 않는다. 다시 읽기(작업 뒤)는 받을 때까지 지금 목록을 둔다.
+      // 다른 대상의 댓글·오류·완료 문구를 보이지 않는다. 다시 읽기(작업 뒤)는 받을 때까지 지금 목록을 둔다.
       comments = [];
       loaded = false;
+      error = undefined;
+      status = '';
     }
     const mine = ++seq;
     api
