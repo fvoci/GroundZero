@@ -25,6 +25,8 @@
   const { item, version = 0, onchanged }: Props = $props();
 
   let events = $state<EventView[]>([]);
+  // 목록을 한 번이라도 받았는지. 받기 전에는 "일정이 없습니다" 대신 불러오는 중이라고 보인다.
+  let loaded = $state(false);
   let error = $state<string | undefined>(undefined);
   let adding = $state(false);
   let openId = $state<string | undefined>(undefined);
@@ -42,6 +44,7 @@
       const next = await api.itemEvents(itemId);
       if (mine !== readSeq) return;
       events = next;
+      loaded = true;
       error = undefined;
       // 지운 일정의 단추처럼 초점이 있던 요소가 사라졌으면 이 영역 제목으로 돌린다.
       await tick();
@@ -88,7 +91,14 @@
     {/if}
   </div>
   {#if error !== undefined}
-    <p role="alert" class="text-sm text-destructive">{error}</p>
+    <p role="alert" class="text-sm text-destructive">
+      {error}
+      {#if !loaded}
+        <Button size="sm" variant="outline" class="ml-2" onclick={() => void reload()}
+          >{m.common_retry()}</Button
+        >
+      {/if}
+    </p>
   {/if}
   {#if adding}
     <div class="rounded-md border p-3">
@@ -119,7 +129,11 @@
         </button>
       </li>
     {:else}
-      <li class="text-sm text-muted-foreground">{m.events_list_empty()}</li>
+      {#if loaded}
+        <li class="text-sm text-muted-foreground">{m.events_list_empty()}</li>
+      {:else if error === undefined}
+        <li class="text-sm text-muted-foreground">{m.app_loading()}</li>
+      {/if}
     {/each}
   </ul>
 </section>

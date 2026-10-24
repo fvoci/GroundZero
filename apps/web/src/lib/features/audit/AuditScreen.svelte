@@ -22,6 +22,8 @@
   let error = $state<string | undefined>(undefined);
   let more = $state(false);
   let loading = $state(false);
+  // 첫 쪽을 받았는지. 받기 전(첫 그림 포함)과 첫 읽기 실패 뒤에는 "기록이 없습니다"를 보이지 않는다.
+  let loaded = $state(false);
   let seq = 0;
 
   async function load(before: string | undefined, mine: number): Promise<void> {
@@ -31,6 +33,7 @@
       if (mine !== seq) return;
       entries = before === undefined ? page : [...entries, ...page];
       more = page.length === 100;
+      loaded = true;
       error = undefined;
     } catch (e: unknown) {
       if (mine === seq) error = errorText(e, m.audit_load_failed());
@@ -56,7 +59,20 @@
     {workspace === undefined ? m.audit_my_hint() : m.audit_hint()}
   </p>
   {#if error !== undefined}
-    <p role="alert" class="text-sm text-destructive">{error}</p>
+    <p role="alert" class="text-sm text-destructive">
+      {error}
+      {#if !loaded}
+        <Button
+          size="sm"
+          variant="outline"
+          class="ml-2"
+          onclick={() => {
+            seq += 1;
+            void load(undefined, seq);
+          }}>{m.common_retry()}</Button
+        >
+      {/if}
+    </p>
   {/if}
   <ol class="flex flex-col gap-1 text-sm" data-testid="audit-list">
     {#each entries as e (e.id)}
@@ -77,8 +93,10 @@
         {/if}
       </li>
     {:else}
-      {#if !loading}
+      {#if loaded}
         <li class="text-muted-foreground">{m.audit_empty()}</li>
+      {:else if error === undefined}
+        <li class="text-muted-foreground">{m.app_loading()}</li>
       {/if}
     {/each}
   </ol>
