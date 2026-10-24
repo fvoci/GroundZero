@@ -60,6 +60,7 @@ beforeEach(async () => {
     locale: 'ko',
     time_zone: '',
     week_start: '',
+    theme: 'system',
   });
 });
 

@@ -23,6 +23,6 @@
   "settings_theme_system": "시스템 설정 따르기",
   "settings_theme_light": "밝게",
   "settings_theme_dark": "어둡게",
-  "settings_theme_hint": "이 브라우저에만 적용됩니다.",
+  "settings_theme_hint": "계정에 저장해 모든 기기에서 같게 보입니다.",
   "settings_save_failed": "저장하지 못했습니다."
 }

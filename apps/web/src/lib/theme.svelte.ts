@@ -1,6 +1,6 @@
-// 화면 밝기: 시스템 설정 따르기(기본)·밝게·어둡게. 문서 본문 서체(doc-font.ts, D-86)처럼 이 브라우저에만 저장하는 보기
-// 설정이다(계정 설정·문서 내용은 바꾸지 않는다). 어두운 색은 app.css의 `.dark` 토큰이 정한다.
-// 처음 그리기 전 적용은 index.html의 인라인 스크립트가 같은 키·규칙으로 한다. 둘을 함께 고친다(theme.test.ts가 맞춰 본다).
+// 화면 밝기(D-109): 시스템 설정 따르기(기본)·밝게·어둡게. 정본은 계정 설정(`/api/me`의 `theme`, 다른 표시 설정과 같은 곳)이고
+// 이 브라우저의 localStorage에는 사본만 둔다: 앱이 뜨기 전 index.html의 인라인 스크립트가 그 사본으로 첫 그림을 정한다(같은
+// 키·규칙, theme.test.ts가 맞춰 본다). 로그인하면 계정 값으로 다시 맞추고 사본도 고친다. 어두운 색은 app.css의 `.dark` 토큰이 정한다.
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
@@ -10,11 +10,15 @@ const DARK_QUERY = '(prefers-color-scheme: dark)';
 /** 지금 화면이 어두운지. 알림(sonner)처럼 테마를 따로 받는 구성요소가 읽는다. */
 export const themeState = $state({ dark: false });
 
-/** 저장한 선택. 없거나 읽을 수 없으면(사생활 보호 모드 등) 시스템 설정 따르기. */
+/** 서버·저장소에서 온 값을 선택지로 읽는다. 모르는 값은 시스템 설정 따르기. */
+export function asTheme(value: unknown): ThemeChoice {
+  return value === 'light' || value === 'dark' ? value : 'system';
+}
+
+/** 이 브라우저에 둔 사본. 없거나 읽을 수 없으면(사생활 보호 모드 등) 시스템 설정 따르기. */
 export function storedTheme(): ThemeChoice {
   try {
-    const value = window.localStorage.getItem(THEME_KEY);
-    return value === 'light' || value === 'dark' ? value : 'system';
+    return asTheme(window.localStorage.getItem(THEME_KEY));
   } catch {
     return 'system';
   }
@@ -40,7 +44,7 @@ export function applyTheme(choice: ThemeChoice): void {
   themeState.dark = dark;
 }
 
-/** 고르고 저장한다. 저장할 수 없어도 지금 화면에는 적용한다. */
+/** 적용하고 이 브라우저의 사본을 고친다(계정 저장은 표시 설정 대화상자가 한다). 저장소를 쓸 수 없어도 지금 화면에는 적용한다. */
 export function setTheme(choice: ThemeChoice): void {
   applyTheme(choice);
   try {

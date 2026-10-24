@@ -18,6 +18,8 @@ afterEach(() => {
   me.timeZone = '';
   me.weekStart = '';
   me.hourCycle = '';
+  me.theme = 'system';
+  vi.unstubAllGlobals();
 });
 
 async function openDialog(): Promise<HTMLSelectElement[]> {
@@ -83,11 +85,14 @@ describe('display settings dialog', () => {
   });
 });
 
-// 화면 밝기(시스템 설정 따르기·밝게·어둡게)는 문서 본문 서체처럼 이 브라우저에만 둔다. 이것만 바꾸면 계정 설정을 쓰지 않고
-// 화면을 새로 읽지도 않는다.
+// 화면 밝기(시스템 설정 따르기·밝게·어둡게, D-109)는 다른 표시 설정처럼 계정에 둔다. 이 브라우저에는 첫 그림용 사본만 둔다.
+// 이것만 바꾸면 바로 적용하고 화면을 새로 읽지 않는다.
 describe('display settings dialog theme', () => {
-  it('offers system, light and dark, and applies a dark choice in this browser only', async () => {
-    const saveAccount = vi.spyOn(api, 'setDisplaySettings');
+  it('offers system, light and dark, saves the choice to the account and applies it without a reload', async () => {
+    const saveAccount = vi.spyOn(api, 'setDisplaySettings').mockResolvedValue(undefined);
+    const reload = vi.fn();
+    vi.stubGlobal('location', { reload });
+    me.theme = 'system';
     applyTheme('system');
     await openDialog();
     const theme = screen.getByRole('combobox', { name: /^화면 밝기/ });
@@ -100,8 +105,15 @@ describe('display settings dialog theme', () => {
 
     await fireEvent.change(theme, { target: { value: 'dark' } });
     await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
-    expect(document.documentElement).toHaveClass('dark');
+    await vi.waitFor(() => {
+      expect(saveAccount).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dark' }));
+    });
+    await vi.waitFor(() => {
+      expect(document.documentElement).toHaveClass('dark');
+    });
+    expect(me.theme).toBe('dark');
+    // 다음 첫 그림(index.html)을 위한 사본.
     expect(window.localStorage.getItem(THEME_KEY)).toBe('dark');
-    expect(saveAccount).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
   });
 });

@@ -70,6 +70,7 @@ describe('display settings dialog keeps edits until save', () => {
       locale: 'en',
       week_start: 'mon',
       hour_cycle: 'h23',
+      theme: 'system',
     });
   });
 
@@ -90,6 +91,7 @@ describe('display settings dialog keeps edits until save', () => {
       locale: 'ko',
       week_start: 'mon',
       hour_cycle: 'h23',
+      theme: 'system',
     });
   });
 
@@ -166,6 +168,7 @@ describe('display settings dialog keeps edits until save', () => {
       locale: 'ko',
       week_start: 'mon',
       hour_cycle: 'h23',
+      theme: 'system',
     });
   });
 });

@@ -1314,7 +1314,7 @@ export interface paths {
         };
         get?: never;
         /**
-         * 내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.
+         * 내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시, D-109 화면 밝기). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.
          *     모르는 값이면 400.
          */
         put: operations["set_my_settings"];
@@ -3431,6 +3431,8 @@ export interface components {
             id: components["schemas"]["UserId"];
             /** @description 표시 언어(D-81): `ko`·`en`, 비었으면 아직 고르지 않음. */
             locale: string;
+            /** @description 화면 밝기(D-109): `system`(기본, 운영체제 설정을 따름)·`light`·`dark`. */
+            theme: string;
             /** @description 내 시간대(IANA 이름, D-50). 비었으면 아직 고르지 않음(화면이 브라우저 시간대를 쓴다). 본인에게만 보인다. */
             time_zone: string;
             /** @description 한 주 시작(D-81): `mon`·`sun`, 비었으면 아직 고르지 않음. */
@@ -3570,6 +3572,8 @@ export interface components {
             hour_cycle?: string | null;
             /** @description `ko`·`en`, 빈 문자열이면 지운다. */
             locale?: string | null;
+            /** @description `system`·`light`·`dark`. 빈 문자열은 받지 않는다(기본이 `system`). */
+            theme?: string | null;
             /** @description IANA 시간대 이름(예: `Asia/Seoul`). 빈 문자열이면 지운다. */
             time_zone?: string | null;
             /** @description `mon`·`sun`, 빈 문자열이면 지운다. */

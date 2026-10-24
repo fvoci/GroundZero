@@ -31,6 +31,7 @@
   import { me as currentUser } from '$lib/me.svelte';
   import AppSidebar from '$lib/features/nav/AppSidebar.svelte';
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
+  import { asTheme, setTheme } from '$lib/theme.svelte';
   import { Button } from '$lib/ui/button';
   import * as Sidebar from '$lib/ui/sidebar';
 
@@ -60,6 +61,10 @@
       currentUser.locale = me.locale;
       currentUser.weekStart = me.week_start;
       currentUser.hourCycle = me.hour_cycle;
+      const theme = asTheme(me.theme);
+      currentUser.theme = theme;
+      // 화면 밝기의 정본은 계정이다. 다른 기기에서 바꿨으면 여기서 맞추고 다음 첫 그림을 위한 사본도 고친다(D-109).
+      setTheme(theme);
       currentUser.displayName = me.display_name;
       // 저장한 표시 언어로 그린다(D-81). 화면 낭독기·브라우저가 쓰는 문서 언어도 맞춘다.
       await setLocale(displaySettings().locale, { reload: false });

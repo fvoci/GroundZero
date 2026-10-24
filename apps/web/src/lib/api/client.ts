@@ -185,6 +185,7 @@ export function parseMe(value: Json): Me {
     locale: typeof o.locale === 'string' ? o.locale : '',
     week_start: typeof o.week_start === 'string' ? o.week_start : '',
     hour_cycle: typeof o.hour_cycle === 'string' ? o.hour_cycle : '',
+    theme: o.theme === 'light' || o.theme === 'dark' ? o.theme : 'system',
   };
 }
 
@@ -2316,14 +2317,15 @@ export const api = {
     return parseMe(json);
   },
   /**
-   * 내 표시 설정(D-50 시간대, D-81 언어·주 시작·시각 표시). 빈 문자열은 고르지 않음(브라우저·로케일 제안을 씀).
-   * 보내지 않은 칸은 서버가 그대로 둔다.
+   * 내 표시 설정(D-50 시간대, D-81 언어·주 시작·시각 표시, D-109 화면 밝기). 빈 문자열은 고르지 않음(브라우저·로케일
+   * 제안을 씀). 화면 밝기는 `system`·`light`·`dark`만 받는다. 보내지 않은 칸은 서버가 그대로 둔다.
    */
   setDisplaySettings: (settings: {
     time_zone?: string;
     locale?: string;
     week_start?: string;
     hour_cycle?: string;
+    theme?: string;
   }) => expectOk('PUT', '/api/me/settings', none, settings),
   async logout(): Promise<string> {
     return expectOk('POST', '/auth/logout', (v) => str(rec(v, 'logout'), 'redirect_to'));
