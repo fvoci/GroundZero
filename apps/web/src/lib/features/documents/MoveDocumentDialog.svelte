@@ -132,9 +132,9 @@
         aria-busy={busy}
       />
     </label>
-    {#if options.length === 0}
-      <p class="text-sm text-muted-foreground" role="status">{m.documents_reparent_none()}</p>
-    {/if}
+    <p class="text-sm text-muted-foreground empty:hidden" role="status">
+      {#if options.length === 0}{m.documents_reparent_none()}{/if}
+    </p>
     <ul
       id="move-doc-options"
       role="listbox"

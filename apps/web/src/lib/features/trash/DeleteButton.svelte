@@ -64,8 +64,11 @@
 </script>
 
 <span class="flex flex-wrap items-center gap-1">
+  <!-- 묻는 글은 늘 있는 상태 영역에서 바꾼다(글과 함께 영역을 새로 넣으면 화면 낭독기가 놓칠 수 있다). -->
+  <span class="text-sm empty:hidden" role="status">
+    {#if confirming}{m.trash_move_question({ what })}{/if}
+  </span>
   {#if confirming}
-    <span class="text-sm" role="status">{m.trash_move_question({ what })}</span>
     <Button
       size="sm"
       variant="destructive"

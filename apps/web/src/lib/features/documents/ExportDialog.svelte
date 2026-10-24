@@ -156,19 +156,23 @@
           {/each}
         </NativeSelect>
       </div>
-      {#if latest && unsaved}
-        <p
-          role="status"
-          class="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
-        >
-          {m.documents_export_unsaved({ revision: doc.revision })}
-        </p>
-      {/if}
-      {#if latest && doc.realtime}
-        <p role="status" class="text-muted-foreground">
-          {m.documents_export_live()}
-        </p>
-      {/if}
+      <!-- 안내는 늘 있는 상태 영역 안에서 바꾼다(리비전을 바꾸면 나타나고 사라진다). -->
+      <div role="status" class="empty:hidden">
+        {#if latest && unsaved}
+          <p
+            class="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+          >
+            {m.documents_export_unsaved({ revision: doc.revision })}
+          </p>
+        {/if}
+      </div>
+      <div role="status" class="empty:hidden">
+        {#if latest && doc.realtime}
+          <p class="text-muted-foreground">
+            {m.documents_export_live()}
+          </p>
+        {/if}
+      </div>
       <fieldset class="flex flex-col gap-1">
         <legend class="mb-1 font-medium">{m.documents_export_format()}</legend>
         {#each FORMATS as f (f.value)}
@@ -190,8 +194,8 @@
       {#if error !== undefined}
         <p role="alert" class="text-destructive">{error}</p>
       {/if}
-      {#if notes !== undefined}
-        <div role="status" class="flex flex-col gap-1">
+      <div role="status" class="flex flex-col gap-1 empty:hidden">
+        {#if notes !== undefined}
           <p>{format === 'pdf' ? m.documents_export_print_opened() : m.documents_exported()}</p>
           {#if notes.length > 0}
             <ul class="list-disc pl-5 text-muted-foreground">
@@ -200,8 +204,8 @@
               {/each}
             </ul>
           {/if}
-        </div>
-      {/if}
+        {/if}
+      </div>
     </div>
     <Dialog.Footer>
       <Button variant="ghost" onclick={() => (open = false)}>{m.documents_close()}</Button>

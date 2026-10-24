@@ -101,20 +101,22 @@
     </form>
   {/if}
   {#if error !== undefined}<p role="alert" class="text-destructive">{error}</p>{/if}
-  {#if result !== undefined}
-    {@const done = result}
-    <p role="status">
-      {m.modules_copy_done()}{done.skipped > 0
-        ? ` ${m.modules_copy_skipped({ count: done.skipped })}`
-        : ''}
-      <a
-        class="underline"
-        href={itemPath(item.workspace_id, done.id)}
-        onclick={(e: MouseEvent) => {
-          e.preventDefault();
-          router.navigate(itemPath(item.workspace_id, done.id));
-        }}>{m.modules_copy_open()}</a
-      >
-    </p>
-  {/if}
+  <div role="status" class="empty:hidden">
+    {#if result !== undefined}
+      {@const done = result}
+      <p>
+        {m.modules_copy_done()}{done.skipped > 0
+          ? ` ${m.modules_copy_skipped({ count: done.skipped })}`
+          : ''}
+        <a
+          class="underline"
+          href={itemPath(item.workspace_id, done.id)}
+          onclick={(e: MouseEvent) => {
+            e.preventDefault();
+            router.navigate(itemPath(item.workspace_id, done.id));
+          }}>{m.modules_copy_open()}</a
+        >
+      </p>
+    {/if}
+  </div>
 </div>

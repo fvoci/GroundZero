@@ -339,9 +339,9 @@
           >{current.archived ? m.modules_unarchive() : m.modules_archive()}</Button
         >
       </form>
-      {#if settingsNote !== undefined}
-        <p class="text-sm" role="status">{settingsNote}</p>
-      {/if}
+      <p class="text-sm empty:hidden" role="status">
+        {#if settingsNote !== undefined}{settingsNote}{/if}
+      </p>
       {#if settingsError !== undefined}
         <p class="text-sm text-destructive" role="alert">{settingsError}</p>
       {/if}

@@ -222,9 +222,10 @@
         </label>
         {#if pickedModule !== '' && items?.length === 0}
           <p class="text-sm text-muted-foreground">{m.events_task_no_items()}</p>
-        {:else if pickedModule !== '' && items === undefined && loadError === undefined}
-          <p class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</p>
         {/if}
+        <p class="text-sm text-muted-foreground empty:hidden" role="status">
+          {#if pickedModule !== '' && items === undefined && loadError === undefined}{m.modules_loading()}{/if}
+        </p>
         {#if loadError !== undefined}
           <p class="text-sm text-destructive" role="alert">{loadError}</p>
         {/if}

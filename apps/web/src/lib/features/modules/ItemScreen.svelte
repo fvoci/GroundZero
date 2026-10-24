@@ -441,7 +441,9 @@
         </div>
       {/if}
     {/if}
-    {#if saved}<p class="text-sm" role="status">{m.common_saved()}</p>{/if}
+    <p class="text-sm empty:hidden" role="status">
+      {#if saved}{m.common_saved()}{/if}
+    </p>
     {#if formError !== undefined}
       <p class="text-sm text-destructive" role="alert">{formError}</p>
     {/if}

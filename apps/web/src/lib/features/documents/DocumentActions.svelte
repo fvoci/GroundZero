@@ -565,19 +565,21 @@
         <p class="text-sm text-muted-foreground">
           {m.documents_public_link_hint()}
         </p>
-        {#if newLinkUrl !== undefined}
-          <div class="flex flex-col gap-1 rounded border px-2 py-2" role="status">
-            <Label for="new-link-url">{m.documents_new_link()}</Label>
-            <Input
-              id="new-link-url"
-              readonly
-              value={newLinkUrl}
-              onfocus={(e: FocusEvent) => {
-                if (e.currentTarget instanceof HTMLInputElement) e.currentTarget.select();
-              }}
-            />
-          </div>
-        {/if}
+        <div role="status" class="empty:hidden">
+          {#if newLinkUrl !== undefined}
+            <div class="flex flex-col gap-1 rounded border px-2 py-2">
+              <Label for="new-link-url">{m.documents_new_link()}</Label>
+              <Input
+                id="new-link-url"
+                readonly
+                value={newLinkUrl}
+                onfocus={(e: FocusEvent) => {
+                  if (e.currentTarget instanceof HTMLInputElement) e.currentTarget.select();
+                }}
+              />
+            </div>
+          {/if}
+        </div>
         <ul class="flex flex-col gap-1 text-sm" data-testid="public-link-list">
           {#each links as link (link.id)}
             <li class="flex flex-wrap items-center gap-2">
