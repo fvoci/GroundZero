@@ -1,0 +1,8 @@
+2026-10-24T12:35:28.0449441Z ##[command]/usr/bin/docker --config /home/runner/work/_temp/.docker_924f91cd-0fa0-4a6b-8781-716493aec709 pull ghcr.io/fvoci/groundzero-ci-base@sha256:055178adbb91af6ec677fc26e56ea5f1bdb72ac9b50ed2c077688e8ed2f8946f
+2026-10-24T12:35:55.8925093Z rustc 1.99.1 (58cf8f9c3 2026-10-13)
+2026-10-24T12:35:55.8967942Z v24.22.1
+2026-10-24T12:35:55.9495432Z 0.36.0
+2026-10-24T12:35:56.0298471Z 12.15.0
+2026-10-24T12:35:59.3933563Z Done in 3.2s using pnpm v12.15.0
+2026-10-24T12:36:36.9291618Z licenses [32mok[0m
+2026-10-24T12:36:37.0522532Z pnpm licenses: all within allow list
