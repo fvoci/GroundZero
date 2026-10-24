@@ -1,5 +1,6 @@
 //! 개발·검사·실행 명령 진입점. `cargo xtask <command>`.
 
+mod browser;
 mod check;
 mod compose;
 mod dev;
@@ -67,7 +68,17 @@ enum Command {
         #[arg(long)]
         no_web: bool,
     },
-    /// 이 체크아웃이 만든 Compose 자원(dev·test)을 정리한다. 다른 체크아웃은 건드리지 않는다.
+    /// 실제 서버·DB·테스트 OIDC에 Chromium으로 접속하는 브라우저 회귀 시험(Playwright). 전용 Compose 프로젝트를 띄우고
+    /// 정리한다. 원시 출력은 `target/browser/raw`, 검사를 통과한 실패 증거는 `target/browser/artifacts`.
+    Browser {
+        /// 실행 후 컨테이너를 남긴다(원시 출력은 다음 실행이 지운다).
+        #[arg(long)]
+        keep: bool,
+        /// Playwright에 그대로 넘길 인자(예: `-- e2e/layout.spec.ts`, `-- --grep 칸반`).
+        #[arg(last = true)]
+        playwright: Vec<String>,
+    },
+    /// 이 체크아웃이 만든 Compose 자원(dev·test·browser)을 정리한다. 다른 체크아웃은 건드리지 않는다.
     Down,
     /// `contracts/openapi.json`을 서버 정의에서 다시 생성한다. `--check`는 그 파일과 거기서 생성한 TS client
     /// (`packages/api-client/src/generated/schema.ts`)의 최신 여부만 본다.
@@ -139,6 +150,7 @@ fn main() -> Result<()> {
             ..
         } => test::run(&root, keep, oidc, external_services),
         Command::Dev { oidc, no_web } => dev::run(&root, oidc, !no_web),
+        Command::Browser { keep, playwright } => browser::run(&root, keep, &playwright),
         Command::Down => compose::down_all(&root),
         Command::Openapi { check } => openapi::run(&root, check),
         Command::Licenses => licenses::run(&root),
