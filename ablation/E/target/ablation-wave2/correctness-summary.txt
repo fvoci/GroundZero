@@ -1,0 +1,12 @@
+target/ablation-wave2/variant-full-home.log:test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.26s
+target/ablation-wave2/release-static-full-home.log:test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.22s
+target/ablation-wave2/release-correctness.log:RACE baseline can show pin before revoke and omit favorite after revoke; grouped after revoke omits both; authorization checked at each statement snapshot. ERROR 42P01; cancellation 57014; pool reusable after rollback.
+target/ablation-wave2/release-correctness.log:test result: ok. 3 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 1.17s
+target/ablation-wave2/variant-tests.log:test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.00s
+target/ablation-wave2/variant-tests.log:RACE baseline can show pin before revoke and omit favorite after revoke; grouped after revoke omits both; authorization checked at each statement snapshot. ERROR 42P01; cancellation 57014; pool reusable after rollback.
+target/ablation-wave2/variant-tests.log:test result: ok. 3 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 1.69s
+target/ablation-wave2/baseline-tests-rerun.log:RACE baseline can show pin before revoke and omit favorite after revoke; grouped after revoke omits both; authorization checked at each statement snapshot. ERROR 42P01; cancellation 57014; pool reusable after rollback.
+target/ablation-wave2/baseline-tests-rerun.log:test raw::raw_prepare_and_baseline_cost ... BASELINE n=0 rows=0 isolation=read committed exact_grouped_output=true no_effects=true roundtrips=2 grouped_roundtrips=1
+target/ablation-wave2/baseline-tests-rerun.log:BASELINE n=1 rows=2 isolation=read committed exact_grouped_output=true no_effects=true roundtrips=2 grouped_roundtrips=1
+target/ablation-wave2/baseline-tests-rerun.log:BASELINE n=100 rows=200 isolation=read committed exact_grouped_output=true no_effects=true roundtrips=2 grouped_roundtrips=1
+target/ablation-wave2/baseline-tests-rerun.log:test result: ok. 3 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 2.67s

@@ -1,0 +1,32 @@
+[
+  {
+    "Project": "fvoci-ablation-home-marks-f0352d-test",
+    "Service": "meilisearch",
+    "Name": "fvoci-ablation-home-marks-f0352d-test-meilisearch-1",
+    "ID": "b3f37624a04a",
+    "Image": "getmeili/meilisearch:v1.37.0@sha256:9cde2774864e6c19cdd09fcd2950bc01ac9a0454b6f343fffafa14faae6eb7ea",
+    "CreatedAt": "2026-10-24 19:18:16 +0900 KST",
+    "Health": "healthy",
+    "State": "running"
+  },
+  {
+    "Project": "fvoci-ablation-home-marks-f0352d-test",
+    "Service": "postgres",
+    "Name": "fvoci-ablation-home-marks-f0352d-test-postgres-1",
+    "ID": "02bd981d3e4c",
+    "Image": "postgres:17.9-bookworm@sha256:47f917f7409eacd22fc5dfb1dee634e1b55cf0c01d1a7eb701be2227a03e0641",
+    "CreatedAt": "2026-10-24 19:18:16 +0900 KST",
+    "Health": "healthy",
+    "State": "running"
+  },
+  {
+    "Project": "fvoci-ablation-home-marks-f0352d-test",
+    "Service": "seaweedfs",
+    "Name": "fvoci-ablation-home-marks-f0352d-test-seaweedfs-1",
+    "ID": "e6c0ac565b28",
+    "Image": "chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d",
+    "CreatedAt": "2026-10-24 19:18:16 +0900 KST",
+    "Health": "healthy",
+    "State": "running"
+  }
+]

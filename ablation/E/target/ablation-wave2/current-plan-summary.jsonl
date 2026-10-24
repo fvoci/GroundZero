@@ -1,0 +1,9 @@
+{"q":"baseline-n0-pin","cost":34.08,"rows":0,"hits":2,"read":0,"node":"Sort"}
+{"q":"baseline-n0-favorite","cost":34.08,"rows":0,"hits":2,"read":0,"node":"Sort"}
+{"q":"grouped-n0","cost":38.36,"rows":0,"hits":2,"read":0,"node":"Sort"}
+{"q":"baseline-n1-pin","cost":34.08,"rows":1,"hits":40,"read":0,"node":"Sort"}
+{"q":"baseline-n1-favorite","cost":34.08,"rows":1,"hits":40,"read":0,"node":"Sort"}
+{"q":"grouped-n1","cost":64.16,"rows":2,"hits":61,"read":0,"node":"Sort"}
+{"q":"baseline-n100-pin","cost":205.17,"rows":100,"hits":4352,"read":0,"node":"Sort"}
+{"q":"baseline-n100-favorite","cost":206.71,"rows":100,"hits":4352,"read":0,"node":"Sort"}
+{"q":"grouped-n100","cost":226.31,"rows":200,"hits":5989,"read":0,"node":"Sort"}
