@@ -66,6 +66,9 @@ Draft PR 제출 전 기준 SHA와 관련 PR 상태를 다시 확인한다.
   [TaskBoard](../apps/web/src/lib/features/tasks/TaskBoard.svelte)·[GanttChart](../apps/web/src/lib/features/tasks/GanttChart.svelte)→
   클라이언트 업무 API→[tasks.rs의 `create/update`](../crates/server/src/features/tasks.rs)→SQL의
   `app_create_task/app_task_access`, `tasks/task_dependencies`가 정본이다.
+  통합 달력은 [CalendarScreen](../apps/web/src/lib/features/events/CalendarScreen.svelte)→클라이언트 `calendar`→
+  [events.rs의 `calendar`](../crates/server/src/features/events.rs)→공간 멤버·항목 접근 검사/RLS를 거쳐
+  업무·일정·개인 학습 계획의 원본을 모은다. 날짜 입력은 시간대 검사와 조회 기간 제한을 받는다.
   [tasks.rs 시험](../crates/server/tests/tasks.rs)·[이동 충돌 UI 시험](../apps/web/tests/component/task-move-undo.test.ts)은
   판 충돌·되돌리기를 다룬다. 그러나 칸반 열 빠른 추가와 달력 업무 생성은 생성 후 이동/날짜 수정의 두 요청이다.
   두 번째 실패 때 중간 업무가 남을 수 있어 다시 확인/수정이 필요하다([#104](https://github.com/fvoci/GroundZero/issues/104)).
