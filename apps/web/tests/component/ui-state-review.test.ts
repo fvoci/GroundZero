@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskTimeView, TaskView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import AuditScreen from '$lib/features/audit/AuditScreen.svelte';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
 import TaskCalendar from '$lib/features/tasks/TaskCalendar.svelte';
 import TaskTimePanel from '$lib/features/time/TaskTimePanel.svelte';
@@ -45,7 +46,48 @@ const view: MembersView = {
   pending_owner: null,
 };
 
+describe('audit', () => {
+  it('drops the previous workspace entries when the workspace changes', async () => {
+    const other: Workspace = { ...workspace, id: 'ws-2', name: '다른 곳' };
+    vi.spyOn(api, 'audit')
+      .mockResolvedValueOnce([
+        {
+          id: 'a-1',
+          action: 'create',
+          target_type: 'document',
+          target_id: 'd-1',
+          actor: 'u1',
+          actor_name: '관리자',
+          detail: {},
+          created_at: '2026-10-24T00:00:00Z',
+        },
+      ])
+      .mockRejectedValueOnce(new Error('offline'));
+    const view = render(AuditScreen, { props: { workspace } });
+    await waitFor(() => {
+      expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    });
+
+    await view.rerender({ workspace: other });
+    expect(await screen.findByRole('button', { name: '다시 시도' })).toBeInTheDocument();
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+  });
+});
+
 describe('members', () => {
+  it('does not offer a list retry for a failed action', async () => {
+    vi.spyOn(api, 'members').mockResolvedValue(view);
+    vi.spyOn(api, 'groups').mockResolvedValue([{ id: 'g-1', name: '세미나', members: [] }]);
+    vi.spyOn(api, 'invitations').mockResolvedValue([]);
+    vi.spyOn(api, 'deleteGroup').mockRejectedValue(new Error('offline'));
+    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: '그룹 삭제' }));
+    await fireEvent.click(await screen.findByRole('button', { name: '확인' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
+  });
+
   it('offers a retry when the group list fails after the member list loaded', async () => {
     vi.spyOn(api, 'members').mockResolvedValue(view);
     const groups = vi

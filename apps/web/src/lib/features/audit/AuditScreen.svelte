@@ -44,8 +44,11 @@
 
   $effect(() => {
     if (workspace?.id === '') return;
-    // 다른 워크스페이스로 바뀌면 그 첫 쪽을 받기 전으로 돌아간다(실패하면 다시 시도가 보이게).
+    // 다른 워크스페이스로 바뀌면 그 첫 쪽을 받기 전으로 돌아간다. 앞 워크스페이스의 기록·더 보기는 남기지 않고, 첫
+    // 읽기가 실패하면 다시 시도가 보인다.
     loaded = false;
+    entries = [];
+    more = false;
     error = undefined;
     seq += 1;
     void load(undefined, seq);
