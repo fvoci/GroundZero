@@ -95,8 +95,15 @@ pub fn strong_etag(user: &[u8], body: &[u8]) -> String {
     hasher.update(b"\0");
     hasher.update(body);
     let digest = hasher.finalize();
-    let hex: String = digest.iter().take(16).map(|b| format!("{b:02x}")).collect();
-    format!("\"{hex}\"")
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut etag = String::with_capacity(34);
+    etag.push('"');
+    for byte in &digest[..16] {
+        etag.push(char::from(HEX[usize::from(byte >> 4)]));
+        etag.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    etag.push('"');
+    etag
 }
 
 /// 조건 머리글에 담긴 엔터티 태그.
@@ -186,6 +193,44 @@ mod tests {
         assert_eq!(a, strong_etag(b"u1", b"{}"));
         assert_ne!(a, strong_etag(b"u2", b"{}"));
         assert_ne!(a, strong_etag(b"u1", b"{ }"));
+    }
+
+    #[test]
+    fn etags_preserve_the_domain_and_truncated_digest_bytes() {
+        for (user, body, expected) in [
+            (
+                b"".as_slice(),
+                b"".as_slice(),
+                "\"4a46a75d39f81999433449f43c77bfe1\"",
+            ),
+            (b"u1", b"{}", "\"e9139f4f87432a88b31104891eb1491e\""),
+            (b"u2", b"{}", "\"a15e964cf2c9e415f3f33dc7c6cedf53\""),
+            (b"u1", b"{ }", "\"b1c8bd8f4d20777303d4974130a6dcfe\""),
+        ] {
+            assert_eq!(strong_etag(user, body), expected);
+        }
+
+        // Binary users/bodies, including NUL and every byte value, must keep the
+        // original domain separation, first 128 bits, padding and lowercase.
+        let body: Vec<u8> = (0..=255).collect();
+        let mut covers_zero_byte = false;
+        for len in 0..=body.len() {
+            let user = &body[len..];
+            let bytes = &body[..len];
+            let mut hasher = Sha256::new();
+            hasher.update(b"fvoci-representation-1\0");
+            hasher.update(user);
+            hasher.update(b"\0");
+            hasher.update(bytes);
+            let digest = hasher.finalize();
+            covers_zero_byte |= digest[..16].contains(&0);
+            let hex: String = digest.iter().take(16).map(|b| format!("{b:02x}")).collect();
+            assert_eq!(strong_etag(user, bytes), format!("\"{hex}\""));
+        }
+        assert!(
+            covers_zero_byte,
+            "corpus must exercise leading-zero padding"
+        );
     }
 
     #[test]
