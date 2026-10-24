@@ -65,13 +65,18 @@ describe('saved view delete', () => {
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
 
     // 저장한 보기는 접힌 "필터·정렬" 영역 안에 있다.
-
     await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
     const select = await screen.findByRole('combobox', { name: '저장한 보기' });
     await screen.findByRole('option', { name: '내 보기' });
     await fireEvent.change(select, { target: { value: 'v1' } });
 
-    const remove = await screen.findByRole('button', { name: '보기 지우기' });
+    // 지우기는 한 번 더 묻는다(되돌릴 수 없다). 묻기만으로는 지우지 않고, 확인 단추를 두 번 누른다.
+    await fireEvent.click(await screen.findByRole('button', { name: '보기 지우기' }));
+    const remove = screen.getByRole('button', { name: '보기 지우기' });
+    expect(remove).toHaveAccessibleDescription(
+      '보기 "내 보기"을(를) 지울까요? 되돌릴 수 없습니다.',
+    );
+    expect(deleteView).not.toHaveBeenCalled();
     await fireEvent.click(remove);
     await fireEvent.click(remove);
     finish();

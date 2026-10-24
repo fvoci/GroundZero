@@ -116,6 +116,7 @@
   "tasks_view_name_aria": "View name",
   "tasks_view_save": "Save current view",
   "tasks_view_delete": "Delete view",
+  "tasks_view_delete_confirm": "Delete the view \"{name}\"? This cannot be undone.",
   "tasks_filter_shown": "Showing {shown} of {total}",
   "tasks_lane_aria": "{status} column",
   "tasks_card_due": "Due {date}",

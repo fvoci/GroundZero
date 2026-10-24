@@ -109,6 +109,19 @@
   let selectedView = $state('');
   // 보기를 지우는 중(두 번 눌러 같은 보기를 다시 지우려다 404 실패를 보이지 않게).
   let deletingView = $state(false);
+  // 저장한 보기 지우기를 묻는 중. 확인 단추로 초점을 옮기고, 그만두면 지우기 단추로 돌려준다.
+  let askingViewDelete = $state(false);
+  let viewDeleteConfirm = $state<HTMLButtonElement | null>(null);
+  async function askViewDelete(): Promise<void> {
+    askingViewDelete = true;
+    await tick();
+    viewDeleteConfirm?.focus();
+  }
+  async function stopViewDelete(): Promise<void> {
+    askingViewDelete = false;
+    await tick();
+    document.getElementById('view-delete')?.focus();
+  }
   let viewName = $state('');
   // 같은 이름·설정의 재시도는 같은 요청 id, 고치면 새 id.
   const viewKey = new RetryKey();
@@ -171,6 +184,7 @@
   }
 
   function applyView(id: string): void {
+    askingViewDelete = false;
     selectedView = id;
     const v = views.find((x) => x.id === id);
     if (v === undefined) return;
@@ -233,6 +247,7 @@
     try {
       await api.deleteView(selectedView);
       selectedView = '';
+      askingViewDelete = false;
       await loadViews(item.id);
       status = m.tasks_view_deleted();
     } catch (e: unknown) {
@@ -1376,8 +1391,27 @@
           />
         </label>
         <Button variant="outline" onclick={() => void saveView()}>{m.tasks_view_save()}</Button>
-        {#if selectedView !== ''}
-          <Button variant="ghost" disabled={deletingView} onclick={() => void deleteView()}
+        {#if selectedView !== '' && askingViewDelete}
+          <!-- 저장한 보기 지우기는 되돌릴 수 없어 한 번 더 묻는다(다른 지우기와 같다). -->
+          <span class="flex flex-wrap items-center gap-1 self-center text-sm">
+            <span id="view-delete-warning"
+              >{m.tasks_view_delete_confirm({
+                name: views.find((v) => v.id === selectedView)?.name ?? '',
+              })}</span
+            >
+            <Button
+              variant="destructive"
+              bind:ref={viewDeleteConfirm}
+              aria-describedby="view-delete-warning"
+              disabled={deletingView}
+              onclick={() => void deleteView()}>{m.tasks_view_delete()}</Button
+            >
+            <Button variant="ghost" onclick={() => void stopViewDelete()}
+              >{m.common_cancel()}</Button
+            >
+          </span>
+        {:else if selectedView !== ''}
+          <Button id="view-delete" variant="ghost" onclick={() => void askViewDelete()}
             >{m.tasks_view_delete()}</Button
           >
         {/if}

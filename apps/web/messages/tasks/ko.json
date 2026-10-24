@@ -113,6 +113,7 @@
   "tasks_view_name_aria": "보기 이름",
   "tasks_view_save": "지금 보기 저장",
   "tasks_view_delete": "보기 지우기",
+  "tasks_view_delete_confirm": "보기 \"{name}\"을(를) 지울까요? 되돌릴 수 없습니다.",
   "tasks_filter_shown": "{shown}/{total}개 보임",
   "tasks_lane_aria": "{status} 열",
   "tasks_card_due": "마감 {date}",
