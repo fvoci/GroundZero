@@ -125,7 +125,7 @@ describe('document actions menu', () => {
 
   it('asks before moving to trash and gives focus back to the menu button on cancel', async () => {
     vi.spyOn(api, 'document').mockResolvedValue(documentView({}));
-    const trash = vi.spyOn(api, 'trashDocument').mockResolvedValue(undefined);
+    const trash = vi.spyOn(api, 'trashDocument').mockResolvedValue('batch-1');
     render(DocumentScreen, { props: { documentId: 'doc-1', workspaces } });
     const menu = await openMore();
     await fireEvent.click(within(menu).getByRole('menuitem', { name: '문서 지우기' }));
