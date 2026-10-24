@@ -2,6 +2,7 @@
   // 새 문서를 템플릿에서 시작하기(D-27). 고를 템플릿이 없으면 아무것도 보이지 않는다.
   import { api } from '$lib/api/client';
   import { m } from '$lib/paraglide/messages.js';
+  import { NativeSelect } from '$lib/ui/native-select';
 
   interface Props {
     /** 이 워크스페이스의 템플릿과 내 개인 노트 템플릿. null이면 개인 노트 템플릿만. */
@@ -41,17 +42,13 @@
 {#if templates.length > 0}
   <div class="flex flex-col gap-1 text-sm">
     <label for={id} class="font-medium">{m.documents_template_label()}</label>
-    <select
-      {id}
-      class="h-9 rounded-md border border-input bg-transparent px-3 text-base"
-      bind:value
-    >
+    <NativeSelect {id} class="w-full" bind:value>
       <option value="">{m.documents_template_blank()}</option>
       {#each templates as t (t.id)}
         <option value={t.id}
           >{t.personal ? `${m.documents_my_notes()} · ` : ''}{t.reference ?? ''} {t.title}</option
         >
       {/each}
-    </select>
+    </NativeSelect>
   </div>
 {/if}

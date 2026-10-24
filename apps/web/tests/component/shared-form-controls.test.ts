@@ -52,6 +52,14 @@ describe('task board fields use the shared controls', () => {
     ];
     for (const field of fields) expect(field).toHaveAttribute('data-slot', 'input');
   });
+
+  it('draws the status, assignee, priority, sort and saved-view selects with the shared NativeSelect', async () => {
+    render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    await screen.findByTestId('task-board');
+    const selects = screen.getAllByRole('combobox');
+    expect(selects).toHaveLength(5);
+    for (const select of selects) expect(select).toHaveAttribute('data-slot', 'native-select');
+  });
 });
 
 describe('comment boxes use the shared Textarea', () => {

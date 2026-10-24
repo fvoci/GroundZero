@@ -27,6 +27,7 @@
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
+  import { NativeSelect } from '$lib/ui/native-select';
   import { durationText } from '$lib/features/time/format';
   import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
@@ -269,9 +270,6 @@
       return m.tasks_sort_updated();
     },
   };
-
-  const fieldBox =
-    'h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 
   // 이 항목의 목록을 한 번이라도 받았는지(실패도 받은 것으로 본다: 오류를 보인다). 받기 전에는 빈 열·"업무가 없습니다"
   // 대신 불러오는 중이라고 보인다. 같은 항목을 다시 읽을 때(옮긴 뒤 등)는 지금 목록을 그대로 둔다.
@@ -1248,15 +1246,19 @@
     </label>
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_status()}</span>
-      <select class={fieldBox} bind:value={filter.status} aria-label={m.tasks_filter_status_aria()}>
+      <NativeSelect
+        class="w-full"
+        bind:value={filter.status}
+        aria-label={m.tasks_filter_status_aria()}
+      >
         <option value="any">{m.tasks_filter_all()}</option>
         {#each TASK_STATUSES as s (s)}<option value={s}>{STATUS_LABEL[s]}</option>{/each}
-      </select>
+      </NativeSelect>
     </label>
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_assignee()}</span>
-      <select
-        class={fieldBox}
+      <NativeSelect
+        class="w-full"
         bind:value={filter.assignee}
         aria-label={m.tasks_filter_assignee_aria()}
       >
@@ -1264,12 +1266,12 @@
         <option value="me">{m.tasks_filter_mine()}</option>
         <option value="none">{m.tasks_filter_unassigned()}</option>
         {#each people as [id, name] (id)}<option value={id}>{name}</option>{/each}
-      </select>
+      </NativeSelect>
     </label>
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_priority()}</span>
-      <select
-        class={fieldBox}
+      <NativeSelect
+        class="w-full"
         bind:value={filter.priority}
         aria-label={m.tasks_filter_priority_aria()}
       >
@@ -1277,7 +1279,7 @@
         {#each ['urgent', 'high', 'medium', 'low', 'none'] as const as p (p)}<option value={p}
             >{PRIORITY_LABEL[p]}</option
           >{/each}
-      </select>
+      </NativeSelect>
     </label>
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_tag()}</span>
@@ -1303,10 +1305,10 @@
     </label>
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_sort()}</span>
-      <select class={fieldBox} bind:value={sort} aria-label={m.tasks_sort()}>
+      <NativeSelect class="w-full" bind:value={sort} aria-label={m.tasks_sort()}>
         {#each Object.entries(SORT_LABEL) as [value, label] (value)}<option {value}>{label}</option
           >{/each}
-      </select>
+      </NativeSelect>
     </label>
     {#if isFiltered(filter) || sort !== 'position'}
       <Button
@@ -1322,9 +1324,9 @@
   <div class="flex flex-wrap items-end gap-2 text-sm">
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_saved_views()}</span>
-      <select
+      <NativeSelect
         aria-label={m.tasks_saved_views()}
-        class={fieldBox}
+        class="w-full"
         value={selectedView}
         onchange={(e: Event) => {
           if (e.currentTarget instanceof HTMLSelectElement) applyView(e.currentTarget.value);
@@ -1332,7 +1334,7 @@
       >
         <option value="">{m.tasks_saved_view_choose()}</option>
         {#each views as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
-      </select>
+      </NativeSelect>
     </label>
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_view_name()}</span>

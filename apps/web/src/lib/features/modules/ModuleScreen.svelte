@@ -18,6 +18,7 @@
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { NativeSelect } from '$lib/ui/native-select';
   import { Textarea } from '$lib/ui/textarea';
 
   import { kindLabel, normalizeKey } from './kinds';
@@ -273,13 +274,9 @@
         >
           <div class="flex flex-col gap-1">
             <Label for="template-source">{m.modules_template()}</Label>
-            <select
-              id="template-source"
-              class="h-9 rounded-md border border-input bg-transparent px-3 text-base"
-              bind:value={templateId}
-            >
+            <NativeSelect id="template-source" class="w-full" bind:value={templateId}>
               {#each templates as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
-            </select>
+            </NativeSelect>
           </div>
           <div class="flex min-w-40 flex-1 flex-col gap-1">
             <Label for="template-title">{m.modules_template_item_title()}</Label>

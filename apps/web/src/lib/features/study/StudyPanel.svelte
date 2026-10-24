@@ -20,6 +20,7 @@
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { NativeSelect } from '$lib/ui/native-select';
   import { Textarea } from '$lib/ui/textarea';
 
   import { plannedOn, replan, studyProgress, unitAmount, unitLabel } from './progress';
@@ -42,9 +43,6 @@
         return m.study_status_done();
     }
   }
-
-  const box =
-    'h-9 rounded-md border border-input bg-transparent px-3 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 
   let plan = $state<StudyPlanView | undefined>(undefined);
   let participants = $state<StudyParticipantView[]>([]);
@@ -511,9 +509,9 @@
               </div>
               <div class="flex flex-col gap-1">
                 <Label for={`unit-kind-${u.id}`}>{m.study_unit()}</Label>
-                <select id={`unit-kind-${u.id}`} class={box} bind:value={shared.unit}>
+                <NativeSelect id={`unit-kind-${u.id}`} class="w-full" bind:value={shared.unit}>
                   {#each STUDY_UNIT_KINDS as k (k)}<option value={k}>{unitLabel(k)}</option>{/each}
-                </select>
+                </NativeSelect>
               </div>
               <div class="flex flex-col gap-1">
                 <Label for={`unit-shared-planned-${u.id}`}>{m.study_planned()}</Label>
@@ -602,9 +600,9 @@
         </div>
         <div class="flex flex-col gap-1">
           <Label for="study-unit-kind">{m.study_unit()}</Label>
-          <select id="study-unit-kind" class={box} bind:value={draft.unit}>
+          <NativeSelect id="study-unit-kind" class="w-full" bind:value={draft.unit}>
             {#each STUDY_UNIT_KINDS as k (k)}<option value={k}>{unitLabel(k)}</option>{/each}
-          </select>
+          </NativeSelect>
         </div>
         <div class="flex flex-col gap-1">
           <Label for="study-unit-planned">{m.study_planned()}</Label>

@@ -6,6 +6,7 @@
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { NativeSelect } from '$lib/ui/native-select';
   import { Textarea } from '$lib/ui/textarea';
 
   import { recordChoiceLabel, recordDateLabel, recordFieldLabel, recordRoleLabel } from './labels';
@@ -34,8 +35,6 @@
     oncancel,
   }: Props = $props();
 
-  const box =
-    'rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
   const id = (key: string): string => `record-${def.kind}-${key}`;
 
   function versionsOf(fileId: string): number[] {
@@ -88,10 +87,10 @@
           : (f.type === 'person' ? people : courses).map((p) => ({ value: p.id, label: p.name }))}
       <div class="flex flex-col gap-1">
         <Label for={id(f.key)}>{recordFieldLabel(def, f)}</Label>
-        <select id={id(f.key)} class={['h-9', box]} bind:value={form.values[f.key]}>
+        <NativeSelect id={id(f.key)} class="w-full" bind:value={form.values[f.key]}>
           <option value="">{m.records_not_selected()}</option>
           {#each options as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-        </select>
+        </NativeSelect>
       </div>
     {:else if f.type === 'people'}
       <fieldset class="flex flex-col gap-1 rounded-md border p-2 sm:col-span-2">
@@ -175,9 +174,9 @@
         <div class="flex flex-wrap items-end gap-2">
           <div class="flex flex-col gap-1">
             <Label for={id(`file-${String(index)}`)}>{m.records_file()}</Label>
-            <select
+            <NativeSelect
               id={id(`file-${String(index)}`)}
-              class={['h-9', box]}
+              class="w-full"
               bind:value={link.file_id}
               onchange={() => {
                 link.version = '';
@@ -185,27 +184,27 @@
             >
               <option value="">{m.records_select()}</option>
               {#each files as file (file.id)}<option value={file.id}>{file.name}</option>{/each}
-            </select>
+            </NativeSelect>
           </div>
           <div class="flex flex-col gap-1">
             <Label for={id(`version-${String(index)}`)}>{m.records_version()}</Label>
-            <select
+            <NativeSelect
               id={id(`version-${String(index)}`)}
-              class={['h-9', box]}
+              class="w-full"
               bind:value={link.version}
             >
               <option value="">{m.records_current_version()}</option>
               {#each versionsOf(link.file_id) as v (v)}<option value={String(v)}>v{v}</option
                 >{/each}
-            </select>
+            </NativeSelect>
           </div>
           <div class="flex flex-col gap-1">
             <Label for={id(`role-${String(index)}`)}>{m.records_role()}</Label>
-            <select id={id(`role-${String(index)}`)} class={['h-9', box]} bind:value={link.role}>
+            <NativeSelect id={id(`role-${String(index)}`)} class="w-full" bind:value={link.role}>
               {#each def.file_roles as r (r.value)}<option value={r.value}
                   >{recordRoleLabel(def, r)}</option
                 >{/each}
-            </select>
+            </NativeSelect>
           </div>
           <Button
             type="button"

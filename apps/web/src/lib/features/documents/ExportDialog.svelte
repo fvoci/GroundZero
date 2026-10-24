@@ -11,6 +11,7 @@
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Label } from '$lib/ui/label';
+  import { NativeSelect } from '$lib/ui/native-select';
 
   import type { ExportFormat } from './export';
   import { exportFileName, prepareExport, saveBlob, toMarkdown, toZip } from './export';
@@ -133,11 +134,7 @@
     <div class="flex flex-col gap-3 text-sm">
       <div class="flex flex-col gap-1">
         <Label for="export-revision">{m.documents_revision_label()}</Label>
-        <select
-          id="export-revision"
-          class="h-9 rounded-md border bg-background px-2"
-          bind:value={selected}
-        >
+        <NativeSelect id="export-revision" class="w-full" bind:value={selected}>
           {#if revisions.length === 0}
             <option value={doc.revision}
               >{m.documents_revision_latest({ revision: doc.revision })}</option
@@ -152,7 +149,7 @@
               )}{byline(rev)}
             </option>
           {/each}
-        </select>
+        </NativeSelect>
       </div>
       {#if latest && unsaved}
         <p role="status" class="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900">

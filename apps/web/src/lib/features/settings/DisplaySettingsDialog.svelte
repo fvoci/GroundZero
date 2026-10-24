@@ -22,6 +22,7 @@
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
+  import { NativeSelect } from '$lib/ui/native-select';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -107,8 +108,6 @@
       error = errorText(e, m.settings_save_failed());
     }
   }
-
-  const fieldClass = 'h-9 rounded-md border border-input bg-transparent px-3 text-base';
 </script>
 
 <Dialog.Root bind:open>
@@ -123,8 +122,8 @@
     <div class="flex flex-col gap-3 text-sm">
       <label class="flex flex-col gap-1">
         <span class="font-medium">{m.settings_language()}</span>
-        <select
-          class={fieldClass}
+        <NativeSelect
+          class="w-full"
           bind:value={
             () => locale,
             (value: string) => {
@@ -135,36 +134,36 @@
         >
           <option value="ko">{m.settings_language_ko()}</option>
           <option value="en">{m.settings_language_en()}</option>
-        </select>
+        </NativeSelect>
       </label>
       <label class="flex flex-col gap-1">
         <span class="font-medium">{m.settings_time_zone()}</span>
-        <select class={fieldClass} bind:value={zone}>
+        <NativeSelect class="w-full" bind:value={zone}>
           <option value="">{m.settings_browser_zone({ zone: suggested.timeZone })}</option>
           {#each zoneOptions as z (z)}<option value={z}>{z}</option>{/each}
-        </select>
+        </NativeSelect>
       </label>
       <label class="flex flex-col gap-1">
         <span class="font-medium">{m.settings_week_start()}</span>
-        <select class={fieldClass} bind:value={weekStart}>
+        <NativeSelect class="w-full" bind:value={weekStart}>
           <option value="mon">{m.settings_monday()}</option>
           <option value="sun">{m.settings_sunday()}</option>
-        </select>
+        </NativeSelect>
       </label>
       <label class="flex flex-col gap-1">
         <span class="font-medium">{m.settings_clock()}</span>
-        <select class={fieldClass} bind:value={hourCycle}>
+        <NativeSelect class="w-full" bind:value={hourCycle}>
           <option value="h12">{m.settings_clock_h12()}</option>
           <option value="h23">{m.settings_clock_h23()}</option>
-        </select>
+        </NativeSelect>
         <span class="text-xs text-muted-foreground">{m.settings_example({ sample })}</span>
       </label>
       <label class="flex flex-col gap-1">
         <span class="font-medium">{m.settings_doc_font()}</span>
-        <select class={fieldClass} bind:value={docFont}>
+        <NativeSelect class="w-full" bind:value={docFont}>
           <option value="sans">{m.settings_doc_font_sans()}</option>
           <option value="serif">{m.settings_doc_font_serif()}</option>
-        </select>
+        </NativeSelect>
         <span class="text-xs text-muted-foreground">{m.settings_doc_font_hint()}</span>
       </label>
     </div>
