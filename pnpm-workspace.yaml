@@ -4,3 +4,8 @@ packages:
 
 engineStrict: true
 savePrefix: ''
+
+# 설치 스크립트 실행 여부. esbuild(Storybook 경로)의 postinstall은 플랫폼 바이너리 확인·최적화만 하며,
+# 바이너리는 선택 의존성 @esbuild/<플랫폼>으로 설치되므로 실행하지 않는다.
+allowBuilds:
+  esbuild: false

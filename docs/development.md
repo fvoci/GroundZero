@@ -80,7 +80,7 @@
 
 ## 8. 검사 명령과 설정 위치
 
-도구 버전과 공통 실행 명령은 [README](../README.md)가 정본이다. `check`는 포맷·lint·타입·단위 시험·라이선스·생성 계약을,
+도구 버전과 공통 실행 명령은 [README](../README.md)가 정본이다. `check`는 포맷·lint·타입·단위 시험·Storybook 빌드·라이선스·생성 계약을,
 `test`는 DB 등 서비스가 필요한 통합 시험을 담당한다. API 변경 시 계약과 클라이언트를 함께 생성하고,
 의존성 변경 시 라이선스를 확인한다. rhwp는 WASM 생성·고지 확인과 최신 보안 권고 재검사를 구분한다.
 
@@ -178,6 +178,47 @@ Svelte·Vite·TypeScript 구성에서 shadcn-svelte/Bits UI와 Tailwind를 사�
 기본 동작·접근성·키보드 처리는 제공 구현을 우선 쓴다. 폰트·색·간격·포커스는 공통 토큰으로 관리하고 별도 종합 UI 시스템이나
 범용 폼·모달·포커스 관리자를 만들지 않는다. 라이브러리 사용을 실제 접근성 검증으로 대신하지 않는다.
 Safari 키보드 접근성은 D-98의 의미에 맞는 요소와 최소 범위 lint 예외를 따른다.
+
+<a id="storybook"></a>
+
+### 11.1 Storybook
+
+실제 제품 컴포넌트의 상태(비활성·오류·저장 중·충돌 확인·긴 한국어 등)를 합성 데이터로 보고 다듬는 곳이다(D-108).
+Storybook 10.6.3(`@storybook/svelte-vite`)과 기본 기능만 쓰며 addon을 더하지 않았다.
+
+```sh
+pnpm --filter @fvoci/web run storybook        # http://127.0.0.1:6006 (로컬 접속만)
+pnpm --filter @fvoci/web run build-storybook  # target/storybook-static
+```
+
+- story는 `apps/web/stories/<기능>/*.stories.ts`, 합성 데이터·조립 예는 `stories/fixtures/`에 둔다. 제품 컴포넌트를 그대로
+  import하고 Storybook용 복제·별도 CSS·제품 코드의 Storybook 분기를 만들지 않는다. 대화상자처럼 조립이 필요한 것만
+  제품 화면과 같은 방식으로 조립한다.
+- `.storybook/preview.ts`가 제품의 `app.css`·서체·번역을 쓰고, 표시 설정(한국어·Asia/Seoul)을 고정한다. 도구 막대로 언어,
+  글자 크기(루트 글꼴 100·150·200%, 브라우저 설정의 흉내), 375·500px·데스크톱 화면 폭을 바꾼다.
+- 서버 데이터가 필요한 story는 `api`의 함수를 story의 `beforeEach`에서 바꿔 끼운다(`spyOn`). 같은 원점의
+  `/api`·`/auth`·`/healthz`와 다른 원점 요청은 막고 콘솔 오류로 남긴다. 실제 OIDC·DB·운영 API에 연결하지 않는다.
+- `tests/component/stories.test.ts`가 모든 story를 jsdom에서 다시 그리고 play 함수(키보드·실패·입력 보존)를 실행한다.
+  jsdom은 배치·초점 가두기·애니메이션을 계산하지 않으므로 표시·줄바꿈·넘침·대화상자 초점 가두기는 Storybook을 실제
+  브라우저(창이 보이는 상태)로 열어 확인한다. 자동 검사가 화면 낭독기·키보드 수동 검증을 대신하지 않는다.
+- 로그인·API·DB 저장·공동 편집 흐름은 Storybook 범위가 아니다. 실제 브라우저 회귀 시험은 #118에서 다룬다.
+- Svelte 전용 story 형식(`@storybook/addon-svelte-csf`)은 Vite 설정에 플러그인을 더해야 해 쓰지 않는다. 접근성 자동 검사
+  addon(`@storybook/addon-a11y`)은 axe-core(MPL-2.0)가 허용 목록 밖이라 도입하지 않았다.
+
+공개 배포는 Cloudflare Workers의 정적 자산 Worker `fvoci-storybook`이다([wrangler.jsonc](../apps/web/wrangler.jsonc)).
+Storybook에는 합성 데이터만 있으며 workers.dev 주소는 누구나 볼 수 있다. Workers Builds가 main 커밋은 배포하고, 다른 브랜치·PR은
+미리보기 주소를 PR에 댓글로 남긴다. 저장소 연결은 소유자가 Cloudflare 대시보드에서 한다.
+
+| Workers Builds 설정 | 값                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| Root directory      | `/` (pnpm 작업 공간 전체 설치)                                                      |
+| Build command       | `pnpm --filter @fvoci/web run build-storybook`                                      |
+| Deploy command      | `pnpm dlx wrangler@4.151.3 deploy --config apps/web/wrangler.jsonc`                 |
+| Preview command     | `pnpm dlx wrangler@4.151.3 preview --config apps/web/wrangler.jsonc`                |
+| Build variable      | `NODE_VERSION=24.22.1` (pnpm 판은 `packageManager`를 따른다)                        |
+| Build watch paths   | `apps/web/*`, `packages/*`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` |
+
+Wrangler는 빌드 환경에서만 받아 쓰고 작업 공간 의존성·라이선스 검사 대상에 넣지 않는다.
 
 <a id="development"></a>
 

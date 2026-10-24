@@ -553,6 +553,12 @@
   - Supabase 프로젝트·관리 스키마·기본 역할·다른 앱 객체, 로컬 Keycloak·첨부·다른 checkout 자원은 자동 포함하지 않는다. 검색 색인 정리가 필요하면 별도 대상·영향에 포함한다. 불명확한 공유 자원은 파괴적 단계만 멈추고 확인한다.
   - 구현·격리 DB 검증·별도 Draft PR까지 진행한다. main 병합·태그·배포는 포함하지 않는다. 실제 Cloud 초기화 후 앱 역할 CRUD·접근 거부·공간 격리를 확인하며 구버전 백업 복구는 실행한 범위만 보고한다.
 
+### 1.16 UI 상태 확인 환경
+
+<a id="d-108"></a>
+
+- **D-108 Storybook과 Cloudflare Workers 공개 미리보기.** 실제 제품 컴포넌트의 상태를 합성 데이터로 확인하는 Storybook을 둔다. 복제 컴포넌트·Storybook 전용 제품 분기·새 디자인 시스템을 만들지 않고 로그인·API·DB·협업 흐름은 브라우저 회귀 시험(#118)에 남긴다. 정적 빌드는 Cloudflare Workers(정적 자산 Worker `fvoci-storybook`)의 workers.dev에 접근 제한 없이 공개하고, Workers Builds가 main 배포와 PR별 미리보기를 맡는다. 유료 서비스 가입과 제품 앱 배포는 포함하지 않는다. 사용·설정은 [개발 지침의 Storybook](development.md#storybook). 근거: 사용자(2026-10-25).
+
 ## 2. 미승인 제안 (검토자)
 
 P 번호는 제안 이력을 보존한다. 채택·대체·기각·보류는 표시된 범위에 한하며, 본문의 겹치는 구현만으로 새 승인 사실을 만들지 않는다. 현행 요구는 연결된 D를 따른다. 표시가 없는 제안은 미승인이다. [제안 당시 상세·재현](https://github.com/fvoci/GroundZero/blob/abd545a250ff1fd9cc166b3c078c4dff76846724/docs/decisions.md#L262-L336)은 역사 기록이다.

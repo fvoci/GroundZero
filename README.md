@@ -27,6 +27,7 @@
 | DB 준비·마이그레이션을 직접 실행할 때 ([설치 안내](docs/self-hosting.md#db-setup)) | `fvoci-server db bootstrap && fvoci-server db migrate`                         |
 | 웹 개발 서버만 따로(`cargo xtask dev --no-web`일 때)                               | `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`              |
 | 이 체크아웃의 Compose 자원 정리                                                    | `cargo xtask down`                                                             |
+| UI 컴포넌트 상태 보기([Storybook](docs/development.md#storybook)) / 정적 빌드      | `pnpm --filter @fvoci/web run storybook` / `run build-storybook`               |
 | OpenAPI 계약 재생성                                                                | `cargo xtask openapi` 후 `pnpm run generate:api`                               |
 | 라이선스 검사만                                                                    | `cargo xtask licenses`                                                         |
 | HWP·HWPX 미리보기 WASM 빌드·고지 갱신                                              | `cargo xtask rhwp`                                                             |
