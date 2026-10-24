@@ -21,8 +21,12 @@ const BLOCKS: &[&str] = &[
     "tableRow",
 ];
 
-fn walk(node: &Value, out: &mut String) {
-    if out.chars().count() >= MAX_INDEX_CHARS {
+/// Appends a node, counting only text added since the preceding node-entry guard.
+/// Deferring the count avoids an extra scan of a final large text node before `plain_text` caps it.
+fn walk(node: &Value, out: &mut String, counted_bytes: &mut usize, chars: &mut usize) {
+    *chars += out[*counted_bytes..].chars().count();
+    *counted_bytes = out.len();
+    if *chars >= MAX_INDEX_CHARS {
         return;
     }
     let kind = node.get("type").and_then(Value::as_str).unwrap_or("");
@@ -62,7 +66,7 @@ fn walk(node: &Value, out: &mut String) {
     }
     if let Some(children) = node.get("content").and_then(Value::as_array) {
         for child in children {
-            walk(child, out);
+            walk(child, out, counted_bytes, chars);
         }
     }
     if BLOCKS.contains(&kind) && !out.ends_with('\n') {
@@ -74,7 +78,9 @@ fn walk(node: &Value, out: &mut String) {
 #[must_use]
 pub fn plain_text(body: &Value) -> String {
     let mut out = String::new();
-    walk(body, &mut out);
+    let mut counted_bytes = 0;
+    let mut chars = 0;
+    walk(body, &mut out, &mut counted_bytes, &mut chars);
     let trimmed = out.trim();
     trimmed.chars().take(MAX_INDEX_CHARS).collect()
 }
@@ -115,5 +121,54 @@ mod tests {
         let long = "가".repeat(MAX_INDEX_CHARS + 10);
         let body = json!({ "type": "doc", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": long }] }] });
         assert_eq!(plain_text(&body).chars().count(), MAX_INDEX_CHARS);
+    }
+
+    /// Markers may cross the cap, while break and ancestor newlines count before the next sibling.
+    #[test]
+    fn cap_counts_unicode_markers_breaks_and_ancestor_newlines() {
+        let prefix = "가".repeat(MAX_INDEX_CHARS - 2);
+        for (node, suffix) in [
+            (
+                json!({ "type": "taskItem", "content": [{ "type": "text", "text": "ignored" }] }),
+                "[ ",
+            ),
+            (
+                json!({ "type": "reference", "attrs": { "kind": "user", "id": "u" } }),
+                "[r",
+            ),
+        ] {
+            let body = json!({ "type": "doc", "content": [
+                { "type": "text", "text": prefix }, node,
+                { "type": "text", "text": "ignored" }
+            ] });
+            assert_eq!(plain_text(&body), format!("{prefix}{suffix}"));
+        }
+
+        let prefix = "😀".repeat(MAX_INDEX_CHARS - 1);
+        for middle in [
+            json!({ "type": "hardBreak" }),
+            json!({ "type": "blockquote", "content": [{ "type": "paragraph" }] }),
+        ] {
+            let body = json!({ "type": "doc", "content": [
+                { "type": "text", "text": prefix }, middle,
+                { "type": "text", "text": "ignored" }
+            ] });
+            assert_eq!(plain_text(&body), prefix);
+        }
+    }
+
+    /// A whole text node may overshoot so leading whitespace is trimmed before the scalar cap.
+    #[test]
+    fn final_text_overshoots_before_whitespace_is_trimmed() {
+        let content = format!(
+            "{}{}  ",
+            " ".repeat(MAX_INDEX_CHARS + 2),
+            "e\u{301}".repeat(MAX_INDEX_CHARS)
+        );
+        let body = json!({ "type": "doc", "content": [
+            { "type": "paragraph", "content": [{ "type": "text", "text": content }] },
+            { "type": "text", "text": "ignored" }
+        ] });
+        assert_eq!(plain_text(&body), "e\u{301}".repeat(MAX_INDEX_CHARS / 2));
     }
 }
