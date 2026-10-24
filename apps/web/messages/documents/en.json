@@ -84,6 +84,7 @@
   "documents_status_error": "Save failed",
   "documents_status_signed_out": "Sign-in required",
   "documents_leave_confirm": "You have unsaved changes. Leave anyway? (The draft is kept in this browser.)",
+  "documents_leave_go": "Leave",
   "documents_reference_title": "Document reference",
   "documents_revision_n": "Revision {revision}",
   "documents_read_only": "Read-only",

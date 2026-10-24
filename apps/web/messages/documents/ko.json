@@ -84,6 +84,7 @@
   "documents_status_error": "저장 실패",
   "documents_status_signed_out": "로그인 필요",
   "documents_leave_confirm": "저장하지 않은 변경이 있습니다. 이동할까요? (초안은 이 브라우저에 보관됩니다)",
+  "documents_leave_go": "이동하기",
   "documents_reference_title": "문서 참조",
   "documents_revision_n": "리비전 {revision}",
   "documents_read_only": "읽기 전용",

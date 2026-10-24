@@ -152,8 +152,11 @@ class Router {
   /** 주소의 `#` 부분(백링크가 원문 문서 안의 참조 자리를 가리킬 때). 경로 해석에는 쓰지 않는다. */
   hash = $state(window.location.hash);
   route = $derived(parseRoute(this.path));
-  /** 이동 전에 확인할 함수(미저장 변경 보호). false면 이동하지 않는다. */
-  guard: (() => boolean) | undefined = undefined;
+  /**
+   * 이동 전에 확인할 함수(미저장 변경 보호). false면 이동하지 않는다. 막은 뒤 확인 대화상자에서 떠나기로 하면 `proceed`로
+   * 같은 이동을 다시 한다(그때는 가드가 true를 돌려줘야 한다).
+   */
+  guard: ((proceed: () => void) => boolean) | undefined = undefined;
 
   constructor() {
     window.addEventListener('popstate', () => {
@@ -168,7 +171,14 @@ class Router {
     const hash = at < 0 ? '' : target.slice(at);
     if (path === this.path && hash === this.hash) return;
     // 같은 화면 안에서 `#`만 바뀌면 화면을 떠나지 않으므로 미저장 확인을 묻지 않는다.
-    if (path !== this.path && this.guard !== undefined && !this.guard()) return;
+    if (
+      path !== this.path &&
+      this.guard !== undefined &&
+      !this.guard(() => {
+        this.navigate(target);
+      })
+    )
+      return;
     window.history.pushState(null, '', target);
     this.path = path;
     this.hash = hash;
@@ -176,7 +186,13 @@ class Router {
 
   /** 바로 앞 기록으로 돌아간다(이 화면이 기록을 쌓아 연 대화상자를 닫을 때). 주소는 popstate가 맞춘다. 가드가 막으면 false. */
   back(): boolean {
-    if (this.guard !== undefined && !this.guard()) return false;
+    if (
+      this.guard !== undefined &&
+      !this.guard(() => {
+        this.back();
+      })
+    )
+      return false;
     window.history.back();
     return true;
   }
