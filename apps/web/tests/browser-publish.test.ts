@@ -1,5 +1,5 @@
 // 브라우저 시험의 실패 증거 공개 검사(e2e/publish.ts). 합성 민감 값으로 공개·거절을 확인한다.
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -15,8 +15,15 @@ async function trace(entries: Record<string, string>): Promise<Uint8Array> {
   return zip.generateAsync({ type: 'uint8array' });
 }
 
+// 이 시험이 만든 임시 폴더만 지운다.
+const created: string[] = [];
+afterEach(() => {
+  for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
 function setup(): { raw: string; out: string } {
   const dir = mkdtempSync(path.join(tmpdir(), 'fvoci-publish-'));
+  created.push(dir);
   const raw = path.join(dir, 'raw');
   mkdirSync(path.join(raw, 'traces'), { recursive: true });
   mkdirSync(path.join(raw, 'test-results', 'a'), { recursive: true });

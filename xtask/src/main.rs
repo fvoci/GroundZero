@@ -69,9 +69,11 @@ enum Command {
         no_web: bool,
     },
     /// 실제 서버·DB·테스트 OIDC에 Chromium으로 접속하는 브라우저 회귀 시험(Playwright). 전용 Compose 프로젝트를 띄우고
-    /// 정리한다. 원시 출력은 `target/browser/raw`, 검사를 통과한 실패 증거는 `target/browser/artifacts`.
+    /// 정리한다. 원시 출력은 실행마다 `target/browser/runs/<실행 ID>`에 남기고 지우지 않는다. 검사를 통과한 실패 증거만
+    /// `target/browser/artifacts`로 옮긴다(실행마다 비운다).
     Browser {
-        /// 실행 후 컨테이너를 남긴다(원시 출력은 다음 실행이 지운다).
+        /// 실행 후 Compose 컨테이너(PostgreSQL·Keycloak)를 남긴다. 서버는 늘 멈춘다. 원시 출력·`target/browser/files`는
+        /// 이 옵션과 상관없이 남는다.
         #[arg(long)]
         keep: bool,
         /// Playwright에 그대로 넘길 인자(예: `-- e2e/layout.spec.ts`, `-- --grep 칸반`).
