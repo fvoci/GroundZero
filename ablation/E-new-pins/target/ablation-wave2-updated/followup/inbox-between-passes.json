@@ -1,0 +1,39 @@
+{
+  "id": "f8e1ede2-4457-4d35-a31c-b35067399861",
+  "ok": true,
+  "result": {
+    "runId": "run_fa40a3b51085",
+    "dispatchId": "ctx_628d1bc7eac9",
+    "deliveryId": "delivery_dd2478a96155",
+    "messages": [
+      {
+        "id": "msg_4e08d7beea48",
+        "run_id": "run_fa40a3b51085",
+        "delivery_contract": "current_delivery",
+        "from_handle": "term_e196cf8c-96b3-4a15-91d8-1ad0a749186b",
+        "to_handle": "dispatch:ctx_628d1bc7eac9",
+        "subject": "Proceed now under existing follow-up grant; exactly passes3/4",
+        "body": "READY received. The explicit grant msg_78e6b4e43a8d at13:24:19 is still valid; this confirms the SAME two-pass follow-up, not additionalpasses. Proceed NOW with unchangedprebuilt passes3/4 only, distinctrawoutputs, alloriginalsretained, declared pooled96samplep95/no-repeat gate. Root/otherworkersremainwithoutheavywork; no build/gitcompression. SendSTART thenDONE beforelonganalysis; no needfurtherapproval. RepeatedBtailobservationnoted, preserveit regardlessoutcome.",
+        "type": "status",
+        "priority": "normal",
+        "thread_id": null,
+        "payload": null,
+        "created_at": "2026-10-24T13:29:48Z",
+        "delivered_at": null
+      }
+    ],
+    "count": 1,
+    "replayed": true,
+    "acknowledged": null,
+    "timedOut": false,
+    "cancelled": false,
+    "connectionLost": false,
+    "mutation": {
+      "requestId": "f633b075-fbb8-4535-a5b9-6f60d4e88748",
+      "replayed": false
+    }
+  },
+  "_meta": {
+    "runtimeId": "faaee975-4e3c-4748-816b-ef5c18dcbf0d"
+  }
+}

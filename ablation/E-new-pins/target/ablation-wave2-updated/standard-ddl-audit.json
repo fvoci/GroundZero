@@ -1,0 +1,84 @@
+{
+  "task_id": "task_be5df1e065f8",
+  "dispatch_id": "ctx_628d1bc7eac9",
+  "source_commit": "2ee60be77f9f4aa585f35162bb39e597509e3970",
+  "server_system_identifier": "7700211961989640231",
+  "project": "fvoci-ablation-home-marks-f0352d-test-updated-standard",
+  "phase": "dependency-main",
+  "start": "2026-10-24T12:43:01Z",
+  "end": "2026-10-24T12:47:06Z",
+  "evidence": "DDL is logged before execution; successful CREATE is supported by .await.unwrap() before FreshDb return and the passing full suite, then same-name/same-session DROP lineage.",
+  "source_lineage": [
+    "tests/common/mod.rs:fresh_database",
+    "tests/migration_baseline.rs:empty_database",
+    "tests/backup.rs:target/source.name cleanup",
+    "tests/search.rs:fresh.name cleanup"
+  ],
+  "created_count": 13,
+  "dropped_count": 9,
+  "dropped": [
+    {
+      "name": "fvoci_restore_01a16df0839374719b7b81cfecc020cb",
+      "pid": 2172,
+      "create_log": "postgres-1  | 2026-10-24 12:44:01.300 UTC [2172] LOG:  statement: CREATE DATABASE fvoci_restore_01a16df0839374719b7b81cfecc020cb",
+      "drop_log": "postgres-1  | 2026-10-24 12:44:02.252 UTC [2172] LOG:  statement: DROP DATABASE fvoci_restore_01a16df0839374719b7b81cfecc020cb WITH (FORCE)"
+    },
+    {
+      "name": "fvoci_backup_src_01a16df0813b7574800d25cd7b49d7da",
+      "pid": 2172,
+      "create_log": "postgres-1  | 2026-10-24 12:44:00.699 UTC [2172] LOG:  statement: CREATE DATABASE fvoci_backup_src_01a16df0813b7574800d25cd7b49d7da",
+      "drop_log": "postgres-1  | 2026-10-24 12:44:02.274 UTC [2172] LOG:  statement: DROP DATABASE fvoci_backup_src_01a16df0813b7574800d25cd7b49d7da WITH (FORCE)"
+    },
+    {
+      "name": "fvoci_uninitialized_guard_01a16df25359707ab654ef94e2f60275",
+      "pid": 3056,
+      "create_log": "postgres-1  | 2026-10-24 12:46:00.026 UTC [3056] LOG:  statement: CREATE DATABASE fvoci_uninitialized_guard_01a16df25359707ab654ef94e2f60275",
+      "drop_log": "postgres-1  | 2026-10-24 12:46:00.425 UTC [3056] LOG:  statement: DROP DATABASE fvoci_uninitialized_guard_01a16df25359707ab654ef94e2f60275 WITH (FORCE)"
+    },
+    {
+      "name": "fvoci_baseline_guard_01a16df25301756ea496fbf99a4cd4f8",
+      "pid": 3054,
+      "create_log": "postgres-1  | 2026-10-24 12:45:59.938 UTC [3054] LOG:  statement: CREATE DATABASE fvoci_baseline_guard_01a16df25301756ea496fbf99a4cd4f8",
+      "drop_log": "postgres-1  | 2026-10-24 12:46:00.466 UTC [3054] LOG:  statement: DROP DATABASE fvoci_baseline_guard_01a16df25301756ea496fbf99a4cd4f8 WITH (FORCE)"
+    },
+    {
+      "name": "fvoci_legacy_guard_01a16df2552074c09581337aaa441cb1",
+      "pid": 3072,
+      "create_log": "postgres-1  | 2026-10-24 12:46:00.481 UTC [3072] LOG:  statement: CREATE DATABASE fvoci_legacy_guard_01a16df2552074c09581337aaa441cb1",
+      "drop_log": "postgres-1  | 2026-10-24 12:46:00.687 UTC [3072] LOG:  statement: DROP DATABASE fvoci_legacy_guard_01a16df2552074c09581337aaa441cb1 WITH (FORCE)"
+    },
+    {
+      "name": "fvoci_enum_guard_01a16df25577773684100adab27d5ef8",
+      "pid": 3075,
+      "create_log": "postgres-1  | 2026-10-24 12:46:00.567 UTC [3075] LOG:  statement: CREATE DATABASE fvoci_enum_guard_01a16df25577773684100adab27d5ef8",
+      "drop_log": "postgres-1  | 2026-10-24 12:46:00.728 UTC [3075] LOG:  statement: DROP DATABASE fvoci_enum_guard_01a16df25577773684100adab27d5ef8 WITH (FORCE)"
+    },
+    {
+      "name": "fvoci_domain_guard_01a16df2563873e5a188985bf332e764",
+      "pid": 3083,
+      "create_log": "postgres-1  | 2026-10-24 12:46:00.760 UTC [3083] LOG:  statement: CREATE DATABASE fvoci_domain_guard_01a16df2563873e5a188985bf332e764",
+      "drop_log": "postgres-1  | 2026-10-24 12:46:00.921 UTC [3083] LOG:  statement: DROP DATABASE fvoci_domain_guard_01a16df2563873e5a188985bf332e764 WITH (FORCE)"
+    },
+    {
+      "name": "fvoci_search_recheck_01a16df2e5c474f390087f40481c6145",
+      "pid": 3434,
+      "create_log": "postgres-1  | 2026-10-24 12:46:37.508 UTC [3434] LOG:  statement: CREATE DATABASE fvoci_search_recheck_01a16df2e5c474f390087f40481c6145",
+      "drop_log": "postgres-1  | 2026-10-24 12:46:38.028 UTC [3434] LOG:  statement: DROP DATABASE fvoci_search_recheck_01a16df2e5c474f390087f40481c6145 WITH (FORCE)"
+    },
+    {
+      "name": "fvoci_search_tasks_01a16df2f0277190b1b67b71354b2690",
+      "pid": 3460,
+      "create_log": "postgres-1  | 2026-10-24 12:46:40.167 UTC [3460] LOG:  statement: CREATE DATABASE fvoci_search_tasks_01a16df2f0277190b1b67b71354b2690",
+      "drop_log": "postgres-1  | 2026-10-24 12:46:51.244 UTC [3460] LOG:  statement: DROP DATABASE fvoci_search_tasks_01a16df2f0277190b1b67b71354b2690 WITH (FORCE)"
+    }
+  ],
+  "retained": [
+    "fvoci_initial_admin_01a16df283477584a2296750a447d8c6",
+    "fvoci_s3_files_01a16df1e49370b884e25f9b44431123",
+    "fvoci_shutdown_01a16df320ca7686a5dc3950c5cb206a",
+    "fvoci_storage_claim_01a16df3460f701fa514c8eb67fe4d6b"
+  ],
+  "protected_initial_databases_preserved": true,
+  "admin_role_defaults_restored": true,
+  "original_benchmark_counts_unchanged": true
+}

@@ -1,0 +1,18 @@
+{
+  "head": "d69cbd4abf9a354be31836d426fdab355a9e0f88",
+  "base": "32e9c77b656114cc6e44171f0a9b952fc1ec1bc2",
+  "ci_run": 40097758968,
+  "jobs_passed": ["check", "licenses", "integration", "oidc", "supabase", "rhwp"],
+  "full_review_request": 6384788536,
+  "full_review_finished_receipt": 6384789328,
+  "full_review_finished_UTC": "2026-10-24T13:34:18Z",
+  "summary_comment": 6383638345,
+  "summary_source_and_covered_commit": "d69cbd4abf9a354be31836d426fdab355a9e0f88",
+  "selected_files": ["crates/server/src/features/home.rs", "crates/server/tests/home_marks.rs"],
+  "latest_new_actionable_findings": 0,
+  "inline_threads": 0,
+  "historical_outside_inline_ordering_nit": 5638281077,
+  "historical_nit_disposition": "Valid; coordinator authorized separate test-only follow-up after E merge, no product timing change.",
+  "warnings": ["generic docstring coverage is not repository gate", "CodeRabbit Clippy1.99.0 tool failed; pinned actual local/CI checks passed"],
+  "merged_by_coordinator": "479b562522f3b2fa1696e6c5828c753fc91124fd"
+}

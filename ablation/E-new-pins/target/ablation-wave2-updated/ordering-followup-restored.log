@@ -1,0 +1,50 @@
+   Compiling fvoci-server v0.1.0 (/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/crates/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.73s
+     Running tests/home_marks.rs (target/ablation-updated-build/debug/deps/home_marks-db3907ad776c8c6f)
+
+running 1 test
+2026-10-24T13:40:34.862952Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4b84-748e-8340-ae12bdb4aea8 method=POST route="/api/workspaces" status_code=201 duration_ms=42.079
+2026-10-24T13:40:34.881941Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4bb6-714b-8bcd-17cebacabd63 method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=11.498
+2026-10-24T13:40:34.889012Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4bc2-7017-8e11-7a4ca3461a07 method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=6.916
+2026-10-24T13:40:34.900989Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4bcc-71d6-a701-0839e66325e6 method=POST route="/api/workspaces/{workspace_id}/invitations" status_code=201 duration_ms=8.863
+2026-10-24T13:40:34.908024Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4bd5-765b-ba04-49c18b211011 method=POST route="/api/invitations/{invitation_id}/accept" status_code=200 duration_ms=6.84
+2026-10-24T13:40:35.076436Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4be3-72fa-bd83-9158fb13697d method=GET route="/api/me/home" status_code=200 duration_ms=160.751
+2026-10-24T13:40:35.086600Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4c85-75f4-973b-bfe5a999ce42 method=POST route="/api/workspaces/{workspace_id}/modules" status_code=201 duration_ms=9.488
+2026-10-24T13:40:35.095996Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4c8e-752a-95c8-6c4f67c8d621 method=POST route="/api/modules/{module_id}/items" status_code=201 duration_ms=9.186
+2026-10-24T13:40:35.110210Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4c98-7558-bfba-e7e82f6d2d15 method=POST route="/api/items/{item_id}/tasks" status_code=201 duration_ms=14.03
+2026-10-24T13:40:35.125438Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4ca6-71f4-8010-995115a60044 method=POST route="/api/workspaces/{workspace_id}/wiki/documents" status_code=201 duration_ms=14.915
+2026-10-24T13:40:35.133849Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4cb5-7502-826e-19f24cc01c1f method=POST route="/api/me/notes" status_code=201 duration_ms=8.218
+2026-10-24T13:40:35.145394Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4cc1-701f-9a08-6f12f05745cb method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=7.761
+2026-10-24T13:40:35.259098Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4ccd-76bb-ab0b-3633b32dc48c method=GET route="/api/me/home" status_code=200 duration_ms=109.533
+2026-10-24T13:40:35.268782Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4d3f-7054-8f33-150e28425786 method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=5.722
+2026-10-24T13:40:35.278495Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4d48-73fa-8763-5f67a63e2e41 method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=5.937
+2026-10-24T13:40:35.289069Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4d53-72fe-8ebf-cfcd2095277c method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=5.952
+2026-10-24T13:40:35.299518Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4d5d-74dc-a83e-90d26eb9c4c8 method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=6.413
+2026-10-24T13:40:35.309737Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4d67-76a4-935f-ccb546775dc0 method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=6.335
+2026-10-24T13:40:35.320155Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4d71-77aa-8447-343ec5c43472 method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=6.256
+2026-10-24T13:40:35.331487Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4d7c-7213-b3dd-f95364c3c414 method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=7.194
+2026-10-24T13:40:35.476054Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4da5-7069-93f2-556ca46da86d method=GET route="/api/me/home" status_code=200 duration_ms=110.509
+2026-10-24T13:40:35.592286Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4e1b-776a-8789-8d16ff5f3511 method=GET route="/api/me/home" status_code=200 duration_ms=108.61
+2026-10-24T13:40:35.703488Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4e8c-756b-a8a2-85672722f0cc method=GET route="/api/me/home" status_code=200 duration_ms=107.032
+2026-10-24T13:40:35.812700Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4efb-72f8-8753-3ab43c0241d7 method=GET route="/api/me/home" status_code=200 duration_ms=105.068
+2026-10-24T13:40:35.862787Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4f68-7221-8a6f-2fec9add1be4 method=GET route="/api/me/home" status_code=200 duration_ms=46.017
+2026-10-24T13:40:35.972946Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-4f9d-7397-85aa-a856b8f4b25a method=GET route="/api/me/home" status_code=200 duration_ms=103.779
+2026-10-24T13:40:36.113891Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-500a-759a-8de8-20494655a9bc method=GET route="/api/me/home" status_code=200 duration_ms=135.103
+2026-10-24T13:40:36.167754Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-5098-71e4-9ed7-616b53658509 method=GET route="/api/me/home" status_code=200 duration_ms=47.367
+2026-10-24T13:40:36.178128Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-50cb-76b3-8114-df2798b59f85 method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=6.176
+2026-10-24T13:40:36.189642Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-50d7-739f-a1c1-cc123bef0856 method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=6.287
+2026-10-24T13:40:36.296220Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-50e1-7664-89e6-b00fb6a948a6 method=GET route="/api/me/home" status_code=200 duration_ms=102.655
+2026-10-24T13:40:36.405992Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-514f-700e-8a59-e3815c2b9da4 method=GET route="/api/me/home" status_code=200 duration_ms=102.022
+2026-10-24T13:40:36.513722Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-51ba-732f-a824-166f936f469c method=GET route="/api/me/home" status_code=200 duration_ms=103.603
+2026-10-24T13:40:36.523720Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-5225-748b-a90d-dfc26e76b451 method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=5.841
+2026-10-24T13:40:36.631875Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-522f-761e-a691-d6dd1b573fbe method=GET route="/api/me/home" status_code=200 duration_ms=104.283
+2026-10-24T13:40:36.742201Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-529c-70c2-a046-cdf68b08f5b8 method=GET route="/api/me/home" status_code=200 duration_ms=106.073
+2026-10-24T13:40:36.857961Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-530c-755e-a456-3a051245d18a method=GET route="/api/me/home" status_code=200 duration_ms=109.163
+2026-10-24T13:40:36.984253Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-5380-74d9-ba6c-9438c7a28dc0 method=GET route="/api/me/home" status_code=200 duration_ms=119.728
+2026-10-24T13:40:37.132105Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-53fc-72f5-aeba-49eaf0e7a52b method=GET route="/api/me/home" status_code=200 duration_ms=143.383
+2026-10-24T13:40:37.132860Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-548c-76b4-a765-d30db9c172ba method=GET route="/api/me/home" status_code=401 duration_ms=0.093 error_code="unauthorized"
+2026-10-24T13:40:37.171353Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e24-548c-76b4-a765-d30eaa28f018 method=GET route="/api/me/home" status_code=400 duration_ms=38.4 error_code="bad_request"
+test home_marks_keep_both_categories_order_and_current_visibility ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.40s
+

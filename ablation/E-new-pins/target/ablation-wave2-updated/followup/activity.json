@@ -1,0 +1,1532 @@
+[
+  {
+    "pid": 3454939,
+    "name": "python3",
+    "ticks": 2140,
+    "max": 103,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 3895040,
+    "name": "postgres",
+    "ticks": 1084,
+    "max": 51,
+    "new": true,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:33:35.897Z"
+  },
+  {
+    "pid": 3911255,
+    "name": "postgres",
+    "ticks": 1078,
+    "max": 53,
+    "new": true,
+    "first": "2026-10-24T13:33:56.112Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 3911254,
+    "name": "postgres",
+    "ticks": 1068,
+    "max": 50,
+    "new": true,
+    "first": "2026-10-24T13:33:56.112Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 3895039,
+    "name": "postgres",
+    "ticks": 1063,
+    "max": 49,
+    "new": true,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:33:35.897Z"
+  },
+  {
+    "pid": 517,
+    "name": "containerd",
+    "ticks": 353,
+    "max": 14,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 562,
+    "name": "dockerd",
+    "ticks": 344,
+    "max": 21,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 82429,
+    "name": "codex",
+    "ticks": 303,
+    "max": 11,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 3945533,
+    "name": "codex",
+    "ticks": 271,
+    "max": 14,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 4114764,
+    "name": "codex",
+    "ticks": 269,
+    "max": 13,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 102032,
+    "name": "docker-proxy",
+    "ticks": 214,
+    "max": 34,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 90949,
+    "name": "beam.smp",
+    "ticks": 149,
+    "max": 20,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 783,
+    "name": "MainThread",
+    "ticks": 147,
+    "max": 20,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 679764,
+    "name": "beam.smp",
+    "ticks": 129,
+    "max": 10,
+    "new": false,
+    "first": "2026-10-24T13:33:15.874Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 986,
+    "name": "MainThread",
+    "ticks": 100,
+    "max": 3,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 3966320,
+    "name": "claude",
+    "ticks": 37,
+    "max": 5,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 3894756,
+    "name": "harness-release",
+    "ticks": 31,
+    "max": 7,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:33:35.897Z"
+  },
+  {
+    "pid": 3911166,
+    "name": "harness-release",
+    "ticks": 31,
+    "max": 8,
+    "new": false,
+    "first": "2026-10-24T13:33:56.112Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 205449,
+    "name": "weed",
+    "ticks": 27,
+    "max": 3,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 3783402,
+    "name": "java",
+    "ticks": 26,
+    "max": 15,
+    "new": false,
+    "first": "2026-10-24T13:33:20.880Z",
+    "last": "2026-10-24T13:34:13.128Z"
+  },
+  {
+    "pid": 2595577,
+    "name": "weed",
+    "ticks": 24,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:17.133Z"
+  },
+  {
+    "pid": 1161660,
+    "name": "weed",
+    "ticks": 24,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 4164878,
+    "name": "weed",
+    "ticks": 24,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 605401,
+    "name": "weed",
+    "ticks": 24,
+    "max": 3,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 101474,
+    "name": "weed",
+    "ticks": 23,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 2542561,
+    "name": "weed",
+    "ticks": 21,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 40570,
+    "name": "weed",
+    "ticks": 21,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 3916926,
+    "name": "weed",
+    "ticks": 21,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:15.874Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 189104,
+    "name": "codex",
+    "ticks": 19,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 3894754,
+    "name": "MainThread",
+    "ticks": 17,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:33:35.897Z"
+  },
+  {
+    "pid": 3911159,
+    "name": "MainThread",
+    "ticks": 17,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:56.112Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 101753,
+    "name": "containerd-shim",
+    "ticks": 16,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 900162,
+    "name": "containerd-shim",
+    "ticks": 16,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 205018,
+    "name": "containerd-shim",
+    "ticks": 15,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 2596662,
+    "name": "containerd-shim",
+    "ticks": 15,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 2542533,
+    "name": "containerd-shim",
+    "ticks": 15,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:15.874Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 4164848,
+    "name": "containerd-shim",
+    "ticks": 15,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:15.874Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 2596223,
+    "name": "containerd-shim",
+    "ticks": 15,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:16.876Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 40884,
+    "name": "containerd-shim",
+    "ticks": 15,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:16.876Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 900922,
+    "name": "meilisearch",
+    "ticks": 15,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:16.876Z",
+    "last": "2026-10-24T13:34:17.133Z"
+  },
+  {
+    "pid": 101046,
+    "name": "containerd-shim",
+    "ticks": 14,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:17.133Z"
+  },
+  {
+    "pid": 1162481,
+    "name": "containerd-shim",
+    "ticks": 14,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 205398,
+    "name": "containerd-shim",
+    "ticks": 14,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 3783501,
+    "name": "containerd-shim",
+    "ticks": 14,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:17.133Z"
+  },
+  {
+    "pid": 3783676,
+    "name": "meilisearch",
+    "ticks": 14,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:17.133Z"
+  },
+  {
+    "pid": 41199,
+    "name": "containerd-shim",
+    "ticks": 14,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:17.133Z"
+  },
+  {
+    "pid": 4164609,
+    "name": "containerd-shim",
+    "ticks": 14,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 1162034,
+    "name": "containerd-shim",
+    "ticks": 14,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 2542893,
+    "name": "containerd-shim",
+    "ticks": 14,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 606214,
+    "name": "containerd-shim",
+    "ticks": 14,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 2595539,
+    "name": "containerd-shim",
+    "ticks": 14,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:15.874Z",
+    "last": "2026-10-24T13:34:17.133Z"
+  },
+  {
+    "pid": 4164187,
+    "name": "containerd-shim",
+    "ticks": 13,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:16.131Z"
+  },
+  {
+    "pid": 101416,
+    "name": "containerd-shim",
+    "ticks": 13,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 2543537,
+    "name": "containerd-shim",
+    "ticks": 13,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 3916899,
+    "name": "containerd-shim",
+    "ticks": 13,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 605376,
+    "name": "containerd-shim",
+    "ticks": 13,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:17.133Z"
+  },
+  {
+    "pid": 900773,
+    "name": "containerd-shim",
+    "ticks": 13,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:17.133Z"
+  },
+  {
+    "pid": 205651,
+    "name": "containerd-shim",
+    "ticks": 13,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:16.131Z"
+  },
+  {
+    "pid": 3917097,
+    "name": "containerd-shim",
+    "ticks": 13,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 3917271,
+    "name": "containerd-shim",
+    "ticks": 13,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:15.874Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 3783214,
+    "name": "containerd-shim",
+    "ticks": 13,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:16.876Z",
+    "last": "2026-10-24T13:34:16.131Z"
+  },
+  {
+    "pid": 40544,
+    "name": "containerd-shim",
+    "ticks": 13,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:17.877Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 605836,
+    "name": "containerd-shim",
+    "ticks": 12,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 1161635,
+    "name": "containerd-shim",
+    "ticks": 11,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:15.874Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 3917636,
+    "name": "java",
+    "ticks": 10,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:34:19.135Z"
+  },
+  {
+    "pid": 41532,
+    "name": "java",
+    "ticks": 8,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:16.131Z"
+  },
+  {
+    "pid": 899915,
+    "name": "java",
+    "ticks": 8,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:15.874Z",
+    "last": "2026-10-24T13:34:16.131Z"
+  },
+  {
+    "pid": 644784,
+    "name": "java",
+    "ticks": 7,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:16.131Z"
+  },
+  {
+    "pid": 899877,
+    "name": "containerd-shim",
+    "ticks": 6,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:15.874Z",
+    "last": "2026-10-24T13:34:11.127Z"
+  },
+  {
+    "pid": 41479,
+    "name": "containerd-shim",
+    "ticks": 6,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:20.880Z",
+    "last": "2026-10-24T13:34:16.131Z"
+  },
+  {
+    "pid": 677922,
+    "name": "containerd-shim",
+    "ticks": 6,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:20.880Z",
+    "last": "2026-10-24T13:34:17.133Z"
+  },
+  {
+    "pid": 89100,
+    "name": "containerd-shim",
+    "ticks": 5,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:16.131Z"
+  },
+  {
+    "pid": 89128,
+    "name": "postgrest",
+    "ticks": 5,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:16.131Z"
+  },
+  {
+    "pid": 644758,
+    "name": "containerd-shim",
+    "ticks": 5,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:15.874Z",
+    "last": "2026-10-24T13:34:11.127Z"
+  },
+  {
+    "pid": 87527,
+    "name": "containerd-shim",
+    "ticks": 5,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:20.880Z",
+    "last": "2026-10-24T13:34:16.131Z"
+  },
+  {
+    "pid": 3917554,
+    "name": "containerd-shim",
+    "ticks": 5,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:21.881Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 84852,
+    "name": "codex-code-mode",
+    "ticks": 5,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:23.884Z",
+    "last": "2026-10-24T13:34:10.126Z"
+  },
+  {
+    "pid": 89638,
+    "name": "containerd-shim",
+    "ticks": 4,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:17.877Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 3783357,
+    "name": "containerd-shim",
+    "ticks": 4,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:21.881Z",
+    "last": "2026-10-24T13:34:15.130Z"
+  },
+  {
+    "pid": 676013,
+    "name": "containerd-shim",
+    "ticks": 4,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:21.881Z",
+    "last": "2026-10-24T13:34:16.131Z"
+  },
+  {
+    "pid": 678044,
+    "name": "postgrest",
+    "ticks": 4,
+    "max": 2,
+    "new": false,
+    "first": "2026-10-24T13:33:35.897Z",
+    "last": "2026-10-24T13:34:14.129Z"
+  },
+  {
+    "pid": 3783239,
+    "name": "postgres",
+    "ticks": 3,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:12.872Z",
+    "last": "2026-10-24T13:34:10.126Z"
+  },
+  {
+    "pid": 4164833,
+    "name": "meilisearch",
+    "ticks": 3,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:16.876Z",
+    "last": "2026-10-24T13:34:11.127Z"
+  },
+  {
+    "pid": 2596273,
+    "name": "postgres",
+    "ticks": 3,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:22.882Z",
+    "last": "2026-10-24T13:34:14.129Z"
+  },
+  {
+    "pid": 3917135,
+    "name": "postgres",
+    "ticks": 3,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:22.882Z",
+    "last": "2026-10-24T13:34:11.127Z"
+  },
+  {
+    "pid": 678549,
+    "name": "containerd-shim",
+    "ticks": 3,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:23.884Z",
+    "last": "2026-10-24T13:34:08.123Z"
+  },
+  {
+    "pid": 41462,
+    "name": "meilisearch",
+    "ticks": 3,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:31.893Z",
+    "last": "2026-10-24T13:34:05.121Z"
+  },
+  {
+    "pid": 922,
+    "name": "orca-ide",
+    "ticks": 3,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:32.894Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 101789,
+    "name": "postgres",
+    "ticks": 2,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3917540,
+    "name": "meilisearch",
+    "ticks": 2,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:33:17.877Z"
+  },
+  {
+    "pid": 40942,
+    "name": "postgres",
+    "ticks": 2,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:18.877Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 4164249,
+    "name": "postgres",
+    "ticks": 2,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:20.880Z",
+    "last": "2026-10-24T13:34:06.121Z"
+  },
+  {
+    "pid": 205686,
+    "name": "postgres",
+    "ticks": 2,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:22.882Z",
+    "last": "2026-10-24T13:34:10.126Z"
+  },
+  {
+    "pid": 606240,
+    "name": "postgres",
+    "ticks": 2,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:24.884Z",
+    "last": "2026-10-24T13:34:08.123Z"
+  },
+  {
+    "pid": 1162079,
+    "name": "postgres",
+    "ticks": 2,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:26.887Z",
+    "last": "2026-10-24T13:34:12.127Z"
+  },
+  {
+    "pid": 87,
+    "name": "systemd-udevd",
+    "ticks": 2,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:27.888Z",
+    "last": "2026-10-24T13:33:35.897Z"
+  },
+  {
+    "pid": 1162906,
+    "name": "meilisearch",
+    "ticks": 2,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:31.893Z",
+    "last": "2026-10-24T13:33:58.113Z"
+  },
+  {
+    "pid": 4115823,
+    "name": "codex-code-mode",
+    "ticks": 2,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:32.894Z",
+    "last": "2026-10-24T13:33:35.897Z"
+  },
+  {
+    "pid": 900250,
+    "name": "postgres",
+    "ticks": 2,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:32.894Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3274191,
+    "name": "bash",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:33:13.873Z"
+  },
+  {
+    "pid": 676075,
+    "name": ".postgres-wrapp",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:14.873Z",
+    "last": "2026-10-24T13:33:14.873Z"
+  },
+  {
+    "pid": 680264,
+    "name": ".postgres-wrapp",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:21.881Z",
+    "last": "2026-10-24T13:33:21.881Z"
+  },
+  {
+    "pid": 88547,
+    "name": ".postgres-wrapp",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:21.881Z",
+    "last": "2026-10-24T13:33:21.881Z"
+  },
+  {
+    "pid": 3945869,
+    "name": "MainThread",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:23.884Z",
+    "last": "2026-10-24T13:33:23.884Z"
+  },
+  {
+    "pid": 2543773,
+    "name": "meilisearch",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:28.889Z",
+    "last": "2026-10-24T13:33:28.889Z"
+  },
+  {
+    "pid": 678598,
+    "name": "tini",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:28.889Z",
+    "last": "2026-10-24T13:33:28.889Z"
+  },
+  {
+    "pid": 2597123,
+    "name": "meilisearch",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:29.890Z",
+    "last": "2026-10-24T13:33:29.890Z"
+  },
+  {
+    "pid": 4115008,
+    "name": "MainThread",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:30.892Z",
+    "last": "2026-10-24T13:33:30.892Z"
+  },
+  {
+    "pid": 1020683,
+    "name": "bash",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:33:32.894Z",
+    "last": "2026-10-24T13:33:32.894Z"
+  },
+  {
+    "pid": 1630,
+    "name": "orca-ide",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:34:03.118Z",
+    "last": "2026-10-24T13:34:03.118Z"
+  },
+  {
+    "pid": 606200,
+    "name": "meilisearch",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 91494,
+    "name": ".postgres-wrapp",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:34:05.121Z",
+    "last": "2026-10-24T13:34:05.121Z"
+  },
+  {
+    "pid": 680270,
+    "name": ".postgres-wrapp",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:34:06.121Z",
+    "last": "2026-10-24T13:34:06.121Z"
+  },
+  {
+    "pid": 2542930,
+    "name": "postgres",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:34:08.123Z",
+    "last": "2026-10-24T13:34:08.123Z"
+  },
+  {
+    "pid": 1612,
+    "name": "orca-ide",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:34:11.127Z",
+    "last": "2026-10-24T13:34:11.127Z"
+  },
+  {
+    "pid": 91490,
+    "name": ".postgres-wrapp",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:34:11.127Z",
+    "last": "2026-10-24T13:34:11.127Z"
+  },
+  {
+    "pid": 4164654,
+    "name": "tini",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:34:14.129Z",
+    "last": "2026-10-24T13:34:14.129Z"
+  },
+  {
+    "pid": 205375,
+    "name": "meilisearch",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:34:17.133Z",
+    "last": "2026-10-24T13:34:17.133Z"
+  },
+  {
+    "pid": 82875,
+    "name": "MainThread",
+    "ticks": 1,
+    "max": 1,
+    "new": false,
+    "first": "2026-10-24T13:34:18.133Z",
+    "last": "2026-10-24T13:34:18.133Z"
+  },
+  {
+    "pid": 3895449,
+    "name": "bash",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:33:13.873Z"
+  },
+  {
+    "pid": 3895450,
+    "name": "MainThread",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:33:13.873Z"
+  },
+  {
+    "pid": 3895451,
+    "name": "bash",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:33:13.873Z"
+  },
+  {
+    "pid": 3895452,
+    "name": "2.1.310",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:33:13.873Z"
+  },
+  {
+    "pid": 3895470,
+    "name": "bash",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:33:13.873Z"
+  },
+  {
+    "pid": 3895471,
+    "name": "MainThread",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:33:13.873Z"
+  },
+  {
+    "pid": 3895472,
+    "name": "jq",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:13.873Z",
+    "last": "2026-10-24T13:33:13.873Z"
+  },
+  {
+    "pid": 3899258,
+    "name": "sleep",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:24.884Z",
+    "last": "2026-10-24T13:33:24.884Z"
+  },
+  {
+    "pid": 3900406,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:26.887Z",
+    "last": "2026-10-24T13:33:26.887Z"
+  },
+  {
+    "pid": 3900445,
+    "name": "(udev-worker)",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:27.888Z",
+    "last": "2026-10-24T13:33:27.888Z"
+  },
+  {
+    "pid": 3900446,
+    "name": "(udev-worker)",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:27.888Z",
+    "last": "2026-10-24T13:33:27.888Z"
+  },
+  {
+    "pid": 3900645,
+    "name": "(udev-worker)",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:27.888Z",
+    "last": "2026-10-24T13:33:27.888Z"
+  },
+  {
+    "pid": 3900646,
+    "name": "(udev-worker)",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:27.888Z",
+    "last": "2026-10-24T13:33:27.888Z"
+  },
+  {
+    "pid": 3900647,
+    "name": "(udev-worker)",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:27.888Z",
+    "last": "2026-10-24T13:33:27.888Z"
+  },
+  {
+    "pid": 3900648,
+    "name": "(udev-worker)",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:27.888Z",
+    "last": "2026-10-24T13:33:27.888Z"
+  },
+  {
+    "pid": 3900649,
+    "name": "(udev-worker)",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:27.888Z",
+    "last": "2026-10-24T13:33:27.888Z"
+  },
+  {
+    "pid": 3902709,
+    "name": "sleep",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:32.894Z",
+    "last": "2026-10-24T13:33:32.894Z"
+  },
+  {
+    "pid": 3903447,
+    "name": "MainThread",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:35.897Z",
+    "last": "2026-10-24T13:33:35.897Z"
+  },
+  {
+    "pid": 3903813,
+    "name": "(udev-worker)",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:35.897Z",
+    "last": "2026-10-24T13:33:35.897Z"
+  },
+  {
+    "pid": 3903814,
+    "name": "(udev-worker)",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:35.897Z",
+    "last": "2026-10-24T13:33:35.897Z"
+  },
+  {
+    "pid": 3912067,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:57.112Z",
+    "last": "2026-10-24T13:33:57.112Z"
+  },
+  {
+    "pid": 3912343,
+    "name": "bash",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:58.113Z",
+    "last": "2026-10-24T13:33:58.113Z"
+  },
+  {
+    "pid": 3912344,
+    "name": "MainThread",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:58.113Z",
+    "last": "2026-10-24T13:33:58.113Z"
+  },
+  {
+    "pid": 3912345,
+    "name": "jq",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:33:58.113Z",
+    "last": "2026-10-24T13:33:58.113Z"
+  },
+  {
+    "pid": 3913595,
+    "name": "postgrest",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:01.116Z",
+    "last": "2026-10-24T13:34:01.116Z"
+  },
+  {
+    "pid": 3914347,
+    "name": "sleep",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:03.118Z",
+    "last": "2026-10-24T13:34:03.118Z"
+  },
+  {
+    "pid": 3914579,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914580,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914581,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914582,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914583,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914584,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914585,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914586,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914587,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914631,
+    "name": "runc",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914698,
+    "name": "runc:[2:INIT]",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914699,
+    "name": "runc:[2:INIT]",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914700,
+    "name": "runc:[2:INIT]",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914701,
+    "name": "runc:[2:INIT]",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914702,
+    "name": "runc:[2:INIT]",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914704,
+    "name": "runc:[2:INIT]",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914710,
+    "name": "runc:[2:INIT]",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914717,
+    "name": "runc:[2:INIT]",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914728,
+    "name": "runc:[2:INIT]",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3914764,
+    "name": "runc:[2:INIT]",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:04.119Z",
+    "last": "2026-10-24T13:34:04.119Z"
+  },
+  {
+    "pid": 3916577,
+    "name": "bash",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:09.124Z",
+    "last": "2026-10-24T13:34:09.124Z"
+  },
+  {
+    "pid": 3916578,
+    "name": "MainThread",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:09.124Z",
+    "last": "2026-10-24T13:34:09.124Z"
+  },
+  {
+    "pid": 3916579,
+    "name": "bash",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:09.124Z",
+    "last": "2026-10-24T13:34:09.124Z"
+  },
+  {
+    "pid": 3916580,
+    "name": "2.1.310",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:09.124Z",
+    "last": "2026-10-24T13:34:09.124Z"
+  },
+  {
+    "pid": 3916591,
+    "name": "sleep",
+    "ticks": 0,
+    "max": 0,
+    "new": true,
+    "first": "2026-10-24T13:34:10.126Z",
+    "last": "2026-10-24T13:34:10.126Z"
+  }
+]

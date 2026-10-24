@@ -1,0 +1,12 @@
+
+running 1 test
+2026-10-24T13:06:25.666725Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e05-06f3-752f-8ead-966fda1c0ae3 method=POST route="/api/me/notes" status_code=201 duration_ms=14.845
+2026-10-24T13:06:25.672236Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e05-0702-703e-ba00-d76928699b91 method=POST route="/api/documents/{document_id}/shares" status_code=201 duration_ms=5.454
+2026-10-24T13:06:25.679294Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e05-0709-70a6-addd-520625d98380 method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=6.071
+2026-10-24T13:06:25.684832Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e05-0710-74b0-97c9-33517836875a method=PUT route="/api/me/marks/{target_kind}/{target_id}" status_code=200 duration_ms=4.686
+2026-10-24T13:06:25.705786Z  INFO fvoci_server::http: request event="http.request" request_id=01a16e05-071c-708f-8980-6bcc8a06a93a method=DELETE route="/api/document-shares/{share_id}" status_code=204 duration_ms=13.756
+RACE baseline can show pin before revoke and omit favorite after revoke; grouped after revoke omits both; authorization checked at each statement snapshot. ERROR 42P01; cancellation 57014; pool reusable after rollback.
+test raw::raw_errors_cancel_and_revocation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.12s
+

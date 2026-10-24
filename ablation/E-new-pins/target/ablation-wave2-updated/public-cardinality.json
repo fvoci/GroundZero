@@ -1,0 +1,31 @@
+{
+  "global_counts": {
+    "audit": 470,
+    "documents": 117,
+    "events": 0,
+    "items": 21,
+    "marks": 302,
+    "notifications": 0,
+    "tasks": 204
+  },
+  "fixtures": [
+    {
+      "json_bytes": 26,
+      "n": 0,
+      "raw_rows_A": 0,
+      "raw_rows_B": 0
+    },
+    {
+      "json_bytes": 266,
+      "n": 1,
+      "raw_rows_A": 2,
+      "raw_rows_B": 2
+    },
+    {
+      "json_bytes": 24404,
+      "n": 100,
+      "raw_rows_A": 200,
+      "raw_rows_B": 200
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+CI run: https://github.com/fvoci/GroundZero/actions/runs/40094669966
+Completed licenses job: https://github.com/fvoci/GroundZero/actions/runs/40094669966/job/120874311354
+Source head: 2ee60be77f9f4aa585f35162bb39e597509e3970
+Selected lines from the connected GitHub job-log API (no environment/credential dump):
+2026-10-24T12:37:35.9803598Z Digest: sha256:055178adbb91af6ec677fc26e56ea5f1bdb72ac9b50ed2c077688e8ed2f8946f
+2026-10-24T12:37:38.1265832Z rustc 1.99.1 (58cf8f9c3 2026-10-13)
+2026-10-24T12:37:38.1303092Z v24.22.1
+2026-10-24T12:37:38.1845074Z 0.36.0
+2026-10-24T12:37:38.2652076Z 12.15.0
+The command immediately preceding these four version outputs is the committed ci.yml runtime-version check (rustc, node, corepack, pnpm).

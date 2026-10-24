@@ -1,0 +1,1 @@
+{"system_identifier" : "7700211961989640231", "version" : "PostgreSQL 17.9 (Debian 17.9-1.pgdg12+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit", "databases" : ["fvoci", "postgres", "template0", "template1"], "admin_role_config_is_null" : true}

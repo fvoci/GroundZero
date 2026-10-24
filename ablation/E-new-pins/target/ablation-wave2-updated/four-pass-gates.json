@@ -1,0 +1,44 @@
+{
+  "tails": [
+    {
+      "pass": 1,
+      "N_per_variant": 24,
+      "A_p95_us": 67092.187,
+      "B_p95_us": 69428.32,
+      "delta_percent": 3.48197473425631
+    },
+    {
+      "pass": 2,
+      "N_per_variant": 24,
+      "A_p95_us": 65238.026,
+      "B_p95_us": 72940.339,
+      "delta_percent": 11.806477712860296
+    },
+    {
+      "pass": 3,
+      "N_per_variant": 24,
+      "A_p95_us": 71798.424,
+      "B_p95_us": 56333.305,
+      "delta_percent": -21.539635744650887
+    },
+    {
+      "pass": 4,
+      "N_per_variant": 24,
+      "A_p95_us": 80314.778,
+      "B_p95_us": 52888.538,
+      "delta_percent": -34.14843529792238
+    }
+  ],
+  "pooled": {
+    "N_per_variant": 96,
+    "nearest_rank": 92,
+    "A_p95_us": 73231.543,
+    "B_p95_us": 69428.32,
+    "delta_percent": -5.193421911101881
+  },
+  "median_regression_failures": [],
+  "gain_above_noise_every_cell": true,
+  "pooled_gate": true,
+  "new_passes_not_both_over5": true,
+  "tail_gate": true
+}

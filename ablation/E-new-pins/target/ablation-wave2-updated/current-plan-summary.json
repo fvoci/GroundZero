@@ -1,0 +1,62 @@
+[
+  {
+    "n": 0,
+    "A": {
+      "cost": 68.16,
+      "rows": 0,
+      "hits": 4,
+      "reads": 0,
+      "nodes": [
+        "Sort",
+        "Sort"
+      ]
+    },
+    "B": {
+      "cost": 38.36,
+      "rows": 0,
+      "hits": 2,
+      "reads": 0,
+      "node": "Sort"
+    }
+  },
+  {
+    "n": 1,
+    "A": {
+      "cost": 68.16,
+      "rows": 2,
+      "hits": 80,
+      "reads": 0,
+      "nodes": [
+        "Sort",
+        "Sort"
+      ]
+    },
+    "B": {
+      "cost": 64.16,
+      "rows": 2,
+      "hits": 61,
+      "reads": 0,
+      "node": "Sort"
+    }
+  },
+  {
+    "n": 100,
+    "A": {
+      "cost": 411.88,
+      "rows": 200,
+      "hits": 8704,
+      "reads": 0,
+      "nodes": [
+        "Sort",
+        "Sort"
+      ]
+    },
+    "B": {
+      "cost": 226.31,
+      "rows": 200,
+      "hits": 5989,
+      "reads": 0,
+      "node": "Sort"
+    }
+  }
+]
