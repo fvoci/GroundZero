@@ -71,7 +71,8 @@
       {m.trash_workspaces_hint()}
     </p>
     <p aria-live="polite" class="text-sm">
-      {#if error !== undefined}<span class="text-destructive">{error}</span>{:else}{status}{/if}
+      {#if error !== undefined}<span role="alert" class="text-destructive">{error}</span
+        >{:else}{status}{/if}
     </p>
     <ul class="flex flex-col gap-2" data-testid="deleted-workspaces">
       {#each list as w (w.id)}

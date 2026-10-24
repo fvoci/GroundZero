@@ -4,6 +4,7 @@
   import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
   import { api, TIME_KINDS } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { focusConfirm, focusConfirmStart } from '$lib/features/common/inline-confirm';
   import type { EditedWall } from '$lib/features/events/repeated';
   import { describedBy, readEditedWall, repeatedOptions } from '$lib/features/events/repeated';
   import RepeatedTimeChoice from '$lib/features/events/RepeatedTimeChoice.svelte';
@@ -360,16 +361,31 @@
         <div class="flex flex-wrap items-center gap-2 sm:col-span-2">
           <Button type="submit" disabled={busy}>{m.common_save()}</Button>
           {#if confirmDelete}
-            <span class="text-sm" role="status">{m.time_delete_confirm()}</span>
-            <Button size="sm" variant="destructive" onclick={() => void remove()}
-              >{m.time_delete()}</Button
+            <span id="time-delete-question" class="text-sm">{m.time_delete_confirm()}</span>
+            <Button
+              size="sm"
+              variant="destructive"
+              data-confirm-go="time-delete"
+              aria-describedby="time-delete-question"
+              onclick={() => void remove()}>{m.time_delete()}</Button
             >
-            <Button size="sm" variant="ghost" onclick={() => (confirmDelete = false)}
-              >{m.common_cancel()}</Button
+            <Button
+              size="sm"
+              variant="ghost"
+              onclick={() => {
+                confirmDelete = false;
+                void focusConfirmStart('time-delete');
+              }}>{m.common_cancel()}</Button
             >
           {:else}
-            <Button size="sm" variant="outline" onclick={() => (confirmDelete = true)}
-              >{m.time_delete_entry()}</Button
+            <Button
+              size="sm"
+              variant="outline"
+              data-confirm="time-delete"
+              onclick={() => {
+                confirmDelete = true;
+                void focusConfirm('time-delete');
+              }}>{m.time_delete_entry()}</Button
             >
           {/if}
         </div>
