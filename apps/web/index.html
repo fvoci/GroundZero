@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>fvoci</title>
+    <!-- 처음 그리기 전에 화면 밝기를 정한다(src/lib/theme.svelte.ts와 같은 키·규칙). 앱 스크립트를 기다리면 어둡게
+         고른 화면이 잠깐 희게 번쩍인다. CSP를 도입하면 이 스크립트의 해시를 허용해야 한다. -->
+    <script>
+      try {
+        var theme = localStorage.getItem('fvoci.theme');
+        if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+        if (
+          theme === 'dark' ||
+          (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        )
+          document.documentElement.classList.add('dark');
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

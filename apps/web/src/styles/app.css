@@ -1,5 +1,5 @@
 /* 전역 스타일. 토큰 출처: shadcn-svelte 1.7.0 manual installation (base color neutral), 2026-10-17.
-   수정분: 타이포그래피 토큰(:root 하단)과 @layer base의 글꼴·줄 높이·줄바꿈. 그 외는 원문 그대로 유지해 업데이트 시 비교한다. */
+   수정분: 타이포그래피 토큰(:root 하단)과 @layer base의 글꼴·줄 높이·줄바꿈·color-scheme. 그 외는 원문 그대로 유지해 업데이트 시 비교한다. */
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @custom-variant dark (&:is(.dark *));
@@ -188,6 +188,15 @@
 }
 
 @layer base {
+  /* 기본 입력 칸(날짜 선택·선택 상자 목록)·스크롤바가 화면 밝기를 따른다(theme.svelte.ts). */
+  :root {
+    color-scheme: light;
+  }
+
+  :root.dark {
+    color-scheme: dark;
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
