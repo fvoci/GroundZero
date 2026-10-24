@@ -147,7 +147,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Playwright와 Chromium revision은 lockfile의 정확한 @playwright/test 판으로 함께 고정된다.
       - run: pnpm --filter @fvoci/web exec playwright install --with-deps chromium
-      - run: cargo xtask browser
+      # Draft PR 검증용: 실제 실패 자료 업로드를 확인한 뒤 정상 전체 묶음으로 되돌린다.
+      - name: verify browser failure artifact delivery
+        env:
+          FVOCI_BROWSER_FAILURE_SMOKE: clean
+        run: cargo xtask browser -- e2e/failure-smoke.spec.ts
       - name: browser failure evidence
         # xtask는 검증한 파일만 이 폴더에 게시하고 마지막에 표시 파일을 쓴다. 검증 실패 원본은 업로드하지 않는다.
         if: failure() && hashFiles('target/browser/artifacts/SAFE_TO_UPLOAD') != ''
