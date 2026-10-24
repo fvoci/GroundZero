@@ -109,3 +109,33 @@ describe('content panels split by the content width', () => {
     expect(source).toMatch(/@(xl|2xl):grid-cols-/);
   });
 });
+
+// UI 감사: 업무 목록 보기의 여섯 칸 표가 좁은 화면에서 본문 밖으로 넘쳤다. 기록 표처럼 표만 가로로 스크롤한다.
+describe('task list table on narrow screens', () => {
+  it('scrolls the table sideways instead of widening the page', async () => {
+    window.sessionStorage.setItem('fvoci:board:i1', JSON.stringify({ view: 'list' }));
+    const item: ItemView = {
+      id: 'i1',
+      module_id: 'm1',
+      workspace_id: 'ws-1',
+      reference: 'KED-1',
+      title: '항목',
+      description: '',
+      visibility: 'workspace',
+      access: 'write',
+      archived: false,
+      updated_at: '2026-10-21T00:00:00Z',
+      status: 'active',
+      is_template: false,
+      version: 1,
+      starts_on: null,
+      ends_on: null,
+    };
+    vi.spyOn(api, 'tasks').mockResolvedValue([]);
+    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    const table = await screen.findByTestId('task-list');
+    expect(table.parentElement).toHaveClass('overflow-x-auto');
+  });
+});
