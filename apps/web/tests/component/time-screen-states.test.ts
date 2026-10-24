@@ -68,8 +68,9 @@ describe('time screen states', () => {
     await fireEvent.click(box);
     expect(set).not.toHaveBeenCalled();
 
-    const retries = screen.getAllByRole('button', { name: '다시 시도' });
-    await fireEvent.click(retries[retries.length - 1]);
+    const retry = screen.getAllByRole('button', { name: '다시 시도' }).at(-1);
+    if (retry === undefined) throw new Error('retry');
+    await fireEvent.click(retry);
     await waitFor(() => {
       expect(sharing).toHaveBeenCalledTimes(2);
     });

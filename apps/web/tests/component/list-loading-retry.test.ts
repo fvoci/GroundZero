@@ -36,7 +36,7 @@ const item: ItemView = {
 describe('audit list', () => {
   it('says loading, not empty, before the first page arrives', () => {
     vi.spyOn(api, 'audit').mockReturnValue(new Promise(() => undefined));
-    render(AuditScreen, { props: {} });
+    render(AuditScreen, { props: { workspace: undefined } });
     expect(screen.queryByText('기록이 없습니다.')).toBeNull();
     expect(screen.getAllByText('불러오는 중…').length).toBeGreaterThan(0);
   });
@@ -46,7 +46,7 @@ describe('audit list', () => {
       .spyOn(api, 'audit')
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValue([]);
-    render(AuditScreen, { props: {} });
+    render(AuditScreen, { props: { workspace: undefined } });
 
     const retry = await screen.findByRole('button', { name: '다시 시도' });
     expect(screen.queryByText('기록이 없습니다.')).toBeNull();

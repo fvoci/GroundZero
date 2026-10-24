@@ -92,9 +92,9 @@
             : e.key === 'End'
               ? last
               : undefined;
-    if (next === undefined || last < 0) return;
+    const target = next === undefined ? undefined : options.at(next);
+    if (next === undefined || target === undefined) return;
     e.preventDefault();
-    const target = options[next];
     target.focus();
     if (next !== at) target.click();
   }

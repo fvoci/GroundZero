@@ -107,21 +107,23 @@ describe('revision list keyboard', () => {
     await fireEvent.click(screen.getByRole('button', { name: '기록' }));
 
     const options = await screen.findAllByRole('option');
+    const [r3, r2, r1] = options;
+    if (r3 === undefined || r2 === undefined || r1 === undefined) throw new Error('options');
     expect(options.map((o) => o.tabIndex)).toEqual([0, -1, -1]);
-    options[0].focus();
-    await fireEvent.keyDown(options[0], { key: 'ArrowDown' });
-    expect(options[1]).toHaveFocus();
+    r3.focus();
+    await fireEvent.keyDown(r3, { key: 'ArrowDown' });
+    expect(r2).toHaveFocus();
     await waitFor(() => {
       expect(load).toHaveBeenCalledWith('d1', 2);
     });
     await waitFor(() => {
-      expect(options[1]).toHaveAttribute('aria-selected', 'true');
+      expect(r2).toHaveAttribute('aria-selected', 'true');
     });
-    expect(options[1].tabIndex).toBe(0);
+    expect(r2.tabIndex).toBe(0);
 
-    await fireEvent.keyDown(options[1], { key: 'End' });
-    expect(options[2]).toHaveFocus();
-    await fireEvent.keyDown(options[2], { key: 'Home' });
-    expect(options[0]).toHaveFocus();
+    await fireEvent.keyDown(r2, { key: 'End' });
+    expect(r1).toHaveFocus();
+    await fireEvent.keyDown(r1, { key: 'Home' });
+    expect(r3).toHaveFocus();
   });
 });

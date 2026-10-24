@@ -99,7 +99,12 @@ describe('members screen', () => {
     vi.spyOn(api, 'members').mockResolvedValue(view);
     vi.spyOn(api, 'groups').mockResolvedValue([]);
     vi.spyOn(api, 'invitations').mockResolvedValue([]);
-    vi.spyOn(api, 'invite').mockResolvedValue(undefined);
+    vi.spyOn(api, 'invite').mockResolvedValue({
+      id: 'inv-1',
+      email: 'kim@lab.example',
+      role: 'writer',
+      expires_at: '2026-11-01T00:00:00Z',
+    });
     render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
 
     const status = screen.getByRole('status');
@@ -119,6 +124,7 @@ describe('received invitations', () => {
   it('answers an invitation once even when clicked twice', async () => {
     const inv: ReceivedInvitation = {
       id: 'inv-1',
+      workspace_id: 'ws-1',
       workspace_name: '연구실',
       invited_by: '관리자',
       role: 'writer',
