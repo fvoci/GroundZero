@@ -202,7 +202,6 @@ fn to_task(row: TaskRow, today: Option<Date>) -> Result<HomeTask, AppError> {
     })
 }
 
-/// Reads pins and favorites at one statement snapshot, retaining each category's order.
 async fn marks(
     tx: &mut crate::db::UserTx,
 ) -> Result<(Vec<MarkedTarget>, Vec<MarkedTarget>), AppError> {
