@@ -2,7 +2,8 @@
 -- Storybook과 같은 합성 데이터(dev-ui-data.json, xtask가 세션 설정 fvoci.dev_ui_data로 넘긴다)로 "UI 상태 예제"
 -- 워크스페이스를 한 번만 만든다.
 -- 긴 한국어·공백 없는 문자열·이모지·숫자가 섞인 위키 문서 트리, 답글과 해결된 스레드가 있는 댓글, 상태·우선순위·
--- 담당자가 다른 업무를 실제 앱에서도 같은 내용으로 본다. 기존 테스트 사용자만 조회하고 계정을 만들거나 바꾸지 않는다.
+-- 담당자가 다른 업무, 다섯 종류의 모듈과 항목을 실제 앱에서도 같은 내용으로 본다. 기존 테스트 사용자만 조회하고 계정을
+-- 만들거나 바꾸지 않는다. 뒤에 더한 내용은 아래의 두 번째 묶음('dev_ui_seed_v2')이 따로 한 번만 넣는다.
 -- 제품 데이터는 기존 app_* 정의자 함수로만 만든다. 'dev_ui_seed_v1' 표시가 있으면 아무것도 바꾸지 않는다(편집·삭제한
 -- 예제를 되살리거나 덮어쓰지 않는다). 새 워크스페이스만 만들므로 실패는 결함이다: 전부 되돌리고 원래 오류 코드로
 -- 실패시켜 `cargo xtask dev`가 멈추게 한다(경고로 바꿔 성공처럼 넘기지 않는다).
@@ -87,9 +88,9 @@ BEGIN
     PERFORM set_config('app.user_id', v_admin::text, true);
     v_module := app_create_module(v_ws, pg_temp.take1(), 'project', v_data->'module'->>'name',
                                   v_data->'module'->>'key', pg_temp.take(2));
-    PERFORM app_set_module_description(v_module, '개발 전용 합성 예제. Storybook과 같은 데이터입니다.');
+    PERFORM app_set_module_description(v_module, v_data->'module'->>'description');
     v_item := app_create_item(v_module, pg_temp.take1(), v_data->'module'->>'item',
-                              '긴 제목·이모지·숫자·상태가 다른 업무로 화면을 점검합니다.', pg_temp.take(2));
+                              v_data->'module'->>'item_description', pg_temp.take(2));
     PERFORM app_set_item_members(v_item, ARRAY[v_user], ARRAY[]::uuid[],
                                  pg_temp.take(app_set_item_members_ids(v_item)));
     FOR v_row IN SELECT * FROM jsonb_array_elements(v_data->'tasks') LOOP
@@ -114,4 +115,104 @@ BEGIN
 END
 $seed$;
 
-SELECT value FROM instance_state WHERE key = 'dev_ui_seed_v1';
+-- 두 번째 묶음('dev_ui_seed_v2'): 프로젝트 모듈의 항목 몇 개와, 모듈 종류마다 하나씩(항목·항목 멤버) 그리고 긴 이름·공백
+-- 없는 이름·이모지 이름의 빈 모듈을 더한다. v1 표시만 있는 기존 개발 DB에도 v1 워크스페이스에 한 번 더한다.
+-- 그 워크스페이스나 프로젝트 모듈을 지웠으면 되살리지 않고, 이미 쓰인 키의 모듈은 건너뛴다(사용자 편집을 덮지 않는다).
+DO $seed_v2$
+DECLARE
+  v_data jsonb := current_setting('fvoci.dev_ui_data')::jsonb;
+  v_people jsonb;
+  v_admin uuid;
+  v_user uuid;
+  v_ws uuid;
+  v_project uuid;
+  v_module uuid;
+  v_item uuid;
+  v_mod jsonb;
+  v_row jsonb;
+  v_members uuid[];
+  v_version integer;
+  v_outcome text;
+  v_today date := current_date;
+  v_modules integer := 0;
+  v_items integer := 0;
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('fvoci:dev_ui_seed_v2', 0));
+  IF EXISTS (SELECT 1 FROM instance_state WHERE key = 'dev_ui_seed_v2') THEN
+    RETURN;
+  END IF;
+  SELECT (value->>'workspace')::uuid INTO v_ws FROM instance_state WHERE key = 'dev_ui_seed_v1';
+  IF v_ws IS NULL THEN
+    RAISE EXCEPTION 'dev_ui_seed_v1 must run first';
+  END IF;
+  SELECT id INTO v_admin FROM users
+    WHERE issuer = current_setting('fvoci.dev_issuer') AND subject = '00000000-0000-4000-8000-00000000000a';
+  SELECT id INTO v_user FROM users
+    WHERE issuer = current_setting('fvoci.dev_issuer') AND subject = '00000000-0000-4000-8000-00000000000b';
+  IF v_admin IS NULL OR v_user IS NULL THEN
+    RAISE EXCEPTION 'existing dev test users are required for this issuer';
+  END IF;
+  v_people := jsonb_build_object('owner', v_admin, 'writer', v_user);
+
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM workspaces WHERE id = v_ws AND deleted_at IS NULL) THEN
+      INSERT INTO instance_state (key, value)
+        VALUES ('dev_ui_seed_v2', jsonb_build_object('workspace', v_ws, 'skipped', 'workspace deleted'));
+      RETURN;
+    END IF;
+    PERFORM set_config('app.user_id', v_admin::text, true);
+    -- v1이 만든 프로젝트 모듈(지금 키가 그대로이고 지우지 않았을 때만).
+    SELECT m.id INTO v_project FROM module_keys k JOIN modules m ON m.id = k.module_id
+      WHERE k.workspace_id = v_ws AND k.key = v_data->'module'->>'key' AND k.retired_at IS NULL
+        AND m.deleted_at IS NULL;
+
+    FOR v_mod IN
+      SELECT jsonb_build_object('module', v_project, 'items', v_data->'project_items')
+        WHERE v_project IS NOT NULL
+      UNION ALL
+      SELECT m FROM jsonb_array_elements(v_data->'modules') AS m
+    LOOP
+      v_module := (v_mod->>'module')::uuid;
+      IF v_module IS NULL THEN
+        IF EXISTS (SELECT 1 FROM module_keys WHERE workspace_id = v_ws AND key = v_mod->>'key') THEN
+          CONTINUE;
+        END IF;
+        v_module := app_create_module(v_ws, pg_temp.take1(), v_mod->>'kind', v_mod->>'name', v_mod->>'key',
+                                      pg_temp.take(2));
+        IF v_mod->>'description' <> '' THEN
+          PERFORM app_set_module_description(v_module, v_mod->>'description');
+        END IF;
+        v_modules := v_modules + 1;
+      END IF;
+      -- 항목: 정보(상태·기간)는 처음 실행한 날 기준의 앞뒤 일수다. 새 항목은 비공개라 멤버로 연다.
+      FOR v_row IN SELECT * FROM jsonb_array_elements(v_mod->'items') LOOP
+        v_item := app_create_item(v_module, pg_temp.take1(), v_row->>'title', v_row->>'description',
+                                  pg_temp.take(2));
+        SELECT coalesce(array_agg((v_people->>p)::uuid), ARRAY[]::uuid[]) INTO v_members
+          FROM jsonb_array_elements_text(v_row->'members') AS p;
+        IF cardinality(v_members) > 0 THEN
+          PERFORM app_set_item_members(v_item, v_members, ARRAY[]::uuid[],
+                                       pg_temp.take(app_set_item_members_ids(v_item)));
+        END IF;
+        -- 정보 패널 저장은 읽은 판을 받는다(D-104). 멤버 정리도 판을 올릴 수 있어 바로 앞에서 읽는다.
+        SELECT profile_version INTO STRICT v_version FROM items WHERE id = v_item;
+        v_outcome := app_set_item_profile(v_item, v_version, v_admin, '', '',
+          v_today + (v_row->>'start')::integer, v_today + (v_row->>'end')::integer, v_row->>'status',
+          '{}'::jsonb, pg_temp.take(2));
+        IF v_outcome <> 'updated' THEN
+          RAISE EXCEPTION 'dev item profile was not saved: %', v_outcome;
+        END IF;
+        v_items := v_items + 1;
+      END LOOP;
+    END LOOP;
+
+    PERFORM set_config('app.user_id', '', true);
+    INSERT INTO instance_state (key, value) VALUES ('dev_ui_seed_v2', jsonb_build_object(
+      'workspace', v_ws, 'project_module', v_project, 'modules', v_modules, 'items', v_items, 'seeded_on', v_today));
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'dev UI examples (v2) not added: %', SQLERRM USING ERRCODE = SQLSTATE;
+  END;
+END
+$seed_v2$;
+
+SELECT key, value FROM instance_state WHERE key IN ('dev_ui_seed_v1', 'dev_ui_seed_v2') ORDER BY key;
