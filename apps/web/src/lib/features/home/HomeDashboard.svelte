@@ -347,9 +347,10 @@
             }}>{mark.label}</button
           >
         {:else}
-          <p class="text-sm text-muted-foreground">
-            {group.empty}
-          </p>
+          <!-- 빈 칸 안내는 홈을 받은 뒤에만(불러오는 중·실패를 "없음"으로 읽지 않게). -->
+          {#if home !== undefined}
+            <p class="text-sm text-muted-foreground">{group.empty}</p>
+          {/if}
         {/each}
       </section>
     {/each}
@@ -382,7 +383,9 @@
           {/if}
         </button>
       {:else}
-        <p class="text-sm text-muted-foreground">{m.home_active_empty()}</p>
+        {#if home !== undefined}
+          <p class="text-sm text-muted-foreground">{m.home_active_empty()}</p>
+        {/if}
       {/each}
     </section>
 
@@ -426,7 +429,9 @@
       {#each notifications as n (n.id)}
         <p class="text-sm">{notificationText(n)}</p>
       {:else}
-        <p class="text-sm text-muted-foreground">{m.home_notifications_empty()}</p>
+        {#if home !== undefined}
+          <p class="text-sm text-muted-foreground">{m.home_notifications_empty()}</p>
+        {/if}
       {/each}
       <a
         class="text-sm underline"

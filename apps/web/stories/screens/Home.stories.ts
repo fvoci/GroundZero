@@ -69,6 +69,14 @@ export const EmptyNewUser: Story = {
   },
 };
 
+/** 받기 전에는 "없습니다"라고 말하지 않는다(불러오는 중·실패를 빈 홈으로 읽지 않게). */
+async function expectNoEmptyClaims(canvasElement: HTMLElement): Promise<void> {
+  const canvas = within(canvasElement);
+  await expect(canvas.queryByText('진행 중인 항목이 없습니다.')).toBeNull();
+  await expect(canvas.queryByText('읽지 않은 알림이 없습니다.')).toBeNull();
+  await expect(canvas.queryByText(/“홈에 고정”으로 더할 수 있습니다/)).toBeNull();
+}
+
 /** 불러오는 중: 홈 응답을 기다린다(날짜가 아직 없다). */
 export const Loading: Story = {
   beforeEach: () => setUpScreen('/', { home: () => never() }),
@@ -76,6 +84,7 @@ export const Loading: Story = {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { level: 1, name: '오늘' });
     await expect(canvas.queryByRole('alert')).toBeNull();
+    await expectNoEmptyClaims(canvasElement);
   },
 };
 
@@ -85,5 +94,6 @@ export const LoadFailed: Story = {
   play: async ({ canvasElement }) => {
     const alert = await within(canvasElement).findByRole('alert');
     await expect(alert).toHaveTextContent('홈을 불러오지 못했습니다.');
+    await expectNoEmptyClaims(canvasElement);
   },
 };
