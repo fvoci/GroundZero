@@ -43,7 +43,7 @@ export function parseEpisodesCsv(text: string): CsvResult {
       errors.push({ line: lineNo, reason: m.courses_csv_title_missing() });
       return;
     }
-    if (title.length > MAX_TITLE) {
+    if (Array.from(title).length > MAX_TITLE) {
       errors.push({
         line: lineNo,
         reason: m.courses_csv_title_too_long({ max: String(MAX_TITLE) }),
