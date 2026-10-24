@@ -9,6 +9,9 @@ use xshell::{Shell, cmd};
 
 use crate::compose::{self, Env};
 
+#[cfg(test)]
+mod tests;
+
 /// 공식 셀프호스트 구성의 revision(2026-10-16 "update 2026-10-16 - 0.8.3"). 바꾸면 compose.test.yaml의 이미지
 /// digest와 docs/self-hosting-supabase.md도 함께 확인한다.
 pub const REVISION: &str = "bc27d2661edd09a5d0b8d76ce33da6d4071a756e";
@@ -100,14 +103,32 @@ impl Supabase {
         ]
     }
 
-    pub fn up(&self, sh: &Shell) -> Result<()> {
+    /// A kept pooler can retain SCRAM secrets and authenticated backends across bootstrap's
+    /// same-password reset. Stop only this project's pooler before changing roles, then start
+    /// it after migration; HTTP health alone does not establish app-role authentication.
+    pub fn prepare_database(&self, sh: &Shell) -> Result<compose::DbUrls> {
         let args = self.args();
-        let up = cmd!(sh, "docker {args...} up --detach --wait db rest supavisor").run();
-        if up.is_err() {
-            // 정리(down)가 컨테이너를 지우기 전에 원인을 남긴다.
+        let args = &args;
+        let result: Result<compose::DbUrls> = (|| {
+            cmd!(sh, "docker {args...} stop supavisor")
+                .run()
+                .context("stop Supavisor before role preparation")?;
+            cmd!(sh, "docker {args...} up --detach --wait db rest")
+                .run()
+                .context("start Supabase database and REST")?;
+            let port = self.host_port(sh, "db", 5432)?;
+            let urls = compose::DbUrls::supabase(port);
+            compose::prepare_database(sh, &urls)?;
+            cmd!(sh, "docker {args...} up --detach --wait supavisor")
+                .run()
+                .context("start Supavisor after role preparation")?;
+            Ok(urls)
+        })();
+        if result.is_err() {
+            // Preserve diagnostics before the caller cleans up, including bootstrap failures.
             self.diagnose(sh);
         }
-        up.with_context(|| format!("docker compose up failed (project {})", self.project))
+        result.with_context(|| format!("Supabase preparation failed (project {})", self.project))
     }
 
     /// 서비스마다 상태·종료 코드·재시작 횟수·OOM·healthcheck 기록·최근 로그를 출력한다. 시험 env의 비밀 값은 가린다.
