@@ -1,0 +1,11 @@
+# New-pin C allowlist — separate from original baseline archive
+
+`new-pin-archive-files.txt` is a literal repository-relative text allowlist. `new-pin-archive-sha256.txt` verifies its selected contents; preserve these two files and this note beside the selection. No original `archive-files.txt` or original baseline evidence is overwritten.
+
+This checkpoint includes exact cache source, server manifest/toolchain and full Cargo.lock snapshots; copied benchmark/oracle/source-match evidence; unchanged source/pin/binary-fingerprint provenance; both authorized raw timing CSVs and summaries; UTC/process/load/context metadata; safe local check/API/CI counts/runtime excerpts; and own-resource identity/config continuity. Source/lock snapshots are evidence copies under target, not source changes.
+
+The actual compiled/tested/prebuilt SHA is **ba6ac88**; the timed current head was **6d2d1a4**; the latest source head at this archive checkpoint is **c1da0cb**. The unchanged hashes justify reuse across independent main merges without relabeling compilation. The predeclared protocol and all original historical measurements remain distinct. Current-head CI/review were pending at checkpoint creation; no earlier green run is claimed as final-current-head validation.
+
+Excluded: optimized executable, sha2 rlib and benchmark-build directory, all caches/node_modules, images, credentials/cookies, raw review JSON/HTML with tokenized UI URLs, and full environment dumps. `updated-harness.sha256` carries omitted binary fingerprints solely to prove unchanged artifacts. Full local check/integration logs remain preserved privately and are fingerprinted, while only safe stage/count/API excerpts are selected. Keyword checks found no credential/DB URL assignments or tokenized review URLs in the selected snapshots/excerpts. Process snapshots contain only PID/state/command name/lifetime CPU, not argv or environment.
+
+The report discloses unrelated shared-host activity and wider baseline tails, retains every accepted sample, and makes no endpoint-latency, allocation-count or meaningful large-body speed claim. Root independently recomputed the two raw CSVs before adopting the result conditionally. This allowlist/report is a stable measurement checkpoint; later final CI/review/all-code reconciliation should be recorded separately without mutating these pinned bytes.

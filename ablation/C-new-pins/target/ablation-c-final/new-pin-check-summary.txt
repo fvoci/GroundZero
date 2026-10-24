@@ -1,0 +1,22 @@
+Actual compiled/tested head: ba6ac88e34b1227108298c2442a825f1d056e3a4
+Command: CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=2 VITEST_MAX_WORKERS=2 cargo xtask check
+Observed exit status: 0
+PASS cargo fmt --check
+PASS cargo clippy
+test result: ok. 84 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.03s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+PASS cargo test (unit)
+PASS cargo deny (advisories, bans, sources)
+PASS openapi.json and api-client schema.ts up to date
+PASS pnpm format:check
+PASS pnpm lint
+PASS pnpm check (svelte-check/tsc)
+PASS i18n messages (both languages, same keys, compiled)
+PASS rhwp WASM notices match deploy/rhwp inputs
+PASS third-party notices up to date
+ Test Files  138 passed (138)
+      Tests  766 passed (766)
+PASS pnpm test
+PASS licenses (cargo deny, pnpm)
+all checks passed

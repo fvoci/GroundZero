@@ -1,0 +1,5 @@
+vector [] []: "4a46a75d39f81999433449f43c77bfe1"
+vector [117, 49] [123, 125]: "e9139f4f87432a88b31104891eb1491e"
+vector [117, 50] [123, 125]: "a15e964cf2c9e415f3f33dc7c6cedf53"
+vector [117, 49] [123, 32, 125]: "b1c8bd8f4d20777303d4974130a6dcfe"
+PASS: 4 fixed vectors and 3072 deterministic binary/user pairs

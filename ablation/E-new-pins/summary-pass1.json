@@ -1,0 +1,126 @@
+{
+  "scope": "optimized release typed marks fetch/filter/split stage only; synthetic personal documents, same targets in both categories",
+  "source": "target/ablation-wave2-updated/latency-pass1.csv",
+  "summaries": [
+    {
+      "n": 0,
+      "phase": "plan_first",
+      "A": {
+        "samples": 24,
+        "p50_us": 1959.346,
+        "p95_us": 2117.678,
+        "MAD_us": 33.33949999999993
+      },
+      "B": {
+        "samples": 24,
+        "p50_us": 1247.1015,
+        "p95_us": 1573.6,
+        "MAD_us": 52.06950000000006
+      },
+      "paired_delta_percent": -36.27802550370575,
+      "paired_MAD_pp": 1.0855161448321269,
+      "regression_gate": "PASS_NO_REPEATABLE_REGRESSION",
+      "gain_above_noise": true
+    },
+    {
+      "n": 0,
+      "phase": "warm",
+      "A": {
+        "samples": 160,
+        "p50_us": 898.082,
+        "p95_us": 1280.907,
+        "MAD_us": 55.8605
+      },
+      "B": {
+        "samples": 160,
+        "p50_us": 449.5435,
+        "p95_us": 701.685,
+        "MAD_us": 32.170500000000004
+      },
+      "paired_delta_percent": -49.416165018274505,
+      "paired_MAD_pp": 1.8824215927762538,
+      "regression_gate": "PASS_NO_REPEATABLE_REGRESSION",
+      "gain_above_noise": true
+    },
+    {
+      "n": 1,
+      "phase": "plan_first",
+      "A": {
+        "samples": 24,
+        "p50_us": 2933.048,
+        "p95_us": 4269.687,
+        "MAD_us": 191.02750000000015
+      },
+      "B": {
+        "samples": 24,
+        "p50_us": 2017.5990000000002,
+        "p95_us": 3790.656,
+        "MAD_us": 124.60400000000016
+      },
+      "paired_delta_percent": -31.320495421713495,
+      "paired_MAD_pp": 1.9528017461474647,
+      "regression_gate": "PASS_NO_REPEATABLE_REGRESSION",
+      "gain_above_noise": true
+    },
+    {
+      "n": 1,
+      "phase": "warm",
+      "A": {
+        "samples": 160,
+        "p50_us": 1856.8595,
+        "p95_us": 2229,
+        "MAD_us": 83.74099999999999
+      },
+      "B": {
+        "samples": 160,
+        "p50_us": 1197.6435000000001,
+        "p95_us": 1484.8,
+        "MAD_us": 56.159000000000106
+      },
+      "paired_delta_percent": -35.08350199571851,
+      "paired_MAD_pp": 2.480763456294799,
+      "regression_gate": "PASS_NO_REPEATABLE_REGRESSION",
+      "gain_above_noise": true
+    },
+    {
+      "n": 100,
+      "phase": "plan_first",
+      "A": {
+        "samples": 24,
+        "p50_us": 56404.5165,
+        "p95_us": 67092.187,
+        "MAD_us": 844.3719999999994
+      },
+      "B": {
+        "samples": 24,
+        "p50_us": 47213.0875,
+        "p95_us": 69428.32,
+        "MAD_us": 615.5294999999969
+      },
+      "paired_delta_percent": -15.695566274044703,
+      "paired_MAD_pp": 1.2166977287315142,
+      "regression_gate": "PASS_NO_REPEATABLE_REGRESSION",
+      "gain_above_noise": true
+    },
+    {
+      "n": 100,
+      "phase": "warm",
+      "A": {
+        "samples": 160,
+        "p50_us": 65280.998999999996,
+        "p95_us": 85500.116,
+        "MAD_us": 716.8984999999993
+      },
+      "B": {
+        "samples": 160,
+        "p50_us": 53301.162,
+        "p95_us": 62267.844,
+        "MAD_us": 1188.7849999999962
+      },
+      "paired_delta_percent": -19.322038052942084,
+      "paired_MAD_pp": 1.1749223491073,
+      "regression_gate": "PASS_NO_REPEATABLE_REGRESSION",
+      "gain_above_noise": true
+    }
+  ]
+}

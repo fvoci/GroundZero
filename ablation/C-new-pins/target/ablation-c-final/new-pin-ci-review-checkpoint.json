@@ -1,0 +1,44 @@
+{
+  "compiled_head": "ba6ac88e34b1227108298c2442a825f1d056e3a4",
+  "timed_head": "6d2d1a469a8b3f1e8172a5d653ecdc4d573d402b",
+  "latest_source_head": "c1da0cb95bb55d8addb414ba95b8ea52fb1f63ac",
+  "local": {
+    "full_standard_check": "PASS",
+    "rust_unit_tests": 99,
+    "frontend_tests": 766,
+    "frontend_test_files": 138,
+    "standard_test_passed": 376,
+    "standard_test_failed": 0,
+    "standard_test_filtered": 18,
+    "cache_api_passed": 3,
+    "equivalence_cases": 3076
+  },
+  "compiled_head_ci": {
+    "run_id": 40094631353,
+    "result": "success",
+    "jobs_passed": [
+      "check",
+      "licenses",
+      "integration",
+      "oidc",
+      "supabase",
+      "rhwp"
+    ]
+  },
+  "latest_source_ci": {
+    "run_id": 40096229732,
+    "result": "in_progress_at_checkpoint"
+  },
+  "review": {
+    "full_review_completed_head": "ba6ac88e34b1227108298c2442a825f1d056e3a4",
+    "actionable_findings": 0,
+    "inline_threads": 0,
+    "outside_diff_findings": 0,
+    "formal_submissions": 0,
+    "later_incremental_runs": "skipped unchanged PR files",
+    "preceding_6d_full_request": "aborted because head changed",
+    "current_full_request": "https://github.com/fvoci/GroundZero/pull/121#issuecomment-6384556727",
+    "current_full_status": "pending_at_checkpoint",
+    "nonblocking_warning": "bot docstring default threshold; existing contract documented and repository has no 80% gate"
+  }
+}

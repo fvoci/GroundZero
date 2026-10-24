@@ -1,0 +1,12 @@
+   Compiling typenum v1.20.1
+   Compiling cmov v0.5.4
+   Compiling ctutils v0.4.5
+   Compiling const-oid v0.10.2
+   Compiling cpufeatures v0.3.1
+   Compiling cfg-if v1.0.5
+   Compiling hybrid-array v0.4.15
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling digest v0.11.3
+   Compiling sha2 v0.11.1
+    Finished `release` profile [optimized] target(s) in 4.12s
