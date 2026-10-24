@@ -79,9 +79,10 @@ export function stopFor(code: number): LiveStop | undefined {
   }
 }
 
-// 커서·이름표 색. 커서 표시가 #rrggbb 형식만 받으므로 흰 글씨와 대비가 충분한 색을 고정해 둔다.
-const COLORS = [
-  '#1d4ed8',
+// 커서·이름표 색. 커서 표시가 #rrggbb 형식만 받으므로 흰 글씨(4.5:1)와 두 화면 밝기의 바탕(커서 선 3:1) 모두와 대비가
+// 충분한 색을 고정해 둔다(tests/theme-contrast.test.ts). 파랑은 어두운 바탕에서 2.95:1이라 한 단계 밝힌다(D-109).
+export const CARET_COLORS = [
+  '#2563eb',
   '#b91c1c',
   '#047857',
   '#7c3aed',
@@ -95,7 +96,7 @@ const COLORS = [
 export function colorFor(id: string): string {
   let hash = 0;
   for (const ch of id) hash = (hash * 31 + (ch.codePointAt(0) ?? 0)) % 1_000_003;
-  return COLORS[hash % COLORS.length] ?? COLORS[0];
+  return CARET_COLORS[hash % CARET_COLORS.length] ?? CARET_COLORS[0];
 }
 
 /**

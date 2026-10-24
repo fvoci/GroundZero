@@ -3,6 +3,8 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { CARET_COLORS } from '$lib/features/documents/live';
+
 // 밝은·어두운 화면의 색 토큰(app.css의 :root·.dark) 대비가 WCAG 2.2 AA를 넘는지 본다. 글자는 4.5:1, 초점 고리처럼 상태를
 // 알리는 표시는 3:1(1.4.11). 반투명 토큰은 그 바탕에 겹쳐 계산한다.
 // 예외(사용자 결정 전): 테두리 --border·--input은 두 화면 모두 3:1에 못 미친다(약 1.3~1.5). 입력 칸은 라벨과 함께 보이며,
@@ -104,5 +106,26 @@ describe.each([
 
   it.each(STATE)('--%s on --%s is at least 3:1', (fg, bg) => {
     expect(contrast(pick(fg), pick(bg))).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// 공동 편집 커서·이름표(D-70)는 사용자 색을 쓴다. 이름표의 흰 글씨는 4.5:1, 커서 선은 두 화면 밝기의 바탕과 3:1.
+describe('collaboration caret colors', () => {
+  const hexLinear = (hex: string): [number, number, number] => {
+    const channel = (at: number): number => decode(parseInt(hex.slice(at, at + 2), 16) / 255);
+    return [channel(1), channel(3), channel(5)];
+  };
+  const ratio = (a: number, b: number): number => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  const background = (selector: string): number => {
+    const value = tokens(selector).background;
+    if (value === undefined) throw new Error('missing --background');
+    return luminance(linear(value));
+  };
+
+  it.each(CARET_COLORS)('%s carries white text and stands out on both backgrounds', (hex) => {
+    const caret = luminance(hexLinear(hex));
+    expect(ratio(caret, 1)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(caret, background(':root'))).toBeGreaterThanOrEqual(3);
+    expect(ratio(caret, background('\\.dark'))).toBeGreaterThanOrEqual(3);
   });
 });
