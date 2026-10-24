@@ -125,7 +125,8 @@ WebKit·실제 Safari는 이 Chromium 묶음의 실행 범위가 아니다.
 원시 출력은 `target/browser/runs/<실행 ID>/`에 보존하며 다음 실행으로 덮어쓰지 않는다.
 `target/browser/artifacts/`는 실행 시작 때 비우며, CI는 이곳의 검증된 실패 캡처·trace·로그만 업로드한다.
 trace는 OIDC 로그인 뒤에 시작하고 로그아웃 전에 끝낸다. 공개할 때 요청·응답의 `*.network` 기록을 제거하고
-남은 압축 내용도 검사한다.
+남은 압축 내용도 검사한다. 공개 trace에는 네트워크 상세가 없고 DOM 재생에서 원래 스타일 일부가 빠질 수 있으므로,
+실제 배치는 함께 보존한 스크린샷으로 확인한다.
 자격 증명·쿠키·토큰을 담은 원본은 업로드 대상이 아니다. 검증이 끝나 표시 파일 `SAFE_TO_UPLOAD`가 있는 경우에만
 Actions artifact를 게시한다. 정상 캡처를 PR에 첨부할 때는 직접 열어 확인하고 Git에는 넣지 않는다.
 `--keep`은 이 명령의 PostgreSQL·Keycloak 컨테이너를 남기고 제품 서버는 종료한다.
