@@ -1,0 +1,54 @@
+## s1-login
+shot /home/kinesis/orca/workspaces/GroundZero/deps-integration/target/deps-integration/final/browser-node24.22.1/shots/01-u1-home.png
+URL http://127.0.0.1:5173/
+## s2-note
+save enabled before click: true
+aria-live: ["저장됨"]
+reopened contains marker: true | list: true
+reopened title: 의존성 검증 노트 1792851425544
+shot /home/kinesis/orca/workspaces/GroundZero/deps-integration/target/deps-integration/final/browser-node24.22.1/shots/07-note-reopened.png
+URL http://127.0.0.1:5173/d/01a16e45-b950-7308-9c38-6f711d9487ee
+## s3-collab
+ws u1: [
+  'ws://127.0.0.1:5173/api/documents/01a16d9d-7f83-7011-887f-0d39140cc6d4/collab?…'
+] ws u2: [
+  'ws://127.0.0.1:5173/api/documents/01a16d9d-7f83-7011-887f-0d39140cc6d4/collab?…'
+live u1: ["실시간 연결됨"]
+u2 sees u1 text after ms: 219
+u1 sees u2 text after ms: 206
+shot /home/kinesis/orca/workspaces/GroundZero/deps-integration/target/deps-integration/final/browser-node24.22.1/shots/08-collab-u1.png
+shot /home/kinesis/orca/workspaces/GroundZero/deps-integration/target/deps-integration/final/browser-node24.22.1/shots/09-collab-u2.png
+live u1: ["실시간 연결됨"]
+live u2: ["실시간 연결됨"]
+## s4-board 할 일 -> 진행 중
+after reload: in 진행 중 = 1 , in 할 일 = 0
+## s4-board 진행 중 -> 할 일 (restore)
+after reload: in 할 일 = 1 , in 진행 중 = 0
+## s5-views
+gantt bars mentioning DEVP: 29
+narrow item scrollWidth/innerWidth: [ 390, 390 ]
+shot /home/kinesis/orca/workspaces/GroundZero/deps-integration/target/deps-integration/final/browser-node24.22.1/shots/19-narrow-item.png
+narrow doc scrollWidth/innerWidth: [ 390, 390 ]
+shot /home/kinesis/orca/workspaces/GroundZero/deps-integration/target/deps-integration/final/browser-node24.22.1/shots/20-narrow-doc.png
+## s6-gantt
+pressed: true null
+headers: 10 | week text: 3
+FAIL locator.scrollIntoViewIfNeeded: Timeout 29979.051999999996ms exceeded.
+Call log:
+[2m  - attempting scroll into view action[22m
+[2m    2 × waiting for element to be stable[22m
+[2m      - element is not visible[22m
+[2m    - retrying scroll into view action[22m
+[2m    - waiting 20ms[22m
+[2m    2 × waiting for element to be stable[22m
+[2m      - element is not visible[22m
+[2m    - retrying scroll into view action[22m
+[2m      - waiting 100ms[22m
+[2m    58 × waiting for element to be stable[22m
+[2m       - element is not visible[22m
+[2m     - retrying scroll into view action[22m
+[2m       - waiting 500ms[22m
+
+## s7-item-calendar (retry after selector fix: first match was hidden)
+visible DEVP entries: ["마감 DEVP-8 관계 예제: 시작 전에 준비 끝","마감 DEVP-4 하위 업무: 검토 목록 작성","마감 DEVP-11 배포 체크리스트 확인","마감 DEVP-2 대표 업무: 준비 사항 확인","마감 DEVP-7 관계 예제: 함께 마무리","마감 DEVP-6 관계 예제: 하루 뒤 함께 시작","◆ DEVP-5 마일스톤: 검토 완료","마감 DEVP-9 API 연결 점검","마감 DEVP-10 문서 초안 검토"]
+shot /home/kinesis/orca/workspaces/GroundZero/deps-integration/target/deps-integration/final/browser-node24.22.1/shots/21-item-calendar-scrolled.png

@@ -1,0 +1,438 @@
+[
+  {
+    "project": "fvoci-deps-rust-cf3466-test",
+    "containers": [
+      {
+        "id": "e0fd28d3b83371df791ba3eaa49a9ab3e9cac8c547603c4755ebf9fc7e99bbd4",
+        "name": "/fvoci-deps-rust-cf3466-test-postgres-1",
+        "created": "2026-10-24T10:14:29.632726725Z",
+        "state": "running",
+        "project": "fvoci-deps-rust-cf3466-test",
+        "service": "postgres",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/var/lib/postgresql/data": ""
+        }
+      },
+      {
+        "id": "6ff1716608b7728ffd7af1428f29fae253f9251705d8943f7f9c265a6661866e",
+        "name": "/fvoci-deps-rust-cf3466-test-meilisearch-1",
+        "created": "2026-10-24T10:14:29.616247905Z",
+        "state": "running",
+        "project": "fvoci-deps-rust-cf3466-test",
+        "service": "meilisearch",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/meili_data": ""
+        }
+      },
+      {
+        "id": "0aa545516a25bc14c8975b44d3a33d69777c4189c1dda6d87eb48e4eadbf5bf8",
+        "name": "/fvoci-deps-rust-cf3466-test-keycloak-1",
+        "created": "2026-10-24T10:14:29.615849765Z",
+        "state": "running",
+        "project": "fvoci-deps-rust-cf3466-test",
+        "service": "keycloak",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy/compose.test.yaml",
+        "mounts": [
+          {
+            "type": "bind",
+            "source": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy/keycloak/realm-test.json",
+            "destination": "/opt/keycloak/data/import/realm-test.json"
+          }
+        ]
+      },
+      {
+        "id": "646946c04ff5d8d91cb71c8325a4ad617b4eb9f886cd491579b703325f1f61aa",
+        "name": "/fvoci-deps-rust-cf3466-test-seaweedfs-1",
+        "created": "2026-10-24T10:14:29.615666133Z",
+        "state": "running",
+        "project": "fvoci-deps-rust-cf3466-test",
+        "service": "seaweedfs",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/data": ""
+        }
+      }
+    ]
+  },
+  {
+    "project": "fvoci-deps-rust-cf3466-supabase",
+    "containers": [
+      {
+        "id": "c047755085f2843538d961429f3e9b989cde0be80b941cddf2479c76ade57c87",
+        "name": "/fvoci-deps-rust-cf3466-supabase-supavisor-1",
+        "created": "2026-10-24T10:17:28.486487117Z",
+        "state": "running",
+        "project": "fvoci-deps-rust-cf3466-supabase",
+        "service": "supavisor",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml,/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy/supabase/compose.test.yaml",
+        "mounts": [
+          {
+            "type": "bind",
+            "source": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/volumes/pooler/pooler.exs",
+            "destination": "/etc/pooler/pooler.exs"
+          }
+        ]
+      },
+      {
+        "id": "5b0fb990516be0baa1df2c0384539582f5b0fcdefa5fd34f78f587fb22d0c90e",
+        "name": "/fvoci-deps-rust-cf3466-supabase-rest-1",
+        "created": "2026-10-24T10:17:28.478826965Z",
+        "state": "running",
+        "project": "fvoci-deps-rust-cf3466-supabase",
+        "service": "rest",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml,/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy/supabase/compose.test.yaml",
+        "mounts": []
+      },
+      {
+        "id": "86ea73e16a626dc4b8ae229112795bdb16a3e8519a4f8a619ba1eed9d189c03a",
+        "name": "/fvoci-deps-rust-cf3466-supabase-db-1",
+        "created": "2026-10-24T10:17:28.123786046Z",
+        "state": "running",
+        "project": "fvoci-deps-rust-cf3466-supabase",
+        "service": "db",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/docker-compose.yml,/home/kinesis/orca/workspaces/GroundZero/deps-rust/deploy/supabase/compose.test.yaml",
+        "mounts": [
+          {
+            "type": "volume",
+            "source": "/var/lib/docker/volumes/fvoci-deps-rust-cf3466-supabase_db-config/_data",
+            "destination": "/etc/postgresql-custom"
+          },
+          {
+            "type": "bind",
+            "source": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/volumes/db/webhooks.sql",
+            "destination": "/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql"
+          },
+          {
+            "type": "bind",
+            "source": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/volumes/db/jwt.sql",
+            "destination": "/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql"
+          },
+          {
+            "type": "bind",
+            "source": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/volumes/db/roles.sql",
+            "destination": "/docker-entrypoint-initdb.d/init-scripts/99-roles.sql"
+          },
+          {
+            "type": "bind",
+            "source": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/volumes/db/_supabase.sql",
+            "destination": "/docker-entrypoint-initdb.d/migrations/97-_supabase.sql"
+          },
+          {
+            "type": "bind",
+            "source": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/volumes/db/logs.sql",
+            "destination": "/docker-entrypoint-initdb.d/migrations/99-logs.sql"
+          },
+          {
+            "type": "bind",
+            "source": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/volumes/db/pooler.sql",
+            "destination": "/docker-entrypoint-initdb.d/migrations/99-pooler.sql"
+          },
+          {
+            "type": "bind",
+            "source": "/home/kinesis/orca/workspaces/GroundZero/deps-rust/target/supabase/bc27d2661edd09a5d0b8d76ce33da6d4071a756e/docker/volumes/db/realtime.sql",
+            "destination": "/docker-entrypoint-initdb.d/migrations/99-realtime.sql"
+          },
+          {
+            "type": "tmpfs",
+            "source": "",
+            "destination": "/var/lib/postgresql/data"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "project": "fvoci-ablation-scout-028b53-test",
+    "containers": [
+      {
+        "id": "c5cfc23fafa0a725b79901000ecdba9e05d7aac075353977471e1bb37555d507",
+        "name": "/fvoci-ablation-scout-028b53-test-postgres-1",
+        "created": "2026-10-24T10:26:00.4936714Z",
+        "state": "running",
+        "project": "fvoci-ablation-scout-028b53-test",
+        "service": "postgres",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/var/lib/postgresql/data": ""
+        }
+      },
+      {
+        "id": "ae49b6c94fe9e965d42091b5e036c6c665733d30a3c7ad20db9d14164f4ca1a1",
+        "name": "/fvoci-ablation-scout-028b53-test-seaweedfs-1",
+        "created": "2026-10-24T10:26:00.479630362Z",
+        "state": "running",
+        "project": "fvoci-ablation-scout-028b53-test",
+        "service": "seaweedfs",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/data": ""
+        }
+      },
+      {
+        "id": "971bfd76394e7383728d7567daa2fa0ee7a4190b9cc16b11e2391874fa2934ad",
+        "name": "/fvoci-ablation-scout-028b53-test-meilisearch-1",
+        "created": "2026-10-24T10:26:00.478899827Z",
+        "state": "running",
+        "project": "fvoci-ablation-scout-028b53-test",
+        "service": "meilisearch",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/meili_data": ""
+        }
+      }
+    ]
+  },
+  {
+    "project": "fvoci-ablation-a-final-67dc1df2",
+    "containers": [
+      {
+        "id": "4b36bcc9f10f3362285cfbe1f994903ea8f77dd6e255575c1200ca9dfdc7d0d7",
+        "name": "/fvoci-ablation-a-final-67dc1df2-postgres-1",
+        "created": "2026-10-24T12:37:25.286066208Z",
+        "state": "running",
+        "project": "fvoci-ablation-a-final-67dc1df2",
+        "service": "postgres",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/var/lib/postgresql/data": ""
+        }
+      },
+      {
+        "id": "0541bf033f7a49453ca23c9b07bdcc407dbd1678796e373b688ab3500745c0f1",
+        "name": "/fvoci-ablation-a-final-67dc1df2-seaweedfs-1",
+        "created": "2026-10-24T12:37:25.27315081Z",
+        "state": "running",
+        "project": "fvoci-ablation-a-final-67dc1df2",
+        "service": "seaweedfs",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/data": ""
+        }
+      },
+      {
+        "id": "85642219fa469fe76bbf22c132e4b637d2eea1ec8c990ba59e5f0d4ae657c801",
+        "name": "/fvoci-ablation-a-final-67dc1df2-meilisearch-1",
+        "created": "2026-10-24T12:37:25.273057299Z",
+        "state": "running",
+        "project": "fvoci-ablation-a-final-67dc1df2",
+        "service": "meilisearch",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-scout/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/meili_data": ""
+        }
+      }
+    ]
+  },
+  {
+    "project": "fvoci-ablation-etag-bf3b8f-test",
+    "containers": [
+      {
+        "id": "60e849d7e707ba659a889322f193d2968e0f6226347f0874e375e37acc021c56",
+        "name": "/fvoci-ablation-etag-bf3b8f-test-postgres-1",
+        "created": "2026-10-24T10:08:56.711461836Z",
+        "state": "running",
+        "project": "fvoci-ablation-etag-bf3b8f-test",
+        "service": "postgres",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-etag/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-etag/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/var/lib/postgresql/data": ""
+        }
+      },
+      {
+        "id": "74d67158c0490df536a41e0f24ee5e49cb7f8d9ee63fe1500f10f17313621141",
+        "name": "/fvoci-ablation-etag-bf3b8f-test-seaweedfs-1",
+        "created": "2026-10-24T10:08:56.689820868Z",
+        "state": "running",
+        "project": "fvoci-ablation-etag-bf3b8f-test",
+        "service": "seaweedfs",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-etag/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-etag/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/data": ""
+        }
+      },
+      {
+        "id": "ab768d841ff38e6d166cb241fe93dcb122b443760f5450e6edcaccba2d100a69",
+        "name": "/fvoci-ablation-etag-bf3b8f-test-meilisearch-1",
+        "created": "2026-10-24T10:08:56.689690881Z",
+        "state": "running",
+        "project": "fvoci-ablation-etag-bf3b8f-test",
+        "service": "meilisearch",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-etag/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-etag/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/meili_data": ""
+        }
+      }
+    ]
+  },
+  {
+    "project": "fvoci-ablation-home-marks-f0352d-test",
+    "containers": [
+      {
+        "id": "02bd981d3e4cb4d9dcbf91ddabc7d434ee524cbe5f44cb455ba41ee9c2a50bee",
+        "name": "/fvoci-ablation-home-marks-f0352d-test-postgres-1",
+        "created": "2026-10-24T10:18:16.828257323Z",
+        "state": "running",
+        "project": "fvoci-ablation-home-marks-f0352d-test",
+        "service": "postgres",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/var/lib/postgresql/data": ""
+        }
+      },
+      {
+        "id": "e6c0ac565b280495e22447bd91dd34ef0a1e9c3d8a6572054707af7ed3d75443",
+        "name": "/fvoci-ablation-home-marks-f0352d-test-seaweedfs-1",
+        "created": "2026-10-24T10:18:16.812042204Z",
+        "state": "running",
+        "project": "fvoci-ablation-home-marks-f0352d-test",
+        "service": "seaweedfs",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/data": ""
+        }
+      },
+      {
+        "id": "b3f37624a04a1da028a2dd780a06eeac57a1e0912e8d8ce8f0a1c9bfd5f24dc5",
+        "name": "/fvoci-ablation-home-marks-f0352d-test-meilisearch-1",
+        "created": "2026-10-24T10:18:16.810545672Z",
+        "state": "running",
+        "project": "fvoci-ablation-home-marks-f0352d-test",
+        "service": "meilisearch",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/meili_data": ""
+        }
+      }
+    ]
+  },
+  {
+    "project": "fvoci-ablation-home-marks-f0352d-test-standard",
+    "containers": [
+      {
+        "id": "bf5c7d63b11edd45d2aeae7cf764bc4c0a24ae4e52b1d66dca488a56ff0e61e0",
+        "name": "/fvoci-ablation-home-marks-f0352d-test-standard-postgres-1",
+        "created": "2026-10-24T11:27:10.635680419Z",
+        "state": "running",
+        "project": "fvoci-ablation-home-marks-f0352d-test-standard",
+        "service": "postgres",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/var/lib/postgresql/data": ""
+        }
+      },
+      {
+        "id": "39bfd957bb713ab64c442f025f31b1b60b82108183117a571a66ccc64b8d35e0",
+        "name": "/fvoci-ablation-home-marks-f0352d-test-standard-seaweedfs-1",
+        "created": "2026-10-24T11:27:10.623483426Z",
+        "state": "running",
+        "project": "fvoci-ablation-home-marks-f0352d-test-standard",
+        "service": "seaweedfs",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/data": ""
+        }
+      },
+      {
+        "id": "e895166d233233cc8952aad3564ce576bd11bfbdd2bf546ec561392832bd18b5",
+        "name": "/fvoci-ablation-home-marks-f0352d-test-standard-meilisearch-1",
+        "created": "2026-10-24T11:27:10.623163642Z",
+        "state": "running",
+        "project": "fvoci-ablation-home-marks-f0352d-test-standard",
+        "service": "meilisearch",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/meili_data": ""
+        }
+      }
+    ]
+  },
+  {
+    "project": "fvoci-ablation-home-marks-f0352d-test-updated-standard",
+    "containers": [
+      {
+        "id": "8a9198f0b615e866853e6ef2f33fa7f6e3cf03dfa4e8a903549204556c52c10e",
+        "name": "/fvoci-ablation-home-marks-f0352d-test-updated-standard-postgres-1",
+        "created": "2026-10-24T12:35:04.19067816Z",
+        "state": "running",
+        "project": "fvoci-ablation-home-marks-f0352d-test-updated-standard",
+        "service": "postgres",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/var/lib/postgresql/data": ""
+        }
+      },
+      {
+        "id": "498589e0d2cbedf992c371bf58924b86991b7f6dbc9c6ff59c382d341fb04c46",
+        "name": "/fvoci-ablation-home-marks-f0352d-test-updated-standard-meilisearch-1",
+        "created": "2026-10-24T12:35:04.176336723Z",
+        "state": "running",
+        "project": "fvoci-ablation-home-marks-f0352d-test-updated-standard",
+        "service": "meilisearch",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/meili_data": ""
+        }
+      },
+      {
+        "id": "74f4ab16e4009d97e3687365f7f61d937b9b3fd430f053843deb0de535c4f968",
+        "name": "/fvoci-ablation-home-marks-f0352d-test-updated-standard-seaweedfs-1",
+        "created": "2026-10-24T12:35:04.176280461Z",
+        "state": "running",
+        "project": "fvoci-ablation-home-marks-f0352d-test-updated-standard",
+        "service": "seaweedfs",
+        "workingDir": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy",
+        "configFiles": "/home/kinesis/orca/workspaces/GroundZero/ablation-home-marks/deploy/compose.test.yaml",
+        "mounts": [],
+        "tmpfs": {
+          "/data": ""
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,2 @@
+chromium 156.0.8078.4 playwright-core 1.64.0
+node v24.22.1; SHA e9b0f2c22e499c4d4f7126d680e214cdf0a51240

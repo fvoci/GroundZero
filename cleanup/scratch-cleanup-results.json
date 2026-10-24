@@ -1,0 +1,206 @@
+[
+  {
+    "project": "fvoci-ablation-scout-028b53-test",
+    "container": "c5cfc23fafa0a725b79901000ecdba9e05d7aac075353977471e1bb37555d507",
+    "server": "7700178703633895463",
+    "database": "fvoci_s3_files_01a16d74788d76119595951094be4838",
+    "evidence": "target/coordination-evidence/ablation/A/archive/database-ownership.json",
+    "evidenceSha256": "334d306a98abeed6d4fa87875b474d84d101594e0eafdeead44819abf7929547",
+    "run": "ablation-a-baseline-20261024T100355Z",
+    "at": "2026-10-24T14:22:30.154Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-scout-028b53-test",
+    "container": "c5cfc23fafa0a725b79901000ecdba9e05d7aac075353977471e1bb37555d507",
+    "server": "7700178703633895463",
+    "database": "fvoci_initial_admin_01a16d750dab7342b5f7a52d547cd23f",
+    "evidence": "target/coordination-evidence/ablation/A/archive/database-ownership.json",
+    "evidenceSha256": "334d306a98abeed6d4fa87875b474d84d101594e0eafdeead44819abf7929547",
+    "run": "ablation-a-baseline-20261024T100355Z",
+    "at": "2026-10-24T14:22:30.364Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-scout-028b53-test",
+    "container": "c5cfc23fafa0a725b79901000ecdba9e05d7aac075353977471e1bb37555d507",
+    "server": "7700178703633895463",
+    "database": "fvoci_shutdown_01a16d75a2c57439bc7689cae3fb3044",
+    "evidence": "target/coordination-evidence/ablation/A/archive/database-ownership.json",
+    "evidenceSha256": "334d306a98abeed6d4fa87875b474d84d101594e0eafdeead44819abf7929547",
+    "run": "ablation-a-baseline-20261024T100355Z",
+    "at": "2026-10-24T14:22:30.562Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-scout-028b53-test",
+    "container": "c5cfc23fafa0a725b79901000ecdba9e05d7aac075353977471e1bb37555d507",
+    "server": "7700178703633895463",
+    "database": "fvoci_storage_claim_01a16d75c4db72449f19030b54594543",
+    "evidence": "target/coordination-evidence/ablation/A/archive/database-ownership.json",
+    "evidenceSha256": "334d306a98abeed6d4fa87875b474d84d101594e0eafdeead44819abf7929547",
+    "run": "ablation-a-baseline-20261024T100355Z",
+    "at": "2026-10-24T14:22:30.777Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-a-final-67dc1df2",
+    "container": "4b36bcc9f10f3362285cfbe1f994903ea8f77dd6e255575c1200ca9dfdc7d0d7",
+    "server": "7700212565316374567",
+    "database": "fvoci_s3_files_01a16ded01f072e2ba7fb6bdad6e05f7",
+    "evidence": "target/coordination-evidence/ablation/A-new-pins/archive/database-ownership.json",
+    "evidenceSha256": "a64fe75c36b0261a179ae31e804fb393ce72a1168354484bddac919d9b1b6983",
+    "run": "ablation-a-updated-main-20261024",
+    "at": "2026-10-24T14:22:30.983Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-a-final-67dc1df2",
+    "container": "4b36bcc9f10f3362285cfbe1f994903ea8f77dd6e255575c1200ca9dfdc7d0d7",
+    "server": "7700212565316374567",
+    "database": "fvoci_initial_admin_01a16ded9c4b74deae7a470700406822",
+    "evidence": "target/coordination-evidence/ablation/A-new-pins/archive/database-ownership.json",
+    "evidenceSha256": "a64fe75c36b0261a179ae31e804fb393ce72a1168354484bddac919d9b1b6983",
+    "run": "ablation-a-updated-main-20261024",
+    "at": "2026-10-24T14:22:31.177Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-a-final-67dc1df2",
+    "container": "4b36bcc9f10f3362285cfbe1f994903ea8f77dd6e255575c1200ca9dfdc7d0d7",
+    "server": "7700212565316374567",
+    "database": "fvoci_shutdown_01a16dee40527440818ba9b746bcf70f",
+    "evidence": "target/coordination-evidence/ablation/A-new-pins/archive/database-ownership.json",
+    "evidenceSha256": "a64fe75c36b0261a179ae31e804fb393ce72a1168354484bddac919d9b1b6983",
+    "run": "ablation-a-updated-main-20261024",
+    "at": "2026-10-24T14:22:31.377Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-a-final-67dc1df2",
+    "container": "4b36bcc9f10f3362285cfbe1f994903ea8f77dd6e255575c1200ca9dfdc7d0d7",
+    "server": "7700212565316374567",
+    "database": "fvoci_storage_claim_01a16dee670f74159c9631e8c6c1b05d",
+    "evidence": "target/coordination-evidence/ablation/A-new-pins/archive/database-ownership.json",
+    "evidenceSha256": "a64fe75c36b0261a179ae31e804fb393ce72a1168354484bddac919d9b1b6983",
+    "run": "ablation-a-updated-main-20261024",
+    "at": "2026-10-24T14:22:31.582Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-home-marks-f0352d-test-standard",
+    "container": "bf5c7d63b11edd45d2aeae7cf764bc4c0a24ae4e52b1d66dca488a56ff0e61e0",
+    "server": "7700194463416586279",
+    "database": "fvoci_initial_admin_01a16db11162727ea1aa0ffd8ad123d5",
+    "evidence": "target/coordination-evidence/ablation/E/target/ablation-wave2/standard-ddl-audit.json",
+    "evidenceSha256": "34325efc0e341259cc41e43b5047ff6f9e4efb7918f4b5de09c4e3f4e8807376",
+    "run": {
+      "task": "task_be5df1e065f8",
+      "dispatch": "ctx_628d1bc7eac9"
+    },
+    "at": "2026-10-24T14:22:31.798Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-home-marks-f0352d-test-standard",
+    "container": "bf5c7d63b11edd45d2aeae7cf764bc4c0a24ae4e52b1d66dca488a56ff0e61e0",
+    "server": "7700194463416586279",
+    "database": "fvoci_s3_files_01a16db075a472d1b50b12f6e47aa960",
+    "evidence": "target/coordination-evidence/ablation/E/target/ablation-wave2/standard-ddl-audit.json",
+    "evidenceSha256": "34325efc0e341259cc41e43b5047ff6f9e4efb7918f4b5de09c4e3f4e8807376",
+    "run": {
+      "task": "task_be5df1e065f8",
+      "dispatch": "ctx_628d1bc7eac9"
+    },
+    "at": "2026-10-24T14:22:32.046Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-home-marks-f0352d-test-standard",
+    "container": "bf5c7d63b11edd45d2aeae7cf764bc4c0a24ae4e52b1d66dca488a56ff0e61e0",
+    "server": "7700194463416586279",
+    "database": "fvoci_shutdown_01a16db1a8a277f993d06676a742b9a0",
+    "evidence": "target/coordination-evidence/ablation/E/target/ablation-wave2/standard-ddl-audit.json",
+    "evidenceSha256": "34325efc0e341259cc41e43b5047ff6f9e4efb7918f4b5de09c4e3f4e8807376",
+    "run": {
+      "task": "task_be5df1e065f8",
+      "dispatch": "ctx_628d1bc7eac9"
+    },
+    "at": "2026-10-24T14:22:32.253Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-home-marks-f0352d-test-standard",
+    "container": "bf5c7d63b11edd45d2aeae7cf764bc4c0a24ae4e52b1d66dca488a56ff0e61e0",
+    "server": "7700194463416586279",
+    "database": "fvoci_storage_claim_01a16db1cbe27170a8e1492c6be2048f",
+    "evidence": "target/coordination-evidence/ablation/E/target/ablation-wave2/standard-ddl-audit.json",
+    "evidenceSha256": "34325efc0e341259cc41e43b5047ff6f9e4efb7918f4b5de09c4e3f4e8807376",
+    "run": {
+      "task": "task_be5df1e065f8",
+      "dispatch": "ctx_628d1bc7eac9"
+    },
+    "at": "2026-10-24T14:22:32.447Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-home-marks-f0352d-test-updated-standard",
+    "container": "8a9198f0b615e866853e6ef2f33fa7f6e3cf03dfa4e8a903549204556c52c10e",
+    "server": "7700211961989640231",
+    "database": "fvoci_initial_admin_01a16df283477584a2296750a447d8c6",
+    "evidence": "target/coordination-evidence/ablation/E-new-pins/target/ablation-wave2-updated/standard-ddl-audit.json",
+    "evidenceSha256": "b2de2f11e43e9c209dfd41719238f957fe0fd4dc9aec1d9d2e398ed34df3c799",
+    "run": {
+      "task": "task_be5df1e065f8",
+      "dispatch": "ctx_628d1bc7eac9",
+      "phase": "dependency-main"
+    },
+    "at": "2026-10-24T14:22:32.648Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-home-marks-f0352d-test-updated-standard",
+    "container": "8a9198f0b615e866853e6ef2f33fa7f6e3cf03dfa4e8a903549204556c52c10e",
+    "server": "7700211961989640231",
+    "database": "fvoci_s3_files_01a16df1e49370b884e25f9b44431123",
+    "evidence": "target/coordination-evidence/ablation/E-new-pins/target/ablation-wave2-updated/standard-ddl-audit.json",
+    "evidenceSha256": "b2de2f11e43e9c209dfd41719238f957fe0fd4dc9aec1d9d2e398ed34df3c799",
+    "run": {
+      "task": "task_be5df1e065f8",
+      "dispatch": "ctx_628d1bc7eac9",
+      "phase": "dependency-main"
+    },
+    "at": "2026-10-24T14:22:32.868Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-home-marks-f0352d-test-updated-standard",
+    "container": "8a9198f0b615e866853e6ef2f33fa7f6e3cf03dfa4e8a903549204556c52c10e",
+    "server": "7700211961989640231",
+    "database": "fvoci_shutdown_01a16df320ca7686a5dc3950c5cb206a",
+    "evidence": "target/coordination-evidence/ablation/E-new-pins/target/ablation-wave2-updated/standard-ddl-audit.json",
+    "evidenceSha256": "b2de2f11e43e9c209dfd41719238f957fe0fd4dc9aec1d9d2e398ed34df3c799",
+    "run": {
+      "task": "task_be5df1e065f8",
+      "dispatch": "ctx_628d1bc7eac9",
+      "phase": "dependency-main"
+    },
+    "at": "2026-10-24T14:22:33.073Z",
+    "result": "DROP DATABASE"
+  },
+  {
+    "project": "fvoci-ablation-home-marks-f0352d-test-updated-standard",
+    "container": "8a9198f0b615e866853e6ef2f33fa7f6e3cf03dfa4e8a903549204556c52c10e",
+    "server": "7700211961989640231",
+    "database": "fvoci_storage_claim_01a16df3460f701fa514c8eb67fe4d6b",
+    "evidence": "target/coordination-evidence/ablation/E-new-pins/target/ablation-wave2-updated/standard-ddl-audit.json",
+    "evidenceSha256": "b2de2f11e43e9c209dfd41719238f957fe0fd4dc9aec1d9d2e398ed34df3c799",
+    "run": {
+      "task": "task_be5df1e065f8",
+      "dispatch": "ctx_628d1bc7eac9",
+      "phase": "dependency-main"
+    },
+    "at": "2026-10-24T14:22:33.270Z",
+    "result": "DROP DATABASE"
+  }
+]

@@ -1,0 +1,9 @@
+725109 exe=/home/kinesis/orca/workspaces/GroundZero/deps-integration/target/debug/xtask ppid=3966320 cwd=/home/kinesis/orca/workspaces/GroundZero/deps-integration cmd=target/debug/xtask dev --oidc 
+726990 exe=/home/kinesis/orca/workspaces/GroundZero/deps-integration/target/debug/fvoci-server ppid=725109 cwd=/home/kinesis/orca/workspaces/GroundZero/deps-integration cmd=target/debug/fvoci-server 
+729819 exe=/home/kinesis/.nvm/versions/node/v24.22.1/bin/node ppid=727062 cwd=/home/kinesis/orca/workspaces/GroundZero/deps-integration/apps/web cmd=node /home/kinesis/orca/workspaces/GroundZero/deps-integration/apps/we
+xtask(725109)-+-MainThread(726989)---pnpm-native(727009)-+-sh(727062)---MainThread(729819)
+              |                                          `-sh(727063)
+              `-fvoci-server(726990)
+838102 exe=/home/kinesis/orca/workspaces/GroundZero/deps-integration/target/debug/xtask cwd=/home/kinesis/orca/workspaces/GroundZero/deps-integration
+840118 exe=/home/kinesis/orca/workspaces/GroundZero/deps-integration/target/debug/fvoci-server cwd=/home/kinesis/orca/workspaces/GroundZero/deps-integration
+843149 exe=/home/kinesis/.nvm/versions/node/v24.22.1/bin/node cwd=/home/kinesis/orca/workspaces/GroundZero/deps-integration/apps/web

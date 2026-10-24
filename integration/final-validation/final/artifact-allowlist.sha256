@@ -1,0 +1,38 @@
+# Safe text artifact allowlist (sha256). Root: target/deps-integration
+# Scanned for credentialed URLs, literal test passwords, cookies/tokens, full env dumps: none found.
+# Excluded: every lib.cjs (test-realm passwords copied from deploy/keycloak/realm-test.json), container-src/ and main-src/ clones, corepack-bin*/ shims, PR bodies (pr-body*.md).
+b0b77a025d14392b4b7cc38b4aab45771cc6e1ce61dacfe472ff40aa2ad85583  final/final-validation.md
+8cf2856df7dc24cb4d991ae6358836be25aa7a117e79446ceb5985b7a171d075  final/host-versions.txt
+437fe195953fb632b6dc675c1f4b8e09fceef6b958c7d35bcd6d2f6f87515734  final/browser-node24.22.1-runtime.txt
+08692c0bdbb346a385bc9d4286c8ea503ae239f0282814a39afb7d4f67f6fc5d  final/browser-node24.22.1-results.txt
+bc902c157e4b6af48c3011b158dd724b8453a0865e09eb9a240c1e266c4c18c0  final/runtime-processes-node24.22.1.txt
+059a4859c646809547b8ba5a5dcdfacd9775a3425f7cfa6128d8d96c1fce170f  final/crypto-bigint-path.txt
+1681551a03cfe2a4c51c69fdec3a3335fef99fa084a49341fa493c8a3bbed9c6  final/deny-no-0387.toml
+4a3afa2f4c84d6582f777d53dacc5090012616357616dd821b695781cc2e68d0  final/deny-no-0387.log
+15950a68a7ed99c59779717acefdceb3f69cfd31bde67d2c954f2a3cea4d7955  final/pnpm-audit.log
+0a6e15edf0dae80bd1681a7c062c5258b5dd5570975d560cdaa9f9317df150aa  final/api-regen.log
+72c02cc759fd4c4a602bd517faaa2b14911155a996fd0a1c6c5e96874737c5f4  final/web-build.log
+e793e8e555a04a1cdf41b0ed405638dc27236823e405f2ec0f19d9fe82205261  final/host-install.log
+366e2669d6d18a9a6716c7952aa307bc36b460c35ff94de43336a76ed14a336b  final/host-check.log
+9d7fb77b1ac24c04ac537b3414025e4d97017099951aac2435950dc175e5235c  final/container-check.log
+c1c36f430eed26411f5a9be06fbc22aae4e76e27ab3a6619803264ac0132e27d  final/test-plain.log
+e52f0e95bbeb1ac4ec53100474c5ffcd38efa2a4a11ee856d379b7aff76b300a  final/test-oidc.log
+518b354c86ee4bd3968292753be004975ab49b3924f2aff8995d75bd5b19190a  final/test-supabase.log
+27369eed966a5736075ac2ea0c695a0dd19f67d9fe8a3483012b3a2cb4ec5242  final/test-supabase-2.log
+06864dbd7c20c4f20b024b5ca66568822a75e28c8199355e2452574cdd273818  final/rerun-audit-session-1.log
+8bcf5bbffcdae4d69f052501b9a645d710e491d1e31856323b04fb3d202dcb37  final/rerun-audit-session-2.log
+82c91ddcf4f58f564dc022825f1c62ce22acc339159e38faedafc4b005e25760  final/rerun-audit-session-3.log
+e50be299bff04338571256af95bd81ae460e5a2a53b1d2cc6efe26bc15c6d278  final/dev.log
+0a3f323718046651b085b113f39c473f66295fba62fe6b3077ddc2fb54c3054b  final/dev-node24.22.1.log
+2718b63e31c1dcf3b2f8de1fea636e90a734ddb7606877ecba4fa0130c37d38d  final/dev-node24.22.1-calendar.log
+fa4224afb8db72c15ab04a7e3bfc4fbfb1ae4f9f3f85ee334f35fce9a70d583b  final/cleanup-resource-manifest.tsv
+5abd742196e1d1016c5e10fee8f8d3d2b8b41ebe96a0032f6d0dd257902e5014  resources-manifest.md
+b23984839526b7f6b39af83274214ab31066ea906d7178594f46eb5fb60a2408  resources-manifest.tsv
+2820b56fdf1db2655c2fcdb756c8181afc10298b7d34e5e6958b853b205b5a69  handoff.md
+95bb7d3116a0784e5c1ad0742be3a011352d6e2d11ff04994a796de1c60f0b27  final/browser-node24.22.1/s1-login.cjs
+5764b791ca92644ef24519ea15b8c4e6d649b9a6e243ea2ac83d3d6bc66f375d  final/browser-node24.22.1/s2-note.cjs
+ceb46eaf0c8dae44fde8ee11419db9887579bae18cf85c6689d45a295f492d08  final/browser-node24.22.1/s3-collab.cjs
+80fadcda6c5bcee70ec68659ba02b7eb875839965dd203e6eeae17915dd9367a  final/browser-node24.22.1/s4-board.cjs
+23116693f8ee6a4bb8c2561754aeb4352e01c41f7f837d58481e37710282e631  final/browser-node24.22.1/s5-views.cjs
+986cab09339bd02e7687018c8a54fa571c33bb8f5fbfbcb35d39ff0d0fe6a49a  final/browser-node24.22.1/s6-gantt.cjs
+e538866ad427fa113fb8a414c08f7094f382fa3821b94002deda97b9646ebd37  final/browser-node24.22.1/s7-item-calendar.cjs

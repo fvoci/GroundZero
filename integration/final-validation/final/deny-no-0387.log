@@ -1,0 +1,49 @@
+error[vulnerability]: Multiple timing variability issues in operations intended to be constant-time
+   ┌─ /home/kinesis/orca/workspaces/GroundZero/deps-integration/Cargo.lock:59:1
+   │
+59 │ crypto-bigint 0.5.5 registry+https://github.com/rust-lang/crates.io-index
+   │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ security vulnerability detected
+   │
+   ├ ID: RUSTSEC-2026-0387
+   ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0387
+   ├ ## Summary
+     
+     Several operations intended to be constant-time could execute secret-dependent
+     branches, depending on the compiler and target CPU. These include subtraction,
+     zero counting, division, and Montgomery multiplication.
+     
+     Additionally, `UintRef` equality could terminate at the first unequal limb,
+     and `BoxedMontyForm::invert` branched on whether an inverse exists.
+     
+     ## Impact
+     
+     Applications using affected operations on secret integers may leak information
+     through timing or microarchitectural side channels. This includes information
+     about intermediate arithmetic values, matching limbs, and invertibility.
+     
+     Such leakage could potentially enable recovery of cryptographic secrets.
+     Practical exploitability depends on the downstream algorithm, compiler, target
+     CPU, and an attacker's ability to observe the side channel.
+     
+     ## Resolution
+     
+     Upgrade to v0.7.6, which removes the identified branches, updates `ctutils` to
+     include its constant-time fixes, and adds BINSEC-based regression checks using
+     `cargo checkct` for arithmetic on multiple targets.
+   ├ Announcement: https://github.com/RustCrypto/crypto-bigint/pull/1365
+   ├ Solution: Upgrade to >=0.7.6 (try `cargo update -p crypto-bigint`)
+   ├ crypto-bigint v0.5.5
+     └── elliptic-curve v0.13.8
+         ├── ecdsa v0.16.9
+         │   ├── p256 v0.13.2
+         │   │   └── openidconnect v4.0.1
+         │   │       └── fvoci-server v0.1.0
+         │   └── p384 v0.13.1
+         │       └── openidconnect v4.0.1 (*)
+         ├── p256 v0.13.2 (*)
+         ├── p384 v0.13.1 (*)
+         └── primeorder v0.13.6
+             ├── p256 v0.13.2 (*)
+             └── p384 v0.13.1 (*)
+
+advisories FAILED

@@ -1,0 +1,37 @@
+const { launch, login, shot, BASE } = require('./lib.cjs');
+(async () => {
+  const b = await launch();
+  const { page } = await login(b, 'u1');
+  await page.goto(BASE + '/notes'); await page.waitForLoadState('networkidle');
+  const title = `의존성 검증 노트 ${Date.now()}`;
+  await page.getByPlaceholder('예: 아이디어').fill(title);
+  await page.getByRole('button', { name: '노트 만들기' }).click();
+  await page.waitForURL(/\/d\//); await page.waitForLoadState('networkidle');
+  const url = page.url();
+  const body = page.locator('[contenteditable=true]').first();
+  await body.click();
+  const marker = `한글 입력 확인 — 저장 후 다시 열기 ${Date.now()}`;
+  await page.keyboard.type(marker);
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('- 목록 항목 하나');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('수식 $E=mc^2$ ');
+  await shot(page, '05-note-typed');
+  const save = page.getByRole('button', { name: '저장', exact: true });
+  console.log('save enabled before click:', await save.isEnabled());
+  await save.click();
+  await page.waitForLoadState('networkidle'); await page.waitForTimeout(1500);
+  await shot(page, '06-note-saved');
+  const status = await page.locator('[aria-live]').allTextContents();
+  console.log('aria-live:', JSON.stringify(status.filter((s) => s.trim())));
+  // reopen in a fresh context of the same user (no in-memory state)
+  const ctx2 = await b.newContext({ viewport: { width: 1280, height: 900 }, storageState: await page.context().storageState() });
+  const p2 = await ctx2.newPage();
+  await p2.goto(url); await p2.waitForLoadState('networkidle'); await p2.waitForTimeout(1000);
+  const txt = await p2.locator('[contenteditable=true]').first().innerText();
+  console.log('reopened contains marker:', txt.includes(marker), '| list:', txt.includes('목록 항목 하나'));
+  console.log('reopened title:', await p2.locator('input').first().inputValue().catch(() => '?'));
+  await shot(p2, '07-note-reopened');
+  console.log('URL', url);
+  await b.close();
+})().catch((e) => { console.error('FAIL', e.message); process.exit(1); });

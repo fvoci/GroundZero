@@ -1,0 +1,6 @@
+wrote /home/kinesis/orca/workspaces/GroundZero/deps-integration/contracts/openapi.json
+regenerate the TS client with `pnpm run generate:api`
+$ pnpm --filter @fvoci/api-client run generate
+$ openapi-typescript ../../contracts/openapi.json --output ./src/generated/schema.ts
+✨ openapi-typescript 7.13.0
+🚀 ../../contracts/openapi.json → ./src/generated/schema.ts [207.1ms]

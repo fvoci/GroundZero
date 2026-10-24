@@ -1,0 +1,21 @@
+kind	id	name	project	created	state
+container	a810679c8ce09bfa95d44d4396c14d2c68a52149e29b180ec4cc78623f225752	fvoci-deps-integration-5fcf21-dev-keycloak-1	fvoci-deps-integration-5fcf21-dev	2026-10-24T11:12:55.684767152Z	running
+container	fac42f526aa6af00180c9ce9df0de3969415ca18a3fa22cf8b55393b8f4698e0	fvoci-deps-integration-5fcf21-dev-meilisearch-1	fvoci-deps-integration-5fcf21-dev	2026-10-24T11:12:55.684614029Z	running
+container	c21eafda840af15596fb14661749e51cb13350a0396a4c85d89b5310affd8cac	fvoci-deps-integration-5fcf21-dev-postgres-1	fvoci-deps-integration-5fcf21-dev	2026-10-24T11:12:55.696831949Z	running
+container	d03ada92ab158c8412b4f2d1d78e996e69c1a3a659cb823c982ca8125d55da59	fvoci-deps-integration-5fcf21-supabase-db-1	fvoci-deps-integration-5fcf21-supabase	2026-10-24T10:58:45.382131753Z	running
+container	0e68c59b9783db8d46ff980f261f698902bc434d5c72c1aaf58eb12d3b9b52c4	fvoci-deps-integration-5fcf21-supabase-rest-1	fvoci-deps-integration-5fcf21-supabase	2026-10-24T10:58:45.434741551Z	running
+container	ffa89cf414529b57e614949e9dd6a7e37b2796f332ed416886681048941011e8	fvoci-deps-integration-5fcf21-supabase-supavisor-1	fvoci-deps-integration-5fcf21-supabase	2026-10-24T10:58:45.440785563Z	running
+container	6783f0be07122af6ec914b77f523f9e4ac4e7df4859a98f3068486f577e7dae2	fvoci-deps-integration-5fcf21-test-keycloak-1	fvoci-deps-integration-5fcf21-test	2026-10-24T10:56:43.754081107Z	running
+container	58eeb1425b027cbff03f1d0955eebcd2acc9a47b231ea52cd2d8cd549050c52c	fvoci-deps-integration-5fcf21-test-meilisearch-1	fvoci-deps-integration-5fcf21-test	2026-10-24T10:54:35.301849088Z	running
+container	fa84a219e47c2e5da39d73b5ef7342815d64062ec8fd433b2b0260eeea1801bb	fvoci-deps-integration-5fcf21-test-postgres-1	fvoci-deps-integration-5fcf21-test	2026-10-24T10:54:35.314904173Z	running
+container	d76e4b98f74cf9485cfe4f35c03ac5ca73b455894e4cba1bef171fde54ecf65b	fvoci-deps-integration-5fcf21-test-seaweedfs-1	fvoci-deps-integration-5fcf21-test	2026-10-24T10:54:35.302166553Z	running
+network	48d0d6e8abf8abd8cbbd922307ed0769cd664a72a4dd4d0198f71bdb2f1f2ac9	fvoci-deps-integration-5fcf21-dev_default	fvoci-deps-integration-5fcf21-dev	2026-10-24T20:12:55.374601135+09:00	-
+network	75d5a07043f4cc3a9bbc9e7c3a4c5abb5118ac05e4ed95e66761f06b53d919b9	fvoci-deps-integration-5fcf21-supabase_default	fvoci-deps-integration-5fcf21-supabase	2026-10-24T19:58:45.062523188+09:00	-
+network	568047a743077ff51a9c6b43b9f6d6949995e2a48e8c9c2ccf736506390a770f	fvoci-deps-integration-5fcf21-test_default	fvoci-deps-integration-5fcf21-test	2026-10-24T19:54:34.953522884+09:00	-
+volume	fvoci-deps-integration-5fcf21-dev_kcdata	fvoci-deps-integration-5fcf21-dev_kcdata	fvoci-deps-integration-5fcf21-dev	2026-10-24T20:12:55+09:00	-
+volume	fvoci-deps-integration-5fcf21-dev_meilidata	fvoci-deps-integration-5fcf21-dev_meilidata	fvoci-deps-integration-5fcf21-dev	2026-10-24T20:12:55+09:00	-
+volume	fvoci-deps-integration-5fcf21-dev_pgdata	fvoci-deps-integration-5fcf21-dev_pgdata	fvoci-deps-integration-5fcf21-dev	2026-10-24T20:12:55+09:00	-
+volume	fvoci-deps-integration-5fcf21-supabase_db-config	fvoci-deps-integration-5fcf21-supabase_db-config	fvoci-deps-integration-5fcf21-supabase	2026-10-24T19:58:45+09:00	-
+image	sha256:483947877ca9cf33db993cbd0904107aa5543eca75073772f56e9d5202295f14	fvoci-ci-base:deps-integration	-	2026-10-24T19:43:49.557208234+09:00	local-only
+image	sha256:4c848772e2d50a475d2a363e30c99d69c204019e8308922eb306b0460ae3ed84	groundzero:pr-local	-	2026-10-24T21:22:01.660168367+09:00	local-only
+process	-	none (all owned xtask/fvoci-server/vite stopped by SIGINT, exits verified)	-	-	-
