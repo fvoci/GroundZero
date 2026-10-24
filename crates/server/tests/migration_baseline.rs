@@ -43,6 +43,11 @@ async fn empty_database(label: &str) -> (PgConnection, common::FreshDb) {
     (connection, common::FreshDb { name, db, app_url })
 }
 
+/// 새 설치가 적용하는 마이그레이션 수: 기준 하나와 그 뒤에 새 번호로 더한 것(예: 202610250001 화면 밝기, D-109).
+fn migration_count() -> usize {
+    sqlx::migrate!("./migrations").migrations.len()
+}
+
 async fn ledger(conn: &mut PgConnection) -> Vec<(i64, Vec<u8>, bool)> {
     sqlx::query_as("SELECT version, checksum, success FROM fvoci._sqlx_migrations ORDER BY version")
         .fetch_all(conn)
@@ -106,7 +111,7 @@ async fn bootstrap_only_database_requests_migration_and_can_initialize() {
     assert!(ledger(&mut conn).await.is_empty());
     admin::migrate(&fixture.db).await.unwrap();
     let installed = ledger(&mut conn).await;
-    assert_eq!(installed.len(), 1);
+    assert_eq!(installed.len(), migration_count());
     assert_eq!(installed[0].0, admin::BASELINE_VERSION);
     let app = Db::connect_lazy(&Secret::new(fixture.app_url.clone())).unwrap();
     app.check_baseline().await.unwrap();
@@ -227,7 +232,7 @@ async fn concurrent_new_installs_repeat_and_preserve_checksums_without_app_ledge
         .await
         .unwrap();
     let before = ledger(&mut conn).await;
-    assert_eq!(before.len(), 1);
+    assert_eq!(before.len(), migration_count());
     assert_eq!(before[0].0, admin::BASELINE_VERSION);
     admin::migrate(&fixture.db).await.unwrap();
     assert_eq!(ledger(&mut conn).await, before);
