@@ -109,7 +109,7 @@ pnpm --filter @fvoci/web exec playwright install --with-deps chromium
 cargo xtask browser
 ```
 
-`browser`는 별도 `-browser` Compose 프로젝트에 시험 PostgreSQL·Meilisearch·Keycloak을 준비한다.
+`browser`는 별도 `-browser` Compose 프로젝트에 시험 PostgreSQL·Keycloak을 준비한다.
 동적 루프백 포트의 실제 서버·DB·OIDC와 합성 데이터를 쓰며 사용자 흐름 전체를 HTTP mock으로 대체하지 않는다.
 기존 개발 환경이나 `cargo xtask test`의 프로젝트를 재사용하지 않는다.
 로그인·로그아웃 후 거부, 한국어 문서 저장·재열기, 두 사용자 협업, 칸반 이동과 서버 반영,
