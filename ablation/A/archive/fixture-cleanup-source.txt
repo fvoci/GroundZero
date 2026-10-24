@@ -1,0 +1,294 @@
+SOURCE crates/server/tests/common/mod.rs
+   285	/// 같은 클러스터의 다른 데이터베이스 주소.
+   286	pub fn with_database(url: &str, database: &str) -> String {
+   287	    let mut parsed = url::Url::parse(url).unwrap();
+   288	    parsed.set_path(&format!("/{database}"));
+   289	    parsed.to_string()
+   290	}
+   291	
+   292	/// 같은 클러스터의 빈 데이터베이스를 지금 마이그레이션까지 만든다. DB 전체를 보는 작업(백업, 검색 대기열)을 다른 시험과
+   293	/// 섞이지 않게 시험할 때 쓴다(공유 테스트 DB에는 다른 시험의 행이 있다).
+   294	pub struct FreshDb {
+   295	    pub name: String,
+   296	    pub db: fvoci_server::config::DbCommandConfig,
+   297	    pub app_url: String,
+   298	}
+   299	
+   300	pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> FreshDb {
+   301	    use sqlx::Connection as _;
+   302	    // 같은 시험 바이너리에서 새 DB 준비가 겹치면 클러스터 공용 행(역할 권한 등)을 함께 고쳐 "tuple concurrently
+   303	    // updated"(XX000)로 실패한다. 준비와 마이그레이션은 한 번에 하나씩 한다.
+   304	    static PREPARE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+   305	    let _serial = PREPARE.lock().await;
+   306	    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+   307	    let migration_url =
+   308	        std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+   309	    // Supavisor session 모드로 돌릴 때(`--session-pooler`)는 테넌트가 한 데이터베이스만 받으므로 새 DB는 직접 연결로 쓴다.
+   310	    let app_url = std::env::var("FVOCI_TEST_DIRECT_APP_URL")
+   311	        .or_else(|_| std::env::var("DATABASE_URL"))
+   312	        .expect("run via `cargo xtask test`");
+   313	    let name = format!("fvoci_{label}_{}", uuid::Uuid::now_v7().simple());
+   314	    sqlx::raw_sql(&format!("CREATE DATABASE {name}"))
+   315	        .execute(&mut *admin)
+   316	        .await
+   317	        .unwrap();
+   318	    let mut db_admin = sqlx::PgConnection::connect(&with_database(&admin_url, &name))
+   319	        .await
+   320	        .unwrap();
+   321	    // 운영자 경로(`db bootstrap`)와 같은 준비. superuser가 아닌 관리자(셀프호스트 Supabase)에서도 된다.
+   322	    fvoci_server::db::admin::prepare_database(&mut db_admin)
+   323	        .await
+   324	        .unwrap();
+   325	    db_admin.close().await.unwrap();
+   326	    let db = fvoci_server::config::DbCommandConfig {
+   327	        admin_url: Some(fvoci_server::config::Secret::new(with_database(
+   328	            &admin_url, &name,
+   329	        ))),
+   330	        migration_url: Some(fvoci_server::config::Secret::new(with_database(
+   331	            &migration_url,
+   332	            &name,
+   333	        ))),
+   334	        migrator_password: None,
+   335	        app_password: None,
+   336	    };
+   337	    fvoci_server::db::admin::migrate(&db).await.unwrap();
+   338	    FreshDb {
+   339	        app_url: with_database(&app_url, &name),
+   340	        name,
+   341	        db,
+   342	    }
+   343	}
+SOURCE crates/server/tests/search.rs
+   978	    (format!("http://{addr}"), fake)
+   979	}
+   980	
+   981	/// 남은 항목 ②: 색인 작업이 아직 끝나지 않았으면(대기·처리 중) 대기열 행을 지우지 않고 작업 번호와 제출 세대를 남긴다.
+   982	/// 대기 중에는 다시 보내거나 실패 횟수를 쓰지 않는다. 성공을 확인한 뒤에만 지우고, 그 사이 더 새 변경이 있으면 남겨 다시
+   983	/// 보낸다. 실패·취소는 다시 보낸다. 전체 DB를 꺼내는 작업이라 이 시험만의 DB를 쓴다.
+   984	#[tokio::test]
+   985	async fn pending_index_tasks_are_tracked_until_they_succeed() {
+   986	    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+   987	    let mut admin = <sqlx::PgConnection as sqlx::Connection>::connect(&admin_url)
+   988	        .await
+   989	        .unwrap();
+   990	    let started = std::time::Instant::now();
+   991	    let fresh = common::fresh_database(&mut admin, "search_tasks").await;
+   992	    eprintln!("fresh database ready in {:?}", started.elapsed());
+   993	    let (url, fake) = fake_search().await;
+   994	    let state = fvoci_server::app::build_state(config_with(&[
+   995	        ("DATABASE_URL", &fresh.app_url),
+   996	        ("FVOCI_SEARCH_URL", &url),
+   997	        ("FVOCI_SEARCH_KEY", "fake-search-key-for-tests"),
+   998	    ]))
+   999	    .unwrap();
+  1000	    let app = common::app(&state);
+  1001	    let search = state.search.as_ref().unwrap();
+  1002	    prepare(&state.db, search).await.unwrap();
+  1003	    let owner_url = common::with_database(
+  1004	        &std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`"),
+  1005	        &fresh.name,
+  1006	    );
+  1007	    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+  1008	    let row = |id: String| {
+  1128	        resent.iter().all(|n| *n == 1),
+  1129	        "the failed batch was sent together again: {resent:?}"
+  1130	    );
+  1131	    assert!(row(other_id).await.is_none());
+  1132	    assert!(row(third_id).await.is_none());
+  1133	    owner.close().await;
+  1134	    state.db.close().await;
+  1135	    sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fresh.name))
+  1136	        .execute(&mut admin)
+  1137	        .await
+  1138	        .unwrap();
+  1139	}
+  1140	
+  1141	/// 리뷰(감사 S12 후속): 꺼낸 행의 재확인은 SQL 함수 시험만 있어, `drain`이 재확인을 부르지 않거나 그 결과로 거르지
+  1142	/// 않아도 시험이 통과했다. `drain`이 꺼낸 뒤 내용을 읽는 사이 그 행의 세대가 바뀌면(사용자가 다시 고침) 그 꺼냄으로는
+  1143	/// 보내지 않고 행을 남긴다(새 세대는 다음 꺼냄이 보낸다). 내용 읽기를 문서 표 잠금으로 붙잡아 그 사이에 세대를 바꾼다.
+  1144	/// 표를 잠그고 전체 대기열을 꺼내므로 이 시험만의 DB를 쓴다.
+  1145	#[tokio::test]
+  1146	async fn drain_does_not_send_a_row_whose_generation_changed_after_the_claim() {
+  1147	    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+  1148	    let mut admin = <sqlx::PgConnection as sqlx::Connection>::connect(&admin_url)
+  1149	        .await
+  1150	        .unwrap();
+  1151	    let fresh = common::fresh_database(&mut admin, "search_recheck").await;
+  1152	    let (url, fake) = fake_search().await;
+  1153	    let state = fvoci_server::app::build_state(config_with(&[
+  1154	        ("DATABASE_URL", &fresh.app_url),
+  1155	        ("FVOCI_SEARCH_URL", &url),
+  1156	        ("FVOCI_SEARCH_KEY", "fake-search-key-for-tests"),
+  1157	    ]))
+  1158	    .unwrap();
+  1159	    let app = common::app(&state);
+  1160	    let search = state.search.clone().unwrap();
+  1238	    let sent_after = fake.lock().unwrap().submitted.len();
+  1239	    drain(&state.db, &search, None).await.unwrap();
+  1240	    let sent_newer = fake.lock().unwrap().submitted[sent_after..]
+  1241	        .iter()
+  1242	        .any(|(_, body)| body.to_string().contains(&doc_uid));
+  1243	    owner.close().await;
+  1244	    state.db.close().await;
+  1245	    sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fresh.name))
+  1246	        .execute(&mut admin)
+  1247	        .await
+  1248	        .unwrap();
+  1249	    assert!(!sent_stale, "the drain sent a row whose generation changed");
+  1250	    assert_eq!(left, Some(newer), "the changed row left the queue");
+  1251	    assert!(sent_newer, "the newer generation was not sent later");
+SOURCE crates/server/tests/backup.rs
+    67	fn temp_dir(label: &str) -> std::path::PathBuf {
+    68	    std::env::temp_dir().join(format!("fvoci-{label}-{}", uuid::Uuid::now_v7().simple()))
+    69	}
+    70	
+    71	#[tokio::test]
+    72	async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
+    73	    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    74	    let mut admin = PgConnection::connect(&admin_url).await.unwrap();
+    75	    // 원본 설치: 자기 DB와 자기 저장소(다른 시험의 행·파일이 섞이지 않게).
+    76	    let source = fresh_database(&mut admin, "backup_src").await;
+    77	    let source_files = temp_dir("source-files");
+    78	    let source_dir = source_files.to_string_lossy().into_owned();
+    79	    let state = fvoci_server::app::build_state(config_with(&[
+    80	        ("FVOCI_STORAGE_DIR", &source_dir),
+    81	        ("DATABASE_URL", &source.app_url),
+    82	    ]))
+    83	    .unwrap();
+    84	    let app = common::app(&state);
+    85	    let subject = format!("backup-{}", uuid::Uuid::now_v7());
+    86	    let owner = session(&state, &subject).await;
+    87	
+    88	    // 원본: 워크스페이스·문서(본문)·업무·첨부 파일.
+    89	    let ws = create_workspace(&app, &owner, "백업할 공간").await;
+    90	    let doc = create_doc(&app, &owner, &ws, "회의록").await;
+    91	    let doc_id = doc["id"].as_str().unwrap().to_owned();
+    92	    let saved = send(
+   148	    assert!(backup::create(&state.config, db, &out).await.is_err());
+   149	    // 저장소 정리를 멈추는 잠금은 백업이 잡은 세션에서 풀려 남지 않는다(다른 세션이 바로 잡을 수 있다).
+   150	    assert_storage_lock_free(&source.app_url).await;
+   151	
+   152	    // 새 DB(같은 클러스터의 다른 데이터베이스)를 같은 마이그레이션까지 만든다.
+   153	    let target = fresh_database(&mut admin, "restore").await;
+   154	    let restored_db = &target.db;
+   155	    let target_files = temp_dir("target-files");
+   156	    let target_dir = target_files.to_string_lossy().into_owned();
+   157	    let restored = fvoci_server::app::build_state(config_with(&[
+   158	        ("FVOCI_STORAGE_DIR", &target_dir),
+   159	        ("DATABASE_URL", &target.app_url),
+   160	    ]))
+   161	    .unwrap();
+   284	    app_conn.close().await.unwrap();
+   285	
+   286	    restored.db.close().await;
+   287	    state.db.close().await;
+   288	    for name in [&target.name, &source.name] {
+   289	        sqlx::raw_sql(&format!("DROP DATABASE {name} WITH (FORCE)"))
+   290	            .execute(&mut admin)
+   291	            .await
+   292	            .unwrap();
+   293	    }
+SOURCE crates/server/tests/migration_baseline.rs
+    12	use fvoci_server::error::AppError;
+    13	use sqlx::migrate::Migrate;
+    14	use sqlx::{Connection, PgConnection};
+    15	
+    16	async fn empty_database(label: &str) -> (PgConnection, common::FreshDb) {
+    17	    static PREPARE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    18	    let _serial = PREPARE.lock().await;
+    19	    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via cargo xtask test");
+    20	    let migration_url =
+    21	        std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via cargo xtask test");
+    22	    let app_url = std::env::var("FVOCI_TEST_DIRECT_APP_URL")
+    23	        .or_else(|_| std::env::var("DATABASE_URL"))
+    24	        .expect("run via cargo xtask test");
+    25	    let mut connection = PgConnection::connect(&admin_url).await.unwrap();
+    26	    let name = format!("fvoci_{label}_{}", uuid::Uuid::now_v7().simple());
+    27	    sqlx::raw_sql(&format!("CREATE DATABASE {name}"))
+    28	        .execute(&mut connection)
+    29	        .await
+    30	        .unwrap();
+    31	    let mut target_admin = PgConnection::connect(&common::with_database(&admin_url, &name))
+    32	        .await
+    33	        .unwrap();
+    34	    admin::prepare_database(&mut target_admin).await.unwrap();
+    35	    target_admin.close().await.unwrap();
+    36	    let db = DbCommandConfig {
+    37	        admin_url: Some(Secret::new(common::with_database(&admin_url, &name))),
+    38	        migration_url: Some(Secret::new(common::with_database(&migration_url, &name))),
+    39	        migrator_password: None,
+    40	        app_password: None,
+    41	    };
+    42	    let app_url = common::with_database(&app_url, &name);
+    43	    (connection, common::FreshDb { name, db, app_url })
+    44	}
+    45	
+    46	async fn ledger(conn: &mut PgConnection) -> Vec<(i64, Vec<u8>, bool)> {
+    47	    sqlx::query_as("SELECT version, checksum, success FROM fvoci._sqlx_migrations ORDER BY version")
+    48	        .fetch_all(conn)
+    49	        .await
+    50	        .unwrap()
+    51	}
+    52	
+    53	async fn startup_error(app_url: &str) -> AppError {
+    54	    let config = common::config_with(&[("DATABASE_URL", app_url)]);
+    55	    tokio::time::timeout(
+    56	        std::time::Duration::from_secs(3),
+    57	        fvoci_server::app::run(config),
+    58	    )
+    59	    .await
+    60	    .unwrap()
+    61	    .unwrap_err()
+    62	}
+    63	
+    64	async fn schema_types(conn: &mut PgConnection) -> serde_json::Value {
+    65	    sqlx::query_scalar(
+    66	        "SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY t.oid), '[]'::jsonb)
+    67	         FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+    68	         WHERE n.nspname = 'fvoci'",
+    69	    )
+    70	    .fetch_one(conn)
+   109	    assert_eq!(installed.len(), 1);
+   110	    assert_eq!(installed[0].0, admin::BASELINE_VERSION);
+   111	    let app = Db::connect_lazy(&Secret::new(fixture.app_url.clone())).unwrap();
+   112	    app.check_baseline().await.unwrap();
+   113	    app.close().await;
+   114	    conn.close().await.unwrap();
+   115	    sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fixture.name))
+   116	        .execute(&mut fixture_admin)
+   117	        .await
+   118	        .unwrap();
+   155	                .await
+   156	                .unwrap();
+   157	        assert!(
+   158	            !ledger_exists,
+   159	            "rejected types must not create SQLx history"
+   160	        );
+   161	        conn.close().await.unwrap();
+   162	        sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fixture.name))
+   163	            .execute(&mut fixture_admin)
+   164	            .await
+   165	            .unwrap();
+   199	    );
+   200	    assert!(ledger(&mut conn).await.is_empty());
+   201	    let value: String = sqlx::query_scalar("SELECT value FROM preserved_data")
+   202	        .fetch_one(&mut conn)
+   203	        .await
+   204	        .unwrap();
+   205	    assert_eq!(value, "must remain");
+   206	    conn.close().await.unwrap();
+   207	    sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fixture.name))
+   208	        .execute(&mut fixture_admin)
+   209	        .await
+   210	        .unwrap();
+   249	        .await
+   250	        .unwrap();
+   251	    assert!(
+   252	        matches!(admin::migrate(&fixture.db).await, Err(AppError::Migrate(sqlx::migrate::MigrateError::VersionMismatch(version))) if version == admin::BASELINE_VERSION)
+   253	    );
+   254	    assert_eq!(ledger(&mut conn).await[0].1, vec![0xba, 0xd0]);
+   255	    conn.close().await.unwrap();
+   256	    sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fixture.name))
+   257	        .execute(&mut fixture_admin)
+   258	        .await
+   259	        .unwrap();

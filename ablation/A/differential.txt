@@ -1,0 +1,1 @@
+PASS exact baseline/variant output equality: 326 fixtures
