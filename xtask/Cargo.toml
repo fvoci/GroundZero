@@ -13,7 +13,7 @@ serde_json.workspace = true
 sqlx = { workspace = true, features = ["tls-native-tls"] }
 tokio = { workspace = true, features = ["time"] }
 tracing.workspace = true
-sha2 = "0.10"
+sha2 = "0.11"
 spdx = { version = "0.13", features = ["text"] }
 xshell.workspace = true
 uuid = { version = "1", features = ["v7"] }
