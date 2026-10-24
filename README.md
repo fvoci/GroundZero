@@ -23,6 +23,7 @@
 | 통합 테스트 (격리된 Compose 기동·정리 포함)                                        | `cargo xtask test`                                                             |
 | OIDC 통합 테스트까지 (Keycloak 포함)                                               | `cargo xtask test --oidc`                                                      |
 | 셀프호스트 Supabase 직접·세션 풀러 시험                                            | `cargo xtask test --supabase` / `cargo xtask test --supabase --session-pooler` |
+| 실제 브라우저 회귀 시험 (Chromium, 실제 서버·DB·테스트 OIDC)                       | `cargo xtask browser`                                                          |
 | 개발 환경 한 번에(서비스·서버·웹, 테스트 계정으로 바로 로그인)                     | `cargo xtask dev --oidc` → http://127.0.0.1:5173                               |
 | DB 준비·마이그레이션을 직접 실행할 때 ([설치 안내](docs/self-hosting.md#db-setup)) | `fvoci-server db bootstrap && fvoci-server db migrate`                         |
 | 웹 개발 서버만 따로(`cargo xtask dev --no-web`일 때)                               | `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`              |

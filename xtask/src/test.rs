@@ -113,6 +113,12 @@ pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -
     if oidc {
         wanted.push("keycloak");
     }
+    if session_pooler {
+        println!("==> kept Supavisor role-preparation regression (independent temporary stack)");
+        cmd!(sh, "cargo test --package xtask --locked supabase::tests::kept_pooler_restarts_after_role_preparation -- --ignored --exact --test-threads=1 --nocapture")
+            .run()
+            .context("independent Supavisor regression failed before main stack setup")?;
+    }
     println!(
         "==> compose up ({} without postgres, {})",
         services.project(),
@@ -120,13 +126,11 @@ pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -
     );
     let result = services
         .up_services(&sh, &wanted)
-        .and_then(|()| supabase.up(&sh))
         .and_then(|()| {
+            let urls = supabase.prepare_database(&sh)?;
             let db = supabase.host_port(&sh, "db", 5432)?;
             let rest = supabase.host_port(&sh, "rest", 3000)?;
             println!("==> supabase db on 127.0.0.1:{db}, rest on 127.0.0.1:{rest}");
-            let urls = DbUrls::supabase(db);
-            compose::prepare_database(&sh, &urls)?;
             let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
             let _admin = sh.push_env("FVOCI_TEST_ADMIN_URL", &urls.admin);
             let _rest = sh.push_env(
