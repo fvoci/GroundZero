@@ -1,0 +1,11 @@
+PR 122 head 3137374e24ba622d0101111039c00f274f27ea34
+Workflow run 40095476763: all six jobs success
+Check job 120876702359: 100 Rust / 798 web tests PASS
+Integration job 120876702152: 376 PASS / 0 failed / 21 filtered; external CI profile excludes S3, OIDC, Supabase. Separate OIDC and Supabase jobs PASS.
+2026-10-24T12:49:42.5801033Z rustc 1.99.1 (58cf8f9c3 2026-10-13)
+2026-10-24T12:49:42.5839362Z v24.22.1
+2026-10-24T12:49:42.6336067Z 0.36.0
+2026-10-24T12:49:42.7114769Z 12.15.0
+2026-10-24T12:55:58.2619120Z  Test Files  139 passed (139)
+2026-10-24T12:55:58.2628677Z       Tests  798 passed (798)
+2026-10-24T12:55:58.3461012Z all checks passed

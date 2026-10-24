@@ -15,6 +15,9 @@ prebuilt-hashes.txt
 ci-runtime-evidence.txt
 integration-counters.json
 unicode-merge-receipt.txt
+ci-current.json
+ci-current-evidence.txt
+review-summary.json
 archive/README.md
 archive/environment.json
 archive/validation-summary.txt

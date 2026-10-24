@@ -1,0 +1,12 @@
+{
+  "head": "3137374e24ba622d0101111039c00f274f27ea34",
+  "sourceCommitId": "3137374e24ba622d0101111039c00f274f27ea34",
+  "coveredCommitId": "3137374e24ba622d0101111039c00f274f27ea34",
+  "kind": "reviewed",
+  "actionableFindings": 0,
+  "inlineFindings": 0,
+  "outsideDiffFindings": 0,
+  "docCoveragePercent": 80,
+  "reviewUrl": "https://github.com/fvoci/GroundZero/pull/122#issuecomment-6383068821",
+  "botToolLimitation": "CodeRabbit Clippy 1.99.0 execution failed; local and CI pinned 1.99.1 checks passed."
+}

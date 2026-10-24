@@ -1,0 +1,84 @@
+{
+  "pr": "https://github.com/fvoci/GroundZero/pull/121",
+  "merged_sha": "32e9c77b656114cc6e44171f0a9b952fc1ec1bc2",
+  "reviewed_source_head": "c1da0cb95bb55d8addb414ba95b8ea52fb1f63ac",
+  "timed_current_head": "6d2d1a469a8b3f1e8172a5d653ecdc4d573d402b",
+  "actual_compiled_tested_head": "ba6ac88e34b1227108298c2442a825f1d056e3a4",
+  "ci": {
+    "run_id": 40096229732,
+    "status": "completed",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 120878966964,
+        "name": "supabase",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120878967118,
+        "name": "rhwp",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120878967122,
+        "name": "check",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120878967155,
+        "name": "integration",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120878967171,
+        "name": "licenses",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120878967273,
+        "name": "oidc",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "runtime": {
+    "head": "c1da0cb95bb55d8addb414ba95b8ea52fb1f63ac",
+    "run": 40096229732,
+    "job": 120878967171,
+    "versions": [
+      "2026-10-24T13:00:15.4923015Z rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+      "2026-10-24T13:00:15.4962343Z v24.22.1",
+      "2026-10-24T13:00:15.5467056Z 0.36.0",
+      "2026-10-24T13:00:15.6211958Z 12.15.0"
+    ],
+    "images": [
+      "ghcr.io/fvoci/groundzero-ci-base@sha256:055178adbb91af6ec677fc26e56ea5f1bdb72ac9b50ed2c077688e8ed2f8946f"
+    ]
+  },
+  "review": {
+    "source_commit": "c1da0cb95bb55d8addb414ba95b8ea52fb1f63ac",
+    "covered_commit": "c1da0cb95bb55d8addb414ba95b8ea52fb1f63ac",
+    "kind": "reviewed",
+    "selected_files": 1,
+    "actionable_findings": 0,
+    "inline_threads": 0,
+    "outside_diff_findings": 0,
+    "formal_review_submissions": 0,
+    "full_review_reply": "https://github.com/fvoci/GroundZero/pull/121#issuecomment-6384557672",
+    "warning_disposition": "https://github.com/fvoci/GroundZero/pull/121#issuecomment-6383158693"
+  },
+  "ownership": {
+    "run": "run_fa40a3b51085",
+    "task": "task_3d0f0ca46eb1",
+    "dispatch": "ctx_3eddc0cc153d",
+    "original_resource_task": "task_1a76e81bd4b2",
+    "original_resource_dispatch": "ctx_809d9193a46e"
+  },
+  "remaining": "Root owns final all-code combination validation/any brief final remeasurement and cleanup decisions; overall goal not claimed complete."
+}

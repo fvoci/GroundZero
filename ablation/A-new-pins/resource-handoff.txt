@@ -1,0 +1,6 @@
+c5cfc23fafa0a725b79901000ecdba9e05d7aac075353977471e1bb37555d507 /fvoci-ablation-scout-028b53-test-postgres-1 true {"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"54971"}]}
+971bfd76394e7383728d7567daa2fa0ee7a4190b9cc16b11e2391874fa2934ad /fvoci-ablation-scout-028b53-test-meilisearch-1 true {"7700/tcp":[{"HostIp":"127.0.0.1","HostPort":"54969"}]}
+ae49b6c94fe9e965d42091b5e036c6c665733d30a3c7ad20db9d14164f4ca1a1 /fvoci-ablation-scout-028b53-test-seaweedfs-1 true {"18080/tcp":null,"18888/tcp":null,"19333/tcp":null,"7333/tcp":null,"8080/tcp":null,"8333/tcp":[{"HostIp":"127.0.0.1","HostPort":"54970"}],"8888/tcp":null,"9333/tcp":null}
+4b36bcc9f10f3362285cfbe1f994903ea8f77dd6e255575c1200ca9dfdc7d0d7 /fvoci-ablation-a-final-67dc1df2-postgres-1 true {"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"54994"}]}
+85642219fa469fe76bbf22c132e4b637d2eea1ec8c990ba59e5f0d4ae657c801 /fvoci-ablation-a-final-67dc1df2-meilisearch-1 true {"7700/tcp":[{"HostIp":"127.0.0.1","HostPort":"54995"}]}
+0541bf033f7a49453ca23c9b07bdcc407dbd1678796e373b688ab3500745c0f1 /fvoci-ablation-a-final-67dc1df2-seaweedfs-1 true {"18080/tcp":null,"18888/tcp":null,"19333/tcp":null,"7333/tcp":null,"8080/tcp":null,"8333/tcp":[{"HostIp":"127.0.0.1","HostPort":"54993"}],"8888/tcp":null,"9333/tcp":null}
