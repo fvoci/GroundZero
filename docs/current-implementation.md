@@ -2,8 +2,8 @@
 
 ## 1. 기준 SHA와 범위
 
-2026-10-24 원격 `main`에서 확인한 기준은
-[`e9b0f2c22e499c4d4f7126d680e214cdf0a51240`](https://github.com/fvoci/GroundZero/tree/e9b0f2c22e499c4d4f7126d680e214cdf0a51240)다.
+2026-10-25 원격 `main`에서 확인한 기준은
+[`fe5952b1ef6cb4b25493baff52442159471778f3`](https://github.com/fvoci/GroundZero/tree/fe5952b1ef6cb4b25493baff52442159471778f3)다.
 아래 소스 링크는 이 기준을 읽은 근거다. **관찰**은 코드·설정·시험에 있는 사실,
 **추론**은 그 사실에서 예상한 사용 조건, **제안**은 사용자에게 확인할 질문이다.
 정책 정본이나 결정의 사본이 아니며 승인 범위는 [결정 기록](decisions.md)을 따른다.
@@ -14,12 +14,23 @@
 [Unicode 경계 수정 #120](https://github.com/fvoci/GroundZero/pull/120),
 [텍스트 추출 #122](https://github.com/fvoci/GroundZero/pull/122),
 [ETag 생성 #121](https://github.com/fvoci/GroundZero/pull/121),
-[홈 표시 조회 #124](https://github.com/fvoci/GroundZero/pull/124)의 변경 경로를 다시 대조했다.
+[홈 표시 조회 #124](https://github.com/fvoci/GroundZero/pull/124),
+[Supavisor 시험 준비 #128](https://github.com/fvoci/GroundZero/pull/128),
+[실제 브라우저 회귀 #129](https://github.com/fvoci/GroundZero/pull/129)의 변경 경로를 다시 대조했다.
 이들은 위 SHA에 포함된다. 절제 실험(ablation)의 미채택 후보나 국소 비교 결과를 제품 전체의 구현·지원 규모로 확대하지 않는다.
 
-검증 범위는 정적 읽기다. 아래 시험 링크는 **시험 정의의 존재**이며 이번 실행의 PASS가 아니다.
+이 문서의 조사 방법은 정적 읽기다. 별도 CI 결과를 명시한 경우 외에 아래 시험 링크는 **시험 정의의 존재**다.
 이 문서 조사에서 제품 빌드·통합 시험·성능 측정·브라우저·운영 서비스 확인은 모두 **NOT RUN**이다.
 인원·문서 수·동시 편집자 수에 따른 지원 규모와 사용자 만족도는 이 조사로 판단하지 않는다.
+
+**관찰 — 별도 실행 근거.** 병합된 #129의 최종 HEAD `03acb54`에서
+[`cargo xtask browser`의 CI](https://github.com/fvoci/GroundZero/actions/runs/40115640142/job/120936227562)는
+Chromium 18건을 통과했다(1280px 데스크톱 11건·375px viewport 7건, 후자에 줄바꿈 검출기의 음성 대조 1건 포함).
+[실행기](../xtask/src/browser.rs)·[설정](../apps/web/playwright.config.ts)은 [Playwright 1.64.1](../apps/web/package.json)로 실제 API·DB·테스트 OIDC를
+연결하며 HTTP mock과 시험 재시도를 쓰지 않는다. 이는 아래 대표 경로의 실행 근거이며 제품 전체의 완결 판정은 아니다.
+[인증 시험](../apps/web/e2e/auth.spec.ts)은 실제 OIDC 로그인·로그아웃 뒤 API 거부와 보호 화면의 로그인 복귀를 확인했다.
+실패 증거 공개의 실행 근거는 [별도 의도적 실패 CI](https://github.com/fvoci/GroundZero/actions/runs/40109689887)다.
+정상 18건과 구분하며, 수집·공개 제한은 [개발 지침](development.md#ci)을 따른다.
 
 ## 2. 핵심 가정
 
@@ -42,21 +53,28 @@
   이 부담이 없어지지는 않는다. 근거: [Config](../crates/server/src/config.rs),
   [검색 `search/fallback`](../crates/server/src/features/search_api.rs),
   [셀프호스트](self-hosting.md), [Supabase의 연결·설치 제약](self-hosting-supabase.md).
-- **관찰 — 한도와 규모는 별개.** 기본 설정은 본문 JSON 2,000,000바이트, 제목 200자, 문서 참조 500개,
+  [Supavisor의 `prepare_database`](../xtask/src/supabase.rs)는 해당 시험 프로젝트의 풀러를 멈춘 뒤
+  DB 역할·마이그레이션을 준비하고 다시 시작한다. 보존한 연결과 SCRAM 캐시의 경합을 다루는
+  [회귀 시험](../xtask/src/supabase/tests.rs)의 `kept_pooler_restarts_after_role_preparation`은
+  격리된 셀프호스트 시험 근거이며 실제 Supabase Cloud 검증이나 새 인증 정책이 아니다.
+- **관찰 — 한도와 규모는 별개.** 기본 설정은 본문 JSON 2,000,000바이트, 제목 유니코드 스칼라 값 200개, 문서 참조 500개,
   트리 깊이 10, 파일 1 GiB, 공간별(개인 영역은 사용자별) 저장량 50 GiB, 조각 8 MiB,
   업로드 조각 동시 수신 8개·ZIP 반출 2개다. 업로드 만료는 24시간이다.
   이는 [Config의 `Limits/FileLimits`](../crates/server/src/config.rs) 기본값이며 O-26의 운영 적정성은 미정이다.
+  제목은 [workspaces.rs의 `validate_title`](../crates/server/src/features/workspaces.rs)에서 앞뒤 공백을 제거한 뒤
+  Rust `str::chars`로 센다. 화면에서 한 글자로 보이는 묶음(grapheme cluster)의 수와는 다를 수 있다.
   [DB 풀](../crates/server/src/db/mod.rs)은 프로세스당 최대 연결 16·획득 대기 5초다.
   이 숫자를 처리량·동시 사용자 보장으로 바꾸지 않는다. 긴 시간 기록의 정책 상한과 반복 작업 잠금 개선은
   [#96](https://github.com/fvoci/GroundZero/issues/96)·[#95](https://github.com/fvoci/GroundZero/issues/95)로 남아 있다.
 
 ## 3. 대표 사용자 작업과 완결도
 
-여기서 **정적 경로 완결·실행 미검증**은 명시한 정상 작업과 실패 처리의 UI→API→서버 권한→DB 연결이 소스에 있다는 뜻이다.
+여기서 **정적 경로 완결**은 명시한 정상 작업과 실패 처리의 UI→API→서버 권한→DB 연결이 소스에 있다는 뜻이다.
+브라우저 실행 근거는 위 CI에서 통과한 대표 경로에 한정하며, 나머지 경로는 **실행 미검증**으로 구분한다.
 **부분**은 작업 중 남은 단계/실패 공백, **우회**는 수동 대안, **미구현**은 명시한 동작의 부재,
 **미검증**은 실행·실사용 근거의 부재다. 화면 경로나 모듈 이름만으로 완결을 판정하지 않는다.
 
-- **공통 문서 작성 — 정적 경로 완결·실행 미검증.** 로그인한 공간 작성자가 공간과 위키 문서를 만들고
+- **공통 문서 작성 — 정적 경로 완결·대표 브라우저 경로 통과.** 로그인한 공간 작성자가 공간과 위키 문서를 만들고
   제목·블록 본문을 저장해 다시 여는 작업이다. 개인 노트는 개인 소유 경로를 쓴다.
   [DocumentEditor](../apps/web/src/lib/features/documents/DocumentEditor.svelte)→
   [클라이언트 `saveDocument`](../apps/web/src/lib/api/client.ts)→
@@ -64,6 +82,9 @@
   자동 저장·초안·수동 저장과 오래된 판의 409/412 처리가 있다. 실패·충돌 때 초안을 보존하는 경로와
   응답 유실 뒤 같은 요청 재시도를 [first_flow.rs](../crates/server/tests/first_flow.rs)의
   `document_write_save_reopen_with_revisions`, `save_retry_is_idempotent_and_stale_save_conflicts`가 다룬다.
+  위 CI의 [문서 시험](../apps/web/e2e/document.spec.ts)은 한국어 문자열 입력·저장·새로고침·재열기를,
+  [협업 시험](../apps/web/e2e/collab.spec.ts)은 두 사용자의 독립 컨텍스트 편집과 서버 저장·새 컨텍스트 재열기를 확인했다.
+  저장 응답 유실·충돌 복구 전체나 OS IME 조합을 브라우저로 확인한 것은 아니다.
   실시간 편집은 공간 설정에 따른 별도 경로다(기본 OFF). 모든 편집이 CRDT로 합쳐진다고 설명하면 틀린다.
 - **프로젝트의 업무·일정 조정 — 부분.** 항목에 쓸 수 있는 팀원이 제목·담당자·시작/마감·선행 관계를 넣어
   칸반 상태와 간트 날짜를 바꾸고 달력에서 확인한다.
@@ -74,7 +95,9 @@
   [events.rs의 `calendar`](../crates/server/src/features/events.rs)→공간 멤버·항목 접근 검사/RLS를 거쳐
   업무·일정·개인 학습 계획의 원본을 모은다. 날짜 입력은 시간대 검사와 조회 기간 제한을 받는다.
   [tasks.rs 시험](../crates/server/tests/tasks.rs)·[이동 충돌 UI 시험](../apps/web/tests/component/task-move-undo.test.ts)은
-  판 충돌·되돌리기를 다룬다. 그러나 칸반 열 빠른 추가와 달력 업무 생성은 생성 후 이동/날짜 수정의 두 요청이다.
+  판 충돌·되돌리기를 다룬다. 위 CI의 [칸반 시험](../apps/web/e2e/board.spec.ts)은 메뉴·키보드 이동과 되돌리기의 서버 반영,
+  대화상자 취소·초점 복귀·미저장 입력 보존을 확인했다. 끌어 놓기 검증으로 확대하지 않는다.
+  칸반 열 빠른 추가와 달력 업무 생성은 생성 후 이동/날짜 수정의 두 요청이다.
   두 번째 실패 때 중간 업무가 남을 수 있어 다시 확인/수정이 필요하다([#104](https://github.com/fvoci/GroundZero/issues/104)).
   CSV 한 행의 원자 생성(D-105)을 이 두 화면으로 확대하지 않는다.
 - **연구·취미의 자료와 기록 축적 — 정적 경로 완결·실행 미검증(수동 기록 범위), 자동화는 우회/미구현.** 항목 작성자가 파일을 올리고
@@ -125,14 +148,16 @@
   늦은 응답·화면 이동 방어를 계정 전환 후 모든 화면 안전성의 완료로 확대하지 않는다
   ([#88](https://github.com/fvoci/GroundZero/issues/88)). 첨부 복원과 철회의 경합은
   [#87](https://github.com/fvoci/GroundZero/issues/87)의 후속 강화이며 새 권한 우회라는 결론이 아니다.
-- **근거 부족 — 기기·언어.** [표시 설정](../apps/web/src/lib/display.ts)은 한국어·영어, 사용자 시간대·주 시작·시간 표기를 지원한다.
+- **일부 실행 근거 — 기기·언어.** [표시 설정](../apps/web/src/lib/display.ts)은 한국어·영어, 사용자 시간대·주 시작·시간 표기를 지원한다.
   [CSS](../apps/web/src/styles/app.css)의 한국어 줄바꿈과 [정적 시험](../apps/web/tests/korean-line-break.test.ts),
   [칸반 키보드 이동 시험](../apps/web/tests/component/task-move-menu.test.ts)이 있다.
   내보내기 파일명·모듈 키·강좌 CSV의 Unicode 경계는
   [웹 회귀 시험](../apps/web/tests/component/unicode-boundaries.test.ts)과 [서버 회귀 시험](../crates/server/tests/unicode_boundaries.rs)이 다룬다.
-  이것만으로 좁은 화면·터치·실제 Safari·한글 조합 입력·다국어 혼용의 완결을 판정할 수 없다.
-  [#118](https://github.com/fvoci/GroundZero/issues/118)은 실제 배치 자동화 공백이며 D-98의 Safari 미실행 범위와도 구분한다.
-  데스크톱에서 메뉴·편집·조정하는 작업이 가장 직접적인 검증 후보라는 정도만 **추론**한다.
+  [#118](https://github.com/fvoci/GroundZero/issues/118)의 실제 배치 자동화는 #129로 병합됐다.
+  위 Chromium CI의 [배치 시험](../apps/web/e2e/layout.spec.ts)과 [간트 시험](../apps/web/e2e/gantt.spec.ts)은
+  1280px·375px에서 한국어 줄바꿈·긴 문자열·화면 넘침·간트 내부 가로 스크롤의 대표 조건을 확인했다.
+  실제 Safari·Firefox·WebKit·휴대 기기·터치·OS IME 조합·다국어 혼용 전체는 이 묶음으로 검증하지 않았다.
+  D-98의 Safari 미실행 범위와 [#112](https://github.com/fvoci/GroundZero/issues/112)의 기존 Orca 캡처 문제도 남는다.
 - **관찰 — 홈 조회의 제한된 일관성.** [home.rs의 `marks`](../crates/server/src/features/home.rs)는 핀과 즐겨찾기를
   한 SQL 문장 스냅숏에서 읽고 두 목록으로 나눈다. [home_marks.rs](../crates/server/tests/home_marks.rs)는
   두 종류·순서·현재 접근 범위를 다루며, [후속 시험 #126](https://github.com/fvoci/GroundZero/pull/126)은
