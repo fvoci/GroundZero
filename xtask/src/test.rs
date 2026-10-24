@@ -113,17 +113,19 @@ pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -
     if oidc {
         wanted.push("keycloak");
     }
+    if session_pooler {
+        println!("==> kept Supavisor role-preparation regression (independent temporary stack)");
+        cmd!(sh, "cargo test --package xtask --locked supabase::tests::kept_pooler_restarts_after_role_preparation -- --ignored --exact --test-threads=1 --nocapture")
+            .run()
+            .context("independent Supavisor regression failed before main stack setup")?;
+    }
     println!(
         "==> compose up ({} without postgres, {})",
         services.project(),
         supabase.project()
     );
-    println!("==> kept Supavisor role-preparation regression (independent temporary stack)");
-    let regression = cmd!(sh, "cargo test --package xtask --locked supabase::tests::kept_pooler_restarts_after_role_preparation -- --ignored --exact --test-threads=1 --nocapture")
-        .run();
-    let result = regression
-        .map_err(anyhow::Error::from)
-        .and_then(|()| services.up_services(&sh, &wanted))
+    let result = services
+        .up_services(&sh, &wanted)
         .and_then(|()| {
             let urls = supabase.prepare_database(&sh)?;
             let db = supabase.host_port(&sh, "db", 5432)?;
