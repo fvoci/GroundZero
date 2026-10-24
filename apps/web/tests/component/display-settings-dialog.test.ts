@@ -7,10 +7,13 @@ import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { applyTheme, THEME_KEY } from '$lib/theme.svelte';
 
 afterEach(() => {
   vi.restoreAllMocks();
   applyDocFont('sans');
+  applyTheme('light');
+  window.localStorage.clear();
   me.locale = '';
   me.timeZone = '';
   me.weekStart = '';
@@ -77,5 +80,28 @@ describe('display settings dialog', () => {
     await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
     await screen.findByRole('alert');
     expect(document.documentElement.dataset.docFont).toBe('serif');
+  });
+});
+
+// 화면 밝기(시스템 설정 따르기·밝게·어둡게)는 문서 본문 서체처럼 이 브라우저에만 둔다. 이것만 바꾸면 계정 설정을 쓰지 않고
+// 화면을 새로 읽지도 않는다.
+describe('display settings dialog theme', () => {
+  it('offers system, light and dark, and applies a dark choice in this browser only', async () => {
+    const saveAccount = vi.spyOn(api, 'setDisplaySettings');
+    applyTheme('system');
+    await openDialog();
+    const theme = screen.getByRole('combobox', { name: /^화면 밝기/ });
+    expect(theme).toHaveValue('system');
+    expect([...theme.querySelectorAll('option')].map((o) => o.textContent)).toEqual([
+      '시스템 설정 따르기',
+      '밝게',
+      '어둡게',
+    ]);
+
+    await fireEvent.change(theme, { target: { value: 'dark' } });
+    await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
+    expect(document.documentElement).toHaveClass('dark');
+    expect(window.localStorage.getItem(THEME_KEY)).toBe('dark');
+    expect(saveAccount).not.toHaveBeenCalled();
   });
 });
