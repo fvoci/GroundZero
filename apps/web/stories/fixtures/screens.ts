@@ -2,7 +2,7 @@
 // 빌드 정보(/healthz)를 story 동안만 바꾼다. 실제 서버에 닿는 요청은 하나도 보내지 않는다(preview.ts의 요청 차단).
 import { spyOn } from 'storybook/test';
 
-import { api } from '$lib/api/client';
+import { api, ApiError } from '$lib/api/client';
 import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
 import { router } from '$lib/router.svelte';
 
@@ -40,7 +40,7 @@ const DEFAULTS: ScreenApi = {
   module: (id) => {
     const found = MODULES.find((mod) => mod.id === id);
     return found === undefined
-      ? Promise.reject(new Error(`no module ${id}`))
+      ? Promise.reject(new ApiError(404, 'not_found', 'module not found'))
       : Promise.resolve(found);
   },
   items: (moduleId) => {
@@ -62,6 +62,9 @@ const HEALTH = { status: 'ok', database: 'ok', build: { version: 'dev', source: 
  * fetch를 되돌린다). 바꿔 끼운 `api` 함수는 Storybook이 story마다 원래대로 돌린다.
  */
 export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): () => void {
+  // 앞 story에서 열어 둔 메뉴·서랍의 body 잠금(pointer-events)은 그 story가 사라진 뒤에야 풀린다. Storybook에서 story를
+  // 바로 바꾸면 이 story의 클릭이 막히므로 먼저 푼다(tests/component/stories.test.ts의 afterEach와 같은 정리).
+  document.body.style.removeProperty('pointer-events');
   const stubs: ScreenApi = { ...DEFAULTS, ...overrides };
   spyOn(api, 'modules').mockImplementation(stubs.modules);
   spyOn(api, 'wikiDocuments').mockImplementation(stubs.wikiDocuments);
