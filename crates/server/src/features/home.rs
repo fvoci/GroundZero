@@ -202,8 +202,11 @@ fn to_task(row: TaskRow, today: Option<Date>) -> Result<HomeTask, AppError> {
     })
 }
 
-async fn marks(tx: &mut crate::db::UserTx, mark: MarkKind) -> Result<Vec<MarkedTarget>, AppError> {
+async fn marks(
+    tx: &mut crate::db::UserTx,
+) -> Result<(Vec<MarkedTarget>, Vec<MarkedTarget>), AppError> {
     type MarkRow = (
+        String,
         String,
         Uuid,
         Option<String>,
@@ -211,31 +214,39 @@ async fn marks(tx: &mut crate::db::UserTx, mark: MarkKind) -> Result<Vec<MarkedT
         Option<ItemId>,
     );
     let rows: Vec<MarkRow> = sqlx::query_as(
-        "SELECT m.target_kind, m.target_id, app_time_target_label(m.target_kind, m.target_id),
+        "SELECT m.mark, m.target_kind, m.target_id, app_time_target_label(m.target_kind, m.target_id),
                     coalesce(t.workspace_id, d.workspace_id, i.workspace_id),
                     coalesce(t.item_id, d.item_id)
              FROM user_marks m
              LEFT JOIN tasks t ON m.target_kind = 'task' AND t.id = m.target_id
              LEFT JOIN documents d ON m.target_kind = 'document' AND d.id = m.target_id
              LEFT JOIN items i ON m.target_kind = 'item' AND i.id = m.target_id
-             WHERE m.mark = $1 ORDER BY m.created_at, m.target_id",
+             WHERE m.mark IN ('pin', 'favorite') ORDER BY m.created_at, m.target_id",
     )
-    .bind(mark.as_str())
     .fetch_all(tx.conn())
     .await?;
-    Ok(rows
-        .into_iter()
-        .filter_map(|(kind, id, label, workspace_id, item_id)| {
-            Some(MarkedTarget {
-                kind: MarkTarget::parse(&kind)?,
-                id,
-                // 볼 수 없게 된 대상은 나오지 않는다.
-                label: label?,
-                workspace_id,
-                item_id,
-            })
-        })
-        .collect())
+    let mut pins = Vec::new();
+    let mut favorites = Vec::new();
+    // 한 문장 스냅숏으로 읽고, 각 목록의 created_at, target_id 순서를 유지한다.
+    for (mark, kind, id, label, workspace_id, item_id) in rows {
+        let (Some(kind), Some(label)) = (MarkTarget::parse(&kind), label) else {
+            // 볼 수 없게 된 대상은 나오지 않는다.
+            continue;
+        };
+        let target = MarkedTarget {
+            kind,
+            id,
+            label,
+            workspace_id,
+            item_id,
+        };
+        match mark.as_str() {
+            "pin" => pins.push(target),
+            "favorite" => favorites.push(target),
+            _ => {}
+        }
+    }
+    Ok((pins, favorites))
 }
 
 /// 홈(로그인한 사람). 모든 워크스페이스에서 볼 수 있는 것만 모은다.
@@ -327,8 +338,7 @@ pub async fn home(
     )
     .fetch_all(tx.conn())
     .await?;
-    let pins = marks(&mut tx, MarkKind::Pin).await?;
-    let favorites = marks(&mut tx, MarkKind::Favorite).await?;
+    let (pins, favorites) = marks(&mut tx).await?;
     tx.commit().await?;
     Ok(Json(Home {
         today: format_date(Some(today)).unwrap_or_default(),
