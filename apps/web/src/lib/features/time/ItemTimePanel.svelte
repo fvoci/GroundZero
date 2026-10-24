@@ -31,19 +31,27 @@
   };
 
   let time = $state<ItemTimeView | undefined>(undefined);
+  // 합계를 못 읽었을 때. 조용히 비우지 않고 알리며, 이미 보이던 합계는 그대로 둔다.
+  let loadError = $state<string | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
   let confirmSwitch = $state(false);
 
   async function reload(id: string = itemId): Promise<void> {
     try {
-      time = await api.itemTime(id);
-    } catch {
-      time = undefined;
+      const next = await api.itemTime(id);
+      if (id !== itemId) return;
+      time = next;
+      loadError = undefined;
+    } catch (e: unknown) {
+      if (id === itemId) loadError = errorText(e, m.time_load_failed());
     }
   }
 
   $effect(() => {
-    void reload(itemId);
+    const id = itemId;
+    time = undefined;
+    loadError = undefined;
+    void reload(id);
   });
 
   // 이 항목 아래 무엇이든 타이머가 끝나면 합계를 다시 읽는다.
@@ -131,15 +139,29 @@
       <p class="text-sm text-muted-foreground">{m.time_item_empty()}</p>
     {/if}
   {/if}
+  {#if loadError !== undefined}
+    <p role="alert" class="text-sm text-destructive">
+      {loadError}
+      <Button size="sm" variant="outline" class="ml-2" onclick={() => void reload()}
+        >{m.common_retry()}</Button
+      >
+    </p>
+  {/if}
   {#if canTrack}
     <div class="flex flex-wrap items-center gap-2">
+      <!-- 상태 글은 처음부터 있는 알림 영역 안에서만 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
+      <span class="text-sm empty:sr-only" role="status"
+        >{runningHere
+          ? m.time_item_running()
+          : confirmSwitch
+            ? m.time_item_switch_confirm()
+            : ''}</span
+      >
       {#if runningHere}
-        <span class="text-sm" role="status">{m.time_item_running()}</span>
         <Button size="sm" variant="outline" onclick={() => void stopHere()}
           >{m.time_stop_timer()}</Button
         >
       {:else if confirmSwitch}
-        <span class="text-sm" role="status">{m.time_item_switch_confirm()}</span>
         <Button size="sm" onclick={() => void startHere()}>{m.time_stop_and_start()}</Button>
         <Button size="sm" variant="ghost" onclick={() => (confirmSwitch = false)}
           >{m.common_cancel()}</Button

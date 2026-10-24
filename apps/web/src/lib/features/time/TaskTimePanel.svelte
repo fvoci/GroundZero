@@ -16,19 +16,27 @@
   const { taskId }: Props = $props();
 
   let time = $state<TaskTimeView | undefined>(undefined);
+  // 합계를 못 읽었을 때. 조용히 비우지 않고 알리며, 이미 보이던 합계는 그대로 둔다.
+  let loadError = $state<string | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
   let confirmSwitch = $state(false);
 
   async function reload(id: string = taskId): Promise<void> {
     try {
-      time = await api.taskTime(id);
-    } catch {
-      time = undefined;
+      const next = await api.taskTime(id);
+      if (id !== taskId) return;
+      time = next;
+      loadError = undefined;
+    } catch (e: unknown) {
+      if (id === taskId) loadError = errorText(e, m.time_load_failed());
     }
   }
 
   $effect(() => {
-    void reload(taskId);
+    const id = taskId;
+    time = undefined;
+    loadError = undefined;
+    void reload(id);
   });
 
   const runningHere = $derived(
@@ -91,14 +99,28 @@
       {/if}
     </p>
   {/if}
+  {#if loadError !== undefined}
+    <p role="alert" class="text-sm text-destructive">
+      {loadError}
+      <Button size="sm" variant="outline" class="ml-2" onclick={() => void reload()}
+        >{m.common_retry()}</Button
+      >
+    </p>
+  {/if}
   <div class="flex flex-wrap items-center gap-2">
+    <!-- 상태 글은 처음부터 있는 알림 영역 안에서만 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
+    <span class="text-sm empty:sr-only" role="status"
+      >{runningHere
+        ? m.time_task_running()
+        : confirmSwitch
+          ? m.time_task_switch_confirm()
+          : ''}</span
+    >
     {#if runningHere}
-      <span class="text-sm" role="status">{m.time_task_running()}</span>
       <Button size="sm" variant="outline" onclick={() => void stopHere()}
         >{m.time_stop_timer()}</Button
       >
     {:else if confirmSwitch}
-      <span class="text-sm" role="status">{m.time_task_switch_confirm()}</span>
       <Button size="sm" onclick={() => void startHere()}>{m.time_stop_and_start()}</Button>
       <Button size="sm" variant="ghost" onclick={() => (confirmSwitch = false)}
         >{m.common_cancel()}</Button
