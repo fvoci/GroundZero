@@ -438,7 +438,7 @@
                   <span class="shrink-0 font-mono text-xs text-muted-foreground">{r.reference}</span
                   >
                 {/if}
-                <span class="truncate font-medium">{r.title}</span>
+                <span class="truncate font-medium" title={r.title}>{r.title}</span>
               </span>
               {#if r.snippet !== null}
                 <span class="mt-0.5 line-clamp-2 text-sm break-words text-muted-foreground"

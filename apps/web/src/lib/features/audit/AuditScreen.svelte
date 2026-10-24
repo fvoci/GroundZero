@@ -73,7 +73,7 @@
           })}</span
         >
         {#if subject !== ''}
-          <span class="min-w-0 truncate text-muted-foreground">{subject}</span>
+          <span class="min-w-0 truncate text-muted-foreground" title={subject}>{subject}</span>
         {/if}
       </li>
     {:else}
