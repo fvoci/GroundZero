@@ -233,8 +233,10 @@
                 router.navigate(itemPath(workspace.id, it.id));
               }}
             >
-              <span class="font-mono text-sm text-muted-foreground">{it.reference}</span>
-              <span>{it.title}</span>
+              <span class="shrink-0 font-mono text-sm whitespace-nowrap text-muted-foreground"
+                >{it.reference}</span
+              >
+              <span class="min-w-0 [overflow-wrap:anywhere]">{it.title}</span>
               <Badge variant="outline">{itemStatusLabel(it.status)}</Badge>
               {#if it.starts_on !== null || it.ends_on !== null}
                 <span class="text-sm text-muted-foreground"

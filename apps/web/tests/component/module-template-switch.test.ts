@@ -114,3 +114,27 @@ describe('create from template after switching modules', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+
+// 항목 목록에서 긴 제목 옆의 참조 번호가 글자 단위로 갈라졌다("DEV/U-9", screen-stories 세션이 발견). 하위 문서 목록과
+// 같이 번호는 한 줄로 두고 제목이 대신 줄바꿈한다. 배치는 jsdom이 계산하지 않아 구조만 지킨다.
+describe('module item list', () => {
+  it('keeps the item reference on one line beside a long title', async () => {
+    await setLocale('ko', { reload: false });
+    vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+    vi.spyOn(api, 'module').mockResolvedValue(module('DEVU'));
+    const long =
+      'https://example.test/workspaces/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/items/ffffffff';
+    vi.spyOn(api, 'items').mockResolvedValue([
+      { ...template('i9', 'DEVU'), reference: 'DEVU-9', title: long, is_template: false },
+    ]);
+    render(ModuleScreen, { props: { workspace, moduleId: 'DEVU' } });
+    const list = await screen.findByTestId('item-list');
+    await waitFor(() => {
+      expect(list.textContent).toContain('DEVU-9');
+    });
+    const reference = [...list.querySelectorAll('span')].find((s) => s.textContent === 'DEVU-9');
+    expect(reference).toHaveClass('shrink-0', 'whitespace-nowrap');
+    const title = [...list.querySelectorAll('span')].find((s) => s.textContent === long);
+    expect(title).toHaveClass('min-w-0', '[overflow-wrap:anywhere]');
+  });
+});
