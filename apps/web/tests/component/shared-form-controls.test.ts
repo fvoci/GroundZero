@@ -43,6 +43,7 @@ describe('task board fields use the shared controls', () => {
   it('draws the text, tag, date and view-name fields with the shared Input', async () => {
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await screen.findByTestId('task-board');
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
     const fields = [
       screen.getByPlaceholderText('제목·번호'),
       screen.getByRole('textbox', { name: '태그로 거르기' }),
@@ -56,6 +57,7 @@ describe('task board fields use the shared controls', () => {
   it('draws the status, assignee, priority, sort and saved-view selects with the shared NativeSelect', async () => {
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await screen.findByTestId('task-board');
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
     const selects = screen.getAllByRole('combobox');
     expect(selects).toHaveLength(5);
     for (const select of selects) expect(select).toHaveAttribute('data-slot', 'native-select');

@@ -105,6 +105,8 @@
   "tasks_filter_due_to_aria": "마감 끝일",
   "tasks_sort": "정렬",
   "tasks_filter_reset": "초기화",
+  "tasks_filter_toggle": "필터·정렬",
+  "tasks_filter_active": "{count}개 적용 중",
   "tasks_saved_views": "저장한 보기",
   "tasks_saved_view_choose": "선택",
   "tasks_view_name": "이름",

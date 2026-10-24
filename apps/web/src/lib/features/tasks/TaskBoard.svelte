@@ -24,6 +24,7 @@
   import TaskCsvImport from './TaskCsvImport.svelte';
   import { itemPath, itemTaskPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
+  import * as Collapsible from '$lib/ui/collapsible';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
@@ -59,6 +60,7 @@
     applyFilter,
     assigneesOf,
     EMPTY_FILTER,
+    hiddenConditionCount,
     isFiltered,
     isRecord,
     readConfig,
@@ -101,6 +103,8 @@
   // 검색·필터·정렬과 저장한 보기(D-31).
   let filter = $state<TaskFilter>({ ...EMPTY_FILTER });
   let sort = $state<TaskSort>('position');
+  let filtersOpen = $state(false);
+  const hiddenConditions = $derived(hiddenConditionCount(filter, sort));
   let views = $state<SavedViewView[]>([]);
   let selectedView = $state('');
   // 보기를 지우는 중(두 번 눌러 같은 보기를 다시 지우려다 404 실패를 보이지 않게).
@@ -1230,135 +1234,156 @@
     </div>
   </div>
 
-  <div
-    class="flex flex-wrap items-end gap-2 text-sm"
+  <!-- 찾기와 "필터·정렬" 단추만 늘 보이고 나머지 조건·저장한 보기는 펼쳐서 쓴다(좁은 화면에서 업무보다 조건이 먼저 한
+       화면을 차지했다). 접혀 있어도 단추가 걸린 조건 수를 보인다. 접어도 조건 값은 그대로다. -->
+  <Collapsible.Root
+    bind:open={filtersOpen}
+    class="flex flex-col gap-2 text-sm"
     role="search"
     aria-label={m.tasks_filter_region()}
   >
-    <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">{m.tasks_filter_find()}</span>
-      <Input
-        class="w-40"
-        type="search"
-        bind:value={filter.text}
-        placeholder={m.tasks_filter_find_placeholder()}
-      />
-    </label>
-    <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">{m.tasks_status()}</span>
-      <NativeSelect
-        class="w-full"
-        bind:value={filter.status}
-        aria-label={m.tasks_filter_status_aria()}
-      >
-        <option value="any">{m.tasks_filter_all()}</option>
-        {#each TASK_STATUSES as s (s)}<option value={s}>{STATUS_LABEL[s]}</option>{/each}
-      </NativeSelect>
-    </label>
-    <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">{m.tasks_assignee()}</span>
-      <NativeSelect
-        class="w-full"
-        bind:value={filter.assignee}
-        aria-label={m.tasks_filter_assignee_aria()}
-      >
-        <option value="any">{m.tasks_filter_all()}</option>
-        <option value="me">{m.tasks_filter_mine()}</option>
-        <option value="none">{m.tasks_filter_unassigned()}</option>
-        {#each people as [id, name] (id)}<option value={id}>{name}</option>{/each}
-      </NativeSelect>
-    </label>
-    <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">{m.tasks_priority()}</span>
-      <NativeSelect
-        class="w-full"
-        bind:value={filter.priority}
-        aria-label={m.tasks_filter_priority_aria()}
-      >
-        <option value="any">{m.tasks_filter_all()}</option>
-        {#each ['urgent', 'high', 'medium', 'low', 'none'] as const as p (p)}<option value={p}
-            >{PRIORITY_LABEL[p]}</option
-          >{/each}
-      </NativeSelect>
-    </label>
-    <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">{m.tasks_tag()}</span>
-      <Input class="w-24" bind:value={filter.tag} aria-label={m.tasks_filter_tag_aria()} />
-    </label>
-    <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">{m.tasks_filter_due_from()}</span>
-      <Input
-        class="w-auto"
-        type="date"
-        bind:value={filter.dueFrom}
-        aria-label={m.tasks_filter_due_from_aria()}
-      />
-    </label>
-    <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">{m.tasks_filter_due_to()}</span>
-      <Input
-        class="w-auto"
-        type="date"
-        bind:value={filter.dueTo}
-        aria-label={m.tasks_filter_due_to_aria()}
-      />
-    </label>
-    <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">{m.tasks_sort()}</span>
-      <NativeSelect class="w-full" bind:value={sort} aria-label={m.tasks_sort()}>
-        {#each Object.entries(SORT_LABEL) as [value, label] (value)}<option {value}>{label}</option
-          >{/each}
-      </NativeSelect>
-    </label>
-    {#if isFiltered(filter) || sort !== 'position'}
-      <Button
-        size="sm"
-        variant="ghost"
-        onclick={() => {
-          filter = { ...EMPTY_FILTER };
-          sort = 'position';
-        }}>{m.tasks_filter_reset()}</Button
-      >
-    {/if}
-  </div>
-  <div class="flex flex-wrap items-end gap-2 text-sm">
-    <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">{m.tasks_saved_views()}</span>
-      <NativeSelect
-        aria-label={m.tasks_saved_views()}
-        class="w-full"
-        value={selectedView}
-        onchange={(e: Event) => {
-          if (e.currentTarget instanceof HTMLSelectElement) applyView(e.currentTarget.value);
-        }}
-      >
-        <option value="">{m.tasks_saved_view_choose()}</option>
-        {#each views as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
-      </NativeSelect>
-    </label>
-    <label class="flex flex-col gap-0.5">
-      <span class="text-xs text-muted-foreground">{m.tasks_view_name()}</span>
-      <Input
-        class="w-32"
-        bind:value={viewName}
-        aria-label={m.tasks_view_name_aria()}
-        maxlength={100}
-      />
-    </label>
-    <Button size="sm" variant="outline" onclick={() => void saveView()}
-      >{m.tasks_view_save()}</Button
-    >
-    {#if selectedView !== ''}
-      <Button size="sm" variant="ghost" disabled={deletingView} onclick={() => void deleteView()}
-        >{m.tasks_view_delete()}</Button
-      >
-    {/if}
-    {#if isFiltered(filter)}
-      <span class="text-xs text-muted-foreground" aria-live="polite"
-        >{m.tasks_filter_shown({ shown: shown.length, total: tasks.length })}</span
-      >
-    {/if}
-  </div>
+    <div class="flex flex-wrap items-end gap-2">
+      <label class="flex flex-col gap-0.5">
+        <span class="text-xs text-muted-foreground">{m.tasks_filter_find()}</span>
+        <Input
+          class="w-40"
+          type="search"
+          bind:value={filter.text}
+          placeholder={m.tasks_filter_find_placeholder()}
+        />
+      </label>
+      <Collapsible.Trigger>
+        {#snippet child({ props })}
+          <Button {...props} variant="outline" data-testid="task-filter-toggle">
+            {m.tasks_filter_toggle()}
+            {#if hiddenConditions > 0}
+              <span
+                class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums"
+                aria-hidden="true">{hiddenConditions}</span
+              >
+              <span class="sr-only">{m.tasks_filter_active({ count: hiddenConditions })}</span>
+            {/if}
+          </Button>
+        {/snippet}
+      </Collapsible.Trigger>
+      {#if isFiltered(filter) || sort !== 'position'}
+        <Button
+          variant="ghost"
+          onclick={() => {
+            filter = { ...EMPTY_FILTER };
+            sort = 'position';
+          }}>{m.tasks_filter_reset()}</Button
+        >
+      {/if}
+      {#if isFiltered(filter)}
+        <span class="self-center text-xs text-muted-foreground" aria-live="polite"
+          >{m.tasks_filter_shown({ shown: shown.length, total: tasks.length })}</span
+        >
+      {/if}
+    </div>
+    <Collapsible.Content class="flex flex-col gap-2">
+      <div class="flex flex-wrap items-end gap-2">
+        <label class="flex flex-col gap-0.5">
+          <span class="text-xs text-muted-foreground">{m.tasks_status()}</span>
+          <NativeSelect
+            class="w-full"
+            bind:value={filter.status}
+            aria-label={m.tasks_filter_status_aria()}
+          >
+            <option value="any">{m.tasks_filter_all()}</option>
+            {#each TASK_STATUSES as s (s)}<option value={s}>{STATUS_LABEL[s]}</option>{/each}
+          </NativeSelect>
+        </label>
+        <label class="flex flex-col gap-0.5">
+          <span class="text-xs text-muted-foreground">{m.tasks_assignee()}</span>
+          <NativeSelect
+            class="w-full"
+            bind:value={filter.assignee}
+            aria-label={m.tasks_filter_assignee_aria()}
+          >
+            <option value="any">{m.tasks_filter_all()}</option>
+            <option value="me">{m.tasks_filter_mine()}</option>
+            <option value="none">{m.tasks_filter_unassigned()}</option>
+            {#each people as [id, name] (id)}<option value={id}>{name}</option>{/each}
+          </NativeSelect>
+        </label>
+        <label class="flex flex-col gap-0.5">
+          <span class="text-xs text-muted-foreground">{m.tasks_priority()}</span>
+          <NativeSelect
+            class="w-full"
+            bind:value={filter.priority}
+            aria-label={m.tasks_filter_priority_aria()}
+          >
+            <option value="any">{m.tasks_filter_all()}</option>
+            {#each ['urgent', 'high', 'medium', 'low', 'none'] as const as p (p)}<option value={p}
+                >{PRIORITY_LABEL[p]}</option
+              >{/each}
+          </NativeSelect>
+        </label>
+        <label class="flex flex-col gap-0.5">
+          <span class="text-xs text-muted-foreground">{m.tasks_tag()}</span>
+          <Input class="w-24" bind:value={filter.tag} aria-label={m.tasks_filter_tag_aria()} />
+        </label>
+        <label class="flex flex-col gap-0.5">
+          <span class="text-xs text-muted-foreground">{m.tasks_filter_due_from()}</span>
+          <Input
+            class="w-auto"
+            type="date"
+            bind:value={filter.dueFrom}
+            aria-label={m.tasks_filter_due_from_aria()}
+          />
+        </label>
+        <label class="flex flex-col gap-0.5">
+          <span class="text-xs text-muted-foreground">{m.tasks_filter_due_to()}</span>
+          <Input
+            class="w-auto"
+            type="date"
+            bind:value={filter.dueTo}
+            aria-label={m.tasks_filter_due_to_aria()}
+          />
+        </label>
+        <label class="flex flex-col gap-0.5">
+          <span class="text-xs text-muted-foreground">{m.tasks_sort()}</span>
+          <NativeSelect class="w-full" bind:value={sort} aria-label={m.tasks_sort()}>
+            {#each Object.entries(SORT_LABEL) as [value, label] (value)}<option {value}
+                >{label}</option
+              >{/each}
+          </NativeSelect>
+        </label>
+      </div>
+      <div class="flex flex-wrap items-end gap-2">
+        <label class="flex flex-col gap-0.5">
+          <span class="text-xs text-muted-foreground">{m.tasks_saved_views()}</span>
+          <NativeSelect
+            aria-label={m.tasks_saved_views()}
+            class="w-full"
+            value={selectedView}
+            onchange={(e: Event) => {
+              if (e.currentTarget instanceof HTMLSelectElement) applyView(e.currentTarget.value);
+            }}
+          >
+            <option value="">{m.tasks_saved_view_choose()}</option>
+            {#each views as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
+          </NativeSelect>
+        </label>
+        <label class="flex flex-col gap-0.5">
+          <span class="text-xs text-muted-foreground">{m.tasks_view_name()}</span>
+          <Input
+            class="w-32"
+            bind:value={viewName}
+            aria-label={m.tasks_view_name_aria()}
+            maxlength={100}
+          />
+        </label>
+        <Button variant="outline" onclick={() => void saveView()}>{m.tasks_view_save()}</Button>
+        {#if selectedView !== ''}
+          <Button variant="ghost" disabled={deletingView} onclick={() => void deleteView()}
+            >{m.tasks_view_delete()}</Button
+          >
+        {/if}
+      </div>
+    </Collapsible.Content>
+  </Collapsible.Root>
   {#if moveNotice !== undefined}
     <p role="alert" class="text-sm text-destructive">{moveNotice}</p>
   {/if}
@@ -1381,7 +1406,6 @@
   {#if loading}
     <p class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</p>
   {:else if view === 'board'}
-    <p class="text-xs text-muted-foreground">{m.tasks_lane_estimate_hint()}</p>
     <div class="grid gap-3 @2xl:grid-cols-3" data-testid="task-board">
       {#each TASK_STATUSES as lane (lane)}
         <section
@@ -1629,6 +1653,8 @@
         {m.tasks_board_hint()}{ordered ? '' : ` ${m.tasks_board_hint_unordered()}`}
       </p>
     {/if}
+    <!-- 열 머리 예상 시간의 뜻. 업무보다 먼저 보이지 않게 보드 아래에 둔다. -->
+    <p class="text-xs text-muted-foreground">{m.tasks_lane_estimate_hint()}</p>
   {:else if view === 'gantt'}
     {#if ganttNotice !== undefined}
       <p role="alert" class="text-sm text-destructive">{ganttNotice}</p>

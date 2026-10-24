@@ -132,6 +132,8 @@ describe('saved view save on a stale version', () => {
     ];
     const sent = viewServer(stored);
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    // 저장한 보기는 접힌 "필터·정렬" 영역 안에 있다.
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
     const select = await screen.findByRole('combobox', { name: '저장한 보기' });
     await screen.findByRole('option', { name: '내 보기' });
     await fireEvent.change(select, { target: { value: 'v1' } });
@@ -169,6 +171,8 @@ describe('saved view save on a stale version', () => {
     const stored: Stored[] = [];
     const sent = viewServer(stored);
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    // 저장한 보기는 접힌 "필터·정렬" 영역 안에 있다.
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
     await screen.findByRole('combobox', { name: '저장한 보기' });
     // 이 탭이 목록을 읽은 뒤 다른 탭이 같은 이름을 만들었다.
     stored.push({ id: 'v9', name: '새 보기', config: { view: 'list' }, version: 1 });
@@ -193,6 +197,8 @@ describe('saved view save on a stale version', () => {
     const control: Control = { listFails: false, held: undefined };
     const sent = viewServer(stored, control);
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    // 저장한 보기는 접힌 "필터·정렬" 영역 안에 있다.
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
     const select = await screen.findByRole('combobox', { name: '저장한 보기' });
     await screen.findByRole('option', { name: '내 보기' });
     await fireEvent.change(select, { target: { value: 'v1' } });
@@ -224,6 +230,8 @@ describe('saved view save on a stale version', () => {
     const control: Control = { listFails: false, held: [] };
     const sent = viewServer(stored, control);
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    // 저장한 보기는 접힌 "필터·정렬" 영역 안에 있다.
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
     const select = await screen.findByRole('combobox', { name: '저장한 보기' });
     await screen.findByRole('option', { name: '나 보기' });
     await fireEvent.change(select, { target: { value: 'v1' } });

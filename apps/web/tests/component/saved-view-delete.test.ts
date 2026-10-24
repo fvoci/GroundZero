@@ -63,6 +63,10 @@ describe('saved view delete', () => {
       .mockRejectedValueOnce(new ApiError(404, 'not_found', 'view not found'));
 
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+
+    // 저장한 보기는 접힌 "필터·정렬" 영역 안에 있다.
+
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
     const select = await screen.findByRole('combobox', { name: '저장한 보기' });
     await screen.findByRole('option', { name: '내 보기' });
     await fireEvent.change(select, { target: { value: 'v1' } });

@@ -108,6 +108,8 @@
   "tasks_filter_due_to_aria": "Due date to",
   "tasks_sort": "Sort",
   "tasks_filter_reset": "Reset",
+  "tasks_filter_toggle": "Filter & sort",
+  "tasks_filter_active": "{count} active",
   "tasks_saved_views": "Saved views",
   "tasks_saved_view_choose": "Choose",
   "tasks_view_name": "Name",
