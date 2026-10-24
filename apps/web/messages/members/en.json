@@ -61,6 +61,6 @@
   "members_received_heading": "Invitations for you",
   "members_accept": "Accept",
   "members_decline": "Decline",
-  "members_delete_group_title": "Delete {name}?",
+  "members_delete_group_title": "Delete the group ‘{name}’?",
   "members_delete_group_body": "Members stay in the workspace, but item access and task assignments they had through this group may be removed."
 }

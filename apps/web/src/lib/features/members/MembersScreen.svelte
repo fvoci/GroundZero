@@ -120,21 +120,27 @@
   </h1>
 
   {#if error !== undefined}
+    <!-- 멤버·그룹·초대 어느 읽기가 실패해도(목록이 이미 있어도) 다시 읽을 수 있다. -->
     <p role="alert" class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2">
       {error}
+      <Button
+        size="sm"
+        variant="outline"
+        class="ml-2"
+        onclick={() => {
+          error = undefined;
+          void load();
+        }}>{m.common_retry()}</Button
+      >
     </p>
   {/if}
   <!-- 완료 알림은 처음부터 있는 알림 영역 안에서 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
   <p role="status" class="text-sm text-muted-foreground empty:sr-only">{notice ?? ''}</p>
 
   {#if view === undefined}
-    <!-- 첫 읽기가 실패하면 "불러오는 중"을 남기지 않고 위 오류와 함께 다시 시도를 둔다. -->
+    <!-- 첫 읽기가 실패하면 "불러오는 중"을 남기지 않는다(위 오류에 다시 시도가 있다). -->
     {#if error === undefined}
       <p aria-live="polite">{m.app_loading()}</p>
-    {:else}
-      <div>
-        <Button variant="outline" onclick={() => void load()}>{m.common_retry()}</Button>
-      </div>
     {/if}
   {:else}
     {@const v = view}

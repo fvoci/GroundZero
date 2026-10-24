@@ -222,8 +222,14 @@
     <p role="alert" class="text-sm text-destructive">
       {error}
       {#if !loaded}
-        <Button size="sm" variant="outline" class="ml-2" onclick={() => (reloadKey += 1)}
-          >{m.common_retry()}</Button
+        <Button
+          size="sm"
+          variant="outline"
+          class="ml-2"
+          onclick={() => {
+            error = undefined;
+            reloadKey += 1;
+          }}>{m.common_retry()}</Button
         >
       {/if}
     </p>
@@ -257,21 +263,24 @@
         {:else}
           <tr
             ><td colspan="9" class="py-2 text-muted-foreground"
-              >{loaded ? m.time_week_empty() : m.app_loading()}</td
+              >{loaded ? m.time_week_empty() : error === undefined ? m.app_loading() : ''}</td
             ></tr
           >
         {/each}
       </tbody>
     </table>
   </div>
-  <p class="text-sm">
+  <!-- 이번 달 합계 한 줄은 불러오는 중에서 결과로 바뀔 때 낭독기가 읽는다(주간 표는 칸이 많아 알림 영역으로 두지 않는다). -->
+  <p class="text-sm" aria-live="polite">
     {m.time_this_month()}
     {#each TIME_KINDS.filter((k) => monthly.some((r) => r.kind === k)) as k, i (k)}{i > 0
         ? ' · '
         : ''}{TIME_KIND_LABEL[k]}
       {durationText(total(monthly, (r) => r.kind === k))}{:else}{loaded
         ? m.time_month_empty()
-        : m.app_loading()}{/each}
+        : error === undefined
+          ? m.app_loading()
+          : ''}{/each}
   </p>
 
   <section class="flex flex-col gap-2" aria-labelledby="time-entries-heading">
@@ -305,11 +314,13 @@
           {/each}
         </ul>
       {/if}
-    {:else}
-      <p class="text-sm text-muted-foreground">
-        {loaded ? m.time_entries_empty() : m.app_loading()}
-      </p>
     {/each}
+    <!-- 날짜는 늘 7개라 위 목록의 {:else}로는 빈 주를 알릴 수 없다. 기록이 없을 때 따로 알린다. -->
+    {#if entries.length === 0}
+      <p class="text-sm text-muted-foreground">
+        {loaded ? m.time_entries_empty() : error === undefined ? m.app_loading() : ''}
+      </p>
+    {/if}
   </section>
 
   <section class="flex flex-col gap-2" aria-labelledby="time-manual-heading">

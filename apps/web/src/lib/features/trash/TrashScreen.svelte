@@ -135,8 +135,14 @@
     <p role="alert" class="text-sm text-destructive">
       {error}
       {#if trash === undefined}
-        <Button size="sm" variant="outline" class="ml-2" onclick={() => (reloadKey += 1)}
-          >{m.common_retry()}</Button
+        <Button
+          size="sm"
+          variant="outline"
+          class="ml-2"
+          onclick={() => {
+            error = undefined;
+            reloadKey += 1;
+          }}>{m.common_retry()}</Button
         >
       {/if}
     </p>

@@ -60,6 +60,6 @@
   "members_received_heading": "받은 초대",
   "members_accept": "수락",
   "members_decline": "거절",
-  "members_delete_group_title": "{name}을(를) 삭제할까요?",
+  "members_delete_group_title": "‘{name}’ 그룹을 삭제할까요?",
   "members_delete_group_body": "구성원은 워크스페이스에 남지만, 이 그룹으로 받은 항목 참여와 업무 담당은 사라질 수 있습니다."
 }

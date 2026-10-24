@@ -21,22 +21,29 @@
   let error = $state<string | undefined>(undefined);
   let confirmSwitch = $state(false);
 
+  // 읽기가 겹치면(처음 읽기·타이머 종료 뒤·다시 시도) 마지막으로 보낸 읽기의 결과만 남긴다. 화면이 사라지면 늘려
+  // 늦은 응답을 버린다.
+  let readSeq = 0;
+
   async function reload(id: string = taskId): Promise<void> {
+    const mine = ++readSeq;
+    loadError = undefined;
     try {
       const next = await api.taskTime(id);
-      if (id !== taskId) return;
+      if (mine !== readSeq) return;
       time = next;
-      loadError = undefined;
     } catch (e: unknown) {
-      if (id === taskId) loadError = errorText(e, m.time_load_failed());
+      if (mine === readSeq) loadError = errorText(e, m.time_load_failed());
     }
   }
 
   $effect(() => {
     const id = taskId;
     time = undefined;
-    loadError = undefined;
     void reload(id);
+    return () => {
+      readSeq += 1;
+    };
   });
 
   const runningHere = $derived(

@@ -44,6 +44,9 @@
 
   $effect(() => {
     if (workspace?.id === '') return;
+    // 다른 워크스페이스로 바뀌면 그 첫 쪽을 받기 전으로 돌아간다(실패하면 다시 시도가 보이게).
+    loaded = false;
+    error = undefined;
     seq += 1;
     void load(undefined, seq);
   });
@@ -67,6 +70,7 @@
           variant="outline"
           class="ml-2"
           onclick={() => {
+            error = undefined;
             seq += 1;
             void load(undefined, seq);
           }}>{m.common_retry()}</Button

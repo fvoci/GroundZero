@@ -94,8 +94,14 @@
     <p role="alert" class="text-sm text-destructive">
       {error}
       {#if !loaded}
-        <Button size="sm" variant="outline" class="ml-2" onclick={() => void reload()}
-          >{m.common_retry()}</Button
+        <Button
+          size="sm"
+          variant="outline"
+          class="ml-2"
+          onclick={() => {
+            error = undefined;
+            void reload();
+          }}>{m.common_retry()}</Button
         >
       {/if}
     </p>
