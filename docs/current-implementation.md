@@ -109,7 +109,7 @@
 
 ## 4. 불일치·제약과 근거
 
-- **의도한 절충.** 개인 노트 비공개와 공간 관리자 열람은 모순이 아니다. D-40·D-49가 소유 범위를 나눈다.
+- **의도한 절충.** 공간 문서의 관리자 접근과 개인 노트 비공개는 서로 다른 범위다. D-40·D-49가 소유 범위를 나눈다.
   공유 철회 뒤 새 요청 권한과 이미 내려받은 사본 회수도 다르다. [sharing.rs](../crates/server/tests/sharing.rs)의
   `share_permissions_and_revocation_take_effect_immediately`는 요청 권한을 다룬다.
   실시간 연결은 [Config](../crates/server/src/config.rs)의 기본 30초 재확인과
