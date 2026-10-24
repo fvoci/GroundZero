@@ -1,5 +1,5 @@
 import type { Workspace } from '@fvoci/api-client';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { HomeView } from '$lib/api/client';
@@ -65,5 +65,32 @@ describe('home first load', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
     expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  // 리뷰: 한 번 받은 뒤 다시 읽기가 실패하고 "다시 시도"를 누르면, 앞 데이터가 남아 있어 진행 중이라는 표시가 없었다.
+  it('says it is loading while a retry runs over earlier data', async () => {
+    let finish: (value: HomeView) => void = () => undefined;
+    vi.spyOn(api, 'home')
+      .mockResolvedValueOnce(home)
+      .mockRejectedValueOnce(new NetworkError('offline'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<HomeView>((resolve) => {
+            finish = resolve;
+          }),
+      );
+    const { rerender } = render(HomeDashboard, { props: { workspaces: [workspace] } });
+    await screen.findByText('진행 중인 항목이 없습니다.');
+    // 워크스페이스 목록이 바뀌면 다시 읽는다(여기서 실패).
+    await rerender({ workspaces: [{ ...workspace }] });
+    expect(await screen.findByRole('alert')).toHaveTextContent('홈을 불러오지 못했습니다.');
+
+    await fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    expect(await screen.findByText('불러오는 중…')).toBeInTheDocument();
+    finish(home);
+    await waitFor(() => {
+      expect(screen.queryByText('불러오는 중…')).toBeNull();
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

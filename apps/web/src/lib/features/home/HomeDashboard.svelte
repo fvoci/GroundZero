@@ -46,6 +46,8 @@
   let notifications = $state<NotificationView[]>([]);
   let error = $state<string | undefined>(undefined);
   let reloadKey = $state(0);
+  /** "다시 시도"로 다시 받는 중(앞서 받은 홈이 남아 있어도 진행 중이라고 보인다). */
+  let retrying = $state(false);
 
   const weekDays = $derived.by(() => {
     if (home === undefined) return [];
@@ -88,8 +90,11 @@
         week = merged;
         notifications = notes.filter((x) => !x.read).slice(0, 5);
         error = undefined;
+        retrying = false;
       } catch (e: unknown) {
-        if (mine === loadSeq) error = errorText(e, m.home_load_failed());
+        if (mine !== loadSeq) return;
+        error = errorText(e, m.home_load_failed());
+        retrying = false;
       }
     })();
   });
@@ -205,11 +210,12 @@
         size="sm"
         onclick={() => {
           error = undefined;
+          retrying = true;
           reloadKey += 1;
         }}>{m.common_retry()}</Button
       >
     </div>
-  {:else if home === undefined}
+  {:else if home === undefined || retrying}
     <p class="text-sm text-muted-foreground" aria-live="polite">{m.app_loading()}</p>
   {/if}
 
