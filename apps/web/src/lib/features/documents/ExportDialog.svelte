@@ -2,6 +2,8 @@
   // 문서 한 건 내보내기(D-75). 저장된 리비전을 골라 Markdown·ZIP(Markdown과 그림·첨부)·PDF(브라우저 인쇄)로 내보낸다.
   // 권한은 서버가 확인하고(내려받기와 같은 규칙) 화면은 `can_export`일 때만 보인다. 저장하지 않은 편집이 있으면
   // 먼저 저장하거나 저장된 리비전을 내보낼지 알린다. 변환 결과와 제한(옮기지 못한 블록, 넣지 못한 첨부)을 보여 준다.
+  import { untrack } from 'svelte';
+
   import { formatInstant } from '$lib/display';
   import type { DocumentView, RevisionSummaryView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
@@ -23,11 +25,12 @@
     /** 편집기에 저장하지 않은 편집이 있는지. */
     unsaved: boolean;
     references: ReferenceContext;
+    /** 여는 단추는 문서 화면의 "더 보기" 메뉴에 있다. */
+    open?: boolean;
   }
 
-  const { doc, unsaved, references }: Props = $props();
+  let { doc, unsaved, references, open = $bindable(false) }: Props = $props();
 
-  let open = $state(false);
   let revisions = $state<RevisionSummaryView[]>([]);
   let selected = $state(0);
   let format = $state<ExportFormat>('markdown');
@@ -58,8 +61,12 @@
   }
   const latest = $derived(selected === doc.revision);
 
-  function openDialog(): void {
-    open = true;
+  // 열 때마다 지난 결과·오류를 지우고 지금 리비전을 고른 뒤 리비전 목록을 다시 읽는다.
+  $effect(() => {
+    if (open) untrack(prepare);
+  });
+
+  function prepare(): void {
     error = undefined;
     notes = undefined;
     selected = doc.revision;
@@ -122,8 +129,6 @@
     }
   }
 </script>
-
-<Button size="sm" variant="outline" onclick={openDialog}>{m.documents_export()}</Button>
 
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-lg">

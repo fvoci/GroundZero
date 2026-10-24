@@ -117,6 +117,7 @@
   "documents_wiki": "{workspace} 위키",
   "documents_move_changed": "그사이 접근할 수 있는 사람이 바뀌었습니다. 다시 확인하세요.",
   "documents_actions_label": "문서 동작",
+  "documents_more_actions": "더 보기",
   "documents_personal_owner": "개인 노트 · 공유한 사람만 봄",
   "documents_personal_shared_read": "공유받은 개인 노트 · 읽기",
   "documents_personal_shared_write": "공유받은 개인 노트 · 고치기",

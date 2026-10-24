@@ -1,8 +1,10 @@
 <script lang="ts">
   // 문서 공유·설정·복제·이동 (D-20, D-23, D-24, D-49, D-59). 권한 판단은 서버가 하고,
   // 화면은 현재 권한(access)에 맞는 동작만 보여준다. 이동은 서버 미리보기로 접근 변화를 보여준 뒤 확인받는다.
+  // 좁은 화면에서 동작 단추 여덟 개가 두 줄을 차지해, 공유·설정과 (부르는 쪽의) 기록만 두고 나머지는 "더 보기" 메뉴에 둔다.
   import { formatInstant } from '$lib/display';
   import type { Workspace } from '@fvoci/api-client';
+  import type { Snippet } from 'svelte';
 
   import type {
     DocumentView,
@@ -20,6 +22,7 @@
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
   import * as Dialog from '$lib/ui/dialog';
+  import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
@@ -28,9 +31,15 @@
     doc: DocumentView;
     workspaces: Workspace[];
     onchanged: (doc: DocumentView) => void;
+    /** 공유·설정 다음, "더 보기" 앞에 늘 보이는 동작(기록). */
+    actions?: Snippet;
+    /** "더 보기" 메뉴의 복제·이동 뒤에 이어지는 항목(내보내기, 홈 표시, 지우기). */
+    more?: Snippet;
+    /** "더 보기" 단추. 메뉴에서 연 일이 끝나면 부르는 쪽이 여기로 초점을 돌린다. */
+    moreButton?: HTMLButtonElement | null;
   }
 
-  const { doc, workspaces, onchanged }: Props = $props();
+  let { doc, workspaces, onchanged, actions, more, moreButton = $bindable(null) }: Props = $props();
 
   type Panel = 'share' | 'copy' | 'move' | undefined;
   let panel = $state<Panel>(undefined);
@@ -352,24 +361,33 @@
       }}>{m.documents_share_settings()}</Button
     >
   {/if}
-  {#if canCopy}
-    <Button
-      size="sm"
-      variant="outline"
-      onclick={() => {
-        open('copy');
-      }}>{m.documents_copy()}</Button
-    >
-  {/if}
-  {#if isOwner && writable.length > 0}
-    <Button
-      size="sm"
-      variant="outline"
-      onclick={() => {
-        open('move');
-      }}>{m.documents_move()}</Button
-    >
-  {/if}
+  {@render actions?.()}
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger>
+      {#snippet child({ props })}
+        <Button {...props} size="sm" variant="outline" bind:ref={moreButton}
+          >{m.documents_more_actions()}</Button
+        >
+      {/snippet}
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content align="start" class="min-w-44">
+      {#if canCopy}
+        <DropdownMenu.Item
+          onSelect={() => {
+            open('copy');
+          }}>{m.documents_copy()}</DropdownMenu.Item
+        >
+      {/if}
+      {#if isOwner && writable.length > 0}
+        <DropdownMenu.Item
+          onSelect={() => {
+            open('move');
+          }}>{m.documents_move()}</DropdownMenu.Item
+        >
+      {/if}
+      {@render more?.()}
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
 </div>
 
 <Dialog.Root

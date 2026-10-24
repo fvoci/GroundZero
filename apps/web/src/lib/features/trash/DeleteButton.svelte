@@ -13,26 +13,37 @@
     what: string;
     remove: () => Promise<unknown>;
     ondeleted: () => void;
+    /** 묻는 중인지. 다른 곳(문서 화면의 "더 보기" 메뉴)에서 묻기를 시작할 수 있다. */
+    confirming?: boolean;
+    /** 시작 단추를 그릴지. 끄면 묻는 동안만 보이고, 취소하면 `oncancel`로 초점을 돌려줄 곳을 부르는 쪽이 정한다. */
+    trigger?: boolean;
+    oncancel?: () => void;
   }
 
-  const { what, remove, ondeleted }: Props = $props();
+  let {
+    what,
+    remove,
+    ondeleted,
+    confirming = $bindable(false),
+    trigger = true,
+    oncancel,
+  }: Props = $props();
 
-  let confirming = $state(false);
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
   let confirmButton = $state<HTMLButtonElement | null>(null);
   let startButton = $state<HTMLButtonElement | null>(null);
 
-  async function ask(): Promise<void> {
-    confirming = true;
-    await tick();
-    confirmButton?.focus();
-  }
+  // 묻기로 바뀌면(이 단추로든 밖에서든) 초점을 확인 단추로 옮긴다.
+  $effect(() => {
+    if (confirming) confirmButton?.focus();
+  });
 
   async function cancel(): Promise<void> {
     confirming = false;
     await tick();
-    startButton?.focus();
+    if (trigger) startButton?.focus();
+    else oncancel?.();
   }
 
   async function go(): Promise<void> {
@@ -63,8 +74,8 @@
       onclick={() => void go()}>{m.trash_move()}</Button
     >
     <Button size="sm" variant="ghost" onclick={() => void cancel()}>{m.common_cancel()}</Button>
-  {:else}
-    <Button size="sm" variant="ghost" bind:ref={startButton} onclick={() => void ask()}
+  {:else if trigger}
+    <Button size="sm" variant="ghost" bind:ref={startButton} onclick={() => (confirming = true)}
       >{m.trash_delete_what({ what })}</Button
     >
   {/if}

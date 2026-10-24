@@ -118,6 +118,7 @@
   "documents_wiki": "{workspace} wiki",
   "documents_move_changed": "Who can access it changed in the meantime. Check again.",
   "documents_actions_label": "Document actions",
+  "documents_more_actions": "More",
   "documents_personal_owner": "Personal note · Only people you share with",
   "documents_personal_shared_read": "Shared personal note · Read",
   "documents_personal_shared_write": "Shared personal note · Edit",
