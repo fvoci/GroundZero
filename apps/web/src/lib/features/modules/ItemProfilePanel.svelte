@@ -400,12 +400,19 @@
       {:else if p.members.length === 0 && p.groups.length === 0}
         <p>{m.modules_none()}</p>
       {:else}
+        <!-- 공통 Badge는 긴 글을 말줄임 없이 자른다. 사람·그룹 이름은 길 수 있어 칸 폭에서 말줄임하고 전체 이름은 title로. -->
         <ul class="flex flex-wrap gap-1" aria-label={labels.members}>
-          {#each p.members as member (member.user_id)}<li>
-              <Badge variant="secondary">{member.display_name}</Badge>
+          {#each p.members as member (member.user_id)}<li class="min-w-0 max-w-full">
+              <Badge variant="secondary" class="max-w-full" title={member.display_name}
+                ><span class="truncate">{member.display_name}</span></Badge
+              >
             </li>{/each}
-          {#each p.groups as g (g.id)}<li>
-              <Badge variant="outline">{m.modules_group_badge({ name: g.name })}</Badge>
+          {#each p.groups as g (g.id)}
+            {@const label = m.modules_group_badge({ name: g.name })}
+            <li class="min-w-0 max-w-full">
+              <Badge variant="outline" class="max-w-full" title={label}
+                ><span class="truncate">{label}</span></Badge
+              >
             </li>{/each}
         </ul>
       {/if}
