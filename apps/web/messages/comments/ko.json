@@ -25,5 +25,6 @@
   "comments_edit": "고치기",
   "comments_delete": "지우기",
   "comments_delete_confirm_label": "댓글 지우기 확인",
-  "comments_delete_confirm": "이 댓글을 지울까요?"
+  "comments_delete_confirm": "이 댓글을 지울까요?",
+  "comments_loading": "불러오는 중…"
 }
