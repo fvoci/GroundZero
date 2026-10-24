@@ -190,9 +190,16 @@ const FONTS: &[Font] = &[
     },
 ];
 
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 /// 서체 파일을 확인하고 고지를 더한다.
 fn fonts(root: &Path, out: &mut String) -> Result<()> {
-    use sha2::{Digest, Sha256};
     let dir = root.join(FONT_DIR);
     let licenses: BTreeSet<&str> = FONTS.iter().map(|f| f.license_file).collect();
     let mut present: BTreeSet<String> = BTreeSet::new();
@@ -215,7 +222,7 @@ fn fonts(root: &Path, out: &mut String) -> Result<()> {
     }
     for font in FONTS {
         let bytes = fs::read(dir.join(font.file)).with_context(|| format!("read {}", font.file))?;
-        let digest = format!("{:x}", Sha256::digest(&bytes));
+        let digest = sha256_hex(&bytes);
         if digest != font.sha256 {
             bail!(
                 "{} changed (sha256 {digest}); fonts ship unmodified (D-86)",
@@ -239,7 +246,7 @@ fn fonts(root: &Path, out: &mut String) -> Result<()> {
         if !is_font {
             continue;
         }
-        let digest = format!("{:x}", Sha256::digest(fs::read(&path)?));
+        let digest = sha256_hex(&fs::read(&path)?);
         if !approved.contains(digest.as_str()) {
             bail!(
                 "web bundle ships a font that is not approved (D-86): {}",
