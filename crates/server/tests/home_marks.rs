@@ -112,6 +112,31 @@ async fn home_marks_keep_both_categories_order_and_current_visibility() {
         .map(|m| m["id"].as_str().unwrap())
         .collect();
     assert!(ids.windows(2).all(|pair| pair[0] < pair[1]));
+    // Creation time takes priority over target_id, in ascending order for both categories.
+    let expected_ids: Vec<&str> = ids.iter().rev().copied().collect();
+    for (day, id) in expected_ids.iter().enumerate() {
+        sqlx::query(
+            "UPDATE user_marks
+             SET created_at = '2026-01-01T00:00:00Z'::timestamptz + $2 * interval '1 day'
+             WHERE user_id = $1 AND target_id = $3",
+        )
+        .bind(owner.id.0)
+        .bind(i32::try_from(day).unwrap())
+        .bind(id.parse::<Uuid>().unwrap())
+        .execute(&mut fixture)
+        .await
+        .unwrap();
+    }
+    let chronological = check_home(&state, &owner).await;
+    for category in ["pins", "favorites"] {
+        let actual_ids: Vec<&str> = chronological[category]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(actual_ids, expected_ids, "{category}");
+    }
     for user in [&admin, &reader, &outsider] {
         let home = check_home(&state, user).await;
         assert_eq!(home["pins"], json!([]));
