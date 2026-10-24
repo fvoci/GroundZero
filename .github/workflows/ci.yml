@@ -1,5 +1,5 @@
-# 제품 검사. 로컬과 같은 진입점(cargo xtask check / cargo xtask test)만 호출한다.
-# 모든 job은 base-image 워크플로가 게시한 같은 이미지 digest 안에서 돈다. 태그나 latest로 실행하지 않는다.
+# 제품 검사. 로컬과 같은 xtask 진입점을 호출한다.
+# 컨테이너 검사는 base-image 워크플로의 digest를 쓴다. Compose를 직접 다루는 작업은 고정 도구의 호스트 러너에서 돈다.
 # digest는 저장소 변수 CI_BASE_IMAGE_DIGEST (sha256:...)에 둔다. 비어 있으면 image 참조가 잘못되어 job이 시작 단계에서 실패한다. 성공으로 처리하지 않는다.
 name: ci
 
@@ -121,6 +121,41 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo xtask test --supabase --session-pooler --oidc
+
+  # 실제 API·DB·OIDC를 쓰는 Chromium 회귀. 브라우저/서비스 생명주기는 로컬과 같은 xtask가 소유한다.
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.1'
+          package-manager-cache: false
+      - name: pinned Node and Corepack
+        run: |
+          npm install --global corepack@0.36.0
+          corepack enable pnpm
+          rustc -V
+          node -v
+          corepack --version
+          pnpm -v
+      - run: pnpm install --frozen-lockfile
+      # Playwright와 Chromium revision은 lockfile의 정확한 @playwright/test 판으로 함께 고정된다.
+      - run: pnpm --filter @fvoci/web exec playwright install --with-deps chromium
+      - run: cargo xtask browser
+      - name: browser failure evidence
+        # xtask는 검증한 파일만 이 폴더에 게시하고 마지막에 표시 파일을 쓴다. 검증 실패 원본은 업로드하지 않는다.
+        if: failure() && hashFiles('target/browser/artifacts/SAFE_TO_UPLOAD') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/browser/artifacts/
+          if-no-files-found: warn
+          retention-days: 7
 
   # HWP·HWPX 미리보기 WASM(D-76). 제품 이미지와 같은 단계(rhwp-out)를 만든다. 빌드 안에서 브라우저에 들어가는
   # 그래프만 cargo-deny로 검사한다(취약점·회수·라이선스, 예외는 deploy/rhwp/deny.toml의 HWP 용도 승인분만).
