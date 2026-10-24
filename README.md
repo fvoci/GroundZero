@@ -10,8 +10,8 @@
 
 ## 요구 도구
 
-- Rust 1.99.0 (`rust-toolchain.toml`이 고정), `cargo-deny` 0.20.x
-- Node 24, pnpm 11.24.0 (`package.json`의 `packageManager`)
+- Rust 1.99.1 (`rust-toolchain.toml`이 고정), `cargo-deny` 0.20.x
+- Node 24.22.1 LTS(Corepack 포함), pnpm 12.15.0 (`package.json`의 `packageManager`, Corepack으로 실행: `corepack enable pnpm`)
 - Docker와 Docker Compose v2 (통합 테스트·개발 서비스)
 
 ## 명령

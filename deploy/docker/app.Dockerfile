@@ -1,7 +1,7 @@
 # 제품 실행 이미지. 서버 바이너리와 정적 웹 자산만 담는다.
 # 릴리스 태그의 이미지는 .github/workflows/release-image.yml이 빌드해 GHCR에 게시한다(D-87). 그 밖의 게시·배포는 하지 않는다.
 
-FROM rust:1.99.0-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6 AS server-build
+FROM rust:1.99.1-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8 AS server-build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
@@ -26,13 +26,14 @@ RUN sh /rhwp/build.sh
 FROM scratch AS rhwp-out
 COPY --from=rhwp-build /out /
 
-FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS web-build
-ARG PNPM_VERSION=11.24.0
-RUN npm install -g pnpm@${PNPM_VERSION}
+FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS web-build
 # 해시 자원의 br 사본을 만드는 도구(아래 빌드 끝).
 RUN apt-get update && apt-get install -y --no-install-recommends brotli && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json ./
+# pnpm은 Corepack이 package.json의 `packageManager`(판·sha512 고정)대로 받아 실행한다.
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable pnpm && corepack install && pnpm --version
 COPY apps ./apps
 COPY packages ./packages
 COPY contracts ./contracts

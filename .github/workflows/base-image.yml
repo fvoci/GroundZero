@@ -9,6 +9,8 @@ on:
     branches: [main]
     paths:
       - deploy/docker/dev.Dockerfile
+      # 이미지가 미리 받는 pnpm 판(packageManager)의 정본.
+      - package.json
       - .github/workflows/base-image.yml
   schedule:
     - cron: '17 3 * * 1'
