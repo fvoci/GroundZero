@@ -223,7 +223,7 @@
           id={`${idPrefix}-paste`}
           bind:value={pasted}
           rows={4}
-          class="min-h-24 font-code"
+          class="max-h-96 min-h-24 overflow-y-auto font-code"
         />
         <div>
           <Button size="sm" variant="outline" onclick={expand} disabled={pasted.trim() === ''}

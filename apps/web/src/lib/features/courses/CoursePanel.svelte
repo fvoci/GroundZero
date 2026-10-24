@@ -810,7 +810,11 @@
         <summary class="cursor-pointer">{m.courses_csv_summary()}</summary>
         <div class="flex flex-col gap-2 pt-2">
           <Label for="episodes-csv">{m.courses_csv_help()}</Label>
-          <Textarea id="episodes-csv" class="min-h-32 font-code" bind:value={csvText} />
+          <Textarea
+            id="episodes-csv"
+            class="max-h-96 min-h-32 overflow-y-auto font-code"
+            bind:value={csvText}
+          />
           {#if csv !== undefined}
             <p aria-live="polite">
               {m.courses_csv_read({ count: csv.rows.length })}

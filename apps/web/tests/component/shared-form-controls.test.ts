@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
 import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
+import TaskCsvImport from '$lib/features/tasks/TaskCsvImport.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // 기능마다 손으로 꾸민 입력 칸은 공통 Input과 모서리·여백·글자 크기(모바일 16px 미만이면 iOS가 초점 때 확대)·높이·초점
@@ -94,5 +96,24 @@ describe('comment boxes use the shared Textarea', () => {
     expect(reply).toHaveAttribute('data-slot', 'textarea');
     // 손으로 꾸민 textarea의 use:focusOnMount를 구성요소에서는 {@attach}로 넘긴다.
     expect(reply).toHaveFocus();
+  });
+});
+
+// 리뷰: 공통 Textarea는 내용만큼 자라므로(field-sizing), 긴 CSV·Markdown을 붙여넣는 칸은 높이를 막고 칸 안에서 스크롤한다.
+describe('paste boxes stay bounded', () => {
+  it('caps the task CSV and checklist paste boxes and scrolls inside them', async () => {
+    render(TaskCsvImport, { itemId: 'i1', onimported: () => Promise.resolve() });
+    expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveClass('max-h-96', 'overflow-y-auto');
+    render(ChecklistForm, {
+      idPrefix: 't',
+      items: [],
+      canEdit: true,
+      onadd: () => Promise.resolve(),
+      ontoggle: () => Promise.resolve(),
+      onrename: () => Promise.resolve(),
+      onremove: () => Promise.resolve(),
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Markdown 붙여넣기' }));
+    expect(screen.getByLabelText(/붙여넣을 체크리스트/)).toHaveClass('max-h-96', 'overflow-y-auto');
   });
 });

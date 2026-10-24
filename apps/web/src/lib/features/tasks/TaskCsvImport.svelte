@@ -146,7 +146,7 @@
     <Label for={`tasks-csv-${itemId}`}>{m.tasks_csv_label()}</Label>
     <Textarea
       id={`tasks-csv-${itemId}`}
-      class="min-h-32 font-code"
+      class="max-h-96 min-h-32 overflow-y-auto font-code"
       bind:value={text}
       oninput={(e: Event) => {
         if (e.currentTarget instanceof HTMLTextAreaElement) edited(e.currentTarget.value);
