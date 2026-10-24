@@ -5,6 +5,7 @@ import { asLocale, type DisplayLocale } from '$lib/display';
 import { applyDocFont } from '$lib/doc-font';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { applyTheme } from '$lib/theme.svelte';
 
 import '../src/styles/app.css';
 import '../src/styles/katex-layout.css';
@@ -53,8 +54,20 @@ const preview: Preview = {
         dynamicTitle: true,
       },
     },
+    theme: {
+      description: '화면 밝기(앱의 표시 설정과 같은 .dark 토큰)',
+      toolbar: {
+        title: '밝기',
+        icon: 'contrast',
+        items: [
+          { value: 'light', title: '밝게' },
+          { value: 'dark', title: '어둡게' },
+        ],
+        dynamicTitle: true,
+      },
+    },
   },
-  initialGlobals: { locale: 'ko', fontScale: '100' },
+  initialGlobals: { locale: 'ko', fontScale: '100', theme: 'light' },
   parameters: {
     layout: 'padded',
     viewport: {
@@ -86,6 +99,8 @@ const preview: Preview = {
     document.documentElement.lang = locale;
     document.documentElement.style.fontSize = FONT_SCALES.includes(scale) ? `${scale}%` : '';
     applyDocFont('sans');
+    // 보는 컴퓨터의 시스템 설정과 상관없이 고른 밝기로 고정한다("시스템 설정 따르기"는 고르지 않는다).
+    applyTheme(globals.theme === 'dark' ? 'dark' : 'light');
   },
 };
 

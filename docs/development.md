@@ -245,7 +245,8 @@ pnpm --filter @fvoci/web run build-storybook  # target/storybook-static
   import하고 Storybook용 복제·별도 CSS·제품 코드의 Storybook 분기를 만들지 않는다. 대화상자처럼 조립이 필요한 것만
   제품 화면과 같은 방식으로 조립한다.
 - `.storybook/preview.ts`가 제품의 `app.css`·서체·번역을 쓰고, 표시 설정(한국어·Asia/Seoul)을 고정한다. 도구 막대로 언어,
-  글자 크기(루트 글꼴 100·150·200%, 브라우저 설정의 흉내), 375·500px·데스크톱 화면 폭을 바꾼다.
+  글자 크기(루트 글꼴 100·150·200%, 브라우저 설정의 흉내), 밝기(밝게·어둡게, 앱과 같은 `applyTheme`, 기본 밝게), 375·500px·데스크톱
+  화면 폭을 바꾼다.
 - 합성 데이터는 [dev-ui-data.json](../deploy/postgres/dev-ui-data.json) 하나를 개발 seed와 함께 쓴다. story(`stories/fixtures/synthetic.ts`)와
   `cargo xtask dev`의 "UI 상태 예제" 워크스페이스는 문서 제목·본문·트리, 댓글 스레드·답글·해결, 업무 제목·상태·우선순위·담당자가
   같다. id·시각은 DB가 정하므로 story는 고정값을 쓰고, 사람은 개발 Keycloak 테스트 사용자 둘(이름은 `tests/synthetic-data.test.ts`가 대조)뿐이다.
