@@ -128,8 +128,13 @@
   >
     {m.comments_heading()}
   </h2>
+  <!-- 목록이 비었을 때의 불러오는 중·빈 목록 글도 이 알림 영역에서 바뀌어 화면 낭독기가 끝났음을 읽는다(리뷰). -->
   <p aria-live="polite" class="text-sm">
     {#if error !== undefined}<span class="text-destructive">{error}</span>{:else}{status}{/if}
+    {#if comments.length === 0 && error === undefined}
+      <span class="text-muted-foreground">{loaded ? m.comments_empty() : m.comments_loading()}</span
+      >
+    {/if}
   </p>
   <ul class="flex flex-col gap-3" data-testid="comments">
     {#each threads(comments) as t (t.root.id)}
@@ -218,12 +223,6 @@
           {/if}
         {/if}
       </li>
-    {:else}
-      {#if loaded}
-        <li class="text-sm text-muted-foreground">{m.comments_empty()}</li>
-      {:else if error === undefined}
-        <li class="text-sm text-muted-foreground">{m.comments_loading()}</li>
-      {/if}
     {/each}
   </ul>
   <form
