@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -87,5 +90,22 @@ describe('multi-column layouts follow the content width', () => {
     const board = await screen.findByTestId('task-board');
     expect(board).toHaveClass('@2xl:grid-cols-3');
     expect(board.className).not.toMatch(viewportColumns);
+  });
+});
+
+// UI 감사: 항목 화면의 내용 패널(항목 정보·강의·스터디·기록 편집)과 문서 충돌 비교도 창 폭(sm·md)으로 나뉘어, 사이드바를 연
+// 640~767px 창에서 칸이 좁게 눌렸다. 모두 본문 안에 그려지므로(대화상자가 아니다) 본문 폭 기준으로 나눈다.
+describe('content panels split by the content width', () => {
+  const panels = [
+    'src/lib/features/courses/CoursePanel.svelte',
+    'src/lib/features/study/StudyPanel.svelte',
+    'src/lib/features/modules/ItemProfilePanel.svelte',
+    'src/lib/features/records/RecordEditor.svelte',
+    'src/lib/features/documents/DocumentEditor.svelte',
+  ];
+  it.each(panels)('%s uses container variants for its columns', (file) => {
+    const source = readFileSync(path.resolve(import.meta.dirname, '../..', file), 'utf8');
+    expect(source).not.toMatch(/(^|[\s'"`])(sm|md|lg):(grid-cols|col-span)-/m);
+    expect(source).toMatch(/@(xl|2xl):grid-cols-/);
   });
 });

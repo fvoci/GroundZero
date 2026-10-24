@@ -51,14 +51,14 @@
 </script>
 
 <form
-  class="grid gap-3 rounded-md border p-3 sm:grid-cols-2"
+  class="grid gap-3 rounded-md border p-3 @xl:grid-cols-2"
   novalidate
   onsubmit={(e: SubmitEvent) => {
     e.preventDefault();
     onsubmit();
   }}
 >
-  <div class="flex flex-col gap-1 sm:col-span-2">
+  <div class="flex flex-col gap-1 @xl:col-span-2">
     <Label for={id('title')}>{m.records_title()}</Label>
     <Input id={id('title')} bind:value={form.title} maxlength={300} />
   </div>
@@ -70,7 +70,7 @@
   {/if}
   {#each def.fields as f (f.key)}
     {#if f.type === 'long_text'}
-      <div class="flex flex-col gap-1 sm:col-span-2">
+      <div class="flex flex-col gap-1 @xl:col-span-2">
         <Label for={id(f.key)}>{recordFieldLabel(def, f)}</Label>
         <Textarea
           id={id(f.key)}
@@ -93,7 +93,7 @@
         </NativeSelect>
       </div>
     {:else if f.type === 'people'}
-      <fieldset class="flex flex-col gap-1 rounded-md border p-2 sm:col-span-2">
+      <fieldset class="flex flex-col gap-1 rounded-md border p-2 @xl:col-span-2">
         <legend class="px-1 text-sm font-medium">{recordFieldLabel(def, f)}</legend>
         <div class="flex flex-wrap gap-3">
           {#each people as p (p.id)}
@@ -158,12 +158,12 @@
       </div>
     {/if}
   {/each}
-  <div class="flex flex-col gap-1 sm:col-span-2">
+  <div class="flex flex-col gap-1 @xl:col-span-2">
     <Label for={id('body')}>{m.records_body()}</Label>
     <Textarea id={id('body')} class="min-h-20" rows={3} maxlength={20000} bind:value={form.body} />
   </div>
   {#if def.file_roles.length > 0}
-    <fieldset class="flex flex-col gap-2 rounded-md border p-2 sm:col-span-2">
+    <fieldset class="flex flex-col gap-2 rounded-md border p-2 @xl:col-span-2">
       <legend class="px-1 text-sm font-medium">{m.records_files_legend()}</legend>
       {#if files.length === 0}
         <p class="text-sm text-muted-foreground">
@@ -233,7 +233,7 @@
       {/if}
     </fieldset>
   {/if}
-  <div class="flex gap-2 sm:col-span-2">
+  <div class="flex gap-2 @xl:col-span-2">
     <Button type="submit">{submitLabel}</Button>
     <Button type="button" variant="ghost" onclick={oncancel}>{m.common_cancel()}</Button>
   </div>

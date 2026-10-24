@@ -366,7 +366,7 @@
     </div>
     {#if editing}
       <form
-        class="grid gap-2 sm:grid-cols-2"
+        class="grid gap-2 @xl:grid-cols-2"
         onsubmit={(e: SubmitEvent) => {
           e.preventDefault();
           if (details.url.trim() !== '' && !isWebUrl(details.url.trim())) {
@@ -415,7 +415,7 @@
             <Input id={`course-${key}`} type="date" bind:value={details[key]} />
           </div>
         {/each}
-        <div class="flex gap-2 sm:col-span-2">
+        <div class="flex gap-2 @xl:col-span-2">
           <Button type="submit" disabled={savingDetails}>{m.common_save()}</Button>
           <Button variant="ghost" onclick={() => (editing = false)}>{m.common_cancel()}</Button>
         </div>
@@ -449,7 +449,7 @@
 
   <section class="flex flex-col gap-2" aria-labelledby="course-progress-heading">
     <h2 id="course-progress-heading" class="text-lg font-semibold">{m.courses_my_progress()}</h2>
-    <div class="grid gap-2 text-sm sm:grid-cols-3">
+    <div class="grid gap-2 text-sm @xl:grid-cols-3">
       <div class="rounded-md border p-2">
         <div class="text-muted-foreground">{m.courses_progress()}</div>
         <div class="text-lg font-semibold">
@@ -644,7 +644,7 @@
           {#if editingEpisode?.id === e.id}
             {@const base = editingEpisode}
             <form
-              class="grid gap-2 border-t pt-2 sm:grid-cols-4"
+              class="grid gap-2 border-t pt-2 @xl:grid-cols-4"
               aria-label={m.courses_episode_form({ number: e.number })}
               onsubmit={(ev: SubmitEvent) => {
                 ev.preventDefault();
@@ -655,7 +655,7 @@
                 <Label for={`ep-number-${e.id}`}>{m.courses_number()}</Label>
                 <Input id={`ep-number-${e.id}`} type="number" min={1} bind:value={shared.number} />
               </div>
-              <div class="flex flex-col gap-1 sm:col-span-3">
+              <div class="flex flex-col gap-1 @xl:col-span-3">
                 <Label for={`ep-title-${e.id}`}>{m.courses_new_title()}</Label>
                 <Input id={`ep-title-${e.id}`} bind:value={shared.title} maxlength={300} />
               </div>
@@ -671,15 +671,15 @@
                   placeholder="12:30"
                 />
               </div>
-              <div class="flex flex-col gap-1 sm:col-span-2">
+              <div class="flex flex-col gap-1 @xl:col-span-2">
                 <Label for={`ep-planned-${e.id}`}>{m.courses_planned()}</Label>
                 <Input id={`ep-planned-${e.id}`} type="date" bind:value={shared.planned_on} />
               </div>
-              <div class="flex flex-col gap-1 sm:col-span-4">
+              <div class="flex flex-col gap-1 @xl:col-span-4">
                 <Label for={`ep-url-${e.id}`}>{m.courses_episode_url()}</Label>
                 <Input id={`ep-url-${e.id}`} type="url" bind:value={shared.url} maxlength={2000} />
               </div>
-              <div class="flex flex-col gap-1 sm:col-span-4">
+              <div class="flex flex-col gap-1 @xl:col-span-4">
                 <Label for={`ep-materials-${e.id}`}>{m.courses_materials()}</Label>
                 <Textarea
                   id={`ep-materials-${e.id}`}
@@ -687,7 +687,7 @@
                   bind:value={shared.materials}
                 />
               </div>
-              <div class="flex gap-2 sm:col-span-4">
+              <div class="flex gap-2 @xl:col-span-4">
                 <Button type="submit" size="sm" disabled={savingEpisode}>{m.common_save()}</Button>
                 <Button
                   size="sm"
@@ -701,7 +701,7 @@
           {/if}
           {#if openEpisode === e.id}
             <form
-              class="grid gap-2 border-t pt-2 sm:grid-cols-3"
+              class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
               onsubmit={(ev: SubmitEvent) => {
                 ev.preventDefault();
                 // 빈칸은 위치 지우기(null), 그 밖은 분:초·시:분:초·분 수(CSV와 같은 규칙). 읽을 수 없는 입력은 보내지
@@ -753,7 +753,7 @@
                   </p>
                 {/if}
               </div>
-              <div class="flex flex-col gap-1 sm:col-span-3">
+              <div class="flex flex-col gap-1 @xl:col-span-3">
                 <Label for={`mine-note-${e.id}`}>{m.courses_my_note()}</Label>
                 <Textarea id={`mine-note-${e.id}`} class="min-h-20" bind:value={mine.note} />
               </div>

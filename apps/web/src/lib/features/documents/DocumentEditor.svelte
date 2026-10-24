@@ -598,7 +598,7 @@
       <p class="text-sm">
         {m.documents_conflict_body({ revision: conflict.revision })}
       </p>
-      <div class="grid gap-3 md:grid-cols-2">
+      <div class="grid gap-3 @2xl:grid-cols-2">
         <div>
           <h3 class="text-sm font-semibold">
             {m.documents_conflict_server({ title: conflict.title })}

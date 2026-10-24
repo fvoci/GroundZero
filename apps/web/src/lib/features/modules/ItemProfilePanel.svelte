@@ -248,7 +248,7 @@
         </div>
       </div>
     {/if}
-    <form class="grid gap-3 sm:grid-cols-2" onsubmit={(e) => void save(e)} novalidate>
+    <form class="grid gap-3 @xl:grid-cols-2" onsubmit={(e) => void save(e)} novalidate>
       <div class="flex flex-col gap-1">
         <span id="item-status-label" class="text-sm font-medium">{m.modules_status()}</span>
         <Select.Root
@@ -296,22 +296,22 @@
         <Label for="item-ends">{m.modules_ends_on()}</Label>
         <Input id="item-ends" type="date" bind:value={form.ends_on} />
       </div>
-      <div class="flex flex-col gap-1 sm:col-span-2">
+      <div class="flex flex-col gap-1 @xl:col-span-2">
         <Label for="item-goal">{m.modules_goal()}</Label>
         <Textarea id="item-goal" rows={2} maxlength={4000} bind:value={form.goal} />
       </div>
-      <div class="flex flex-col gap-1 sm:col-span-2">
+      <div class="flex flex-col gap-1 @xl:col-span-2">
         <Label for="item-scope">{m.modules_scope()}</Label>
         <Textarea id="item-scope" rows={2} maxlength={4000} bind:value={form.scope} />
       </div>
       {#if kind === 'research'}
-        <div class="flex flex-col gap-1 sm:col-span-2">
+        <div class="flex flex-col gap-1 @xl:col-span-2">
           <Label for="item-keywords">{m.modules_keywords_input()}</Label>
           <Input id="item-keywords" bind:value={form.keywords} />
         </div>
       {/if}
       {#each fields as f (f.key)}
-        <div class={['flex flex-col gap-1', f.multiline ? 'sm:col-span-2' : '']}>
+        <div class={['flex flex-col gap-1', f.multiline ? '@xl:col-span-2' : '']}>
           <Label for={`item-detail-${f.key}`}>{f.label}</Label>
           {#if f.multiline}
             <Textarea
@@ -325,7 +325,7 @@
           {/if}
         </div>
       {/each}
-      <div class="flex gap-2 sm:col-span-2">
+      <div class="flex gap-2 @xl:col-span-2">
         <Button type="submit">{m.common_save()}</Button>
         <Button
           type="button"
