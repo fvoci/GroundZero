@@ -17,6 +17,8 @@
   const { target }: Props = $props();
 
   let comments = $state<CommentView[]>([]);
+  // 이 대상의 목록을 한 번이라도 받았는지. 받기 전에는 "댓글이 없습니다" 대신 불러오는 중이라고 보인다.
+  let loaded = $state(false);
   let error = $state<string | undefined>(undefined);
   let status = $state('');
   let draft = $state('');
@@ -39,12 +41,18 @@
       lastTarget = t.id;
       draftKey.done();
       replyKey.done();
+      // 다른 대상의 댓글을 보이지 않는다. 다시 읽기(작업 뒤)는 받을 때까지 지금 목록을 둔다.
+      comments = [];
+      loaded = false;
     }
     const mine = ++seq;
     api
       .comments(t)
       .then((list) => {
-        if (mine === seq) comments = list;
+        if (mine === seq) {
+          comments = list;
+          loaded = true;
+        }
       })
       .catch((e: unknown) => {
         if (mine === seq) error = errorText(e, m.comments_load_failed());
@@ -209,7 +217,11 @@
         {/if}
       </li>
     {:else}
-      <li class="text-sm text-muted-foreground">{m.comments_empty()}</li>
+      {#if loaded}
+        <li class="text-sm text-muted-foreground">{m.comments_empty()}</li>
+      {:else if error === undefined}
+        <li class="text-sm text-muted-foreground">{m.comments_loading()}</li>
+      {/if}
     {/each}
   </ul>
   <form

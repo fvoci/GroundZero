@@ -40,10 +40,15 @@ export const Empty: Story = {
   },
 };
 
-/** 불러오는 중: 지금 제품은 따로 표시하지 않아 빈 목록과 같은 글이 보인다(관찰 기록, 바꾸지 않음). */
+/** 불러오는 중: 목록을 받기 전에는 빈 목록 글 대신 불러오는 중이라고 보인다. */
 export const Loading: Story = {
   beforeEach: () => {
     spyOn(api, 'comments').mockImplementation(() => never());
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('불러오는 중…')).toBeInTheDocument();
+    await expect(canvas.queryByText('댓글이 없습니다.')).toBeNull();
   },
 };
 
