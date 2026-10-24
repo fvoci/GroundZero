@@ -158,7 +158,13 @@
       {/snippet}
     </DocumentActions>
     {#if doc.can_export}
-      <ExportDialog bind:open={exportOpen} {doc} {unsaved} references={referencesFor(doc)} />
+      <ExportDialog
+        bind:open={exportOpen}
+        returnFocus={moreButton}
+        {doc}
+        {unsaved}
+        references={referencesFor(doc)}
+      />
     {/if}
     <div class="ml-auto flex flex-wrap items-center gap-1">
       {#if doc.can_delete}

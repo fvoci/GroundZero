@@ -27,9 +27,11 @@
     references: ReferenceContext;
     /** 여는 단추는 문서 화면의 "더 보기" 메뉴에 있다. */
     open?: boolean;
+    /** 닫으면 초점을 돌려줄 곳("더 보기" 단추). 연 메뉴 항목은 닫히며 사라지므로 브라우저에 맡기지 않는다. */
+    returnFocus?: HTMLElement | null;
   }
 
-  let { doc, unsaved, references, open = $bindable(false) }: Props = $props();
+  let { doc, unsaved, references, open = $bindable(false), returnFocus = null }: Props = $props();
 
   let revisions = $state<RevisionSummaryView[]>([]);
   let selected = $state(0);
@@ -131,7 +133,14 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-lg">
+  <Dialog.Content
+    class="sm:max-w-lg"
+    onCloseAutoFocus={(e: Event) => {
+      if (returnFocus === null) return;
+      e.preventDefault();
+      returnFocus.focus();
+    }}
+  >
     <Dialog.Header>
       <Dialog.Title>{m.documents_export()}</Dialog.Title>
       <Dialog.Description>{m.documents_export_description()}</Dialog.Description>

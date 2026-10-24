@@ -188,3 +188,21 @@ describe('focus after the duplicate dialog', () => {
     });
   });
 });
+
+// 리뷰: 내보내기 창도 닫히며 사라지는 메뉴 항목에서 열린다. 닫으면 "더 보기"로 초점을 돌린다.
+describe('focus after the export dialog', () => {
+  it('returns focus to the More button when the export dialog closes', async () => {
+    vi.spyOn(api, 'document').mockResolvedValue(documentView({}));
+    render(DocumentScreen, { props: { documentId: 'doc-1', workspaces } });
+    const menu = await openMore();
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: '내보내기' }));
+    const dialog = await screen.findByRole('dialog');
+    await fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '더 보기' })).toHaveFocus();
+    });
+  });
+});
