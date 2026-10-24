@@ -1075,9 +1075,13 @@
                 onopen(sub.id);
               }}
             >
-              <span class="font-mono text-xs text-muted-foreground">{sub.reference ?? ''}</span>
-              <span>{sub.title}</span>
-              <span class="ml-auto text-xs text-muted-foreground">{STATUS_LABEL[sub.status]}</span>
+              <span class="shrink-0 font-mono text-xs whitespace-nowrap text-muted-foreground"
+                >{sub.reference ?? ''}</span
+              >
+              <span class="min-w-0 [overflow-wrap:anywhere]">{sub.title}</span>
+              <span class="ml-auto shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >{STATUS_LABEL[sub.status]}</span
+              >
             </button>
           {:else}
             <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>

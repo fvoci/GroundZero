@@ -96,6 +96,21 @@ describe('child documents', () => {
     expect(screen.queryByRole('navigation')).toBeNull();
   });
 
+  // 375px에서 긴 제목 옆의 `WIKI-9`가 `WI / KI / -9`로 갈라졌다. 배치는 jsdom이 계산하지 않아 구조만 지킨다.
+  it('keeps the reference on one line and lets a long title break instead', async () => {
+    const url =
+      'https://example.test/workspaces/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/documents/ffffffff';
+    vi.spyOn(api, 'wikiDocuments').mockResolvedValue([
+      summary('guide', '운영 안내', null),
+      { ...summary('long', url, 'guide'), reference: 'WIKI-9' },
+    ]);
+    render(ChildDocuments, { props: { doc: view({}), workspaces } });
+    const nav = await screen.findByRole('navigation');
+    const reference = within(nav).getByText('WIKI-9');
+    expect(reference).toHaveClass('shrink-0', 'whitespace-nowrap');
+    expect(within(nav).getByText(url)).toHaveClass('min-w-0', '[overflow-wrap:anywhere]');
+  });
+
   it('says so when the list cannot be loaded', async () => {
     vi.spyOn(api, 'wikiDocuments').mockRejectedValue(new NetworkError('offline'));
     render(ChildDocuments, { props: { doc: view({}), workspaces } });

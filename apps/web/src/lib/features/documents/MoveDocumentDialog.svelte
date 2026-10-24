@@ -168,7 +168,8 @@
           }}
         >
           <span>
-            {#if option.reference !== null}<span class="font-mono text-xs text-muted-foreground"
+            {#if option.reference !== null}<span
+                class="font-mono text-xs whitespace-nowrap text-muted-foreground"
                 >{option.reference}</span
               >{/if}
             {option.title}

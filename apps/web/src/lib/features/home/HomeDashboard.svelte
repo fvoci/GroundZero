@@ -300,9 +300,11 @@
                     openTask(t);
                   }}
                 >
-                  <span class="font-mono text-xs text-muted-foreground">{t.reference ?? ''}</span>
+                  <span class="shrink-0 font-mono text-xs whitespace-nowrap text-muted-foreground"
+                    >{t.reference ?? ''}</span
+                  >
                   <span class="min-w-0 flex-1 truncate">{t.title}</span>
-                  <span class="text-xs text-muted-foreground"
+                  <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
                     >{t.due_date === null ? '' : formatDay(t.due_date)}</span
                   >
                 </button>
