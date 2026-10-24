@@ -264,8 +264,10 @@
         </div>
       </header>
 
+      <!-- 화면 안 여러 열 배치는 창 폭(md·lg)이 아니라 이 본문 폭(@container)을 본다. 사이드바가 차지한 폭과 사용자가 키운 루트
+           글꼴(컨테이너 쿼리의 rem은 루트 글꼴을 따른다)을 함께 반영한다. -->
       <main
-        class={`mx-auto flex w-full min-w-0 flex-col gap-8 px-4 py-6 sm:px-6 ${READING_ROUTES.has(route.name) ? 'max-w-3xl' : 'max-w-5xl'}`}
+        class={`@container mx-auto flex w-full min-w-0 flex-col gap-8 px-4 py-6 sm:px-6 ${READING_ROUTES.has(route.name) ? 'max-w-3xl' : 'max-w-5xl'}`}
       >
         {#if route.name === 'home'}
           <HomeScreen

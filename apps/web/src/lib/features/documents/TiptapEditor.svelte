@@ -476,7 +476,7 @@
 
 {#if editable}
   <div class="flex flex-wrap items-center gap-1 border-b pb-2">
-    <div class="flex gap-1" role="group" aria-label={m.documents_mode_label()}>
+    <div class="flex flex-wrap gap-1" role="group" aria-label={m.documents_mode_label()}>
       {#each collab === undefined ? MODES : [] as option (option.mode)}
         <Button
           size="sm"

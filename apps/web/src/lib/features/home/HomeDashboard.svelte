@@ -279,7 +279,7 @@
   {/if}
 
   <!-- 열 정의가 없으면 암묵 auto 열이 띄어쓰기 없는 긴 글(URL)만큼 늘어나 좁은 화면에서 가로로 넘친다. -->
-  <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+  <div class="grid grid-cols-1 gap-6 @2xl:grid-cols-2">
     <section class="flex flex-col gap-2" aria-labelledby="up-next-heading">
       <h2 id="up-next-heading" class="text-lg font-semibold">{m.home_up_next()}</h2>
       {#each ['overdue', 'today', 'upcoming'] as const as b (b)}

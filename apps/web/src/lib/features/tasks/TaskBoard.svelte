@@ -1383,7 +1383,7 @@
     <p class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</p>
   {:else if view === 'board'}
     <p class="text-xs text-muted-foreground">{m.tasks_lane_estimate_hint()}</p>
-    <div class="grid gap-3 md:grid-cols-3" data-testid="task-board">
+    <div class="grid gap-3 @2xl:grid-cols-3" data-testid="task-board">
       {#each TASK_STATUSES as lane (lane)}
         <section
           data-lane={lane}

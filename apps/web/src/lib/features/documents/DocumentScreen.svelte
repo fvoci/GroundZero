@@ -156,8 +156,8 @@
   {#key `${doc.id}:${String(epoch)}:${String(doc.realtime)}`}
     <ReferenceFocus root={bodyArea} target={parseReferenceHash(router.hash)} />
   {/key}
-  <!-- 넓은 화면에서는 본문 옆에 목차(Outline처럼 읽기 위치를 잡기 쉽게). 좁은 화면에서는 본문만. -->
-  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-6">
+  <!-- 본문 영역이 넓으면 본문 옆에 목차(Outline처럼 읽기 위치를 잡기 쉽게). 좁거나 글꼴을 키웠으면 본문만. -->
+  <div class="@2xl:grid @2xl:grid-cols-[minmax(0,1fr)_14rem] @2xl:gap-6">
     <div bind:this={bodyArea} class="min-w-0">
       {#key `${doc.id}:${String(epoch)}:${String(doc.realtime)}`}
         {#if doc.realtime}
@@ -200,7 +200,7 @@
         {/if}
       {/key}
     </div>
-    <aside class="hidden lg:block">
+    <aside class="hidden @2xl:block">
       <div class="sticky top-4">
         <DocumentOutline root={bodyArea} />
       </div>
