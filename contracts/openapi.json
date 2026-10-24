@@ -5522,7 +5522,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.\n모르는 값이면 400.",
+        "summary": "내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시, D-109 화면 밝기). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.\n모르는 값이면 400.",
         "operationId": "set_my_settings",
         "requestBody": {
           "content": {
@@ -13271,7 +13271,8 @@
           "time_zone",
           "locale",
           "week_start",
-          "hour_cycle"
+          "hour_cycle",
+          "theme"
         ],
         "properties": {
           "display_name": {
@@ -13293,6 +13294,10 @@
           "locale": {
             "type": "string",
             "description": "표시 언어(D-81): `ko`·`en`, 비었으면 아직 고르지 않음."
+          },
+          "theme": {
+            "type": "string",
+            "description": "화면 밝기(D-109): `system`(기본, 운영체제 설정을 따름)·`light`·`dark`."
           },
           "time_zone": {
             "type": "string",
@@ -13674,6 +13679,13 @@
               "null"
             ],
             "description": "`ko`·`en`, 빈 문자열이면 지운다."
+          },
+          "theme": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`system`·`light`·`dark`. 빈 문자열은 받지 않는다(기본이 `system`)."
           },
           "time_zone": {
             "type": [

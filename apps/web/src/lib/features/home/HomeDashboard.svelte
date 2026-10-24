@@ -278,7 +278,8 @@
     </p>
   {/if}
 
-  <div class="grid gap-6 md:grid-cols-2">
+  <!-- 열 정의가 없으면 암묵 auto 열이 띄어쓰기 없는 긴 글(URL)만큼 늘어나 좁은 화면에서 가로로 넘친다. -->
+  <div class="grid grid-cols-1 gap-6 @2xl:grid-cols-2">
     <section class="flex flex-col gap-2" aria-labelledby="up-next-heading">
       <h2 id="up-next-heading" class="text-lg font-semibold">{m.home_up_next()}</h2>
       {#each ['overdue', 'today', 'upcoming'] as const as b (b)}
@@ -299,9 +300,11 @@
                     openTask(t);
                   }}
                 >
-                  <span class="font-mono text-xs text-muted-foreground">{t.reference ?? ''}</span>
+                  <span class="shrink-0 font-mono text-xs whitespace-nowrap text-muted-foreground"
+                    >{t.reference ?? ''}</span
+                  >
                   <span class="min-w-0 flex-1 truncate">{t.title}</span>
-                  <span class="text-xs text-muted-foreground"
+                  <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
                     >{t.due_date === null ? '' : formatDay(t.due_date)}</span
                   >
                 </button>
@@ -329,7 +332,9 @@
             <span class="w-14 shrink-0 text-muted-foreground"
               >{WEEKDAY[i]} {Number(d.slice(8))}</span
             >
-            <span class="min-w-0 flex-1">{entries.map((e) => e.label).join(' · ') || '—'}</span>
+            <span class="min-w-0 flex-1 [overflow-wrap:anywhere]"
+              >{entries.map((e) => e.label).join(' · ') || '—'}</span
+            >
           </li>
         {/each}
       </ol>

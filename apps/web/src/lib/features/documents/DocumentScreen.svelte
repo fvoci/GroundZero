@@ -17,6 +17,7 @@
   import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
+  import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
 
   import DocumentActions from './DocumentActions.svelte';
@@ -41,12 +42,20 @@
   let unsaved = $state(false);
   // 목차가 읽는 본문 영역.
   let bodyArea = $state<HTMLDivElement | undefined>(undefined);
+  // "더 보기" 메뉴에서 여는 내보내기·지우기 확인과, 그 일이 끝나면 초점을 돌려줄 "더 보기" 단추.
+  let exportOpen = $state(false);
+  let deleting = $state(false);
+  let moreButton = $state<HTMLButtonElement | null>(null);
 
   $effect(() => {
     const id = documentId;
     let cancelled = false;
     doc = undefined;
     error = undefined;
+    // 다른 문서로 옮기면 화면은 그대로라 앞 문서에서 연 지우기 확인·내보내기가 새 문서에 이어진다(리뷰: 확인을 누르면
+    // 새 문서가 휴지통으로 간다). 문서가 바뀔 때 닫는다.
+    deleting = false;
+    exportOpen = false;
     api
       .document(id)
       .then((d) => {
@@ -110,32 +119,61 @@
 {:else if doc === undefined}
   <p aria-live="polite">{m.documents_loading()}</p>
 {:else}
+  {@const shownDoc = doc}
   <div class="flex flex-wrap items-center gap-2">
     <DocumentActions
       {doc}
       {workspaces}
+      bind:moreButton
       onchanged={(next: DocumentView) => {
         // 설정·이동은 리비전을 바꾸지 않는다. 편집 중인 내용은 편집기가 그대로 가진다.
         if (doc !== undefined && isShown(next))
           doc = { ...doc, ...next, body: doc.body, title: doc.title, revision: doc.revision };
       }}
-    />
-    <RevisionHistory
-      {doc}
-      onrestored={(restored: DocumentView) => {
-        if (!isShown(restored)) return;
-        doc = restored;
-        epoch += 1;
-      }}
-    />
+    >
+      {#snippet actions()}
+        <RevisionHistory
+          doc={shownDoc}
+          onrestored={(restored: DocumentView) => {
+            if (!isShown(restored)) return;
+            doc = restored;
+            epoch += 1;
+          }}
+        />
+      {/snippet}
+      {#snippet more()}
+        {#if shownDoc.can_export}
+          <DropdownMenu.Item onSelect={() => (exportOpen = true)}
+            >{m.documents_export()}</DropdownMenu.Item
+          >
+        {/if}
+        <DropdownMenu.Separator />
+        <MarkButtons kind="document" id={shownDoc.id} layout="menu" />
+        {#if shownDoc.can_delete}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item variant="destructive" onSelect={() => (deleting = true)}
+            >{m.trash_delete_what({ what: m.documents_delete_what() })}</DropdownMenu.Item
+          >
+        {/if}
+      {/snippet}
+    </DocumentActions>
     {#if doc.can_export}
-      <ExportDialog {doc} {unsaved} references={referencesFor(doc)} />
+      <ExportDialog
+        bind:open={exportOpen}
+        returnFocus={moreButton}
+        {doc}
+        {unsaved}
+        references={referencesFor(doc)}
+      />
     {/if}
     <div class="ml-auto flex flex-wrap items-center gap-1">
-      <MarkButtons kind="document" id={doc.id} />
       {#if doc.can_delete}
         {@const d = doc}
+        <!-- "더 보기"의 지우기를 고르면 여기서 한 번 더 묻는다. 취소하면 초점을 "더 보기"로 돌린다. -->
         <DeleteButton
+          bind:confirming={deleting}
+          trigger={false}
+          oncancel={() => moreButton?.focus()}
           what={m.documents_delete_what()}
           remove={() => api.trashDocument(d.id)}
           ondeleted={() => {
@@ -156,8 +194,8 @@
   {#key `${doc.id}:${String(epoch)}:${String(doc.realtime)}`}
     <ReferenceFocus root={bodyArea} target={parseReferenceHash(router.hash)} />
   {/key}
-  <!-- 넓은 화면에서는 본문 옆에 목차(Outline처럼 읽기 위치를 잡기 쉽게). 좁은 화면에서는 본문만. -->
-  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-6">
+  <!-- 본문 영역이 넓으면 본문 옆에 목차(Outline처럼 읽기 위치를 잡기 쉽게). 좁거나 글꼴을 키웠으면 본문만. -->
+  <div class="@2xl:grid @2xl:grid-cols-[minmax(0,1fr)_14rem] @2xl:gap-6">
     <div bind:this={bodyArea} class="min-w-0">
       {#key `${doc.id}:${String(epoch)}:${String(doc.realtime)}`}
         {#if doc.realtime}
@@ -200,7 +238,7 @@
         {/if}
       {/key}
     </div>
-    <aside class="hidden lg:block">
+    <aside class="hidden @2xl:block">
       <div class="sticky top-4">
         <DocumentOutline root={bodyArea} />
       </div>

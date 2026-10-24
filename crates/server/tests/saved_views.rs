@@ -468,7 +468,8 @@ async fn time_zone_is_a_personal_setting() {
     );
 }
 
-/// 표시 설정(D-81): 언어·주 시작·시각 표시를 따로 저장하고, 보내지 않은 칸은 그대로 둔다. 본인만 보고 모르는 값은 400.
+/// 표시 설정(D-81, D-109): 언어·주 시작·시각 표시·화면 밝기를 따로 저장하고, 보내지 않은 칸은 그대로 둔다. 본인만 보고
+/// 모르는 값은 400. 화면 밝기는 처음부터 `system`이고 빈 값으로 지울 수 없다.
 #[tokio::test]
 async fn display_settings_are_personal_and_kept_independently() {
     let state = common::state();
@@ -495,16 +496,20 @@ async fn display_settings_are_personal_and_kept_independently() {
                 v["locale"].as_str().unwrap().to_owned(),
                 v["week_start"].as_str().unwrap().to_owned(),
                 v["hour_cycle"].as_str().unwrap().to_owned(),
+                v["theme"].as_str().unwrap().to_owned(),
             ]
         }
     };
     // 처음에는 아무것도 고르지 않았다(화면이 브라우저·로케일로 제안).
-    assert_eq!(fields(me.clone()).await, ["", "", "", ""]);
+    assert_eq!(fields(me.clone()).await, ["", "", "", "", "system"]);
     assert_eq!(
-        put(json!({ "time_zone": "Asia/Seoul", "locale": "en", "week_start": "sun", "hour_cycle": "h12" })).await,
+        put(json!({ "time_zone": "Asia/Seoul", "locale": "en", "week_start": "sun", "hour_cycle": "h12", "theme": "dark" })).await,
         StatusCode::NO_CONTENT
     );
-    assert_eq!(fields(me.clone()).await, ["Asia/Seoul", "en", "sun", "h12"]);
+    assert_eq!(
+        fields(me.clone()).await,
+        ["Asia/Seoul", "en", "sun", "h12", "dark"]
+    );
     // 한 칸만 바꾸면 나머지는 그대로다(예전 화면은 시간대만 보낸다).
     assert_eq!(
         put(json!({ "time_zone": "America/New_York" })).await,
@@ -516,9 +521,11 @@ async fn display_settings_are_personal_and_kept_independently() {
     );
     assert_eq!(
         fields(me.clone()).await,
-        ["America/New_York", "en", "mon", "h12"]
+        ["America/New_York", "en", "mon", "h12", "dark"]
     );
     for bad in [
+        json!({ "theme": "auto" }),
+        json!({ "theme": "" }),
         json!({ "locale": "fr" }),
         json!({ "week_start": "sat" }),
         json!({ "hour_cycle": "h24" }),
@@ -528,9 +535,9 @@ async fn display_settings_are_personal_and_kept_independently() {
     }
     assert_eq!(
         fields(me.clone()).await,
-        ["America/New_York", "en", "mon", "h12"]
+        ["America/New_York", "en", "mon", "h12", "dark"]
     );
-    assert_eq!(fields(other.clone()).await, ["", "", "", ""]);
+    assert_eq!(fields(other.clone()).await, ["", "", "", "", "system"]);
     // 빈 값은 "고르지 않음"으로 되돌린다.
     assert_eq!(put(json!({ "locale": "" })).await, StatusCode::NO_CONTENT);
     assert_eq!(fields(me.clone()).await[1], "");

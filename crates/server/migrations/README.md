@@ -55,6 +55,9 @@ ID 개수·순서·FV001/002 재시도 계약은 [SQL ID 계약](../../../docs/s
 rg -n '^CREATE FUNCTION fvoci\.app_record_document_references\(' crates/server/migrations
 ```
 
+기준 뒤에 새 번호로 더한 파일이 같은 함수를 다시 만들 수 있다(예: `202610250001`의 `app_set_display_settings`, D-109).
+그때는 번호가 가장 큰 파일의 정의가 지금 정의다. 새 설치 시험은 기준이 먼저이고 디렉터리의 모든 마이그레이션이 적용되는지 본다.
+
 제품 검사는 `cargo xtask check`·`cargo xtask test`를 쓴다. 이번 통합의 전용 비교 도구와 준비 자료는
 현재 트리에서 제거했다. 고정 SHA의 누적 SQL과 새 기준을 각각 격리된 빈 DB에 적용해
 객체·권한·RLS·초기 상태와 동작을 비교하며, 의도한 SQLx 이력·원장 주석 차이를 구분했다.

@@ -15,6 +15,7 @@
   import { m } from '$lib/paraglide/messages.js';
   import { itemPath, itemTaskPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
+  import { NativeSelect } from '$lib/ui/native-select';
 
   import type { CalendarEntry } from './calendar';
   import { entriesByDay, isWeekend, monthRange, shiftMonth } from './calendar';
@@ -212,8 +213,6 @@
             ? entry.date.item_id
             : entry.event.item_id,
     ) ?? '';
-  const fieldBox =
-    'h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
   const WEEKDAYS = weekdays(settings).map((w) => w.short);
 </script>
 
@@ -247,19 +246,19 @@
     <div class="flex flex-wrap items-end gap-2" role="group" aria-label={m.events_scope()}>
       <label class="flex flex-col gap-1 text-xs text-muted-foreground">
         {m.events_scope_module()}
-        <select class={fieldBox} bind:value={filterModule}>
+        <NativeSelect class="w-full" bind:value={filterModule}>
           <option value="">{m.events_scope_all()}</option>
           {#each modules as mod (mod.id)}<option value={mod.id}>{mod.name} ({mod.key})</option
             >{/each}
-        </select>
+        </NativeSelect>
       </label>
       {#if filterModule !== ''}
         <label class="flex flex-col gap-1 text-xs text-muted-foreground">
           {m.events_scope_item()}
-          <select class={fieldBox} bind:value={filterItem}>
+          <NativeSelect class="w-full" bind:value={filterItem}>
             <option value="">{m.events_scope_module_all()}</option>
             {#each moduleItems as it (it.id)}<option value={it.id}>{it.title}</option>{/each}
-          </select>
+          </NativeSelect>
         </label>
       {/if}
     </div>

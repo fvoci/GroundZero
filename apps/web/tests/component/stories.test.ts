@@ -44,3 +44,15 @@ for (const [path, module] of Object.entries(modules)) {
     }
   });
 }
+
+// 도구 막대의 "밝기"(밝게·어둡게)는 앱과 같은 applyTheme으로 <html>에 적용한다. 기본은 밝게.
+it('applies the theme global to the page like the app does', async () => {
+  const badge = Object.entries(modules).find(([path]) => path.endsWith('ui/Badge.stories.ts'))?.[1];
+  if (badge === undefined) throw new Error('no Badge stories');
+  const Story = Object.values(composeStories(badge))[0];
+  if (Story === undefined) throw new Error('no Badge story');
+  await Story.run({ globals: { theme: 'dark' } });
+  expect(document.documentElement).toHaveClass('dark');
+  await Story.run();
+  expect(document.documentElement).not.toHaveClass('dark');
+});

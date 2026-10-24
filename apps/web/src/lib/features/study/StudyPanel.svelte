@@ -20,6 +20,8 @@
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { NativeSelect } from '$lib/ui/native-select';
+  import { Textarea } from '$lib/ui/textarea';
 
   import { plannedOn, replan, studyProgress, unitAmount, unitLabel } from './progress';
 
@@ -41,9 +43,6 @@
         return m.study_status_done();
     }
   }
-
-  const box =
-    'h-9 rounded-md border border-input bg-transparent px-3 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 
   let plan = $state<StudyPlanView | undefined>(undefined);
   let participants = $state<StudyParticipantView[]>([]);
@@ -297,7 +296,7 @@
   {@const current = plan}
   <section class="flex flex-col gap-3" aria-labelledby="study-heading">
     <h2 id="study-heading" class="text-lg font-semibold">{m.study_heading()}</h2>
-    <div class="grid gap-2 sm:grid-cols-3">
+    <div class="grid gap-2 @xl:grid-cols-3">
       <div class="rounded-md border p-2">
         <div class="text-sm text-muted-foreground">{m.study_progress()}</div>
         <div class="text-lg font-semibold">{p.percent}%</div>
@@ -474,7 +473,7 @@
           {#if editingUnit?.id === u.id}
             {@const base = editingUnit}
             <form
-              class="grid gap-2 border-t pt-2 sm:grid-cols-4"
+              class="grid gap-2 border-t pt-2 @xl:grid-cols-4"
               aria-label={m.study_unit_form({ title: u.title })}
               novalidate
               onsubmit={(e: SubmitEvent) => {
@@ -491,7 +490,7 @@
                   bind:value={shared.number}
                 />
               </div>
-              <div class="flex flex-col gap-1 sm:col-span-3">
+              <div class="flex flex-col gap-1 @xl:col-span-3">
                 <Label for={`unit-title-${u.id}`}>{m.study_new_title()}</Label>
                 <Input id={`unit-title-${u.id}`} bind:value={shared.title} maxlength={300} />
               </div>
@@ -510,9 +509,9 @@
               </div>
               <div class="flex flex-col gap-1">
                 <Label for={`unit-kind-${u.id}`}>{m.study_unit()}</Label>
-                <select id={`unit-kind-${u.id}`} class={box} bind:value={shared.unit}>
+                <NativeSelect id={`unit-kind-${u.id}`} class="w-full" bind:value={shared.unit}>
                   {#each STUDY_UNIT_KINDS as k (k)}<option value={k}>{unitLabel(k)}</option>{/each}
-                </select>
+                </NativeSelect>
               </div>
               <div class="flex flex-col gap-1">
                 <Label for={`unit-shared-planned-${u.id}`}>{m.study_planned()}</Label>
@@ -522,7 +521,7 @@
                   bind:value={shared.planned_on}
                 />
               </div>
-              <div class="flex gap-2 sm:col-span-4">
+              <div class="flex gap-2 @xl:col-span-4">
                 <Button type="submit" size="sm" disabled={savingUnit}>{m.common_save()}</Button>
                 <Button
                   size="sm"
@@ -536,7 +535,7 @@
           {/if}
           {#if openUnit === u.id}
             <form
-              class="grid gap-2 border-t pt-2 sm:grid-cols-3"
+              class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
               onsubmit={(e: SubmitEvent) => {
                 e.preventDefault();
                 const doneAmount = wholeAmount(mine.done_amount);
@@ -572,13 +571,9 @@
                 <Label for={`unit-plan-${u.id}`}>{m.study_my_planned()}</Label>
                 <Input id={`unit-plan-${u.id}`} type="date" bind:value={mine.planned_on} />
               </div>
-              <div class="flex flex-col gap-1 sm:col-span-3">
+              <div class="flex flex-col gap-1 @xl:col-span-3">
                 <Label for={`unit-note-${u.id}`}>{m.study_note()}</Label>
-                <textarea
-                  id={`unit-note-${u.id}`}
-                  class="rounded-md border border-input bg-transparent px-3 py-2 text-base"
-                  rows={2}
-                  bind:value={mine.note}></textarea>
+                <Textarea id={`unit-note-${u.id}`} rows={2} bind:value={mine.note} />
               </div>
               <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
             </form>
@@ -605,9 +600,9 @@
         </div>
         <div class="flex flex-col gap-1">
           <Label for="study-unit-kind">{m.study_unit()}</Label>
-          <select id="study-unit-kind" class={box} bind:value={draft.unit}>
+          <NativeSelect id="study-unit-kind" class="w-full" bind:value={draft.unit}>
             {#each STUDY_UNIT_KINDS as k (k)}<option value={k}>{unitLabel(k)}</option>{/each}
-          </select>
+          </NativeSelect>
         </div>
         <div class="flex flex-col gap-1">
           <Label for="study-unit-planned">{m.study_planned()}</Label>

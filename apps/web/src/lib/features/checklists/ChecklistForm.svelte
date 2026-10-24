@@ -5,6 +5,7 @@
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Textarea } from '$lib/ui/textarea';
 
   import { newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
@@ -218,12 +219,12 @@
     {#if pasteOpen}
       <div class="flex flex-col gap-2 rounded-md border p-3">
         <Label for={`${idPrefix}-paste`}>{m.checklists_paste_label()}</Label>
-        <textarea
+        <Textarea
           id={`${idPrefix}-paste`}
           bind:value={pasted}
           rows={4}
-          class="rounded-md border border-input bg-transparent px-3 py-2 font-code text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        ></textarea>
+          class="max-h-96 min-h-24 overflow-y-auto font-code"
+        />
         <div>
           <Button size="sm" variant="outline" onclick={expand} disabled={pasted.trim() === ''}
             >{m.checklists_expand()}</Button

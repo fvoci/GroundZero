@@ -121,6 +121,8 @@ describe('stand-in revisions (D-95)', () => {
       props: {
         doc: documentAt(3),
         unsaved: false,
+        // 여는 단추는 문서 화면의 "더 보기" 메뉴에 있다.
+        open: true,
         references: {
           workspaceId: 'ws-1',
           describeWorkspace: () => undefined,
@@ -129,7 +131,6 @@ describe('stand-in revisions (D-95)', () => {
         },
       },
     });
-    await fireEvent.click(screen.getByRole('button', { name: '내보내기' }));
     await waitFor(() => {
       expect(screen.getAllByRole('option')).toHaveLength(3);
     });

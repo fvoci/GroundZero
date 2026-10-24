@@ -224,6 +224,13 @@ Svelte·Vite·TypeScript 구성에서 shadcn-svelte/Bits UI와 Tailwind를 사�
 
 기본 동작·접근성·키보드 처리는 제공 구현을 우선 쓴다. 폰트·색·간격·포커스는 공통 토큰으로 관리하고 별도 종합 UI 시스템이나
 범용 폼·모달·포커스 관리자를 만들지 않는다. 라이브러리 사용을 실제 접근성 검증으로 대신하지 않는다.
+입력 칸·여러 줄 칸·선택 상자는 `$lib/ui`의 `Input`·`Textarea`·`NativeSelect`로 그리고 기능 코드에서 테두리·여백을 손으로 꾸미지 않는다
+(입력 칸 테두리는 `--input-border`, 바탕과 3:1 이상). 같은 줄 확인의 초점·상태 알림·보조 조작 정리 규칙은 D-110을 따른다.
+화면 안 여러 열 배치는 창 폭(`md:`·`lg:`)이 아니라 본문 폭 컨테이너 쿼리(`App.svelte`의 `main`이 `@container`, 예: `@2xl:grid-cols-2`)로
+나눈다. 미디어 쿼리의 rem은 사용자가 키운 루트 글꼴을 따르지 않고 사이드바 폭도 모른다.
+화면 밝기(D-109)는 계정 설정이 정본이고 `$lib/theme.svelte.ts`가 `<html class="dark">`로 적용한다(localStorage는 첫 그림용 사본). 색은 `app.css`의 `.dark` 토큰과 `dark:` 변형으로만 바꾼다.
+기능 코드에 고정 색(`bg-amber-50` 등)을 쓰면 어두운 짝을 함께 둔다. 첫 그림을 정하는 `index.html`의 인라인 스크립트는 `theme.svelte.ts`와
+같은 키·규칙이어야 하며(`theme.test.ts`가 맞춰 본다), 토큰을 바꾸면 `tests/theme-contrast.test.ts`가 두 테마의 대비를 다시 잰다.
 Safari 키보드 접근성은 D-98의 의미에 맞는 요소와 최소 범위 lint 예외를 따른다.
 
 <a id="storybook"></a>
@@ -242,7 +249,8 @@ pnpm --filter @fvoci/web run build-storybook  # target/storybook-static
   import하고 Storybook용 복제·별도 CSS·제품 코드의 Storybook 분기를 만들지 않는다. 대화상자처럼 조립이 필요한 것만
   제품 화면과 같은 방식으로 조립한다.
 - `.storybook/preview.ts`가 제품의 `app.css`·서체·번역을 쓰고, 표시 설정(한국어·Asia/Seoul)을 고정한다. 도구 막대로 언어,
-  글자 크기(루트 글꼴 100·150·200%, 브라우저 설정의 흉내), 375·500px·데스크톱 화면 폭을 바꾼다.
+  글자 크기(루트 글꼴 100·150·200%, 브라우저 설정의 흉내), 밝기(밝게·어둡게, 앱과 같은 `applyTheme`, 기본 밝게), 375·500px·데스크톱
+  화면 폭을 바꾼다.
 - 합성 데이터는 [dev-ui-data.json](../deploy/postgres/dev-ui-data.json) 하나를 개발 seed와 함께 쓴다. story(`stories/fixtures/synthetic.ts`)와
   `cargo xtask dev`의 "UI 상태 예제" 워크스페이스는 문서 제목·본문·트리, 댓글 스레드·답글·해결, 업무 제목·상태·우선순위·담당자가
   같다. id·시각은 DB가 정하므로 story는 고정값을 쓰고, 사람은 개발 Keycloak 테스트 사용자 둘(이름은 `tests/synthetic-data.test.ts`가 대조)뿐이다.

@@ -1,8 +1,11 @@
 <script lang="ts">
   // 문서 공유·설정·복제·이동 (D-20, D-23, D-24, D-49, D-59). 권한 판단은 서버가 하고,
   // 화면은 현재 권한(access)에 맞는 동작만 보여준다. 이동은 서버 미리보기로 접근 변화를 보여준 뒤 확인받는다.
+  // 좁은 화면에서 동작 단추 여덟 개가 두 줄을 차지해, 공유·설정과 (부르는 쪽의) 기록만 두고 나머지는 "더 보기" 메뉴에 둔다.
   import { formatInstant } from '$lib/display';
   import type { Workspace } from '@fvoci/api-client';
+  import type { Snippet } from 'svelte';
+  import { tick } from 'svelte';
 
   import type {
     DocumentView,
@@ -20,6 +23,7 @@
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
   import * as Dialog from '$lib/ui/dialog';
+  import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
@@ -28,12 +32,20 @@
     doc: DocumentView;
     workspaces: Workspace[];
     onchanged: (doc: DocumentView) => void;
+    /** 공유·설정 다음, "더 보기" 앞에 늘 보이는 동작(기록). */
+    actions?: Snippet;
+    /** "더 보기" 메뉴의 복제·이동 뒤에 이어지는 항목(내보내기, 홈 표시, 지우기). */
+    more?: Snippet;
+    /** "더 보기" 단추. 메뉴에서 연 일이 끝나면 부르는 쪽이 여기로 초점을 돌린다. */
+    moreButton?: HTMLButtonElement | null;
   }
 
-  const { doc, workspaces, onchanged }: Props = $props();
+  let { doc, workspaces, onchanged, actions, more, moreButton = $bindable(null) }: Props = $props();
 
   type Panel = 'share' | 'copy' | 'move' | undefined;
   let panel = $state<Panel>(undefined);
+  // 마지막으로 연 창. 닫힌 뒤(panel은 이미 비었다) 초점을 어디로 돌릴지 정한다.
+  let opened: Panel = undefined;
   let error = $state<string | undefined>(undefined);
 
   const isOwner = $derived(doc.access === 'owner');
@@ -50,6 +62,7 @@
   function open(next: Panel): void {
     error = undefined;
     panel = next;
+    opened = next;
     if (next === 'share') {
       newLinkUrl = undefined;
       void loadShares();
@@ -86,6 +99,29 @@
     } catch (e: unknown) {
       fail(e);
     }
+  }
+
+  // 공유 철회·공개 링크 철회는 한 번 더 묻는다(같은 화면의 다른 지우기처럼). 확인 단추로 초점을 옮기고, 그만두면 처음 누른
+  // 단추로 돌려준다.
+  interface Asking {
+    kind: 'share' | 'link';
+    id: string;
+  }
+  let asking = $state<Asking | undefined>(undefined);
+  let askConfirm = $state<HTMLButtonElement | null>(null);
+  const askId = (a: Asking): string => `${a.kind}-revoke-${a.id}`;
+
+  async function ask(next: Asking): Promise<void> {
+    asking = next;
+    await tick();
+    askConfirm?.focus();
+  }
+
+  async function stopAsking(): Promise<void> {
+    const was = asking;
+    asking = undefined;
+    await tick();
+    if (was !== undefined) document.getElementById(askId(was))?.focus();
   }
 
   async function removeShare(id: string): Promise<void> {
@@ -352,24 +388,33 @@
       }}>{m.documents_share_settings()}</Button
     >
   {/if}
-  {#if canCopy}
-    <Button
-      size="sm"
-      variant="outline"
-      onclick={() => {
-        open('copy');
-      }}>{m.documents_copy()}</Button
-    >
-  {/if}
-  {#if isOwner && writable.length > 0}
-    <Button
-      size="sm"
-      variant="outline"
-      onclick={() => {
-        open('move');
-      }}>{m.documents_move()}</Button
-    >
-  {/if}
+  {@render actions?.()}
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger>
+      {#snippet child({ props })}
+        <Button {...props} size="sm" variant="outline" bind:ref={moreButton}
+          >{m.documents_more_actions()}</Button
+        >
+      {/snippet}
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content align="start" class="min-w-44">
+      {#if canCopy}
+        <DropdownMenu.Item
+          onSelect={() => {
+            open('copy');
+          }}>{m.documents_copy()}</DropdownMenu.Item
+        >
+      {/if}
+      {#if isOwner && writable.length > 0}
+        <DropdownMenu.Item
+          onSelect={() => {
+            open('move');
+          }}>{m.documents_move()}</DropdownMenu.Item
+        >
+      {/if}
+      {@render more?.()}
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
 </div>
 
 <Dialog.Root
@@ -378,7 +423,14 @@
     if (!o) panel = undefined;
   }}
 >
-  <Dialog.Content>
+  <!-- 복제·이동은 "더 보기" 메뉴의 항목(닫히며 사라짐)에서 열린다. 닫으면 브라우저에 맡기지 않고 "더 보기"로 초점을 돌린다. -->
+  <Dialog.Content
+    onCloseAutoFocus={(e: Event) => {
+      if (opened !== 'copy' && opened !== 'move') return;
+      e.preventDefault();
+      moreButton?.focus();
+    }}
+  >
     {#if panel === 'share'}
       <Dialog.Header>
         <Dialog.Title>{m.documents_share_title()}</Dialog.Title>
@@ -391,16 +443,41 @@
       </Dialog.Header>
       <ul class="flex flex-col gap-1" data-testid="share-list">
         {#each shares as s (s.id)}
-          <li class="flex items-center gap-2 text-sm">
+          <li class="flex flex-wrap items-center gap-2 text-sm">
             <span>{s.email}</span>
             <span class="text-muted-foreground"
               >{s.permission === 'write'
                 ? m.documents_permission_write()
                 : m.documents_permission_read()}</span
             >
-            <Button size="sm" variant="ghost" class="ml-auto" onclick={() => void removeShare(s.id)}
-              >{m.documents_revoke()}</Button
-            >
+            {#if asking?.kind === 'share' && asking.id === s.id}
+              <span class="ml-auto flex flex-wrap items-center gap-1">
+                <span id="share-revoke-warning"
+                  >{m.documents_unshare_confirm({ email: s.email })}</span
+                >
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  bind:ref={askConfirm}
+                  aria-describedby="share-revoke-warning"
+                  onclick={() => {
+                    asking = undefined;
+                    void removeShare(s.id);
+                  }}>{m.documents_revoke()}</Button
+                >
+                <Button size="sm" variant="ghost" onclick={() => void stopAsking()}
+                  >{m.common_cancel()}</Button
+                >
+              </span>
+            {:else}
+              <Button
+                id={askId({ kind: 'share', id: s.id })}
+                size="sm"
+                variant="ghost"
+                class="ml-auto"
+                onclick={() => void ask({ kind: 'share', id: s.id })}>{m.documents_revoke()}</Button
+              >
+            {/if}
           </li>
         {:else}
           <li class="text-sm text-muted-foreground">{m.documents_share_empty()}</li>
@@ -488,22 +565,24 @@
         <p class="text-sm text-muted-foreground">
           {m.documents_public_link_hint()}
         </p>
-        {#if newLinkUrl !== undefined}
-          <div class="flex flex-col gap-1 rounded border px-2 py-2" role="status">
-            <Label for="new-link-url">{m.documents_new_link()}</Label>
-            <Input
-              id="new-link-url"
-              readonly
-              value={newLinkUrl}
-              onfocus={(e: FocusEvent) => {
-                if (e.currentTarget instanceof HTMLInputElement) e.currentTarget.select();
-              }}
-            />
-          </div>
-        {/if}
+        <div role="status" class="empty:hidden">
+          {#if newLinkUrl !== undefined}
+            <div class="flex flex-col gap-1 rounded border px-2 py-2">
+              <Label for="new-link-url">{m.documents_new_link()}</Label>
+              <Input
+                id="new-link-url"
+                readonly
+                value={newLinkUrl}
+                onfocus={(e: FocusEvent) => {
+                  if (e.currentTarget instanceof HTMLInputElement) e.currentTarget.select();
+                }}
+              />
+            </div>
+          {/if}
+        </div>
         <ul class="flex flex-col gap-1 text-sm" data-testid="public-link-list">
           {#each links as link (link.id)}
-            <li class="flex items-center gap-2">
+            <li class="flex flex-wrap items-center gap-2">
               <span
                 >{m.documents_link_created({
                   date: formatInstant(link.created_at, { dateStyle: 'medium' }),
@@ -518,12 +597,31 @@
                       })
                   : m.documents_link_closed()}
               </span>
-              {#if link.active}
+              {#if link.active && asking?.kind === 'link' && asking.id === link.id}
+                <span class="ml-auto flex flex-wrap items-center gap-1">
+                  <span id="link-revoke-warning">{m.documents_revoke_link_confirm()}</span>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    bind:ref={askConfirm}
+                    aria-describedby="link-revoke-warning"
+                    onclick={() => {
+                      asking = undefined;
+                      void revokeLink(link.id);
+                    }}>{m.documents_revoke()}</Button
+                  >
+                  <Button size="sm" variant="ghost" onclick={() => void stopAsking()}
+                    >{m.common_cancel()}</Button
+                  >
+                </span>
+              {:else if link.active}
                 <Button
+                  id={askId({ kind: 'link', id: link.id })}
                   size="sm"
                   variant="ghost"
                   class="ml-auto"
-                  onclick={() => void revokeLink(link.id)}>{m.documents_revoke()}</Button
+                  onclick={() => void ask({ kind: 'link', id: link.id })}
+                  >{m.documents_revoke()}</Button
                 >
               {/if}
             </li>

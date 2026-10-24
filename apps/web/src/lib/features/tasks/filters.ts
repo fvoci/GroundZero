@@ -51,6 +51,15 @@ export function isFiltered(f: TaskFilter): boolean {
   return FILTER_KEYS.some((k) => f[k] !== EMPTY_FILTER[k]);
 }
 
+/**
+ * 접힌 "필터·정렬" 영역 안에서 바뀐 조건 수. 늘 보이는 찾기 글자는 세지 않고, 정렬을 바꿨으면 하나로 센다. 접혀 있어도
+ * 단추에 이 수를 보여 조건이 걸려 있음을 알린다.
+ */
+export function hiddenConditionCount(f: TaskFilter, sort: TaskSort): number {
+  const changed = FILTER_KEYS.filter((k) => k !== 'text' && f[k] !== EMPTY_FILTER[k]).length;
+  return changed + (sort === 'position' ? 0 : 1);
+}
+
 export function applyFilter(tasks: readonly TaskView[], f: TaskFilter, me: string): TaskView[] {
   const text = f.text.trim().toLowerCase();
   const tag = f.tag.trim().toLowerCase();

@@ -19,5 +19,10 @@
   "settings_doc_font_sans": "Sans (Noto Sans KR)",
   "settings_doc_font_serif": "Serif (Noto Serif KR)",
   "settings_doc_font_hint": "Applies to this browser only. Serif downloads its typeface once when you open a document.",
+  "settings_theme": "Appearance",
+  "settings_theme_system": "Match system",
+  "settings_theme_light": "Light",
+  "settings_theme_dark": "Dark",
+  "settings_theme_hint": "Saved to your account, so every device matches.",
   "settings_save_failed": "Couldn't save."
 }

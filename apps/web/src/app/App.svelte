@@ -31,6 +31,7 @@
   import { me as currentUser } from '$lib/me.svelte';
   import AppSidebar from '$lib/features/nav/AppSidebar.svelte';
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
+  import { asTheme, setTheme } from '$lib/theme.svelte';
   import { Button } from '$lib/ui/button';
   import * as Sidebar from '$lib/ui/sidebar';
 
@@ -60,6 +61,10 @@
       currentUser.locale = me.locale;
       currentUser.weekStart = me.week_start;
       currentUser.hourCycle = me.hour_cycle;
+      const theme = asTheme(me.theme);
+      currentUser.theme = theme;
+      // 화면 밝기의 정본은 계정이다. 다른 기기에서 바꿨으면 여기서 맞추고 다음 첫 그림을 위한 사본도 고친다(D-109).
+      setTheme(theme);
       currentUser.displayName = me.display_name;
       // 저장한 표시 언어로 그린다(D-81). 화면 낭독기·브라우저가 쓰는 문서 언어도 맞춘다.
       await setLocale(displaySettings().locale, { reload: false });
@@ -105,7 +110,8 @@
       const count = (await api.notifications()).filter((n) => !n.read).length;
       if (mine === unreadSeq) unreadCount = count;
     } catch {
-      if (mine === unreadSeq) unreadCount = 0;
+      // 읽지 못했으면 0("알림 없음")으로 보이지 않게 앞의 수를 둔다. 다음 이동·창 초점 때 바로 다시 묻는다.
+      if (mine === unreadSeq) unreadAt = 0;
     }
   }
   $effect(() => {
@@ -264,8 +270,10 @@
         </div>
       </header>
 
+      <!-- 화면 안 여러 열 배치는 창 폭(md·lg)이 아니라 이 본문 폭(@container)을 본다. 사이드바가 차지한 폭과 사용자가 키운 루트
+           글꼴(컨테이너 쿼리의 rem은 루트 글꼴을 따른다)을 함께 반영한다. -->
       <main
-        class={`mx-auto flex w-full min-w-0 flex-col gap-8 px-4 py-6 sm:px-6 ${READING_ROUTES.has(route.name) ? 'max-w-3xl' : 'max-w-5xl'}`}
+        class={`@container mx-auto flex w-full min-w-0 flex-col gap-8 px-4 py-6 sm:px-6 ${READING_ROUTES.has(route.name) ? 'max-w-3xl' : 'max-w-5xl'}`}
       >
         {#if route.name === 'home'}
           <HomeScreen

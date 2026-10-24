@@ -1,5 +1,8 @@
 /* 전역 스타일. 토큰 출처: shadcn-svelte 1.7.0 manual installation (base color neutral), 2026-10-17.
-   수정분: 타이포그래피 토큰(:root 하단)과 @layer base의 글꼴·줄 높이·줄바꿈. 그 외는 원문 그대로 유지해 업데이트 시 비교한다. */
+   수정분: 타이포그래피 토큰(:root 하단)과 @layer base의 글꼴·줄 높이·줄바꿈·color-scheme. 대비(WCAG AA, tests/theme-contrast.test.ts)를 맞추려
+   밝은 --muted-foreground 0.556→0.54, 밝은 --sidebar-ring 0.708→0.64, 어두운 --sidebar-ring 0.439→0.556, 입력 칸 테두리용 --input-border(밝게 0.62·어둡게 0.56,
+   바탕 3:1 이상)와 그와 구분되는 --ring(밝게 0.708→0.45, 어둡게 0.556→0.75)(2026-10-25, D-109).
+   그 외는 원문 그대로 유지해 업데이트 시 비교한다. */
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @custom-variant dark (&:is(.dark *));
@@ -57,13 +60,14 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted-foreground: oklch(0.54 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --input-border: oklch(0.62 0 0);
+  --ring: oklch(0.45 0 0);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -76,7 +80,7 @@
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: oklch(0.64 0 0);
 
   /* fvoci 타이포그래피 토큰 (D-66). rem 기준: 브라우저 기본 글자 크기와 확대 설정을 따른다.
      CJK 본문은 줄 높이를 넉넉히 두고, 입력란·목록은 본문 크기 밑으로 내리지 않는다. */
@@ -118,7 +122,8 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --input-border: oklch(0.56 0 0);
+  --ring: oklch(0.75 0 0);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -131,7 +136,7 @@
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.439 0 0);
+  --sidebar-ring: oklch(0.556 0 0);
 }
 
 @theme inline {
@@ -159,6 +164,7 @@
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-input-border: var(--input-border);
   --color-ring: var(--ring);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -188,6 +194,15 @@
 }
 
 @layer base {
+  /* 기본 입력 칸(날짜 선택·선택 상자 목록)·스크롤바가 화면 밝기를 따른다(theme.svelte.ts). */
+  :root {
+    color-scheme: light;
+  }
+
+  :root.dark {
+    color-scheme: dark;
+  }
+
   * {
     @apply border-border outline-ring/50;
   }

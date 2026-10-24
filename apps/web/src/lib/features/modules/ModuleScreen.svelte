@@ -18,6 +18,8 @@
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { NativeSelect } from '$lib/ui/native-select';
+  import { Textarea } from '$lib/ui/textarea';
 
   import { kindLabel, normalizeKey } from './kinds';
   import { itemStatusLabel, periodText } from './profile';
@@ -231,8 +233,10 @@
                 router.navigate(itemPath(workspace.id, it.id));
               }}
             >
-              <span class="font-mono text-sm text-muted-foreground">{it.reference}</span>
-              <span>{it.title}</span>
+              <span class="shrink-0 font-mono text-sm whitespace-nowrap text-muted-foreground"
+                >{it.reference}</span
+              >
+              <span class="min-w-0 [overflow-wrap:anywhere]">{it.title}</span>
               <Badge variant="outline">{itemStatusLabel(it.status)}</Badge>
               {#if it.starts_on !== null || it.ends_on !== null}
                 <span class="text-sm text-muted-foreground"
@@ -272,13 +276,9 @@
         >
           <div class="flex flex-col gap-1">
             <Label for="template-source">{m.modules_template()}</Label>
-            <select
-              id="template-source"
-              class="h-9 rounded-md border border-input bg-transparent px-3 text-base"
-              bind:value={templateId}
-            >
+            <NativeSelect id="template-source" class="w-full" bind:value={templateId}>
               {#each templates as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
-            </select>
+            </NativeSelect>
           </div>
           <div class="flex min-w-40 flex-1 flex-col gap-1">
             <Label for="template-title">{m.modules_template_item_title()}</Label>
@@ -326,22 +326,22 @@
         </div>
         <div class="flex w-full flex-col gap-1">
           <Label for="module-edit-description">{m.modules_description()}</Label>
-          <textarea
+          <Textarea
             id="module-edit-description"
             bind:value={editDescription}
             maxlength={2000}
             rows={3}
-            class="rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          ></textarea>
+            class="min-h-20"
+          />
         </div>
         <Button type="submit" variant="outline" disabled={savingSettings}>{m.common_save()}</Button>
         <Button type="button" variant="outline" onclick={() => void toggleArchive()}
           >{current.archived ? m.modules_unarchive() : m.modules_archive()}</Button
         >
       </form>
-      {#if settingsNote !== undefined}
-        <p class="text-sm" role="status">{settingsNote}</p>
-      {/if}
+      <p class="text-sm empty:hidden" role="status">
+        {#if settingsNote !== undefined}{settingsNote}{/if}
+      </p>
       {#if settingsError !== undefined}
         <p class="text-sm text-destructive" role="alert">{settingsError}</p>
       {/if}

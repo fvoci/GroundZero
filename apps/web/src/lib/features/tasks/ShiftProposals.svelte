@@ -78,7 +78,9 @@
   <ul class="flex flex-col gap-1.5">
     {#each proposals as s (s.task_id)}
       <li data-shift-task={s.task_id}>
-        <span class="font-mono text-xs text-muted-foreground">{s.reference ?? ''}</span>
+        <span class="font-mono text-xs whitespace-nowrap text-muted-foreground"
+          >{s.reference ?? ''}</span
+        >
         {s.title}: {range(s.from_start_date, s.from_due_date)} → {range(s.start_date, s.due_date)}
         {#each s.causes as c (c.predecessor_id)}
           <span class="block text-xs text-muted-foreground" data-shift-cause={c.predecessor_id}>

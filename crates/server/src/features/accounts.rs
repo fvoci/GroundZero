@@ -562,6 +562,8 @@ pub struct Me {
     pub week_start: String,
     /// 시각 표시(D-81): `h12`·`h23`, 비었으면 아직 고르지 않음.
     pub hour_cycle: String,
+    /// 화면 밝기(D-109): `system`(기본, 운영체제 설정을 따름)·`light`·`dark`.
+    pub theme: String,
 }
 
 /// 현재 로그인한 사용자.
@@ -572,16 +574,25 @@ pub async fn me(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Me>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    type MeRow = (String, Option<String>, String, String, String, String);
-    let (display_name, email, time_zone, locale, week_start, hour_cycle): MeRow = sqlx::query_as(
-        "SELECT u.display_name, u.email, coalesce(s.time_zone, ''), coalesce(s.locale, ''),
-                coalesce(s.week_start, ''), coalesce(s.hour_cycle, '')
+    type MeRow = (
+        String,
+        Option<String>,
+        String,
+        String,
+        String,
+        String,
+        String,
+    );
+    let (display_name, email, time_zone, locale, week_start, hour_cycle, theme): MeRow =
+        sqlx::query_as(
+            "SELECT u.display_name, u.email, coalesce(s.time_zone, ''), coalesce(s.locale, ''),
+                coalesce(s.week_start, ''), coalesce(s.hour_cycle, ''), coalesce(s.theme, 'system')
          FROM users u LEFT JOIN user_settings s ON s.user_id = u.id WHERE u.id = $1",
-    )
-    .bind(user)
-    .fetch_optional(tx.conn())
-    .await?
-    .ok_or(AppError::Unauthorized)?;
+        )
+        .bind(user)
+        .fetch_optional(tx.conn())
+        .await?
+        .ok_or(AppError::Unauthorized)?;
     tx.commit().await?;
     Ok(Json(Me {
         id: user,
@@ -591,6 +602,7 @@ pub async fn me(
         locale,
         week_start,
         hour_cycle,
+        theme,
     }))
 }
 
@@ -609,9 +621,12 @@ pub struct MySettings {
     /// `h12`·`h23`, 빈 문자열이면 지운다.
     #[serde(default)]
     pub hour_cycle: Option<String>,
+    /// `system`·`light`·`dark`. 빈 문자열은 받지 않는다(기본이 `system`).
+    #[serde(default)]
+    pub theme: Option<String>,
 }
 
-/// 내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.
+/// 내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시, D-109 화면 밝기). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.
 /// 모르는 값이면 400.
 #[utoipa::path(put, path = "/api/me/settings", operation_id = "set_my_settings", request_body = MySettings,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody)), tag = "auth")]
@@ -621,11 +636,12 @@ pub async fn set_settings(
     Json(input): Json<MySettings>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_display_settings($1, $2, $3, $4)")
+    sqlx::query("SELECT app_set_display_settings($1, $2, $3, $4, $5)")
         .bind(input.time_zone.as_deref())
         .bind(input.locale.as_deref())
         .bind(input.week_start.as_deref())
         .bind(input.hour_cycle.as_deref())
+        .bind(input.theme.as_deref())
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

@@ -1,4 +1,4 @@
-<!-- 수정(2026-10-17): mode-watcher를 쓰지 않는다(앱에 테마 전환이 없음). theme을 light로 고정. -->
+<!-- 수정(2026-10-17): mode-watcher를 쓰지 않는다. 수정(2026-10-25): 앱의 화면 밝기($lib/theme.svelte)를 따른다(전에는 light 고정). -->
 <script lang="ts">
   import { Toaster as Sonner, type ToasterProps as SonnerProps } from 'svelte-sonner';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
@@ -6,12 +6,13 @@
   import OctagonXIcon from '@lucide/svelte/icons/octagon-x';
   import InfoIcon from '@lucide/svelte/icons/info';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
+  import { themeState } from '$lib/theme.svelte';
 
   let { ...restProps }: SonnerProps = $props();
 </script>
 
 <Sonner
-  theme="light"
+  theme={themeState.dark ? 'dark' : 'light'}
   class="toaster group"
   style="--normal-bg: var(--color-popover); --normal-text: var(--color-popover-foreground); --normal-border: var(--color-border);"
   toastOptions={{
