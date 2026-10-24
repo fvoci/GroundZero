@@ -16,22 +16,22 @@
 
 ## 명령
 
-| 목적                                                                               | 명령                                                                           |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| 의존성 설치                                                                        | `pnpm install --frozen-lockfile`                                               |
-| 포맷·lint·타입·단위 테스트·라이선스·계약 검사                                      | `cargo xtask check`                                                            |
-| 통합 테스트 (격리된 Compose 기동·정리 포함)                                        | `cargo xtask test`                                                             |
-| OIDC 통합 테스트까지 (Keycloak 포함)                                               | `cargo xtask test --oidc`                                                      |
-| 셀프호스트 Supabase 직접·세션 풀러 시험                                            | `cargo xtask test --supabase` / `cargo xtask test --supabase --session-pooler` |
-| 실제 브라우저 회귀 시험 (Chromium, 실제 서버·DB·테스트 OIDC)                       | `cargo xtask browser`                                                          |
-| 개발 환경 한 번에(서비스·서버·웹, 테스트 계정으로 바로 로그인)                     | `cargo xtask dev --oidc` → http://127.0.0.1:5173                               |
-| DB 준비·마이그레이션을 직접 실행할 때 ([설치 안내](docs/self-hosting.md#db-setup)) | `fvoci-server db bootstrap && fvoci-server db migrate`                         |
-| 웹 개발 서버만 따로(`cargo xtask dev --no-web`일 때)                               | `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`              |
-| 이 체크아웃의 Compose 자원 정리                                                    | `cargo xtask down`                                                             |
-| UI 컴포넌트 상태 보기([Storybook](docs/development.md#storybook)) / 정적 빌드      | `pnpm --filter @fvoci/web run storybook` / `run build-storybook`               |
-| OpenAPI 계약 재생성                                                                | `cargo xtask openapi` 후 `pnpm run generate:api`                               |
-| 라이선스 검사만                                                                    | `cargo xtask licenses`                                                         |
-| HWP·HWPX 미리보기 WASM 빌드·고지 갱신                                              | `cargo xtask rhwp`                                                             |
+| 목적                                                                               | 명령                                                                                      |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 의존성 설치                                                                        | `pnpm install --frozen-lockfile`                                                          |
+| 포맷·lint·타입·단위 테스트·라이선스·계약 검사                                      | `cargo xtask check`                                                                       |
+| 통합 테스트 (격리된 Compose 기동·정리 포함)                                        | `cargo xtask test`                                                                        |
+| OIDC 통합 테스트까지 (Keycloak 포함)                                               | `cargo xtask test --oidc`                                                                 |
+| 셀프호스트 Supabase 직접·세션 풀러 시험                                            | `cargo xtask test --supabase` / `cargo xtask test --supabase --session-pooler`            |
+| 실제 브라우저 회귀 시험 (Chromium, 실제 서버·DB·테스트 OIDC)                       | `cargo xtask browser`                                                                     |
+| 개발 환경 한 번에(서비스·서버·웹, 테스트 계정으로 바로 로그인)                     | `cargo xtask dev --oidc` → http://127.0.0.1:5173                                          |
+| DB 준비·마이그레이션을 직접 실행할 때 ([설치 안내](docs/self-hosting.md#db-setup)) | `fvoci-server db bootstrap && fvoci-server db migrate`                                    |
+| 웹 개발 서버만 따로(`cargo xtask dev --no-web`일 때)                               | `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`                         |
+| 이 체크아웃의 Compose 자원 정리                                                    | `cargo xtask down`                                                                        |
+| UI 컴포넌트 상태 보기([Storybook](docs/development.md#storybook)) / 정적 빌드      | `pnpm --filter @fvoci/web run storybook` / `pnpm --filter @fvoci/web run build-storybook` |
+| OpenAPI 계약 재생성                                                                | `cargo xtask openapi` 후 `pnpm run generate:api`                                          |
+| 라이선스 검사만                                                                    | `cargo xtask licenses`                                                                    |
+| HWP·HWPX 미리보기 WASM 빌드·고지 갱신                                              | `cargo xtask rhwp`                                                                        |
 
 `cargo xtask check`는 외부 서비스를 띄우지 않는다. 데이터베이스가 필요한 통합 테스트는 `cargo xtask test`에서만 돌고, `DATABASE_URL`이 없으면 건너뛰지 않고 실패한다.
 
