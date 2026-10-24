@@ -110,7 +110,8 @@
       const count = (await api.notifications()).filter((n) => !n.read).length;
       if (mine === unreadSeq) unreadCount = count;
     } catch {
-      if (mine === unreadSeq) unreadCount = 0;
+      // 읽지 못했으면 0("알림 없음")으로 보이지 않게 앞의 수를 둔다. 다음 이동·창 초점 때 바로 다시 묻는다.
+      if (mine === unreadSeq) unreadAt = 0;
     }
   }
   $effect(() => {
