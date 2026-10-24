@@ -120,11 +120,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - name: kept Supavisor role-preparation regression
-        run: >-
-          cargo test --package xtask --locked
-          supabase::tests::kept_pooler_restarts_after_role_preparation
-          -- --ignored --test-threads=1 --nocapture
       - run: cargo xtask test --supabase --session-pooler --oidc
 
   # HWP·HWPX 미리보기 WASM(D-76). 제품 이미지와 같은 단계(rhwp-out)를 만든다. 빌드 안에서 브라우저에 들어가는

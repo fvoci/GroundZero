@@ -2,8 +2,10 @@
 //! fresh/kept direct/session runs are separate integration evidence, not timing assertions.
 
 use super::*;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+#[cfg(unix)]
 const COMMAND: &str = r#"#!/bin/sh
 case "$0" in
   */cargo) case "$*" in
@@ -31,6 +33,7 @@ if [ "$FAIL_AT" = "$step" ]; then
 fi
 "#;
 
+#[cfg(unix)]
 fn preparation(fail_at: &str) -> Result<(Result<compose::DbUrls>, Vec<String>)> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -78,7 +81,6 @@ fn kept_pooler_restarts_after_role_preparation() -> Result<()> {
         .join("target/supabase-readiness-tests")
         .join(uuid::Uuid::now_v7().to_string());
     std::fs::create_dir_all(root.join("deploy/supabase"))?;
-    std::fs::create_dir_all(root.join("target"))?;
     for file in ["compose.test.yaml", "test.env"] {
         std::fs::copy(
             repository.join("deploy/supabase").join(file),
@@ -86,12 +88,11 @@ fn kept_pooler_restarts_after_role_preparation() -> Result<()> {
         )?;
     }
     // Share only downloaded official configuration, never DB state or Compose resources.
-    upstream(repository)?;
-    std::os::unix::fs::symlink(
-        repository.join("target/supabase"),
-        root.join("target/supabase"),
-    )?;
-    let supabase = Supabase::new(&root)?;
+    let supabase = Supabase {
+        root: root.clone(),
+        upstream: upstream(repository)?,
+        project: compose::project_name(&root, Env::Supabase),
+    };
     let sh = Shell::new()?;
     sh.change_dir(repository);
     let args = supabase.args();
@@ -169,6 +170,7 @@ fn kept_pooler_restarts_after_role_preparation() -> Result<()> {
 }
 
 #[test]
+#[cfg(unix)]
 fn pooler_stays_stopped_until_bootstrap_and_migration_finish() -> Result<()> {
     let (result, commands) = preparation("")?;
     let urls = result?;
@@ -181,6 +183,7 @@ fn pooler_stays_stopped_until_bootstrap_and_migration_finish() -> Result<()> {
 }
 
 #[test]
+#[cfg(unix)]
 fn preparation_failure_stops_setup_and_preserves_original_error() -> Result<()> {
     let steps = ["stop", "database", "bootstrap", "migrate", "pooler"];
     for (index, step) in steps.iter().enumerate() {

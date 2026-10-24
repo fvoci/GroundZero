@@ -9,7 +9,7 @@ use xshell::{Shell, cmd};
 
 use crate::compose::{self, Env};
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests;
 
 /// 공식 셀프호스트 구성의 revision(2026-10-16 "update 2026-10-16 - 0.8.3"). 바꾸면 compose.test.yaml의 이미지

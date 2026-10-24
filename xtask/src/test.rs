@@ -118,8 +118,12 @@ pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -
         services.project(),
         supabase.project()
     );
-    let result = services
-        .up_services(&sh, &wanted)
+    println!("==> kept Supavisor role-preparation regression (independent temporary stack)");
+    let regression = cmd!(sh, "cargo test --package xtask --locked supabase::tests::kept_pooler_restarts_after_role_preparation -- --ignored --exact --test-threads=1 --nocapture")
+        .run();
+    let result = regression
+        .map_err(anyhow::Error::from)
+        .and_then(|()| services.up_services(&sh, &wanted))
         .and_then(|()| {
             let urls = supabase.prepare_database(&sh)?;
             let db = supabase.host_port(&sh, "db", 5432)?;
