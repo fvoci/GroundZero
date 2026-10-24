@@ -8,6 +8,8 @@ import JSZip from 'jszip';
 import { MARKER, publish } from '../e2e/publish';
 
 const SENTINEL = 'fvoci-sentinel-0123456789abcdef';
+// URL 예약 문자가 있어 인코딩하면 원문이 남지 않는 값. 인코딩된 형태만으로 걸러야 한다.
+const RESERVED = 'fvoci/reserved?&=#0123456789';
 
 async function trace(entries: Record<string, string>): Promise<Uint8Array> {
   const zip = new JSZip();
@@ -67,18 +69,21 @@ describe('browser evidence publishing', () => {
 
   it.each([
     ['a sensitive value in a trace action', { 'trace.trace': `{"params":"${SENTINEL}"}` }],
-    ['an encoded sensitive value', { 'trace.trace': encodeURIComponent(`${SENTINEL}/`) }],
+    ['an encoded sensitive value', { 'trace.trace': `?next=${encodeURIComponent(RESERVED)}` }],
     ['an auth cookie name', { 'resources/a.html': 'Set-Cookie: fvoci_session=1' }],
   ])('refuses to publish anything when a trace has %s', async (_, entries) => {
     const { raw, out } = setup();
     writeFileSync(path.join(raw, 'traces', 't.zip'), await trace(entries));
     writeFileSync(path.join(raw, 'server.log'), 'ok\n');
 
-    const result = await publish(raw, out, [SENTINEL]);
+    const result = await publish(raw, out, [SENTINEL, RESERVED]);
 
     expect(result.published).toEqual([]);
     expect(result.refused.map((r) => r.file)).toEqual([path.join('traces', 't.zip')]);
-    expect(JSON.stringify(result.refused)).not.toContain(SENTINEL);
+    const reported = JSON.stringify(result.refused);
+    for (const value of [SENTINEL, RESERVED, encodeURIComponent(RESERVED)]) {
+      expect(reported).not.toContain(value);
+    }
     expect(existsSync(out)).toBe(false);
   });
 
