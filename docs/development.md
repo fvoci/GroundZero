@@ -105,11 +105,12 @@ Playwright 판과 Chromium revision은 lockfile에 고정된 패키지로 맞춘
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter @fvoci/web exec playwright install --with-deps chromium
+PLAYWRIGHT_SKIP_BROWSER_GC=1 pnpm --filter @fvoci/web exec playwright install --with-deps chromium
 cargo xtask browser
 ```
 
 `browser`는 별도 `-browser` Compose 프로젝트에 시험 PostgreSQL·Keycloak을 준비한다.
+설치 명령의 `PLAYWRIGHT_SKIP_BROWSER_GC=1`은 다른 작업에서 쓰던 공유 브라우저 캐시 판을 보존한다.
 동적 루프백 포트의 실제 서버·DB·OIDC와 합성 데이터를 쓰며 사용자 흐름 전체를 HTTP mock으로 대체하지 않는다.
 기존 개발 환경이나 `cargo xtask test`의 프로젝트를 재사용하지 않는다.
 로그인·로그아웃 후 거부, 한국어 문서 저장·재열기, 두 사용자 협업, 칸반 이동과 서버 반영,
