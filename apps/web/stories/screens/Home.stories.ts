@@ -83,17 +83,19 @@ export const Loading: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { level: 1, name: '오늘' });
+    await expect(canvas.getByText('불러오는 중…')).toBeInTheDocument();
     await expect(canvas.queryByRole('alert')).toBeNull();
     await expectNoEmptyClaims(canvasElement);
   },
 };
 
-/** 불러오지 못함: 서버에 닿지 않았다는 오류를 알린다. */
+/** 불러오지 못함: 서버에 닿지 않았다는 오류와 다시 시도를 보인다. */
 export const LoadFailed: Story = {
   beforeEach: () => setUpScreen('/', { home: () => Promise.reject(new NetworkError('offline')) }),
   play: async ({ canvasElement }) => {
     const alert = await within(canvasElement).findByRole('alert');
     await expect(alert).toHaveTextContent('홈을 불러오지 못했습니다.');
+    await expect(within(canvasElement).getByRole('button', { name: '다시 시도' })).toBeEnabled();
     await expectNoEmptyClaims(canvasElement);
   },
 };

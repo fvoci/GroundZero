@@ -197,7 +197,20 @@
       >{/if}
   </div>
   {#if error !== undefined}
-    <p role="alert" class="text-sm text-destructive">{error}</p>
+    <!-- 다시 받기: 빠른 추가 뒤와 같은 다시 읽기(reloadKey). 받는 동안은 오류 대신 불러오는 중이라고 보인다. -->
+    <div class="flex flex-wrap items-center gap-2">
+      <p role="alert" class="text-sm text-destructive">{error}</p>
+      <Button
+        variant="outline"
+        size="sm"
+        onclick={() => {
+          error = undefined;
+          reloadKey += 1;
+        }}>{m.common_retry()}</Button
+      >
+    </div>
+  {:else if home === undefined}
+    <p class="text-sm text-muted-foreground" aria-live="polite">{m.app_loading()}</p>
   {/if}
 
   <form
