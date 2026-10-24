@@ -6,6 +6,6 @@ The retained first local Supabase run passed 399 direct tests and then failed au
 
 The coordinator directly opened final Node 24.22.1 captures for saved/reopened Korean content, collaboration, persisted board movement, Gantt, workspace calendar, the full scrolled item calendar and narrow item/document views. Actual OS IME and real-device coverage remain NOT RUN. Chromium evidence does not establish Safari compatibility or a production performance guarantee.
 
-The worker report's phrase “never commit or post” for PNG files is not a user policy. Images must stay out of Git; the user explicitly requested selected verified images be attached to GitHub PR bodies. Attachment remains pending because Orca's GitHub browser is signed out. Image bytes and their hashes are retained locally, outside this evidence branch.
+The worker report's phrase “never commit or post” for PNG files is not a user policy. The original PR-body attachment requirement was explicitly excluded by the user on 2026-10-25. Image upload is therefore no longer pending or blocking. Actual browser verification and visual inspection remain completed; image bytes and hashes are retained locally, outside Git and this evidence branch.
 
 The evidence branch is for recovery and review only; it is not to be merged into product main. The implementation-map PR119 remains Draft, with no policy proposal adopted by this work.
