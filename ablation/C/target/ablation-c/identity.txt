@@ -1,0 +1,12 @@
+22ad80ee205332e3ef1ffd8f64f783789955921b
+afacc07bfd285d2079e5ef770e62e2d3aafd011f8aeb31dff0de63a9314a0d49  Cargo.lock
+72f7dd8c9fdf9c1fcd8eb8bf9326d4bc66833e4ebf4bc2932636e2b85efcb7af  rust-toolchain.toml
+28bc4d785c3473a631deea4cfb7c2302efdadd4e38561b0c274cdab9e6834fc4  crates/server/src/http/cache.rs
+rustc 1.99.0 (b940084d7 2026-09-28)
+binary: rustc
+commit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4
+commit-date: 2026-09-28
+host: x86_64-unknown-linux-gnu
+release: 1.99.0
+LLVM version: 23.1.1
+cargo 1.99.0 (5f94df478 2026-08-27)

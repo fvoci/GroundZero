@@ -1,0 +1,14 @@
+crates/server/src/features/revisions.rs:311:        return conflict(user, doc);
+crates/server/src/features/revisions.rs:313:    document_reply(user, &doc)
+crates/server/src/features/documents.rs:683:pub(crate) fn representation(user: UserId, doc: &Document) -> Result<(Vec<u8>, String), AppError> {
+crates/server/src/features/documents.rs:708:pub(crate) fn document_reply(user: UserId, doc: &Document) -> Result<Response, AppError> {
+crates/server/src/features/documents.rs:709:    let (bytes, etag) = representation(user, doc)?;
+crates/server/src/features/documents.rs:732:    let (bytes, etag) = representation(user, &to_document(row, access))?;
+crates/server/src/features/documents.rs:752:    let (_, etag) = representation(user, &current)?;
+crates/server/src/features/documents.rs:765:pub(crate) fn conflict(user: UserId, current: Document) -> Result<Response, AppError> {
+crates/server/src/features/documents.rs:832:            document_reply(user, &doc)
+crates/server/src/features/documents.rs:834:            conflict(user, doc)
+crates/server/src/features/documents.rs:840:        let (_, etag) = representation(user, &now)?;
+crates/server/src/features/documents.rs:853:        return conflict(user, to_document(current, access));
+crates/server/src/features/documents.rs:858:        return document_reply(user, &to_document(current, access));
+crates/server/src/features/documents.rs:875:    document_reply(user, &to_document(row, access))

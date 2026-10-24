@@ -1,0 +1,2 @@
+PASS: baseline_etag matches production function exactly except name
+PASS: candidate_etag matches production function exactly except name

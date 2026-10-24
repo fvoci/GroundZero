@@ -1,0 +1,25 @@
+    PID STAT COMMAND         %CPU
+3955002 Sl   python3         88.6
+4114764 Sl+  codex            8.3
+4039155 Sl+  codex            7.3
+4036455 Sl+  codex            7.2
+3945533 Sl+  codex            7.0
+4058002 Sl+  codex            6.9
+4011796 Sl+  codex            6.8
+3963355 Sl+  claude           6.3
+3966320 Sl+  claude           6.0
+3961217 Sl+  claude           5.9
+ 189104 Sl+  codex            2.7
+4131736 Ssl  MainThread       2.1
+    783 Sl   MainThread       1.5
+4131365 Ssl  MainThread       1.5
+ 383828 Ss   python3          1.3
+    517 Ssl  containerd       0.8
+    562 Ssl  dockerd          0.8
+    986 Ssl  MainThread       0.7
+    922 Sl   orca-ide         0.4
+3916926 Ssl  weed             0.4
+4130030 Sl   MainThread       0.4
+   1630 Sl   orca-ide         0.4
+4131357 Ss   bash             0.3
+3783676 Sl   meilisearch      0.3

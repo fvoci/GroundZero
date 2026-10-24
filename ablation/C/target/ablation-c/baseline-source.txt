@@ -1,0 +1,115 @@
+//! 캐시 범위와 조건부 요청(D-77). CDN이 없는 셀프호스트와 CDN 뒤에서 같은 머리글을 낸다.
+//!
+//! - `/api`·`/auth`·`/healthz`: 핸들러가 재검증을 허용한 GET·HEAD의 200·304(문서 단건 조회)만
+//!   `private, no-cache, no-transform`, 나머지는 모두 `no-store, no-transform`. 공유 캐시에 남지 않고, 중간 장치가
+//!   본문을 압축·변환하며 ETag를 약하게 바꾸지 않게 한다.
+//! - 해시 파일명 정적 자원(`/assets/*`, `/rhwp/<입력 해시>/*`): `public, max-age=31536000, immutable`.
+//! - 그 밖의 정적 응답(HTML 진입점·SPA 경로·`/pptx-frame.js`·`/rhwp/manifest.json`): `no-cache`(매번 재검증).
+//! - 정적 오류 응답은 `no-store`. 정적 응답은 압축 사본을 고를 수 있으므로 `Vary: Accept-Encoding`.
+
+use axum::extract::Request;
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
+use axum::middleware::Next;
+use axum::response::Response;
+use sha2::{Digest, Sha256};
+
+/// 재검증을 허용하는 개인 응답. 브라우저만 저장하고 쓰기 전에 매번 서버에 확인한다.
+pub const PRIVATE_REVALIDATE: &str = "private, no-cache, no-transform";
+/// API·인증의 기본값.
+pub const NO_STORE: &str = "no-store, no-transform";
+const IMMUTABLE: &str = "public, max-age=31536000, immutable";
+const REVALIDATE: &str = "no-cache";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Scope {
+    Api,
+    Immutable,
+    Revalidate,
+}
+
+fn under(path: &str, prefix: &str) -> bool {
+    path == prefix
+        || path
+            .strip_prefix(prefix)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
+fn scope(path: &str) -> Scope {
+    if under(path, "/api") || under(path, "/auth") || path == "/healthz" {
+        Scope::Api
+    } else if path.starts_with("/assets/") {
+        Scope::Immutable
+    } else if let Some(rest) = path.strip_prefix("/rhwp/") {
+        if rest == "manifest.json" {
+            Scope::Revalidate
+        } else {
+            Scope::Immutable
+        }
+    } else {
+        Scope::Revalidate
+    }
+}
+
+/// 모든 응답의 마지막에 범위별 `Cache-Control`을 정한다(라우터 맨 바깥 층).
+pub async fn policy(request: Request, next: Next) -> Response {
+    let scope = scope(request.uri().path());
+    let safe = matches!(*request.method(), Method::GET | Method::HEAD);
+    let mut response = next.run(request).await;
+    let status = response.status();
+    let ok = status == StatusCode::OK || status == StatusCode::NOT_MODIFIED;
+    let headers = response.headers_mut();
+    let value = match scope {
+        Scope::Api => {
+            let revalidate = safe
+                && ok
+                && headers
+                    .get(header::CACHE_CONTROL)
+                    .is_some_and(|v| v == PRIVATE_REVALIDATE);
+            if revalidate {
+                PRIVATE_REVALIDATE
+            } else {
+                NO_STORE
+            }
+        }
+        Scope::Immutable | Scope::Revalidate => {
+            headers.insert(header::VARY, HeaderValue::from_static("accept-encoding"));
+            if !(status.is_success() || status == StatusCode::NOT_MODIFIED) {
+                "no-store"
+            } else if scope == Scope::Immutable {
+                IMMUTABLE
+            } else {
+                REVALIDATE
+            }
+        }
+    };
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static(value));
+    response
+}
+
+/// 강한 ETag(따옴표 포함). 실제 응답 바이트와 요청한 사용자로 만든다. 같은 바이트라도 사용자가 다르면 값이
+/// 달라 사용자를 바꾼 브라우저가 앞 사람의 검증자로 304를 받지 않는다. 앞의 표지는 계산 방식이 바뀌면 올린다.
+pub fn strong_etag(user: &[u8], body: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"fvoci-representation-1\0");
+    hasher.update(user);
+    hasher.update(b"\0");
+    hasher.update(body);
+    let digest = hasher.finalize();
+    let hex: String = digest.iter().take(16).map(|b| format!("{b:02x}")).collect();
+    format!("\"{hex}\"")
+}
+
+/// 조건 머리글에 담긴 엔터티 태그.
+enum Tags {
+    Absent,
+    /// `*`
+    Any,
+    /// (약한지, 따옴표 포함 태그)
+    List(Vec<(bool, String)>),
+}
+
+fn tags(headers: &HeaderMap, name: header::HeaderName) -> Tags {
+    let mut found = false;
+    let mut out = Vec::new();
+    for value in headers.get_all(name) {
+        found = true;

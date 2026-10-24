@@ -1,0 +1,14 @@
+   Compiling fvoci-server v0.1.0 (/home/kinesis/orca/workspaces/GroundZero/ablation-etag/crates/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 21.26s
+     Running unittests src/lib.rs (target/debug/deps/fvoci_server-82810fec0417dccf)
+
+running 6 tests
+test http::cache::tests::etags_depend_on_bytes_and_user ... ok
+test http::cache::tests::if_match_uses_strong_comparison ... ok
+test http::cache::tests::if_none_match_uses_weak_comparison ... ok
+test http::cache::tests::scopes_follow_the_path ... ok
+test http::cache::tests::cdn_examples_match_the_scopes ... ok
+test http::cache::tests::etags_preserve_the_domain_and_truncated_digest_bytes ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 78 filtered out; finished in 0.01s
+
