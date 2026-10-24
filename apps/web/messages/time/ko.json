@@ -93,5 +93,6 @@
   "time_add_entry": "기록 더하기",
   "time_sharing_heading": "합계 공유",
   "time_sharing_hint": "켜면 그 워크스페이스 업무에 연결한 내 시간의 합계만 함께 보입니다. 기록·메모·시각은 공유하지 않습니다.",
-  "time_no_workspaces": "워크스페이스가 없습니다."
+  "time_no_workspaces": "워크스페이스가 없습니다.",
+  "time_sharing_load_failed": "공유 설정을 불러오지 못했습니다."
 }
