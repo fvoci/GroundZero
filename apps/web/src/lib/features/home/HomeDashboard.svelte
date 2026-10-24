@@ -55,7 +55,7 @@
     return Array.from({ length: 7 }, (_, i) => fromDayNumber(first + i));
   });
 
-  // 빠른 추가 뒤(reloadKey)나 워크스페이스가 바뀌면 다시 불러온다. 늦게 온 이전 응답은 버린다.
+  // 빠른 추가 뒤(reloadKey)나 워크스페이스가 바뀌면 다시 불러온다. 늦게 온 이전 응답과 화면이 사라진 뒤의 응답은 버린다.
   let loadSeq = 0;
   const request = $derived({ list: workspaces, key: reloadKey });
   $effect(() => {
@@ -64,6 +64,7 @@
     void (async () => {
       try {
         const h = await api.home(zone);
+        if (mine !== loadSeq) return;
         const from = startOfWeek(h.today, settings.weekStart);
         const to = fromDayNumber(dayNumber(from) + 6);
         // 워크스페이스 하나의 달력이 실패해도(그사이 나간 경우 등) 나머지는 보인다.
@@ -97,6 +98,10 @@
         retrying = false;
       }
     })();
+    // 화면이 사라지거나 다시 불러오면 이 요청의 응답은 버린다.
+    return () => {
+      loadSeq += 1;
+    };
   });
 
   function bucketLabel(b: 'overdue' | 'today' | 'upcoming'): string {
