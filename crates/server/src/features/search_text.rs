@@ -21,9 +21,9 @@ const BLOCKS: &[&str] = &[
     "tableRow",
 ];
 
+/// Appends a node, counting only text added since the preceding node-entry guard.
+/// Deferring the count avoids an extra scan of a final large text node before `plain_text` caps it.
 fn walk(node: &Value, out: &mut String, counted_bytes: &mut usize, chars: &mut usize) {
-    // Count only text appended since the preceding node. Waiting until the next guard also avoids
-    // counting a large final text node that will only be trimmed and capped by `plain_text`.
     *chars += out[*counted_bytes..].chars().count();
     *counted_bytes = out.len();
     if *chars >= MAX_INDEX_CHARS {
@@ -123,6 +123,7 @@ mod tests {
         assert_eq!(plain_text(&body).chars().count(), MAX_INDEX_CHARS);
     }
 
+    /// Markers may cross the cap, while break and ancestor newlines count before the next sibling.
     #[test]
     fn cap_counts_unicode_markers_breaks_and_ancestor_newlines() {
         let prefix = "가".repeat(MAX_INDEX_CHARS - 2);
@@ -156,6 +157,7 @@ mod tests {
         }
     }
 
+    /// A whole text node may overshoot so leading whitespace is trimmed before the scalar cap.
     #[test]
     fn final_text_overshoots_before_whitespace_is_trimmed() {
         let content = format!(
