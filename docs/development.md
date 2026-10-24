@@ -177,6 +177,9 @@ Svelte·Vite·TypeScript 구성에서 shadcn-svelte/Bits UI와 Tailwind를 사�
 
 기본 동작·접근성·키보드 처리는 제공 구현을 우선 쓴다. 폰트·색·간격·포커스는 공통 토큰으로 관리하고 별도 종합 UI 시스템이나
 범용 폼·모달·포커스 관리자를 만들지 않는다. 라이브러리 사용을 실제 접근성 검증으로 대신하지 않는다.
+입력 칸·여러 줄 칸·선택 상자는 `$lib/ui`의 `Input`·`Textarea`·`NativeSelect`로 그리고 기능 코드에서 테두리·여백을 손으로 꾸미지 않는다.
+화면 안 여러 열 배치는 창 폭(`md:`·`lg:`)이 아니라 본문 폭 컨테이너 쿼리(`App.svelte`의 `main`이 `@container`, 예: `@2xl:grid-cols-2`)로
+나눈다. 미디어 쿼리의 rem은 사용자가 키운 루트 글꼴을 따르지 않고 사이드바 폭도 모른다.
 Safari 키보드 접근성은 D-98의 의미에 맞는 요소와 최소 범위 lint 예외를 따른다.
 
 <a id="storybook"></a>
