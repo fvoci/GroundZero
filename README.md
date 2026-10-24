@@ -13,3 +13,7 @@
 `ablation/wave2/proposal.md`는 홈 화면 요청 병렬화(D)의 실패 배너 순서 반례, 고정·즐겨찾기 조회(E)의 실험 조건, Up Next(F)의 근거 부족을 구분한다. D/F의 성능 실험은 실행하지 않았으며, E의 채택을 이 문서가 승인하지 않는다.
 
 비밀번호·토큰·연결 문자열·사용자 데이터·이미지는 이 증거에 포함하지 않는다. 시험 입력은 합성 데이터다. 실제 실행 조건·한계와 PASS/FAIL/NOT RUN은 각 보고를 따른다.
+
+## 의존성 작업자의 인계 시점 보고
+
+`dependencies/rust/report.md`와 `dependencies/node/report.md`는 각 작업자가 통합 전 작성한 역사적 보고다. 원문을 보존했으므로 당시의 `Not pushed`, NOTICE 실패, 브라우저·통합 검사 미실행 표시는 최종 상태가 아니다. 두 원본 브랜치는 이후 원격에 보존했고, 통합은 별도 PR https://github.com/fvoci/GroundZero/pull/123 에서 수행한다. 최신 검증과 병합 상태는 그 PR 및 최종 main 실행을 기준으로 한다.
