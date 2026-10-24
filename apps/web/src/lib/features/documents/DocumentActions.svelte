@@ -5,6 +5,7 @@
   import { formatInstant } from '$lib/display';
   import type { Workspace } from '@fvoci/api-client';
   import type { Snippet } from 'svelte';
+  import { tick } from 'svelte';
 
   import type {
     DocumentView,
@@ -98,6 +99,29 @@
     } catch (e: unknown) {
       fail(e);
     }
+  }
+
+  // 공유 철회·공개 링크 철회는 한 번 더 묻는다(같은 화면의 다른 지우기처럼). 확인 단추로 초점을 옮기고, 그만두면 처음 누른
+  // 단추로 돌려준다.
+  interface Asking {
+    kind: 'share' | 'link';
+    id: string;
+  }
+  let asking = $state<Asking | undefined>(undefined);
+  let askConfirm = $state<HTMLButtonElement | null>(null);
+  const askId = (a: Asking): string => `${a.kind}-revoke-${a.id}`;
+
+  async function ask(next: Asking): Promise<void> {
+    asking = next;
+    await tick();
+    askConfirm?.focus();
+  }
+
+  async function stopAsking(): Promise<void> {
+    const was = asking;
+    asking = undefined;
+    await tick();
+    if (was !== undefined) document.getElementById(askId(was))?.focus();
   }
 
   async function removeShare(id: string): Promise<void> {
@@ -419,16 +443,41 @@
       </Dialog.Header>
       <ul class="flex flex-col gap-1" data-testid="share-list">
         {#each shares as s (s.id)}
-          <li class="flex items-center gap-2 text-sm">
+          <li class="flex flex-wrap items-center gap-2 text-sm">
             <span>{s.email}</span>
             <span class="text-muted-foreground"
               >{s.permission === 'write'
                 ? m.documents_permission_write()
                 : m.documents_permission_read()}</span
             >
-            <Button size="sm" variant="ghost" class="ml-auto" onclick={() => void removeShare(s.id)}
-              >{m.documents_revoke()}</Button
-            >
+            {#if asking?.kind === 'share' && asking.id === s.id}
+              <span class="ml-auto flex flex-wrap items-center gap-1">
+                <span id="share-revoke-warning"
+                  >{m.documents_unshare_confirm({ email: s.email })}</span
+                >
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  bind:ref={askConfirm}
+                  aria-describedby="share-revoke-warning"
+                  onclick={() => {
+                    asking = undefined;
+                    void removeShare(s.id);
+                  }}>{m.documents_revoke()}</Button
+                >
+                <Button size="sm" variant="ghost" onclick={() => void stopAsking()}
+                  >{m.common_cancel()}</Button
+                >
+              </span>
+            {:else}
+              <Button
+                id={askId({ kind: 'share', id: s.id })}
+                size="sm"
+                variant="ghost"
+                class="ml-auto"
+                onclick={() => void ask({ kind: 'share', id: s.id })}>{m.documents_revoke()}</Button
+              >
+            {/if}
           </li>
         {:else}
           <li class="text-sm text-muted-foreground">{m.documents_share_empty()}</li>
@@ -531,7 +580,7 @@
         {/if}
         <ul class="flex flex-col gap-1 text-sm" data-testid="public-link-list">
           {#each links as link (link.id)}
-            <li class="flex items-center gap-2">
+            <li class="flex flex-wrap items-center gap-2">
               <span
                 >{m.documents_link_created({
                   date: formatInstant(link.created_at, { dateStyle: 'medium' }),
@@ -546,12 +595,31 @@
                       })
                   : m.documents_link_closed()}
               </span>
-              {#if link.active}
+              {#if link.active && asking?.kind === 'link' && asking.id === link.id}
+                <span class="ml-auto flex flex-wrap items-center gap-1">
+                  <span id="link-revoke-warning">{m.documents_revoke_link_confirm()}</span>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    bind:ref={askConfirm}
+                    aria-describedby="link-revoke-warning"
+                    onclick={() => {
+                      asking = undefined;
+                      void revokeLink(link.id);
+                    }}>{m.documents_revoke()}</Button
+                  >
+                  <Button size="sm" variant="ghost" onclick={() => void stopAsking()}
+                    >{m.common_cancel()}</Button
+                  >
+                </span>
+              {:else if link.active}
                 <Button
+                  id={askId({ kind: 'link', id: link.id })}
                   size="sm"
                   variant="ghost"
                   class="ml-auto"
-                  onclick={() => void revokeLink(link.id)}>{m.documents_revoke()}</Button
+                  onclick={() => void ask({ kind: 'link', id: link.id })}
+                  >{m.documents_revoke()}</Button
                 >
               {/if}
             </li>
