@@ -101,10 +101,12 @@ env:
     fi
     echo "- $image:$ref already published from \`$sha\` ($digest). Nothing rebuilt or changed." >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
     echo true
-  # 이미지 smoke 검사(외부 서비스 없이): 플랫폼, 실행 사용자, OCI 라벨(소스 SHA·버전), 웹 자산·HWP 미리보기 WASM·
+  # 이미지 smoke 검사: 플랫폼, 실행 사용자, OCI 라벨(소스 SHA·버전), 웹 자산·HWP 미리보기 WASM·
   # 제3자 고지 포함. 소스가 버전 주입을 지원하면(inject=true) 빌드 인자와 같은 값이 컴파일 결과(`fvoci-server version`),
-  # 시작 로그(server.starting의 version·source), 버전 응답(/healthz의 build)에 모두 나와야 한다. 서버는 닿지 않는 DB 주소로
-  # 띄운다(연결은 늦게 맺으므로 시작하고, /healthz는 503 본문에 build를 담는다). 인자: 이미지, 플랫폼, 소스 SHA, 버전, inject.
+  # 시작 로그(server.starting의 version·source), 버전 응답(/healthz의 build)에 모두 나와야 한다. 서버는 시작할 때 DB 기준을
+  # 확인하므로(db::Db::check_baseline) 시험 Compose의 PostgreSQL을 실행마다 새로 띄우고(tmpfs), 이미지의 `db bootstrap`·
+  # `db migrate`로 준비한 뒤 앱 역할로 띄운다. 자격 증명은 시험 값이다. 실패하면 정리 전에 로그를 남긴다.
+  # 인자: 이미지, 플랫폼, 소스 SHA, 버전, inject.
   SMOKE: |
     set -euo pipefail
     ref="$1"; platform="$2"; revision="$3"; version="$4"; inject="$5"
@@ -127,10 +129,52 @@ env:
     if [ "$inject" = true ]; then
       compiled=$(docker run --rm "$ref" version | jq -c '{version, source}')
       [ "$compiled" = "$want" ] || fail "compiled build $compiled, expected $want"
-      name="smoke-${platform//\//-}"
-      docker run -d --name "$name" -p 127.0.0.1:18080:8080 \
-        -e DATABASE_URL=postgres://nobody@127.0.0.1:1/none -e FVOCI_ROLE=api "$ref" >/dev/null
-      trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+      # 실행·시도·호출마다 다른 이름을 쓴다. 같은 이름의 컨테이너·프로젝트·네트워크가 이미 있으면 건드리지 않고 멈춘다.
+      # 정리는 이 실행이 만들어 ID를 받은 것 가운데 라벨이 아직 이 이름인 것만 한다(PostgreSQL은 tmpfs라 볼륨이 없다).
+      name="fvoci-smoke-${platform//\//-}-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
+      db=(docker compose --project-name "$name" --file deploy/compose.test.yaml)
+      existing=$(docker ps -aq --filter "name=^${name}\$"
+        docker ps -aq --filter "label=com.docker.compose.project=$name"
+        docker network ls -q --filter "label=com.docker.compose.project=$name")
+      [ -z "$existing" ] || fail "resources named $name already exist; not touching them"
+      app=""; pg_id=""; net_id=""
+      mine() { [ "$(docker "$1" inspect --format "{{index $2 \"$3\"}}" "$4" 2>/dev/null)" = "$name" ]; }
+      cleanup() {
+        if [ "$1" != 0 ]; then
+          if [ -n "$app" ]; then docker logs "$app" 2>&1 | tail -n 50 || true; fi
+          if [ -n "$pg_id" ]; then docker logs "$pg_id" 2>&1 | tail -n 50 || true; fi
+        fi
+        if [ -n "$app" ] && mine container .Config.Labels fvoci.smoke "$app"; then docker rm -f "$app" >/dev/null || true; fi
+        if [ -n "$pg_id" ] && mine container .Config.Labels com.docker.compose.project "$pg_id"; then
+          docker rm -f "$pg_id" >/dev/null || true
+        fi
+        if [ -n "$net_id" ] && mine network .Labels com.docker.compose.project "$net_id"; then
+          docker network rm "$net_id" >/dev/null || true
+        fi
+        left=$(docker ps -aq --filter "label=com.docker.compose.project=$name"; docker ps -aq --filter "name=^${name}\$"
+          docker network ls -q --filter "label=com.docker.compose.project=$name")
+        [ -z "$left" ] || echo "::warning::$platform: left resources of $name in place (not created or not owned): $left"
+      }
+      trap 'cleanup $?' EXIT
+      "${db[@]}" create postgres
+      pg_id=$("${db[@]}" ps --all --quiet postgres)
+      net_id=$(docker network ls --quiet --filter "label=com.docker.compose.project=$name")
+      [ "$(wc -w <<<"$pg_id")" = 1 ] && [ "$(wc -w <<<"$net_id")" = 1 ] || fail "postgres container or network of $name not found"
+      echo "smoke resources: project $name, postgres $pg_id, network $net_id"
+      "${db[@]}" up --detach --wait --no-recreate postgres
+      net="$net_id"
+      pg=postgres:5432/fvoci
+      for cmd in bootstrap migrate; do
+        docker run --rm --network "$net" \
+          -e DATABASE_ADMIN_URL="postgres://fvoci:fvoci-test-password@$pg" \
+          -e DATABASE_MIGRATION_URL="postgres://fvoci_migrator:fvoci-test-migrator-password@$pg" \
+          -e FVOCI_DB_MIGRATOR_PASSWORD=fvoci-test-migrator-password -e FVOCI_DB_APP_PASSWORD=fvoci-test-app-password \
+          "$ref" db "$cmd" || fail "db $cmd failed"
+      done
+      app=$(docker create --name "$name" --label "fvoci.smoke=$name" --network "$net" -p 127.0.0.1:18080:8080 \
+        -e DATABASE_URL="postgres://fvoci_app:fvoci-test-app-password@$pg" -e FVOCI_ROLE=api "$ref")
+      echo "smoke resources: app $app"
+      docker start "$app" >/dev/null
       served=""
       for _ in $(seq 1 60); do
         served=$(curl -s http://127.0.0.1:18080/healthz | jq -c '.build // empty' 2>/dev/null || true)
@@ -138,7 +182,7 @@ env:
         sleep 1
       done
       [ "$served" = "$want" ] || fail "/healthz build '$served', expected $want"
-      logged=$(docker logs "$name" 2>&1 | jq -Rc 'fromjson? | select(.event? == "server.starting") | {version, source}' | head -n1)
+      logged=$(docker logs "$app" 2>&1 | jq -Rc 'fromjson? | select(.event? == "server.starting") | {version, source}' | head -n1)
       [ "$logged" = "$want" ] || fail "start log '$logged', expected $want"
       shown="$version (compiled, start log, /healthz and labels agree)"
     else
