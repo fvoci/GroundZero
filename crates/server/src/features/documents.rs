@@ -222,9 +222,25 @@ pub fn validate_body(body: &Value, limits: &Limits) -> Result<(), AppError> {
             "body must be a document object with type \"doc\"".into(),
         ));
     }
-    let size = serde_json::to_vec(body)
-        .map_err(|e| AppError::BadRequest(format!("body is not serializable: {e}")))?
-        .len();
+    // to_vec와 같은 직렬화 경로로 바이트만 센다. 상한을 넘겨도 끝까지 세어 오류의 실제 크기를 유지한다.
+    struct ByteCount(usize);
+    impl std::io::Write for ByteCount {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0 = self
+                .0
+                .checked_add(bytes.len())
+                .ok_or_else(|| std::io::Error::other("serialized body size overflow"))?;
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut count = ByteCount(0);
+    serde_json::to_writer(&mut count, body)
+        .map_err(|e| AppError::BadRequest(format!("body is not serializable: {e}")))?;
+    let size = count.0;
     if size > limits.max_document_bytes {
         return Err(AppError::BadRequest(format!(
             "body is {size} bytes; the limit is {}",
