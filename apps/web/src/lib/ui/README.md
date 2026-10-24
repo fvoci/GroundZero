@@ -22,6 +22,7 @@ pnpm dlx shadcn-svelte@1.7.0 add button input checkbox label dialog dropdown-men
 - 손댐(2026-10-25): `dialog/dialog-title.svelte`에 `pr-6`(두 줄 이상인 제목이 오른쪽 위 닫기 단추 밑으로 들어가 겹쳤다), `leading-none` 제거(alert-dialog·sheet 제목처럼 기본 줄 높이. 두 줄 한글 제목의 줄이 붙었다). 다시 생성하면 같은 식으로 고친다.
 - 추가(2026-10-25): `pnpm dlx shadcn-svelte@1.7.0 add textarea native-select --yes --no-deps-install`. 기능마다 손으로 꾸민 여러 줄 칸·기본 선택 상자(모서리·여백·글자 크기·높이·초점 표시가 서로 달랐다)를 공통 모양으로 맞춘다. CLI가 `@lucide/svelte`를 `^1.61.0` 범위로 바꾼 것은 되돌려 고정 판을 유지했다. 생성 파일은 prettier로 맞췄다. `native-select/native-select.svelte`: 글자 크기를 `text-sm`에서 `Input`·`textarea`처럼 `text-base md:text-sm`으로(16px 미만 입력 칸은 iOS가 초점 때 화면을 확대한다). 다시 생성하면 같은 식으로 고친다. `class`는 감싸개 `div`에 붙으므로 폭은 `class`로, `select` 자체 속성(`id`·`aria-*`·`bind:value`)은 그대로 넘긴다.
 - 추가(2026-10-25): `pnpm dlx shadcn-svelte@1.7.0 add collapsible --yes --no-deps-install`(업무 보드의 접는 "필터·정렬" 영역). `--no-deps-install`인데도 CLI가 `bits-ui`를 `^2.20.0`으로 바꾸고 설치까지 해 `package.json`·`pnpm-lock.yaml`을 되돌리고 고정 판 2.19.5로 다시 설치했다. 생성 파일은 prettier만 맞췄다.
+- 손댐(2026-10-25, D-109): 입력 칸 테두리를 바탕과 3:1 이상으로 하려고 토큰 `--input-border`를 새로 두고 `input`·`textarea`·`native-select`·`select/select-trigger.svelte`·`checkbox`의 `border-input`을 `border-input-border`로 바꿨다(머리 주석). `--input`은 어두운 화면의 입력 칸 바탕(`bg-input/30`)과 테두리 단추에 그대로 쓴다. 다시 생성하면 이 다섯 곳을 같은 식으로 고친다.
 - ESLint: 이 디렉터리와 `hooks/`, `utils.ts`에는 `eslint.config.mjs`의 외부 코드 예외가 적용된다(규칙 10개). 자체 코드에는 적용되지 않는다.
 
 규칙

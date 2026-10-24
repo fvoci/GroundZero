@@ -7,8 +7,8 @@ import { CARET_COLORS } from '$lib/features/documents/live';
 
 // 밝은·어두운 화면의 색 토큰(app.css의 :root·.dark) 대비가 WCAG 2.2 AA를 넘는지 본다. 글자는 4.5:1, 초점 고리처럼 상태를
 // 알리는 표시는 3:1(1.4.11). 반투명 토큰은 그 바탕에 겹쳐 계산한다.
-// 예외(사용자 결정 전): 테두리 --border·--input은 두 화면 모두 3:1에 못 미친다(약 1.3~1.5). 입력 칸은 라벨과 함께 보이며,
-// 3:1로 올리면 카드·구분선까지 진해져 화면 인상이 바뀌므로 따로 묻는다.
+// 입력 칸 테두리(--input-border)는 칸을 알아보게 하는 경계라 바탕과 3:1 이상이다(D-109). 카드·구분선의 --border는 장식이라
+// 일부러 3:1보다 옅게 둔다(약 1.3, D-109). 초점 고리(--ring)는 쉬고 있는 입력 칸 테두리와도 뚜렷이 달라야 한다.
 
 const css = readFileSync(path.resolve(import.meta.dirname, '../src/styles/app.css'), 'utf8');
 
@@ -82,6 +82,10 @@ const TEXT: [string, string][] = [
   ['sidebar-primary-foreground', 'sidebar-primary'],
 ];
 const STATE: [string, string][] = [
+  ['input-border', 'background'],
+  ['input-border', 'card'],
+  ['input-border', 'popover'],
+  ['input-border', 'muted'],
   ['ring', 'background'],
   ['ring', 'muted'],
   ['ring', 'card'],
@@ -106,6 +110,10 @@ describe.each([
 
   it.each(STATE)('--%s on --%s is at least 3:1', (fg, bg) => {
     expect(contrast(pick(fg), pick(bg))).toBeGreaterThanOrEqual(3);
+  });
+
+  it('focus ring stands apart from a resting input border', () => {
+    expect(contrast(pick('ring'), pick('input-border'))).toBeGreaterThanOrEqual(1.8);
   });
 });
 

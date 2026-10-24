@@ -53,7 +53,11 @@ describe('task board fields use the shared controls', () => {
       screen.getByLabelText('마감 끝일'),
       screen.getByRole('textbox', { name: '보기 이름' }),
     ];
-    for (const field of fields) expect(field).toHaveAttribute('data-slot', 'input');
+    for (const field of fields) {
+      expect(field).toHaveAttribute('data-slot', 'input');
+      // 입력 칸 테두리는 카드·구분선과 다른 토큰(바탕과 3:1 이상, D-109).
+      expect(field).toHaveClass('border-input-border');
+    }
   });
 
   it('draws the status, assignee, priority, sort and saved-view selects with the shared NativeSelect', async () => {
@@ -62,7 +66,10 @@ describe('task board fields use the shared controls', () => {
     await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
     const selects = screen.getAllByRole('combobox');
     expect(selects).toHaveLength(5);
-    for (const select of selects) expect(select).toHaveAttribute('data-slot', 'native-select');
+    for (const select of selects) {
+      expect(select).toHaveAttribute('data-slot', 'native-select');
+      expect(select).toHaveClass('border-input-border');
+    }
   });
 });
 

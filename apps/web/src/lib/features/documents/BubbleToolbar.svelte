@@ -126,7 +126,7 @@
       }}
     >
       <input
-        class="h-7 w-56 max-w-[60vw] rounded border border-input bg-background px-2 text-sm"
+        class="h-7 w-56 max-w-[60vw] rounded border border-input-border bg-background px-2 text-sm"
         aria-label={m.documents_link_url()}
         aria-invalid={linkError}
         placeholder="https://"
