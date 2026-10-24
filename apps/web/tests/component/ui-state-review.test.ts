@@ -75,6 +75,25 @@ describe('audit', () => {
 });
 
 describe('members', () => {
+  it('keeps the list retry when an action fails after a list read failed', async () => {
+    vi.spyOn(api, 'members').mockResolvedValue(view);
+    vi.spyOn(api, 'groups').mockResolvedValue([{ id: 'g-1', name: '세미나', members: [] }]);
+    vi.spyOn(api, 'invitations').mockRejectedValue(new Error('offline'));
+    const del = vi.spyOn(api, 'deleteGroup').mockRejectedValue(new Error('offline'));
+    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+
+    expect(await screen.findByRole('button', { name: '다시 시도' })).toBeInTheDocument();
+    await fireEvent.click(await screen.findByRole('button', { name: '그룹 삭제' }));
+    await fireEvent.click(await screen.findByRole('button', { name: '확인' }));
+    await waitFor(() => {
+      expect(del).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getAllByRole('alert')).toHaveLength(2);
+    });
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeInTheDocument();
+  });
+
   it('does not offer a list retry for a failed action', async () => {
     vi.spyOn(api, 'members').mockResolvedValue(view);
     vi.spyOn(api, 'groups').mockResolvedValue([{ id: 'g-1', name: '세미나', members: [] }]);

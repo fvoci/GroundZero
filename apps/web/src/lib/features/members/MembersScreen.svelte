@@ -66,9 +66,9 @@
     return view?.members.find((member) => member.user_id === userId)?.display_name ?? userId;
   }
 
-  // 위 오류가 읽기 실패인지(다시 시도로 다시 읽는다). 역할 바꾸기·그룹 삭제 같은 요청의 실패에는 다시 읽기 단추를 두지
-  // 않는다(실패한 요청을 다시 보내지 않으므로).
-  let loadFailed = $state(false);
+  // 읽기 실패는 요청(역할 바꾸기·그룹 삭제 등) 실패와 따로 둔다. 읽기 실패에만 다시 읽기 단추가 있고, 그 뒤 요청이
+  // 실패해도 다시 읽기 단추는 남는다.
+  let loadError = $state<string | undefined>(undefined);
 
   async function load(wsId: string = workspace.id): Promise<void> {
     try {
@@ -77,10 +77,9 @@
       groups = await api.groups(wsId);
       invitations = v.my_role === 'admin' ? await api.invitations(wsId) : [];
       error = undefined;
-      loadFailed = false;
+      loadError = undefined;
     } catch (e: unknown) {
-      error = errorText(e, m.members_load_failed());
-      loadFailed = true;
+      loadError = errorText(e, m.members_load_failed());
     }
   }
 
@@ -104,10 +103,8 @@
         onchanged();
       }
       const text = errorText(e, m.members_request_failed());
-      if (fail === undefined) {
-        error = text;
-        loadFailed = false;
-      } else fail(text);
+      if (fail === undefined) error = text;
+      else fail(text);
       return false;
     }
     if (done !== undefined) notice = done;
@@ -127,21 +124,24 @@
     {m.members_heading({ workspace: workspace.name })}
   </h1>
 
-  {#if error !== undefined}
+  {#if loadError !== undefined}
     <!-- 멤버·그룹·초대 어느 읽기가 실패해도(목록이 이미 있어도) 다시 읽을 수 있다. -->
     <p role="alert" class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2">
+      {loadError}
+      <Button
+        size="sm"
+        variant="outline"
+        class="ml-2"
+        onclick={() => {
+          loadError = undefined;
+          void load();
+        }}>{m.common_retry()}</Button
+      >
+    </p>
+  {/if}
+  {#if error !== undefined}
+    <p role="alert" class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2">
       {error}
-      {#if loadFailed}
-        <Button
-          size="sm"
-          variant="outline"
-          class="ml-2"
-          onclick={() => {
-            error = undefined;
-            void load();
-          }}>{m.common_retry()}</Button
-        >
-      {/if}
     </p>
   {/if}
   <!-- 완료 알림은 처음부터 있는 알림 영역 안에서 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
@@ -149,7 +149,7 @@
 
   {#if view === undefined}
     <!-- 첫 읽기가 실패하면 "불러오는 중"을 남기지 않는다(위 오류에 다시 시도가 있다). -->
-    {#if error === undefined}
+    {#if loadError === undefined}
       <p aria-live="polite">{m.app_loading()}</p>
     {/if}
   {:else}
