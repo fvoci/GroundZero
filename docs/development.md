@@ -88,6 +88,12 @@
 `test`에서 선택하지 않은 OIDC·Supabase 시험과 외부 서비스 모드의 S3 미설정은 NOT RUN이다.
 Supabase session 실행에서도 별도 빈 DB를 만드는 시험은 직접 연결을 사용한다. 실제 Cloud 검증과 같지 않다.
 
+Supabase 시험 준비는 해당 프로젝트의 풀러를 멈추고 DB 역할·마이그레이션을 준비한 뒤 다시 시작한다.
+보존한 풀러의 SCRAM 캐시가 같은 비밀번호 재설정 전의 값을 사용하는 것을 막는다.
+`--keep`은 성공·실패 모두 컨테이너를 보존하며, 준비 중 실패하면 풀러가 멈춘 상태일 수 있다.
+Supabase CI는 `cargo test --package xtask --locked supabase::tests::kept_pooler_restarts_after_role_preparation -- --ignored --test-threads=1 --nocapture`로
+새 격리 스택에서 연결을 유지한 채 준비를 반복하는 회귀도 실행한다. 기본 단위 검사에서는 Docker를 띄우지 않는다.
+
 | 설정                     | 정본                                                                                                            |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | Rust 버전·lint·시험 예외 | [rust-toolchain.toml](../rust-toolchain.toml), [Cargo.toml](../Cargo.toml), [clippy.toml](../clippy.toml)       |
