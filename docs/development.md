@@ -120,9 +120,12 @@ cargo xtask browser
 WebKit·실제 Safari는 이 Chromium 묶음의 실행 범위가 아니다.
 
 시험 재시도는 끄고 화면·요청·저장 완료 조건을 기다린다. 실패 결과를 재실행 성공으로 덮어쓰지 않는다.
-원시 출력은 `target/browser/`에 두며, CI는 검증된 실패 캡처·trace·로그만 `artifacts/`에서 업로드한다.
+원시 출력은 `target/browser/runs/<실행 ID>/`에 보존하며 다음 실행으로 덮어쓰지 않는다.
+CI는 검증된 실패 캡처·trace·로그만 `target/browser/artifacts/`에서 업로드한다.
 자격 증명·쿠키·토큰을 담은 원본은 업로드 대상이 아니다. 검증이 끝나 표시 파일 `SAFE_TO_UPLOAD`가 있는 경우에만
 Actions artifact를 게시한다. 정상 캡처를 PR에 첨부할 때는 직접 열어 확인하고 Git에는 넣지 않는다.
+`--keep`은 이 명령의 PostgreSQL·Keycloak 컨테이너를 남기고 제품 서버는 종료한다.
+원시 출력과 `target/browser/files/`의 파일 저장소는 `--keep` 여부와 관계없이 보존한다.
 
 ### DB 비교와 사전 검사 fixture
 
