@@ -141,10 +141,10 @@ fn with_shutdown(primary: Result<()>, shutdown: Result<()>) -> Result<()> {
     }
 }
 
-/// 같은 체크아웃의 실행을 직렬화하는 `target/browser/run.lock`. 파일을 닫거나 프로세스가 끝나면 운영체제가 푼다.
+/// 같은 체크아웃의 실행을 직렬화하는 `target/browser/run.lock`. 놓을 때 명시적으로 풀고, 프로세스가 끝나면 운영체제가 푼다.
 /// 지운 경로를 다른 실행이 새로 만들어 따로 잠그는 경쟁이 생기므로 파일은 지우지 않는다.
 #[derive(Debug)]
-struct RunLock(#[expect(dead_code, reason = "열어 둔 동안만 잠금이 유지된다")] File);
+struct RunLock(File);
 
 impl RunLock {
     fn acquire(out: &Path) -> Result<Self> {
@@ -166,6 +166,16 @@ impl RunLock {
             Err(TryLockError::Error(e)) => {
                 Err(e).with_context(|| format!("lock {}", path.display()))
             }
+        }
+    }
+}
+
+/// 닫기만 하면 같은 파일 서술자를 물려받은 프로세스(exec 전의 fork 자식 등)가 닫을 때까지 잠금이 남는다.
+/// 잠금은 공유된 열린 파일 설명에 걸리므로 여기서 풀면 사본이 남아 있어도 바로 풀린다.
+impl Drop for RunLock {
+    fn drop(&mut self) {
+        if let Err(e) = self.0.unlock() {
+            eprintln!("unlock target/browser/run.lock: {e}");
         }
     }
 }
@@ -319,6 +329,22 @@ mod tests {
         assert!(failed.is_err());
         drop(RunLock::acquire(&out)?);
         assert!(out.join("run.lock").exists());
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    /// 다른 시험이 띄운 자식이 exec 전에 물려받은 서술자 사본을 `try_clone`(같은 열린 파일 설명)으로 흉내 낸다.
+    /// 사본이 아직 열려 있어도 잠금을 놓은 즉시 다음 실행이 잡을 수 있어야 한다.
+    #[test]
+    fn dropped_lock_is_released_while_a_shared_descriptor_stays_open() -> Result<()> {
+        let root = scratch()?;
+        let out = root.join("target/browser");
+        let holder = RunLock::acquire(&out)?;
+        let inherited = holder.0.try_clone()?;
+        drop(holder);
+        let next = RunLock::acquire(&out);
+        drop(inherited);
+        drop(next?);
         std::fs::remove_dir_all(&root)?;
         Ok(())
     }
