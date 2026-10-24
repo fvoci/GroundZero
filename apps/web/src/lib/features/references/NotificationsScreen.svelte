@@ -119,7 +119,9 @@
             <span class="flex min-w-0 flex-col">
               <span>{notificationText(n)}</span>
               {#if n.excerpt !== null}
-                <span class="truncate text-sm text-muted-foreground">“{n.excerpt}”</span>
+                <span class="truncate text-sm text-muted-foreground" title={n.excerpt}
+                  >“{n.excerpt}”</span
+                >
               {/if}
             </span>
             <span class="ml-auto shrink-0 text-sm text-muted-foreground"

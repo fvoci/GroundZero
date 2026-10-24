@@ -9,6 +9,7 @@
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { focusConfirm, focusConfirmStart } from '$lib/features/common/inline-confirm';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -502,16 +503,31 @@
         {/if}
         <div class="flex items-center gap-2 border-t pt-3">
           {#if confirmDelete}
-            <span class="text-sm" role="status">{m.events_delete_confirm()}</span>
-            <Button size="sm" variant="destructive" onclick={() => void remove()}
-              >{m.events_delete()}</Button
+            <span id="event-delete-question" class="text-sm">{m.events_delete_confirm()}</span>
+            <Button
+              size="sm"
+              variant="destructive"
+              data-confirm-go="event-delete"
+              aria-describedby="event-delete-question"
+              onclick={() => void remove()}>{m.events_delete()}</Button
             >
-            <Button size="sm" variant="ghost" onclick={() => (confirmDelete = false)}
-              >{m.common_cancel()}</Button
+            <Button
+              size="sm"
+              variant="ghost"
+              onclick={() => {
+                confirmDelete = false;
+                void focusConfirmStart('event-delete');
+              }}>{m.common_cancel()}</Button
             >
           {:else}
-            <Button size="sm" variant="outline" onclick={() => (confirmDelete = true)}
-              >{m.events_delete_event()}</Button
+            <Button
+              size="sm"
+              variant="outline"
+              data-confirm="event-delete"
+              onclick={() => {
+                confirmDelete = true;
+                void focusConfirm('event-delete');
+              }}>{m.events_delete_event()}</Button
             >
           {/if}
         </div>

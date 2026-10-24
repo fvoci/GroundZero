@@ -250,6 +250,7 @@
               {#if f.can_download}
                 <a
                   class="min-w-0 flex-1 truncate font-medium underline-offset-2 hover:underline"
+                  title={f.name}
                   href={fileContentUrl(f.id)}>{f.name}</a
                 >
               {:else}

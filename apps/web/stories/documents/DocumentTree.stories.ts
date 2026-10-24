@@ -39,8 +39,15 @@ export const ReadOnly: Story = {
 
 export const Empty: Story = { args: { docs: [] } };
 
+/** 긴 제목은 칸 폭에서 말줄임으로 끝나지만, 가리키면 전체 제목이 보인다(title). */
 export const LongTitles: Story = {
   args: { docs: DOCS.filter((d) => LONG_SUBTREE.has(d.id)) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    for (const d of DOCS.filter((doc) => LONG_SUBTREE.has(doc.id))) {
+      await expect(canvas.getByText(d.title)).toHaveAttribute('title', d.title);
+    }
+  },
 };
 
 /** 키보드: Tab으로 트리에 들어가 아래 화살표로 옮기고, 왼쪽으로 접고, Enter로 연다. */

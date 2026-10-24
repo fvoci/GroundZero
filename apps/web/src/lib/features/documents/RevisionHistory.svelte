@@ -72,6 +72,33 @@
     }
   }
 
+  // 리비전 목록은 목록 상자다: Tab으로는 한 칸(고른 리비전, 없으면 처음)에만 들어가고, 위·아래·Home·End로 옮기며
+  // 고른다(옮긴 리비전을 바로 불러 비교한다).
+  const tabRevision = $derived(
+    list.some((r) => r.revision === selected?.revision) ? selected?.revision : list.at(0)?.revision,
+  );
+
+  function moveInList(e: KeyboardEvent & { currentTarget: HTMLElement }): void {
+    const options = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="option"]')];
+    const at = options.findIndex((o) => o === document.activeElement);
+    const last = options.length - 1;
+    const next =
+      e.key === 'ArrowDown'
+        ? Math.min(at + 1, last)
+        : e.key === 'ArrowUp'
+          ? Math.max(at - 1, 0)
+          : e.key === 'Home'
+            ? 0
+            : e.key === 'End'
+              ? last
+              : undefined;
+    const target = next === undefined ? undefined : options.at(next);
+    if (next === undefined || target === undefined) return;
+    e.preventDefault();
+    target.focus();
+    if (next !== at) target.click();
+  }
+
   function openHistory(): void {
     open = true;
     // 지난번에 열었을 때 고른 리비전의 늦은 응답은 버린다.
@@ -147,30 +174,35 @@
       </Dialog.Description>
     </Dialog.Header>
     <div class="grid max-h-[65vh] gap-4 overflow-hidden md:grid-cols-[14rem_1fr]">
-      <div
-        class="flex min-h-0 flex-col gap-1 overflow-y-auto"
-        role="listbox"
-        aria-label={m.documents_revisions_label()}
-      >
-        {#each list as rev (rev.revision)}
-          <button
-            type="button"
-            role="option"
-            aria-selected={selected?.revision === rev.revision}
-            class={`rounded px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${selected?.revision === rev.revision ? 'bg-accent' : ''}`}
-            onclick={() => void choose(rev.revision)}
-          >
-            <span class="font-mono">r{rev.revision}</span>
-            <span class="text-muted-foreground"
-              >{standInLabel(rev) ?? rev.author_name ?? m.documents_unknown_author()}</span
+      <div class="flex min-h-0 flex-col gap-1 overflow-y-auto">
+        <div
+          class="flex flex-col gap-1"
+          role="listbox"
+          tabindex="-1"
+          aria-label={m.documents_revisions_label()}
+          onkeydown={moveInList}
+        >
+          {#each list as rev (rev.revision)}
+            <button
+              type="button"
+              role="option"
+              tabindex={rev.revision === tabRevision ? 0 : -1}
+              aria-selected={selected?.revision === rev.revision}
+              class={`rounded px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${selected?.revision === rev.revision ? 'bg-accent' : ''}`}
+              onclick={() => void choose(rev.revision)}
             >
-            <span class="block text-xs text-muted-foreground">
-              {when(rev.created_at)}{rev.restored_from === null
-                ? ''
-                : ` · ${m.documents_restored_from({ revision: rev.restored_from })}`}
-            </span>
-          </button>
-        {/each}
+              <span class="font-mono">r{rev.revision}</span>
+              <span class="text-muted-foreground"
+                >{standInLabel(rev) ?? rev.author_name ?? m.documents_unknown_author()}</span
+              >
+              <span class="block text-xs text-muted-foreground">
+                {when(rev.created_at)}{rev.restored_from === null
+                  ? ''
+                  : ` · ${m.documents_restored_from({ revision: rev.restored_from })}`}
+              </span>
+            </button>
+          {/each}
+        </div>
         {#if more}
           <Button size="sm" variant="ghost" onclick={() => void load(list.at(-1)?.revision ?? null)}
             >{m.documents_load_more()}</Button

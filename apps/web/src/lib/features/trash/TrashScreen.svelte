@@ -7,6 +7,7 @@
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { formatInstant } from '$lib/display';
+  import { focusConfirm, focusConfirmStart } from '$lib/features/common/inline-confirm';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -131,7 +132,20 @@
     </p>
   {/if}
   {#if error !== undefined}
-    <p role="alert" class="text-sm text-destructive">{error}</p>
+    <p role="alert" class="text-sm text-destructive">
+      {error}
+      {#if trash === undefined}
+        <Button
+          size="sm"
+          variant="outline"
+          class="ml-2"
+          onclick={() => {
+            error = undefined;
+            reloadKey += 1;
+          }}>{m.common_retry()}</Button
+        >
+      {/if}
+    </p>
   {/if}
   <p class="sr-only" aria-live="polite">{status}</p>
 
@@ -224,7 +238,7 @@
   {#if isAdmin && expiredCount > 0}
     <div class="flex flex-wrap items-center gap-2 text-sm">
       {#if confirmPurge === EXPIRED}
-        <span role="status">
+        <span id="trash-purge-expired-question">
           {m.trash_irreversible()}
           {#if keptCount > 0}
             {m.trash_purge_expired_kept({ count: keptCount })}
@@ -234,18 +248,31 @@
         <Button
           variant="destructive"
           size="sm"
+          data-confirm-go="trash-purge-expired"
+          aria-describedby="trash-purge-expired-question"
           onclick={() =>
             void run(
               () => api.purgeExpiredTrash(workspace?.id ?? null),
               m.trash_purged_expired({ count: expiredCount }),
             )}>{m.trash_purge()}</Button
         >
-        <Button size="sm" variant="ghost" onclick={() => (confirmPurge = undefined)}
-          >{m.common_cancel()}</Button
+        <Button
+          size="sm"
+          variant="ghost"
+          onclick={() => {
+            confirmPurge = undefined;
+            void focusConfirmStart('trash-purge-expired');
+          }}>{m.common_cancel()}</Button
         >
       {:else}
-        <Button variant="destructive" size="sm" onclick={() => (confirmPurge = EXPIRED)}
-          >{m.trash_purge_expired_button({ count: expiredCount })}</Button
+        <Button
+          variant="destructive"
+          size="sm"
+          data-confirm="trash-purge-expired"
+          onclick={() => {
+            confirmPurge = EXPIRED;
+            void focusConfirm('trash-purge-expired');
+          }}>{m.trash_purge_expired_button({ count: expiredCount })}</Button
         >
       {/if}
     </div>
@@ -277,7 +304,7 @@
         {/if}
         {#if e.can_purge}
           {#if confirmPurge === e.id}
-            <span role="status"
+            <span id={`trash-purge-question-${e.id}`}
               >{e.kept_for_references
                 ? m.trash_purge_question_kept()
                 : m.trash_purge_question()}</span
@@ -285,22 +312,40 @@
             <Button
               size="sm"
               variant="destructive"
+              data-confirm-go={`trash-purge-${e.id}`}
+              aria-describedby={`trash-purge-question-${e.id}`}
               onclick={() =>
                 void run(() => api.purgeTrash(e.id), m.trash_purged({ label: label(e) }))}
               >{m.trash_purge()}</Button
             >
-            <Button size="sm" variant="ghost" onclick={() => (confirmPurge = undefined)}
-              >{m.common_cancel()}</Button
+            <Button
+              size="sm"
+              variant="ghost"
+              onclick={() => {
+                confirmPurge = undefined;
+                void focusConfirmStart(`trash-purge-${e.id}`);
+              }}>{m.common_cancel()}</Button
             >
           {:else}
-            <Button size="sm" variant="ghost" onclick={() => (confirmPurge = e.id)}
-              >{m.trash_purge_ellipsis()}</Button
+            <Button
+              size="sm"
+              variant="ghost"
+              data-confirm={`trash-purge-${e.id}`}
+              onclick={() => {
+                confirmPurge = e.id;
+                void focusConfirm(`trash-purge-${e.id}`);
+              }}>{m.trash_purge_ellipsis()}</Button
             >
           {/if}
         {/if}
       </li>
     {:else}
-      <li class="text-sm text-muted-foreground">{m.trash_empty()}</li>
+      <!-- 목록을 받기 전에는 "휴지통이 비었습니다" 대신 불러오는 중이라고 보인다. -->
+      {#if trash !== undefined}
+        <li class="text-sm text-muted-foreground">{m.trash_empty()}</li>
+      {:else if error === undefined}
+        <li class="text-sm text-muted-foreground">{m.app_loading()}</li>
+      {/if}
     {/each}
   </ul>
 </section>
