@@ -116,6 +116,8 @@ cargo xtask browser
 ```
 
 `browser`는 별도 `-browser` Compose 프로젝트에 시험 PostgreSQL·Keycloak을 준비한다.
+같은 체크아웃에서 이미 실행 중이면 파일 정리나 서비스 기동 전에 실패한다. `target/browser/run.lock`은
+운영체제가 관리하는 잠금이며 프로세스 종료 시 풀린다. 남아 있는 잠금 파일을 지울 필요는 없다.
 설치 명령의 `PLAYWRIGHT_SKIP_BROWSER_GC=1`은 다른 작업에서 쓰던 공유 브라우저 캐시 판을 보존한다.
 동적 루프백 포트의 실제 서버·DB·OIDC와 합성 데이터를 쓰며 사용자 흐름 전체를 HTTP mock으로 대체하지 않는다.
 기존 개발 환경이나 `cargo xtask test`의 프로젝트를 재사용하지 않는다.
