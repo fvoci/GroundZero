@@ -1,0 +1,11 @@
+mode	case	baseline ns	variant ns	paired improvement %	baseline MAD %	gate
+warm	tiny	136.9	139.8	-2.85	2.46	PASS
+warm	single_huge	452291.9	447889.7	0.99	0.98	PASS
+warm	many_ascii	15649247.5	382333.9	97.57	0.39	PASS
+warm	many_unicode	30874440.6	390071.5	98.75	1.33	PASS
+warm	many_blocks	11865089.3	312458.1	97.37	1.43	PASS
+cold	tiny	135.2	140.7	-3.86	0.92	PASS
+cold	single_huge	452758.5	450252.5	0.26	1.25	PASS
+cold	many_ascii	15611668.4	592270.5	96.25	0.83	PASS
+cold	many_unicode	30487990.4	621268.4	97.96	0.77	PASS
+cold	many_blocks	11857146.6	590359.1	95.01	0.61	PASS

@@ -1,0 +1,42 @@
+{
+  "baseline": "e0103ef5fbcb818a66d2156cc7c742d51ea321fc",
+  "variant": "11b9d9cd05a15259bd0d2867f82ba1b0ccd31a86",
+  "finalHead": "3137374e24ba622d0101111039c00f274f27ea34",
+  "finalMain": "06809206e9f7cdc88e538502d7f6fab3dff60d76",
+  "originalBaseline": "22ad80ee205332e3ef1ffd8f64f783789955921b",
+  "model": "gpt-6.1-sol",
+  "rustc": "1.99.1 (58cf8f9c3 2026-10-13)",
+  "cargo": "1.99.1 (5f94df478 2026-08-27)",
+  "node": "v24.22.1",
+  "corepack": "0.36.0",
+  "pnpm": "12.15.0",
+  "os": "Linux 6.18.33.2-microsoft-standard-WSL2 x86_64",
+  "visibleCpus": 32,
+  "profile": {
+    "optLevel": 3,
+    "codegenUnits": 1,
+    "buildJobs": 2
+  },
+  "measurementStart": "2026-10-24T12:51:32.366Z",
+  "measurementEnd": "2026-10-24T12:51:50.653Z",
+  "startLoadAverage": [
+    5.21,
+    5.79,
+    6.46
+  ],
+  "endLoadAverage": [
+    4.7,
+    5.65,
+    6.41
+  ],
+  "startFreeMemory": 59976372224,
+  "endFreeMemory": 60050034688,
+  "processColdDefinition": "warm uses five untimed calls; process-cold is a fresh process with no explicit warmup, reporting the whole batch",
+  "pinHashes": {
+    "rust-toolchain.toml": "b9c8d2d59f6f46474c0cfa0b8b77bea21d94fc73a30ad93d5bf6385c422197d2",
+    "Cargo.toml": "e564fe18c5e7c07ac4aaa6972c343b6ef211963b6de3f493c1cf7e0943114a6f",
+    "Cargo.lock": "8a053c821efaa4b950c8815e6422d23092438007b0db881d457bd05d2c46a40b",
+    "pnpm-lock.yaml": "109dc2960c2c03155f61991b87c99a03a80f829bd8d84c373595fae0b8950ba3",
+    "package.json": "11824534eaa8e01d5020e80f5ee288c4464997dd6250bbd3bdd86d38e68e025a"
+  }
+}

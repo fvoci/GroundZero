@@ -1,0 +1,16 @@
+Quiet release msg_b0532681b5b7; preexisting unrelated Python background about one core disclosed by coordinator; no new heavy jobs permitted.
+3137374e24ba622d0101111039c00f274f27ea34
+Compiled variant 11b9d9cd05a15259bd0d2867f82ba1b0ccd31a86; compiled baseline e0103ef5fbcb818a66d2156cc7c742d51ea321fc
+rust-toolchain.toml: OK
+Cargo.lock: OK
+pnpm-lock.yaml: OK
+target/ablation-a-final/harness/Cargo.toml: OK
+target/ablation-a-final/harness/Cargo.lock: OK
+target/ablation-a-final/harness/src/main.rs: OK
+target/ablation-a-final/harness/src/baseline.rs: OK
+target/ablation-a-final/harness/src/variant.rs: OK
+target/ablation-a-final/baseline: OK
+target/ablation-a-final/variant: OK
+2026-10-24T12:51:32.337560953Z
+2026-10-24T12:51:50.664521024Z
+exit=0

@@ -1,0 +1,170 @@
+{
+  "postgresContainer": "4b36bcc9f10f3362285cfbe1f994903ea8f77dd6e255575c1200ca9dfdc7d0d7",
+  "systemIdentifier": "7700212565316374567",
+  "project": "fvoci-ablation-a-final-67dc1df2",
+  "source": "archive/fixture-cleanup-source.txt",
+  "created": [
+    {
+      "at": "2026-10-24 12:38:39.067 UTC",
+      "pid": "363",
+      "session": "6adca6cf.16b",
+      "name": "fvoci_backup_src_01a16deb98da70b584c9ff589eaa3eda"
+    },
+    {
+      "at": "2026-10-24 12:38:39.918 UTC",
+      "pid": "363",
+      "session": "6adca6cf.16b",
+      "name": "fvoci_restore_01a16deb9c2e7246bb187f23c535ae71"
+    },
+    {
+      "at": "2026-10-24 12:40:11.505 UTC",
+      "pid": "987",
+      "session": "6adca72b.3db",
+      "name": "fvoci_s3_files_01a16ded01f072e2ba7fb6bdad6e05f7"
+    },
+    {
+      "at": "2026-10-24 12:40:38.781 UTC",
+      "pid": "1242",
+      "session": "6adca746.4da",
+      "name": "fvoci_uninitialized_guard_01a16ded6c767137a4729449e87ee370"
+    },
+    {
+      "at": "2026-10-24 12:40:38.870 UTC",
+      "pid": "1245",
+      "session": "6adca746.4dd",
+      "name": "fvoci_baseline_guard_01a16ded6cd677eda3be3aa9f763417b"
+    },
+    {
+      "at": "2026-10-24 12:40:39.270 UTC",
+      "pid": "1256",
+      "session": "6adca747.4e8",
+      "name": "fvoci_legacy_guard_01a16ded6e66705e97b886c243978d83"
+    },
+    {
+      "at": "2026-10-24 12:40:39.468 UTC",
+      "pid": "1266",
+      "session": "6adca747.4f2",
+      "name": "fvoci_enum_guard_01a16ded6f2c71a6bb7e299c40606c03"
+    },
+    {
+      "at": "2026-10-24 12:40:39.673 UTC",
+      "pid": "1271",
+      "session": "6adca747.4f7",
+      "name": "fvoci_domain_guard_01a16ded6ff974ecb32a560bc2d23f5b"
+    },
+    {
+      "at": "2026-10-24 12:40:51.020 UTC",
+      "pid": "1450",
+      "session": "6adca752.5aa",
+      "name": "fvoci_initial_admin_01a16ded9c4b74deae7a470700406822"
+    },
+    {
+      "at": "2026-10-24 12:41:17.831 UTC",
+      "pid": "1629",
+      "session": "6adca76d.65d",
+      "name": "fvoci_search_recheck_01a16dee05077212af2d384e6b53b973"
+    },
+    {
+      "at": "2026-10-24 12:41:20.514 UTC",
+      "pid": "1655",
+      "session": "6adca770.677",
+      "name": "fvoci_search_tasks_01a16dee0f8272cc9a6beab040f43667"
+    },
+    {
+      "at": "2026-10-24 12:41:33.010 UTC",
+      "pid": "1762",
+      "session": "6adca77c.6e2",
+      "name": "fvoci_shutdown_01a16dee40527440818ba9b746bcf70f"
+    },
+    {
+      "at": "2026-10-24 12:41:42.928 UTC",
+      "pid": "1934",
+      "session": "6adca786.78e",
+      "name": "fvoci_storage_claim_01a16dee670f74159c9631e8c6c1b05d"
+    }
+  ],
+  "dropped": [
+    {
+      "at": "2026-10-24 12:38:40.968 UTC",
+      "pid": "363",
+      "session": "6adca6cf.16b",
+      "name": "fvoci_restore_01a16deb9c2e7246bb187f23c535ae71",
+      "createdAt": "2026-10-24 12:38:39.918 UTC",
+      "sameCreationSession": true
+    },
+    {
+      "at": "2026-10-24 12:38:40.994 UTC",
+      "pid": "363",
+      "session": "6adca6cf.16b",
+      "name": "fvoci_backup_src_01a16deb98da70b584c9ff589eaa3eda",
+      "createdAt": "2026-10-24 12:38:39.067 UTC",
+      "sameCreationSession": true
+    },
+    {
+      "at": "2026-10-24 12:40:39.212 UTC",
+      "pid": "1242",
+      "session": "6adca746.4da",
+      "name": "fvoci_uninitialized_guard_01a16ded6c767137a4729449e87ee370",
+      "createdAt": "2026-10-24 12:40:38.781 UTC",
+      "sameCreationSession": true
+    },
+    {
+      "at": "2026-10-24 12:40:39.427 UTC",
+      "pid": "1245",
+      "session": "6adca746.4dd",
+      "name": "fvoci_baseline_guard_01a16ded6cd677eda3be3aa9f763417b",
+      "createdAt": "2026-10-24 12:40:38.870 UTC",
+      "sameCreationSession": true
+    },
+    {
+      "at": "2026-10-24 12:40:39.480 UTC",
+      "pid": "1256",
+      "session": "6adca747.4e8",
+      "name": "fvoci_legacy_guard_01a16ded6e66705e97b886c243978d83",
+      "createdAt": "2026-10-24 12:40:39.270 UTC",
+      "sameCreationSession": true
+    },
+    {
+      "at": "2026-10-24 12:40:39.641 UTC",
+      "pid": "1266",
+      "session": "6adca747.4f2",
+      "name": "fvoci_enum_guard_01a16ded6f2c71a6bb7e299c40606c03",
+      "createdAt": "2026-10-24 12:40:39.468 UTC",
+      "sameCreationSession": true
+    },
+    {
+      "at": "2026-10-24 12:40:39.839 UTC",
+      "pid": "1271",
+      "session": "6adca747.4f7",
+      "name": "fvoci_domain_guard_01a16ded6ff974ecb32a560bc2d23f5b",
+      "createdAt": "2026-10-24 12:40:39.673 UTC",
+      "sameCreationSession": true
+    },
+    {
+      "at": "2026-10-24 12:41:18.339 UTC",
+      "pid": "1629",
+      "session": "6adca76d.65d",
+      "name": "fvoci_search_recheck_01a16dee05077212af2d384e6b53b973",
+      "createdAt": "2026-10-24 12:41:17.831 UTC",
+      "sameCreationSession": true
+    },
+    {
+      "at": "2026-10-24 12:41:31.615 UTC",
+      "pid": "1655",
+      "session": "6adca770.677",
+      "name": "fvoci_search_tasks_01a16dee0f8272cc9a6beab040f43667",
+      "createdAt": "2026-10-24 12:41:20.514 UTC",
+      "sameCreationSession": true
+    }
+  ],
+  "retained": [
+    "fvoci_s3_files_01a16ded01f072e2ba7fb6bdad6e05f7",
+    "fvoci_initial_admin_01a16ded9c4b74deae7a470700406822",
+    "fvoci_shutdown_01a16dee40527440818ba9b746bcf70f",
+    "fvoci_storage_claim_01a16dee670f74159c9631e8c6c1b05d"
+  ],
+  "assertion": "Every dropped full name was first created in this run on the same owned server and session; fixture CREATE execution is checked by unwrap before cleanup.",
+  "evidenceRunId": "ablation-a-updated-main-20261024",
+  "privateRuntimeBindingSha256": "206406cb8fcc8e54db887688503516d223684a4128bfdef16c9151ed9ca341a8",
+  "note": "Private runtime identifiers omitted; exact original binding remains local. Server, names, sessions and ordering are unchanged."
+}
