@@ -1,6 +1,6 @@
 # Ablation adoption decisions
 
-Coordinator review at main `e9b0f2c22e499c4d4f7126d680e214cdf0a51240`. Original experiment baseline was `22ad80ee205332e3ef1ffd8f64f783789955921b`; updated-pin experiments used dependency main `e0103ef` and verified unchanged inputs across later independent merges. These are experiment decisions, not product policy. Final combined runtime/CI remain pending at this checkpoint; the test-only ordering-coverage follow-up is merged.
+Coordinator review at main `e9b0f2c22e499c4d4f7126d680e214cdf0a51240`. Original experiment baseline was `22ad80ee205332e3ef1ffd8f64f783789955921b`; updated-pin experiments used dependency main `e0103ef` and verified unchanged inputs across later independent merges. These are experiment decisions, not product policy. Final combined validation is complete: CI run 40099871664 passed all six jobs, local general/OIDC/Supabase direct and session-pooler tests passed, and browser flows were verified with the final Node 24.22.1 toolchain. The retained first Supabase session failure and validation limits are recorded in [the coordinator reconciliation](../integration/final-validation/COORDINATOR.md). The test-only ordering-coverage follow-up is merged.
 
 | Candidate | Decision | Basis |
 | --- | --- | --- |
