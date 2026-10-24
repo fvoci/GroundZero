@@ -47,13 +47,15 @@
       >{m.tasks_today()}</Button
     >
   </div>
+  <!-- 방향키로 칸을 옮기지 않으므로 grid 역할을 쓰지 않는다. 날짜 칸마다 이름(날짜·업무 수)이 있어 요일 머리는
+       보이기만 한다. -->
   <div
     class="grid grid-cols-7 gap-px rounded-md border bg-border text-xs"
-    role="grid"
+    role="group"
     aria-label={m.tasks_calendar_aria({ month })}
   >
     {#each WEEKDAYS as w (w)}
-      <div class="bg-background p-1 text-center font-medium" role="columnheader">{w}</div>
+      <div class="bg-background p-1 text-center font-medium" aria-hidden="true">{w}</div>
     {/each}
     {#each range.days as day (day)}
       {@const list = byDay.get(day) ?? []}
@@ -66,7 +68,7 @@
               ? 'bg-muted/50'
               : 'bg-background',
         ]}
-        role="gridcell"
+        role="group"
         aria-label={m.tasks_calendar_day_aria({ day, count: list.length })}
       >
         <!-- 오늘은 날짜를 채운 원으로(칸 테두리 대신), 만들기 단추는 마우스 화면에서 가리키거나 초점일 때만. -->
@@ -99,6 +101,7 @@
               t.status === 'done' ? 'line-through' : '',
             ]}
             title={`${t.reference ?? ''} ${t.title} · ${STATUS_LABEL[t.status]}`}
+            aria-label={`${t.title} · ${STATUS_LABEL[t.status]}`}
             onclick={() => {
               onopen(t.id);
             }}>{t.title}</button
