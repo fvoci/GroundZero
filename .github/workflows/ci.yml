@@ -27,6 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # pnpm은 Corepack이 packageManager의 판·sha512대로 실행한다(이미지의 다른 pnpm이 아니라). 쓰인 판을 로그에 남긴다.
+      - run: corepack enable pnpm && rustc -V && node -v && corepack --version && pnpm -v
       - run: pnpm install --frozen-lockfile
       # 라이선스는 아래 licenses job이 따로 보인다(D-60 승인 대기 중 실패가 다른 검사 결과를 가리지 않게).
       - run: cargo xtask check --skip-licenses
@@ -39,6 +41,7 @@ jobs:
       image: ghcr.io/fvoci/groundzero-ci-base@${{ vars.CI_BASE_IMAGE_DIGEST }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: corepack enable pnpm && rustc -V && node -v && corepack --version && pnpm -v
       - run: pnpm install --frozen-lockfile
       - run: cargo xtask licenses
 

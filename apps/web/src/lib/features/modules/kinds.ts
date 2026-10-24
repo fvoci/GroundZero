@@ -25,7 +25,10 @@ export function asKind(value: string): ModuleKind | undefined {
 
 /** 서버와 같은 키 규칙: 2~10자 영문·숫자, 영문으로 시작, WIKI 예약. 소문자는 대문자로 바꾼다. */
 export function normalizeKey(raw: string): string | undefined {
-  const key = raw.trim().toUpperCase();
+  // Rust str::trim/to_ascii_uppercase와 같은 범위만 바꾼다. ß 같은 문자를 ASCII 키로 바꾸지 않는다.
+  const key = raw
+    .replace(/^\p{White_Space}+|\p{White_Space}+$/gu, '')
+    .replace(/[a-z]/g, (c) => c.toUpperCase());
   if (!/^[A-Z][A-Z0-9]{1,9}$/.test(key) || key === 'WIKI') return undefined;
   return key;
 }

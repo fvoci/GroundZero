@@ -4,7 +4,7 @@
 
 use bytes::Bytes;
 use futures_util::StreamExt;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 use url::Url;
