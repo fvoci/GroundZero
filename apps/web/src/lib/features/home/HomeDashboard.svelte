@@ -46,6 +46,8 @@
   let notifications = $state<NotificationView[]>([]);
   let error = $state<string | undefined>(undefined);
   let reloadKey = $state(0);
+  /** "다시 시도"로 다시 받는 중(앞서 받은 홈이 남아 있어도 진행 중이라고 보인다). */
+  let retrying = $state(false);
 
   const weekDays = $derived.by(() => {
     if (home === undefined) return [];
@@ -53,7 +55,7 @@
     return Array.from({ length: 7 }, (_, i) => fromDayNumber(first + i));
   });
 
-  // 빠른 추가 뒤(reloadKey)나 워크스페이스가 바뀌면 다시 불러온다. 늦게 온 이전 응답은 버린다.
+  // 빠른 추가 뒤(reloadKey)나 워크스페이스가 바뀌면 다시 불러온다. 늦게 온 이전 응답과 화면이 사라진 뒤의 응답은 버린다.
   let loadSeq = 0;
   const request = $derived({ list: workspaces, key: reloadKey });
   $effect(() => {
@@ -62,6 +64,7 @@
     void (async () => {
       try {
         const h = await api.home(zone);
+        if (mine !== loadSeq) return;
         const from = startOfWeek(h.today, settings.weekStart);
         const to = fromDayNumber(dayNumber(from) + 6);
         // 워크스페이스 하나의 달력이 실패해도(그사이 나간 경우 등) 나머지는 보인다.
@@ -88,10 +91,17 @@
         week = merged;
         notifications = notes.filter((x) => !x.read).slice(0, 5);
         error = undefined;
+        retrying = false;
       } catch (e: unknown) {
-        if (mine === loadSeq) error = errorText(e, m.home_load_failed());
+        if (mine !== loadSeq) return;
+        error = errorText(e, m.home_load_failed());
+        retrying = false;
       }
     })();
+    // 화면이 사라지거나 다시 불러오면 이 요청의 응답은 버린다.
+    return () => {
+      loadSeq += 1;
+    };
   });
 
   function bucketLabel(b: 'overdue' | 'today' | 'upcoming'): string {
@@ -197,7 +207,21 @@
       >{/if}
   </div>
   {#if error !== undefined}
-    <p role="alert" class="text-sm text-destructive">{error}</p>
+    <!-- 다시 받기: 빠른 추가 뒤와 같은 다시 읽기(reloadKey). 받는 동안은 오류 대신 불러오는 중이라고 보인다. -->
+    <div class="flex flex-wrap items-center gap-2">
+      <p role="alert" class="text-sm text-destructive">{error}</p>
+      <Button
+        variant="outline"
+        size="sm"
+        onclick={() => {
+          error = undefined;
+          retrying = true;
+          reloadKey += 1;
+        }}>{m.common_retry()}</Button
+      >
+    </div>
+  {:else if home === undefined || retrying}
+    <p class="text-sm text-muted-foreground" aria-live="polite">{m.app_loading()}</p>
   {/if}
 
   <form
@@ -296,6 +320,7 @@
                 <button
                   type="button"
                   class="flex w-full items-baseline gap-2 rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  title={t.title}
                   onclick={() => {
                     openTask(t);
                   }}
@@ -352,9 +377,10 @@
             }}>{mark.label}</button
           >
         {:else}
-          <p class="text-sm text-muted-foreground">
-            {group.empty}
-          </p>
+          <!-- 빈 칸 안내는 홈을 받은 뒤에만(불러오는 중·실패를 "없음"으로 읽지 않게). -->
+          {#if home !== undefined}
+            <p class="text-sm text-muted-foreground">{group.empty}</p>
+          {/if}
         {/each}
       </section>
     {/each}
@@ -387,7 +413,9 @@
           {/if}
         </button>
       {:else}
-        <p class="text-sm text-muted-foreground">{m.home_active_empty()}</p>
+        {#if home !== undefined}
+          <p class="text-sm text-muted-foreground">{m.home_active_empty()}</p>
+        {/if}
       {/each}
     </section>
 
@@ -397,6 +425,7 @@
         <button
           type="button"
           class="rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          title={d.title}
           onclick={() => {
             router.navigate(pathFor(d, memberOf));
           }}
@@ -411,6 +440,7 @@
         <button
           type="button"
           class="rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          title={t.title}
           onclick={() => {
             openTask(t);
           }}
@@ -431,7 +461,9 @@
       {#each notifications as n (n.id)}
         <p class="text-sm">{notificationText(n)}</p>
       {:else}
-        <p class="text-sm text-muted-foreground">{m.home_notifications_empty()}</p>
+        {#if home !== undefined}
+          <p class="text-sm text-muted-foreground">{m.home_notifications_empty()}</p>
+        {/if}
       {/each}
       <a
         class="text-sm underline"

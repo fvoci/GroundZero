@@ -143,7 +143,7 @@ fn seed(root: &Path, compose: &Compose, sh: &Shell, issuer: &str) -> Result<()> 
     // 모듈 예제는 자기 표시(dev_module_seed_v1)로 따로 한 번만 만든다. 이미 dev_seed가 있는 개발 DB에도 더해진다.
     println!("==> dev module examples (separate synthetic workspace, once)");
     seed_file(root, compose, sh, issuer, "dev-module-seed.sql", None)?;
-    // Storybook story와 같은 내용(apps/web/stories/fixtures/synthetic.ts). 자기 표시(dev_ui_seed_v1)로 한 번만.
+    // Storybook story와 같은 내용(apps/web/stories/fixtures/synthetic.ts). 묶음마다 자기 표시(dev_ui_seed_v1·v2)로 한 번만.
     println!("==> dev UI examples (same synthetic data as Storybook, once)");
     let path = root.join("deploy/postgres/dev-ui-data.json");
     let data =

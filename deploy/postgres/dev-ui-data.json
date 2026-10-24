@@ -117,7 +117,134 @@
       }
     ]
   },
-  "module": { "name": "UI 예제", "key": "DEVU", "item": "UI 상태 점검" },
+  "module": {
+    "name": "UI 예제",
+    "key": "DEVU",
+    "description": "개발 전용 합성 예제. Storybook과 같은 데이터입니다.",
+    "item": "UI 상태 점검",
+    "item_description": "긴 제목·이모지·숫자·상태가 다른 업무로 화면을 점검합니다."
+  },
+  "project_items": [
+    {
+      "title": "2026학년도 2학기 대학원 연구실 공동 세미나 발표 자료와 회의록을 한곳에 모아 정리하는 작업 공간",
+      "description": "제목이 긴 항목이 목록에서 어떻게 줄바꿈되는지 확인합니다.",
+      "status": "active",
+      "start": -7,
+      "end": 30,
+      "members": ["writer"]
+    },
+    {
+      "title": "회의 준비 🎉📚✅ 👩‍💻🧑‍🔬",
+      "description": "이모지가 섞인 항목입니다. 날짜가 없습니다.",
+      "status": "on_hold",
+      "start": null,
+      "end": null,
+      "members": []
+    },
+    {
+      "title": "장비 점검 결과 보고",
+      "description": "끝난 항목입니다.",
+      "status": "done",
+      "start": -20,
+      "end": -6,
+      "members": ["writer"]
+    }
+  ],
+  "modules": [
+    {
+      "kind": "research",
+      "name": "합성 연구 노트",
+      "key": "DEVR",
+      "description": "가상 참여자로 자료 관리 흐름을 점검하는 연구 모듈입니다.",
+      "items": [
+        {
+          "title": "학습 습관 합성 연구",
+          "description": "실제 개인정보 없이 자료 관리 흐름을 확인합니다.",
+          "status": "active",
+          "start": -14,
+          "end": 60,
+          "members": ["writer"]
+        },
+        {
+          "title": "설문 문항 초안 검토",
+          "description": "",
+          "status": "planned",
+          "start": 7,
+          "end": 21,
+          "members": []
+        }
+      ]
+    },
+    {
+      "kind": "study",
+      "name": "SQL 함께 읽기",
+      "key": "DEVS",
+      "description": "공통 계획과 개인별 진행을 나누어 보는 스터디 모듈입니다.",
+      "items": [
+        {
+          "title": "SQL 기초 1부",
+          "description": "20페이지와 연습 문제 8개.",
+          "status": "active",
+          "start": -3,
+          "end": 25,
+          "members": ["writer"]
+        }
+      ]
+    },
+    {
+      "kind": "course",
+      "name": "데이터 입문 강좌",
+      "key": "DEVC",
+      "description": "공유 목차와 개인 진도를 나누어 보는 강의 모듈입니다.",
+      "items": [
+        {
+          "title": "데이터 입문 1주 차",
+          "description": "",
+          "status": "active",
+          "start": -1,
+          "end": 6,
+          "members": ["writer"]
+        }
+      ]
+    },
+    {
+      "kind": "hobby",
+      "name": "주말 수채화",
+      "key": "DEVH",
+      "description": "준비부터 결과물까지 활동을 기록하는 취미 모듈입니다.",
+      "items": [
+        {
+          "title": "가을 풍경 그리기",
+          "description": "",
+          "status": "planned",
+          "start": 4,
+          "end": 4,
+          "members": []
+        }
+      ]
+    },
+    {
+      "kind": "project",
+      "name": "2026학년도 2학기 대학원 연구실 공동 세미나 발표 자료와 회의록을 한곳에 모아 정리하는 작업 공간",
+      "key": "DEVLONG",
+      "description": "",
+      "items": []
+    },
+    {
+      "kind": "research",
+      "name": "https://example.test/workspaces/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/documents/ffffffff-0000-1111-2222-333333333333",
+      "key": "DEVNOSP",
+      "description": "",
+      "items": []
+    },
+    {
+      "kind": "hobby",
+      "name": "회의 준비 🎉📚✅ 👩‍💻🧑‍🔬",
+      "key": "DEVEMOJI",
+      "description": "",
+      "items": []
+    }
+  ],
   "tasks": [
     {
       "title": "주간 회의 자료 정리",
