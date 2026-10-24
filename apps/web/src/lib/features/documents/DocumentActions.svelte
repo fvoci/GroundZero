@@ -43,6 +43,8 @@
 
   type Panel = 'share' | 'copy' | 'move' | undefined;
   let panel = $state<Panel>(undefined);
+  // 마지막으로 연 창. 닫힌 뒤(panel은 이미 비었다) 초점을 어디로 돌릴지 정한다.
+  let opened: Panel = undefined;
   let error = $state<string | undefined>(undefined);
 
   const isOwner = $derived(doc.access === 'owner');
@@ -59,6 +61,7 @@
   function open(next: Panel): void {
     error = undefined;
     panel = next;
+    opened = next;
     if (next === 'share') {
       newLinkUrl = undefined;
       void loadShares();
@@ -396,7 +399,14 @@
     if (!o) panel = undefined;
   }}
 >
-  <Dialog.Content>
+  <!-- 복제·이동은 "더 보기" 메뉴의 항목(닫히며 사라짐)에서 열린다. 닫으면 브라우저에 맡기지 않고 "더 보기"로 초점을 돌린다. -->
+  <Dialog.Content
+    onCloseAutoFocus={(e: Event) => {
+      if (opened !== 'copy' && opened !== 'move') return;
+      e.preventDefault();
+      moreButton?.focus();
+    }}
+  >
     {#if panel === 'share'}
       <Dialog.Header>
         <Dialog.Title>{m.documents_share_title()}</Dialog.Title>

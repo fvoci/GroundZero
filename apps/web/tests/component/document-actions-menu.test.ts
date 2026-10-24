@@ -170,3 +170,21 @@ describe('document actions after switching documents', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
+
+// 리뷰: 복제·이동 창은 닫히며 사라지는 메뉴 항목에서 열리므로, 닫을 때 기본 초점 복원에 기대지 않고 "더 보기"로 돌린다.
+describe('focus after the duplicate dialog', () => {
+  it('returns focus to the More button when the dialog closes', async () => {
+    vi.spyOn(api, 'document').mockResolvedValue(documentView({}));
+    render(DocumentScreen, { props: { documentId: 'doc-1', workspaces } });
+    const menu = await openMore();
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: '복제' }));
+    const dialog = await screen.findByRole('dialog');
+    await fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '더 보기' })).toHaveFocus();
+    });
+  });
+});
