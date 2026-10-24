@@ -3,18 +3,22 @@
 ## 1. 기준 SHA와 범위
 
 2026-10-24 원격 `main`에서 확인한 기준은
-[`22ad80ee205332e3ef1ffd8f64f783789955921b`](https://github.com/fvoci/GroundZero/tree/22ad80ee205332e3ef1ffd8f64f783789955921b)다.
+[`e9b0f2c22e499c4d4f7126d680e214cdf0a51240`](https://github.com/fvoci/GroundZero/tree/e9b0f2c22e499c4d4f7126d680e214cdf0a51240)다.
 아래 소스 링크는 이 기준을 읽은 근거다. **관찰**은 코드·설정·시험에 있는 사실,
 **추론**은 그 사실에서 예상한 사용 조건, **제안**은 사용자에게 확인할 질문이다.
 정책 정본이나 결정의 사본이 아니며 승인 범위는 [결정 기록](decisions.md)을 따른다.
 
 기존 [직접 써 보기](try-it.md)는 설치·체험 안내이고 [참고 제품 조사](reference-products-survey.md)는 역사 기록이다.
-이 문서는 대표 작업의 연결과 빈틈만 다룬다. 별도 의존성 정리·절제 실험(ablation)·Unicode 작업은
-이 SHA의 구현으로 계산하지 않는다. 조사 시 열린 PR 목록은 비어 있었으며 미발행 작업의 완료를 뜻하지 않는다.
-Draft PR 제출 전 기준 SHA와 관련 PR 상태를 다시 확인한다.
+이 문서는 대표 작업의 연결과 빈틈만 다룬다. 초기 조사 뒤 병합된
+[의존성 갱신 #123](https://github.com/fvoci/GroundZero/pull/123),
+[Unicode 경계 수정 #120](https://github.com/fvoci/GroundZero/pull/120),
+[텍스트 추출 #122](https://github.com/fvoci/GroundZero/pull/122),
+[ETag 생성 #121](https://github.com/fvoci/GroundZero/pull/121),
+[홈 표시 조회 #124](https://github.com/fvoci/GroundZero/pull/124)의 변경 경로를 다시 대조했다.
+이들은 위 SHA에 포함된다. 절제 실험(ablation)의 미채택 후보나 국소 비교 결과를 제품 전체의 구현·지원 규모로 확대하지 않는다.
 
 검증 범위는 정적 읽기다. 아래 시험 링크는 **시험 정의의 존재**이며 이번 실행의 PASS가 아니다.
-제품 빌드·통합 시험·성능 측정·브라우저·운영 서비스 확인은 모두 **NOT RUN**이다.
+이 문서 조사에서 제품 빌드·통합 시험·성능 측정·브라우저·운영 서비스 확인은 모두 **NOT RUN**이다.
 인원·문서 수·동시 편집자 수에 따른 지원 규모와 사용자 만족도는 이 조사로 판단하지 않는다.
 
 ## 2. 핵심 가정
@@ -124,9 +128,15 @@ Draft PR 제출 전 기준 SHA와 관련 PR 상태를 다시 확인한다.
 - **근거 부족 — 기기·언어.** [표시 설정](../apps/web/src/lib/display.ts)은 한국어·영어, 사용자 시간대·주 시작·시간 표기를 지원한다.
   [CSS](../apps/web/src/styles/app.css)의 한국어 줄바꿈과 [정적 시험](../apps/web/tests/korean-line-break.test.ts),
   [칸반 키보드 이동 시험](../apps/web/tests/component/task-move-menu.test.ts)이 있다.
+  내보내기 파일명·모듈 키·강좌 CSV의 Unicode 경계는
+  [웹 회귀 시험](../apps/web/tests/component/unicode-boundaries.test.ts)과 [서버 회귀 시험](../crates/server/tests/unicode_boundaries.rs)이 다룬다.
   이것만으로 좁은 화면·터치·실제 Safari·한글 조합 입력·다국어 혼용의 완결을 판정할 수 없다.
   [#118](https://github.com/fvoci/GroundZero/issues/118)은 실제 배치 자동화 공백이며 D-98의 Safari 미실행 범위와도 구분한다.
   데스크톱에서 메뉴·편집·조정하는 작업이 가장 직접적인 검증 후보라는 정도만 **추론**한다.
+- **관찰 — 홈 조회의 제한된 일관성.** [home.rs의 `marks`](../crates/server/src/features/home.rs)는 핀과 즐겨찾기를
+  한 SQL 문장 스냅숏에서 읽고 두 목록으로 나눈다. [home_marks.rs](../crates/server/tests/home_marks.rs)는
+  두 종류·순서·현재 접근 범위를 다루며, [후속 시험 #126](https://github.com/fvoci/GroundZero/pull/126)은
+  생성 시각과 대상 ID의 순서가 반대인 경우도 확인한다. 홈 전체의 원자적 스냅숏이나 동시 사용 규모를 보장하는 변경은 아니다.
 - **정책 미정/운영 미검증.** 한도 조정(O-26), 긴 시간 기록(P-29), 자체 공개 라이선스(O-27)는 정책 판단을 남겨 둔다.
   [backup.rs](../crates/server/src/backup.rs)·[복구 시험](../crates/server/tests/backup.rs)에 DB·첨부의 백업/빈 설치 복구 경로가 있다.
   복구는 마이그레이션 판 일치를 검사하고 세션은 복원하지 않는다. 운영자는 백업 보관·설정·OIDC의 별도 보존까지 준비해야 한다
