@@ -21,7 +21,7 @@ export const Disabled: Story = {
   args: { disabled: true },
   play: async ({ canvasElement }) => {
     await expect(
-      within(canvasElement).getByRole('button', { name: '김연구의 역할' }),
+      within(canvasElement).getByRole('button', { name: '김연구의 역할: 작성자' }),
     ).toBeDisabled();
   },
 };
@@ -29,7 +29,7 @@ export const Disabled: Story = {
 /** 키보드: Tab으로 닿고 Enter로 열어 아래 화살표·Enter로 고른다. Escape는 고르지 않고 닫는다. */
 export const KeyboardChoose: Story = {
   play: async ({ canvasElement, args }) => {
-    const trigger = within(canvasElement).getByRole('button', { name: '김연구의 역할' });
+    const trigger = within(canvasElement).getByRole('button', { name: '김연구의 역할: 작성자' });
     await userEvent.tab();
     await expect(trigger).toHaveFocus();
     await userEvent.keyboard('{Enter}');
