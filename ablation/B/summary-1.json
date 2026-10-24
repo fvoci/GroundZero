@@ -1,0 +1,234 @@
+{
+  "minimal": {
+    "serializedBytes": 14,
+    "removedVecCapacityBytes": 128,
+    "baselineNs": {
+      "n": 41,
+      "min": 45.0986,
+      "median": 49.6877,
+      "p95": 88.8781,
+      "max": 91.3812,
+      "madPercent": 7.342058497374601
+    },
+    "variantNs": {
+      "n": 41,
+      "min": 40.7295,
+      "median": 43.3216,
+      "p95": 82.2361,
+      "max": 88.3062,
+      "madPercent": 5.503028512335632
+    },
+    "pairedRatio": {
+      "n": 41,
+      "min": 0.7783587993429806,
+      "median": 0.893158833018546,
+      "p95": 0.984218371609299,
+      "max": 1.0287889220144208,
+      "madPercent": 3.2916868702407944
+    },
+    "medianChangePercent": -10.684116698145395
+  },
+  "small_prose": {
+    "serializedBytes": 485,
+    "removedVecCapacityBytes": 866,
+    "baselineNs": {
+      "n": 41,
+      "min": 487.3565,
+      "median": 501.1465,
+      "p95": 988.8435,
+      "max": 1002.9335,
+      "madPercent": 1.532585780804614
+    },
+    "variantNs": {
+      "n": 41,
+      "min": 300.799,
+      "median": 309.514,
+      "p95": 605.3585,
+      "max": 613.398,
+      "madPercent": 2.0241410727786096
+    },
+    "pairedRatio": {
+      "n": 41,
+      "min": 0.5777304880767083,
+      "median": 0.6136209591873746,
+      "p95": 0.6728262452850754,
+      "max": 0.9538296424571181,
+      "madPercent": 2.558367488046616
+    },
+    "medianChangePercent": -38.63790408126254
+  },
+  "unicode_escapes": {
+    "serializedBytes": 139288,
+    "removedVecCapacityBytes": 262144,
+    "baselineNs": {
+      "n": 41,
+      "min": 69801.14,
+      "median": 70894.45,
+      "p95": 71911.56,
+      "max": 74709.3,
+      "madPercent": 0.4007506934604903
+    },
+    "variantNs": {
+      "n": 41,
+      "min": 84743.84,
+      "median": 85206.04,
+      "p95": 86281.35,
+      "max": 87890.99,
+      "madPercent": 0.37861165710786615
+    },
+    "pairedRatio": {
+      "n": 41,
+      "min": 1.1372029988234396,
+      "median": 1.2047837304598574,
+      "p95": 1.2187761450138859,
+      "max": 1.259162672701334,
+      "madPercent": 0.49639087121187964
+    },
+    "medianChangePercent": 20.47837304598574
+  },
+  "many_nodes": {
+    "serializedBytes": 68026,
+    "removedVecCapacityBytes": 131072,
+    "baselineNs": {
+      "n": 41,
+      "min": 133162.59,
+      "median": 134082.61,
+      "p95": 136353.53,
+      "max": 137313.15,
+      "madPercent": 0.39140049556017553
+    },
+    "variantNs": {
+      "n": 41,
+      "min": 128417.03,
+      "median": 129788.94,
+      "p95": 132833.19,
+      "max": 134153.5,
+      "madPercent": 0.3496445845077423
+    },
+    "pairedRatio": {
+      "n": 41,
+      "min": 0.9487135406908674,
+      "median": 0.9688320090977227,
+      "p95": 0.9794757692961451,
+      "max": 0.9855497232877589,
+      "madPercent": 0.4462035769008784
+    },
+    "medianChangePercent": -3.1167990902277287
+  },
+  "large_exact": {
+    "serializedBytes": 2000000,
+    "removedVecCapacityBytes": 3999970,
+    "baselineNs": {
+      "n": 41,
+      "min": 892670.71875,
+      "median": 904416.84375,
+      "p95": 933496.28125,
+      "max": 973628.40625,
+      "madPercent": 0.6181573008767839
+    },
+    "variantNs": {
+      "n": 41,
+      "min": 426071.03125,
+      "median": 428325.4375,
+      "p95": 452104.5,
+      "max": 458862.71875,
+      "madPercent": 0.3156989129322958
+    },
+    "pairedRatio": {
+      "n": 41,
+      "min": 0.45725386359164993,
+      "median": 0.4752366169375828,
+      "p95": 0.49455412775536123,
+      "max": 0.5091797502906519,
+      "madPercent": 0.5575445047458768
+    },
+    "medianChangePercent": -52.47633830624172
+  },
+  "large_rejected": {
+    "serializedBytes": 2000001,
+    "removedVecCapacityBytes": 3999972,
+    "baselineNs": {
+      "n": 41,
+      "min": 894731.0625,
+      "median": 906998.125,
+      "p95": 1265071.0625,
+      "max": 1424093.84375,
+      "madPercent": 0.8887938715419064
+    },
+    "variantNs": {
+      "n": 41,
+      "min": 425525.71875,
+      "median": 429468.875,
+      "p95": 594307.375,
+      "max": 610780.6875,
+      "madPercent": 0.5760749251037109
+    },
+    "pairedRatio": {
+      "n": 41,
+      "min": 0.4129069049307721,
+      "median": 0.4739136615071632,
+      "p95": 0.5016084364166103,
+      "max": 0.5188103156634079,
+      "madPercent": 0.5977893805396898
+    },
+    "medianChangePercent": -52.608633849283684
+  },
+  "deep": {
+    "serializedBytes": 285,
+    "removedVecCapacityBytes": 512,
+    "baselineNs": {
+      "n": 41,
+      "min": 989.743,
+      "median": 1204.5365,
+      "p95": 1512.6305,
+      "max": 2015.982,
+      "madPercent": 8.691808010799187
+    },
+    "variantNs": {
+      "n": 41,
+      "min": 1198.801,
+      "median": 1468.985,
+      "p95": 2118.8285,
+      "max": 2810.308,
+      "madPercent": 10.403237609642025
+    },
+    "pairedRatio": {
+      "n": 41,
+      "min": 0.9657609707063292,
+      "median": 1.2364252689393864,
+      "p95": 1.3831844466916723,
+      "max": 2.159520347022244,
+      "madPercent": 4.5461169937013315
+    },
+    "medianChangePercent": 23.642526893938644
+  },
+  "references": {
+    "serializedBytes": 8926,
+    "removedVecCapacityBytes": 16384,
+    "baselineNs": {
+      "n": 41,
+      "min": 21087.03,
+      "median": 24152.625,
+      "p95": 31138.62,
+      "max": 36669.99,
+      "madPercent": 3.4468717168423653
+    },
+    "variantNs": {
+      "n": 41,
+      "min": 20055.62,
+      "median": 23180.31,
+      "p95": 27573.22,
+      "max": 28540.835,
+      "madPercent": 4.7594919998913
+    },
+    "pairedRatio": {
+      "n": 41,
+      "min": 0.7783158653711114,
+      "median": 0.9427996514048942,
+      "p95": 1.0532033096781108,
+      "max": 1.2721064898779928,
+      "madPercent": 4.922833765527473
+    },
+    "medianChangePercent": -5.720034859510581
+  }
+}

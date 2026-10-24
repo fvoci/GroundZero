@@ -1,0 +1,146 @@
+{
+  "minimal": {
+    "baselineFirstNs": {
+      "n": 12,
+      "min": 1050,
+      "median": 1270,
+      "p95": 2070,
+      "max": 2070,
+      "madPercent": 17.322834645669293
+    },
+    "variantFirstNs": {
+      "n": 12,
+      "min": 1030,
+      "median": 1230,
+      "p95": 1520,
+      "max": 1520,
+      "madPercent": 4.0650406504065035
+    }
+  },
+  "small_prose": {
+    "baselineFirstNs": {
+      "n": 12,
+      "min": 2190,
+      "median": 2340,
+      "p95": 3390,
+      "max": 3390,
+      "madPercent": 4.273504273504273
+    },
+    "variantFirstNs": {
+      "n": 12,
+      "min": 1700,
+      "median": 2200,
+      "p95": 2870,
+      "max": 2870,
+      "madPercent": 11.363636363636363
+    }
+  },
+  "unicode_escapes": {
+    "baselineFirstNs": {
+      "n": 12,
+      "min": 70121,
+      "median": 71501,
+      "p95": 85021,
+      "max": 85021,
+      "madPercent": 1.3426385644956014
+    },
+    "variantFirstNs": {
+      "n": 12,
+      "min": 84032,
+      "median": 84561,
+      "p95": 128742,
+      "max": 128742,
+      "madPercent": 0.18802994288147018
+    }
+  },
+  "many_nodes": {
+    "baselineFirstNs": {
+      "n": 12,
+      "min": 151942,
+      "median": 183012,
+      "p95": 228763,
+      "max": 228763,
+      "madPercent": 9.851812995869123
+    },
+    "variantFirstNs": {
+      "n": 12,
+      "min": 164433,
+      "median": 220533,
+      "p95": 323675,
+      "max": 323675,
+      "madPercent": 11.830429006089792
+    }
+  },
+  "large_exact": {
+    "baselineFirstNs": {
+      "n": 12,
+      "min": 1886266,
+      "median": 1931776,
+      "p95": 2002937,
+      "max": 2002937,
+      "madPercent": 1.029622482109727
+    },
+    "variantFirstNs": {
+      "n": 12,
+      "min": 425076,
+      "median": 478937,
+      "p95": 577578,
+      "max": 577578,
+      "madPercent": 7.013657328625686
+    }
+  },
+  "large_rejected": {
+    "baselineFirstNs": {
+      "n": 12,
+      "min": 1887645,
+      "median": 1930916,
+      "p95": 2464523,
+      "max": 2464523,
+      "madPercent": 1.653101429580572
+    },
+    "variantFirstNs": {
+      "n": 12,
+      "min": 443646,
+      "median": 509877,
+      "p95": 694970,
+      "max": 694970,
+      "madPercent": 7.93544325396125
+    }
+  },
+  "deep": {
+    "baselineFirstNs": {
+      "n": 12,
+      "min": 2670,
+      "median": 3080,
+      "p95": 3670,
+      "max": 3670,
+      "madPercent": 8.441558441558442
+    },
+    "variantFirstNs": {
+      "n": 12,
+      "min": 2230,
+      "median": 2700,
+      "p95": 3140,
+      "max": 3140,
+      "madPercent": 7.074074074074074
+    }
+  },
+  "references": {
+    "baselineFirstNs": {
+      "n": 12,
+      "min": 20820,
+      "median": 21890,
+      "p95": 22921,
+      "max": 22921,
+      "madPercent": 1.6491548652352674
+    },
+    "variantFirstNs": {
+      "n": 12,
+      "min": 19530,
+      "median": 20231,
+      "p95": 20630,
+      "max": 20630,
+      "madPercent": 1.3345855370471058
+    }
+  }
+}

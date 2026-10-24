@@ -1,0 +1,11 @@
+   Compiling fvoci-server v0.1.0 (/home/kinesis/orca/workspaces/GroundZero/ablation-body-size/crates/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 20.64s
+     Running tests/ablation_body_size.rs (target/ablation-body-size/build/debug/deps/ablation_body_size-ea5c4eb5a2f45086)
+
+running 3 tests
+test reference_limit_is_inclusive_and_precedes_invalid_excess_reference ... ok
+test type_then_size_then_content_errors_keep_their_precedence ... ok
+test serialized_byte_limits_are_exact_for_unicode_escapes_numbers_and_large_bodies ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
