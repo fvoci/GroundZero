@@ -227,7 +227,7 @@ Svelte·Vite·TypeScript 구성에서 shadcn-svelte/Bits UI와 Tailwind를 사�
 입력 칸·여러 줄 칸·선택 상자는 `$lib/ui`의 `Input`·`Textarea`·`NativeSelect`로 그리고 기능 코드에서 테두리·여백을 손으로 꾸미지 않는다.
 화면 안 여러 열 배치는 창 폭(`md:`·`lg:`)이 아니라 본문 폭 컨테이너 쿼리(`App.svelte`의 `main`이 `@container`, 예: `@2xl:grid-cols-2`)로
 나눈다. 미디어 쿼리의 rem은 사용자가 키운 루트 글꼴을 따르지 않고 사이드바 폭도 모른다.
-화면 밝기(D-109)는 `$lib/theme.svelte.ts`가 `<html class="dark">`로 정하고 색은 `app.css`의 `.dark` 토큰과 `dark:` 변형으로만 바꾼다.
+화면 밝기(D-109)는 계정 설정이 정본이고 `$lib/theme.svelte.ts`가 `<html class="dark">`로 적용한다(localStorage는 첫 그림용 사본). 색은 `app.css`의 `.dark` 토큰과 `dark:` 변형으로만 바꾼다.
 기능 코드에 고정 색(`bg-amber-50` 등)을 쓰면 어두운 짝을 함께 둔다. 첫 그림을 정하는 `index.html`의 인라인 스크립트는 `theme.svelte.ts`와
 같은 키·규칙이어야 하며(`theme.test.ts`가 맞춰 본다), 토큰을 바꾸면 `tests/theme-contrast.test.ts`가 두 테마의 대비를 다시 잰다.
 Safari 키보드 접근성은 D-98의 의미에 맞는 요소와 최소 범위 lint 예외를 따른다.
