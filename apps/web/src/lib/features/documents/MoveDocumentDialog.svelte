@@ -6,6 +6,7 @@
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
+  import { Input } from '$lib/ui/input';
 
   import { parentCandidates } from './tree';
 
@@ -119,8 +120,7 @@
     </Dialog.Header>
     <label class="flex flex-col gap-1 text-sm">
       {m.documents_reparent_search()}
-      <input
-        class="h-9 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      <Input
         role="combobox"
         aria-expanded="true"
         aria-controls="move-doc-options"

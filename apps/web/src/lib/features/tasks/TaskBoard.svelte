@@ -26,6 +26,7 @@
   import { Button } from '$lib/ui/button';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import * as Dialog from '$lib/ui/dialog';
+  import { Input } from '$lib/ui/input';
   import { durationText } from '$lib/features/time/format';
   import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
@@ -1238,8 +1239,8 @@
   >
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_filter_find()}</span>
-      <input
-        class={['w-40', fieldBox]}
+      <Input
+        class="w-40"
         type="search"
         bind:value={filter.text}
         placeholder={m.tasks_filter_find_placeholder()}
@@ -1280,16 +1281,12 @@
     </label>
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_tag()}</span>
-      <input
-        class={['w-24', fieldBox]}
-        bind:value={filter.tag}
-        aria-label={m.tasks_filter_tag_aria()}
-      />
+      <Input class="w-24" bind:value={filter.tag} aria-label={m.tasks_filter_tag_aria()} />
     </label>
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_filter_due_from()}</span>
-      <input
-        class={fieldBox}
+      <Input
+        class="w-auto"
         type="date"
         bind:value={filter.dueFrom}
         aria-label={m.tasks_filter_due_from_aria()}
@@ -1297,8 +1294,8 @@
     </label>
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_filter_due_to()}</span>
-      <input
-        class={fieldBox}
+      <Input
+        class="w-auto"
         type="date"
         bind:value={filter.dueTo}
         aria-label={m.tasks_filter_due_to_aria()}
@@ -1339,8 +1336,8 @@
     </label>
     <label class="flex flex-col gap-0.5">
       <span class="text-xs text-muted-foreground">{m.tasks_view_name()}</span>
-      <input
-        class={['w-32', fieldBox]}
+      <Input
+        class="w-32"
         bind:value={viewName}
         aria-label={m.tasks_view_name_aria()}
         maxlength={100}

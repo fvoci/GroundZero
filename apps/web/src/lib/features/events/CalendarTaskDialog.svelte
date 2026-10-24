@@ -15,6 +15,7 @@
   import { itemTaskPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
+  import { Input } from '$lib/ui/input';
 
   interface Props {
     workspaceId: string;
@@ -232,12 +233,11 @@
       {/if}
       <label class="flex flex-col gap-1 text-sm">
         {m.events_task_due()}
-        <input class={fieldBox} type="date" bind:value={date} required disabled={busy} />
+        <Input type="date" bind:value={date} required disabled={busy} />
       </label>
       <label class="flex flex-col gap-1 text-sm">
         {m.events_task_name()}
-        <input
-          class={fieldBox}
+        <Input
           bind:value={title}
           required
           disabled={busy || made !== undefined}

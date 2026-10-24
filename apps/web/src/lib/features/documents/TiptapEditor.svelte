@@ -19,6 +19,7 @@
   import { ReferenceSuggestion } from '$lib/features/references/reference-extension';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
+  import { Input } from '$lib/ui/input';
 
   import BlockControls from './BlockControls.svelte';
   import { BlockKeys, insertDivider } from './block-ops';
@@ -592,8 +593,8 @@
     >
       <label class="flex flex-1 flex-col gap-1">
         <span class="font-medium">{m.documents_math_latex()}</span>
-        <input
-          class="h-8 rounded-md border border-input bg-transparent px-2 font-code"
+        <Input
+          class="font-code"
           bind:value={current.latex}
           placeholder={m.documents_math_placeholder()}
         />
