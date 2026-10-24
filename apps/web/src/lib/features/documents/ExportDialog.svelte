@@ -157,7 +157,10 @@
         </NativeSelect>
       </div>
       {#if latest && unsaved}
-        <p role="status" class="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900">
+        <p
+          role="status"
+          class="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+        >
           {m.documents_export_unsaved({ revision: doc.revision })}
         </p>
       {/if}
