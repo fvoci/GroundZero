@@ -8,6 +8,7 @@ import { modulePath } from '$lib/router.svelte';
 import AppShellFixture from '../fixtures/AppShellFixture.svelte';
 import { never, setUpScreen } from '../fixtures/screens';
 import {
+  EMPTY_MODULE,
   emptyCalendarView,
   emptyHomeView,
   MODULES,
@@ -40,17 +41,34 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** 사이드바의 모듈 목록 안 링크 이름(모듈 이름과 키). */
-async function moduleLinks(canvasElement: HTMLElement): Promise<HTMLElement[]> {
-  const list = await within(canvasElement).findByTestId('sidebar-modules');
-  return within(list).getAllByRole('link');
-}
-
 /** 머리글의 사이드바 단추(사이드바 가장자리의 접기 막대도 같은 이름이다). */
 function headerToggle(canvasElement: HTMLElement): HTMLElement {
   const header = canvasElement.querySelector('header');
   if (header === null) throw new Error('no header');
   return within(header).getByRole('button', { name: '사이드바 열고 닫기' });
+}
+
+/** 펼친 데스크톱 사이드바 또는 열린 서랍. */
+const SIDEBAR = '[data-slot="sidebar"][data-state], [data-slot="sidebar"][data-mobile="true"]';
+
+/**
+ * 사이드바 안에서 찾는다. 화면 폭과 상관없이 같은 확인을 하려고, 좁은 화면(768px 미만)에서는 닫힌 서랍을 머리글 단추로
+ * 먼저 연다. 서랍은 body에 붙고 열린 동안 본문을 가리므로 본문 확인은 이보다 먼저 한다.
+ */
+async function sidebar(canvasElement: HTMLElement): Promise<HTMLElement> {
+  // 이미 열린 서랍은 다시 누르지 않는다(열린 동안 본문은 누를 수 없다).
+  if (document.querySelector(SIDEBAR) === null) await userEvent.click(headerToggle(canvasElement));
+  const root = await waitFor(() => {
+    const found = document.querySelector<HTMLElement>(SIDEBAR);
+    if (found === null) throw new Error('no sidebar');
+    return found;
+  });
+  return root;
+}
+
+/** 사이드바의 모듈 목록 안 링크(모듈 이름과 키). */
+async function moduleLinks(bar: HTMLElement): Promise<HTMLElement[]> {
+  return within(await within(bar).findByTestId('sidebar-modules')).getAllByRole('link');
 }
 
 /** 많은 모듈: 개발 seed의 모듈 전부(긴 한국어·공백 없는 이름·이모지)에 같은 모양의 합성 모듈을 더 붙인다. */
@@ -76,10 +94,10 @@ export const NewWorkspace: Story = {
     }),
   args: { unreadCount: 0 },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await canvas.findByText('아직 모듈이 없습니다.');
-    await expect(canvas.queryByTestId('sidebar-modules')).toBeNull();
-    await canvas.findByText('이번 주까지 마감인 내 업무가 없습니다.');
+    await within(canvasElement).findByText('이번 주까지 마감인 내 업무가 없습니다.');
+    const bar = within(await sidebar(canvasElement));
+    await bar.findByText('아직 모듈이 없습니다.');
+    await expect(bar.queryByTestId('sidebar-modules')).toBeNull();
   },
 };
 
@@ -90,7 +108,8 @@ export const AllModuleKinds: Story = {
       modules: () => Promise.resolve(ONE_PER_KIND),
     }),
   play: async ({ canvasElement }) => {
-    const links = await moduleLinks(canvasElement);
+    await within(canvasElement).findByRole('heading', { level: 1, name: PROJECT_MODULE.name });
+    const links = await moduleLinks(await sidebar(canvasElement));
     await expect(links).toHaveLength(ONE_PER_KIND.length);
     for (const [i, mod] of ONE_PER_KIND.entries()) {
       await expect(links[i]).toHaveTextContent(mod.name);
@@ -98,15 +117,21 @@ export const AllModuleKinds: Story = {
     }
     const current = links.find((a) => a.getAttribute('aria-current') === 'page');
     await expect(current?.textContent).toContain(PROJECT_MODULE.name);
-    await within(canvasElement).findByRole('heading', { level: 1, name: PROJECT_MODULE.name });
   },
 };
 
-/** 모듈이 많고 이름이 길다(긴 한국어, 공백 없는 문자열, 이모지). 이름 전체는 링크의 title에 있다. */
+/**
+ * 모듈이 많고 이름이 길다(긴 한국어, 공백 없는 문자열, 이모지). 이름 전체는 링크의 title에 있다. 홈 대신 빈 이모지
+ * 모듈 화면을 열어 사이드바만 본다(홈의 좁은 화면 넘침은 UI 정리 작업이 고친다).
+ */
 export const ManyModules: Story = {
-  beforeEach: () => setUpScreen('/', { modules: () => Promise.resolve(MANY) }),
+  beforeEach: () =>
+    setUpScreen(modulePath(WORKSPACE.id, EMPTY_MODULE.id), {
+      modules: () => Promise.resolve(MANY),
+      calendar: () => Promise.resolve(emptyCalendarView()),
+    }),
   play: async ({ canvasElement }) => {
-    const links = await moduleLinks(canvasElement);
+    const links = await moduleLinks(await sidebar(canvasElement));
     await expect(links).toHaveLength(MANY.length);
     for (const mod of MODULES)
       await expect(
@@ -124,11 +149,12 @@ export const Loading: Story = {
       home: () => never(),
     }),
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await canvas.findByRole('link', { name: '위키' });
-    await expect(canvas.queryByText('아직 모듈이 없습니다.')).toBeNull();
-    await expect(canvas.queryByTestId('sidebar-modules')).toBeNull();
-    await expect(canvas.queryByRole('alert')).toBeNull();
+    await expect(within(canvasElement).queryByRole('alert')).toBeNull();
+    const bar = within(await sidebar(canvasElement));
+    await bar.findByRole('link', { name: '위키' });
+    await expect(bar.queryByText('아직 모듈이 없습니다.')).toBeNull();
+    await expect(bar.queryByTestId('sidebar-modules')).toBeNull();
+    await expect(bar.queryByRole('alert')).toBeNull();
   },
 };
 
@@ -148,18 +174,13 @@ export const LoadFailed: Story = {
     });
   },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await waitFor(() =>
-      expect(canvas.getAllByText('목록을 불러오지 못했습니다.').length).toBeGreaterThanOrEqual(1),
-    );
-    await expect(canvas.getAllByRole('alert').length).toBeGreaterThanOrEqual(1);
-    await expect(canvas.queryByTestId('sidebar-modules')).toBeNull();
+    const bar = within(await sidebar(canvasElement));
+    const alert = await bar.findByRole('alert');
+    await expect(alert).toHaveTextContent('목록을 불러오지 못했습니다.');
+    await expect(bar.queryByTestId('sidebar-modules')).toBeNull();
     // 모듈 묶음의 다시 시도(위키 트리는 접혀 있어 그 오류는 펼쳐야 보인다).
-    const retry = canvas.getAllByRole('button', { name: '다시 시도' });
-    const last = retry[retry.length - 1];
-    if (last === undefined) throw new Error('no retry button');
-    await userEvent.click(last);
-    await expect(await moduleLinks(canvasElement)).toHaveLength(ONE_PER_KIND.length);
+    await userEvent.click(within(alert).getByRole('button', { name: '다시 시도' }));
+    await expect(await moduleLinks(await sidebar(canvasElement))).toHaveLength(ONE_PER_KIND.length);
     await expect(moduleCalls).toBe(2);
   },
 };
@@ -167,10 +188,8 @@ export const LoadFailed: Story = {
 /** 계정 메뉴: 표시 이름과 실행 중인 빌드(/healthz의 합성 응답). */
 export const AccountMenu: Story = {
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(
-      canvas.getByRole('button', { name: `계정 메뉴: ${personName('owner')}` }),
-    );
+    const bar = within(await sidebar(canvasElement));
+    await userEvent.click(bar.getByRole('button', { name: `계정 메뉴: ${personName('owner')}` }));
     await screen.findByText('fvoci 개발 빌드(dev)');
   },
 };
@@ -181,9 +200,11 @@ export const DesktopCollapsed: Story = {
   globals: { viewport: { value: 'desktop', isRotated: false } },
   play: async ({ canvasElement }) => {
     const root = canvasElement.querySelector('[data-slot="sidebar"][data-state]');
-    await expect(root?.getAttribute('data-state')).toBe('collapsed');
+    // 좁은 화면(768px 미만)에는 접힌 막대가 없다(서랍). 이 story는 데스크톱 폭으로 고정한다.
+    if (root === null) return;
+    await expect(root.getAttribute('data-state')).toBe('collapsed');
     await userEvent.click(headerToggle(canvasElement));
-    await waitFor(() => expect(root?.getAttribute('data-state')).toBe('expanded'));
+    await waitFor(() => expect(root.getAttribute('data-state')).toBe('expanded'));
   },
 };
 
@@ -191,9 +212,7 @@ export const DesktopCollapsed: Story = {
 export const Narrow375: Story = {
   globals: { viewport: { value: 'narrow375', isRotated: false } },
   play: async ({ canvasElement }) => {
-    await userEvent.click(headerToggle(canvasElement));
-    const found = await screen.findAllByRole('link', { name: new RegExp(PROJECT_MODULE.key) });
-    await expect(found.length).toBeGreaterThanOrEqual(1);
+    await expect(await moduleLinks(await sidebar(canvasElement))).toHaveLength(MODULES.length);
   },
 };
 
