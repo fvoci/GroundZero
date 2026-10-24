@@ -67,6 +67,26 @@ export const LongContentScroll: Story = {
   },
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: '업무 편집' }));
-    await screen.findByRole('dialog');
+    const dialog = await screen.findByRole('dialog');
+    // 긴 제목이 오른쪽 위 닫기 단추 밑으로 들어가지 않는다(실제 브라우저에서 잰다. jsdom은 크기가 0이라 통과한다).
+    const title = dialog.querySelector('[data-slot=dialog-title]');
+    const close = dialog.querySelector('[data-slot=dialog-close]');
+    await expect(title).not.toBeNull();
+    await expect(close).not.toBeNull();
+    const t = title?.getBoundingClientRect();
+    const c = close?.getBoundingClientRect();
+    // 글이 놓이는 곳은 오른쪽 안쪽 여백을 뺀 자리다.
+    const textRight =
+      title === null || t === undefined
+        ? 0
+        : t.right - Number.parseFloat(getComputedStyle(title).paddingRight);
+    const overlaps =
+      t !== undefined &&
+      c !== undefined &&
+      c.width > 0 &&
+      c.left < textRight &&
+      c.top < t.bottom &&
+      c.bottom > t.top;
+    await expect(overlaps).toBe(false);
   },
 };
