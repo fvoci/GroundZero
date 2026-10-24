@@ -13,6 +13,9 @@ pub enum Env {
     Test,
     /// 셀프호스트 Supabase 시험 구성(D-88). 공식 구성과 겹쳐 쓰므로 [`crate::supabase`]가 다룬다.
     Supabase,
+    /// 실제 브라우저 회귀 시험(`cargo xtask browser`). 시험 Compose 파일을 쓰되 프로젝트를 따로 둬, 같은 체크아웃의
+    /// `cargo xtask test`와 서로 정리하지 않는다.
+    Browser,
 }
 
 impl Env {
@@ -21,6 +24,7 @@ impl Env {
             Self::Dev => "deploy/compose.dev.yaml",
             Self::Test => "deploy/compose.test.yaml",
             Self::Supabase => "deploy/supabase/compose.test.yaml",
+            Self::Browser => "deploy/compose.test.yaml",
         }
     }
 
@@ -29,6 +33,7 @@ impl Env {
             Self::Dev => "dev",
             Self::Test => "test",
             Self::Supabase => "supabase",
+            Self::Browser => "browser",
         }
     }
 }
@@ -163,9 +168,9 @@ impl Compose {
     }
 }
 
-/// dev·test 프로젝트를 모두 정리한다.
+/// dev·test·browser 프로젝트를 모두 정리한다.
 pub fn down_all(root: &Path) -> Result<()> {
-    for env in [Env::Dev, Env::Test] {
+    for env in [Env::Dev, Env::Test, Env::Browser] {
         let compose = Compose::new(root, env).with_profile("oidc");
         let sh = compose.shell()?;
         println!("==> down {}", compose.project());
