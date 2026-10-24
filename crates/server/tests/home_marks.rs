@@ -14,6 +14,7 @@ use serde_json::{Value, json};
 use sqlx::Connection;
 use uuid::Uuid;
 
+/// Fetches a successful home response for the given session.
 async fn check_home(state: &AppState, user: &TestUser) -> Value {
     let app = common::app(state);
     let home = send(&app, Method::GET, "/api/me/home?tz=UTC", Some(user), None).await;
@@ -21,6 +22,7 @@ async fn check_home(state: &AppState, user: &TestUser) -> Value {
     home.json
 }
 
+/// Sets a pin or favorite through the public API and requires success.
 async fn mark(state: &AppState, user: &TestUser, kind: &str, id: &Value, category: &str) {
     let reply = send(
         &common::app(state),
@@ -33,6 +35,7 @@ async fn mark(state: &AppState, user: &TestUser, kind: &str, id: &Value, categor
     assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
 }
 
+/// Checks independent categories, timestamp ties and current target visibility.
 #[tokio::test]
 async fn home_marks_keep_both_categories_order_and_current_visibility() {
     let state = common::state();
