@@ -4,23 +4,25 @@ import { expect, fn, userEvent, within } from 'storybook/test';
 import ClashConfirm from '$lib/features/tasks/ClashConfirm.svelte';
 import type { ClashRow } from '$lib/features/tasks/labels';
 
+import { TASKS } from '../fixtures/synthetic';
 import { EMOJI, LONG_KO, NO_SPACE } from '../fixtures/text';
 
 // 업무 저장 충돌에서 "내 입력으로 다시 저장"을 고른 뒤 같은 칸을 서로 다르게 바꿨을 때의 확인(D-94).
 // 이 story는 확인 UI의 상태(값 비교·바쁨·취소)만 보인다. 충돌에 들어가고 나오는 흐름은 TaskDetail이 맡고
-// tests/component의 업무 충돌 시험이 검증한다.
+// tests/component의 업무 충돌 시험이 검증한다. 서버 값은 개발 seed의 첫 업무, 내 값은 그 업무를 고친 것이다.
+const task = TASKS[0];
 const rows: ClashRow[] = [
   {
     key: 'title',
     label: '제목',
-    server: '주간 회의 자료 정리',
+    server: task?.title ?? '',
     mine: '주간 회의 준비',
     looksSame: false,
   },
   {
     key: 'description',
     label: '설명',
-    server: '발표 순서를 정하고 회의록 양식을 공유합니다.',
+    server: task?.description ?? '',
     mine: '발표 순서를 정합니다.\n회의록 양식은 다음 주에 공유합니다.',
     looksSame: false,
   },

@@ -3,7 +3,7 @@ import { expect, fn, userEvent, within } from 'storybook/test';
 
 import CommentItem from '$lib/features/comments/CommentItem.svelte';
 
-import { comment } from '../fixtures/comments';
+import { comment, WRITER_NAME } from '../fixtures/comments';
 import { EMOJI, LONG_KO, NO_SPACE, NUMBERS } from '../fixtures/text';
 
 // 댓글 하나(src/lib/features/comments/CommentItem.svelte): 고치기·지우기 확인과 저장 실패 때 입력 보존.
@@ -25,7 +25,7 @@ export const Mine: Story = {};
 
 /** 다른 사람의 댓글: 고치기·지우기 단추가 없다(읽기 전용). */
 export const OthersReadOnly: Story = {
-  args: { comment: comment({ author_name: '이협업', can_edit: false, can_delete: false }) },
+  args: { comment: comment({ author_name: WRITER_NAME, can_edit: false, can_delete: false }) },
   play: async ({ canvasElement }) => {
     await expect(within(canvasElement).queryByRole('button')).toBeNull();
   },

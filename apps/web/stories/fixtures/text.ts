@@ -1,12 +1,12 @@
-// story에서 쓰는 합성 문구와 글 조각. 표시가 깨지기 쉬운 경우(긴 한국어, 공백 없는 문자열, 숫자, 이모지)를 모았다.
+// 표시가 깨지기 쉬운 문구(긴 한국어, 공백 없는 문자열, 숫자, 이모지). 개발 seed와 같은 합성 데이터에서 가져온다.
 import { createRawSnippet, type Snippet } from 'svelte';
 
-export const LONG_KO =
-  '2026학년도 2학기 대학원 연구실 공동 세미나 발표 자료와 회의록을 한곳에 모아 정리하는 작업 공간';
-export const NO_SPACE =
-  'https://example.test/workspaces/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/documents/ffffffff-0000-1111-2222-333333333333';
-export const NUMBERS = '12,345,678.90 · 2026-10-25 · 0001234567';
-export const EMOJI = '회의 준비 🎉📚✅ 👩‍💻🧑‍🔬';
+import { SAMPLES } from './synthetic';
+
+export const LONG_KO = SAMPLES.long_ko;
+export const NO_SPACE = SAMPLES.no_space;
+export const NUMBERS = SAMPLES.numbers;
+export const EMOJI = SAMPLES.emoji;
 
 function escapeHtml(value: string): string {
   return value

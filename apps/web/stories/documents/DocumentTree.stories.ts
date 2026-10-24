@@ -1,35 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 
-import type { SummaryView } from '$lib/api/client';
 import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
 
-import { EMOJI, LONG_KO, NO_SPACE } from '../fixtures/text';
+import { DOCS } from '../fixtures/synthetic';
 
 // 문서 트리(src/lib/features/documents/DocumentTree.svelte): WAI-ARIA 트리 키보드 조작, 쓰기 권한에 따른 메뉴,
-// 빈 목록, 옮기기 실패 알림.
-function doc(
-  id: string,
-  title: string,
-  parent: string | null,
-  reference: string | null = null,
-): SummaryView {
-  return {
-    id,
-    reference,
-    title,
-    revision: 1,
-    updated_at: '2026-10-20T01:30:00Z',
-    parent_id: parent,
-  };
-}
-
-const DOCS: SummaryView[] = [
-  doc('d-01', '연구실 안내', null, 'W-1'),
-  doc('d-02', '세미나 발표 순서', 'd-01', 'W-2'),
-  doc('d-03', '회의록 2026-10', 'd-01', 'W-3'),
-  doc('d-04', '참고 문헌 목록', null, 'W-4'),
-];
+// 빈 목록, 옮기기 실패 알림. 문서는 개발 seed의 "UI 상태 예제" 위키와 같다(긴 제목·공백 없는 제목·이모지·숫자 포함).
+const LONG_SUBTREE = new Set(['doc-long-title', 'doc-no-space', 'doc-emoji']);
 
 const meta = {
   title: 'Documents/DocumentTree',
@@ -62,13 +40,7 @@ export const ReadOnly: Story = {
 export const Empty: Story = { args: { docs: [] } };
 
 export const LongTitles: Story = {
-  args: {
-    docs: [
-      doc('d-11', LONG_KO, null, 'W-11'),
-      doc('d-12', NO_SPACE, 'd-11', 'W-12'),
-      doc('d-13', `발표 준비 ${EMOJI}`, 'd-12', 'W-13'),
-    ],
-  },
+  args: { docs: DOCS.filter((d) => LONG_SUBTREE.has(d.id)) },
 };
 
 /** 키보드: Tab으로 트리에 들어가 아래 화살표로 옮기고, 왼쪽으로 접고, Enter로 연다. */
@@ -76,17 +48,17 @@ export const KeyboardNavigate: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.tab();
-    await expect(canvas.getByRole('treeitem', { name: 'W-1 연구실 안내' })).toHaveFocus();
+    await expect(canvas.getByRole('treeitem', { name: 'WIKI-1 연구실 안내' })).toHaveFocus();
     await userEvent.keyboard('{ArrowDown}');
-    await expect(canvas.getByRole('treeitem', { name: 'W-2 세미나 발표 순서' })).toHaveFocus();
+    await expect(canvas.getByRole('treeitem', { name: 'WIKI-2 세미나 발표 순서' })).toHaveFocus();
     await userEvent.keyboard('{ArrowLeft}');
-    await expect(canvas.getByRole('treeitem', { name: 'W-1 연구실 안내' })).toHaveFocus();
+    await expect(canvas.getByRole('treeitem', { name: 'WIKI-1 연구실 안내' })).toHaveFocus();
     await userEvent.keyboard('{ArrowLeft}');
     await waitFor(() =>
-      expect(canvas.queryByRole('treeitem', { name: 'W-2 세미나 발표 순서' })).toBeNull(),
+      expect(canvas.queryByRole('treeitem', { name: 'WIKI-2 세미나 발표 순서' })).toBeNull(),
     );
     await userEvent.keyboard('{Enter}');
-    await expect(args.navigate).toHaveBeenCalledWith('#/documents/d-01');
+    await expect(args.navigate).toHaveBeenCalledWith('#/documents/doc-guide');
   },
 };
 
