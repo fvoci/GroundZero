@@ -23,6 +23,15 @@ beforeEach(() => {
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
   }));
+  // jsdom에는 크기 관찰도 없다(사이드바 툴팁 위치 계산에 쓴다). 크기를 알리지 않는 빈 관찰자를 둔다.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe = (): undefined => undefined;
+      unobserve = (): undefined => undefined;
+      disconnect = (): undefined => undefined;
+    },
+  );
 });
 
 afterEach(() => {
