@@ -1,0 +1,16 @@
+{
+  "sha": "e9b0f2c22e499c4d4f7126d680e214cdf0a51240",
+  "run": "https://github.com/fvoci/GroundZero/actions/runs/40099871664",
+  "conclusion": "success",
+  "jobs": ["check", "licenses", "integration", "oidc", "supabase", "rhwp"],
+  "log_observed_versions": {"rust": "1.99.1", "node": "24.22.1", "corepack": "0.36.0", "pnpm": "12.15.0"},
+  "tests": {
+    "check_rust": {"passed": 101, "failed": 0},
+    "check_web": {"files": 139, "passed": 798},
+    "integration": {"passed": 378, "failed": 0, "filtered": 21},
+    "oidc": {"passed": 387, "failed": 0, "filtered": 12},
+    "supabase_direct": {"passed": 399, "failed": 0},
+    "supabase_session_pooler": {"passed": 399, "failed": 0}
+  },
+  "evidence": "Coordinator inspected completed run metadata and counted test-result lines per cargo test invocation in job logs. The strengthened home_marks test passed in general, OIDC and both Supabase invocations. Final remote main matched this SHA at verification. This file records CI evidence only; local matrix/browser evidence is separate."
+}
