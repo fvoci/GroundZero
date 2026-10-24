@@ -7,5 +7,13 @@
       "$lib/*": ["./src/lib/*"]
     }
   },
-  "include": ["src/**/*", "tests/**/*", "vite.config.ts", ".storybook/**/*", "stories/**/*"]
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "e2e/**/*",
+    ".storybook/**/*",
+    "stories/**/*",
+    "vite.config.ts",
+    "playwright.config.ts"
+  ]
 }
