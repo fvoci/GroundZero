@@ -1,0 +1,20 @@
+{
+  "sha": "479b562522f3b2fa1696e6c5828c753fc91124fd",
+  "run": "https://github.com/fvoci/GroundZero/actions/runs/40098801602",
+  "conclusion": "success",
+  "jobs": ["check", "licenses", "integration", "oidc", "supabase", "rhwp"],
+  "log_observed_versions": {
+    "rust": "1.99.1",
+    "node": "24.22.1",
+    "corepack": "0.36.0",
+    "pnpm": "12.15.0"
+  },
+  "tests": {
+    "check_rust": {"passed": 101, "failed": 0},
+    "check_web": {"files": 139, "passed": 798},
+    "integration": {"passed": 378, "failed": 0, "filtered": 21},
+    "oidc": {"passed": 387, "failed": 0, "filtered": 12},
+    "supabase_direct_and_session_combined": {"passed": 798, "failed": 0, "filtered": 0}
+  },
+  "scope": "Intermediate merged product main; test-only PR126 remains pending. Counts parsed from completed job test-result lines, excluding running-test announcements. This is CI evidence, not final local browser evidence."
+}

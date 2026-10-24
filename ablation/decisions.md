@@ -1,6 +1,6 @@
 # Ablation adoption decisions
 
-Coordinator review at product main `479b562522f3b2fa1696e6c5828c753fc91124fd`. Original experiment baseline was `22ad80ee205332e3ef1ffd8f64f783789955921b`; updated-pin experiments used dependency main `e0103ef` and verified unchanged inputs across later independent merges. These are experiment decisions, not product policy. Final combined runtime/CI and a test-only ordering-coverage follow-up remain pending at this checkpoint.
+Coordinator review at main `e9b0f2c22e499c4d4f7126d680e214cdf0a51240`. Original experiment baseline was `22ad80ee205332e3ef1ffd8f64f783789955921b`; updated-pin experiments used dependency main `e0103ef` and verified unchanged inputs across later independent merges. These are experiment decisions, not product policy. Final combined runtime/CI remain pending at this checkpoint; the test-only ordering-coverage follow-up is merged.
 
 | Candidate | Decision | Basis |
 | --- | --- | --- |
@@ -17,4 +17,4 @@ E tail concern was not hidden: initial n100 plan-first p95 worsened3.48%/11.81%.
 
 The coordinator independently recomputed A/C raw pairs and all24 E case/phase cells and checked workload records. A/C are helper measurements; E covers SQL fetch/decode/filter/split, not transaction setup, commit or complete endpoint latency. Shared-host background activity remained disclosed. Process-cold A means a fresh process batch without explicit warmup, not cold OS caches; E plan-first is not cold database storage.
 
-Current-head CodeRabbit body/inline/outside-diff checks and six-job CI passed before each adoption. A historical E test nit (created_at priority opposing UUID order) was subsequently found in a formal review; it is being addressed in a separate test-only follow-up, not silently ignored. Original and new-pin records remain separate. The bounded investigation ends with A–F; no new candidates or product policy were authorized.
+Current-head CodeRabbit body/inline/outside-diff checks and six-job CI passed before each adoption. A historical E test nit (created_at priority opposing UUID order) was subsequently found in a formal review and resolved in test-only PR126, merged as `e9b0f2c`. At exact head `4cd44d0`, both deliberately incorrect ordering mutations failed, restored production passed, all six CI jobs passed, and full CodeRabbit review had no actionable findings or review threads. Only 25 test lines differ from product main `479b562`; production sources and dependency pins are unchanged. Original and new-pin records remain separate. The bounded investigation ends with A–F; no new candidates or product policy were authorized.
