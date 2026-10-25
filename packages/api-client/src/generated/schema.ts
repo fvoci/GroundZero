@@ -9729,8 +9729,7 @@ export interface operations {
     shared_with_me: {
         parameters: {
             query: {
-                /** @description 현재 조직 */
-                organization_id: string;
+                organization_id: components["schemas"]["OrganizationId"];
             };
             header?: never;
             path?: never;

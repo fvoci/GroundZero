@@ -624,7 +624,7 @@ pub struct SharedDocument {
 
 /// 나에게 공유된 문서(검증된 이메일 기준). 현재 조직 범위(D-111): 그 조직에서 받은 공유만.
 #[utoipa::path(get, path = "/api/me/shared", operation_id = "shared_with_me",
-    params(("organization_id" = String, Query, format = Uuid, description = "현재 조직")),
+    params(("organization_id" = OrganizationId, Query)),
     responses((status = 200, body = [SharedDocument]), (status = 400, body = ErrorBody),
               (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn shared_with_me(

@@ -6374,11 +6374,9 @@
           {
             "name": "organization_id",
             "in": "query",
-            "description": "현재 조직",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],

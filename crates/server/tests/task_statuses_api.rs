@@ -103,7 +103,7 @@ async fn statuses_are_defined_per_item_by_its_owner_and_tasks_follow_them() {
     assert_eq!(created.json["color"], "#f59e0b");
     assert_eq!(created.json["task_count"], 0);
     let review = created.json["id"].as_str().unwrap().to_owned();
-    // 같은 이름은 409, 모르는 범주는 400.
+    // 같은 이름은 409, 모르는 범주는 본문 역직렬화 거절(422, 서버의 기존 규칙).
     assert_eq!(
         send(&app, Method::POST, &path, Some(&admin), Some(body.clone()))
             .await
@@ -120,7 +120,7 @@ async fn statuses_are_defined_per_item_by_its_owner_and_tasks_follow_them() {
         )
         .await
         .status,
-        StatusCode::BAD_REQUEST
+        StatusCode::UNPROCESSABLE_ENTITY
     );
     // 색은 빈 문자열 또는 #rrggbb(표의 CHECK): 토큰 이름은 400.
     assert_eq!(
