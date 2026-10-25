@@ -1919,7 +1919,7 @@
         await reload();
       }}
     />
-    <TaskCsvImport itemId={item.id} onimported={reload} />
+    <TaskCsvImport itemId={item.id} statuses={definitions} onimported={reload} />
   {/if}
   <p class="sr-only" aria-live="polite">{status}</p>
 </section>

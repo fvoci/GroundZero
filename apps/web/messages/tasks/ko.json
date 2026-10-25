@@ -61,7 +61,7 @@
   ],
   "tasks_csv_resume_restart": "처음부터 새로 넣으려면 글자를 모두 지우세요.",
   "tasks_csv_summary": "CSV로 여러 업무 등록",
-  "tasks_csv_label": "한 줄에 한 업무: 제목, 설명, 상태(할 일·진행 중·완료), 우선순위(없음·낮음·보통·높음·긴급), 시작일, 기한(YYYY-MM-DD), 예상(분), 담당자(이름, ;로 여럿), 태그(;로 여럿)",
+  "tasks_csv_label": "한 줄에 한 업무: 제목, 설명, 상태({statuses}; 비우면 항목의 기본 상태), 우선순위(없음·낮음·보통·높음·긴급), 시작일, 기한(YYYY-MM-DD), 예상(분), 담당자(이름, ;로 여럿), 태그(;로 여럿)",
   "tasks_csv_read": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],

@@ -5,6 +5,7 @@
   // 둘이 되지 않는다). 이어서 넣는 동안은 그렇다고 보여 준다. 등록하지 않는 동안 글자를 모두 지우거나 지난 줄과 겹치지
   // 않는 글자로 누르면 새 묶음이다.
   import type { AssigneeView } from '$lib/api/client';
+  import type { TaskStatusDefinition } from '@fvoci/api-client';
   import { untrack } from 'svelte';
   import { org } from '$lib/org.svelte';
   import { router } from '$lib/router.svelte';
@@ -32,10 +33,11 @@
 
   interface Props {
     itemId: string;
+    statuses: TaskStatusDefinition[];
     onimported: () => Promise<void>;
   }
 
-  const { itemId, onimported }: Props = $props();
+  const { itemId, statuses, onimported }: Props = $props();
 
   let text = $state('');
   let assignable = $state<AssigneeView[]>([]);
@@ -108,7 +110,9 @@
     };
   });
 
-  const parsed = $derived(text.trim() === '' ? undefined : parseTasksCsv(text, assignable));
+  const parsed = $derived(
+    text.trim() === '' ? undefined : parseTasksCsv(text, assignable, statuses),
+  );
   // 지난 등록에 이어서 넣는다는 안내. 건너뛸 줄이 없으면 비운다.
   const resume = $derived.by(() => {
     if (parsed === undefined) return '';
@@ -165,7 +169,7 @@
             null,
             {
               description: row.description,
-              status: row.status,
+              ...(row.status === undefined ? {} : { status: row.status }),
               priority: row.priority,
               start_date: row.start_date,
               due_date: row.due_date,
@@ -181,7 +185,8 @@
           // 다음 줄부터 넣는다(같은 업무를 또 만들지 않는다).
           line.applied = key;
           saveImport(keyForImport, source, batch);
-          if (!rowApplied(row, task)) {
+          // 빈 상태 칸은 서버가 기본 상태를 고르므로 응답의 상태를 그대로 허용한다.
+          if (!rowApplied({ ...row, status: row.status ?? task.status }, task)) {
             differs = row.title;
             throw new Error('differs');
           }
@@ -258,7 +263,11 @@
 <Collapsible.Root bind:open={expanded} class="text-sm">
   <Collapsible.Trigger>{m.tasks_csv_summary()}</Collapsible.Trigger>
   <Collapsible.Content class="flex flex-col gap-2 pt-2">
-    <Label for={`tasks-csv-${itemId}`}>{m.tasks_csv_label()}</Label>
+    <Label for={`tasks-csv-${itemId}`}
+      >{m.tasks_csv_label({
+        statuses: statuses.map((definition) => definition.name).join(' · '),
+      })}</Label
+    >
     <Textarea
       id={`tasks-csv-${itemId}`}
       class="max-h-96 min-h-32 overflow-y-auto font-code"
