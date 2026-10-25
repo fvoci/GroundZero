@@ -21,8 +21,6 @@ const meta = {
       spyOn(api, 'taskTime').mockResolvedValue({
         estimate_minutes: null,
         mine_seconds: 0,
-        shared_seconds: 0,
-        shared_people: 0,
       }),
     ];
     return () => {
