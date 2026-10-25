@@ -10,7 +10,6 @@
   import ChevronsUpDown from '@lucide/svelte/icons/chevrons-up-down';
   import Clock from '@lucide/svelte/icons/clock';
   import Download from '@lucide/svelte/icons/download';
-  import FolderKanban from '@lucide/svelte/icons/folder-kanban';
   import House from '@lucide/svelte/icons/house';
   import Building2 from '@lucide/svelte/icons/building-2';
   import ListChecks from '@lucide/svelte/icons/list-checks';
@@ -29,6 +28,7 @@
   import { fetchHealth } from '$lib/api/client';
   import { buildLabel } from '$lib/features/health/build';
   import { kindLabel } from '$lib/features/modules/kinds';
+  import ModuleKindIcon from '$lib/features/modules/ModuleKindIcon.svelte';
   import WorkspaceBadge from '$lib/features/workspaces/WorkspaceBadge.svelte';
   import { org } from '$lib/org.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -502,7 +502,7 @@
                             go(e, modulePath(shown.id, mod.id));
                           }}
                         >
-                          <FolderKanban aria-hidden="true" />
+                          <ModuleKindIcon kind={mod.kind} />
                           <span class="min-w-0 flex-1 truncate">{mod.name}</span>
                           <span class="shrink-0 font-mono text-xs text-muted-foreground"
                             >{mod.key}</span

@@ -249,9 +249,11 @@
     const id = route.workspaceId;
     return session.workspaces.find((w) => w.id === id);
   });
-  // 지금 보는 워크스페이스의 조직이 현재 조직이다(D-111). 개인 화면에서는 기억한 선택을 쓴다.
+  // 지금 보는 워크스페이스의 조직이 현재 조직이다(D-111). 워크스페이스로 들어간 것은 사용자의 선택이므로 그 조직을 기억해
+  // 뒤이어 홈·알림함 같은 개인 화면도 같은 조직 범위로 본다(구현 해석; 여러 조직 중 첫 조직을 조용히 고르는 것과 다르다).
   $effect(() => {
     org.routeOrganizationId = currentWorkspace?.organization_id;
+    if (currentWorkspace !== undefined) org.select(currentWorkspace.organization_id);
   });
 </script>
 
