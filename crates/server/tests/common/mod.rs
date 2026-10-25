@@ -176,18 +176,105 @@ pub fn new_request_id() -> String {
     uuid::Uuid::now_v7().to_string()
 }
 
-/// 워크스페이스를 만들고 id를 돌려준다.
+/// 시험 준비 전용 마이그레이션 역할 연결(`FVOCI_TEST_MIGRATION_URL`). 앱 권한 검사를 거치지 않으므로 조직·서버 관리자
+/// 시드 같은 준비에만 쓰고, 권한 단언은 앱 역할(`state.db`, HTTP)로 한다.
+pub async fn fixture_conn() -> sqlx::PgConnection {
+    use sqlx::Connection;
+    let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    sqlx::PgConnection::connect(&url).await.unwrap()
+}
+
+/// 운영자가 지정한 초기 관리자처럼 이 사용자를 서버 관리자로 시드한다(D-51·D-112).
+pub async fn make_server_admin(user: &TestUser) {
+    let mut conn = fixture_conn().await;
+    sqlx::query(
+        "INSERT INTO fvoci.server_admins (user_id, detail) VALUES ($1, '{\"seed\": \"test\"}'::jsonb)
+         ON CONFLICT (user_id) DO NOTHING",
+    )
+    .bind(user.id.0)
+    .execute(&mut conn)
+    .await
+    .unwrap();
+}
+
+/// 이 사용자가 속한 첫 조직. 없으면 그 사용자를 서버 관리자로 시드하고 그 사용자 문맥에서 `app_create_organization`으로
+/// 조직을 만들어 첫 조직 관리자로 둔다(D-111·D-51). 같은 사용자가 만드는 워크스페이스는 모두 이 조직에 들어간다.
+pub async fn organization_for(user: &TestUser) -> uuid::Uuid {
+    use sqlx::Connection;
+    let mut conn = fixture_conn().await;
+    let existing: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT o.id FROM fvoci.organizations o JOIN fvoci.organization_members m ON m.organization_id = o.id
+         WHERE m.user_id = $1 ORDER BY o.created_at, o.id LIMIT 1",
+    )
+    .bind(user.id.0)
+    .fetch_one(&mut conn)
+    .await
+    .ok();
+    if let Some(id) = existing {
+        return id;
+    }
+    make_server_admin(user).await;
+    let mut tx = conn.begin().await.unwrap();
+    sqlx::query("SELECT set_config('app.user_id', $1::text, true)")
+        .bind(user.id.0)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let ids: Vec<uuid::Uuid> = (0..3).map(|_| uuid::Uuid::now_v7()).collect();
+    let id: uuid::Uuid = sqlx::query_scalar("SELECT fvoci.app_create_organization($1, $2, $3, $4)")
+        .bind(uuid::Uuid::now_v7())
+        .bind(format!("조직 {}", user.id.0.simple()))
+        .bind(user.id.0)
+        .bind(ids)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    id
+}
+
+/// 사용자를 조직 멤버(`admin` 또는 `member`)로 넣는다. 워크스페이스 초대 수락에는 조직 멤버십이 필요하다(D-114).
+pub async fn join_organization(organization: uuid::Uuid, user: &TestUser, role: &str) {
+    let mut conn = fixture_conn().await;
+    sqlx::query(
+        "INSERT INTO fvoci.organization_members (organization_id, user_id, role) VALUES ($1, $2, $3)
+         ON CONFLICT (organization_id, user_id) DO UPDATE SET role = EXCLUDED.role",
+    )
+    .bind(organization)
+    .bind(user.id.0)
+    .bind(role)
+    .execute(&mut conn)
+    .await
+    .unwrap();
+}
+
+/// 워크스페이스를 만들고 id를 돌려준다. 만드는 사람의 조직(없으면 새로 만든다) 안에 만든다(D-111).
 pub async fn create_workspace(app: &Router, user: &TestUser, name: &str) -> String {
+    let organization = organization_for(user).await;
     let r = send(
         app,
         Method::POST,
         "/api/workspaces",
         Some(user),
-        Some(serde_json::json!({ "request_id": new_request_id(), "name": name })),
+        Some(serde_json::json!({
+            "request_id": new_request_id(),
+            "organization_id": organization,
+            "name": name
+        })),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
     r.json["id"].as_str().unwrap().to_owned()
+}
+
+/// 워크스페이스가 속한 조직.
+pub async fn organization_of_workspace(ws: &str) -> uuid::Uuid {
+    let mut conn = fixture_conn().await;
+    sqlx::query_scalar("SELECT organization_id FROM fvoci.workspaces WHERE id = $1::uuid")
+        .bind(ws)
+        .fetch_one(&mut conn)
+        .await
+        .unwrap()
 }
 
 /// 위키 문서를 만들고 응답 JSON을 돌려준다.
@@ -211,7 +298,8 @@ pub fn doc_body(text: &str) -> Value {
     })
 }
 
-/// 초대와 수락으로 멤버를 넣는다. (사용자, 검증된 이메일)을 돌려준다.
+/// 초대와 수락으로 멤버를 넣는다. (사용자, 검증된 이메일)을 돌려준다. 수락 전에 그 워크스페이스의 조직 멤버로 넣는다
+/// (워크스페이스 초대는 조직 멤버만 수락할 수 있다, D-114).
 pub async fn add_member(
     app: &Router,
     state: &AppState,
@@ -222,6 +310,7 @@ pub async fn add_member(
 ) -> (TestUser, String) {
     let email = unique_email(label);
     let user = login_with_email(state, label, &email, true).await;
+    join_organization(organization_of_workspace(ws).await, &user, "member").await;
     let inv = send(
         app,
         Method::POST,

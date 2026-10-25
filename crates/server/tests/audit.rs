@@ -32,7 +32,7 @@ async fn workspace_audit_is_for_admins_and_personal_audit_is_private() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "감사").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
     let doc = create_doc(&app, &writer, &ws, "기록될 문서").await;
     let r = send(
@@ -66,7 +66,7 @@ async fn workspace_audit_is_for_admins_and_personal_audit_is_private() {
     assert!(seen.contains(&"delete:document".to_owned()), "{seen:?}");
     // 최신 먼저, 누가 했는지 이름과 함께.
     assert_eq!(log.json[0]["action"], "delete");
-    assert_eq!(log.json[0]["actor_name"], "writer");
+    assert_eq!(log.json[0]["actor_name"], "member");
     // 쪽 넘기기: 마지막 것보다 앞선 기록만.
     let last = log.json.as_array().unwrap().last().unwrap()["id"]
         .as_str()

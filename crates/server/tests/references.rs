@@ -88,7 +88,7 @@ async fn hidden_targets_look_exactly_like_missing_ones() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "해석").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
     let secret = module_item(&app, &admin, &ws, "SEC", "비밀 실험").await;
     let missing = json!(uuid::Uuid::now_v7().to_string());
 
@@ -142,7 +142,7 @@ async fn backlinks_follow_access_to_the_source_document() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "역링크").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
     let target = create_doc(&app, &admin, &ws, "대상").await;
     let source = create_doc(&app, &admin, &ws, "출발").await;
     let it = module_item(&app, &admin, &ws, "DEV", "항목").await;
@@ -217,7 +217,7 @@ async fn mentions_notify_once_only_people_who_can_read_and_never_grant_access() 
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "언급").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
     let doc = create_doc(&app, &admin, &ws, "회의록").await;
     let doc_uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
@@ -297,7 +297,7 @@ async fn mentions_notify_once_only_people_who_can_read_and_never_grant_access() 
         json!([])
     );
     // 비공개 문서에서 언급해도 볼 수 없는 사람에게는 알림이 생기지 않는다.
-    let (member2, _) = add_member(&app, &state, &admin, &ws, "member2", "writer").await;
+    let (member2, _) = add_member(&app, &state, &admin, &ws, "member2", "member").await;
     save_body(&app, &admin, &saved, body_with(vec![user_ref(&member2)])).await;
     assert_eq!(
         get(&app, &member2, "/api/me/notifications").await.1,
@@ -311,7 +311,7 @@ async fn candidates_find_visible_people_items_and_documents_by_title_or_referenc
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "후보").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "동료", "writer").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "동료", "member").await;
     let outsider = login(&state, "동료아님").await;
     let other_ws = create_workspace(&app, &outsider, "남의 공간").await;
     let secret = module_item(&app, &admin, &ws, "DEV", "비밀 설계").await;
@@ -409,8 +409,8 @@ async fn copying_and_editing_does_not_resend_existing_mentions() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "사본 언급").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
-    let (editor, _) = add_member(&app, &state, &admin, &ws, "editor", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (editor, _) = add_member(&app, &state, &admin, &ws, "editor", "member").await;
     let doc = create_doc(&app, &admin, &ws, "원본").await;
     save_body(&app, &admin, &doc, body_with(vec![user_ref(&member)])).await;
     assert_eq!(

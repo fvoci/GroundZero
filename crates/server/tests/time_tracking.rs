@@ -78,7 +78,7 @@ async fn one_timer_per_user_survives_pause_and_stays_private() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "시간").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
 
     let body =
         json!({ "request_id": new_request_id(), "kind": "study", "memo": "통계", "target": null });
@@ -178,7 +178,7 @@ async fn entries_are_edited_with_history_and_summed_in_the_viewers_days() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "집계").await;
-    let (owner_of_private, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
+    let (owner_of_private, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
     let task = task_in_public_item(&app, &admin, &ws).await;
 
     // 서울 10-20 23:30 시작(UTC 14:30) 1시간 공부, 10-21 09:00 시작 30분 강의, 10-26 휴식 15분.
@@ -415,8 +415,8 @@ async fn task_totals_include_only_people_who_chose_to_share() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "공유").await;
-    let (sharer, _) = add_member(&app, &state, &admin, &ws, "sharer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (sharer, _) = add_member(&app, &state, &admin, &ws, "sharer", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let task = task_in_public_item(&app, &admin, &ws).await;
     let on_task =
@@ -533,8 +533,8 @@ async fn item_totals_group_entries_under_the_item_by_kind() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "항목 시간").await;
-    let (sharer, _) = add_member(&app, &state, &admin, &ws, "sharer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (sharer, _) = add_member(&app, &state, &admin, &ws, "sharer", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let task = task_in_public_item(&app, &admin, &ws).await;
     let item = task["item_id"].as_str().unwrap().to_owned();
@@ -667,7 +667,7 @@ async fn a_running_timer_keeps_its_pauses_inside_its_span() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "멈춤 범위").await;
-    let (me, _) = add_member(&app, &state, &admin, &ws, "pauser", "writer").await;
+    let (me, _) = add_member(&app, &state, &admin, &ws, "pauser", "member").await;
     let body =
         json!({ "request_id": new_request_id(), "kind": "work", "memo": "", "target": null });
     let (status, timer) = start(&app, &me, body).await;
@@ -854,7 +854,7 @@ async fn time_sharing_reads_back_per_person_and_workspace() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "공유 읽기").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
     let uri = format!("/api/workspaces/{ws}/time-sharing");
     let read = |user: TestUser| {

@@ -139,7 +139,7 @@ async fn search_returns_only_what_each_person_can_see() {
     let tok = token();
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "검색").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
     let other_ws = create_workspace(&app, &outsider, "남의 공간").await;
 
@@ -735,7 +735,7 @@ async fn author_and_title_only_narrow_results_without_widening_access() {
     let body_tok = token();
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "작성자 검색").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let mine = create_doc(&app, &admin, &ws, &format!("{tok} 관리자 문서")).await;
     let saved = send(
         &app,
@@ -842,7 +842,7 @@ async fn item_records_are_searchable_by_people_who_see_the_item() {
     let field_tok = token();
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "기록 검색").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let module = send(
         &app,
         Method::POST,
@@ -1274,7 +1274,7 @@ async fn a_document_shared_out_of_a_private_item_does_not_reveal_the_item() {
     let tok = token();
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "공유 모듈").await;
-    let (reader, email) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, email) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let module = send(
         &app,
         Method::POST,
@@ -1846,9 +1846,9 @@ async fn an_author_filter_finds_results_beyond_the_old_candidate_window() {
     let tok = token();
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "작성자 창").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (decoy, _) = add_member(&app, &state, &admin, &ws, "decoy", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (decoy, _) = add_member(&app, &state, &admin, &ws, "decoy", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let target = format!("{tok} 대상 문서");
     let target_id = create_doc(&app, &writer, &ws, &target).await["id"]
         .as_str()

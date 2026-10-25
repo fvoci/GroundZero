@@ -91,7 +91,7 @@ async fn a_save_goes_through_only_for_the_user_who_started_the_edit() {
     let doc = create_doc(&app, &alice, &ws, "처음 제목").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let uri = format!("/api/documents/{id}");
-    let (other, _) = add_member(&app, &state, &alice, &ws, "bob", "writer").await;
+    let (other, _) = add_member(&app, &state, &alice, &ws, "bob", "member").await;
     let before = snapshot(&app, &alice, &id).await;
 
     // 다른 사용자(쓰기 권한이 있는 멤버라도)로 시작한 편집이 alice의 세션으로 나가면 바꾸지 않는다.
@@ -174,7 +174,7 @@ async fn the_expected_user_grants_nothing() {
     let doc = create_doc(&app, &alice, &ws, "alice의 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let uri = format!("/api/documents/{id}");
-    let (reader, _) = add_member(&app, &state, &alice, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &alice, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let before = snapshot(&app, &alice, &id).await;
     let alice_id = alice.id.0.to_string();
@@ -285,7 +285,7 @@ async fn an_upload_starts_only_for_the_user_who_started_it() {
     let alice = login(&state, "alice").await;
     let ws = create_workspace(&app, &alice, "업로드 기대 사용자").await;
     let doc = create_doc(&app, &alice, &ws, "첨부 문서").await;
-    let (bob, _) = add_member(&app, &state, &alice, &ws, "bob", "writer").await;
+    let (bob, _) = add_member(&app, &state, &alice, &ws, "bob", "member").await;
     let body = json!({ "request_id": new_request_id(),
                        "target": { "kind": "document", "id": doc["id"] },
                        "name": "a.txt", "content_type": "text/plain", "size": 3 });

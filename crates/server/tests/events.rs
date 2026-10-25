@@ -88,7 +88,7 @@ async fn events_follow_item_access_keep_their_zone_and_guard_versions() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "일정").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let item = module_item(&app, &admin, &ws, "EVT", true).await;
 
@@ -219,7 +219,7 @@ async fn the_calendar_shows_visible_tasks_and_events_by_the_viewers_days() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "달력").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
     let public = module_item(&app, &admin, &ws, "PUB", true).await;
     let private = module_item(&app, &admin, &ws, "PRV", false).await;
@@ -321,7 +321,7 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "달력 범위").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let other_ws = create_workspace(&app, &admin, "다른 곳").await;
     let made = |kind: &'static str, key: &'static str, public: bool| {
         let app = app.clone();

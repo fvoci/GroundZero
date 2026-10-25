@@ -55,10 +55,10 @@ async fn private_items_open_to_their_members_only() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "항목 멤버").await;
-    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "writer").await;
-    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "writer").await;
-    let (viewer, _) = add_member(&app, &state, &admin, &ws, "viewer", "reader").await;
-    let (grouped, _) = add_member(&app, &state, &admin, &ws, "grouped", "writer").await;
+    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "member").await;
+    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "member").await;
+    let (viewer, _) = add_member(&app, &state, &admin, &ws, "viewer", "readonly").await;
+    let (grouped, _) = add_member(&app, &state, &admin, &ws, "grouped", "member").await;
     let outsider = login(&state, "outsider").await;
     let m = module(&app, &admin, &ws, "project", "PRJ").await;
     let it = item(&app, &owner, &m, "비공개 프로젝트").await;
@@ -266,7 +266,7 @@ async fn profile_fields_follow_the_module_kind() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "항목 정보").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let research = module(&app, &admin, &ws, "research", "RES").await;
     let hobby = module(&app, &admin, &ws, "hobby", "HOB").await;
     let r = item(&app, &admin, &research, "학습 동기 연구").await;
@@ -379,9 +379,9 @@ async fn items_copy_with_fresh_numbers_and_templates() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "항목 복제").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let p1 = module(&app, &admin, &ws, "project", "ONE").await;
     let p2 = module(&app, &admin, &ws, "project", "TWO").await;
     let research = module(&app, &admin, &ws, "research", "RES").await;
@@ -671,8 +671,8 @@ async fn group_changes_and_leaving_end_item_roles() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "그룹 정리").await;
-    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "writer").await;
-    let (grouped, email) = add_member(&app, &state, &admin, &ws, "grouped", "writer").await;
+    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "member").await;
+    let (grouped, email) = add_member(&app, &state, &admin, &ws, "grouped", "member").await;
     let m = module(&app, &admin, &ws, "project", "GRP").await;
     let it = item(&app, &owner, &m, "비공개").await;
     let item_uri = format!("/api/items/{it}");
@@ -842,7 +842,7 @@ async fn group_changes_and_leaving_end_item_roles() {
         Method::POST,
         &format!("/api/workspaces/{ws}/invitations"),
         Some(&admin),
-        Some(json!({ "email": email, "role": "writer" })),
+        Some(json!({ "email": email, "role": "member" })),
     )
     .await;
     let accepted = send(
@@ -966,8 +966,8 @@ async fn stale_profile_saves_are_refused_with_the_latest() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "정보 판").await;
-    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "writer").await;
-    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "writer").await;
+    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "member").await;
+    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "member").await;
     let m = module(&app, &admin, &ws, "research", "PVER").await;
     let it = item(&app, &owner, &m, "연구").await;
     let uri = format!("/api/items/{it}/profile");

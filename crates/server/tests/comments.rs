@@ -39,8 +39,8 @@ async fn comments_threads_and_notifications_follow_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "댓글").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let doc = create_doc(&app, &writer, &ws, "회의록").await;
     let doc_id = doc["id"].as_str().unwrap();
@@ -87,7 +87,7 @@ async fn comments_threads_and_notifications_follow_access() {
     let n = notes(&app, &writer).await;
     assert_eq!(n[0]["kind"], "comment");
     assert_eq!(n[0]["excerpt"], "안건 2는 다음 주로");
-    assert_eq!(n[0]["actor_name"], "reader");
+    assert_eq!(n[0]["actor_name"], "readonly");
     assert_eq!(n[0]["document_id"], doc["id"]);
     assert!(notes(&app, &reader).await.is_empty());
 
@@ -327,7 +327,7 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
     let admin = login(&state, "admin").await;
     let old = create_workspace(&app, &admin, "옛 공간").await;
     let new = create_workspace(&app, &admin, "새 공간").await;
-    let (member, _) = add_member(&app, &state, &admin, &old, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &old, "member", "member").await;
     let doc = create_doc(&app, &admin, &old, "옮길 문서").await;
     let doc_id = doc["id"].as_str().unwrap().to_owned();
     let open = send(
@@ -443,7 +443,7 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
     );
 
     // 업무를 만든 사람이 담당자이기도 하면 댓글 알림은 한 번.
-    let (other, _) = add_member(&app, &state, &admin, &new, "other", "writer").await;
+    let (other, _) = add_member(&app, &state, &admin, &new, "other", "member").await;
     let module = send(
         &app,
         Method::POST,
@@ -550,7 +550,7 @@ async fn comments_in_an_archived_item_are_not_edited_or_resolved() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보관 댓글").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let (_, item, task) = item_task(&app, &admin, &ws, "ARC").await;
     let (status, created) = comment(
         &app,
@@ -611,7 +611,7 @@ async fn due_notices_skip_tasks_in_an_archived_module() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보관 모듈 기한").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let (m, _, task) = item_task(&app, &admin, &ws, "DUE").await;
     let task_id = task["id"].as_str().unwrap().to_owned();
     // 마감은 아직 멀다(다른 시험의 작업 실행이 먼저 알리지 않게).
@@ -655,7 +655,7 @@ async fn task_comments_follow_the_item_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "업무 댓글").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let m = send(
         &app,
         Method::POST,
@@ -745,8 +745,8 @@ async fn archived_items_let_authors_delete_only_their_own_comments() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보관 댓글 지우기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
     let outsider = login(&state, "outsider").await;
     let (module, item, task) = item_task(&app, &admin, &ws, "ARD").await;
     let mut ids = Vec::new();

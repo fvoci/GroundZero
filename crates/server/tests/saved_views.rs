@@ -17,7 +17,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
     let m = send(&app, Method::POST, &format!("/api/workspaces/{ws}/modules"), Some(&admin),
         Some(json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "VIEW" }))).await;

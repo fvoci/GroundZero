@@ -186,7 +186,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "반복").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let item = module_item(&app, &admin, &ws, "REP").await;
     let today = seoul_today(&state, &admin).await;
     let anchor = today - time::Duration::days(3);

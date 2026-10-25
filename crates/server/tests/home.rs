@@ -79,7 +79,7 @@ async fn home_collects_my_upcoming_work_and_marks_only_what_i_can_see() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "홈").await;
-    let (me, _) = add_member(&app, &state, &admin, &ws, "me", "writer").await;
+    let (me, _) = add_member(&app, &state, &admin, &ws, "me", "member").await;
     let shared = item(&app, &admin, &ws, "PUB", true).await;
     let private = item(&app, &admin, &ws, "PRV", false).await;
     let today: Date = {
@@ -294,7 +294,7 @@ async fn up_next_keeps_today_and_upcoming_behind_a_long_overdue_backlog() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "밀린 일").await;
-    let (me, _) = add_member(&app, &state, &admin, &ws, "me", "writer").await;
+    let (me, _) = add_member(&app, &state, &admin, &ws, "me", "member").await;
     let shared = item(&app, &admin, &ws, "BKL", true).await;
     let today: Date = {
         let mut tx = state.db.begin_as(me.id).await.unwrap();
@@ -379,7 +379,7 @@ async fn marks_read_back_only_for_their_owner() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "표시 읽기").await;
-    let (me, _) = add_member(&app, &state, &admin, &ws, "me", "writer").await;
+    let (me, _) = add_member(&app, &state, &admin, &ws, "me", "member").await;
     let shared = item(&app, &admin, &ws, "MRK", true).await;
     let private = item(&app, &admin, &ws, "MRP", false).await;
     let uri = |target: &Value| format!("/api/me/marks/item/{}", target["id"].as_str().unwrap());

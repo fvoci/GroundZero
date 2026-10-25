@@ -162,7 +162,7 @@ async fn module_keys_are_admin_managed_unique_and_case_insensitive() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "모듈").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
 
     // 소문자는 대문자로 받는다. 같은 유형을 여러 개 둘 수 있다 (D-15).
@@ -356,9 +356,9 @@ async fn private_items_hide_their_documents_and_numbers() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "비공개 항목").await;
-    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "writer").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "member").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let dev = module(&app, &admin, &ws, "DEV").await;
 
     let it = item(&app, &creator, &dev, "내 실험").await;
@@ -443,7 +443,7 @@ async fn archived_items_and_modules_are_read_only_but_visible() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보관").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let dev = module(&app, &admin, &ws, "DEV").await;
     let it = item(&app, &writer, &dev, "항목").await;
     set_item(&app, &writer, &it, "workspace").await;
@@ -520,7 +520,7 @@ async fn documents_move_between_wiki_and_items() {
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "이동").await;
     let other_ws = create_workspace(&app, &admin, "다른 곳").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
     let dev = module(&app, &admin, &ws, "DEV").await;
     let it = item(&app, &admin, &dev, "비공개 항목").await;
     let doc = create_doc(&app, &admin, &ws, "위키 문서").await;
@@ -717,7 +717,7 @@ async fn copies_moves_and_retries_respect_item_boundaries() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "경계").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
     let dev = module(&app, &admin, &ws, "DEV").await;
     let first = item(&app, &admin, &dev, "첫 항목").await;
     let second = item(&app, &admin, &dev, "둘째 항목").await;
@@ -826,8 +826,8 @@ async fn item_details_keep_the_visibility_unless_it_is_sent() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "공개 범위").await;
-    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "writer").await;
-    let (helper, _) = add_member(&app, &state, &admin, &ws, "helper", "writer").await;
+    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "member").await;
+    let (helper, _) = add_member(&app, &state, &admin, &ws, "helper", "member").await;
     let m = module(&app, &admin, &ws, "VIS").await;
     let it = item(&app, &creator, &m, "설계").await;
     let uri = format!("/api/items/{}", it["id"].as_str().unwrap());
@@ -897,7 +897,7 @@ async fn stale_item_details_are_refused_with_the_latest() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "항목 판").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let m = module(&app, &admin, &ws, "IVER").await;
     let it = item(&app, &admin, &m, "설계").await;
     let uri = format!("/api/items/{}", it["id"].as_str().unwrap());

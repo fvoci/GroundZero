@@ -247,9 +247,9 @@ async fn live_editing_end_to_end() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "실시간").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (writer2, _) = add_member(&app, &state, &admin, &ws, "writer2", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (writer2, _) = add_member(&app, &state, &admin, &ws, "writer2", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let doc = common::create_doc(&app, &writer, &ws, "함께 쓰는 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
@@ -454,7 +454,7 @@ async fn live_editing_end_to_end() {
     assert_eq!(e.closed().await, Some(4403));
 
     // 끄면 열린 방은 리비전을 남기고 닫히며, 그 뒤로는 연결할 수 없다.
-    let (writer3, _) = add_member(&app, &state, &admin, &ws, "writer3", "writer").await;
+    let (writer3, _) = add_member(&app, &state, &admin, &ws, "writer3", "member").await;
     let mut f = connect(addr, Some(&writer3), &id, true).await.unwrap();
     f.paragraph("끄기 전").await;
     tokio::time::sleep(Duration::from_millis(600)).await;
@@ -502,8 +502,8 @@ async fn live_editing_guards() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "실시간 경계").await;
-    let (w1, _) = add_member(&app, &state, &admin, &ws, "w1", "writer").await;
-    let (w2, _) = add_member(&app, &state, &admin, &ws, "w2", "writer").await;
+    let (w1, _) = add_member(&app, &state, &admin, &ws, "w1", "member").await;
+    let (w2, _) = add_member(&app, &state, &admin, &ws, "w2", "member").await;
     let doc = common::create_doc(&app, &w1, &ws, "경계 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let saved = send(
@@ -622,7 +622,7 @@ async fn live_editing_guards() {
         Method::PUT,
         &format!("/api/workspaces/{ws}/members/{}", w1.id.0),
         Some(&admin),
-        Some(json!({ "role": "reader" })),
+        Some(json!({ "role": "readonly" })),
     )
     .await;
     assert!(demoted.status.is_success(), "{:?}", demoted.json);
@@ -745,8 +745,8 @@ async fn the_live_connection_carries_the_expected_user() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "실시간 기대 사용자").await;
-    let (w1, _) = add_member(&app, &state, &admin, &ws, "w1", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (w1, _) = add_member(&app, &state, &admin, &ws, "w1", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let doc = common::create_doc(&app, &w1, &ws, "기대 사용자 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
@@ -881,8 +881,8 @@ async fn turning_realtime_off_keeps_live_edits() {
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "끄기 보존").await;
     let ws_id = uuid::Uuid::parse_str(&ws).unwrap();
-    let (w1, _) = add_member(&app, &state, &admin, &ws, "w1", "writer").await;
-    let (r1, _) = add_member(&app, &state, &admin, &ws, "r1", "reader").await;
+    let (w1, _) = add_member(&app, &state, &admin, &ws, "w1", "member").await;
+    let (r1, _) = add_member(&app, &state, &admin, &ws, "r1", "readonly").await;
     let set = |enabled: bool| {
         let app = app.clone();
         let admin = admin.clone();
@@ -951,7 +951,7 @@ async fn turning_realtime_off_keeps_live_edits() {
     let mut watcher = connect(addr, Some(&r1), &a_id, true).await.unwrap();
     a.paragraph("열린 방의 글").await;
     assert!(watcher.until(|c| c.text().contains("열린 방의 글")).await);
-    role("reader").await;
+    role("readonly").await;
     assert_eq!(a.closed().await, Some(4403));
     assert_eq!(b.closed().await, Some(4403));
     tokio::time::sleep(Duration::from_millis(800)).await;
@@ -1007,7 +1007,7 @@ async fn turning_realtime_off_keeps_live_edits() {
     assert_eq!(pending, 0);
 
     // 끈 뒤 저장 API는 그 리비전을 바탕으로만 저장된다(예전 리비전을 바탕으로 하면 충돌, 실시간 편집을 덮지 않음).
-    role("writer").await;
+    role("member").await;
     let doc_uri = format!("/api/documents/{a_id}");
     let after = send(&app, Method::GET, &doc_uri, Some(&w1), None)
         .await
@@ -1053,7 +1053,7 @@ async fn reconnecting_without_changes_is_not_an_edit() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "다시 붙기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = common::create_doc(&app, &writer, &ws, "지운 흔적").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let doc_uri = format!("/api/documents/{id}");
@@ -1097,7 +1097,7 @@ async fn reconnecting_without_changes_is_not_an_edit() {
         .await
         .unwrap();
     again
-        .announce(4242, 1, r#"{"user":{"name":"writer"}}"#)
+        .announce(4242, 1, r#"{"user":{"name":"member"}}"#)
         .await;
     assert!(
         again.until(|c| c.presence.contains_key(&4242)).await,
@@ -1172,7 +1172,7 @@ async fn live_body_pins_the_file_versions_it_points_to() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "실시간 첨부").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = common::create_doc(&app, &writer, &ws, "그림 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let target = json!({ "target": { "kind": "document", "id": id }, "name": "그림.txt" });
@@ -1278,7 +1278,7 @@ async fn trashed_document_keeps_live_file_pins() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "휴지통 실시간 첨부").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = common::create_doc(&app, &writer, &ws, "버릴 그림 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let target = json!({ "target": { "kind": "document", "id": id }, "name": "그림.txt" });
@@ -1347,7 +1347,7 @@ async fn deleting_a_version_right_after_a_live_reference_is_refused() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "실시간 첨부 경합").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = common::create_doc(&app, &writer, &ws, "경합 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let target = json!({ "target": { "kind": "document", "id": id }, "name": "그림.txt" });
@@ -1397,7 +1397,7 @@ async fn rooms_acknowledge_persisted_state_with_a_snapshot() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "저장 확인").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = common::create_doc(&app, &writer, &ws, "확인 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let on = send(
@@ -1543,7 +1543,7 @@ async fn workspace_export_includes_live_edits() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "실시간 반출").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = common::create_doc(&app, &writer, &ws, "반출 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let on = send(
@@ -1681,7 +1681,7 @@ async fn a_reader_cannot_make_rooms_persist_through_version_delete() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "읽기 저장 유도").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let doc = common::create_doc(&app, &admin, &ws, "열린 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let target = json!({ "target": { "kind": "document", "id": id }, "name": "첨부.txt" });
@@ -1973,7 +1973,7 @@ async fn a_restore_from_outside_the_room_still_conflicts_with_live_edits() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "방 밖 복원").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = common::create_doc(&app, &admin, &ws, "방 밖 복원 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let on = send(
@@ -2027,7 +2027,7 @@ async fn live_restore_setup(
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, label).await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = common::create_doc(&app, &admin, &ws, label).await;
     let on = send(
         &app,
@@ -2100,7 +2100,7 @@ async fn a_failed_checkpoint_stops_the_restore() {
         Method::PUT,
         &format!("/api/workspaces/{ws}/members/{}", writer.id.0),
         Some(&admin),
-        Some(json!({ "role": "reader" })),
+        Some(json!({ "role": "readonly" })),
     )
     .await;
     assert!(demoted.status.is_success(), "{:?}", demoted.json);
@@ -2401,7 +2401,7 @@ async fn moving_a_live_document_into_a_realtime_off_workspace_keeps_the_live_edi
     .await;
     assert_eq!(on.status, StatusCode::NO_CONTENT);
     // 편집자는 옮기기 전 워크스페이스의 작성자일 뿐 새 워크스페이스의 멤버가 아니다.
-    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &from, "member", "member").await;
     let doc = common::create_doc(&app, &admin, &from, "회의록").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let mut e = connect(addr, Some(&writer), &id, true).await.unwrap();
@@ -2485,7 +2485,7 @@ async fn live_move_setup(
     )
     .await;
     assert_eq!(on.status, StatusCode::NO_CONTENT);
-    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &from, "member", "member").await;
     let doc = common::create_doc(&app, &admin, &from, label).await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let mut e = connect(addr, Some(&writer), &id, true).await.unwrap();
@@ -2758,8 +2758,8 @@ async fn live_move_race_setup_rechecking(label: &str, recheck_secs: &str) -> (Te
     )
     .await;
     assert_eq!(on.status, StatusCode::NO_CONTENT);
-    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &from, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &from, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &from, "readonly", "readonly").await;
     let doc = common::create_doc(&app, &admin, &from, label).await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let mut e = connect(addr, Some(&writer), &id, true).await.unwrap();
@@ -3084,7 +3084,7 @@ async fn no_room_opens_while_a_document_moves() {
     )
     .await;
     assert_eq!(on.status, StatusCode::NO_CONTENT);
-    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &from, "member", "member").await;
     let doc = common::create_doc(&app, &admin, &from, "방 없이 옮길 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
@@ -3194,7 +3194,7 @@ async fn a_move_without_a_room_saves_a_live_state_left_pending() {
     let admin = login(&state, "admin").await;
     let from = create_workspace(&app, &admin, "남은 상태 켠 곳").await;
     let to = create_workspace(&app, &admin, "남은 상태 끈 곳").await;
-    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &from, "member", "member").await;
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
     let left = common::create_doc(&app, &admin, &from, "방 없이 남은 상태").await;
@@ -3242,7 +3242,7 @@ async fn a_move_without_a_room_saves_a_live_state_left_pending() {
         Method::PUT,
         &format!("/api/workspaces/{from}/members/{}", writer.id.0),
         Some(&admin),
-        Some(json!({ "role": "reader" })),
+        Some(json!({ "role": "readonly" })),
     )
     .await;
     assert!(demoted.status.is_success(), "{:?}", demoted.json);
@@ -3306,7 +3306,7 @@ async fn a_move_without_a_room_saves_a_live_state_left_pending() {
     .json;
     assert_eq!(history[0]["revision"], saved_at);
     assert_eq!(history[0]["author_name"], "admin");
-    assert_eq!(history[0]["edited_by_names"], json!(["writer"]));
+    assert_eq!(history[0]["edited_by_names"], json!(["member"]));
     assert_eq!(history[1]["edited_by_names"], serde_json::Value::Null);
     let one = send(
         &app,
@@ -3317,7 +3317,7 @@ async fn a_move_without_a_room_saves_a_live_state_left_pending() {
     )
     .await
     .json;
-    assert_eq!(one["edited_by_names"], json!(["writer"]));
+    assert_eq!(one["edited_by_names"], json!(["member"]));
 
     // 방을 연 적 없는 문서: 상태 행도 리비전도 생기지 않는다.
     let never_before = last_revision(&owner, &never_id).await;
@@ -3547,7 +3547,7 @@ async fn an_editor_who_lost_write_access_before_a_move_cannot_edit_during_it() {
         Method::PUT,
         &format!("/api/workspaces/{from}/members/{}", writer.id.0),
         Some(&admin),
-        Some(json!({ "role": "reader" })),
+        Some(json!({ "role": "readonly" })),
     )
     .await;
     assert!(demoted.status.is_success(), "{:?}", demoted.json);
@@ -3599,7 +3599,7 @@ async fn a_restore_without_a_room_saves_a_live_state_left_pending_first() {
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "방 없는 복원").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
     // 리비전 2(저장 API, 실시간을 켜기 전): 복원하면 본문이 바뀌도록. 저장 대기 상태가 없을 문서도 같이 만든다.
@@ -3652,7 +3652,7 @@ async fn a_restore_without_a_room_saves_a_live_state_left_pending_first() {
             assert!(r.status.is_success(), "{:?}", r.json);
         }
     };
-    role("reader").await;
+    role("readonly").await;
     // 권한 재확인(3600초)을 기다리지 않고 독자가 된 연결을 닫는다.
     e.close().await;
     until_no_room(&state, &id).await;
@@ -3682,7 +3682,7 @@ async fn a_restore_without_a_room_saves_a_live_state_left_pending_first() {
     )));
 
     // 편집자가 다시 쓸 수 있으면 그 사람이 작성자로 먼저 리비전을 남기고(대신 저장 아님), 복원은 기준이 지나 충돌이다.
-    role("writer").await;
+    role("member").await;
     let conflict = restore(2).await;
     assert_eq!(conflict.status, StatusCode::CONFLICT, "{:?}", conflict.json);
     assert!(
@@ -3732,8 +3732,8 @@ async fn a_connected_writer_saving_for_an_editor_is_recorded_as_a_stand_in() {
     )
     .await;
     assert_eq!(on.status, StatusCode::NO_CONTENT);
-    let (first, _) = add_member(&app, &state, &admin, &ws, "first-editor", "writer").await;
-    let (second, _) = add_member(&app, &state, &admin, &ws, "second-writer", "writer").await;
+    let (first, _) = add_member(&app, &state, &admin, &ws, "first-editor", "member").await;
+    let (second, _) = add_member(&app, &state, &admin, &ws, "second-writer", "member").await;
     let doc = common::create_doc(&app, &admin, &ws, "대신 저장 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
     let mut a = connect(addr, Some(&first), &id, true).await.unwrap();
@@ -3745,7 +3745,7 @@ async fn a_connected_writer_saving_for_an_editor_is_recorded_as_a_stand_in() {
         Method::PUT,
         &format!("/api/workspaces/{ws}/members/{}", first.id.0),
         Some(&admin),
-        Some(json!({ "role": "reader" })),
+        Some(json!({ "role": "readonly" })),
     )
     .await;
     assert!(demoted.status.is_success(), "{:?}", demoted.json);
@@ -3816,8 +3816,8 @@ async fn a_room_reopened_on_a_pending_state_saves_it_before_a_restore_or_move() 
     let admin = login(&state, "admin").await;
     let from = create_workspace(&app, &admin, "다시 연 방 켠 곳").await;
     let to = create_workspace(&app, &admin, "다시 연 방 끈 곳").await;
-    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &from, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &from, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &from, "readonly", "readonly").await;
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
     let mut docs = Vec::new();
@@ -3880,7 +3880,7 @@ async fn a_room_reopened_on_a_pending_state_saves_it_before_a_restore_or_move() 
         assert!(e.until(acked).await, "the edit was never acknowledged");
         editors.push(e);
     }
-    role("reader").await;
+    role("readonly").await;
     // 권한 재확인(3600초)을 기다리지 않고 독자가 된 연결을 닫는다.
     for e in editors {
         e.close().await;
@@ -3925,7 +3925,7 @@ async fn a_room_reopened_on_a_pending_state_saves_it_before_a_restore_or_move() 
     restorer.close().await;
 
     // 고친 사람이 다시 쓸 수 있고 독자만 방을 열었다: 체크포인트가 그 사람의 리비전으로 남기고 복원은 충돌이다.
-    role("writer").await;
+    role("member").await;
     let r = connect(addr, Some(&reader), &a, true).await.unwrap();
     let conflict = restore(&a, 2).await;
     assert_eq!(conflict.status, StatusCode::CONFLICT, "{:?}", conflict.json);
@@ -4036,7 +4036,7 @@ async fn revoke_while_a_move_waits(
             Method::PUT,
             &path,
             Some(&admin),
-            Some(json!({ "role": "reader" })),
+            Some(json!({ "role": "readonly" })),
         )
         .await
     } else {
@@ -4135,7 +4135,7 @@ async fn demote_while_a_rechecking_move_waits(label: &str, later_lock: bool) -> 
         Method::PUT,
         &format!("/api/workspaces/{from}/members/{}", writer.id.0),
         Some(&admin),
-        Some(json!({ "role": "reader" })),
+        Some(json!({ "role": "readonly" })),
     )
     .await;
     assert!(demoted.status.is_success(), "{:?}", demoted.json);
@@ -4237,7 +4237,7 @@ async fn a_restore_or_move_racing_a_closing_room_keeps_its_edits() {
     let admin = login(&state, "admin").await;
     let from = create_workspace(&app, &admin, "닫히는 방 경합 켠 곳").await;
     let to = create_workspace(&app, &admin, "닫히는 방 경합 끈 곳").await;
-    let (writer, _) = add_member(&app, &state, &admin, &from, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &from, "member", "member").await;
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
     let mut docs = Vec::new();

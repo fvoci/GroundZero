@@ -64,7 +64,7 @@ async fn history_is_listed_and_restore_adds_a_revision_without_erasing_history()
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "기록").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let doc = create_doc(&app, &admin, &ws, "계획").await;
     let v2 = save(&app, &admin, &doc, "첫 안").await;
@@ -137,8 +137,8 @@ async fn restore_follows_save_conflict_and_permission_rules() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "복원 규칙").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = create_doc(&app, &admin, &ws, "문서").await;
     let v2 = save(&app, &admin, &doc, "하나").await;
     let v3 = save(&app, &admin, &v2, "둘").await;
@@ -181,7 +181,7 @@ async fn restore_is_denied_without_write_access_and_request_ids_do_not_cross() {
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "복원 경계").await;
     let other_ws = create_workspace(&app, &admin, "다른 곳").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let stranger = login(&state, "stranger").await;
 
     // 남의 개인 노트, 다른 사람 워크스페이스의 문서: 404.

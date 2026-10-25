@@ -18,7 +18,7 @@ async fn documents_start_from_readable_templates() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "템플릿").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
 
     let template = create_doc(&app, &admin, &ws, "회의록 양식").await;

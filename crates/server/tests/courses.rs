@@ -75,8 +75,8 @@ async fn course_episodes_and_personal_progress() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "강의").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let item = course(&app, &admin, &ws).await;
 
@@ -257,7 +257,7 @@ async fn course_episodes_and_personal_progress() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|p| p["display_name"] == "reader")
+        .find(|p| p["display_name"] == "readonly")
         .unwrap()
         .clone();
     assert_eq!(p["done"], 1);
@@ -374,7 +374,7 @@ async fn completion_dates_links_and_participant_visibility() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "강의 리뷰").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = course(&app, &admin, &ws).await;
 
     let bad = json!({ "subject": "", "instructor": "", "platform": "", "url": "javascript:alert(1)",
@@ -477,7 +477,7 @@ async fn completion_dates_links_and_participant_visibility() {
             .map(|p| p["display_name"].as_str().unwrap().to_owned())
             .collect()
     };
-    assert_eq!(names(participants(admin.clone()).await), ["writer"]);
+    assert_eq!(names(participants(admin.clone()).await), ["member"]);
     let r = send(
         &app,
         Method::PUT,
@@ -567,7 +567,7 @@ async fn two_writers_on_the_same_episode_version_do_not_overwrite() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "강의 동시 수정").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = course(&app, &admin, &ws).await;
     let added = send(
         &app,

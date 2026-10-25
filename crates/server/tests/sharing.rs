@@ -103,8 +103,8 @@ async fn private_team_document_is_visible_to_creator_admin_and_shares_only() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "비공개").await;
-    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "writer").await;
-    let (other, other_email) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
+    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "member").await;
+    let (other, other_email) = add_member(&app, &state, &admin, &ws, "other", "member").await;
     let doc = create_doc(&app, &creator, &ws, "작성자 비공개").await;
 
     // 작성자는 소유 권한이 아니므로 설정을 바꿀 수 없다. 관리자는 바꿀 수 있다.
@@ -226,7 +226,7 @@ async fn shared_personal_note_does_not_reach_the_grantees_workspace_admin() {
     let alice = login(&state, "alice").await;
     let boss = login(&state, "boss").await;
     let ws = create_workspace(&app, &boss, "B의 회사").await;
-    let (bob, bob_email) = add_member(&app, &state, &boss, &ws, "bob", "writer").await;
+    let (bob, bob_email) = add_member(&app, &state, &boss, &ws, "bob", "member").await;
 
     let note = create_note(&app, &alice, "앨리스 개인 노트").await;
     share(&app, &alice, &note, &bob_email, "write").await;
@@ -361,8 +361,8 @@ async fn move_requires_the_reviewed_preview_and_changes_who_can_see() {
     let alice = login(&state, "alice").await;
     let src = create_workspace(&app, &alice, "출발").await;
     let dst = create_workspace(&app, &alice, "도착").await;
-    let (src_reader, _) = add_member(&app, &state, &alice, &src, "src-reader", "reader").await;
-    let (dst_writer, _) = add_member(&app, &state, &alice, &dst, "dst-writer", "writer").await;
+    let (src_reader, _) = add_member(&app, &state, &alice, &src, "src-reader", "readonly").await;
+    let (dst_writer, _) = add_member(&app, &state, &alice, &dst, "dst-writer", "member").await;
     let doc = create_doc(&app, &alice, &src, "옮길 문서").await;
     assert_eq!(get(&app, &src_reader, &doc).await.0, StatusCode::OK);
 
@@ -428,7 +428,7 @@ async fn moving_a_private_document_where_the_mover_loses_access_still_completes(
     let app = common::app(&state);
     let alice = login(&state, "alice").await;
     let src = create_workspace(&app, &alice, "출발").await;
-    let (creator, _) = add_member(&app, &state, &alice, &src, "creator", "writer").await;
+    let (creator, _) = add_member(&app, &state, &alice, &src, "creator", "member").await;
     let boss = login(&state, "boss").await;
     let dst = create_workspace(&app, &boss, "남의 팀").await;
     let alice_email = unique_email("alice-dst");
@@ -440,7 +440,7 @@ async fn moving_a_private_document_where_the_mover_loses_access_still_completes(
         Method::POST,
         &format!("/api/workspaces/{dst}/invitations"),
         Some(&boss),
-        Some(json!({ "email": alice_email, "role": "writer" })),
+        Some(json!({ "email": alice_email, "role": "member" })),
     )
     .await;
     let alice_with_email = login_with_email(&state, "alice-src", &alice_email, true).await;
@@ -509,7 +509,7 @@ async fn personal_note_moves_into_a_workspace_as_private() {
         Method::POST,
         &format!("/api/workspaces/{ws}/invitations"),
         Some(&boss),
-        Some(json!({ "email": alice_email, "role": "writer" })),
+        Some(json!({ "email": alice_email, "role": "member" })),
     )
     .await;
     send(
@@ -523,7 +523,7 @@ async fn personal_note_moves_into_a_workspace_as_private() {
         None,
     )
     .await;
-    let (peer, _) = add_member(&app, &state, &boss, &ws, "peer", "writer").await;
+    let (peer, _) = add_member(&app, &state, &boss, &ws, "peer", "member").await;
 
     let note = create_note(&app, &alice2, "개인 → 팀").await;
     let uri = format!("/api/documents/{}/move", note["id"].as_str().unwrap());
@@ -552,8 +552,8 @@ async fn copies_of_private_documents_stay_private() {
     let app = common::app(&state);
     let boss = login(&state, "boss").await;
     let ws = create_workspace(&app, &boss, "팀").await;
-    let (member, member_email) = add_member(&app, &state, &boss, &ws, "member", "writer").await;
-    let (peer, _) = add_member(&app, &state, &boss, &ws, "peer", "writer").await;
+    let (member, member_email) = add_member(&app, &state, &boss, &ws, "member", "member").await;
+    let (peer, _) = add_member(&app, &state, &boss, &ws, "peer", "member").await;
     let outsider = login(&state, "outsider").await;
     let note = create_note(&app, &outsider, "외부 노트").await;
     share(&app, &outsider, &note, &member_email, "read").await;
@@ -677,8 +677,8 @@ async fn export_follows_download_permission_and_is_audited() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "내보내기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let doc = create_doc(&app, &writer, &ws, "보고서").await;
     assert_eq!(

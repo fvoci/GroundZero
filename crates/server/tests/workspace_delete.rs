@@ -138,7 +138,7 @@ async fn only_the_owner_deletes_and_everyone_loses_access_until_restored() {
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "지울 공간").await;
     let (admin, _) = add_member(&app, &state, &owner, &ws, "admin", "admin").await;
-    let (writer, _) = add_member(&app, &state, &owner, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &owner, &ws, "member", "member").await;
     let doc = create_doc(&app, &writer, &ws, "회의록").await;
     let doc_uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
     // 밖의 사람에게 공유하고 공개 링크도 만든다.
@@ -177,7 +177,7 @@ async fn only_the_owner_deletes_and_everyone_loses_access_until_restored() {
         Method::POST,
         &format!("/api/workspaces/{ws}/invitations"),
         Some(&owner),
-        Some(json!({ "email": invitee_email, "role": "reader" })),
+        Some(json!({ "email": invitee_email, "role": "readonly" })),
     )
     .await;
     assert_eq!(inv.status, StatusCode::CREATED, "{:?}", inv.json);
@@ -338,7 +338,7 @@ async fn purge_removes_everything_but_personal_time_and_expiry_purges_in_the_wor
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "영구 삭제").await;
-    let (writer, _) = add_member(&app, &state, &owner, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &owner, &ws, "member", "member").await;
     let task = fill(&app, &owner, &ws).await;
     let entry = send(
         &app,

@@ -65,8 +65,8 @@ async fn study_units_are_shared_and_progress_is_personal() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "스터디").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let study = module(&app, &admin, &ws, "study", "STU").await;
     let lecture = module(&app, &admin, &ws, "course", "LEC").await;
@@ -219,7 +219,7 @@ async fn study_units_are_shared_and_progress_is_personal() {
         }
     };
     let list = participants(writer.clone()).await;
-    assert_eq!(list[0]["display_name"], "reader", "{list:?}");
+    assert_eq!(list[0]["display_name"], "readonly", "{list:?}");
     assert_eq!(list[0]["done"], 1);
     assert_eq!(list[0]["done_amount"], 30);
     assert_eq!(list[0]["overdue"], 2);
@@ -300,7 +300,7 @@ async fn two_writers_on_the_same_unit_version_do_not_overwrite() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "스터디 동시 수정").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let study = module(&app, &admin, &ws, "study", "STV").await;
     let item = open_item(&app, &admin, &study, "통계 스터디").await;
     let added = send(

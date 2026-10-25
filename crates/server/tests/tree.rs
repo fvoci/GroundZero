@@ -77,7 +77,7 @@ async fn children_are_created_ordered_and_moved_within_the_tree() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "트리").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let guide = create_doc(&app, &admin, &ws, "안내").await;
     let notes = create_doc(&app, &admin, &ws, "기록").await;
 
@@ -166,8 +166,8 @@ async fn parents_must_be_in_the_same_place_and_hidden_parents_are_not_revealed()
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "같은 자리").await;
     let other = create_workspace(&app, &admin, "다른 자리").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
     let here = create_doc(&app, &admin, &ws, "여기").await;
     let there = create_doc(&app, &admin, &other, "저기").await;
     let note = send(

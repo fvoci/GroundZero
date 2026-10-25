@@ -61,9 +61,9 @@ async fn deleted_documents_disappear_and_come_back_with_their_subtree() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "휴지통").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let parent = create_doc(&app, &writer, &ws, "상위").await;
     let child = send(
         &app,
@@ -162,7 +162,7 @@ async fn items_and_tasks_go_to_the_trash_together_and_expire() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "만료").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let it = item(&app, &admin, &ws, "TRS").await;
     let task = send(
         &app,
@@ -320,8 +320,8 @@ async fn trashed_content_is_closed_everywhere_and_others_children_stay() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "닫기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
 
     // 공개 링크는 문서를 지우면 닫힌다.
     let public = create_doc(&app, &admin, &ws, "공개").await;
@@ -602,7 +602,7 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "모듈 휴지통").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let post = |user: &TestUser, uri: String, body: Value| {
         let app = app.clone();
         let user = user.clone();
@@ -1275,14 +1275,14 @@ async fn trashing_a_document_moved_to_another_workspace_meanwhile_conflicts() {
     let admin = login(&state, "admin").await;
     let w1 = create_workspace(&app, &admin, "옮기기 전").await;
     let w2 = create_workspace(&app, &admin, "옮긴 뒤").await;
-    let (writer, email) = add_member(&app, &state, &admin, &w1, "author", "writer").await;
+    let (writer, email) = add_member(&app, &state, &admin, &w1, "author", "member").await;
     // 쓴 사람은 옮겨 갈 워크스페이스에도 있다(읽기만).
     let inv = send(
         &app,
         Method::POST,
         &format!("/api/workspaces/{w2}/invitations"),
         Some(&admin),
-        Some(json!({ "email": email, "role": "reader" })),
+        Some(json!({ "email": email, "role": "readonly" })),
     )
     .await;
     let accepted = send(
@@ -1362,8 +1362,8 @@ async fn trashed_items_keep_assignees_who_did_not_lose_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "휴지통 담당자").await;
-    let (keep, _) = add_member(&app, &state, &admin, &ws, "keeper", "writer").await;
-    let (gone, _) = add_member(&app, &state, &admin, &ws, "leaver", "writer").await;
+    let (keep, _) = add_member(&app, &state, &admin, &ws, "keeper", "member").await;
+    let (gone, _) = add_member(&app, &state, &admin, &ws, "leaver", "member").await;
     let it = item(&app, &admin, &ws, "TAS").await;
     let item_id = it["id"].as_str().unwrap();
     let task = new_task(&app, &admin, item_id, "담당 업무", None).await;
@@ -1508,7 +1508,7 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
     // 비공개 설정은 문서 소유 권한자(여기서는 관리자)가 한다.
     let author = admin.clone();
     let (helper, helper_email) =
-        add_member(&app, &state, &admin, &ws, "doc-helper", "writer").await;
+        add_member(&app, &state, &admin, &ws, "doc-helper", "member").await;
     let doc = create_doc(&app, &author, &ws, "비공개 문서").await;
     let doc_id = doc["id"].as_str().unwrap();
     let private = send(
@@ -1614,7 +1614,7 @@ async fn personal_trash_lists_and_purges_only_the_owners_notes() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "개인 휴지통").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let note = |user: &TestUser, title: &str| {
         let app = app.clone();
         let user = user.clone();

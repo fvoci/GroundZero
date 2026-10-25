@@ -109,8 +109,8 @@ async fn tasks_share_the_module_sequence_and_follow_item_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "업무").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let item = module_item(&app, &admin, &ws, "DEV").await;
     assert_eq!(item["reference"], "DEV-1");
@@ -278,8 +278,8 @@ async fn assignees_must_see_the_item_and_lose_assignments_with_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "담당").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
     let outsider = login(&state, "outsider").await;
     let item = module_item(&app, &admin, &ws, "DEV").await;
     let t = task(&app, &admin, &item, "배포").await;
@@ -389,7 +389,7 @@ async fn checklists_are_idempotent_and_reader_cannot_toggle() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "체크리스트").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let item = module_item(&app, &admin, &ws, "DEV").await;
     make_public(&app, &admin, &item).await;
     let t = task(&app, &admin, &item, "준비").await;
@@ -560,7 +560,7 @@ async fn demotion_drops_assignments_on_items_the_member_can_no_longer_see() {
         Method::PUT,
         &format!("/api/workspaces/{ws}/members/{}", deputy.id.0),
         Some(&admin),
-        Some(json!({ "role": "writer" })),
+        Some(json!({ "role": "member" })),
     )
     .await;
     assert!(r.status.is_success(), "{:?}", r.json);
@@ -592,7 +592,7 @@ async fn checklist_rename_and_toggle_by_two_people_both_stay() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "체크리스트 동시").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "CHK").await;
     make_public(&app, &admin, &item).await;
     let t = task(&app, &admin, &item, "보고서").await;
@@ -719,7 +719,7 @@ async fn conditional_moves_refuse_a_place_changed_since_it_was_read() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "조건부 이동").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "CMV").await;
     make_public(&app, &admin, &item).await;
     let a = task(&app, &admin, &item, "가").await;
@@ -997,7 +997,7 @@ async fn a_rejected_create_leaves_no_task_and_no_relations() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "한 번에 만들기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
     let item = module_item(&app, &admin, &ws, "CSV").await;
     make_public(&app, &admin, &item).await;
@@ -1068,7 +1068,7 @@ async fn a_create_carries_every_field_and_a_replay_returns_the_first_task() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "한 번에 만들기 재시도").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "CSV").await;
     make_public(&app, &admin, &item).await;
     let uri = format!("/api/items/{}/tasks", item["id"].as_str().unwrap());
@@ -1167,7 +1167,7 @@ async fn a_replay_tells_a_deleted_task_from_a_lost_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "한 번에 만들기 404").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "CSV").await;
     make_public(&app, &admin, &item).await;
     let uri = format!("/api/items/{}/tasks", item["id"].as_str().unwrap());

@@ -107,9 +107,9 @@ async fn analysis_records_pin_file_versions_and_follow_item_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "연구 기록").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let research = module(&app, &admin, &ws, "research", "RES").await;
     let item = open_item(&app, &admin, &research, "학습 동기").await;
@@ -375,7 +375,7 @@ async fn old_versions_expire_unless_something_refers_to_them() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "버전 보존").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let research = module(&app, &admin, &ws, "research", "KEEP").await;
     let item = open_item(&app, &admin, &research, "보존 연구").await;
     // 파일 하나에 버전 4개: v1(기록이 연결), v2(아무도 안 씀), v3(문서 리비전의 이미지), v4(지금).
@@ -526,7 +526,7 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     let admin = login(&state, "admin").await;
     let outsider = login(&state, "outsider").await;
     let ws = create_workspace(&app, &admin, "버전 보존 2").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let research = module(&app, &admin, &ws, "research", "KEEP2").await;
     let item = open_item(&app, &admin, &research, "보존 연구").await;
     let two_versions = |name: &'static str| {
@@ -749,7 +749,7 @@ async fn trash_expiry_keeps_files_with_referenced_versions() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "만료 보호").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let research = module(&app, &admin, &ws, "research", "EXP").await;
     let item = open_item(&app, &admin, &research, "만료 연구").await;
     let with_v2 = |name: &'static str, item: String| {
@@ -894,7 +894,7 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "만료 경합").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let research = module(&app, &admin, &ws, "research", "RACE").await;
     let item = open_item(&app, &admin, &research, "경합 연구").await;
     let owner = owner_pool().await;
@@ -1019,7 +1019,7 @@ async fn trash_expiry_of_documents_honours_live_references_and_breaks_cycles() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "문서 만료").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = |title: &'static str| {
         let (app, writer, ws) = (app.clone(), writer.clone(), ws.clone());
         async move {
@@ -1103,9 +1103,9 @@ async fn kept_expired_bundles_restore_with_existing_permissions() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보존 되살리기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let research = module(&app, &admin, &ws, "research", "KEPT").await;
     let item = open_item(&app, &admin, &research, "보존 연구").await;
     let file = new_file(&app, &writer, &item, "plot.png", b"one").await;
@@ -1326,7 +1326,7 @@ async fn records_keep_a_member_who_left_while_other_fields_change() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "나간 출석자").await;
-    let (gone, _) = add_member(&app, &state, &admin, &ws, "gone", "writer").await;
+    let (gone, _) = add_member(&app, &state, &admin, &ws, "gone", "member").await;
     let outsider = login(&state, "outsider").await;
     let study = module(&app, &admin, &ws, "study", "LFT").await;
     let group = open_item(&app, &admin, &study, "읽기 모임").await;
@@ -1414,7 +1414,7 @@ async fn kept_ids_come_from_the_version_being_replaced() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "판 묶음").await;
-    let (gone, _) = add_member(&app, &state, &admin, &ws, "gone", "writer").await;
+    let (gone, _) = add_member(&app, &state, &admin, &ws, "gone", "member").await;
     let study = module(&app, &admin, &ws, "study", "KVR").await;
     let group = open_item(&app, &admin, &study, "읽기 모임").await;
     let created = send(

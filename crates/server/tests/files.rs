@@ -162,8 +162,8 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "파일").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let doc = create_doc(&app, &writer, &ws, "자료").await;
     let doc_id = doc["id"].as_str().unwrap();
@@ -651,7 +651,7 @@ async fn concurrent_starts_and_old_version_cleanup() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "버전 정리").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let doc = create_doc(&app, &admin, &ws, "자료").await;
     let body = json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] },
                        "name": "v.txt", "size": 3, "content_type": "text/plain" });
@@ -801,7 +801,7 @@ async fn moving_a_document_takes_its_attachments_along() {
     let src = create_workspace(&app, &alice, "첨부 출발").await;
     let dst = create_workspace(&app, &alice, "첨부 도착").await;
     let (src_admin, _) = add_member(&app, &state, &alice, &src, "src-admin", "admin").await;
-    let (dst_writer, _) = add_member(&app, &state, &alice, &dst, "dst-writer", "writer").await;
+    let (dst_writer, _) = add_member(&app, &state, &alice, &dst, "dst-writer", "member").await;
     let doc = create_doc(&app, &alice, &src, "첨부 문서").await;
     let doc_id = doc["id"].as_str().unwrap().to_owned();
     let body = json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc_id },

@@ -65,7 +65,7 @@ async fn invitation_requires_the_verified_invited_email() {
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "초대").await;
     let email = unique_email("bob");
-    let inv = invite(&app, &owner, &ws, &email, "writer").await;
+    let inv = invite(&app, &owner, &ws, &email, "member").await;
     let id = inv["id"].as_str().unwrap();
 
     // 다른 이메일, 같은 이메일이지만 미검증: 초대가 보이지 않고 수락할 수 없다(링크만으로 가입 불가).
@@ -81,7 +81,7 @@ async fn invitation_requires_the_verified_invited_email() {
     let bob = login_with_email(&state, "bob", &email.to_uppercase(), true).await;
     let mine = send(&app, Method::GET, "/api/invitations", Some(&bob), None).await;
     assert_eq!(mine.json[0]["workspace_name"], "초대");
-    assert_eq!(mine.json[0]["role"], "writer");
+    assert_eq!(mine.json[0]["role"], "member");
     assert_eq!(accept(&app, &bob, id).await, StatusCode::OK);
     assert_eq!(
         accept(&app, &bob, id).await,
@@ -95,7 +95,7 @@ async fn invitation_requires_the_verified_invited_email() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|w| w["id"] == ws.as_str() && w["role"] == "writer")
+            .any(|w| w["id"] == ws.as_str() && w["role"] == "member")
     );
     // 작성자는 문서를 만들 수 있다.
     create_doc(&app, &bob, &ws, "밥의 문서").await;
@@ -110,7 +110,7 @@ async fn decline_and_revoke_close_invitations() {
     let email = unique_email("carol");
     let carol = login_with_email(&state, "carol", &email, true).await;
 
-    let inv = invite(&app, &owner, &ws, &email, "reader").await;
+    let inv = invite(&app, &owner, &ws, &email, "readonly").await;
     let id = inv["id"].as_str().unwrap();
     let declined = send(
         &app,
@@ -123,7 +123,7 @@ async fn decline_and_revoke_close_invitations() {
     assert_eq!(declined.status, StatusCode::NO_CONTENT);
     assert_eq!(accept(&app, &carol, id).await, StatusCode::CONFLICT);
 
-    let again = invite(&app, &owner, &ws, &email, "reader").await;
+    let again = invite(&app, &owner, &ws, &email, "readonly").await;
     let again_id = again["id"].as_str().unwrap();
     let pending = send(
         &app,
@@ -152,13 +152,13 @@ async fn roles_are_enforced_and_only_admins_manage_members() {
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "역할").await;
-    let writer = add_member(&app, &state, &owner, &ws, "writer", "writer").await;
+    let writer = add_member(&app, &state, &owner, &ws, "member", "member").await;
     let doc = create_doc(&app, &writer, &ws, "작성자 문서").await;
 
     // 작성자는 멤버를 관리할 수 없다(403). 비멤버는 404.
     let outsider = login(&state, "outsider").await;
     let path = format!("/api/workspaces/{ws}/members/{}", writer.id.0);
-    let body = json!({ "role": "reader" });
+    let body = json!({ "role": "readonly" });
     assert_eq!(
         send(&app, Method::PUT, &path, Some(&writer), Some(body.clone()))
             .await
@@ -245,7 +245,7 @@ async fn roles_are_enforced_and_only_admins_manage_members() {
     };
     assert!(email_of(&as_admin.json).is_string());
     assert!(email_of(&as_reader.json).is_null());
-    assert_eq!(as_reader.json["my_role"], "reader");
+    assert_eq!(as_reader.json["my_role"], "readonly");
 }
 
 #[tokio::test]
@@ -278,7 +278,7 @@ async fn owner_is_protected_and_ownership_transfer_needs_acceptance() {
         Method::PUT,
         &owner_path,
         Some(&admin2),
-        Some(json!({ "role": "writer" })),
+        Some(json!({ "role": "member" })),
     )
     .await;
     assert_eq!(demote.status, StatusCode::CONFLICT);
@@ -375,7 +375,7 @@ async fn removed_member_loses_access_and_team_documents_remain() {
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "제거").await;
-    let writer = add_member(&app, &state, &owner, &ws, "leaver", "writer").await;
+    let writer = add_member(&app, &state, &owner, &ws, "leaver", "member").await;
     let doc = create_doc(&app, &writer, &ws, "팀 문서").await;
     let uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
 
@@ -406,7 +406,7 @@ async fn groups_hold_only_workspace_members() {
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "그룹").await;
-    let member = add_member(&app, &state, &owner, &ws, "member", "writer").await;
+    let member = add_member(&app, &state, &owner, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
 
     let created = send(
@@ -497,13 +497,13 @@ async fn membership_changes_are_audited() {
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "감사").await;
-    let member = add_member(&app, &state, &owner, &ws, "m", "writer").await;
+    let member = add_member(&app, &state, &owner, &ws, "m", "member").await;
     send(
         &app,
         Method::PUT,
         &format!("/api/workspaces/{ws}/members/{}", member.id.0),
         Some(&owner),
-        Some(json!({ "role": "reader" })),
+        Some(json!({ "role": "readonly" })),
     )
     .await;
     send(
@@ -665,7 +665,7 @@ async fn adding_a_member_who_is_being_removed_does_not_survive_the_removal() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "내보내기 경합").await;
-    let leaving = add_member(&app, &state, &admin, &ws, "leaving", "writer").await;
+    let leaving = add_member(&app, &state, &admin, &ws, "leaving", "member").await;
     let item = private_item(&app, &admin, &ws, "PRV").await;
     let group = send(
         &app,
@@ -682,7 +682,7 @@ async fn adding_a_member_who_is_being_removed_does_not_survive_the_removal() {
     for target in ["item", "group"] {
         // 매번 다시 넣고 시작한다.
         if target == "group" {
-            let again = add_member(&app, &state, &admin, &ws, "leaving-again", "writer").await;
+            let again = add_member(&app, &state, &admin, &ws, "leaving-again", "member").await;
             run_removal_race(
                 &app, &state, &admin, ws_id, &again, target, &item, &group_id,
             )
@@ -802,7 +802,7 @@ async fn revoking_an_invitation_being_accepted_does_not_overwrite_the_acceptance
     let ws = create_workspace(&app, &admin, "철회 경합").await;
     let email = unique_email("invitee");
     let invitee = login_with_email(&state, "invitee", &email, true).await;
-    let inv = invite(&app, &admin, &ws, &email, "writer").await;
+    let inv = invite(&app, &admin, &ws, &email, "member").await;
     let inv_id: uuid::Uuid = inv["id"].as_str().unwrap().parse().unwrap();
 
     let mut t1 = state.db.begin_as(invitee.id).await.unwrap();
@@ -920,7 +920,7 @@ async fn an_admin_demoted_meanwhile_cannot_add_to_a_group() {
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "강등 중 그룹").await;
     let admin = add_member(&app, &state, &owner, &ws, "admin", "admin").await;
-    let member = add_member(&app, &state, &owner, &ws, "member", "writer").await;
+    let member = add_member(&app, &state, &owner, &ws, "member", "member").await;
     let group = send(
         &app,
         Method::POST,
@@ -962,7 +962,7 @@ async fn an_admin_demoted_meanwhile_cannot_revoke_an_invitation() {
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "강등 중 철회").await;
     let admin = add_member(&app, &state, &owner, &ws, "admin", "admin").await;
-    let inv = invite(&app, &owner, &ws, &unique_email("invitee"), "writer").await;
+    let inv = invite(&app, &owner, &ws, &unique_email("invitee"), "member").await;
     let inv_id = inv["id"].as_str().unwrap().to_owned();
     let ws_id: uuid::Uuid = ws.parse().unwrap();
 
@@ -995,7 +995,7 @@ async fn setting_item_members_does_not_deadlock_with_the_workspace_assignee_lock
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "항목 멤버 잠금 순서").await;
-    let member = add_member(&app, &state, &owner, &ws, "member", "writer").await;
+    let member = add_member(&app, &state, &owner, &ws, "member", "member").await;
     let item = private_item(&app, &owner, &ws, "LKM").await;
 
     let db = owner_pool().await;
