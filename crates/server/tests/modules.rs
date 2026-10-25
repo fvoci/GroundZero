@@ -146,12 +146,12 @@ async fn move_to(
     let target =
         json!({ "target_workspace_id": ws, "target_item_id": item.map(|i| i["id"].clone()) });
     let preview = send(app, Method::POST, &uri, Some(user), Some(target.clone())).await;
-    if preview.status != StatusCode::CONFLICT || preview.json.get("gains").is_none() {
+    if preview.status != StatusCode::CONFLICT || preview.json.get("changes").is_none() {
         return (preview.status, preview.json);
     }
     let mut body = target;
-    body["acknowledged"] =
-        json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    // D-114: 표시 이름 집합 대신 사용자별 등급 변화를 확인한다.
+    body["acknowledged"] = json!({ "changes": preview.json["changes"] });
     let r = send(app, Method::POST, &uri, Some(user), Some(body)).await;
     (r.status, r.json)
 }
@@ -542,7 +542,12 @@ async fn documents_move_between_wiki_and_items() {
     )
     .await;
     assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
-    assert_eq!(preview.json["loses"], json!(["peer"]));
+    assert_eq!(
+        preview.json["changes"],
+        json!([
+            { "change": "lose", "user_id": peer.id.0, "display_name": "peer", "from_grade": "write", "to_grade": null }
+        ])
+    );
     let (status, moved) = move_to(&app, &admin, &doc, &ws, Some(&it)).await;
     assert_eq!(status, StatusCode::OK, "{moved:?}");
     assert_eq!(moved["reference"], "DEV-2");

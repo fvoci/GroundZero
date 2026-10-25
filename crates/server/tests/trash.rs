@@ -544,9 +544,9 @@ async fn purged_repeating_occurrences_are_not_recreated() {
                       "start_date": null, "due_date": yesterday, "estimate_minutes": null, "tags": [], "assignee_ids": [],
                       "milestone": false }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
-    // D-125: 반복 규칙도 직전 업무 판을 기준으로 변경한다.
+    // D-125: 반복 규칙 편집의 기준은 기존 규칙이며 최초 설정은 null이다.
     let recurrence = send(&app, Method::PUT, &format!("/api/tasks/{}/recurrence", t["id"].as_str().unwrap()), Some(&admin),
-         Some(json!({ "base_version": updated.json["version"], "rule": {"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null}, "timezone": "Asia/Seoul" }))).await;
+         Some(json!({ "base": null, "rule": {"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null}, "timezone": "Asia/Seoul" }))).await;
     assert_eq!(recurrence.status, StatusCode::OK, "{:?}", recurrence.json);
     let tasks = send(
         &app,
@@ -711,10 +711,13 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     let shared_uri = format!("/api/documents/{}", shared_doc["id"].as_str().unwrap());
     let carol_email = unique_email("carol");
     let carol = login_with_email(&state, "carol", &carol_email, true).await;
+    // D-114: 모듈 밖 공유도 조직 경계 안에서만 허용한다.
+    let organization = common::organization_of_workspace(&ws).await;
+    common::join_organization(organization, &carol, "member").await;
     let r = post(
         &admin,
         format!("{shared_uri}/shares"),
-        json!({ "email": carol_email, "permission": "write" }),
+        json!({ "email": carol_email, "permission": "write", "organization_id": organization }),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);

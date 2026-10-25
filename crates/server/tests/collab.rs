@@ -1777,7 +1777,7 @@ async fn a_moved_room_follows_its_document_to_the_new_workspace() {
         &format!("/api/documents/{id}/move"),
         Some(&admin),
         Some(json!({ "target_workspace_id": to, "target_item_id": null,
-                     "acknowledged": { "gains": preview.json["gains"], "loses": preview.json["loses"] } })),
+                     "acknowledged": { "changes": preview.json["changes"] } })),
     )
     .await;
     assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
@@ -2431,7 +2431,7 @@ async fn moving_a_live_document_into_a_realtime_off_workspace_keeps_the_live_edi
         &format!("/api/documents/{id}/move"),
         Some(&admin),
         Some(json!({ "target_workspace_id": to, "target_item_id": null,
-                     "acknowledged": { "gains": preview.json["gains"], "loses": preview.json["loses"] } })),
+                     "acknowledged": { "changes": preview.json["changes"] } })),
     )
     .await;
     assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
@@ -2509,7 +2509,8 @@ async fn move_to(app: &Router, user: &TestUser, id: &str, to: &str) -> common::R
         Some(target),
     )
     .await;
-    let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    // D-114: 사용자 id·등급 변화가 그대로인 미리보기만 확인한다.
+    let ack = json!({ "changes": preview.json["changes"] });
     send(
         app,
         Method::POST,
@@ -2585,7 +2586,7 @@ async fn a_failed_checkpoint_stops_the_move() {
     .await
     .json;
     assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
-    assert!(refused.json.get("gains").is_none(), "{:?}", refused.json);
+    assert!(refused.json.get("changes").is_none(), "{:?}", refused.json);
     assert_eq!(doc["workspace_id"], from.as_str(), "the document moved");
 
     // 다시 하면 방의 편집을 리비전으로 남기고 옮긴다.
@@ -2636,7 +2637,7 @@ async fn a_move_without_permission_leaves_the_room_alone() {
         Some(&writer),
         Some(
             json!({ "target_workspace_id": elsewhere, "target_item_id": null,
-                     "acknowledged": { "gains": [], "loses": [] } }),
+                     "acknowledged": { "changes": [] } }),
         ),
     )
     .await;
@@ -2900,7 +2901,8 @@ async fn edits_held_by_a_move_that_does_not_happen_are_accepted() {
                 &format!("/api/documents/{id}/move"),
                 Some(&admin),
                 Some(json!({ "target_workspace_id": to, "target_item_id": null,
-                             "acknowledged": { "gains": ["없는 사람"], "loses": [] } })),
+                             "acknowledged": { "changes": [{ "change": "gain", "user_id": uuid::Uuid::now_v7(),
+                                 "display_name": "없는 사람", "from_grade": null, "to_grade": "read" }] } })),
             )
             .await
         }
@@ -2917,7 +2919,7 @@ async fn edits_held_by_a_move_that_does_not_happen_are_accepted() {
     hold.rollback().await.unwrap();
     let refused = request.await.unwrap();
     assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
-    assert!(refused.json["gains"].is_array(), "{:?}", refused.json);
+    assert!(refused.json["changes"].is_array(), "{:?}", refused.json);
     assert!(
         r.until(|c| c.text().contains("체크포인트 뒤 문단")).await,
         "the held edit did not reach the other connection"
@@ -2984,7 +2986,7 @@ async fn a_move_dropped_before_the_room_handles_it_changes_nothing() {
         doc: fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap()),
         user: admin.id,
         input: serde_json::from_value(json!({ "target_workspace_id": to, "target_item_id": null,
-            "acknowledged": { "gains": preview.json["gains"], "loses": preview.json["loses"] } }))
+            "acknowledged": { "changes": preview.json["changes"] } }))
         .unwrap(),
     };
     let mut moving = Box::pin(
@@ -3393,7 +3395,7 @@ async fn a_move_held_past_the_lock_limit_is_refused_and_the_room_carries_on() {
     let refused = request.await.unwrap();
     assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
     assert_eq!(refused.json["error"], "invalid_state", "{:?}", refused.json);
-    assert!(refused.json.get("gains").is_none(), "{:?}", refused.json);
+    assert!(refused.json.get("changes").is_none(), "{:?}", refused.json);
     // 방은 살아 있다: 기다린 편집을 받아 다른 연결에 보내고 확인한다. 연결은 열려 있다.
     assert!(
         r.until(|c| c.text().contains("잠금을 기다리는 동안 쓴 문단"))
@@ -4207,7 +4209,7 @@ async fn write_access_removed_while_a_move_waits() {
         "{:?}",
         out.reply.json
     );
-    assert!(out.reply.json["loses"].is_array(), "{:?}", out.reply.json);
+    assert!(out.reply.json["changes"].is_array(), "{:?}", out.reply.json);
     let body = out.doc["body"].to_string();
     assert!(
         body.contains("체크포인트 전 문단"),

@@ -562,6 +562,8 @@ async fn items_copy_with_fresh_numbers_and_templates() {
         "{na:?}"
     );
     assert_eq!(na["status"], "todo");
+    // D-116: 새로 시작하는 사본은 상태 이름과 범주를 함께 초기화한다.
+    assert_eq!(na["status_category"], "todo");
     assert!(na["due_date"].is_null());
     assert_eq!(na["priority"], "high");
     assert_eq!(na["estimate_minutes"], 120);
@@ -616,6 +618,7 @@ async fn items_copy_with_fresh_numbers_and_templates() {
         .unwrap()
         .clone();
     assert_eq!(design["status"], "done");
+    assert_eq!(design["status_category"], "done");
     assert_eq!(design["due_date"], "2026-11-01");
 
     // 템플릿 표시는 쓸 수 있는 사람이, 목록에 보인다.
@@ -778,8 +781,13 @@ async fn group_changes_and_leaving_end_item_roles() {
     )
     .await;
     assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
+    // D-114: 같은 이름이 아니라 그룹 구성원의 id와 이동 후 등급으로 접근 유지를 검사한다.
     assert!(
-        !preview.json["loses"].to_string().contains("grouped"),
+        preview.json["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["user_id"] != json!(grouped.id.0) || row["to_grade"].is_string()),
         "{:?}",
         preview.json
     );

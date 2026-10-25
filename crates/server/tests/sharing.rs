@@ -150,6 +150,53 @@ async fn private_team_document_is_visible_to_creator_admin_and_shares_only() {
 }
 
 #[tokio::test]
+async fn shares_require_organization_membership_and_respect_readonly_ceiling() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "공유 경계").await;
+    let doc = create_doc(&app, &admin, &ws, "비공개 공유").await;
+    assert_eq!(
+        settings(&app, &admin, &doc, "private", false).await,
+        StatusCode::OK
+    );
+    let organization = common::organization_of_workspace(&ws).await;
+    let email = unique_email("outside");
+    let outsider = login_with_email(&state, "outside", &email, true).await;
+    let (reader, reader_email) =
+        add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
+    // D-20·D-114: 조직 밖 공유와 읽기 전용의 수정 공유는 각각 400이며 접근을 주지 않는다.
+    for recipient in [&email, &reader_email] {
+        let rejected = send(&app, Method::POST,
+            &format!("/api/documents/{}/shares", doc["id"].as_str().unwrap()),
+            Some(&admin), Some(json!({ "email": recipient, "permission": "write", "organization_id": organization }))).await;
+        assert_eq!(
+            rejected.status,
+            StatusCode::BAD_REQUEST,
+            "{:?}",
+            rejected.json
+        );
+    }
+    assert_eq!(get(&app, &outsider, &doc).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(get(&app, &reader, &doc).await.0, StatusCode::NOT_FOUND);
+    let granted = share(&app, &admin, &doc, &reader_email, "read").await;
+    assert_eq!(get(&app, &reader, &doc).await.1["access"], "read");
+    let list = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{}/shares", doc["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(list.status, StatusCode::OK, "{:?}", list.json);
+    assert_eq!(list.json.as_array().unwrap().len(), 1);
+    assert_eq!(list.json[0]["id"], granted["id"]);
+    assert_eq!(list.json[0]["email"], reader_email);
+    assert_eq!(list.json[0]["display_name"], "readonly");
+}
+
+#[tokio::test]
 async fn share_permissions_and_revocation_take_effect_immediately() {
     let state = common::state();
     let app = common::app(&state);
@@ -349,10 +396,11 @@ async fn move_doc(
     )
     .await;
     // 409라도 미리보기가 아니라 상태 오류(예: 팀 문서 → 개인)면 그대로 돌려준다.
-    if preview.status != StatusCode::CONFLICT || preview.json.get("gains").is_none() {
+    if preview.status != StatusCode::CONFLICT || preview.json.get("changes").is_none() {
         return (preview.status, preview.json);
     }
-    let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    // D-114: 확인은 사용자 id와 이동 전후 등급을 포함한 변화 전체에 대해 한다.
+    let ack = json!({ "changes": preview.json["changes"] });
     let r = send(
         app,
         Method::POST,
@@ -386,8 +434,13 @@ async fn move_requires_the_reviewed_preview_and_changes_who_can_see() {
     )
     .await;
     assert_eq!(preview.status, StatusCode::CONFLICT);
-    assert_eq!(preview.json["loses"], json!(["src-reader"]));
-    assert_eq!(preview.json["gains"], json!(["dst-writer"]));
+    assert_eq!(
+        preview.json["changes"],
+        json!([
+            { "change": "gain", "user_id": dst_writer.id.0, "display_name": "dst-writer", "from_grade": null, "to_grade": "write" },
+            { "change": "lose", "user_id": src_reader.id.0, "display_name": "src-reader", "from_grade": "read", "to_grade": null }
+        ])
+    );
     assert_eq!(preview.json["history_moves_with_document"], true);
 
     // 확인한 미리보기가 지금과 다르면(그사이 멤버가 바뀐 경우 등) 옮기지 않고 새 미리보기를 준다.
@@ -396,7 +449,7 @@ async fn move_requires_the_reviewed_preview_and_changes_who_can_see() {
         Method::POST,
         &uri,
         Some(&alice),
-        Some(json!({ "target_workspace_id": dst, "acknowledged": { "gains": [], "loses": [] } })),
+        Some(json!({ "target_workspace_id": dst, "acknowledged": { "changes": [] } })),
     )
     .await;
     assert_eq!(stale.status, StatusCode::CONFLICT);
@@ -561,7 +614,18 @@ async fn personal_note_moves_into_a_workspace_as_private() {
     )
     .await;
     // 개인 노트는 비공개로 들어가므로 관리자만 새로 볼 수 있다.
-    assert_eq!(preview.json["gains"], json!(["boss"]));
+    let gains: Vec<_> = preview.json["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["change"] == "gain")
+        .collect();
+    assert_eq!(
+        gains,
+        vec![
+            &json!({ "change": "gain", "user_id": boss.id.0, "display_name": "boss", "from_grade": null, "to_grade": "owner" })
+        ]
+    );
     let (status, moved) = move_doc(&app, &alice2, &note, Some(&ws)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(moved["document"]["placement"], "wiki");

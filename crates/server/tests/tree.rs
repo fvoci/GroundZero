@@ -267,7 +267,8 @@ async fn moving_a_parent_elsewhere_leaves_its_children_on_the_old_parent() {
     )
     .await;
     assert_eq!(preview.json["children_left_behind"], 1);
-    let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    // D-114: 사용자 id·등급 변화 전체를 확인한 뒤 이동한다.
+    let ack = json!({ "changes": preview.json["changes"] });
     let moved = send(
         &app,
         Method::POST,
@@ -404,7 +405,7 @@ async fn retries_precision_and_left_behind_order() {
     )
     .await;
     assert_eq!(preview.json["children_left_behind"], 2);
-    let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    let ack = json!({ "changes": preview.json["changes"] });
     let moved = send(
         &app,
         Method::POST,
@@ -450,7 +451,7 @@ async fn concurrent_moves_creates_and_reparents_do_not_deadlock() {
             Some(json!({ "target_workspace_id": dst })),
         )
         .await;
-        let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+        let ack = json!({ "changes": preview.json["changes"] });
         let create_uri = format!("/api/workspaces/{dst}/wiki/documents");
         let (moved, reparented, created) = tokio::join!(
             send(

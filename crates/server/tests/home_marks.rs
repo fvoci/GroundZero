@@ -40,7 +40,9 @@ async fn home_marks_keep_both_categories_order_and_current_visibility() {
     let owner = common::login(&state, "marks-owner").await;
     let ws = common::create_workspace(&app, &owner, "marks").await;
     let (admin, _) = common::add_member(&app, &state, &owner, &ws, "marks-admin", "admin").await;
-    let (reader, _) = common::add_member(&app, &state, &owner, &ws, "marks-reader", "readonly").await;
+    // D-112: 읽기 전용 역할의 홈 표시·접근 경계는 그대로 검증한다.
+    let (reader, _) =
+        common::add_member(&app, &state, &owner, &ws, "marks-reader", "readonly").await;
     let outsider = common::login(&state, "marks-outsider").await;
     let empty = check_home(&state, &owner).await;
     assert_eq!(empty["pins"], json!([]));
