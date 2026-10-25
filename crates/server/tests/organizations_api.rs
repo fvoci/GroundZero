@@ -74,6 +74,11 @@ async fn organization_api_status_matrix_and_email_visibility() {
     let server = login(&w.state, "server admin only").await;
     common::make_server_admin(&server).await;
     let ws_member = w.member("member").await;
+    // login 기본 fixture는 이메일이 없다. 마스킹 여부를 비교할 조직 멤버 모두에게 실제 값을 준다.
+    fixture(
+        "UPDATE fvoci.users SET email = id::text || '@example.test', email_verified = true WHERE id IN ($1,$2,$3)",
+        &[w.owner.id.0, admin.id.0, member.id.0],
+    ).await;
     let removable = login(&w.state, "removable").await;
     common::join_organization(w.org, &removable, "member").await;
     let org = format!("/api/organizations/{}", w.org);
