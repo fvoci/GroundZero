@@ -313,6 +313,66 @@ async fn the_calendar_shows_visible_tasks_and_events_by_the_viewers_days() {
     );
 }
 
+/// #101: 달력의 날 경계도 그 시간대에서 그날 0시가 처음 오는 시점이다(시간 기록·검색과 같은 식, 감사 S21). 날짜는
+/// tzdata의 America/Havana 2026년 전환(`zdump -v -c 2026,2027 America/Havana`)에서 골랐다.
+/// - 2026-11-01: 01:00 CDT → 00:00 CST로 0시가 두 번(04:00Z, 05:00Z) 온다. 첫 0시 직후 일정은 그날에 든다.
+///   `날짜::timestamp AT TIME ZONE`만 쓰면 뒤의 0시(05:00Z)에 시작해 이 일정을 전날로 보냈다.
+/// - 2026-03-08: 00:00 CST → 01:00 CDT로 0시가 없다. 그날은 건너뛴 직후(01:00 CDT = 05:00Z)에 시작하고, 직전
+///   (전날 23:30 CST)은 전날이다.
+#[tokio::test]
+async fn calendar_days_start_at_the_first_midnight_in_the_viewers_zone() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "아바나 달력").await;
+    let item = module_item(&app, &admin, &ws, "HAV", true).await;
+    for (title, starts, ends) in [
+        (
+            "가을 전날 밤",
+            "2026-10-31T23:30:00-04:00",
+            "2026-10-31T23:45:00-04:00",
+        ),
+        (
+            "첫 0시 뒤",
+            "2026-11-01T00:30:00-04:00",
+            "2026-11-01T00:45:00-04:00",
+        ),
+        (
+            "봄 전날 밤",
+            "2026-03-07T23:30:00-05:00",
+            "2026-03-07T23:45:00-05:00",
+        ),
+        (
+            "건너뛴 직후",
+            "2026-03-08T01:00:00-04:00",
+            "2026-03-08T01:15:00-04:00",
+        ),
+    ] {
+        let (status, event) = create(
+            &app,
+            &admin,
+            &item,
+            timed(title, starts, ends, "America/Havana"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{event:?}");
+    }
+    let titles = async |day: &str| -> Vec<String> {
+        let (status, cal) = calendar(&app, &admin, &ws, day, day, "America/Havana").await;
+        assert_eq!(status, StatusCode::OK, "{cal:?}");
+        cal["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v["title"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(titles("2026-10-31").await, ["가을 전날 밤"]);
+    assert_eq!(titles("2026-11-01").await, ["첫 0시 뒤"]);
+    assert_eq!(titles("2026-03-07").await, ["봄 전날 밤"]);
+    assert_eq!(titles("2026-03-08").await, ["건너뛴 직후"]);
+}
+
 /// 워크스페이스·모듈·항목 범위의 같은 달력과 날짜 출처(D-80): 강의·스터디 계획일(내 계획일이 있으면 그것, 본인만),
 /// 투고 제출 예정일·수정 마감일, 산출물 마감일. 볼 수 없는 항목은 나오지 않고, 다른 워크스페이스·범위 밖은 404.
 #[tokio::test]

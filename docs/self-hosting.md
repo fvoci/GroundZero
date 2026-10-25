@@ -238,6 +238,6 @@ docker compose --env-file .env -f deploy/compose.selfhost.yaml logs --no-log-pre
 
 - 비밀 값은 `.env`에만 있고 이미지·로그에 쓰지 않는다. `.env`는 소유자만 읽게 둔다.
 - Meilisearch는 사용 통계 전송을 끈 운영 모드로 뜬다. 색인이 지워지면 앱이 다시 만든다.
-- 실시간 공동 편집(D-70)은 워크스페이스마다 관리자가 워크스페이스 설정에서 켠다(기본 꺼짐). 켜면 문서 화면이 웹소켓(`/api/documents/{id}/collab`)으로 붙으므로 역방향 프록시가 웹소켓 업그레이드(`Upgrade`·`Connection` 헤더)를 앱으로 넘겨야 한다(Caddy는 기본으로 넘김, nginx는 `proxy_http_version 1.1`과 두 헤더 설정). 앱은 브라우저의 `Origin`이 `FVOCI_PUBLIC_URL`과 같을 때만 연결을 받는다. 편집 방은 앱 프로세스 안에 있으므로 앱은 한 개만 띄운다. 연결된 사람의 권한은 `FVOCI_COLLAB_RECHECK_SECS`(기본 30초)마다 다시 확인한다. 꺼진 워크스페이스는 저장할 때 리비전으로 남고, 동시에 고치면 충돌을 알리고 내 초안을 지킨다(D-53).
+- 실시간 공동 편집(D-70)은 워크스페이스마다 관리자가 워크스페이스 설정에서 켠다(기본 꺼짐). 켜면 문서 화면이 웹소켓(`/api/documents/{id}/collab`)으로 붙으므로 역방향 프록시가 웹소켓 업그레이드(`Upgrade`·`Connection` 헤더)를 앱으로 넘겨야 한다(Caddy는 기본으로 넘김, nginx는 `proxy_http_version 1.1`과 두 헤더 설정). 앱은 브라우저의 `Origin`이 `FVOCI_PUBLIC_URL`과 같을 때만 연결을 받는다. 편집 방은 앱 프로세스 안에 있으므로 앱은 한 개만 띄운다. 연결된 사람의 권한은 `FVOCI_COLLAB_RECHECK_SECS`(기본 30초, 1~3600초. 범위 밖이면 앱이 시작하지 않는다)마다 다시 확인한다. 꺼진 워크스페이스는 저장할 때 리비전으로 남고, 동시에 고치면 충돌을 알리고 내 초안을 지킨다(D-53).
 - 앱 한 프로세스가 API와 백그라운드 작업을 함께 한다(`FVOCI_ROLE=all`). 작업은 확인 간격(기본 60초)마다 저장소 정리와 검색 색인 반영을 하고, 휴지통 만료와 이전 파일 버전 정리는 매시간, 반복 업무 회차는 15분마다, 업무 기한·항목 알림은 매시간 한다. 작업은 `all`·`worker` 역할 프로세스만 한다(기본 Compose는 `all` 고정). `FVOCI_ROLE=api`로 띄운 프로세스는 이 작업을 하나도 하지 않는다(알림도 만들지 않는다).
 - 지우기: `docker compose --env-file .env -f deploy/compose.selfhost.yaml down`은 데이터를 남긴다. `down -v`는 모든 볼륨(데이터)을 지운다.
