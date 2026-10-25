@@ -24,6 +24,8 @@
   import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
   import { connection } from '$lib/features/feedback/feedback.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
+  // 작업자 B: 홈에서 초대를 처리한 경우도 서버 미독 수를 즉시 다시 읽는다(D-118).
+  import { invitationChanges } from '$lib/features/home/invitations.svelte';
   import TimeScreen from '$lib/features/time/TimeScreen.svelte';
   import TimerWidget from '$lib/features/time/TimerWidget.svelte';
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
@@ -105,6 +107,14 @@
   // 읽지 않은 알림 수는 서버가 현재 조직 범위로 센다(D-118; 초대는 어느 조직에서나 포함). 화면을 옮길 때 다시 세되
   // 30초 안에는 다시 묻지 않는다. 알림 화면에서 읽음 처리하면 곧바로, 창으로 돌아오거나 조직을 바꾸면 다시 센다.
   const UNREAD_FRESH_MS = 30_000;
+  // 작업자 B: 초대 수락·거절은 경로 이동의 30초 캐시를 기다리지 않는다.
+  let seenInvitationVersion = invitationChanges.version;
+  $effect(() => {
+    const version = invitationChanges.version;
+    if (version === seenInvitationVersion) return;
+    seenInvitationVersion = version;
+    void refreshUnread(true);
+  });
   let unreadCount = $state(0);
   let unreadAt = 0;
   let unreadSeq = 0;
