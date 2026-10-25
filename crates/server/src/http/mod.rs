@@ -22,7 +22,8 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
     members, modules, organizations, public_links, records, recurrence, references, revisions,
-    saved_views, schedule, search_api, study, tasks, time_tracking, trash, workspaces, zotero,
+    saved_views, schedule, search_api, study, task_statuses, tasks, time_tracking, trash,
+    workspaces, zotero,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -261,6 +262,11 @@ async fn api_not_found() -> AppError {
         workspaces::purge,
         organizations::list_mine,
         organizations::get,
+        // 상태 정의 (2단계 코디네이터)
+        task_statuses::list,
+        task_statuses::create,
+        task_statuses::update,
+        task_statuses::delete,
         documents::list_wiki,
         documents::create_wiki,
         documents::get,
@@ -554,6 +560,11 @@ async fn api_not_found() -> AppError {
         organizations::OrganizationSummary,
         organizations::OrganizationLimits,
         organizations::Organization,
+        task_statuses::StatusCategory,
+        task_statuses::TaskStatus,
+        task_statuses::NewTaskStatus,
+        task_statuses::UpdateTaskStatus,
+        task_statuses::DeletedTaskStatus,
         home::UpNextCounts,
         home::SetMark,
         home::MarkState,
@@ -714,6 +725,15 @@ pub fn router(state: AppState) -> Router {
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
         .route("/organizations/{organization_id}", get(organizations::get))
+        // 상태 정의 (2단계 코디네이터)
+        .route(
+            "/items/{item_id}/statuses",
+            get(task_statuses::list).post(task_statuses::create),
+        )
+        .route(
+            "/items/{item_id}/statuses/{status_id}",
+            put(task_statuses::update).delete(task_statuses::delete),
+        )
         .route("/auth-info", get(accounts::auth_info))
         .route(
             "/workspaces",

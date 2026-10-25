@@ -24,6 +24,7 @@ pub mod schedule;
 pub mod search_api;
 pub mod search_text;
 pub mod study;
+pub mod task_statuses;
 pub mod tasks;
 pub mod time_tracking;
 pub mod trash;
