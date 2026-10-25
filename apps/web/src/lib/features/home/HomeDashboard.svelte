@@ -225,7 +225,7 @@
   {/if}
 
   <form
-    class="flex flex-wrap items-end gap-2"
+    class="flex flex-wrap items-end gap-2 rounded-md border bg-card p-2 @md:p-3"
     onsubmit={(e) => void addQuick(e)}
     aria-label={m.home_quick_add()}
   >
@@ -274,15 +274,15 @@
         <Input id="quick-date" type="date" bind:value={quick.date} />
       </div>
     {/if}
-    <div class="flex min-w-48 flex-1 flex-col gap-1">
+    <div class="flex min-w-0 flex-1 basis-48 flex-col gap-1">
       <Label for="quick-title">{m.home_title()}</Label>
       <Input id="quick-title" bind:value={quick.title} maxlength={200} />
     </div>
     <Button type="submit">{m.home_add()}</Button>
+    {#if quickError !== undefined}<p role="alert" class="basis-full text-sm text-destructive">
+        {quickError}
+      </p>{/if}
   </form>
-  {#if quickError !== undefined}<p role="alert" class="text-sm text-destructive">
-      {quickError}
-    </p>{/if}
   <p class="sr-only" aria-live="polite">{quickStatus}</p>
 
   {#if timer.entry !== null}
@@ -304,7 +304,10 @@
 
   <!-- 열 정의가 없으면 암묵 auto 열이 띄어쓰기 없는 긴 글(URL)만큼 늘어나 좁은 화면에서 가로로 넘친다. -->
   <div class="grid grid-cols-1 gap-6 @2xl:grid-cols-2">
-    <section class="flex flex-col gap-2" aria-labelledby="up-next-heading">
+    <section
+      class="flex flex-col gap-2 rounded-md border bg-card p-2 @md:p-3"
+      aria-labelledby="up-next-heading"
+    >
       <h2 id="up-next-heading" class="text-lg font-semibold">{m.home_up_next()}</h2>
       {#each ['overdue', 'today', 'upcoming'] as const as b (b)}
         {@const list = bucketOf(b)}
@@ -348,7 +351,10 @@
       {/if}
     </section>
 
-    <section class="flex flex-col gap-2" aria-labelledby="week-heading">
+    <section
+      class="flex flex-col gap-2 rounded-md border bg-card p-2 @md:p-3"
+      aria-labelledby="week-heading"
+    >
       <h2 id="week-heading" class="text-lg font-semibold">{m.home_week()}</h2>
       <ol class="flex flex-col gap-1">
         {#each weekDays as d, i (d)}
@@ -366,7 +372,10 @@
     </section>
 
     {#each [{ id: 'pins', label: m.home_pins(), empty: m.home_pins_empty(), list: home?.pins ?? [] }, { id: 'favorites', label: m.home_favorites(), empty: m.home_favorites_empty(), list: home?.favorites ?? [] }] as group (group.id)}
-      <section class="flex flex-col gap-2" aria-labelledby={`${group.id}-heading`}>
+      <section
+        class="flex flex-col gap-2 rounded-md border bg-card p-2 @md:p-3"
+        aria-labelledby={`${group.id}-heading`}
+      >
         <h2 id={`${group.id}-heading`} class="text-lg font-semibold">{group.label}</h2>
         {#each group.list as mark (`${mark.kind}:${mark.id}`)}
           <button
@@ -385,7 +394,10 @@
       </section>
     {/each}
 
-    <section class="flex flex-col gap-2" aria-labelledby="active-heading">
+    <section
+      class="flex flex-col gap-2 rounded-md border bg-card p-2 @md:p-3"
+      aria-labelledby="active-heading"
+    >
       <h2 id="active-heading" class="text-lg font-semibold">{m.home_active()}</h2>
       {#each home?.active_items ?? [] as i (i.id)}
         <button
@@ -419,7 +431,10 @@
       {/each}
     </section>
 
-    <section class="flex flex-col gap-2" aria-labelledby="recent-heading">
+    <section
+      class="flex flex-col gap-2 rounded-md border bg-card p-2 @md:p-3"
+      aria-labelledby="recent-heading"
+    >
       <h2 id="recent-heading" class="text-lg font-semibold">{m.home_recent()}</h2>
       {#each home?.recent_documents ?? [] as d (d.id)}
         <button
@@ -456,7 +471,10 @@
       {/if}
     </section>
 
-    <section class="flex flex-col gap-2" aria-labelledby="notes-heading">
+    <section
+      class="flex flex-col gap-2 rounded-md border bg-card p-2 @md:p-3"
+      aria-labelledby="notes-heading"
+    >
       <h2 id="notes-heading" class="text-lg font-semibold">{m.home_notifications()}</h2>
       {#each notifications as n (n.id)}
         <p class="text-sm">{notificationText(n)}</p>

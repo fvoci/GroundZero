@@ -4,6 +4,7 @@ import { expect, within } from 'storybook/test';
 import { NetworkError } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 
+import MainFrame from '../fixtures/MainFrame.svelte';
 import { never, setUpScreen } from '../fixtures/screens';
 import {
   emptyCalendarView,
@@ -20,6 +21,7 @@ const meta = {
   title: 'Screens/Home',
   component: HomeDashboard,
   args: { workspaces: [WORKSPACE] },
+  decorators: [() => ({ Component: MainFrame })],
   beforeEach: () => setUpScreen('/'),
 } satisfies Meta<typeof HomeDashboard>;
 

@@ -5,6 +5,7 @@ import { ApiError, NetworkError } from '$lib/api/client';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { modulePath } from '$lib/router.svelte';
 
+import MainFrame from '../fixtures/MainFrame.svelte';
 import { never, setUpScreen } from '../fixtures/screens';
 import {
   EMPTY_MODULE,
@@ -22,6 +23,7 @@ const meta = {
   title: 'Screens/ModuleScreen',
   component: ModuleScreen,
   args: { workspace: WORKSPACE, moduleId: PROJECT_MODULE.id },
+  decorators: [() => ({ Component: MainFrame })],
   beforeEach: () => setUpScreen(modulePath(WORKSPACE.id, PROJECT_MODULE.id)),
 } satisfies Meta<typeof ModuleScreen>;
 

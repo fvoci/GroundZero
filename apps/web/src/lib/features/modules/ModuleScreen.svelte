@@ -220,13 +220,15 @@
     {/if}
 
     {#if items.length === 0}
-      <p class="text-muted-foreground">{m.modules_items_empty()}</p>
+      <p class="rounded-md border bg-card p-2 @md:p-3 text-muted-foreground">
+        {m.modules_items_empty()}
+      </p>
     {:else}
-      <ul class="flex flex-col gap-1" data-testid="item-list">
+      <ul class="flex flex-col gap-1 rounded-md border bg-card p-2" data-testid="item-list">
         {#each items as it (it.id)}
           <li>
             <a
-              class="flex items-baseline gap-2 rounded px-2 py-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded px-2 py-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               href={itemPath(workspace.id, it.id)}
               onclick={(e) => {
                 e.preventDefault();
@@ -253,55 +255,60 @@
       </ul>
     {/if}
 
+    <!-- 기능 단위의 큰 구획(항목 목록·만들기·달력·설정)만 얇은 테두리로 나눈다. 행·입력 칸에는 박스를 두르지 않는다. -->
     {#if canCreate}
-      <CreateForm
-        id="new-item"
-        label={m.modules_new_item_title()}
-        placeholder={m.modules_new_item_placeholder()}
-        submitLabel={m.modules_create_item()}
-        create={async (requestId: string, title: string) => {
-          const created = await api.createItem(current.id, requestId, title);
-          router.navigate(itemPath(workspace.id, created.id));
-        }}
-      />
-      <p class="text-sm text-muted-foreground">{m.modules_new_item_hint()}</p>
-      {#if templates.length > 0}
-        <form
-          class="flex flex-wrap items-end gap-2"
-          aria-label={m.modules_from_template()}
-          onsubmit={(e: SubmitEvent) => {
-            e.preventDefault();
-            void fromTemplate(current.id);
+      <div class="flex flex-col gap-2 rounded-md border bg-card p-2 @md:p-3">
+        <CreateForm
+          id="new-item"
+          label={m.modules_new_item_title()}
+          placeholder={m.modules_new_item_placeholder()}
+          submitLabel={m.modules_create_item()}
+          create={async (requestId: string, title: string) => {
+            const created = await api.createItem(current.id, requestId, title);
+            router.navigate(itemPath(workspace.id, created.id));
           }}
-        >
-          <div class="flex flex-col gap-1">
-            <Label for="template-source">{m.modules_template()}</Label>
-            <NativeSelect id="template-source" class="w-full" bind:value={templateId}>
-              {#each templates as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
-            </NativeSelect>
-          </div>
-          <div class="flex min-w-40 flex-1 flex-col gap-1">
-            <Label for="template-title">{m.modules_template_item_title()}</Label>
-            <Input id="template-title" bind:value={templateTitle} maxlength={200} />
-          </div>
-          <Button type="submit" variant="outline">{m.modules_from_template()}</Button>
-        </form>
-        {#if templateError !== undefined}
-          <p class="text-sm text-destructive" role="alert">{templateError}</p>
+        />
+        <p class="text-sm text-muted-foreground">{m.modules_new_item_hint()}</p>
+        {#if templates.length > 0}
+          <form
+            class="flex flex-wrap items-end gap-2"
+            aria-label={m.modules_from_template()}
+            onsubmit={(e: SubmitEvent) => {
+              e.preventDefault();
+              void fromTemplate(current.id);
+            }}
+          >
+            <div class="flex flex-col gap-1">
+              <Label for="template-source">{m.modules_template()}</Label>
+              <NativeSelect id="template-source" class="w-full" bind:value={templateId}>
+                {#each templates as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
+              </NativeSelect>
+            </div>
+            <div class="flex min-w-0 flex-1 basis-40 flex-col gap-1">
+              <Label for="template-title">{m.modules_template_item_title()}</Label>
+              <Input id="template-title" bind:value={templateTitle} maxlength={200} />
+            </div>
+            <Button type="submit" variant="outline">{m.modules_from_template()}</Button>
+          </form>
+          {#if templateError !== undefined}
+            <p class="text-sm text-destructive" role="alert">{templateError}</p>
+          {/if}
         {/if}
-      {/if}
+      </div>
     {/if}
 
-    <CalendarScreen {workspace} scope={{ moduleId: current.id }} embedded />
+    <div class="rounded-md border bg-card p-2 @md:p-3">
+      <CalendarScreen {workspace} scope={{ moduleId: current.id }} embedded />
+    </div>
 
     {#if isAdmin}
       <form
-        class="flex flex-wrap items-end gap-2 border-t pt-4"
+        class="flex flex-wrap items-end gap-2 rounded-md border bg-card p-2 @md:p-3"
         onsubmit={(e) => void saveSettings(e)}
         novalidate
         aria-label={m.modules_settings()}
       >
-        <div class="flex min-w-40 flex-1 flex-col gap-1">
+        <div class="flex min-w-0 flex-1 basis-40 flex-col gap-1">
           <Label for="module-edit-name">{m.modules_name()}</Label>
           <Input id="module-edit-name" bind:value={editName} maxlength={200} />
         </div>
