@@ -1,4 +1,7 @@
 {
+  "tasks_csv_cancelled": "가져오기를 중단했습니다. 다시 누르면 저장한 줄은 건너뛰고 같은 요청으로 이어갑니다.",
+  "tasks_csv_leave_description": "CSV 가져오기를 중단하고 이동할까요? 이 탭에 입력과 줄별 진행 상태를 보관하며, 돌아오면 같은 요청으로 이어갈 수 있습니다.",
+  "tasks_csv_leave": "중단하고 이동",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "tasks_status_todo": "할 일",
   "tasks_status_in_progress": "진행 중",

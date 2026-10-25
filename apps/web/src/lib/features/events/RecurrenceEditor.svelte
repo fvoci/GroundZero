@@ -20,9 +20,10 @@
     /** 이 반복의 시간대(업무는 "오늘"의 기준, 일정은 일정 시간대). */
     zoneNote: string;
     onsave: (rule: RecurrenceRule | null) => Promise<void>;
+    untilError?: string | undefined;
   }
 
-  const { idPrefix, rule, canEdit, zoneNote, onsave }: Props = $props();
+  const { idPrefix, rule, canEdit, zoneNote, onsave, untilError }: Props = $props();
 
   const FREQ_LABEL: Record<Frequency | 'none', string> = {
     get none() {
@@ -64,6 +65,7 @@
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
   let saved = $state(false);
+  let localUntilError = $state<string | undefined>(undefined);
 
   /** 입력을 규칙으로. 틀린 값은 조용히 바꾸지 않고 오류 글로 돌려준다. */
   function build(): RecurrenceRule | null | string {
@@ -90,6 +92,7 @@
     event.preventDefault();
     if (busy) return;
     error = undefined;
+    localUntilError = undefined;
     saved = false;
     const rule = build();
     if (typeof rule === 'string') {
@@ -101,6 +104,14 @@
       await onsave(rule);
       saved = true;
     } catch (e: unknown) {
+      if (
+        e instanceof ApiError &&
+        e.code === 'bad_request' &&
+        e.message === 'until must not be before the first occurrence'
+      ) {
+        localUntilError = m.events_until_before_start();
+        return;
+      }
       // 그사이 다른 사람이 규칙을 바꿨다(서버 409). 입력한 칸은 그대로 두고, 요약(서버 규칙)과 함께 알린다.
       error =
         e instanceof ApiError && e.code === 'rule_conflict'
@@ -190,8 +201,17 @@
                 type="date"
                 bind:value={f.until}
                 aria-label={m.events_end_until_aria()}
+                aria-invalid={untilError !== undefined || localUntilError !== undefined}
+                aria-describedby={untilError !== undefined || localUntilError !== undefined
+                  ? `${idPrefix}-until-error`
+                  : undefined}
                 required
               />
+              {#if untilError !== undefined || localUntilError !== undefined}
+                <p id={`${idPrefix}-until-error`} role="alert" class="text-sm text-destructive">
+                  {untilError ?? localUntilError}
+                </p>
+              {/if}
             {/if}
             <label class="flex items-center gap-1"
               ><input type="radio" bind:group={f.end} value="count" />

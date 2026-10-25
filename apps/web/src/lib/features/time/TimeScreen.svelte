@@ -1,9 +1,7 @@
 <script lang="ts">
-  // 내 시간 (D-32): 한 주의 기록과 날짜·종류별 합계, 이번 달 합계, 수동 기록, 합계 공유 선택.
+  // 내 시간 (D-117): 본인 기록과 날짜·종류별 합계, 수동 기록.
   // 기록은 본인만 본다(워크스페이스 관리자에게도 보이지 않는다). 날짜는 보는 사람 시간대, 기록은 시작한 날에 센다.
   import { untrack } from 'svelte';
-
-  import type { Workspace } from '@fvoci/api-client';
 
   import type { TimeEntryView, TimeKind, TimeSummaryRowView } from '$lib/api/client';
   import { api, TIME_KINDS } from '$lib/api/client';
@@ -15,7 +13,8 @@
   import { dayNumber, fromDayNumber } from '$lib/features/tasks/gantt';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
-  import { Checkbox } from '$lib/ui/checkbox';
+  import { org } from '$lib/org.svelte';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
@@ -23,12 +22,6 @@
   import { durationText, TIME_KIND_LABEL } from './format';
   import TimeEntryDialog from './TimeEntryDialog.svelte';
   import { timer } from './timer.svelte';
-
-  interface Props {
-    workspaces: Workspace[];
-  }
-
-  const { workspaces }: Props = $props();
 
   // 오늘·주 시작·시각 표시는 사용자 표시 설정(D-81).
   const settings = displaySettings();
@@ -46,12 +39,6 @@
   let monthly = $state<TimeSummaryRowView[]>([]);
   // 첫 목록을 받기 전에는 빈 표·"기록이 없습니다" 대신 불러오는 중이라고 보인다.
   let loaded = $state(false);
-  let sharing = $state<Record<string, boolean>>({});
-  // 공유 설정을 받기 전·못 받았을 때는 선택 칸을 막는다(모르는 상태를 "꺼짐"으로 보이고 누르면 엉뚱한 값을 보낸다).
-  let sharingLoad = $state<'loading' | 'ready' | 'error'>('loading');
-  let sharingKey = $state(0);
-  // 바꾸는 중인 워크스페이스. 응답이 오기 전 다시 누르면 순서가 뒤섞이므로 그동안 막는다.
-  let sharingBusy = $state<Record<string, boolean>>({});
   let error = $state<string | undefined>(undefined);
   let editing = $state<TimeEntryView | undefined>(undefined);
   let reloadKey = $state(0);
@@ -67,6 +54,7 @@
   const request = $derived({ from: weekStart, to: weekEnd, key: reloadKey });
   $effect(() => {
     const { from, to } = request;
+    if (org.currentId === undefined) return;
     const monthFrom = `${today.slice(0, 7)}-01`;
     let cancelled = false;
     Promise.all([
@@ -84,25 +72,6 @@
       })
       .catch((e: unknown) => {
         if (!cancelled) error = errorText(e, m.time_load_failed());
-      });
-    return () => {
-      cancelled = true;
-    };
-  });
-
-  const sharingRequest = $derived({ list: workspaces, key: sharingKey });
-  $effect(() => {
-    const { list } = sharingRequest;
-    let cancelled = false;
-    sharingLoad = 'loading';
-    void Promise.all(list.map(async (w) => [w.id, await api.timeSharing(w.id)] as const))
-      .then((pairs) => {
-        if (cancelled) return;
-        sharing = Object.fromEntries(pairs);
-        sharingLoad = 'ready';
-      })
-      .catch(() => {
-        if (!cancelled) sharingLoad = 'error';
       });
     return () => {
       cancelled = true;
@@ -171,21 +140,10 @@
       manualKey.done(requestId);
       manual.memo = '';
       manualStatus = m.time_manual_added();
+      notifyDone(manualStatus);
       reloadKey += 1;
     } catch (e: unknown) {
       manualError = errorText(e, m.time_manual_failed());
-    }
-  }
-
-  async function toggleSharing(ws: string, on: boolean): Promise<void> {
-    if (sharingBusy[ws] === true) return;
-    sharingBusy = { ...sharingBusy, [ws]: true };
-    try {
-      sharing = { ...sharing, [ws]: await api.setTimeSharing(ws, on) };
-    } catch (e: unknown) {
-      error = errorText(e, m.time_sharing_failed());
-    } finally {
-      sharingBusy = { ...sharingBusy, [ws]: false };
     }
   }
 
@@ -194,248 +152,226 @@
     `${formatClock(e.started_at, settings)}–${e.ended_at === null ? m.time_in_progress() : formatClock(e.ended_at, settings)}`;
 </script>
 
-<section class="flex flex-col gap-4" aria-labelledby="time-heading">
-  <div class="flex flex-wrap items-center gap-2">
-    <h1 id="time-heading" class="text-xl font-semibold">{m.time_my_time()}</h1>
-    <div class="ml-auto flex gap-1" role="group" aria-label={m.time_week_nav()}>
-      <Button
-        size="sm"
-        variant="outline"
-        onclick={() => (weekStart = fromDayNumber(dayNumber(weekStart) - 7))}
-        >{m.time_prev_week()}</Button
-      >
-      <Button size="sm" variant="outline" onclick={() => (weekStart = thisWeek)}
-        >{m.time_this_week()}</Button
-      >
-      <Button
-        size="sm"
-        variant="outline"
-        onclick={() => (weekStart = fromDayNumber(dayNumber(weekStart) + 7))}
-        >{m.time_next_week()}</Button
-      >
-    </div>
-  </div>
-  <p class="text-sm text-muted-foreground">
-    {m.time_week_hint({ from: weekStart, to: weekEnd, zone })}
-  </p>
-  {#if error !== undefined}
-    <p role="alert" class="text-sm text-destructive">
-      {error}
-      {#if !loaded}
+{#if org.currentId === undefined}
+  <p role="status">{m.app_organization_required()}</p>
+{:else}
+  <section class="flex flex-col gap-4" aria-labelledby="time-heading">
+    <div class="flex flex-wrap items-center gap-2">
+      <h1 id="time-heading" class="text-xl font-semibold">{m.time_my_time()}</h1>
+      <div class="ml-auto flex gap-1" role="group" aria-label={m.time_week_nav()}>
         <Button
           size="sm"
           variant="outline"
-          class="ml-2"
-          onclick={() => {
-            error = undefined;
-            reloadKey += 1;
-          }}>{m.common_retry()}</Button
+          onclick={() => (weekStart = fromDayNumber(dayNumber(weekStart) - 7))}
+          >{m.time_prev_week()}</Button
         >
-      {/if}
+        <Button size="sm" variant="outline" onclick={() => (weekStart = thisWeek)}
+          >{m.time_this_week()}</Button
+        >
+        <Button
+          size="sm"
+          variant="outline"
+          onclick={() => (weekStart = fromDayNumber(dayNumber(weekStart) + 7))}
+          >{m.time_next_week()}</Button
+        >
+      </div>
+    </div>
+    <p class="text-sm text-muted-foreground">
+      {m.time_week_hint({ from: weekStart, to: weekEnd, zone })}
     </p>
-  {/if}
-
-  <div class="overflow-x-auto">
-    <table class="w-full min-w-[32rem] text-sm" data-testid="time-week">
-      <caption class="sr-only">{m.time_week_caption()}</caption>
-      <thead class="text-left text-muted-foreground">
-        <tr>
-          <th scope="col" class="py-1 font-medium">{m.time_kind()}</th>
-          {#each days as d, i (d)}
-            <th scope="col" class="font-medium">{WEEKDAY[i]} {Number(d.slice(8))}</th>
-          {/each}
-          <th scope="col" class="font-medium">{m.time_total()}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each kindsInWeek as k (k)}
-          <tr class="border-t">
-            <th scope="row" class="py-1 text-left font-normal">{TIME_KIND_LABEL[k]}</th>
-            {#each days as d (d)}
-              <td
-                >{total(daily, (r) => r.kind === k && r.period === d) > 0
-                  ? durationText(total(daily, (r) => r.kind === k && r.period === d))
-                  : ''}</td
-              >
-            {/each}
-            <td class="font-medium">{durationText(total(daily, (r) => r.kind === k))}</td>
-          </tr>
-        {:else}
-          <tr
-            ><td colspan="9" class="py-2 text-muted-foreground"
-              >{loaded ? m.time_week_empty() : error === undefined ? m.app_loading() : ''}</td
-            ></tr
-          >
-        {/each}
-      </tbody>
-    </table>
-  </div>
-  <!-- 이번 달 합계 한 줄은 불러오는 중에서 결과로 바뀔 때 낭독기가 읽는다(주간 표는 칸이 많아 알림 영역으로 두지 않는다). -->
-  <p class="text-sm" aria-live="polite">
-    {m.time_this_month()}
-    {#each TIME_KINDS.filter((k) => monthly.some((r) => r.kind === k)) as k, i (k)}{i > 0
-        ? ' · '
-        : ''}{TIME_KIND_LABEL[k]}
-      {durationText(total(monthly, (r) => r.kind === k))}{:else}{loaded
-        ? m.time_month_empty()
-        : error === undefined
-          ? m.app_loading()
-          : ''}{/each}
-  </p>
-
-  <section class="flex flex-col gap-2" aria-labelledby="time-entries-heading">
-    <h2 id="time-entries-heading" class="text-lg font-semibold">{m.time_entries_heading()}</h2>
-    {#each [...days].reverse() as d (d)}
-      {@const list = entries.filter((e) => dayIn(e.started_at, zone) === d)}
-      {#if list.length > 0}
-        <h3 class="text-sm font-semibold">{d}</h3>
-        <ul class="flex flex-col gap-1">
-          {#each list as e (e.id)}
-            <li>
-              <button
-                type="button"
-                data-time-entry={e.id}
-                class="flex w-full flex-wrap items-baseline gap-x-2 rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                onclick={() => (editing = e)}
-              >
-                <span class="font-mono text-xs">{timeRange(e)}</span>
-                <span>{TIME_KIND_LABEL[e.kind]}</span>
-                <span class="text-muted-foreground"
-                  >{e.target === null
-                    ? m.time_no_target()
-                    : (e.target.label ?? m.time_target_hidden())}</span
-                >
-                {#if e.memo !== ''}<span class="text-muted-foreground">· {e.memo}</span>{/if}
-                <span class="ml-auto font-medium"
-                  >{durationText(e.id === timer.entry?.id ? timer.seconds : e.seconds)}</span
-                >
-              </button>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    {/each}
-    <!-- 날짜는 늘 7개라 위 목록의 {:else}로는 빈 주를 알릴 수 없다. 기록이 없을 때 따로 알린다. -->
-    {#if entries.length === 0}
-      <p class="text-sm text-muted-foreground">
-        {loaded ? m.time_entries_empty() : error === undefined ? m.app_loading() : ''}
-      </p>
-    {/if}
-  </section>
-
-  <section class="flex flex-col gap-2" aria-labelledby="time-manual-heading">
-    <h2 id="time-manual-heading" class="text-lg font-semibold">{m.time_manual_heading()}</h2>
-    <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addManual(e)}>
-      <div class="flex flex-col gap-1">
-        <Label for="time-manual-day">{m.time_date()}</Label>
-        <!-- 없는 시각인지는 날짜와 시각을 함께 보고 정하므로 날짜만 바꿔도 칸 옆 오류를 지운다. -->
-        <Input
-          id="time-manual-day"
-          type="date"
-          bind:value={manual.day}
-          required
-          oninput={() => (manualMissing = undefined)}
-        />
-      </div>
-      <div class="flex flex-col gap-1">
-        <Label for="time-manual-start">{m.time_start()}</Label>
-        <Input
-          id="time-manual-start"
-          type="time"
-          bind:value={manual.start}
-          required
-          oninput={() => (manualMissing = undefined)}
-          aria-invalid={manualMissing === 'start'}
-          aria-describedby={manualMissing === 'start' ? 'time-manual-start-error' : undefined}
-        />
-        {#if manualMissing === 'start'}
-          <p id="time-manual-start-error" class="text-xs text-destructive" role="alert">
-            {m.events_missing_time({ zone })}
-          </p>
-        {/if}
-      </div>
-      <div class="flex flex-col gap-1">
-        <Label for="time-manual-end">{m.time_end()}</Label>
-        <Input
-          id="time-manual-end"
-          type="time"
-          bind:value={manual.end}
-          required
-          oninput={() => (manualMissing = undefined)}
-          aria-invalid={manualMissing === 'end'}
-          aria-describedby={manualMissing === 'end' ? 'time-manual-end-error' : undefined}
-        />
-        {#if manualMissing === 'end'}
-          <p id="time-manual-end-error" class="text-xs text-destructive" role="alert">
-            {m.events_missing_time({ zone })}
-          </p>
-        {/if}
-      </div>
-      <div class="flex flex-col gap-1">
-        <span class="text-sm font-medium" id="time-manual-kind-label">{m.time_kind()}</span>
-        <Select.Root
-          type="single"
-          value={manual.kind}
-          onValueChange={(v: string) => {
-            const k = TIME_KINDS.find((x) => x === v);
-            if (k !== undefined) manual.kind = k;
-          }}
-        >
-          <Select.Trigger aria-labelledby="time-manual-kind-label"
-            >{TIME_KIND_LABEL[manual.kind]}</Select.Trigger
-          >
-          <Select.Content>
-            {#each TIME_KINDS as k (k)}
-              <Select.Item value={k} label={TIME_KIND_LABEL[k]}>{TIME_KIND_LABEL[k]}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="flex flex-1 flex-col gap-1">
-        <Label for="time-manual-memo">{m.time_memo()}</Label>
-        <Input id="time-manual-memo" bind:value={manual.memo} maxlength={2000} />
-      </div>
-      <Button type="submit">{m.time_add_entry()}</Button>
-    </form>
-    {#if manualError !== undefined}
-      <p role="alert" class="text-sm text-destructive">{manualError}</p>
-    {/if}
-    <p class="sr-only" aria-live="polite">{manualStatus}</p>
-  </section>
-
-  <section class="flex flex-col gap-2" aria-labelledby="time-sharing-heading">
-    <h2 id="time-sharing-heading" class="text-lg font-semibold">{m.time_sharing_heading()}</h2>
-    <p class="text-sm text-muted-foreground">{m.time_sharing_hint()}</p>
-    {#if sharingLoad === 'error'}
+    {#if error !== undefined}
       <p role="alert" class="text-sm text-destructive">
-        {m.time_sharing_load_failed()}
-        <Button size="sm" variant="outline" class="ml-2" onclick={() => (sharingKey += 1)}
-          >{m.common_retry()}</Button
-        >
+        {error}
+        {#if !loaded}
+          <Button
+            size="sm"
+            variant="outline"
+            class="ml-2"
+            onclick={() => {
+              error = undefined;
+              reloadKey += 1;
+            }}>{m.common_retry()}</Button
+          >
+        {/if}
       </p>
     {/if}
-    {#each workspaces as w (w.id)}
-      <div class="flex items-center gap-2">
-        <Checkbox
-          id={`time-share-${w.id}`}
-          checked={sharing[w.id] === true}
-          disabled={sharingLoad !== 'ready' || sharingBusy[w.id] === true}
-          onCheckedChange={(v) => void toggleSharing(w.id, v === true)}
-        />
-        <Label for={`time-share-${w.id}`}>{w.name}</Label>
-      </div>
-    {:else}
-      <p class="text-sm text-muted-foreground">{m.time_no_workspaces()}</p>
-    {/each}
-  </section>
-</section>
 
-<TimeEntryDialog
-  entry={editing}
-  {zone}
-  onclose={() => (editing = undefined)}
-  onchanged={() => {
-    reloadKey += 1;
-    void timer.load();
-  }}
-/>
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[32rem] text-sm" data-testid="time-week">
+        <caption class="sr-only">{m.time_week_caption()}</caption>
+        <thead class="text-left text-muted-foreground">
+          <tr>
+            <th scope="col" class="py-1 font-medium">{m.time_kind()}</th>
+            {#each days as d, i (d)}
+              <th scope="col" class="font-medium">{WEEKDAY[i]} {Number(d.slice(8))}</th>
+            {/each}
+            <th scope="col" class="font-medium">{m.time_total()}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each kindsInWeek as k (k)}
+            <tr class="border-t">
+              <th scope="row" class="py-1 text-left font-normal">{TIME_KIND_LABEL[k]}</th>
+              {#each days as d (d)}
+                <td
+                  >{total(daily, (r) => r.kind === k && r.period === d) > 0
+                    ? durationText(total(daily, (r) => r.kind === k && r.period === d))
+                    : ''}</td
+                >
+              {/each}
+              <td class="font-medium">{durationText(total(daily, (r) => r.kind === k))}</td>
+            </tr>
+          {:else}
+            <tr
+              ><td colspan="9" class="py-2 text-muted-foreground"
+                >{loaded ? m.time_week_empty() : error === undefined ? m.app_loading() : ''}</td
+              ></tr
+            >
+          {/each}
+        </tbody>
+      </table>
+    </div>
+    <!-- 이번 달 합계 한 줄은 불러오는 중에서 결과로 바뀔 때 낭독기가 읽는다(주간 표는 칸이 많아 알림 영역으로 두지 않는다). -->
+    <p class="text-sm" aria-live="polite">
+      {m.time_this_month()}
+      {#each TIME_KINDS.filter((k) => monthly.some((r) => r.kind === k)) as k, i (k)}{i > 0
+          ? ' · '
+          : ''}{TIME_KIND_LABEL[k]}
+        {durationText(total(monthly, (r) => r.kind === k))}{:else}{loaded
+          ? m.time_month_empty()
+          : error === undefined
+            ? m.app_loading()
+            : ''}{/each}
+    </p>
+
+    <section class="flex flex-col gap-2" aria-labelledby="time-entries-heading">
+      <h2 id="time-entries-heading" class="text-lg font-semibold">{m.time_entries_heading()}</h2>
+      {#each [...days].reverse() as d (d)}
+        {@const list = entries.filter((e) => dayIn(e.started_at, zone) === d)}
+        {#if list.length > 0}
+          <h3 class="text-sm font-semibold">{d}</h3>
+          <ul class="flex flex-col gap-1">
+            {#each list as e (e.id)}
+              <li>
+                <button
+                  type="button"
+                  data-time-entry={e.id}
+                  class="flex w-full flex-wrap items-baseline gap-x-2 rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  onclick={() => (editing = e)}
+                >
+                  <span class="font-mono text-xs">{timeRange(e)}</span>
+                  <span>{TIME_KIND_LABEL[e.kind]}</span>
+                  <span class="text-muted-foreground"
+                    >{e.target === null
+                      ? m.time_no_target()
+                      : (e.target.label ?? m.time_target_hidden())}</span
+                  >
+                  {#if e.memo !== ''}<span class="text-muted-foreground">· {e.memo}</span>{/if}
+                  <span class="ml-auto font-medium"
+                    >{durationText(e.id === timer.entry?.id ? timer.seconds : e.seconds)}</span
+                  >
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      {/each}
+      <!-- 날짜는 늘 7개라 위 목록의 {:else}로는 빈 주를 알릴 수 없다. 기록이 없을 때 따로 알린다. -->
+      {#if entries.length === 0}
+        <p class="text-sm text-muted-foreground">
+          {loaded ? m.time_entries_empty() : error === undefined ? m.app_loading() : ''}
+        </p>
+      {/if}
+    </section>
+
+    <section class="flex flex-col gap-2" aria-labelledby="time-manual-heading">
+      <h2 id="time-manual-heading" class="text-lg font-semibold">{m.time_manual_heading()}</h2>
+      <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addManual(e)}>
+        <div class="flex flex-col gap-1">
+          <Label for="time-manual-day">{m.time_date()}</Label>
+          <!-- 없는 시각인지는 날짜와 시각을 함께 보고 정하므로 날짜만 바꿔도 칸 옆 오류를 지운다. -->
+          <Input
+            id="time-manual-day"
+            type="date"
+            bind:value={manual.day}
+            required
+            oninput={() => (manualMissing = undefined)}
+          />
+        </div>
+        <div class="flex flex-col gap-1">
+          <Label for="time-manual-start">{m.time_start()}</Label>
+          <Input
+            id="time-manual-start"
+            type="time"
+            bind:value={manual.start}
+            required
+            oninput={() => (manualMissing = undefined)}
+            aria-invalid={manualMissing === 'start'}
+            aria-describedby={manualMissing === 'start' ? 'time-manual-start-error' : undefined}
+          />
+          {#if manualMissing === 'start'}
+            <p id="time-manual-start-error" class="text-xs text-destructive" role="alert">
+              {m.events_missing_time({ zone })}
+            </p>
+          {/if}
+        </div>
+        <div class="flex flex-col gap-1">
+          <Label for="time-manual-end">{m.time_end()}</Label>
+          <Input
+            id="time-manual-end"
+            type="time"
+            bind:value={manual.end}
+            required
+            oninput={() => (manualMissing = undefined)}
+            aria-invalid={manualMissing === 'end'}
+            aria-describedby={manualMissing === 'end' ? 'time-manual-end-error' : undefined}
+          />
+          {#if manualMissing === 'end'}
+            <p id="time-manual-end-error" class="text-xs text-destructive" role="alert">
+              {m.events_missing_time({ zone })}
+            </p>
+          {/if}
+        </div>
+        <div class="flex flex-col gap-1">
+          <span class="text-sm font-medium" id="time-manual-kind-label">{m.time_kind()}</span>
+          <Select.Root
+            type="single"
+            value={manual.kind}
+            onValueChange={(v: string) => {
+              const k = TIME_KINDS.find((x) => x === v);
+              if (k !== undefined) manual.kind = k;
+            }}
+          >
+            <Select.Trigger aria-labelledby="time-manual-kind-label"
+              >{TIME_KIND_LABEL[manual.kind]}</Select.Trigger
+            >
+            <Select.Content>
+              {#each TIME_KINDS as k (k)}
+                <Select.Item value={k} label={TIME_KIND_LABEL[k]}>{TIME_KIND_LABEL[k]}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+        <div class="flex flex-1 flex-col gap-1">
+          <Label for="time-manual-memo">{m.time_memo()}</Label>
+          <Input id="time-manual-memo" bind:value={manual.memo} maxlength={2000} />
+        </div>
+        <Button type="submit">{m.time_add_entry()}</Button>
+      </form>
+      {#if manualError !== undefined}
+        <p role="alert" class="text-sm text-destructive">{manualError}</p>
+      {/if}
+      <p class="sr-only" aria-live="polite">{manualStatus}</p>
+    </section>
+  </section>
+
+  <TimeEntryDialog
+    entry={editing}
+    {zone}
+    onclose={() => (editing = undefined)}
+    onchanged={() => {
+      reloadKey += 1;
+      void timer.load();
+    }}
+  />
+{/if}

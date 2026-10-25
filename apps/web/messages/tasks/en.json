@@ -1,4 +1,7 @@
 {
+  "tasks_csv_cancelled": "Import stopped. Resume to skip saved rows and retry with the same request IDs.",
+  "tasks_csv_leave_description": "Stop the CSV import and leave? Your input and row progress stay in this tab so you can resume with the same request IDs when you return.",
+  "tasks_csv_leave": "Stop and leave",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "tasks_status_todo": "To do",
   "tasks_status_in_progress": "In progress",

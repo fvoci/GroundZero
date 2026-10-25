@@ -1817,14 +1817,12 @@ export interface TimeSummaryRowView {
 export interface TaskTimeView {
   estimate_minutes: number | null;
   mine_seconds: number;
-  shared_seconds: number;
-  shared_people: number;
 }
 
 /** 항목의 시간 합계(D-78). 기록이 있는 종류만. */
 export interface ItemTimeView {
   estimate_minutes: number;
-  kinds: { kind: TimeKind; mine_seconds: number; shared_seconds: number; shared_people: number }[];
+  kinds: { kind: TimeKind; mine_seconds: number }[];
 }
 
 function timeKind(value: string): TimeKind {
@@ -2456,6 +2454,8 @@ async function request(
   path: string,
   body?: Json,
   extra: Record<string, string> = {},
+  // 작업자 D: CSV 가져오기 취소 신호를 fetch까지 전달한다.
+  signal?: AbortSignal,
 ): Promise<{ status: number; json: Json; etag: string | null }> {
   let response: Response;
   const expiriesAtStart = sessionExpiries();
@@ -2466,8 +2466,10 @@ async function request(
       headers: body === undefined ? extra : { ...extra, 'Content-Type': 'application/json' },
     };
     if (body !== undefined) init.body = JSON.stringify(body);
+    if (signal !== undefined) init.signal = signal;
     response = await fetch(path, init);
   } catch (error: unknown) {
+    if (signal?.aborted === true) throw error;
     // 연결 배너(D-82). 각 화면은 자기 자리에서 입력을 지키고 다시 시도한다.
     reportConnectionLost();
     throw new NetworkError(error instanceof Error ? error.message : 'network error');
@@ -2536,8 +2538,10 @@ async function expectOk<T>(
   path: string,
   parse: (v: Json) => T,
   body?: Json,
+  // 작업자 D: 선택적 취소 신호(기존 호출은 그대로).
+  signal?: AbortSignal,
 ): Promise<T> {
-  const { status, json } = await request(method, path, body);
+  const { status, json } = await request(method, path, body, {}, signal);
   if (status < 200 || status >= 300) fail(status, json);
   return parse(json);
 }
@@ -3137,13 +3141,21 @@ export const api = {
     title: string,
     parentId: string | null = null,
     fields?: Omit<TaskInput, 'title'>,
+    // 작업자 D: #84 가져오기 중단.
+    signal?: AbortSignal,
   ) =>
-    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/tasks`, parseTaskDetail, {
-      ...fields,
-      request_id: requestId,
-      title,
-      parent_id: parentId,
-    }),
+    expectOk(
+      'POST',
+      `/api/items/${encodeURIComponent(itemId)}/tasks`,
+      parseTaskDetail,
+      {
+        ...fields,
+        request_id: requestId,
+        title,
+        parent_id: parentId,
+      },
+      signal,
+    ),
   /**
    * 필드 고치기와 승인한 후속 재배치. 이 업무의 기준 버전이 지났으면 `conflict`, 승인한 후속 업무가 그사이
    * 바뀌었으면 `shift_conflict`(아무것도 바뀌지 않았으니 다시 미리 본다).
@@ -3403,6 +3415,7 @@ export const api = {
       mark,
       on,
     }),
+  // 작업자 D: D-117 개인 시간 계약, 시작 응답의 자동 종료 기록.
   currentTimer: () =>
     expectOk('GET', '/api/me/timer', (v) => (v === null ? null : parseTimeEntry(v))),
   startTimer: (
@@ -3411,12 +3424,20 @@ export const api = {
     memo: string,
     target: { kind: TimeTargetKind; id: string } | null,
   ) =>
-    expectOk('POST', '/api/me/timer', parseTimeEntry, {
-      request_id: requestId,
-      kind,
-      memo,
-      target: target === null ? null : { ...target },
-    }),
+    expectOk(
+      'POST',
+      '/api/me/timer',
+      (v) => ({
+        ...parseTimeEntry(v),
+        stopped_entry_id: optStr(rec(v, 'started timer'), 'stopped_entry_id'),
+      }),
+      {
+        request_id: requestId,
+        kind,
+        memo,
+        target: target === null ? null : { ...target },
+      },
+    ),
   timerAction: (id: string, action: 'pause' | 'resume' | 'stop') =>
     expectOk('POST', `/api/time-entries/${encodeURIComponent(id)}/timer`, parseTimeEntry, {
       action,
@@ -3481,17 +3502,6 @@ export const api = {
           };
         }),
     ),
-  timeSharing: (workspaceId: string) =>
-    expectOk('GET', `/api/workspaces/${encodeURIComponent(workspaceId)}/time-sharing`, (v) =>
-      bool(rec(v, 'sharing'), 'enabled'),
-    ),
-  setTimeSharing: (workspaceId: string, enabled: boolean) =>
-    expectOk(
-      'PUT',
-      `/api/workspaces/${encodeURIComponent(workspaceId)}/time-sharing`,
-      (v) => bool(rec(v, 'sharing'), 'enabled'),
-      { enabled },
-    ),
   itemTime: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/time`, (v): ItemTimeView => {
       const o = rec(v, 'item time');
@@ -3503,8 +3513,6 @@ export const api = {
           return {
             kind: timeKind(str(r, 'kind')),
             mine_seconds: int(r, 'mine_seconds'),
-            shared_seconds: int(r, 'shared_seconds'),
-            shared_people: int(r, 'shared_people'),
           };
         }),
       };
@@ -3515,8 +3523,6 @@ export const api = {
       return {
         estimate_minutes: optInt(o, 'estimate_minutes'),
         mine_seconds: int(o, 'mine_seconds'),
-        shared_seconds: int(o, 'shared_seconds'),
-        shared_people: int(o, 'shared_people'),
       };
     }),
   /** 달력(D-80). `scope`로 모듈·항목 범위로 좁힌다(같은 데이터, 사본 없음). */

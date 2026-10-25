@@ -48,6 +48,19 @@
   let participants = $state<StudyParticipantView[]>([]);
   let error = $state<string | undefined>(undefined);
   let status = $state('');
+  let timerBusy = $state(false);
+  async function startUnit(id: string): Promise<void> {
+    if (timerBusy) return;
+    timerBusy = true;
+    error = undefined;
+    try {
+      await timer.start('study', { kind: 'study_unit', id });
+    } catch (e: unknown) {
+      error = errorText(e, m.time_start_failed());
+    } finally {
+      timerBusy = false;
+    }
+  }
   let reloadKey = $state(0);
   // 숫자 칸(type="number")은 숫자를 주고, 비우면 null을 준다. 상태도 그 모양으로 든다.
   interface UnitDraft {
@@ -417,15 +430,12 @@
               size="sm"
               variant="ghost"
               aria-label={m.study_track_aria({ title: u.title })}
-              onclick={() =>
-                void timer
-                  .start('study', { kind: 'study_unit', id: u.id })
-                  .then(() => {
-                    status = m.study_track_started({ title: u.title });
-                  })
-                  .catch(() => {
-                    error = m.study_timer_busy();
-                  })}>{m.study_track()}</Button
+              disabled={timerBusy ||
+                (timer.entry?.target?.kind === 'study_unit' && timer.entry.target.id === u.id)}
+              onclick={() => void startUnit(u.id)}
+              >{timer.entry?.target?.kind === 'study_unit' && timer.entry.target.id === u.id
+                ? m.time_in_progress()
+                : m.study_track()}</Button
             >
             {#if current.can_write}
               <Button

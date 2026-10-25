@@ -9,6 +9,11 @@ import type { RowProgress } from '$lib/features/tasks/csv-import';
 import { matchRows, rowApplied } from '$lib/features/tasks/csv-import';
 import TaskCsvImport from '$lib/features/tasks/TaskCsvImport.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { org } from '$lib/org.svelte';
+import { router } from '$lib/router.svelte';
+import { m } from '$lib/paraglide/messages.js';
+import { restoreImport } from '$lib/features/tasks/csv-import';
+import { TEST_ORGANIZATION } from './fixtures/organization';
 
 function detail(id: string, title: string, version: number): TaskDetailView {
   return {
@@ -160,6 +165,7 @@ const tooManyTags = (): ApiError => new ApiError(400, 'bad_request', 'at most 20
 
 describe('TaskCsvImport one request per row (D-105)', () => {
   beforeEach(async () => {
+    sessionStorage.clear();
     await setLocale('ko', { reload: false });
     vi.spyOn(api, 'assignable').mockResolvedValue([
       { user_id: 'u1', display_name: '가람' },
@@ -169,6 +175,116 @@ describe('TaskCsvImport one request per row (D-105)', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('resumes after unmount with the same request id for a lost response', async () => {
+    const server = fakeServer();
+    server.lose('B');
+    const onimported = vi.fn(() => Promise.resolve());
+    const first = render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('A\nB');
+    await pressImport(onimported, 1);
+    const lostId = server.create.mock.calls[1]?.[1];
+    first.unmount();
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('A\nB');
+    await pressImport(onimported, 2);
+    expect(server.titles()).toEqual(['A', 'B', 'B']);
+    expect(server.create.mock.calls[2]?.[1]).toBe(lostId);
+    expect(server.made).toHaveLength(2);
+  });
+
+  it('cancels the in-flight request, retains its id, and stops before the next row', async () => {
+    let signal: AbortSignal | undefined;
+    const create = vi.spyOn(api, 'createTask').mockImplementation((_i, _r, _t, _p, _f, s) => {
+      signal = s;
+      return new Promise((_resolve, reject) =>
+        s?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        }),
+      );
+    });
+    const onimported = vi.fn(() => Promise.resolve());
+    render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('A\nB');
+    await fireEvent.click(screen.getByRole('button', { name: '등록' }));
+    const stored = restoreImport(org.key('csv-import:i1'));
+    expect(stored.rows[0]?.requestId).toBe(create.mock.calls[0]?.[1]);
+    await fireEvent.click(screen.getByRole('button', { name: m.common_cancel() }));
+    await waitFor(() => {
+      expect(onimported).toHaveBeenCalled();
+    });
+    expect(signal?.aborted).toBe(true);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('status')).toHaveTextContent(m.tasks_csv_cancelled());
+    expect(restoreImport(org.key('csv-import:i1'))).toEqual(stored);
+  });
+
+  it('unmount aborts and preserves the request id before the response arrives', async () => {
+    let signal: AbortSignal | undefined;
+    const create = vi.spyOn(api, 'createTask').mockImplementation((_i, _r, _t, _p, _f, s) => {
+      signal = s;
+      return new Promise((_resolve, reject) =>
+        s?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        }),
+      );
+    });
+    const onimported = vi.fn(() => Promise.resolve());
+    const view = render(TaskCsvImport, { itemId: 'i1', onimported });
+    await setText('A\nB');
+    await fireEvent.click(screen.getByRole('button', { name: '등록' }));
+    view.unmount();
+    expect(signal?.aborted).toBe(true);
+    expect(restoreImport(org.key('csv-import:i1')).rows[0]?.requestId).toBe(
+      create.mock.calls[0]?.[1],
+    );
+    expect(onimported).not.toHaveBeenCalled();
+  });
+
+  it('confirms navigation and keeps the draft when continuing to edit', async () => {
+    render(TaskCsvImport, { itemId: 'i1', onimported: () => Promise.resolve() });
+    const cleanUnload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(cleanUnload);
+    expect(cleanUnload.defaultPrevented).toBe(false);
+    await setText('A');
+    const unsavedUnload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unsavedUnload);
+    expect(unsavedUnload.defaultPrevented).toBe(true);
+    const before = router.path;
+    router.navigate('/csv-away');
+    await screen.findByRole('alertdialog');
+    expect(router.path).toBe(before);
+    await fireEvent.click(screen.getByRole('button', { name: m.common_discard_keep() }));
+    expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('A');
+    router.navigate('/csv-away');
+    await fireEvent.click(await screen.findByRole('button', { name: m.tasks_csv_leave() }));
+    expect(router.path).toBe('/csv-away');
+    expect(restoreImport(org.key('csv-import:i1')).text).toBe('A');
+  });
+
+  it('keeps each account and organization in a separate session draft', async () => {
+    org.load('csv-user-a', [TEST_ORGANIZATION], TEST_ORGANIZATION.id);
+    render(TaskCsvImport, { itemId: 'i1', onimported: () => Promise.resolve() });
+    await setText('계정 A');
+    org.load('csv-user-b', [TEST_ORGANIZATION], TEST_ORGANIZATION.id);
+    await waitFor(() => {
+      expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('');
+    });
+    await setText('계정 B');
+    org.load('csv-user-a', [TEST_ORGANIZATION], TEST_ORGANIZATION.id);
+    await waitFor(() => {
+      expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('계정 A');
+    });
+    const other = { ...TEST_ORGANIZATION, id: 'org-2' };
+    org.load('csv-user-a', [TEST_ORGANIZATION, other], other.id);
+    await waitFor(() => {
+      expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('');
+    });
+    org.select(TEST_ORGANIZATION.id);
+    await waitFor(() => {
+      expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('계정 A');
+    });
   });
 
   // 한 줄은 모든 칸을 실은 만들기 하나다. 고치기를 보내지 않으므로 제목만 있는 업무가 남을 두 번째 단계가 없다.

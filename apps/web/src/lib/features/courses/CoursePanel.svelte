@@ -50,6 +50,19 @@
   let participants = $state<ParticipantView[]>([]);
   let error = $state<string | undefined>(undefined);
   let status = $state('');
+  let timerBusy = $state(false);
+  async function startEpisode(id: string): Promise<void> {
+    if (timerBusy) return;
+    timerBusy = true;
+    error = undefined;
+    try {
+      await timer.start('lecture', { kind: 'episode', id });
+    } catch (e: unknown) {
+      error = errorText(e, m.time_start_failed());
+    } finally {
+      timerBusy = false;
+    }
+  }
   let editing = $state(false);
   let details = $state({
     subject: '',
@@ -572,15 +585,12 @@
               size="sm"
               variant="ghost"
               aria-label={m.courses_track_aria({ number: e.number })}
-              onclick={() =>
-                void timer
-                  .start('lecture', { kind: 'episode', id: e.id })
-                  .then(() => {
-                    status = m.courses_track_started({ number: e.number });
-                  })
-                  .catch(() => {
-                    error = m.courses_timer_busy();
-                  })}>{m.courses_track()}</Button
+              disabled={timerBusy ||
+                (timer.entry?.target?.kind === 'episode' && timer.entry.target.id === e.id)}
+              onclick={() => void startEpisode(e.id)}
+              >{timer.entry?.target?.kind === 'episode' && timer.entry.target.id === e.id
+                ? m.time_in_progress()
+                : m.courses_track()}</Button
             >
             <Button
               size="sm"

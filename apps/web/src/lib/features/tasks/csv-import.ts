@@ -5,6 +5,7 @@
 import type { TaskView } from '$lib/api/client';
 import { newRequestId } from '$lib/api/client';
 import { canonicalJson } from '$lib/features/documents/drafts';
+import { readSession, writeSession } from '$lib/storage';
 
 import type { TaskRow } from './csv';
 
@@ -30,6 +31,46 @@ export interface RowPair {
 
 export interface RowStep extends RowPair {
   progress: RowProgress;
+}
+
+/** #84: 요청을 보내기 전 id를 저장한다. 응답을 못 받아도 같은 id로 재개한다. */
+export function saveImport(key: string, text: string, rows: readonly RowProgress[]): void {
+  writeSession(key, text === '' && rows.length === 0 ? null : JSON.stringify({ text, rows }));
+}
+
+export function restoreImport(key: string): { text: string; rows: RowProgress[] } {
+  const empty = { text: '', rows: [] };
+  try {
+    const raw: unknown = JSON.parse(readSession(key) ?? 'null');
+    if (
+      typeof raw !== 'object' ||
+      raw === null ||
+      !('text' in raw) ||
+      typeof raw.text !== 'string' ||
+      !('rows' in raw) ||
+      !Array.isArray(raw.rows)
+    )
+      return empty;
+    const rows: RowProgress[] = [];
+    for (const value of raw.rows) {
+      const row: unknown = value;
+      if (
+        typeof row !== 'object' ||
+        row === null ||
+        !('requestId' in row) ||
+        typeof row.requestId !== 'string' ||
+        !('title' in row) ||
+        typeof row.title !== 'string'
+      )
+        return empty;
+      const applied = 'applied' in row ? row.applied : undefined;
+      if (applied !== undefined && typeof applied !== 'string') return empty;
+      rows.push({ requestId: row.requestId, title: row.title, applied });
+    }
+    return { text: raw.text, rows };
+  } catch {
+    return empty;
+  }
 }
 
 /**
