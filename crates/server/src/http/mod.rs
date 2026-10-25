@@ -445,6 +445,8 @@ async fn api_not_found() -> AppError {
         BuildInfo,
         ErrorBody,
         accounts::Me,
+        // 작업자 D · #79 입력 한도 계약.
+        accounts::InputLimits,
         accounts::MySettings,
         accounts::AuthInfo,
         accounts::LogoutResponse,
