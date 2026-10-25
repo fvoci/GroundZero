@@ -2425,11 +2425,12 @@ CREATE FUNCTION fvoci.app_create_task_status(p_item uuid, p_name text, p_color t
     IF app_access('item', p_item) = 'none' THEN
       RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
     END IF;
-    IF app_access('item', p_item) <> 'owner' THEN
-      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
-    END IF;
+    -- 보관된 항목은 볼 수 있는 누구에게나 보관 상태(409)가 먼저다(문서·업무·파일과 같은 규칙).
     IF app_item_archived(p_item) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
+    IF app_access('item', p_item) <> 'owner' THEN
+      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
     END IF;
     IF p_category NOT IN ('todo', 'doing', 'done') THEN
       RAISE EXCEPTION 'invalid category' USING ERRCODE = '22023';
@@ -2469,11 +2470,11 @@ CREATE FUNCTION fvoci.app_update_task_status(p_status uuid, p_name text, p_color
     IF v_status.id IS NULL OR app_access('item', v_status.item_id) = 'none' THEN
       RAISE EXCEPTION 'status not found' USING ERRCODE = 'P0002';
     END IF;
-    IF app_access('item', v_status.item_id) <> 'owner' THEN
-      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
-    END IF;
     IF app_item_archived(v_status.item_id) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
+    IF app_access('item', v_status.item_id) <> 'owner' THEN
+      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
     END IF;
     -- 항목의 상태 집합 변경을 줄 세운 뒤(생성·삭제와 같은 잠금) 열을 잠그고, 잠금 뒤 등급·보관·존재를 다시 본다.
     PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-statuses:' || v_status.item_id::text, 0));
@@ -2483,11 +2484,11 @@ CREATE FUNCTION fvoci.app_update_task_status(p_status uuid, p_name text, p_color
     IF v_status.id IS NULL THEN
       RAISE EXCEPTION 'status not found' USING ERRCODE = 'P0002';
     END IF;
-    IF app_access('item', v_status.item_id) <> 'owner' THEN
-      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
-    END IF;
     IF app_item_archived(v_status.item_id) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
+    IF app_access('item', v_status.item_id) <> 'owner' THEN
+      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
     END IF;
     v_name := coalesce(btrim(p_name), v_status.name);
     v_cat := coalesce(p_category, v_status.category);
@@ -2531,11 +2532,11 @@ CREATE FUNCTION fvoci.app_delete_task_status(p_status uuid, p_move_to uuid, p_id
     IF v_status.id IS NULL OR app_access('item', v_status.item_id) = 'none' THEN
       RAISE EXCEPTION 'status not found' USING ERRCODE = 'P0002';
     END IF;
-    IF app_access('item', v_status.item_id) <> 'owner' THEN
-      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
-    END IF;
     IF app_item_archived(v_status.item_id) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
+    IF app_access('item', v_status.item_id) <> 'owner' THEN
+      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
     END IF;
     IF p_move_to IS NOT NULL THEN
       SELECT * INTO v_to FROM task_statuses WHERE id = p_move_to;
@@ -2558,11 +2559,11 @@ CREATE FUNCTION fvoci.app_delete_task_status(p_status uuid, p_move_to uuid, p_id
     IF v_status.id IS NULL THEN
       RAISE EXCEPTION 'status not found' USING ERRCODE = 'P0002';
     END IF;
-    IF app_access('item', v_status.item_id) <> 'owner' THEN
-      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
-    END IF;
     IF app_item_archived(v_status.item_id) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
+    IF app_access('item', v_status.item_id) <> 'owner' THEN
+      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
     END IF;
     IF EXISTS (SELECT 1 FROM tasks WHERE status_id = p_status) THEN
       IF p_move_to IS NULL THEN
