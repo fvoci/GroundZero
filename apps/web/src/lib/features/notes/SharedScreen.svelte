@@ -15,6 +15,8 @@
   $effect(() => {
     const organizationId = org.currentId;
     const mine = ++loadSeq;
+    docs = undefined;
+    error = undefined;
     if (organizationId === undefined) {
       docs = undefined;
       error = m.app_organization_required();
@@ -31,18 +33,29 @@
         if (mine !== loadSeq) return;
         error = errorText(e, m.notes_shared_load_failed());
       });
+    return () => {
+      loadSeq += 1;
+    };
   });
 </script>
 
 <section class="flex flex-col gap-6" aria-labelledby="shared-heading">
   <h1 id="shared-heading" class="text-xl font-semibold">{m.notes_shared_heading()}</h1>
+  {#if org.current}<p class="text-sm text-muted-foreground">
+      {m.notes_organization_scope({ name: org.current.name })}
+    </p>{/if}
+  <p role="status" class="text-sm text-muted-foreground empty:hidden">
+    {org.currentId === undefined
+      ? m.app_organization_required()
+      : docs === undefined && error === undefined
+        ? m.notes_loading()
+        : ''}
+  </p>
   {#if error !== undefined}
-    <p role="alert" class="text-destructive">{error}</p>
-  {:else if docs === undefined}
-    <p aria-live="polite">{m.notes_loading()}</p>
-  {:else if docs.length === 0}
+    {#if org.currentId !== undefined}<p role="alert" class="text-destructive">{error}</p>{/if}
+  {:else if docs?.length === 0}
     <p class="text-muted-foreground">{m.notes_shared_empty()}</p>
-  {:else}
+  {:else if docs !== undefined}
     <ul class="flex flex-col gap-1" data-testid="shared-list">
       {#each docs as doc (doc.id)}
         <li>

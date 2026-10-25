@@ -35,6 +35,8 @@
 
   import ItemCopy from './ItemCopy.svelte';
   import ItemProfilePanel from './ItemProfilePanel.svelte';
+  // 작업자 B: 활동(D-119). 업무 보기 탭과 별개인 항목 활동 섹션.
+  import ItemActivityTab from '$lib/features/activity/ItemActivityTab.svelte';
 
   interface Props {
     workspace: Workspace;
@@ -480,6 +482,8 @@
     {/if}
 
     <AttachmentsPanel target={{ kind: 'item', id: current.id }} canWrite={canEdit} />
+    <!-- 작업자 B: 활동(D-119) -->
+    <ItemActivityTab itemId={current.id} workspaceId={workspace.id} />
 
     <section class="flex flex-col gap-3" aria-labelledby="item-docs-heading">
       <h2 id="item-docs-heading" class="text-lg font-semibold">{m.modules_documents()}</h2>

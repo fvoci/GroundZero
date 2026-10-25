@@ -26,6 +26,8 @@
   import { accountSafety } from '$lib/features/feedback/feedback.svelte';
   import { connection } from '$lib/features/feedback/feedback.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
+  // 작업자 B: 홈에서 초대를 처리한 경우도 서버 미독 수를 즉시 다시 읽는다(D-118).
+  import { invitationChanges } from '$lib/features/home/invitations.svelte';
   import TimeScreen from '$lib/features/time/TimeScreen.svelte';
   import TimerWidget from '$lib/features/time/TimerWidget.svelte';
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
@@ -107,6 +109,14 @@
   // 읽지 않은 알림 수는 서버가 현재 조직 범위로 센다(D-118; 초대는 어느 조직에서나 포함). 화면을 옮길 때 다시 세되
   // 30초 안에는 다시 묻지 않는다. 알림 화면에서 읽음 처리하면 곧바로, 창으로 돌아오거나 조직을 바꾸면 다시 센다.
   const UNREAD_FRESH_MS = 30_000;
+  // 작업자 B: 초대 수락·거절은 경로 이동의 30초 캐시를 기다리지 않는다.
+  let seenInvitationVersion = invitationChanges.version;
+  $effect(() => {
+    const version = invitationChanges.version;
+    if (version === seenInvitationVersion) return;
+    seenInvitationVersion = version;
+    void refreshUnread(true);
+  });
   let unreadCount = $state(0);
   let unreadAt = 0;
   let unreadSeq = 0;
@@ -322,18 +332,23 @@
           class={`@container mx-auto flex w-full min-w-0 flex-col gap-8 px-4 py-6 sm:px-6 ${READING_ROUTES.has(route.name) ? 'max-w-3xl' : 'max-w-5xl'}`}
         >
           {#if route.name === 'home'}
-            <HomeScreen
-              workspaces={signedIn.workspaces}
-              oncreated={(ws: Workspace) => {
-                if (
-                  session.state === 'signed-in' &&
-                  !session.workspaces.some((w) => w.id === ws.id)
-                ) {
-                  session.workspaces = [...session.workspaces, ws];
-                }
-              }}
-              onjoined={reloadWorkspaces}
-            />
+            <!-- 작업자 B: 조직 선택 전 홈은 선택 안내만 표시(D-111·D-120). -->
+            {#if org.currentId === undefined}
+              <p role="status">{m.app_organization_required()}</p>
+            {:else}
+              <HomeScreen
+                workspaces={signedIn.workspaces.filter((w) => w.organization_id === org.currentId)}
+                oncreated={(ws: Workspace) => {
+                  if (
+                    session.state === 'signed-in' &&
+                    !session.workspaces.some((w) => w.id === ws.id)
+                  ) {
+                    session.workspaces = [...session.workspaces, ws];
+                  }
+                }}
+                onjoined={reloadWorkspaces}
+              />
+            {/if}
           {:else if WORKSPACE_ROUTES.has(route.name)}
             {#if currentWorkspace === undefined}
               <p role="alert">{m.app_workspace_missing()}</p>
@@ -382,9 +397,11 @@
           {:else if route.name === 'my-tasks'}
             <MyTasksScreen />
           {:else if route.name === 'notifications'}
+            <!-- 작업자 B: 초대 수락 뒤 조직·공간 문맥을 함께 갱신(D-112·D-118). 상세 id는 router.route에서 읽는다. -->
             <NotificationsScreen
               workspaces={signedIn.workspaces}
               onchanged={() => void refreshUnread(true)}
+              onaccepted={reloadWorkspaces}
             />
           {:else if route.name === 'my-audit'}
             <AuditScreen workspace={undefined} />

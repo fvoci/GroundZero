@@ -5,6 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HomeView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
+import { homeExtras } from './fixtures/home';
+import { beforeEach as beforeHome } from 'vitest';
+
+beforeHome(homeExtras);
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // 리뷰: 늦은 응답은 새 요청이 시작됐을 때만 버렸다. 홈이 사라진 뒤 도착한 응답은 이어서 달력·알림을 묻고 사라진

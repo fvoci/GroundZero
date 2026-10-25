@@ -1,4 +1,7 @@
 {
+  "search_status_name": "Status name (blank for all)",
+  "search_organization_scope": "Search in organization: {name}",
+  "search_workspace_scope": "Narrow to workspace: {name}",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "search_kind_document": "Document",
   "search_kind_task": "Task",

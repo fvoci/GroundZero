@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, NetworkError } from '$lib/api/client';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
+import { invitationChanges } from '$lib/features/home/invitations.svelte';
 
 import { TEST_ORGANIZATION } from './fixtures/organization';
 
@@ -60,6 +61,15 @@ afterEach(() => {
 });
 
 describe('unread notification count', () => {
+  it('refreshes the server count immediately after an invitation changes', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const count = vi.spyOn(api, 'unreadCount').mockResolvedValueOnce(2).mockResolvedValue(1);
+    render(App);
+    await screen.findByRole('link', { name: /읽지 않은 알림 2개/ });
+    invitationChanges.changed();
+    await screen.findByRole('link', { name: /읽지 않은 알림 1개/ });
+    expect(count).toHaveBeenCalledTimes(2);
+  });
   it('keeps the last count when reading it again fails, and retries on the next focus', async () => {
     let now = 1_000_000;
     vi.spyOn(Date, 'now').mockImplementation(() => now);

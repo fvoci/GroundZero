@@ -4,11 +4,10 @@
 
   import type { Module } from '@fvoci/api-client';
 
-  import type { SearchFilters, SearchKind, SearchResultView, TaskStatus } from '$lib/api/client';
+  import type { SearchFilters, SearchKind, SearchResultView } from '$lib/api/client';
   import { api } from '$lib/api/client';
   import { displaySettings } from '$lib/display';
   import { org } from '$lib/org.svelte';
-  import { STATUS_LABEL } from '$lib/features/tasks/labels';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -30,9 +29,6 @@
     workspace?: { id: string; name: string } | undefined;
   } = $props();
 
-  // 작업자 A: 상태 이름 문자열 전환에 따른 표시 fallback; 검색 범주 전환은 담당 작업자 영역.
-  const TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'done'];
-
   let query = $state('');
   let results = $state<SearchResultView[]>([]);
   let status = $state<'idle' | 'loading' | 'done' | 'error'>('idle');
@@ -41,13 +37,15 @@
 
   // 필터(D-39). 상태·내 담당을 고르면 업무만 나온다.
   let kind = $state<SearchKind | 'all'>('all');
-  let taskStatus = $state<TaskStatus>('any');
+  // 현재 서버 계약(GET /api/search status)은 범주가 아니라 상태 이름이다. D-116과의 충돌은 PR 본문에 기록했다.
+  let taskStatus = $state('');
   let mine = $state(false);
   let from = $state('');
   let to = $state('');
   // 작성자(만든 사람)와 제목만. 작성자 거르기는 좁히기만 한다(볼 수 없는 것은 그대로 안 나온다).
   let author = $state<string>('any');
   let titleOnly = $state(false);
+  let workspaceOnly = $state(false);
   let people = $state<{ user_id: string; display_name: string }[]>([]);
   // 고를 때의 사람 이름. 대화상자를 다시 열어 멤버 목록을 다시 읽는 동안에도 작성자 거르기는 남으므로, 목록이 오기 전에는
   // 이 이름을 보인다(표시는 "누구나"인데 거르기는 남아 있는 일이 없게. 모듈도 같다).
@@ -73,6 +71,7 @@
     modules = [];
     if (moduleWs !== ws) dropMissingModule([]);
     if (!open) return;
+    if (org.currentId === undefined) return;
     if (ws === undefined) return;
     let cancelled = false;
     api
@@ -108,6 +107,7 @@
     const ws = workspace?.id;
     people = [];
     if (!open) return;
+    if (org.currentId === undefined) return;
     if (ws === undefined) {
       dropMissingAuthor([]);
       return;
@@ -135,14 +135,14 @@
         : (people.find((p) => p.user_id === author)?.display_name ??
           (authorName === '' ? m.search_author_any() : authorName)),
   );
-  const taskOnly = $derived(taskStatus !== 'any' || mine);
+  const taskOnly = $derived(taskStatus.trim() !== '' || mine);
   const reversed = $derived(from !== '' && to !== '' && from > to);
 
   function filters(): SearchFilters {
     const f: SearchFilters = {};
     if (taskOnly) f.kind = 'task';
     else if (kind !== 'all') f.kind = kind;
-    if (taskStatus !== 'any') f.status = taskStatus;
+    if (taskStatus.trim() !== '') f.status = taskStatus.trim();
     if (mine) f.assignee = 'me';
     if (from !== '') f.from = from;
     if (to !== '') f.to = to;
@@ -163,8 +163,13 @@
     try {
       // 검색은 현재 조직 범위다(D-111). 조직을 고르기 전에는 찾지 않는다.
       const organizationId = org.currentId;
-      if (organizationId === undefined) throw new Error('no organization');
-      const found = await api.search(organizationId, q, null, filters());
+      if (organizationId === undefined) return;
+      const found = await api.search(
+        organizationId,
+        q,
+        workspaceOnly ? (workspace?.id ?? null) : null,
+        filters(),
+      );
       if (ticket !== seq) return;
       results = found;
       status = 'done';
@@ -181,7 +186,7 @@
     const ticket = seq;
     if (timer !== undefined) clearTimeout(timer);
     const q = value.trim();
-    if (q === '') {
+    if (q === '' || org.currentId === undefined) {
       results = [];
       status = 'idle';
       return;
@@ -191,6 +196,22 @@
       run(q, ticket).catch(() => undefined);
     }, delay);
   }
+
+  $effect(() => {
+    const organizationId = org.currentId;
+    untrack(() => {
+      workspaceOnly = false;
+      moduleId = 'any';
+      author = 'any';
+      results = [];
+      if (organizationId !== undefined && open) changed(query, 0);
+      else {
+        seq += 1;
+        if (timer !== undefined) clearTimeout(timer);
+        status = 'idle';
+      }
+    });
+  });
 
   let list = $state<HTMLUListElement | undefined>();
 
@@ -237,11 +258,28 @@
       <Dialog.Title>{m.search_title()}</Dialog.Title>
       <Dialog.Description>{m.search_description()}</Dialog.Description>
     </Dialog.Header>
+    <p role="status" class="text-sm text-muted-foreground">
+      {org.current === undefined
+        ? m.app_organization_required()
+        : m.search_organization_scope({ name: org.current.name })}
+    </p>
+    {#if workspace !== undefined && org.currentId !== undefined}
+      <label class="flex items-center gap-2 text-sm"
+        ><Checkbox
+          checked={workspaceOnly}
+          onCheckedChange={(value: boolean) => {
+            workspaceOnly = value;
+            refilter();
+          }}
+        />{m.search_workspace_scope({ name: workspace.name })}</label
+      >
+    {/if}
     <Input
       type="search"
       aria-label={m.search_query()}
       placeholder={m.search_query()}
       maxlength={200}
+      disabled={org.currentId === undefined}
       value={query}
       oninput={(e: Event) => {
         if (e.currentTarget instanceof HTMLInputElement) changed(e.currentTarget.value);
@@ -280,25 +318,20 @@
         </Select.Root>
       </div>
       <div class="flex flex-col gap-1">
-        <span id="search-status-label" class="font-medium">{m.search_task_status()}</span>
-        <Select.Root
-          type="single"
+        <Label for="search-status">{m.search_task_status()}</Label>
+        <Input
+          id="search-status"
+          class="w-40"
           value={taskStatus}
-          onValueChange={(v: string) => {
-            taskStatus = TASK_STATUSES.find((s) => s === v) ?? 'any';
-            refilter();
+          maxlength={50}
+          placeholder={m.search_status_name()}
+          oninput={(e: Event) => {
+            if (e.currentTarget instanceof HTMLInputElement) {
+              taskStatus = e.currentTarget.value;
+              refilter();
+            }
           }}
-        >
-          <Select.Trigger class="w-24" aria-labelledby="search-status-label"
-            >{taskStatus === 'any' ? m.search_all() : STATUS_LABEL[taskStatus]}</Select.Trigger
-          >
-          <Select.Content>
-            <Select.Item value="any" label={m.search_all()}>{m.search_all()}</Select.Item>
-            {#each TASK_STATUSES as s (s)}
-              <Select.Item value={s} label={STATUS_LABEL[s] ?? s}>{STATUS_LABEL[s]}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
+        />
       </div>
       {#if workspace !== undefined}
         <div class="flex flex-col gap-1">

@@ -1,4 +1,9 @@
 {
+  "members_invitation_organization": "조직 초대",
+  "members_invitation_workspace": "{organization} · 워크스페이스 초대",
+  "members_invitation_accepted": "초대를 수락했습니다.",
+  "members_invitation_declined": "초대를 거절했습니다.",
+  "members_invitation_unavailable": "이미 처리되었거나 만료된 초대입니다.",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "members_role_admin": "관리자",
   "members_role_member": "멤버",

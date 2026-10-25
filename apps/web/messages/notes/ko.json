@@ -1,4 +1,5 @@
 {
+  "notes_organization_scope": "{name} 조직에서 공유받은 문서",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "notes_shared_load_failed": "목록을 불러오지 못했습니다.",
   "notes_shared_heading": "공유받은 문서",
