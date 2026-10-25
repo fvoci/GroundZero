@@ -261,6 +261,21 @@ async fn api_not_found() -> AppError {
         workspaces::purge,
         organizations::list_mine,
         organizations::get,
+        // organizations (2단계 A)
+        organizations::members,
+        organizations::set_member,
+        organizations::removal_preview,
+        organizations::remove_member,
+        organizations::invite,
+        organizations::invitations,
+        organizations::set_settings,
+        organizations::workspace_limits,
+        organizations::set_workspace_limits,
+        organizations::workspaces,
+        organizations::join_as_admin,
+        organizations::server_organizations,
+        organizations::create,
+        organizations::server_admins,
         documents::list_wiki,
         documents::create_wiki,
         documents::get,
@@ -552,6 +567,18 @@ async fn api_not_found() -> AppError {
         organizations::OrganizationSummary,
         organizations::OrganizationLimits,
         organizations::Organization,
+        // organizations (2단계 A)
+        organizations::OrganizationMember,
+        organizations::SetOrganizationRole,
+        organizations::OrganizationRemovalPreview,
+        organizations::InviteOrganization,
+        organizations::OrganizationInvitation,
+        organizations::OrganizationSettingsPatch,
+        organizations::OrganizationWorkspace,
+        organizations::ServerOrganization,
+        organizations::CreateOrganization,
+        organizations::CreatedOrganization,
+        organizations::ServerAdmin,
         home::UpNextCounts,
         home::SetMark,
         home::MarkState,
@@ -712,6 +739,44 @@ pub fn router(state: AppState) -> Router {
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
         .route("/organizations/{organization_id}", get(organizations::get))
+        // organizations (2단계 A)
+        .route(
+            "/organizations/{organization_id}/members",
+            get(organizations::members),
+        )
+        .route(
+            "/organizations/{organization_id}/members/{user_id}",
+            put(organizations::set_member).delete(organizations::remove_member),
+        )
+        .route(
+            "/organizations/{organization_id}/members/{user_id}/removal-preview",
+            get(organizations::removal_preview),
+        )
+        .route(
+            "/organizations/{organization_id}/invitations",
+            get(organizations::invitations).post(organizations::invite),
+        )
+        .route(
+            "/organizations/{organization_id}/settings",
+            put(organizations::set_settings),
+        )
+        .route(
+            "/workspaces/{workspace_id}/limits",
+            get(organizations::workspace_limits).put(organizations::set_workspace_limits),
+        )
+        .route(
+            "/organizations/{organization_id}/workspaces",
+            get(organizations::workspaces),
+        )
+        .route(
+            "/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin",
+            post(organizations::join_as_admin),
+        )
+        .route(
+            "/server/organizations",
+            get(organizations::server_organizations).post(organizations::create),
+        )
+        .route("/server/admins", get(organizations::server_admins))
         .route("/auth-info", get(accounts::auth_info))
         .route(
             "/workspaces",
