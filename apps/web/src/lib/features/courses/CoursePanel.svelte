@@ -798,7 +798,8 @@
           });
         }}
       >
-        <div class="flex min-w-48 flex-1 flex-col gap-1">
+        <!-- 최소 폭 12rem은 200% 글꼴의 375px에서 화면보다 넓어지므로 컨테이너 폭을 넘지 않게 한다(D-110). -->
+        <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
           <Label for="episode-title">{m.courses_new_title()}</Label>
           <Input id="episode-title" bind:value={newEpisode.title} maxlength={300} />
         </div>

@@ -60,7 +60,7 @@
       {@const list = byDay.get(day) ?? []}
       <div
         class={[
-          'group flex min-h-20 flex-col gap-0.5 p-1',
+          'group flex min-h-20 min-w-0 flex-col gap-0.5 p-1',
           day.slice(0, 7) !== month
             ? 'bg-muted text-muted-foreground'
             : isWeekend(day)
@@ -73,8 +73,9 @@
           count: list.length,
         })}
       >
-        <!-- 오늘은 날짜를 채운 원으로(칸 테두리 대신), 만들기 단추는 마우스 화면에서 가리키거나 초점일 때만. -->
-        <span class="flex items-center justify-between">
+        <!-- 오늘은 날짜를 채운 원으로(칸 테두리 대신), 만들기 단추는 마우스 화면에서 가리키거나 초점일 때만. 좁은 칸(375px·200%)에서는
+             만들기 단추가 다음 줄로 내려간다(가로 넘침 금지). -->
+        <span class="flex flex-wrap items-center justify-between">
           <span
             class={[
               'min-w-5 rounded-full px-1.5 text-center tabular-nums',

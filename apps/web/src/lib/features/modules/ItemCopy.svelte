@@ -85,7 +85,7 @@
             >{/each}
         </NativeSelect>
       </div>
-      <div class="flex min-w-48 flex-1 flex-col gap-1">
+      <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
         <Label for="copy-title">{m.modules_copy_new_title()}</Label>
         <Input id="copy-title" bind:value={title} maxlength={200} />
       </div>

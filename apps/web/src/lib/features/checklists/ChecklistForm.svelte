@@ -195,14 +195,15 @@
   </ul>
 
   {#if canEdit}
+    <!-- 375px·200%에서는 입력 칸과 두 단추가 한 줄에 들지 않아 줄바꿈한다(가로 넘침 금지, D-110). -->
     <form
-      class="flex items-end gap-2"
+      class="flex flex-wrap items-end gap-2"
       onsubmit={(event) => {
         event.preventDefault();
         addOne();
       }}
     >
-      <div class="flex flex-1 flex-col gap-1">
+      <div class="flex min-w-0 flex-1 basis-48 flex-col gap-1">
         <Label for={`${idPrefix}-new`}>{m.checklists_new_item()}</Label>
         <Input
           id={`${idPrefix}-new`}

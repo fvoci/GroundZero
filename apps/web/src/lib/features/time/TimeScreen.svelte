@@ -158,7 +158,12 @@
   <section class="flex flex-col gap-4" aria-labelledby="time-heading">
     <div class="flex flex-wrap items-center gap-2">
       <h1 id="time-heading" class="text-xl font-semibold">{m.time_my_time()}</h1>
-      <div class="ml-auto flex gap-1" role="group" aria-label={m.time_week_nav()}>
+      <!-- 375px·200%에서는 세 단추가 한 줄에 들지 않아 줄바꿈한다(가로 넘침 금지, D-110). -->
+      <div
+        class="ml-auto flex flex-wrap justify-end gap-1"
+        role="group"
+        aria-label={m.time_week_nav()}
+      >
         <Button
           size="sm"
           variant="outline"

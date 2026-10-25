@@ -101,7 +101,7 @@
         >
         <Input id="zotero-id" inputmode="numeric" bind:value={libraryId} />
       </div>
-      <div class="flex min-w-48 flex-1 flex-col gap-1">
+      <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
         <Label for="zotero-key">{m.records_zotero_key()}</Label>
         <Input id="zotero-key" type="password" autocomplete="off" bind:value={apiKey} />
       </div>
