@@ -282,7 +282,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     assert_eq!(listed.json[0]["name"], "data.csv");
     assert_eq!(listed.json[0]["can_write"], false);
     assert_eq!(listed.json[0]["size"], data.len());
-    // D-20: 내려받기는 고칠 수 있는 사람이나, 소유자가 복제·다운로드를 허용한 문서의 독자만.
+    // D-115: 수정 권한도 소유 권한이 아니면 allow_copy가 있어야 내려받는다.
     assert_eq!(listed.json[0]["can_download"], false);
     assert_eq!(
         download(&app, &reader, &format!("/api/files/{file_id}/content"))
@@ -305,7 +305,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
         download(&app, &writer, &format!("/api/files/{file_id}/content"))
             .await
             .0,
-        StatusCode::OK
+        StatusCode::FORBIDDEN
     );
     let allowed = send(
         &app,

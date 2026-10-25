@@ -469,9 +469,10 @@ async fn archived_items_and_modules_are_read_only_but_visible() {
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
     assert_eq!(r.json["archived"], true);
     assert_eq!(get(&app, &writer, &doc_uri).await.1["access"], "read");
+    // D-113: 보관 아래 쓰기는 읽기 전용 역할의 403과 달리 상태 충돌이다.
     assert_eq!(
         save(&app, &writer, &doc, "보관 뒤").await,
-        StatusCode::FORBIDDEN
+        StatusCode::CONFLICT
     );
     assert_eq!(
         item_doc(&app, &writer, &it, "새 문서").await.0,
@@ -584,9 +585,9 @@ async fn documents_move_between_wiki_and_items() {
     );
 }
 
-/// 검토 반영: 보관 아래에서도 소유 권한자는 노출을 줄일 수 있고, 넓히는 변경은 막힌다.
+/// D-113: 보관 중에는 관리자도 설정·공유·링크를 바꾸지 못하며 해제 뒤 철회한다.
 #[tokio::test]
-async fn archived_documents_can_still_be_restricted_by_their_owner() {
+async fn archived_documents_require_unarchiving_before_owner_changes() {
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -597,12 +598,14 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
     let doc_id = doc["id"].as_str().unwrap();
     let email = unique_email("guest");
     let guest = login_with_email(&state, "guest", &email, true).await;
+    let organization = common::organization_of_workspace(&ws).await;
+    common::join_organization(organization, &guest, "member").await;
     let share = send(
         &app,
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&admin),
-        Some(json!({ "email": email, "permission": "write" })),
+        Some(json!({ "email": email, "permission": "write", "organization_id": organization })),
     )
     .await;
     assert_eq!(share.status, StatusCode::CREATED, "{:?}", share.json);
@@ -635,7 +638,7 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
         .await
         .1;
     assert_eq!(archived["access"], "read");
-    assert_eq!(archived["can_manage"], true);
+    assert_eq!(archived["can_manage"], false);
     assert_eq!(
         get(&app, &guest, &format!("/api/documents/{doc_id}"))
             .await
@@ -643,7 +646,7 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
         "read"
     );
 
-    // 넓히는 변경은 409, 좁히는 변경은 된다.
+    // D-113: 노출을 줄이는 변경에도 보관 중 관리자 예외는 없다.
     let settings = format!("/api/documents/{doc_id}/settings");
     let widen = send(
         &app,
@@ -662,10 +665,8 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
         Some(json!({ "visibility": "private", "allow_copy": false })),
     )
     .await;
-    assert_eq!(narrow.status, StatusCode::OK, "{:?}", narrow.json);
-    let shares = get(&app, &admin, &format!("/api/documents/{doc_id}/shares")).await;
-    assert_eq!(shares.0, StatusCode::OK);
-    let share_id = shares.1[0]["id"].as_str().unwrap().to_owned();
+    assert_eq!(narrow.status, StatusCode::CONFLICT, "{:?}", narrow.json);
+    let share_id = share.json["id"].as_str().unwrap();
     let r = send(
         &app,
         Method::DELETE,
@@ -674,21 +675,14 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
         None,
     )
     .await;
-    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    assert_eq!(r.status, StatusCode::CONFLICT);
     assert_eq!(
         get(&app, &guest, &format!("/api/documents/{doc_id}"))
             .await
             .0,
-        StatusCode::NOT_FOUND
+        StatusCode::OK
     );
-    let links = get(
-        &app,
-        &admin,
-        &format!("/api/documents/{doc_id}/public-links"),
-    )
-    .await;
-    assert_eq!(links.0, StatusCode::OK);
-    let link_id = links.1[0]["id"].as_str().unwrap().to_owned();
+    let link_id = link.json["id"].as_str().unwrap();
     let r = send(
         &app,
         Method::DELETE,
@@ -697,17 +691,43 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
         None,
     )
     .await;
-    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    assert_eq!(r.status, StatusCode::CONFLICT);
     // 새 공유·새 링크는 보관 중에 만들 수 없다.
     let share = send(
         &app,
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&admin),
-        Some(json!({ "email": unique_email("x"), "permission": "read" })),
+        Some(json!({ "email": email, "permission": "read", "organization_id": organization })),
     )
     .await;
-    assert_eq!(share.status, StatusCode::FORBIDDEN);
+    assert_eq!(share.status, StatusCode::CONFLICT);
+    let unarchived = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{}/archived", dev["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "archived": false })),
+    )
+    .await;
+    assert_eq!(unarchived.status, StatusCode::OK);
+    for uri in [
+        format!("/api/document-shares/{share_id}"),
+        format!("/api/public-links/{link_id}"),
+    ] {
+        assert_eq!(
+            send(&app, Method::DELETE, &uri, Some(&admin), None)
+                .await
+                .status,
+            StatusCode::NO_CONTENT
+        );
+    }
+    assert_eq!(
+        get(&app, &guest, &format!("/api/documents/{doc_id}"))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
 }
 
 /// 검토 반영: 사본·같은 모듈 안 이동·request_id 재사용·공개 링크 안내.

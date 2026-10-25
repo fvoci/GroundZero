@@ -144,12 +144,15 @@ async fn only_the_owner_deletes_and_everyone_loses_access_until_restored() {
     // 밖의 사람에게 공유하고 공개 링크도 만든다.
     let outsider_email = unique_email("outsider");
     let outsider = login_with_email(&state, "outsider", &outsider_email, true).await;
+    // D-114: 공간 밖 공유 대상도 같은 조직 멤버여야 한다.
+    let organization = common::organization_of_workspace(&ws).await;
+    common::join_organization(organization, &outsider, "member").await;
     let shared = send(
         &app,
         Method::POST,
         &format!("{doc_uri}/shares"),
         Some(&owner),
-        Some(json!({ "email": outsider_email, "permission": "read" })),
+        Some(json!({ "email": outsider_email, "permission": "read", "organization_id": organization })),
     )
     .await;
     assert_eq!(shared.status, StatusCode::CREATED, "{:?}", shared.json);
@@ -172,7 +175,12 @@ async fn only_the_owner_deletes_and_everyone_loses_access_until_restored() {
     // 열린 초대. 받는 사람은 조직 멤버여야 수락할 수 있다(D-114).
     let invitee_email = unique_email("invitee");
     let invitee = login_with_email(&state, "invitee", &invitee_email, true).await;
-    common::join_organization(common::organization_of_workspace(&ws).await, &invitee, "member").await;
+    common::join_organization(
+        common::organization_of_workspace(&ws).await,
+        &invitee,
+        "member",
+    )
+    .await;
     let inv = send(
         &app,
         Method::POST,

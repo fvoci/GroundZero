@@ -1306,12 +1306,14 @@ async fn a_document_shared_out_of_a_private_item_does_not_reveal_the_item() {
     .await;
     assert_eq!(doc.status, StatusCode::CREATED, "{:?}", doc.json);
     let doc_id = doc.json["id"].as_str().unwrap().to_owned();
+    // D-114: 개별 공유 행에 문서의 조직을 명시한다.
+    let organization = common::organization_of_workspace(&ws).await;
     let shared = send(
         &app,
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&admin),
-        Some(json!({ "email": email, "permission": "read" })),
+        Some(json!({ "email": email, "permission": "read", "organization_id": organization })),
     )
     .await;
     assert!(shared.status.is_success(), "{:?}", shared.json);
