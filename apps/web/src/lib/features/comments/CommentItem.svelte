@@ -4,6 +4,7 @@
   import type { CommentView } from '$lib/api/client';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
+  import { Textarea } from '$lib/ui/textarea';
 
   interface Props {
     comment: CommentView;
@@ -39,11 +40,7 @@
         if (editing !== undefined && (await onedit(editing.trim()))) editing = undefined;
       }}
     >
-      <textarea
-        aria-label={m.comments_edit_label()}
-        class="min-h-16 rounded-md border bg-background p-2 text-sm"
-        bind:value={editing}
-        maxlength={10000}></textarea>
+      <Textarea aria-label={m.comments_edit_label()} bind:value={editing} maxlength={10000} />
       <div class="flex gap-2">
         <Button type="submit" size="sm" disabled={busy}>{m.common_save()}</Button>
         <Button size="sm" variant="ghost" onclick={() => (editing = undefined)}

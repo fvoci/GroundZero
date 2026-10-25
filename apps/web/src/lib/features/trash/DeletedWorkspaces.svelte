@@ -70,9 +70,11 @@
     <p class="text-sm text-muted-foreground">
       {m.trash_workspaces_hint()}
     </p>
-    <p aria-live="polite" class="text-sm">
-      {#if error !== undefined}<span class="text-destructive">{error}</span>{:else}{status}{/if}
-    </p>
+    <!-- 오류는 따로 알리고(alert), 완료 알림은 처음부터 있는 polite 영역에서 바뀐다(알림 영역을 겹치지 않는다). -->
+    {#if error !== undefined}
+      <p role="alert" class="text-sm text-destructive">{error}</p>
+    {/if}
+    <p aria-live="polite" class="text-sm empty:sr-only">{error === undefined ? status : ''}</p>
     <ul class="flex flex-col gap-2" data-testid="deleted-workspaces">
       {#each list as w (w.id)}
         <li class="flex flex-wrap items-center gap-2 rounded-md border p-2 text-sm">

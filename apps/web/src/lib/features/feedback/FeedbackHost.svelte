@@ -68,7 +68,7 @@
   <div
     role="status"
     aria-live="polite"
-    class="sticky top-0 z-40 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900"
+    class="sticky top-0 z-40 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
     data-testid="session-banner"
   >
     <span>{m.common_session_expired()}</span>
@@ -81,7 +81,7 @@
   <div
     role="status"
     aria-live="polite"
-    class="sticky top-0 z-40 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900"
+    class="sticky top-0 z-40 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
     data-testid="connection-banner"
   >
     {m.common_connection_lost()}

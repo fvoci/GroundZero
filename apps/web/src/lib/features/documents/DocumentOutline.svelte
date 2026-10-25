@@ -55,6 +55,7 @@
           <button
             type="button"
             class="w-full truncate rounded px-1 py-0.5 text-left text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            title={heading.text}
             onclick={() => {
               heading.element.scrollIntoView({ block: 'start' });
             }}>{heading.text}</button

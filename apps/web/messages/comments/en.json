@@ -25,5 +25,6 @@
   "comments_edit": "Edit",
   "comments_delete": "Delete",
   "comments_delete_confirm_label": "Confirm comment deletion",
-  "comments_delete_confirm": "Delete this comment?"
+  "comments_delete_confirm": "Delete this comment?",
+  "comments_loading": "Loading…"
 }

@@ -22,6 +22,7 @@
   import type { ReferenceContext } from '$lib/features/references/context';
   import { m } from '$lib/paraglide/messages.js';
   import { router, standalonePath } from '$lib/router.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
@@ -490,6 +491,16 @@
     }
   }
 
+  let pendingLeave = $state<(() => void) | undefined>(undefined);
+  let leaving = false;
+  function leave(): void {
+    const go = pendingLeave;
+    pendingLeave = undefined;
+    leaving = true;
+    go?.();
+    leaving = false;
+  }
+
   onMount(() => {
     const beforeUnload = (event: BeforeUnloadEvent): void => {
       if (!isDirty()) return;
@@ -506,7 +517,13 @@
       if (!kept) event.preventDefault();
     };
     window.addEventListener('beforeunload', beforeUnload);
-    router.guard = () => !isDirty() || window.confirm(m.documents_leave_confirm());
+    // 저장하지 않은 채 다른 화면으로 가려 하면 이동을 붙잡고 다른 화면과 같은 확인을 연다(브라우저 기본 확인창 대신). 떠나기로
+    // 하면 같은 이동을 다시 하고, 계속 편집하면 입력을 그대로 둔다.
+    router.guard = (proceed) => {
+      if (leaving || !isDirty()) return true;
+      pendingLeave = proceed;
+      return false;
+    };
     return () => {
       destroyed = true;
       if (timer !== undefined) clearTimeout(timer);
@@ -581,7 +598,7 @@
       <p class="text-sm">
         {m.documents_conflict_body({ revision: conflict.revision })}
       </p>
-      <div class="grid gap-3 md:grid-cols-2">
+      <div class="grid gap-3 @2xl:grid-cols-2">
         <div>
           <h3 class="text-sm font-semibold">
             {m.documents_conflict_server({ title: conflict.title })}
@@ -637,6 +654,15 @@
       }}
     />
   {/key}
+  <DiscardChangesConfirm
+    open={pendingLeave !== undefined}
+    description={m.documents_leave_confirm()}
+    confirmLabel={m.documents_leave_go()}
+    onkeep={() => {
+      pendingLeave = undefined;
+    }}
+    ondiscard={leave}
+  />
 </article>
 
 <Dialog.Root bind:open={confirmOverwrite}>

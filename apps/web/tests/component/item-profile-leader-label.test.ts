@@ -154,3 +154,25 @@ describe('item profile leader label', () => {
     expect(leaderTrigger().textContent.trim()).toBe('Test User');
   });
 });
+
+// 공통 Badge는 긴 글을 말줄임 없이 잘랐다. 사람·그룹 이름은 칸 폭에서 말줄임하고 전체 이름을 title로 둔다. 배치는 jsdom이
+// 계산하지 않아 구조만 지키고, 말줄임은 실제 브라우저(375px)에서 확인했다.
+describe('item member badges', () => {
+  it('ellipsizes long member and group names and keeps the whole name', async () => {
+    const long = '연구실공동세미나발표담당자SecondUserWithAVeryLongDisplayName';
+    vi.spyOn(api, 'itemProfile').mockResolvedValue({
+      ...profile,
+      members: [{ user_id: 'u2', display_name: long }],
+      groups: [{ id: 'g1', name: '2026학년도2학기대학원연구실공동세미나' }],
+    });
+    vi.spyOn(api, 'assignable').mockResolvedValue([leader]);
+    render(ItemProfilePanel, { props: { item, kind: 'project', onchanged: () => undefined } });
+
+    const name = await screen.findByText(long);
+    expect(name).toHaveClass('truncate');
+    expect(name.closest('[data-slot="badge"]')).toHaveAttribute('title', long);
+    const group = screen.getByText('그룹 · 2026학년도2학기대학원연구실공동세미나');
+    expect(group).toHaveClass('truncate');
+    expect(group.closest('li')).toHaveClass('min-w-0', 'max-w-full');
+  });
+});

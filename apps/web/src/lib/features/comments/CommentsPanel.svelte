@@ -6,6 +6,7 @@
   import { RetryKey } from '$lib/api/retry-key';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
+  import { Textarea } from '$lib/ui/textarea';
 
   import CommentItem from './CommentItem.svelte';
   import { threads } from './threads';
@@ -17,6 +18,8 @@
   const { target }: Props = $props();
 
   let comments = $state<CommentView[]>([]);
+  // 이 대상의 목록을 한 번이라도 받았는지. 받기 전에는 "댓글이 없습니다" 대신 불러오는 중이라고 보인다.
+  let loaded = $state(false);
   let error = $state<string | undefined>(undefined);
   let status = $state('');
   let draft = $state('');
@@ -39,12 +42,20 @@
       lastTarget = t.id;
       draftKey.done();
       replyKey.done();
+      // 다른 대상의 댓글·오류·완료 문구를 보이지 않는다. 다시 읽기(작업 뒤)는 받을 때까지 지금 목록을 둔다.
+      comments = [];
+      loaded = false;
+      error = undefined;
+      status = '';
     }
     const mine = ++seq;
     api
       .comments(t)
       .then((list) => {
-        if (mine === seq) comments = list;
+        if (mine === seq) {
+          comments = list;
+          loaded = true;
+        }
       })
       .catch((e: unknown) => {
         if (mine === seq) error = errorText(e, m.comments_load_failed());
@@ -118,8 +129,13 @@
   >
     {m.comments_heading()}
   </h2>
+  <!-- 목록이 비었을 때의 불러오는 중·빈 목록 글도 이 알림 영역에서 바뀌어 화면 낭독기가 끝났음을 읽는다(리뷰). -->
   <p aria-live="polite" class="text-sm">
     {#if error !== undefined}<span class="text-destructive">{error}</span>{:else}{status}{/if}
+    {#if comments.length === 0 && error === undefined}
+      <span class="text-muted-foreground">{loaded ? m.comments_empty() : m.comments_loading()}</span
+      >
+    {/if}
   </p>
   <ul class="flex flex-col gap-3" data-testid="comments">
     {#each threads(comments) as t (t.root.id)}
@@ -187,15 +203,15 @@
                 void reply(t.root.id);
               }}
             >
-              <textarea
-                use:focusOnMount
+              <Textarea
+                {@attach focusOnMount}
                 aria-label={m.comments_reply()}
-                class="min-h-16 rounded-md border bg-background p-2 text-sm"
                 bind:value={replyDraft}
                 maxlength={10000}
                 onkeydown={(e: KeyboardEvent) => {
                   submitOnCtrlEnter(e, () => void reply(t.root.id));
-                }}></textarea>
+                }}
+              />
               <div class="flex gap-2">
                 <Button type="submit" size="sm" disabled={busy || replyDraft.trim() === ''}
                   >{m.comments_reply_submit()}</Button
@@ -208,8 +224,6 @@
           {/if}
         {/if}
       </li>
-    {:else}
-      <li class="text-sm text-muted-foreground">{m.comments_empty()}</li>
     {/each}
   </ul>
   <form
@@ -219,15 +233,16 @@
       void post();
     }}
   >
-    <textarea
+    <Textarea
       aria-label={m.comments_new_label()}
-      class="min-h-20 rounded-md border bg-background p-2 text-sm"
+      class="min-h-20"
       bind:value={draft}
       maxlength={10000}
       placeholder={m.comments_new_placeholder()}
       onkeydown={(e: KeyboardEvent) => {
         submitOnCtrlEnter(e, () => void post());
-      }}></textarea>
+      }}
+    />
     <div>
       <Button type="submit" disabled={busy || draft.trim() === ''}>{m.comments_post()}</Button>
     </div>

@@ -118,6 +118,14 @@
     if (router.path !== '') sidebar.setOpenMobile(false);
   });
 
+  // 대화상자를 여는 동작(검색·표시 설정·내보내기)도 서랍을 먼저 닫는다. 서랍이 대화상자 위에 남아 가렸다.
+  function closingDrawer(action: () => void): () => void {
+    return () => {
+      sidebar.setOpenMobile(false);
+      action();
+    };
+  }
+
   function go(e: MouseEvent, path: string): void {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
     e.preventDefault();
@@ -220,7 +228,7 @@
         <Sidebar.MenuButton
           variant="outline"
           tooltipContent={m.app_search()}
-          onclick={onsearch}
+          onclick={closingDrawer(onsearch)}
           data-testid="search-open"
           class="text-muted-foreground"
         >
@@ -453,10 +461,10 @@
             {/snippet}
           </DropdownMenu.Trigger>
           <DropdownMenu.Content side="top" align="start" class="min-w-56">
-            <DropdownMenu.Item onSelect={ondisplay}>
+            <DropdownMenu.Item onSelect={closingDrawer(ondisplay)}>
               <Settings2 aria-hidden="true" />{m.app_menu_display()}
             </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={onexport}>
+            <DropdownMenu.Item onSelect={closingDrawer(onexport)}>
               <Download aria-hidden="true" />{m.app_menu_export()}
             </DropdownMenu.Item>
             <DropdownMenu.Separator />

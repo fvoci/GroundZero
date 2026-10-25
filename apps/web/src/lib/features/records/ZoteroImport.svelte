@@ -8,6 +8,7 @@
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { NativeSelect } from '$lib/ui/native-select';
 
   interface Props {
     itemId: string;
@@ -25,7 +26,6 @@
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
   let status = $state('');
-  const box = 'h-9 rounded-md border border-input bg-transparent px-3 text-base';
 
   function library(): ZoteroLibraryInput | undefined {
     if (apiKey.trim() === '' || !/^\d+$/.test(libraryId.trim())) {
@@ -88,10 +88,10 @@
     >
       <div class="flex flex-col gap-1">
         <Label for="zotero-type">{m.records_zotero_library()}</Label>
-        <select id="zotero-type" class={box} bind:value={libraryType}>
+        <NativeSelect id="zotero-type" class="w-full" bind:value={libraryType}>
           <option value="user">{m.records_zotero_my_library()}</option>
           <option value="group">{m.records_zotero_group()}</option>
-        </select>
+        </NativeSelect>
       </div>
       <div class="flex w-32 flex-col gap-1">
         <Label for="zotero-id"
@@ -115,10 +115,10 @@
       {#if collections.length > 0}
         <div class="flex flex-col gap-1">
           <Label for="zotero-collection">{m.records_zotero_collection()}</Label>
-          <select id="zotero-collection" class={box} bind:value={collection}>
+          <NativeSelect id="zotero-collection" class="w-full" bind:value={collection}>
             <option value="">{m.records_zotero_all()}</option>
             {#each collections as c (c.key)}<option value={c.key}>{c.name}</option>{/each}
-          </select>
+          </NativeSelect>
         </div>
       {/if}
       <Button type="submit" size="sm" disabled={busy}

@@ -1,0 +1,15 @@
+// Storybook 정적 빌드를 Cloudflare Workers(정적 자산만, Worker 코드 없음)로 보인다. 빌드·배포·PR 미리보기는
+// Workers Builds가 맡는다. 설정 값과 명령은 docs/development.md의 Storybook 절을 따른다.
+{
+  "name": "fvoci-storybook",
+  "compatibility_date": "2026-10-20",
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    // `pnpm --filter @fvoci/web run build-storybook`의 출력.
+    "directory": "../../target/storybook-static",
+  },
+  // Worker Previews(`wrangler preview`, PR별 미리보기)는 이 블록이 있어야 한다. 정적 자산만 쓰므로 미리보기 전용
+  // 변수·바인딩은 없다.
+  "previews": {},
+}

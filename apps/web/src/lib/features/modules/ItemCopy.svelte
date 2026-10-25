@@ -13,6 +13,7 @@
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { NativeSelect } from '$lib/ui/native-select';
 
   interface Props {
     item: ItemView;
@@ -79,14 +80,10 @@
     >
       <div class="flex flex-col gap-1">
         <Label for="copy-target">{m.modules_copy_module()}</Label>
-        <select
-          id="copy-target"
-          class="h-9 rounded-md border border-input bg-transparent px-3 text-base"
-          bind:value={target}
-        >
+        <NativeSelect id="copy-target" class="w-full" bind:value={target}>
           {#each targets as mod (mod.id)}<option value={mod.id}>{mod.name} ({mod.key})</option
             >{/each}
-        </select>
+        </NativeSelect>
       </div>
       <div class="flex min-w-48 flex-1 flex-col gap-1">
         <Label for="copy-title">{m.modules_copy_new_title()}</Label>
@@ -104,20 +101,22 @@
     </form>
   {/if}
   {#if error !== undefined}<p role="alert" class="text-destructive">{error}</p>{/if}
-  {#if result !== undefined}
-    {@const done = result}
-    <p role="status">
-      {m.modules_copy_done()}{done.skipped > 0
-        ? ` ${m.modules_copy_skipped({ count: done.skipped })}`
-        : ''}
-      <a
-        class="underline"
-        href={itemPath(item.workspace_id, done.id)}
-        onclick={(e: MouseEvent) => {
-          e.preventDefault();
-          router.navigate(itemPath(item.workspace_id, done.id));
-        }}>{m.modules_copy_open()}</a
-      >
-    </p>
-  {/if}
+  <div role="status" class="empty:hidden">
+    {#if result !== undefined}
+      {@const done = result}
+      <p>
+        {m.modules_copy_done()}{done.skipped > 0
+          ? ` ${m.modules_copy_skipped({ count: done.skipped })}`
+          : ''}
+        <a
+          class="underline"
+          href={itemPath(item.workspace_id, done.id)}
+          onclick={(e: MouseEvent) => {
+            e.preventDefault();
+            router.navigate(itemPath(item.workspace_id, done.id));
+          }}>{m.modules_copy_open()}</a
+        >
+      </p>
+    {/if}
+  </div>
 </div>

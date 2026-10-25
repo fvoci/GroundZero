@@ -9,6 +9,7 @@
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Textarea } from '$lib/ui/textarea';
   import * as Select from '$lib/ui/select';
 
   import { trimLikeServer } from './conflict';
@@ -340,12 +341,7 @@
   {/if}
   <div class="flex flex-col gap-1 md:col-span-2">
     <Label for={`${idPrefix}-description`}>{m.events_description()}</Label>
-    <textarea
-      id={`${idPrefix}-description`}
-      bind:value={f.description}
-      rows={2}
-      class="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-    ></textarea>
+    <Textarea id={`${idPrefix}-description`} bind:value={f.description} rows={2} />
   </div>
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive md:col-span-2">{error}</p>

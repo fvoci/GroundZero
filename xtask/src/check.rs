@@ -70,6 +70,11 @@ pub fn run(root: &Path, skip_licenses: bool) -> Result<()> {
             "pnpm test",
             Box::new(|sh| Ok(cmd!(sh, "pnpm run test").run()?)),
         ),
+        // story가 실제 Vite 빌드로 묶이는지(설정·import 오류). 출력은 target/storybook-static.
+        (
+            "storybook build",
+            Box::new(|sh| Ok(cmd!(sh, "pnpm --filter @fvoci/web run build-storybook").run()?)),
+        ),
     ];
     if skip_licenses {
         println!("SKIP licenses (--skip-licenses; run `cargo xtask licenses` separately)");

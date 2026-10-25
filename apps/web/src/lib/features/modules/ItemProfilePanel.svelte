@@ -18,6 +18,7 @@
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Textarea } from '$lib/ui/textarea';
   import * as Select from '$lib/ui/select';
 
   import ItemProfileSummary from './ItemProfileSummary.svelte';
@@ -81,8 +82,6 @@
   });
   const fields = $derived(detailFields(kind));
   const labels = $derived(peopleLabels(kind));
-  const textarea =
-    'rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 
   $effect(() => {
     const id = item.id;
@@ -249,7 +248,7 @@
         </div>
       </div>
     {/if}
-    <form class="grid gap-3 sm:grid-cols-2" onsubmit={(e) => void save(e)} novalidate>
+    <form class="grid gap-3 @xl:grid-cols-2" onsubmit={(e) => void save(e)} novalidate>
       <div class="flex flex-col gap-1">
         <span id="item-status-label" class="text-sm font-medium">{m.modules_status()}</span>
         <Select.Root
@@ -297,38 +296,36 @@
         <Label for="item-ends">{m.modules_ends_on()}</Label>
         <Input id="item-ends" type="date" bind:value={form.ends_on} />
       </div>
-      <div class="flex flex-col gap-1 sm:col-span-2">
+      <div class="flex flex-col gap-1 @xl:col-span-2">
         <Label for="item-goal">{m.modules_goal()}</Label>
-        <textarea id="item-goal" class={textarea} rows={2} maxlength={4000} bind:value={form.goal}
-        ></textarea>
+        <Textarea id="item-goal" rows={2} maxlength={4000} bind:value={form.goal} />
       </div>
-      <div class="flex flex-col gap-1 sm:col-span-2">
+      <div class="flex flex-col gap-1 @xl:col-span-2">
         <Label for="item-scope">{m.modules_scope()}</Label>
-        <textarea id="item-scope" class={textarea} rows={2} maxlength={4000} bind:value={form.scope}
-        ></textarea>
+        <Textarea id="item-scope" rows={2} maxlength={4000} bind:value={form.scope} />
       </div>
       {#if kind === 'research'}
-        <div class="flex flex-col gap-1 sm:col-span-2">
+        <div class="flex flex-col gap-1 @xl:col-span-2">
           <Label for="item-keywords">{m.modules_keywords_input()}</Label>
           <Input id="item-keywords" bind:value={form.keywords} />
         </div>
       {/if}
       {#each fields as f (f.key)}
-        <div class={['flex flex-col gap-1', f.multiline ? 'sm:col-span-2' : '']}>
+        <div class={['flex flex-col gap-1', f.multiline ? '@xl:col-span-2' : '']}>
           <Label for={`item-detail-${f.key}`}>{f.label}</Label>
           {#if f.multiline}
-            <textarea
+            <Textarea
               id={`item-detail-${f.key}`}
-              class={textarea}
               rows={2}
               maxlength={2000}
-              bind:value={form.values[f.key]}></textarea>
+              bind:value={form.values[f.key]}
+            />
           {:else}
             <Input id={`item-detail-${f.key}`} maxlength={2000} bind:value={form.values[f.key]} />
           {/if}
         </div>
       {/each}
-      <div class="flex gap-2 sm:col-span-2">
+      <div class="flex gap-2 @xl:col-span-2">
         <Button type="submit">{m.common_save()}</Button>
         <Button
           type="button"
@@ -403,12 +400,19 @@
       {:else if p.members.length === 0 && p.groups.length === 0}
         <p>{m.modules_none()}</p>
       {:else}
+        <!-- 공통 Badge는 긴 글을 말줄임 없이 자른다. 사람·그룹 이름은 길 수 있어 칸 폭에서 말줄임하고 전체 이름은 title로. -->
         <ul class="flex flex-wrap gap-1" aria-label={labels.members}>
-          {#each p.members as member (member.user_id)}<li>
-              <Badge variant="secondary">{member.display_name}</Badge>
+          {#each p.members as member (member.user_id)}<li class="min-w-0 max-w-full">
+              <Badge variant="secondary" class="max-w-full" title={member.display_name}
+                ><span class="truncate">{member.display_name}</span></Badge
+              >
             </li>{/each}
-          {#each p.groups as g (g.id)}<li>
-              <Badge variant="outline">{m.modules_group_badge({ name: g.name })}</Badge>
+          {#each p.groups as g (g.id)}
+            {@const label = m.modules_group_badge({ name: g.name })}
+            <li class="min-w-0 max-w-full">
+              <Badge variant="outline" class="max-w-full" title={label}
+                ><span class="truncate">{label}</span></Badge
+              >
             </li>{/each}
         </ul>
       {/if}

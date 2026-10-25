@@ -44,7 +44,14 @@
   let entries = $state<TimeEntryView[]>([]);
   let daily = $state<TimeSummaryRowView[]>([]);
   let monthly = $state<TimeSummaryRowView[]>([]);
+  // 첫 목록을 받기 전에는 빈 표·"기록이 없습니다" 대신 불러오는 중이라고 보인다.
+  let loaded = $state(false);
   let sharing = $state<Record<string, boolean>>({});
+  // 공유 설정을 받기 전·못 받았을 때는 선택 칸을 막는다(모르는 상태를 "꺼짐"으로 보이고 누르면 엉뚱한 값을 보낸다).
+  let sharingLoad = $state<'loading' | 'ready' | 'error'>('loading');
+  let sharingKey = $state(0);
+  // 바꾸는 중인 워크스페이스. 응답이 오기 전 다시 누르면 순서가 뒤섞이므로 그동안 막는다.
+  let sharingBusy = $state<Record<string, boolean>>({});
   let error = $state<string | undefined>(undefined);
   let editing = $state<TimeEntryView | undefined>(undefined);
   let reloadKey = $state(0);
@@ -72,6 +79,7 @@
         entries = e;
         daily = d;
         monthly = mo;
+        loaded = true;
         error = undefined;
       })
       .catch((e: unknown) => {
@@ -82,13 +90,23 @@
     };
   });
 
+  const sharingRequest = $derived({ list: workspaces, key: sharingKey });
   $effect(() => {
-    const list = workspaces;
+    const { list } = sharingRequest;
+    let cancelled = false;
+    sharingLoad = 'loading';
     void Promise.all(list.map(async (w) => [w.id, await api.timeSharing(w.id)] as const))
       .then((pairs) => {
+        if (cancelled) return;
         sharing = Object.fromEntries(pairs);
+        sharingLoad = 'ready';
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) sharingLoad = 'error';
+      });
+    return () => {
+      cancelled = true;
+    };
   });
 
   const total = (rows: TimeSummaryRowView[], filter: (r: TimeSummaryRowView) => boolean): number =>
@@ -160,10 +178,14 @@
   }
 
   async function toggleSharing(ws: string, on: boolean): Promise<void> {
+    if (sharingBusy[ws] === true) return;
+    sharingBusy = { ...sharingBusy, [ws]: true };
     try {
       sharing = { ...sharing, [ws]: await api.setTimeSharing(ws, on) };
     } catch (e: unknown) {
       error = errorText(e, m.time_sharing_failed());
+    } finally {
+      sharingBusy = { ...sharingBusy, [ws]: false };
     }
   }
 
@@ -197,7 +219,20 @@
     {m.time_week_hint({ from: weekStart, to: weekEnd, zone })}
   </p>
   {#if error !== undefined}
-    <p role="alert" class="text-sm text-destructive">{error}</p>
+    <p role="alert" class="text-sm text-destructive">
+      {error}
+      {#if !loaded}
+        <Button
+          size="sm"
+          variant="outline"
+          class="ml-2"
+          onclick={() => {
+            error = undefined;
+            reloadKey += 1;
+          }}>{m.common_retry()}</Button
+        >
+      {/if}
+    </p>
   {/if}
 
   <div class="overflow-x-auto">
@@ -226,17 +261,26 @@
             <td class="font-medium">{durationText(total(daily, (r) => r.kind === k))}</td>
           </tr>
         {:else}
-          <tr><td colspan="9" class="py-2 text-muted-foreground">{m.time_week_empty()}</td></tr>
+          <tr
+            ><td colspan="9" class="py-2 text-muted-foreground"
+              >{loaded ? m.time_week_empty() : error === undefined ? m.app_loading() : ''}</td
+            ></tr
+          >
         {/each}
       </tbody>
     </table>
   </div>
-  <p class="text-sm">
+  <!-- 이번 달 합계 한 줄은 불러오는 중에서 결과로 바뀔 때 낭독기가 읽는다(주간 표는 칸이 많아 알림 영역으로 두지 않는다). -->
+  <p class="text-sm" aria-live="polite">
     {m.time_this_month()}
     {#each TIME_KINDS.filter((k) => monthly.some((r) => r.kind === k)) as k, i (k)}{i > 0
         ? ' · '
         : ''}{TIME_KIND_LABEL[k]}
-      {durationText(total(monthly, (r) => r.kind === k))}{:else}{m.time_month_empty()}{/each}
+      {durationText(total(monthly, (r) => r.kind === k))}{:else}{loaded
+        ? m.time_month_empty()
+        : error === undefined
+          ? m.app_loading()
+          : ''}{/each}
   </p>
 
   <section class="flex flex-col gap-2" aria-labelledby="time-entries-heading">
@@ -270,9 +314,13 @@
           {/each}
         </ul>
       {/if}
-    {:else}
-      <p class="text-sm text-muted-foreground">{m.time_entries_empty()}</p>
     {/each}
+    <!-- 날짜는 늘 7개라 위 목록의 {:else}로는 빈 주를 알릴 수 없다. 기록이 없을 때 따로 알린다. -->
+    {#if entries.length === 0}
+      <p class="text-sm text-muted-foreground">
+        {loaded ? m.time_entries_empty() : error === undefined ? m.app_loading() : ''}
+      </p>
+    {/if}
   </section>
 
   <section class="flex flex-col gap-2" aria-labelledby="time-manual-heading">
@@ -358,11 +406,20 @@
   <section class="flex flex-col gap-2" aria-labelledby="time-sharing-heading">
     <h2 id="time-sharing-heading" class="text-lg font-semibold">{m.time_sharing_heading()}</h2>
     <p class="text-sm text-muted-foreground">{m.time_sharing_hint()}</p>
+    {#if sharingLoad === 'error'}
+      <p role="alert" class="text-sm text-destructive">
+        {m.time_sharing_load_failed()}
+        <Button size="sm" variant="outline" class="ml-2" onclick={() => (sharingKey += 1)}
+          >{m.common_retry()}</Button
+        >
+      </p>
+    {/if}
     {#each workspaces as w (w.id)}
       <div class="flex items-center gap-2">
         <Checkbox
           id={`time-share-${w.id}`}
           checked={sharing[w.id] === true}
+          disabled={sharingLoad !== 'ready' || sharingBusy[w.id] === true}
           onCheckedChange={(v) => void toggleSharing(w.id, v === true)}
         />
         <Label for={`time-share-${w.id}`}>{w.name}</Label>

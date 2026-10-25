@@ -7,14 +7,19 @@ import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { applyTheme, THEME_KEY } from '$lib/theme.svelte';
 
 afterEach(() => {
   vi.restoreAllMocks();
   applyDocFont('sans');
+  applyTheme('light');
+  window.localStorage.clear();
   me.locale = '';
   me.timeZone = '';
   me.weekStart = '';
   me.hourCycle = '';
+  me.theme = 'system';
+  vi.unstubAllGlobals();
 });
 
 async function openDialog(): Promise<HTMLSelectElement[]> {
@@ -77,5 +82,38 @@ describe('display settings dialog', () => {
     await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
     await screen.findByRole('alert');
     expect(document.documentElement.dataset.docFont).toBe('serif');
+  });
+});
+
+// 화면 밝기(시스템 설정 따르기·밝게·어둡게, D-109)는 다른 표시 설정처럼 계정에 둔다. 이 브라우저에는 첫 그림용 사본만 둔다.
+// 이것만 바꾸면 바로 적용하고 화면을 새로 읽지 않는다.
+describe('display settings dialog theme', () => {
+  it('offers system, light and dark, saves the choice to the account and applies it without a reload', async () => {
+    const saveAccount = vi.spyOn(api, 'setDisplaySettings').mockResolvedValue(undefined);
+    const reload = vi.fn();
+    vi.stubGlobal('location', { reload });
+    me.theme = 'system';
+    applyTheme('system');
+    await openDialog();
+    const theme = screen.getByRole('combobox', { name: /^화면 밝기/ });
+    expect(theme).toHaveValue('system');
+    expect([...theme.querySelectorAll('option')].map((o) => o.textContent)).toEqual([
+      '시스템 설정 따르기',
+      '밝게',
+      '어둡게',
+    ]);
+
+    await fireEvent.change(theme, { target: { value: 'dark' } });
+    await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
+    await vi.waitFor(() => {
+      expect(saveAccount).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dark' }));
+    });
+    await vi.waitFor(() => {
+      expect(document.documentElement).toHaveClass('dark');
+    });
+    expect(me.theme).toBe('dark');
+    // 다음 첫 그림(index.html)을 위한 사본.
+    expect(window.localStorage.getItem(THEME_KEY)).toBe('dark');
+    expect(reload).not.toHaveBeenCalled();
   });
 });

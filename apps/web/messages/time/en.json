@@ -94,5 +94,6 @@
   "time_add_entry": "Add entry",
   "time_sharing_heading": "Share totals",
   "time_sharing_hint": "When on, only the totals of my time linked to that workspace's tasks are shown. Entries, notes and times aren't shared.",
-  "time_no_workspaces": "No workspaces."
+  "time_no_workspaces": "No workspaces.",
+  "time_sharing_load_failed": "Couldn't load sharing settings."
 }

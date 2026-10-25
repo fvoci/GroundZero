@@ -1,0 +1,334 @@
+{
+  "about": "개발 전용 합성 데이터. 실제 사람·고객·연구 자료가 아니다. dev-ui-seed.sql(cargo xtask dev)과 Storybook(apps/web/stories/fixtures/synthetic.ts)이 같은 내용을 쓴다. 사람 이름은 deploy/keycloak/realm-test.json의 테스트 사용자 표시 이름과 같아야 한다.",
+  "people": [
+    { "key": "owner", "name": "Test User" },
+    { "key": "writer", "name": "Second User" }
+  ],
+  "samples": {
+    "long_ko": "2026학년도 2학기 대학원 연구실 공동 세미나 발표 자료와 회의록을 한곳에 모아 정리하는 작업 공간",
+    "no_space": "https://example.test/workspaces/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/documents/ffffffff-0000-1111-2222-333333333333",
+    "numbers": "12,345,678.90 · 2026-10-25 · 0001234567",
+    "emoji": "회의 준비 🎉📚✅ 👩‍💻🧑‍🔬"
+  },
+  "workspace": "UI 상태 예제 (합성 데이터)",
+  "documents": [
+    {
+      "key": "guide",
+      "parent": null,
+      "title": "연구실 안내",
+      "body": "새로 합류한 사람이 처음 읽는 문서입니다. 자리 배치, 공용 장비 예약, 세미나 일정을 정리합니다."
+    },
+    {
+      "key": "seminar",
+      "parent": "guide",
+      "title": "세미나 발표 순서",
+      "body": "매주 목요일 오후 두 시에 두 명씩 발표합니다. 발표 자료는 전날까지 올립니다."
+    },
+    {
+      "key": "minutes",
+      "parent": "guide",
+      "title": "회의록 2026-10",
+      "body": "10월 정기 회의에서 장비 예약 규칙과 자료 보관 위치를 정했습니다."
+    },
+    {
+      "key": "minutes-week3",
+      "parent": "minutes",
+      "title": "3주 차 회의: 실험 일정 조정",
+      "body": "장비 점검 때문에 실험을 하루씩 미루고, 분석 일정은 그대로 둡니다."
+    },
+    {
+      "key": "equipment",
+      "parent": "guide",
+      "title": "공용 장비 예약 규칙",
+      "body": "예약은 하루 최대 네 시간이며 끝나면 사용 기록을 남깁니다."
+    },
+    {
+      "key": "references",
+      "parent": null,
+      "title": "참고 문헌 목록",
+      "body": "읽은 논문과 책을 주제별로 모읍니다. 인용 형식은 학과 양식을 따릅니다."
+    },
+    {
+      "key": "references-method",
+      "parent": "references",
+      "title": "방법론 읽을거리",
+      "body": "표본 설계와 측정 도구에 관한 자료입니다."
+    },
+    {
+      "key": "long-title",
+      "parent": null,
+      "title": "2026학년도 2학기 대학원 연구실 공동 세미나 발표 자료와 회의록을 한곳에 모아 정리하는 작업 공간",
+      "body": "제목이 긴 문서가 목록·트리·탭에서 어떻게 줄바꿈되거나 잘리는지 확인합니다."
+    },
+    {
+      "key": "no-space",
+      "parent": "long-title",
+      "title": "https://example.test/workspaces/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/documents/ffffffff-0000-1111-2222-333333333333",
+      "body": "공백 없는 긴 문자열이 화면을 가로로 넘치지 않는지 확인합니다."
+    },
+    {
+      "key": "emoji",
+      "parent": "long-title",
+      "title": "회의 준비 🎉📚✅ 👩‍💻🧑‍🔬",
+      "body": "이모지와 결합 문자가 섞인 제목입니다."
+    },
+    {
+      "key": "numbers",
+      "parent": null,
+      "title": "예산 12,345,678.90원 정산 (2026-10-25)",
+      "body": "숫자와 날짜가 섞인 제목과 본문입니다. 문서 번호 0001234567."
+    },
+    {
+      "key": "empty-body",
+      "parent": null,
+      "title": "빈 초안",
+      "body": ""
+    }
+  ],
+  "comments": {
+    "document": "seminar",
+    "threads": [
+      {
+        "author": "owner",
+        "body": "초안 잘 봤습니다. 2절의 표는 다음 회의 전에 고쳐 두겠습니다.",
+        "resolved": false,
+        "replies": [
+          { "author": "writer", "body": "좋습니다. 표 번호도 같이 맞춰 주세요." },
+          { "author": "owner", "body": "표 번호까지 맞췄습니다. 다시 확인 부탁드립니다." }
+        ]
+      },
+      {
+        "author": "writer",
+        "body": "2026학년도 2학기 대학원 연구실 공동 세미나 발표 자료와 회의록을 한곳에 모아 정리하는 작업 공간 https://example.test/workspaces/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/documents/ffffffff-0000-1111-2222-333333333333 회의 준비 🎉📚✅ 👩‍💻🧑‍🔬",
+        "resolved": false,
+        "replies": []
+      },
+      {
+        "author": "writer",
+        "body": "발표 순서를 바꿔도 될까요?\n다음 주에 학회 일정이 있습니다.",
+        "resolved": false,
+        "replies": [{ "author": "owner", "body": "네, 3주 차와 바꾸겠습니다." }]
+      },
+      {
+        "author": "owner",
+        "body": "참고 문헌 형식은 학과 양식으로 통일했습니다.",
+        "resolved": true,
+        "replies": [{ "author": "writer", "body": "확인했습니다." }]
+      }
+    ]
+  },
+  "module": {
+    "name": "UI 예제",
+    "key": "DEVU",
+    "description": "개발 전용 합성 예제. Storybook과 같은 데이터입니다.",
+    "item": "UI 상태 점검",
+    "item_description": "긴 제목·이모지·숫자·상태가 다른 업무로 화면을 점검합니다."
+  },
+  "project_items": [
+    {
+      "title": "2026학년도 2학기 대학원 연구실 공동 세미나 발표 자료와 회의록을 한곳에 모아 정리하는 작업 공간",
+      "description": "제목이 긴 항목이 목록에서 어떻게 줄바꿈되는지 확인합니다.",
+      "status": "active",
+      "start": -7,
+      "end": 30,
+      "members": ["writer"]
+    },
+    {
+      "title": "회의 준비 🎉📚✅ 👩‍💻🧑‍🔬",
+      "description": "이모지가 섞인 항목입니다. 날짜가 없습니다.",
+      "status": "on_hold",
+      "start": null,
+      "end": null,
+      "members": []
+    },
+    {
+      "title": "장비 점검 결과 보고",
+      "description": "끝난 항목입니다.",
+      "status": "done",
+      "start": -20,
+      "end": -6,
+      "members": ["writer"]
+    }
+  ],
+  "modules": [
+    {
+      "kind": "research",
+      "name": "합성 연구 노트",
+      "key": "DEVR",
+      "description": "가상 참여자로 자료 관리 흐름을 점검하는 연구 모듈입니다.",
+      "items": [
+        {
+          "title": "학습 습관 합성 연구",
+          "description": "실제 개인정보 없이 자료 관리 흐름을 확인합니다.",
+          "status": "active",
+          "start": -14,
+          "end": 60,
+          "members": ["writer"]
+        },
+        {
+          "title": "설문 문항 초안 검토",
+          "description": "",
+          "status": "planned",
+          "start": 7,
+          "end": 21,
+          "members": []
+        }
+      ]
+    },
+    {
+      "kind": "study",
+      "name": "SQL 함께 읽기",
+      "key": "DEVS",
+      "description": "공통 계획과 개인별 진행을 나누어 보는 스터디 모듈입니다.",
+      "items": [
+        {
+          "title": "SQL 기초 1부",
+          "description": "20페이지와 연습 문제 8개.",
+          "status": "active",
+          "start": -3,
+          "end": 25,
+          "members": ["writer"]
+        }
+      ]
+    },
+    {
+      "kind": "course",
+      "name": "데이터 입문 강좌",
+      "key": "DEVC",
+      "description": "공유 목차와 개인 진도를 나누어 보는 강의 모듈입니다.",
+      "items": [
+        {
+          "title": "데이터 입문 1주 차",
+          "description": "",
+          "status": "active",
+          "start": -1,
+          "end": 6,
+          "members": ["writer"]
+        }
+      ]
+    },
+    {
+      "kind": "hobby",
+      "name": "주말 수채화",
+      "key": "DEVH",
+      "description": "준비부터 결과물까지 활동을 기록하는 취미 모듈입니다.",
+      "items": [
+        {
+          "title": "가을 풍경 그리기",
+          "description": "",
+          "status": "planned",
+          "start": 4,
+          "end": 4,
+          "members": []
+        }
+      ]
+    },
+    {
+      "kind": "project",
+      "name": "2026학년도 2학기 대학원 연구실 공동 세미나 발표 자료와 회의록을 한곳에 모아 정리하는 작업 공간",
+      "key": "DEVLONG",
+      "description": "",
+      "items": []
+    },
+    {
+      "kind": "research",
+      "name": "https://example.test/workspaces/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/documents/ffffffff-0000-1111-2222-333333333333",
+      "key": "DEVNOSP",
+      "description": "",
+      "items": []
+    },
+    {
+      "kind": "hobby",
+      "name": "회의 준비 🎉📚✅ 👩‍💻🧑‍🔬",
+      "key": "DEVEMOJI",
+      "description": "",
+      "items": []
+    }
+  ],
+  "tasks": [
+    {
+      "title": "주간 회의 자료 정리",
+      "description": "발표 순서를 정하고 회의록 양식을 공유합니다.",
+      "status": "in_progress",
+      "priority": "medium",
+      "start": -2,
+      "due": 2,
+      "estimate": 60,
+      "tags": ["회의"],
+      "assignees": ["owner", "writer"],
+      "milestone": false
+    },
+    {
+      "title": "2026학년도 2학기 대학원 연구실 공동 세미나 발표 자료와 회의록을 한곳에 모아 정리하기",
+      "description": "제목이 긴 업무가 보드·목록·대화상자에서 어떻게 보이는지 확인합니다.",
+      "status": "todo",
+      "priority": "high",
+      "start": 0,
+      "due": 7,
+      "estimate": 120,
+      "tags": ["긴제목", "세미나"],
+      "assignees": ["owner"],
+      "milestone": false
+    },
+    {
+      "title": "https://example.test/workspaces/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/tasks/ffffffff-0000-1111-2222-333333333333",
+      "description": "공백 없는 긴 문자열이 넘치지 않는지 확인합니다.",
+      "status": "todo",
+      "priority": "low",
+      "start": null,
+      "due": 3,
+      "estimate": null,
+      "tags": ["공백없음"],
+      "assignees": ["writer"],
+      "milestone": false
+    },
+    {
+      "title": "회의 준비 🎉📚✅ 👩‍💻🧑‍🔬",
+      "description": "이모지가 섞인 업무입니다.",
+      "status": "todo",
+      "priority": "none",
+      "start": 1,
+      "due": 1,
+      "estimate": 15,
+      "tags": ["이모지"],
+      "assignees": [],
+      "milestone": false
+    },
+    {
+      "title": "예산 12,345,678.90원 정산",
+      "description": "숫자와 날짜가 섞인 업무입니다. 문서 번호 0001234567.",
+      "status": "in_progress",
+      "priority": "urgent",
+      "start": -5,
+      "due": -1,
+      "estimate": 30,
+      "tags": ["예산"],
+      "assignees": ["owner"],
+      "milestone": false
+    },
+    {
+      "title": "장비 점검 결과 공유",
+      "description": "",
+      "status": "done",
+      "priority": "low",
+      "start": -7,
+      "due": -6,
+      "estimate": 20,
+      "tags": [],
+      "assignees": ["writer"],
+      "milestone": false
+    },
+    {
+      "title": "중간 발표",
+      "description": "",
+      "status": "todo",
+      "priority": "high",
+      "start": null,
+      "due": 14,
+      "estimate": null,
+      "tags": ["세미나"],
+      "assignees": ["owner", "writer"],
+      "milestone": true
+    }
+  ]
+}

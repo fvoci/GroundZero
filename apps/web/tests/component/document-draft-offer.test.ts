@@ -69,6 +69,7 @@ beforeEach(async () => {
     locale: 'ko',
     time_zone: '',
     week_start: '',
+    theme: 'system',
   });
   // 같은 탭에서 다시 열었다(새로고침·앱 안 이동): 지난번 편집이 이 탭의 초안으로 남아 있다.
   storeDraft('doc-1', {

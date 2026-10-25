@@ -269,7 +269,7 @@
           <span class="shrink-0 font-mono text-sm text-muted-foreground"
             >{row.doc.reference ?? ''}</span
           >
-          <span class="truncate">{row.doc.title}</span>
+          <span class="truncate" title={row.doc.title}>{row.doc.title}</span>
         </a>
         {#if canWrite}
           <DropdownMenu.Root>

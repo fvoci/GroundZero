@@ -15,6 +15,8 @@
   import { itemTaskPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
+  import { Input } from '$lib/ui/input';
+  import { NativeSelect } from '$lib/ui/native-select';
 
   interface Props {
     workspaceId: string;
@@ -169,9 +171,6 @@
       busy = false;
     }
   }
-
-  const fieldBox =
-    'h-9 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 </script>
 
 <Dialog.Root
@@ -201,43 +200,43 @@
         {#if moduleId === undefined}
           <label class="flex flex-col gap-1 text-sm">
             {m.events_scope_module()}
-            <select class={fieldBox} bind:value={pickedModule} disabled={made !== undefined}>
+            <NativeSelect class="w-full" bind:value={pickedModule} disabled={made !== undefined}>
               <option value="">{m.events_task_pick_module()}</option>
               {#each modules ?? [] as mod (mod.id)}
                 <option value={mod.id}>{mod.name} ({mod.key})</option>
               {/each}
-            </select>
+            </NativeSelect>
           </label>
         {/if}
         <label class="flex flex-col gap-1 text-sm">
           {m.events_scope_item()}
-          <select
-            class={fieldBox}
+          <NativeSelect
+            class="w-full"
             bind:value={pickedItem}
             disabled={made !== undefined || items === undefined || items.length === 0}
           >
             {#each items ?? [] as it (it.id)}
               <option value={it.id}>{it.title}</option>
             {/each}
-          </select>
+          </NativeSelect>
         </label>
         {#if pickedModule !== '' && items?.length === 0}
           <p class="text-sm text-muted-foreground">{m.events_task_no_items()}</p>
-        {:else if pickedModule !== '' && items === undefined && loadError === undefined}
-          <p class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</p>
         {/if}
+        <p class="text-sm text-muted-foreground empty:hidden" role="status">
+          {#if pickedModule !== '' && items === undefined && loadError === undefined}{m.modules_loading()}{/if}
+        </p>
         {#if loadError !== undefined}
           <p class="text-sm text-destructive" role="alert">{loadError}</p>
         {/if}
       {/if}
       <label class="flex flex-col gap-1 text-sm">
         {m.events_task_due()}
-        <input class={fieldBox} type="date" bind:value={date} required disabled={busy} />
+        <Input type="date" bind:value={date} required disabled={busy} />
       </label>
       <label class="flex flex-col gap-1 text-sm">
         {m.events_task_name()}
-        <input
-          class={fieldBox}
+        <Input
           bind:value={title}
           required
           disabled={busy || made !== undefined}

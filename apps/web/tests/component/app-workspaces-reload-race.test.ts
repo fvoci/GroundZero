@@ -20,6 +20,7 @@ const me: Me = {
   locale: 'ko',
   time_zone: '',
   week_start: '',
+  theme: 'system',
 };
 
 function workspace(id: string, name: string, realtime: boolean): Workspace {

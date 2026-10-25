@@ -6,6 +6,7 @@
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
+  import { Input } from '$lib/ui/input';
 
   import { parentCandidates } from './tree';
 
@@ -119,8 +120,7 @@
     </Dialog.Header>
     <label class="flex flex-col gap-1 text-sm">
       {m.documents_reparent_search()}
-      <input
-        class="h-9 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      <Input
         role="combobox"
         aria-expanded="true"
         aria-controls="move-doc-options"
@@ -132,9 +132,9 @@
         aria-busy={busy}
       />
     </label>
-    {#if options.length === 0}
-      <p class="text-sm text-muted-foreground" role="status">{m.documents_reparent_none()}</p>
-    {/if}
+    <p class="text-sm text-muted-foreground empty:hidden" role="status">
+      {#if options.length === 0}{m.documents_reparent_none()}{/if}
+    </p>
     <ul
       id="move-doc-options"
       role="listbox"
@@ -168,7 +168,8 @@
           }}
         >
           <span>
-            {#if option.reference !== null}<span class="font-mono text-xs text-muted-foreground"
+            {#if option.reference !== null}<span
+                class="font-mono text-xs whitespace-nowrap text-muted-foreground"
                 >{option.reference}</span
               >{/if}
             {option.title}

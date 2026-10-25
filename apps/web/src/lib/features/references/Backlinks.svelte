@@ -67,8 +67,10 @@
               router.navigate(path);
             }}
           >
-            <span class="font-mono text-xs text-muted-foreground">{link.reference ?? ''}</span>
-            <span>{link.title}</span>
+            <span class="shrink-0 font-mono text-xs whitespace-nowrap text-muted-foreground"
+              >{link.reference ?? ''}</span
+            >
+            <span class="min-w-0 [overflow-wrap:anywhere]">{link.title}</span>
           </a>
         </li>
       {/each}

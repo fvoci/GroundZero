@@ -209,7 +209,8 @@
         </fieldset>
       {/if}
       <Button type="submit" size="sm" disabled={busy}>{m.events_recurrence_save()}</Button>
-      {#if saved}<span class="text-sm" role="status">{m.common_saved()}</span>{/if}
+      <!-- 저장 알림은 처음부터 있는 알림 영역 안에서 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
+      <span class="text-sm empty:sr-only" role="status">{saved ? m.common_saved() : ''}</span>
     </form>
     {#if error !== undefined}
       <p role="alert" class="text-sm text-destructive">{error}</p>

@@ -22,6 +22,7 @@
 | `apps/web/src/lib/api/`                                             | 생성 계약과 런타임 입력 검증을 연결하는 클라이언트                                |
 | `apps/web/src/styles/`, `messages/`, `project.inlang/`              | 디자인 토큰·화면 문구·번역 구성                                                   |
 | `apps/web/tests/`                                                   | 웹 단위·컴포넌트 시험                                                             |
+| `apps/web/.storybook/`, `apps/web/stories/`                         | Storybook 설정과 실제 컴포넌트의 상태 story·합성 fixture                          |
 | `contracts/openapi.json`, `packages/api-client/src/generated/`      | Rust 정의에서 생성하는 API 계약과 TypeScript 타입                                 |
 | `contracts/collab/`                                                 | 실시간 공동 편집의 기준 파일                                                      |
 

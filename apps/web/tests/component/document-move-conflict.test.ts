@@ -118,7 +118,9 @@ describe('move panel when the live room is busy', () => {
     });
     render(DocumentActions, { props: { doc, workspaces, onchanged: () => undefined } });
 
-    await fireEvent.click(screen.getByRole('button', { name: '이동' }));
+    // 이동은 "더 보기" 메뉴 안에 있다.
+    await fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
+    await fireEvent.click(await screen.findByRole('menuitem', { name: '이동' }));
     const dialog = await screen.findByRole('dialog');
     await within(dialog).findByTestId('move-preview');
     const move = within(dialog).getByRole('button', { name: '이동' });

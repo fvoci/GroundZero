@@ -109,6 +109,7 @@ describe('reordering under a non-default sort', () => {
     await screen.findByRole('button', { name: '문서 검토 옮기기' });
     const card = document.querySelector<HTMLElement>('[data-task-card="1"]');
     if (card === null) throw new Error('card');
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
     await fireEvent.change(screen.getByRole('combobox', { name: '정렬' }), {
       target: { value: 'title' },
     });

@@ -45,6 +45,7 @@
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Textarea } from '$lib/ui/textarea';
   import * as Select from '$lib/ui/select';
 
   import ClashConfirm from './ClashConfirm.svelte';
@@ -919,13 +920,13 @@
         </div>
         <div class="col-span-2 flex flex-col gap-1">
           <Label for="task-description">{m.tasks_description()}</Label>
-          <textarea
+          <Textarea
             id="task-description"
             bind:value={f.description}
             disabled={locked}
             rows={3}
-            class="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          ></textarea>
+            class="min-h-20"
+          />
         </div>
         <div class="flex min-w-0 flex-col gap-1">
           <Label for="task-estimate">{m.tasks_estimate()}</Label>
@@ -1075,9 +1076,13 @@
                 onopen(sub.id);
               }}
             >
-              <span class="font-mono text-xs text-muted-foreground">{sub.reference ?? ''}</span>
-              <span>{sub.title}</span>
-              <span class="ml-auto text-xs text-muted-foreground">{STATUS_LABEL[sub.status]}</span>
+              <span class="shrink-0 font-mono text-xs whitespace-nowrap text-muted-foreground"
+                >{sub.reference ?? ''}</span
+              >
+              <span class="min-w-0 [overflow-wrap:anywhere]">{sub.title}</span>
+              <span class="ml-auto shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >{STATUS_LABEL[sub.status]}</span
+              >
             </button>
           {:else}
             <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>

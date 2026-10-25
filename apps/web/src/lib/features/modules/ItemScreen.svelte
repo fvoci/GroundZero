@@ -31,6 +31,7 @@
   import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Textarea } from '$lib/ui/textarea';
 
   import ItemCopy from './ItemCopy.svelte';
   import ItemProfilePanel from './ItemProfilePanel.svelte';
@@ -369,13 +370,13 @@
         </div>
         <div class="flex flex-col gap-1">
           <Label for="item-description">{m.modules_description()}</Label>
-          <textarea
+          <Textarea
             id="item-description"
             bind:value={description}
             maxlength={2000}
             rows={3}
-            class="rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          ></textarea>
+            class="min-h-20"
+          />
         </div>
         {#if isOwner}
           <div class="flex items-center gap-2">
@@ -440,7 +441,9 @@
         </div>
       {/if}
     {/if}
-    {#if saved}<p class="text-sm" role="status">{m.common_saved()}</p>{/if}
+    <p class="text-sm empty:hidden" role="status">
+      {#if saved}{m.common_saved()}{/if}
+    </p>
     {#if formError !== undefined}
       <p class="text-sm text-destructive" role="alert">{formError}</p>
     {/if}

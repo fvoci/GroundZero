@@ -2,6 +2,8 @@
   // 문서 한 건 내보내기(D-75). 저장된 리비전을 골라 Markdown·ZIP(Markdown과 그림·첨부)·PDF(브라우저 인쇄)로 내보낸다.
   // 권한은 서버가 확인하고(내려받기와 같은 규칙) 화면은 `can_export`일 때만 보인다. 저장하지 않은 편집이 있으면
   // 먼저 저장하거나 저장된 리비전을 내보낼지 알린다. 변환 결과와 제한(옮기지 못한 블록, 넣지 못한 첨부)을 보여 준다.
+  import { untrack } from 'svelte';
+
   import { formatInstant } from '$lib/display';
   import type { DocumentView, RevisionSummaryView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
@@ -11,6 +13,7 @@
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Label } from '$lib/ui/label';
+  import { NativeSelect } from '$lib/ui/native-select';
 
   import type { ExportFormat } from './export';
   import { exportFileName, prepareExport, saveBlob, toMarkdown, toZip } from './export';
@@ -22,11 +25,14 @@
     /** 편집기에 저장하지 않은 편집이 있는지. */
     unsaved: boolean;
     references: ReferenceContext;
+    /** 여는 단추는 문서 화면의 "더 보기" 메뉴에 있다. */
+    open?: boolean;
+    /** 닫으면 초점을 돌려줄 곳("더 보기" 단추). 연 메뉴 항목은 닫히며 사라지므로 브라우저에 맡기지 않는다. */
+    returnFocus?: HTMLElement | null;
   }
 
-  const { doc, unsaved, references }: Props = $props();
+  let { doc, unsaved, references, open = $bindable(false), returnFocus = null }: Props = $props();
 
-  let open = $state(false);
   let revisions = $state<RevisionSummaryView[]>([]);
   let selected = $state(0);
   let format = $state<ExportFormat>('markdown');
@@ -57,8 +63,12 @@
   }
   const latest = $derived(selected === doc.revision);
 
-  function openDialog(): void {
-    open = true;
+  // 열 때마다 지난 결과·오류를 지우고 지금 리비전을 고른 뒤 리비전 목록을 다시 읽는다.
+  $effect(() => {
+    if (open) untrack(prepare);
+  });
+
+  function prepare(): void {
     error = undefined;
     notes = undefined;
     selected = doc.revision;
@@ -122,10 +132,15 @@
   }
 </script>
 
-<Button size="sm" variant="outline" onclick={openDialog}>{m.documents_export()}</Button>
-
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-lg">
+  <Dialog.Content
+    class="sm:max-w-lg"
+    onCloseAutoFocus={(e: Event) => {
+      if (returnFocus === null) return;
+      e.preventDefault();
+      returnFocus.focus();
+    }}
+  >
     <Dialog.Header>
       <Dialog.Title>{m.documents_export()}</Dialog.Title>
       <Dialog.Description>{m.documents_export_description()}</Dialog.Description>
@@ -133,11 +148,7 @@
     <div class="flex flex-col gap-3 text-sm">
       <div class="flex flex-col gap-1">
         <Label for="export-revision">{m.documents_revision_label()}</Label>
-        <select
-          id="export-revision"
-          class="h-9 rounded-md border bg-background px-2"
-          bind:value={selected}
-        >
+        <NativeSelect id="export-revision" class="w-full" bind:value={selected}>
           {#if revisions.length === 0}
             <option value={doc.revision}
               >{m.documents_revision_latest({ revision: doc.revision })}</option
@@ -152,18 +163,25 @@
               )}{byline(rev)}
             </option>
           {/each}
-        </select>
+        </NativeSelect>
       </div>
-      {#if latest && unsaved}
-        <p role="status" class="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900">
-          {m.documents_export_unsaved({ revision: doc.revision })}
-        </p>
-      {/if}
-      {#if latest && doc.realtime}
-        <p role="status" class="text-muted-foreground">
-          {m.documents_export_live()}
-        </p>
-      {/if}
+      <!-- 안내는 늘 있는 상태 영역 안에서 바꾼다(리비전을 바꾸면 나타나고 사라진다). -->
+      <div role="status" class="empty:hidden">
+        {#if latest && unsaved}
+          <p
+            class="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+          >
+            {m.documents_export_unsaved({ revision: doc.revision })}
+          </p>
+        {/if}
+      </div>
+      <div role="status" class="empty:hidden">
+        {#if latest && doc.realtime}
+          <p class="text-muted-foreground">
+            {m.documents_export_live()}
+          </p>
+        {/if}
+      </div>
       <fieldset class="flex flex-col gap-1">
         <legend class="mb-1 font-medium">{m.documents_export_format()}</legend>
         {#each FORMATS as f (f.value)}
@@ -185,8 +203,8 @@
       {#if error !== undefined}
         <p role="alert" class="text-destructive">{error}</p>
       {/if}
-      {#if notes !== undefined}
-        <div role="status" class="flex flex-col gap-1">
+      <div role="status" class="flex flex-col gap-1 empty:hidden">
+        {#if notes !== undefined}
           <p>{format === 'pdf' ? m.documents_export_print_opened() : m.documents_exported()}</p>
           {#if notes.length > 0}
             <ul class="list-disc pl-5 text-muted-foreground">
@@ -195,8 +213,8 @@
               {/each}
             </ul>
           {/if}
-        </div>
-      {/if}
+        {/if}
+      </div>
     </div>
     <Dialog.Footer>
       <Button variant="ghost" onclick={() => (open = false)}>{m.documents_close()}</Button>

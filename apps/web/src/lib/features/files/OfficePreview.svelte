@@ -221,13 +221,13 @@
     </div>
   {:else if sheets !== undefined}
     {#if sheets.length > 1}
-      <div class="flex flex-wrap gap-1" role="tablist" aria-label={m.files_sheets()}>
+      <!-- 방향키 탭 규약을 따르지 않으므로 탭 역할 대신 눌림 상태가 있는 단추 묶음으로 둔다. -->
+      <div class="flex flex-wrap gap-1" role="group" aria-label={m.files_sheets()}>
         {#each sheets as sheet, i (sheet.name)}
           <Button
             size="sm"
             variant={i === active ? 'secondary' : 'ghost'}
-            role="tab"
-            aria-selected={i === active}
+            aria-pressed={i === active}
             onclick={() => {
               active = i;
             }}>{sheet.name}</Button
@@ -237,7 +237,7 @@
     {/if}
     {@const sheet = sheets[active]}
     {#if sheet !== undefined}
-      <div class="max-h-[70vh] overflow-auto rounded border" role="tabpanel">
+      <div class="max-h-[70vh] overflow-auto rounded border" role="region" aria-label={sheet.name}>
         <table class="text-sm">
           <tbody>
             {#each sheet.rows as row, r (r)}

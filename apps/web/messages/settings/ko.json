@@ -19,5 +19,10 @@
   "settings_doc_font_sans": "고딕(Noto Sans KR)",
   "settings_doc_font_serif": "명조(Noto Serif KR)",
   "settings_doc_font_hint": "이 브라우저에만 적용됩니다. 명조는 고른 뒤 문서를 열 때 서체를 한 번 받습니다.",
+  "settings_theme": "화면 밝기",
+  "settings_theme_system": "시스템 설정 따르기",
+  "settings_theme_light": "밝게",
+  "settings_theme_dark": "어둡게",
+  "settings_theme_hint": "계정에 저장해 모든 기기에서 같게 보입니다.",
   "settings_save_failed": "저장하지 못했습니다."
 }
