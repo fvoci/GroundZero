@@ -91,3 +91,31 @@ describe('router popstate guard', () => {
     expect(router.hash).toBe('#ref-1');
   });
 });
+
+// 이동이 아닌 문맥 전환(조직 바꾸기)도 같은 가드를 거친다: 막히면 실행하지 않고, 떠나기로 하면 가드가 그 동작을 실행한다.
+describe('router.confirmLeave', () => {
+  afterEach(() => {
+    router.guard = undefined;
+  });
+
+  it('runs a context change only when the guard allows it, or when the user proceeds', () => {
+    const action = vi.fn();
+    let proceed: (() => void) | undefined;
+    router.guard = (next) => {
+      proceed = next;
+      return false;
+    };
+    router.confirmLeave(action);
+    expect(action).not.toHaveBeenCalled();
+    proceed?.();
+    expect(action).toHaveBeenCalledTimes(1);
+
+    router.guard = () => true;
+    router.confirmLeave(action);
+    expect(action).toHaveBeenCalledTimes(2);
+
+    router.guard = undefined;
+    router.confirmLeave(action);
+    expect(action).toHaveBeenCalledTimes(3);
+  });
+});

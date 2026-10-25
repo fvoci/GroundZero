@@ -252,6 +252,16 @@ class Router {
     this.hash = hash;
   }
 
+  /**
+   * 이동이 아닌 문맥 전환(조직 바꾸기 등)도 같은 이탈 확인을 거친다(D-121·D-125). 가드가 없거나 허락하면 바로 실행하고,
+   * 가드가 막으면 사용자가 떠나기로 했을 때 가드가 `action`을 실행한다. 취소하면 아무것도 바꾸지 않는다. `action` 안의
+   * `navigate`는 그 확정 안에서 다시 묻지 않는다(가드가 proceed 동안 통과시킨다).
+   */
+  confirmLeave(action: () => void): void {
+    if (this.guard !== undefined && !this.guard(action)) return;
+    action();
+  }
+
   /** 바로 앞 기록으로 돌아간다(이 화면이 기록을 쌓아 연 대화상자를 닫을 때). 주소는 popstate가 맞춘다. 가드가 막으면 false. */
   back(): boolean {
     if (
