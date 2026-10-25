@@ -292,6 +292,37 @@ describe('kanban save states', () => {
     expect(screen.getByRole('alert').textContent).toContain('그사이 다른 곳에서 업무가 바뀌어');
   });
 
+  // 카드는 저장 전에 새 열에 다시 그려진다(앞 요소가 사라짐). 저장을 기다리는 동안에도 초점이 문서 처음으로 빠지지 않는다.
+  it('keeps focus on the moved card while saving and after it is put back', async () => {
+    lists(start);
+    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
+    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    await mount();
+    card('a').focus();
+    await moveRight('a');
+    await flush();
+    expect(laneOf('a')).toBe('in_progress');
+    expect(card('a')).toHaveFocus();
+    save.reject(new ApiError(400, 'stale', 'x'));
+    await flush();
+    expect(laneOf('a')).toBe('todo');
+    expect(card('a')).toHaveFocus();
+  });
+
+  it('a save that ends late does not take back focus the user moved elsewhere', async () => {
+    lists(start, moved);
+    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
+    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    await mount();
+    card('a').focus();
+    await moveRight('a');
+    await flush();
+    card('b').focus();
+    save.resolve({ ...movedA, checklist: [] });
+    await flush();
+    expect(card('b')).toHaveFocus();
+  });
+
   it('lost response but saved on the server: confirms after reading the list again', async () => {
     const read = lists(start, moved);
     const move = vi.spyOn(api, 'moveTask').mockRejectedValue(new NetworkError('reset'));
@@ -563,18 +594,24 @@ describe('kanban save states', () => {
     expect(move).toHaveBeenLastCalledWith('b', 'in_progress', null, undefined);
   });
 
+  // 옮긴 카드에 초점을 두면 초점 처리 라이브러리도 자기 타이머를 건다(이 화면의 타이머가 아니다). 그래서 남은 타이머 수가
+  // 아니라 이 화면의 타이머가 하는 일(지연 안내·10초 뒤 목록 대조)이 떠난 뒤 일어나지 않는지 본다.
   it('leaving the screen stops the timers and ignores late answers', async () => {
-    lists(start);
+    const reads = lists(start);
     const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
     vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
     const errors = vi.spyOn(console, 'error');
     const view = await mount();
+    card('a').focus();
     await moveRight('a');
     expect(vi.getTimerCount()).toBeGreaterThan(0);
+    const readsBefore = reads.mock.calls.length;
     view.unmount();
-    expect(vi.getTimerCount()).toBe(0);
+    await flush(20000);
+    expect(reads.mock.calls.length).toBe(readsBefore);
     save.reject(new NetworkError('reset'));
     await flush(20000);
+    expect(reads.mock.calls.length).toBe(readsBefore);
     expect(errors).not.toHaveBeenCalled();
   });
 

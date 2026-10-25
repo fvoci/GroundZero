@@ -449,6 +449,22 @@
     await tick();
     document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(id)}"]`)?.focus();
   }
+  /**
+   * 키보드·메뉴로 옮기고 그 카드에 초점을 둔다. 카드는 저장 전에 새 열에 다시 그려지므로(앞 요소는 사라짐) 바로 새 자리로
+   * 초점을 옮긴다: 저장이 늦거나 끝나지 않아도 초점이 문서 처음으로 빠지지 않게. 저장이 끝나면(실패면 원래 자리로 돌아와
+   * 다시 그려짐) 초점을 잃은 경우에만 다시 둔다. 기다리는 동안 다른 곳으로 옮긴 초점은 빼앗지 않는다.
+   */
+  async function moveAndFocus(
+    id: string,
+    plan: BoardMove,
+    how: BoardAction | 'menu',
+  ): Promise<void> {
+    const sent = commitMove(id, plan, how);
+    await focusCard(id);
+    await sent;
+    const active = document.activeElement;
+    if (active === null || active === document.body) await focusCard(id);
+  }
 
   // 화면을 떠나면 타이머를 멈추고 늦게 온 응답은 버린다. 항목이 바뀌면 앞 항목의 기다림을 버린다.
   $effect(() => {
@@ -1086,8 +1102,7 @@
     }
     const plan = planBoardMove(shown, id, action);
     if (plan === undefined) return;
-    await commitMove(id, plan, action);
-    document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(id)}"]`)?.focus();
+    await moveAndFocus(id, plan, action);
   }
 
   // 끌어서 옮기기(마우스·터치·펜, Pointer Events). 마우스는 카드 어디서나 끌고, 터치·펜은 손잡이(⠿)에서만 끈다
@@ -1533,7 +1548,7 @@
                           <DropdownMenu.Item
                             disabled={busy(t.id)}
                             onSelect={() =>
-                              void commitMove(t.id, { status: target, beforeId: null }, 'menu')}
+                              void moveAndFocus(t.id, { status: target, beforeId: null }, 'menu')}
                             >{MOVE_TO[target]()}</DropdownMenu.Item
                           >
                         {/each}
