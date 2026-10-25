@@ -695,8 +695,9 @@ async fn owner_pool() -> sqlx::PgPool {
     sqlx::PgPool::connect(&url).await.unwrap()
 }
 
-/// 휴지통 묶음을 보존 기간보다 오래전에 지운 것으로 만든다(테이블 소유 역할로 시각만 바꾼다).
-async fn expire_trash(owner: &sqlx::PgPool, file: &str) {
+/// 휴지통 묶음을 보존 기간보다 오래전에 지운 것으로 만든다(테이블 소유 역할로 시각만 바꾼다). 소유 역할의 풀이나
+/// 그 풀에서 연 트랜잭션에 쓴다.
+async fn expire_trash(owner: impl sqlx::PgExecutor<'_>, file: &str) {
     sqlx::query(
         "UPDATE fvoci.trash_batches SET deleted_at = now() - interval '400 days'
          WHERE id = (SELECT trash_batch_id FROM fvoci.files WHERE id = $1::uuid)",
@@ -947,7 +948,6 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
     // 2) 정리가 먼저: 정리 트랜잭션을 열어 둔 채 저장하면 저장은 기다렸다가 오류 없이 끝나고, 파일은 지워져 있다.
     let second = new_file(&app, &writer, &item, "second.png", b"one").await;
     trash_file(&app, &writer, &second).await;
-    expire_trash(&owner, &second).await;
     let batch: uuid::Uuid =
         sqlx::query_scalar("SELECT trash_batch_id FROM fvoci.files WHERE id = $1::uuid")
             .bind(&second)
@@ -955,6 +955,9 @@ async fn trash_expiry_and_a_new_reference_race_safely() {
             .await
             .unwrap();
     let mut purging = owner.begin().await.unwrap();
+    // 만료도 정리 트랜잭션 안에서 한다. 따로 커밋하면 정리 전에 동시에 도는 다른 시험의 전체 정리(`run_all_now`)가
+    // 이 묶음을 먼저 지워 아래 정리가 P0002로 실패한다(#102). 커밋 전의 만료는 다른 연결에 보이지 않는다.
+    expire_trash(&mut *purging, &second).await;
     // 작업 프로세스의 묶음 정리와 같은 경로를 이 묶음에만 쓴다(열어 둔 트랜잭션이 다른 테스트의 묶음까지 잡지 않게).
     sqlx::query("SELECT fvoci.app_purge_batch_as($1, true, $2)")
         .bind(batch)
