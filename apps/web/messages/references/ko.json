@@ -1,4 +1,11 @@
 {
+  "references_load_more": "더 보기",
+  "references_unread_count": "읽지 않음 {count}개",
+  "references_notifications_back": "목록으로",
+  "references_notifications_choose": "알림을 골라 상세 내용을 확인하세요.",
+  "references_notification_open_target": "대상 열기",
+  "references_notification_unavailable": "알림이 없거나 더 이상 볼 수 없습니다.",
+  "references_notification_invite": "{who}님이 초대했습니다. {target}",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "references_kind_item": "항목",
   "references_kind_document": "문서",

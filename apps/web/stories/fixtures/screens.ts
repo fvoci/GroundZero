@@ -8,6 +8,8 @@ import { applyMove } from '$lib/features/tasks/board';
 import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
 import { org } from '$lib/org.svelte';
 import { router } from '$lib/router.svelte';
+// 작업자 B: 개인 화면·활동 story의 실제 계약 모양을 채운다.
+import { ACTIVITY, myTasksView } from './personal';
 
 import {
   calendarView,
@@ -25,6 +27,8 @@ import {
 
 /** 화면이 부르는 서버 함수. 기본값은 합성 데이터로 답하고, story가 일부만 바꾼다. */
 export interface ScreenApi {
+  myTasks: typeof api.myTasks;
+  recentActivity: typeof api.recentActivity;
   modules: typeof api.modules;
   wikiDocuments: typeof api.wikiDocuments;
   module: typeof api.module;
@@ -76,6 +80,8 @@ function taskServer(): Pick<ScreenApi, 'tasks' | 'task' | 'moveTask'> {
 }
 
 const DEFAULTS: Omit<ScreenApi, 'tasks' | 'task' | 'moveTask'> = {
+  myTasks: () => Promise.resolve(myTasksView()),
+  recentActivity: () => Promise.resolve(ACTIVITY),
   modules: () => Promise.resolve(MODULES),
   wikiDocuments: () => Promise.resolve(DOCS),
   module: (id) => {
@@ -117,6 +123,8 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   // 바로 바꾸면 이 story의 클릭이 막히므로 먼저 푼다(tests/component/stories.test.ts의 afterEach와 같은 정리).
   document.body.style.removeProperty('pointer-events');
   const stubs: ScreenApi = { ...DEFAULTS, ...taskServer(), ...overrides };
+  spyOn(api, 'myTasks').mockImplementation(stubs.myTasks);
+  spyOn(api, 'recentActivity').mockImplementation(stubs.recentActivity);
   spyOn(api, 'modules').mockImplementation(stubs.modules);
   spyOn(api, 'wikiDocuments').mockImplementation(stubs.wikiDocuments);
   spyOn(api, 'module').mockImplementation(stubs.module);

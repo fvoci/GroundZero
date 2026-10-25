@@ -57,7 +57,7 @@ describe('multi-column layouts follow the content width', () => {
     vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
-    const grid = document.querySelector('[aria-labelledby="up-next-heading"]')?.parentElement;
+    const grid = document.querySelector('[aria-labelledby="week-heading"]')?.parentElement;
     if (!(grid instanceof HTMLElement)) throw new Error('no dashboard grid');
     await waitFor(() => {
       expect(grid).toHaveClass('@2xl:grid-cols-2');

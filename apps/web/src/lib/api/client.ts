@@ -1105,7 +1105,8 @@ export interface NotificationView {
   document_id: string | null;
   task_id: string | null;
   /** 대상(문서 또는 업무) 제목. */
-  document_title: string;
+  // 작업자 B: 초대 알림의 대상 제목은 계약대로 null이다(D-118).
+  document_title: string | null;
   document_reference: string | null;
   workspace_id: string | null;
   item_id: string | null;
@@ -1182,7 +1183,7 @@ export function parseNotification(value: Json): NotificationView {
     document_id: optStr(o, 'document_id'),
     task_id: optStr(o, 'task_id'),
     // 초대 알림은 대상 제목이 없다(D-118).
-    document_title: optStr(o, 'document_title') ?? '',
+    document_title: optStr(o, 'document_title'),
     document_reference: optStr(o, 'document_reference'),
     workspace_id: optStr(o, 'workspace_id'),
     item_id: optStr(o, 'item_id'),
@@ -1877,7 +1878,9 @@ export interface HomeTaskView {
   workspace_id: string;
   reference: string | null;
   title: string;
-  status: TaskStatus;
+  // 작업자 B: 홈 계약의 상태는 항목별 사용자 정의 문자열(D-116).
+  status: string;
+  status_category: StatusCategory;
   due_date: string | null;
   bucket: 'overdue' | 'today' | 'upcoming' | null;
 }
@@ -1934,7 +1937,8 @@ function parseHomeTask(value: Json): HomeTaskView {
     workspace_id: str(o, 'workspace_id'),
     reference: optStr(o, 'reference'),
     title: str(o, 'title'),
-    status: taskStatus(str(o, 'status')),
+    status: str(o, 'status'),
+    status_category: statusCategory(str(o, 'status_category')),
     due_date: optStr(o, 'due_date'),
     bucket,
   };
@@ -2387,7 +2391,8 @@ export type SearchKind = 'document' | 'task' | 'item' | 'event' | 'file' | 'reco
 export interface SearchFilters {
   kind?: SearchKind;
   moduleId?: string;
-  status?: TaskStatus;
+  // 작업자 B: GET /api/search는 상태 이름 문자열을 받는다. D-116의 범주 검색과의 충돌은 별도 보고한다.
+  status?: string;
   /** `me` 또는 사용자 id. */
   assignee?: string;
   from?: string;
@@ -3143,6 +3148,13 @@ export const api = {
       request_id: requestId,
       title,
       parent_id: parentId,
+    }),
+  // 작업자 B: 빠른 추가는 CreateTask의 기본값을 쓰고 담당=나만 명시한다(D-120).
+  createQuickTask: (itemId: string, requestId: string, title: string, userId: string) =>
+    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/tasks`, parseTaskDetail, {
+      request_id: requestId,
+      title,
+      assignee_ids: [userId],
     }),
   /**
    * 필드 고치기와 승인한 후속 재배치. 이 업무의 기준 버전이 지났으면 `conflict`, 승인한 후속 업무가 그사이

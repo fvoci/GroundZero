@@ -1,4 +1,7 @@
 {
+  "search_status_name": "상태 이름 (비우면 전체)",
+  "search_organization_scope": "검색 범위: {name} 조직",
+  "search_workspace_scope": "{name} 워크스페이스로 좁히기",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "search_kind_document": "문서",
   "search_kind_task": "업무",

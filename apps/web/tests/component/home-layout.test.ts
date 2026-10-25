@@ -5,6 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CalendarView, HomeView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
+import { homeExtras } from './fixtures/home';
+import { beforeEach as beforeHome } from 'vitest';
+
+beforeHome(homeExtras);
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 afterEach(() => {

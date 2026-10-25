@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, NetworkError } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
+import { homeExtras } from './fixtures/home';
+import { beforeEach as beforeHome } from 'vitest';
+
+beforeHome(homeExtras);
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // 홈을 받기 전(불러오는 중)이나 받지 못했을 때(실패) 고정·즐겨찾기·진행 중인 항목·알림 칸이 "없습니다"라고 말해,

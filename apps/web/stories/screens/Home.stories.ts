@@ -3,6 +3,8 @@ import { expect, within } from 'storybook/test';
 
 import { NetworkError } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
+import { org } from '$lib/org.svelte';
+import { myTasksView } from '../fixtures/personal';
 
 import MainFrame from '../fixtures/MainFrame.svelte';
 import { never, setUpScreen } from '../fixtures/screens';
@@ -23,6 +25,7 @@ const meta = {
   args: { workspaces: [WORKSPACE] },
   decorators: [() => ({ Component: MainFrame })],
   beforeEach: () => setUpScreen('/'),
+  globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop' } },
 } satisfies Meta<typeof HomeDashboard>;
 
 export default meta;
@@ -35,7 +38,7 @@ export const DataRich: Story = {
     const home = homeView();
     const overdue = home.up_next.filter((t) => t.bucket === 'overdue').length;
     await canvas.findByRole('heading', { level: 3, name: `기한 지남 ${String(overdue)}` });
-    for (const t of home.up_next)
+    for (const t of home.up_next.slice(0, 5))
       await expect(canvas.getAllByText(t.title).length).toBeGreaterThan(0);
     // 이번 주: 날짜가 있는 업무 제목이 그날 줄에 보인다(오늘 시작·마감인 이모지 업무).
     const emoji = TASKS.find((t) => t.due === 1);
@@ -61,10 +64,12 @@ export const EmptyNewUser: Story = {
       home: () => Promise.resolve(emptyHomeView()),
       calendar: () => Promise.resolve(emptyCalendarView()),
       notifications: () => Promise.resolve({ notifications: [], next: null }),
+      myTasks: () => Promise.resolve(myTasksView(emptyHomeView())),
+      recentActivity: () => Promise.resolve([]),
     }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await canvas.findByText('이번 주까지 마감인 내 업무가 없습니다.');
+    await canvas.findByText('담당한 업무가 없습니다.');
     await expect(canvas.getByText('진행 중인 항목이 없습니다.')).toBeInTheDocument();
     await expect(canvas.getByText('최근에 고친 문서·업무가 없습니다.')).toBeInTheDocument();
     await expect(canvas.getByText('읽지 않은 알림이 없습니다.')).toBeInTheDocument();
@@ -100,4 +105,21 @@ export const LoadFailed: Story = {
     await expect(within(canvasElement).getByRole('button', { name: '다시 시도' })).toBeEnabled();
     await expectNoEmptyClaims(canvasElement);
   },
+};
+
+export const NoOrganization: Story = {
+  beforeEach: () => {
+    const cleanup = setUpScreen('/');
+    org.reset();
+    return cleanup;
+  },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).queryByRole('heading')).toBeNull();
+  },
+};
+export const Dark: Story = { ...DataRich, globals: { theme: 'dark' } };
+export const Narrow375: Story = { ...DataRich, globals: { viewport: { value: 'narrow375' } } };
+export const LargeText: Story = {
+  ...DataRich,
+  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
 };

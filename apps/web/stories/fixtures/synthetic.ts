@@ -283,6 +283,7 @@ const homeTask = (t: (typeof TASK_ROWS)[number]): HomeTaskView => ({
   reference: t.reference,
   title: t.title,
   status: t.status,
+  status_category: t.status === 'done' ? 'done' : t.status === 'in_progress' ? 'doing' : 'todo',
   due_date: t.due_date,
   bucket: bucketOf(t.due_date),
 });

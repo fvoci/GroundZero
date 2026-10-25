@@ -316,18 +316,23 @@
         class={`@container mx-auto flex w-full min-w-0 flex-col gap-8 px-4 py-6 sm:px-6 ${READING_ROUTES.has(route.name) ? 'max-w-3xl' : 'max-w-5xl'}`}
       >
         {#if route.name === 'home'}
-          <HomeScreen
-            workspaces={signedIn.workspaces}
-            oncreated={(ws: Workspace) => {
-              if (
-                session.state === 'signed-in' &&
-                !session.workspaces.some((w) => w.id === ws.id)
-              ) {
-                session.workspaces = [...session.workspaces, ws];
-              }
-            }}
-            onjoined={reloadWorkspaces}
-          />
+          <!-- 작업자 B: 조직 선택 전 홈은 선택 안내만 표시(D-111·D-120). -->
+          {#if org.currentId === undefined}
+            <p role="status">{m.app_organization_required()}</p>
+          {:else}
+            <HomeScreen
+              workspaces={signedIn.workspaces.filter((w) => w.organization_id === org.currentId)}
+              oncreated={(ws: Workspace) => {
+                if (
+                  session.state === 'signed-in' &&
+                  !session.workspaces.some((w) => w.id === ws.id)
+                ) {
+                  session.workspaces = [...session.workspaces, ws];
+                }
+              }}
+              onjoined={reloadWorkspaces}
+            />
+          {/if}
         {:else if WORKSPACE_ROUTES.has(route.name)}
           {#if currentWorkspace === undefined}
             <p role="alert">{m.app_workspace_missing()}</p>
@@ -376,9 +381,11 @@
         {:else if route.name === 'my-tasks'}
           <MyTasksScreen />
         {:else if route.name === 'notifications'}
+          <!-- 작업자 B: 초대 수락 뒤 조직·공간 문맥을 함께 갱신(D-112·D-118). 상세 id는 router.route에서 읽는다. -->
           <NotificationsScreen
             workspaces={signedIn.workspaces}
             onchanged={() => void refreshUnread(true)}
+            onaccepted={reloadWorkspaces}
           />
         {:else if route.name === 'my-audit'}
           <AuditScreen workspace={undefined} />

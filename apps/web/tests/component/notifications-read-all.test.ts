@@ -1,11 +1,17 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NotificationView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { router } from '$lib/router.svelte';
+
+beforeEach(() => {
+  router.path = '/notifications';
+  vi.spyOn(api, 'unreadCount').mockResolvedValueOnce(15).mockResolvedValue(0);
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
