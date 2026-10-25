@@ -9,6 +9,7 @@
   import { router } from '$lib/router.svelte';
   import { Toaster } from '$lib/ui/sonner';
   import { Button } from '$lib/ui/button';
+  import * as Dialog from '$lib/ui/dialog';
 
   import {
     auth,
@@ -50,6 +51,16 @@
   $effect(() => watchConnection());
   // 화면(문서의 배경 저장 등)이 계정이 바뀐 것을 알면 아래 확인과 같게 다시 읽는다.
   $effect(() => onAccountSwitch(reload));
+  // 뒤로 가기나 늦은 이동이 숨겨 둔 편집 확인창을 새로 열지 못하게 한다.
+  $effect(() => {
+    if (!accountSafety.switching) return;
+    const previous = router.guard;
+    const stay = (): boolean => false;
+    router.guard = stay;
+    return () => {
+      if (router.guard === stay) router.guard = previous;
+    };
+  });
 
   // 이 창으로 돌아올 때마다 누구로 로그인돼 있는지 다시 확인한다(다른 탭에서 로그아웃하고 다른 계정으로 로그인했을 수
   // 있다. 세션이 끝난 동안이 아니어도 쿠키는 이미 바뀌었다). 같은 계정이면 화면과 입력은 그대로 두고, 세션이 끝난
@@ -81,19 +92,25 @@
   );
 </script>
 
-<div role="status" aria-live="polite" class="empty:hidden">
-  {#if accountSafety.switching}
-    <div
-      class="flex flex-wrap items-center gap-3 bg-background p-6"
-      data-testid="account-safe-state"
+<!-- 이미 열린 대화상자의 초점 덫 위에 안전 상태를 연다. 기존 편집 상태는 그대로 보존한다. -->
+<Dialog.Root open={accountSafety.switching}>
+  <Dialog.Content
+    data-account-safe
+    data-testid="account-safe-state"
+    class="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto"
+    showCloseButton={false}
+    escapeKeydownBehavior="ignore"
+    interactOutsideBehavior="ignore"
+  >
+    <Dialog.Header>
+      <Dialog.Title>{m.feedback_account_changed_title()}</Dialog.Title>
+      <Dialog.Description>{m.feedback_account_switching()}</Dialog.Description>
+    </Dialog.Header>
+    <Button class="h-auto max-w-full whitespace-normal" onclick={reload}
+      >{m.feedback_reload()}</Button
     >
-      <span>{m.feedback_account_switching()}</span>
-      <Button class="h-auto max-w-full whitespace-normal" onclick={reload}
-        >{m.feedback_reload()}</Button
-      >
-    </div>
-  {/if}
-</div>
+  </Dialog.Content>
+</Dialog.Root>
 <div role="status" aria-live="polite" class="empty:hidden">
   {#if auth.expired && !sessionDismissed && !accountSafety.switching}
     <div

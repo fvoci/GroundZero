@@ -1,5 +1,5 @@
 <script lang="ts">
-  // 댓글(D-27, D-20). 대상을 볼 수 있으면 댓글을 단다. 한 단계 답글, 해결된 스레드는 접어 둔다.
+  // 댓글(D-27, D-20). 서버가 쓰기를 허용한 대상에만 댓글을 단다. 한 단계 답글, 해결된 스레드는 접어 둔다.
   import type { CommentTarget, CommentView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
@@ -17,10 +17,34 @@
     /** 부모가 받은 서버 접근 등급으로만 정한다. 생략하면 입력을 열지 않는다. */
     canWrite?: boolean;
     archived?: boolean;
+    /** 문서·업무 응답에는 보관 칸이 없어, 안내용 부모 상태를 읽을 때 쓴다. */
+    itemId?: string | null;
   }
 
-  const { target, canWrite = false, archived = false }: Props = $props();
-  const writable = $derived(canWrite && !archived);
+  const { target, canWrite = false, archived, itemId }: Props = $props();
+  let parentArchived = $state(false);
+  const isArchived = $derived(archived ?? parentArchived);
+  const writable = $derived(canWrite && !isArchived);
+
+  $effect(() => {
+    const id = itemId;
+    parentArchived = false;
+    if (canWrite || archived !== undefined || id === undefined || id === null) return;
+    let cancelled = false;
+    const active = (): boolean => !cancelled;
+    void api
+      .item(id)
+      .then(async (item) => {
+        if (!active()) return;
+        parentArchived = item.archived;
+        const module = await api.module(item.module_id);
+        if (active()) parentArchived = item.archived || module.archived;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  });
 
   let comments = $state<CommentView[]>([]);
   // 이 대상의 목록을 한 번이라도 받았는지. 받기 전에는 "댓글이 없습니다" 대신 불러오는 중이라고 보인다.
@@ -144,9 +168,9 @@
     {m.comments_heading()}
   </h2>
   <!-- 목록이 비었을 때의 불러오는 중·빈 목록 글도 이 알림 영역에서 바뀌어 화면 낭독기가 끝났음을 읽는다(리뷰). -->
-  <p aria-live="polite" class="text-sm">
+  <p role="status" aria-live="polite" class="text-sm">
     {#if error !== undefined}<span class="text-destructive">{error}</span>{/if}
-    {#if archived}<span>{m.comments_archived()}</span>{/if}
+    {#if isArchived}<span>{m.comments_archived()}</span>{/if}
     {#if comments.length === 0 && error === undefined}
       <span class="text-muted-foreground">{loaded ? m.comments_empty() : m.comments_loading()}</span
       >

@@ -35,27 +35,6 @@
   const { documentId, workspaces }: Props = $props();
 
   let doc = $state<DocumentView | undefined>(undefined);
-  let archived = $state(false);
-  // 문서에는 보관 칸이 없어 부모 항목·모듈의 서버 상태로 안내한다. 접근 등급은 문서 응답을 그대로 쓴다.
-  $effect(() => {
-    const itemId = doc?.item_id;
-    archived = false;
-    if (itemId === undefined || itemId === null) return;
-    let cancelled = false;
-    const active = (): boolean => !cancelled;
-    void api
-      .item(itemId)
-      .then(async (item) => {
-        if (!active()) return;
-        archived = item.archived;
-        const module = await api.module(item.module_id);
-        if (active()) archived = item.archived || module.archived;
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  });
   let error = $state<string | undefined>(undefined);
   // 복원 뒤 편집기를 새 내용으로 다시 만든다(저장하지 않은 편집은 편집기의 초안 보존이 지킨다).
   let epoch = $state(0);
@@ -280,6 +259,6 @@
   <CommentsPanel
     target={{ kind: 'document', id: doc.id }}
     canWrite={doc.access !== 'read'}
-    {archived}
+    itemId={doc.item_id}
   />
 {/if}

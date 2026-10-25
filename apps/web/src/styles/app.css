@@ -199,8 +199,8 @@
     visibility: hidden !important;
     pointer-events: none !important;
   }
-  html[data-account-switching] [data-testid='account-safe-state'],
-  html[data-account-switching] [data-testid='account-safe-state'] * {
+  html[data-account-switching] [data-account-safe],
+  html[data-account-switching] [data-account-safe] * {
     visibility: visible !important;
     pointer-events: auto !important;
   }

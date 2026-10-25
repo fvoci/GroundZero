@@ -9,6 +9,7 @@ import { org } from '$lib/org.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { ACCESS_DOCUMENT, ACCESS_FILE } from '../../stories/fixtures/access';
 import { comment } from '../../stories/fixtures/comments';
+import { TASK_ITEM, PROJECT_MODULE } from '../../stories/fixtures/synthetic';
 
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
@@ -16,6 +17,19 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('server access and archived comments (D-20·D-106·D-113)', () => {
+  it.each(['document', 'task'] as const)(
+    'shows the archived-parent notice for %s comments',
+    async (kind) => {
+      vi.spyOn(api, 'comments').mockResolvedValue([]);
+      vi.spyOn(api, 'item').mockResolvedValue({ ...TASK_ITEM, access: 'read' });
+      vi.spyOn(api, 'module').mockResolvedValue({ ...PROJECT_MODULE, archived: true });
+      render(CommentsPanel, {
+        props: { target: { kind, id: 'target-1' }, canWrite: false, itemId: TASK_ITEM.id },
+      });
+      await screen.findByText('보관된 항목이라 쓸 수 없습니다.');
+      expect(screen.queryByRole('textbox')).toBeNull();
+    },
+  );
   it.each([false, true])(
     'hides write controls and preserves own-comment deletion when archived=%s',
     async (archived) => {

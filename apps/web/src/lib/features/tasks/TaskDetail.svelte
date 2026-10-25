@@ -1324,6 +1324,7 @@
       <CommentsPanel
         target={{ kind: 'task', id: current.id }}
         canWrite={current.access !== 'read'}
+        itemId={current.item_id}
       />
 
       <Backlinks kind="task" id={current.id} {workspaces} />
