@@ -2,7 +2,16 @@
 // 새 세션의 달력 시각만 하루 뒤로 고정한다. 서버 시간·실제 하루 경과·실기기 시험은 아니다.
 import type { Locator, Page } from '@playwright/test';
 
-import { expect, list, selectOrganization, str, test, unique } from './fixtures';
+import {
+  expect,
+  list,
+  listField,
+  nullableStr,
+  selectOrganization,
+  str,
+  test,
+  unique,
+} from './fixtures';
 import { expectViewport, pageOverflows } from './layout';
 
 function day(offset: number): string {
@@ -103,11 +112,11 @@ for (const theme of ['light', 'dark'] as const) {
       await dialog.getByRole('checkbox', { name: str(me, 'display_name'), exact: true }).check();
       await dialog.getByRole('button', { name: '저장', exact: true }).click();
       await expect
-        .poll(async () => str(await api.get(`/api/tasks/${taskId}`), 'due_date'))
+        .poll(async () => nullableStr(await api.get(`/api/tasks/${taskId}`), 'due_date'))
         .toBe(day(2));
       const saved = await api.get(`/api/tasks/${taskId}`);
       expect(listField(saved, 'assignees').map((a) => str(a, 'user_id'))).toContain(str(me, 'id'));
-      await dialog.getByRole('combobox', { name: '선행 업무 추가', exact: true }).click();
+      await dialog.getByRole('button', { name: '선행 업무 추가', exact: true }).click();
       await page.getByRole('option', { name: new RegExp(predecessorTitle) }).click();
       await dialog.getByRole('button', { name: '관계 저장', exact: true }).click();
       await expect
@@ -186,11 +195,4 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(dialog.getByLabel('설명', { exact: true })).toHaveValue(continued);
     });
   });
-}
-
-function listField(value: unknown, key: string): unknown[] {
-  if (typeof value !== 'object' || value === null || !(key in value)) {
-    throw new Error(`missing list ${key}`);
-  }
-  return list(Reflect.get(value, key));
 }

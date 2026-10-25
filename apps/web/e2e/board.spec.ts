@@ -13,7 +13,6 @@ async function serverStatus(api: Api, task: string): Promise<string> {
 
 async function openBoard(page: Page, ws: string, item: string): Promise<void> {
   await page.goto(`/w/${ws}/i/${item}/tasks/board`);
-  await page.getByRole('button', { name: '칸반', exact: true }).click();
   await expect(page.getByTestId('task-board')).toBeVisible();
 }
 
@@ -47,7 +46,6 @@ test('moves a kanban card, undoes the move, and both reach the server', async ({
 
   // 새로 읽어도 서버의 자리 그대로다.
   await page.reload();
-  await page.getByRole('button', { name: '칸반', exact: true }).click();
   await expect(card(lane(page, '진행 중'), title)).toBeVisible();
   await expect(card(lane(page, '할 일'), title)).toHaveCount(0);
 });

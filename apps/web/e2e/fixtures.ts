@@ -39,6 +39,17 @@ export function str(v: unknown, key: string): string {
   return v[key];
 }
 
+/** 날짜처럼 저장 전 null일 수 있는 계약 칸. 잘못된 타입은 계속 거절한다. */
+export function nullableStr(v: unknown, key: string): string | null {
+  if (isRecord(v) && v[key] === null) return null;
+  return str(v, key);
+}
+
+export function listField(v: unknown, key: string): unknown[] {
+  if (!isRecord(v)) throw new Error(`missing object for ${key}`);
+  return list(v[key]);
+}
+
 /** 응답 객체의 숫자 칸. 없으면 시험 실패. */
 export function num(v: unknown, key: string): number {
   if (!isRecord(v) || typeof v[key] !== 'number') throw new Error(`missing number ${key}`);

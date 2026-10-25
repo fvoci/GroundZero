@@ -52,7 +52,6 @@ test('long Korean titles and unbroken strings wrap without overflow', async ({
   for (const title of [longTitle, url, solid]) await api.createTask(item, title);
 
   await page.goto(`/w/${ws}/i/${item}/tasks/board`);
-  await page.getByRole('button', { name: '칸반', exact: true }).click();
   const card = (title: string) => page.locator('[data-task-card]').filter({ hasText: title });
   const titleWrap = await expectKoreanWrap(card(longTitle), narrow(testInfo.project.name) ? 2 : 1);
   expect(titleWrap.unavoidable).toEqual([]);
