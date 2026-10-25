@@ -670,7 +670,9 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     .fetch_one(&owner)
     .await
     .unwrap();
-    assert_eq!(recorded, 1);
+    // D-114: 조직 밖 사람의 참조는 기록하지 않는다(옛 동작은 기록하되 보존에서만 무시했다). 기록·버전 보존·휴지통 보존이
+    // 같은 범위 규칙(app_file_ref_in_scope)을 쓴다.
+    assert_eq!(recorded, 0);
 
     age(fresh, 2, 2).await;
     age(foreign, 1, 10).await;

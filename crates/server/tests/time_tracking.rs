@@ -173,7 +173,7 @@ async fn one_timer_per_user_survives_pause_and_stays_private() {
     );
     drop(tx);
 
-    // 동시에 두 타이머를 시작해도 하나만 된다.
+    // 동시에 두 타이머를 시작하면 둘 다 받아들이되(뒤의 시작이 앞의 것을 멈춘다, D-117) 실행 중 기록은 결국 하나다.
     let go = |app: Router, user: TestUser| async move {
         start(
             &app,
@@ -187,11 +187,15 @@ async fn one_timer_per_user_survives_pause_and_stays_private() {
         go(app.clone(), member.clone()),
         go(app.clone(), member.clone())
     );
-    assert_eq!(
-        [a, b].iter().filter(|s| **s == StatusCode::CREATED).count(),
-        1,
-        "{a} {b}"
-    );
+    assert_eq!((a, b), (StatusCode::CREATED, StatusCode::CREATED));
+    let mut tx = state.db.begin_as(member.id).await.unwrap();
+    let running: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM time_entries WHERE user_id = app_user_id() AND ended_at IS NULL AND deleted_at IS NULL",
+    )
+    .fetch_one(tx.conn())
+    .await
+    .unwrap();
+    assert_eq!(running, 1, "exactly one timer keeps running");
 }
 
 #[tokio::test]

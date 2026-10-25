@@ -688,6 +688,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
         .await,
         [format!("{tok} 기획"), format!("{tok} 보고서")]
     );
+    // 상태는 항목별 정의의 이름이다(D-116): 모르는 이름은 400이 아니라 빈 결과다.
     let r = send(
         &app,
         Method::GET,
@@ -696,7 +697,8 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
         None,
     )
     .await;
-    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    assert!(found(format!("{tok}&status=late")).await.is_empty());
     let r = send(
         &app,
         Method::GET,
