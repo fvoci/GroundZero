@@ -23,6 +23,16 @@ static LANE_TICK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// id를 넉넉히 준다(남는 id는 버린다). 한 반복이 한 번에 쓰는 몫은 회차 50개 × 3 = 150개다(체크리스트 줄 없음).
 const SPARE_TICK_IDS: usize = 10_000;
 
+/// 감사 행(action, target_type, workspace_id, organization_id, owner_user_id, detail) — 어긋난 검사의 진단 출력용.
+type AuditRow = (
+    String,
+    String,
+    Option<uuid::Uuid>,
+    Option<uuid::Uuid>,
+    Option<uuid::Uuid>,
+    Value,
+);
+
 async fn module_item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> Value {
     let m = send(
         app,
@@ -327,8 +337,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
         .await
         .unwrap();
     // 어긋나면 무엇이 쓰였는지 보인다(읽기가 쓰지 않았음을 확인하는 시험이라 원인이 바로 보여야 한다).
-    let latest: Vec<(String, String, Option<uuid::Uuid>, Option<uuid::Uuid>, Option<uuid::Uuid>, Value)> =
-        sqlx::query_as(
+    let latest: Vec<AuditRow> = sqlx::query_as(
             "SELECT action, target_type, workspace_id, organization_id, owner_user_id, detail FROM audit_log
              ORDER BY created_at DESC, id DESC LIMIT 4",
         )
