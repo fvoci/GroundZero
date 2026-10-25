@@ -91,3 +91,34 @@ it('disables editing archived items', () => {
   });
   for (const button of screen.getAllByRole('button')) expect(button).toBeDisabled();
 });
+
+// CodeRabbit(#141): 순서 칸을 비우면 Number('')가 0이라 검증을 지나 열이 맨 앞으로 조용히 옮겨졌다. 빈 순서는 거절한다.
+it('rejects an empty position instead of saving 0', async () => {
+  const update = vi.spyOn(api, 'updateTaskStatus');
+  render(StatusEditor, {
+    itemId: 'i',
+    statuses: TEST_STATUSES,
+    archived: false,
+    onchanged: vi.fn(),
+  });
+  await fireEvent.click(screen.getByRole('button', { name: 'todo 수정' }));
+  await fireEvent.input(screen.getByLabelText('순서'), { target: { value: '   ' } });
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  expect(screen.getByRole('status')).toHaveTextContent('이름과 순서를 확인하세요');
+  expect(update).not.toHaveBeenCalled();
+  await fireEvent.input(screen.getByLabelText('순서'), { target: { value: '2' } });
+  update.mockResolvedValue(
+    TEST_STATUSES[0] ?? {
+      id: '',
+      name: '',
+      color: '',
+      position: 0,
+      category: 'todo',
+      task_count: 0,
+    },
+  );
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  await waitFor(() => {
+    expect(update).toHaveBeenCalledOnce();
+  });
+});

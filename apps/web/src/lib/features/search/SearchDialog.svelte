@@ -346,7 +346,7 @@
         </Select.Root>
       </div>
       {#if workspace !== undefined}
-        <div class="flex flex-col gap-1">
+        <div class="flex min-w-0 flex-col gap-1">
           <span id="search-module-label" class="font-medium">{m.search_module()}</span>
           <Select.Root
             type="single"
@@ -358,7 +358,7 @@
               refilter();
             }}
           >
-            <Select.Trigger class="w-40" aria-labelledby="search-module-label"
+            <Select.Trigger class="w-40 max-w-full" aria-labelledby="search-module-label"
               >{moduleLabel}</Select.Trigger
             >
             <Select.Content>
@@ -372,7 +372,7 @@
           </Select.Root>
         </div>
       {/if}
-      <div class="flex flex-col gap-1">
+      <div class="flex min-w-0 flex-col gap-1">
         <span id="search-author-label" class="font-medium">{m.search_author()}</span>
         <Select.Root
           type="single"
@@ -383,7 +383,7 @@
             refilter();
           }}
         >
-          <Select.Trigger class="w-36" aria-labelledby="search-author-label"
+          <Select.Trigger class="w-36 max-w-full" aria-labelledby="search-author-label"
             >{authorLabel}</Select.Trigger
           >
           <Select.Content>

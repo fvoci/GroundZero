@@ -166,3 +166,21 @@ describe('course question and review records (D-123)', () => {
     expect(options).toEqual([m.records_not_selected(), '1. 벡터', '2. 행렬']);
   });
 });
+
+// CodeRabbit(#141): 회차 조회가 실패해도 이미 읽은 기록 목록은 보이고, 회차 이름·선택 실패만 따로 알린다.
+describe('course records when the episode list cannot be loaded', () => {
+  it('still lists the records and reports the episode failure with a retry', async () => {
+    vi.spyOn(api, 'itemRecords').mockResolvedValue([
+      record('r-1', 'question', 'ep-1', '고유값이 왜 실수인가요?'),
+    ]);
+    const courseCall = vi.spyOn(api, 'course').mockRejectedValue(new Error('offline'));
+    render(RecordsPanel, { props: { item: course, kind: 'course', canWrite: true } });
+    expect(await screen.findByText('고유값이 왜 실수인가요?')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(m.records_episodes_load_failed());
+    expect(screen.getByText(m.records_hidden_episode())).toBeInTheDocument();
+    courseCall.mockResolvedValue(courseView);
+    await fireEvent.click(screen.getByRole('button', { name: m.common_retry() }));
+    expect(await screen.findByText('1. 벡터')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});

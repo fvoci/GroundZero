@@ -37,7 +37,6 @@ description: fvoci 웹(apps/web)을 바꿀 때 읽을 코드와 결정, UI·조�
 - 업무 안 시간 기록(D-117): 행·카드는 `features/time/TaskTimeStart.svelte`(서버 조회 없이 타이머 저장소만 봄), 상세·회차·단위는 `TaskTimePanel`·각 패널. 상단 틀 `TimerWidget`은 기록 중 표시와 멈춤만.
 - 이탈 확인(D-97·D-125): 문서·일정은 `features/common/leave-guard.svelte.ts`의 `createLeaveGuard({ dirty, busy?, identity? })`를 `DiscardChangesConfirm`과 묶어 쓴다. 업무 대화상자(`tasks/TaskBoard.svelte`)는 같은 규칙을 자체 구현하고 있어 공용 모듈로 바꾸는 것이 후속이다.
 - 상태 정의(D-116): 업무 `status`는 항목별 이름 문자열, 집계·완료 판단은 `status_category`. 열·편집은 `tasks/StatusEditor.svelte`와 `api.taskStatuses*`.
-- 검색 `status` 필터는 서버 계약상 상태 이름이다(D-116 "범주만"과 어긋남 — 결정·계약 충돌로 기록됨). 서버가 범주 필터를 주기 전까지 이름 입력을 보낸다.
 - 테스트 모듈 캐시: 스토리 파일을 더한 뒤 `stories.test.ts`가 디스크와 다르다고 하면 `pnpm --filter @fvoci/web exec vitest --clearCache` 뒤 다시 돌린다.
 
 ## 보강(2026-10-26, 서버 계약 보완 뒤)

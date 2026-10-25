@@ -271,5 +271,6 @@
   "records_choice_question_state_answered": "Answered",
   "records_role_question_other": "Attachment",
   "records_field_review_episode": "Episode",
-  "records_hidden_episode": "(episode not visible)"
+  "records_hidden_episode": "(episode not visible)",
+  "records_episodes_load_failed": "Could not load the episodes, so episode names and the episode choice are unavailable."
 }

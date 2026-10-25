@@ -59,6 +59,8 @@
       !removing &&
       (name.trim() === '' ||
         (color !== '' && !/^#[0-9a-fA-F]{6}$/.test(color)) ||
+        // 빈 순서는 Number('')가 0이라 통과해 버리고 열을 맨 앞으로 옮겼다(CodeRabbit). 비우면 거절한다.
+        position.trim() === '' ||
         !Number.isFinite(Number(position)))
     ) {
       invalid = m.tasks_status_invalid();

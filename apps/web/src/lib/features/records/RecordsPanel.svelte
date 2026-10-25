@@ -37,6 +37,8 @@
   let error = $state<string | undefined>(undefined);
   /** 기록 종류·기록 목록을 읽지 못했다(저장 오류와 따로). 처음부터 못 읽으면 종류가 없어도 이 안내는 보인다. */
   let loadError = $state<string | undefined>(undefined);
+  /** 회차 목록(D-123)만 못 읽었다. 기록은 보이고 회차 이름·선택이 빈다. */
+  let episodeError = $state<string | undefined>(undefined);
   let status = $state('');
   let creating = $state(false);
   let editingId = $state<string | undefined>(undefined);
@@ -100,17 +102,24 @@
           );
           courseList = lists.flat().map((i) => ({ id: i.id, name: i.title }));
         }
-        // 회차 칸(D-123 강의 질문·복습)은 이 강좌의 회차 가운데 고른다. 번호와 제목으로 보인다.
+        // 회차 칸(D-123 강의 질문·복습)은 이 강좌의 회차 가운데 고른다. 번호와 제목으로 보인다. 회차를 못 읽어도 기록 목록은
+        // 보이고, 회차 이름·선택만 따로 실패를 알린다(CodeRabbit).
         let episodeList: { id: string; name: string }[] = [];
+        let episodeFailure: string | undefined;
         if (mine.some((d) => d.fields.some((f) => f.type === 'episode'))) {
-          const course = await api.course(id);
-          episodeList = course.episodes.map((e) => ({
-            id: e.id,
-            name: `${String(e.number)}. ${e.title}`,
-          }));
+          try {
+            const course = await api.course(id);
+            episodeList = course.episodes.map((e) => ({
+              id: e.id,
+              name: `${String(e.number)}. ${e.title}`,
+            }));
+          } catch (e: unknown) {
+            episodeFailure = errorText(e, m.records_episodes_load_failed());
+          }
         }
         if (cancelled) return;
         loadError = undefined;
+        episodeError = episodeFailure;
         defs = mine;
         records = list;
         // 고치던 기록이 그사이 지워졌으면 편집기가 말없이 사라지지 않게 알린다.
@@ -251,6 +260,18 @@
     {#if loadError !== undefined}
       <div class="flex flex-wrap items-center gap-2">
         <p role="alert" class="text-sm text-destructive">{loadError}</p>
+        <Button
+          size="sm"
+          variant="outline"
+          onclick={() => {
+            reloadKey += 1;
+          }}>{m.common_retry()}</Button
+        >
+      </div>
+    {/if}
+    {#if episodeError !== undefined}
+      <div class="flex flex-wrap items-center gap-2">
+        <p role="alert" class="text-sm text-destructive">{episodeError}</p>
         <Button
           size="sm"
           variant="outline"

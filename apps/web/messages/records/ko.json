@@ -270,5 +270,6 @@
   "records_choice_question_state_answered": "답변됨",
   "records_role_question_other": "첨부",
   "records_field_review_episode": "회차",
-  "records_hidden_episode": "(볼 수 없는 회차)"
+  "records_hidden_episode": "(볼 수 없는 회차)",
+  "records_episodes_load_failed": "회차 목록을 불러오지 못해 회차 이름과 선택을 보일 수 없습니다."
 }
