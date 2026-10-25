@@ -12,15 +12,14 @@ use axum::http::{Method, StatusCode};
 use common::{TestUser, add_member, create_workspace, login, new_request_id, send};
 use serde_json::{Value, json};
 
-async fn item(app: &Router, admin: &TestUser, ws: &str) -> String {
+/// 모듈 키는 워크스페이스 안에서 유일해야 하므로 부를 때마다 다른 키를 준다.
+async fn item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> String {
     let module = send(
         &app,
         Method::POST,
         &format!("/api/workspaces/{ws}/modules"),
         Some(admin),
-        Some(
-            json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "STS" }),
-        ),
+        Some(json!({ "request_id": new_request_id(), "kind": "project", "name": key, "key": key })),
     )
     .await;
     assert_eq!(module.status, StatusCode::CREATED, "{:?}", module.json);
@@ -69,7 +68,7 @@ async fn statuses_are_defined_per_item_by_its_owner_and_tasks_follow_them() {
     let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
-    let it = item(&app, &admin, &ws).await;
+    let it = item(&app, &admin, &ws, "STS").await;
     let path = format!("/api/items/{it}/statuses");
 
     // 기본 세 상태(D-116).
@@ -199,7 +198,7 @@ async fn statuses_are_defined_per_item_by_its_owner_and_tasks_follow_them() {
     assert_eq!(after.json[0]["task_count"], 1);
 
     // 다른 항목의 상태 id를 이 항목 경로로 고치려 하면 404.
-    let other = item(&app, &admin, &ws).await;
+    let other = item(&app, &admin, &ws, "OTH").await;
     let other_status = send(
         &app,
         Method::GET,
