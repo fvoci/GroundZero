@@ -1,0 +1,38 @@
+# 결정 기록 · 운영 로그·한도·캐시
+
+[결정 기록 색인](../decisions.md)의 한 주제다. 번호·앵커(`#d-xx`)는 색인 전체에서 고유하다. 아래 "현재 규칙 요약"은 이 주제의 유효한 규칙을 줄인 것이고, 정본은 그 아래 조항이다. 조항 안의 "개정 2026-10-25"는 그날 바뀐 문구이며 이전 문장은 조항의 원문 연결 또는 [개정 전 판](https://github.com/fvoci/GroundZero/blob/8349771265af71e70d628bd48abe94f815d8f29c/docs/decisions.md)에서 본다.
+
+## 현재 규칙 요약
+
+- 파일 크기·저장량·업로드 동시성·알림 발송률·보존 기간은 조직과 워크스페이스 두 단계 설정이며 기본값 근거를 문서화한다(D-52, D-124).
+- 로그는 tracing JSON Lines, 기본 INFO, 비밀·본문·헤더를 어떤 레벨에도 쓰지 않는다(D-83).
+- 문서 단건 GET만 강한 ETag·304, API는 `no-store`, 해시 자원만 장기 캐시다. CDN 설정은 예시이고 정책은 앱이 정한다(D-77).
+
+## 조항
+
+<a id="d-52"></a>
+
+- **D-52 운영 한도.** 파일 최대 크기·총 저장량·업로드 동시성·알림 발송률은 조직·워크스페이스 두 단계로 설정 가능해야 한다(D-124, 개정 2026-10-25). 기본값은 사용량·시험 근거로 제안하며 코드에 임의 고정하지 않는다(O-26). O-07 해소. 근거: 사용자.
+
+<a id="d-77"></a>
+
+- **D-77 ETag·조건부 요청·캐시 범위.** CDN 없는 셀프호스트와 Cloudflare·CloudFront 앞에서 권한·저장 정합성을 같게 유지한다. 캐시 정책은 앱이 정하고 CDN 설정은 예시다. 근거: 사용자.
+  - 문서 단건 GET(위키·모듈·개인 노트)의 강한 ETag는 실제 응답 바이트·요청 사용자의 해시다. 세션·권한 확인 뒤 `If-None-Match`를 약한 비교해 같으면 304, 권한 철회는 404·로그아웃은 401이다.
+  - PUT의 선택적 `If-Match`는 같은 트랜잭션·문서 행 잠금에서 요청 id 재시도 판단 다음, `base_revision` 비교 전에 현재 표현과 강한 비교한다. 불일치는 412+최신본(409와 같은 모양)이며 초안을 보존한다. 약한 ETag는 일치로 보지 않는다. 헤더가 없으면 기존 `base_revision`의 409를 쓰고 CRDT·저장 확인·멱등 키 역할을 바꾸지 않는다.
+  - API 응답을 압축하지 않고 `no-transform`을 붙인다. 클라이언트는 강한 ETag일 때만 `If-Match`, 약해졌으면 `base_revision`만 쓴다.
+  - 해시 정적 자원(`/assets/*`, `/rhwp/<해시>/*`)은 `public, max-age=31536000, immutable`. HTML·SPA·해시 없는 자원·rhwp manifest는 `no-cache`. `/api`·`/auth`·`/healthz` 중 문서 단건 GET만 `private, no-cache, no-transform`이고 나머지(인증·개인 데이터·첨부·내보내기·익명 링크 포함)는 `no-store`다. 없는 해시 자원은 SPA가 아닌 404, 압축 정적 응답은 `Vary: Accept-Encoding`이다.
+  - Cloudflare 민감 경로 Cache Bypass는 다른 규칙보다 뒤에 두고 API의 Respect Strong ETags를 켜며 브라우저 TTL은 원본을 존중한다. CloudFront 민감 경로는 CachingDisabled+AllViewer로 쿠키·Authorization·Origin·조건부 헤더를 전달한다. 해시 자원만 캐시·압축(CloudFront CachingOptimized)하며 사용자별 캐시 키로 격리를 대신하지 않는다. 로그인/로그아웃/콜백/쓰기의 메서드·Set-Cookie·If-Match·304/412·웹소켓을 원본에 그대로 전달하고 캐시하지 않는다.
+  - 객체 저장소 ETag·API ETag·SHA-256 무결성 체크섬을 구분한다. 비공개 첨부는 앱을 거치고 영구 공개 URL로 바꾸지 않는다. 업로드 조각 5~64 MiB는 프록시 요청 한도 안이고 완료 시 파일 전체를 재전송하지 않는다. 새 캐시 서버·범용 틀은 만들지 않는다. 실제 클라우드 설정·유료 서비스는 별도 승인, 승인된 대상의 실제 CDN 검증 전에는 NOT RUN이다.
+
+<a id="d-83"></a>
+
+- **D-83 운영 로그 레벨과 JSON Lines.** 기존 tracing을 쓰고 새 로그 프레임워크·서비스는 두지 않는다. 근거: 사용자.
+  - 기본 INFO, `FVOCI_LOG`로 ERROR~TRACE·모듈별 필터를 시작 때 읽으며 잘못된 설정은 시작을 거부한다. 옛 `RUST_LOG` 별칭은 D-92로 제거했다. ERROR는 처리 실패/정합성, WARN은 복구 가능한 이상(외부 502 포함), INFO는 시작/종료/주요 결과/요청 접근(거절이면 error_code 포함), DEBUG·TRACE는 진단이다. 4xx는 오류 줄 대신 접근 status_code, healthz·정적 접근은 DEBUG다.
+  - stdout JSON Lines(`FVOCI_LOG_FORMAT=json`)의 필드는 timestamp(UTC RFC3339)·level·target·안정된 event·message와 해당하는 request_id/job/job_id/status_code/duration_ms(밀리초 숫자)/error_code(응답 오류 코드와 같은 값)/detail이다. 색·원시 줄바꿈은 없고 로그는 UI 언어와 무관하다. 개발 pretty도 같은 사건·필드의 한 줄이다.
+  - 안전한 x-request-id 또는 새 UUIDv7을 응답 헤더·오류 본문·로그에 같이 쓴다(권한 근거 아님). 주기 작업은 실행별 ID, 화면의 5xx는 안전한 문구·요청 ID만 표시한다. 서버 오류는 응답 변환 경계에서 한 번 기록한다.
+  - 어떤 레벨에도 비밀번호/토큰/쿠키/Authorization/OIDC 코드/서명 URL/문서·첨부 내용/요청·응답 본문·헤더·쿼리/설정값/DB 바인딩/외부 오류 원문을 쓰지 않는다. 실제 경로 대신 경로 틀, 오류는 자체 분류·SQLSTATE·제약 이름만 남긴다. HTTP/TLS/웹소켓/OIDC/DB 라이브러리는 info 상한, pdf_extract·lopdf 로그와 SQL 문장/느린 질의 로그는 끈다. 작업 함수 경고도 SQLSTATE만, 패닉도 위치만 한 줄이다.
+  - DB audit_log는 로그 레벨과 별개다. 보관은 Docker json-file 회전(기본 10 MB×5, `FVOCI_LOG_MAX_SIZE`·`FVOCI_LOG_MAX_FILE`)이며 앱 내 파일 로그/회전기·로그 서버·실시간 로그 UI·외부 전송은 제외한다. 운영 절차는 [설치 안내](../self-hosting.md).
+
+<a id="d-124"></a>
+
+- **D-124 한도 두 단계.** 파일 크기·저장량·업로드 동시성·알림 발송률·활동/감사 보존 기간은 조직 한도와 워크스페이스 한도 두 단계로 설정하며 기본값의 근거를 문서화한다(D-52·O-26). 감사로그의 만료 삭제를 구현한다(D-57). 근거: 사용자(2026-10-25).

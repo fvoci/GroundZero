@@ -8,7 +8,7 @@ Rust `xtask` 명령이다. 검토·CI 통과 후 main 병합과 읽기 전용 �
 
 이 점검은 일반 [ci.yml](../.github/workflows/ci.yml)과 [로컬 Supabase 시험](../xtask/src/supabase.rs)과 별도다.
 `cargo xtask test --supabase`는 로컬 컨테이너의 bootstrap·migrate·통합 시험용이므로
-이 점검에 사용하지 않는다. 기준은 [결정 D-88·D-100](decisions.md)과
+이 점검에 사용하지 않는다. 기준은 [결정 D-88·D-100](decisions/database.md)과
 D-09·D-60의 기존 Rust·의존성·검사 규칙이다.
 
 ## 설정

@@ -19,7 +19,7 @@ reviews:
   path_instructions:
     - path: '**'
       instructions: >-
-        AGENTS.md와 docs/decisions.md의 확정 원칙을 따른다.
+        AGENTS.md와 docs/decisions.md, docs/decisions/*.md의 확정 원칙을 따른다.
         변경으로 생기는 실제 오류, 서버 권한 검사와 비공개 데이터·시크릿 유출,
         트랜잭션·동시성·재시도·삭제/복원의 데이터 정합성, API 계약과 시간대 경계 오류를 우선한다.
         문제를 지적할 때 구체적인 실패 경로와 필요한 검증을 설명한다.

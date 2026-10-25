@@ -1,4 +1,4 @@
-// 타입 정보를 사용하는 ESLint 설정. .ts와 .svelte 모두 검사한다 (D-09, docs/decisions.md#d-09).
+// 타입 정보를 사용하는 ESLint 설정. .ts와 .svelte 모두 검사한다 (D-09, docs/decisions/delivery.md#d-09).
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import svelte from 'eslint-plugin-svelte';
