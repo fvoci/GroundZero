@@ -26,8 +26,8 @@ pub const APP_ROLE: &str = "fvoci_app";
 pub const SCHEMA: &str = "fvoci";
 
 /// 새 설치 이력의 시작점. 이전 개발 DB는 이력 수정 없이 승인 후 재생성한다(D-107).
-pub const BASELINE_VERSION: i64 = 202_610_230_001;
-pub const BASELINE_MARKER: &str = "fvoci baseline 202610230001";
+pub const BASELINE_VERSION: i64 = 202_610_250_001;
+pub const BASELINE_MARKER: &str = "fvoci baseline 202610250001";
 
 fn recreation_required() -> AppError {
     AppError::Config(
