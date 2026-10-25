@@ -1,3 +1,5 @@
+import * as feedback from '$lib/features/feedback/feedback.svelte';
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -223,6 +225,7 @@ describe('saved view save on a stale version', () => {
   // CodeRabbit: 저장을 기다리는 사이 목록에서 다른 보기를 고르면 늦은 응답이 선택을 저장한 보기로 되돌렸다(지우기
   // 단추가 화면과 다른 보기를 가리킴). 시작할 때의 선택이 그대로일 때만 선택을 바꾼다.
   it('does not move the selection the user changed while the save was in flight', async () => {
+    const done = vi.spyOn(feedback, 'notifyDone');
     const stored: Stored[] = [
       { id: 'v1', name: '가 보기', config: { view: 'list' }, version: 1 },
       { id: 'v2', name: '나 보기', config: { view: 'calendar' }, version: 1 },
@@ -242,7 +245,9 @@ describe('saved view save on a stale version', () => {
     });
     await fireEvent.change(select, { target: { value: 'v2' } });
     for (const release of control.held ?? []) release();
-    await screen.findByText(/보기 "가 보기"을\(를\) 저장했습니다/);
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith('보기 "가 보기"을(를) 저장했습니다.');
+    });
 
     expect(select).toHaveValue('v2');
   });

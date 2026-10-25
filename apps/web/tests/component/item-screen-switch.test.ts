@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { tick } from 'svelte';

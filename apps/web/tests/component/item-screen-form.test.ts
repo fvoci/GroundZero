@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -5,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ItemProfileView, ItemView, TaskView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
+import { itemViewPath, itemTaskPath, router } from '$lib/router.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 afterEach(() => {
@@ -288,6 +290,7 @@ function task(id: string, title: string): TaskView {
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 1,
@@ -327,5 +330,41 @@ describe('item info form when the task board finds the item changed', () => {
 
     expect(titleInput().value).toBe('다른 사람이 고친 제목');
     expect(description().value).toBe('쓰는 중인 설명');
+  });
+});
+it('ItemScreen follows direct gantt URLs, view navigation and task detail URLs (E regression)', async () => {
+  await setLocale('ko', { reload: false });
+  quietServer();
+  const ws = { ...workspace, id: '10000000-0000-0000-0000-000000000001' };
+  const current = item({ id: '20000000-0000-0000-0000-000000000001', workspace_id: ws.id });
+  const entry = {
+    ...task('30000000-0000-0000-0000-000000000001', '경로 업무'),
+    item_id: current.id,
+    workspace_id: ws.id,
+    start_date: '2026-10-25',
+    due_date: '2026-10-28',
+  };
+  mockItem(current);
+  vi.spyOn(api, 'tasks').mockResolvedValue([entry]);
+  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+  vi.spyOn(api, 'task').mockResolvedValue({ ...entry, checklist: [] });
+  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  router.guard = undefined;
+  router.path = itemViewPath(ws.id, current.id, 'gantt');
+  window.history.replaceState(null, '', router.path);
+  render(ItemScreen, { workspace: ws, itemId: current.id, workspaces: [ws] });
+  await screen.findByTestId('task-gantt');
+  expect(screen.getByRole('button', { name: '간트' })).toHaveAttribute('aria-pressed', 'true');
+  await fireEvent.click(screen.getByRole('button', { name: '칸반' }));
+  await screen.findByTestId('task-board');
+  expect(window.location.pathname).toBe(itemViewPath(ws.id, current.id, 'board'));
+  await fireEvent.click(screen.getByRole('button', { name: '간트' }));
+  await screen.findByTestId('task-gantt');
+  expect(window.location.pathname).toBe(itemViewPath(ws.id, current.id, 'gantt'));
+  router.navigate(itemTaskPath(ws.id, current.id, entry.id));
+  await screen.findByRole('dialog');
+  await waitFor(() => {
+    expect(api.task).toHaveBeenCalledWith(entry.id);
   });
 });

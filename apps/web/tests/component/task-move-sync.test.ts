@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import type { MockInstance } from 'vitest';
@@ -55,6 +56,7 @@ function task(id: string, title: string, status: TaskStatus = 'todo', version = 
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version,
@@ -263,7 +265,7 @@ describe('kanban save states', () => {
     save.resolve({ ...movedA, checklist: [] });
     await flush();
     expect(saveState('a')).toBeNull();
-    expect(liveText()).toContain('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
+    expect(liveText()).toContain('API 연결: 오른쪽 열로 옮겼습니다(in_progress).');
   });
 
   it('slow success: says the response is delayed, then confirms when it arrives', async () => {
@@ -333,7 +335,7 @@ describe('kanban save states', () => {
     expect(move).toHaveBeenCalledTimes(1);
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('in_progress');
-    expect(liveText()).toContain('API 연결: 저장을 확인했습니다(진행 중).');
+    expect(liveText()).toContain('API 연결: 저장을 확인했습니다(in_progress).');
   });
 
   it('lost response and not saved: shows the server place, retries once only on request', async () => {
@@ -359,7 +361,7 @@ describe('kanban save states', () => {
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('in_progress');
     // 응답의 판이 이 이동만으로 될 판(1 → 2)이므로 겹친 변경으로 알리지 않는다.
-    expect(liveText()).toContain('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
+    expect(liveText()).toContain('API 연결: 오른쪽 열로 옮겼습니다(in_progress).');
     expect(screen.queryByRole('alert')?.textContent ?? '').not.toContain('덮었을 수 있습니다');
   });
 
@@ -493,36 +495,31 @@ describe('kanban save states', () => {
     await flush();
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('in_progress');
-    expect(liveText()).toContain('API 연결: 저장을 확인했습니다(진행 중).');
+    expect(liveText()).toContain('API 연결: 저장을 확인했습니다(in_progress).');
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('a card quick-added to another column shows its save state even when the list cannot be read', async () => {
-    // 빠른 추가는 "할 일"로 만든 뒤 그 열로 옮긴다. 옮기기 결과를 모르고 목록도 읽지 못해도 카드와 다시 확인 단추가 있어야 한다.
-    let call = 0;
-    vi.spyOn(api, 'tasks').mockImplementation(() => {
-      call += 1;
-      if (call === 1) return Promise.resolve(start);
-      if (call === 2) return Promise.reject(new NetworkError('offline'));
-      return Promise.resolve([...start, task('n', '새 업무', 'in_progress', 2)]);
-    });
-    vi.spyOn(api, 'createTask').mockResolvedValue({ ...task('n', '새 업무'), checklist: [] });
-    vi.spyOn(api, 'moveTask').mockRejectedValue(new NetworkError('reset'));
+  it('quick add includes the status in one request and keeps the response when reloading fails (#104)', async () => {
+    vi.spyOn(api, 'tasks')
+      .mockResolvedValueOnce(start)
+      .mockRejectedValue(new NetworkError('offline'));
+    const create = vi
+      .spyOn(api, 'createTask')
+      .mockResolvedValue({ ...task('n', '새 업무', 'in_progress'), checklist: [] });
+    const move = vi.spyOn(api, 'moveTask');
     await mount();
-    const lane = screen.getByRole('region', { name: /진행 중/ });
+    const lane = screen.getByRole('region', { name: /in_progress/ });
     await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
     const input = within(lane).getByRole('textbox');
     await fireEvent.input(input, { target: { value: '새 업무' } });
     await fireEvent.submit(input.closest('form') ?? input);
     await flush();
+    expect(create).toHaveBeenCalledWith('i1', expect.any(String), '새 업무', null, {
+      status: 'in_progress',
+    });
+    expect(move).not.toHaveBeenCalled();
     expect(laneOf('n')).toBe('in_progress');
-    expect(saveState('n')).toBe('unknown');
-    const box = card('n').closest<HTMLElement>('[data-board-card]');
-    if (box === null) throw new Error('box');
-    await fireEvent.click(within(box).getByRole('button', { name: '다시 확인' }));
-    await flush();
     expect(saveState('n')).toBeNull();
-    expect(liveText()).toContain('새 업무: 저장을 확인했습니다(진행 중).');
   });
 
   it('a quick add that finishes after leaving the board does not go on to move it', async () => {
@@ -531,7 +528,7 @@ describe('kanban save states', () => {
     vi.spyOn(api, 'createTask').mockReturnValue(made.promise);
     const move = vi.spyOn(api, 'moveTask');
     const view = await mount();
-    const lane = screen.getByRole('region', { name: /진행 중/ });
+    const lane = screen.getByRole('region', { name: /in_progress/ });
     await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
     const input = within(lane).getByRole('textbox');
     await fireEvent.input(input, { target: { value: '새 업무' } });
@@ -558,26 +555,49 @@ describe('kanban save states', () => {
     vi.spyOn(api, 'moveTask')
       .mockResolvedValueOnce({ ...task('b', '문서 검토', 'in_progress', 2), checklist: [] })
       .mockReturnValueOnce(save.promise);
-    vi.spyOn(api, 'createTask').mockResolvedValue({ ...task('n', '새 업무'), checklist: [] });
+    vi.spyOn(api, 'createTask').mockResolvedValue({
+      ...task('n', '새 업무', 'in_progress'),
+      checklist: [],
+    });
     await mount();
     await moveRight('b');
     await flush();
-    const lane = screen.getByRole('region', { name: /진행 중/ });
+    const lane = screen.getByRole('region', { name: /in_progress/ });
     await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
     const input = within(lane).getByRole('textbox');
     await fireEvent.input(input, { target: { value: '새 업무' } });
     await fireEvent.submit(input.closest('form') ?? input);
     await flush();
-    expect(saveState('n')).toBe('saving');
+    expect(saveState('n')).toBeNull();
     slow.resolve([task('a', 'API 연결'), task('b', '문서 검토', 'in_progress', 2)]);
     await flush();
     expect(laneOf('n')).toBe('in_progress');
-    save.reject(new NetworkError('reset'));
+    expect(saveState('n')).toBeNull();
+    expect(api.moveTask).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a 409 move plan and only resaves it explicitly against the latest move version', async () => {
+    const newest = task('a', 'API 연결', 'done', 5);
+    lists(start, [newest], [newest]);
+    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
+    const move = vi
+      .spyOn(api, 'moveTask')
+      .mockRejectedValueOnce(new ApiError(409, 'move_conflict', 'moved elsewhere'))
+      .mockReturnValueOnce(save.promise);
+    await mount();
+    await moveRight('a');
+    await flush(20000);
+    expect(move).toHaveBeenCalledTimes(1);
+    expect(laneOf('a')).toBe('done');
+    expect(screen.getByText('API 연결: 요청한 상태 in_progress')).toBeVisible();
+    await fireEvent.click(screen.getByRole('button', { name: '최신본 확인' }));
     await flush();
-    expect(saveState('n')).toBe('unknown');
-    const box = card('n').closest<HTMLElement>('[data-board-card]');
-    if (box === null) throw new Error('box');
-    expect(within(box).getByRole('button', { name: '다시 확인' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: '내 입력으로 다시 저장' }));
+    await fireEvent.click(screen.getByRole('button', { name: '내 입력으로 다시 저장' }));
+    expect(move).toHaveBeenCalledTimes(2);
+    expect(move).toHaveBeenLastCalledWith('a', 'in_progress', null, 5);
+    save.resolve({ ...newest, status: 'in_progress', move_version: 6, checklist: [] });
+    await flush();
   });
 
   it('blocks a second move of the same card but not of another card', async () => {
@@ -687,6 +707,6 @@ describe('kanban save states', () => {
     expect(laneOf('a')).toBe('in_progress');
     // 늦게 끝난 실패 쪽 흐름이 방금 성공한 이동의 안내를 실패 경고로 덮지 않는다.
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(liveText()).toContain('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
+    expect(liveText()).toContain('API 연결: 오른쪽 열로 옮겼습니다(in_progress).');
   });
 });

@@ -36,6 +36,7 @@ function detail(id: string, title: string, version: number): TaskDetailView {
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version,
@@ -75,7 +76,7 @@ function fakeServer() {
         requestId: string,
         title: string,
         _parent?: string | null,
-        fields?: Fields,
+        fields?: Partial<Fields>,
       ) => {
         const held = gate;
         gate = Promise.resolve();

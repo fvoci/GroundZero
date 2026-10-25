@@ -1258,9 +1258,28 @@ export function parseRevision(value: Json): RevisionView {
 
 // --- 업무 -------------------------------------------------------------
 
-export type TaskStatus = 'todo' | 'in_progress' | 'done';
+// 작업자 A: 상태 이름은 항목 정의의 문자열, 완료 판단은 status_category만 사용한다.
+export type TaskStatus = string;
+// 작업자 A: 업무 폼은 account_changed에서 입력을 메모리에 보존하고 잠근다. 전역 새로고침 전에 오류를 전달한다.
+function failTask(status: number, json: Json): never {
+  if (status === 409 && isRecord(json) && json.error === 'account_changed')
+    throw new ApiError(409, 'account_changed', 'account_changed');
+  fail(status, json);
+}
+
+async function expectTask<T>(
+  method: string,
+  path: string,
+  parse: (v: Json) => T,
+  body: Json,
+  // 선택적 취소 신호(#84 CSV 가져오기 중단). 기존 호출은 그대로.
+  signal?: AbortSignal,
+): Promise<T> {
+  const { status, json } = await request(method, path, body, {}, signal);
+  if (status < 200 || status >= 300) failTask(status, json);
+  return parse(json);
+}
 export type TaskPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent';
-export const TASK_STATUSES: readonly TaskStatus[] = ['todo', 'in_progress', 'done'] as const;
 export const TASK_PRIORITIES: readonly TaskPriority[] = [
   'none',
   'low',
@@ -1301,6 +1320,13 @@ function parseRule(value: Json): RecurrenceRule | null {
   };
 }
 
+// 작업자 A: 반복 충돌 최신본은 편집 중 입력과 분리한다.
+export class TaskRuleConflict extends ApiError {
+  constructor(readonly current: TaskDetailView) {
+    super(409, 'rule_conflict', 'rule_conflict');
+  }
+}
+
 export interface TaskSeriesView {
   id: string;
   root_task_id: string;
@@ -1318,6 +1344,7 @@ export interface TaskView {
   title: string;
   description: string;
   status: TaskStatus;
+  status_category: StatusCategory;
   priority: TaskPriority;
   start_date: string | null;
   due_date: string | null;
@@ -1511,12 +1538,6 @@ function parseSchedulePlan(value: Json): SchedulePlanView {
   };
 }
 
-function taskStatus(value: string): TaskStatus {
-  const found = TASK_STATUSES.find((s) => s === value);
-  if (found === undefined) throw new TypeError(`unknown task status ${value}`);
-  return found;
-}
-
 function taskPriority(value: string): TaskPriority {
   const found = TASK_PRIORITIES.find((p) => p === value);
   if (found === undefined) throw new TypeError(`unknown priority ${value}`);
@@ -1539,7 +1560,8 @@ export function parseTask(value: Json): TaskView {
     reference: optStr(o, 'reference'),
     title: str(o, 'title'),
     description: str(o, 'description'),
-    status: taskStatus(str(o, 'status')),
+    status: str(o, 'status'),
+    status_category: statusCategory(str(o, 'status_category')),
     priority: taskPriority(str(o, 'priority')),
     start_date: optStr(o, 'start_date'),
     due_date: optStr(o, 'due_date'),
@@ -1649,6 +1671,7 @@ export interface CalendarTaskView {
   reference: string | null;
   title: string;
   status: TaskStatus;
+  status_category: StatusCategory;
   milestone: boolean;
   start_date: string | null;
   due_date: string | null;
@@ -1718,7 +1741,8 @@ function parseCalendar(value: Json): CalendarView {
         item_id: str(t, 'item_id'),
         reference: optStr(t, 'reference'),
         title: str(t, 'title'),
-        status: taskStatus(str(t, 'status')),
+        status: str(t, 'status'),
+        status_category: statusCategory(str(t, 'status_category')),
         milestone: bool(t, 'milestone'),
         start_date: optStr(t, 'start_date'),
         due_date: optStr(t, 'due_date'),
@@ -1876,6 +1900,7 @@ export interface HomeTaskView {
   reference: string | null;
   title: string;
   status: TaskStatus;
+  status_category: StatusCategory;
   due_date: string | null;
   bucket: 'overdue' | 'today' | 'upcoming' | null;
 }
@@ -1932,8 +1957,9 @@ function parseHomeTask(value: Json): HomeTaskView {
     workspace_id: str(o, 'workspace_id'),
     reference: optStr(o, 'reference'),
     title: str(o, 'title'),
-    status: taskStatus(str(o, 'status')),
+    status: str(o, 'status'),
     due_date: optStr(o, 'due_date'),
+    status_category: statusCategory(str(o, 'status_category')),
     bucket,
   };
 }
@@ -3140,11 +3166,11 @@ export const api = {
     requestId: string,
     title: string,
     parentId: string | null = null,
-    fields?: Omit<TaskInput, 'title'>,
+    fields?: Partial<Omit<TaskInput, 'title'>>,
     // 작업자 D: #84 가져오기 중단.
     signal?: AbortSignal,
   ) =>
-    expectOk(
+    expectTask(
       'POST',
       `/api/items/${encodeURIComponent(itemId)}/tasks`,
       parseTaskDetail,
@@ -3183,7 +3209,7 @@ export const api = {
         ? { kind: 'shift_conflict', current }
         : { kind: 'conflict', current };
     }
-    if (status !== 200) fail(status, json);
+    if (status !== 200) failTask(status, json);
     return { kind: 'updated', task: parseTaskDetail(json) };
   },
   /**
@@ -3191,7 +3217,7 @@ export const api = {
    * 아무것도 바꾸지 않고 409 `move_conflict`를 돌려준다(`ApiError`). 주지 않으면 판과 상관없이 옮긴다.
    */
   moveTask: (id: string, status: TaskStatus, beforeId: string | null, baseMoveVersion?: number) =>
-    expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/position`, parseTaskDetail, {
+    expectTask('PUT', `/api/tasks/${encodeURIComponent(id)}/position`, parseTaskDetail, {
       status,
       before_id: beforeId,
       ...(baseMoveVersion === undefined ? {} : { base_move_version: baseMoveVersion }),
@@ -3296,11 +3322,31 @@ export const api = {
     return { kind: 'updated', event: parseEvent(json) };
   },
   deleteEvent: (id: string) => expectOk('DELETE', `/api/events/${encodeURIComponent(id)}`, none),
-  setTaskRecurrence: (id: string, rule: RecurrenceRule | null, timezone: string) =>
-    expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/recurrence`, parseTaskDetail, {
-      rule: rule === null ? null : { ...rule },
-      timezone,
-    }),
+  async setTaskRecurrence(
+    id: string,
+    rule: RecurrenceRule | null,
+    timezone: string,
+    base: RecurrenceRule | null,
+  ): Promise<TaskDetailView> {
+    const { status, json } = await request(
+      'PUT',
+      `/api/tasks/${encodeURIComponent(id)}/recurrence`,
+      {
+        rule: rule === null ? null : { ...rule },
+        timezone,
+        base: base === null ? null : { ...base },
+      },
+    );
+    if (
+      status === 409 &&
+      isRecord(json) &&
+      json.error === 'rule_conflict' &&
+      json.current !== undefined
+    )
+      throw new TaskRuleConflict(parseTaskDetail(json.current));
+    if (status !== 200) failTask(status, json);
+    return parseTaskDetail(json);
+  },
   /** 반복 업무 회차 만들기(쓰기 권한으로 항목을 열 때). 만든 수. */
   syncRecurrences: (itemId: string) =>
     expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/recurrences/sync`, (v) =>

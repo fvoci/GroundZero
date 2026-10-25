@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';

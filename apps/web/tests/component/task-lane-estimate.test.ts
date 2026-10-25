@@ -1,3 +1,5 @@
+import { org } from '$lib/org.svelte';
+import './fixtures/task-statuses';
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -47,6 +49,7 @@ function task(id: string, title: string, status: TaskStatus, estimate: number | 
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 1,
@@ -107,7 +110,7 @@ describe('lane estimate in the board', () => {
 
   it('says it counts the shown cards when filtered, and gives the whole column too', async () => {
     window.sessionStorage.setItem(
-      'fvoci:board:i1',
+      org.key('board:i1'),
       JSON.stringify({ view: 'board', sort: 'position', filter: { text: '자료' } }),
     );
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });

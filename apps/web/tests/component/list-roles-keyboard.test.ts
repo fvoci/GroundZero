@@ -34,6 +34,7 @@ function task(id: string, title: string, status: TaskView['status'], due: string
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 1,
@@ -55,7 +56,7 @@ describe('task calendar roles', () => {
 
     expect(screen.queryByRole('grid')).toBeNull();
     expect(screen.queryAllByRole('gridcell')).toHaveLength(0);
-    expect(screen.getByRole('button', { name: /^발표 자료 · 완료$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^발표 자료 · done$/ })).toBeInTheDocument();
   });
 });
 

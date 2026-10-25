@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -45,6 +46,7 @@ function task(id: string, title: string): TaskView {
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 1,
@@ -83,7 +85,7 @@ describe('move menu within a column', () => {
     await waitFor(() => {
       expect(move).toHaveBeenCalledTimes(1);
     });
-    // 같은 열(할 일)의 "문서 검토" 앞으로.
+    // 같은 열(todo)의 "문서 검토" 앞으로.
     expect(move.mock.calls[0]?.slice(0, 3)).toEqual(['2', 'todo', '1']);
   });
 });

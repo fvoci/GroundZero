@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -48,6 +49,7 @@ function task(id: string, title: string, priority: TaskView['priority']): TaskVi
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 1,

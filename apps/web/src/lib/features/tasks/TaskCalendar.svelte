@@ -1,5 +1,5 @@
 <script lang="ts">
-  // 항목 업무의 달력 보기(D-31). 업무는 마감일(없으면 시작일) 한 칸에 놓는다. 날짜가 없는 업무는 아래에 따로.
+  // 항목 업무의 달력 보기(D-31). 시작·마감이 있으면 기간 막대, 한 날짜만 있으면 점으로 놓는다. 날짜가 없는 업무는 아래에 따로.
   import type { TaskView } from '$lib/api/client';
   import { isWeekend, monthRange, shiftMonth } from '$lib/features/events/calendar';
   import { displaySettings, formatDay, formatMonth, weekdays } from '$lib/display';
@@ -8,7 +8,6 @@
   import { Button } from '$lib/ui/button';
 
   import { tasksByDay } from './filters';
-  import { STATUS_LABEL } from './labels';
 
   interface Props {
     tasks: TaskView[];
@@ -23,7 +22,7 @@
   const today = dayIn(new Date().toISOString(), settings.timeZone);
   let month = $state(today.slice(0, 7));
   const range = $derived(monthRange(month, settings.weekStart));
-  const byDay = $derived(tasksByDay(tasks));
+  const byDay = $derived(tasksByDay(tasks, range.days));
   const undated = $derived(tasks.filter((t) => t.due_date === null && t.start_date === null));
   const WEEKDAYS = weekdays(settings).map((w) => w.short);
 </script>
@@ -101,13 +100,17 @@
             type="button"
             class={[
               'truncate rounded px-1 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-              t.status === 'done' ? 'line-through' : '',
+              t.status_category === 'done' ? 'line-through' : '',
+              t.start_date !== null &&
+                t.due_date !== null &&
+                'rounded-none bg-primary/15 border-y border-primary/30',
             ]}
-            title={`${t.reference ?? ''} ${t.title} · ${STATUS_LABEL[t.status]}`}
-            aria-label={`${t.title} · ${STATUS_LABEL[t.status]}`}
+            data-span={t.start_date !== null && t.due_date !== null ? 'range' : 'point'}
+            title={`${t.start_date ?? t.due_date ?? ''} – ${t.due_date ?? t.start_date ?? ''} · ${t.reference ?? ''} ${t.title} · ${t.status}`}
+            aria-label={`${t.title} · ${t.status}`}
             onclick={() => {
               onopen(t.id);
-            }}>{t.title}</button
+            }}>{t.start_date === null || t.due_date === null ? '• ' : ''}{t.title}</button
           >
         {/each}
       </div>

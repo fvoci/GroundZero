@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -39,6 +40,7 @@ function task(id: string, fields: Partial<TaskDetailView> = {}): TaskDetailView 
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 2,
@@ -136,12 +138,18 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
   vi.spyOn(api, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
-  const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+  const back = vi.fn();
+  const navigate = router.navigate.bind(router);
+  const navigating = vi.spyOn(router, 'navigate').mockImplementation((path) => {
+    if (path.endsWith('/tasks/board')) back();
+    navigate(path);
+  });
   const props = (openTaskId: string | undefined) => ({ item, workspaces: [], openTaskId });
   const view = render(TaskBoard, { props: props(undefined) });
   await fireEvent.click(await screen.findByRole('button', { name: /^KED-1\s*옛 제목$/ }));
   await view.rerender(props('t1'));
   await screen.findByRole('dialog');
+  navigating.mockClear();
   await waitFor(() => {
     expect(field('task-title').value).toBe('옛 제목');
   });

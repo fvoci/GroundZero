@@ -127,6 +127,7 @@ describe('gantt name column', () => {
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 1,

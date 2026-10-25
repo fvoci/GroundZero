@@ -30,6 +30,7 @@ function task(n: number, due: string, bucket: HomeTaskView['bucket']): HomeTaskV
     reference: `DEV-${String(n)}`,
     title: `${bucket ?? ''} ${String(n)}`,
     status: 'todo',
+    status_category: 'todo',
     due_date: due,
     bucket,
   };

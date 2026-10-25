@@ -19,7 +19,7 @@
     ganttWeeks,
     weekday,
   } from './gantt';
-  import { STATUS_LABEL, linkText } from './labels';
+  import { linkText } from './labels';
 
   interface Props {
     tasks: TaskView[];
@@ -334,7 +334,7 @@
     return [
       `${t.reference ?? ''} ${t.title}`.trim(),
       t.milestone ? m.tasks_gantt_milestone({ date: when }) : when,
-      STATUS_LABEL[t.status],
+      t.status,
       preds.length > 0 ? m.tasks_gantt_predecessors({ refs: preds.join(', ') }) : '',
       succs.length > 0 ? m.tasks_gantt_successors({ refs: succs.join(', ') }) : '',
     ]
@@ -520,7 +520,7 @@
             <div
               class={[
                 'absolute inset-y-1 z-[2] rounded-sm',
-                row.task.status === 'done' ? 'bg-muted-foreground/40' : 'bg-primary/70',
+                row.task.status_category === 'done' ? 'bg-muted-foreground/40' : 'bg-primary/70',
                 editable(row.task) && 'cursor-grab touch-none',
                 draft?.id === row.task.id && 'ring-2 ring-ring',
                 span.off && 'invisible',

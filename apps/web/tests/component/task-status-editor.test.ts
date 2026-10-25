@@ -1,0 +1,93 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { api, ApiError } from '$lib/api/client';
+import StatusEditor from '$lib/features/tasks/StatusEditor.svelte';
+import { setLocale } from '$lib/paraglide/runtime.js';
+import { TEST_STATUSES } from './fixtures/task-statuses';
+
+beforeEach(async () => {
+  await setLocale('ko', { reload: false });
+});
+afterEach(() => vi.restoreAllMocks());
+
+it('adds a status, validates fields, and prevents duplicate requests', async () => {
+  const create = vi.spyOn(api, 'createTaskStatus').mockReturnValue(new Promise(() => undefined));
+  render(StatusEditor, {
+    itemId: 'i',
+    statuses: TEST_STATUSES,
+    archived: false,
+    onchanged: vi.fn(),
+  });
+  await fireEvent.click(screen.getByRole('button', { name: '상태 추가' }));
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  expect(create).not.toHaveBeenCalled();
+  await fireEvent.input(screen.getByLabelText('상태 이름'), { target: { value: '검토 대기' } });
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  expect(create).toHaveBeenCalledExactlyOnceWith('i', '검토 대기', '', 'todo');
+});
+
+it('preserves edits on 400 and 409, then saves name, color, category and position', async () => {
+  const first = TEST_STATUSES[0];
+  if (first === undefined) throw new Error('missing status');
+  const update = vi
+    .spyOn(api, 'updateTaskStatus')
+    .mockRejectedValueOnce(new ApiError(400, 'bad_request', 'color rejected'))
+    .mockRejectedValueOnce(new ApiError(409, 'archived', 'item archived'))
+    .mockResolvedValue(first);
+  const changed = vi.fn(() => Promise.resolve());
+  render(StatusEditor, {
+    itemId: 'i',
+    statuses: TEST_STATUSES,
+    archived: false,
+    onchanged: changed,
+  });
+  await fireEvent.click(screen.getByRole('button', { name: 'todo 수정' }));
+  await fireEvent.input(screen.getByLabelText('상태 이름'), { target: { value: '검토' } });
+  await fireEvent.input(screen.getByLabelText('색 (#rrggbb)'), { target: { value: '#abcdef' } });
+  await fireEvent.change(screen.getByLabelText('범주'), { target: { value: 'doing' } });
+  await fireEvent.input(screen.getByLabelText('순서'), { target: { value: '1.5' } });
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('color rejected');
+  expect(screen.getByLabelText('상태 이름')).toHaveValue('검토');
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('item archived');
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  await waitFor(() => {
+    expect(changed).toHaveBeenCalledOnce();
+  });
+  expect(update).toHaveBeenLastCalledWith('i', 's-todo', {
+    name: '검토',
+    color: '#abcdef',
+    category: 'doing',
+    position: 1.5,
+  });
+});
+
+it('requires another status before deletion and sends its id', async () => {
+  const remove = vi.spyOn(api, 'deleteTaskStatus').mockResolvedValue(3);
+  render(StatusEditor, {
+    itemId: 'i',
+    statuses: TEST_STATUSES,
+    archived: false,
+    onchanged: () => Promise.resolve(),
+  });
+  await fireEvent.click(screen.getByRole('button', { name: 'todo 삭제' }));
+  await fireEvent.click(screen.getByRole('button', { name: '업무를 옮기고 삭제' }));
+  expect(remove).not.toHaveBeenCalled();
+  await fireEvent.change(screen.getByLabelText('업무를 옮길 상태'), {
+    target: { value: 's-doing' },
+  });
+  await fireEvent.click(screen.getByRole('button', { name: '업무를 옮기고 삭제' }));
+  expect(remove).toHaveBeenCalledExactlyOnceWith('i', 's-todo', 's-doing');
+});
+
+it('disables editing archived items', () => {
+  render(StatusEditor, {
+    itemId: 'i',
+    statuses: TEST_STATUSES,
+    archived: true,
+    onchanged: vi.fn(),
+  });
+  for (const button of screen.getAllByRole('button')) expect(button).toBeDisabled();
+});

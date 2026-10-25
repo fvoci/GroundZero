@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskInput } from '$lib/api/client';
-import { api, ApiError } from '$lib/api/client';
+import { api, ApiError, TaskRuleConflict } from '$lib/api/client';
 
 // 업무 고치기의 409는 세 갈래다(계약 `TaskConflict`·`ErrorBody`): 기준 버전이 지났으면 `conflict`, 승인한 후속 재배치가
 // 맞지 않으면 `shift_conflict`(둘 다 최신본 포함), 보관·다시 시도 등은 최신본 없는 일반 오류다. 칸반 이동은 읽은 이동
@@ -27,6 +27,7 @@ const task = {
   series: null,
   occurrence_date: null,
   assignees: [],
+  status_category: 'todo',
   checklist_done: 0,
   checklist_total: 0,
   version: 3,
@@ -142,4 +143,21 @@ describe('kanban move (D-89)', () => {
       'move_conflict',
     ]);
   });
+});
+it('sends the recurrence base and retains the latest rule on 409 without retry', async () => {
+  const base = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+  const seen = reply(409, { error: 'rule_conflict', current: task });
+  const result = await failure(api.setTaskRecurrence('b', base, 'Asia/Seoul', null));
+  expect(result).toBeInstanceOf(TaskRuleConflict);
+  expect(seen).toHaveLength(1);
+  expect(seen[0]?.body).toEqual({ rule: base, timezone: 'Asia/Seoul', base: null });
+});
+
+it('passes account_changed to the task form without reloading or retrying', async () => {
+  const seen = reply(409, { error: 'account_changed' });
+  expect(await failure(api.updateTask('b', 3, input))).toMatchObject({
+    status: 409,
+    code: 'account_changed',
+  });
+  expect(seen).toHaveLength(1);
 });
