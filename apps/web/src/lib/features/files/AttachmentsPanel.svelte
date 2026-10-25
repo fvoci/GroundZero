@@ -195,7 +195,7 @@
       }}
     />
   </div>
-  <p aria-live="polite" class="text-sm">
+  <p role="status" aria-live="polite" class="text-sm empty:hidden">
     {#if progress !== undefined}
       {m.files_uploading({ name: progress.name, percent: progress.percent })}
       <Button size="sm" variant="ghost" onclick={() => controller?.abort()}

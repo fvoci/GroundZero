@@ -114,11 +114,12 @@
   }
 </script>
 
+<p role="status" class="empty:hidden">
+  {#if error === undefined && doc === undefined}{m.documents_loading()}{/if}
+</p>
 {#if error !== undefined}
   <p role="alert" class="text-destructive">{error}</p>
-{:else if doc === undefined}
-  <p aria-live="polite">{m.documents_loading()}</p>
-{:else}
+{:else if doc !== undefined}
   {@const shownDoc = doc}
   <div class="flex flex-wrap items-center gap-2">
     <DocumentActions
