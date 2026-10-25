@@ -35,6 +35,7 @@ vi.mock(import('$lib/features/documents/live'), async (importOriginal) => {
 
 const workspaces: Workspace[] = [
   {
+    access: 'write',
     id: 'ws-1',
     name: '공간',
     organization_id: 'org-1',

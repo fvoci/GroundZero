@@ -34,10 +34,6 @@ const MAX_TAG_CHARS: usize = 50;
 const MAX_CHECKLIST_BATCH: usize = 200;
 
 /// 생성 시 기본 상태 이름. 사용자 정의 상태도 같은 문자열 계약을 쓴다.
-fn default_status() -> String {
-    "todo".into()
-}
-
 /// 상태 이름은 앞뒤 공백을 제거하고 1..50자로 제한한다.
 pub(crate) fn validate_status(raw: &str) -> Result<String, AppError> {
     validate_title(raw, 50, "status")
@@ -177,8 +173,9 @@ pub struct CreateTask {
     pub parent_id: Option<Uuid>,
     #[serde(default)]
     pub description: String,
-    #[serde(default = "default_status")]
-    pub status: String,
+    /// 항목의 상태 정의 이름(D-116). 비우면 항목의 기본 상태(첫 번째 상태)로 만든다.
+    #[serde(default)]
+    pub status: Option<String>,
     #[serde(default)]
     pub priority: TaskPriority,
     #[serde(default)]
@@ -692,7 +689,7 @@ pub async fn create(
         .bind(&fields.title)
         .bind(input.parent_id)
         .bind(&fields.description)
-        .bind(validate_status(&input.status)?)
+        .bind(input.status.as_deref().map(validate_status).transpose()?)
         .bind(input.priority.as_str())
         .bind(fields.start)
         .bind(fields.due)

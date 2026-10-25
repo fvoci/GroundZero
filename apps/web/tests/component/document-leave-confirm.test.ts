@@ -12,6 +12,7 @@ import { router } from '$lib/router.svelte';
 // 대화상자와 같은 확인(DiscardChangesConfirm)을 쓰고, 계속 편집하면 입력을 그대로 두며, 떠나기로 하면 같은 이동을 한다.
 const workspaces: Workspace[] = [
   {
+    access: 'write',
     id: 'ws-1',
     name: '공간',
     organization_id: 'org-1',

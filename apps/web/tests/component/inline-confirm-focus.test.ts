@@ -11,6 +11,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 같은 줄에서 묻는 지우기 확인: 누른 단추가 사라져도 초점이 빠지지 않고 확인 단추로 가며(질문은 그 단추의 설명),
 // 취소하면 처음 단추로 돌아온다. 휴지통은 목록을 받기 전 "비어 있습니다" 대신 불러오는 중, 첫 읽기 실패에 다시 시도.
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '연구실',

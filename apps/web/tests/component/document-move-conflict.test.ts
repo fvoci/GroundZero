@@ -92,6 +92,7 @@ const doc: DocumentView = {
 // 문서가 있는 ws-1의 위키는 대상에서 빠지므로 옮길 곳은 ws-2 위키 하나다.
 const workspaces: Workspace[] = [
   {
+    access: 'write',
     id: 'ws-1',
     name: '운영',
     organization_id: 'org-1',
@@ -100,6 +101,7 @@ const workspaces: Workspace[] = [
     realtime_enabled: true,
   },
   {
+    access: 'write',
     id: 'ws-2',
     name: '개발',
     organization_id: 'org-1',

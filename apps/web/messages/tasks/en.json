@@ -398,5 +398,8 @@
   "tasks_status_category": "Category",
   "tasks_status_position": "Position",
   "tasks_status_delete_confirm": "Move tasks and delete",
-  "tasks_status_description": "Set the name, color, category and position. Deleting a status moves its tasks to another status."
+  "tasks_status_description": "Set the name, color, category and position. Deleting a status moves its tasks to another status.",
+  "tasks_category_todo": "To do",
+  "tasks_category_doing": "Doing",
+  "tasks_category_done": "Done"
 }

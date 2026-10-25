@@ -94,6 +94,7 @@ describe('backlinks point at the reference', () => {
   it('links to the source document with the target in the address', async () => {
     const workspaces: Workspace[] = [
       {
+        access: 'write',
         id: 'ws-1',
         name: '공간',
         organization_id: 'org-1',

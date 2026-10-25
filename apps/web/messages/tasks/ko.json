@@ -372,5 +372,8 @@
   "tasks_status_category": "범주",
   "tasks_status_position": "순서",
   "tasks_status_delete_confirm": "업무를 옮기고 삭제",
-  "tasks_status_description": "상태 이름·색·범주·순서를 정합니다. 삭제할 때는 업무를 다른 상태로 옮깁니다."
+  "tasks_status_description": "상태 이름·색·범주·순서를 정합니다. 삭제할 때는 업무를 다른 상태로 옮깁니다.",
+  "tasks_category_todo": "할 일",
+  "tasks_category_doing": "진행 중",
+  "tasks_category_done": "완료"
 }

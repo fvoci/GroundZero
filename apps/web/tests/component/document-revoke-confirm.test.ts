@@ -11,6 +11,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 단추로 초점을 돌려준다.
 const workspaces: Workspace[] = [
   {
+    access: 'owner',
     id: 'ws-1',
     name: '공간',
     organization_id: 'org-1',

@@ -46,6 +46,7 @@ describe('audit codes', () => {
 
   it('renders the audit list without raw codes or user ids', async () => {
     const workspace: Workspace = {
+      access: 'owner',
       id: 'ws-1',
       organization_id: 'org-1',
       name: '연구실',

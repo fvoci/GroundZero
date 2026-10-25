@@ -33,6 +33,7 @@ const me: Me = {
 
 function workspace(id: string, name: string, realtime: boolean): Workspace {
   return {
+    access: 'owner',
     id,
     organization_id: 'org-1',
     name,

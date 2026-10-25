@@ -9,6 +9,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 
 // 멤버 화면: 첫 읽기 실패 뒤 다시 시도, 그룹 삭제 확인, 초대·받은 초대의 중복 요청 막기.
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '연구실',
@@ -18,6 +19,7 @@ const workspace: Workspace = {
 };
 
 const view: MembersView = {
+  can_manage_members: true,
   members: [
     {
       user_id: 'u1',

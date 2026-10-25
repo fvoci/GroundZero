@@ -16,6 +16,7 @@ afterEach(() => {
 
 function workspace(id: string): Workspace {
   return {
+    access: 'write',
     id,
     name: `공간 ${id}`,
     organization_id: 'org-1',
@@ -63,6 +64,7 @@ function item(id: string, ws: string): ItemView {
 
 function module(ws: string): Module {
   return {
+    access: 'owner',
     id: `m-${ws}`,
     workspace_id: ws,
     kind: 'project',

@@ -30,6 +30,7 @@ beforeEach(async () => {
 describe('multi-column layouts follow the content width', () => {
   it('splits the home dashboard by the container, not the window', async () => {
     const workspace: Workspace = {
+      access: 'owner',
       id: 'ws-1',
       organization_id: 'org-1',
       name: '공간',

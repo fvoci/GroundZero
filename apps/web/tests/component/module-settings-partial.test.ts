@@ -13,6 +13,7 @@ afterEach(() => {
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
@@ -22,6 +23,7 @@ const workspace: Workspace = {
 };
 
 const before: Module = {
+  access: 'owner',
   id: 'A',
   workspace_id: 'ws-1',
   kind: 'project',

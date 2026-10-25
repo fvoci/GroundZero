@@ -9,6 +9,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 멤버 화면의 초대 이메일·새 그룹 이름(D-82, 감사 W30·W35): 요청이 실패하면 입력을 지우지 않고 이유를 칸 옆에
 // 보인다. 성공했을 때만 비운다.
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '연구실',
@@ -18,6 +19,7 @@ const workspace: Workspace = {
 };
 
 const view: MembersView = {
+  can_manage_members: true,
   members: [
     {
       user_id: 'u1',

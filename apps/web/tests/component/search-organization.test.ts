@@ -9,11 +9,17 @@ import { TEST_ORGANIZATION } from './fixtures/organization';
 
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
+  // bits-ui Select는 jsdom에 없는 포인터 캡처·스크롤을 부른다(search-module-filter와 같은 준비).
+  Element.prototype.hasPointerCapture = (): boolean => false;
+  Element.prototype.setPointerCapture = (): void => undefined;
+  Element.prototype.releasePointerCapture = (): void => undefined;
+  Element.prototype.scrollIntoView = (): void => undefined;
   vi.spyOn(api, 'modules').mockResolvedValue([]);
   vi.spyOn(api, 'members').mockResolvedValue({
     members: [],
     i_am_owner: false,
     my_role: 'member',
+    can_manage_members: false,
     pending_owner: null,
   });
 });
@@ -39,13 +45,18 @@ it('shows organization scope and uses workspace_id only to narrow it', async () 
   await waitFor(() => {
     expect(search).toHaveBeenLastCalledWith('org-1', '계획', 'ws1', {});
   });
-  await fireEvent.input(screen.getByLabelText(m.search_task_status()), {
-    target: { value: ' 검토 대기 ' },
-  });
+  // 상태 필터는 항목별 이름이 아니라 범주다(D-116): 고르면 업무만, status_category로 보낸다.
+  const trigger = document.querySelector<HTMLElement>('[aria-labelledby="search-status-label"]');
+  if (trigger === null) throw new Error('status trigger');
+  await fireEvent.pointerDown(trigger, { button: 0, pointerType: 'mouse' });
+  await fireEvent.click(trigger);
+  const option = await screen.findByRole('option', { name: m.tasks_category_doing() });
+  await fireEvent.pointerUp(option, { button: 0, pointerType: 'mouse' });
+  await fireEvent.click(option);
   await waitFor(() => {
     expect(search).toHaveBeenLastCalledWith('org-1', '계획', 'ws1', {
       kind: 'task',
-      status: '검토 대기',
+      statusCategory: 'doing',
     });
   });
 });

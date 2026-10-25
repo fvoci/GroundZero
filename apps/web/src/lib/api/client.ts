@@ -223,6 +223,7 @@ export function parseWorkspace(value: Json): Workspace {
     role: role(str(o, 'role')),
     is_owner: bool(o, 'is_owner'),
     realtime_enabled: bool(o, 'realtime_enabled'),
+    access: access(str(o, 'access')),
   };
 }
 
@@ -603,6 +604,7 @@ export function parseMembersView(value: Json): MembersView {
     members,
     my_role: role(str(o, 'my_role')),
     i_am_owner: bool(o, 'i_am_owner'),
+    can_manage_members: bool(o, 'can_manage_members'),
     pending_owner: optStr(o, 'pending_owner'),
   };
 }
@@ -686,6 +688,7 @@ export function parseModule(value: Json): Module {
     archived: bool(o, 'archived'),
     icon: str(o, 'icon'),
     description: str(o, 'description'),
+    access: access(str(o, 'access')),
   };
 }
 
@@ -2417,8 +2420,8 @@ export type SearchKind = 'document' | 'task' | 'item' | 'event' | 'file' | 'reco
 export interface SearchFilters {
   kind?: SearchKind;
   moduleId?: string;
-  // 작업자 B: GET /api/search는 상태 이름 문자열을 받는다. D-116의 범주 검색과의 충돌은 별도 보고한다.
-  status?: string;
+  /** 업무 상태 범주(D-116). 상태 이름이 아니라 범주로 거르며, 주면 업무만 나온다. */
+  statusCategory?: StatusCategory;
   /** `me` 또는 사용자 id. */
   assignee?: string;
   from?: string;
@@ -3658,7 +3661,7 @@ export const api = {
     if (workspaceId !== null) params.set('workspace_id', workspaceId);
     if (filters.kind !== undefined) params.set('kinds', filters.kind);
     if (filters.moduleId !== undefined) params.set('module_id', filters.moduleId);
-    if (filters.status !== undefined) params.set('status', filters.status);
+    if (filters.statusCategory !== undefined) params.set('status_category', filters.statusCategory);
     if (filters.assignee !== undefined) params.set('assignee', filters.assignee);
     if (filters.from !== undefined) params.set('from', filters.from);
     if (filters.to !== undefined) params.set('to', filters.to);

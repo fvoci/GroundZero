@@ -12,6 +12,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 
 // 달력의 날짜에서 업무 만들기: 대상(항목)을 분명히 하고, 만들기 뒤 마감일을 넣으며, 날짜만 실패하면 다시 만들지 않는다.
 const workspace: Workspace = {
+  access: 'write',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
@@ -81,6 +82,7 @@ function created(version = 1, due: string | null = null): TaskDetailView {
   };
 }
 const module: Module = {
+  access: 'owner',
   id: 'm1',
   workspace_id: 'ws-1',
   kind: 'project',

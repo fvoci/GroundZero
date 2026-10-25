@@ -3170,7 +3170,8 @@ export interface components {
             /** Format: uuid */
             request_id: string;
             start_date?: string | null;
-            status?: string;
+            /** @description 항목의 상태 정의 이름(D-116). 비우면 항목의 기본 상태(첫 번째 상태)로 만든다. */
+            status?: string | null;
             tags?: string[];
             title: string;
         };
@@ -3473,7 +3474,7 @@ export interface components {
          * @description 칸의 형식.
          * @enum {string}
          */
-        FieldType: "text" | "long_text" | "date" | "number" | "choice" | "url" | "tags" | "person" | "people" | "course";
+        FieldType: "text" | "long_text" | "date" | "number" | "choice" | "url" | "tags" | "person" | "people" | "course" | "episode";
         /** @description 파일과 모든 버전(최신 먼저). */
         FileDetail: {
             file: components["schemas"]["FileView"];
@@ -3828,14 +3829,18 @@ export interface components {
         };
         /** @description 멤버 화면 데이터. */
         MembersView: {
+            /** @description 초대·역할 변경·내보내기를 할 수 있다(D-113, `app_access('workspace', id)` = owner). 웹은 역할이 아니라 이 칸을 본다. */
+            can_manage_members: boolean;
             i_am_owner: boolean;
             members: components["schemas"]["Member"][];
-            /** @description 현재 사용자의 역할. */
+            /** @description 현재 사용자의 역할(표시용). */
             my_role: components["schemas"]["Role"];
             pending_owner?: null | components["schemas"]["UserId"];
         };
         /** @description 모듈 인스턴스. */
         Module: {
+            /** @description 현재 사용자의 접근 등급(D-113, `app_access('module', id)`): read·write·owner. */
+            access: components["schemas"]["Access"];
             /** @description 보관됨: 읽기 전용이며 번호·키는 그대로 남는다. */
             archived: boolean;
             /** @description 설명(관리자가 쓰는 글, 없으면 빈 문자열). */
@@ -5319,6 +5324,11 @@ export interface components {
         };
         /** @description 워크스페이스 요약. */
         Workspace: {
+            /**
+             * @description 현재 사용자의 접근 등급(D-113, `app_access('workspace', id)`): read·write·owner. 웹의 쓰기·관리 표시는 역할이
+             *     아니라 이 칸을 본다.
+             */
+            access: components["schemas"]["Access"];
             id: components["schemas"]["WorkspaceId"];
             /** @description 현재 사용자가 소유자인지 (D-51). */
             is_owner: boolean;
@@ -11046,8 +11056,8 @@ export interface operations {
                 kinds?: string | null;
                 /** @description 이 모듈 안의 것만. */
                 module_id?: string | null;
-                /** @description 업무 상태 이름(1..50자). 주면 업무만 나온다. */
-                status?: string | null;
+                /** @description 업무 상태 범주(`todo`·`doing`·`done`, D-116). 주면 업무만 나온다. 세 낱말 밖은 400. */
+                status_category?: string | null;
                 /** @description 담당자(`me` 또는 사용자 id). 주면 업무만 나온다. */
                 assignee?: string | null;
                 /**

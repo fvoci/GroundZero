@@ -49,6 +49,7 @@ describe('search author and title only', () => {
       ],
       my_role: 'admin',
       i_am_owner: true,
+      can_manage_members: true,
     });
     const search = vi.spyOn(api, 'search').mockResolvedValue([]);
     render(SearchDialog, {
@@ -96,8 +97,14 @@ describe('search author that is no longer in the member list', () => {
         ],
         my_role: 'admin',
         i_am_owner: true,
+        can_manage_members: true,
       })
-      .mockResolvedValue({ members: [], my_role: 'admin', i_am_owner: true });
+      .mockResolvedValue({
+        members: [],
+        my_role: 'admin',
+        i_am_owner: true,
+        can_manage_members: true,
+      });
     const search = vi.spyOn(api, 'search').mockResolvedValue([]);
     const view = render(SearchDialog, {
       props: { open: true, memberOf: () => true, workspace: { id: 'ws-1', name: '공간' } },
@@ -137,6 +144,7 @@ describe('search author that is no longer in the member list', () => {
     // 사람을 보여야 한다. 전에는 목록이 올 때까지 '누구나'로 보였는데 검색은 그 사람으로 좁혀졌다.
     vi.spyOn(api, 'modules').mockResolvedValue([]);
     const roster: Awaited<ReturnType<typeof api.members>> = {
+      can_manage_members: true,
       members: [
         { user_id: 'u-1', display_name: '가상 멤버', email: null, role: 'member', is_owner: false },
       ],

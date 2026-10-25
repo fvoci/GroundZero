@@ -37,8 +37,15 @@
 
   // 필터(D-39). 상태·내 담당을 고르면 업무만 나온다.
   let kind = $state<SearchKind | 'all'>('all');
-  // 현재 서버 계약(GET /api/search status)은 범주가 아니라 상태 이름이다. D-116과의 충돌은 PR 본문에 기록했다.
-  let taskStatus = $state('');
+  // 상태 필터는 항목별 상태 이름이 아니라 범주(todo·doing·done)다(D-116).
+  const CATEGORIES = ['todo', 'doing', 'done'] as const;
+  type Category = (typeof CATEGORIES)[number];
+  const categoryLabel: Record<Category, () => string> = {
+    todo: () => m.tasks_category_todo(),
+    doing: () => m.tasks_category_doing(),
+    done: () => m.tasks_category_done(),
+  };
+  let taskStatus = $state<Category | 'any'>('any');
   let mine = $state(false);
   let from = $state('');
   let to = $state('');
@@ -135,14 +142,14 @@
         : (people.find((p) => p.user_id === author)?.display_name ??
           (authorName === '' ? m.search_author_any() : authorName)),
   );
-  const taskOnly = $derived(taskStatus.trim() !== '' || mine);
+  const taskOnly = $derived(taskStatus !== 'any' || mine);
   const reversed = $derived(from !== '' && to !== '' && from > to);
 
   function filters(): SearchFilters {
     const f: SearchFilters = {};
     if (taskOnly) f.kind = 'task';
     else if (kind !== 'all') f.kind = kind;
-    if (taskStatus.trim() !== '') f.status = taskStatus.trim();
+    if (taskStatus !== 'any') f.statusCategory = taskStatus;
     if (mine) f.assignee = 'me';
     if (from !== '') f.from = from;
     if (to !== '') f.to = to;
@@ -318,20 +325,25 @@
         </Select.Root>
       </div>
       <div class="flex flex-col gap-1">
-        <Label for="search-status">{m.search_task_status()}</Label>
-        <Input
-          id="search-status"
-          class="w-40"
+        <span id="search-status-label" class="font-medium">{m.search_task_status()}</span>
+        <Select.Root
+          type="single"
           value={taskStatus}
-          maxlength={50}
-          placeholder={m.search_status_name()}
-          oninput={(e: Event) => {
-            if (e.currentTarget instanceof HTMLInputElement) {
-              taskStatus = e.currentTarget.value;
-              refilter();
-            }
+          onValueChange={(v: string) => {
+            taskStatus = CATEGORIES.find((s) => s === v) ?? 'any';
+            refilter();
           }}
-        />
+        >
+          <Select.Trigger class="w-24" aria-labelledby="search-status-label"
+            >{taskStatus === 'any' ? m.search_all() : categoryLabel[taskStatus]()}</Select.Trigger
+          >
+          <Select.Content>
+            <Select.Item value="any" label={m.search_all()}>{m.search_all()}</Select.Item>
+            {#each CATEGORIES as s (s)}
+              <Select.Item value={s} label={categoryLabel[s]()}>{categoryLabel[s]()}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
       </div>
       {#if workspace !== undefined}
         <div class="flex flex-col gap-1">

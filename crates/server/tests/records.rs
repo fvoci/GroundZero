@@ -364,7 +364,13 @@ async fn study_materials_link_courses_and_kinds_are_published() {
         list.iter()
             .any(|k| k["kind"] == "supply" && k["module_kind"] == "hobby")
     );
-    assert!(list.iter().all(|k| k["module_kind"] != "course"));
+    // 강의 모듈의 기록 종류는 질문·복습뿐이다(D-123).
+    let course: Vec<&str> = list
+        .iter()
+        .filter(|k| k["module_kind"] == "course")
+        .map(|k| k["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(course, ["question", "review"]);
 }
 
 /// 이전 버전 보존 기간(D-56): 기간이 지난 이전 버전은 작업이 지우지만, 기록이 연결한 버전·문서 리비전이 가리키는 버전·
@@ -1560,4 +1566,194 @@ async fn a_retried_record_create_waiting_on_the_first_returns_that_record() {
     assert_eq!(retry.json["id"], first.to_string());
     let (_, list) = records(&app, &admin, &it).await;
     assert_eq!(list.as_array().unwrap().len(), 1, "{list:?}");
+}
+
+/// D-123: 강의 항목의 질문·복습 기록은 그 강좌의 회차에 붙는다. 복습 기록의 다음 복습일이 오늘이면 작성자에게 복습 알림이
+/// 간다(스터디 복습과 같은 `app_system_item_reminders` 경로, 하루 한 번). 다른 강좌의 회차 id와 스터디 항목의 질문 종류는 400.
+#[tokio::test]
+async fn course_question_and_review_records_follow_episodes_and_remind() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "강의 기록").await;
+    let lecture = module(&app, &admin, &ws, "course", "LEC").await;
+    let course = open_item(&app, &admin, &lecture, "선형대수").await;
+    let other = open_item(&app, &admin, &lecture, "확률론").await;
+    for item in [&course, &other] {
+        let r = send(
+            &app,
+            Method::POST,
+            &format!("/api/items/{item}/episodes"),
+            Some(&admin),
+            Some(json!({ "episodes": [
+                { "request_id": new_request_id(), "title": "1강" },
+                { "request_id": new_request_id(), "title": "2강" } ] })),
+        )
+        .await;
+        assert!(r.status.is_success(), "{:?}", r.json);
+    }
+    let episodes = |item: String| {
+        let app = &app;
+        let admin = &admin;
+        async move {
+            let c = send(
+                app,
+                Method::GET,
+                &format!("/api/items/{item}/course"),
+                Some(admin),
+                None,
+            )
+            .await;
+            assert_eq!(c.status, StatusCode::OK, "{:?}", c.json);
+            c.json["episodes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|e| e["id"].as_str().unwrap().to_owned())
+                .collect::<Vec<String>>()
+        }
+    };
+    let mine = episodes(course.clone()).await;
+    let theirs = episodes(other.clone()).await;
+
+    // 강의 모듈의 기록 종류는 질문·복습이다.
+    let kinds = send(&app, Method::GET, "/api/record-kinds", Some(&admin), None).await;
+    let course_kinds: Vec<&str> = kinds
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|k| k["module_kind"] == "course")
+        .map(|k| k["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(course_kinds, ["question", "review"]);
+    let question_def = kinds
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["module_kind"] == "course" && k["kind"] == "question")
+        .unwrap();
+    assert_eq!(question_def["fields"][0]["key"], "episode");
+    assert_eq!(question_def["fields"][0]["type"], "episode");
+
+    let today = time::OffsetDateTime::now_utc().date();
+    let uri = format!("/api/items/{course}/records");
+    let question_body = |episode: &str| {
+        json!({ "request_id": new_request_id(), "kind": "question", "title": "고유값이 왜 실수인가요?",
+                "occurred_on": today.to_string(),
+                "fields": { "episode": episode, "answer": "", "state": "open" } })
+    };
+    // 질문은 이 강좌의 회차에 붙는다.
+    let q = send(
+        &app,
+        Method::POST,
+        &uri,
+        Some(&admin),
+        Some(question_body(&mine[0])),
+    )
+    .await;
+    assert_eq!(q.status, StatusCode::CREATED, "{:?}", q.json);
+    let question = q.json["id"].as_str().unwrap().to_owned();
+    // 다른 강좌의 회차 id는 거절한다.
+    let wrong_episode = send(
+        &app,
+        Method::POST,
+        &uri,
+        Some(&admin),
+        Some(question_body(&theirs[0])),
+    )
+    .await;
+    assert_eq!(
+        wrong_episode.status,
+        StatusCode::BAD_REQUEST,
+        "{:?}",
+        wrong_episode.json
+    );
+    // 스터디 항목에는 질문 종류가 없다.
+    let study = module(&app, &admin, &ws, "study", "STU").await;
+    let study_item = open_item(&app, &admin, &study, "스터디").await;
+    let wrong_module = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{study_item}/records"),
+        Some(&admin),
+        Some(question_body(&mine[0])),
+    )
+    .await;
+    assert_eq!(
+        wrong_module.status,
+        StatusCode::BAD_REQUEST,
+        "{:?}",
+        wrong_module.json
+    );
+    // 답변을 적고 상태를 바꾼다(회차는 그대로 둔다).
+    let edited = send(
+        &app,
+        Method::PUT,
+        &format!("/api/records/{question}"),
+        Some(&admin),
+        Some(json!({ "version": 1, "title": "고유값이 왜 실수인가요?", "occurred_on": today.to_string(),
+                     "fields": { "episode": mine[0], "answer": "대칭 행렬이라서", "state": "answered" } })),
+    )
+    .await;
+    assert_eq!(edited.status, StatusCode::OK, "{:?}", edited.json);
+
+    // 복습: 다음 복습일이 오늘이다.
+    let r = send(
+        &app,
+        Method::POST,
+        &uri,
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "review", "title": "2강 복습",
+                     "occurred_on": today.to_string(),
+                     "fields": { "episode": mine[1], "weakness": "행렬식", "rounds": 1 } }),
+        ),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    let review = r.json["id"].as_str().unwrap().to_owned();
+    let (status, list) = records(&app, &admin, &course).await;
+    assert_eq!(status, StatusCode::OK, "{list:?}");
+    let by_id = |id: &str| {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["id"] == id)
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(by_id(&question)["fields"]["state"], "answered");
+    assert_eq!(by_id(&question)["fields"]["episode"], mine[0].as_str());
+    assert_eq!(by_id(&review)["fields"]["episode"], mine[1].as_str());
+    assert_eq!(by_id(&review)["occurred_on"], today.to_string());
+
+    // 하루에 두 번 돌아도 복습 알림은 한 번이다.
+    fvoci_server::worker::run_all_now(&state.db, None, None)
+        .await
+        .unwrap();
+    fvoci_server::worker::run_all_now(&state.db, None, None)
+        .await
+        .unwrap();
+    let notes = send(
+        &app,
+        Method::GET,
+        &format!(
+            "/api/me/notifications?organization_id={}",
+            common::organization_for(&admin).await
+        ),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(notes.status, StatusCode::OK, "{:?}", notes.json);
+    let reviews: Vec<&Value> = notes.json["notifications"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|n| n["kind"] == "review" && n["item_id"] == course.as_str())
+        .collect();
+    assert_eq!(reviews.len(), 1, "{:?}", notes.json);
+    assert_eq!(reviews[0]["due_date"], today.to_string());
 }

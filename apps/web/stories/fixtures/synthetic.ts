@@ -113,6 +113,7 @@ export const ORGANIZATION: OrganizationSummary = {
 };
 
 export const WORKSPACE: Workspace = {
+  access: 'owner',
   id: fixedId(1, 1),
   organization_id: fixedId(0, 1),
   name: data.workspace,
@@ -185,6 +186,7 @@ export const MODULES: Module[] = MODULE_DATA.map((mod, i) => ({
   archived: false,
   icon: '',
   description: mod.description,
+  access: 'owner',
 }));
 
 function moduleAt(index: number): Module {
@@ -486,6 +488,7 @@ export function searchResults(): SearchResultView[] {
 /** 워크스페이스 멤버(owner는 소유자·관리자, writer는 작성자). 개발 seed의 두 테스트 사용자와 같다. */
 export function membersView(): MembersView {
   return {
+    can_manage_members: true,
     members: [
       { ...person('owner'), email: null, role: 'admin', is_owner: true },
       { ...person('writer'), email: null, role: 'member', is_owner: false },

@@ -19,6 +19,7 @@ afterEach(() => {
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',

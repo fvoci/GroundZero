@@ -11,6 +11,7 @@ const LABEL = '실시간 공동 편집(문서를 여럿이 동시에 고침)';
 
 function workspaceWith(realtime: boolean): Workspace {
   return {
+    access: 'owner',
     id: 'ws-1',
     name: '공간',
     organization_id: 'org-1',

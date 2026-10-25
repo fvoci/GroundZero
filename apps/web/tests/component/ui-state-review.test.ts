@@ -24,6 +24,7 @@ afterEach(() => {
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '연구실',
@@ -33,6 +34,7 @@ const workspace: Workspace = {
 };
 
 const view: MembersView = {
+  can_manage_members: true,
   members: [
     {
       user_id: 'u1',

@@ -63,6 +63,7 @@ function mockPanel(...lists: RecordView[][]): void {
   vi.spyOn(api, 'members').mockResolvedValue({
     members: [],
     my_role: 'member',
+    can_manage_members: false,
     i_am_owner: false,
     pending_owner: null,
   });

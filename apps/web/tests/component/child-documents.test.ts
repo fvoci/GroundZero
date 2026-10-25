@@ -38,6 +38,7 @@ function summary(id: string, title: string, parent: string | null): SummaryView 
 }
 const workspaces: Workspace[] = [
   {
+    access: 'write',
     id: 'ws-1',
     name: '모듈 예제',
     organization_id: 'org-1',
