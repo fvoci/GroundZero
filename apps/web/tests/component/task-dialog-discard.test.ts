@@ -488,3 +488,20 @@ describe('opening another task from the dialog with unsaved input', () => {
     await screen.findByText('저장했습니다.');
   });
 });
+
+it('warns before unloading only while the open task has unsaved input', async () => {
+  const { reopen } = await openBoard();
+  const unloading = (): boolean => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  expect(unloading()).toBe(false);
+  await type('task-title', '새 제목');
+  expect(unloading()).toBe(true);
+  await type('task-title', '옛 제목');
+  expect(unloading()).toBe(false);
+  await type('task-title', '새 제목');
+  await reopen(undefined);
+  expect(unloading()).toBe(false);
+});
