@@ -295,10 +295,16 @@ pub async fn restore(
     // 않게, #64 반박 검증). 권한의 최종 확인은 복원 함수가 한다.
     let mut tx = state.db.begin_as(user).await?;
     let access_now = access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
-    tx.commit().await?;
     if !access_now.can_write() {
+        // 쓸 수 없는 이유(권한 부족 403, 보관된 항목 409)는 SQL이 정한다(D-113·D-106).
+        sqlx::query("SELECT app_require_document($1, 'write')")
+            .bind(id)
+            .execute(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
         return Err(AppError::Forbidden);
     }
+    tx.commit().await?;
     let outcome = state
         .collab
         .restore(&state.db, &state.config.limits, request)

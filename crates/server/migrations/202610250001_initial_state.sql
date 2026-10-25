@@ -1381,13 +1381,17 @@ CREATE FUNCTION fvoci.app_grade_document_at(p_doc uuid, p_workspace uuid, p_item
       END IF;
     END IF;
 
+    -- 공유는 기록된 조직 안에서만 유효하다(D-114): 받는 사람이 그 조직의 멤버이고, 공간 문서면 그 조직이 지금 문서가 속한
+    -- 조직이어야 하며(다른 조직의 공간으로 옮긴 뒤에는 효력 없음), 개인 노트면 소유자도 그 조직의 멤버여야 한다.
     SELECT s.permission INTO v_share
     FROM document_shares s
     JOIN organization_members om ON om.organization_id = s.organization_id AND om.user_id = p_user
     WHERE s.document_id = p_doc AND s.grantee_user_id = p_user
-      AND (p_owner IS NULL OR EXISTS (
-            SELECT 1 FROM organization_members o2
-            WHERE o2.organization_id = s.organization_id AND o2.user_id = p_owner));
+      AND (CASE WHEN p_owner IS NULL
+                THEN s.organization_id = (SELECT w.organization_id FROM workspaces w WHERE w.id = p_workspace)
+                ELSE EXISTS (SELECT 1 FROM organization_members o2
+                             WHERE o2.organization_id = s.organization_id AND o2.user_id = p_owner)
+           END);
 
     v_access := CASE
       WHEN v_base = 'owner' THEN 'owner'
@@ -1910,7 +1914,13 @@ CREATE FUNCTION fvoci.app_record_document_references(p_doc uuid, p_notify boolea
     SELECT DISTINCT p_doc, r.kind, r.id FROM app_reference_nodes(v_doc.body) r
     WHERE r.kind IN ('item', 'document', 'task') AND NOT (r.kind = 'document' AND r.id = p_doc)
       AND app_access(r.kind, r.id) <> 'none'
-      AND (v_org IS NULL OR app_target_organization(r.kind, r.id) = v_org);
+      -- D-114: 같은 조직 안의 대상만. 개인 대상(조직 없음)은 볼 수 있으면 되고, 개인 노트에서는 쓴 사람이 속한 조직의
+      -- 대상만 참조한다.
+      AND (app_target_organization(r.kind, r.id) IS NULL
+           OR app_target_organization(r.kind, r.id) = v_org
+           OR (v_org IS NULL AND EXISTS (SELECT 1 FROM organization_members m
+                                         WHERE m.organization_id = app_target_organization(r.kind, r.id)
+                                           AND m.user_id = v_user)));
 
     IF NOT p_notify THEN
       RETURN;
@@ -1947,18 +1957,21 @@ CREATE FUNCTION fvoci.app_record_file_refs() RETURNS trigger
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   DECLARE
-    v_org uuid := app_target_organization('document', NEW.document_id);
+    v_doc documents%ROWTYPE;
   BEGIN
-    -- 가리키는 버전 행을 참조를 넣기 전에 공유 잠금한다.
+    SELECT * INTO v_doc FROM documents WHERE id = NEW.document_id;
+    -- 가리키는 버전 행을 참조를 넣기 전에 공유 잠금한다. 범위 밖 참조(다른 조직의 파일)는 기록하지 않는다(D-114).
     PERFORM 1 FROM file_versions v
     JOIN (SELECT DISTINCT r.file_id, r.version FROM app_file_refs(NEW.body) r) r
       ON r.file_id = v.file_id AND r.version = v.version
-    WHERE v_org IS NULL OR app_target_organization('file', v.file_id) = v_org
+    JOIN files f ON f.id = v.file_id
+    WHERE app_file_ref_in_scope(v_doc.workspace_id, v_doc.owner_user_id, f.workspace_id, f.owner_user_id)
     ORDER BY v.id
     FOR KEY SHARE OF v;
     INSERT INTO document_file_refs (document_id, revision, file_id, version)
-    SELECT NEW.document_id, NEW.revision, r.file_id, r.version FROM app_file_refs(NEW.body) r
-    WHERE v_org IS NULL OR app_target_organization('file', r.file_id) = v_org
+    SELECT NEW.document_id, NEW.revision, r.file_id, r.version
+    FROM app_file_refs(NEW.body) r JOIN files f ON f.id = r.file_id
+    WHERE app_file_ref_in_scope(v_doc.workspace_id, v_doc.owner_user_id, f.workspace_id, f.owner_user_id)
     ON CONFLICT DO NOTHING;
     RETURN NULL;
   END
@@ -2158,6 +2171,7 @@ CREATE FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo tex
     v_ws      uuid;
     v_running time_entries%ROWTYPE;
     v_stopped uuid;
+    v_now     timestamp with time zone;
   BEGIN
     IF v_user IS NULL THEN
       RAISE EXCEPTION 'sign in required' USING ERRCODE = '42501';
@@ -2171,6 +2185,9 @@ CREATE FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo tex
     v_ws := app_time_target_workspace(p_target_kind, p_target);
     -- 같은 사용자의 시작 요청을 줄 세운다(하나만 진행 중이라는 규칙을 고유 색인과 함께 지킨다).
     PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-timer:' || v_user::text, 0));
+    -- 전환 시각은 잠금을 얻은 뒤의 실제 시각이다(now()는 트랜잭션 시작 시각이라, 먼저 시작했지만 잠금을 늦게 얻은 요청이
+    -- 뒤에 만들어진 기록의 시작보다 이른 시각으로 멈추려다 time_entries_order에 걸린다).
+    v_now := clock_timestamp();
     SELECT id INTO v_id FROM time_entries WHERE user_id = v_user AND request_id = p_request_id;
     IF v_id IS NOT NULL THEN
       RETURN QUERY SELECT v_id, NULL::uuid;
@@ -2182,13 +2199,13 @@ CREATE FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo tex
       -- 멈춤(app_timer_action 'stop')과 같은 계산: 일시정지 중이던 시간은 정지 시간에 더한다.
       UPDATE time_entries SET
         paused_seconds = paused_seconds
-          + CASE WHEN paused_at IS NULL THEN 0 ELSE floor(extract(epoch FROM now() - paused_at))::integer END,
-        paused_at = NULL, ended_at = now(), version = version + 1, updated_at = now()
+          + CASE WHEN paused_at IS NULL THEN 0 ELSE floor(extract(epoch FROM v_now - paused_at))::integer END,
+        paused_at = NULL, ended_at = v_now, version = version + 1, updated_at = v_now
       WHERE id = v_running.id;
       v_stopped := v_running.id;
     END IF;
     INSERT INTO time_entries (id, user_id, started_at, kind, memo, target_kind, target_id, workspace_id, request_id)
-    VALUES (app_id(p_ids, 1), v_user, now(), p_kind, coalesce(p_memo, ''), p_target_kind, p_target, v_ws,
+    VALUES (app_id(p_ids, 1), v_user, v_now, p_kind, coalesce(p_memo, ''), p_target_kind, p_target, v_ws,
             p_request_id)
     RETURNING id INTO v_id;
     RETURN QUERY SELECT v_id, v_stopped;
@@ -2402,6 +2419,8 @@ CREATE FUNCTION fvoci.app_create_task_status(p_item uuid, p_name text, p_color t
     v_item items%ROWTYPE;
     v_id   uuid;
   BEGIN
+    -- 항목의 상태 집합 변경(생성·수정·삭제)을 줄 세운다: 개수·이름 중복 검사가 잠금 뒤에 유효하도록.
+    PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-statuses:' || p_item::text, 0));
     SELECT * INTO v_item FROM items WHERE id = p_item FOR SHARE;
     IF app_access('item', p_item) = 'none' THEN
       RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
@@ -2456,9 +2475,20 @@ CREATE FUNCTION fvoci.app_update_task_status(p_status uuid, p_name text, p_color
     IF app_item_archived(v_status.item_id) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
+    -- 항목의 상태 집합 변경을 줄 세운 뒤(생성·삭제와 같은 잠금) 열을 잠그고, 잠금 뒤 등급·보관·존재를 다시 본다.
+    PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-statuses:' || v_status.item_id::text, 0));
     PERFORM app_lock_lane(p_status);
     SELECT * INTO v_item FROM items WHERE id = v_status.item_id FOR SHARE;
     SELECT * INTO v_status FROM task_statuses WHERE id = p_status FOR UPDATE;
+    IF v_status.id IS NULL THEN
+      RAISE EXCEPTION 'status not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF app_access('item', v_status.item_id) <> 'owner' THEN
+      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
+    END IF;
+    IF app_item_archived(v_status.item_id) THEN
+      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
     v_name := coalesce(btrim(p_name), v_status.name);
     v_cat := coalesce(p_category, v_status.category);
     IF v_cat NOT IN ('todo', 'doing', 'done') THEN
@@ -2513,15 +2543,27 @@ CREATE FUNCTION fvoci.app_delete_task_status(p_status uuid, p_move_to uuid, p_id
         RAISE EXCEPTION 'move the tasks to another status of the same item' USING ERRCODE = '22023';
       END IF;
     END IF;
+    -- 항목의 상태 집합 변경을 줄 세운다(생성·수정과 같은 잠금): 마지막 상태 보장이 동시 삭제에서도 지켜지도록 개수 검사는
+    -- 이 잠금 뒤에 한다.
+    PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-statuses:' || v_status.item_id::text, 0));
     IF (SELECT count(*) FROM task_statuses WHERE item_id = v_status.item_id) <= 1 THEN
       RAISE EXCEPTION 'an item needs at least one status' USING ERRCODE = '55000';
     END IF;
-    -- 두 열을 id 순서로 잠근 뒤(이동·생성과 같은 순서) 항목을 공유 잠금한다.
+    -- 두 열을 id 순서로 잠근 뒤(이동·생성과 같은 순서) 항목을 공유 잠금하고, 잠금 뒤 등급·보관·존재를 다시 본다.
     FOR v_lane IN SELECT x FROM unnest(ARRAY[p_status, p_move_to]) x WHERE x IS NOT NULL ORDER BY x LOOP
       PERFORM app_lock_lane(v_lane);
     END LOOP;
     SELECT * INTO v_item FROM items WHERE id = v_status.item_id FOR SHARE;
     SELECT * INTO v_status FROM task_statuses WHERE id = p_status FOR UPDATE;
+    IF v_status.id IS NULL THEN
+      RAISE EXCEPTION 'status not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF app_access('item', v_status.item_id) <> 'owner' THEN
+      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
+    END IF;
+    IF app_item_archived(v_status.item_id) THEN
+      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
     IF EXISTS (SELECT 1 FROM tasks WHERE status_id = p_status) THEN
       IF p_move_to IS NULL THEN
         RAISE EXCEPTION 'choose a status for the tasks in this column' USING ERRCODE = '22023';
@@ -2683,6 +2725,7 @@ CREATE FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text
     v_limit   bigint;
     v_org     uuid;
     v_org_max bigint;
+    v_org_conc integer;
   BEGIN
     IF v_user IS NULL THEN
       RAISE EXCEPTION 'not signed in' USING ERRCODE = '42501';
@@ -2720,13 +2763,19 @@ CREATE FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text
       RAISE EXCEPTION 'not enough storage left (limit % bytes)', v_limit USING ERRCODE = '55000';
     END IF;
     IF v_place.workspace_id IS NOT NULL THEN
-      SELECT w.organization_id, o.max_storage_bytes INTO v_org, v_org_max
+      SELECT w.organization_id, o.max_storage_bytes, o.max_concurrent_uploads INTO v_org, v_org_max, v_org_conc
       FROM workspaces w JOIN organizations o ON o.id = w.organization_id WHERE w.id = v_place.workspace_id;
-      IF v_org_max IS NOT NULL THEN
+      IF v_org_max IS NOT NULL OR v_org_conc IS NOT NULL THEN
         PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-storage-org:' || v_org::text, 0));
-        IF app_storage_used_organization(v_org, NULL) + p_size > v_org_max THEN
-          RAISE EXCEPTION 'not enough storage left in the organization (limit % bytes)', v_org_max USING ERRCODE = '55000';
-        END IF;
+      END IF;
+      IF v_org_max IS NOT NULL AND app_storage_used_organization(v_org, NULL) + p_size > v_org_max THEN
+        RAISE EXCEPTION 'not enough storage left in the organization (limit % bytes)', v_org_max USING ERRCODE = '55000';
+      END IF;
+      -- 조직 동시 업로드 한도(D-124)는 조직 안 모든 공간의 진행 중 업로드를 센다(공간 단계는 아래 실효 한도).
+      IF v_org_conc IS NOT NULL AND (SELECT count(*) FROM uploads u JOIN workspaces w ON w.id = u.workspace_id
+                                     WHERE w.organization_id = v_org
+                                       AND u.state IN ('uploading', 'completing')) >= v_org_conc THEN
+        RAISE EXCEPTION 'too many uploads in progress in the organization (limit %)', v_org_conc USING ERRCODE = '55000';
       END IF;
       v_limit := app_effective_limit(v_place.workspace_id, 'max_concurrent_uploads', NULL);
       IF v_limit IS NOT NULL AND (SELECT count(*) FROM uploads u
@@ -2789,6 +2838,14 @@ CREATE FUNCTION fvoci.app_finish_upload(p_upload uuid, p_sha256 text, p_max_stor
       SELECT * INTO v_place FROM app_file_place(v_up.target_kind, v_up.target_id);
     END IF;
     PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-storage:' || coalesce(v_place.workspace_id, v_place.owner_user_id)::text, 0));
+    -- 저장량 잠금을 기다리는 사이 대상 권한이 바뀌었을 수 있다(잠금 뒤 재검사).
+    IF v_up.file_id IS NOT NULL THEN
+      IF app_access('file', v_up.file_id) NOT IN ('owner', 'write') THEN
+        RAISE EXCEPTION 'write access is required' USING ERRCODE = '42501';
+      END IF;
+    ELSIF app_access(v_up.target_kind, v_up.target_id) NOT IN ('owner', 'write') THEN
+      RAISE EXCEPTION 'write access is required' USING ERRCODE = '42501';
+    END IF;
     v_limit := app_effective_limit(v_place.workspace_id, 'max_storage_bytes', p_max_storage);
     IF app_storage_used(v_place.workspace_id, v_place.owner_user_id, p_upload) + v_up.size > v_limit THEN
       RAISE EXCEPTION 'not enough storage left (limit % bytes)', v_limit USING ERRCODE = '55000';
@@ -4218,6 +4275,9 @@ CREATE FUNCTION fvoci.app_add_episodes(p_item uuid, p_rows jsonb, p_ids uuid[]) 
     v_at    integer := 0;
   BEGIN
     PERFORM app_require_course_write(p_item);
+    -- 항목을 잠근 뒤 다시 본다(기다리는 사이 공개 범위·보관이 바뀌었을 수 있다).
+    PERFORM app_lock_item(p_item);
+    PERFORM app_require_course_write(p_item);
     IF jsonb_typeof(p_rows) <> 'array' OR jsonb_array_length(p_rows) NOT BETWEEN 1 AND 1000 THEN
       RAISE EXCEPTION 'give 1 to 1000 episodes' USING ERRCODE = '22023';
     END IF;
@@ -4266,6 +4326,9 @@ CREATE FUNCTION fvoci.app_add_study_units(p_item uuid, p_rows jsonb, p_ids uuid[
     v_added integer := 0;
     v_at    integer := 0;
   BEGIN
+    PERFORM app_require_study_write(p_item);
+    -- 항목을 잠근 뒤 다시 본다(기다리는 사이 공개 범위·보관이 바뀌었을 수 있다).
+    PERFORM app_lock_item(p_item);
     PERFORM app_require_study_write(p_item);
     IF jsonb_typeof(p_rows) <> 'array' OR jsonb_array_length(p_rows) NOT BETWEEN 1 AND 1000 THEN
       RAISE EXCEPTION 'give 1 to 1000 units' USING ERRCODE = '22023';
@@ -4562,6 +4625,30 @@ CREATE FUNCTION fvoci.app_batch_files(p_batch fvoci.trash_batches) RETURNS TABLE
 
 ALTER FUNCTION fvoci.app_batch_files(p_batch fvoci.trash_batches) OWNER TO fvoci_migrator;
 
+CREATE FUNCTION fvoci.app_file_ref_in_scope(p_doc_ws uuid, p_doc_owner uuid, p_file_ws uuid, p_file_owner uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    -- 파일 참조의 유효 범위(D-114): 개인 파일은 같은 소유자의 문서만, 공간 파일은 같은 조직의 공간 문서 또는 그 조직 멤버가
+    -- 소유한 개인 노트만. 참조 기록(app_record_file_refs)·버전 보존(app_version_referenced)·휴지통 보존
+    -- (app_batch_keeps_referenced)이 같은 규칙을 쓴다.
+    SELECT CASE
+      WHEN p_file_owner IS NOT NULL THEN p_doc_owner IS NOT DISTINCT FROM p_file_owner
+      WHEN p_doc_ws IS NOT NULL THEN
+        (SELECT w.organization_id FROM workspaces w WHERE w.id = p_doc_ws)
+          = (SELECT w.organization_id FROM workspaces w WHERE w.id = p_file_ws)
+      WHEN p_doc_owner IS NOT NULL THEN EXISTS (
+        SELECT 1 FROM organization_members m JOIN workspaces w ON w.organization_id = m.organization_id
+        WHERE w.id = p_file_ws AND m.user_id = p_doc_owner)
+      ELSE false
+    END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_file_ref_in_scope(p_doc_ws uuid, p_doc_owner uuid, p_file_ws uuid, p_file_owner uuid) OWNER TO fvoci_migrator;
+
+REVOKE ALL ON FUNCTION fvoci.app_file_ref_in_scope(p_doc_ws uuid, p_doc_owner uuid, p_file_ws uuid, p_file_owner uuid) FROM PUBLIC;
+
 CREATE FUNCTION fvoci.app_batch_keeps_referenced(p_batch fvoci.trash_batches) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -4591,8 +4678,7 @@ CREATE FUNCTION fvoci.app_batch_keeps_referenced(p_batch fvoci.trash_batches) RE
                AND NOT app_batch_expired(d.trash_batch_id)
                AND NOT app_batch_expired(di.trash_batch_id)
                AND NOT app_batch_expired(dm.trash_batch_id)
-               AND ((f.workspace_id IS NOT NULL AND d.workspace_id = f.workspace_id)
-                 OR (f.owner_user_id IS NOT NULL AND d.owner_user_id = f.owner_user_id)))
+               AND app_file_ref_in_scope(d.workspace_id, d.owner_user_id, f.workspace_id, f.owner_user_id))
         -- 리비전 줄과 같은 규칙(휴지통 만료), 낡은 상태는 빼고.
         OR EXISTS (
              SELECT 1 FROM bf
@@ -4608,8 +4694,7 @@ CREATE FUNCTION fvoci.app_batch_keeps_referenced(p_batch fvoci.trash_batches) RE
                AND NOT app_batch_expired(d.trash_batch_id)
                AND NOT app_batch_expired(di.trash_batch_id)
                AND NOT app_batch_expired(dm.trash_batch_id)
-               AND ((f.workspace_id IS NOT NULL AND d.workspace_id = f.workspace_id)
-                 OR (f.owner_user_id IS NOT NULL AND d.owner_user_id = f.owner_user_id)))
+               AND app_file_ref_in_scope(d.workspace_id, d.owner_user_id, f.workspace_id, f.owner_user_id))
   $$;
 
 
@@ -5169,6 +5254,10 @@ CREATE FUNCTION fvoci.app_create_event(p_item uuid, p_request_id uuid, p_kind te
     IF app_item_archived(p_item) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
+    -- 잠금 뒤 등급을 다시 본다(기다리는 사이 공개 범위·멤버가 바뀌었을 수 있다).
+    IF app_access('item', p_item) NOT IN ('owner', 'write') THEN
+      RAISE EXCEPTION 'write access is required' USING ERRCODE = '42501';
+    END IF;
     SELECT * INTO v_item FROM items WHERE id = p_item;
     INSERT INTO events (id, workspace_id, item_id, kind, title, description, all_day, start_date, end_date,
                         starts_at, ends_at, timezone, created_by, updated_by, request_id)
@@ -5514,7 +5603,9 @@ CREATE FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title te
     IF app_item_archived(p_item) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM task_statuses WHERE id = v_status.id) THEN
+    -- 열 잠금 뒤 상태 정의를 다시 읽는다(기다리는 사이 이름·범주가 바뀌었거나 지워졌을 수 있다).
+    SELECT * INTO v_status FROM task_statuses WHERE id = v_status.id;
+    IF v_status.id IS NULL THEN
       RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
     END IF;
     FOREACH v_uid IN ARRAY v_people LOOP
@@ -5787,16 +5878,10 @@ CREATE FUNCTION fvoci.app_delete_file_version(p_file uuid, p_version integer, p_
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   DECLARE
-    v_access text := app_access('file', p_file);
     v_file   files%ROWTYPE;
     v_id     uuid;
   BEGIN
-    IF v_access = 'none' THEN
-      RAISE EXCEPTION 'file not found' USING ERRCODE = 'P0002';
-    END IF;
-    IF v_access NOT IN ('owner', 'write') THEN
-      RAISE EXCEPTION 'read-only access' USING ERRCODE = '42501';
-    END IF;
+    PERFORM app_require_file_write(p_file);
     SELECT * INTO v_file FROM files WHERE id = p_file FOR NO KEY UPDATE;
     IF app_file_archived(p_file) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
@@ -6704,6 +6789,18 @@ CREATE FUNCTION fvoci.app_move_document(p_doc uuid, p_target uuid, p_item uuid, 
     WHERE u.state IN ('uploading', 'completing')
       AND ((u.target_kind = 'document' AND u.target_id = p_doc)
            OR u.file_id IN (SELECT f.id FROM files f WHERE f.document_id = p_doc));
+    -- D-114: 옮긴 자리의 조직 밖 공유는 철회한다(개인 노트를 공간으로 옮길 때 다른 조직에서 준 공유).
+    FOR v_child IN
+      SELECT s.id, s.grantee_user_id FROM document_shares s
+      WHERE s.document_id = p_doc
+        AND s.organization_id <> (SELECT w.organization_id FROM workspaces w WHERE w.id = p_target)
+      ORDER BY s.id
+    LOOP
+      DELETE FROM document_shares WHERE id = v_child.id;
+      v_at := v_at + 1;
+      PERFORM app_activity(app_id(p_ids, v_at), p_target, p_item, 'document', p_doc, 'unshare',
+                           jsonb_build_object('user', v_child.grantee_user_id, 'reason', 'moved'));
+    END LOOP;
     v_at := v_at + 1;
     PERFORM app_audit_document(app_id(p_ids, v_at), p_doc, 'move_in',
       jsonb_build_object('from', CASE WHEN v_doc.owner_user_id IS NULL THEN 'workspace' ELSE 'personal' END));
@@ -6726,9 +6823,10 @@ CREATE FUNCTION fvoci.app_move_document_ids(p_doc uuid) RETURNS integer
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    -- move_out·move_in 감사 2 + 활동 1 + 원래 자리에 남기는 자식마다 1.
+    -- move_out·move_in 감사 2 + 활동 1 + 원래 자리에 남기는 자식마다 1 + 철회할 수 있는 공유마다 1(상한).
     SELECT CASE WHEN app_access('document', p_doc) = 'none' THEN 0
-                ELSE 3 + (SELECT count(*) FROM documents c WHERE c.parent_id = p_doc)::integer END
+                ELSE 3 + (SELECT count(*) FROM documents c WHERE c.parent_id = p_doc)::integer
+                       + (SELECT count(*) FROM document_shares s WHERE s.document_id = p_doc)::integer END
   $$;
 
 
@@ -6776,7 +6874,9 @@ CREATE FUNCTION fvoci.app_move_task(p_task uuid, p_status text, p_before uuid, p
     IF p_base_move_version IS NOT NULL AND v_task.move_version IS DISTINCT FROM p_base_move_version THEN
       RAISE EXCEPTION 'the task moved since it was read' USING ERRCODE = 'FV003';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM task_statuses WHERE id = v_status.id) THEN
+    -- 열 잠금 뒤 상태 정의를 다시 읽는다(기다리는 사이 이름·범주가 바뀌었거나 지워졌을 수 있다).
+    SELECT * INTO v_status FROM task_statuses WHERE id = v_status.id;
+    IF v_status.id IS NULL THEN
       RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
     END IF;
     v_old := app_task_status(v_task.status_id);
@@ -7498,21 +7598,40 @@ CREATE FUNCTION fvoci.app_remove_task_dependency(p_predecessor uuid, p_successor
 
 ALTER FUNCTION fvoci.app_remove_task_dependency(p_predecessor uuid, p_successor uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
+CREATE FUNCTION fvoci.app_require_file_write(p_file uuid) RETURNS void
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_access text := app_access('file', p_file);
+  BEGIN
+    -- 문서·업무와 같은 규칙: 볼 수 없으면 404, 보관된 항목 아래면 409가 먼저, 그다음 권한 부족 403(D-106·D-113).
+    IF v_access = 'none' THEN
+      RAISE EXCEPTION 'file not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_access NOT IN ('owner', 'write') THEN
+      IF app_file_archived(p_file) THEN
+        RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+      END IF;
+      RAISE EXCEPTION 'read-only access' USING ERRCODE = '42501';
+    END IF;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_require_file_write(p_file uuid) OWNER TO fvoci_migrator;
+
+REVOKE ALL ON FUNCTION fvoci.app_require_file_write(p_file uuid) FROM PUBLIC;
+
 CREATE FUNCTION fvoci.app_rename_file(p_file uuid, p_name text, p_ids uuid[]) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   DECLARE
-    v_access text := app_access('file', p_file);
     v_file   files%ROWTYPE;
     v_name   text := btrim(coalesce(p_name, ''));
   BEGIN
-    IF v_access = 'none' THEN
-      RAISE EXCEPTION 'file not found' USING ERRCODE = 'P0002';
-    END IF;
-    IF v_access NOT IN ('owner', 'write') THEN
-      RAISE EXCEPTION 'read-only access' USING ERRCODE = '42501';
-    END IF;
+    PERFORM app_require_file_write(p_file);
     IF length(v_name) NOT BETWEEN 1 AND 255 OR v_name ~ '[\x00-\x1f/\\]' THEN
       RAISE EXCEPTION 'invalid file name' USING ERRCODE = '22023';
     END IF;
@@ -7594,10 +7713,10 @@ CREATE FUNCTION fvoci.app_require_document(p_doc uuid, p_need text) RETURNS text
     END IF;
     IF (p_need = 'owner' AND v_access <> 'owner')
        OR (p_need = 'write' AND v_access NOT IN ('owner', 'write')) THEN
-      -- 보관된 항목 아래 문서는 read로 낮아진다(D-113). 항목 등급은 그대로이므로 항목에 쓸 수 있는 사람에게는 권한 부족이
-      -- 아니라 보관 상태를 알린다(D-106: 보관 중 변경은 409, 보관 해제 뒤 다시). 업무의 app_require_task_write와 같은 규칙.
+      -- 보관된 항목 아래 문서는 read로 낮아진다(D-113). 볼 수 있는 사람에게는 권한 부족이 아니라 보관 상태를 먼저 알린다
+      -- (D-106: 보관 중 변경은 409, 보관 해제 뒤 다시). 댓글·업무(app_require_task_write)와 같은 규칙.
       SELECT item_id INTO v_item FROM documents WHERE id = p_doc;
-      IF v_item IS NOT NULL AND app_item_archived(v_item) AND app_access('item', v_item) IN ('owner', 'write') THEN
+      IF v_item IS NOT NULL AND app_item_archived(v_item) THEN
         RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
       END IF;
       RAISE EXCEPTION 'insufficient permission' USING ERRCODE = '42501';
@@ -7662,8 +7781,9 @@ CREATE FUNCTION fvoci.app_require_task_write(p_task uuid) RETURNS void
       RAISE EXCEPTION 'task not found' USING ERRCODE = 'P0002';
     END IF;
     IF v_access NOT IN ('owner', 'write') THEN
+      -- 보관된 항목 아래에서는 누구에게나 보관 상태(409)가 먼저다(D-106: 보관 중 변경은 409, 댓글과 같은 규칙).
       SELECT item_id INTO v_item FROM tasks WHERE id = p_task;
-      IF app_item_archived(v_item) AND app_access('item', v_item) IN ('owner', 'write') THEN
+      IF app_item_archived(v_item) THEN
         RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
       END IF;
       RAISE EXCEPTION 'write access is required' USING ERRCODE = '42501';
@@ -7736,8 +7856,17 @@ CREATE FUNCTION fvoci.app_restore_batch(p_batch uuid, p_ids uuid[]) RETURNS void
     v_ids   uuid[];
     v_file_doc uuid;
   BEGIN
-    SELECT * INTO v_batch FROM trash_batches WHERE id = p_batch FOR UPDATE;
+    SELECT * INTO v_batch FROM trash_batches WHERE id = p_batch;
     IF v_batch.id IS NULL OR app_trash_role(v_batch) IS NULL THEN
+      RAISE EXCEPTION 'trash entry not found' USING ERRCODE = 'P0002';
+    END IF;
+    -- 첨부 묶음은 붙은 문서 행을 묶음보다 먼저 잠근다. 문서 이동은 문서 행 → 첨부 → 묶음 순서로 잡으므로 묶음을 먼저 잡으면
+    -- 서로 기다릴 수 있다(교착 방지).
+    IF v_batch.root_kind = 'file' THEN
+      PERFORM 1 FROM documents WHERE id = (SELECT document_id FROM files WHERE id = v_batch.root_id) FOR SHARE;
+    END IF;
+    SELECT * INTO v_batch FROM trash_batches WHERE id = p_batch FOR UPDATE;
+    IF app_trash_role(v_batch) IS NULL THEN
       RAISE EXCEPTION 'trash entry not found' USING ERRCODE = 'P0002';
     END IF;
     IF app_trash_expires_at(v_batch) <= now() AND NOT app_batch_keeps_referenced(v_batch) THEN
@@ -7811,6 +7940,10 @@ CREATE FUNCTION fvoci.app_restore_batch(p_batch uuid, p_ids uuid[]) RETURNS void
          AND app_access('item', v_item) <> 'write' THEN
         RAISE EXCEPTION 'trash entry not found' USING ERRCODE = 'P0002';
       END IF;
+    END IF;
+    -- 잠금 뒤 다시 본다: 기다리는 사이 역할을 잃었으면(강등·제거·공유 철회) 없는 것과 같다.
+    IF app_trash_role(v_batch) IS NULL THEN
+      RAISE EXCEPTION 'trash entry not found' USING ERRCODE = 'P0002';
     END IF;
     -- 문서에 붙은 첨부는 지운 사람이 지금도 그 문서에 쓸 수 있어야 되살린다(항목 없는 위키 문서·공유 철회 포함).
     IF v_batch.root_kind = 'file' AND v_file_doc IS NOT NULL AND app_trash_role(v_batch) = 'deleter'
@@ -9497,8 +9630,12 @@ CREATE FUNCTION fvoci.app_system_purge_expired(p_ids uuid[]) RETURNS integer
         IF app_purge_workspace_as(v_ws, true, ARRAY[app_id(p_ids, v_at - 1), app_id(p_ids, v_at)]) THEN
           v_made := v_made + 1;
         END IF;
-      EXCEPTION WHEN OTHERS THEN
-        RAISE WARNING 'purge of deleted workspace % failed with SQLSTATE %', v_ws, SQLSTATE;
+      EXCEPTION
+        WHEN SQLSTATE 'FV001' OR SQLSTATE 'FV002' THEN
+          -- 새 id 계약 위반(D-88)은 묶음 실패가 아니라 호출 전체를 되돌려 다시 하게 한다.
+          RAISE;
+        WHEN OTHERS THEN
+          RAISE WARNING 'purge of deleted workspace % failed with SQLSTATE %', v_ws, SQLSTATE;
       END;
     END LOOP;
     FOR v_batch IN
@@ -9511,8 +9648,11 @@ CREATE FUNCTION fvoci.app_system_purge_expired(p_ids uuid[]) RETURNS integer
         IF (SELECT purged_at FROM trash_batches WHERE id = v_batch.id) IS NOT NULL THEN
           v_made := v_made + 1;
         END IF;
-      EXCEPTION WHEN OTHERS THEN
-        RAISE WARNING 'purge of trash batch % failed with SQLSTATE %', v_batch.id, SQLSTATE;
+      EXCEPTION
+        WHEN SQLSTATE 'FV001' OR SQLSTATE 'FV002' THEN
+          RAISE;
+        WHEN OTHERS THEN
+          RAISE WARNING 'purge of trash batch % failed with SQLSTATE %', v_batch.id, SQLSTATE;
       END;
     END LOOP;
     RETURN v_made;
@@ -10174,16 +10314,10 @@ CREATE FUNCTION fvoci.app_trash_file(p_file uuid, p_ids uuid[]) RETURNS uuid
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   DECLARE
-    v_access text := app_access('file', p_file);
     v_file   files%ROWTYPE;
     v_batch  uuid;
   BEGIN
-    IF v_access = 'none' THEN
-      RAISE EXCEPTION 'file not found' USING ERRCODE = 'P0002';
-    END IF;
-    IF v_access NOT IN ('owner', 'write') THEN
-      RAISE EXCEPTION 'read-only access' USING ERRCODE = '42501';
-    END IF;
+    PERFORM app_require_file_write(p_file);
     SELECT * INTO v_file FROM files WHERE id = p_file FOR NO KEY UPDATE;
     IF app_file_archived(p_file) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
@@ -10333,10 +10467,10 @@ CREATE FUNCTION fvoci.app_trash_task(p_task uuid, p_ids uuid[]) RETURNS uuid
     PERFORM app_require_task_write(p_task);
     SELECT array_agg(id) INTO v_ids FROM tasks WHERE (id = p_task OR parent_id = p_task) AND deleted_at IS NULL;
     PERFORM app_lock_task_rows(v_ids, NULL);
-    -- 잠그는 사이 새로 생긴 하위 업무도 함께(드문 경우, 다시 잠근다).
+    -- 잠그는 사이 새로 생긴 하위 업무가 있으면 다시 잠그지 않는다(이미 쥔 열 뒤에 더 낮은 열을 잡으면 순서가 뒤집혀 교착할
+    -- 수 있다). 드문 경우이므로 다시 하게 한다(409).
     IF EXISTS (SELECT 1 FROM tasks WHERE parent_id = p_task AND deleted_at IS NULL AND NOT (id = ANY (v_ids))) THEN
-      SELECT array_agg(id) INTO v_ids FROM tasks WHERE (id = p_task OR parent_id = p_task) AND deleted_at IS NULL;
-      PERFORM app_lock_task_rows(v_ids, NULL);
+      RAISE EXCEPTION 'subtasks changed while deleting; try again' USING ERRCODE = '55000';
     END IF;
     SELECT * INTO v_task FROM tasks WHERE id = p_task;
     PERFORM app_lock_item(v_task.item_id);
@@ -10717,7 +10851,9 @@ CREATE FUNCTION fvoci.app_update_task(p_task uuid, p_base_version integer, p_tit
     IF v_task.version IS DISTINCT FROM p_base_version THEN
       RETURN 'conflict';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM task_statuses WHERE id = v_status.id) THEN
+    -- 열 잠금 뒤 상태 정의를 다시 읽는다(기다리는 사이 이름·범주가 바뀌었거나 지워졌을 수 있다).
+    SELECT * INTO v_status FROM task_statuses WHERE id = v_status.id;
+    IF v_status.id IS NULL THEN
       RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
     END IF;
     v_old := app_task_status(v_task.status_id);
@@ -10988,8 +11124,7 @@ CREATE FUNCTION fvoci.app_version_referenced(p_file uuid, p_version integer, p_v
                    JOIN documents d ON d.id = r.document_id
                    JOIN files f ON f.id = r.file_id
                    WHERE r.file_id = p_file AND r.version = p_version
-                     AND ((f.workspace_id IS NOT NULL AND d.workspace_id = f.workspace_id)
-                       OR (f.owner_user_id IS NOT NULL AND d.owner_user_id = f.owner_user_id)))
+                     AND app_file_ref_in_scope(d.workspace_id, d.owner_user_id, f.workspace_id, f.owner_user_id))
         -- 휴지통의 문서도 리비전과 같게 보고, 낡은 상태는 빼고.
         OR EXISTS (SELECT 1 FROM document_collab_file_refs r
                    JOIN document_collab_states s ON s.document_id = r.document_id AND s.pending
@@ -10997,8 +11132,7 @@ CREATE FUNCTION fvoci.app_version_referenced(p_file uuid, p_version integer, p_v
                    JOIN files f ON f.id = r.file_id
                    WHERE r.file_id = p_file AND r.version = p_version
                      AND app_collab_state_current(s.document_id, s.revision)
-                     AND ((f.workspace_id IS NOT NULL AND d.workspace_id = f.workspace_id)
-                       OR (f.owner_user_id IS NOT NULL AND d.owner_user_id = f.owner_user_id)))
+                     AND app_file_ref_in_scope(d.workspace_id, d.owner_user_id, f.workspace_id, f.owner_user_id))
   $$;
 
 
@@ -12720,6 +12854,8 @@ REVOKE ALL ON FUNCTION fvoci.app_require_admin(p_workspace uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION fvoci.app_require_course_write(p_item uuid) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION fvoci.app_require_document(p_doc uuid, p_need text) FROM PUBLIC;
+-- 서버가 쓸 수 없는 이유(403/409)를 묻는 데 직접 부른다(documents::save).
+GRANT ALL ON FUNCTION fvoci.app_require_document(p_doc uuid, p_need text) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_require_document_manager(p_doc uuid) FROM PUBLIC;
 

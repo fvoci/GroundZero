@@ -910,7 +910,7 @@ async fn demoting(
         n
     };
     let mut t1 = state.db.begin_as(owner.id).await.unwrap();
-    sqlx::query("SELECT app_set_member_role($1, $2, 'writer', $3)")
+    sqlx::query("SELECT app_set_member_role($1, $2, 'member', $3)")
         .bind(ws_id)
         .bind(admin.id)
         .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
