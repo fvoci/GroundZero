@@ -328,11 +328,13 @@ SELECT json_build_object(
              doc.visibility, doc.schema_version, doc.revision, doc.body, doc.created_at, doc.updated_at
       FROM documents doc WHERE doc.workspace_id = $1 AND doc.deleted_at IS NULL) d),
   'tasks', (SELECT coalesce(json_agg(t ORDER BY t.created_at), '[]') FROM (
-      SELECT tk.*, app_task_reference(tk.id) AS reference,
+      SELECT tk.*, s.name AS status, s.category AS status_category, app_task_reference(tk.id) AS reference,
              (SELECT coalesce(json_agg(a.user_id), '[]') FROM task_assignees a WHERE a.task_id = tk.id) AS assignees,
              (SELECT coalesce(json_agg(c ORDER BY c.position), '[]') FROM checklist_items c WHERE c.task_id = tk.id)
                AS checklist
-      FROM tasks tk WHERE tk.workspace_id = $1 AND tk.deleted_at IS NULL) t),
+      FROM tasks tk JOIN task_statuses s ON s.id = tk.status_id WHERE tk.workspace_id = $1 AND tk.deleted_at IS NULL) t),
+  'task_statuses', (SELECT coalesce(json_agg(s ORDER BY s.item_id, s.position), '[]')
+      FROM task_statuses s JOIN items i ON i.id = s.item_id WHERE i.workspace_id = $1),
   'task_dependencies', (SELECT coalesce(json_agg(dep), '[]') FROM (
       SELECT dp.* FROM task_dependencies dp JOIN items it ON it.id = dp.item_id WHERE it.workspace_id = $1) dep),
   'task_series', (SELECT coalesce(json_agg(s), '[]') FROM (SELECT * FROM task_series WHERE workspace_id = $1) s),

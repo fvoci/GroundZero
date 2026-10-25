@@ -1,5 +1,5 @@
 //! 항목 정보와 항목 멤버 (D-33·D-34·D-36·D-38, D-20 공유). 리더·목표·범위·기간·상태와 모듈 종류별 정보,
-//! 비공개 항목을 함께 쓰는 사람·그룹. 권한 판정은 DB의 정의자 함수(`app_item_access`)가 한다.
+//! 비공개 항목을 함께 쓰는 사람·그룹. 권한 판정은 DB의 정의자 함수(`app_access`)가 한다.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -239,7 +239,7 @@ async fn load(tx: &mut UserTx, item: ItemId) -> Result<ItemProfile, AppError> {
                 (SELECT u.display_name FROM users u JOIN workspace_members wm
                   ON wm.user_id = u.id AND wm.workspace_id = i.workspace_id WHERE u.id = i.leader_id),
                 i.goal, i.scope, i.starts_on, i.ends_on, i.status, i.details,
-                app_item_access(i.id), i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL,
+                app_access('item', i.id), i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL,
                 i.profile_version
          FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1",
     )

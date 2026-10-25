@@ -13,12 +13,13 @@ use crate::db::{UserTx, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
-use crate::ids::{DocumentId, Role, WorkspaceId};
+use crate::ids::{DocumentId, OrganizationId, Role, WorkspaceId};
 
 /// 워크스페이스 요약.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Workspace {
     pub id: WorkspaceId,
+    pub organization_id: OrganizationId,
     pub name: String,
     /// 현재 사용자의 역할.
     pub role: Role,
@@ -31,6 +32,7 @@ pub struct Workspace {
 /// 워크스페이스 생성 요청.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateWorkspace {
+    pub organization_id: OrganizationId,
     /// 클라이언트가 만든 요청 ID. 재시도 중복 방지.
     #[schema(value_type = String, format = Uuid)]
     pub request_id: Uuid,
@@ -68,12 +70,20 @@ pub async fn member_role(tx: &mut UserTx, ws: WorkspaceId) -> Result<Role, AppEr
 }
 
 fn row_to_workspace(
-    (id, name, role, is_owner, realtime_enabled): (WorkspaceId, String, String, bool, bool),
+    (id, organization_id, name, role, is_owner, realtime_enabled): (
+        WorkspaceId,
+        OrganizationId,
+        String,
+        String,
+        bool,
+        bool,
+    ),
 ) -> Result<Workspace, AppError> {
     let role = Role::parse(&role)
         .ok_or_else(|| AppError::Config(format!("unknown role in database: {role}")))?;
     Ok(Workspace {
         id,
+        organization_id,
         name,
         role,
         is_owner,
@@ -89,8 +99,8 @@ pub async fn list(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<Workspace>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let rows: Vec<(WorkspaceId, String, String, bool, bool)> = sqlx::query_as(
-        "SELECT w.id, w.name, m.role, w.owner_id = m.user_id, w.realtime_enabled
+    let rows: Vec<(WorkspaceId, OrganizationId, String, String, bool, bool)> = sqlx::query_as(
+        "SELECT w.id, w.organization_id, w.name, m.role, w.owner_id = m.user_id, w.realtime_enabled
          FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id
          WHERE m.user_id = app_user_id()
          ORDER BY w.created_at, w.id",
@@ -115,14 +125,16 @@ pub async fn create(
 ) -> Result<(StatusCode, Json<Workspace>), AppError> {
     let name = validate_title(&input.name, state.config.limits.max_title_chars, "name")?;
     let mut tx = state.db.begin_as(user).await?;
-    let id: WorkspaceId = sqlx::query_scalar("SELECT app_create_workspace($1, $2, $3)")
+    let id: WorkspaceId = sqlx::query_scalar("SELECT app_create_workspace($1, $2, $3, $4)")
         .bind(input.request_id)
+        .bind(input.organization_id)
         .bind(&name)
-        .bind(new_ids(2))
+        .bind(new_ids(3))
         .fetch_one(tx.conn())
-        .await?;
-    let row: (WorkspaceId, String, String, bool, bool) = sqlx::query_as(
-        "SELECT w.id, w.name, m.role, w.owner_id = m.user_id, w.realtime_enabled FROM workspaces w
+        .await
+        .map_err(AppError::from_db_function)?;
+    let row: (WorkspaceId, OrganizationId, String, String, bool, bool) = sqlx::query_as(
+        "SELECT w.id, w.organization_id, w.name, m.role, w.owner_id = m.user_id, w.realtime_enabled FROM workspaces w
          JOIN workspace_members m ON m.workspace_id = w.id AND m.user_id = app_user_id()
          WHERE w.id = $1",
     )
@@ -180,7 +192,7 @@ pub async fn delete(
     let expires_at: OffsetDateTime = sqlx::query_scalar("SELECT app_delete_workspace($1, $2, $3)")
         .bind(ws)
         .bind(&input.name)
-        .bind(new_ids(1))
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -228,7 +240,7 @@ pub async fn restore(
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_restore_workspace($1, $2)")
         .bind(ws)
-        .bind(new_ids(1))
+        .bind(new_ids(2))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -248,7 +260,7 @@ pub async fn purge(
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_purge_workspace($1, $2)")
         .bind(ws)
-        .bind(new_ids(1))
+        .bind(new_ids(2))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

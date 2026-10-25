@@ -5,8 +5,8 @@
 //! 번호는 모듈마다 하나의 번호열을 항목·문서·작업이 함께 쓴다. 할당은 DB 함수 `app_allocate_number`만 한다.
 //! 참조 문자열(`DEV-3`)은 저장하지 않고 현재 키로 만든다. 링크는 내부 id 기준이다.
 //!
-//! 권한은 `migrations/202610230001_initial_state.sql`의 DB 함수가 판정한다. 모듈 관리는 관리자, 항목 생성은 작성자 이상,
-//! 항목 권한은 `app_item_access`, 항목 아래 문서는 `app_document_access`(항목 권한과 문서 규칙 중 낮은 쪽).
+//! 권한은 `migrations/202610250001_initial_state.sql`의 DB 함수가 판정한다. 모듈 관리는 관리자, 항목 생성은 작성자 이상,
+//! 항목 권한은 `app_access`, 항목 아래 문서는 `app_access`(항목 권한과 문서 규칙 중 낮은 쪽).
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -269,7 +269,7 @@ type ItemRow = (
 
 const ITEM_SELECT: &str =
     "SELECT i.id, i.module_id, i.workspace_id, app_item_reference(i.id), i.title,
-        i.description, i.visibility, app_item_access(i.id), i.archived_at IS NOT NULL, i.updated_at,
+        i.description, i.visibility, app_access('item', i.id), i.archived_at IS NOT NULL, i.updated_at,
         i.status, i.starts_on, i.ends_on, i.is_template, i.version
  FROM items i";
 
@@ -542,7 +542,7 @@ pub async fn create_item(
             .bind(input.request_id)
             .bind(&title)
             .bind(&description)
-            .bind(new_ids(2))
+            .bind(new_ids(6))
             .fetch_one(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;
@@ -708,7 +708,7 @@ pub async fn create_item_document(
                 .bind(body)
                 .bind(input.parent_id)
                 .bind(max_depth(&state.config.limits))
-                .bind(new_ids(3))
+                .bind(new_ids(4))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;

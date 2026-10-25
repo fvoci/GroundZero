@@ -44,7 +44,7 @@ pub struct SearchQuery {
     /// 이 모듈 안의 것만.
     #[param(value_type = Option<String>, format = Uuid)]
     pub module_id: Option<Uuid>,
-    /// 업무 상태(`todo`·`in_progress`·`done`). 주면 업무만 나온다.
+    /// 업무 상태 이름(1..50자). 주면 업무만 나온다.
     pub status: Option<String>,
     /// 담당자(`me` 또는 사용자 id). 주면 업무만 나온다.
     pub assignee: Option<String>,
@@ -94,8 +94,7 @@ fn parse_day(raw: Option<&str>, name: &str) -> Result<Option<time::Date>, AppErr
 fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
     let status = match query.status.as_deref().map(str::trim) {
         None | Some("") => None,
-        Some(s @ ("todo" | "in_progress" | "done")) => Some(s.to_owned()),
-        Some(other) => return Err(AppError::BadRequest(format!("unknown status {other}"))),
+        Some(s) => Some(crate::features::tasks::validate_status(s)?),
     };
     let person = |raw: Option<&str>, name: &str| -> Result<Option<Uuid>, AppError> {
         match raw.map(str::trim) {
@@ -164,7 +163,11 @@ fn meili_filters(f: &Filters) -> String {
         out.push_str(&format!(" AND module_id = \"{m}\""));
     }
     if let Some(s) = &f.status {
-        out.push_str(&format!(" AND status = \"{s}\""));
+        // 사용자 정의 이름의 따옴표·역슬래시가 필터 식을 바꾸지 않게 문자열로 인코딩한다.
+        out.push_str(&format!(
+            " AND status = {}",
+            serde_json::Value::String(s.clone())
+        ));
     }
     if let Some(a) = f.assignee {
         out.push_str(&format!(" AND assignee_ids = \"{a}\""));
@@ -244,14 +247,14 @@ async fn scope_filter(
         member_role(tx, ws).await?;
         return Ok(format!("({kind_filter}) AND workspace_id = \"{}\"", ws.0));
     }
-    let workspaces: Vec<Uuid> = sqlx::query_scalar("SELECT app_my_workspace_ids()")
+    let workspaces: Vec<Uuid> = sqlx::query_scalar("SELECT app_my_workspace_ids(NULL::uuid)")
         .fetch_all(tx.conn())
         .await?;
     // 내 워크스페이스 밖에서 볼 수 있는 문서(받은 공유).
     let shared: Vec<Uuid> = sqlx::query_scalar(
         "SELECT d.id FROM documents d
          WHERE (d.workspace_id IS NULL AND d.owner_user_id IS DISTINCT FROM app_user_id())
-            OR (d.workspace_id IS NOT NULL AND d.workspace_id NOT IN (SELECT app_my_workspace_ids()))
+            OR (d.workspace_id IS NOT NULL AND d.workspace_id NOT IN (SELECT app_my_workspace_ids(NULL::uuid)))
          LIMIT 1000",
     )
     .fetch_all(tx.conn())
@@ -493,7 +496,7 @@ async fn fallback(
         // 날짜: 실제 시각(`at`)은 보는 사람 시간대의 범위($9·$10)로, 날짜만 있는 값(`on_day`)은 날짜($7·$8)로 본다. 한 행에는
         // 둘 중 하나만 있다(색인 `app_system_search_payload`와 같은 규칙, D-101).
         "SELECT kind, id, title, workspace_id,
-                CASE WHEN r.item_id IS NOT NULL AND app_item_access(r.item_id) IS NOT NULL THEN r.item_id END
+                CASE WHEN r.item_id IS NOT NULL AND app_access('item', r.item_id) <> 'none' THEN r.item_id END
          FROM (
            SELECT 'document' AS kind, d.id, d.title, d.workspace_id, d.item_id, d.updated_at,
                   (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status,
@@ -501,10 +504,10 @@ async fn fallback(
            FROM documents d WHERE d.title ILIKE $1 AND d.deleted_at IS NULL
            UNION ALL
            SELECT 'task', t.id, t.title, t.workspace_id, t.item_id, t.updated_at,
-                  (SELECT module_id FROM items WHERE id = t.item_id), t.status,
+                  (SELECT module_id FROM items WHERE id = t.item_id), s.name,
                   ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id), NULL,
                   coalesce(t.due_date, t.start_date), t.created_by
-           FROM tasks t WHERE t.title ILIKE $1 AND t.deleted_at IS NULL
+           FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.title ILIKE $1 AND t.deleted_at IS NULL
            UNION ALL
            SELECT 'item', i.id, i.title, i.workspace_id, NULL, i.updated_at, i.module_id, NULL, NULL,
                   i.updated_at, NULL, i.created_by
@@ -575,6 +578,18 @@ async fn fallback(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_status_is_a_quoted_filter_value() {
+        let filter = Filters {
+            status: Some("검토 \\\" OR kind = \\\"file".into()),
+            ..Filters::default()
+        };
+        let expression = meili_filters(&filter);
+        let encoded = expression.strip_prefix(" AND status = ").unwrap();
+        let decoded: String = serde_json::from_str(encoded).unwrap();
+        assert_eq!(Some(decoded), filter.status);
+    }
 
     /// 날짜 범위는 그날 시작과 다음 날 시작을 시각으로 만든다. 다음 날이 없는 날(9999-12-31)이나 1년 전은 그 시각을
     /// 나타낼 수 없어(`time`·PostgreSQL 범위 밖) 500이 되던 것을 400으로 거절한다(CodeRabbit #99).

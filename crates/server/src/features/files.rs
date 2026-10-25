@@ -615,19 +615,14 @@ type FileRow = (
     Option<i64>,
     Option<String>,
     OffsetDateTime,
-    Option<String>,
+    String,
     bool,
 );
 
-// 보관된 항목(또는 그 모듈)에 바로 붙은 파일은 쓰기 함수가 거부하므로 읽기로 보인다(can_write). 문서에 붙은 파일은
-// 문서 접근이 이미 보관을 읽기로 낮춘다.
+// 보관을 포함한 접근 등급은 SQL 한 곳에서 계산한다.
 const FILE_SELECT: &str = "SELECT f.id, f.name, f.document_id, f.item_id, f.current_version, v.size, v.content_type,
                                   f.updated_at,
-                                  CASE WHEN EXISTS (SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id
-                                                    WHERE i.id = f.item_id
-                                                      AND (i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL))
-                                            AND app_file_access(f.id) IS NOT NULL
-                                       THEN 'read' ELSE app_file_access(f.id) END,
+                                  app_access('file', f.id),
                                   app_file_can_download(f.id)
                            FROM files f
                            LEFT JOIN file_versions v ON v.file_id = f.id AND v.version = f.current_version";
@@ -654,7 +649,7 @@ fn file_view(row: FileRow) -> FileView {
         size: size.unwrap_or_default(),
         content_type: content_type.unwrap_or_else(|| "application/octet-stream".into()),
         updated_at,
-        can_write: matches!(access.as_deref(), Some("owner" | "write")),
+        can_write: matches!(access.as_str(), "owner" | "write"),
         can_download,
     }
 }
@@ -669,11 +664,11 @@ pub async fn document_files(
     Path(doc): Path<DocumentId>,
 ) -> Result<Json<Vec<FileView>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let visible: Option<String> = sqlx::query_scalar("SELECT app_document_access($1)")
+    let visible: String = sqlx::query_scalar("SELECT app_access('document', $1)")
         .bind(doc)
         .fetch_one(tx.conn())
         .await?;
-    if visible.is_none() {
+    if visible == "none" {
         return Err(AppError::NotFound);
     }
     let rows: Vec<FileRow> = sqlx::query_as(&format!(
@@ -696,11 +691,11 @@ pub async fn item_files(
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<FileView>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let visible: Option<String> = sqlx::query_scalar("SELECT app_item_access($1)")
+    let visible: String = sqlx::query_scalar("SELECT app_access('item', $1)")
         .bind(item)
         .fetch_one(tx.conn())
         .await?;
-    if visible.is_none() {
+    if visible == "none" {
         return Err(AppError::NotFound);
     }
     let rows: Vec<FileRow> = sqlx::query_as(&format!(
@@ -718,7 +713,7 @@ async fn one_file(tx: &mut UserTx, id: FileId) -> Result<FileView, AppError> {
         .bind(id)
         .fetch_optional(tx.conn())
         .await?;
-    row.filter(|r| r.8.is_some())
+    row.filter(|r| r.8 != "none")
         .map(file_view)
         .ok_or(AppError::NotFound)
 }
@@ -842,7 +837,7 @@ pub async fn delete_version(
     // 볼 수 없거나 고칠 수 없는 파일이면 아무 방도 건드리지 않고 아래 함수가 404·403을 낸다.
     let mut tx = state.db.begin_as(user).await?;
     let workspace: Option<Option<Uuid>> = sqlx::query_scalar(
-        "SELECT workspace_id FROM files WHERE id = $1 AND app_file_access(id) IN ('owner', 'write')",
+        "SELECT workspace_id FROM files WHERE id = $1 AND app_access('file', id) IN ('owner', 'write')",
     )
     .bind(id)
     .fetch_optional(tx.conn())

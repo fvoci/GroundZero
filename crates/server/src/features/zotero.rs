@@ -402,7 +402,7 @@ pub async fn import(
     {
         let mut tx = state.db.begin_as(user).await?;
         let kind: Option<(String, String)> = sqlx::query_as(
-            "SELECT m.kind, app_item_access(i.id) FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1",
+            "SELECT m.kind, app_access('item', i.id) FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1",
         )
         .bind(item)
         .fetch_optional(tx.conn())

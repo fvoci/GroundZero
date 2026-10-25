@@ -1,9 +1,9 @@
 //! 회의·발표·행사 일정과 워크스페이스 달력 (D-19, D-31, D-50, D-57).
 //!
-//! 일정은 항목에 속하고 권한은 항목을 따른다(DB 함수 `app_event_access`). 시각이 있는 일정은 UTC 시각과 일정의
+//! 일정은 항목에 속하고 권한은 항목을 따른다(DB 함수 `app_access`). 시각이 있는 일정은 UTC 시각과 일정의
 //! 시간대를 함께 저장하고, 종일 일정은 날짜 그대로 둔다(D-50). 달력은 워크스페이스 단위의 기간 조회로, 볼 수 있는
 //! 업무(시작·마감)와 일정을 함께 돌려준다(홈의 주간 달력도 같은 API를 쓴다).
-//! DB 정의는 `migrations/202610230001_initial_state.sql`의 `app_event_access`·`app_event_occurrences` 등에 있다.
+//! DB 정의는 `migrations/202610250001_initial_state.sql`의 `app_access`·`app_event_occurrences` 등에 있다.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -20,7 +20,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::Access;
 use crate::features::recurrence::RecurrenceRule;
-use crate::features::tasks::{TaskStatus, format_date, parse_date, validate_text};
+use crate::features::tasks::{format_date, parse_date, validate_text};
 use crate::features::workspaces::{member_role, validate_title};
 use crate::http::AppState;
 use crate::ids::{ItemId, WorkspaceId};
@@ -236,7 +236,7 @@ struct EventRow {
 const EVENT_SELECT: &str =
     "SELECT e.id, e.item_id, e.workspace_id, e.kind, e.title, e.description, e.all_day,
         e.start_date, e.end_date, e.starts_at, e.ends_at, e.timezone, e.recurrence, e.excluded_dates, e.version,
-        app_event_access(e.id) AS access
+        app_access('event', e.id) AS access
  FROM events e";
 
 const EVENT_ORDER: &str =
@@ -289,7 +289,7 @@ pub async fn list(
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<Event>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let visible: bool = sqlx::query_scalar("SELECT app_item_access($1) IS NOT NULL")
+    let visible: bool = sqlx::query_scalar("SELECT app_access('item', $1) <> 'none'")
         .bind(item)
         .fetch_one(tx.conn())
         .await?;
@@ -352,7 +352,7 @@ pub async fn create(
         .bind(valid.when.starts_at)
         .bind(valid.when.ends_at)
         .bind(&valid.timezone)
-        .bind(new_ids(2))
+        .bind(new_ids(3))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -507,7 +507,8 @@ pub struct CalendarTask {
     pub item_id: ItemId,
     pub reference: Option<String>,
     pub title: String,
-    pub status: TaskStatus,
+    pub status: String,
+    pub status_category: String,
     pub milestone: bool,
     pub start_date: Option<String>,
     pub due_date: Option<String>,
@@ -616,13 +617,14 @@ pub async fn calendar(
         Option<String>,
         String,
         String,
+        String,
         bool,
         Option<Date>,
         Option<Date>,
     );
     let mut task_rows: Vec<TaskRow> = sqlx::query_as(
-        "SELECT t.id, t.item_id, app_task_reference(t.id), t.title, t.status, t.milestone, t.start_date, t.due_date
-         FROM tasks t
+        "SELECT t.id, t.item_id, app_task_reference(t.id), t.title, s.name AS status, s.category AS status_category, t.milestone, t.start_date, t.due_date
+         FROM tasks t JOIN task_statuses s ON s.id = t.status_id
          WHERE t.workspace_id = $1
            AND coalesce(t.start_date, t.due_date) <= $3 AND coalesce(t.due_date, t.start_date) >= $2
          ORDER BY coalesce(t.start_date, t.due_date), t.number",
@@ -679,7 +681,7 @@ pub async fn calendar(
     .fetch_all(tx.conn())
     .await?;
     // 강의·스터디 계획일은 내 계획일이 있으면 그것(본인 진도 행만 읽힌다), 없으면 공통 계획일. 투고·산출물은 기록의
-    // 날짜. 모두 그 항목을 볼 수 있을 때만 나온다(RLS·app_item_access).
+    // 날짜. 모두 그 항목을 볼 수 있을 때만 나온다(RLS·app_access).
     type DateRow = (String, Uuid, ItemId, String, Date, bool, bool);
     let mut date_rows: Vec<DateRow> = sqlx::query_as(
         "SELECT 'episode', e.id, e.item_id, e.number::text || '. ' || e.title,
@@ -687,20 +689,20 @@ pub async fn calendar(
          FROM course_episodes e
          LEFT JOIN episode_progress p ON p.episode_id = e.id AND p.user_id = app_user_id()
          WHERE e.workspace_id = $1 AND coalesce(p.planned_on, e.planned_on) BETWEEN $2 AND $3
-           AND app_item_access(e.item_id) IS NOT NULL
+           AND app_access('item', e.item_id) <> 'none'
          UNION ALL
          SELECT 'study_unit', u.id, u.item_id, u.number::text || '. ' || u.title,
                 coalesce(p.planned_on, u.planned_on), p.planned_on IS NOT NULL, coalesce(p.status = 'done', false)
          FROM study_units u
          LEFT JOIN unit_progress p ON p.unit_id = u.id AND p.user_id = app_user_id()
          WHERE u.workspace_id = $1 AND coalesce(p.planned_on, u.planned_on) BETWEEN $2 AND $3
-           AND app_item_access(u.item_id) IS NOT NULL
+           AND app_access('item', u.item_id) <> 'none'
          UNION ALL
          SELECT 'submission', r.id, r.item_id, r.title, r.occurred_on, false,
                 coalesce(r.fields->>'status' IN ('published', 'rejected'), false)
          FROM item_records r
          WHERE r.workspace_id = $1 AND r.kind = 'submission' AND r.occurred_on BETWEEN $2 AND $3
-           AND app_item_access(r.item_id) IS NOT NULL
+           AND app_access('item', r.item_id) <> 'none'
          UNION ALL
          SELECT 'revision_due', r.id, r.item_id, r.title, (r.fields->>'revision_due')::date, false,
                 coalesce(r.fields->>'status' IN ('accepted', 'published', 'rejected'), false)
@@ -708,13 +710,13 @@ pub async fn calendar(
          WHERE r.workspace_id = $1 AND r.kind = 'submission'
            AND r.fields->>'revision_due' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
            AND (r.fields->>'revision_due')::date BETWEEN $2 AND $3
-           AND app_item_access(r.item_id) IS NOT NULL
+           AND app_access('item', r.item_id) <> 'none'
          UNION ALL
          SELECT 'deliverable', r.id, r.item_id, r.title, r.occurred_on, false,
                 coalesce(r.fields->>'status' IN ('done', 'accepted'), false)
          FROM item_records r
          WHERE r.workspace_id = $1 AND r.kind = 'deliverable' AND r.occurred_on BETWEEN $2 AND $3
-           AND app_item_access(r.item_id) IS NOT NULL
+           AND app_access('item', r.item_id) <> 'none'
          ORDER BY 5, 1, 4",
     )
     .bind(ws)
@@ -748,14 +750,14 @@ pub async fn calendar(
     let tasks = task_rows
         .into_iter()
         .map(
-            |(id, item_id, reference, title, status, milestone, start, due)| {
+            |(id, item_id, reference, title, status, status_category, milestone, start, due)| {
                 Ok(CalendarTask {
                     id,
                     item_id,
                     reference,
                     title,
-                    status: TaskStatus::parse(&status)
-                        .ok_or_else(|| AppError::Config(format!("unknown task status {status}")))?,
+                    status,
+                    status_category,
                     milestone,
                     start_date: format_date(start),
                     due_date: format_date(due),

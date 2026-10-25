@@ -67,7 +67,7 @@ pub async fn list(
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<SavedView>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let visible: bool = sqlx::query_scalar("SELECT app_item_access($1) IS NOT NULL")
+    let visible: bool = sqlx::query_scalar("SELECT app_access('item', $1) <> 'none'")
         .bind(item)
         .fetch_one(tx.conn())
         .await?;
