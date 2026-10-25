@@ -681,11 +681,15 @@
   function requestOpen(id: string): void {
     if (leave.open || detailSaving) return;
     if (id === openTaskId) {
-      leave.proceed(() => open(id));
+      leave.proceed(() => {
+        open(id);
+      });
       return;
     }
-    leave.request(() => open(id));
-    if (leave.open) openNext = id;
+    leave.request(() => {
+      open(id);
+    });
+    openNext = id;
   }
 
   function close(): void {
