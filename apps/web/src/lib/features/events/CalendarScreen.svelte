@@ -230,7 +230,11 @@
         >{m.events_task_create()}</Button
       >
     {/if}
-    <div class="ml-auto flex gap-1" role="group" aria-label={m.events_month_nav()}>
+    <div
+      class="ml-auto flex flex-wrap justify-end gap-1"
+      role="group"
+      aria-label={m.events_month_nav()}
+    >
       <Button size="sm" variant="outline" onclick={() => (month = shiftMonth(month, -1))}
         >{m.events_prev_month()}</Button
       >

@@ -1,6 +1,9 @@
 // Storybook story를 jsdom에서 다시 쓴다(composeStories). 모든 story가 오류 없이 그려지고, play 함수(키보드·저장
 // 실패·입력 보존 등 상호작용)가 통과하는지 본다. 실제 배치·픽셀은 jsdom이 계산하지 않으므로 Storybook을 실제
 // 브라우저로 열어 확인한다(docs/development.md의 Storybook 절).
+import { readdirSync } from 'node:fs';
+import { resolve, sep } from 'node:path';
+
 import { composeStories, setProjectAnnotations } from '@storybook/svelte';
 import type { StoryObj, SvelteRenderer } from '@storybook/svelte';
 import type { Store_CSFExports } from 'storybook/internal/types';
@@ -44,6 +47,23 @@ it('finds the story files', () => {
   expect(Object.keys(modules).length).toBeGreaterThanOrEqual(8);
 });
 
+// Vitest의 파일 모듈 캐시가 이전 glob 결과를 쓰면 새로 더한 story 파일이 조용히 빠진다(통과로 보임). 디스크의 파일과
+// 맞춰 보고, 다르면 `pnpm --filter @fvoci/web exec vitest --clearCache` 뒤 다시 실행한다.
+it('runs every story file on disk', () => {
+  const onDisk = readdirSync(resolve(import.meta.dirname, '../../stories'), {
+    recursive: true,
+    encoding: 'utf8',
+  })
+    .filter((file) => file.endsWith('.stories.ts'))
+    .map((file) => file.split(sep).join('/'))
+    .sort();
+  expect(
+    Object.keys(modules)
+      .map((path) => path.replace('../../stories/', ''))
+      .sort(),
+  ).toEqual(onDisk);
+});
+
 for (const [path, module] of Object.entries(modules)) {
   describe(path.replace('../../stories/', ''), () => {
     for (const [name, Story] of Object.entries(composeStories(module))) {
@@ -64,4 +84,28 @@ it('applies the theme global to the page like the app does', async () => {
   expect(document.documentElement).toHaveClass('dark');
   await Story.run();
   expect(document.documentElement).not.toHaveClass('dark');
+});
+
+// 도구 막대의 "글자 크기"는 문자열('200')로 오지만, 주소(`?globals=fontScale:200`)에서는 Storybook이 숫자(200)로 읽는다.
+// 둘 다 같은 배율로 적용되고, 지원하지 않는 값은 기본 100%로 돌아간다(임의 값을 CSS에 넣지 않는다).
+it('applies the font scale global whether it arrives as the toolbar string or the URL number', async () => {
+  const badge = Object.entries(modules).find(([path]) => path.endsWith('ui/Badge.stories.ts'))?.[1];
+  if (badge === undefined) throw new Error('no Badge stories');
+  const Story = Object.values(composeStories(badge))[0];
+  if (Story === undefined) throw new Error('no Badge story');
+  const root = document.documentElement;
+  try {
+    await Story.run({ globals: { fontScale: 200 } });
+    expect(root.style.fontSize).toBe('200%');
+    await Story.run({ globals: { fontScale: '150' } });
+    expect(root.style.fontSize).toBe('150%');
+    await Story.run({ globals: { fontScale: 300 } });
+    expect(root.style.fontSize).toBe('100%');
+    await Story.run({ globals: { fontScale: '200%' } });
+    expect(root.style.fontSize).toBe('100%');
+    await Story.run();
+    expect(root.style.fontSize).toBe('100%');
+  } finally {
+    root.style.fontSize = '';
+  }
 });

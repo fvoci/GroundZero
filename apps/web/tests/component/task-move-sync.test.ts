@@ -292,6 +292,37 @@ describe('kanban save states', () => {
     expect(screen.getByRole('alert').textContent).toContain('그사이 다른 곳에서 업무가 바뀌어');
   });
 
+  // 카드는 저장 전에 새 열에 다시 그려진다(앞 요소가 사라짐). 저장을 기다리는 동안에도 초점이 문서 처음으로 빠지지 않는다.
+  it('keeps focus on the moved card while saving and after it is put back', async () => {
+    lists(start);
+    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
+    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    await mount();
+    card('a').focus();
+    await moveRight('a');
+    await flush();
+    expect(laneOf('a')).toBe('in_progress');
+    expect(card('a')).toHaveFocus();
+    save.reject(new ApiError(400, 'stale', 'x'));
+    await flush();
+    expect(laneOf('a')).toBe('todo');
+    expect(card('a')).toHaveFocus();
+  });
+
+  it('a save that ends late does not take back focus the user moved elsewhere', async () => {
+    lists(start, moved);
+    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
+    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    await mount();
+    card('a').focus();
+    await moveRight('a');
+    await flush();
+    card('b').focus();
+    save.resolve({ ...movedA, checklist: [] });
+    await flush();
+    expect(card('b')).toHaveFocus();
+  });
+
   it('lost response but saved on the server: confirms after reading the list again', async () => {
     const read = lists(start, moved);
     const move = vi.spyOn(api, 'moveTask').mockRejectedValue(new NetworkError('reset'));
@@ -563,19 +594,72 @@ describe('kanban save states', () => {
     expect(move).toHaveBeenLastCalledWith('b', 'in_progress', null, undefined);
   });
 
-  it('leaving the screen stops the timers and ignores late answers', async () => {
-    lists(start);
+  // 떠난 뒤 남는 가짜 타이머는 이 보드 것이 아니다: Svelte 이벤트 위임이 거는 1회성 0ms 타이머와 연결 확인 주기(전역,
+  // feedback.svelte.ts). 그래서 전체 타이머 수 0을 요구하지 않고 보드가 건 타이머(3초 지연 안내·10초 목록 대조)가 떠날 때
+  // 모두 지워지는지, 떠난 뒤 새 재조회·재전송이 없는지, 늦게 온 응답이 초점을 바꾸지 않는지 본다. 이미 보낸 저장 요청은
+  // 끝나도록 둔다(화면 이탈은 서버 저장 취소가 아니다).
+  it('leaving the screen clears the board timers and starts nothing afterwards', async () => {
+    const reads = lists(start);
+    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
+    const move = vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    const errors = vi.spyOn(console, 'error');
+    const setTimer = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    try {
+      const view = await mount();
+      card('a').focus();
+      await moveRight('a');
+      const boardTimers = setTimer.mock.results
+        .filter((_, i) => {
+          const ms = setTimer.mock.calls[i]?.[1];
+          return ms === 3000 || ms === 10000;
+        })
+        .map((r): unknown => r.value);
+      expect(boardTimers).toHaveLength(2);
+      const readsBefore = reads.mock.calls.length;
+      view.unmount();
+      for (const t of boardTimers) expect(clearTimer).toHaveBeenCalledWith(t);
+      outside.focus();
+      await flush(20000);
+      expect(reads.mock.calls.length).toBe(readsBefore);
+      expect(move).toHaveBeenCalledTimes(1);
+      save.reject(new NetworkError('reset'));
+      await flush(20000);
+      expect(reads.mock.calls.length).toBe(readsBefore);
+      expect(move).toHaveBeenCalledTimes(1);
+      expect(outside).toHaveFocus();
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      // 가짜 타이머를 되돌리기 전에 spy를 푼다(spy가 가짜 setTimeout을 "원본"으로 기억하고 있다).
+      setTimer.mockRestore();
+      clearTimer.mockRestore();
+      outside.remove();
+    }
+  });
+
+  // 같은 항목을 다시 열면 새 보드가 같은 id의 카드를 그린다. 떠난 보드의 늦은 성공 응답은 새 보드의 카드로 초점을
+  // 가져가거나 목록을 다시 읽지 않는다(새 보드는 이미 서버 상태를 읽어 보이고 있다).
+  it('a late answer for a board that was left does not touch a board opened afterwards', async () => {
+    const reads = lists(start);
     const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
     vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
-    const errors = vi.spyOn(console, 'error');
-    const view = await mount();
+    const first = await mount();
+    card('a').focus();
     await moveRight('a');
-    expect(vi.getTimerCount()).toBeGreaterThan(0);
-    view.unmount();
-    expect(vi.getTimerCount()).toBe(0);
-    save.reject(new NetworkError('reset'));
-    await flush(20000);
-    expect(errors).not.toHaveBeenCalled();
+    first.unmount();
+    reads.mockResolvedValue(moved);
+    await mount();
+    expect(laneOf('a')).toBe('in_progress');
+    expect(document.activeElement).toBe(document.body);
+    const readsAfterMount = reads.mock.calls.length;
+    save.resolve({ ...movedA, checklist: [] });
+    await flush();
+    expect(document.activeElement).toBe(document.body);
+    expect(reads.mock.calls.length).toBe(readsAfterMount);
+    expect(saveState('a')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('an older list read that arrives late does not overwrite a newer one', async () => {

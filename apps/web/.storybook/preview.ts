@@ -30,6 +30,14 @@ globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Respo
 
 /** 브라우저 글자 크기 설정을 흉내 낸다(rem 기준 크기 확인). 실제 브라우저·OS 설정 시험과는 다르다. */
 const FONT_SCALES = ['100', '150', '200'];
+/**
+ * 글자 크기 전역값을 지원하는 배율로 정한다. 도구 막대는 문자열('200')을 주지만 주소의 `globals=fontScale:200`은
+ * Storybook이 숫자(200)로 읽는다. 둘을 같은 배율로 보고, 그 밖의 값은 CSS에 넣지 않고 100%로 돌린다.
+ */
+function fontScaleOf(value: unknown): string {
+  const text = typeof value === 'number' ? String(value) : typeof value === 'string' ? value : '';
+  return FONT_SCALES.includes(text) ? text : '100';
+}
 
 const preview: Preview = {
   globalTypes: {
@@ -85,7 +93,7 @@ const preview: Preview = {
   async beforeEach({ globals }) {
     const locale: DisplayLocale =
       typeof globals.locale === 'string' ? (asLocale(globals.locale) ?? 'ko') : 'ko';
-    const scale = typeof globals.fontScale === 'string' ? globals.fontScale : '100';
+    const scale = fontScaleOf(globals.fontScale);
     // 로그인한 사람의 표시 설정 자리에 고정값을 둔다: 날짜·시각이 보는 컴퓨터의 시간대와 상관없이 같게 보인다.
     Object.assign(me, {
       userId: '',
@@ -97,7 +105,7 @@ const preview: Preview = {
     });
     await setLocale(locale, { reload: false });
     document.documentElement.lang = locale;
-    document.documentElement.style.fontSize = FONT_SCALES.includes(scale) ? `${scale}%` : '';
+    document.documentElement.style.fontSize = `${scale}%`;
     applyDocFont('sans');
     // 보는 컴퓨터의 시스템 설정과 상관없이 고른 밝기로 고정한다("시스템 설정 따르기"는 고르지 않는다).
     applyTheme(globals.theme === 'dark' ? 'dark' : 'light');

@@ -1,7 +1,7 @@
 // 개발 seed와 같은 합성 데이터(deploy/postgres/dev-ui-data.json)를 화면 타입으로 옮긴다. 내용(제목·본문·트리·
 // 스레드·상태)은 `cargo xtask dev`의 "UI 상태 예제" 워크스페이스와 같다. id·시각은 DB가 정하므로 여기서는 고정값을 쓴다
 // (시각은 기준 시각에서 몇 분씩 뒤, 표시 시간대는 preview.ts가 Asia/Seoul로 고정).
-import type { Module, ModuleKind, Role, Workspace } from '@fvoci/api-client';
+import type { MembersView, Module, ModuleKind, Role, Workspace } from '@fvoci/api-client';
 
 import type {
   CalendarView,
@@ -11,10 +11,13 @@ import type {
   ItemStatus,
   ItemView,
   NotificationView,
+  SearchResultView,
   SummaryView,
+  TaskPriority,
   TaskStatus,
+  TaskView,
 } from '$lib/api/client';
-import { ITEM_STATUSES, MODULE_KINDS, TASK_STATUSES } from '$lib/api/client';
+import { ITEM_STATUSES, MODULE_KINDS, TASK_PRIORITIES, TASK_STATUSES } from '$lib/api/client';
 
 import data from '../../../../deploy/postgres/dev-ui-data.json';
 
@@ -149,6 +152,12 @@ function asTaskStatus(value: string): TaskStatus {
   const status = TASK_STATUSES.find((s) => s === value);
   if (status === undefined) throw new TypeError(`unknown task status ${value}`);
   return status;
+}
+
+function asTaskPriority(value: string): TaskPriority {
+  const priority = TASK_PRIORITIES.find((p) => p === value);
+  if (priority === undefined) throw new TypeError(`unknown task priority ${value}`);
+  return priority;
 }
 
 export const MODULES: Module[] = MODULE_DATA.map((mod, i) => ({
@@ -377,6 +386,95 @@ export function calendarView(): CalendarView {
 
 export function emptyCalendarView(): CalendarView {
   return { tasks: [], projected_tasks: [], events: [], occurrences: [], dates: [], items: [] };
+}
+
+/** 사람 열쇠를 화면의 사람으로. id는 댓글 작성자(commentThreads)와 같다. */
+function person(key: string): { user_id: string; display_name: string } {
+  return { user_id: `u-${key}`, display_name: personName(key) };
+}
+
+/**
+ * 업무 항목의 업무 전체(칸반·간트). 개발 seed가 같은 순서로 만드는 업무이고 id·번호는 홈·달력의 업무 줄과 같다.
+ * seed에는 선행 관계가 없으므로 연결선이 필요한 story가 `predecessors`를 더한다.
+ */
+export function taskViews(): TaskView[] {
+  return data.tasks.map((t, i) => {
+    const row = TASK_ROWS[i];
+    if (row === undefined) throw new RangeError(`no task row ${String(i)}`);
+    return {
+      id: row.id,
+      item_id: TASK_ITEM.id,
+      module_id: PROJECT_MODULE.id,
+      workspace_id: WORKSPACE.id,
+      parent_id: null,
+      reference: row.reference,
+      title: t.title,
+      description: t.description,
+      status: row.status,
+      priority: asTaskPriority(t.priority),
+      start_date: row.start_date,
+      due_date: row.due_date,
+      estimate_minutes: t.estimate,
+      tags: t.tags,
+      milestone: t.milestone,
+      predecessors: [],
+      series: null,
+      occurrence_date: null,
+      assignees: t.assignees.map(person),
+      checklist_done: 0,
+      checklist_total: 0,
+      version: 1,
+      move_version: 1,
+      completed_at: row.status === 'done' ? at(10 + i) : null,
+      access: 'write',
+      updated_at: at(10 + i),
+    };
+  });
+}
+
+/**
+ * 검색 결과 줄(서버가 고른 결과를 그대로 보이는 화면용). 문서는 본문 앞부분을 요약으로, 업무는 설명을 요약으로 둔다.
+ * 검색어로 거르거나 순서를 정하지 않는다(서버의 일이다). story가 필요한 만큼 잘라 쓴다.
+ */
+export function searchResults(): SearchResultView[] {
+  const docs = data.documents.map((d, i): SearchResultView => {
+    const doc = DOCS[i];
+    if (doc === undefined) throw new RangeError(`no document ${d.key}`);
+    return {
+      kind: 'document',
+      id: doc.id,
+      title: d.title,
+      reference: doc.reference,
+      workspace_id: WORKSPACE.id,
+      item_id: null,
+      document_id: doc.id,
+      snippet: d.body === '' ? null : d.body.slice(0, 200),
+    };
+  });
+  const tasks = taskViews().map((t): SearchResultView => ({
+    kind: 'task',
+    id: t.id,
+    title: t.title,
+    reference: t.reference,
+    workspace_id: WORKSPACE.id,
+    item_id: TASK_ITEM.id,
+    document_id: null,
+    snippet: t.description,
+  }));
+  return [...docs, ...tasks];
+}
+
+/** 워크스페이스 멤버(owner는 소유자·관리자, writer는 작성자). 개발 seed의 두 테스트 사용자와 같다. */
+export function membersView(): MembersView {
+  return {
+    members: [
+      { ...person('owner'), email: null, role: 'admin', is_owner: true },
+      { ...person('writer'), email: null, role: 'writer', is_owner: false },
+    ],
+    my_role: 'admin',
+    i_am_owner: true,
+    pending_owner: null,
+  };
 }
 
 /**

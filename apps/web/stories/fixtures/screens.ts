@@ -2,7 +2,9 @@
 // 빌드 정보(/healthz)를 story 동안만 바꾼다. 실제 서버에 닿는 요청은 하나도 보내지 않는다(preview.ts의 요청 차단).
 import { spyOn } from 'storybook/test';
 
+import type { TaskView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
+import { applyMove } from '$lib/features/tasks/board';
 import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
 import { router } from '$lib/router.svelte';
 
@@ -11,8 +13,11 @@ import {
   DOCS,
   homeView,
   itemsOf,
+  membersView,
   MODULES,
   notificationsView,
+  TASK_ITEM,
+  taskViews,
   WORKSPACE,
 } from './synthetic';
 
@@ -27,6 +32,14 @@ export interface ScreenApi {
   notifications: typeof api.notifications;
   myInvitations: typeof api.myInvitations;
   currentTimer: typeof api.currentTimer;
+  tasks: typeof api.tasks;
+  savedViews: typeof api.savedViews;
+  syncRecurrences: typeof api.syncRecurrences;
+  task: typeof api.task;
+  moveTask: typeof api.moveTask;
+  members: typeof api.members;
+  assignable: typeof api.assignable;
+  search: typeof api.search;
 }
 
 /** 응답이 오지 않는 요청(불러오는 중). */
@@ -34,7 +47,31 @@ export function never<T>(): Promise<T> {
   return new Promise<T>(() => undefined);
 }
 
-const DEFAULTS: ScreenApi = {
+/**
+ * 업무 항목의 업무 목록. story마다 새로 만들고, 기본 옮기기는 서버처럼 목록에 반영하고 이동 판을 올린다(자리 규칙은
+ * 화면과 같은 `applyMove`). 옮기기를 바꿔 끼운 story에서는 목록이 그대로다(서버가 아무것도 바꾸지 않음).
+ */
+function taskServer(): Pick<ScreenApi, 'tasks' | 'task' | 'moveTask'> {
+  let list: TaskView[] = taskViews();
+  const find = (id: string): TaskView => {
+    const found = list.find((t) => t.id === id);
+    if (found === undefined) throw new ApiError(404, 'not_found', 'task not found');
+    return found;
+  };
+  return {
+    tasks: (itemId) => Promise.resolve(itemId === TASK_ITEM.id ? list : []),
+    task: (id) => Promise.resolve({ ...find(id), checklist: [] }),
+    moveTask: (id, status, beforeId) => {
+      const before = find(id);
+      list = applyMove(list, id, { status, beforeId }).map((t) =>
+        t.id === id ? { ...t, move_version: before.move_version + 1 } : t,
+      );
+      return Promise.resolve({ ...find(id), checklist: [] });
+    },
+  };
+}
+
+const DEFAULTS: Omit<ScreenApi, 'tasks' | 'task' | 'moveTask'> = {
   modules: () => Promise.resolve(MODULES),
   wikiDocuments: () => Promise.resolve(DOCS),
   module: (id) => {
@@ -52,6 +89,14 @@ const DEFAULTS: ScreenApi = {
   notifications: () => Promise.resolve(notificationsView()),
   myInvitations: () => Promise.resolve([]),
   currentTimer: () => Promise.resolve(null),
+  savedViews: () => Promise.resolve([]),
+  syncRecurrences: () => Promise.resolve(0),
+  members: () => Promise.resolve(membersView()),
+  assignable: () =>
+    Promise.resolve(
+      membersView().members.map((p) => ({ user_id: p.user_id, display_name: p.display_name })),
+    ),
+  search: () => Promise.resolve([]),
 };
 
 /** 계정 메뉴가 묻는 빌드 정보(/healthz). 개발 빌드로 답한다. */
@@ -65,7 +110,7 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   // 앞 story에서 열어 둔 메뉴·서랍의 body 잠금(pointer-events)은 그 story가 사라진 뒤에야 풀린다. Storybook에서 story를
   // 바로 바꾸면 이 story의 클릭이 막히므로 먼저 푼다(tests/component/stories.test.ts의 afterEach와 같은 정리).
   document.body.style.removeProperty('pointer-events');
-  const stubs: ScreenApi = { ...DEFAULTS, ...overrides };
+  const stubs: ScreenApi = { ...DEFAULTS, ...taskServer(), ...overrides };
   spyOn(api, 'modules').mockImplementation(stubs.modules);
   spyOn(api, 'wikiDocuments').mockImplementation(stubs.wikiDocuments);
   spyOn(api, 'module').mockImplementation(stubs.module);
@@ -75,6 +120,14 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   spyOn(api, 'notifications').mockImplementation(stubs.notifications);
   spyOn(api, 'myInvitations').mockImplementation(stubs.myInvitations);
   spyOn(api, 'currentTimer').mockImplementation(stubs.currentTimer);
+  spyOn(api, 'tasks').mockImplementation(stubs.tasks);
+  spyOn(api, 'savedViews').mockImplementation(stubs.savedViews);
+  spyOn(api, 'syncRecurrences').mockImplementation(stubs.syncRecurrences);
+  spyOn(api, 'task').mockImplementation(stubs.task);
+  spyOn(api, 'moveTask').mockImplementation(stubs.moveTask);
+  spyOn(api, 'members').mockImplementation(stubs.members);
+  spyOn(api, 'assignable').mockImplementation(stubs.assignable);
+  spyOn(api, 'search').mockImplementation(stubs.search);
 
   // 사이드바 목록은 앱 전체가 같이 쓰는 저장소다. 같은 워크스페이스라도 앞 story의 목록·오류를 이어 받지 않게 비운다.
   workspaceNav.workspaceId = undefined;

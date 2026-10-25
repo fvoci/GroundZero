@@ -249,14 +249,20 @@ pnpm --filter @fvoci/web run build-storybook  # target/storybook-static
   import하고 Storybook용 복제·별도 CSS·제품 코드의 Storybook 분기를 만들지 않는다. 대화상자처럼 조립이 필요한 것만
   제품 화면과 같은 방식으로 조립한다.
 - `.storybook/preview.ts`가 제품의 `app.css`·서체·번역을 쓰고, 표시 설정(한국어·Asia/Seoul)을 고정한다. 도구 막대로 언어,
-  글자 크기(루트 글꼴 100·150·200%, 브라우저 설정의 흉내), 밝기(밝게·어둡게, 앱과 같은 `applyTheme`, 기본 밝게), 375·500px·데스크톱
+  글자 크기(루트 글꼴 100·150·200%, 브라우저 설정의 흉내. 주소의 `globals=fontScale:200`도 같은 배율을 적용하며, 그때 도구 막대 제목은 Storybook이 값을 숫자로 읽어 기본 제목으로 보일 수 있다), 밝기(밝게·어둡게, 앱과 같은 `applyTheme`, 기본 밝게), 375·500px·데스크톱
   화면 폭을 바꾼다.
 - 합성 데이터는 [dev-ui-data.json](../deploy/postgres/dev-ui-data.json) 하나를 개발 seed와 함께 쓴다. story(`stories/fixtures/synthetic.ts`)와
   `cargo xtask dev`의 "UI 상태 예제" 워크스페이스는 문서 제목·본문·트리, 댓글 스레드·답글·해결, 업무 제목·상태·우선순위·담당자가
   같다. id·시각은 DB가 정하므로 story는 고정값을 쓰고, 사람은 개발 Keycloak 테스트 사용자 둘(이름은 `tests/synthetic-data.test.ts`가 대조)뿐이다.
 - 서버 데이터가 필요한 story는 `api`의 함수를 story의 `beforeEach`에서 바꿔 끼운다(`spyOn`). 같은 원점의
   `/api`·`/auth`·`/healthz`와 다른 원점 요청은 막고 콘솔 오류로 남긴다. 실제 OIDC·DB·운영 API에 연결하지 않는다.
+  바꿔 끼울 함수는 `stories/fixtures/screens.ts`의 `setUpScreen` 한곳에 더한다(업무 목록·옮기기·검색 등). mock은 서버 응답만
+  흉내 내고 자리·충돌·권한 판단은 제품 코드에 맡긴다(옮긴 자리는 화면과 같은 `applyMove`).
+- 화면이 "지금"을 읽으면(간트의 오늘 등) `fixClock()`(`stories/fixtures/clock.ts`)으로 합성 데이터의 기준일에 맞춘다. 화면
+  조각만 그리는 story는 앱 본문과 같은 `@container` 틀(`stories/fixtures/MainFrame.svelte`)에 넣어야 앱과 같은 열로 나뉜다.
 - `tests/component/stories.test.ts`가 모든 story를 jsdom에서 다시 그리고 play 함수(키보드·실패·입력 보존)를 실행한다.
+  Vitest 파일 모듈 캐시가 예전 story 목록을 쓰면 새 story가 빠지므로 디스크의 story 파일과 맞춰 보고 실패한다. 그때는
+  `pnpm --filter @fvoci/web exec vitest --clearCache` 뒤 다시 실행한다. 화면 타이머(칸반 "응답 지연" 3초 등)는 기다리지 않는다.
   jsdom은 배치·초점 가두기·애니메이션을 계산하지 않으므로 표시·줄바꿈·넘침·대화상자 초점 가두기는 Storybook을 실제
   브라우저(창이 보이는 상태)로 열어 확인한다. 자동 검사가 화면 낭독기·키보드 수동 검증을 대신하지 않는다.
 - 로그인·API·DB 저장·공동 편집 흐름은 Storybook 범위가 아니다. 실제 브라우저 회귀 시험은 #118에서 다룬다.

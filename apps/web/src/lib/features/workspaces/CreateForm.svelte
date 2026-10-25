@@ -66,7 +66,7 @@
 </script>
 
 <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void submit(e)} novalidate>
-  <div class="flex min-w-40 flex-1 flex-col gap-1">
+  <div class="flex min-w-0 flex-1 basis-40 flex-col gap-1">
     <Label for={id}>{label}</Label>
     <Input
       bind:ref={input}

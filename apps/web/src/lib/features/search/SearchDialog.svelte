@@ -418,7 +418,9 @@
       {/if}
     </div>
     {#if results.length > 0}
-      <ul bind:this={list} class="flex flex-col gap-1" data-testid="search-results">
+      <!-- 대화상자 본문은 격자라 칸 폭이 내용 폭을 따라간다. 줄바꿈하지 않는 긴 제목(truncate)이 칸을 넓혀 대화상자 전체가
+           옆으로 넘치지 않게 목록의 최소 폭을 0으로 둔다(제목은 말줄임, 요약은 줄바꿈). -->
+      <ul bind:this={list} class="flex min-w-0 flex-col gap-1" data-testid="search-results">
         {#each results as r, index (`${r.kind}:${r.id}`)}
           <li>
             <button
