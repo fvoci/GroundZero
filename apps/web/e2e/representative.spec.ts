@@ -175,6 +175,11 @@ for (const theme of ['light', 'dark'] as const) {
       await expect
         .poll(async () => str(await next.api.get(`/api/tasks/${taskId}`), 'description'))
         .toBe(continued);
+      // 서버 확인만으로는 화면이 아직 저장 중일 수 있고, 저장 중의 Esc는 제품 규칙대로 무시된다(CI fe73631f에서 재현). 저장이
+      // 끝나면 저장 단추로 초점이 돌아오고 단추가 다시 활성화된다. 그 뒤에 닫는다.
+      const save = dialog.getByRole('button', { name: '저장', exact: true });
+      await expect(save).toBeFocused();
+      await expect(save).toBeEnabled();
       await next.page.keyboard.press('Escape');
       await expect(dialog).toBeHidden();
       await next.page.goto('/');
