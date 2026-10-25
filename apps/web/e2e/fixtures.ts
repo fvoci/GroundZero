@@ -229,6 +229,20 @@ export interface Session {
   endTrace: () => Promise<void>;
 }
 
+/** 개인 화면은 저장소 주입 없이 실제 전환기로 조직을 고른다. 좁은 화면에서는 서랍을 연다. */
+export async function selectOrganization(
+  page: Page,
+  organization: { id: string; name: string },
+): Promise<void> {
+  const switcher = page.getByTestId('organization-switcher');
+  const narrow = (page.viewportSize()?.width ?? 1280) < 768;
+  if (narrow) await page.getByRole('button', { name: '사이드바 열고 닫기' }).click();
+  await switcher.click();
+  await page.getByRole('menuitem').filter({ hasText: organization.name }).click();
+  await expect(switcher).toContainText(organization.name);
+  if (narrow) await page.keyboard.press('Escape');
+}
+
 /** 실패 증거를 남길 브라우저 컨텍스트(이름은 증거 파일 이름에 쓴다). */
 interface Tracked {
   name: string;

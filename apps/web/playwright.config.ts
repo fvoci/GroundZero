@@ -40,14 +40,19 @@ export default defineConfig({
     {
       name: 'desktop',
       // 프로젝트의 testIgnore는 위 설정을 대신하므로 함께 적는다.
-      testIgnore: [...smokeIgnore, 'layout-control.spec.ts'],
+      testIgnore: [...smokeIgnore, 'layout-control.spec.ts', '**/representative.spec.ts'],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
     },
     {
       // 375px 이하 viewport. 실제 휴대 기기·모바일 브라우저 엔진 시험이 아니다.
       name: 'narrow-375',
       // 좁은 화면이 의미 있는 배치 시험만 돈다.
-      testMatch: ['layout.spec.ts', 'layout-control.spec.ts', 'gantt.spec.ts'],
+      testMatch: [
+        '00-representative.spec.ts',
+        'layout.spec.ts',
+        'layout-control.spec.ts',
+        'gantt.spec.ts',
+      ],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 375, height: 812 },
