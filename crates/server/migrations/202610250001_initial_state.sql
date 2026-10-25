@@ -1556,7 +1556,7 @@ CREATE FUNCTION fvoci.app_unshare_document(p_share uuid, p_ids uuid[]) RETURNS v
 
 ALTER FUNCTION fvoci.app_unshare_document(p_share uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_shared_with_me() RETURNS TABLE(id uuid, title text, permission text, shared_by text, updated_at timestamp with time zone)
+CREATE FUNCTION fvoci.app_shared_with_me(p_organization uuid DEFAULT NULL::uuid) RETURNS TABLE(id uuid, title text, permission text, shared_by text, updated_at timestamp with time zone)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
@@ -1564,12 +1564,14 @@ CREATE FUNCTION fvoci.app_shared_with_me() RETURNS TABLE(id uuid, title text, pe
     FROM document_shares s
     JOIN documents d ON d.id = s.document_id
     JOIN users granter ON granter.id = s.granted_by
+    -- 공유받은 문서는 현재 조직 범위(D-111): p_organization이 NULL이면 전체. 공유 행의 조직은 공유를 준 조직이다(D-114).
     WHERE s.grantee_user_id = app_user_id() AND app_access('document', d.id) <> 'none'
+      AND (p_organization IS NULL OR s.organization_id = p_organization)
     ORDER BY d.updated_at DESC
   $$;
 
 
-ALTER FUNCTION fvoci.app_shared_with_me() OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_shared_with_me(p_organization uuid) OWNER TO fvoci_migrator;
 
 -- 문서가 그 자리에 있을 때 볼 수 있는 사람과 등급. 후보는 소유자·공간 멤버·공유받은 사람이다.
 CREATE FUNCTION fvoci.app_document_audience(p_doc uuid, p_workspace uuid, p_item uuid, p_owner uuid) RETURNS TABLE(user_id uuid, grade text)
@@ -12980,8 +12982,8 @@ REVOKE ALL ON FUNCTION fvoci.app_set_workspace_realtime(p_workspace uuid, p_enab
 GRANT ALL ON FUNCTION fvoci.app_set_workspace_realtime(p_workspace uuid, p_enabled boolean, p_ids uuid[]) TO fvoci_app;
 
 
-REVOKE ALL ON FUNCTION fvoci.app_shared_with_me() FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_shared_with_me() TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_shared_with_me(p_organization uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_shared_with_me(p_organization uuid) TO fvoci_app;
 
 
 REVOKE ALL ON FUNCTION fvoci.app_shift_excluded_dates() FROM PUBLIC;
