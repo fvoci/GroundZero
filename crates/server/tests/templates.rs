@@ -322,6 +322,8 @@ async fn restoring_a_document_leaves_tasks_and_progress_alone() {
     )
     .await;
     assert_eq!(task_now.json["status"], "done");
+    // D-116: 상태 이름과 별개로 집계에 쓰는 범주도 보존한다.
+    assert_eq!(task_now.json["status_category"], "done");
     let course_now = send(
         &app,
         Method::GET,

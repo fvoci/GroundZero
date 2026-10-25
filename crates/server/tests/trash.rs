@@ -375,12 +375,15 @@ async fn trashed_content_is_closed_everywhere_and_others_children_stay() {
     .json;
     let bob_email = unique_email("bob");
     let bob = login_with_email(&state, "bob", &bob_email, true).await;
+    // D-114: 공간 밖 공유 대상도 같은 조직에 준비한다.
+    let organization = common::organization_of_workspace(&ws).await;
+    common::join_organization(organization, &bob, "member").await;
     let r = send(
         &app,
         Method::POST,
         &format!("/api/documents/{}/shares", doc["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "email": bob_email, "permission": "write" })),
+        Some(json!({ "email": bob_email, "permission": "write", "organization_id": organization })),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
@@ -536,12 +539,15 @@ async fn purged_repeating_occurrences_are_not_recreated() {
             .await
             .unwrap()
     };
-    send(&app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(&admin),
+    let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(&admin),
          Some(json!({ "base_version": t["version"], "title": "점검", "description": "", "status": "todo", "priority": "none",
                       "start_date": null, "due_date": yesterday, "estimate_minutes": null, "tags": [], "assignee_ids": [],
                       "milestone": false }))).await;
-    send(&app, Method::PUT, &format!("/api/tasks/{}/recurrence", t["id"].as_str().unwrap()), Some(&admin),
-         Some(json!({ "rule": {"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null}, "timezone": "Asia/Seoul" }))).await;
+    assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
+    // D-125: 반복 규칙 편집의 기준은 기존 규칙이며 최초 설정은 null이다.
+    let recurrence = send(&app, Method::PUT, &format!("/api/tasks/{}/recurrence", t["id"].as_str().unwrap()), Some(&admin),
+         Some(json!({ "base": null, "rule": {"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null}, "timezone": "Asia/Seoul" }))).await;
+    assert_eq!(recurrence.status, StatusCode::OK, "{:?}", recurrence.json);
     let tasks = send(
         &app,
         Method::GET,
@@ -705,10 +711,13 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     let shared_uri = format!("/api/documents/{}", shared_doc["id"].as_str().unwrap());
     let carol_email = unique_email("carol");
     let carol = login_with_email(&state, "carol", &carol_email, true).await;
+    // D-114: 모듈 밖 공유도 조직 경계 안에서만 허용한다.
+    let organization = common::organization_of_workspace(&ws).await;
+    common::join_organization(organization, &carol, "member").await;
     let r = post(
         &admin,
         format!("{shared_uri}/shares"),
-        json!({ "email": carol_email, "permission": "write" }),
+        json!({ "email": carol_email, "permission": "write", "organization_id": organization }),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
@@ -1511,6 +1520,7 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
         add_member(&app, &state, &admin, &ws, "doc-helper", "member").await;
     let doc = create_doc(&app, &author, &ws, "비공개 문서").await;
     let doc_id = doc["id"].as_str().unwrap();
+    let organization = common::organization_of_workspace(&ws).await;
     let private = send(
         &app,
         Method::PUT,
@@ -1525,7 +1535,7 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&author),
-        Some(json!({ "email": helper_email, "permission": "write" })),
+        Some(json!({ "email": helper_email, "permission": "write", "organization_id": organization })),
     )
     .await;
     assert_eq!(shared.status, StatusCode::CREATED, "{:?}", shared.json);
@@ -1586,7 +1596,7 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&author),
-        Some(json!({ "email": helper_email, "permission": "write" })),
+        Some(json!({ "email": helper_email, "permission": "write", "organization_id": organization })),
     )
     .await;
     assert_eq!(reshared.status, StatusCode::CREATED, "{:?}", reshared.json);

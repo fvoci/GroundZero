@@ -43,7 +43,14 @@ async fn save_body(app: &Router, user: &TestUser, doc: &Value, body: Value) -> (
 }
 
 async fn get(app: &Router, user: &TestUser, uri: &str) -> (StatusCode, Value) {
-    let r = send(app, Method::GET, uri, Some(user), None).await;
+    let mut r = send(app, Method::GET, uri, Some(user), None).await;
+    if uri == "/api/me/notifications" {
+        // D-118: 수락한 초대 알림은 남으므로 이 시험의 언급 알림과 분리한다.
+        r.json
+            .as_array_mut()
+            .unwrap()
+            .retain(|row| row["kind"] != "invite");
+    }
     (r.status, r.json)
 }
 
@@ -241,6 +248,11 @@ async fn mentions_notify_once_only_people_who_can_read_and_never_grant_access() 
     let (_, inbox) = get(&app, &member, "/api/me/notifications").await;
     assert_eq!(inbox.as_array().unwrap().len(), 1, "{inbox:?}");
     assert_eq!(inbox[0]["kind"], "mention");
+    assert_eq!(
+        inbox[0]["organization_id"],
+        json!(common::organization_of_workspace(&ws).await)
+    );
+    assert_eq!(inbox[0]["invitation_id"], Value::Null);
     assert_eq!(inbox[0]["actor_name"], "admin");
     assert_eq!(inbox[0]["document_title"], "회의록");
     assert_eq!(inbox[0]["read"], false);

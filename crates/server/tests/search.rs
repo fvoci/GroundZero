@@ -44,6 +44,35 @@ fn client(state: &AppState) -> &SearchClient {
     state.search.as_ref().unwrap()
 }
 
+// D-111·D-112: 검색 대기열 전용 DB에서는 조직도 같은 DB에 준비한다.
+async fn fresh_workspace(app: &Router, user: &TestUser, db: &sqlx::PgPool, name: &str) -> String {
+    let mut tx = db.begin().await.unwrap();
+    sqlx::query("INSERT INTO fvoci.server_admins (user_id) VALUES ($1)")
+        .bind(user.id.0)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("SELECT set_config('app.user_id', $1::text, true)")
+        .bind(user.id.0)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let organization: Uuid =
+        sqlx::query_scalar("SELECT fvoci.app_create_organization($1, $2, $3, $4)")
+            .bind(Uuid::now_v7())
+            .bind(name)
+            .bind(user.id.0)
+            .bind((0..3).map(|_| Uuid::now_v7()).collect::<Vec<_>>())
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    tx.commit().await.unwrap();
+    let r = send(app, Method::POST, "/api/workspaces", Some(user),
+        Some(json!({ "request_id": new_request_id(), "organization_id": organization, "name": name }))).await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    r.json["id"].as_str().unwrap().to_owned()
+}
+
 async fn search(app: &Router, user: &TestUser, q: &str) -> Value {
     let r = send(
         app,
@@ -1040,7 +1069,7 @@ async fn pending_index_tasks_are_tracked_until_they_succeed() {
     };
 
     let admin_user = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin_user, "색인 작업").await;
+    let ws = fresh_workspace(&app, &admin_user, &owner, "색인 작업").await;
     let doc = common::create_doc(&app, &admin_user, &ws, "처음 제목").await;
     let id = doc["id"].as_str().unwrap().to_owned();
 
@@ -1167,7 +1196,7 @@ async fn drain_does_not_send_a_row_whose_generation_changed_after_the_claim() {
     fake.lock().unwrap().new_status = "succeeded".into();
 
     let user = login(&state, "admin").await;
-    let ws = create_workspace(&app, &user, "세대 재확인").await;
+    let ws = fresh_workspace(&app, &user, &owner, "세대 재확인").await;
     while drain(&state.db, &search, None).await.unwrap() > 0 {}
     let doc = common::create_doc(&app, &user, &ws, "세대가 바뀔 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
@@ -1306,12 +1335,14 @@ async fn a_document_shared_out_of_a_private_item_does_not_reveal_the_item() {
     .await;
     assert_eq!(doc.status, StatusCode::CREATED, "{:?}", doc.json);
     let doc_id = doc.json["id"].as_str().unwrap().to_owned();
+    // D-114: 개별 공유 행에 문서의 조직을 명시한다.
+    let organization = common::organization_of_workspace(&ws).await;
     let shared = send(
         &app,
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&admin),
-        Some(json!({ "email": email, "permission": "read" })),
+        Some(json!({ "email": email, "permission": "read", "organization_id": organization })),
     )
     .await;
     assert!(shared.status.is_success(), "{:?}", shared.json);
