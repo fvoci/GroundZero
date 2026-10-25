@@ -802,6 +802,12 @@ pub async fn save(
     // 잠그기 전에 권한을 판정한다(읽기 권한만 있으면 잠글 수 없고, 403과 404를 구분해야 한다).
     let access = access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
     if !access.can_write() {
+        // 쓸 수 없는 이유(권한 부족 403, 보관된 항목 409)는 SQL이 정한다(D-113·D-106).
+        sqlx::query("SELECT app_require_document($1, 'write')")
+            .bind(id)
+            .execute(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
         return Err(AppError::Forbidden);
     }
     let current = load_for_update(&mut tx, id)

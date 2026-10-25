@@ -222,15 +222,26 @@ async fn oidc_second_user_is_denied_first_users_documents() {
     let base = spawn_server(&[]).await;
     let alice = browser();
     let bob = browser();
-    assert_eq!(login(&alice, &base, USER1).await.0, 200);
+    let (status, me) = login(&alice, &base, USER1).await;
+    assert_eq!(status, 200, "{me:?}");
     assert_eq!(login(&bob, &base, USER2).await.0, 200);
+    // 워크스페이스는 조직 안에 만든다(D-111). 띄운 서버는 시험 DB를 같이 쓰므로 fixture 헬퍼로 조직을 준비한다.
+    let alice_user = common::TestUser {
+        id: fvoci_server::ids::UserId(me["id"].as_str().unwrap().parse().unwrap()),
+        cookie: String::new(),
+    };
+    let organization = common::organization_for(&alice_user).await;
 
     let (status, ws) = api(
         &alice,
         &base,
         reqwest::Method::POST,
         "/api/workspaces",
-        Some(json!({ "request_id": common::new_request_id(), "name": "OIDC 팀" })),
+        Some(json!({
+            "request_id": common::new_request_id(),
+            "organization_id": organization,
+            "name": "OIDC 팀"
+        })),
     )
     .await;
     assert_eq!(status, 201);

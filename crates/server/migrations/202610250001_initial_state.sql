@@ -1443,15 +1443,9 @@ CREATE FUNCTION fvoci.app_require_document_manager(p_doc uuid) RETURNS void
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-  DECLARE
-    v_access text := app_access('document', p_doc);
   BEGIN
-    IF v_access = 'none' THEN
-      RAISE EXCEPTION 'document not found' USING ERRCODE = 'P0002';
-    END IF;
-    IF v_access <> 'owner' THEN
-      RAISE EXCEPTION 'insufficient permission' USING ERRCODE = '42501';
-    END IF;
+    -- 문서 관리(공유·링크·설정)는 owner 등급 하나다(D-113·D-115). 404/보관 409/403의 구분은 app_require_document와 같다.
+    PERFORM app_require_document(p_doc, 'owner');
   END
   $$;
 
@@ -4339,7 +4333,7 @@ CREATE FUNCTION fvoci.app_add_time_entry(p_request_id uuid, p_started timestamp 
 
 ALTER FUNCTION fvoci.app_add_time_entry(p_request_id uuid, p_started timestamp with time zone, p_ended timestamp with time zone, p_paused integer, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
--- 번호는 범위별 카운터와 대장으로 할당하며 지운 번호도 다시 쓰지 않는다. D-48: docs/decisions.md#d-48.
+-- 번호는 범위별 카운터와 대장으로 할당하며 지운 번호도 다시 쓰지 않는다. D-48: docs/decisions/modules.md#d-48.
 CREATE FUNCTION fvoci.app_allocate_number(p_workspace uuid, p_scope uuid, p_kind text, p_target uuid) RETURNS bigint
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -5453,9 +5447,9 @@ CREATE FUNCTION fvoci.app_create_session(p_token_hash bytea, p_user uuid, p_id_t
 
 ALTER FUNCTION fvoci.app_create_session(p_token_hash bytea, p_user uuid, p_id_token text, p_ttl_secs bigint, p_replaces bytea, p_ids uuid[]) OWNER TO fvoci_migrator;
 
--- D-105: 업무 한 건의 필드·담당·번호·감사 기록을 같은 트랜잭션으로 만든다. docs/decisions.md#d-105.
+-- D-105: 업무 한 건의 필드·담당·번호·감사 기록을 같은 트랜잭션으로 만든다. docs/decisions/tasks.md#d-105.
 -- 같은 요청 ID는 입력을 덮거나 비교하지 않고 기존 업무를 반환한다. 삭제된 결과는 FV004이며 권한 검사 뒤에만 알린다.
--- 잠금은 열 → 상위 업무 → 항목 공유 → 멤버 → 번호 순서다. docs/development.md#task-create-contract.
+-- 잠금은 열 → 상위 업무 → 항목 공유 → 멤버 → 번호 순서다. D-105: docs/decisions/tasks.md#d-105.
 CREATE FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_description text, p_status text, p_priority text, p_start date, p_due date, p_estimate integer, p_tags text[], p_assignees uuid[], p_milestone boolean, p_ids uuid[]) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -6335,7 +6329,7 @@ CREATE FUNCTION fvoci.app_guard_series_root() RETURNS trigger
 
 ALTER FUNCTION fvoci.app_guard_series_root() OWNER TO fvoci_migrator;
 
--- D-88: 앱이 공급한 UUIDv7만 소비한다. DB 생성이나 부족한 ID의 대체는 없다. docs/sql-id-contract.md.
+-- D-88: 앱이 공급한 UUIDv7만 소비한다. DB 생성이나 부족한 ID의 대체는 없다. docs/decisions/database.md#d-88.
 -- FV001은 개수 조회 뒤 대상이 늘어난 경합으로 재시도할 수 있는 부족, FV002는 잘못된 ID·위치다.
 -- HTTP는 부족을 409로 돌려주고 작업 프로세스는 개수 조회부터 트랜잭션 전체를 재시도한다.
 CREATE FUNCTION fvoci.app_id(p_ids uuid[], p_at integer) RETURNS uuid
@@ -7593,12 +7587,19 @@ CREATE FUNCTION fvoci.app_require_document(p_doc uuid, p_need text) RETURNS text
     AS $$
   DECLARE
     v_access text := app_access('document', p_doc);
+    v_item   uuid;
   BEGIN
     IF v_access = 'none' THEN
       RAISE EXCEPTION 'document not found' USING ERRCODE = 'P0002';
     END IF;
     IF (p_need = 'owner' AND v_access <> 'owner')
        OR (p_need = 'write' AND v_access NOT IN ('owner', 'write')) THEN
+      -- 보관된 항목 아래 문서는 read로 낮아진다(D-113). 항목 등급은 그대로이므로 항목에 쓸 수 있는 사람에게는 권한 부족이
+      -- 아니라 보관 상태를 알린다(D-106: 보관 중 변경은 409, 보관 해제 뒤 다시). 업무의 app_require_task_write와 같은 규칙.
+      SELECT item_id INTO v_item FROM documents WHERE id = p_doc;
+      IF v_item IS NOT NULL AND app_item_archived(v_item) AND app_access('item', v_item) IN ('owner', 'write') THEN
+        RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+      END IF;
       RAISE EXCEPTION 'insufficient permission' USING ERRCODE = '42501';
     END IF;
     RETURN v_access;
@@ -8190,7 +8191,7 @@ CREATE FUNCTION fvoci.app_set_episode_progress(p_episode uuid, p_status text, p_
 ALTER FUNCTION fvoci.app_set_episode_progress(p_episode uuid, p_status text, p_planned date, p_position integer, p_note text, p_today date) OWNER TO fvoci_migrator;
 
 -- 현재 규칙이 요청과 이미 같으면 재시도 성공으로 끝낸다. 다른 경우에만 잠근 행의 규칙과 읽은 기준을 비교한다.
--- 기준이 지난 요청은 규칙·판·감사를 덮지 않는다. docs/development.md#recurrence-contract.
+-- 기준이 지난 요청은 규칙·판·감사를 덮지 않는다. D-94·D-125: docs/decisions/tasks.md#d-94.
 CREATE FUNCTION fvoci.app_set_event_recurrence(p_event uuid, p_rule jsonb, p_base jsonb, p_ids uuid[]) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -9691,7 +9692,7 @@ CREATE FUNCTION fvoci.app_system_search_enqueue_all() RETURNS integer
 
 ALTER FUNCTION fvoci.app_system_search_enqueue_all() OWNER TO fvoci_migrator;
 
--- 검색 색인과 대체 SQL의 작성자·날짜 의미를 맞춘다. D-101·D-102: docs/development.md#search-contract.
+-- 검색 색인과 대체 SQL의 작성자·날짜 의미를 맞춘다. D-101·D-102: docs/decisions/notify-audit.md#d-101.
 -- 시각은 사용자 시간대의 하루 경계로, 날짜 전용 값은 날짜 그대로 비교한다. 최종 접근 권한은 서버가 다시 검사한다.
 CREATE FUNCTION fvoci.app_system_search_payload(p_kinds text[], p_ids uuid[]) RETURNS TABLE(kind text, id uuid, live boolean, workspace_id uuid, owner_user_id uuid, item_id uuid, title text, reference text, body jsonb, description text, created_by uuid, module_id uuid, status text, status_category text, assignee_ids uuid[], at timestamp with time zone, on_day date, file_key text, file_type text, file_size bigint)
     LANGUAGE sql STABLE SECURITY DEFINER
@@ -10896,7 +10897,7 @@ CREATE FUNCTION fvoci.app_update_time_entry(p_entry uuid, p_base_version integer
 ALTER FUNCTION fvoci.app_update_time_entry(p_entry uuid, p_base_version integer, p_started timestamp with time zone, p_ended timestamp with time zone, p_paused integer, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 -- D-103: 마지막 수정 요청 ID만 재시도 성공으로 인정한다. 이후 저장이 있으면 옛 기준 판으로 되돌릴 수 없다.
--- 판 확인과 갱신은 같은 행 잠금 안에서 한다. docs/development.md#version-contract.
+-- 판 확인과 갱신은 같은 행 잠금 안에서 한다. D-89: docs/decisions/tasks.md#d-89.
 CREATE FUNCTION fvoci.app_update_view(p_request uuid, p_view uuid, p_base_version integer, p_config jsonb) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -10959,7 +10960,7 @@ CREATE FUNCTION fvoci.app_upsert_user(p_issuer text, p_subject text, p_email tex
 ALTER FUNCTION fvoci.app_upsert_user(p_issuer text, p_subject text, p_email text, p_email_verified boolean, p_display_name text, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 -- 요청 사용자는 트랜잭션의 app.user_id다. 미설정·빈 값은 NULL이며 사용자 RLS·권한 검사는 거부한다.
--- app_system_*의 명시적인 사용자 없음 경로는 서버 작업용이다. docs/decisions.md#d-08.
+-- app_system_*의 명시적인 사용자 없음 경로는 서버 작업용이다. docs/decisions/access.md#d-08.
 CREATE FUNCTION fvoci.app_user_id() RETURNS uuid
     LANGUAGE sql STABLE
     SET search_path TO 'fvoci', 'pg_temp'

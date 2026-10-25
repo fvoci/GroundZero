@@ -835,9 +835,11 @@ async fn reset_copy_merges_lanes_without_duplicate_positions() {
             )
             .await
             .unwrap();
+            // 상태는 항목별 정의(D-116): 이름과 열 순서는 task_statuses에서 온다.
             let rows: Vec<(String, String, String)> = sqlx::query_as(
-                "SELECT title, status, position::text FROM fvoci.tasks WHERE item_id = $1::uuid \
-                 ORDER BY array_position(ARRAY['todo', 'in_progress', 'done'], status), position, number",
+                "SELECT t.title, s.name, t.position::text FROM fvoci.tasks t \
+                 JOIN fvoci.task_statuses s ON s.id = t.status_id WHERE t.item_id = $1::uuid \
+                 ORDER BY s.position, t.position, t.number",
             )
             .bind(item)
             .fetch_all(&mut conn)

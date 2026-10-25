@@ -603,6 +603,48 @@ async fn the_designated_initial_admin_gets_the_first_workspace_once() {
             .unwrap(),
         None
     );
+    // D-112·D-51: 초기 관리자는 서버 관리자이자 첫 조직의 관리자이고 첫 워크스페이스는 그 조직 안에 있다. 다시 불러도
+    // 조직·워크스페이스가 늘지 않고, 먼저 로그인한 다른 사람은 아무 권한도 얻지 않는다.
+    {
+        use sqlx::Connection as _;
+        let url = fresh.db.migration_url.as_ref().unwrap().expose().to_owned();
+        let mut owner = sqlx::PgConnection::connect(&url).await.unwrap();
+        let (is_server_admin, organizations, admin_of, in_organization): (bool, i64, i64, bool) =
+            sqlx::query_as(
+                "SELECT EXISTS (SELECT 1 FROM fvoci.server_admins WHERE user_id = $1),
+                        (SELECT count(*) FROM fvoci.organizations),
+                        (SELECT count(*) FROM fvoci.organization_members WHERE user_id = $1 AND role = 'admin'),
+                        EXISTS (SELECT 1 FROM fvoci.workspaces w
+                                JOIN fvoci.organization_members m
+                                  ON m.organization_id = w.organization_id AND m.user_id = $1
+                                WHERE w.id = $2)",
+            )
+            .bind(user.0)
+            .bind(ws.unwrap())
+            .fetch_one(&mut owner)
+            .await
+            .unwrap();
+        assert!(is_server_admin, "the initial admin is a server admin");
+        assert_eq!(
+            organizations, 1,
+            "one organization, also after the second claim"
+        );
+        assert_eq!(admin_of, 1, "organization admin of the first organization");
+        assert!(
+            in_organization,
+            "the first workspace belongs to that organization"
+        );
+        let stranger_grants: i64 = sqlx::query_scalar(
+            "SELECT (SELECT count(*) FROM fvoci.server_admins WHERE user_id = $1)
+                  + (SELECT count(*) FROM fvoci.organization_members WHERE user_id = $1)",
+        )
+        .bind(stranger_id.0)
+        .fetch_one(&mut owner)
+        .await
+        .unwrap();
+        assert_eq!(stranger_grants, 0, "someone else gets nothing");
+        owner.close().await.unwrap();
+    }
     let me = common::TestUser {
         id: user,
         cookie: format!("{SESSION_COOKIE}={token}"),

@@ -80,6 +80,8 @@ async fn invitation_requires_the_verified_invited_email() {
 
     // 대소문자가 달라도 같은 이메일이다. 검증된 대상은 초대를 보고 수락한다.
     let bob = login_with_email(&state, "bob", &email.to_uppercase(), true).await;
+    // 워크스페이스 초대는 조직 멤버만 수락한다(D-114).
+    common::join_organization(common::organization_of_workspace(&ws).await, &bob, "member").await;
     let mine = send(&app, Method::GET, "/api/invitations", Some(&bob), None).await;
     assert_eq!(mine.json[0]["workspace_name"], "초대");
     assert_eq!(mine.json[0]["role"], "member");
@@ -803,6 +805,12 @@ async fn revoking_an_invitation_being_accepted_does_not_overwrite_the_acceptance
     let ws = create_workspace(&app, &admin, "철회 경합").await;
     let email = unique_email("invitee");
     let invitee = login_with_email(&state, "invitee", &email, true).await;
+    common::join_organization(
+        common::organization_of_workspace(&ws).await,
+        &invitee,
+        "member",
+    )
+    .await;
     let inv = invite(&app, &admin, &ws, &email, "member").await;
     let inv_id: uuid::Uuid = inv["id"].as_str().unwrap().parse().unwrap();
 

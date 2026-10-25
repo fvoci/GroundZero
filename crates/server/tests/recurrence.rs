@@ -70,13 +70,25 @@ async fn dated_task(app: &Router, user: &TestUser, item: &Value, title: &str, du
     r.json
 }
 
+/// 반복 규칙을 처음 정한다(기준 규칙 없음).
 async fn repeat(app: &Router, user: &TestUser, task: &Value, rule: Value) -> (StatusCode, Value) {
+    repeat_from(app, user, task, rule, Value::Null).await
+}
+
+/// 반복 규칙을 바꾼다. `base`는 편집을 시작할 때 본 규칙이다(D-125: 지금 규칙이 기준과도 새 규칙과도 다르면 409).
+async fn repeat_from(
+    app: &Router,
+    user: &TestUser,
+    task: &Value,
+    rule: Value,
+    base: Value,
+) -> (StatusCode, Value) {
     let r = send(
         app,
         Method::PUT,
         &format!("/api/tasks/{}/recurrence", task["id"].as_str().unwrap()),
         Some(user),
-        Some(json!({ "rule": rule, "timezone": "Asia/Seoul" })),
+        Some(json!({ "rule": rule, "timezone": "Asia/Seoul", "base": base })),
     )
     .await;
     (r.status, r.json)
@@ -318,7 +330,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
     drop(tx);
 
     // 멈추면 이미 만든 회차는 남고 예정도 사라진다.
-    let (status, stopped) = repeat(&app, &admin, &root, Value::Null).await;
+    let (status, stopped) = repeat_from(&app, &admin, &root, Value::Null, daily.clone()).await;
     assert_eq!(status, StatusCode::OK, "{stopped:?}");
     assert_eq!(stopped["series"]["rule"], Value::Null);
     let cal = send(
@@ -493,13 +505,21 @@ async fn changing_a_rule_applies_from_today_and_the_template_stays_top_level() {
     )
     .await;
     let weekly = json!({"freq":"weekly","interval":1,"weekdays":[],"until":null,"count":null});
-    assert_eq!(repeat(&app, &admin, &root, weekly).await.0, StatusCode::OK);
+    assert_eq!(
+        repeat(&app, &admin, &root, weekly.clone()).await.0,
+        StatusCode::OK
+    );
     // 4주 전부터 매주: 기준일 포함 5개 + 다음 하나.
     let before = tasks(&app, &admin, &item).await.len();
     assert_eq!(before, 6);
     // 매일로 바꾸면 지난 28일을 채우지 않고 오늘부터만(오늘·내일, 이미 있는 날은 그대로).
     let daily = json!({"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null});
-    assert_eq!(repeat(&app, &admin, &root, daily).await.0, StatusCode::OK);
+    assert_eq!(
+        repeat_from(&app, &admin, &root, daily.clone(), weekly)
+            .await
+            .0,
+        StatusCode::OK
+    );
     let after = tasks(&app, &admin, &item).await;
     let new_dates: Vec<String> = after
         .iter()
@@ -542,7 +562,9 @@ async fn changing_a_rule_applies_from_today_and_the_template_stays_top_level() {
     let early =
         json!({"freq":"daily","interval":1,"weekdays":[],"until":"2000-01-01","count":null});
     assert_eq!(
-        repeat(&app, &admin, &root, early).await.0,
+        repeat_from(&app, &admin, &root, early, daily.clone())
+            .await
+            .0,
         StatusCode::BAD_REQUEST
     );
     let cal = send(
@@ -909,21 +931,25 @@ async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves()
         .await;
     }
 
-    // 사용자 쪽: 완료 열을 잡고(완료 업무를 할 일로 옮기는 중) 할 일 열을 기다린다.
+    // 사용자 쪽: 칸반 이동과 같은 순서(열 id 순, D-116)로 첫 열을 잡고 마지막 열을 기다린다(완료 업무를 할 일로 옮기는 중).
     let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&url).await.unwrap();
+    let lanes: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM fvoci.task_statuses WHERE item_id = $1::uuid ORDER BY id",
+    )
+    .bind(&item_id)
+    .fetch_all(&owner)
+    .await
+    .unwrap();
+    assert_eq!(lanes.len(), 3, "default statuses");
     let mut t1 = owner.begin().await.unwrap();
     let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
         .fetch_one(&mut *t1)
         .await
         .unwrap();
-    let lane = |status: &str| {
-        format!(
-            "SELECT pg_advisory_xact_lock(hashtextextended('fvoci-lane:' || $1 || ':{status}', 0))"
-        )
-    };
-    sqlx::query(&lane("done"))
-        .bind(&item_id)
+    let lane = "SELECT pg_advisory_xact_lock(hashtextextended('fvoci-lane:' || $1::text, 0))";
+    sqlx::query(lane)
+        .bind(lanes[0])
         .execute(&mut *t1)
         .await
         .unwrap();
@@ -945,14 +971,14 @@ async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves()
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    assert!(blocked, "the tick never waited on the done lane");
-    let todo = tokio::time::timeout(
+    assert!(blocked, "the tick never waited on the first lane");
+    let last = tokio::time::timeout(
         std::time::Duration::from_secs(15),
-        sqlx::query(&lane("todo")).bind(&item_id).execute(&mut *t1),
+        sqlx::query(lane).bind(lanes[2]).execute(&mut *t1),
     )
     .await
     .expect("the user side waited too long");
-    assert!(todo.is_ok(), "{todo:?}");
+    assert!(last.is_ok(), "{last:?}");
     t1.commit().await.unwrap();
     tick.await.unwrap().unwrap();
 
@@ -1003,10 +1029,17 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
 
     let url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&url).await.unwrap();
-    // 다른 연결이 앞 항목의 완료 열을 쥐고 있다.
+    // 다른 연결이 앞 항목의 첫 열(열 id 순, 뿌리 업무의 할 일 열)을 쥐고 있다.
+    let first_lane: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM fvoci.task_statuses WHERE item_id = $1::uuid ORDER BY id LIMIT 1",
+    )
+    .bind(&items[0])
+    .fetch_one(&owner)
+    .await
+    .unwrap();
     let mut holder = owner.acquire().await.unwrap();
-    sqlx::query("SELECT pg_advisory_lock(hashtextextended('fvoci-lane:' || $1 || ':done', 0))")
-        .bind(&items[0])
+    sqlx::query("SELECT pg_advisory_lock(hashtextextended('fvoci-lane:' || $1::text, 0))")
+        .bind(first_lane)
         .execute(&mut *holder)
         .await
         .unwrap();
@@ -1019,24 +1052,43 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
         )
         .await;
     }
-    let mut tx = owner.begin().await.unwrap();
-    sqlx::query("SET LOCAL lock_timeout = '300ms'")
-        .execute(&mut *tx)
+    // 작업 프로세스처럼(#95): 기한이 된 계열을 모으고 계열마다 트랜잭션 하나에서 맞춘다. 잠금 시간 초과(55P03)는 그 계열만
+    // 건너뛰고 다음 계열을 계속한다. 이 시험의 두 계열만 본다(공유 DB의 다른 계열은 다른 시험의 것).
+    let due: Vec<uuid::Uuid> = sqlx::query_scalar("SELECT fvoci.app_system_recurrence_due()")
+        .fetch_all(&owner)
         .await
         .unwrap();
-    // id는 작업 프로세스처럼 서버가 만든다(Supabase의 Postgres에는 `uuidv7()`이 없다). 상한 뒤의 경합에 대비해 넉넉히.
-    let need: i32 = sqlx::query_scalar("SELECT fvoci.app_system_recurrence_tick_ids()")
-        .fetch_one(&mut *tx)
-        .await
-        .unwrap();
-    let ticked = sqlx::query_scalar::<_, i32>("SELECT fvoci.app_system_recurrence_tick($1)")
-        .bind(fvoci_server::db::new_ids(
-            usize::try_from(need).unwrap_or_default() + SPARE_TICK_IDS,
-        ))
-        .fetch_one(&mut *tx)
-        .await;
-    if ticked.is_ok() {
-        tx.commit().await.unwrap();
+    let mut outcomes: Vec<Result<i32, Option<String>>> = Vec::new();
+    for id in &series {
+        let id: uuid::Uuid = id.parse().unwrap();
+        assert!(due.contains(&id), "{id} is not due: {due:?}");
+        let mut tx = owner.begin().await.unwrap();
+        sqlx::query("SET LOCAL lock_timeout = '300ms'")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        // id는 작업 프로세스처럼 서버가 만든다(Supabase의 Postgres에는 `uuidv7()`이 없다). 상한 뒤의 경합에 대비해 넉넉히.
+        let need: i32 = sqlx::query_scalar("SELECT fvoci.app_system_sync_task_series_ids($1)")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        let made = sqlx::query_scalar::<_, i32>("SELECT fvoci.app_system_sync_task_series($1, $2)")
+            .bind(id)
+            .bind(fvoci_server::db::new_ids(
+                usize::try_from(need).unwrap_or_default() + SPARE_TICK_IDS,
+            ))
+            .fetch_one(&mut *tx)
+            .await;
+        match made {
+            Ok(n) => {
+                tx.commit().await.unwrap();
+                outcomes.push(Ok(n));
+            }
+            Err(e) => outcomes.push(Err(e
+                .as_database_error()
+                .and_then(|d| d.code().map(|c| c.into_owned())))),
+        }
     }
 
     // 잠금을 풀기 전에 센다(풀면 다른 시험의 회차 맞추기가 앞 항목을 채울 수 있다).
@@ -1055,14 +1107,19 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
     };
     let skipped = made(series[0].clone()).await;
     let synced = made(series[1].clone()).await;
-    sqlx::query("SELECT pg_advisory_unlock(hashtextextended('fvoci-lane:' || $1 || ':done', 0))")
-        .bind(&items[0])
+    sqlx::query("SELECT pg_advisory_unlock(hashtextextended('fvoci-lane:' || $1::text, 0))")
+        .bind(first_lane)
         .execute(&mut *holder)
         .await
         .unwrap();
     drop(holder);
     owner.close().await;
-    assert!(ticked.is_ok(), "{ticked:?}");
+    assert_eq!(
+        outcomes[0],
+        Err(Some("55P03".to_owned())),
+        "the locked series must stop at lock_timeout: {outcomes:?}"
+    );
+    assert!(outcomes[1].is_ok(), "{outcomes:?}");
     assert_eq!(skipped, 0, "the locked item was synced");
     assert!(synced >= 1, "the other item lost its occurrences");
 }
