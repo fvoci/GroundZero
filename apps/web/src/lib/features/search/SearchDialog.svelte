@@ -418,7 +418,8 @@
         />
         <Label for="search-mine">{m.search_mine()}</Label>
       </div>
-      <div class="flex items-end gap-2">
+      <!-- 375px·200%에서는 날짜 칸 둘이 한 줄에 들지 않아 줄바꿈한다(대화상자 안쪽이 잘리지 않게, D-110). -->
+      <div class="flex flex-wrap items-end gap-2">
         <div class="flex flex-col gap-1">
           <Label for="search-from">{m.search_from()}</Label>
           <Input

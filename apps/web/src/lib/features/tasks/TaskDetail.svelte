@@ -894,7 +894,7 @@
       <div class="flex flex-col gap-4" inert={clashAsk !== undefined}>
         <!-- 제목 다음에 상태·우선순위·날짜를 두 칸으로 먼저 보이고(좁은 화면에서도 스크롤 없이), 설명은 그 아래에 둔다. -->
         <form
-          class="grid grid-cols-1 gap-3 @md:grid-cols-2"
+          class="grid grid-cols-1 gap-3 *:min-w-0 @md:grid-cols-2"
           inert={pending !== undefined}
           onsubmit={(e) => {
             e.preventDefault();

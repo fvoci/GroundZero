@@ -54,7 +54,7 @@
 </script>
 
 <form
-  class="grid gap-3 rounded-md border p-3 @xl:grid-cols-2"
+  class="grid gap-3 rounded-md border p-3 *:min-w-0 @xl:grid-cols-2"
   novalidate
   onsubmit={(e: SubmitEvent) => {
     e.preventDefault();

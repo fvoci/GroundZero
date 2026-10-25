@@ -206,7 +206,8 @@
   });
 </script>
 
-<form class="grid gap-3 md:grid-cols-2" onsubmit={(e) => void submit(e)}>
+<!-- 칸의 min-width를 0으로 두어 날짜·시각 입력의 고유 폭이 좁은 대화상자(375px·200%)를 넓히지 않게 한다. -->
+<form class="grid gap-3 *:min-w-0 md:grid-cols-2" onsubmit={(e) => void submit(e)}>
   <div class="flex flex-col gap-1 md:col-span-2">
     <Label for={`${idPrefix}-title`}>{m.events_title()}</Label>
     <Input id={`${idPrefix}-title`} bind:value={f.title} maxlength={200} required />
