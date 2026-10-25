@@ -19,10 +19,10 @@ test('gantt scrolls horizontally inside its own box', async ({ signIn }, testInf
   await api.createTask(item, `화면 설계와 검토 ${tag}`, { start_date: day(5), due_date: day(20) });
   await api.createTask(item, `배포와 회고 ${tag}`, { start_date: day(18), due_date: day(30) });
 
-  await page.goto(`/w/${ws}/i/${item}`);
+  await page.goto(`/w/${ws}/i/${item}/tasks/gantt`);
   const narrow = testInfo.project.name === 'narrow-375';
   await expectViewport(page, narrow);
-  await page.getByRole('button', { name: '간트', exact: true }).click();
+  // URL이 보기를 정해야 한다(D-121). 다시 단추를 눌러 잘못 열린 보기를 가리지 않는다.
   const gantt = page.getByTestId('task-gantt');
   await expect(gantt.getByText(`요구 사항 정리 ${tag}`).first()).toBeVisible();
 

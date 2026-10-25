@@ -1,5 +1,5 @@
 // 두 사용자(서로 다른 브라우저 컨텍스트, 쿠키 공유 없음)의 실시간 공동 편집과 저장 결과.
-// 실시간 연결·동기화는 DB 저장이 아니다(docs/development.md 실시간 편집 보존). 저장 결과는 모두 나간 뒤 서버가 남긴
+// 실시간 연결·동기화는 DB 저장이 아니다. 저장 결과는 모두 나간 뒤 서버가 남긴
 // 리비전을 API로 확인하고, 새 컨텍스트에서 다시 열어 본다.
 import type { Page } from '@playwright/test';
 
@@ -12,7 +12,8 @@ test('two users edit a live document together and the result persists', async ({
   const writer = await signIn('test-user-2');
   const tag = unique();
   const ws = await owner.api.createWorkspace(`공동 편집 시험 ${tag}`);
-  await owner.api.invite(ws, writer.user.email, 'writer');
+  await owner.api.ensureOrganizationMember(writer.api, writer.user.email);
+  await owner.api.invite(ws, writer.user.email, 'member');
   await writer.api.acceptInvitation(ws);
   await owner.api.setRealtime(ws, true);
   const doc = await owner.api.createWikiDocument(ws, `공동 편집 ${tag}`);
