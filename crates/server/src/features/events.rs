@@ -598,9 +598,11 @@ pub async fn calendar(
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-    // 보는 사람의 날짜 경계. 모르는 시간대는 400.
+    // 보는 사람의 날짜 경계. 하루의 시작은 그날 0시가 처음 오는 시점이다(0시가 두 번 오는 날은 앞의 0시, 없는 날은
+    // 건너뛴 직후). 시간 기록·검색의 날 경계(`time_tracking.rs`, `search_api.rs`, 감사 S21)와 같은 식.
     let (from_at, to_at): (OffsetDateTime, OffsetDateTime) = sqlx::query_as(
-        "SELECT $1::date::timestamp AT TIME ZONE $3, ($2::date + 1)::timestamp AT TIME ZONE $3",
+        "SELECT coalesce(app_local_instant($1::date::timestamp, $3), $1::date::timestamp AT TIME ZONE $3),
+                coalesce(app_local_instant(($2::date + 1)::timestamp, $3), ($2::date + 1)::timestamp AT TIME ZONE $3)",
     )
     .bind(from)
     .bind(to)
