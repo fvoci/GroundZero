@@ -79,6 +79,7 @@
     event = undefined;
     formBase = undefined;
     error = undefined;
+    untilError = undefined;
     conflict = undefined;
     clash = undefined;
     confirmDelete = false;
@@ -134,6 +135,15 @@
     pending += 1;
     try {
       return await request;
+    } catch (e: unknown) {
+      if (
+        e instanceof ApiError &&
+        e.code === 'bad_request' &&
+        e.message === 'until must not be before the first occurrence'
+      ) {
+        untilError = m.events_until_before_start();
+      }
+      throw e;
     } finally {
       pending -= 1;
     }
@@ -185,9 +195,12 @@
   }
 
   /** 일정 입력 양식의 제출. 충돌 알림의 단추에서 시작됐으면 서버 최신 일정에 합쳐 보낸다. */
+  let untilError = $state<string | undefined>(undefined);
+
   function submitted(input: EventInput): Promise<void> {
     const mode = submitMode;
     submitMode = undefined;
+    untilError = undefined;
     if (mode !== undefined && latest !== undefined && formBase !== undefined)
       return saveMine(input, formBase, latest, mode === 'overwrite');
     return save(input, formVersion);
@@ -279,6 +292,7 @@
 
   async function saveRule(rule: RecurrenceRule | null): Promise<void> {
     if (event === undefined) return;
+    untilError = undefined;
     const mine = shown;
     const before = event.version;
     const id = event.id;
@@ -490,6 +504,7 @@
               canEdit={true}
               zoneNote={m.events_zone_note({ zone: current.timezone })}
               onsave={saveRule}
+              {untilError}
             />
           {/key}
         </fieldset>

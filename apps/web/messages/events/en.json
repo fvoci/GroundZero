@@ -1,4 +1,5 @@
 {
+  "events_until_before_start": "The event starts after the recurrence end date. Set the recurrence end on or after the start date, or move the event start earlier.",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "events_load_failed": "Couldn't load the calendar.",
   "events_calendar_embedded": "Calendar · {title}",
